@@ -6,6 +6,7 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
+  exprSimForeignImmutableFrame
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -379,21 +380,10 @@ Theorem select_result_immutable_origin:
   ?path. pv = PlaceR (ImmutablePlace md name path) /\
          path' = path ++ [sb]
 Proof
-  Cases_on `pv` >>
-  simp[select_result_def, extend_place_def, bind_def, return_def,
-       raise_def, lift_option_type_def, lift_sum_def, AllCaseEqs()]
-  >~ [`extend_place cx (PlaceR p)`]
-  >- (rename1 `extend_place cx (PlaceR p)` >> Cases_on `p` >>
-      simp[extend_place_def, extend_memory_place_def, bind_def,
-           ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[] >>
-      drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
-      simp[])
-  >> rename1 `extend_place cx (HashMapRef tr slot kt vt)` >>
-  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
-  Cases_on `vt` >>
-  simp[extend_place_def, bind_def, return_def, raise_def,
-       lift_option_type_def, AllCaseEqs()]
+  Cases_on `pv` >> simp[select_result_def]
+  >- simp[lift_option_type_def, bind_def, lift_sum_def,
+          return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> drule extend_place_immutable_origin >> simp[]
 QED
 
 Theorem select_result_immutable_error:
