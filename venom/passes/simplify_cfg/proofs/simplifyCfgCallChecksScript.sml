@@ -12,7 +12,8 @@
 Theory simplifyCfgCallChecks
 Ancestors
   simplifyCfgDefs simplifyCfgCollapseShape simplifyCfgReferences cfgTransform cfgTransformProps venomExecProps
-  unitShapeDefs venomWf venomInst list rich_list
+  simplifyCfgStruct simplifyCfgLabelProps simplifyCfgInvariant simplifyCfgShape
+  dftCallChecks unitShapeDefs venomWf venomInst list rich_list
 
 Theorem revert_path_fuel_mono:
   !n m bbs l. revert_path bbs n l /\ n <= m ==>
@@ -335,6 +336,129 @@ Proof
      gvs[call_checks_ok_def, EVERY_MEM] >>
      qexists_tac `bb` >> simp[]) >>
   gvs[call_checks_ok_def, remove_unreachable_blocks_def, EVERY_MEM, MEM_FILTER]
+QED
+
+Theorem phi_prefix_partition_identity:
+  !xs.
+    (!i j. i < j /\ j < LENGTH xs /\ (EL j xs).inst_opcode = PHI ==>
+       (EL i xs).inst_opcode = PHI) ==>
+    FILTER (\i. i.inst_opcode = PHI) xs ++
+    FILTER (\i. i.inst_opcode <> PHI) xs = xs
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[] >> first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) xs` by
+    (simp[EVERY_EL] >> rpt strip_tac >>
+     first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  `FILTER (\i. i.inst_opcode <> PHI) xs = xs /\
+   FILTER (\i. i.inst_opcode = PHI) xs = []` by
+    gvs[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM] >>
+  simp[]
+QED
+
+Theorem fix_phis_in_block_calls_flagged:
+  bb_well_formed bb ==>
+  (calls_flagged bbs (fix_phis_in_block ps bb).bb_instructions <=>
+   calls_flagged bbs bb.bb_instructions)
+Proof
+  strip_tac >>
+  `FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions ++
+   FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions = bb.bb_instructions` by
+    (irule phi_prefix_partition_identity >> gvs[bb_well_formed_def] >> metis_tac[]) >>
+  qabbrev_tac `phis = FILTER (\i. i.inst_opcode = PHI) bb.bb_instructions` >>
+  qabbrev_tac `body_insts = FILTER (\i. i.inst_opcode <> PHI) bb.bb_instructions` >>
+  `EVERY (\i. i.inst_opcode = PHI) phis /\
+   EVERY (\i. i.inst_opcode <> PHI) body_insts` by
+    simp[Abbr `phis`, Abbr `body_insts`, EVERY_FILTER] >>
+  `MAP (fix_phi_inst ps) body_insts = body_insts` by
+    (`MAP (fix_phi_inst ps) body_insts = MAP I body_insts` suffices_by simp[] >>
+     irule MAP_CONG >> gvs[EVERY_MEM] >> rpt strip_tac >>
+     irule fix_phi_inst_non_phi >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL)
+    (MAP (fix_phi_inst ps) phis)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> rpt gen_tac >> disch_tac >>
+     irule (BETA_RULE (Q.INST [`P` |-> `\op. op <> CALL /\ op <> STATICCALL`]
+       fix_phi_inst_opcode_property)) >> gvs[EVERY_MEM]) >>
+  simp[fix_phis_in_block_def] >>
+  qpat_x_assum `phis ++ body_insts = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  `FILTER (\i. i.inst_opcode = PHI) body_insts = [] /\
+   FILTER (\i. i.inst_opcode <> PHI) body_insts = body_insts` by
+    gvs[FILTER_EQ_ID, FILTER_EQ_NIL, EVERY_MEM] >>
+  `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) phis /\
+   EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL)
+     (FILTER (\i. i.inst_opcode = PHI) (MAP (fix_phi_inst ps) phis)) /\
+   EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL)
+     (FILTER (\i. i.inst_opcode <> PHI) (MAP (fix_phi_inst ps) phis))` by
+    gvs[EVERY_MEM, MEM_FILTER] >>
+  simp[MAP_APPEND, FILTER_APPEND, GSYM APPEND_ASSOC,
+       calls_flagged_prefix_no_calls]
+QED
+
+Theorem revert_path_fix_all_phis:
+  !n fn l. EVERY bb_well_formed fn.fn_blocks /\
+    revert_path fn.fn_blocks n l ==>
+    revert_path (fix_all_phis fn).fn_blocks n l
+Proof
+  Induct >- simp[revert_path_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `revert_path _ _ _` mp_tac >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> BETA_TAC >>
+  disch_then (qx_choose_then `bb` strip_assume_tac) >>
+  `bb_well_formed bb` by gvs[EVERY_MEM] >>
+  `bb_well_formed (fix_phis_in_block (pred_labels fn bb.bb_label) bb)` by
+    simp[simplifyCfgStructTheory.fix_phis_in_block_wf] >>
+  `!ps. (fix_phis_in_block ps bb).bb_instructions <> [] /\
+    EVERY (\i. i.inst_opcode <> INVOKE) (fix_phis_in_block ps bb).bb_instructions` by
+    (gen_tac >> conj_tac
+     >- (`bb_well_formed (fix_phis_in_block ps bb)` by
+           simp[simplifyCfgStructTheory.fix_phis_in_block_wf] >>
+         gvs[bb_well_formed_def]) >>
+     irule fix_phis_in_block_every >> simp[] >> rpt gen_tac >> disch_tac >>
+     mp_tac (Q.INST [`code` |-> `INVOKE`, `actual_preds` |-> `ps`,
+                     `inst` |-> `i`] fix_phi_inst_opcode_source) >> simp[]) >>
+  `MEM (fix_phis_in_block (pred_labels fn bb.bb_label) bb)
+       (fix_all_phis fn).fn_blocks` by
+    (simp[fix_all_phis_def, MEM_MAP] >> qexists_tac `bb` >> simp[]) >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> BETA_TAC >>
+  qexists_tac `fix_phis_in_block (pred_labels fn bb.bb_label) bb` >>
+  simp[bb_label_fix_phis_in_block, fix_phis_in_block_last] >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem flag_fails_fix_all_phis:
+  EVERY bb_well_formed fn.fn_blocks /\ flag_fails fn.fn_blocks vs i ==>
+  flag_fails (fix_all_phis fn).fn_blocks vs i
+Proof
+  strip_tac >>
+  `!l. revert_path fn.fn_blocks (LENGTH fn.fn_blocks) l ==>
+    revert_path (fix_all_phis fn).fn_blocks (LENGTH (fix_all_phis fn).fn_blocks) l` by
+    (rpt strip_tac >> irule revert_path_fuel_normalize >>
+     qexists_tac `LENGTH fn.fn_blocks` >>
+     irule revert_path_fix_all_phis >> simp[]) >>
+  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
+QED
+
+Theorem fix_all_phis_call_checks_ok:
+  EVERY bb_well_formed fn.fn_blocks /\ call_checks_ok fn ==>
+  call_checks_ok (fix_all_phis fn)
+Proof
+  strip_tac >> simp[call_checks_ok_def, fix_all_phis_def, EVERY_MAP] >>
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `bb_well_formed bb` by gvs[EVERY_MEM] >>
+  simp[fix_phis_in_block_calls_flagged] >>
+  irule calls_flagged_environment >> qexists_tac `fn.fn_blocks` >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all flag_fails_fix_all_phis >>
+      simp[fix_all_phis_def]) >>
+  gvs[call_checks_ok_def, EVERY_MEM]
 QED
 
 Theorem simplify_cfg_call_checks_ok:
