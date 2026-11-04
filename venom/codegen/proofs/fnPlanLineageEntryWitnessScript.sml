@@ -2,6 +2,7 @@ Theory fnPlanLineageEntryWitness
 Ancestors
   venomExecProofs venomWf list relation
   simplifyCfgPhiRepair removeUnusedSsaProofs
+  livenessAnalysisProps codegenReadyCompute cfgAnalysisProps venomInst
 
 Theorem is_fn_path_first_entry:
   !path lbl.
@@ -53,4 +54,28 @@ Proof
   drule distinct_projection_member_eq >>
   disch_then (qspecl_then [`bb`, `def_bb`, `v`] mp_tac) >>
   simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem reachable_use_no_kill_live_entry:
+  wf_function fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM inst bb.bb_instructions /\ MEM v (inst_uses inst) /\
+  EVERY (\i. ~MEM v i.inst_outputs) bb.bb_instructions ==>
+  MEM v (live_vars_at (liveness_analyze fn) lbl 0)
+Proof
+  strip_tac >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    (drule fn_reachable_cfg_analyze >>
+     drule cfg_analyze_reachable_sets >> simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `?j. j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst` by
+    metis_tac[MEM_EL] >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl j)` by
+    (drule livenessAnalysisPropsTheory.live_vars_at_uses >>
+     disch_then (qspecl_then [`lbl`, `bb`, `j`, `v`] mp_tac) >>
+     simp[]) >>
+  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  disch_then (qspecl_then [`lbl`, `bb`, `0`, `j`, `v`] mp_tac) >>
+  simp[] >>
+  gvs[EVERY_EL, inst_defs_def] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
 QED
