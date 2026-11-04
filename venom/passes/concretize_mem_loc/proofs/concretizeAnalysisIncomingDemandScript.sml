@@ -2,7 +2,7 @@ Theory concretizeAnalysisIncomingDemand
 Ancestors
   concretizeAnalysisTemporalDemand frameDemandTaint frameJointRevert frameJointTaint
   frameJointTrace frameJointDemand frameJointTransition frameActivationCache unitTransformDefs
-  frameIncomingArgument concretizeAnalysisScanCoverage concretizeAnalysisWriteSafety
+  frameIncomingArgument frameOpenCall concretizeAnalysisScanCoverage concretizeAnalysisWriteSafety
   concretizeAnalysisLivenessPaths concretizeAnalysisLivenessTransfer
   frameOriginHistory frameOriginReachable frameAllocationOwnership
   o1PassContract ptrDiscipline concretizeMemLocDefs basePtrDefs cfgAnalysis
@@ -168,4 +168,51 @@ Proof
   goal_assum (drule_at (Pat `callee_first _ _`)) >>
   goal_assum (drule_at (Pat `ptr_discipline _ _ _`)) >>
   qexistsl_tac [`byte`,`j`] >> gvs[]
+QED
+
+(* Incoming provenance selects the suspended owner, not the physical writer. *)
+Theorem joint_incoming_used_generator:
+  joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
+  o1_ctx_shape ctx /\ ptr_discipline lo ctx vs0 /\
+  EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
+  ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  ?k aid owner d.
+    k < LENGTH stk /\ owner = (EL k stk).cf_fn /\ d = LENGTH stk - SUC k /\
+    FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME site /\
+    active_inst owner (EL k stk).cf_inst (EL k stk).cf_state /\
+    (EL k stk).cf_inst.inst_opcode = INVOKE /\
+    ml_used_gen (Allocation aid)
+      (bp_analyze_fuel (concretize_memloc_fuel owner) (cfg_analyze owner) owner)
+      mems (EL k stk).cf_inst
+Proof
+  strip_tac >> drule_all joint_incoming_production_argument >> strip_tac >>
+  qexistsl_tac [`k`,`aid`,`(EL k stk).cf_fn`,`LENGTH stk - SUC k`] >> simp[] >>
+  `MEM (Var u) (EL k stk).cf_inst.inst_operands` by
+    gvs[decode_invoke_def, AllCaseEqs()] >>
+  simp[ml_used_gen_def, ml_operand_gen_def] >>
+  disj1_tac >> qexists_tac `Var u` >> gvs[bp_bases_find_base_allocas]
+QED
+
+(* Only equal function/instruction/state is transported from the open call. *)
+Theorem joint_saved_used_generator_occurrence:
+  joint_trace vs0 ctx q0 es qs q /\ n <= m /\ m <= LENGTH es /\
+  EL m (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
+  k < LENGTH stk /\ d = LENGTH stk - SUC k /\ owner = (EL k stk).cf_fn /\
+  active_inst owner (EL k stk).cf_inst (EL k stk).cf_state /\
+  ml_used_gen (Allocation aid) bp mems (EL k stk).cf_inst /\
+  activation_depth (EL n (q0::qs)) = d /\
+  (!t. n <= t /\ t <= m ==> d <= activation_depth (EL t (q0::qs))) ==>
+  ?c stk0 PG0 G0 tn0 invoke sc oms0 om0 hs0 h0.
+    n <= c /\ c < m /\ LENGTH stk0 = d /\
+    EL c (q0::qs) = JointConfig stk0 PG0 G0 tn0 owner invoke sc oms0 om0 hs0 h0 /\
+    active_inst owner invoke sc /\ invoke.inst_opcode = INVOKE /\
+    ml_used_gen (Allocation aid) bp mems invoke
+Proof
+  strip_tac >>
+  `d < activation_depth (EL m (q0::qs)) /\ LENGTH stk - SUC d = k` by
+    (simp[activation_depth_def] >> decide_tac) >>
+  drule_all joint_open_call_saved >> strip_tac >> gvs[] >>
+  `LENGTH stk - SUC (LENGTH stk - SUC k) = k` by decide_tac >>
+  fs[] >> qexists_tac `c` >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
