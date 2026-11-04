@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyAmbient
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words
-  o1PassContract venomWf venomInst list
+  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs
 
 Theorem ld_sync_labels:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -164,3 +164,132 @@ QED
    dependency path after replacing the old .49.1 by this audit. They must be
    authorized and checked before saved-call construction, not skipped.
 *)
+
+Theorem ld_active_lookup:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s ==>
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       s.vs_inst_idx < LENGTH bb.bb_instructions /\
+       EL s.vs_inst_idx bb.bb_instructions = inst
+Proof
+  simp[active_inst_def] >> rpt strip_tac >>
+  drule_all MEM_lookup_block >> strip_tac >>
+  qexists_tac `bb` >> simp[]
+QED
+
+Definition ld_return_suffix_def:
+  ld_return_suffix C fn s ret e <=>
+    ?bb n. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      (exec_block n C bb s = IntRet ret e \/
+       ?q m. exec_block n C bb s = OK q /\ ~q.vs_halted /\
+             run_blocks m C fn q = IntRet ret e)
+End
+
+Definition ld_return_cont_def:
+  ld_return_cont C fn cs s <=>
+    !ret e. ld_return_suffix C fn s ret e ==>
+            ?n. run_blocks n C fn cs = IntRet ret e
+End
+
+Theorem ld_return_suffix_terminal:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ step_inst k C inst s = IntRet ret e ==>
+  ld_return_suffix C fn s ret e
+Proof
+  strip_tac >> drule_all ld_active_lookup >> strip_tac >>
+  simp[ld_return_suffix_def] >> qexists_tac `k` >>
+  simp[Once exec_block_def, get_instruction_def]
+QED
+
+Theorem ld_enters_block_alignment:
+  enters_block fn cs s ==>
+  ?bb sp. lookup_block cs.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis cs bb.bb_instructions = OK sp /\
+    s = sp with vs_inst_idx := phi_prefix_length bb.bb_instructions /\
+    s.vs_current_bb = cs.vs_current_bb
+Proof
+  simp[enters_block_def] >> rpt strip_tac >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  qexistsl_tac [`bb`, `s_phi`] >> simp[]
+QED
+
+Theorem ld_return_cont_entry:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  enters_block fn cs s ==> ld_return_cont C fn cs s
+Proof
+  strip_tac >> drule ld_enters_block_alignment >> strip_tac >>
+  simp[ld_return_cont_def, ld_return_suffix_def] >> rpt strip_tac
+  >- (qexists_tac `SUC n` >> simp[Once run_blocks_def]) >>
+  `exec_block (n + m) C bb s = OK q` by
+    (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `n` >> simp[]) >>
+  `run_blocks (n + m) C fn q = IntRet ret e` by
+    (irule (cj 3 fuel_mono) >> simp[] >> qexists_tac `m` >> simp[]) >>
+  qexists_tac `SUC (n + m)` >>
+  gvs[] >> simp[Once run_blocks_def]
+QED
+
+Theorem ld_return_suffix_next:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+  step_inst k C inst s = OK q /\
+  ld_return_suffix C fn (q with vs_inst_idx := SUC s.vs_inst_idx) ret e ==>
+  ld_return_suffix C fn s ret e
+Proof
+  strip_tac >> drule_all ld_active_lookup >> strip_tac >>
+  drule_all step_preserves_control_flow >> strip_tac >>
+  qpat_x_assum `ld_return_suffix _ _ _ _ _` mp_tac >>
+  simp[ld_return_suffix_def] >> rpt strip_tac
+  >- (`step_inst (k + n) C inst s = OK q` by
+        (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `k` >> simp[]) >>
+      `exec_block (k + n) C bb
+         (q with vs_inst_idx := SUC s.vs_inst_idx) = IntRet ret e` by
+        (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `n` >> simp[]) >>
+      simp[ld_return_suffix_def] >> qexists_tac `k + n` >>
+      simp[Once exec_block_def, get_instruction_def]) >>
+  `step_inst (k + n) C inst s = OK q` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `k` >> simp[]) >>
+  `exec_block (k + n) C bb
+     (q with vs_inst_idx := SUC s.vs_inst_idx) = OK q'` by
+    (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `n` >> simp[]) >>
+  simp[ld_return_suffix_def] >> qexists_tac `k + n` >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  qexistsl_tac [`q'`, `m`] >>
+  simp[Once exec_block_def, get_instruction_def]
+QED
+
+Theorem ld_return_suffix_block:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ is_terminator inst.inst_opcode /\
+  step_inst k C inst s = OK q /\ ~q.vs_halted /\
+  enters_block fn q s1 /\ ld_return_suffix C fn s1 ret e ==>
+  ld_return_suffix C fn s ret e
+Proof
+  strip_tac >> drule_all ld_active_lookup >> strip_tac >>
+  `ld_return_cont C fn q s1` by
+    (irule ld_return_cont_entry >> simp[]) >>
+  `?m. run_blocks m C fn q = IntRet ret e` by
+    metis_tac[ld_return_cont_def] >>
+  simp[ld_return_suffix_def] >> qexists_tac `k` >>
+  simp[Once exec_block_def, get_instruction_def] >>
+  qexistsl_tac [`q`, `m`] >>
+  simp[Once exec_block_def, get_instruction_def]
+QED
+
+Theorem ld_return_cont_next:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+  step_inst k C inst s = OK q /\ ld_return_cont C fn cs s ==>
+  ld_return_cont C fn cs (q with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  metis_tac[ld_return_cont_def, ld_return_suffix_next]
+QED
+
+Theorem ld_return_cont_block:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ is_terminator inst.inst_opcode /\
+  step_inst k C inst s = OK q /\ ~q.vs_halted /\
+  enters_block fn q s1 /\ ld_return_cont C fn cs s ==>
+  ld_return_cont C fn cs s1
+Proof
+  metis_tac[ld_return_cont_def, ld_return_suffix_block]
+QED
