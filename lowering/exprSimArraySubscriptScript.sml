@@ -4,6 +4,7 @@ Ancestors
   compileEnv exprLoweringProps exprOperandVar exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse supportedStmts exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
+  exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -2120,3 +2121,284 @@ Proof
   pop_assum (mp_tac o Q.AP_TERM `\fm. FLOOKUP fm "a"`) >>
   simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+Theorem eval_mutual_callfree_nopop_immutables[local]:
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!cx e. int_calls_expr e = [] /\ ~expr_has_pop e ==> !s res t.
+    eval_expr cx e s = (res,t) ==> t.immutables = s.immutables) /\
+  (!cx es. EVERY (\e. int_calls_expr e = [] /\ ~expr_has_pop e) es ==> !s res t.
+    eval_exprs cx es s = (res,t) ==> t.immutables = s.immutables) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!cx es. EVERY (\e. int_calls_expr e = [] /\ ~expr_has_pop e) es ==> !s res t.
+    eval_expr_results cx es s = (res,t) ==> t.immutables = s.immutables)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
+  simp[vyperTypeCallGraphTheory.int_calls_expr_def, expr_has_pop_def, supported_expr_exists_def,
+       expr_pop_root_def, int_calls_exprs_empty_every,
+       int_calls_named_exprs_empty_every, supported_exprs_exists_every,
+       supported_fields_exists_every, listTheory.EVERY_CONJ,
+       listTheory.EVERY_MAP, combinTheory.o_DEF]
+  >~ [`eval_expr _ (Name _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()])
+  >~ [`eval_expr _ (TopLevelName _ _) _ = _`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >> drule lookup_global_immutables >> simp[])
+  >~ [`eval_expr _ (FlagMember _ _ _) _ = _`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >> drule lookup_flag_mem_state >> simp[])
+  >~ [`eval_expr _ (Literal _ _) _ = _`]
+  >- simp[Once evaluate_def, return_def]
+  >~ [`eval_expr _ (IfExp _ _ _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def,
+          switch_BoolV_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac read_result_state >> imp_res_tac conditional_result_state >> gvs[] >>
+      gvs[COND_RATOR, AllCaseEqs(), raise_def] >> metis_tac[])
+  >~ [`eval_expr _ (StructLit _ _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      imp_res_tac lift_sum_state >> gvs[] >> metis_tac[])
+  >~ [`eval_expr _ (Subscript _ _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+      gvs[] >> metis_tac[])
+  >~ [`eval_expr _ (Attribute _ _ _) _ = _`]
+  >- (rpt strip_tac >>
+      gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+  >~ [`eval_expr _ (Builtin _ _ _) _ = _`] >- suspend "Builtin"
+  >~ [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "TypeBuiltin"
+  >~ [`eval_expr _ (Call _ (Send _) _ _) _ = _`] >- suspend "Send"
+  >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`] >- suspend "ExtCall"
+  >~ [`eval_expr _ (Call _ (RawCallTarget _) _ _) _ = _`] >- suspend "RawCall"
+  >~ [`eval_expr _ (Call _ (RawCallCalldataTarget _) _ _) _ = _`] >- suspend "RawCalldata"
+  >~ [`eval_expr _ (Call _ RawLog _ _) _ = _`] >- suspend "RawLog"
+  >~ [`eval_expr _ (Call _ RawRevert _ _) _ = _`] >- suspend "RawRevert"
+  >~ [`eval_expr _ (Call _ SelfDestructTarget _ _) _ = _`] >- suspend "SelfDestruct"
+  >~ [`eval_expr _ (Call _ (CreateTarget _ _ _) _ _) _ = _`] >- suspend "Create"
+  >~ [`eval_exprs _ [] _ = _`] >- simp[Once evaluate_def, return_def]
+  >~ [`eval_exprs _ (_::_) _ = _`] >- suspend "Cons"
+  >~ [`eval_expr_results _ [] _ = _`] >- simp[Once evaluate_def, return_def] >>
+  suspend "ResultsCons"
+QED
+
+Resume eval_mutual_callfree_nopop_immutables[Builtin]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)`
+  >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
+      Cases_on `bt = Env MsgGas` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> imp_res_tac result_array_length_state >>
+      imp_res_tac next_gas_reading_state >>
+      imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
+      gvs[type_check_def, assert_def, return_def,
+          vyperContextTheory.builtin_args_length_ok_def] >>
+      all_tac
+      >>~- ([`LENGTH es = 1`], Cases_on `es` >> gvs[] >> metis_tac[])) >>
+  simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+       ignore_bind_def, raise_def]
+QED
+Resume eval_mutual_callfree_nopop_immutables[TypeBuiltin]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_builtin_args_length_ok tb (LENGTH es)` >>
+  rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
+      ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[Send]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH es = if has_gas then 3 else 2` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), type_check_def, assert_def, return_def] >>
+  imp_res_tac eval_send_preserves_non_accounts >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[ExtCall]:
+  rpt strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+  strip_tac >> imp_res_tac eval_ext_call_preserves_non_accounts >>
+  imp_res_tac read_results_state >> gvs[] >>
+  `!n. EVERY (\e. int_calls_expr e = []) (TAKE n es)` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n. EVERY (\e. int_calls_expr e = []) (DROP n es)` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  `!n m. EVERY (\e. int_calls_expr e = []) (TAKE n (DROP m es))` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n. EVERY (\e. ~supported_expr_exists expr_pop_root e) (TAKE n es)` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n. EVERY (\e. ~supported_expr_exists expr_pop_root e) (DROP n es)` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  `!n m. EVERY (\e. ~supported_expr_exists expr_pop_root e) (TAKE n (DROP m es))` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  gvs[] >>
+  rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!a b c. _` drule_all >> strip_tac) >>
+  metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[RawCall]:
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, type_check_def, assert_def,
+       lift_option_type_def, vyperMiscTheory.option_CASE_rator] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[RawCalldata]:
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, type_check_def, assert_def,
+       lift_option_type_def, vyperMiscTheory.option_CASE_rator] >>
+  rpt strip_tac >> gvs[] >>
+  imp_res_tac eval_raw_call_preserves_non_accounts >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[RawLog]:
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, check_def, type_check_def, assert_def,
+       lift_option_def, lift_option_type_def, push_log_def, vyperMiscTheory.option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[RawRevert]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+      return_def, raise_def, check_def, type_check_def, assert_def] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[SelfDestruct]:
+  rpt strip_tac >> qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+       return_def, raise_def, check_def, type_check_def, assert_def,
+       lift_option_def, lift_option_type_def, get_accounts_def,
+       vyperMiscTheory.option_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac transfer_value_immutables >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[Create]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `!n. EVERY (\e. int_calls_expr e = []) (TAKE n es)` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n. EVERY (\e. int_calls_expr e = []) (DROP n es)` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  `!n m. EVERY (\e. int_calls_expr e = []) (TAKE n (DROP m es))` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n m. EVERY (\e. int_calls_expr e = []) (DROP n (DROP m es))` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  `!n. EVERY (\e. ~supported_expr_exists expr_pop_root e) (TAKE n es)` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n. EVERY (\e. ~supported_expr_exists expr_pop_root e) (DROP n es)` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  `!n m. EVERY (\e. ~supported_expr_exists expr_pop_root e) (TAKE n (DROP m es))` by
+    simp[rich_listTheory.EVERY_TAKE] >>
+  `!n m. EVERY (\e. ~supported_expr_exists expr_pop_root e) (DROP n (DROP m es))` by
+    simp[rich_listTheory.EVERY_DROP] >>
+  Cases_on `kind` >> gvs[] >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  imp_res_tac check_create_blueprint_result_state >> gvs[] >>
+  imp_res_tac read_results_state >> gvs[] >>
+  imp_res_tac eval_create_preserves_scopes_immutables >> gvs[] >>
+  rpt (qpat_x_assum `!s prefix t s1 code_size t1. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!s prefix t s1 results t1 s2 args t2. _` drule_all >> strip_tac) >>
+  rpt (qpat_x_assum `!s prefix t. _` drule_all >> strip_tac) >>
+  metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[Cons]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+QED
+Resume eval_mutual_callfree_nopop_immutables[ResultsCons]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  metis_tac[]
+QED
+Finalise eval_mutual_callfree_nopop_immutables
+
+Theorem eval_expr_callfree_nopop_immutables:
+  int_calls_expr e = [] /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) ==> t.immutables = s.immutables
+Proof
+  strip_tac >> drule_all (cj 5 eval_mutual_callfree_nopop_immutables) >> simp[]
+QED
+
+Theorem eval_exprs_callfree_nopop_immutables:
+  int_calls_exprs es = [] /\ EVERY (\e. ~expr_has_pop e) es /\
+  eval_exprs cx es s = (res,t) ==> t.immutables = s.immutables
+Proof
+  strip_tac >> irule (cj 6 eval_mutual_callfree_nopop_immutables) >>
+  goal_assum (drule_at Any) >>
+  gvs[listTheory.EVERY_CONJ, int_calls_exprs_empty_every]
+QED
+
+Theorem read_result_immutable_callfree_nopop:
+  int_calls_expr e = [] /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) ==>
+  (read_result cx (PlaceR (ImmutablePlace md name path)) t = (INL v,t) <=>
+   read_result cx (PlaceR (ImmutablePlace md name path)) s = (INL v,s))
+Proof
+  strip_tac >> drule_all eval_expr_callfree_nopop_immutables >> strip_tac >>
+  irule read_result_source_components >> simp[]
+QED
+
+Theorem immutable_holds_callfree_nopop:
+  int_calls_expr e = [] /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\
+  immutable_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) w s ==>
+  immutable_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) w t
+Proof
+  strip_tac >>
+  drule_all eval_expr_callfree_nopop_immutables >> strip_tac >>
+  irule immutable_holds_source_frame >> simp[] >>
+  metis_tac[read_result_immutable_callfree_nopop]
+QED
+
+Theorem vv_holds_code_immutable_callfree_nopop:
+  int_calls_expr e = [] /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\
+  vv_location vv = SOME LocCode /\
+  vv_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) vv s q /\
+  (!w. eval_operand (vv_operand vv) q = SOME w ==>
+       eval_operand (vv_operand vv) q' = SOME w) ==>
+  vv_holds cenv cx ty (PlaceR (ImmutablePlace md name path)) vv t q'
+Proof
+  Cases_on `vv` >> simp[contextTheory.vv_location_def] >>
+  rpt strip_tac >> rename1 `pp.ptr_location = LocCode` >>
+  gvs[vv_holds_def, contextTheory.vv_operand_def] >>
+  drule_all immutable_holds_callfree_nopop >> simp[]
+QED
+
+Theorem vv_at_code:
+  vv_location vv = SOME LocCode ==> vv_at cenv cx ty sa sb t tv vv q
+Proof
+  Cases_on `vv` >> simp[contextTheory.vv_location_def, vv_at_def]
+QED
+
+(* C1.4.13 use-site ledger:
+   The empty-int_calls_expr branch now has checked immutable-table and
+   captured ImmutablePlace read/holds preservation, including proper paths.
+   Both exclusions matter: no internal calls alone permits ImmutablePlace
+   Pop (the checked primitive probe above). The frozen no-pop hypothesis
+   yields ~expr_has_pop idx by expr_has_pop_def and supported_expr_exists_def.
+   The call-free premise is supplied by the branch split, and successful
+   index evaluation by the source Subscript equation. Operand preservation
+   is supplied by compile_expr_operand_expr_post_frame after index simulation.
+   vv_at_code needs only the known location. No supported_program or root
+   restriction is used in these boundaries.
+
+   Remaining interface: vv_holds_code_immutable_callfree_nopop requires the
+   captured source result to be an ImmutablePlace. Neither vv_location nor
+   vv_holds alone establishes that shape; code representations can describe
+   reads of other result forms. General compiler/source result provenance
+   is still unproved. No storage-read frame across external calls is claimed.
+   The nonempty-internal-call route and task-level endpoint composition
+   remain gated; the C1.4.12 proposed root-only implication is NOT proved.
+*)
