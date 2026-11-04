@@ -838,6 +838,36 @@ Proof
        AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem sub_layout_representation_transport:
+  sub_layout itv old k tvt v /\
+  (!b mem. val_in_memory itv fresh b mem ==> val_in_memory itv old b mem) ==>
+  sub_layout itv fresh k tvt v
+Proof
+  simp[sub_layout_def] >> metis_tac[]
+QED
+
+Theorem immutable_holds_representation_frame:
+  immutable_holds cenv cx ty tv w s /\
+  (!v. read_result cx tv s = (INL v,s) ==>
+       read_result cx tv t = (INL v,t)) /\
+  (!name off itv old.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP s.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms)
+      name = SOME (itv,old) ==>
+    ?fresh.
+      FLOOKUP (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms)
+        name = SOME (itv,fresh) /\
+      (!b mem. val_in_memory itv fresh b mem ==> val_in_memory itv old b mem)) ==>
+  immutable_holds cenv cx ty tv w t
+Proof
+  simp[immutable_holds_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`name`, `off`, `itv`, `fresh`, `k`, `tvt`, `v`] >> simp[] >>
+  irule sub_layout_representation_transport >> goal_assum drule >> simp[]
+QED
+
 Theorem immutable_holds_source_frame:
   (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
      | SOME imms => get_source_immutables cenv.ce_module imms) =
