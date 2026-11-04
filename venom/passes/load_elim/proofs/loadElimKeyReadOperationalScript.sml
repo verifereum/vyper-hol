@@ -1,7 +1,7 @@
 Theory loadElimKeyReadOperational
 Ancestors
   loadElimKeyRead memAliasProps mem2varBlockSimHelpers deadStoreElimProofs
-  venomMemDefs venomEffects words
+  venomMemDefs venomEffects words venomInstProps
 
 Theorem le_memory_read_nonalias_store:
   wf_alias_sets aliases /\ ~ma_may_alias aliases readloc writeloc /\
@@ -48,4 +48,20 @@ Proof
   simp[regions_disjoint_def, addr_space_word_scale_def] >>
   strip_tac >> simp[] >> irule tload_tstore_disjoint >>
   simp[n2w_11] >> decide_tac
+QED
+
+Theorem le_calldata_read_step_nonterminator:
+  step_inst fuel ctx inst s = OK t /\
+  ~is_terminator inst.inst_opcode ==>
+  le_read_address AddrSp_Calldata a t = le_read_address AddrSp_Calldata a s
+Proof
+  strip_tac >> drule_all step_preserves_call_ctx >> simp[]
+QED
+
+Theorem le_data_read_step_nonterminator:
+  step_inst fuel ctx inst s = OK t /\
+  ~is_terminator inst.inst_opcode ==>
+  le_read_address AddrSp_Data a t = le_read_address AddrSp_Data a s
+Proof
+  strip_tac >> drule_all step_preserves_data_section >> simp[]
 QED
