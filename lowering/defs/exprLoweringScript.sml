@@ -215,20 +215,6 @@ Definition infer_array_location_def:
   infer_array_location cenv _ = LocMemory
 End
 
-(* Infer whether an array is dynamic (DynArray) or static (SArray).
-   Mirrors Python: isinstance(array_typ, DArrayT) vs SArrayT *)
-Definition infer_array_is_dynamic_def:
-  infer_array_is_dynamic cenv (Name _ var_name) =
-    (case cenv.ce_var_type var_name of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_module_var_type nsid of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
-End
-
 (* Compute memory_bytes_required for an AST type.
    Mirrors Python: VyperType.memory_bytes_required (base.py, subscriptable.py).
    BytesT/StringT: 32 (length word) + ceil32(max_length) (data area).
