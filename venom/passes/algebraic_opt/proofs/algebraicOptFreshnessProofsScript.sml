@@ -94,3 +94,76 @@ Proof
   drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
   metis_tac[ao_ssa_output_occurrence]
 QED
+
+(* O.Q INTERFACE AUDIT -- proposal only, NOT an established theorem.
+
+Proposed writer-forces-producer boundary, with an ordinary observation or
+selected-PHI predecessor-exit observation encoded by use_opt:
+
+!ctx fn trace a b tail bp r prod x z target use_opt h t.
+  wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+  trace = a::b::tail /\ ao_source_trace ctx fn trace /\
+  LAST trace = (h,F,t) /\
+  MEM bp fn.fn_blocks /\ get_instruction bp r = SOME prod /\
+  prod.inst_opcode = ISZERO /\ prod.inst_outputs = [x] /\
+  prod.inst_operands = [Var z] /\
+  phi_prefix_length bp.bb_instructions <= r /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+  def_available_at fn target use_opt x /\
+  (case use_opt of
+     SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                 use.inst_opcode <> PHI
+   | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                    is_terminator term.inst_opcode) /\
+  ao_transition_writes fn z a b ==>
+  ?middle q u v rest w.
+    trace = a::(middle ++ (q,F,u)::(q,F,v)::rest) /\
+    u.vs_current_bb = bp.bb_label /\ u.vs_inst_idx = r /\
+    ao_source_step ctx fn (q,F,u) (q,F,v) /\
+    step_inst q ctx prod u = OK w /\
+    v = w with vs_inst_idx := SUC r
+
+The leading a in the conclusion matters: the producer edge is AFTER the
+hypothetical writer edge, not merely somewhere on the same trace. The suffix
+must end at the original ordinary consumer-pre node or actual predecessor exit,
+never at a successor post-PHI node. ao_selected_phi_available supplies NONE
+availability; ao_source_trace_selected_edge supplies that predecessor endpoint.
+
+Case-to-interface map (not yet a formal integration proof):
+- W (ao_ssa_transition_writer) identifies an ordinary operand writer's exact
+  block/index, or identifies its containing atomic PHI batch.
+- ao_dominance_interval on ao_source_trace_path forces a producer LABEL between
+  the identified operand-definition block and observation block. It does not
+  itself return the required later edge.
+- Truly interior producer labels: ao_source_trace_interior_execution gives the
+  actual edge and original-list witnesses.
+- Initial partial visit in producer block: operand definition precedes prod by
+  def_available_at and W. From an ordinary writer, its post-index is <= r;
+  crossing_index or crosses_before_exit can then find the edge. If the writer
+  is after a previously selected producer within that same sequential visit,
+  sequential_bounds instead excludes it. Missing integration: extract this
+  first visit and its exit from the writer-started suffix, including re-entry.
+- Final partial visit in producer block: SOME availability gives r < consumer
+  index using W. NONE needs the well-formed terminator's final position. Use
+  final_visit, sequential_bounds and crosses_index. Missing integration:
+  distinguish no intervening entry from a final complete-entry fragment.
+- PHI writer: use source_step_entry, start AFTER the whole batch at phi prefix,
+  then cross r. Never invent a sequential ordering of PHI writes.
+- Producer/writer or producer/consumer in the same block: these are precisely
+  the two endpoint cases, not cases discharged by interior_execution.
+- Self-loop: split on F-to-T and T-to-F edges, not changing labels. Existing
+  final_visit permits this; no same-label monotonicity is claimed.
+- Literal producer operand: no variable writer-forcing obligation; eval_operand
+  is state-independent. Variable with no definition: wf_ssa's ordinary-use
+  availability forbids it for this ISZERO producer; do not assume it is zero.
+
+First producer existence is separate: source_prefix_value_origin and
+iszero_historical_operand establish historical successful evaluation from an
+initially absent x, but their witnesses are prefixes, not adjacent occurrences
+of an arbitrarily supplied original trace. A trace-local value-origin boundary
+(or a first-execution dominance/crossing proof) is still needed before applying
+trace_last_event on that same trace. Stability after the last producer then
+uses the proposed forcing boundary to rule out z writers; W rules out other
+x writers and source_trace_non_writer transports both lookups. Neither first
+existence nor the endpoint forcing integration is certified by W/B/V alone.
+*)
