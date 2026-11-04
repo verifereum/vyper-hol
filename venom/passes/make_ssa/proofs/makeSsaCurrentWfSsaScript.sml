@@ -1562,6 +1562,250 @@ Proof
   metis_tac[current_source_cut_step]
 QED
 
+Theorem current_wf_source_cut_name:
+  current_event_valid A V ev /\ current_event_trace A H ev /\
+  current_source_cut A ev n rs E /\ MEM u V ==>
+  current_token_name H (E u) = SOME (latest_current_name rs u)
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_valid_def, current_event_trace_def,
+    current_source_cut_def] >> rpt strip_tac >>
+  `current_annotations_ok V ev5 (FLAT ap)` by
+    metis_tac[current_annotations_split, FLAT_APPEND] >>
+  `current_env_realizes Hm E rs V` by
+    metis_tac[current_local_trace_preserves] >>
+  `current_token_name Hm (E u) = SOME (latest_current_name rs u)` by
+    fs[current_env_realizes_def] >>
+  drule current_local_trace_history >> strip_tac >> gvs[] >>
+  metis_tac[current_token_name_append_stable, APPEND_ASSOC]
+QED
+
+Theorem current_wf_rename_operands_var:
+  !ops. MEM (Var v) (rename_current_operands rs ops) <=>
+    ?u. MEM (Var u) ops /\ v = latest_current_name rs u
+Proof
+  Induct >> simp[rename_current_operands_def] >>
+  Cases_on `h` >> simp[rename_current_operands_def] >> metis_tac[]
+QED
+
+Theorem current_wf_inst_trace_use:
+  current_inst_trace aa inst s rs H E inst' s' rs' H' E' /\
+  inst'.inst_opcode <> PHI /\ MEM (Var v) inst'.inst_operands ==>
+  ?u. MEM (Var u) inst.inst_operands /\ v = latest_current_name rs u
+Proof
+  simp[current_inst_trace_def] >> rpt strip_tac >>
+  Cases_on `inst.inst_opcode = PHI` >> gvs[current_wf_rename_operands_var] >>
+  metis_tac[]
+QED
+
+Theorem current_wf_edge_shape_ordinary_index:
+  current_edge_shape (old with bb_instructions := pre ++ old.bb_instructions) bb /\
+  i < LENGTH old.bb_instructions /\ (EL i old.bb_instructions).inst_opcode <> PHI ==>
+  LENGTH pre + i < LENGTH bb.bb_instructions /\
+  EL (LENGTH pre + i) bb.bb_instructions = EL i old.bb_instructions
+Proof
+  simp[current_edge_shape_def, LIST_REL_EL_EQN] >> strip_tac >>
+  first_x_assum (qspec_then `LENGTH pre + i` mp_tac) >>
+  simp[EL_APPEND_EQN]
+QED
+
+Theorem current_wf_event_ordinary_cut:
+  current_event_trace A H ev /\
+  current_edge_shape (old with bb_instructions := pre ++ old.bb_instructions)
+    (current_event_input_block ev) /\
+  i < LENGTH old.bb_instructions /\ (EL i old.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var v) (EL (LENGTH pre + i)
+    (current_event_renamed_block ev).bb_instructions).inst_operands ==>
+  ?rs E u. current_source_cut A ev (LENGTH pre + i) rs E /\
+    MEM (Var u) (EL i old.bb_instructions).inst_operands /\
+    v = latest_current_name rs u
+Proof
+  strip_tac >> drule_all current_wf_edge_shape_ordinary_index >> strip_tac >>
+  `?rs E. current_source_cut A ev (LENGTH pre + i) rs E` by
+    metis_tac[current_wf_event_source_cut_exists, arithmeticTheory.LESS_IMP_LESS_OR_EQ] >>
+  drule_all current_wf_event_source_cut_step >> strip_tac >>
+  ` (EL (LENGTH pre + i)
+      (current_event_renamed_block ev).bb_instructions).inst_opcode <> PHI` by
+    metis_tac[current_inst_trace_opcode] >>
+  drule_all current_wf_inst_trace_use >> strip_tac >>
+  metis_tac[]
+QED
+
+Theorem current_wf_edge_shape_ordinary_member:
+  current_edge_shape old bb /\ MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI ==>
+  ?n. n < LENGTH old.bb_instructions /\
+    EL n old.bb_instructions = inst /\ EL n bb.bb_instructions = inst
+Proof
+  simp[current_edge_shape_def, LIST_REL_EL_EQN] >> strip_tac >>
+  `?n. n < LENGTH bb.bb_instructions /\ inst = EL n bb.bb_instructions` by
+    metis_tac[MEM_EL] >>
+  first_x_assum (qspec_then `n` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `n` >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_wf_event_ordinary_source_index:
+  current_event_trace A H ev /\
+  current_edge_shape (old with bb_instructions := pre ++ old.bb_instructions)
+    (current_event_input_block ev) /\ EVERY (\inst. inst.inst_opcode = PHI) pre /\
+  n < LENGTH (current_event_renamed_block ev).bb_instructions /\
+  (EL n (current_event_renamed_block ev).bb_instructions).inst_opcode <> PHI ==>
+  ?i. n = LENGTH pre + i /\ i < LENGTH old.bb_instructions /\
+    (EL i old.bb_instructions).inst_opcode <> PHI
+Proof
+  strip_tac >>
+  `MAP instruction_inst_opcode (current_event_renamed_block ev).bb_instructions =
+    MAP instruction_inst_opcode (current_event_input_block ev).bb_instructions` by
+    (PairCases_on `ev` >>
+     fs[current_event_trace_def, current_event_renamed_block_def,
+       current_event_input_block_def] >>
+     metis_tac[current_local_trace_opcodes]) >>
+  drule current_edge_shape_opcodes >> simp[] >> strip_tac >>
+  `LENGTH (current_event_renamed_block ev).bb_instructions =
+     LENGTH pre + LENGTH old.bb_instructions` by
+    metis_tac[LENGTH_MAP, LENGTH_APPEND] >>
+  `MAP instruction_inst_opcode (current_event_renamed_block ev).bb_instructions =
+     MAP instruction_inst_opcode (pre ++ old.bb_instructions)` by simp[] >>
+  ` (EL n (current_event_renamed_block ev).bb_instructions).inst_opcode =
+     (EL n (pre ++ old.bb_instructions)).inst_opcode` by
+    (fs[MAP_EQ_EVERY2, LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `n >= LENGTH pre` by
+    (spose_not_then assume_tac >>
+     `n < LENGTH pre` by decide_tac >>
+     ` (EL n pre).inst_opcode = PHI` by
+       (qpat_x_assum `EVERY _ pre` mp_tac >> rewrite_tac[EVERY_EL] >>
+        disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+     fs[EL_APPEND_EQN]) >>
+  qexists_tac `n - LENGTH pre` >>
+  fs[EL_APPEND_EQN]
+QED
+
+Theorem current_wf_precleanup_structural:
+  current_wf_precleanup_certificate s fn renamed s' A H events ==>
+  ?fn'. current_structural_certificate s fn fn' s' A H events
+Proof
+  strip_tac >>
+  qexists_tac `fn with fn_blocks := simplify_current_phis_if
+    (blocks_have_leading_phi fn.fn_blocks) renamed` >>
+  metis_tac[current_wf_precleanup_certificate_stages]
+QED
+
+Theorem current_wf_precleanup_block_shape:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\ MEM bb renamed ==>
+  ?ev. MEM ev events /\ current_event_label ev = bb.bb_label /\
+    current_edge_shape (current_event_renamed_block ev) bb
+Proof
+  strip_tac >> drule_all current_wf_precleanup_coverage >> strip_tac >>
+  drule_all current_wf_precleanup_event >> strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) renamed)` by
+    (drule current_wf_precleanup_labels >>
+     fs[wf_function_def, fn_labels_def]) >>
+  `lookup_block bb.bb_label renamed = SOME bb` by
+    (irule MEM_lookup_block >> simp[]) >>
+  qexists_tac `ev` >> gvs[]
+QED
+
+Theorem current_wf_precleanup_ordinary_cut:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM bb renamed /\ MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+  MEM (Var v) inst.inst_operands ==>
+  ?ev old pre i rs E u.
+    MEM ev events /\ current_event_label ev = bb.bb_label /\
+    lookup_block (current_event_label ev) fn.fn_blocks = SOME old /\
+    A (current_event_label ev) = current_block_annotations old pre /\
+    EVERY (\inst. inst.inst_opcode = PHI) pre /\
+    (!w. current_actual_inserted fn w (current_event_label ev) <=>
+      ?phi. MEM phi pre /\ MEM w phi.inst_outputs) /\
+    i < LENGTH old.bb_instructions /\ (EL i old.bb_instructions).inst_opcode <> PHI /\
+    LENGTH pre + i < LENGTH bb.bb_instructions /\
+    EL (LENGTH pre + i) bb.bb_instructions = inst /\
+    current_source_cut A ev (LENGTH pre + i) rs E /\
+    MEM (Var u) (EL i old.bb_instructions).inst_operands /\
+    v = latest_current_name rs u
+Proof
+  strip_tac >> drule_all current_wf_precleanup_block_shape >> strip_tac >>
+  `?old. MEM old fn.fn_blocks /\ old.bb_label = current_event_label ev` by
+    (drule current_wf_precleanup_labels >>
+     strip_tac >> `MEM bb.bb_label (MAP (\b. b.bb_label) fn.fn_blocks)` by
+       metis_tac[MEM_MAP] >> gvs[MEM_MAP] >> metis_tac[]) >>
+  `lookup_block (current_event_label ev) fn.fn_blocks = SOME old` by
+    (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  drule_all current_wf_edge_shape_ordinary_member >> strip_tac >>
+  ` (EL n (current_event_renamed_block ev).bb_instructions).inst_opcode <> PHI` by
+    simp[] >>
+  drule_all current_wf_event_ordinary_source_index >> strip_tac >>
+  gvs[] >>
+  `?rs E u. current_source_cut A ev (LENGTH pre + i) rs E /\
+      MEM (Var u) (EL i old.bb_instructions).inst_operands /\
+      v = latest_current_name rs u` by
+    (irule current_wf_event_ordinary_cut >> simp[] >> metis_tac[]) >>
+  `LENGTH bb.bb_instructions =
+    LENGTH (current_event_renamed_block ev).bb_instructions` by
+    (qpat_x_assum `current_edge_shape (current_event_renamed_block ev) bb` mp_tac >>
+     simp[current_edge_shape_def, LIST_REL_EL_EQN]) >>
+  qexistsl_tac [`ev`, `old`, `pre`, `i`, `rs`, `E`, `u`] >>
+  fs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_wf_prefix_vars:
+  !olds news. LIST_REL (\old new. ?pre.
+    new = old with bb_instructions := pre ++ old.bb_instructions)
+    olds news ==>
+  !u. MEM u (FLAT (MAP block_ir_vars olds)) ==>
+    MEM u (FLAT (MAP block_ir_vars news))
+Proof
+  Induct >> Cases_on `news` >> simp[] >> rpt strip_tac >> gvs[] >>
+  fs[block_ir_vars_def, MAP_APPEND, FLAT_APPEND] >> metis_tac[]
+QED
+
+Theorem current_wf_ordinary_demand:
+  lookup_block l fn.fn_blocks = SOME old /\ i < LENGTH old.bb_instructions /\
+  (EL i old.bb_instructions).inst_opcode <> PHI /\
+  MEM (Var u) (EL i old.bb_instructions).inst_operands ==>
+  current_demand fn u l i /\ MEM u (FLAT (MAP block_ir_vars fn.fn_blocks))
+Proof
+  strip_tac >>
+  `MEM u (inst_uses (EL i old.bb_instructions))` by
+    fs[inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+  conj_tac >- metis_tac[current_demand_rules] >>
+  `MEM old fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  simp[MEM_FLAT, MEM_MAP] >> qexists_tac `block_ir_vars old` >>
+  conj_tac >- metis_tac[] >>
+  simp[block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists_tac `inst_ir_vars (EL i old.bb_instructions)` >>
+  simp[inst_ir_vars_def] >> metis_tac[EL_MEM]
+QED
+
+Theorem current_wf_precleanup_cut_name:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM ev events /\ current_source_cut A ev n rs E /\
+  MEM u (FLAT (MAP block_ir_vars fn.fn_blocks)) ==>
+  current_token_name H (E u) = SOME (latest_current_name rs u)
+Proof
+  strip_tac >> drule_all current_wf_precleanup_names >> strip_tac >> gvs[] >>
+  drule current_actual_insertion_prefix >> strip_tac >>
+  `MEM u (FLAT (MAP block_ir_vars ins))` by
+    (irule current_wf_prefix_vars >> qexists_tac `fn.fn_blocks` >> simp[] >>
+     irule LIST_REL_mono >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  irule current_wf_source_cut_name >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_wf_nonphi_after_collect:
+  !xs i. i < LENGTH xs /\ (EL i xs).inst_opcode <> PHI ==>
+    LENGTH (collect_phis xs) <= i
+Proof
+  Induct >> simp[] >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[livenessDefsTheory.collect_phis_def] >>
+  Cases_on `i` >> simp[]
+QED
+
 Theorem current_wf_entry_undemanded:
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
   fn_entry_label fn = SOME l ==> ~current_demand fn v l 0
@@ -1916,6 +2160,76 @@ Theorem current_wf_precleanup_dominance:
 Proof
   strip_tac >> irule current_wf_cfg_dominance >>
   metis_tac[current_wf_precleanup_cfg]
+QED
+
+Theorem current_wf_precleanup_output_available:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM dev events /\ current_wf_output_at A H dev k tok /\
+  current_token_name H tok = SOME v /\
+  MEM bb renamed /\ n < LENGTH bb.bb_instructions /\ EL n bb.bb_instructions = inst /\
+  fn_dominates fn (current_event_label dev) bb.bb_label /\
+  (current_event_label dev = bb.bb_label ==> k < n) ==>
+  def_available_at (fn with fn_blocks := renamed) bb (SOME inst) v
+Proof
+  strip_tac >> drule_all current_wf_precleanup_output >> strip_tac >>
+  rename1 `lookup_block (current_event_label dev) renamed = SOME db` >>
+  `MEM db renamed` by metis_tac[lookup_block_MEM] >>
+  `fn_dominates (fn with fn_blocks := renamed) db.bb_label bb.bb_label` by
+    metis_tac[current_wf_precleanup_dominance] >>
+  simp[def_available_at_def] >>
+  qexistsl_tac [`db`, `EL k db.bb_instructions`] >>
+  simp[EL_MEM] >> strip_tac >> gvs[] >>
+  qexistsl_tac [`k`, `n`] >> simp[]
+QED
+
+Theorem current_wf_precleanup_output_sites:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s ==>
+  !ev k j. MEM ev events /\ k < LENGTH (A (current_event_label ev)) /\
+    j < LENGTH (EL k (A (current_event_label ev))) ==>
+    current_wf_output_at A H ev k (FST (EL j (EL k (A (current_event_label ev)))))
+Proof
+  strip_tac >> drule_all current_wf_precleanup_names >> strip_tac >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  irule current_wf_event_output_at >> metis_tac[]
+QED
+
+Theorem current_wf_precleanup_ordinary_available:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM bb renamed /\ MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+  MEM (Var v) inst.inst_operands ==>
+  def_available_at (fn with fn_blocks := renamed) bb (SOME inst) v
+Proof
+  strip_tac >> drule_all current_wf_precleanup_ordinary_cut >> strip_tac >>
+  drule_all current_wf_ordinary_demand >> strip_tac >>
+  `current_token_name H (E u) = SOME v` by
+    (drule_all current_wf_precleanup_cut_name >> simp[]) >>
+  `LENGTH (collect_phis old.bb_instructions) <= i` by
+    metis_tac[current_wf_nonphi_after_collect] >>
+  drule current_wf_precleanup_structural >> strip_tac >>
+  `!dev k j. MEM dev events /\ k < LENGTH (A (current_event_label dev)) /\
+     j < LENGTH (EL k (A (current_event_label dev))) ==>
+     current_wf_output_at A H dev k (FST (EL j (EL k (A (current_event_label dev)))))` by
+    metis_tac[current_wf_precleanup_output_sites] >>
+  `fn_reachable fn (current_event_label ev)` by
+    (drule lookup_block_MEM >> strip_tac >>
+     drule lookup_block_label >> strip_tac >> fs[all_reachable_def] >> metis_tac[]) >>
+  `fn_dominates fn (current_event_label ev) (current_event_label ev)` by
+    (simp[fn_dominates_def] >> metis_tac[LAST_MEM]) >>
+  `?dev k. MEM dev events /\ current_wf_output_at A H dev k (E u) /\
+    ((dev = ev /\ k < LENGTH pre + i) \/
+     (current_event_label dev <> current_event_label ev /\
+      fn_dominates fn (current_event_label dev) (current_event_label ev)))` by
+    (irule current_wf_demanded_source_cut_output >>
+     fs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  irule current_wf_precleanup_output_available >>
+  fs[arithmeticTheory.ADD_COMM] >> metis_tac[]
 QED
 
 Definition current_wf_block_replacement_def:
