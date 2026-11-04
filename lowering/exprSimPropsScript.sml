@@ -362,3 +362,23 @@ Proof
   simp[as_stack_val_def, unwrap_value_def, comp_return_def]
 QED
 
+Theorem eval_expr_flag_member:
+  !cx ann src fid mid es res es'.
+    (do result <- eval_expr cx (FlagMember ann (src, fid) mid); read_result cx result od) es = (res, es') /\
+    expr_res_ok res ==>
+    es' = es /\
+    ?ts ls i. get_module_code cx src = SOME ts /\
+              lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
+              res = INL (FlagV (2 ** i))
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, lookup_flag_mem_def] >>
+  Cases_on `get_module_code cx src` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `lookup_flag fid ts` >>
+  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
+  rename1 `lookup_flag fid ts = SOME ls` >>
+  Cases_on `INDEX_OF mid ls` >>
+  gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
+QED

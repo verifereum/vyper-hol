@@ -69,6 +69,7 @@ Ancestors
   exprSimNameWord
   exprSimLiteralWord
   exprSimEnv
+  exprSimFlagWord
 
 val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
                   basicSizeTheory.option_size_def];
@@ -663,61 +664,6 @@ Proof
                          read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)`
   >- (gvs[] >> irule compile_toplevel_storage_vv_sim >> metis_tac[]) >>
   irule compile_toplevel_storage_undecodable_sim >> metis_tac[]
-QED
-
-Theorem eval_expr_flag_member:
-  !cx ann src fid mid es res es'.
-    (do result <- eval_expr cx (FlagMember ann (src, fid) mid); read_result cx result od) es = (res, es') /\
-    expr_res_ok res ==>
-    es' = es /\
-    ?ts ls i. get_module_code cx src = SOME ts /\
-              lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i /\
-              res = INL (FlagV (2 ** i))
-Proof
-  rpt gen_tac >>
-  simp[Once evaluate_def, lookup_flag_mem_def] >>
-  Cases_on `get_module_code cx src` >>
-  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
-  rename1 `get_module_code cx src = SOME ts` >>
-  Cases_on `lookup_flag fid ts` >>
-  gvs[bind_def, raise_def, return_def, expr_res_ok_def] >>
-  rename1 `lookup_flag fid ts = SOME ls` >>
-  Cases_on `INDEX_OF mid ls` >>
-  gvs[bind_def, read_result_def, raise_def, return_def, expr_res_ok_def]
-QED
-
-(* A flag member is the literal 2 ** id, id its index in its flag's
-   declaration by expr_sim_inv's flag members clause. *)
-Theorem compile_flag_member_word_sim:
-  !cenv ann nsid mid. expr_sim_ok cenv (FlagMember ann nsid mid)
-Proof
-  rw[expr_sim_ok_def, expr_sim_def] >> PairCases_on `nsid` >>
-  drule_all eval_expr_flag_member >> strip_tac >> gvs[] >>
-  `cenv.ce_flag_member_id (nsid_to_string (nsid0, nsid1)) mid = i` by
-    (gvs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
-  `ann = FlagT (nsid0, nsid1)` by gvs[expr_sim_pre_def, well_typed_expr_def] >>
-  gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
-      unwrap_value_def] >>
-  irule frag_exec_refl >>
-  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
-       vyperASTTheory.expr_type_def, eval_operand_def, is_word_type_def,
-       typed_val_to_w256_word_value, word_value_def, val_to_w256_def]
-QED
-
-Theorem compile_flag_member_case_sim:
-  !cenv ann nsid mid. expr_ok cenv (FlagMember ann nsid mid)
-Proof
-  rpt gen_tac >> irule expr_ok_stack >>
-  simp[compile_flag_member_word_sim, compile_expr_def] >>
-  PairCases_on `nsid` >> rpt gen_tac >>
-  simp[Once evaluate_def, lookup_flag_mem_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]
-QED
-
-Theorem compile_flag_member_sim:
-  !cenv ann nsid mid. expr_vv_ok cenv (FlagMember ann nsid mid)
-Proof
-  metis_tac[compile_flag_member_case_sim, expr_ok_def]
 QED
 
 (* Integrity gate: memory forcing must not introduce admitted dependencies
