@@ -498,7 +498,7 @@ Proof
 QED
 
 (* The length of ps_stack after apply_simple_op matches stack_op_wf's SND *)
-Theorem apply_simple_op_length[local]:
+Theorem apply_simple_op_length:
   !lo op ps.
     is_simple_stack_op op ==>
     LENGTH (apply_simple_op lo op ps).ps_stack =

@@ -5,7 +5,7 @@ Ancestors
   stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
-  stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel
+  stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -572,3 +572,42 @@ Resume simple_op_stack_frame[pop]:
 QED
 
 Finalise simple_op_stack_frame
+
+Theorem simple_prefix_stack_frame:
+  !ops initial_fmp lo o2pc prog ps vs st stk rest.
+    EVERY is_simple_stack_op ops /\
+    prefix_wf lo (LENGTH ps.ps_stack) ops /\
+    plan_stack_rel lo vs ps.ps_stack stk /\
+    st.as_stack = stk ++ rest /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?stk'.
+      asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+        AsmOK (st with <|as_stack := stk' ++ rest;
+          as_pc := st.as_pc + LENGTH (execute_plan initial_fmp ops)|>) /\
+      plan_stack_rel lo vs (apply_simple_ops lo ops ps).ps_stack stk'
+Proof
+  Induct_on `ops`
+  >- (rpt strip_tac >> qexists_tac `stk` >>
+      gvs[execute_plan_def, asm_steps_def, apply_simple_ops_def,
+          asm_state_component_equality]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[EVERY_DEF, apply_simple_ops_def, execute_plan_def,
+      asm_block_at_append] >>
+  `FST (stack_op_wf lo h (LENGTH ps.ps_stack)) /\
+   prefix_wf lo (SND (stack_op_wf lo h (LENGTH ps.ps_stack))) ops` by
+    (gvs[prefix_wf_cons] >> pairarg_tac >> gvs[]) >>
+  drule_all simple_op_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  first_x_assum (qspecl_then [`initial_fmp`, `lo`, `o2pc`, `prog`,
+    `apply_simple_op lo h ps`, `vs`,
+    `st with <|as_stack := stk' ++ rest;
+               as_pc := st.as_pc + LENGTH (exec_stack_op initial_fmp h)|>`,
+    `stk'`, `rest`] mp_tac) >>
+  simp[apply_simple_op_length, execute_plan_def] >> strip_tac >>
+  qexists_tac `stk''` >> simp[] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule asm_steps_compose_ok >>
+  qexists_tac `st with <|as_stack := stk' ++ rest;
+    as_pc := st.as_pc + LENGTH (exec_stack_op initial_fmp h)|>` >>
+  gvs[]
+QED
