@@ -95,3 +95,17 @@ Proof
   irule (cj 4 ao_source_prefix_rules) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem ao_source_prefix_compose:
+  !ctx fn s0 n k s j phase t.
+    ao_source_prefix ctx fn s0 n k T s /\
+    ao_source_prefix ctx fn s k j phase t ==>
+    ao_source_prefix ctx fn s0 n j phase t
+Proof
+  `!ctx fn s k j phase t.
+      ao_source_prefix ctx fn s k j phase t ==>
+      !s0 n. ao_source_prefix ctx fn s0 n k T s ==>
+        ao_source_prefix ctx fn s0 n j phase t` suffices_by metis_tac[] >>
+  ho_match_mp_tac ao_source_prefix_ind >> rpt strip_tac >>
+  metis_tac[ao_source_prefix_rules]
+QED
