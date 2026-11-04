@@ -5862,6 +5862,25 @@ Proof
   drule_all aug_place_pure_base_storage_live >> simp[]
 QED
 
+Theorem aug_place_storage_load_ready:
+  target_post ctx func cenv cx es sa sb s0 st
+    (PlaceR (StoragePlace tr slot tv)) (Type ty) r vs /\
+  read_place cx (StoragePlace tr slot tv) st = (INL cur,stc) /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  slots_in_range (get_storage cx st tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx st tr) slot tv ==>
+  (if tr then tload slot vs else sload slot vs) = typed_val_to_w256 tv cur
+Proof
+  strip_tac >> drule read_place_state >> strip_tac >> gvs[] >>
+  `read_storage_slot cx tr slot tv st = (INL cur,st)` by
+    gvs[read_place_def] >>
+  `storage_holds cx tr ty (Value cur) slot st` by
+    (irule aug_place_storage_read_holds >> simp[]) >>
+  irule exprSimUnwrapTheory.storage_holds_load >>
+  gvs[target_post_def] >> goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
