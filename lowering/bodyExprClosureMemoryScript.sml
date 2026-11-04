@@ -131,3 +131,30 @@ val () =
      then print "BODY_NOT_BOOL_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "Boolean Not closure inherited admission"
   end;
+
+Theorem body_abs_mem_case:
+  !cx ann e. body_expr_mem_ok cx e ==>
+    body_expr_mem_ok cx (Builtin ann Abs [e])
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ann = BaseT (IntT 256) /\ expr_type e = BaseT (IntT 256)` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule expr_body_pre_builtin_arg >> simp[] >>
+     qexistsl_tac [`BaseT (IntT 256)`, `[e]`, `Abs`, `es`] >> simp[]) >>
+  `expr_sim_mem ctx func cenv cx ty e es` by
+    metis_tac[body_expr_mem_ok_def] >>
+  metis_tac[compile_abs_sim_mem, compile_abs_vv_sim_mem]
+QED
+
+val () =
+  let val th = body_abs_mem_case
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_ABS_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "Abs closure inherited admission"
+  end;
