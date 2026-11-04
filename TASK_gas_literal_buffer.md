@@ -53,4 +53,4 @@ An independent definition/producer audit answered PROVABLE unchanged, including 
 
 ## Notes
 
-An independent audit checked the actual source/compiler producers, all gas tails, allocation and initialized-immutable frames, local/older-allocation memory preservation and full vv_post. Preliminary build 65918 is still running; the root has not yet been parsed under the trimmed independent imports. The moved loweringPosts and fragGasSeq prerequisites have built. No proof strategy is prescribed.
+An independent audit checked the actual source/compiler producers, all gas tails, allocation and initialized-immutable frames, local/older-allocation memory preservation and full vv_post. Preliminary build 65918 and one focused retry 66212 both failed at the existing literal_memory_vv_post metis_tac step's default 2.5-second timeout. The root has not yet been parsed under the trimmed independent imports. The moved loweringPosts, fragGasSeq and exprSimProps prerequisites built. Fix the expensive pure proof step as part of the port, preserving its existing statement and the default timeout. No proof strategy is prescribed.
