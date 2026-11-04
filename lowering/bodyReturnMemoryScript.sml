@@ -1,7 +1,7 @@
 (* Return-value composition through the body expression precondition. *)
 Theory bodyReturnMemory
 Ancestors
-  bodyMemoryPreds bodyMemoryDefs bodySim bodySimStmtCases exprSimHyps
+  bodyMemoryPreds bodyMemoryDefs bodySim bodyExprPreFacts exprSimHypsDefs
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST vyperTypeCallGraph
 
