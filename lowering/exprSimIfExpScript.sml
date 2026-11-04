@@ -1855,6 +1855,28 @@ Proof
   simp[bind_def]
 QED
 
+Theorem ifexp_word_forced_arm_sim[local]:
+  expr_sim ctx func ce cx ty e es /\ is_word_type (expr_type e) /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  expr_res_ok res /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. ?v. res = INL v /\ expr_post ctx func ce cx e es sa sb s0 es' v op s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `lower_value compile_expr ce ty e sa = (op,sb)` by
+    (simp[lower_value_def, comp_bind_def] >>
+     metis_tac[compile_ifexp_arm_unwrap]) >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `op`, `res`, `es'`, `s0`] mp_tac) >>
+  simp[SF CONJ_ss]
+QED
+
 Theorem compile_ifexp_forced_frag[local]:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
@@ -2366,4 +2388,146 @@ Proof
   disch_then (qspec_then `env` mp_tac) >>
   gvs[expr_body_pre_def, expr_sim_inv_def,
       vyperTypeExprSoundnessTheory.value_runtime_typed_def]
+QED
+
+Theorem compile_ifexp_word_forced_frag[local]:
+  !ctx func cenv cx ty t c a b es.
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    is_word_type t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim ctx func cenv cx (BaseT BoolT) c es /\
+    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+       expr_sim ctx func cenv cx ty a es1 /\
+       expr_sim ctx func cenv cx ty b es1) ==>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
+      (do result <- eval_expr cx (IfExp t c a b); read_result cx result od) es = (res, es') /\ expr_res_ok res /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+        (\s. ?v. res = INL v /\
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' (Value v) vv s)
+        (expr_exit res)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
+        simp[frag_exec_false_pre] >>
+      pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >> simp[]) >>
+  drule_all compile_expr_ifexp_states >> strip_tac >>
+  drule eval_expr_ifexp_cases >> strip_tac
+  >- (`fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
+      qpat_x_assum `expr_sim _ _ _ _ (BaseT BoolT) c _`
+        (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+      disch_then (qspecl_then [`sa`, `s1`, `cond_op`, `INR exc`, `es'`, `s0`] mp_tac) >>
+      (impl_tac >- gvs[]) >>
+      disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+                               `\s. F`, `expr_exit res`] mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >>
+      irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
+  >- (qpat_x_assum `!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = _ ==> _` drule >>
+      strip_tac >>
+      rename1 `(do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV cond_bool),es1)` >>
+      Cases_on `cond_bool` >> pure_rewrite_tac[COND_CLAUSES]
+      >- suspend "then_arm" >> suspend "else_arm") >>
+  gvs[expr_res_ok_def]
+QED
+
+Resume compile_ifexp_word_forced_frag[then_arm]:
+  qpat_x_assum `vv = _` SUBST1_TAC >>
+  irule ifexp_branch_sim >>
+  qpat_assum `emit_inst ASSIGN [aop] _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_inst JMP _ _ s9 = _` (irule_at Any) >>
+  qpat_assum `new_block el s10 = _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `new_block tl s6 = _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ c sa = _` (irule_at Any) >>
+  qpat_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` (irule_at Any) >>
+  qexistsl_tac [`a`, `s7`, `tl`] >> simp[cs_extends_refl] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- gvs[] >>
+  rpt strip_tac >> irule ifexp_word_forced_arm_sim >>
+  qpat_assum `compile_expr _ _ a s7 = _` (irule_at Any) >> simp[] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `cs_extends s5 s6` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s1 s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends sa s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends s8 s9 /\ cs_extends s9 s10` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s10 s11` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s8 s11` by metis_tac[cs_extends_trans] >>
+  `cs_extends s8 sb` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_mid]
+QED
+
+Resume compile_ifexp_word_forced_frag[else_arm]:
+  qpat_x_assum `vv = _` SUBST1_TAC >>
+  irule ifexp_branch_sim >>
+  qpat_assum `emit_inst ASSIGN [bop] _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_inst JMP _ _ s13 = _` (irule_at Any) >>
+  qpat_assum `new_block xl s14 = _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `new_block tl s6 = _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ c sa = _` (irule_at Any) >>
+  qpat_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` (irule_at Any) >>
+  qexistsl_tac [`b`, `s11`, `el`] >> simp[cs_extends_refl] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- gvs[] >>
+  rpt strip_tac >> irule ifexp_word_forced_arm_sim >>
+  qpat_assum `compile_expr _ _ b s11 = _` (irule_at Any) >> simp[] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `cs_extends s5 s6` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s1 s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends sa s11` by metis_tac[cs_extends_trans] >>
+  `cs_extends s12 s13 /\ cs_extends s13 s14` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s14 sb` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s12 sb` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_mid]
+QED
+Finalise compile_ifexp_word_forced_frag
+
+Theorem compile_ifexp_word_vv_sim:
+  !ctx func cenv cx ty t c a b es.
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    is_word_type t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim ctx func cenv cx (BaseT BoolT) c es /\
+    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+       expr_sim ctx func cenv cx ty a es1 /\
+       expr_sim ctx func cenv cx ty b es1) ==>
+    !sa sb vv res es' s0.
+      compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
+      eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa ==>
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+        (\s. ?tv. res = INL tv /\
+                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s)
+        (expr_exit res)
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule readable_eval_frag_transport >>
+  simp[] >> rpt strip_tac >>
+  irule compile_ifexp_word_forced_frag >> simp[] >>
+  qexists_tac `ty` >> simp[] >> metis_tac[]
 QED
