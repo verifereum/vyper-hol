@@ -151,3 +151,126 @@ QED
    prove retirement/deletion preserves future query shielding. No assertion
    of spill alignment, window bounds or global preservation follows here.
 *)
+
+(* Temporal branch matrix.  Whole-record equalities also check that shallow
+   PHI steps preserve allocator and persistent-spill bookkeeping. *)
+Theorem alias_dup_live_stage:
+  generate_phi_plan alias_phi0 ["a";"b";"x"] F
+    ((init_plan_state 0) with ps_stack := [Var "left";Var "c";Var "a"]) =
+  ([SODup 1; SOPoke 0 (Var "x")],
+    (init_plan_state 0) with ps_stack := [Var "left";Var "c";Var "a";Var "x"]) /\
+  generate_phi_plan alias_phi0 ["a";"b";"x"] F
+    ((init_plan_state 0) with ps_stack := [Var "right";Var "x";Var "b"]) =
+  ([SODup 1; SOPoke 0 (Var "x")],
+    (init_plan_state 0) with ps_stack := [Var "right";Var "x";Var "b";Var "x"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_dup_dead_stage:
+  generate_phi_plan alias_phi0 ["a";"b"] F
+    ((init_plan_state 0) with ps_stack := [Var "left";Var "c";Var "a"]) =
+  ([SODup 1; SOPoke 0 (Var "x"); SOPop 1],
+    (init_plan_state 0) with ps_stack := [Var "left";Var "c";Var "a"]) /\
+  generate_phi_plan alias_phi0 ["a";"b"] F
+    ((init_plan_state 0) with ps_stack := [Var "right";Var "x";Var "b"]) =
+  ([SODup 1; SOPoke 0 (Var "x"); SOPop 1],
+    (init_plan_state 0) with ps_stack := [Var "right";Var "x";Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_replace_deep_dead_stage:
+  generate_phi_plan alias_phi0 [] F
+    ((init_plan_state 0) with ps_stack := [Var "left";Var "a";Var "c"]) =
+  ([SOPoke 1 (Var "x"); SOSwap 1; SOPop 1],
+    (init_plan_state 0) with ps_stack := [Var "left";Var "c"]) /\
+  generate_phi_plan alias_phi0 [] F
+    ((init_plan_state 0) with ps_stack := [Var "right";Var "b";Var "x"]) =
+  ([SOPoke 1 (Var "x"); SOPop 1],
+    (init_plan_state 0) with ps_stack := [Var "right";Var "x"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_two_steps_with_residuals:
+  generate_phi_plan alias_phi1 [] F
+    (SND (generate_phi_plan alias_phi0 ["c";"x"] F
+      ((init_plan_state 0) with ps_stack := [Var "left";Var "c";Var "a"]))) =
+    ([SOPoke 0 (Var "y"); SOPop 1],
+     (init_plan_state 0) with ps_stack := [Var "left";Var "c"]) /\
+  generate_phi_plan alias_phi1 [] F
+    (SND (generate_phi_plan alias_phi0 ["c";"x"] F
+      ((init_plan_state 0) with ps_stack := [Var "right";Var "x";Var "b"]))) =
+    ([SOPoke 0 (Var "y"); SOPop 1],
+     (init_plan_state 0) with ps_stack := [Var "right";Var "x"])
+Proof
+  EVAL_TAC
+QED
+
+(* Same query depth/vector is insufficient without selected-value liveness
+   agreement.  This is a local interface countermodel, not a ready function. *)
+Theorem alias_depth_does_not_determine_dup:
+  stack_get_phi_depth [Var "a";Var "b"] [Var "c";Var "a"] = SOME 0 /\
+  stack_get_phi_depth [Var "a";Var "b"] [Var "x";Var "b"] = SOME 0 /\
+  FST (generate_phi_plan alias_phi0 ["a";"x"] F
+    ((init_plan_state 0) with ps_stack := [Var "c";Var "a"])) =
+      [SODup 1; SOPoke 0 (Var "x")] /\
+  FST (generate_phi_plan alias_phi0 ["a";"x"] F
+    ((init_plan_state 0) with ps_stack := [Var "x";Var "b"])) =
+      [SOPoke 0 (Var "x")]
+Proof
+  EVAL_TAC
+QED
+
+(* Candidate one-step interface / premise-producer ledger (C3.2.2.15).
+
+   States share all non-stack fields and have stacks P++K and Q++L.
+   K,L have equal length; for every remaining PHI query R, the vectors
+   MAP (\op. MEM op R) (REVERSE K) and the corresponding L vector agree.
+   Each executed query has a true position inside K,L (shielding P,Q).
+   No original-class identity is attached to a position: renamed common
+   cells may shadow unresolved edge cells. Retired unequal cells remain
+   physically present and counted in distances until removed.
+
+   Step premises beyond these positional observations:
+   A. Selected-value membership in next_liveness agrees. Equal depth alone
+      does NOT imply this: alias_depth_does_not_determine_dup is checked.
+      Unequal unresolved incoming names should both be dead by disjoint
+      incoming classes and the incoming-dead-after-prefix readiness clause;
+      an equal common renamed operand has identical membership trivially.
+      This explanation still needs a universal liveness/temporal producer.
+   B. DUP/window operations stay within the compared suffix, or have an
+      established framed spill-window replay. Shallow DUP and replacement
+      were checked here, but deep DUP allocator evolution needs the existing
+      replay/window boundaries and a global producer. Stack agreement alone
+      says nothing about persistent spill maps; those are an explicit input.
+   C. For dead-output popping, the top-first occurrence of ret must be at
+      the same position on both sides inside the suffix. Equality of the
+      incoming query vectors does NOT guarantee this. The deep dead stage
+      above gives different code when an old output-name alias sits above
+      the replaced position on just one side. Correct liveness for an alias
+      read by a later PHI keeps this output live, avoiding that local case;
+      other old repeated output occurrences require a real temporal proof.
+   D. After poke/dup/pop, remaining query vectors and shielding must still
+      hold. Common inserted ret has equal query membership; deletion must
+      use equal positions. Removing the sole shielding hit is not licensed
+      merely because it is dead after the PHI prefix. Retiring cells may
+      enlarge P,Q only if every future query/window remains shielded above.
+
+   Proven inputs: exact map classes and trace membership (PhiMaps/PhiSlots),
+   existential entry representatives (EntryWitness), and actual alias stage
+   equations. Locally preservable: equal common-cell query memberships,
+   same-index vector updates/deletions, shallow framed operations. Missing
+   global producers: A for arbitrary reachable intermediate states, C for
+   old aliases, D's shielding after retirement, and B's deep spill windows.
+
+   Verdict: the positional relation alone is NOT closed under actual PHI
+   execution (A and C countermodels above). With A--D as explicit premises
+   it is a candidate consumer interface, not yet a producer-backed invariant.
+   The genuine two-PHI alias trace does close: the first common x shadows
+   the unresolved c/x class on both edges; the second dead output pops that
+   common cell, leaving c/x as unequal retired cells and no PHI queries left.
+   Whole-record equations above certify operations and allocator/spill fields
+   in this bounded trace, not a universal retirement or frozen-task theorem.
+*)
