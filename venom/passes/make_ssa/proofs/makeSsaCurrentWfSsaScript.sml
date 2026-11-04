@@ -24,7 +24,7 @@ Ancestors
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
-  makeSsaCurrentPlacementCut ssaPipeline codegenReadyCompute
+  makeSsaCurrentPlacementCut ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
 
@@ -2978,6 +2978,205 @@ Proof
   qpat_x_assum `_ = pre ++ tail /\ _` (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all current_wf_cleanup_prefix_semantics >> strip_tac >>
   qexistsl_tac [`pre`, `tail`, `pre'`, `tail'`] >> fs[] >> metis_tac[]
+QED
+
+(* Bounded cleanup probe: two backedge predecessors of an original PHI. *)
+Definition current_wf_probe_fork_def:
+  current_wf_probe_fork = mk_raw_function "fork"
+    [<| bb_label := "E"; bb_instructions :=
+        [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+         current_probe_inst 1 JMP [Label "H"] []] |>;
+     <| bb_label := "H"; bb_instructions :=
+        [current_probe_inst 2 PHI
+          [Label "E"; Var "a"; Label "D"; Var "b"; Label "F"; Var "c"] ["v"];
+         current_probe_inst 3 JNZ [Var "v"; Label "D"; Label "F"] []] |>;
+     <| bb_label := "D"; bb_instructions :=
+        [current_probe_inst 4 ASSIGN [Lit 2w] ["b"];
+         current_probe_inst 5 JNZ [Var "v"; Label "H"; Label "X"] []] |>;
+     <| bb_label := "F"; bb_instructions :=
+        [current_probe_inst 6 ASSIGN [Lit 3w] ["c"];
+         current_probe_inst 7 JMP [Label "H"] []] |>;
+     <| bb_label := "X"; bb_instructions :=
+        [current_probe_inst 8 STOP [] []] |>]
+End
+
+Definition current_wf_probe_supply_def:
+  current_wf_probe_supply fn =
+    <| irs_next_inst := 20; irs_next_var := 0; irs_next_label := 0;
+       irs_used_inst_ids := fn_ir_inst_ids fn;
+       irs_used_vars := fn_ir_vars fn; irs_used_labels := fn_ir_labels fn |>
+End
+
+Theorem current_wf_probe_fork_structural:
+  wf_function current_wf_probe_fork /\ fn_inst_wf current_wf_probe_fork /\
+  first_block_no_preds current_wf_probe_fork /\ first_block_no_phi current_wf_probe_fork /\
+  ir_supply_covers_fn (current_wf_probe_supply current_wf_probe_fork) current_wf_probe_fork /\
+  ir_supply_inst_ok (current_wf_probe_supply current_wf_probe_fork)
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_wf_probe_fork_final:
+  wf_ssa (FST (make_ssa_current_fn (current_wf_probe_supply current_wf_probe_fork)
+    current_wf_probe_fork))
+Proof
+  rewrite_tac[wf_ssa_def] >> EVAL_TAC
+QED
+
+(* Nested header: the inner original PHI reads the outer PHI's output. *)
+Definition current_wf_probe_nested_def:
+  current_wf_probe_nested = mk_raw_function "nested"
+    [<| bb_label := "E"; bb_instructions :=
+        [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+         current_probe_inst 1 JMP [Label "H"] []] |>;
+     <| bb_label := "H"; bb_instructions :=
+        [current_probe_inst 2 PHI
+          [Label "E"; Var "a"; Label "F"; Var "b"] ["v"];
+         current_probe_inst 3 JMP [Label "J"] []] |>;
+     <| bb_label := "J"; bb_instructions :=
+        [current_probe_inst 4 PHI
+          [Label "H"; Var "v"; Label "D"; Var "c"] ["w"];
+         current_probe_inst 5 JNZ [Var "w"; Label "D"; Label "F"] []] |>;
+     <| bb_label := "D"; bb_instructions :=
+        [current_probe_inst 6 ASSIGN [Lit 2w] ["c"];
+         current_probe_inst 7 JMP [Label "J"] []] |>;
+     <| bb_label := "F"; bb_instructions :=
+        [current_probe_inst 8 ASSIGN [Lit 3w] ["b"];
+         current_probe_inst 9 JNZ [Var "w"; Label "H"; Label "X"] []] |>;
+     <| bb_label := "X"; bb_instructions :=
+        [current_probe_inst 10 ASSIGN [Var "v"] ["z"];
+         current_probe_inst 11 STOP [] []] |>]
+End
+
+Theorem current_wf_probe_fork_header:
+  (EL 1 (FST (make_ssa_current_fn
+    (current_wf_probe_supply current_wf_probe_fork) current_wf_probe_fork)).fn_blocks).
+    bb_instructions =
+  [current_probe_inst 20 PHI
+    [Label "E"; Var "a"; Label "D"; Var "b"; Label "F"; Var "c"] ["formal_var_0"];
+   current_probe_inst 2 ASSIGN [Var "formal_var_0"] ["v"];
+   current_probe_inst 3 JNZ [Var "formal_var_0"; Label "D"; Label "F"] []]
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_wf_probe_nested_structural:
+  wf_function current_wf_probe_nested /\ fn_inst_wf current_wf_probe_nested /\
+  first_block_no_preds current_wf_probe_nested /\ first_block_no_phi current_wf_probe_nested /\
+  ir_supply_covers_fn (current_wf_probe_supply current_wf_probe_nested) current_wf_probe_nested /\
+  ir_supply_inst_ok (current_wf_probe_supply current_wf_probe_nested)
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_wf_probe_nested_final:
+  wf_ssa (FST (make_ssa_current_fn (current_wf_probe_supply current_wf_probe_nested)
+    current_wf_probe_nested))
+Proof
+  rewrite_tac[wf_ssa_def] >> EVAL_TAC
+QED
+
+Theorem current_wf_probe_nested_shape:
+  MAP (\bb. (bb.bb_label, MAP (\i. (i.inst_opcode,i.inst_operands,i.inst_outputs))
+     bb.bb_instructions))
+    (FST (make_ssa_current_fn (current_wf_probe_supply current_wf_probe_nested)
+       current_wf_probe_nested)).fn_blocks =
+  [("E",[(ASSIGN,[Lit 1w],["a"]); (JMP,[Label "H"],[])]);
+   ("H",[(PHI,[Label "E"; Var "a"; Label "F"; Var "b"],["formal_var_0"]);
+         (ASSIGN,[Var "formal_var_0"],["v"]); (JMP,[Label "J"],[])]);
+   ("J",[(PHI,[Label "H"; Var "formal_var_0"; Label "D"; Var "c"],["formal_var_1"]);
+         (ASSIGN,[Var "formal_var_1"],["w"]);
+         (JNZ,[Var "formal_var_1"; Label "D"; Label "F"],[])]);
+   ("D",[(ASSIGN,[Lit 2w],["c"]); (JMP,[Label "J"],[])]);
+   ("F",[(ASSIGN,[Lit 3w],["b"]); (JNZ,[Var "formal_var_1"; Label "H"; Label "X"],[])]);
+   ("X",[(ASSIGN,[Var "formal_var_0"],["z"]); (STOP,[],[])])]
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_wf_probe_phi_contract:
+  !fn. MEM fn [current_wf_probe_fork; current_wf_probe_nested] ==>
+  fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn /\
+  fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
+  (!bb inst. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+     inst.inst_opcode = PHI ==>
+     ALL_DISTINCT (MAP FST (phi_pairs inst.inst_operands)) /\
+     !l v. MEM (l,v) (phi_pairs inst.inst_operands) ==>
+       fn_cfg_edge fn l bb.bb_label)
+Proof
+  simp[fn_phi_operands_single_def_def, fn_phis_cover_preds_def,
+       fn_phi_outputs_single_def_def, fn_phis_non_degenerate_def,
+       current_wf_probe_fork_def, current_wf_probe_nested_def,
+       mk_raw_function_def, fn_insts_def, fn_cfg_edge_def,
+       current_probe_inst_def, phi_pairs_def] >>
+  rpt strip_tac >> gvs[phi_pairs_def] >>
+  rule_assum_tac (CONV_RULE EVAL) >> gvs[] >>
+  EVAL_TAC >>
+  simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >> EVAL_TAC
+QED
+
+Theorem current_wf_probe_input_ssa:
+  wf_ssa current_wf_probe_fork /\ wf_ssa current_wf_probe_nested
+Proof
+  rewrite_tac[wf_ssa_def] >> EVAL_TAC
+QED
+
+Theorem current_wf_probe_input_definite_assignment:
+  fn_defs_reach_uses current_wf_probe_fork /\
+  fn_defs_reach_uses current_wf_probe_nested
+Proof
+  conj_tac >> irule wf_ssa_defs_reach_uses >>
+  simp[current_wf_probe_input_ssa, current_wf_probe_fork_structural,
+       current_wf_probe_nested_structural]
+QED
+
+Theorem current_wf_probe_input_reachable:
+  all_reachable current_wf_probe_fork /\ all_reachable current_wf_probe_nested
+Proof
+  conj_tac >>
+  simp[all_reachable_def, fn_reachable_cfg_analyze,
+       current_wf_probe_fork_structural, current_wf_probe_nested_structural] >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+(* Negative control for self-only deletion.  The non-degeneracy premise
+   excludes this input; it must not be reported as a task counterexample. *)
+Definition current_wf_probe_self_only_def:
+  current_wf_probe_self_only = mk_raw_function "self_only"
+    [<| bb_label := "E"; bb_instructions :=
+        [current_probe_inst 0 JMP [Label "H"] []] |>;
+     <| bb_label := "H"; bb_instructions :=
+        [current_probe_inst 1 PHI
+          [Label "E"; Var "v"; Label "H"; Var "v"] ["v"];
+         current_probe_inst 2 JNZ [Var "v"; Label "H"; Label "X"] []] |>;
+     <| bb_label := "X"; bb_instructions :=
+        [current_probe_inst 3 ASSIGN [Var "v"] ["z"];
+         current_probe_inst 4 STOP [] []] |>]
+End
+
+Theorem current_wf_probe_self_only_rejected:
+  ~fn_phis_non_degenerate current_wf_probe_self_only
+Proof
+  simp[fn_phis_non_degenerate_def, current_wf_probe_self_only_def,
+       mk_raw_function_def, fn_insts_def, current_probe_inst_def,
+       phi_pairs_def] >>
+  qexistsl [`current_probe_inst 1 PHI
+    [Label "E"; Var "v"; Label "H"; Var "v"] ["v"]`, `"v"`] >>
+  simp[current_probe_inst_def, phi_pairs_def] >> EVAL_TAC >> metis_tac[]
+QED
+
+Theorem current_wf_probe_self_only_shape:
+  MAP (\bb. (bb.bb_label, MAP (\i. (i.inst_opcode,i.inst_operands,i.inst_outputs))
+     bb.bb_instructions))
+    (FST (make_ssa_current_fn (current_wf_probe_supply current_wf_probe_self_only)
+       current_wf_probe_self_only)).fn_blocks =
+  [("E",[(JMP,[Label "H"],[])]);
+   ("H",[(ASSIGN,[Var "formal_var_0"],["v"]);
+         (ASSIGN,[Var "v"],["formal_var_0"]);
+         (JNZ,[Var "formal_var_0"; Label "H"; Label "X"],[])]);
+   ("X",[(ASSIGN,[Var "formal_var_0"],["z"]); (STOP,[],[])])]
+Proof
+  EVAL_TAC
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
