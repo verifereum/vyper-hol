@@ -383,13 +383,7 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok, expr_sim_pre_body_pre]
 QED
 
-Theorem expr_body_pre_gas_admissible:
-  expr_body_pre cenv cx env e es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
-Proof
-  rw[gas_admissible_def] >>
-  metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]
-QED
+
 
 Theorem expr_body_pre_vv_gas_admissible:
   expr_body_pre cenv cx env e es ==>
