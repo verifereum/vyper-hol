@@ -1,7 +1,7 @@
 Theory lowerDloadPtrPhi
 Ancestors
   venomExecSemantics venomState venomInst execEquivParamBase
-  list pred_set finite_map lowerDloadDefs o1ContractLowerDload
+  list pred_set finite_map lowerDloadDefs o1ContractLowerDload contextCodegenRel
 
 Theorem eval_operand_definedness:
   s.vs_labels = t.vs_labels /\
@@ -115,4 +115,47 @@ Proof
   gvs[] >> irule eval_phis_definedness >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> qexists `i` >> simp[]) >>
   qexists `t` >> simp[]
+QED
+
+Theorem lower_dload_blocks_supply_lookup:
+  !bs q cs q' lbl b'.
+    lower_dload_blocks_supply q bs = (cs,q') /\
+    lookup_block lbl cs = SOME b' ==>
+    ?b u u'. lookup_block lbl bs = SOME b /\
+              lower_dload_block_supply u b = (b',u')
+Proof
+  Induct_on `bs` >- simp[lower_dload_blocks_supply_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_blocks_supply_def, AllCaseEqs()] >> strip_tac >>
+  `bb'.bb_label = h.bb_label` by
+    (gvs[lower_dload_block_supply_def, AllCaseEqs()] >> simp[]) >>
+  gvs[lookup_block_def, FIND_thm] >> Cases_on `h.bb_label = lbl` >> gvs[]
+  >- (qexistsl [`q`,`s1`] >> simp[]) >>
+  first_x_assum drule >> simp[lookup_block_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_enters_block:
+  lower_dload_function_supply q f = (g,q') /\
+  s.vs_current_bb = t.vs_current_bb /\
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
+  (!bb i v. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+            MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  enters_block g t t' ==>
+  ?s'. enters_block f s s' /\ s'.vs_inst_idx = t'.vs_inst_idx /\
+       (!v. v IN V ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE))
+Proof
+  simp[lower_dload_function_supply_def, enters_block_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  drule_all lower_dload_blocks_supply_lookup >> strip_tac >>
+  `MEM b f.fn_blocks` by metis_tac[lookup_block_def, FIND_MEM] >>
+  `?sp. eval_phis s b.bb_instructions = OK sp /\
+    (!v. v IN V ==> (lookup_var v sp = NONE <=> lookup_var v s_phi = NONE))` by
+    (irule lower_dload_block_supply_phi_definedness >>
+     conj_tac
+     >- (rpt strip_tac >> first_x_assum irule >> qexistsl [`b`,`i`] >> simp[]) >>
+     qexistsl [`bb`, `u`, `u'`, `t`] >> simp[]) >>
+  drule lower_dload_block_supply_phi_exact >> strip_tac >>
+  qexists `sp with vs_inst_idx := phi_prefix_length b.bb_instructions` >>
+  gvs[lookup_var_def] >> rpt strip_tac >> first_x_assum drule >> simp[]
 QED

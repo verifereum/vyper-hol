@@ -426,3 +426,30 @@ Premise origins for subsequent consumers:
   original variables must not be removed from definedness coverage.
 - No provenance/value/memory relation, saved suffix layout, call/return,
   or full enters_block transport is established by these equalities.
+
+## Actual function block-entry consumer (C1.12.3.7)
+
+Checked `lower_dload_blocks_supply_lookup`: an actual supply transformation
+of a block list and successful target lookup yield a successful source
+lookup and an actual block-supply witness for those selected blocks.
+The induction preserves first-match lookup even with duplicate labels.
+
+Checked `lower_dload_function_supply_enters_block` in PhiTheory:
+given the actual function-supply witness, equal current block, predecessor
+and label map, coverage of source function Var operands by V, definedness
+agreement on V, and `enters_block g t t'`, obtains `enters_block f s s'`,
+equal post-entry instruction indices, and definedness agreement on V.
+The selected-block witness is derived internally, not an added premise.
+It consumes the checked block PHI definedness/exactness interfaces.
+
+Still-required premise producers:
+- Initial entry must show paired setup selects the same entry label, sets
+  equal predecessor/label maps and starts with identical original vars.
+- Later block entry must preserve the selected current label, predecessor,
+  label map and all-original-variable definedness in transition transport.
+- Function-supply correspondence must come from stage/function lookup.
+- V operand coverage is syntactic; include opaque retpc original operands.
+This is successful entry/index/definedness transport ONLY. Pointer values,
+parallel provenance/taint, memory, allocation layouts and saved-frame
+relations remain separate central integration obligations. No full
+enters_block boundary-core transport has been proved.
