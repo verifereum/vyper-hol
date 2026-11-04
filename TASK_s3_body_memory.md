@@ -8,13 +8,17 @@ Locations: lowering/bodyMemoryScript.sml and additive lowering memory proofs
 
 ## Theorem Statement (FROZEN)
 
-The counted body endpoint retains every existing outer hypothesis. It removes
-only externally fixed source results and supplies the actual source action.
+The counted body endpoint retains the existing outer hypotheses, adds the
+approved syntax-wide ABI-target coverage supplied by actual function membership,
+and replaces externally fixed source results with the actual source action.
 
 ```sml
 Theorem body_stmts_sim_mem:
   !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
@@ -36,7 +40,9 @@ and bodyMemoryDefs (frame_ret_ok_mem). Do not change their statements.
    loop and internal-call memory execution. A body-footprint assumption,
    restricted coverage family or renamed admission does not deliver it.
 2. Migrate the existing additive body predicates/consumers to the counted
-   source-action schema, preserving their outer hypotheses and checked facts.
+   source-action schema, threading approved ABI coverage and preserving their
+   remaining hypotheses and checked facts. Derive coverage from the actual
+   FunctionDecl body at S3 entry; no new top-level premise.
 3. Build bodyMemoryTheory and edited additive memory theories with all kernel
    guards intact; no newly admitted helpers or changed stage hypotheses.
 4. Commit proof sources and necessary roots; retain existing successful proof

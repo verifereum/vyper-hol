@@ -21,6 +21,9 @@ Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      (!target. supported_stmt_expr_exists
+         (expr_abi_decode_target_root target) s ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
@@ -34,6 +37,9 @@ Definition body_stmts_mem_ok_def:
   body_stmts_mem_ok cx ss <=>
     !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      (!target. supported_stmts_expr_exists
+         (expr_abi_decode_target_root target) ss ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
@@ -113,6 +119,9 @@ Theorem body_stmts_mem_projection:
   (!cx ss. body_stmts_mem_ok cx ss) ==>
   !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+    (!target. supported_stmts_expr_exists
+       (expr_abi_decode_target_root target) ss ==>
+       occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
