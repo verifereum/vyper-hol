@@ -127,3 +127,25 @@ Proof
   simp[] >>
   irule ld_joint_identity_boundary_next >> simp[] >> metis_tac[]
 QED
+
+Theorem ld_joint_assert_abort:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  MEM inst.inst_opcode [ASSERT; ASSERT_UNREACHABLE] /\
+  step_inst fuel C inst s = Abort ab s1 ==>
+  ?t1. step_inst fuel C' inst t = Abort ab t1 /\
+    dead_result_rel D (Abort ab s1) (Abort ab t1)
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (drule ld_joint_scalar_operands_clean >>
+     gvs[MEM, is_pointer_preserving_op_def, mem_read_ops_def,
+         mem_write_ops_def, retpc_use_ok_def, taint_ok_def] >> metis_tac[]) >>
+  fs[MEM] >>
+  (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+   simp[step_inst_non_invoke] >>
+   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+   simp[dead_result_rel_def] >> metis_tac[MEM])
+QED
