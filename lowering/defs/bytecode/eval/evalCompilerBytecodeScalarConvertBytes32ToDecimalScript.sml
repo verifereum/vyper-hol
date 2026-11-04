@@ -230,7 +230,7 @@ Proof
        scalar_convert_bytes32_to_decimal_runtime_pipeline_def,
        scalar_convert_bytes32_to_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  rpt (CASE_TAC >> gvs[])
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval
