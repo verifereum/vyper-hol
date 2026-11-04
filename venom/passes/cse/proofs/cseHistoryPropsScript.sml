@@ -1,5 +1,7 @@
 Theory cseHistoryProps
 Ancestors passSharedProps venomExecSemantics venomState stateEquiv execEquivProofs
+  cfgAnalysisProps analysisSimProps venomInstProps venomExecProps
+  venomWf venomInst venomExecProofs list cfgDefs
 
 (* Local copy transport only: the persistence premise must be established
    for the particular later execution occurrence by a separate argument. *)
@@ -539,4 +541,101 @@ Proof
  `cse_prefix ctx fn fuel0 s0 [] (CseRun fuel0 s0)`
    by simp[cse_prefix_empty] >>
  qpat_x_assum `!events s t. _` drule_all >> simp[]
+QED
+
+(* A successful continuing terminator follows a real CFG edge. *)
+Theorem cse_terminator_boundary:
+ !fn bb s inst fuel ctx t.
+ wf_function fn /\ fn_inst_wf fn /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\
+ is_terminator inst.inst_opcode /\ ~t.vs_halted ==>
+ SUC s.vs_inst_idx = LENGTH bb.bb_instructions /\
+ MEM bb.bb_label (cfg_preds_of (cfg_analyze fn) t.vs_current_bb) /\
+ (MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre ==>
+  MEM t.vs_current_bb (cfg_analyze fn).cfg_dfs_pre)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ `bb_well_formed bb` by gvs[wf_function_def, EVERY_MEM] >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL s.vs_inst_idx bb.bb_instructions = inst` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ `s.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
+   metis_tac[bb_well_formed_def] >>
+ `SUC s.vs_inst_idx = LENGTH bb.bb_instructions` by
+   (gvs[bb_well_formed_def] >> Cases_on `bb.bb_instructions` >> gvs[]) >>
+ `LAST bb.bb_instructions = inst` by
+   (`PRE (LENGTH bb.bb_instructions) = s.vs_inst_idx` by decide_tac >>
+    fs[bb_well_formed_def] >> simp[LAST_EL]) >>
+ `inst_wf inst` by
+   (fs[fn_inst_wf_def, EVERY_MEM] >>
+    `MEM inst bb.bb_instructions` by
+      (fs[bb_well_formed_def] >>
+       `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions` by
+         (Cases_on `bb.bb_instructions` >> gvs[]) >>
+       metis_tac[MEM_EL, LAST_EL]) >>
+    metis_tac[]) >>
+ `inst.inst_opcode <> INVOKE` by
+   (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+ `MEM t.vs_current_bb (get_successors inst)` by
+   metis_tac[step_inst_base_term_succs, step_inst_non_invoke] >>
+ `MEM t.vs_current_bb (bb_succs bb)` by
+   (Cases_on `bb.bb_instructions` >>
+    gvs[bb_succs_def, MEM_nub, MEM_REVERSE]) >>
+ `MEM t.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
+   metis_tac[cfg_analyze_preserves_bb_succs] >>
+ simp[] >> conj_tac
+ >- metis_tac[cfg_edge_symmetry_uncond] >>
+ strip_tac >> drule cfg_dfs_pre_succs_closed >>
+ simp[EVERY_MEM] >> disch_then irule >> simp[]
+QED
+
+Theorem cse_prefix_control:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ case phase of
+   CseRun n s => MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+ | CseExec n bb s =>
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   bb.bb_label = s.vs_current_bb /\
+   MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+   s.vs_inst_idx <= LENGTH bb.bb_instructions
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+     gvs[fn_entry_label_def] >> Cases_on `entry_block fn` >> gvs[] >>
+     drule cfg_analyze_preorder_entry_first >>
+     Cases_on `(cfg_analyze fn).cfg_dfs_pre` >> simp[])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     drule eval_phis_preserves_current_bb >> strip_tac >>
+     simp[] >> metis_tac[lookup_block_label, phi_prefix_length_le])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     drule_all step_preserves_control_flow >> strip_tac >>
+     gvs[get_instruction_def, AllCaseEqs()])
+ >> rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_terminator_boundary >> simp[]
+QED
+
+Theorem cse_prefix_run_control:
+ !ctx fn fuel0 s0 events n s.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseRun n s) ==>
+ MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Proof
+ rpt strip_tac >> drule cse_prefix_control >> simp[]
+QED
+
+Theorem cse_prefix_exec_control:
+ !ctx fn fuel0 s0 events n bb s.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) ==>
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ bb.bb_label = s.vs_current_bb /\
+ MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
+ s.vs_inst_idx <= LENGTH bb.bb_instructions
+Proof
+ rpt gen_tac >> strip_tac >> drule cse_prefix_control >> simp[]
 QED
