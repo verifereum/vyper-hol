@@ -2479,3 +2479,107 @@ QED
    A later provenance argument must use more than expr_body_pre; in
    particular the frozen operand simulation premise has not been used here.
 *)
+
+(* A zero-code replay reconstructs the representation relationally, not at
+   the original target state. Source replay is an explicit premise. *)
+Theorem expr_vv_case_zero_code_replay:
+  expr_vv_case nocalls ctx func cenv cx obj /\
+  expr_body_pre cenv cx env obj t /\
+  (nocalls ==> int_calls_expr obj = []) /\
+  compile_expr cenv ty obj sc = (vv,sc) /\
+  eval_expr cx obj t = (INL tv,t) /\
+  expr_vv_res_ok (INL tv) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc ==>
+  frag_exec ctx sc sc
+    (\s. s = q /\ stmt_state_rel ctx func cenv cx t s)
+    (vv_post ctx func cenv cx obj t sc sc q t tv vv)
+    (expr_exit (INL tv))
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_vv_case _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_case_def]) >>
+  disch_then (qspecl_then [`env`,`ty`,`t`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sc`,`sc`,`vv`,`INL tv`,`t`,`q`] mp_tac) >>
+  simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+QED
+
+Theorem expr_vv_case_zero_code_replay_operand:
+  expr_vv_case nocalls ctx func cenv cx obj /\
+  expr_body_pre cenv cx env obj t /\
+  (nocalls ==> int_calls_expr obj = []) /\
+  compile_expr cenv ty obj sc = (vv,sc) /\
+  eval_expr cx obj t = (INL tv,t) /\ expr_vv_res_ok (INL tv) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\
+  (!x. op = Var x ==> not_fresh_at sc x) /\
+  (!l. op <> Label l) /\ eval_operand op q = SOME iw ==>
+  frag_exec ctx sc sc
+    (\s. s = q /\ stmt_state_rel ctx func cenv cx t s)
+    (\s. vv_post ctx func cenv cx obj t sc sc q t tv vv s /\
+         eval_operand op s = SOME iw)
+    (expr_exit (INL tv))
+Proof
+  strip_tac >> drule_all expr_vv_case_zero_code_replay >>
+  disch_then (qspec_then `q` assume_tac) >>
+  irule fragExecTheory.frag_exec_conseq >> first_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `op` >> gvs[venomStateTheory.eval_operand_def, vv_post_def] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+(* Root specialization and a residual-fragment composition test. The
+   continuation can be compile_array_subscript_ok/oob once its premises
+   have been obtained; no target-state equality is used. *)
+Theorem immutable_root_replay_then[local]:
+  expr_vv_case nocalls ctx func cenv cx (TopLevelName ann (md,name)) /\
+  expr_body_pre cenv cx env (TopLevelName ann (md,name)) t /\
+  FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off) /\
+  eval_expr cx (TopLevelName ann (md,name)) t = (INL tv,t) /\
+  expr_vv_res_ok (INL tv) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\
+  (!x. op = Var x ==> not_fresh_at sc x) /\
+  (!l. op <> Label l) /\ eval_operand op q = SOME iw /\
+  cs_extends sc sd /\
+  (!s. vv_post ctx func cenv cx (TopLevelName ann (md,name)) t sc sc q t tv
+          (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s /\
+       eval_operand op s = SOME iw ==>
+       frag_exec ctx sc sd (\r. r = s) Q (expr_exit (INL tv))) ==>
+  frag_exec ctx sc sd
+    (\s. s = q /\ stmt_state_rel ctx func cenv cx t s)
+    Q (expr_exit (INL tv))
+Proof
+  strip_tac >>
+  `compile_expr cenv (expr_type (TopLevelName ann (md,name)))
+     (TopLevelName ann (md,name)) sc =
+     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode),sc)` by
+    (irule compile_immutable_root_shape >> simp[]) >>
+  `nocalls ==> int_calls_expr (TopLevelName ann (md,name)) = []` by
+    simp[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  drule_all expr_vv_case_zero_code_replay_operand >>
+  disch_then (mp_then Any irule fragExecTheory.frag_exec_then) >>
+  simp[compileEnvTheory.cs_extends_refl]
+QED
+
+(* C1.4.15 bounded replay result:
+   - expr_vv_case_zero_code_replay applies the frozen universal operand
+     premise at any new source endpoint satisfying its body precondition.
+   - The saved-operand variant preserves a non-label operand already below
+     sc's freshness frontier. immutable_root_replay_then checks zero-code
+     root specialization and relational composition with a residual fragment.
+   - Source replay eval_expr cx obj t = (INL tv,t), expr_body_pre at t,
+     expr_vv_res_ok, fn_has_code sc sc func, local_ptrs_reserved, and saved
+     operand freshness remain explicit hypotheses. In particular this does
+     not derive replay of a captured result from LocCode. A root with source
+     storage may replay its place even though the compiler says code; no
+     ImmutablePlace provenance is needed by these conditional boundaries.
+   - Proper Subscript/Attribute code paths are not zero-code in general.
+     Neither same-result source replay nor their code erasure is proved.
+     The continuation probe tests the frag_exec interface only: it does not
+     discharge array_len_ok or the other array-operation premises.
+   No endpoint equality or theorem falsehood is asserted here.
+*)
