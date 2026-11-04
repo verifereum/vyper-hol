@@ -930,3 +930,55 @@ Proof
       simp[]) >>
   irule simple_prefix_spill_wf >> simp[]
 QED
+
+Theorem list_elem_count_dom_length:
+  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
+    LENGTH xs <= LENGTH ys
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `MEM h ys` by
+    (first_x_assum (qspec_then `h` mp_tac) >>
+     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  qpat_x_assum `MEM h ys` mp_tac >>
+  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
+  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
+    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
+     Cases_on `h = x` >> simp[] >> decide_tac) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem available_input_plan_length:
+  !opc inputs nl ps input_ops ps1.
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+    LENGTH inputs <= LENGTH ps1.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule list_elem_count_dom_length >>
+  drule_all emit_input_plan_materialised >> simp[]
+QED
+
+Theorem available_preparation_prefix_wf:
+  !opc inputs nl ps input_ops ps1 dfg reorder_ops ps2 lo.
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    reorder_plan dfg inputs ps1 = (reorder_ops,ps2) /\
+    opc <> INVOKE /\ LENGTH inputs <= 16 /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!l. MEM (Label l) inputs ==> IS_SOME (FLOOKUP lo l)) ==>
+    prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH inputs <= LENGTH ps1.ps_stack` by
+    (metis_tac[available_input_plan_length]) >>
+  `prefix_wf lo (LENGTH ps.ps_stack) input_ops /\
+   prefix_end_len lo (LENGTH ps.ps_stack) input_ops = LENGTH ps1.ps_stack` by
+    (metis_tac[emit_input_plan_wf_len, pairTheory.FST, pairTheory.SND]) >>
+  `prefix_wf lo (LENGTH ps1.ps_stack) reorder_ops` by
+    (qspecl_then [`dfg`, `inputs`, `ps1`, `lo`] mp_tac reorder_plan_wf_len >>
+     simp[]) >>
+  metis_tac[prefix_wf_len_append, prefix_wf_append]
+QED
