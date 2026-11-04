@@ -151,3 +151,17 @@ Proof
   drule ld_annotated_owner_separation >>
   disch_then (qspecl_then [`(oa,(bs,sz))`, `(ob,(bs,sz))`] mp_tac) >> simp[]
 QED
+
+Theorem ld_owned_operands_defined:
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) ops ==> v IN V) ==>
+  ((!op. MEM op ops ==> ?x. eval_operand op s = SOME x) <=>
+   (!op. MEM op ops ==> ?y. eval_operand op t = SOME y))
+Proof
+  strip_tac >>
+  `!op. MEM op ops ==> (eval_operand op s = NONE <=> eval_operand op t = NONE)` by
+    (rpt strip_tac >> irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
+  eq_tac >> rpt strip_tac >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
+  gvs[] >> metis_tac[optionTheory.option_CLAUSES]
+QED
