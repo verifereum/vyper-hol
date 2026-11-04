@@ -701,6 +701,8 @@ Proof
    (!w v. step_inst_base inst s2 <> IntRet w v) /\
    (!a v. step_inst_base inst s2 <> Abort a v)` by
     (irule step_inst_base_not_halt_abort >> gvs[]) >>
+  (* the static-write case split is done; keep gvs from splitting it again *)
+  qpat_x_assum `~(_ /\ s1.vs_call_ctx.cc_static /\ _)` kall_tac >>
   Cases_on `step_inst_base inst s1` >> gvs[]
   >- ((* OK s1' — goal is ∃s2'. ... = OK s2' /\ ld_ok ... *)
       drule_all step_inst_base_ld_ok_classify >> metis_tac[])
