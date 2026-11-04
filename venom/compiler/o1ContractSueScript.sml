@@ -897,6 +897,20 @@ Proof
       listTheory.EVERY_EL] >> metis_tac[]
 QED
 
+(* Row 7 of the DFT run (dft_in_ok) asks for wf_ssa of SUE's output. *)
+Theorem sue_stage_wf_ssa:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SingleUseExpansion) view C C' /\
+  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
+  EVERY all_reachable C.ctx_functions ==>
+  EVERY wf_ssa C'.ctx_functions
+Proof
+  strip_tac >> drule sue_stage_functions >> strip_tac >>
+  gvs[listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  irule sue_expand_function_supply_wf_ssa >>
+  gvs[o1_ctx_shape_def, o1_fn_shape_def, listTheory.EVERY_EL] >> metis_tac[]
+QED
+
 Theorem sue_stage_walk:
   o1_run_contract rpolicy D 6
 Proof

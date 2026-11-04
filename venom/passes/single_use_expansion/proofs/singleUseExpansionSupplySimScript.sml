@@ -5,7 +5,7 @@ Ancestors
   stateFrame stateEquiv venomExecProps venomExecProofs
   venomExecSemantics venomWf venomInst venomState sccpCorrectnessProofs
   analysisSimDefs instIdxIndep execEquivParamProofs passSharedSubst
-  venomFnScheduleRunner ctxLookupAgreeHelpers
+  venomFnScheduleRunner ctxLookupAgreeHelpers cfgWf
 
 (* Control indices are related separately by segment alignment. *)
 Definition sue_state_rel_def:
@@ -2708,4 +2708,716 @@ Proof
     (s with irs_used_inst_ids := fn_ir_inst_ids fn) fn` >>
   gvs[ir_supply_covers_fn_def, list_subset_def, ir_supply_inst_ok_def,
       listTheory.EVERY_MEM]
+QED
+
+Theorem sue_expand_ops_supply_use_origin:
+  sue_expand_ops_supply dfg inst s ops idx = (assigns,new_ops,s') /\
+  MEM (Var v) new_ops ==>
+  MEM (Var v) ops \/ ?a. MEM a assigns /\ MEM v a.inst_outputs
+Proof
+  strip_tac >> drule sue_expand_ops_supply_provenance >>
+  simp[listTheory.LIST_REL_EL_EQN] >> strip_tac >>
+  qpat_x_assum `MEM (Var v) new_ops` mp_tac >>
+  simp[Once listTheory.MEM_EL] >> strip_tac >>
+  first_x_assum (qspec_then `n` mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+  >- (disj1_tac >> simp[listTheory.MEM_EL] >>
+      qexists_tac `n` >> simp[]) >>
+  disj2_tac >> qexists_tac `a` >> simp[]
+QED
+
+Theorem sue_expand_inst_supply_use_origin:
+  sue_expand_inst_supply dfg s inst = (out,s') /\
+  k < LENGTH out /\ MEM (Var v) (EL k out).inst_operands ==>
+  MEM (Var v) inst.inst_operands \/
+  ?h. h < k /\ MEM v (EL h out).inst_outputs
+Proof
+  strip_tac >> Cases_on `sue_should_skip inst.inst_opcode`
+  >- (gvs[sue_expand_inst_supply_def] >>
+      `k = 0` by decide_tac >> gvs[]) >>
+  Cases_on `sue_expand_ops_supply dfg inst s inst.inst_operands 0` >>
+  PairCases_on `r` >>
+  gvs[sue_expand_inst_supply_def] >>
+  rename1 `sue_expand_ops_supply dfg inst s inst.inst_operands 0 =
+    (assigns,new_ops,s')` >>
+  Cases_on `k < LENGTH assigns`
+  >- (gvs[listTheory.EL_APPEND_EQN] >>
+      drule sue_expand_ops_supply_copies >>
+      simp[listTheory.EVERY_MEM] >> strip_tac >>
+      `MEM (EL k assigns) assigns` by metis_tac[listTheory.MEM_EL] >>
+      first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `k = LENGTH assigns` by decide_tac >>
+  gvs[listTheory.EL_APPEND_EQN] >>
+  drule_all sue_expand_ops_supply_use_origin >> strip_tac
+  >- simp[] >>
+  disj2_tac >>
+  qpat_x_assum `MEM a assigns` mp_tac >>
+  simp[Once listTheory.MEM_EL] >>
+  disch_then (qx_choose_then `h` strip_assume_tac) >>
+  qexists_tac `h` >> gvs[listTheory.EL_APPEND_EQN]
+QED
+
+Theorem sue_expand_inst_supply_phi:
+  sue_expand_inst_supply dfg s inst = (out,s') /\
+  MEM a out /\ a.inst_opcode = PHI ==>
+  out = [inst] /\ a = inst /\ inst.inst_opcode = PHI
+Proof
+  strip_tac >> Cases_on `sue_should_skip inst.inst_opcode`
+  >- gvs[sue_expand_inst_supply_def] >>
+  Cases_on `sue_expand_ops_supply dfg inst s inst.inst_operands 0` >>
+  PairCases_on `r` >> gvs[sue_expand_inst_supply_def] >>
+  drule sue_expand_ops_supply_copies >>
+  simp[listTheory.EVERY_MEM] >> strip_tac >>
+  gvs[listTheory.MEM_APPEND, listTheory.MEM]
+  >- (first_x_assum drule >> simp[]) >>
+  gvs[sue_should_skip_def]
+QED
+
+Theorem sue_expand_inst_supply_outputs_distinct:
+  ir_supply_inst_ok s /\ ALL_DISTINCT inst.inst_outputs /\
+  EVERY (\v. MEM v s.irs_used_vars) inst.inst_outputs /\
+  sue_expand_inst_supply dfg s inst = (out,s') ==>
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) out)) /\
+  !v. MEM v (FLAT (MAP (\i. i.inst_outputs) out)) /\
+      MEM v s.irs_used_vars ==> MEM v inst.inst_outputs
+Proof
+  strip_tac >> drule_all sue_expand_inst_supply_segment >> strip_tac >>
+  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
+      listTheory.ALL_DISTINCT_APPEND, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem sue_expand_inst_supply_outputs_covered:
+  ir_supply_inst_ok s /\
+  EVERY (\v. MEM v s.irs_used_vars) inst.inst_outputs /\
+  sue_expand_inst_supply dfg s inst = (out,s') ==>
+  EVERY (\v. MEM v s'.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) out))
+Proof
+  strip_tac >> drule_all sue_expand_inst_supply_segment >> strip_tac >>
+  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
+      listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem sue_expand_insts_supply_outputs_distinct:
+  !insts dfg s out s'.
+  ir_supply_inst_ok s /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+  EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+  sue_expand_insts_supply dfg s insts = (out,s') ==>
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) out)) /\
+  !v. MEM v (FLAT (MAP (\i. i.inst_outputs) out)) /\
+      MEM v s.irs_used_vars ==>
+      MEM v (FLAT (MAP (\i. i.inst_outputs) insts))
+Proof
+  Induct >> simp[sue_expand_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `sue_expand_inst_supply dfg s h` >>
+  rename1 `sue_expand_inst_supply dfg s h = (head_out,s1)` >>
+  Cases_on `sue_expand_insts_supply dfg s1 insts` >>
+  rename1 `sue_expand_insts_supply dfg s1 insts = (tail_out,s2)` >>
+  gvs[sue_expand_insts_supply_def, listTheory.ALL_DISTINCT_APPEND,
+      listTheory.EVERY_APPEND] >>
+  `sue_supply_extends s s1` by
+    metis_tac[sue_expand_inst_supply_extends] >>
+  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
+  `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` by
+    metis_tac[sue_supply_extends_members] >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) insts))` by
+    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all sue_expand_inst_supply_outputs_distinct >> strip_tac >>
+  drule_all sue_expand_inst_supply_outputs_covered >> strip_tac >>
+  first_x_assum (qspecl_then [`dfg`,`s1`,`tail_out`,`s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
+      listTheory.ALL_DISTINCT_APPEND, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem sue_expand_insts_supply_outputs_covered:
+  !insts dfg s out s'.
+  ir_supply_inst_ok s /\
+  EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) insts)) /\
+  sue_expand_insts_supply dfg s insts = (out,s') ==>
+  EVERY (\v. MEM v s'.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) out))
+Proof
+  Induct >> simp[sue_expand_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `sue_expand_inst_supply dfg s h` >>
+  rename1 `sue_expand_inst_supply dfg s h = (head_out,s1)` >>
+  Cases_on `sue_expand_insts_supply dfg s1 insts` >>
+  rename1 `sue_expand_insts_supply dfg s1 insts = (tail_out,s2)` >>
+  gvs[sue_expand_insts_supply_def, listTheory.EVERY_APPEND] >>
+  `sue_supply_extends s s1` by
+    metis_tac[sue_expand_inst_supply_extends] >>
+  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
+  `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` by
+    metis_tac[sue_supply_extends_members] >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) insts))` by
+    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all sue_expand_inst_supply_outputs_covered >> strip_tac >>
+  first_x_assum (qspecl_then [`dfg`,`s1`,`tail_out`,`s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `sue_supply_extends s1 s'` by
+    metis_tac[sue_expand_insts_supply_extends] >>
+  drule sue_supply_extends_members >> strip_tac >>
+  gvs[listTheory.MAP_APPEND, listTheory.FLAT_APPEND,
+      listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem sue_expand_block_supply_outputs_distinct:
+  ir_supply_inst_ok s /\
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) /\
+  EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) /\
+  sue_expand_block_supply dfg s bb = (out,s') ==>
+  ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) out.bb_instructions)) /\
+  (!v. MEM v (FLAT (MAP (\i. i.inst_outputs) out.bb_instructions)) /\
+       MEM v s.irs_used_vars ==>
+       MEM v (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions))) /\
+  EVERY (\v. MEM v s'.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) out.bb_instructions))
+Proof
+  strip_tac >>
+  Cases_on `sue_expand_insts_supply dfg s bb.bb_instructions` >>
+  gvs[sue_expand_block_supply_def] >>
+  metis_tac[sue_expand_insts_supply_outputs_distinct,
+            sue_expand_insts_supply_outputs_covered]
+QED
+
+Theorem sue_expand_blocks_supply_outputs_distinct:
+  !bbs dfg s out s'.
+  ir_supply_inst_ok s /\
+  ALL_DISTINCT (FLAT (MAP (\bb.
+    FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs)) /\
+  EVERY (\v. MEM v s.irs_used_vars) (FLAT (MAP (\bb.
+    FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs)) /\
+  sue_expand_blocks_supply dfg s bbs = (out,s') ==>
+  ALL_DISTINCT (FLAT (MAP (\bb.
+    FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) out)) /\
+  !v. MEM v (FLAT (MAP (\bb.
+        FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) out)) /\
+      MEM v s.irs_used_vars ==>
+      MEM v (FLAT (MAP (\bb.
+        FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs))
+Proof
+  Induct >> simp[sue_expand_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `sue_expand_block_supply dfg s h` >>
+  rename1 `sue_expand_block_supply dfg s h = (head_out,s1)` >>
+  Cases_on `sue_expand_blocks_supply dfg s1 bbs` >>
+  rename1 `sue_expand_blocks_supply dfg s1 bbs = (tail_out,s2)` >>
+  gvs[sue_expand_blocks_supply_def, listTheory.ALL_DISTINCT_APPEND,
+      listTheory.EVERY_APPEND] >>
+  `sue_supply_extends s s1` by
+    metis_tac[sue_expand_block_supply_extends] >>
+  `ir_supply_inst_ok s1` by gvs[sue_supply_extends_def] >>
+  `!v. MEM v s.irs_used_vars ==> MEM v s1.irs_used_vars` by
+    metis_tac[sue_supply_extends_members] >>
+  `EVERY (\v. MEM v s1.irs_used_vars) (FLAT (MAP (\bb.
+     FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) bbs))` by
+    (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  drule_all sue_expand_block_supply_outputs_distinct >> strip_tac >>
+  first_x_assum (qspecl_then [`dfg`,`s1`,`tail_out`,`s'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem sue_expand_function_supply_ssa_form:
+  ir_supply_inst_ok s /\ ir_supply_covers_fn s fn /\ ssa_form fn /\
+  sue_expand_function_supply s fn = (fn',s') ==> ssa_form fn'
+Proof
+  strip_tac >>
+  `!bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)` by
+    (Induct >> simp[fn_insts_blocks_def]) >>
+  `EVERY (\v. MEM v s.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) (fn_insts fn)))` by
+    (gvs[ir_supply_covers_fn_def, list_subset_def, fn_ir_vars_def,
+         block_ir_vars_def, inst_ir_vars_def, fn_insts_def,
+         listTheory.EVERY_MEM, listTheory.MEM_FLAT,
+         listTheory.MEM_MAP] >>
+     metis_tac[inst_ir_vars_def, listTheory.MEM_FLAT,
+               listTheory.MEM_MAP, listTheory.MEM_APPEND]) >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def, ssa_form_def, fn_insts_def] >>
+  drule sue_expand_blocks_supply_flat >> strip_tac >>
+  drule_all sue_expand_insts_supply_outputs_distinct >> simp[]
+QED
+
+Theorem sue_expand_function_supply_cfg_edge:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  !a b. fn_cfg_edge fn' a b <=> fn_cfg_edge fn a b
+Proof
+  strip_tac >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def] >>
+  rpt gen_tac >> simp[fn_cfg_edge_def] >> eq_tac >> strip_tac
+  >- (drule_all sue_expand_blocks_supply_member >> strip_tac >>
+      drule sue_expand_block_supply_bb_succs >> strip_tac >>
+      drule sue_expand_block_supply_label >> strip_tac >>
+      qexists_tac `bb'` >> gvs[]) >>
+  drule_all sue_expand_blocks_supply_member_forward >> strip_tac >>
+  drule sue_expand_block_supply_bb_succs >> strip_tac >>
+  drule sue_expand_block_supply_label >> strip_tac >>
+  qexists_tac `bb'` >> gvs[]
+QED
+
+Theorem sue_expand_function_supply_entry_label:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  fn_entry_label fn' = fn_entry_label fn
+Proof
+  strip_tac >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def] >>
+  drule sue_expand_blocks_supply_labels >> strip_tac >>
+  Cases_on `fn.fn_blocks` >> Cases_on `q` >>
+  gvs[fn_entry_label_def, entry_block_def]
+QED
+
+Theorem sue_expand_function_supply_reachable:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  !lbl. fn_reachable fn' lbl <=> fn_reachable fn lbl
+Proof
+  strip_tac >>
+  drule sue_expand_function_supply_cfg_edge >> strip_tac >>
+  drule sue_expand_function_supply_entry_label >> strip_tac >>
+  `fn_cfg_edge fn' = fn_cfg_edge fn` by simp[FUN_EQ_THM] >>
+  simp[fn_reachable_def]
+QED
+
+Theorem sue_expand_function_supply_path:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  !path. is_fn_path fn' path <=> is_fn_path fn path
+Proof
+  strip_tac >> drule sue_expand_function_supply_cfg_edge >> strip_tac >>
+  Induct >> simp[is_fn_path_def] >>
+  Cases_on `path` >> gvs[is_fn_path_def]
+QED
+
+Theorem sue_expand_function_supply_dominates:
+  sue_expand_function_supply s fn = (fn',s') ==>
+  !d n. fn_dominates fn' d n <=> fn_dominates fn d n
+Proof
+  strip_tac >>
+  drule sue_expand_function_supply_reachable >> strip_tac >>
+  drule sue_expand_function_supply_entry_label >> strip_tac >>
+  drule sue_expand_function_supply_path >> strip_tac >>
+  simp[fn_dominates_def]
+QED
+
+Theorem sue_expand_function_supply_all_reachable:
+  all_reachable fn /\ sue_expand_function_supply s fn = (fn',s') ==>
+  all_reachable fn'
+Proof
+  strip_tac >> drule sue_expand_function_supply_reachable >> strip_tac >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def, all_reachable_def] >>
+  rpt strip_tac >>
+  drule_all sue_expand_blocks_supply_member >> strip_tac >>
+  drule sue_expand_block_supply_label >> strip_tac >> metis_tac[]
+QED
+
+Theorem sue_reachable_self_dominates:
+  fn_reachable fn lbl ==> fn_dominates fn lbl lbl
+Proof
+  simp[fn_dominates_def] >> rpt strip_tac >>
+  Cases_on `path` >> gvs[rich_listTheory.MEM_LAST]
+QED
+
+Theorem sue_segment_position_bound:
+  i < LENGTH segs /\ j < LENGTH (EL i segs) ==>
+  sue_segment_offset segs i + j < LENGTH (FLAT segs)
+Proof
+  strip_tac >>
+  `sue_segment_offset segs (SUC i) <= LENGTH (FLAT segs)` by
+    (irule sue_segment_offset_bound >> simp[]) >>
+  drule sue_segment_offset_suc >> simp[]
+QED
+
+Theorem sue_segment_positions_ordered:
+  i < j /\ j < LENGTH segs /\
+  h < LENGTH (EL i segs) ==>
+  sue_segment_offset segs i + h < sue_segment_offset segs j + k
+Proof
+  strip_tac >>
+  `sue_segment_offset segs (SUC i) <= sue_segment_offset segs j` by
+    (irule sue_segment_offset_mono >> simp[]) >>
+  `i < LENGTH segs` by decide_tac >>
+  drule sue_segment_offset_suc >> simp[]
+QED
+
+Theorem sue_segments_supply_last_outputs:
+  sue_segments_supply dfg s insts = (segs,s') /\ i < LENGTH insts ==>
+  sue_segment_offset segs i + (LENGTH (EL i segs) - 1) < LENGTH (FLAT segs) /\
+  (EL (sue_segment_offset segs i + (LENGTH (EL i segs) - 1))
+      (FLAT segs)).inst_outputs = (EL i insts).inst_outputs
+Proof
+  strip_tac >>
+  drule sue_segments_supply_length >> strip_tac >>
+  drule_all sue_segments_supply_index >> strip_tac >>
+  drule sue_expand_inst_supply_nonempty >> strip_tac >>
+  `LENGTH (EL i segs) - 1 < LENGTH (EL i segs)` by
+    (Cases_on `EL i segs` >> gvs[]) >>
+  conj_tac
+  >- (irule sue_segment_position_bound >> simp[]) >>
+  simp[sue_segment_offset_el] >>
+  drule sue_expand_inst_supply_last >> strip_tac >>
+  gvs[listTheory.LAST_EL, arithmeticTheory.PRE_SUB1]
+QED
+
+Theorem sue_segments_supply_use_origin:
+  sue_segments_supply dfg s insts = (segs,s') /\
+  k < LENGTH (FLAT segs) /\
+  MEM (Var v) (EL k (FLAT segs)).inst_operands ==>
+  (?i j. i < LENGTH insts /\ j < LENGTH (EL i segs) /\
+     k = sue_segment_offset segs i + j /\
+     MEM (Var v) (EL i insts).inst_operands) \/
+  ?h. h < k /\ MEM v (EL h (FLAT segs)).inst_outputs
+Proof
+  strip_tac >> drule_all sue_segment_interior >> strip_tac >>
+  drule sue_segments_supply_length >> strip_tac >>
+  `i < LENGTH insts` by decide_tac >>
+  drule_all sue_segments_supply_index >> strip_tac >>
+  `EL k (FLAT segs) = EL j (EL i segs)` by
+    metis_tac[sue_segment_offset_el] >>
+  qpat_x_assum `MEM (Var v) (EL k (FLAT segs)).inst_operands` mp_tac >>
+  asm_rewrite_tac[] >> strip_tac >>
+  drule_all sue_expand_inst_supply_use_origin >> strip_tac
+  >- (disj1_tac >> qexistsl [`i`,`j`] >> simp[]) >>
+  disj2_tac >> qexists_tac `sue_segment_offset segs i + h` >>
+  `h < LENGTH (EL i segs)` by decide_tac >>
+  simp[sue_segment_offset_el]
+QED
+
+Theorem sue_segments_supply_definition_before:
+  sue_segments_supply dfg s insts = (segs,s') /\
+  i < j /\ j < LENGTH insts /\ k < LENGTH (EL j segs) ==>
+  ?h. h < sue_segment_offset segs j + k /\
+      h < LENGTH (FLAT segs) /\
+      (EL h (FLAT segs)).inst_outputs = (EL i insts).inst_outputs
+Proof
+  strip_tac >>
+  drule sue_segments_supply_length >> strip_tac >>
+  `i < LENGTH insts` by decide_tac >>
+  drule_all sue_segments_supply_last_outputs >> strip_tac >>
+  qexists_tac `sue_segment_offset segs i + (LENGTH (EL i segs) - 1)` >>
+  `LENGTH (EL i segs) - 1 < LENGTH (EL i segs)` by
+    (drule_all sue_segments_supply_index >> strip_tac >>
+     drule sue_expand_inst_supply_nonempty >>
+     Cases_on `EL i segs` >> simp[]) >>
+  metis_tac[sue_segment_positions_ordered]
+QED
+
+Theorem sue_segments_supply_endpoint_outputs:
+  sue_segments_supply dfg s insts = (segs,s') /\
+  MEM inst insts /\ MEM v inst.inst_outputs ==>
+  ?h. h < LENGTH (FLAT segs) /\ MEM v (EL h (FLAT segs)).inst_outputs
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM inst insts` mp_tac >> simp[Once listTheory.MEM_EL] >>
+  disch_then (qx_choose_then `i` strip_assume_tac) >>
+  drule_all sue_segments_supply_last_outputs >> strip_tac >>
+  qexists_tac `sue_segment_offset segs i + (LENGTH (EL i segs) - 1)` >>
+  gvs[]
+QED
+
+Theorem sue_segments_supply_phi:
+  sue_segments_supply dfg s insts = (segs,s') /\
+  k < LENGTH (FLAT segs) /\ (EL k (FLAT segs)).inst_opcode = PHI ==>
+  ?i. i < LENGTH insts /\ EL k (FLAT segs) = EL i insts /\
+      EL i segs = [EL i insts]
+Proof
+  strip_tac >> drule_all sue_segment_interior >> strip_tac >>
+  drule sue_segments_supply_length >> strip_tac >>
+  `i < LENGTH insts` by decide_tac >>
+  drule_all sue_segments_supply_index >> strip_tac >>
+  `EL k (FLAT segs) = EL j (EL i segs)` by
+    metis_tac[sue_segment_offset_el] >>
+  `MEM (EL k (FLAT segs)) (EL i segs)` by
+    metis_tac[listTheory.MEM_EL] >>
+  drule_all sue_expand_inst_supply_phi >> strip_tac >>
+  qexists_tac `i` >> simp[]
+QED
+
+Theorem sue_expand_block_supply_output_member:
+  sue_expand_block_supply dfg s bb = (bb',s') /\
+  MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs ==>
+  ?inst'. MEM inst' bb'.bb_instructions /\ MEM v inst'.inst_outputs
+Proof
+  strip_tac >> Cases_on `sue_segments_supply dfg s bb.bb_instructions` >>
+  drule sue_segments_supply_flat >> strip_tac >>
+  gvs[sue_expand_block_supply_def] >>
+  drule_all sue_segments_supply_endpoint_outputs >> strip_tac >>
+  qexists_tac `EL h (FLAT q)` >> simp[] >>
+  metis_tac[listTheory.MEM_EL]
+QED
+
+Theorem sue_expand_function_supply_available_endpoint:
+  sue_expand_function_supply s fn = (fn',s') /\
+  target'.bb_label = target.bb_label /\
+  def_available_at fn target NONE v ==>
+  def_available_at fn' target' NONE v
+Proof
+  strip_tac >>
+  drule sue_expand_function_supply_dominates >> strip_tac >>
+  qpat_x_assum `def_available_at fn target NONE v` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def] >>
+  drule_all sue_expand_blocks_supply_member_forward >> strip_tac >>
+  drule_all sue_expand_block_supply_output_member >> strip_tac >>
+  drule sue_expand_block_supply_label >> strip_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb'`,`inst'`] >> simp[]
+QED
+
+Theorem sue_available_local:
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  h < k /\ k < LENGTH bb.bb_instructions /\
+  MEM v (EL h bb.bb_instructions).inst_outputs ==>
+  def_available_at fn bb (SOME (EL k bb.bb_instructions)) v
+Proof
+  strip_tac >> drule sue_reachable_self_dominates >> strip_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb`,`EL h bb.bb_instructions`] >> simp[] >>
+  conj_tac >- metis_tac[listTheory.MEM_EL, arithmeticTheory.LESS_TRANS] >>
+  qexistsl [`h`,`k`] >> simp[]
+QED
+
+Theorem sue_expand_function_supply_phi_edge_uses:
+  sue_expand_function_supply s fn = (fn',s') /\
+  bb'.bb_label = bb.bb_label /\ phi_edge_uses_wf fn bb inst ==>
+  phi_edge_uses_wf fn' bb' inst
+Proof
+  strip_tac >>
+  drule sue_expand_function_supply_cfg_edge >> strip_tac >>
+  `!pred_bb. MEM pred_bb fn.fn_blocks ==>
+    ?pred_bb'. MEM pred_bb' fn'.fn_blocks /\
+      pred_bb'.bb_label = pred_bb.bb_label` by
+    (rpt strip_tac >>
+     Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+     gvs[sue_expand_function_supply_def] >>
+     drule_all sue_expand_blocks_supply_member_forward >> strip_tac >>
+     drule sue_expand_block_supply_label >> strip_tac >> metis_tac[]) >>
+  gvs[phi_edge_uses_wf_def] >> rpt strip_tac >>
+  qpat_x_assum `!pred v. _` drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all sue_expand_function_supply_available_endpoint >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem sue_wf_block_instruction_index:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  i < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
+  EL i bb.bb_instructions = EL j bb.bb_instructions ==> i = j
+Proof
+  strip_tac >>
+  `!bbs. ALL_DISTINCT (FLAT (MAP (\b. MAP (\inst. inst.inst_id)
+       b.bb_instructions) bbs)) ==> !b. MEM b bbs ==>
+       ALL_DISTINCT (MAP (\inst. inst.inst_id) b.bb_instructions)` by
+    (Induct >> simp[listTheory.ALL_DISTINCT_APPEND] >> rpt strip_tac >>
+     gvs[] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    metis_tac[wf_function_def, fn_inst_ids_distinct_def] >>
+  metis_tac[listTheory.ALL_DISTINCT_EL_IMP, listTheory.LENGTH_MAP,
+            listTheory.EL_MAP]
+QED
+
+Theorem sue_expand_function_supply_available_ordinary:
+  sue_expand_function_supply s fn = (fn',s') /\ wf_function fn /\
+  MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks /\
+  bb'.bb_label = bb.bb_label /\
+  sue_segments_supply (dfg_build_function fn) si bb.bb_instructions = (segs,sj) /\
+  bb'.bb_instructions = FLAT segs /\
+  j < LENGTH bb.bb_instructions /\ k < LENGTH (EL j segs) /\
+  def_available_at fn bb (SOME (EL j bb.bb_instructions)) v ==>
+  def_available_at fn' bb'
+    (SOME (EL (sue_segment_offset segs j + k) bb'.bb_instructions)) v
+Proof
+  strip_tac >>
+  `!a b. MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+     a.bb_label = b.bb_label ==> a = b` by
+    (gvs[wf_function_def, fn_labels_def] >> rpt strip_tac >>
+     gvs[listTheory.MEM_EL] >>
+     metis_tac[listTheory.ALL_DISTINCT_EL_IMP, listTheory.LENGTH_MAP,
+               listTheory.EL_MAP]) >>
+  drule sue_expand_function_supply_dominates >> strip_tac >>
+  qpat_x_assum `def_available_at fn bb _ v` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  Cases_on `def_bb = bb`
+  >- (gvs[] >>
+      `j' = j` by metis_tac[sue_wf_block_instruction_index] >> gvs[] >>
+      drule_all sue_segments_supply_definition_before >> strip_tac >>
+      simp[def_available_at_def] >>
+      qexistsl [`bb'`,`EL h (FLAT segs)`] >> simp[] >>
+      conj_tac >- metis_tac[listTheory.MEM_EL] >>
+      qexistsl [`h`,`sue_segment_offset segs j + k`] >>
+      simp[] >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+      irule sue_segment_position_bound >>
+      drule sue_segments_supply_length >> simp[]) >>
+  Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+  gvs[sue_expand_function_supply_def] >>
+  drule_all sue_expand_blocks_supply_member_forward >> strip_tac >>
+  drule_all sue_expand_block_supply_output_member >> strip_tac >>
+  drule sue_expand_block_supply_label >> strip_tac >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb''`,`inst'`] >> simp[] >> metis_tac[]
+QED
+
+Theorem sue_expand_function_supply_def_dominates_uses:
+  wf_function fn /\ all_reachable fn /\ def_dominates_uses fn /\
+  sue_expand_function_supply s fn = (fn',s') ==>
+  def_dominates_uses fn'
+Proof
+  strip_tac >>
+  `all_reachable fn'` by metis_tac[sue_expand_function_supply_all_reachable] >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `MEM bb' fn'.fn_blocks` >>
+  `?bb si sj. MEM bb fn.fn_blocks /\
+     sue_expand_block_supply (dfg_build_function fn) si bb = (bb',sj)` by
+    (Cases_on `sue_expand_blocks_supply (dfg_build_function fn) s fn.fn_blocks` >>
+     gvs[sue_expand_function_supply_def] >>
+     metis_tac[sue_expand_blocks_supply_member]) >>
+  drule sue_expand_block_supply_label >> strip_tac >>
+  Cases_on `sue_segments_supply (dfg_build_function fn) si bb.bb_instructions` >>
+  rename1 `sue_segments_supply _ _ _ = (segs,t)` >>
+  drule sue_segments_supply_flat >> strip_tac >>
+  `bb'.bb_instructions = FLAT segs` by gvs[sue_expand_block_supply_def] >>
+  qpat_x_assum `MEM inst bb'.bb_instructions` mp_tac >>
+  simp[Once listTheory.MEM_EL] >>
+  disch_then (qx_choose_then `k` strip_assume_tac) >> gvs[] >>
+  Cases_on `(EL k (FLAT segs)).inst_opcode = PHI`
+  >- (simp[] >> drule_all sue_segments_supply_phi >> strip_tac >>
+      `phi_edge_uses_wf fn bb (EL i bb.bb_instructions)` by
+        (qpat_x_assum `def_dominates_uses fn` mp_tac >>
+         simp[def_dominates_uses_def] >>
+         metis_tac[listTheory.MEM_EL]) >>
+      metis_tac[sue_expand_function_supply_phi_edge_uses]) >>
+  simp[] >> rpt strip_tac >>
+  drule_all sue_segments_supply_use_origin >> strip_tac
+  >- (`(EL i bb.bb_instructions).inst_opcode <> PHI` by
+        (strip_tac >> drule sue_segments_supply_length >> strip_tac >>
+         drule_all sue_segments_supply_index >> strip_tac >>
+         `EL i segs = [EL i bb.bb_instructions]` by
+           gvs[sue_expand_inst_supply_def, sue_should_skip_def] >>
+         `EL k (FLAT segs) = EL j (EL i segs)` by
+           metis_tac[sue_segment_offset_el] >>
+         gvs[]) >>
+      `def_available_at fn bb (SOME (EL i bb.bb_instructions)) v` by
+        (qpat_x_assum `def_dominates_uses fn` mp_tac >>
+         simp[def_dominates_uses_def] >> metis_tac[listTheory.MEM_EL]) >>
+      drule_all sue_expand_function_supply_available_ordinary >>
+      simp[]) >>
+  `fn_reachable fn' bb'.bb_label` by metis_tac[all_reachable_def] >>
+  `k < LENGTH bb'.bb_instructions /\
+   MEM v (EL h bb'.bb_instructions).inst_outputs` by simp[] >>
+  drule_all sue_available_local >> simp[]
+QED
+
+(* Counterexample: expansion creates variable uses in an unreachable block. *)
+Definition sue_ce_fn_def:
+  sue_ce_fn = mk_raw_function "ce"
+    [<| bb_label := "e"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "u"; bb_instructions :=
+       [mk_inst 1 ADD [Lit 0w; Lit 1w] ["x"]; mk_inst 2 STOP [] []] |>]
+End
+
+Definition sue_ce_supply_def:
+  sue_ce_supply = <| irs_next_inst := 3; irs_next_var := 0;
+    irs_next_label := 0; irs_used_inst_ids := [0;1;2];
+    irs_used_vars := ["x"]; irs_used_labels := ["ce";"e";"u"] |>
+End
+
+Definition sue_ce_out_def:
+  sue_ce_out = mk_raw_function "ce"
+    [<| bb_label := "e"; bb_instructions := [mk_inst 0 STOP [] []] |>;
+     <| bb_label := "u"; bb_instructions :=
+       [mk_inst 4 ASSIGN [Lit 0w] ["formal_var_1"];
+        mk_inst 3 ASSIGN [Lit 1w] ["formal_var_0"];
+        mk_inst 1 ADD [Var "formal_var_1"; Var "formal_var_0"] ["x"];
+        mk_inst 2 STOP [] []] |>]
+End
+
+Theorem sue_ce_input:
+  wf_ssa sue_ce_fn /\ fn_inst_wf sue_ce_fn /\
+  wf_function sue_ce_fn /\ ir_supply_covers_fn sue_ce_supply sue_ce_fn
+Proof
+  simp[wf_ssa_def, ssa_form_def, def_dominates_uses_def,
+       fn_inst_wf_def, wf_function_def, sue_ce_fn_def, mk_raw_function_def,
+       mk_inst_def, fn_succs_closed_def, fn_inst_ids_distinct_def,
+       listTheory.MEM, GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem sue_ce_expansion:
+  sue_expand_function_supply sue_ce_supply sue_ce_fn =
+    (sue_ce_out, sue_ce_supply with <| irs_next_inst := 5;
+      irs_next_var := 2; irs_used_inst_ids := [4;3;0;1;2];
+      irs_used_vars := ["formal_var_1";"formal_var_0";"x"] |>)
+Proof
+  EVAL_TAC
+QED
+
+Theorem sue_ce_no_edges:
+  !a b. ~fn_cfg_edge sue_ce_out a b
+Proof
+  rewrite_tac[fn_cfg_edge_def] >> rpt strip_tac >>
+  gvs[sue_ce_out_def, mk_raw_function_def, listTheory.MEM] >>
+  pop_assum mp_tac >> EVAL_TAC
+QED
+
+Theorem sue_ce_unreachable:
+  ~fn_reachable sue_ce_out "u"
+Proof
+  simp[fn_reachable_def, Once relationTheory.RTC_CASES1,
+       sue_ce_no_edges] >> EVAL_TAC
+QED
+
+Theorem sue_ce_not_ssa:
+  ~wf_ssa sue_ce_out
+Proof
+  `!bb use v. bb.bb_label = "u" ==>
+     ~def_available_at sue_ce_out bb use v` by
+    metis_tac[def_available_at_def, fn_dominates_def, sue_ce_unreachable] >>
+  strip_tac >> fs[wf_ssa_def, def_dominates_uses_def] >>
+  qpat_x_assum `!bb inst. _` (qspecl_then
+    [`EL 1 sue_ce_out.fn_blocks`,
+     `mk_inst 1 ADD [Var "formal_var_1"; Var "formal_var_0"] ["x"]`] mp_tac) >>
+  impl_tac >- EVAL_TAC >>
+  simp[mk_inst_def] >>
+  qexists_tac `"formal_var_1"` >> simp[] >>
+  `((EL 1 sue_ce_out.fn_blocks).bb_label = "u")` by EVAL_TAC >>
+  metis_tac[]
+QED
+
+Theorem sue_expand_function_supply_wf_ssa_counterexample:
+  ?s'. wf_ssa sue_ce_fn /\ fn_inst_wf sue_ce_fn /\
+    wf_function sue_ce_fn /\ ir_supply_covers_fn sue_ce_supply sue_ce_fn /\
+    sue_expand_function_supply sue_ce_supply sue_ce_fn = (sue_ce_out,s') /\
+    ~wf_ssa sue_ce_out
+Proof
+  metis_tac[sue_ce_input, sue_ce_expansion, sue_ce_not_ssa]
+QED
+
+(* The counterexample above shows why reachability is needed: inserted
+   copies in unreachable blocks cannot have dominating definitions. *)
+(* The inserted copies define fresh variables, each right before the one
+   instruction that reads it, and read what that instruction read there. *)
+Theorem sue_expand_function_supply_wf_ssa:
+  wf_ssa fn /\ fn_inst_wf fn /\ wf_function fn /\ all_reachable fn /\
+  ir_supply_covers_fn s fn /\
+  sue_expand_function_supply s fn = (fn',s') ==>
+  wf_ssa fn'
+Proof
+  strip_tac >> drule_all sue_supply_replay >> strip_tac >>
+  gvs[wf_ssa_def] >> conj_tac
+  >- metis_tac[sue_expand_function_supply_ssa_form] >>
+  metis_tac[sue_expand_function_supply_def_dominates_uses]
 QED

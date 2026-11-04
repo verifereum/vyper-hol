@@ -370,17 +370,21 @@ Proof
      rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
      metis_tac[o1_fn_shape_def]) >>
   conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
-  simp[o1_ssa_inv_def] >> conj_tac
+  simp[o1_ssa_inv_def, GSYM CONJ_ASSOC] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac
       >- metis_tac[simplify_cfg_stage_max_live_eom] >>
       irule simplify_cfg_stage_mem_inv >>
       metis_tac[mem_corr_closed_lowered_mem_fact]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
-  simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  `simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>
-  irule simplify_cfg_preserves_wf_ssa >>
-  gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+  simp[EVERY_MEM, MEM_MAP, PULL_EXISTS] >> conj_tac >> rpt strip_tac
+  >- (`simplify_cfg_fn_ok y` by gvs[EVERY_MEM] >>
+      irule simplify_cfg_preserves_wf_ssa >>
+      gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
+      `o1_fn_shape C y` by metis_tac[] >>
+      gvs[o1_fn_shape_def]) >>
+  irule simplify_cfg_establishes_all_reachable >>
+  gvs[o1_ctx_shape_def, EVERY_MEM] >>
   `o1_fn_shape C y` by metis_tac[] >>
   gvs[o1_fn_shape_def]
 QED

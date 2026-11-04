@@ -651,7 +651,9 @@ Definition o1_lowered_inv_def:
 End
 
 (* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
-   second run establishes it and SimplifyCFG keeps it. *)
+   second run establishes it and SimplifyCFG keeps it.  Row 6 also has
+   every block reachable, which SimplifyCFG establishes: SUE's copies of
+   literals keep wf_ssa only in reachable blocks. *)
 Definition o1_ssa_inv_def:
   o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
 End
@@ -667,7 +669,9 @@ Definition o1_inv_def:
     if k = 0 then o1_walk_src_inv
     else if k <= 2 then o1_src_inv
     else if k = 3 then o1_static_inv
-    else if k = 5 \/ k = 6 then o1_ssa_inv
+    else if k = 5 then o1_ssa_inv
+    else if k = 6 then
+      (\C vs. o1_ssa_inv C vs /\ EVERY all_reachable C.ctx_functions)
     else o1_lowered_inv
 End
 
