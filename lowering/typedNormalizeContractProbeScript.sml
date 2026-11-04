@@ -4,6 +4,8 @@ Ancestors
   typedCopyAgreement typedNormalizeDynarrayLoop typedNormalizeLoop
   typedNormalizeContinuation typedNormalizeFields typedNormalizeFrame
   compileEnv emitHelper venomInst list arithmetic
+  typedNormalizeArrayRepresentation typedNormalizeFieldRepresentation
+  vyperTypeArgFits vyperTypeSystem exprSimBufferStore
 
 (* The compiler equation alone does not imply operand freshness: at this
    legal word compiler input the first result overwrites the destination.
@@ -103,4 +105,110 @@ QED
    The repaired callbacks expose the candidate IH's structural premises;
    semantic IH instantiation/reassembly is still a separate obligation.
    This audit is not recursive normalization or a proof of the frozen task.
+*)
+
+(* Consumer check: legal widening discharges the explicit sparse-default
+   bridge. The general equality is already arg_type_fits_default_value. *)
+Theorem normalize_sparse_widening_reconstruction:
+  type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type (ArrayTV stv (Fixed n)) (ArrayV (SArrayV kvs)) /\
+  (!j. j < n ==>
+    val_in_memory dtv
+      (case ALOOKUP kvs j of SOME v => v | NONE => default_value stv)
+      (b + j * type_memory_size dtv) m) ==>
+  val_in_memory (ArrayTV dtv (Fixed n)) (ArrayV (SArrayV kvs)) b m
+Proof
+  strip_tac >>
+  `default_value stv = default_value dtv` by
+    (gvs[type_widens_to_def] >>
+     metis_tac[cj 1 arg_type_fits_default_value]) >>
+  drule normalize_sparse_typed_keys >> strip_tac >>
+  irule normalize_sparse_destination_memory >>
+  reverse conj_tac >- simp[] >> qexists_tac `stv` >> simp[]
+QED
+
+(* The bytes leaf can choose the actual length witness from typed memory;
+   no arbitrary modular preimage of the length word is used. *)
+Theorem normalize_bytestring_typed_window_bounds:
+  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\ val_in_memory tv v p s.vs_memory /\
+  val_wf tv v /\ p + type_memory_size tv <= s.vs_alloca_next /\
+  d + type_memory_size tv <= s.vs_alloca_next /\
+  type_memory_size tv < dimword (:256) ==>
+  ?len. mload p s = n2w len /\
+    32 + 32 * word_size len < dimword (:256) /\
+    p + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+    d + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+    val_footprint tv v <= 32 + 32 * word_size len
+Proof
+  strip_tac >> drule_all buffer_typed_bytestring_header >> strip_tac >>
+  `val_store_size tv v <= type_memory_size tv` by
+    metis_tac[exprSimTheory.val_store_size_le] >>
+  `val_footprint tv v <= val_store_size tv v` by
+    metis_tac[exprSimTheory.val_footprint_le_store_size] >>
+  qexists_tac `len` >> simp[] >> decide_tac
+QED
+
+(* Semantic audit after C1.3.16/17 (no recursive theorem asserted here).
+
+   Checked branch interfaces:
+   - Word: compileEnv.type_widens_to_word forces syntax equality;
+     normalize_word_window_cont then consumes destination typing/memory.
+   - Bytes: valueCopyBytes.bytestring_val_in_memory_transfer changes the
+     semantic type; buffer_typed_bytestring_header chooses the actual length.
+     normalize_bytestring_typed_window_bounds above supplies every padded
+     runtime read/write bound of normalize_bytestring_window_cont when its
+     input representation is at that type. Widening must transfer typing and
+     supply both padded enclosing windows; it cannot use just payload length.
+   - Static bulk: type_widens_to_static_identity and
+     typed_static_fast_evaluated_identity (typedNormalizeStaticRigidity)
+     remove the false equal-size-implies-equal-representation inference.
+   - Arrays: elems_in_memory_EL/intro are the dense indexed equivalence;
+     normalize_sparse_memory_index and normalize_sparse_typed_keys handle
+     sparse key uniqueness/domain. normalize_sparse_widening_reconstruction
+     above discharges the source/destination default gap from actual legal
+     element widening, using arg_type_fits_default_value. Dynamic rebuilding
+     uses normalize_dynamic_destination_memory; type_widens_to_dynamic_array
+     supplies capacity order, with runtime length obtained from value typing.
+   - Fields: normalize_tuple_memory_index and normalize_fields_memory_index
+     reconstruct ordered lists; normalize_tuple_compiler_offsets and
+     normalize_fields_compiler_offsets consume LIST_REL size agreement.
+     make_struct_fields_map_consistent supplies ordered names/types, not just
+     lookup agreement. evaluated StructTV fields use evaluate_types and ZIP;
+     type_memory_size correspondence comes from checked_return_frame_metadata.
+     Full nominal child instantiation is not asserted by those equations alone.
+
+   Important newly located reusable S1 infrastructure:
+   typedMemoryCopyTheory was built during this audit. Its
+   compile_store_memory_typed_run is admission-free (the source checks tags
+   of every exported theorem at theory end) and covers recursive typed stores.
+   typed_copy_rank_entry handles all recursion phases by destination type_rank.
+   typed_copy_sarray_representation, typed_copy_dynarray_reconstruct,
+   typed_copy_tuple_cursor/fields_cursor, typed_copy_default_widening and
+   typed_copy_struct_fields_producer are existing semantic paths to reuse.
+   typed_copy_elems_indexed and typed_copy_sarray_indexed overlap the recently
+   built semantic reconstruction boundaries; do not introduce further variants.
+   This S1 theorem gives the final memory, frames, endpoint and run refinement,
+   NOT mem_cont_sim or safety of intermediate reads. Thus it is not the missing
+   S3 proof, but a new integration strategy should reuse its semantic contracts.
+
+   Proposed S3 contract remains the universally quantified candidate above,
+   with val_wf at both source/destination added explicitly, value typing at both
+   types, metadata ordered type consistency and per-field size/distinctness.
+   Its source memory/window, operand freshness, nonhalted endpoint, and
+   source val_wf come from the expression boundary/stmt_state_rel. Destination
+   typing follows type_widens_to_value_has_type; destination val_wf and strict
+   word-address windows must be checked at the normalization allocation site,
+   NOT assumed to follow merely from s.vs_alloca_next. Metadata size/acyclicity
+   comes from initial_return_frame_metadata and same_frame_return_metadata.
+   Child runtime, entry/exit certificates, prefix zero and old operands are
+   already universally guarded by the repaired loop/field callbacks.
+   Remaining integration: attach semantic child IHs/locality and padded slot
+   bounds to all five actual compiler phases, discharge destination val_wf,
+   and align nominal evaluated fields and metadata under recursive tenv deletion.
+   No fallback branch may be discarded without evaluated-type/typing evidence.
+   Return producer discharge and the full recursive S3 continuation are still
+   unproved. The checked S1 recursive result is a strategy input, not a reason
+   to start the frozen theorem or silently treat final-state frames as safety.
 *)
