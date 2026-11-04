@@ -171,3 +171,33 @@ val _ = List.app (fn (name,th) =>
   end)
   [("mem_path_offset_dynamic_tail", mem_path_offset_dynamic_tail),
    ("read_result_preserved_fields", read_result_preserved_fields)];
+
+Theorem mem_path_dynamic_local_frame:
+  path <> [] /\
+  mem_path_offset (ArrayTV etv (Dynamic n)) path = SOME (k,tv) /\
+  local_region cenv es.scopes s id (w2n b) sz /\
+  type_memory_size (ArrayTV etv (Dynamic n)) <= sz /\
+  w2n b + sz <= dimword (:256) /\
+  len <= type_memory_size tv /\
+  locals_kept cenv es s s2 ==>
+  mem_bytes_at (w2n (b + n2w k : bytes32)) len s2.vs_memory =
+  mem_bytes_at (w2n (b + n2w k : bytes32)) len s.vs_memory
+Proof
+  strip_tac >> Cases_on `len = 0`
+  >- simp[mem_bytes_at_def] >>
+  drule mem_path_offset_sound >> strip_tac >>
+  `32 <= k` by metis_tac[mem_path_offset_dynamic_tail] >>
+  `w2n b + k < dimword (:256)` by decide_tac >>
+  `w2n (b + n2w k : bytes32) = w2n b + k` by
+    (Cases_on `b` >> fs[word_add_n2w]) >>
+  simp[] >>
+  qpat_x_assum `locals_kept _ _ _ _` mp_tac >>
+  simp[locals_kept_def] >> strip_tac >>
+  first_x_assum irule >>
+  qexistsl_tac [`w2n b`, `id`, `sz`] >> simp[] >> decide_tac
+QED
+
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag mem_path_dynamic_local_frame) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "Dynamic local frame dependency" else ()
+end;
