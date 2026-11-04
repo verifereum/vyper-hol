@@ -483,3 +483,188 @@ Proof
   simp[ld_maps_def, FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> metis_tac[]
 QED
+
+Theorem ld_global_bounds:
+  ld_global lo A frames /\ (j,aid,b,n) IN ld_sites frames source ==>
+  lo <= b /\ b+n <= (if source then (HD frames).lf_src.vs_alloca_next
+                    else (HD frames).lf_tgt.vs_alloca_next)
+Proof
+  simp[ld_global_def] >> metis_tac[]
+QED
+
+Theorem ld_global_separate:
+  ld_global lo A frames /\
+  (j,aid,b,n) IN ld_sites frames source /\
+  (j',aid',b',n') IN ld_sites frames source /\
+  (j,aid) <> (j',aid') /\ 0 < n /\ 0 < n' ==>
+  b+n <= b' \/ b'+n' <= b
+Proof
+  simp[ld_global_def] >> metis_tac[]
+QED
+
+Theorem ld_global_selected:
+  ld_global lo A frames /\ MEM f frames /\
+  (a IN FRANGE f.lf_H \/ MEM (SOME a) f.lf_Q) ==> a IN FDOM A
+Proof
+  simp[ld_global_def] >> metis_tac[]
+QED
+
+(* A single extension interface covers both ordinary and private sites.
+   The source increment is zero for a private target-only allocation. *)
+Theorem ld_global_extend_head:
+  ld_global lo A (f::frames) /\ FDOM A SUBSET FDOM B /\
+  lo <= f.lf_src.vs_alloca_next /\ lo <= f.lf_tgt.vs_alloca_next /\
+  (!source. ld_sites (g::frames) source SUBSET
+    ld_sites (f::frames) source UNION
+      {(0,ai,if source then f.lf_src.vs_alloca_next else f.lf_tgt.vs_alloca_next,sz source)}) /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next + sz T /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next + sz F /\
+  g.lf_H = f.lf_H /\ g.lf_Q = f.lf_Q ==>
+  ld_global lo B (g::frames)
+Proof
+  strip_tac >>
+  qpat_x_assum `!source. _ SUBSET _` (mp_tac o SIMP_RULE (srw_ss()) [SUBSET_DEF]) >>
+  strip_tac >>
+  rewrite_tac[ld_global_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `((j,aid,b,n) IN ld_sites (f::frames) source) \/
+        (j = 0 /\ aid = ai /\
+         b = (if source then f.lf_src.vs_alloca_next else f.lf_tgt.vs_alloca_next) /\ n = sz source)` by
+        metis_tac[pairTheory.PAIR_EQ] >>
+      gvs[]
+      >- (drule_all ld_global_bounds >> simp[] >>
+          Cases_on `source` >> simp[]) >>
+      Cases_on `source` >> simp[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `((j,aid,b,n) IN ld_sites (f::frames) source) \/
+        (j = 0 /\ aid = ai /\
+         b = (if source then f.lf_src.vs_alloca_next else f.lf_tgt.vs_alloca_next) /\ n = sz source)` by
+        metis_tac[pairTheory.PAIR_EQ] >>
+      `((j',aid',b',n') IN ld_sites (f::frames) source) \/
+        (j' = 0 /\ aid' = ai /\
+         b' = (if source then f.lf_src.vs_alloca_next else f.lf_tgt.vs_alloca_next) /\ n' = sz source)` by
+        metis_tac[pairTheory.PAIR_EQ] >>
+      gvs[]
+      >- (`(j,aid) <> (j',aid')` by simp[] >>
+          drule_all ld_global_separate >> simp[])
+      >- (drule_all ld_global_bounds >> simp[])
+      >> (drule_all ld_global_bounds >> simp[])) >>
+  drule ld_global_selected >> simp[] >> strip_tac >>
+  rpt strip_tac >> gvs[] >> fs[SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_global_insert_head:
+  ld_global lo A (f::frames) /\ FDOM A SUBSET FDOM B /\
+  lo <= f.lf_src.vs_alloca_next /\ lo <= f.lf_tgt.vs_alloca_next /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas |+ (ai,(f.lf_src.vs_alloca_next,n)) /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas |+ (ai,(f.lf_tgt.vs_alloca_next,n)) /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next + n /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next + n /\
+  g.lf_H = f.lf_H /\ g.lf_Q = f.lf_Q ==>
+  ld_global lo B (g::frames)
+Proof
+  strip_tac >> irule ld_global_extend_head >>
+  qexistsl_tac [`A`, `ai`, `f`, `\source. n`] >>
+  simp[] >> gen_tac >> irule ld_sites_insert_head >> simp[]
+QED
+
+Theorem ld_global_insert_private:
+  ld_global lo A (f::frames) /\
+  lo <= f.lf_src.vs_alloca_next /\ lo <= f.lf_tgt.vs_alloca_next /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas |+ (ai,(f.lf_tgt.vs_alloca_next,n)) /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next + n /\
+  g.lf_H = f.lf_H /\ g.lf_Q = f.lf_Q ==>
+  ld_global lo A (g::frames)
+Proof
+  strip_tac >> irule ld_global_extend_head >>
+  qexistsl_tac [`A`, `ai`, `f`, `\source. if source then 0 else n`] >>
+  simp[] >> gen_tac >>
+  simp[SUBSET_DEF, ld_sites_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `j` >> gvs[] >>
+  Cases_on `source` >> gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
+Theorem ld_global_head_cong:
+  ld_global lo A (f::frames) /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+  g.lf_H = f.lf_H /\ g.lf_Q = f.lf_Q ==>
+  ld_global lo A (g::frames)
+Proof
+  strip_tac >>
+  `!source. ld_sites (g::frames) source = ld_sites (f::frames) source` by
+    (gen_tac >> simp[ld_sites_def, EXTENSION] >>
+     gen_tac >> PairCases_on `x` >> simp[] >>
+     Cases_on `x0` >> simp[]) >>
+  fs[ld_global_def] >> metis_tac[]
+QED
+
+Theorem ld_frontiers_scratch:
+  ld_maps A f /\
+  (!j. j < LENGTH (f::frames) ==>
+    (EL j (f::frames)).lf_tgt.vs_alloca_next =
+    (EL j (f::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j (f::frames))) /\
+  t'.vs_alloca_next = f.lf_tgt.vs_alloca_next +
+    32 * (if d IN f.lf_E then 0 else 1) ==>
+  !j. j < LENGTH (f::frames) ==>
+    (EL j ((f with <|lf_tgt := t'; lf_E := d INSERT f.lf_E|>)::frames)).lf_tgt.vs_alloca_next =
+    (EL j ((f with <|lf_tgt := t'; lf_E := d INSERT f.lf_E|>)::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j ((f with <|lf_tgt := t'; lf_E := d INSERT f.lf_E|>)::frames))
+Proof
+  strip_tac >> gen_tac >> Cases_on `j` >> simp[]
+  >- (drule ld_charge_scratch >>
+      disch_then (qspecl_then [`t'`, `frames`, `d`] assume_tac) >>
+      first_x_assum (qspec_then `0` mp_tac) >>
+      simp[arithmeticTheory.LEFT_ADD_DISTRIB]) >>
+  first_x_assum (qspec_then `SUC n` mp_tac) >> simp[]
+QED
+
+Theorem ld_frontiers_original:
+  (!j. j < LENGTH (f::frames) ==>
+    (EL j (f::frames)).lf_tgt.vs_alloca_next =
+    (EL j (f::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j (f::frames))) /\
+  g.lf_E = f.lf_E /\
+  g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next + n /\
+  g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next + n ==>
+  !j. j < LENGTH (g::frames) ==>
+    (EL j (g::frames)).lf_tgt.vs_alloca_next =
+    (EL j (g::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j (g::frames))
+Proof
+  strip_tac >> gen_tac >> Cases_on `j` >> simp[]
+  >- (first_x_assum (qspec_then `0` mp_tac) >> simp[ld_charge_def]) >>
+  first_x_assum (qspec_then `SUC n'` mp_tac) >> simp[]
+QED
+
+Theorem ld_frontiers_tail:
+  (!j. j < LENGTH (f::frames) ==>
+    (EL j (f::frames)).lf_tgt.vs_alloca_next =
+    (EL j (f::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j (f::frames))) ==>
+  !j. j < LENGTH frames ==>
+    (EL j frames).lf_tgt.vs_alloca_next =
+    (EL j frames).lf_src.vs_alloca_next + 32 * ld_charge (DROP j frames)
+Proof
+  strip_tac >> gen_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem ld_frontiers_empty_push:
+  f.lf_E = {} /\
+  f.lf_tgt.vs_alloca_next = f.lf_src.vs_alloca_next + 32 * ld_charge frames /\
+  (!j. j < LENGTH frames ==>
+    (EL j frames).lf_tgt.vs_alloca_next =
+    (EL j frames).lf_src.vs_alloca_next + 32 * ld_charge (DROP j frames)) ==>
+  !j. j < LENGTH (f::frames) ==>
+    (EL j (f::frames)).lf_tgt.vs_alloca_next =
+    (EL j (f::frames)).lf_src.vs_alloca_next +
+      32 * ld_charge (DROP j (f::frames))
+Proof
+  strip_tac >> gen_tac >> Cases_on `j` >> simp[ld_charge_empty_push]
+QED
