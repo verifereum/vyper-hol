@@ -242,7 +242,7 @@ Theorem body_annassign_memory:
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
-    (expr_type e = typ \/ is_bytestring_type typ \/
+    (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
      has_length_word typ /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
@@ -353,7 +353,7 @@ Theorem body_annassign_other:
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\
-    ~(expr_type e = typ \/ is_bytestring_type typ \/
+    ~(lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
       has_length_word typ /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
@@ -376,7 +376,7 @@ Proof
   >- (irule body_annassign_word >> metis_tac[]) >>
   `0 < type_memory_bytes cenv typ` by
     metis_tac[annassign_memory_bytes_pos] >>
-  Cases_on `expr_type e = typ \/ is_bytestring_type typ \/
+  Cases_on `lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
             has_length_word typ /\ is_empty_value_expr e`
   >- (irule body_annassign_memory >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]

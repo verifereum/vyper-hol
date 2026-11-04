@@ -1189,7 +1189,7 @@ Theorem body_assign_local_memory:
     eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
     FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
-    (expr_type e = ty \/ is_bytestring_type ty \/
+    (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
      has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
@@ -1575,7 +1575,7 @@ Theorem body_assign_other:
               is_word_type ty) /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               ~is_word_type ty /\
-              (expr_type e = ty \/ is_bytestring_type ty \/
+              (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
     ~(?nsid mut ty slot.
@@ -1613,7 +1613,7 @@ Proof
   >- (gvs[] >> irule body_assign_local_word >> metis_tac[]) >>
   Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
                     ~is_word_type ty /\
-                    (expr_type e = ty \/ is_bytestring_type ty \/
+                    (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
                      has_length_word (expr_type e) /\ is_empty_value_expr e)`
   >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
               0 < type_memory_bytes cenv ty` by
