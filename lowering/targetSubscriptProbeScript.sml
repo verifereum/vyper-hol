@@ -4760,3 +4760,46 @@ val () =
       print "BASE_TARGET_AUDIT probe_word_outer_zero_case OK\n"
     else raise Fail "probe_word_outer_zero_case: admitted proof dependency"
   end;
+
+Definition probe_word_source_state_def:
+  probe_word_source_state =
+    SND (set_storage_backend probe_word_context F
+      (update_storage 0w 1w (update_storage 1w 1w empty_storage)) empty_state)
+      with <| scopes := [FEMPTY]; outcomes := SOME [] |>
+End
+
+Theorem probe_word_captured_target_source:
+  eval_base_place probe_word_context
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+    probe_word_source_state =
+  (INL (PlaceR (StoragePlace F 2w (BaseTV (UintT 256)))),
+   set_storage probe_word_context probe_word_source_state F
+     (update_storage 0w 0w (get_storage probe_word_context probe_word_source_state F)))
+Proof
+  `eval_base_place probe_word_context
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0))) probe_word_source_state =
+    (INL (PlaceR (StoragePlace F 1w (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))),
+     probe_word_source_state)` by
+    (rewrite_tac[probe_word_outer_zero_eval] >>
+     EVAL_TAC >> simp[return_def, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC) >>
+  `lookup_storage 3w (get_storage probe_word_context probe_word_source_state F) = 0w /\
+   lookup_storage 4w (get_storage probe_word_context probe_word_source_state F) = 0w` by
+    (EVAL_TAC >> simp[dimword_def,
+      fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  qspecl_then [`probe_word_source_state`, `0`, `0`] mp_tac probe_word_copy_symbolic_success >>
+  simp[] >> strip_tac >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
+  simp[extend_place_def, extend_storage_place_def,
+       resolve_array_element_def, bind_def, ignore_bind_def,
+       check_def, return_def, raise_def, get_storage_backend_def,
+       LET_THM, assert_def, get_accounts_def] >>
+  EVAL_TAC >> simp[dimword_def,
+    fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC >>
+  simp[wordsTheory.word_add_n2w, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
