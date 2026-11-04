@@ -2437,6 +2437,44 @@ Proof
   simp[Abbr `h`, Abbr `m`]
 QED
 
+Theorem aug_place_stmt_state_rel_metadata:
+  stmt_state_rel ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx es s <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  eq_tac >> strip_tac >> irule stmt_state_rel_cenv_cong >>
+  first_assum (irule_at Any) >> simp[]
+QED
+
+Theorem aug_place_place_ptr_rel_metadata:
+  place_ptr_rel
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    cx s pv w loc vt <=>
+  place_ptr_rel cenv cx s pv w loc vt
+Proof
+  Cases_on `pv` >> simp[place_ptr_rel_def] >>
+  rename1 `PlaceR p` >> Cases_on `p` >> simp[place_ptr_rel_def]
+QED
+
+Theorem aug_place_target_post_metadata:
+  target_post ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    cx es sa sb s0 es' pv vt r s <=>
+  target_post ctx func cenv cx es sa sb s0 es' pv vt r s
+Proof
+  simp[target_post_def, aug_place_stmt_state_rel_metadata,
+       aug_place_place_ptr_rel_metadata, local_region_def,
+       locals_kept_def, dynarray_local_def]
+QED
+
+Theorem aug_place_local_ptrs_reserved_metadata:
+  local_ptrs_reserved
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) sa <=>
+  local_ptrs_reserved cenv sa
+Proof
+  simp[local_ptrs_reserved_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
