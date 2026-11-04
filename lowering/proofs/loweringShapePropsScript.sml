@@ -14052,3 +14052,141 @@ Proof
   simp[emit_void_labels, compile_store_bytestring_labels,
        typed_memory_family_labels, compile_copy_memory_labels]
 QED
+
+Theorem compile_abi_encode_static_labels:
+  !dst src s P.
+    cs_extends s (SND (compile_abi_encode_static dst src s)) /\
+    EVERY P (added_labels s (SND (compile_abi_encode_static dst src s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_encode_static_def] >>
+  BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_encode_static_info_labels:
+  !dst src info s P.
+    cs_extends s (SND (compile_abi_encode_static_info dst src info s)) /\
+    EVERY P (added_labels s (SND (compile_abi_encode_static_info dst src info s)))
+Proof
+  rpt gen_tac >> Cases_on `info` >>
+  simp[abiEncoderTheory.compile_abi_encode_static_info_def,
+       compile_abi_encode_static_labels, comp_return_labels, emit_void_labels] >>
+  irule comp_ignore_bind_labels >> simp[emit_void_labels, comp_return_labels]
+QED
+
+Theorem compile_abi_zero_pad_labels:
+  !ptr len count s P.
+    cs_extends s (SND (compile_abi_zero_pad ptr len count s)) /\
+    EVERY P (added_labels s (SND (compile_abi_zero_pad ptr len count s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_zero_pad_def] >>
+  BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_int_clamp_labels:
+  !v bits signed s P.
+    cs_extends s (SND (compile_abi_int_clamp v bits signed s)) /\
+    EVERY P (added_labels s (SND (compile_abi_int_clamp v bits signed s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_int_clamp_def, LET_THM] >>
+  BETA_TAC >> IF_CASES_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_bytes_clamp_labels:
+  !v m s P.
+    cs_extends s (SND (compile_abi_bytes_clamp v m s)) /\
+    EVERY P (added_labels s (SND (compile_abi_bytes_clamp v m s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_bytes_clamp_def, LET_THM] >>
+  BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_clamp_basetype_labels:
+  !v clamp s P.
+    cs_extends s (SND (compile_abi_clamp_basetype v clamp s)) /\
+    EVERY P (added_labels s (SND (compile_abi_clamp_basetype v clamp s)))
+Proof
+  rpt gen_tac >> Cases_on `clamp` >>
+  simp[abiEncoderTheory.compile_abi_clamp_basetype_def, comp_return_labels,
+       compile_abi_int_clamp_labels, compile_abi_bytes_clamp_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_decode_static_labels:
+  !src dst opc clamp s P.
+    (!v t. cs_extends t (SND (clamp v t)) /\
+           EVERY P (added_labels t (SND (clamp v t)))) ==>
+    cs_extends s (SND (compile_abi_decode_static src dst opc clamp s)) /\
+    EVERY P (added_labels s (SND (compile_abi_decode_static src dst opc clamp s)))
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_static_def] >>
+  BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_getelemptr_abi_labels:
+  !src dyn off opc hi s P.
+    cs_extends s (SND (compile_getelemptr_abi src dyn off opc hi s)) /\
+    EVERY P (added_labels s (SND (compile_getelemptr_abi src dyn off opc hi s)))
+Proof
+  rpt gen_tac >> Cases_on `hi = Lit 0w` >> Cases_on `dyn` >>
+  simp[abiEncoderTheory.compile_getelemptr_abi_def] >> BETA_TAC >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_decode_dyn_elem_ptr_labels:
+  !opc elem src hi sz s P.
+    cs_extends s (SND (compile_abi_decode_dyn_elem_ptr opc elem src hi sz s)) /\
+    EVERY P (added_labels s (SND (compile_abi_decode_dyn_elem_ptr opc elem src hi sz s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_decode_dyn_elem_ptr_def] >>
+  BETA_TAC >> Cases_on `hi = Lit 0w` >> simp[] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_abi_encode_dyn_static_loop_labels:
+  !dst src info asz msz len s.
+    cs_extends s (SND (compile_abi_encode_dyn_static_loop dst src info asz msz len s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_abi_encode_dyn_static_loop dst src info asz msz len s)))
+Proof
+  rpt gen_tac >> rewrite_tac[abiEncoderTheory.compile_abi_encode_dyn_static_loop_def] >>
+  BETA_TAC >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels,
+            emit_inst_labels, fresh_var_action_labels, compile_alloc_buffer_labels,
+            compile_abi_encode_static_info_labels])
+QED
