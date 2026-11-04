@@ -6,7 +6,7 @@
 
 Theory simplifyCfgCorrectness
 Ancestors
-  simplifyCfgProof cfgWf unitShapeDefs venomInst
+  simplifyCfgProof simplifyCfgWfssa cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -46,7 +46,9 @@ Theorem simplify_cfg_preserves_wf_ssa:
   first_block_no_preds fn /\ simplify_cfg_fn_ok fn ==>
   wf_ssa (simplify_cfg_fn fn)
 Proof
-  cheat
+  strip_tac >> irule simplify_cfg_fn_ssa_invariant >>
+  fs[simplifyCfgPhiRepairTheory.simplify_cfg_fn_ok_phi_safe,
+     fn_shape_ok_def, inst_shape_ok_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
 (* The pre-walk run feeds MakeSSA, which needs its input's uses defined on
