@@ -1,6 +1,7 @@
 Theory cseCanonProps
 Ancestors cseDefs availExprDefs availExprAnalysisProps dfAnalyzeDefs dfAnalyzeProps
           worklistProps cfgAnalysisProps venomExecProofs analysisSimProofsBase
+          analysisSimProps
 
 (* These are syntactic matching facts, not runtime value equalities. *)
 Theorem operand_ids_match_length:
@@ -816,4 +817,139 @@ Theorem compute_canon_common_predecessor:
 Proof
  rpt strip_tac >> drule_all compute_canon_preorder >> strip_tac >>
  qexists_tac `canonical_id (compute_canon d result fn) a` >> metis_tac[]
+QED
+
+(* Syntactic instruction-point paths include the block-end point. *)
+Inductive cse_static_trace:
+ (!entry bb. fn_entry_label fn = SOME entry /\
+   lookup_block entry fn.fn_blocks = SOME bb ==>
+   cse_static_trace fn [(entry,0)]) /\
+ (!ps lbl k bb. cse_static_trace fn ps /\ LAST ps = (lbl,k) /\
+   lookup_block lbl fn.fn_blocks = SOME bb /\ k < LENGTH bb.bb_instructions ==>
+   cse_static_trace fn (ps ++ [(lbl,SUC k)])) /\
+ (!ps lbl bb next nb. cse_static_trace fn ps /\
+   LAST ps = (lbl,LENGTH bb.bb_instructions) /\
+   lookup_block lbl fn.fn_blocks = SOME bb /\ fn_cfg_edge fn lbl next /\
+   lookup_block next fn.fn_blocks = SOME nb ==>
+   cse_static_trace fn (ps ++ [(next,0)]))
+End
+
+Definition cse_point_has_id_def:
+ cse_point_has_id fn (lbl,k) id <=>
+ ?bb. lookup_block lbl fn.fn_blocks = SOME bb /\
+      k < LENGTH bb.bb_instructions /\ (EL k bb.bb_instructions).inst_id = id
+End
+
+Definition cse_path_preorder_def:
+ cse_path_preorder fn a b <=>
+ !ps p. cse_static_trace fn ps /\ LAST ps = p /\ cse_point_has_id fn p b ==>
+        ?q. MEM q ps /\ cse_point_has_id fn q a
+End
+
+Theorem cse_static_trace_nonempty:
+ !fn ps. cse_static_trace fn ps ==> ps <> []
+Proof
+ gen_tac >> ho_match_mp_tac cse_static_trace_ind >> simp[]
+QED
+
+Theorem cse_static_trace_points:
+ !fn ps. cse_static_trace fn ps ==>
+ !lbl k. MEM (lbl,k) ps ==>
+ ?bb. lookup_block lbl fn.fn_blocks = SOME bb /\ k <= LENGTH bb.bb_instructions
+Proof
+ gen_tac >> ho_match_mp_tac cse_static_trace_ind >> simp[] >> rpt strip_tac >> gvs[] >>
+ metis_tac[arithmeticTheory.LESS_OR_EQ, arithmeticTheory.LESS_EQ]
+QED
+
+Theorem cse_path_preorder_reflexive:
+ reflexive (cse_path_preorder fn)
+Proof
+ simp[relationTheory.reflexive_def, cse_path_preorder_def] >> rpt strip_tac >>
+ qexists_tac `LAST ps` >> simp[] >>
+ drule cse_static_trace_nonempty >>
+ Cases_on `ps` >> simp[rich_listTheory.MEM_LAST]
+QED
+
+Theorem cse_static_trace_front:
+ cse_static_trace fn ps /\ 1 < LENGTH ps ==> cse_static_trace fn (FRONT ps)
+Proof
+ strip_tac >>
+ qpat_x_assum `cse_static_trace fn ps`
+   (strip_assume_tac o ONCE_REWRITE_RULE [cse_static_trace_cases]) >>
+ gvs[] >>
+ gvs[GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC]
+QED
+
+Theorem cse_static_trace_prefix:
+ !post pre. cse_static_trace fn (pre ++ post) /\ pre <> [] ==>
+ cse_static_trace fn pre
+Proof
+ Induct_on `post` using rich_listTheory.SNOC_INDUCT >- simp[] >>
+ rpt strip_tac >> first_x_assum irule >> simp[] >>
+ `cse_static_trace fn (FRONT (SNOC x (pre ++ post)))` by
+   (irule cse_static_trace_front >> gvs[rich_listTheory.SNOC_APPEND, listTheory.APPEND_ASSOC] >>
+    Cases_on `pre` >> gvs[]) >>
+ fs[listTheory.FRONT_SNOC]
+QED
+
+Theorem cse_static_trace_member_prefix:
+ cse_static_trace fn ps /\ MEM p ps ==>
+ ?pre post. ps = pre ++ post /\ pre <> [] /\ LAST pre = p /\
+            cse_static_trace fn pre
+Proof
+ rpt strip_tac >>
+ fs[listTheory.MEM_SPLIT] >>
+ qexistsl_tac [`l1 ++ [p]`, `l2`] >>
+ simp[listTheory.APPEND_ASSOC] >>
+ irule cse_static_trace_prefix >> simp[] >>
+ qexists_tac `l2` >> fs[listTheory.APPEND_ASSOC]
+QED
+
+Theorem cse_path_preorder_transitive:
+ transitive (cse_path_preorder fn)
+Proof
+ rw[relationTheory.transitive_def, cse_path_preorder_def] >>
+ `?q. MEM q ps /\ cse_point_has_id fn q y` by metis_tac[] >>
+ drule_all cse_static_trace_member_prefix >> rpt strip_tac >>
+ `?r. MEM r pre /\ cse_point_has_id fn r x` by metis_tac[] >>
+ qexists_tac `r` >> simp[]
+QED
+
+Theorem cse_path_preorder_occurrence:
+ cse_path_preorder fn a b /\ cse_static_trace fn ps /\
+ cse_point_has_id fn (LAST ps) b ==>
+ ?pre post lbl k bb.
+   ps = pre ++ post /\ pre <> [] /\ LAST pre = (lbl,k) /\
+   cse_static_trace fn pre /\
+   lookup_block lbl fn.fn_blocks = SOME bb /\
+   k < LENGTH bb.bb_instructions /\
+   (EL k bb.bb_instructions).inst_id = a
+Proof
+ rw[cse_path_preorder_def] >>
+ `?q. MEM q ps /\ cse_point_has_id fn q a` by metis_tac[] >>
+ drule_all cse_static_trace_member_prefix >> rpt strip_tac >>
+ Cases_on `q` >> fs[cse_point_has_id_def] >> metis_tac[]
+QED
+
+Theorem cse_static_trace_reachable:
+ !fn ps. cse_static_trace fn ps ==> wf_function fn ==>
+ !lbl k. MEM (lbl,k) ps ==> MEM lbl (cfg_analyze fn).cfg_dfs_pre
+Proof
+ gen_tac >> ho_match_mp_tac cse_static_trace_strongind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     gvs[venomInstTheory.fn_entry_label_def] >> Cases_on `entry_block fn` >> gvs[] >>
+     drule cfg_analyze_preorder_entry_first >>
+     Cases_on `(cfg_analyze fn).cfg_dfs_pre` >> simp[]) 
+ >- (rpt strip_tac >> gvs[] >>
+     metis_tac[cse_static_trace_nonempty, rich_listTheory.MEM_LAST, listTheory.list_CASES]) >>
+ rpt strip_tac >> gvs[] >- metis_tac[] >>
+ rename1 `MEM next (cfg_analyze fn).cfg_dfs_pre` >>
+ `MEM (lbl,LENGTH bb.bb_instructions) ps` by
+   metis_tac[cse_static_trace_nonempty, rich_listTheory.MEM_LAST, listTheory.list_CASES] >>
+ `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by metis_tac[] >>
+ `MEM next (cfg_succs_of (cfg_analyze fn) lbl)` by
+   (gvs[venomWfTheory.fn_cfg_edge_def] >>
+    irule (SIMP_RULE (srw_ss()) [LET_THM] cfgHelpersTheory.bb_succs_in_cfg_succs) >>
+    fs[venomWfTheory.wf_function_def]) >>
+ drule cfg_dfs_pre_succs_closed >> simp[listTheory.EVERY_MEM] >> metis_tac[]
 QED
