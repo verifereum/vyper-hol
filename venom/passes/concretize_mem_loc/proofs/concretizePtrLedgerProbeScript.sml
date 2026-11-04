@@ -1,6 +1,7 @@
 Theory concretizePtrLedgerProbe
 Ancestors
-  concretizePtrPrefixProbe concretizeMemLocDefs venomInst words
+  concretizePtrPrefixProbe concretizePtrChronologicalHistory contextCodegenRel
+  mem2varBlockSimHelpers concretizeMemLocDefs venomExecSemantics venomState ptrDiscipline venomInst words list finite_map
 Libs wordsLib
 
 Definition ptr_ledger_probe_source_def:
@@ -27,4 +28,298 @@ Theorem ptr_ledger_probe_production_transform:
     ptr_ledger_probe_source = SOME ptr_ledger_probe_target
 Proof
   EVAL_TAC
+QED
+
+(* Ordinary observations keep the actual operational ghosts. *)
+Definition ptr_ledger_next_def:
+  ptr_ledger_next obs inst post = ptr_observe obs.po_stack obs.po_params
+    (step_prov obs.po_params obs.po_prov obs.po_inst post)
+    (step_taint obs.po_inst obs.po_state post obs.po_taint)
+    obs.po_fn inst (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx)
+End
+
+Theorem ptr_ledger_next_history[local]:
+  ptr_chrono_history initial ctx h obs /\
+  active_inst obs.po_fn obs.po_inst obs.po_state /\
+  ~is_terminator obs.po_inst.inst_opcode /\ obs.po_inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx obs.po_inst obs.po_state = OK post /\
+  active_inst obs.po_fn inst (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx) ==>
+  ptr_chrono_history initial ctx (h ++ [ptr_ledger_next obs inst post])
+    (ptr_ledger_next obs inst post)
+Proof
+  strip_tac >> irule (cj 2 ptr_chrono_history_rules) >>
+  qexists_tac `obs` >> simp[] >>
+  Cases_on `obs` >> gvs[ptr_ledger_next_def, ptr_observe_def] >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def,
+    ptr_observation_component_equality] >>
+  qexistsl_tac [`post`,`fuel`] >> simp[]
+QED
+
+(* A bounded ordinary suffix is computed from successful execution, not
+   supplied as a source-history hypothesis. The instruction list is checked
+   against active_inst at every boundary. *)
+Definition ptr_ledger_follow_def:
+  (ptr_ledger_follow ctx [] obs = SOME []) /\
+  (ptr_ledger_follow ctx (inst::rest) obs =
+    if active_inst obs.po_fn obs.po_inst obs.po_state /\
+       ~is_terminator obs.po_inst.inst_opcode /\ obs.po_inst.inst_opcode <> INVOKE
+    then
+      case step_inst 0 ctx obs.po_inst obs.po_state of
+        OK post =>
+          if active_inst obs.po_fn inst
+               (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx)
+          then OPTION_MAP (CONS (ptr_ledger_next obs inst post))
+            (ptr_ledger_follow ctx rest (ptr_ledger_next obs inst post))
+          else NONE
+      | _ => NONE
+    else NONE)
+End
+
+Theorem ptr_ledger_follow_history[local]:
+  !rest obs tail h endpoint.
+    ptr_ledger_follow ctx rest obs = SOME tail /\
+    ptr_chrono_history initial ctx h obs ==>
+    ptr_chrono_history initial ctx (h ++ tail)
+      (if tail = [] then obs else LAST tail)
+Proof
+  Induct >> simp[ptr_ledger_follow_def] >> rpt gen_tac >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  rename1 `step_inst 0 ctx obs.po_inst obs.po_state = OK post` >>
+  rename1 `ptr_ledger_follow ctx rest (ptr_ledger_next obs inst post) = SOME suffix` >>
+  rename1 `ptr_chrono_history initial ctx history obs` >>
+  `ptr_chrono_history initial ctx (history ++ [ptr_ledger_next obs inst post])
+     (ptr_ledger_next obs inst post)` by
+    (irule ptr_ledger_next_history >> metis_tac[]) >>
+  first_x_assum drule >> disch_then drule >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  Cases_on `suffix` >> simp[LAST_DEF]
+QED
+
+Definition ptr_ledger_source_entry_def:
+  ptr_ledger_source_entry s = ptr_observe [] [] FEMPTY entry_taint
+    ptr_ledger_probe_source (mk_inst 10 ALLOCA [Lit 32w] ["p"])
+    (ptr_probe_entry_state s)
+End
+
+Theorem ptr_ledger_next_projections[local,simp]:
+  (ptr_ledger_next obs inst post).po_fn = obs.po_fn /\
+  (ptr_ledger_next obs inst post).po_inst = inst /\
+  (ptr_ledger_next obs inst post).po_state =
+    post with vs_inst_idx := SUC obs.po_state.vs_inst_idx
+Proof
+  simp[ptr_ledger_next_def, ptr_observe_def]
+QED
+
+Theorem ptr_ledger_source_active[local,simp]:
+  active_inst ptr_ledger_probe_source inst s <=>
+    s.vs_current_bb = "entry" /\ s.vs_inst_idx < 5 /\
+    EL s.vs_inst_idx
+      [mk_inst 10 ALLOCA [Lit 32w] ["p"];
+       mk_inst 11 MSTORE [Var "p"; Lit 42w] [];
+       mk_inst 12 NOP [] [];
+       mk_inst 13 MLOAD [Var "p"] ["r"];
+       mk_inst 14 STOP [] []] = inst
+Proof
+  simp[active_inst_def, ptr_ledger_probe_source_def, ptr_probe_fn_def,
+    mk_raw_function_def, EQ_SYM_EQ]
+QED
+
+Theorem ptr_ledger_source_entry_projections[local,simp]:
+  (ptr_ledger_source_entry s).po_fn = ptr_ledger_probe_source /\
+  (ptr_ledger_source_entry s).po_inst = mk_inst 10 ALLOCA [Lit 32w] ["p"] /\
+  (ptr_ledger_source_entry s).po_state = ptr_probe_entry_state s
+Proof
+  simp[ptr_ledger_source_entry_def, ptr_observe_def]
+QED
+
+
+Definition ptr_ledger_s1_def:
+  ptr_ledger_s1 s = ptr_probe_allocated_state 10 "p" (32w : bytes32)
+    (ptr_probe_entry_state s) with vs_inst_idx := 1
+End
+Definition ptr_ledger_s2_def:
+  ptr_ledger_s2 s = mstore (w2n (n2w s.vs_alloca_next : bytes32)) 42w
+    (ptr_ledger_s1 s) with vs_inst_idx := 2
+End
+Definition ptr_ledger_s3_def:
+  ptr_ledger_s3 s = ptr_ledger_s2 s with vs_inst_idx := 3
+End
+Definition ptr_ledger_s4_def:
+  ptr_ledger_s4 s = update_var "r"
+    (mload (w2n (n2w s.vs_alloca_next : bytes32)) (ptr_ledger_s3 s))
+    (ptr_ledger_s3 s) with vs_inst_idx := 4
+End
+
+Theorem ptr_ledger_s1_fields[local,simp]:
+  (ptr_ledger_s1 s).vs_current_bb = "entry" /\
+  (ptr_ledger_s1 s).vs_inst_idx = 1 /\
+  lookup_var "p" (ptr_ledger_s1 s) = SOME (n2w s.vs_alloca_next : bytes32)
+Proof
+  simp[ptr_ledger_s1_def, ptr_probe_allocated_state_def,
+    ptr_probe_entry_state_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_ledger_s2_fields[local,simp]:
+  (ptr_ledger_s2 s).vs_current_bb = "entry" /\
+  (ptr_ledger_s2 s).vs_inst_idx = 2 /\
+  lookup_var "p" (ptr_ledger_s2 s) = SOME (n2w s.vs_alloca_next : bytes32)
+Proof
+  simp[ptr_ledger_s2_def, mstore_preserves, lookup_var_mstore_idx]
+QED
+
+Theorem ptr_ledger_s3_fields[local,simp]:
+  (ptr_ledger_s3 s).vs_current_bb = "entry" /\
+  (ptr_ledger_s3 s).vs_inst_idx = 3 /\
+  lookup_var "p" (ptr_ledger_s3 s) = SOME (n2w s.vs_alloca_next : bytes32)
+Proof
+  simp[ptr_ledger_s3_def, ptr_ledger_s2_def, mstore_preserves,
+    lookup_var_mstore_idx]
+QED
+
+Theorem ptr_ledger_s4_fields[local,simp]:
+  (ptr_ledger_s4 s).vs_current_bb = "entry" /\
+  (ptr_ledger_s4 s).vs_inst_idx = 4
+Proof
+  simp[ptr_ledger_s4_def, update_var_def]
+QED
+
+Theorem ptr_ledger_alloca_edge[local]:
+  s.vs_allocas = FEMPTY ==>
+  step_inst fuel ctx (mk_inst 10 ALLOCA [Lit 32w] ["p"])
+    (ptr_probe_entry_state s) = OK (ptr_ledger_s1 s with vs_inst_idx := 0)
+Proof
+  simp[ptr_probe_alloca_step, ptr_probe_entry_state_def, ptr_ledger_s1_def,
+    ptr_probe_allocated_state_def, update_var_def]
+QED
+
+Theorem ptr_ledger_store_edge[local]:
+  step_inst fuel ctx (mk_inst 11 MSTORE [Var "p"; Lit 42w] [])
+    (ptr_ledger_s1 s) = OK (ptr_ledger_s2 s with vs_inst_idx := 1)
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+    exec_write2_def, eval_operand_def, ptr_ledger_s2_def] >>
+  simp[ptr_ledger_s1_def, ptr_probe_allocated_state_def,
+    ptr_probe_entry_state_def, update_var_def, mstore_def]
+QED
+
+Theorem ptr_ledger_nop_edge[local]:
+  step_inst fuel ctx (mk_inst 12 NOP [] []) s = OK s
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def]
+QED
+
+Theorem ptr_ledger_load_edge[local]:
+  step_inst fuel ctx (mk_inst 13 MLOAD [Var "p"] ["r"])
+    (ptr_ledger_s3 s) = OK (ptr_ledger_s4 s with vs_inst_idx := 3)
+Proof
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def,
+    exec_read1_def, eval_operand_def, ptr_ledger_s4_def, update_var_def,
+    venom_state_component_equality]
+QED
+
+Definition ptr_ledger_o1_def:
+  ptr_ledger_o1 s = ptr_ledger_next (ptr_ledger_source_entry s)
+    (mk_inst 11 MSTORE [Var "p"; Lit 42w] [])
+    (ptr_ledger_s1 s with vs_inst_idx := 0)
+End
+Definition ptr_ledger_o2_def:
+  ptr_ledger_o2 s = ptr_ledger_next (ptr_ledger_o1 s)
+    (mk_inst 12 NOP [] []) (ptr_ledger_s2 s with vs_inst_idx := 1)
+End
+Definition ptr_ledger_o3_def:
+  ptr_ledger_o3 s = ptr_ledger_next (ptr_ledger_o2 s)
+    (mk_inst 13 MLOAD [Var "p"] ["r"]) (ptr_ledger_s2 s)
+End
+Definition ptr_ledger_o4_def:
+  ptr_ledger_o4 s = ptr_ledger_next (ptr_ledger_o3 s)
+    (mk_inst 14 STOP [] []) (ptr_ledger_s4 s with vs_inst_idx := 3)
+End
+
+Theorem ptr_ledger_o1_fields[local,simp]:
+  (ptr_ledger_o1 s).po_fn = ptr_ledger_probe_source /\
+  (ptr_ledger_o1 s).po_inst = mk_inst 11 MSTORE [Var "p"; Lit 42w] [] /\
+  (ptr_ledger_o1 s).po_state = ptr_ledger_s1 s
+Proof
+  simp[ptr_ledger_o1_def, ptr_probe_entry_state_def,
+    venom_state_component_equality]
+QED
+Theorem ptr_ledger_o2_fields[local,simp]:
+  (ptr_ledger_o2 s).po_fn = ptr_ledger_probe_source /\
+  (ptr_ledger_o2 s).po_inst = mk_inst 12 NOP [] [] /\
+  (ptr_ledger_o2 s).po_state = ptr_ledger_s2 s
+Proof
+  simp[ptr_ledger_o2_def, venom_state_component_equality]
+QED
+Theorem ptr_ledger_o3_fields[local,simp]:
+  (ptr_ledger_o3 s).po_fn = ptr_ledger_probe_source /\
+  (ptr_ledger_o3 s).po_inst = mk_inst 13 MLOAD [Var "p"] ["r"] /\
+  (ptr_ledger_o3 s).po_state = ptr_ledger_s3 s
+Proof
+  simp[ptr_ledger_o3_def, ptr_ledger_s3_def]
+QED
+Theorem ptr_ledger_o4_fields[local,simp]:
+  (ptr_ledger_o4 s).po_fn = ptr_ledger_probe_source /\
+  (ptr_ledger_o4 s).po_inst = mk_inst 14 STOP [] [] /\
+  (ptr_ledger_o4 s).po_state = ptr_ledger_s4 s
+Proof
+  simp[ptr_ledger_o4_def, venom_state_component_equality]
+QED
+
+Theorem ptr_ledger_instruction_opcode[local,simp]:
+  (mk_inst iid opc ops outs).inst_opcode = opc
+Proof
+  simp[mk_inst_def]
+QED
+
+Theorem ptr_ledger_entry_fields[local,simp]:
+  (ptr_probe_entry_state s).vs_current_bb = "entry" /\
+  (ptr_probe_entry_state s).vs_inst_idx = 0
+Proof
+  simp[ptr_probe_entry_state_def]
+QED
+
+Theorem ptr_ledger_source_follows:
+  s.vs_allocas = FEMPTY ==>
+  ptr_ledger_follow ctx
+    [mk_inst 11 MSTORE [Var "p"; Lit 42w] [];
+     mk_inst 12 NOP [] [];
+     mk_inst 13 MLOAD [Var "p"] ["r"];
+     mk_inst 14 STOP [] []] (ptr_ledger_source_entry s) =
+    SOME [ptr_ledger_o1 s; ptr_ledger_o2 s; ptr_ledger_o3 s; ptr_ledger_o4 s]
+Proof
+  strip_tac >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_alloca_edge,
+    is_terminator_def, GSYM ptr_ledger_o1_def] >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_store_edge,
+    is_terminator_def, GSYM ptr_ledger_o2_def] >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_nop_edge,
+    is_terminator_def, GSYM ptr_ledger_o3_def, ptr_ledger_s3_fields] >>
+  simp[Once ptr_ledger_follow_def, ptr_ledger_load_edge,
+    is_terminator_def, GSYM ptr_ledger_o4_def] >>
+  simp[ptr_ledger_follow_def]
+QED
+
+Theorem ptr_ledger_source_entry_history[local]:
+  ptr_chrono_history s
+    (mk_venom_context [ptr_ledger_probe_source] (SOME "probe"))
+    [ptr_ledger_source_entry s] (ptr_ledger_source_entry s)
+Proof
+  simp[ptr_ledger_source_entry_def, ptr_ledger_probe_source_def,
+    GSYM ptr_probe_ctx_def] >>
+  irule ptr_probe_entry_history >> simp[]
+QED
+
+Theorem ptr_ledger_source_history:
+  s.vs_allocas = FEMPTY ==>
+  ptr_chrono_history s
+    (mk_venom_context [ptr_ledger_probe_source] (SOME "probe"))
+    [ptr_ledger_source_entry s; ptr_ledger_o1 s; ptr_ledger_o2 s;
+     ptr_ledger_o3 s; ptr_ledger_o4 s] (ptr_ledger_o4 s)
+Proof
+  strip_tac >>
+  qspec_then `s` assume_tac (GEN_ALL ptr_ledger_source_entry_history) >>
+  drule (GEN_ALL ptr_ledger_source_follows) >>
+  disch_then (qspec_then
+    `mk_venom_context [ptr_ledger_probe_source] (SOME "probe")` assume_tac) >>
+  drule_all ptr_ledger_follow_history >> simp[]
 QED
