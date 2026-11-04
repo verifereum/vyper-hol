@@ -5,7 +5,8 @@ Ancestors
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyRelation lowerDloadSafetyKernel
   unitMemInv unitTransformDefs memLocDefs ptrDiscipline
   codegenRel contextCodegenRel venomExecSemantics venomInst
-  finite_map pred_set list words arithmetic
+  finite_map pred_set list words arithmetic pair venomWf
+  lowerDloadSafetyAssemblyPremises lowerDloadSafetyWriteAssembly
 
 Theorem ld_alloc_target_frontier:
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
@@ -105,3 +106,89 @@ Resume ld_oracle_call_range_transport[call]:
 QED
 
 Finalise ld_oracle_call_range_transport
+
+Theorem ld_sync_oracle_call_raw:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ ~in_revert_forward fn s /\
+  MEM inst.inst_opcode [CALL;STATICCALL] ==>
+  raw_mem_ok C fn inst t
+Proof
+  strip_tac >>
+  `fn_shape_ok fn /\ fn_inst_wf fn` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
+  `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
+  `lo <= t.vs_alloca_next` by metis_tac[ld_sync_frontier_lower_bound] >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[ld_sync_slots, ld_sync_maps] >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t.vs_alloca_next` by
+    (rpt strip_tac >> drule_all ld_alloc_target_frontier >>
+     drule ld_sync_active >> simp[]) >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
+    metis_tac[LESS_EQ_LESS_TRANS] >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  `inst_wf inst` by
+    (fs[venomWfTheory.fn_inst_wf_def, fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
+  `?g ad v ao az ro rz.
+    (inst.inst_opcode = CALL /\ inst.inst_operands = [g;ad;v;ao;az;ro;rz]) \/
+    (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;ad;ao;az;ro;rz])` by
+    (qpat_x_assum `inst_wf inst` mp_tac >>
+     pure_rewrite_tac[venomWfTheory.inst_wf_def] >>
+     fs[MEM] >> gvs[] >> simp[LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  `!i. MEM i (if inst.inst_opcode = CALL then [0;1;2;4;6] else [0;1;3;5]) ==>
+      eval_operand (EL i inst.inst_operands) s =
+      eval_operand (EL i inst.inst_operands) t` by
+    (rpt strip_tac >>
+     `eval_operand (EL i inst.inst_operands) f.lf_src =
+      eval_operand (EL i inst.inst_operands) f.lf_tgt` suffices_by metis_tac[] >>
+     irule ld_oracle_call_scalar_equal >> gvs[] >> metis_tac[]) >>
+  `!op y. MEM op inst.inst_operands /\ eval_operand op t = SOME y ==>
+      ?x. eval_operand op s = SOME x` by
+    (rpt strip_tac >>
+     `?x. eval_operand op f.lf_src = SOME x` suffices_by metis_tac[] >>
+     irule ld_write_operand_defined >> simp[] >> metis_tac[]) >>
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
+  pure_rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
+  qx_gen_tac `r` >> PairCases_on `r` >> pure_rewrite_tac[UNCURRY] >>
+  disch_tac >> Cases_on `r1 = 0` >- simp[] >> simp[] >>
+  `?getops ranges. MEM (getops,ranges)
+    [(mem_read_ops,source_memory_read_ranges);
+     (mem_write_ops,source_memory_write_ranges)] /\
+    MEM (r0,r1) (ranges inst t)` by
+    (gvs[MEM_APPEND] >> metis_tac[MEM]) >>
+  drule_all ld_oracle_call_range_transport >> strip_tac >>
+  `MEM ops.iao_ofst inst.inst_operands` by
+    (gvs[MEM, mem_read_ops_def, mem_write_ops_def]) >>
+  `op_taint tn ops.iao_ofst = {}` by
+    (irule ld_numeric_operand_untainted >> simp[] >>
+     qexistsl_tac [`fn`,`inst`,`s`] >> gvs[]) >>
+  `?xx. eval_operand ops.iao_ofst f.lf_src = SOME xx /\
+    (op_prov f.lf_H ops.iao_ofst = NONE ==> xx = y) /\
+    (!a. op_prov f.lf_H ops.iao_ofst = SOME a ==>
+         ld_wordrel A (SOME a) xx y)` by
+    (irule ld_numeric_operand_observation >> simp[] >>
+     conj_tac >- (qexists_tac `tn` >> simp[]) >>
+     conj_tac >- (qexists_tac `inst` >> gvs[]) >>
+     metis_tac[]) >>
+  `xx = x` by metis_tac[optionTheory.SOME_11] >>
+  ` (w2n x+r1 <= lo /\ y=x) \/
+    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+      w2n x=b+delta /\ w2n y=c+delta /\ delta+r1 <= sz)` by
+    (`0 < r1` by decide_tac >>
+     qpat_x_assum `MEM (getops,ranges) _`
+       (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ])
+     >- (gvs[] >> drule_all ld_read_access_classified >> simp[]) >>
+     gvs[] >> drule_all ld_write_access_classified >> simp[]) >>
+  qpat_assum `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= _`
+    imp_res_tac >>
+  qpat_x_assum `r0 = w2n y` SUBST1_TAC >>
+  pure_asm_rewrite_tac[] >> decide_tac
+QED
