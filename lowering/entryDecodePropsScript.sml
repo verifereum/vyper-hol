@@ -139,6 +139,22 @@ Proof
   gvs[value_has_type_def, val_in_memory_def, typed_val_to_w256_def]
 QED
 
+(* Sharing one word representation determines the representation at every
+   address, without requiring equality of the source values (integers wrap). *)
+Theorem val_in_memory_word_entails:
+  !tenv ty tv old fresh p data b mem.
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv old /\ value_has_type tv fresh /\
+    val_in_memory tv old p data /\ val_in_memory tv fresh p data /\
+    val_in_memory tv fresh b mem ==>
+    val_in_memory tv old b mem
+Proof
+  rpt strip_tac >>
+  imp_res_tac val_in_memory_word >> gvs[] >>
+  irule (iffRL val_in_memory_word) >>
+  simp[] >> qexistsl [`tenv`, `ty`] >> simp[]
+QED
+
 (* A word-typed value's ABI encoding is its word. *)
 Theorem vyper_to_abi_word_enc:
   !tenv ty tv v av.
