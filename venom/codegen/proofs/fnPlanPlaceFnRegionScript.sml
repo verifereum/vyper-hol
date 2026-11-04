@@ -1,6 +1,7 @@
 Theory fnPlanPlaceFnRegion
 Ancestors
-  stackPlanGen callLayoutDefs venomInst stackPlanTypes list rich_list arithmetic
+  stackPlanGen callLayoutDefs venomInst stackPlanTypes list rich_list arithmetic asmToBytecodeProofs codegen asmSem
+  codegenRel words symbolResolve
 
 Theorem generate_block_plan_leading_label:
   generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps') ==>
@@ -78,4 +79,48 @@ Proof
   first_x_assum drule >> simp[] >> strip_tac >>
   gvs[generate_fn_plan_with_cleanup_def] >>
   drule generate_fn_plan_with_cleanup_analyzed_leading_label >> simp[]
+QED
+
+Theorem asm_symbols_ok_label_suffix:
+  asm_symbols_ok (pre ++ AsmLabel lbl :: rest) ==>
+  !j. j < LENGTH rest ==>
+    EL j rest <> AsmLabel lbl /\
+    (!l. EL j rest = AsmDataHeader l ==> l <> lbl)
+Proof
+  strip_tac >> drule asm_symbols_ok_distinct >>
+  simp[asm_defined_symbols_def, ALL_DISTINCT_APPEND] >>
+  rpt strip_tac >>
+  `MEM (EL j rest) rest` by simp[EL_MEM] >>
+  gvs[MEM_FLAT, MEM_MAP] >> metis_tac[asm_defined_symbols_def, MEM]
+QED
+
+Theorem labelled_asm_slice_placed:
+  !prog pre body post lbl.
+  prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog ==>
+  ?off.
+    FLOOKUP (SND (compute_label_offsets prog)) lbl = SOME off /\
+    off < dimword (:256) /\
+    FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre) /\
+    asm_block_at prog (LENGTH pre) (AsmLabel lbl :: body)
+Proof
+  rpt strip_tac >> gvs[] >>
+  rename1 `asm_block_at _ _ (AsmLabel lbl :: tail)` >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  qexists_tac `asm_pc_to_offset (pre ++ AsmLabel lbl :: (tail ++ post)) (LENGTH pre)` >>
+  conj_tac >-
+    (drule asm_symbols_ok_label_suffix >> strip_tac >>
+     irule label_offset_consistent_proof >>
+     simp[EL_APPEND_EQN] >> rpt strip_tac >>
+     first_x_assum (qspec_then `PRE (j - LENGTH pre)` mp_tac) >>
+     gvs[EL_CONS]) >>
+  conj_tac >-
+    (gvs[asm_pc_to_offset_def, TAKE_APPEND, asm_symbols_ok_def] >>
+     gvs[SUM_APPEND, asm_inst_size_def, dimword_def] >>
+     CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >> decide_tac) >>
+  conj_tac >-
+    (irule offset_to_pc_inverse_proof >>
+     simp[EL_APPEND_EQN, asm_inst_size_def]) >>
+  simp[asm_block_at_def, EL_APPEND_EQN] >>
+  rpt strip_tac >> Cases_on `j` >> simp[EL_APPEND_EQN]
 QED
