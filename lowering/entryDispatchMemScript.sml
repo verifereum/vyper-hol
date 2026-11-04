@@ -516,3 +516,158 @@ Proof
   goal_assum (drule_at Any) >>
   simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
 QED
+
+Theorem linear_size_ops_eval[local]:
+  LENGTH ss.vs_call_ctx.cc_calldata < dimword(:256) ==>
+  ?u. run_inst_seq
+       [mk_inst id CALLDATASIZE [] [x];
+        mk_inst (id+1) LT [Var x; Lit 4w] [y];
+        mk_inst (id+2) ISZERO [Var y] [z]] ss = OK u /\
+      u = update_var z (bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata))
+            (update_var y (bool_to_word (LENGTH ss.vs_call_ctx.cc_calldata < 4))
+              (update_var x (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ss)) /\
+      eval_operand (Var z) u =
+        SOME (bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata))
+Proof
+  strip_tac >>
+  qabbrev_tac `u1 = update_var x (n2w (LENGTH ss.vs_call_ctx.cc_calldata)) ss` >>
+  qabbrev_tac `w = bool_to_word
+     (w2n (n2w (LENGTH ss.vs_call_ctx.cc_calldata):bytes32) < w2n (4w:bytes32))` >>
+  qabbrev_tac `u2 = update_var y w u1` >>
+  qabbrev_tac `u3 = update_var z (bool_to_word (w = 0w)) u2` >>
+  `step_inst_base (mk_inst id CALLDATASIZE [] [x]) ss = OK u1` by
+    simp[step_CALLDATASIZE, Abbr `u1`] >>
+  `step_inst_base (mk_inst (id+1) LT [Var x; Lit 4w] [y]) u1 = OK u2` by
+    (qunabbrev_tac `u2` >> qunabbrev_tac `w` >> irule step_LT >>
+     simp[Abbr `u1`, eval_operand_update_var, eval_operand_lit]) >>
+  `step_inst_base (mk_inst (id+2) ISZERO [Var y] [z]) u2 = OK u3` by
+    (simp[Abbr `u3`] >> irule step_ISZERO >>
+     simp[Abbr `u2`, eval_operand_update_var]) >>
+  qexists_tac `u3` >> conj_tac
+  >- simp[run_inst_seq_def] >> conj_tac
+  >- (simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `w`, wordsTheory.dimword_def] >>
+      Cases_on `LENGTH ss.vs_call_ctx.cc_calldata < 4` >> simp[bool_to_word_def]) >>
+  simp[Abbr `u3`, eval_operand_update_var] >>
+  simp[Abbr `w`, wordsTheory.dimword_def] >>
+  Cases_on `LENGTH ss.vs_call_ctx.cc_calldata < 4` >> simp[bool_to_word_def]
+QED
+
+Theorem linear_method_ops_eval[local]:
+  4 <= LENGTH ss.vs_call_ctx.cc_calldata ==>
+  ?u. run_inst_seq
+       [mk_inst id CALLDATALOAD [Lit 0w] [x];
+        mk_inst (id+1) SHR [Lit 224w; Var x] [y]] ss = OK u /\
+      u = update_var y (calldata_method_id ss.vs_call_ctx.cc_calldata)
+            (update_var x (word_of_bytes T (0w:bytes32)
+              (TAKE 32 (ss.vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) ss) /\
+      eval_operand (Var y) u = SOME (calldata_method_id ss.vs_call_ctx.cc_calldata)
+Proof
+  strip_tac >>
+  qabbrev_tac `w = word_of_bytes T (0w:bytes32)
+     (TAKE 32 (ss.vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))` >>
+  qabbrev_tac `u1 = update_var x w ss` >>
+  qabbrev_tac `u2 = update_var y (w >>> w2n (224w:bytes32)) u1` >>
+  `step_inst_base (mk_inst id CALLDATALOAD [Lit 0w] [x]) ss = OK u1` by
+    (qunabbrev_tac `u1` >> qunabbrev_tac `w` >>
+     qspec_then `Lit 0w` mp_tac step_CALLDATALOAD >>
+     simp[eval_operand_lit]) >>
+  `step_inst_base (mk_inst (id+1) SHR [Lit 224w; Var x] [y]) u1 = OK u2` by
+    (qunabbrev_tac `u2` >>
+     irule step_SHR >> simp[Abbr `u1`, eval_operand_update_var, eval_operand_lit]) >>
+  qexists_tac `u2` >> conj_tac
+  >- simp[run_inst_seq_def] >>
+  simp[Abbr `u2`, Abbr `u1`, eval_operand_update_var, Abbr `w`,
+       wordsTheory.dimword_def, calldataload_0_shr_224]
+QED
+
+Theorem linear_size_ops_mem[local]:
+  let code = [mk_inst id CALLDATASIZE [] [x];
+              mk_inst (id+1) LT [Var x; Lit 4w] [y];
+              mk_inst (id+2) ISZERO [Var y] [z]] in
+    run_inst_seq_mem_ok code ss /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code
+Proof
+  simp[LET_THM, mk_inst_def, is_terminator_def] >>
+  irule run_inst_seq_mem_ok_every >> simp[EVERY_DEF] >>
+  rpt conj_tac >> gen_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem linear_method_ops_mem[local]:
+  let code = [mk_inst id CALLDATALOAD [Lit 0w] [x];
+              mk_inst (id+1) SHR [Lit 224w; Var x] [y]] in
+    run_inst_seq_mem_ok code ss /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code
+Proof
+  simp[LET_THM, mk_inst_def, is_terminator_def] >>
+  irule run_inst_seq_mem_ok_every >> simp[EVERY_DEF] >>
+  rpt conj_tac >> gen_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem linear_size_prefix_eval[local]:
+  emit_op CALLDATASIZE [] st = (cds,a1) /\
+  emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+  emit_op ISZERO [small] a2 = (cond,a3) /\
+  fresh_vars_wrt st ss /\ LENGTH ss.vs_call_ctx.cc_calldata < dimword(:256) ==>
+  ?u. run_inst_seq (emitted_insts st a3) ss = OK u /\
+      eval_operand cond u = SOME (bool_to_word (4 <= LENGTH ss.vs_call_ctx.cc_calldata)) /\
+      vars_pc_only ss u /\ fresh_vars_wrt a3 u /\
+      (!x. not_fresh_at st x ==> lookup_var x u = lookup_var x ss) /\
+      u.vs_current_bb = ss.vs_current_bb /\ u.vs_halted = ss.vs_halted /\
+      u.vs_inst_idx = ss.vs_inst_idx
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  `emitted_insts st a3 = emitted_insts st a1 ++
+     emitted_insts a1 a2 ++ emitted_insts a2 a3` by
+    (simp[SimpLHS, emitted_insts_def, APPEND_ASSOC,
+          rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+  drule linear_size_ops_eval >>
+  disch_then (qspecl_then [`STRING #"%" (toString (st.cs_next_var+2))`,
+     `STRING #"%" (toString (st.cs_next_var+1))`,
+     `STRING #"%" (toString st.cs_next_var)`, `st.cs_next_id`] mp_tac) >>
+  strip_tac >> qexists_tac `u` >> conj_tac
+  >- simp[APPEND_ASSOC] >> conj_tac
+  >- simp[eval_operand_update_var] >> conj_tac
+  >- (simp[] >> rpt (irule vars_pc_only_update_var) >> irule vars_pc_only_refl) >>
+  conj_tac
+  >- (simp[] >> irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`st.cs_next_var+2`, `st with cs_next_var := st.cs_next_var+2`] >>
+      simp[] >> irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`st.cs_next_var+1`, `st with cs_next_var := st.cs_next_var+1`] >>
+      simp[] >> irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`st.cs_next_var`, `st`] >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      gvs[not_fresh_at_def]) >>
+  simp[update_var_def]
+QED
+
+Theorem linear_method_prefix_eval[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+  fresh_vars_wrt a6 ss /\ 4 <= LENGTH ss.vs_call_ctx.cc_calldata ==>
+  ?u. run_inst_seq (emitted_insts a6 a8) ss = OK u /\
+      eval_operand mid u = SOME (calldata_method_id ss.vs_call_ctx.cc_calldata) /\
+      vars_pc_only ss u /\ fresh_vars_wrt a8 u /\
+      (!x. not_fresh_at a6 x ==> lookup_var x u = lookup_var x ss) /\
+      u.vs_current_bb = ss.vs_current_bb /\ u.vs_halted = ss.vs_halted /\
+      u.vs_inst_idx = ss.vs_inst_idx
+Proof
+  strip_tac >> drule_all linear_method_prefix_code >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  drule linear_method_ops_eval >>
+  disch_then (qspecl_then [`STRING #"%" (toString (a6.cs_next_var+1))`,
+     `STRING #"%" (toString a6.cs_next_var)`, `a6.cs_next_id`] mp_tac) >>
+  strip_tac >> qexists_tac `u` >> conj_tac
+  >- simp[] >> conj_tac
+  >- simp[eval_operand_update_var] >> conj_tac
+  >- (simp[] >> rpt (irule vars_pc_only_update_var) >> irule vars_pc_only_refl) >>
+  conj_tac
+  >- (simp[] >> irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`a6.cs_next_var+1`, `a6 with cs_next_var := a6.cs_next_var+1`] >>
+      simp[] >> irule fresh_vars_wrt_advance >>
+      qexistsl_tac [`a6.cs_next_var`, `a6`] >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      gvs[not_fresh_at_def]) >>
+  simp[update_var_def]
+QED
