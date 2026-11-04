@@ -1145,3 +1145,184 @@ QED
    a candidate-only premise is not currently necessary, but preservation above
    is still unproved.  This audit is not terminal-integration evidence.
 *)
+
+Definition rf_inventory_inv_def:
+  rf_inventory_inv fn ra lo entry ps s <=>
+    !at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (frame_view fn ra s) lo at =
+      operand_val entry lo (normalize_operand (dfg_build_function fn) [] at)
+End
+
+Theorem rf_inventory_inv_entry:
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+    operand_val (frame_view fn ra s) lo at =
+    operand_val (frame_view fn ra s) lo
+      (normalize_operand (dfg_build_function fn) [] at)) ==>
+  rf_inventory_inv fn ra lo (frame_view fn ra s) ps s
+Proof
+  simp[rf_inventory_inv_def]
+QED
+
+Theorem rf_inventory_inv_transport:
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+  (!at. operand_val (frame_view fn ra s') lo at =
+        operand_val (frame_view fn ra s) lo at) ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  simp[rf_inventory_inv_def] >> metis_tac[]
+QED
+
+Theorem rf_inventory_inv_index[simp]:
+  rf_inventory_inv fn ra lo entry ps (s with vs_inst_idx := k) <=>
+  rf_inventory_inv fn ra lo entry ps s
+Proof
+  simp[rf_inventory_inv_def] >> eq_tac >> rpt strip_tac >>
+  first_x_assum (qspec_then `at` mp_tac) >> simp[] >> Cases_on `at` >>
+  simp[frame_view_def, codegenRelTheory.operand_val_def,
+       venomStateTheory.lookup_var_def]
+QED
+
+Theorem rf_inventory_inv_assign:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [x] /\ ~is_label_operand rhs /\
+  step_inst fuel ctx inst s = OK s' /\
+  rf_inventory_inv fn ra lo entry ps s /\
+  operand_val (frame_view fn ra s) lo rhs =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs) /\
+  ps' = ps with ps_stack := stack_push (Var x) (stack_pop 1 ps.ps_stack) ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, Once step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `normalize_operand (dfg_build_function fn) [] (Var x) =
+   normalize_operand (dfg_build_function fn) [] rhs` by
+    (irule normalize_operand_codegen_assign >> simp[] >> qexists_tac `inst` >>
+     simp[] >> irule dfg_build_function_ssa_def >> simp[] >> metis_tac[]) >>
+  `MEM x inst.inst_outputs` by simp[] >>
+  `eval_operand rhs (frame_view fn ra s) =
+   SOME (if retpc_var fn x then ra else v)` by
+    (drule_all assign_eval_frame_view >>
+     disch_then (qspecl_then [`ra`, `s.vs_memory`] mp_tac) >>
+     Cases_on `rhs` >>
+     simp[frame_view_def, venomStateTheory.eval_operand_def,
+          venomStateTheory.lookup_var_def]) >>
+  simp[rf_inventory_inv_def] >> gen_tac >> disch_tac >>
+  Cases_on `at = Var x`
+  >- (gvs[frame_view_update_var, operand_val_update_var_eq] >>
+      metis_tac[operand_val_eq_eval]) >>
+  `MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (gvs[stack_push_def, stack_pop_def, MEM_SNOC] >>
+     metis_tac[MEM_TAKE]) >>
+  `operand_val (frame_view fn ra s) lo at =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] at)` by
+    metis_tac[rf_inventory_inv_def] >>
+  simp[frame_view_update_var] >>
+  irule EQ_TRANS >> goal_assum (drule_at Any) >>
+  irule operand_val_update_var >> Cases_on `at` >> gvs[]
+QED
+
+Theorem rf_inventory_inv_vars_subset:
+  rf_inventory_inv fn ra lo entry ps s /\ s'.vs_vars = s.vs_vars /\
+  (!at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  strip_tac >> irule rf_inventory_inv_transport >>
+  qexistsl_tac [`ps`, `s`] >> asm_rewrite_tac[] >>
+  Cases >> simp[frame_view_def, codegenRelTheory.operand_val_def,
+    venomStateTheory.lookup_var_def]
+QED
+
+Theorem rf_reorder_steps_inventory_subset:
+  !items ps ops ps' tops dfg.
+    EVERY (\(idx,op). idx < LENGTH tops /\ MEM op tops) items /\
+    LENGTH tops <= LENGTH ps.ps_stack /\ LENGTH tops <= 16 /\
+    plan_steps (\(idx,op) ps. reorder_one dfg tops idx op ps) items ps = (ops,ps') ==>
+    !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+      MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg tops idx op ps = (step_ops,ps1)` >>
+  `LENGTH tops <= LENGTH ps1.ps_stack` by
+    (qspec_then `dfg` mp_tac reorder_one_wf_len >>
+     disch_then (qspecl_then [`tops`, `idx`, `op`, `ps`, `lo`] mp_tac) >>
+     simp[]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule_at (Pat `reorder_one _ _ _ _ _ = _`) reorder_one_inventory_subset >>
+     simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!ps ops ps' tops dfg. _` drule >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem rf_reorder_inventory_subset:
+  reorder_plan dfg inputs ps = (ops,ps') /\
+  LENGTH inputs <= LENGTH ps.ps_stack /\ LENGTH inputs <= 16 ==>
+  !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  strip_tac >>
+  match_mp_tac rf_reorder_steps_inventory_subset >>
+  qexistsl_tac [`MAPi (\i op. (i,op)) inputs`, `ops`, `inputs`, `dfg`] >>
+  simp[GSYM reorder_plan_eq_plan_steps] >>
+  simp[EVERY_EL, indexedListsTheory.LENGTH_MAPi, indexedListsTheory.EL_MAPi,
+    EL_MEM]
+QED
+
+Theorem rf_inventory_inv_preparation:
+  rf_inventory_inv fn ra lo entry ps s /\
+  (!op. MEM op inputs ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  opc <> INVOKE /\ LENGTH inputs <= 16 /\
+  emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+  reorder_plan (dfg_build_function fn) inputs ps1 = (reorder_ops,ps2) ==>
+  rf_inventory_inv fn ra lo entry ps2 s
+Proof
+  strip_tac >>
+  `LENGTH inputs <= LENGTH ps1.ps_stack` by
+    metis_tac[available_input_plan_length] >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+    MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
+    (drule_at (Pat `reorder_plan _ _ _ = _`) rf_reorder_inventory_subset >> simp[]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at inputs` by
+    (drule emit_input_plan_inventory_subset >> simp[]) >>
+  fs[rf_inventory_inv_def] >> metis_tac[]
+QED
+
+Theorem rf_inventory_inv_release:
+  rf_inventory_inv fn ra lo entry ps s ==>
+  rf_inventory_inv fn ra lo entry (release_dead_spills nl ps) s
+Proof
+  `!dead (ps0:plan_state). rf_inventory_inv fn ra lo entry ps0 s ==>
+    rf_inventory_inv fn ra lo entry
+      (FOLDL (\ps' (op:operand,off:num).
+        ps' with <|ps_spilled := ps'.ps_spilled \\ op;
+                   ps_alloc := free_spill_slot off ps'.ps_alloc|>) ps0 dead) s` by
+    (Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+     PairCases_on `h` >> simp[] >> first_x_assum irule >>
+     gvs[rf_inventory_inv_def, finite_mapTheory.FDOM_DOMSUB] >> metis_tac[]) >>
+  simp[stackPlanOpsTheory.release_dead_spills_def]
+QED
+
+Theorem rf_inventory_inv_copy_pop:
+  rf_inventory_inv fn ra lo entry ps s /\ s'.vs_vars = s.vs_vars /\
+  ps' = release_dead_spills nl (ps with ps_stack := stack_pop n ps.ps_stack) ==>
+  rf_inventory_inv fn ra lo entry ps' s'
+Proof
+  strip_tac >> gvs[] >> irule rf_inventory_inv_release >>
+  irule rf_inventory_inv_vars_subset >> qexistsl_tac [`ps`, `s`] >>
+  asm_rewrite_tac[] >> simp[stack_pop_def] >> metis_tac[MEM_TAKE]
+QED
