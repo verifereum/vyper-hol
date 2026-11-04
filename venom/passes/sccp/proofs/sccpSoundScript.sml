@@ -539,6 +539,11 @@ Proof
   rw[transfer_sound_def] >> rpt strip_tac >>
   simp[sccp_transfer_inst_def] >>
   rpt (IF_CASES_TAC >> gvs[]) >>
+  (* One case-split level per step: a single rpt over all 8 goals runs
+     past the step limit on a loaded box. *)
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
+  TRY (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
   rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
   rpt (IF_CASES_TAC >> gvs[]) >>
   REWRITE_TAC [FOLDL] >>
