@@ -15526,3 +15526,19 @@ Proof
     simp[emit_inst_labels, cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
   simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
+
+Theorem compile_expr_pop_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_expr_body f g h cenv ty (Pop ann target) st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_expr_body f g h cenv ty (Pop ann target) st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_expr_body_def] >> simp[LET_THM] >>
+  ho_match_mp_tac application_labels >> conj_tac
+  >- (irule compile_get_target_ptr_labels >> simp[]) >>
+  map_every qx_gen_tac [`x`, `s`] >> PairCases_on `x` >> simp[] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_dynarray_pop_labels] >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
