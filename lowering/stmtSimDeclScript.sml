@@ -136,6 +136,36 @@ Proof
        venomInstTheory.mk_inst_def]
 QED
 
+Theorem annassign_alloca_op_framed_frag:
+  !ctx func cenv cx es st st1 p sz s0 R.
+    emit_op ALLOCA [Lit (n2w sz)] st = (Var p, st1) /\
+    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) ==>
+    ?s1 w. (!op. op <> Var p ==> eval_operand op s1 = eval_operand op s0) /\
+      s1.vs_memory = s0.vs_memory /\ lookup_var p s1 = SOME w /\
+      FLOOKUP s1.vs_allocas st.cs_next_id = SOME (w2n w, sz) /\
+      (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s1.vs_allocas aid = SOME entry) /\
+      frag_exec ctx st st1 (\s. s = s0)
+        (\s. s = s1 /\ stmt_state_rel ctx func cenv cx es s) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  `emit_inst ALLOCA [Lit (n2w sz)] [p] st =
+     ((),st1 with cs_next_var := st.cs_next_var)` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, emit_inst_def, fresh_id_def, fresh_var_def,
+          emit_def, comp_bind_def, comp_return_def] >> strip_tac >>
+     gvs[emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     simp[compile_state_component_equality]) >>
+  drule_all annassign_alloca_operand_framed_frag >>
+  disch_then (qspec_then `R` mp_tac) >> strip_tac >>
+  qexistsl_tac [`s1`, `w`] >> simp[] >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def, fn_has_code_def, emitted_blocks_def]
+QED
+
 Theorem annassign_mstore_framed_frag:
   !w wd p val_op ctx func cenv cx es' st st' Pre R keep s0.
     emit_void MSTORE [Var p; val_op] st = ((), st') /\

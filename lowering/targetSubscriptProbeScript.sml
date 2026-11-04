@@ -3999,3 +3999,63 @@ Proof
   rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
 QED
 
+
+Theorem probe_word_shrink_emit_layout:
+  !cenv sa bufsz flags ty vv sb.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) /\
+    compile_expr cenv ty
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa =
+      (vv,sb) ==>
+    let p = "%" ++ toString sa.cs_next_var;
+        r = "%" ++ toString (sa.cs_next_var + 1);
+        q = "%" ++ toString (sa.cs_next_var + 2);
+        lab = internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+                (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor in
+    ?sA sI sD.
+      emit_op ALLOCA [Lit 32w] sa = (Var p,sA) /\
+      emit_op INVOKE [Label lab] sA = (Var r,sI) /\
+      emit_multi_op INVOKE [Label lab] 1 sA = ([Var r],sI) /\
+      emit_op ADD [Var p; Lit 0w] sI = (Var q,sD) /\
+      emit_void MSTORE [Var q; Var r] sD = ((),sb) /\
+      sA.cs_next_id = sa.cs_next_id + 1 /\
+      sI.cs_next_id = sa.cs_next_id + 2 /\
+      sD.cs_next_id = sa.cs_next_id + 3 /\
+      sb.cs_next_id = sa.cs_next_id + 4 /\
+      sA.cs_next_var = sa.cs_next_var + 1 /\
+      sI.cs_next_var = sa.cs_next_var + 2 /\
+      sD.cs_next_var = sa.cs_next_var + 3 /\
+      sb.cs_next_var = sa.cs_next_var + 3 /\
+      cs_extends sa sA /\ cs_extends sA sI /\
+      cs_extends sI sD /\ cs_extends sD sb
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_shrink_compile_expr >>
+  disch_then (qspecl_then [`sa`,`ty`] assume_tac) >> gvs[] >>
+  simp[emit_op_def, emit_multi_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  pure_rewrite_tac[numLib.num_CONV ``1``, fresh_vars_def] >>
+  simp[comp_bind_def, comp_return_def, fresh_var_def,
+       emit_inst_def, fresh_id_def, emit_def, comp_ignore_bind_def] >>
+  rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  rpt conj_tac >> irule cs_extends_same_block >> simp[]
+QED
+
+Theorem probe_word_shrink_alloca_member:
+  !cenv sa bufsz flags ty vv sb func.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) /\
+    compile_expr cenv ty
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa =
+      (vv,sb) /\ fn_has_code sa sb func ==>
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+           ["%" ++ toString sa.cs_next_var]) (fn_insts func)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_shrink_compile_expr >>
+  disch_then (qspecl_then [`sa`,`ty`] assume_tac) >> gvs[] >>
+  drule fn_has_code_same_block >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+  gvs[get_instruction_def] >>
+  metis_tac[listTheory.EL_MEM]
+QED
