@@ -485,6 +485,29 @@ Proof
   strip_tac >> simp[local_region_def] >> metis_tac[]
 QED
 
+Theorem vv_at_region_frame:
+  vv_at cenv cx ty ca cb es raw held s0 /\
+  cb.cs_next_id <= cc.cs_next_id /\
+  (!aid region. FLOOKUP s0.vs_allocas aid = SOME region ==>
+     FLOOKUP s.vs_allocas aid = SOME region) /\
+  (!name b sz. local_region cenv es.scopes s name b sz <=>
+               local_region cenv es.scopes s0 name b sz) /\
+  (!w. eval_operand (vv_operand held) s0 = SOME w ==>
+       eval_operand (vv_operand held) s = SOME w) ==>
+  vv_at cenv cx ty ca cc es raw held s
+Proof
+  strip_tac >> Cases_on `held` >>
+  gvs[vv_at_def, expr_val_at_def, vv_operand_def] >>
+  rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
+  qexists_tac `w` >> simp[]
+  >>~- ([`FLOOKUP s0.vs_allocas aid = SOME (b,sz)`],
+    disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
+    `aid < cc.cs_next_id` by decide_tac >> asm_rewrite_tac[] >>
+    metis_tac[]) >>
+  disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem vv_at_frame:
   vv_at cenv cx ty ca cb es raw held s0 /\
   cb.cs_next_id <= cc.cs_next_id /\
@@ -497,19 +520,147 @@ Theorem vv_at_frame:
      eval_operand (vv_operand held) s = SOME w) ==>
   vv_at cenv cx ty ca cc es raw held s
 Proof
+  strip_tac >> irule vv_at_region_frame >>
+  qexistsl_tac [`cb`, `s0`] >> simp[] >>
+  metis_tac[local_region_pointer_frame]
+QED
+
+(* Only live locals are relevant to location witnesses.  Uninitialised,
+   non-live pointer variables need not have equal lookups at both endpoints. *)
+Theorem vv_post_local_regions:
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es raw vv s ==>
+  (!name b sz. local_region cenv es.scopes s name b sz <=>
+               local_region cenv es.scopes s0 name b sz)
+Proof
   strip_tac >>
-  `!name b sz. local_region cenv es.scopes s name b sz <=>
-               local_region cenv es.scopes s0 name b sz` by
-    metis_tac[local_region_pointer_frame] >>
-  Cases_on `held` >>
-  gvs[vv_at_def, expr_val_at_def, vv_operand_def] >>
-  rpt strip_tac >>
-  first_x_assum drule_all >> strip_tac >>
-  qexists_tac `w` >> simp[]
-  >>~- ([`FLOOKUP s0.vs_allocas aid = SOME (b,sz)`],
-    disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
-    `aid < cc.cs_next_id` by decide_tac >> asm_rewrite_tac[] >>
-    metis_tac[]) >>
-  disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >>
-  simp[] >> metis_tac[]
+  `!name entry p size. lookup_scopes name es.scopes = SOME entry /\
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) size) ==>
+     lookup_var p s = lookup_var p s0` by
+    (rpt strip_tac >>
+     `?w. lookup_var p s0 = SOME w` by
+       (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+     `not_fresh_at sm p` by
+       (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     gvs[vv_post_def] >> metis_tac[]) >>
+  simp[local_region_def] >> metis_tac[]
+QED
+
+Theorem vv_post_held_location:
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  vv_at cenv cx ty lo sm es raw held s0 /\
+  sm.cs_next_id <= sn.cs_next_id /\
+  (!w. eval_operand (vv_operand held) s0 = SOME w ==>
+       eval_operand (vv_operand held) s = SOME w) ==>
+  vv_at cenv cx ty lo sn es raw held s
+Proof
+  strip_tac >> irule vv_at_region_frame >>
+  qexistsl_tac [`sm`, `s0`] >> simp[] >> conj_tac
+  >- metis_tac[vv_post_local_regions] >>
+  gvs[vv_post_def]
+QED
+
+Theorem vv_post_deferred_entry:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\ local_ptrs_reserved cenv sm /\
+  compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
+  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  vv_holds cenv cx ty raw held es s0 /\
+  vv_at cenv cx ty lo sm es raw held s0 /\
+  safe_operand sm (vv_operand held) ==>
+  vv_holds cenv cx ty raw held es s /\
+  vv_at cenv cx ty lo sn es raw held s /\
+  safe_operand sn (vv_operand held)
+Proof
+  strip_tac >> drule (cj 1 compile_expr_grows) >> strip_tac >>
+  `!w. eval_operand (vv_operand held) s0 = SOME w ==>
+       eval_operand (vv_operand held) s = SOME w` by
+    (rpt strip_tac >> irule safe_operand_value_preserved >>
+     qexistsl_tac [`s0`, `sm`] >> simp[] >> gvs[vv_post_def]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
+  conj_tac >- (irule vv_post_preserves_held_value >> metis_tac[]) >>
+  conj_tac >- (irule vv_post_held_location >> metis_tac[]) >>
+  metis_tac[safe_operand_mono]
+QED
+
+Theorem vv_post_deferred_prefix:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\ local_ptrs_reserved cenv sm /\
+  compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
+  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  EVERY (\(ty,raw,held,lo).
+    vv_holds cenv cx ty raw held es s0 /\
+    vv_at cenv cx ty lo sm es raw held s0 /\
+    safe_operand sm (vv_operand held)) hs ==>
+  EVERY (\(ty,raw,held,lo).
+    vv_holds cenv cx ty raw held es s /\
+    vv_at cenv cx ty lo sn es raw held s /\
+    safe_operand sn (vv_operand held)) hs
+Proof
+  simp[listTheory.EVERY_MEM] >> strip_tac >> gen_tac >> disch_tac >>
+  rename1 `MEM item hs` >> PairCases_on `item` >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  irule vv_post_deferred_entry >> metis_tac[]
+QED
+
+Theorem expr_vv_success_deferred_prefix:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+  compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
+  eval_expr cx e es = (INL raw_new,es) /\ expr_vv_res_ok (INL raw_new) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es s /\
+        vv_at cenv cx ty lo sm es raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. vv_post ctx func cenv cx e es sm sn start es raw_new vv_new s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es s /\
+        vv_at cenv cx ty lo sn es raw held s /\
+        safe_operand sn (vv_operand held)) hs /\
+      safe_operand sn (vv_operand vv_new))
+    (\r. F)
+Proof
+  strip_tac >> irule frag_exec_pointwise >>
+  qx_gen_tac `s0` >> strip_tac >> fs[] >>
+  qpat_x_assum `s0 = start` SUBST_ALL_TAC >>
+  `frag_exec ctx sm sn
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx e es sm sn start es raw_new vv_new)
+     (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
+  gen_tac >> disch_tac >> simp[] >> conj_tac
+  >- (irule vv_post_deferred_prefix >>
+      `local_ptrs_rel func cenv es.scopes start` by
+        gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  irule compile_expr_operand_safe >> metis_tac[]
+QED
+
+Theorem expr_vv_exception_deferred_prefix:
+  expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+  compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
+  eval_expr cx e es = (INR exc,es') /\ expr_vv_res_ok (INR exc) /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sm sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es s /\
+        vv_at cenv cx ty lo sm es raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. F) (expr_exit (INR exc : eval_result + exception))
+Proof
+  strip_tac >>
+  `frag_exec ctx sm sn
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (\s. F) (expr_exit (INR exc : eval_result + exception))` by
+    (irule expr_vv_sim_exception_frag >> metis_tac[]) >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]
 QED
