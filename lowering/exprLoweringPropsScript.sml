@@ -4040,14 +4040,42 @@ Theorem ci_mono_builtin_hash[local]:
 Proof
   strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
   >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
+      Cases_on `is_bytestring_type (expr_type (HD args))`
+      >- (simp[] >> irule ci_mono_uncurry >> reverse conj_tac
+          >- simp[ci_mono_lower_value_cfn] >>
+          simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes]) >>
+      simp[] >> Cases_on `expr_type (HD args)` >> simp[] >>
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_lower_value_cfn]
+           >> rpt gen_tac >> BETA_TAC) >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word] >>
+      rename1 `BaseT b` >> Cases_on `b` >> simp[] >>
+      rpt (irule ci_mono_uncurry >> reverse conj_tac
+           >- simp[ci_mono_lower_value_cfn]
+           >> rpt gen_tac >> BETA_TAC) >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word] >>
+      rename1 `BytesT bound` >> Cases_on `bound` >> simp[] >>
       rpt (irule ci_mono_uncurry >> reverse conj_tac
            >- simp[ci_mono_lower_value_cfn]
            >> rpt gen_tac >> BETA_TAC) >>
       simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
            ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >> rpt TOP_CASE_TAC >>
+  Cases_on `is_bytestring_type (expr_type (HD args))`
+  >- (simp[] >> irule ci_mono_uncurry >> reverse conj_tac
+      >- simp[ci_mono_lower_value_cfn] >>
+      simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes]) >>
+  simp[] >> Cases_on `expr_type (HD args)` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_word] >>
+  rename1 `BaseT b` >> Cases_on `b` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_word] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >> simp[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
