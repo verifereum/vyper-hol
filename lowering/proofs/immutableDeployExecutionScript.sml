@@ -2,7 +2,7 @@ Theory immutableDeployExecution
 Ancestors
   immutableMemoryFrame immutableWordExecution moduleLowering
   exprLoweringProps venomInst venomExecSemantics venomState instIdxIndep fragExec
-  vyperCompiler
+  vyperCompiler moduleLoweringProps
 Libs wordsLib
 
 (* MCOPY runs before CODECOPY in the actual epilogue. Its source is thus
@@ -322,7 +322,12 @@ Theorem immutable_deploy_block_terminal_bridge:
   run_inst_seq (pre ++ [mk_inst id RETURN [dst;szop] []]) s = Halt final ==>
   ?final'. exec_block fuel ctx bb s = Halt final' /\
     final'.vs_returndata = final.vs_returndata /\
-    final'.vs_halted = final.vs_halted
+    final'.vs_halted = final.vs_halted /\ final'.vs_halted /\
+    final'.vs_accounts = final.vs_accounts /\
+    final'.vs_transient = final.vs_transient /\
+    final'.vs_logs = final.vs_logs /\
+    final'.vs_code = final.vs_code /\
+    final'.vs_call_ctx = final.vs_call_ctx
 Proof
   strip_tac >>
   `EVERY (\i. !s final. step_inst_base i s <> Halt final) pre` by
@@ -364,6 +369,13 @@ Proof
   `step_inst_base (mk_inst id RETURN [dst;szop] []) shifted =
      Halt (final with vs_inst_idx := s.vs_inst_idx + LENGTH pre)` by
     simp[Abbr `shifted`, immutable_deploy_return_index, exec_result_map_def] >>
+  `final.vs_halted` by
+    (qpat_x_assum `step_inst_base _ mid = Halt final` mp_tac >>
+     simp[mk_inst_def, step_inst_base_def] >>
+     Cases_on `eval_operand dst mid` >> simp[] >>
+     Cases_on `eval_operand szop mid` >>
+     simp[halt_state_def, set_returndata_def] >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   qexists_tac `final with vs_inst_idx := s.vs_inst_idx + LENGTH pre` >>
   simp[] >>
   simp[Once exec_block_def, get_instruction_def,
@@ -401,13 +413,53 @@ Proof
   simp[mk_inst_def]
 QED
 
+Theorem compile_constructor_epilogue_append:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  ~block_is_terminated st ==>
+  st'.cs_current_bb = st.cs_current_bb /\
+  st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  Cases_on `cap = 0` >>
+  simp[moduleLoweringTheory.compile_constructor_epilogue_def,
+       contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_return_def, compileEnvTheory.fresh_id_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, listTheory.DROP_APPEND, listTheory.APPEND_ASSOC]
+QED
+
+Theorem compile_constructor_epilogue_code_placement:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  fn_has_code st st' func /\ ~block_is_terminated st /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions)
+Proof
+  strip_tac >> drule_all compile_constructor_epilogue_append >> strip_tac >>
+  fs[fn_has_code_def] >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  qexists_tac `l` >>
+  qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+                  rich_listTheory.DROP_LENGTH_APPEND] >> REFL_TAC
+QED
+
 Theorem compile_constructor_epilogue_block_bridge:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts st st') s = Halt final ==>
   ?final'. exec_block fuel ctx bb s = Halt final' /\
     final'.vs_returndata = final.vs_returndata /\
-    final'.vs_halted = final.vs_halted
+    final'.vs_halted = final.vs_halted /\ final'.vs_halted /\
+    final'.vs_accounts = final.vs_accounts /\
+    final'.vs_transient = final.vs_transient /\
+    final'.vs_logs = final.vs_logs /\
+    final'.vs_code = final.vs_code /\
+    final'.vs_call_ctx = final.vs_call_ctx
 Proof
   strip_tac >> drule compile_constructor_epilogue_terminal_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -515,6 +567,45 @@ Proof
   CONV_TAC immutable_deploy_probe_conv
 QED
 
+
+(* Constructor Return's continuation needs the whole terminal world frame,
+   so the instruction-list result must survive lifting into the actual
+   function, including the instruction-index updates performed by exec_block. *)
+Theorem compile_constructor_epilogue_bytes_run_from:
+  !ctx func runtime section prefix args immutables_buf s st st'.
+    compile_constructor_epilogue (LENGTH runtime) (LENGTH section)
+      immutables_buf st = ((), st') /\
+    fn_has_code st st' func /\ ~block_is_terminated st /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    fresh_vars_wrt st s /\
+    FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+    s.vs_alloca_next + LENGTH runtime + LENGTH section < dimword(:256) /\
+    LENGTH prefix < dimword(:256) /\
+    s.vs_code = prefix ++ runtime ++ args /\
+    FLOOKUP s.vs_labels "runtime_begin" = SOME (n2w (LENGTH prefix)) /\
+    (section <> [] ==>
+      ?p. eval_operand immutables_buf s = SOME p /\
+          TAKE (LENGTH section)
+            (DROP (w2n p) s.vs_memory ++ REPLICATE (LENGTH section) 0w) = section)
+    ==>
+    ?fuel final.
+      run_from fuel ctx func s = Halt final /\
+      final.vs_returndata = runtime ++ section /\ final.vs_halted /\
+      final.vs_accounts = s.vs_accounts /\
+      final.vs_transient = s.vs_transient /\
+      final.vs_logs = s.vs_logs /\
+      final.vs_code = s.vs_code /\
+      final.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_constructor_epilogue_bytes >> strip_tac >>
+  drule_all compile_constructor_epilogue_code_placement >> strip_tac >>
+  drule_all compile_constructor_epilogue_block_bridge >>
+  disch_then (qspecl_then [`0`,`ctx`] strip_assume_tac) >>
+  qexistsl_tac [`0`,`final'`] >>
+  simp[run_from_def]
+QED
 
 val _ = List.app (fn (name, th) => let
   val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
