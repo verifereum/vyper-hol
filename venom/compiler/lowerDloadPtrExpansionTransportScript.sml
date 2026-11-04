@@ -576,7 +576,7 @@ Resume dload_four_step_boundary[after_copy]:
         simp[IgnAsm `t2 = _`] >> metis_tac[]) >>
      `un3.t_mem = mem_taint un2 c t2 v3` by
        (qpat_assum `un3 = _` SUBST1_TAC >>
-        simp_tac (srw_ss()) [step_taint_def]) >>
+        simp_tac (srw_ss()) [step_taint_def, LET_THM]) >>
      qpat_x_assum `un3 = _` kall_tac >>
      qpat_x_assum `un2 = _` kall_tac >>
      qpat_x_assum `t3 = _` kall_tac >>
