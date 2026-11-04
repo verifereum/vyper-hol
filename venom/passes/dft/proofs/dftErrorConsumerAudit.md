@@ -603,3 +603,56 @@ Evidence: exact full signature m4594; gas producer signatures and source
 metadata m4607; stack producer signatures m4615; constructor definitions
 m4620/m4621; exact candidate residual goal m4623; clean checked partial
 boundary build m4625.
+
+## C3.2.41.9 authoritative residual consumer audit (2026-11-04)
+
+This section supersedes the CREATE investigation recommendation in section 4
+and the earlier proposed next boundary. The historical probes above are retained,
+but do not impose further EVM proof obligations on the context theorem.
+`dftShapeBoundaryTheory` builds clean. No counterexample is established.
+
+**Actual external semantics:** `venomExecSemanticsScript.sml:490-503` implements
+CALL/STATICCALL with `consume_call_outcome`, not VFM run/extraction. Gas operands
+are evaluated but their values are ignored by this helper. With one output,
+`dftGuardsScript.sml:89-95` proves this helper always returns OK. Concrete VFM
+branches belong to DELEGATECALL/CREATE/CREATE2, excluded at context instruction
+sites by the accepted shape boundary. A nested VFM CREATE campaign for allowed
+CALL is therefore irrelevant to the semantics used here.
+
+### Obligation-to-consumer map
+
+| obligation / exact interface | same-context frozen block consumer | frozen cross-context consumer / remaining gap |
+|---|---|---|
+| Runtime-error opcode exclusion (`dftGuards:78-86`, shape boundary) | Not a block premise. Do not add it: `dft_run_block_gas:2717-2809` is already proved and permits this family. | `o1_ctx_shape` supplies `inst_shape_ok`; accepted membership/permutation boundary excludes this family at every scheduled instruction. No external-extraction theorem needed for allowed calls. |
+| NoFail local totality (`dft_guarded_nofail_total:121-127`, `dft_ordinary_nofail_total:177-184`) | Has inst_wf, operand readiness, no ALLOCA; block proof uses its existing stopping/reordering argument, not a universal no-Error assumption. | Shape supplies arities and excluded opcode family; original SSA/protected-cut readiness must supply operands at each current cut. These local theorems exclude pseudo, terminator and INVOKE and only treat NoFail. They do not prove global no-Error. |
+| Fallible ordinary instruction | Frozen abort-incompatible order premise is explicit (`dftRunRel:2728-2731`). | `dft_fn_rel` provides fallible order; preserve these protected edges in intermediate schedules. Existing `dft_ordinary_first_stop_partner`/`first_abort_crossing` (`dftOrdinaryStop:215-261`) require their exact pair, well-formedness, defined partner operands and original no-output barrier. Abort is not Error. |
+| Label operand evaluation | Explicit block premise at `2725-2727` covers nonpseudo, nonterminator, non-INVOKE instructions. | `ctx_labels_bound` plus original label references supplies static bounds; existing ordinary environment encodes the same non-INVOKE bounds. Need propagation through provenance, not a new label assumption. |
+| INVOKE decoding, lookup, setup (`decode_invoke:1473-1479`, `setup_callee:1449-1464`) | Same C in both runs; no separate shape assumption or callee transformation required. Existing block theorem handles arbitrary finite callee result at this fuel. | `o1_fn_shape:429-437` includes `fn_invoke_ok`; this ensures Label head and membership in context names (`382-386`). Nonempty callee blocks make setup SOME; wf_function supplies that structural premise. Operand evaluation still needs the dynamic cut. Transform lookup and setup across corresponding functions and pair suspended callers; do not demand a future return for callee-prefix coverage. |
+| Return binding (`bind_outputs:1481-1487`) | Existing finite block lift does not require global successful-return typing. | Output/value length mismatch can Error. Shape alone has not been shown to rule out all such errors. Synchronized call-return matching can preserve identical mismatch rather than assume universal safety; target observations before it still need coverage. |
+| Entry/root result classification (`o1PassContract:239-244,429-437`) | dft_res_rel is the consumer; no dead_result_rel or mem_inv obligation here. | ctx_sim ignores source Error but dead_result_rel accepts neither OK nor IntRet. Existing run-blocks-not-OK boundary and entry no-return syntax need an execution-facing no-IntRet bridge. INVOKE consumes callee IntRet; do not forbid internal returns. |
+| Memory observations (`contextRawReachable:26-57`, `unitMemInv:96-109`) | Frozen block theorem has no observation conclusion. It cannot directly transport mem_inv. | Must transport target pre-instruction observations, including failing instructions and divergent/erroneous callee prefixes. Source Error does not make invariant implication vacuous. Ranges-empty speculation is sufficient only where actually proved. |
+| Existing ordinary orbit environment (`dftOccurrenceOrdinaryClosure:988-1002`) | Not required by the completed finite block theorem. | Requires EVERY wf_ssa over *current* C, EVERY runtime_fn_ok, label bounds, and `ordinary_live`: all-orbit no-Error, runtime_ready, source_provenance. Task gives original SSA, not intermediate SSA. Do not compose by repeatedly asserting this environment. |
+| Existing readiness preservation (`dftOccurrenceRuntime:7-35,44-50`) | Block theorem has strict_dom_vars_defined at entry. | Runtime readiness refers to the current function and its activation cut; initialization and preservation currently use its SSA structure. Replace the consumer boundary with original-function/protected-current cuts, or explicitly derive an equivalent usable boundary. `dft_protected_cut_operand_defined` already gives the original-SSA operand interface; it does not itself solve call return, control transfer or all-orbit no-Error. |
+
+### Concrete integration requirements returned for strategist review
+
+1. Choose a **local crossed-pair** Error treatment, rather than universal
+   all-orbit no-Error. For ordinary pairs under shape, split NoFail totality
+   from the existing fallible Abort facts using protected-cut readiness.
+   Errors at unchanged call/control/return transitions may be synchronized;
+   do not assume they never happen. This is a proposed boundary, not a theorem.
+2. Replace current-schedule SSA requirements with an environment naming original
+   functions, current permutation schedules, original protected edges and dynamic
+   original-function cuts. Prove entry, successful-step, successor, call-entry and
+   caller-resumption obligations before whole edit-chain composition.
+3. Supply the missing GAS/O and INVOKE/O whole-orbit classes from section 3,
+   with terminal matching forward and nonempty memory-observation coverage
+   backward. Preserve accepted GAS/GAS and GAS/INVOKE results.
+4. Only after those semantic conclusions compose should finite-support witness
+   realization proceed. The already-proved frozen block theorem is finite,
+   same-context and chooses its witness after fuel; it does not discharge the
+   cross-context fixed-witness context theorem.
+
+Audit verification: holbuild dftShapeBoundaryTheory clean in this session.
+Only this audit document changed; frozen statements, accepted proof theories,
+protected definitions and separately owned dftBlockSim remain untouched.
