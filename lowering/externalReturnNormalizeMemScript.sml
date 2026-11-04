@@ -5,6 +5,7 @@ Ancestors
   vfmConstants externalReturnBounds valueEncoding vyperTypeSystem vyperValue
   exprSimBufferStore exprSimLiteralBuffer allocaFootprint
   exprSimOperands abiCallerAllocation exprSimBuffer emitHelperProps
+  valueEncodingProps
 
 Theorem typed_copy_word_mem_ok:
   is_word_type dst_ty /\
@@ -326,4 +327,123 @@ Proof
   simp[Abbr `q`, mstore_def, write_memory_with_expansion_def,
        update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
+Theorem normalize_offset_word_run[local]:
+  compile_with_byte_offset dst 96 sa = (d,sb) /\
+  compile_with_byte_offset src 64 sb = (p,sc) /\
+  compile_store_memory_typed cenv d (BaseT (UintT 256)) p
+    (BaseT (UintT 256)) sc = ((),sd) /\
+  eval_operand src s = SOME w /\ eval_operand dst s = SOME v /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  w2n w + 96 <= s.vs_alloca_next /\
+  w2n v + 128 <= s.vs_alloca_next /\
+  s.vs_alloca_next < dimword (:256) ==>
+  sd.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sd /\
+  run_inst_seq_mem_ok (emitted_insts sa sd) s /\
+  ?q. run_inst_seq (emitted_insts sa sd) s = OK q /\
+      q.vs_memory = (mstore (w2n v + 96)
+        (mload (w2n w + 64) s) s).vs_memory /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
+Proof
+  strip_tac >> qpat_assum `compile_with_byte_offset dst _ _ = _`
+    (mp_then Any mp_tac normalize_byte_offset_run) >>
+  disch_then drule >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  `!x. src = Var x ==> not_fresh_at sb x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `eval_operand src q = SOME w` by
+    (Cases_on `src` >> gvs[eval_operand_def] >>
+     qpat_x_assum `q with vs_vars := _ = _` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `compile_with_byte_offset src _ _ = _` assume_tac >>
+  drule_all normalize_byte_offset_run >> strip_tac >>
+  `eval_operand d q' = SOME (v + 96w)` by
+    (Cases_on `d` >> gvs[eval_operand_def] >>
+     qpat_x_assum `q' with vs_vars := _ = _` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  `(!x. d = Var x \/ p = Var x ==> not_fresh_at sc x)` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `q'.vs_memory = s.vs_memory /\ q'.vs_alloca_next = s.vs_alloca_next /\
+   (q' with vs_vars := s.vs_vars) = s` by
+    (fs[venom_state_component_equality]) >>
+  `w2n (v + 96w) = w2n v + 96 /\
+   w2n (w + 64w) = w2n w + 64` by
+    (conj_tac >- (irule buffer_offset_no_wrap >> qexists_tac `128` >> decide_tac) >>
+     irule buffer_offset_no_wrap >> qexists_tac `96` >> decide_tac) >>
+  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
+  `!x. d = Var x ==> not_fresh_at sc x` by metis_tac[] >>
+  drule_all normalize_word_copy_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sc sd) q'` by
+    (qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
+       (mp_then Any mp_tac typed_copy_word_mem_ok) >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
+  `emitted_insts sa sd = emitted_insts sa sb ++
+     (emitted_insts sb sc ++ emitted_insts sc sd)` by
+    (`emitted_insts sb sd = emitted_insts sb sc ++ emitted_insts sc sd` by
+       (irule emitted_insts_append >> simp[]) >>
+     `sd.cs_current_insts = sb.cs_current_insts ++ emitted_insts sb sd` by
+       simp[listTheory.APPEND_ASSOC] >>
+     `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+       (irule emitted_insts_append >> simp[]) >> simp[]) >>
+  imp_res_tac run_inst_seq_append >>
+  conj_tac >- simp[listTheory.APPEND_ASSOC] >> simp[] >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_append >> simp[run_inst_seq_append] >>
+      irule run_inst_seq_mem_ok_append >> simp[] >>
+      metis_tac[normalize_byte_offset_mem_ok]) >>
+  once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >> simp[] >>
+  conj_tac
+  >- gvs[mstore_def, mload_def, write_memory_with_expansion_def] >>
+  fs[venom_state_component_equality]
+QED
+
+Theorem normalized_bytes_word_run[local]:
+  compile_typed_copy_fields cenv dst src
+    [BaseT (BytesT (Dynamic 33)); BaseT (UintT 256)]
+    [BaseT (BytesT (Dynamic 1)); BaseT (UintT 256)] 0 0 sa = ((),sd) /\
+  eval_operand src s = SOME w /\ eval_operand dst s = SOME v /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  mload (w2n w) s = n2w len /\ len <= 1 /\
+  32 + 32 * word_size len < dimword (:256) /\
+  w2n w + 96 <= s.vs_alloca_next /\
+  w2n v + 128 <= s.vs_alloca_next /\
+  (w2n w + 96 <= w2n v \/ w2n v + 128 <= w2n w) /\
+  s.vs_alloca_next < dimword (:256) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sd) s /\
+  ?q. run_inst_seq (emitted_insts sa sd) s = OK q /\
+      mem_word_at (w2n v + 96) q.vs_memory = mload (w2n w + 64) s /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[normalized_bytes_word_fields, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_store_bytestring src dst sa = (u,sb)` >>
+  Cases_on `u` >>
+  drule_all normalized_bytes_first_preserves_word >> strip_tac >>
+  drule_all buffer_store_bytestring_shape >> strip_tac >>
+  `eval_operand src q = SOME w /\ eval_operand dst q = SOME v` by
+    (conj_tac >- (Cases_on `src` >> gvs[eval_operand_def] >>
+                  fs[venom_state_component_equality]) >>
+     Cases_on `dst` >> gvs[eval_operand_def] >>
+     fs[venom_state_component_equality]) >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sb x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[] >> metis_tac[]) >>
+  `q.vs_alloca_next = s.vs_alloca_next` by
+    fs[venom_state_component_equality] >>
+  `w2n w + 96 <= q.vs_alloca_next /\
+   w2n v + 128 <= q.vs_alloca_next /\
+   q.vs_alloca_next < dimword (:256)` by simp[] >>
+  drule_all normalize_offset_word_run >> strip_tac >>
+  `emitted_insts sa sd = emitted_insts sa sb ++ emitted_insts sb sd` by
+    (irule emitted_insts_append >> simp[]) >>
+  imp_res_tac run_inst_seq_append >> simp[] >>
+  conj_tac
+  >- (irule run_inst_seq_mem_ok_append >> simp[]) >>
+  conj_tac
+  >- (simp[mstore_mem_word_at_same] >>
+      fs[GSYM mem_word_at_eq_mload, mem_word_at_def, mem_bytes_at_def]) >>
+  fs[venom_state_component_equality]
 QED
