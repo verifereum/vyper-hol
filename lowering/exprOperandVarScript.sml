@@ -284,6 +284,20 @@ Proof
   simp[ci_mono_def] >> metis_tac[freshWritesTheory.not_fresh_at_mono]
 QED
 
+Theorem compiler_bytestring_widen_copy_var[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==>
+  !x. op = Var x ==> not_fresh_at sb x
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  drule_all compiler_alloc_buffer_var >> strip_tac >>
+  rename1 `compile_copy_memory _ _ _ s1 = (_, s2)` >>
+  `ci_mono s1 s2` by
+    metis_tac[ci_mono_compile_copy_memory, pairTheory.SND] >>
+  metis_tac[compiler_ci_mono_not_fresh]
+QED
+
 Theorem compiler_lower_abi_encode_var:
   lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==>
   !x. op = Var x ==> not_fresh_at sb x
@@ -522,6 +536,14 @@ Proof
                 lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
      pop_assum (fn th => REWRITE_TAC [th])
      >- (rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
+     Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type rt /\
+               type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
+               type_memory_bytes cenv rt` >>
+     pop_assum (fn th => REWRITE_TAC [th])
+     >- (qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
+         Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+         rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+         metis_tac[compiler_bytestring_widen_copy_var]) >>
      Cases_on `rt` >> simp[] >>
      qmatch_goalsub_abbrev_tac `as_stack_val vt result` >>
      Cases_on `result` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
@@ -847,9 +869,19 @@ Proof
   Cases_on `lit`
   >~ [`compile_literal_vv ty (BoolL b)`] >-
     (Cases_on `b` >> simp[compile_literal_vv_def, comp_return_def] >>
-     rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
-  simp[compile_literal_vv_def, comp_return_def] >>
-  rpt CASE_TAC >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def])
+  >~ [`compile_literal_vv ty (BytesL bs)`] >-
+    (Cases_on `ty` >>
+     gvs[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt strip_tac >> gvs[contextTheory.vv_operand_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[comp_return_def, contextTheory.vv_operand_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >>
+     gvs[comp_bind_def, comp_return_def, contextTheory.vv_operand_def] >>
+     rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+     gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>
+     metis_tac[compiler_bytelike_literal_var]) >>
+  simp[compile_literal_vv_def, comp_return_def, contextTheory.vv_operand_def] >>
   simp[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.base_ptr_def] >>

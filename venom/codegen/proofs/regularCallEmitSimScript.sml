@@ -109,6 +109,15 @@ Proof
   simp[]
 QED
 
+Theorem write_memory_byte_frame:
+  LENGTH bytes <= len /\ ~(off <= i /\ i < off + len) ==>
+  read_byte i (write_memory_with_expansion off bytes s).vs_memory =
+  read_byte i s.vs_memory
+Proof
+  strip_tac >> simp[read_byte_write_memory_with_expansion] >>
+  `~(off <= i /\ i < off + LENGTH bytes)` by decide_tac >> simp[]
+QED
+
 Theorem memory_rel_call_return_write:
   memory_rel alloc vs.vs_memory mem ==>
   memory_rel alloc (write_memory_with_expansion ro (TAKE rs data) vs).vs_memory
