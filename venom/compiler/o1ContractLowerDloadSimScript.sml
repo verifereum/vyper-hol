@@ -18,6 +18,7 @@ Ancestors
   o1LowerDloadJointRead1 o1LowerDloadJointResidualScalar o1LowerDloadJointIdentity
   o1LowerDloadJointRetpc o1LowerDloadJointVarsUpdate o1LowerDloadJointBump
   o1LowerDloadJointCompare o1LowerDloadRangeTransport
+  o1LowerDloadJointRangeCopy
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
