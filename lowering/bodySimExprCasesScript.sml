@@ -25,7 +25,7 @@ Theory bodySimExprCases
 Ancestors
   list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
-  vyperInterpreter vyperState vyperContext vyperTypeCallGraph bodyIntCallReturn bodyIntCallSource bodyIntCallCode bodyIntCallEntry bodyIntCallEntryTarget bodyIntCallArgs bodyIntCallArgMetadata bodyIntCallArgLifetime bodyIntCallArgList bodyIntCallArgStaging bodyIntCallForce
+  vyperInterpreter vyperState vyperContext vyperTypeCallGraph bodyIntCallVoid bodyIntCallReturn bodyIntCallSource bodyIntCallCode bodyIntCallEntry bodyIntCallEntryTarget bodyIntCallArgs bodyIntCallArgMetadata bodyIntCallArgLifetime bodyIntCallArgList bodyIntCallArgStaging bodyIntCallForce
 
 (* With no internal call in it, an expression simulates by
    compile_expr_sim; what is left is the case with one. *)
