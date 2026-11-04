@@ -315,6 +315,30 @@ Proof
   metis_tac[gas_path_rules, exit_result_def]
 QED
 
+Theorem emit_abort_zero_path_mem:
+  emit_inst opc ops [] sa = ((), sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  opc <> INVOKE /\ opc <> GAS /\
+  inst_mem_below_frontier (mk_inst sa.cs_next_id opc ops []) s /\
+  step_inst_base (mk_inst sa.cs_next_id opc ops []) s = Abort a t ==>
+  gas_path_mem ctx func s 0 (Abort a t)
+Proof
+  strip_tac >> drule emit_inst_extends >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id opc ops [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_mem_edge ctx func s 0 (Abort a t)` by
+    (rewrite_tac[gas_path_mem_edge_def] >> simp[] >>
+     qexists_tac `0:num` >>
+     `mem_safe_step 0 ctx (mk_inst sa.cs_next_id opc ops []) s` by
+       simp[mem_safe_step_non_invoke, mk_inst_def] >>
+     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
+          exit_result_def] >> metis_tac[]) >>
+  metis_tac[gas_path_mem_rules, exit_result_def]
+QED
+
 Theorem emit_abort_exit:
   !ctx func opc ops st st' s0 RetQ es' res.
     emit_inst opc ops [] st = ((), st') /\ fn_has_code st st' func /\
