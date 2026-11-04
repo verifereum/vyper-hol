@@ -1,6 +1,6 @@
 Theory abiMetadataErasure
 Ancestors
-  retAbiPlanProps compileEnv vyperTypeABI vyperValue vyperAST finite_map list rich_list
+  abiLayoutSource compileEnv vyperTypeABI vyperValue vyperAST finite_map list rich_list
 
 Theorem evaluate_types_acc_every[local]:
   evaluate_types env ts acc = SOME out /\ EVERY P out ==> EVERY P acc
@@ -150,4 +150,18 @@ Proof
   drule (cj 2 vyper_to_abi_type_submap) >>
   disch_then drule >>
   simp[Abbr `bad`, pred_setTheory.COMPL_DEF, pred_setTheory.DIFF_DEF]
+QED
+
+(* Delete one compiler name together with precisely its semantic struct aliases.
+   Flag declarations with the same printed name remain available. *)
+Theorem sfields_tenv_consistent_erase_aliases:
+  sfields_tenv_consistent sf env ==>
+  sfields_tenv_consistent (sf \\ nsid_to_string a)
+    (DRESTRICT env {k | nsid_to_string k <> nsid_to_string a \/
+                       (!xs. FLOOKUP env k <> SOME (StructArgs xs))})
+Proof
+  simp[sfields_tenv_consistent_def, FLOOKUP_DRESTRICT, DOMSUB_FLOOKUP_THM] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl_tac [`nsid`, `args`] >> gvs[]
 QED
