@@ -344,7 +344,8 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
   gvs[opcode_fail_class_def, is_terminator_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()]
+  gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  gvs[exec_create_abort_iff]
 QED
 
 (* Two abort_compatible non-term/non-INVOKE instructions that both abort
