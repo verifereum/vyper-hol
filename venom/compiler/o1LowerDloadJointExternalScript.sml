@@ -6,7 +6,7 @@ Ancestors
   o1LowerDloadJointRangeRead o1LowerDloadJointRangeCopy
   o1LowerDloadJointRelation o1LowerDloadShared o1PassContract
   o1LowerDloadOccurrence o1LowerDloadJointScalar o1LowerDloadOpaque
-  o1LowerDloadEnvironment pointerConfinedDefs finite_map memLocDefs
+  o1LowerDloadEnvironment o1LowerDloadRelocationKernel pointerConfinedDefs finite_map memLocDefs
   ptrDiscipline venomExecSemantics venomCallOracleDefs extCallOracle
   venomState list pred_set venomInst unitShapeDefs contextCodegenRel codegenRel
 
@@ -276,3 +276,134 @@ Proof
   >- simp[source_memory_write_ranges_def, fixed_source_write_range_def] >>
   first_assum ACCEPT_TAC
 QED
+
+(* External effects change shared fields as well as the output variable. *)
+Theorem ld_env_external_clean_update:
+  ld_env_agree sites fn H tn s t /\ inst.inst_outputs = [out] /\
+  s1.vs_vars = s.vs_vars |+ (out,x) /\
+  t1.vs_vars = t.vs_vars |+ (out,x) /\
+  occurrence_out a HP H inst s1 = NONE /\ out_taint tn inst s = {} ==>
+  ld_env_agree sites fn (occurrence_step a HP H inst s1)
+    (step_taint inst s s1 tn) s1 t1
+Proof
+  strip_tac >>
+  simp[ld_env_agree_def, FLOOKUP_UPDATE,
+       occurrence_step_def, set_prov_def, FLOOKUP_DRESTRICT,
+       step_taint_def, set_var_taint_def, op_taint_def] >>
+  conj_tac
+  >- (rpt strip_tac >> Cases_on `v = out` >> gvs[ld_env_agree_def]) >>
+  rpt gen_tac >> Cases_on `v = out` >>
+  gvs[ld_env_agree_def, op_taint_def, ld_value_agree_scalar,
+      word_agree_except_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_joint_delegatecall_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ~in_revert_forward fn s /\ inst.inst_opcode = DELEGATECALL /\
+  step_inst fuel C inst s = OK s1 /\
+  active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  ?t1 u fn'. step_inst fuel C' inst t = OK t1 /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> drule_all ld_joint_delegatecall_execute >>
+  disch_then (qx_choose_then `out` (qx_choose_then `w`
+    (qx_choose_then `r` (qx_choose_then `ro` (qx_choose_then `rq`
+      (qx_choose_then `rs` assume_tac)))))) >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+    fs[ld_joint_boundary_def] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    simp[is_terminator_def] >>
+  `occ_frame_reachable vs C stk PG (step_prov PG G inst s1)
+     (step_taint inst s s1 tn) fn inst2
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
+     (occurrence_step a HP H inst s1)` by
+    (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def]) >>
+  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+     stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule occurrence_annotation_next >>
+     disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
+     simp[occurrence_sites_step_def]) >>
+  `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
+    (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs()] >> rpt strip_tac >>
+     gvs[out_taint_def, written_taint_def]) >>
+  `ld_env_agree sites fn (occurrence_step a HP H inst s1)
+     (step_taint inst s s1 tn) s1 target` by
+    suspend "environment" >>
+  `new_site_bytes s s1 = {}` by
+    (simp[new_site_bytes_def, update_var_def] >>
+     qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+     simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
+  `ld_joint_geometry sites X lo (a::MAP (\x. x.of_owner) U)` by
+    fs[ld_joint_boundary_def, ld_joint_frame_def] >>
+  `ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
+      s1.vs_memory target.vs_memory` by
+    suspend "memory" >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
+     s1 target` by
+    suspend "shared" >>
+  qexists_tac `target` >> simp[] >>
+  irule ld_joint_external_update_next >>
+  qpat_assum `s1 = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
+  conj_tac >- simp[Abbr `target`, update_var_def] >>
+  conj_tac
+  >- (qexistsl_tac [`r.vs_accounts`,`s.vs_vars |+ (out,w)`,`r.vs_logs`,
+         `r.vs_memory`,`s.vs_outcomes`,`r.vs_pending_deletions`,
+         `r.vs_returndata`,`s.vs_requests`,`r.vs_transient`] >>
+      simp[update_var_def] >>
+      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+      simp[venom_state_fupdcanon, venom_state_component_equality]) >>
+  conj_tac
+  >- (simp[Abbr `target`, update_var_def, venom_state_component_equality]) >>
+  qexistsl_tac [`G`,`H`,`tn`] >> simp[]
+QED
+
+Resume ld_joint_delegatecall_next[environment]:
+  irule ld_env_external_clean_update >> simp[] >>
+  conj_tac >- simp[occurrence_out_def, out_prov_def] >>
+  qexistsl_tac [`t`,`w`] >> simp[Abbr `target`, update_var_def] >>
+  conj_tac
+  >- (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  metis_tac[ld_joint_environment]
+QED
+
+Resume ld_joint_delegatecall_next[memory]:
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       range_bytes_def, update_var_def, Abbr `target`] >>
+  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (qpat_x_assum `rs = 0 \/ _` strip_assume_tac
+      >- simp[]
+      >- (disj2_tac >> disj1_tac >> simp[] >>
+          simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+      disj2_tac >> disj2_tac >>
+      qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >>
+      simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  fs[ld_joint_boundary_def, ld_joint_frame_def] >> metis_tac[]
+QED
+
+Resume ld_joint_delegatecall_next[shared]:
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    fs[ld_joint_boundary_def] >>
+  simp[ld_shared_agree_def, step_taint_def, imm_taint_def,
+       update_var_def, Abbr `target`, word_agree_except_def] >>
+  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+  fs[ld_shared_agree_def, word_agree_except_def]
+QED
+
+Finalise ld_joint_delegatecall_next
