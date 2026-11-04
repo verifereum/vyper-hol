@@ -859,3 +859,117 @@ no successful whole-list evaluation is assumed for label-bearing operands.
 This resolves destination reconstruction only. Successful block entry, PHI
 source activity, envelope, correlated ownership/synchronization packaging,
 and general target reachability remain unproved integration obligations.
+
+## C1.11.5.84: original ALLOCA successor interface audit
+
+Status reconciliation: .81-.83 now prove entry active/envelope inversion,
+branch effects and correlated owned branch/PHI-entry coverage, respectively.
+`lowerDloadSafetyControlCoverage.ld_sync_control_owned_coverage` explicitly
+requires the continuing target successor `~ts.vs_halted`. It uses the shared
+`lowerDloadSafetyAdvance.ld_sync_head_update`, also consumed by ordinary
+advance. Thus the block-entry gaps described above are closed locally, not
+an exhaustive reachability proof. Original allocation is the next open case.
+
+### Checked cached-site probe
+
+`lowerDloadSafetyAllocation.ld_cached_alloca_pair` takes exactly
+`ld_maps A f /\ inst.inst_outputs=[out] /\
+ FLOOKUP f.lf_src.vs_allocas inst.inst_id=SOME(b,n)`.
+It produces `c`, matching A and target lookups, both successful exec_alloca
+results `update_var out (n2w b) f.lf_src` and
+`update_var out (n2w c) f.lf_tgt`, and ld_maps for the updated frame.
+Importantly, requested `szS` and `szT` are independently quantified. Cached
+execution ignores BOTH requested sizes, including zero or values differing
+from n. The proof consumes ld_maps_original and ld_maps_cached_original;
+it does not duplicate their map proofs. Allocation maps/frontiers and BB
+fields of these update_var results are unchanged by update_var_def.
+This is checked execution/map evidence, NOT yet owned successor coverage.
+
+### Exact effect / consumer candidate interfaces (NOT admitted theorems)
+
+The notation in this section is only textual substitution, not new HOL
+definitions. In both branches set `aid=inst.inst_id`, `k=(f.lf_serial,aid)`,
+`H'=f.lf_H |+ (out,k)`, `tn'=step_taint inst s ss tn`,
+`G'=step_prov PG G inst ss`, `sn=ss with vs_inst_idx:=SUC s.vs_inst_idx`,
+`tt=ts with vs_inst_idx:=SUC p`, and
+`g=f with <|lf_src:=sn; lf_tgt:=tt; lf_H:=H'; lf_tv:=tn'.t_var|>`.
+The common preconditions are ld_sync lo P C vs0 stk PG G tn fn inst s t
+A (f::fs) N, ld_global lo A (f::fs), o1_ctx_shape C, taint_ok fn tn inst s,
+inst.inst_opcode=ALLOCA, inst.inst_outputs=[out], the singleton current
+envelope ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p,
+t.vs_inst_idx=p, and target step_inst fuel C' inst t=OK ts.
+The semantic effect boundary belongs in lowerDloadSafetyAllocationScript.sml.
+
+* Cached effect candidate: add FLOOKUP s.vs_allocas aid=SOME(b,n).
+  Conclude there exist c,ss such that source step_inst fuel C inst s=OK ss,
+  matching A/target lookups as in the checked probe,
+  ss=update_var out (n2w b) s, ts=update_var out (n2w c) t,
+  G'=ld_erase A o_f H', ld_vars P A g,
+  ld_memory lo A tn' sn tt, ld_nonghost tn' sn tt, and
+  (!a. a IN FRANGE H' ==> a IN FDOM A).
+  A is unchanged; explicit poststate equalities give the other premises of
+  ld_sync_head_update. No source/target requested-size equality is needed
+  for exec_alloca. The step_inst adapter is simpler: target success forces
+  inst.inst_operands=[Lit sz], so both sides use the very same literal.
+* Fresh effect candidate: add FLOOKUP s.vs_allocas aid=NONE.
+  Conclude there exist sz,ss such that both operand evaluations are the same
+  sz, source step_inst fuel C inst s=OK ss, target site is absent,
+  k NOTIN FDOM A, (!d. ~ld_private f d aid), and the two states are
+  update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas:=s.vs_allocas |+ (aid,(s.vs_alloca_next,w2n sz));
+              vs_alloca_next:=s.vs_alloca_next+w2n sz|>)
+  and the analogous target state with t frontier. Put
+  A'=A |+ (k,(s.vs_alloca_next,t.vs_alloca_next,w2n sz)).
+  Required effect conclusions are G'=ld_erase A' o_f H', ld_vars P A' g,
+  ld_memory lo A' tn' sn tt, ld_nonghost tn' sn tt,
+  (!a. a IN FRANGE H' ==> a IN FDOM A'), and
+  EVERY (ld_vars P A') fs plus preserved saved erasures. ld_maps for the
+  head follows from ld_maps_fresh_original; tails must also be transported.
+
+Owned-successor consumer (same candidate shape for either branch): add the
+positional EVERY Q ownership premise on (f::fs), configured EVERY supply,
+name order, active_inst fn next sn, and
+(?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y (SUC p)).
+Conclude the EXACT existential body of ld_sync_control_owned_coverage,
+with final target `tt`, target function `ld_image f`, and any active target
+instruction at tt. In the cached case A stays A and frame g::fs; in fresh
+case A becomes A' and frame g::fs. PG/stk are preserved only after the
+saved erasure equalities below. The final packaging uses h=0 and Y, not
+an assumed singleton next expansion. Place this consumer in a future
+lowerDloadSafetyAllocationCoverage theory after effect/reconstruction checks.
+
+### Premise-to-producer / changed-map table
+
+| Obligation | Existing producer or precise missing boundary |
+|---|---|
+| Source/target active original site | ld_sync_active/source plus current envelope; ALLOCA is unchanged singleton supply expansion. Need operational adapter, not new pass structure. |
+| Size operand defined / scalar equal | step_inst_base ALLOCA accepts ONLY [Lit sz]. Target OK supplies that syntactic form; no evaluation/taint/numeric-operand theorem is needed. Both sides use identical literal sz. Source step dispatch still needs proof. |
+| Cached target lookup / successful execution | Checked ld_cached_alloca_pair. Actual n, not w2n requested size, is selected provenance size. |
+| Source absence => target absence | ld_maps reverse clause permits private target entries. Must first exclude original aid from EVERY private generated ID by supply freshness and original instruction membership; source absence alone is insufficient. |
+| k fresh in A | ld_sync FDOM A=ld_slots A frames, distinct serials, and source absence. ld_maps alone has no reverse-domain axiom for unused A entries. |
+| Head fresh ld_maps | ld_maps_fresh_original requires both absences, k freshness and private exclusion, plus common sz executions. |
+| Head intervals | ld_intervals_exec_alloca requires lo<=old frontier; derive from reachable-frontier boundary, NOT o1_run_state_ok alone. |
+| Head vars including new selected output | Need allocation-output adapter to ld_vars update boundary; H' selects k, out in fn_pv, and wordrel uses b/c. Cached probe does NOT prove this. |
+| Head G' erasure | step_prov/out_prov ALLOCA select poststate actual (base,size); show erasure of H' equals step_prov, using selected A lookup. |
+| Head current tn' | step_taint/mem_taint/new_site_bytes: cached no new bytes; fresh interval entirely tainted. ALLOCA writes no memory. Do not equate stale fresh bytes. |
+| Head ld_memory under A' | ld_memory_new_slot handles changed map only when old mask subset new and full new interval tainted; then update_var/index memory invariance. |
+| Head ld_nonghost | ALLOCA changes vars/allocas/frontier, none compared by nonghost. Its taint-sensitive fields are t_imm/t_stor/t_trans; step_taint must leave these unchanged. |
+| Every tail ld_maps A' | Need extension lemma for serial-distinct tail; new key cannot be a tail serial. Maps query A at every old source allocation. |
+| Every tail ld_vars P A' | ld_wordrel_fresh_update already transports each old word relation when k NOTIN FDOM A. All selected H and Q in FDOM A by ld_global; fresh k changes none of their lookups. Domain/params remain unchanged. Need only a packaged vars/erasure extension boundary, not a duplicate wordrel theorem or per-frame replay. |
+| Saved cf_prov and cf_params | ld_sync equates these with ld_erase A o_f H and MAP OPTION_MAP(ld_erase A) Q at each tail. Preserve erasure on all old supported identities under A'. cf_state/cf_tvar unchanged. |
+| Head PG | Head Q unchanged, supported in FDOM A; preserve MAP OPTION_MAP(ld_erase A) Q under extension. |
+| ld_slots / FDOM A' | Fresh head adds exactly k, tails unchanged; ld_slots_insert_head is existing numerical constructor, verify its premises rather than reprove. |
+| ld_charge / every suffix frontier | E unchanged; both head frontiers grow by common w2n sz. Tail frontiers and charge unchanged. Cached invokes ld_sync_head_update; fresh violates its premises. |
+| ld_global | Bounds/separation use old global numerical constraints and frontier extension; new zero-size site needs no positive-size assumption. Selected H' support is FDOM extension. Existing insert-head facts are conditional, not full sync reconstruction. |
+| Supply/order/owned-Q | Frame fn, Q, supply, serial and E unchanged. Preserve same correlated witness, never independent ld_pair. |
+| Successor source reachable / envelope | frame_reachable_next needs source OK; existing location boundary must cover next active instruction and supply offset. |
+
+Minimal remaining package: (i) original-site freshness and successful allocation
+operands/effects; (ii) one supported-map-extension transport boundary for H/Q,
+wordrel/vars and saved erasures (reuse existing extension facts if already
+present); (iii) fresh allocation-changing sync/global reconstruction; (iv)
+correlated owned-successor consumer. Cached reconstruction can reuse
+ld_sync_head_update once (i) supplies vars/provenance/taint effects. No new
+definition, axiom, cheat, or speculative admitted theorem is introduced here.
+Generated DLOAD scratch prefixes, INVOKE/return, failing/terminal states and
+current raw safety remain separate outstanding obligations.
