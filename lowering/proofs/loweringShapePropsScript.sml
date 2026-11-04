@@ -15246,3 +15246,22 @@ Proof
   FIRST [irule as_stack_val_labels, irule as_ptr_val_labels] >>
   simp[compile_ecrecover_labels, compile_ecadd_points_labels, compile_ecmul_point_labels]
 QED
+
+Theorem builtin_branching_scalar_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  !bi. (bi = Not \/ bi = Len \/ (?d. bi = AsWeiValue d)) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels]) >>
+  rpt IF_CASES_TAC >> irule as_stack_val_labels >>
+  simp[compile_invert_labels, emit_op_labels, compile_builtin_len_labels,
+       compile_builtin_calldatasize_labels, compile_as_wei_value_decimal_labels,
+       compile_as_wei_value_int_labels]
+QED
