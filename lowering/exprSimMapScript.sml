@@ -718,3 +718,95 @@ Proof
   conj_tac >- (qexistsl [`em`, `sm`, `s1`] >> simp[]) >>
   goal_assum (drule_at Any))
 QED
+
+Theorem compile_mapping_subscript_frag:
+  (expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+   expr_map_pre cenv cx env (Subscript ann obj idx) es) /\
+  (nocalls ==> int_calls_expr (Subscript ann obj idx) = []) /\
+  expr_map_case nocalls ctx func cenv cx obj /\
+  (!s tv t. eval_expr cx obj s = (INL tv,t) ==>
+     expr_sim_case nocalls ctx func cenv cx idx) /\
+  place_type cenv obj = MapPT kt vt /\
+  compile_expr cenv ty (Subscript ann obj idx) sa = (vv,sb) /\
+  eval_expr cx (Subscript ann obj idx) es = (res,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. ?tr base_slot kv tv slot.
+      res = INL tv /\ storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
+      select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt)
+        (ValueSubscript kv) es' = (INL tv,es') /\
+      vv = LocatedValue ann (mk_ptr slot (slot_loc tr)) /\
+      eval_operand slot s = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      stmt_state_rel ctx func cenv cx es' s /\ wb_frame cenv es sa s0 s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  (reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+   >- simp[frag_exec_def]) >>
+  drule_all compile_expr_mapping_subscript_parts >> strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base, expr_map_pre_subscript_base] >>
+  `expr_map_sim ctx func cenv cx ty obj es` by
+    (gvs[expr_map_case_def] >> first_x_assum irule >> simp[] >>
+     metis_tac[int_calls_subscript_operands]) >>
+  drule (cj 1 compile_expr_grows) >> strip_tac >>
+  drule (cj 2 compile_expr_grows) >> strip_tac >>
+  `cs_extends sn sp` by
+    (Cases_on `is_bytestring_type kt` >> gvs[]
+     >- (mp_tac (Q.SPECL [`key`, `F`] ci_mono_compile_keccak256_key) >>
+         rewrite_tac[ci_mono_def] >>
+         disch_then (qspec_then `sn` mp_tac) >> simp[]) >>
+     simp[cs_extends_refl]) >>
+  `cs_extends sp sb` by
+    (mp_tac (Q.SPECL [`vv_operand bvv`, `hashed`] ci_mono_compile_mapping_subscript) >>
+     rewrite_tac[ci_mono_def] >>
+     disch_then (qspec_then `sp` mp_tac) >> simp[]) >>
+  `cs_extends sn sb /\ cs_extends sm sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sp sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  Cases_on `eval_expr cx obj es` >> rename1 `_ = (br,em)` >>
+  `expr_map_res_ok br` by metis_tac[expr_map_pre_res_ok] >>
+  qpat_x_assum `expr_map_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_map_sim_def] >>
+  disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx sa sm P BQ _ ==> _` >>
+  disch_then (mp_then Any mp_tac frag_exec_weaken) >>
+  disch_then (qspecl_then [`P`, `BQ`, `expr_exit res`] mp_tac) >>
+  simp[] >>
+  (impl_tac >- (
+    Cases_on `br` >- simp[] >>
+    rename1 `eval_expr cx obj es = (INR ex,em)` >>
+    `res = INR ex` by
+      (qpat_x_assum `eval_expr cx (Subscript _ _ _) _ = _` mp_tac >>
+       simp[Once evaluate_def, bind_def, ignore_bind_def]) >>
+    simp[])) >>
+  disch_tac >> irule frag_exec_seq_pointwise >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> gvs[Abbr `BQ`] >>
+  drule_all expr_map_pre_result_types >> strip_tac >> gvs[] >>
+  qpat_x_assum `frag_exec ctx sa sm _ _ _` kall_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x. p.ptr_operand = Var x ==> not_fresh_at sm x` by
+    (drule (CONJUNCT1 exprOperandVarTheory.compiler_compile_var) >>
+     simp[vv_operand_def]) >>
+  `!l. p.ptr_operand <> Label l` by
+    (drule_all expr_map_pre_checked_type >> strip_tac >>
+     drule_all compile_mapping_operand_not_label >> simp[vv_operand_def]) >>
+  `wb_frame cenv es sa s0 t` by
+    (rewrite_tac[exprSimWordArgsTheory.wb_frame_def] >> rpt conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
+  simp[vv_location_def, vv_operand_def] >>
+  gvs[vv_operand_def] >>
+  (SUBGOAL_THEN
+    ``expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+      expr_map_pre cenv cx env (Subscript ann obj idx) es`` assume_tac
+   >- simp[]) >>
+  drule_all compile_mapping_index_continuation >>
+  disch_then (mp_then Any irule frag_exec_conseq) >> simp[] >>
+  rpt strip_tac >>
+  rename1 `storage_mapping_region cx tr_w base_slot (HashMapT kt vt)` >>
+  qexistsl [`tr_w`, `base_slot`, `kv`, `tv`, `slot`] >> simp[]
+QED
