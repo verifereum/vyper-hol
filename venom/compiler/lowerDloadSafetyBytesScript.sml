@@ -62,3 +62,32 @@ Proof
   irule ld_memory_slot >> goal_assum (drule_at Any) >>
   qexistsl_tac [`lo`, `tn`] >> gvs[GSYM ADD_ASSOC] >> decide_tac
 QED
+
+Theorem ld_memory_transport:
+  !lo A tn s t coords tn' s' t'.
+  ld_memory lo A tn s t /\
+  (!i. i < lo /\ i NOTIN tn'.t_mem ==>
+    if i IN coords then read_byte i s'.vs_memory = read_byte i t'.vs_memory
+    else i NOTIN tn.t_mem /\
+      read_byte i s'.vs_memory = read_byte i s.vs_memory /\
+      read_byte i t'.vs_memory = read_byte i t.vs_memory) /\
+  (!k b c n j. FLOOKUP A k = SOME (b,c,n) /\ j < n /\
+    b+j NOTIN tn'.t_mem ==>
+    if b+j IN coords then
+      read_byte (b+j) s'.vs_memory = read_byte (c+j) t'.vs_memory
+    else b+j NOTIN tn.t_mem /\
+      read_byte (b+j) s'.vs_memory = read_byte (b+j) s.vs_memory /\
+      read_byte (c+j) t'.vs_memory = read_byte (c+j) t.vs_memory) ==>
+  ld_memory lo A tn' s' t'
+Proof
+  rpt gen_tac >> strip_tac >> simp[ld_memory_def] >> conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!i. _` (qspec_then `i` mp_tac) >>
+      simp[] >> Cases_on `i IN coords` >> simp[] >>
+      metis_tac[ld_memory_low]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!k b c n j. _` drule >>
+  disch_then (qspecl_then [`j`] mp_tac) >>
+  simp[] >> Cases_on `b+j IN coords` >> simp[] >>
+  metis_tac[ld_memory_slot]
+QED
