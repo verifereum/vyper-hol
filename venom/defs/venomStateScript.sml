@@ -99,6 +99,7 @@ Datatype:
     vs_outcomes : extCallOracle$call_outcome list; (* Remaining external-call outcomes *)
     vs_requests : extCallOracle$call_request list; (* External-call request accumulator *)
     vs_pending_deletions : address list; (* Deletions from successful CALLs *)
+    vs_gas_readings : bytes32 list;  (* Remaining GAS readings, popped in order *)
     vs_immutables : (num, bytes32) fmap; (* Immutable storage (ILOAD/ISTORE) *)
     vs_data_section : byte list;     (* Read-only data section (DLOAD/DLOADBYTES) *)
     vs_labels : (string, bytes32) fmap; (* Label->address map for data offset labels *)
@@ -167,6 +168,7 @@ Definition init_venom_state_def:
     vs_outcomes := [];
     vs_requests := [];
     vs_pending_deletions := [];
+    vs_gas_readings := [];
     vs_immutables := FEMPTY;
     vs_data_section := [];
     vs_labels := FEMPTY;
@@ -397,6 +399,30 @@ Proof
   simp[update_var_def, write_memory_def, expand_memory_def,
        write_memory_with_expansion_def, mstore_def, mstore8_def,
        sstore_def, tstore_def, jump_to_def, next_inst_def,
+       halt_state_def, revert_state_def, set_returndata_def]
+QED
+
+(* Only GAS consumes gas readings. *)
+Theorem state_updates_gas_readings[simp]:
+  (init_venom_state entry).vs_gas_readings = [] /\
+  (update_var x v s).vs_gas_readings = s.vs_gas_readings /\
+  (write_memory offset bytes s).vs_gas_readings = s.vs_gas_readings /\
+  (expand_memory n s).vs_gas_readings = s.vs_gas_readings /\
+  (write_memory_with_expansion offset bytes s).vs_gas_readings =
+    s.vs_gas_readings /\
+  (mstore offset v s).vs_gas_readings = s.vs_gas_readings /\
+  (mstore8 offset v s).vs_gas_readings = s.vs_gas_readings /\
+  (sstore key v s).vs_gas_readings = s.vs_gas_readings /\
+  (tstore key v s).vs_gas_readings = s.vs_gas_readings /\
+  (jump_to lbl s).vs_gas_readings = s.vs_gas_readings /\
+  (next_inst s).vs_gas_readings = s.vs_gas_readings /\
+  (halt_state s).vs_gas_readings = s.vs_gas_readings /\
+  (revert_state s).vs_gas_readings = s.vs_gas_readings /\
+  (set_returndata rd s).vs_gas_readings = s.vs_gas_readings
+Proof
+  simp[init_venom_state_def, update_var_def, write_memory_def,
+       expand_memory_def, write_memory_with_expansion_def, mstore_def,
+       mstore8_def, sstore_def, tstore_def, jump_to_def, next_inst_def,
        halt_state_def, revert_state_def, set_returndata_def]
 QED
 

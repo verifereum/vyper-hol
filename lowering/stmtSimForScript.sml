@@ -12,9 +12,12 @@
 
 Theory stmtSimFor
 Ancestors
-  stmtSim stmtSimForParts stmtSimForLoop
+  stmtSimProps
+  stmtSimDefs
+  loweringPosts
+   stmtSimForParts stmtSimForLoop
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice
+  fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes

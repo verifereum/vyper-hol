@@ -1364,6 +1364,16 @@ Proof
   imp_res_tac read_result_state >> gvs[return_def] >> metis_tac[]
 QED
 
+Theorem get_scopes_read_results:
+  bind get_scopes (\prev. bind (read_results cx results) (\vs. k prev vs)) =
+  bind (read_results cx results) (\vs. bind get_scopes (\prev. k prev vs))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `read_results cx results x` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[bind_def, get_scopes_def, return_def]
+QED
+
 Theorem read_results_length:
   !results st vs st'.
     read_results cx results st = (INL vs,st') ==> LENGTH vs = LENGTH results
@@ -1371,4 +1381,47 @@ Proof
   Induct >> simp[read_results_def, return_def] >>
   rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[return_def] >> first_x_assum drule >> simp[]
+QED
+
+Theorem ignore_bind_try_unit:
+  ignore_bind (try a h) (return ()) =
+  try (ignore_bind a (return ())) (\e. ignore_bind (h e) (return ()))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[try_def, ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem ignore_bind_finally_unit:
+  ignore_bind (finally a cleanup) (return ()) =
+  finally (ignore_bind a (return ())) cleanup
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[finally_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `cleanup st` >> rename1 `_ = (res,st2)` >> Cases_on `res` >>
+  simp[raise_def]
+QED
+
+Theorem ignore_bind_return_twice:
+  ignore_bind (ignore_bind a (return v)) (return w) =
+  ignore_bind a (return w)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem bind_assoc:
+  bind (bind a b) c = bind a (\x. bind (b x) c)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[bind_def]
+QED
+
+Theorem bind_return:
+  bind (return v) k = k v
+Proof
+  simp[FUN_EQ_THM, bind_def, return_def]
 QED

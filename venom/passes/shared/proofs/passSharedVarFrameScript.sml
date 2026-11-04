@@ -84,7 +84,7 @@ val step_base_result_tac =
   rw[step_inst_base_def] >>
   gvs[AllCaseEqs(), is_terminator_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_ext_call_def, exec_delegatecall_def,
      exec_create_def, exec_alloca_def,
      extract_venom_result_def] >>
@@ -110,7 +110,7 @@ Triviality exec_result_helpers_not_intret[simp]:
 Proof
   simp_tac exec_result_head_ss
     [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def, exec_alloca_def]
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def, exec_alloca_def]
 QED
 
 Triviality exec_call_helpers_not_intret[simp]:
@@ -315,6 +315,20 @@ Proof
                          finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
+Triviality exec_gas_var_frame[local]:
+  !inst x w st.
+    ~MEM x inst.inst_outputs ==>
+    exec_gas inst (update_var x w st) =
+    var_frame_result x w (exec_gas inst st)
+Proof
+  rw[exec_gas_def, var_frame_result_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[var_frame_result_def] >>
+  Cases_on `t` >> gvs[var_frame_result_def] >>
+  Cases_on `st.vs_gas_readings` >>
+  gvs[var_frame_result_def, update_var_def,
+      finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Triviality exec_read1_var_frame[local]:
   !f inst x w st.
     (!a s0. f a (update_var x w s0) = f a s0) /\
@@ -410,7 +424,8 @@ QED
 
 val exec_frame_thms =
   [exec_pure1_var_frame, exec_pure2_var_frame, exec_pure3_var_frame,
-   exec_read0_var_frame, exec_read1_var_frame, exec_write2_var_frame,
+   exec_read0_var_frame, exec_gas_var_frame, exec_read1_var_frame,
+   exec_write2_var_frame,
    exec_alloca_var_frame, exec_ext_call_var_frame,
    exec_delegatecall_var_frame, exec_create_var_frame];
 

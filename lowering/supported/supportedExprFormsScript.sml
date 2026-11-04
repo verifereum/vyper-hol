@@ -108,7 +108,7 @@ Definition supported_builtin_form_def:
     | (AddMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
     | (MulMod, [a; b; c]) => EVERY (supported_unsigned_type o expr_type) es
     | (PowMod256, [a; b]) => EVERY (supported_unsigned_type o expr_type) es
-    | (Env item, []) => item <> MsgGas
+    | (Env item, []) => T
     | (Acc item, [a]) => item <> Code
     | (BlockHash, [a]) => T
     | (BlobHash, [a]) => T

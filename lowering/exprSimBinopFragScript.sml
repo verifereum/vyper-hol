@@ -26,8 +26,9 @@
 
 Theory exprSimBinopFrag
 Ancestors
+  exprSimHypsDefs
   list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprSimCompare exprSimArith
+  fragExec  exprSimHyps exprSimOps exprSimCompare exprSimArith
   exprBopLowering loweringSlice
   exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph

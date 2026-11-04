@@ -255,3 +255,100 @@ Theorem call_external_error_no_state_change:
 Proof
   strip_tac >> imp_res_tac call_external_error_rollback >> gvs[]
 QED
+
+(* Empty default evaluation changes no call state; keep this source
+   normalization below both storage and lowering proof consumers. *)
+Theorem eval_empty_defaults_finally:
+  finally (do set_scopes scopes; eval_exprs cx [] od)
+    (set_scopes st.scopes) st = (INL [],st)
+Proof
+  simp[Once evaluate_def, finally_def, ignore_bind_apply, set_scopes_def,
+       return_def]
+QED
+
+Theorem eval_expr_intcall_empty_defaults:
+  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
+  LENGTH es = LENGTH args ==>
+  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
+  (do results <- eval_expr_results cx es;
+      prev <- get_scopes;
+      vs <- read_results cx results;
+      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (NONE,fn) call_env cx;
+      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od)
+Proof
+  strip_tac >> simp[Once evaluate_def, type_check_def, assert_def,
+    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
+    get_scopes_def, eval_empty_defaults_finally]
+QED
+
+Theorem eval_expr_intcall_args_factor:
+  ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME tops /\
+  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
+  LENGTH es = LENGTH args ==>
+  eval_expr cx (Call ty (IntCall (src,fn)) es kw) =
+  (do vs <- (do results <- eval_expr_results cx es; read_results cx results od);
+      prev <- get_scopes;
+      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      lock_if_nr cx nr (is_view_mut mut);
+      cxf <- push_function (src,fn) call_env cx;
+      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
+        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od)
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def,
+    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
+    get_scopes_def, eval_empty_defaults_finally] >>
+  qx_gen_tac `st` >> Cases_on `eval_expr_results cx es st` >>
+  Cases_on `q` >> simp[] >>
+  rename1 `eval_expr_results cx es st = (INL results,st')` >>
+  Cases_on `read_results cx results st'` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[]
+QED
+
+Theorem eval_expr_intcall_body_normalize:
+  ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,F,params,[],ret,body) /\ LENGTH args = LENGTH params ==>
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) =
+  (do vs <- vyperState$bind (eval_expr_results cx args) (read_results cx);
+      prev <- get_scopes;
+      env <- lift_option_type (bind_arguments (get_tenv cx) params vs)
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      set_scopes [env];
+      rv <- finally
+        (try (do eval_stmts (cx with stk updated_by CONS (src,fn)) body;
+                 return NoneV od) handle_function) (set_scopes prev);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od)
+Proof
+  strip_tac >> drule_all eval_expr_intcall_args_factor >>
+  disch_then (qspecl_then [`ty`,`drv`] SUBST1_TAC) >>
+  rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `st` >>
+  simp[bind_def, ignore_bind_def, get_scopes_def, return_def,
+    lock_if_nr_def, unlock_if_nr_def] >>
+  Cases_on `eval_expr_results cx args st` >>
+  rename1 `_ = (res,st1)` >> Cases_on `res` >> simp[] >>
+  rename1 `read_results cx results st1` >>
+  Cases_on `read_results cx results st1` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  rename1 `_ = (res,st1)` >> Cases_on `res` >>
+  `vyperState$bind (set_scopes st1.scopes) (\x. return ()) =
+   set_scopes st1.scopes` by
+    simp[FUN_EQ_THM, bind_def, set_scopes_def, return_def] >>
+  simp[push_function_def, pop_function_def, bind_def, ignore_bind_def,
+    set_scopes_def, return_def, FUN_EQ_THM]
+QED

@@ -221,7 +221,7 @@ Proof
 QED
 
 Theorem checked_constant_name_result[local]:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   ALOOKUP am.immutables cx.txn.target = SOME imms /\
   deployment_constant_cells_typed (type_env_all_modules mods)
@@ -339,7 +339,7 @@ Proof
 QED
 
 Theorem constant_place_expr_well_typed[local]:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods ==>
   !e vt. constant_expr mods e /\
     type_place_expr (artifact_env artifact mods current_src) e = SOME vt ==>
@@ -376,7 +376,7 @@ Proof
 QED
 
 Theorem constant_subscript_base_well_typed[local]:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   constant_expr mods e /\
   well_typed_expr (artifact_env artifact mods current_src) (Subscript ty e ix) ==>
@@ -559,7 +559,7 @@ End
 Theorem constant_value_eval_expr_shape[local]:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
-     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
      ALOOKUP cx.sources cx.txn.target = SOME mods /\
      constant_machine_immutables am cx.txn.target = imms /\
      deployment_constant_cells_typed (type_env_all_modules mods)
@@ -574,7 +574,7 @@ Theorem constant_value_eval_expr_shape[local]:
        constant_result_shape pv) /\
   (!mods imms es vs cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_values mods imms es = SOME vs /\
-     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
      ALOOKUP cx.sources cx.txn.target = SOME mods /\
      constant_machine_immutables am cx.txn.target = imms /\
      deployment_constant_cells_typed (type_env_all_modules mods)
@@ -747,7 +747,7 @@ QED
 Theorem constant_value_eval_expr_checked:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
-     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist)
+     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist)
        checker_addr mods = SOME artifact /\
      ALOOKUP cx.sources cx.txn.target = SOME mods /\
      constant_machine_immutables am cx.txn.target = imms /\
@@ -762,7 +762,7 @@ Theorem constant_value_eval_expr_checked:
        value_runtime_typed (artifact_env artifact mods current_src) (expr_type e) v) /\
   (!mods imms es vs cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_values mods imms es = SOME vs /\
-     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist)
+     check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist)
        checker_addr mods = SOME artifact /\
      ALOOKUP cx.sources cx.txn.target = SOME mods /\
      constant_machine_immutables am cx.txn.target = imms /\
@@ -1100,7 +1100,7 @@ Theorem constants_fold_module_constants_env:
   !mods imms src ts acc.
   !cenv cx am full artifact mode layouts addr.
     constants_fold_module mods imms src ts acc = SOME cenv /\
-    check_contract mode (layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist)
+    check_contract mode (layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist)
       addr mods = SOME artifact /\
     ALOOKUP mods src = SOME full /\ EVERY (\tl. MEM tl full) ts /\
     ALOOKUP cx.sources cx.txn.target = SOME mods /\
@@ -1142,7 +1142,7 @@ QED
 Theorem constants_fold_evaluate_module_constants:
   !rest imms am imms' cx artifact mode layouts addr.
     constants_fold mods imms rest = SOME imms' /\
-    check_contract mode (layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist)
+    check_contract mode (layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist)
       addr mods = SOME artifact /\
     EVERY (\m. MEM m mods) rest /\
     ALOOKUP cx.sources cx.txn.target = SOME mods /\

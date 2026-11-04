@@ -16,8 +16,9 @@
 
 Theory intCallReturnMem
 Ancestors
+  loweringPosts
   list rich_list
-  fragExec exprSim stmtSimReturn intCallResult valueCopy instIdxIndep
+  fragExec  stmtSimReturn intCallResult valueCopy instIdxIndep
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
@@ -31,6 +32,13 @@ Definition intret_mem_q_def:
     intret_q func cenv cx ret_tv v es r /\
     ?ir s. r = IntRet ir s /\ val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
+
+Theorem intret_mem_q_gas_obs:
+  intret_mem_q func cenv cx ret_tv buf v (es with gas_obs := readings) r =
+  intret_mem_q func cenv cx ret_tv buf v es r
+Proof
+  simp[intret_mem_q_def, intret_q_gas_obs]
+QED
 
 (* RET with only the return PC: an IntRet with no values. *)
 Theorem emit_ret_pc_frag[local]:

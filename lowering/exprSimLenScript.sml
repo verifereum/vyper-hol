@@ -21,7 +21,11 @@
 
 Theory exprSimLen
 Ancestors
-  list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
+  list fragExec  exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering
   exprLoweringProps builtinSimple emitHelper compileEnv accountsRelProps
   valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState

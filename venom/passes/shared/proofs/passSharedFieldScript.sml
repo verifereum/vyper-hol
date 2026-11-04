@@ -31,7 +31,7 @@ val field_tac =
   gvs[AllCaseEqs(), is_terminator_def, is_alloca_op_def, is_ext_call_op_def,
       write_effects_def, all_effects_def, empty_effects_def] >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -326,7 +326,7 @@ val mem_frame_finish_tac =
   FIRST [irule exec_pure2_mem_error >> first_assum ACCEPT_TAC,
     fs[] >>
     fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, extract_venom_result_def] >>
     gvs[AllCaseEqs()] >>
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
@@ -649,7 +649,7 @@ val trans_frame_finish_tac =
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   step_inst_base_opcode_tac >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-       exec_read0_def, exec_read1_def, exec_write2_def,
+       exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
        exec_alloca_def, extract_venom_result_def] >>
   strip_tac >>
   gvs[AllCaseEqs()] >>
@@ -975,7 +975,7 @@ val acct_frame_finish_tac =
   qpat_x_assum `step_inst_base inst s = _` mp_tac >>
   step_inst_base_opcode_tac >> rpt strip_tac >>
   fs[exec_pure1_def, exec_pure2_def, exec_pure3_def,
-     exec_read0_def, exec_read1_def, exec_write2_def,
+     exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
      exec_alloca_def, extract_venom_result_def] >>
   gvs[AllCaseEqs()] >>
   rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>

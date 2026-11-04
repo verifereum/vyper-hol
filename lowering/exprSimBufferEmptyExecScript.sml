@@ -19,6 +19,7 @@
  *)
 Theory exprSimBufferEmptyExec
 Ancestors
+  exprSimProps
   exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
@@ -362,7 +363,7 @@ Resume compile_builtin_empty_complex_run[package]:
   (* the locals' regions, by their pointers, which the buffer's code keeps *)
   map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
   `local_region cenv es.scopes t nm lb llen` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   qpat_x_assum `!name b len. local_region _ _ t name b len ==> _ \/ _` drule >>
   simp[arithmeticTheory.ADD_COMM]

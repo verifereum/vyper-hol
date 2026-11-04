@@ -27,9 +27,11 @@
 
 Theory bodySimDeclCases
 Ancestors
+  stmtSimProps
+  exprSimHypsDefs
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps
-  exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
+  list finite_map bodySim bodySimStmtCases allocLimits  exprSimHyps
+  exprLoweringProps  stmtSimDecl stmtSimReturn stmtSimAssign
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
   fragExec compileEnv supportedStmts supportedStmtTraverse vyperAST

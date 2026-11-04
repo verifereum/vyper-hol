@@ -24,10 +24,11 @@
 
 Theory intCallResult
 Ancestors
+  loweringPosts
   list rich_list arithmetic
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   freshWrites valueEncoding valueEncodingProps entryDecodeProps immutableMemoryFrame
-  exprSim fragExec localPtrsProps context valueCopy
+   fragExec localPtrsProps context valueCopy
   vyperTyping vyperValue vyperState venomExecSemantics venomState
 
 (* ===== Storing the results ===== *)

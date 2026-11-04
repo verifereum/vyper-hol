@@ -68,7 +68,7 @@ Theorem vsr_step_inst_selfdestruct:
     lift_result R_ok R_term R_term (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
   rpt strip_tac >> gvs[] >> vsr_eval_rewrite_tac () >>
-  rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def]) >>
+  rpt (CASE_TAC >> gvs[lift_result_def, halt_state_def, set_returndata_def]) >>
   vsr_terminal_tac ()
 QED
 

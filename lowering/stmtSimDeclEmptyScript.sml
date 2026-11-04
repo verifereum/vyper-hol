@@ -14,8 +14,12 @@
 
 Theory stmtSimDeclEmpty
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem valueCopyBytes
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps

@@ -757,7 +757,7 @@ Theorem step_inst_selfdestruct_halt[local]:
     ?addr_op addr_val.
       inst.inst_operands = [addr_op] /\
       eval_operand addr_op vs = SOME addr_val /\
-      vs' = halt_state (vs with vs_accounts :=
+      vs' = halt_state (set_returndata [] (vs with vs_accounts :=
         (\a. if a = vs.vs_call_ctx.cc_address then
                lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts
                  with balance := 0
@@ -767,7 +767,7 @@ Theorem step_inst_selfdestruct_halt[local]:
                    (lookup_account vs.vs_call_ctx.cc_address
                       vs.vs_accounts).balance +
                    (lookup_account (w2w addr_val) vs.vs_accounts).balance
-             else vs.vs_accounts a))
+             else vs.vs_accounts a)))
 Proof
   rpt strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
@@ -776,7 +776,7 @@ Proof
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   qpat_x_assum `inst.inst_opcode = SELFDESTRUCT`
     (fn th => PURE_REWRITE_TAC[th]) >>
-  every_case_tac >> gvs[halt_state_def, LET_THM]
+  every_case_tac >> gvs[halt_state_def, set_returndata_def, LET_THM]
 QED
 
 (* What step_inst RETURNDATACOPY abort produces *)
@@ -974,8 +974,7 @@ Proof
   first_x_assum (qspec_then `i` mp_tac) >> simp[]
 QED
 
-(* SELFDESTRUCT terminal step: pops address, transfers balance.
-   Simpler than RETURN/REVERT — no memory/returndata involved. *)
+(* SELFDESTRUCT terminal step: pops address, transfers balance, clears output. *)
 Theorem terminal_selfdestruct_step[local]:
   !lo o2pc prog st addr_val rest_stk vs.
     asm_block_at prog st.as_pc [AsmOp "SELFDESTRUCT"] /\
@@ -986,7 +985,7 @@ Theorem terminal_selfdestruct_step[local]:
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmHalt st' /\
       venom_asm_terminal_rel
-        (halt_state (vs with vs_accounts :=
+        (halt_state (set_returndata [] (vs with vs_accounts :=
           (\a. if a = vs.vs_call_ctx.cc_address then
                  lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts
                    with balance := 0
@@ -996,7 +995,7 @@ Theorem terminal_selfdestruct_step[local]:
                      (lookup_account vs.vs_call_ctx.cc_address
                         vs.vs_accounts).balance +
                      (lookup_account (w2w addr_val) vs.vs_accounts).balance
-               else vs.vs_accounts a)))
+               else vs.vs_accounts a))))
         st'
 Proof
   rpt strip_tac >>
@@ -1006,7 +1005,7 @@ Proof
   REWRITE_TAC[stackOpAsmSimTheory.asm_step_selfdestruct,
               asm_selfdestruct_def] >>
   ASM_REWRITE_TAC[] >>
-  fs[venom_asm_terminal_rel_def, halt_state_def, LET_THM]
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def, LET_THM]
 QED
 
 (* ===== Simple prefix_spill_wf initial_fmp ===== *)
@@ -3737,7 +3736,10 @@ Resume gen_inst_ok_sim[fmp_param]:
   simp[step_inst_non_invoke] >>
   qpat_x_assum `inst_wf inst` mp_tac >>
   simp[inst_wf_def] >> strip_tac >> gvs[] >>
-  gvs[step_inst_base_def, compute_operands_def, eval_operand_def] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_x_assum `inst.inst_opcode = FMP_PARAM`
+    (fn th => PURE_REWRITE_TAC[th]) >>
+  asm_simp_tac (srw_ss()) [] >>
   gvs[AllCaseEqs()] >> strip_tac >> gvs[] >>
   PURE_REWRITE_TAC[venom_asm_rel_def] >>
   rpt conj_tac

@@ -20,22 +20,15 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimProps
+  loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
   exprLoweringProps context venomExecSemantics venomState compileEnv
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
   exprSimMemoryTransport valueEncodingProps entryDecodeProps entryDecodeStaticProps
+Libs
+  wordsLib
 
-Theorem buffer_round_mask:
-  !w:bytes32. w && i2w (- &32) = (w >>> 5) << 5
-Proof
-  `i2w (- &32):bytes32 = (-1w:bytes32) << 5` by
-    (EVAL_TAC >> CONV_TAC wordsLib.WORD_EVAL_CONV) >>
-  pop_assum (fn th => pure_rewrite_tac[th]) >>
-  simp_tac (bool_ss ++ fcpLib.FCP_ss)
-    [word_and_def, word_lsl_def, word_lsr_def, WORD_NEG_1, word_T] >>
-  rpt strip_tac >> Cases_on `5 <= i` >>
-  asm_simp_tac (arith_ss ++ fcpLib.FCP_ss) [WORD_NEG_1, word_T]
-QED
 
 Theorem buffer_round_no_wrap:
   !len. 32 + 32 * word_size len < dimword (:256) ==>
@@ -54,7 +47,7 @@ Theorem buffer_round_size:
      n2w (32 + 32 * word_size len))
 Proof
   rpt strip_tac >> drule buffer_round_no_wrap >> strip_tac >>
-  rewrite_tac[buffer_round_mask, word_add_n2w] >>
+  rewrite_tac[exprSimPropsTheory.buffer_round_mask, word_add_n2w] >>
   `n2w (len + 31):bytes32 >>> 5 = n2w ((len + 31) DIV 32)` by
     (simp[GSYM n2w_DIV]) >>
   simp[word_size_def, word_lsl_n2w, word_add_n2w] >>
@@ -366,7 +359,7 @@ Theorem buffer_store_bytestring_encoding:
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
     mload (w2n w) s = n2w len /\
     val_in_memory tv v (w2n w) s.vs_memory /\ val_wf tv v /\
-    val_footprint tv v = 32 + 32 * word_size len /\
+    val_store_size tv v = 32 + 32 * word_size len /\
     type_memory_size tv < dimword (:256) ==>
     ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
       val_in_memory tv v (w2n d) q.vs_memory /\
@@ -377,7 +370,9 @@ Theorem buffer_store_bytestring_encoding:
 Proof
   rpt gen_tac >> strip_tac >>
   `32 + 32 * word_size len <= type_memory_size tv` by
-    metis_tac[exprSimTheory.val_footprint_le] >>
+    metis_tac[exprSimPropsTheory.val_store_size_le] >>
+  `val_footprint tv v <= 32 + 32 * word_size len` by
+    metis_tac[exprSimPropsTheory.val_footprint_le_store_size] >>
   `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
   drule_all buffer_store_bytestring_run >> strip_tac >>
   qexists_tac `q` >> simp[] >> conj_tac
@@ -390,7 +385,7 @@ Theorem buffer_typed_bytestring_header:
     is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
     value_has_type tv v /\ val_in_memory tv v p s.vs_memory ==>
     ?len. mload p s = n2w len /\
-      val_footprint tv v = 32 + 32 * word_size len
+      val_store_size tv v = 32 + 32 * word_size len
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `ty` >> gvs[is_bytestring_type_def] >>
@@ -399,11 +394,11 @@ Proof
       gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def] >>
       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
       drule buffer_bytes_header >> strip_tac >>
-      qexists_tac `LENGTH l` >> simp[exprSimTheory.val_footprint_def]) >>
+      qexists_tac `LENGTH l` >> simp[exprSimPropsTheory.val_store_size_def]) >>
   gvs[vyperValueTheory.evaluate_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
   drule buffer_string_header >> strip_tac >>
-  qexists_tac `LENGTH s'` >> simp[exprSimTheory.val_footprint_def]
+  qexists_tac `LENGTH s'` >> simp[exprSimPropsTheory.val_store_size_def]
 QED
 
 Theorem buffer_store_memory_encoding:
@@ -422,7 +417,7 @@ Theorem buffer_store_memory_encoding:
         mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all (SRULE [] buffer_store_word_encoding) >> strip_tac >>
@@ -443,7 +438,7 @@ Proof
       rpt gen_tac >> strip_tac >> first_x_assum irule >> decide_tac) >>
   gvs[compile_store_memory_def] >>
   `val_footprint tv v <= type_memory_size tv` by
-    simp[exprSimTheory.val_footprint_le] >>
+    simp[exprSimPropsTheory.val_footprint_le] >>
   drule_all (SRULE [] buffer_copy_memory_encoding) >> strip_tac >>
   `q.vs_vars = s.vs_vars` by
     (qpat_assum `q with vs_memory := _ = s`
@@ -468,7 +463,7 @@ Theorem buffer_store_memory_capacity:
     LENGTH s.vs_memory <= LENGTH q.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
-  gvs[exprSimTheory.expr_val_rel_def] >>
+  gvs[loweringPostsTheory.expr_val_rel_def] >>
   Cases_on `is_word_type ty`
   >- (gvs[compile_store_memory_def] >>
       drule_all literal_emit_mstore_run >> strip_tac >> gvs[] >>
@@ -478,7 +473,7 @@ Proof
   >- (gvs[compile_store_memory_def] >>
       drule_all buffer_typed_bytestring_header >> strip_tac >>
       `32 + 32 * word_size len <= type_memory_size tv` by
-        metis_tac[exprSimTheory.val_footprint_le] >>
+        metis_tac[exprSimPropsTheory.val_store_size_le] >>
       `32 + 32 * word_size len < dimword (:256)` by
         (simp[dimword_def] >> decide_tac) >>
       drule_all buffer_store_bytestring_run >> strip_tac >> gvs[] >>

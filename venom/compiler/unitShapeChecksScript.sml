@@ -106,18 +106,6 @@ Proof
   EVAL_TAC
 QED
 
-Theorem gas_position_checks:
-  gas_use_ok (mk_inst 0 CALL [Var "g"; Var "a"] ["r"]) "g" /\
-  gas_use_ok (mk_inst 0 STATICCALL [Var "g"; Var "a"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 CALL [Var "a"; Var "g"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 CALL [Var "g"; Var "g"] ["r"]) "g" /\
-  ~gas_use_ok (mk_inst 0 SSTORE [Lit 0w; Var "g"] []) "g" /\
-  gas_use_ok (mk_inst 0 ASSIGN [Var "g"] ["h"]) "g" /\
-  gas_use_ok (mk_inst 0 PHI [Label "p"; Var "g"] ["h"]) "g"
-Proof
-  simp[gas_use_ok_def, mk_inst_def]
-QED
-
 Theorem retpc_position_checks:
   retpc_use_ok (mk_inst 0 RET [Var "result"; Var "pc"] []) "pc" /\
   ~retpc_use_ok (mk_inst 0 RET [Var "pc"; Var "result"] []) "pc" /\
@@ -139,10 +127,9 @@ Definition shape_probe_cycle_def:
 End
 
 Theorem unseeded_cycle_checks:
-  (!x. ~gas_var (shape_probe_cycle GAS F) x) /\
-  (!x. ~retpc_var (shape_probe_cycle RETPC_PARAM F) x)
+  !x. ~retpc_var (shape_probe_cycle RETPC_PARAM F) x
 Proof
-  simp[gas_var_def, retpc_var_def] >> conj_tac >>
+  simp[retpc_var_def] >>
   irule copy_phi_var_no_seed >>
   simp[shape_probe_cycle_def, shape_probe_fn_def, mk_raw_function_def,
        fn_insts_def, fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]
@@ -166,32 +153,23 @@ Proof
 QED
 
 Theorem seeded_opaque_cycle_checks:
-  gas_var (shape_probe_cycle GAS T) "a" /\
   retpc_var (shape_probe_cycle RETPC_PARAM T) "a"
 Proof
-  simp[gas_var_def, retpc_var_def, seeded_cycle_checks]
+  simp[retpc_var_def, seeded_cycle_checks]
 QED
 
-(* A GAS-to-storage use is rejected by the full function predicate, not just
- * by the local position check. *)
-Theorem opaque_gas_misuse_check:
-  ~opaque_use_ok (shape_probe_fn
+(* GAS readings match between Venom and assembly, so a GAS result is an
+ * ordinary value: storing it is allowed. *)
+Theorem opaque_gas_storage_allowed_check:
+  opaque_use_ok (shape_probe_fn
     [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []])
 Proof
-  strip_tac >>
-  `gas_var (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]) "g"`
-    by (simp[gas_var_def] >> irule copy_phi_var_seed >>
-        qexists_tac `mk_inst 0 GAS [] ["g"]` >>
-        simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-             fn_insts_blocks_def, mk_inst_def]) >>
-  `gas_use_ok (mk_inst 1 SSTORE [Lit 0w; Var "g"] []) "g"` by
-    (irule opaque_use_ok_gas_use >> simp[mk_inst_def] >>
-     qexists_tac `shape_probe_fn
-       [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]` >>
+  `!x. ~retpc_var (shape_probe_fn
+    [mk_inst 0 GAS [] ["g"]; mk_inst 1 SSTORE [Lit 0w; Var "g"] []]) x` by
+    (simp[retpc_var_def] >> irule copy_phi_var_no_seed >>
      simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def]) >>
-  fs[gas_use_ok_def, mk_inst_def]
+          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
+  simp[opaque_use_ok_def]
 QED
 
 Theorem opaque_retpc_misuse_check:
@@ -217,33 +195,11 @@ Proof
   fs[retpc_use_ok_def, mk_inst_def]
 QED
 
-Theorem opaque_gas_call_allowed_check:
-  opaque_use_ok (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 ASSIGN [Var "g"] ["h"];
-     mk_inst 2 CALL [Var "h"; Lit 0w] ["r"]])
-Proof
-  `!x. ~retpc_var (shape_probe_fn
-    [mk_inst 0 GAS [] ["g"]; mk_inst 1 ASSIGN [Var "g"] ["h"];
-     mk_inst 2 CALL [Var "h"; Lit 0w] ["r"]]) x` by
-    (simp[retpc_var_def] >> irule copy_phi_var_no_seed >>
-     simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
-  simp[opaque_use_ok_def, shape_probe_fn_def, mk_raw_function_def,
-       fn_insts_def, fn_insts_blocks_def, mk_inst_def, gas_use_ok_def,
-       GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM]
-QED
-
 Theorem opaque_retpc_return_allowed_check:
   opaque_use_ok (shape_probe_fn
     [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
      mk_inst 1 ASSIGN [Var "pc"] ["q"]; mk_inst 2 RET [Lit 1w; Var "q"] []])
 Proof
-  `!x. ~gas_var (shape_probe_fn
-    [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
-     mk_inst 1 ASSIGN [Var "pc"] ["q"]; mk_inst 2 RET [Lit 1w; Var "q"] []]) x` by
-    (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
-     simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
-          fn_insts_blocks_def, mk_inst_def] >> rw[] >> simp[]) >>
   simp[opaque_use_ok_def, shape_probe_fn_def, mk_raw_function_def,
        fn_insts_def, fn_insts_blocks_def, mk_inst_def, retpc_use_ok_def,
        GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM, APPEND_EQ_CONS]

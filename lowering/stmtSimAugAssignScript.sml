@@ -23,10 +23,16 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  exprSimName
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
   allocLimits
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
+  fragExec localPtrsProps  exprSimHyps exprSimOps exprSimBinopFrag
+  exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv valueEncoding

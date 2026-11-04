@@ -171,7 +171,7 @@ fun idx_cases_tac ss =
 
 val exec_idx_ss = idx_case_ss ++ rewrites
   [exec_pure1_def, exec_pure2_def, exec_pure3_def,
-   exec_read0_def, exec_read1_def, exec_write2_def];
+   exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def];
 
 val exec_idx_tac = idx_cases_tac exec_idx_ss;
 
@@ -206,6 +206,14 @@ Theorem exec_read0_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n) (exec_read0 g inst s)
 Proof
   rpt strip_tac >> exec_idx_tac
+QED
+
+Theorem exec_gas_idx[local]:
+  !inst s n.
+    exec_gas inst (s with vs_inst_idx := n) =
+    exec_result_map (\s'. s' with vs_inst_idx := n) (exec_gas inst s)
+Proof
+  rpt gen_tac >> exec_idx_tac
 QED
 
 Theorem exec_read1_idx[local]:
@@ -367,8 +375,8 @@ val step_inst_base_opcode_tac =
   qpat_assum `inst.inst_opcode = _` rewrite_step_inst_base_opcode;
 
 val opcode_idx_ss = idx_case_ss ++ rewrites
-  (idx_rw @ [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_alloca_idx,
-             exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx]);
+  (idx_rw @ [exec_pure1_idx, exec_pure2_idx, exec_pure3_idx, exec_gas_idx,
+             exec_alloca_idx, exec_ext_call_idx, exec_delegatecall_idx, exec_create_idx]);
 
 (* Direct envelopes do not need the exec_read/exec_write rule probes. *)
 val envelope_idx_tac =

@@ -2089,6 +2089,7 @@ Proof
        vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
        vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
        vs_pending_deletions := v.vs_pending_deletions;
+       vs_gas_readings := v.vs_gas_readings;
        vs_immutables := v.vs_immutables|> =
    (s with
      <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
@@ -2096,6 +2097,7 @@ Proof
        vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
        vs_requests := v.vs_requests;
        vs_pending_deletions := v.vs_pending_deletions;
+       vs_gas_readings := v.vs_gas_readings;
        vs_immutables := v.vs_immutables|>) with vs_prev_bb := p` by simp[] >>
   pop_assum (fn th => REWRITE_TAC[th]) >>
   simp[adopt_return_fmp_prev_bb, foldl_update_var_prev_bb]
@@ -2740,12 +2742,14 @@ Proof
      vs_accounts := v.vs_accounts; vs_logs := v.vs_logs;
      vs_outcomes := v.vs_outcomes; vs_requests := v.vs_requests;
      vs_pending_deletions := v.vs_pending_deletions;
+     vs_gas_readings := v.vs_gas_readings;
      vs_immutables := v.vs_immutables|> =
    (s with <|vs_memory := v.vs_memory; vs_transient := v.vs_transient;
      vs_returndata := v.vs_returndata; vs_accounts := v.vs_accounts;
      vs_logs := v.vs_logs; vs_outcomes := v.vs_outcomes;
      vs_requests := v.vs_requests;
      vs_pending_deletions := v.vs_pending_deletions;
+     vs_gas_readings := v.vs_gas_readings;
      vs_immutables := v.vs_immutables|>) with vs_prev_bb := p`
     by simp[venomStateTheory.venom_state_component_equality]) >>
   pop_assum (fn eq => REWRITE_TAC[eq]) >>
@@ -2800,24 +2804,132 @@ Proof
   simp[]
 QED
 
-val nonjump_term_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
-       eval_operands_prev_bb, halt_state_def, revert_state_def,
-       set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  simp[exec_result_map_prev_bb_def,
-       venomStateTheory.venom_state_component_equality];
+Theorem step_inst_base_ret_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RET ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_opcode_eqs, eval_operands_prev_bb] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `x` >> simp[exec_result_map_prev_bb_def]
+QED
 
+Theorem step_inst_base_retfmp_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RETFMP ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_RETFMP, eval_operands_prev_bb] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `x` >> simp[exec_result_map_prev_bb_def]
+QED
 
-val dret_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
-       eval_operands_prev_bb, halt_state_def, revert_state_def,
-       set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
-  BasicProvers.EVERY_CASE_TAC >>
-  gvs[pack_dret_dynamic_prev_bb_eq, exec_result_map_prev_bb_def,
-      venomStateTheory.venom_state_component_equality];
+Theorem step_inst_base_stop_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = STOP ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_sink_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = SINK ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_invalid_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = INVALID ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def, halt_state_def,
+    set_returndata_def, exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_return_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = RETURN ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t'` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `eval_operand h' s` >>
+  simp[exec_result_map_prev_bb_def, halt_state_def, set_returndata_def,
+    venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_revert_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = REVERT ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t'` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `eval_operand h' s` >>
+  simp[exec_result_map_prev_bb_def, revert_state_def, set_returndata_def,
+    venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_selfdestruct_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = SELFDESTRUCT ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >> simp[step_inst_base_def] >>
+  Cases_on `inst.inst_operands` >> simp[exec_result_map_prev_bb_def] >>
+  Cases_on `t` >> simp[exec_result_map_prev_bb_def] >>
+  simp[eval_operand_prev_bb] >>
+  Cases_on `eval_operand h s` >>
+  simp[exec_result_map_prev_bb_def, halt_state_def, venom_state_fupdcanon]
+QED
+
+Theorem step_inst_base_dret_prev_bb[local]:
+  !inst (s:venom_state) p. inst.inst_opcode = DRET ==>
+    step_inst_base inst (s with vs_prev_bb := p) =
+    exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
+      (step_inst_base inst s)
+Proof
+  rpt strip_tac >>
+  simp[step_inst_base_def, eval_operands_prev_bb] >>
+  Cases_on `inst.inst_outputs = []` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `parse_dret_shape inst` >>
+  simp[exec_result_map_prev_bb_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_operands inst.inst_operands s` >>
+  simp[exec_result_map_prev_bb_def] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))` >>
+  simp[exec_result_map_prev_bb_def, pack_dret_dynamic_prev_bb_eq] >>
+  Cases_on `pack_dret_dynamic s.vs_call_entry_fmp x' s` >>
+  PairCases_on `r` >>
+  simp[exec_result_map_prev_bb_def, venom_state_fupdcanon]
+QED
+
 Triviality step_inst_base_non_jump_terminator_prev_bb:
   !inst (s:venom_state) p.
     is_terminator inst.inst_opcode /\
@@ -2829,16 +2941,11 @@ Triviality step_inst_base_non_jump_terminator_prev_bb:
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  TRY (rename1 `inst.inst_opcode = DRET` >> dret_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RET` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETFMP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETURN` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = REVERT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = STOP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SINK` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SELFDESTRUCT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = INVALID` >> nonjump_term_prev_bb_tac) >>
-  dret_prev_bb_tac
+  simp[step_inst_base_ret_prev_bb, step_inst_base_retfmp_prev_bb,
+    step_inst_base_return_prev_bb, step_inst_base_revert_prev_bb,
+    step_inst_base_stop_prev_bb, step_inst_base_sink_prev_bb,
+    step_inst_base_selfdestruct_prev_bb, step_inst_base_invalid_prev_bb,
+    step_inst_base_dret_prev_bb]
 QED
 
 (* For non-PHI, non-JMP/JNZ/DJMP opcodes, step_inst_base commutes with
@@ -3287,11 +3394,14 @@ Proof
 QED
 
 val subst_label_nonjump_tac =
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label,
-      parse_dret_shape_subst_label] >>
-  BasicProvers.every_case_tac >>
-  gvs[eval_operand_subst_label, parse_dret_shape_subst_label];
+  simp[step_inst_base_def, subst_label_inst_def,
+       eval_operands_subst_label, eval_operand_subst_label,
+       parse_dret_shape_subst_label] >>
+  namedCases_on `inst.inst_operands` ["", "arg rest"] >>
+  simp[eval_operand_subst_label] >>
+  namedCases_on `rest` ["", "arg2 rest2"] >>
+  simp[eval_operand_subst_label] >>
+  Cases_on `rest2` >> simp[eval_operand_subst_label];
 
 (* For non-jump terminators, subst_label_inst has no effect on step_inst_base
    when vs_labels agrees on old and new labels *)

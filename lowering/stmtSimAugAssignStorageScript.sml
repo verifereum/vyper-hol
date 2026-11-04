@@ -36,9 +36,12 @@
 
 Theory stmtSimAugAssignStorage
 Ancestors
+  exprSimHypsDefs
+  stmtSimDefs
+  loweringPosts
   allocLimits list finite_map
-  fragExec exprSim exprSimHyps exprSimOps exprSimOperators exprSimLeaves
-  stmtSim stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
+  fragExec  exprSimHyps exprSimOps exprSimOperators exprSimLeaves
+   stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign
   exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping

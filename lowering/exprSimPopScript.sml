@@ -31,8 +31,12 @@
 
 Theory exprSimPop
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   list rich_list finite_map arithmetic words
-  fragExec loweringSlice exprSim exprSimHyps exprSimLeaves exprSimAggregateLayout
+  fragExec loweringSlice  exprSimHyps exprSimLeaves exprSimAggregateLayout
   exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
   emitHelperProps compileEnv localPtrsProps valueEncoding valueEncodingProps
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation

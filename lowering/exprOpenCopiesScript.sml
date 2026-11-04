@@ -10,6 +10,7 @@
 
 Theory exprOpenCopies
 Ancestors
+  exprSimHypsDefs
   exprOpenPrimitives exprOpenTerminals exprLowering context compileEnv
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
   exprSimAggregateLayout exprSimHyps vyperTypeInvariants vyperTypeSystem

@@ -1008,9 +1008,18 @@ val () = check_accepts "constant chain through two imports" false
 val mutability_layouts =
   ``([((0w : address),
        ([((NONE, "x"), 0); ((NONE, "arr"), 1)] : storage_layout,
-        [((NONE, "t"), 0); ((NONE, "$.nonreentrant_key"), 1)]
+        [((NONE, "$.nonreentrant_key"), 0); ((NONE, "t"), 1)]
           : storage_layout))]
       : (address # (storage_layout # storage_layout)) list)``
+
+Theorem nonreentrant_rejects_noncanonical_lock_slot:
+  check_contract F
+    [(0w : address, ([], [((NONE,"$.nonreentrant_key"),7)]))]
+    0w [(NONE,
+      [FunctionDecl External View T F "f" [] [] NoneT [Pass]])] = NONE
+Proof
+  CONV_TAC (LAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
+QED
 
 val u256 = ``BaseT (UintT 256)``
 fun uint n = ``Literal (BaseT (UintT 256)) (IntL ^(intSyntax.term_of_int (Arbint.fromInt n)))``

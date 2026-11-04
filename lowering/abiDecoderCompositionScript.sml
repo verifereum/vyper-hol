@@ -92,7 +92,7 @@ Proof
     (Cases_on `cond` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
   simp[Once exec_block_def, get_instruction_def, step_inst_def,
-       Once step_inst_base_def, is_terminator_def, jump_to_def] >>
+       step_inst_base_opcode_eqs, is_terminator_def, jump_to_def] >>
   Cases_on `w = 0w` >> simp[]
 QED
 

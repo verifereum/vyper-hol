@@ -884,8 +884,9 @@ Definition check_toplevel_decl_def:
     | EventDecl id fields =>
         EVERY (\((_,ty),indexed). assignable_type tenv ty) fields
     | ErrorDecl id args => params_ok tenv args
-    | FunctionDecl vis mut nr _ _ args dflts ret body =>
+    | FunctionDecl vis mut nr rr _ args dflts ret body =>
         params_ok tenv args /\ well_formed_type tenv ret /\
+        (rr ==> vis = External /\ (?n. ret = BaseT (BytesT (Dynamic n)))) /\
         (* Vyper: "Constructor may not use default arguments" *)
         (vis = Deploy ==> dflts = []) /\
         function_mutability_ok mods vis mut nr dflts body
@@ -898,7 +899,7 @@ Definition check_function_body_def:
     let tenv = type_env_all_modules mods in
     let env = function_entry_env art mods src args in
       params_ok tenv args /\
-      (nr ==> IS_SOME (lookup_nonreentrant_slot layouts addr)) /\
+      (nr ==> lookup_nonreentrant_slot layouts addr = SOME 0) /\
       IS_SOME (evaluate_type tenv ret) /\
       IS_SOME (type_stmts env ret body) /\
       custom_errors_stmts_ok mods body /\
