@@ -488,6 +488,47 @@ Proof
   drule_all ao_ssa_producer_operand_not_output >> simp[]
 QED
 
+Theorem ao_source_trace_last_output:
+  !ctx fn trace bp r prod x value h t.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode <> PHI /\
+    ~is_terminator prod.inst_opcode /\ MEM x prod.inst_outputs ==>
+    ?front q u v back w.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = bp.bb_label /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      step_inst q ctx prod u = OK w /\ v = w with vs_inst_idx := SUC r /\
+      lookup_var x t = lookup_var x v /\
+      ao_trace_avoids (ao_transition_writes fn x) ((q,F,v)::back)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `trace` (qspec_then `ao_transition_writes fn x` strip_assume_tac)
+    ao_trace_last_event
+  >- (drule_all ao_source_trace_non_writer >> simp[]) >>
+  `ao_source_step ctx fn a b` by
+    metis_tac[ao_source_trace_transition_split] >>
+  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
+  `lookup_block a2.vs_current_bb fn.fn_blocks = SOME bp /\
+   (if a1 then prod.inst_opcode = PHI
+    else a2.vs_inst_idx = r /\ ~is_terminator prod.inst_opcode)` by
+    (irule (INST_TYPE [alpha |-> ``:num``] ao_ssa_transition_writer) >>
+     simp[] >> qexistsl [`(b0,b1,b2)`, `a0`] >> simp[] >> metis_tac[]) >>
+  Cases_on `a1` >- gvs[] >> gvs[] >>
+  qpat_x_assum `ao_source_step _ _ _ _` mp_tac >>
+  simp[Once ao_source_step_cases] >> strip_tac >> gvs[] >>
+  `ao_source_trace ctx fn ((a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back)` by
+    metis_tac[ao_source_trace_transition_split] >>
+  `lookup_var x (t' with vs_inst_idx := SUC a2.vs_inst_idx) = lookup_var x t` by
+    (qspec_then `(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back`
+       (qspecl_then [`ctx`,`fn`,`x`] mp_tac) ao_source_trace_non_writer >> simp[]) >>
+  qexistsl [`front`,`a0`,`a2`,`back`,`t'`] >> simp[] >>
+  conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  metis_tac[ao_source_step_rules]
+QED
+
 Theorem ao_source_trace_last_producer_operand:
   !ctx fn trace bp r prod x z target use_opt h t value.
     wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
@@ -514,21 +555,11 @@ Theorem ao_source_trace_last_producer_operand:
       eval_operand (Var z) t = eval_operand (Var z) u
 Proof
   rpt gen_tac >> strip_tac >>
-  qspec_then `trace` (qspec_then `ao_transition_writes fn x` strip_assume_tac)
-    ao_trace_last_event
-  >- (drule_all ao_source_trace_non_writer >> simp[]) >>
-  `ao_source_step ctx fn a b` by
-    metis_tac[ao_source_trace_transition_split] >>
-  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
-  `lookup_block a2.vs_current_bb fn.fn_blocks = SOME bp /\
-   (if a1 then prod.inst_opcode = PHI
-    else a2.vs_inst_idx = r /\ ~is_terminator prod.inst_opcode)` by
-    (irule (INST_TYPE [alpha |-> ``:num``] ao_ssa_transition_writer) >>
-     simp[] >> qexistsl [`(b0,b1,b2)`, `a0`] >> simp[] >> metis_tac[]) >>
-  Cases_on `a1` >- gvs[] >> gvs[] >>
-  qpat_x_assum `ao_source_step _ _ _ _` mp_tac >>
-  simp[Once ao_source_step_cases] >> strip_tac >> gvs[] >>
-  suspend "stable"
+  drule_all ao_source_trace_last_output >>
+  disch_then (qx_choose_then `front` (qx_choose_then `a0`
+    (qx_choose_then `a2` (qx_choose_then `v` (qx_choose_then `back`
+      (qx_choose_then `t'` strip_assume_tac)))))) >>
+  gvs[] >> suspend "stable"
 QED
 Resume ao_source_trace_last_producer_operand[stable]:
   `lookup_block bp.bb_label fn.fn_blocks = SOME bp` by
@@ -536,9 +567,6 @@ Resume ao_source_trace_last_producer_operand[stable]:
      gvs[wf_function_def, fn_labels_def]) >>
   `ao_source_trace ctx fn ((a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back)` by
     metis_tac[ao_source_trace_transition_split] >>
-  `lookup_var x (t' with vs_inst_idx := SUC a2.vs_inst_idx) = lookup_var x t` by
-    (qspec_then `(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back`
-       (qspecl_then [`ctx`,`fn`,`x`] mp_tac) ao_source_trace_non_writer >> simp[]) >>
   `ao_trace_avoids (ao_transition_writes fn z)
     ((a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back)` by
     (spose_not_then assume_tac >>
@@ -576,10 +604,7 @@ Resume ao_source_trace_last_producer_operand[transport]:
     (qspec_then `(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back`
        (qspecl_then [`ctx`,`fn`,`z`] mp_tac) ao_source_trace_non_writer >> simp[]) >>
   qexistsl [`front`,`a0`,`a2`,`back`,`t'`] >>
-  simp[venomStateTheory.eval_operand_def] >>
-  conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_label] >>
-  conj_tac >- metis_tac[ao_source_step_rules] >>
-  gvs[venomStateTheory.lookup_var_def]
+  gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
 QED
 Finalise ao_source_trace_last_producer_operand
 
