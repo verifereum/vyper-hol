@@ -2,7 +2,7 @@
 Theory bodyIntCallArgLifetime
 Ancestors
   exprSimAggregateChildren exprSimAggregateSource exprLowering compileEnv vyperEvalPureExpr vyperPureExpr supportedExprs supportedExprForms
-  exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim
+  exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim exprLoweringProps fragExec
   vyperValue valueEncoding valueEncodingProps valueEncodingProofs vyperTypeEnv vyperTypeInvariants vyperTyping
 
 Theorem compile_multi_vvs_empty:
@@ -234,4 +234,243 @@ Proof
        simp[mem_bytes_at_split_padded]) >>
     drule mem_bytes_at_agree_window >> simp[]) >>
   gvs[locals_kept_def] >> metis_tac[]
+QED
+
+(* A covered footprint survives a later successful expression. *)
+Theorem vv_post_covered_window:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  ((?aid b sz. FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
+      aid < sm.cs_next_id /\ b <= off /\ off + len <= b + sz /\
+      (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
+                  b + sz <= lb \/ lb + lsz <= b)) \/
+   (?n b sz. local_region cenv es.scopes s0 n b sz /\
+      b <= off /\ off + len <= b + sz) \/ len = 0) ==>
+  mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
+Proof
+  strip_tac
+  >- (irule vv_post_old_allocation_window >> metis_tac[])
+  >- (`!name p size w.
+         FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) size) /\
+         lookup_var p s0 = SOME w ==> lookup_var p s = SOME w` by
+        (gvs[vv_post_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+      `locals_kept cenv es s0 s` by gvs[vv_post_def] >>
+      metis_tac[locals_kept_typed_full_window]) >>
+  simp[mem_bytes_at_def]
+QED
+
+Theorem vv_post_preserves_located_memory:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_holds cenv cx t raw (LocatedValue t' p) es s0 /\
+  vv_at cenv cx t sa sm es raw (LocatedValue t' p) s0 /\
+  p.ptr_location = LocMemory /\
+  (!w. eval_operand p.ptr_operand s0 = SOME w ==>
+       eval_operand p.ptr_operand s = SOME w) ==>
+  vv_holds cenv cx t raw (LocatedValue t' p) es s
+Proof
+  strip_tac >> irule vv_holds_memory_footprint_frame >>
+  conj_tac >- simp[] >>
+  qexists_tac `s0` >> simp[] >>
+  map_every qx_gen_tac [`v`, `tvt`, `w`] >> strip_tac >>
+  gvs[vv_at_def] >> sym_tac >>
+  irule vv_post_covered_window >> metis_tac[]
+QED
+
+Theorem vv_post_preserves_stack_value:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_holds cenv cx t raw (StackValue t' op) es s0 /\
+  vv_at cenv cx t sa sm es raw (StackValue t' op) s0 /\
+  (!w. eval_operand op s0 = SOME w ==> eval_operand op s = SOME w) ==>
+  vv_holds cenv cx t raw (StackValue t' op) es s
+Proof
+  strip_tac >> gvs[vv_holds_def, expr_val_rel_def] >>
+  gen_tac >> strip_tac >> Cases_on `is_word_type t`
+  >- gvs[] >>
+  gvs[vv_at_def, expr_val_at_def] >>
+  (irule val_in_memory_footprint_agree >>
+   conj_tac >- simp[] >>
+   qexists_tac `s0.vs_memory` >> simp[] >>
+   sym_tac >> irule vv_post_covered_window >> metis_tac[])
+QED
+
+Theorem vv_post_preserves_held_value:
+  expr_sim_inv cenv cx env es /\
+  local_ptrs_rel func cenv es.scopes s0 /\
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_reserved cenv sm /\
+  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_holds cenv cx t raw held es s0 /\
+  vv_at cenv cx t sa sm es raw held s0 /\
+  (!w. eval_operand (vv_operand held) s0 = SOME w ==>
+       eval_operand (vv_operand held) s = SOME w) ==>
+  vv_holds cenv cx t raw held es s
+Proof
+  Cases_on `held` >> simp[vv_operand_def] >> strip_tac
+  >- (irule vv_post_preserves_stack_value >> metis_tac[]) >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (irule vv_post_preserves_located_memory >> metis_tac[]) >>
+  irule vv_holds_nonmemory_frame >> metis_tac[]
+QED
+
+(* The first raw result is still held only after the second expression has
+   succeeded; no read_results or materialisation is inserted between them. *)
+Theorem two_vv_posts_deferred_holds:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e1 /\
+  supported_pure_expr tops e2 /\
+  eval_expr cx e2 es = (INL raw2,es2) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  compile_expr cenv ty1 e1 sa = (vv1,sm) /\
+  vv_post ctx func cenv cx e1 es0 sa sm start es raw1 vv1 s0 /\
+  vv_post ctx func cenv cx e2 es sm sn s0 es2 raw2 vv2 s ==>
+  vv_holds cenv cx (expr_type e1) raw1 vv1 es2 s
+Proof
+  strip_tac >>
+  `es2 = es` by metis_tac[supported_pure_eval_expr_state] >> gvs[] >>
+  `!w. eval_operand (vv_operand vv1) s0 = SOME w ==>
+       eval_operand (vv_operand vv1) s = SOME w` by
+    (rpt strip_tac >> irule vv_post_preserves_compiled_operand >> metis_tac[]) >>
+  `local_ptrs_rel func cenv es.scopes s0 /\
+   local_ptrs_rel func cenv es.scopes s /\
+   vv_holds cenv cx (expr_type e1) raw1 vv1 es s0 /\
+   vv_at cenv cx (expr_type e1) sa sm es raw1 vv1 s0` by
+    gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
+  irule vv_post_preserves_held_value >> metis_tac[]
+QED
+
+Theorem expr_vv_sim_success_frag:
+  expr_vv_sim ctx func cenv cx ty e es /\
+  compile_expr cenv ty e sa = (vv,sb) /\
+  eval_expr cx e es = (INL raw,es') /\ expr_vv_res_ok (INL raw) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (vv_post ctx func cenv cx e es sa sb start es' raw vv)
+    (\r. F)
+Proof
+  strip_tac >> gvs[expr_vv_sim_def] >>
+  first_x_assum drule_all >>
+  disch_then (qspec_then `start` mp_tac) >>
+  `expr_exit (INL raw) = (\r. F)` by simp[FUN_EQ_THM] >>
+  simp[SF ETA_ss]
+QED
+
+Theorem two_expr_vv_success_deferred:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e1 /\
+  supported_pure_expr tops e2 /\
+  expr_vv_sim ctx func cenv cx (expr_type e1) e1 es /\
+  expr_vv_sim ctx func cenv cx (expr_type e2) e2 es /\
+  eval_expr cx e1 es = (INL raw1,es) /\
+  eval_expr cx e2 es = (INL raw2,es) /\
+  expr_vv_res_ok (INL raw1) /\ expr_vv_res_ok (INL raw2) /\
+  compile_expr cenv (expr_type e1) e1 sa = (vv1,sm) /\
+  compile_expr cenv (expr_type e2) e2 sm = (vv2,sn) /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\
+  fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sa sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. ?mid.
+       vv_post ctx func cenv cx e1 es sa sm start es raw1 vv1 mid /\
+       vv_post ctx func cenv cx e2 es sm sn mid es raw2 vv2 s /\
+       vv_holds cenv cx (expr_type e1) raw1 vv1 es s)
+    (\r. F)
+Proof
+  strip_tac >>
+  `frag_exec ctx sa sm
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx e1 es sa sm start es raw1 vv1)
+     (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
+  drule frag_exec_then >> disch_then irule >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `frag_exec ctx sm sn
+         (\s. s = t /\ stmt_state_rel ctx func cenv cx es s)
+         (vv_post ctx func cenv cx e2 es sm sn t es raw2 vv2)
+         (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
+      irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
+      conj_tac
+      >- gvs[vv_post_def] >>
+      rpt strip_tac >> qexists_tac `t` >> simp[] >>
+      irule two_vv_posts_deferred_holds >> metis_tac[]) >>
+  metis_tac[cj 1 exprLoweringPropsTheory.compile_expr_grows]
+QED
+
+Theorem expr_vv_sim_exception_frag:
+  expr_vv_sim ctx func cenv cx ty e es /\
+  compile_expr cenv ty e sa = (vv,sb) /\
+  eval_expr cx e es = (INR exc,es') /\ expr_vv_res_ok (INR exc) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. F) (expr_exit (INR exc : eval_result + exception))
+Proof
+  strip_tac >> gvs[expr_vv_sim_def] >>
+  first_x_assum drule_all >>
+  disch_then (qspec_then `start` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem two_expr_vv_second_exception:
+  expr_vv_sim ctx func cenv cx (expr_type e1) e1 es /\
+  expr_vv_sim ctx func cenv cx (expr_type e2) e2 es1 /\
+  eval_expr cx e1 es = (INL raw1,es1) /\
+  eval_expr cx e2 es1 = (INR exc,es2) /\
+  expr_vv_res_ok (INL raw1) /\ expr_vv_res_ok (INR exc) /\
+  compile_expr cenv (expr_type e1) e1 sa = (vv1,sm) /\
+  compile_expr cenv (expr_type e2) e2 sm = (vv2,sn) /\
+  fn_has_code sa sm func /\ fn_has_code sm sn func /\
+  fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm ==>
+  frag_exec ctx sa sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. F) (expr_exit (INR exc : eval_result + exception))
+Proof
+  strip_tac >>
+  `frag_exec ctx sa sm
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx e1 es sa sm start es1 raw1 vv1)
+     (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
+  `frag_exec ctx sa sm
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx e1 es sa sm start es1 raw1 vv1)
+     (expr_exit (INR exc : eval_result + exception))` by
+    (irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ (\r. F)` kall_tac >>
+  drule frag_exec_then >>
+  disch_then irule >> conj_tac
+  >- (rpt strip_tac >>
+      `frag_exec ctx sm sn
+         (\s. s = t /\ stmt_state_rel ctx func cenv cx es1 s)
+         (\s. F) (expr_exit (INR exc : eval_result + exception))` by
+        (irule expr_vv_sim_exception_frag >> metis_tac[]) >>
+      irule frag_exec_conseq >> first_assum (irule_at Any) >>
+      gvs[vv_post_def]) >>
+  metis_tac[cj 1 exprLoweringPropsTheory.compile_expr_grows]
+QED
+
+Theorem compile_multi_vvs_singleton:
+  cfn cenv (expr_type e) e sa = (vv,sb) ==>
+  compile_multi_vvs cfn cenv [e] sa = ([vv],sb)
+Proof
+  simp[compile_multi_vvs_def, comp_bind_def, comp_return_def]
+QED
+
+Theorem compile_multi_vvs_pair:
+  cfn cenv (expr_type e1) e1 sa = (vv1,sm) /\
+  cfn cenv (expr_type e2) e2 sm = (vv2,sn) ==>
+  compile_multi_vvs cfn cenv [e1;e2] sa = ([vv1;vv2],sn)
+Proof
+  simp[compile_multi_vvs_def, comp_bind_def, comp_return_def]
 QED
