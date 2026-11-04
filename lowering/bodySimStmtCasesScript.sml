@@ -2475,6 +2475,20 @@ Proof
   simp[local_ptrs_reserved_def]
 QED
 
+Theorem aug_place_expr_sim_inv_metadata:
+  (!nsid vt. FLOOKUP env.toplevel_vtypes nsid = SOME vt ==>
+             h nsid = cenv.ce_hashmap_info nsid) /\
+  (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
+             h nsid = cenv.ce_hashmap_info nsid) ==>
+  (expr_sim_inv
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env es <=>
+   expr_sim_inv cenv cx env es)
+Proof
+  strip_tac >>
+  simp[expr_sim_inv_def,
+       placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
