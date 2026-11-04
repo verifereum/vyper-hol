@@ -3333,6 +3333,47 @@ Proof
   gvs[] >> irule (SRULE [] aug_place_toplevel_ptr_metadata) >> simp[]
 QED
 
+Theorem aug_place_type_builtin_metadata:
+  supported_type_builtin_form tops vv_ty tb rt args /\
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_type_builtin_dispatch_body f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vv_ty ty tb rt args st =
+  compile_type_builtin_dispatch_body g cenv vv_ty ty tb rt args st
+Proof
+  strip_tac >>
+  `!e ty. MEM e args ==>
+    lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+    lower_value g cenv ty e` by
+    (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
+  Cases_on `tb` >> Cases_on `args` >>
+  gvs[supportedExprFormsTheory.supported_type_builtin_form_def] >>
+  TRY (rename1 `case tail of [] => _ | _ => _` >> Cases_on `tail` >>
+       gvs[supportedExprFormsTheory.supported_type_builtin_form_def]) >>
+  TRY (rename1 `AbiEncode ensure method` >> Cases_on `method` >>
+       gvs[supportedExprFormsTheory.supported_type_builtin_form_def]) >>
+  simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
+       SRULE [] aug_place_memory_bytes_metadata,
+       SRULE [] aug_place_abi_enc_metadata, SRULE [] aug_place_abi_dec_metadata,
+       SRULE [] aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_makearray_dispatch_metadata:
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_builtin_dispatch_body f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty (MakeArray et bd) args st =
+  compile_builtin_dispatch_body g cenv rt ty (MakeArray et bd) args st
+Proof
+  strip_tac >>
+  `type_memory_bytes (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+   type_memory_bytes cenv` by simp[FUN_EQ_THM, aug_place_memory_bytes_metadata] >>
+  drule aug_place_make_tuple_metadata >> strip_tac >>
+  drule aug_place_make_array_metadata >> strip_tac >>
+  Cases_on `et` >>
+  simp[exprLoweringTheory.compile_builtin_dispatch_body_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
