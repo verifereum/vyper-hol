@@ -354,7 +354,7 @@ Proof
      simp[word_value_type_def]) >>
   `type_alloc_ok cenv ty` by
     (drule_all well_typed_binop_augassign_word >> strip_tac >>
-     imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
+     imp_res_tac exprSimSourceTheory.word_value_type_word >>
      simp[type_alloc_ok_def]) >>
   PairCases_on `nsid` >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,

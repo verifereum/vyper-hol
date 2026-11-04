@@ -1,6 +1,9 @@
 (* Reachability-aligned recursive expression memory closure. *)
 Theory bodyExprClosureMemory
 Ancestors
+  bodyNameNonwordMemory
+  bodyNameValueMemory
+  bodyNameWordMemory
   exprSimSource
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState

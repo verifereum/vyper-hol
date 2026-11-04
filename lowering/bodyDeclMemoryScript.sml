@@ -1,6 +1,7 @@
 (* Declaration store: source-state and memory continuation boundaries. *)
 Theory bodyDeclMemory
 Ancestors
+  bodyNameMemoryFacts
   bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
   valueTypingMemoryProps vyperTyping exprSimDefs stmtSimDefs venomState
@@ -685,7 +686,7 @@ Theorem annassign_name_rhs_body_frag_mem:
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all bodyAllocMemoryTheory.body_name_source_region >> strip_tac >>
+  drule_all bodyNameMemoryFactsTheory.body_name_source_region >> strip_tac >>
   drule_then (qspecl_then [`cx`, `ty`] assume_tac) eval_name_word >> gvs[] >>
   gvs[lower_value_def, compile_expr_def, compile_name_vv_def,
       comp_bind_def, comp_return_def, unwrap_value_def,

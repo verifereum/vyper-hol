@@ -180,15 +180,6 @@ Proof
   metis_tac[expr_body_pre_word_value, expr_sim_pre_body_pre]
 QED
 
-Theorem word_value_type_word:
-  !t. word_value_type t ==>
-      is_word_type t /\ ~is_ArrayT t /\ ~is_bytestring_type t
-Proof
-  Cases >> simp[word_value_type_def, is_word_type_def] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt`) >>
-  simp[is_word_type_def, is_bytestring_type_def]
-QED
-
 Theorem well_typed_binop_word_result:
   !ann bop t1 t2.
     well_typed_binop ann bop t1 t2 /\ word_value_type t1 ==>

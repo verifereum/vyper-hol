@@ -1,6 +1,8 @@
 (* Contained field capacity for actual memory projections. *)
 Theory bodyFieldMemory
 Ancestors
+  bodyNameValueMemory
+  bodyNameMemoryFacts
   exprSimSource
   exprSimAttributeFields bodyAllocMemory
   valueEncoding compileEnv venomState words list rich_list finite_map
