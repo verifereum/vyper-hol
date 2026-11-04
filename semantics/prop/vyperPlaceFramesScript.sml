@@ -154,11 +154,27 @@ Theorem extend_place_state:
 Proof
   Cases_on `res`
   >- simp[extend_place_def, raise_def]
-  >- (Cases_on `p` >>
+  >- (Cases_on `p`
+      >- (simp[extend_place_def, bind_def, return_def, raise_def] >>
+          Cases_on `extend_storage_place cx b c t sb st` >>
+          rename1 `extend_storage_place _ _ _ _ _ _ = (outcome,tmp)` >>
+          drule extend_storage_place_state >> strip_tac >> gvs[] >>
+          Cases_on `outcome` >> simp[]) >>
       simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      metis_tac[extend_storage_place_state, place_type_value_state,
-                read_place_state, lift_sum_state, return_state]) >>
+      qmatch_goalsub_abbrev_tac `place_type_value cx p st` >>
+      Cases_on `place_type_value cx p st` >>
+      rename1 `place_type_value _ _ _ = (outcome,tmp)` >>
+      drule place_type_value_state >> strip_tac >> gvs[] >>
+      Cases_on `outcome` >> gvs[return_def, raise_def] >>
+      qmatch_goalsub_rename_tac `read_place cx p state` >>
+      Cases_on `read_place cx p state` >>
+      rename1 `read_place _ _ _ = (outcome,tmp)` >>
+      drule read_place_state >> strip_tac >> gvs[] >>
+      Cases_on `outcome` >> gvs[return_def, raise_def] >>
+      simp[lift_sum_def] >>
+      qmatch_goalsub_rename_tac `evaluate_subscripts tv value subs` >>
+      Cases_on `evaluate_subscripts tv value subs` >>
+      simp[return_def, raise_def]) >>
   Cases_on `sb` >>
   simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])

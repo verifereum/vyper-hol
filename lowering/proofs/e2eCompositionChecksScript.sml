@@ -73,7 +73,7 @@ Theorem successful_composition_requests:
   venom_frame_rel es r es' (Halt output) ==>
   LIST_REL (request_agree (initial_evaluation_context am'.sources am'.layouts
                              tx NONE))
-    rqs (MAP FST (call_trace es))
+    rqs (call_requests es)
 Proof
   simp[external_call_result_rel_def, unit_result_rel_def,
        observable_equiv_def, venom_frame_rel_def] >>
@@ -105,11 +105,11 @@ val expected_composition = ``
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
           venom_frame_rel es r es' (run_context fuel ctx' vs)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
              call_result_rel tops ret am tx es r es')``;
 val saved_composition = DB.fetch "e2eCorrectness" "e2e_vyper_to_evm";
 val () = if Term.aconv expected_composition (Thm.concl saved_composition)

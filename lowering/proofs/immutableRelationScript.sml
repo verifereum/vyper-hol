@@ -80,7 +80,9 @@ Proof
 QED
 
 Theorem immutable_base_zero_literal:
-  cenv.ce_imm_alloca = SOME (Lit 0w) ==> immutable_base_zero cenv ss
+  cenv.ce_imm_alloca = SOME (Lit 0w) /\
+  (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin")) ==>
+  immutable_base_zero cenv ss
 Proof
   simp[immutable_base_zero_def, venomStateTheory.eval_operand_def]
 QED
@@ -208,7 +210,8 @@ Proof
 QED
 
 Theorem immutable_base_zero_assigned:
-  cenv.ce_imm_alloca = SOME (Var out) ==>
+  cenv.ce_imm_alloca = SOME (Var out) /\
+  (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin")) ==>
   immutable_base_zero cenv (update_var out 0w ss)
 Proof
   simp[immutable_base_zero_def, venomStateTheory.eval_operand_def,

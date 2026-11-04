@@ -180,6 +180,26 @@ Proof
   strip_tac >> gvs[free_spill_slot_next_offset]
 QED
 
+Theorem restore_spilled_plan_spill_base:
+  !ops0 ps ops ps'.
+    restore_spilled_plan ops0 ps = (ops, ps') ==>
+    ps'.ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[do_restore_spill_base]
+QED
+
+Theorem restore_spilled_plan_next_offset:
+  !ops0 ps ops ps'.
+    restore_spilled_plan ops0 ps = (ops, ps') ==>
+    ps.ps_alloc.sa_next_offset <= ps'.ps_alloc.sa_next_offset
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[do_restore_next_offset, arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 (* ========== do_swap ========== *)
 
 (* do_swap/do_dup deep case: FOLDL alloc + FOLDL free pattern.
@@ -850,7 +870,9 @@ Proof
   (* JMP reorder *)
   `ps2.ps_alloc.sa_spill_base = ps1.ps_alloc.sa_spill_base` by
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
-     simp[AllCaseEqs()] >> metis_tac[reorder_plan_spill_base]) >>
+     simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     metis_tac[reorder_plan_spill_base, restore_spilled_plan_spill_base]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* operands reorder *)
   `ps4.ps_alloc.sa_spill_base = ps2.ps_alloc.sa_spill_base` by
@@ -890,7 +912,9 @@ Proof
   `ps1.ps_alloc.sa_next_offset <= ps2.ps_alloc.sa_next_offset` by
     (qpat_x_assum `(if _ then _ else _) = (join_ops,ps2)` mp_tac >>
      simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-     metis_tac[reorder_plan_next_offset]) >>
+     rpt (pairarg_tac >> gvs[]) >>
+     metis_tac[reorder_plan_next_offset, restore_spilled_plan_next_offset,
+               arithmeticTheory.LESS_EQ_TRANS]) >>
   rpt BasicProvers.VAR_EQ_TAC >>
   (* operands reorder *)
   `ps2.ps_alloc.sa_next_offset <= ps4.ps_alloc.sa_next_offset` by

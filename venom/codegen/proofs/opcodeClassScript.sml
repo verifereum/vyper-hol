@@ -72,10 +72,7 @@ val exec_delegatecall_not_halt = store_thm(
   ``!inst s g a ao as_ ro rs vs'.
     exec_delegatecall inst s g a ao as_ ro rs <> Halt vs'``,
   simp[exec_delegatecall_def] >> exec_case_tac);
-val exec_create_not_halt = store_thm("exec_create_not_halt[local,simp]",
-  ``!inst s v off sz salt vs'.
-    exec_create inst s v off sz salt <> Halt vs'``,
-  simp[exec_create_def] >> exec_case_tac);
+val () = augment_srw_ss [rewrites [exec_create_not_Halt, exec_create_not_IntRet]];
 val exec_alloca_not_halt = store_thm("exec_alloca_not_halt[local,simp]",
   ``!inst s a vs'. exec_alloca inst s a <> Halt vs'``,
   simp[exec_alloca_def] >> exec_case_tac);
@@ -110,10 +107,6 @@ val exec_delegatecall_not_abort = store_thm(
   ``!inst s g a ao as_ ro rs ab vs'.
     exec_delegatecall inst s g a ao as_ ro rs <> Abort ab vs'``,
   simp[exec_delegatecall_def] >> exec_case_tac);
-val exec_create_not_abort = store_thm("exec_create_not_abort[local,simp]",
-  ``!inst s v off sz salt ab vs'.
-    exec_create inst s v off sz salt <> Abort ab vs'``,
-  simp[exec_create_def] >> exec_case_tac);
 val exec_alloca_not_abort = store_thm("exec_alloca_not_abort[local,simp]",
   ``!inst s a ab vs'. exec_alloca inst s a <> Abort ab vs'``,
   simp[exec_alloca_def] >> exec_case_tac);
@@ -169,13 +162,6 @@ Triviality exec_delegatecall_not_intret[local,simp]:
     exec_delegatecall inst s g a ao as_ ro rs <> IntRet vals vs'
 Proof
   simp[exec_delegatecall_def] >> exec_case_tac
-QED
-
-Triviality exec_create_not_intret[local,simp]:
-  !inst s v off sz salt vals vs'.
-    exec_create inst s v off sz salt <> IntRet vals vs'
-Proof
-  simp[exec_create_def] >> exec_case_tac
 QED
 
 Triviality exec_alloca_not_intret[local,simp]:
@@ -607,17 +593,22 @@ Proof
   Cases >> EVAL_TAC
 QED
 
-Triviality ext_call_not_halt_abort[local]:
+Theorem ext_call_not_halt_abort[local]:
   !inst s vs' a.
     is_ext_call_op inst.inst_opcode ==>
     step_inst_base inst s <> Halt vs' /\
-    step_inst_base inst s <> Abort a vs'
+    (step_inst_base inst s <> Abort a vs' \/
+     inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
-  >> (strip_tac >>
+  >- (strip_tac >>
       drule ext_call_opcode_cases >> strip_tac >>
       qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-      step_inst_base_opcode_tac >> gvs[AllCaseEqs()])
+      step_inst_base_opcode_tac >> gvs[AllCaseEqs()]) >>
+  drule ext_call_opcode_cases >> strip_tac >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
+  step_inst_base_opcode_tac >> gvs[AllCaseEqs()]
 QED
 
 Triviality storage_imm_log_assert_not_halt[local]:
@@ -740,6 +731,8 @@ Theorem step_inst_base_abort_opcodes:
     inst.inst_opcode = INVALID \/
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
+    inst.inst_opcode = CREATE \/
+    inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY
 Proof
   rpt strip_tac >>
@@ -752,7 +745,7 @@ Proof
   >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
         alloca_not_halt_abort >> gvs[])
   >- (qspecl_then [`inst`, `vs`, `vs'`, `a`] mp_tac
-        ext_call_not_halt_abort >> gvs[]) >>
+        ext_call_not_halt_abort >> gvs[] >> metis_tac[]) >>
   gvs[] >>
   qspecl_then [`inst`, `vs`, `a`, `vs'`] mp_tac
     nofail_storage_imm_log_not_abort >> gvs[]
@@ -765,6 +758,8 @@ Theorem step_inst_abort_opcodes:
     inst.inst_opcode = INVALID \/
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
+    inst.inst_opcode = CREATE \/
+    inst.inst_opcode = CREATE2 \/
     inst.inst_opcode = RETURNDATACOPY \/
     inst.inst_opcode = INVOKE
 Proof

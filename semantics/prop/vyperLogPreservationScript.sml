@@ -3,7 +3,7 @@ Theory vyperLogPreservation
 Ancestors
   pair option sum vyperMisc vyperCall vyperStatePreservation vyperCallFrame vyperCallOutcomeFrame
   vyperState[ignore_grammar] vyperInterpreter[ignore_grammar] vyperCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
-  vyperCreate vyperCreateFrame vyperPlaceFrames
+  vyperCreate vyperCreateFrame vyperTypeExternalDefaults vyperPlaceFrames
 
 (* Keep existing free statement-list variables when importing oracle grammar. *)
 val _ = hide "body";
@@ -551,6 +551,8 @@ Proof
   >> BasicProvers.FULL_CASE_TAC
   >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
   >> first_x_assum drule >> simp[]
+  >> strip_tac >> imp_res_tac precompile_call_success_state >>
+  gvs[log_extends_def]
 QED
 
 Theorem case_stmt_return_some_logs[local]:
@@ -1716,22 +1718,15 @@ Theorem eval_raw_call_log_extends:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   log_extends st st'
 Proof
-  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
-  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, log_extends_refl] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def, log_extends_refl] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
-  PairCases_on `call_result` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       log_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  rpt strip_tac >> gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >>
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem case_expr_raw_call_logs[local]:
@@ -2197,7 +2192,7 @@ Proof
           rpt (qpat_x_assum `!x. _` kall_tac) >>
           metis_tac[log_extends_trans]) >~
        [`_ ==> !st res st'.
-           eval_expr _ (Call _ (CreateTarget _ _ _) _ _) st = (res,st') ==>
+           eval_expr _ (Call _ (CreateTarget _ _ _ _) _ _) st = (res,st') ==>
            log_extends st st'`] >-
          suspend "CreateTarget" >>
      all_tac >>~- ([`_ ==> !st res st'.
@@ -2411,62 +2406,49 @@ Proof
   metis_tac[release_nonreentrant_lock_logs]
 QED
 
+Theorem eval_external_defaults_log_extends[local]:
+  eval_external_defaults cx es st = (res,st') ==> log_extends st st'
+Proof
+  simp[vyperInterpreterTheory.eval_external_defaults_run] >>
+  Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule eval_exprs_log_extends >> simp[log_extends_def]
+QED
+
 Theorem call_body_pipeline_log_extends[local]:
-  (do lock_action; send_call_value mut cx; eval_stmts cx body od) st =
-    (res,st') ==>
+  (do lock_action; eval_stmts cx body od) st = (res,st') ==>
   (!s0 r s1. lock_action s0 = (r,s1) ==> s1.logs = s0.logs) ==>
   log_extends st st'
 Proof
   rpt strip_tac >>
-  qpat_x_assum `(do lock_action; send_call_value _ _; eval_stmts _ _ od) _ = _`
-    mp_tac >>
-  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-       AllCaseEqs()] >>
+  qpat_x_assum `(do lock_action; eval_stmts _ _ od) _ = _` mp_tac >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac send_call_value_logs >>
   imp_res_tac eval_stmts_log_extends >>
   metis_tac[log_extends_eq_logs, log_extends_trans]
 QED
+
 Theorem call_external_function_success_log_extends:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
     (INL v,am',rqs) ==>
   machine_log_extends am am'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_function_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >>
-  Cases_on `(do
-               if nr then
-                 case cx.nonreentrant_slot of
-                   NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                 | SOME slot =>
-                     acquire_nonreentrant_lock cx.txn.target slot
-                       (mut = View \/ mut = Pure)
-               else return ();
-               send_call_value mut cx;
-               eval_stmts cx body
-             od) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case cx.nonreentrant_slot of
-                 NONE => return ()
-               | SOME slot =>
-                   release_nonreentrant_lock cx.txn.target slot
-             else return ()) r` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `evaluate_type (type_env_all_modules all_mods) ret` >>
-       gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `safe_cast x v'` >> gvs[AllCaseEqs()]) >>
+  strip_tac >> drule call_external_function_success_phases >> strip_tac >>
   drule call_body_pipeline_log_extends >>
-  (impl_tac >-
-     (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
+  (impl_tac >- (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
   strip_tac >>
+  drule eval_external_defaults_log_extends >> strip_tac >>
+  imp_res_tac send_call_value_logs >>
   imp_res_tac external_unlock_action_logs >>
-  imp_res_tac evaluate_all_constants_logs >>
-  gvs[machine_log_extends_def, log_extends_def]
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     imp_res_tac evaluate_all_constants_logs >> gvs[]) >>
+  gvs[machine_log_extends_def, log_extends_def,
+      vyperInterpreterTheory.initial_state_def,
+      vyperInterpreterTheory.abstract_machine_from_state_def] >>
+  drule external_unlock_action_logs >> strip_tac >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  gvs[] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
 QED
 
 Theorem call_external_success_log_extends:
@@ -2525,3 +2507,54 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("Log preservation oracle debt: " ^ name)
   end) (DB.thms "vyperLogPreservation");
+
+Theorem log_extends_outcome_rules[local]:
+  (!s. log_extends s s) /\
+  (!s t u. log_extends s t /\ log_extends t u ==> log_extends s u) /\
+  (!s os rqs. log_extends s (s with <|outcomes := os; requests := rqs|>)) /\
+  (!s accounts transient logs pending. log_extends s
+     (s with <|accounts := accounts; tStorage := transient;
+               logs := s.logs ++ logs; pending_deletions := pending|>))
+Proof
+  rpt conj_tac
+  >- simp[log_extends_refl]
+  >- metis_tac[log_extends_trans]
+  >- simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL] >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem log_extends_final_frame:
+  log_extends st mid /\ isPREFIX mid.logs st'.logs ==>
+  log_extends st st'
+Proof
+  simp[log_extends_def] >> metis_tac[rich_listTheory.IS_PREFIX_TRANS]
+QED
+
+Theorem Send_outcome_log_extends:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED
+
+Theorem ExtCall_outcome_log_extends:
+  (!bs s res t. k bs s = (res,t) ==> log_extends s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> log_extends st st'
+Proof
+  rpt strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
+QED

@@ -5,8 +5,8 @@
  *   compile_expr_open_general — a supported expression that evaluates
  *     compiles, at any annotated type, without terminating its block:
  *     bodySimStmtCases's compile_expr_open
- *   supported_immutable_bound — CHEAT: a supported immutable is bound
- *     in ce_module_vars (#563)
+ *   supported_immutable_bound — a supported immutable is bound
+ *     in ce_module_vars
  *)
 
 Theory exprOpenMain
@@ -15,18 +15,41 @@ Ancestors
   exprOpenPrimitives exprOpenCopies exprOpenTerminals exprOpenBuiltins
   bodySim exprSimHyps supportedExprs supportedExprForms supportedTypes
   exprLowering exprCallBounds compileEnv vyperAST vyperTypeSystem list
+  supportedDecls vyperTypeInvariants
 
-(* A supported immutable is bound to an ImmutableLoc in ce_module_vars.
-   Cheated: nothing in body_inv or expr_sim_inv says so yet (#563), and
-   without it a supported immutable read compiles to INVALID.
-   exprSimLeaves' compile_toplevel_immutable_sim rests on the same gap. *)
+Theorem supported_variable_decl_mem[local]:
+  !tops src id vis mut ty slot.
+    supported_variable_decl tops (src, id) = SOME (vis, mut, ty, slot) ==>
+    src = NONE /\ MEM (VariableDecl vis mut id ty slot) tops
+Proof
+  Induct >> simp[supported_variable_decl_def] >> Cases >>
+  rw[supported_variable_decl_def] >> metis_tac[]
+QED
+
+(* Context consistency installs the declaration in bare_globals;
+   expr_sim_inv supplies its compiler location. *)
 Theorem supported_immutable_bound:
   !tops ctx cenv cx env es nsid ty.
     body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
     supported_immutable_type tops nsid = SOME ty ==>
     ?off. FLOOKUP cenv.ce_module_vars nsid = SOME (ImmutableLoc off)
 Proof
-  cheat
+  rpt gen_tac >> PairCases_on `nsid` >> strip_tac >>
+  qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
+  simp[supported_immutable_type_def] >>
+  Cases_on `supported_variable_decl tops (nsid0, nsid1)` >> simp[] >>
+  rename1 `supported_variable_decl tops (nsid0, nsid1) = SOME decl` >>
+  PairCases_on `decl` >>
+  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops /\
+   bare_globals_complete env.bare_globals cx` by
+    fs[body_inv_def, expr_sim_inv_def, env_consistent_def,
+       env_context_consistent_def] >>
+  `?t. FLOOKUP env.bare_globals (NONE, nsid1) = SOME t` by
+    metis_tac[bare_globals_complete_def] >>
+  fs[expr_sim_inv_def] >> metis_tac[]
 QED
 
 Theorem compile_expr_open_general:

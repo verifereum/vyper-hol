@@ -156,9 +156,9 @@ QED
 
 Theorem lowering_success_boundary:
   external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) <=>
-  return_bytes tops ret v ss.vs_returndata /\
+  tx_return_bytes tops ret tx v ss.vs_returndata /\
   accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
-    am.accounts ss.vs_accounts /\
+    am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
   transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
     am.tStorage ss.vs_transient /\
   logs_correspond (compiled_event_info tops) (type_env tops)
@@ -171,13 +171,14 @@ Proof
 QED
 
 Theorem lowering_wrapped_return:
+  ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
   needs_external_call_wrap ret /\ ret <> NoneT ==>
   (external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) <=>
    (?abi_v. vyper_to_abi (type_env tops) ret v = SOME abi_v /\
      ss.vs_returndata =
        enc (Tuple [vyper_to_abi_type (type_env tops) ret]) (ListV [abi_v])) /\
    accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
-     am.accounts ss.vs_accounts /\
+     am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
    transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
      am.tStorage ss.vs_transient /\
    logs_correspond (compiled_event_info tops) (type_env tops)
@@ -186,17 +187,21 @@ Theorem lowering_wrapped_return:
      (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
      rqs ss.vs_requests)
 Proof
-  simp[lowering_success_boundary, return_bytes_def]
+  simp[lowering_success_boundary, tx_return_bytes_def, return_bytes_def]
 QED
 
 (* A concrete successful terminal witness with requests, and a request
    list that does not agree rejected. Leftover outcomes are intentionally unconstrained. *)
 Theorem lowering_none_return_witness:
+  ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops ==>
   external_call_result_rel tops NoneT tx (INL v, am, rqs)
-    (Halt (ss with <| vs_accounts := am.accounts; vs_transient := am.tStorage;
+    (Halt (ss with <| vs_accounts := am.accounts; vs_pending_deletions := [];
+       vs_transient := am.tStorage;
        vs_logs := am.logs; vs_returndata := []; vs_requests := rqs |>))
 Proof
-  simp[lowering_success_boundary, return_bytes_def, logs_correspond_def] >>
+  strip_tac >>
+  simp[lowering_success_boundary, tx_return_bytes_def, return_bytes_def,
+       logs_correspond_def, vfmExecutionTheory.process_deletions_def] >>
   rpt conj_tac >> irule LIST_REL_refl >> simp[log_entry_corresponds_def]
 QED
 
