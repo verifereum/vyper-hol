@@ -56,7 +56,7 @@ Definition source_storage_ok_def:
 End
 
 Definition call_outcomes_ok_def:
-  call_outcomes_ok (tops : toplevel list) am tx os <=>
+  call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
                LENGTH outcome.co_returnData < dimword(:256) /\
