@@ -902,3 +902,73 @@ Proof
   Cases_on `a` >> simp[range_edge_transfer_opt_def,ao_range_opt_support_def] >>
   metis_tac[ao_range_branch_support]
 QED
+
+(* One worklist step only needs transfer closure for this function's instructions. *)
+Theorem ao_range_process_support:
+  wf_ssa fn /\
+  (case ev of NONE => T | SOME (l,v) => ao_range_opt_support (ao_range_outputs fn) v) /\
+  (!k v. FLOOKUP st.dws_inst k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v) /\
+  (!k v. FLOOKUP st.dws_boundary k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v) /\
+  (!k v. FLOOKUP st.dws_entry k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v) /\
+  df_process_block_widen Forward NONE range_join_opt range_widen_opt
+    WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+    (dfg_build_function fn,fn.fn_blocks) ev cfg fn.fn_blocks lbl st = result ==>
+  (!k v. FLOOKUP result.dws_boundary k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v) /\
+  (!k v. FLOOKUP result.dws_entry k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v) /\
+  (!k v. FLOOKUP result.dws_inst k = SOME v ==>
+     ao_range_opt_support (ao_range_outputs fn) v)
+Proof
+  strip_tac >> qpat_x_assum `_ = result` (SUBST1_TAC o SYM) >>
+  simp[dfAnalyzeWidenDefsTheory.df_process_block_widen_def,LET_THM] >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
+  >- metis_tac[] >>
+  pop_assum kall_tac >>
+  qmatch_asmsub_abbrev_tac `df_fold_block Forward _ lbl instrs entry = _` >>
+  `!l. ao_range_opt_support (ao_range_outputs fn) (df_widen_boundary NONE st l)` by
+    (rw[dfAnalyzeWidenDefsTheory.df_widen_boundary_def] >>
+     Cases_on `FLOOKUP st.dws_boundary l` >> simp[ao_range_opt_support_def] >>
+     metis_tac[]) >>
+  `!l. ao_range_opt_support (ao_range_outputs fn) (df_widen_entry NONE st l)` by
+    (rw[dfAnalyzeWidenDefsTheory.df_widen_entry_def] >>
+     Cases_on `FLOOKUP st.dws_entry l` >> simp[ao_range_opt_support_def] >>
+     metis_tac[]) >>
+  `ao_range_opt_support (ao_range_outputs fn) entry` by
+    (qunabbrev_tac `entry` >>
+     qmatch_goalsub_abbrev_tac `if _ then range_widen_opt _ joined else _` >>
+     `ao_range_opt_support (ao_range_outputs fn) joined` by
+       (qunabbrev_tac `joined` >>
+        qmatch_goalsub_abbrev_tac `case edges of [] => _ | _ => _` >>
+        `EVERY (ao_range_opt_support (ao_range_outputs fn)) edges` by
+          (simp[Abbr `edges`,listTheory.EVERY_MEM,listTheory.MEM_MAP,PULL_EXISTS] >>
+           metis_tac[ao_range_edge_support]) >>
+        `!xs a. EVERY (ao_range_opt_support (ao_range_outputs fn)) xs /\
+           ao_range_opt_support (ao_range_outputs fn) a ==>
+           ao_range_opt_support (ao_range_outputs fn) (FOLDL range_join_opt a xs)` by
+          (Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+           simp[ao_range_join_support]) >>
+        Cases_on `edges`
+        >- (Cases_on `ev` >> gvs[ao_range_opt_support_def] >>
+            PairCases_on `x` >> gvs[] >> IF_CASES_TAC >> simp[ao_range_opt_support_def]) >>
+        simp[] >>
+        qpat_x_assum `!xs a. EVERY _ xs /\ _ ==> _` irule >>
+        gvs[] >> metis_tac[ao_range_join_support,ao_range_opt_support_def]) >>
+     IF_CASES_TAC >> simp[ao_range_widen_support]) >>
+  `!inst. MEM inst instrs ==> MEM inst (fn_insts fn)` by
+    (simp[Abbr `instrs`] >> Cases_on `lookup_block lbl fn.fn_blocks` >> simp[] >>
+     rpt strip_tac >>
+     drule venomExecPropsTheory.lookup_block_MEM >> strip_tac >>
+     simp[venomInstTheory.fn_insts_def,unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+     metis_tac[]) >>
+  drule dfAnalyzeProofsTheory.df_fold_block_forward_invariant >>
+  disch_then (qspec_then `ao_range_opt_support (ao_range_outputs fn)` mp_tac) >>
+  impl_tac
+  >- (simp[] >> metis_tac[ao_range_transfer_support]) >>
+  strip_tac >> rpt conj_tac >> rpt strip_tac >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE,AllCaseEqs()] >>
+  metis_tac[ao_range_join_support]
+QED
