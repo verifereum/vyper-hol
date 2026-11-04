@@ -2,7 +2,8 @@ Theory deadStoreElimLocal
 Ancestors
   deadStoreElimPending deadStoreElimMemory deadStoreElimSafety deadStoreElimEquiv
   deadStoreElimFrame deadStoreElimDefs venomState venomExecSemantics
-  basePtrDefs memLocDefs finite_map
+  basePtrDefs memLocDefs finite_map phiCongruence venomExecProofs
+  deadStoreElimLiveness list
 Libs
   deadStoreElimFrameLib
 
@@ -111,4 +112,54 @@ Theorem dse_local_agrees_undefined_read_step:
   step_inst fuel ctx (EL idx bb.bb_instructions) t
 Proof
   strip_tac >> drule_all dse_local_agrees_undefined_read >> simp[]
+QED
+
+Theorem dse_local_agrees_eval_one_phi:
+  dse_local_agrees sp P s t ==> eval_one_phi s inst = eval_one_phi t inst
+Proof
+  strip_tac >>
+  `dse_safety_agrees s t` by fs[dse_local_agrees_def] >>
+  `s.vs_prev_bb = t.vs_prev_bb` by
+    fs[dse_local_agrees_def, dse_operational_agrees_def] >>
+  `!op. eval_operand op s = eval_operand op t` by
+    metis_tac[dse_safety_agrees_eval_operand] >>
+  simp[eval_one_phi_def]
+QED
+
+Theorem dse_pending_at_phi_prefix:
+  dse_pending_at cfg bp sp fn bb 0 P s ==>
+  dse_pending_at cfg bp sp fn bb (phi_prefix_length bb.bb_instructions) P s
+Proof
+  rewrite_tac[dse_pending_at_def] >> strip_tac >>
+  reverse conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  simp[EVERY_MEM] >> qx_gen_tac `entry` >> strip_tac >>
+  PairCases_on `entry` >> gvs[] >>
+  qpat_x_assum `EVERY _ P` mp_tac >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  irule dse_suffix_dead_phi_prefix >> simp[]
+QED
+
+Theorem dse_local_agrees_eval_phis:
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb 0 P s /\
+  eval_phis s bb.bb_instructions = OK s1 ==>
+  ?t1. eval_phis t bb.bb_instructions = OK t1 /\
+    dse_local_agrees sp P
+      (s1 with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+      (t1 with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+    dse_pending_at cfg bp sp fn bb
+      (phi_prefix_length bb.bb_instructions) P s1
+Proof
+  strip_tac >>
+  `?t1. eval_phis t bb.bb_instructions = OK t1 /\
+        dse_local_agrees sp P s1 t1` by
+    (irule eval_phis_rel >> conj_tac
+     >- metis_tac[dse_local_agrees_update_var] >>
+     qexists_tac `s` >> simp[] >>
+     metis_tac[dse_local_agrees_eval_one_phi]) >>
+  qexists_tac `t1` >> simp[dse_local_agrees_inst_idx] >>
+  qpat_assum `eval_phis s _ = OK s1`
+    (mp_then Any strip_assume_tac eval_phis_preserves_alloca_fields) >>
+  irule dse_pending_at_allocas_extend >> qexists_tac `s` >>
+  simp[dse_pending_at_phi_prefix]
 QED
