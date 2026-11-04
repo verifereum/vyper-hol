@@ -363,7 +363,7 @@ QED
 Theorem compile_expr_ifexp:
   !cenv ty t c a b st vv st'.
     compile_expr cenv ty (IfExp t c a b) st = (vv, st') ==>
-    ?cond_op s1 rv s2 tl s3 el s4 xl s5 s6 x6 s7 aop s8 s9 s10 x10 s11 bop
+    ?cond_op s1 rv s2 tl s3 el s4 xl s5 s6 x6 s7 av s7a aop s8 s9 s10 x10 s11 bv s11a bop
      s12 s13 s14 x14.
       lower_value compile_expr cenv (BaseT BoolT) c st = (cond_op, s1) /\
       fresh_var s1 = (rv, s2) /\
@@ -371,11 +371,13 @@ Theorem compile_expr_ifexp:
       fresh_label "exit" s4 = (xl, s5) /\
       emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
       new_block tl s6 = (x6, s7) /\
-      lower_value compile_expr cenv ty a s7 = (aop, s8) /\
+      compile_expr cenv ty a s7 = (av, s7a) /\
+      compile_ifexp_arm cenv t (lowered_value_type cenv a) av s7a = (aop, s8) /\
       emit_inst ASSIGN [aop] [rv] s8 = ((), s9) /\
       emit_inst JMP [Label xl] [] s9 = ((), s10) /\
       new_block el s10 = (x10, s11) /\
-      lower_value compile_expr cenv ty b s11 = (bop, s12) /\
+      compile_expr cenv ty b s11 = (bv, s11a) /\
+      compile_ifexp_arm cenv t (lowered_value_type cenv b) bv s11a = (bop, s12) /\
       emit_inst ASSIGN [bop] [rv] s12 = ((), s13) /\
       emit_inst JMP [Label xl] [] s13 = ((), s14) /\
       new_block xl s14 = (x14, st') /\
@@ -856,16 +858,18 @@ Theorem compile_expr_ifexp_states:
        lower_value compile_expr cenv ty e sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) ==>
-    ?cond_op s1 rv tl el xl s5 s6 x6 s7 aop s8 s9 s10 x10 s11 bop s12 s13
+    ?cond_op s1 rv tl el xl s5 s6 x6 s7 av s7a aop s8 s9 s10 x10 s11 bv s11a bop s12 s13
      s14 x14.
       lower_value compile_expr cenv (BaseT BoolT) c st = (cond_op, s1) /\
       emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
       new_block tl s6 = (x6, s7) /\
-      lower_value compile_expr cenv ty a s7 = (aop, s8) /\
+      compile_expr cenv ty a s7 = (av, s7a) /\
+      compile_ifexp_arm cenv t (lowered_value_type cenv a) av s7a = (aop, s8) /\
       emit_inst ASSIGN [aop] [rv] s8 = ((), s9) /\
       emit_inst JMP [Label xl] [] s9 = ((), s10) /\
       new_block el s10 = (x10, s11) /\
-      lower_value compile_expr cenv ty b s11 = (bop, s12) /\
+      compile_expr cenv ty b s11 = (bv, s11a) /\
+      compile_ifexp_arm cenv t (lowered_value_type cenv b) bv s11a = (bop, s12) /\
       emit_inst ASSIGN [bop] [rv] s12 = ((), s13) /\
       emit_inst JMP [Label xl] [] s13 = ((), s14) /\
       new_block xl s14 = (x14, st') /\
@@ -889,14 +893,17 @@ Proof
   drule compile_expr_ifexp >> strip_tac >>
   qpat_x_assum `!st sb op. lower_value _ _ (BaseT BoolT) c _ = _ ==> _`
     (drule_then strip_assume_tac) >>
+  imp_res_tac (CONJUNCT1 compile_expr_grows) >>
+  qspecl_then [`cenv`, `t`, `lowered_value_type cenv a`, `av`, `s7a`]
+    mp_tac ci_mono_compile_ifexp_arm >>
+  qspecl_then [`cenv`, `t`, `lowered_value_type cenv b`, `bv`, `s11a`]
+    mp_tac ci_mono_compile_ifexp_arm >>
+  simp[ci_mono_def] >> rpt strip_tac >>
   `cs_extends s7 s8 /\ s7.cs_next_var <= s8.cs_next_var /\
-   s7.cs_next_id <= s8.cs_next_id` by
-    (qpat_x_assum `!e st sb op. _` (qspecl_then [`a`, `s7`, `s8`, `aop`] mp_tac) >>
-     simp[]) >>
-  `cs_extends s11 s12 /\ s11.cs_next_var <= s12.cs_next_var /\
+   s7.cs_next_id <= s8.cs_next_id /\
+   cs_extends s11 s12 /\ s11.cs_next_var <= s12.cs_next_var /\
    s11.cs_next_id <= s12.cs_next_id` by
-    (qpat_x_assum `!e st sb op. _` (qspecl_then [`b`, `s11`, `s12`, `bop`] mp_tac) >>
-     simp[]) >>
+    (metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
   imp_res_tac fresh_label_props >> imp_res_tac emit_inst_extends >>
   `cs_extends s1 s2` by metis_tac[cs_extends_fresh_var] >>
   `cs_extends s2 s3 /\ cs_extends s3 s4 /\ cs_extends s4 s5` by
@@ -925,8 +932,8 @@ Proof
   `cs_extends s1 s5 /\ cs_extends s7 s11 /\ cs_extends s11 st'` by
     metis_tac[cs_extends_trans] >>
   `cs_extends s1 st'` by metis_tac[cs_extends_trans] >>
-  qexistsl_tac [`cond_op`, `s1`, `rv`, `tl`, `el`, `xl`, `s5`, `s6`, `x6`,
-                `s7`, `aop`, `s8`, `s9`, `s10`, `x10`, `s11`, `bop`, `s12`,
+  qexistsl_tac [`rv`, `s5`, `s6`, `x6`,
+                `s7`, `av`, `s7a`, `aop`, `s8`, `s9`, `s10`, `x10`, `s11`, `bv`, `s11a`, `bop`, `s12`,
                 `s13`, `s14`, `x14`] >>
   simp[] >>
   qpat_x_assum `!x. not_fresh_at st x ==> x <> rv` (qspec_then `rv` mp_tac) >>
