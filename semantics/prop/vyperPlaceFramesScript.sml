@@ -150,7 +150,7 @@ Proof
 QED
 
 Theorem extend_place_state:
-  extend_place cx res sb st = (result,st') ==> st' = st
+  extend_place cx res sb st = (result,st') ==> st' = st with storage_trace := st'.storage_trace
 Proof
   Cases_on `res`
   >- simp[extend_place_def, raise_def]
@@ -169,12 +169,13 @@ Proof
       Cases_on `evaluate_subscripts x x' [sb]` >>
       simp[lift_sum_def, return_def, raise_def]) >>
   Cases_on `sb` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+  simp[extend_place_def, bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem select_result_state:
-  select_result cx ty res sb st = (result,st') ==> st' = st
+  select_result cx ty res sb st = (result,st') ==> st' = st with storage_trace := st'.storage_trace
 Proof
   Cases_on `res` >>
   simp[select_result_def, bind_def, lift_option_type_def,

@@ -123,6 +123,25 @@ Proof
        get_transient_storage_def, get_accounts_def, return_def]
 QED
 
+Theorem get_storage_backend_storage_trace[simp]:
+  get_storage_backend cx b (st with storage_trace := observations) =
+    (FST (get_storage_backend cx b st), st with storage_trace := observations)
+Proof
+  Cases_on `b` >>
+  simp[get_storage_backend_def, bind_def, get_transient_storage_def,
+       get_accounts_def, return_def]
+QED
+
+Theorem set_storage_backend_storage_trace[simp]:
+  set_storage_backend cx b storage (st with storage_trace := observations) =
+    (FST (set_storage_backend cx b storage st),
+     SND (set_storage_backend cx b storage st) with storage_trace := observations)
+Proof
+  Cases_on `b` >>
+  simp[set_storage_backend_def, bind_def, get_accounts_def, update_accounts_def,
+       update_transient_def, return_def, evaluation_state_fupdcanon]
+QED
+
 Theorem get_after_set_storage_backend:
   ∀cx is_transient storage' st.
     get_storage_backend cx is_transient
