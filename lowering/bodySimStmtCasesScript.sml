@@ -4734,6 +4734,41 @@ Proof
   gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
+Theorem aug_place_storage_store_frag:
+  emit_void (if tr then TSTORE else SSTORE) [dst; result] sa = ((),sf) /\
+  eval_operand dst s0 = SOME slot /\ eval_operand result s0 = SOME w /\
+  (!u st. storage_dead cx tr (update_storage slot u st) =
+          storage_dead cx tr st) /\
+  write_storage_slot cx tr slot tv v es = (res,es') /\
+  encode_value tv v = SOME [(0,w)] ==>
+  frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. res = INL () /\ stmt_state_rel ctx func cenv cx es' s /\
+         (!x. lookup_var x s = lookup_var x s0) /\
+         s.vs_allocas = s0.vs_allocas /\ s.vs_memory = s0.vs_memory) R
+Proof
+  strip_tac >>
+  imp_res_tac emitHelperPropsTheory.emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sf)` by
+    (Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def,
+                            venomInstTheory.is_terminator_def]) >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all stmt_state_rel_write_storage_word >> strip_tac >>
+  disj1_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id (if tr then TSTORE else SSTORE)
+                      [dst; result] []) s0 =
+     OK (if tr then tstore slot w s0 else sstore slot w s0)` by
+    (Cases_on `tr` >>
+     gvs[venomExecSemanticsTheory.step_inst_base_def,
+         venomExecSemanticsTheory.exec_write2_def, venomInstTheory.mk_inst_def]) >>
+  Cases_on `tr` >> gvs[] >>
+  gvs[run_inst_seq_def, stmt_state_rel_inst_idx,
+       venomStateTheory.lookup_var_def, venomStateTheory.sstore_def,
+       venomStateTheory.tstore_def, LET_THM]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
