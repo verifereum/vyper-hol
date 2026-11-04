@@ -461,6 +461,157 @@ Proof
   gvs[call_checks_ok_def, EVERY_MEM]
 QED
 
+Theorem get_successors_no_labels:
+  EVERY (\op. ~is_label_operand op) i.inst_operands ==>
+  get_successors i = []
+Proof
+  strip_tac >> simp[get_successors_def] >>
+  `FILTER IS_SOME (MAP venomState$get_label i.inst_operands) = []` suffices_by simp[] >>
+  simp[FILTER_EQ_NIL, EVERY_MAP] >> gvs[EVERY_MEM] >> rpt strip_tac >>
+  Cases_on `x` >> gvs[venomStateTheory.get_label_def,
+                          stackPlanTypesTheory.is_label_operand_def] >>
+  first_x_assum drule >> simp[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem shaped_terminator_jump_cases:
+  label_positions_ok i /\ is_terminator i.inst_opcode ==>
+  (i.inst_opcode = JMP /\ (?l. i.inst_operands = [Label l])) \/
+  (i.inst_opcode = JNZ /\ (?c t f. i.inst_operands = [c; Label t; Label f] /\
+     ~is_label_operand c /\ t <> f)) \/ get_successors i = []
+Proof
+  strip_tac >> Cases_on `i.inst_opcode` >>
+  gvs[is_terminator_def, label_positions_ok_def]
+  >- (Cases_on `i.inst_operands` >> gvs[]
+      >- simp[get_successors_def] >>
+      Cases_on `h` >> gvs[stackPlanTypesTheory.is_label_operand_def]
+      >- (irule get_successors_no_labels >>
+          simp[stackPlanTypesTheory.is_label_operand_def])
+      >- (irule get_successors_no_labels >>
+          simp[stackPlanTypesTheory.is_label_operand_def]) >>
+      Cases_on `t` >> gvs[stackPlanTypesTheory.is_label_operand_def])
+  >- (Cases_on `?c t f. i.inst_operands = [c; Label t; Label f] /\
+          ~is_label_operand c /\ t <> f` >- simp[] >>
+      disj2_tac >> irule get_successors_no_labels >>
+      Cases_on `i.inst_operands` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      Cases_on `h'` >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `t'` >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `h'` >> gvs[stackPlanTypesTheory.is_label_operand_def] >>
+      Cases_on `t` >> gvs[stackPlanTypesTheory.is_label_operand_def]) >>
+  irule get_successors_no_labels >> simp[]
+QED
+
+Theorem shaped_bb_single_successor_jmp:
+  bb_well_formed bb /\ EVERY label_positions_ok bb.bb_instructions /\
+  bb_succs bb = [l] ==>
+  (LAST bb.bb_instructions).inst_opcode = JMP /\
+  (LAST bb.bb_instructions).inst_operands = [Label l]
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `label_positions_ok (LAST bb.bb_instructions)` by
+    (fs[EVERY_MEM] >> qpat_x_assum `!x. MEM x _ ==> _` irule >> simp[LAST_MEM]) >>
+  drule shaped_terminator_jump_cases >>
+  impl_tac >- gvs[bb_well_formed_def] >>
+  strip_tac >>
+  Cases_on `bb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, is_terminator_def,
+      venomStateTheory.get_label_def, listTheory.nub_def] >>
+  Cases_on `c` >>
+  gvs[stackPlanTypesTheory.is_label_operand_def,
+      venomStateTheory.get_label_def, listTheory.nub_def]
+QED
+
+Theorem revert_path_step_witness:
+  revert_path bbs n l ==>
+  ?bb. MEM bb bbs /\ bb.bb_label = l /\ bb.bb_instructions <> [] /\
+    EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
+    ((LAST bb.bb_instructions).inst_opcode = REVERT \/
+     (LAST bb.bb_instructions).inst_opcode = JMP /\
+     ?t m. (LAST bb.bb_instructions).inst_operands = [Label t] /\
+       m < n /\ revert_path bbs m t)
+Proof
+  Cases_on `n` >> simp[revert_path_def, EXISTS_MEM] >> strip_tac >>
+  qexists_tac `bb` >> simp[] >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  qexists_tac `n'` >> simp[]
+QED
+
+Theorem merge_revert_target_not_removed:
+  can_merge_blocks fn a b /\ MEM a fn.fn_blocks /\ MEM c fn.fn_blocks /\
+  c <> a /\ c.bb_instructions <> [] /\
+  (LAST c.bb_instructions).inst_opcode = JMP /\
+  (LAST c.bb_instructions).inst_operands = [Label t] ==>
+  t <> b.bb_label
+Proof
+  strip_tac >> strip_tac >> gvs[] >>
+  `MEM b.bb_label (bb_succs c)` by
+    (Cases_on `c.bb_instructions` >>
+     gvs[bb_succs_def, get_successors_def, is_terminator_def,
+         venomStateTheory.get_label_def, listTheory.nub_def]) >>
+  drule_all can_merge_blocks_unique_pred >> simp[]
+QED
+
+Theorem chain_merge_revert_step:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  bbs = replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks) /\
+  l <> b.bb_label /\ revert_path fn.fn_blocks n l ==>
+  ?c. MEM c bbs /\ c.bb_label = l /\ c.bb_instructions <> [] /\
+      EVERY (\i. i.inst_opcode <> INVOKE) c.bb_instructions /\
+      ((LAST c.bb_instructions).inst_opcode = REVERT \/
+       ((LAST c.bb_instructions).inst_opcode = JMP /\
+        ?t m. (LAST c.bb_instructions).inst_operands = [Label t] /\
+          t <> b.bb_label /\ m < n /\ revert_path fn.fn_blocks m t))
+Proof
+  strip_tac >> drule revert_path_step_witness >> strip_tac >>
+  Cases_on `bb = a` >>
+  TRY (qpat_x_assum `bb = a` SUBST_ALL_TAC >> suspend "merged_root") >>
+  qexists_tac `bb` >>
+  `bb.bb_label <> a.bb_label` by
+    (strip_tac >> `lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+      lookup_block bb.bb_label fn.fn_blocks = SOME a` by
+       (conj_tac >> irule MEM_lookup_block >> gvs[fn_labels_def]) >> gvs[]) >>
+  `MEM bb bbs` by
+    (gvs[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+     qexists_tac `bb` >> simp[]) >>
+  simp[] >> qexists_tac `m` >> simp[] >>
+  irule merge_revert_target_not_removed >> metis_tac[]
+QED
+
+Resume chain_merge_revert_step[merged_root]:
+  markerLib.RESUME_TAC >> rpt strip_tac >>
+  `bb_well_formed a /\ EVERY label_positions_ok a.bb_instructions` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `bb_succs a = [b.bb_label]` by gvs[can_merge_blocks_def] >>
+  drule_all shaped_bb_single_successor_jmp >> strip_tac >> gvs[] >>
+  qpat_x_assum `revert_path _ m _` (strip_assume_tac o MATCH_MP revert_path_step_witness) >>
+  `bb = b` by
+    (`lookup_block b.bb_label fn.fn_blocks = SOME bb /\
+      lookup_block b.bb_label fn.fn_blocks = SOME b` by
+       (conj_tac >> irule MEM_lookup_block >> gvs[fn_labels_def]) >> gvs[]) >>
+  gvs[] >> qexists_tac `merge_blocks a b` >>
+  `MEM (merge_blocks a b)
+    (replace_block a.bb_label (merge_blocks a b)
+      (remove_block b.bb_label fn.fn_blocks))` by
+    (simp[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+     qexists_tac `a` >> simp[]) >>
+  `LAST (FRONT a.bb_instructions ++ b.bb_instructions) =
+    LAST b.bb_instructions` by
+    (Cases_on `b.bb_instructions` >> gvs[LAST_APPEND_CONS]) >>
+  simp[merge_blocks_def] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) (FRONT a.bb_instructions)` by
+    (fs[EVERY_MEM] >> metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >>
+  simp[] >> qexists_tac `m'` >> simp[] >>
+  irule merge_revert_target_not_removed >>
+  qexistsl_tac [`a`, `b`, `fn`] >> simp[] >> strip_tac >> gvs[]
+QED
+
+Finalise chain_merge_revert_step
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
