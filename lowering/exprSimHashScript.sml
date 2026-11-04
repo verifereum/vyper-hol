@@ -1130,11 +1130,25 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_SHR, step_SHL, mk_inst_def,
-       eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-       bind_outputs_def, lookup_var_update_var] >>
-  simp[dimword_def, update_var_def] >> rpt strip_tac >>
+  `step_inst_base
+     (mk_inst sa.cs_next_id SHR [Lit 224w; hash_op]
+       [STRING #"%" (toString sa.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (w >>> w2n (224w : 256 word)) s)` by
+    (irule step_SHR >> simp[eval_operand_def, dimword_def]) >>
+  fs[dimword_def] >>
+  `step_inst_base
+     (mk_inst (sa.cs_next_id + 1) SHL
+       [Lit 224w; Var (STRING #"%" (toString sa.cs_next_var))]
+       [STRING #"%" (toString (sa.cs_next_var + 1))])
+     (update_var (STRING #"%" (toString sa.cs_next_var)) (w >>> 224) s) =
+     OK (update_var (STRING #"%" (toString (sa.cs_next_var + 1)))
+       ((w >>> 224) << w2n (224w : 256 word))
+       (update_var (STRING #"%" (toString sa.cs_next_var)) (w >>> 224) s))` by
+    (irule step_SHL >> simp[eval_operand_def, lookup_var_update_var, dimword_def]) >>
+  fs[dimword_def] >>
+  simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
+  simp[update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
   first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
   first_assum (qspec_then `sa.cs_next_var` assume_tac) >> gvs[]

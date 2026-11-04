@@ -687,9 +687,8 @@ Proof
        loweringShapePropsTheory.compile_external_fn_bodies_label_partition >> simp[]) >>
   `cs_extends st' se` by metis_tac[cs_extends_trans] >>
   `~MEM lbl (MAP FST pre)` by
-    gvs[ALL_DISTINCT_APPEND] >>
-  drule_all external_checks_labels_unshadowed >>
-  disch_then drule_all >> strip_tac >>
+    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  drule_all external_checks_labels_unshadowed >> strip_tac >>
   qexistsl_tac [`st`, `st'`] >> simp[]
 QED
 
