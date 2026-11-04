@@ -429,6 +429,18 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+Theorem flag_fails_revert_environment:
+  (!l. revert_path src (LENGTH src) l ==> revert_path dst (LENGTH dst) l) ==>
+  !vs i. flag_fails src vs i ==> flag_fails dst vs i
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
+  Cases_on `i.inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
+QED
+
 Theorem flag_fails_fix_all_phis:
   EVERY bb_well_formed fn.fn_blocks /\ flag_fails fn.fn_blocks vs i ==>
   flag_fails (fix_all_phis fn).fn_blocks vs i
@@ -439,11 +451,7 @@ Proof
     (rpt strip_tac >> irule revert_path_fuel_normalize >>
      qexists_tac `LENGTH fn.fn_blocks` >>
      irule revert_path_fix_all_phis >> simp[]) >>
-  Cases_on `i.inst_opcode` >> gvs[flag_fails_def] >>
-  Cases_on `i.inst_operands` >> gvs[] >>
-  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
-  Cases_on `h` >> gvs[] >> Cases_on `t'` >> gvs[] >>
-  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >> metis_tac[]
+  drule flag_fails_revert_environment >> metis_tac[]
 QED
 
 Theorem fix_all_phis_call_checks_ok:
@@ -897,6 +905,112 @@ Proof
   drule_all shaped_bb_single_successor_jmp >> strip_tac >>
   simp[flag_path_def, flag_fails_def] >> rpt strip_tac >>
   irule flag_path_chain_merge_revert_suffix >> metis_tac[]
+QED
+
+Theorem calls_flagged_chain_merge_body:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  calls_flagged fn.fn_blocks a.bb_instructions /\
+  calls_flagged fn.fn_blocks b.bb_instructions ==>
+  calls_flagged raw (merge_blocks a b).bb_instructions
+Proof
+  strip_tac >>
+  `bb_well_formed a` by gvs[EVERY_MEM] >>
+  `a.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `b <> a` by metis_tac[can_merge_blocks_distinct] >>
+  `calls_flagged raw b.bb_instructions` by
+    (irule calls_flagged_chain_merge_other >> metis_tac[]) >>
+  simp[NoAsms, merge_blocks_def] >>
+  irule calls_flagged_replace_terminal_selective >>
+  conj_tac >- gvs[] >>
+  qexistsl_tac [`LAST a.bb_instructions`, `fn.fn_blocks`] >>
+  simp[APPEND_FRONT_LAST] >> conj_tac
+  >- (rpt strip_tac >> irule flag_fails_front_environment >> metis_tac[]) >>
+  rpt strip_tac >> irule flag_path_chain_merge_terminal >> metis_tac[]
+QED
+
+Theorem chain_merge_raw_call_checks_ok:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  call_checks_ok fn ==>
+  call_checks_ok (fn with fn_blocks := raw)
+Proof
+  strip_tac >>
+  `calls_flagged raw (merge_blocks a b).bb_instructions` by
+    (irule calls_flagged_chain_merge_body >> gvs[call_checks_ok_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  simp[call_checks_ok_def, EVERY_MEM] >> gen_tac >>
+  qpat_x_assum `raw = _` SUBST_ALL_TAC >>
+  simp[replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  strip_tac >> gvs[] >> IF_CASES_TAC
+  >- gvs[replace_block_def, remove_block_def] >>
+  gvs[] >> irule calls_flagged_chain_merge_other >>
+  qexistsl_tac [`a`, `b`, `fn`] >>
+  gvs[call_checks_ok_def, EVERY_MEM, replace_block_def, remove_block_def] >>
+  metis_tac[]
+QED
+
+Theorem update_succ_phi_labels_call_checks_ok:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  call_checks_ok fn ==>
+  call_checks_ok (fn with fn_blocks := update_succ_phi_labels old new fn.fn_blocks succs)
+Proof
+  strip_tac >>
+  `!vs i. flag_fails fn.fn_blocks vs i ==>
+    flag_fails (update_succ_phi_labels old new fn.fn_blocks succs) vs i` by
+    (rpt strip_tac >> irule flag_fails_revert_environment >>
+     qexists_tac `fn.fn_blocks` >> simp[] >>
+     rpt strip_tac >> irule revert_path_fuel_normalize >>
+     qexists_tac `LENGTH fn.fn_blocks` >>
+     irule revert_path_update_succ_phi_labels >> gvs[fn_labels_def]) >>
+  `!xs. calls_flagged fn.fn_blocks xs ==>
+    calls_flagged (update_succ_phi_labels old new fn.fn_blocks succs) xs` by
+    (rpt strip_tac >> irule calls_flagged_environment >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by gvs[fn_labels_def] >>
+  simp[call_checks_ok_def] >>
+  fs[simplifyCfgReachusesTheory.update_succ_phi_labels_exact] >>
+  simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+  `bb_well_formed bb /\ calls_flagged fn.fn_blocks bb.bb_instructions` by
+    gvs[call_checks_ok_def, EVERY_MEM] >>
+  IF_CASES_TAC >> simp[]
+  >- (drule (calls_flagged_block_phi_map |> Q.INST
+       [`f` |-> `\i. if i.inst_opcode <> PHI then i else subst_label_inst old new i`]
+       |> BETA_RULE) >>
+      disch_then (qspecl_then [`old`, `new`] mp_tac) >>
+      simp[subst_label_inst_def] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem chain_merge_call_checks_ok:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  call_checks_ok fn /\
+  g = fn with fn_blocks := update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b)) ==>
+  call_checks_ok g
+Proof
+  strip_tac >>
+  qabbrev_tac `raw = replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks)` >>
+  `call_checks_ok (fn with fn_blocks := raw)` by
+    (irule chain_merge_raw_call_checks_ok >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) raw)` by
+    (simp[Abbr `raw`, fn_labels_replace_block, merge_blocks_def] >>
+     irule ALL_DISTINCT_remove_block >> fs[fn_labels_def]) >>
+  `EVERY bb_well_formed raw` by
+    (simp[Abbr `raw`] >> irule EVERY_replace_block >> conj_tac
+     >- (irule bb_well_formed_merge_blocks >> fs[EVERY_MEM, can_merge_blocks_def]) >>
+     fs[remove_block_def, EVERY_MEM, MEM_FILTER]) >>
+  mp_tac (update_succ_phi_labels_call_checks_ok |> SPEC_ALL |> Q.INST
+    [`fn` |-> `fn with fn_blocks := raw`, `old` |-> `b.bb_label`,
+     `new` |-> `a.bb_label`, `succs` |-> `bb_succs (merge_blocks a b)`]) >>
+  gvs[fn_labels_def]
 QED
 
 Theorem simplify_cfg_call_checks_ok:
