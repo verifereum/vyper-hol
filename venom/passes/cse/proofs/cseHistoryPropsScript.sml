@@ -953,3 +953,214 @@ Proof
      drule_all step_preserves_non_output_vars >> gvs[lookup_var_def])
  >> drule_all step_terminator_preserves_vars >> gvs[lookup_var_def]
 QED
+
+(* A branch appends a visit even when its target is the same label. *)
+Definition cse_event_next_visit_def:
+ (cse_event_next_visit (CsePhi n bb s t) = []) /\
+ (cse_event_next_visit (CseStep n bb inst s t) =
+   if is_terminator inst.inst_opcode then [t.vs_current_bb] else [])
+End
+
+Definition cse_visit_path_def:
+ cse_visit_path s0 events =
+ s0.vs_current_bb :: FLAT (MAP cse_event_next_visit events)
+End
+
+Theorem cse_visit_path_snoc:
+ cse_visit_path s0 (events ++ [ev]) =
+ cse_visit_path s0 events ++ cse_event_next_visit ev
+Proof
+ simp[cse_visit_path_def, FLAT_APPEND]
+QED
+
+Theorem cse_terminator_cfg_edge:
+ wf_function fn /\ fn_inst_wf fn /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\
+ is_terminator inst.inst_opcode /\ ~t.vs_halted ==>
+ fn_cfg_edge fn s.vs_current_bb t.vs_current_bb
+Proof
+ strip_tac >> drule_all cse_terminator_boundary >> strip_tac >>
+ `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+   metis_tac[lookup_block_MEM, lookup_block_label] >>
+ `MEM t.vs_current_bb (cfg_succs_of (cfg_analyze fn) bb.bb_label)` by
+   metis_tac[cfg_edge_symmetry_uncond] >>
+ `MEM t.vs_current_bb (bb_succs bb)` by
+   metis_tac[cfg_analyze_preserves_bb_succs] >>
+ simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem cse_prefix_visit_path:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ is_fn_path fn (cse_visit_path s0 events) /\
+ fn_entry_label fn = SOME (HD (cse_visit_path s0 events)) /\
+ LAST (cse_visit_path s0 events) = (cse_phase_state phase).vs_current_bb
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     simp[cse_visit_path_def, cse_phase_state_def, is_fn_path_def])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     drule eval_phis_preserves_current_bb >> strip_tac >>
+     gvs[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     drule_all step_preserves_control_flow >> strip_tac >>
+     gvs[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def])
+ >> rpt gen_tac >> strip_tac >> strip_tac >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_terminator_cfg_edge >> strip_tac >>
+ gvs[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def] >>
+ conj_tac
+ >- (irule is_fn_path_snoc >> simp[cse_visit_path_def]) >>
+ simp[cse_visit_path_def]
+QED
+
+(* A segment contains one atomic PHI batch and the ordinary occurrences in
+   index order.  The endpoint k is the next ordinary instruction index. *)
+Inductive cse_visit_segment:
+[~phi:]
+ (!n bb s t. eval_phis s bb.bb_instructions = OK t ==>
+   cse_visit_segment bb [CsePhi n bb s t]
+     (phi_prefix_length bb.bb_instructions))
+[~step:]
+ (!bb es k n inst s t.
+   cse_visit_segment bb es k /\ s.vs_inst_idx = k /\
+   get_instruction bb k = SOME inst ==>
+   cse_visit_segment bb (es ++ [CseStep n bb inst s t]) (SUC k))
+End
+
+Theorem cse_prefix_visit_segments:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ ?done current.
+ events = FLAT (MAP SND done) ++ current /\
+ cse_visit_path s0 events =
+   MAP (\visit. (FST visit).bb_label) done ++
+   [(cse_phase_state phase).vs_current_bb] /\
+ EVERY (\visit. cse_visit_segment (FST visit) (SND visit)
+                   (LENGTH (FST visit).bb_instructions)) done /\
+ (case phase of CseRun n s => current = []
+  | CseExec n bb s => cse_visit_segment bb current s.vs_inst_idx)
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     qexistsl [`[]`, `[]`] >> simp[cse_visit_path_def, cse_phase_state_def])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     qexistsl [`done`, `[CsePhi fuel bb s t]`] >>
+     drule eval_phis_preserves_current_bb >> strip_tac >>
+     simp[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def] >>
+     metis_tac[cse_visit_segment_rules])
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+     qexistsl [`done`, `current ++ [CseStep fuel bb inst s t]`] >>
+     drule_all step_preserves_control_flow >> strip_tac >>
+     simp[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def,
+          APPEND_ASSOC] >> metis_tac[cse_visit_segment_rules])
+ >> rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_terminator_boundary >> strip_tac >>
+ qexists `done ++ [(bb, current ++ [CseStep fuel bb inst s t])]` >>
+ simp[cse_visit_path_snoc, cse_event_next_visit_def, cse_phase_state_def,
+      FLAT_APPEND, EVERY_APPEND, APPEND_ASSOC] >>
+ metis_tac[cse_visit_segment_rules]
+QED
+
+Theorem cse_visit_segment_length:
+ !bb es k. cse_visit_segment bb es k ==>
+ phi_prefix_length bb.bb_instructions <= k /\
+ LENGTH es = SUC (k - phi_prefix_length bb.bb_instructions)
+Proof
+ ho_match_mp_tac cse_visit_segment_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> simp[]
+QED
+
+Theorem cse_visit_segment_phi_head:
+ !bb es k. cse_visit_segment bb es k ==>
+ ?n s t rest. es = CsePhi n bb s t :: rest /\
+ eval_phis s bb.bb_instructions = OK t
+Proof
+ ho_match_mp_tac cse_visit_segment_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac
+ >- (qexistsl [`n`, `s`, `t`, `[]`] >> simp[]) >>
+ qexistsl [`n'`, `s'`, `t'`, `rest ++ [CseStep n bb inst s t]`] >> simp[]
+QED
+
+Theorem cse_visit_segment_ordinary:
+ !bb es endpoint. cse_visit_segment bb es endpoint ==>
+ !k. phi_prefix_length bb.bb_instructions <= k /\ k < endpoint ==>
+ ?pre n inst s t post.
+ es = pre ++ [CseStep n bb inst s t] ++ post /\
+ LENGTH pre = SUC (k - phi_prefix_length bb.bb_instructions) /\
+ s.vs_inst_idx = k /\ get_instruction bb k = SOME inst
+Proof
+ ho_match_mp_tac cse_visit_segment_strongind >> rpt conj_tac
+ >- simp[] >> rpt gen_tac >> strip_tac >>
+ rename1 `cse_visit_segment bb es endpoint` >>
+ qx_gen_tac `usek` >> strip_tac >>
+ Cases_on `usek = endpoint`
+ >- (gvs[] >> qexistsl [`es`, `n`, `s`, `t`, `[]`] >>
+     simp[] >> drule cse_visit_segment_length >> simp[]) >>
+ `usek < endpoint` by decide_tac >>
+ first_x_assum (qspec_then `usek` mp_tac) >> simp[] >> strip_tac >>
+ qexistsl [`pre`, `n'`, `inst'`, `s'`, `t'`,
+           `post ++ [CseStep n bb inst s t]`] >> simp[APPEND_ASSOC]
+QED
+
+Definition cse_event_covers_def:
+ (cse_event_covers (CsePhi n blk s t) bb k inst <=>
+   blk = bb /\ k < phi_prefix_length bb.bb_instructions /\
+   get_instruction bb k = SOME inst) /\
+ (cse_event_covers (CseStep n blk instr s t) bb k inst <=>
+   blk = bb /\ instr = inst /\ s.vs_inst_idx = k)
+End
+
+Theorem cse_visit_segment_occurrence:
+ cse_visit_segment bb es endpoint /\
+ get_instruction bb k = SOME inst /\ k < endpoint ==>
+ ?ev. MEM ev es /\ cse_event_covers ev bb k inst
+Proof
+ strip_tac >> Cases_on `k < phi_prefix_length bb.bb_instructions`
+ >- (drule cse_visit_segment_phi_head >> strip_tac >>
+     qexists `CsePhi n bb s t` >> simp[cse_event_covers_def]) >>
+ `phi_prefix_length bb.bb_instructions <= k` by decide_tac >>
+ drule cse_visit_segment_ordinary >>
+ disch_then (qspec_then `k` mp_tac) >> simp[] >> strip_tac >>
+ qexists `CseStep n bb inst s t` >> simp[cse_event_covers_def, MEM_APPEND]
+QED
+
+Theorem cse_prefix_current_occurrence:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb k = SOME inst /\ k < s.vs_inst_idx ==>
+ ?ev. MEM ev events /\ cse_event_covers ev bb k inst
+Proof
+ strip_tac >> drule_all cse_prefix_visit_segments >> strip_tac >> gvs[] >>
+ drule_all cse_visit_segment_occurrence >> strip_tac >>
+ qexists `ev` >> simp[MEM_APPEND]
+QED
+
+Theorem cse_prefix_completed_occurrences:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ ?done current.
+ events = FLAT (MAP SND done) ++ current /\
+ cse_visit_path s0 events =
+   MAP (\visit. (FST visit).bb_label) done ++
+   [(cse_phase_state phase).vs_current_bb] /\
+ (!j bb es k inst. j < LENGTH done /\ EL j done = (bb,es) /\
+   get_instruction bb k = SOME inst ==>
+   ?ev. MEM ev es /\ MEM ev events /\ cse_event_covers ev bb k inst)
+Proof
+ strip_tac >> drule_all cse_prefix_visit_segments >> strip_tac >>
+ qexistsl [`done`, `current`] >> simp[] >> rpt strip_tac >>
+ `MEM (bb,es) done` by metis_tac[MEM_EL] >>
+ `cse_visit_segment bb es (LENGTH bb.bb_instructions)` by
+   (gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
+ `k < LENGTH bb.bb_instructions` by gvs[get_instruction_def, AllCaseEqs()] >>
+ drule_all cse_visit_segment_occurrence >> strip_tac >>
+ qexists `ev` >> simp[] >>
+ `MEM es (MAP SND done)` by (simp[MEM_MAP] >> qexists `(bb,es)` >> simp[]) >>
+ gvs[MEM_FLAT, MEM_APPEND] >> metis_tac[]
+QED
