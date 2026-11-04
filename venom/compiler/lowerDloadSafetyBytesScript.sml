@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyBytes
 Ancestors
   lowerDloadSafetyKernel venomState codegenRel list rich_list arithmetic
-    finite_map pred_set regularCallEmitSim byte ptrDiscipline
+    finite_map pred_set regularCallEmitSim byte ptrDiscipline venomMemProps
 
 Theorem ld_read_memory_byte:
   j < n ==> EL j (read_memory off n s) = read_byte (off+j) s.vs_memory
@@ -108,4 +108,34 @@ Theorem ld_mstore_masked_byte:
   read_byte (dst+j) (mstore dst w t).vs_memory
 Proof
   simp[ld_mstore_byte, word_agree_except_def] >> metis_tac[]
+QED
+
+Theorem ld_mload_masked:
+  (!j. j < 32 /\ j NOTIN mask ==>
+    EL j (read_memory off 32 s) = EL j (read_memory dst 32 t)) ==>
+  word_agree_except mask (mload off s) (mload dst t)
+Proof
+  `!off s. mload off s = word_of_bytes T (0w:bytes32) (read_memory off 32 s)` by
+    simp[mload_def, read_memory_def] >>
+  simp[word_agree_except_def, word_bytes_roundtrip_256]
+QED
+
+Theorem ld_memory_mload_low:
+  ld_memory lo A tn s t /\ off+32 <= lo ==>
+  word_agree_except {j | j < 32 /\ off+j IN tn.t_mem}
+    (mload off s) (mload off t)
+Proof
+  strip_tac >> irule ld_mload_masked >> simp[] >> rpt strip_tac >>
+  irule ld_memory_read_low_masked >> simp[] >>
+  qexistsl_tac [`A`, `lo`, `tn`] >> simp[ADD_COMM]
+QED
+
+Theorem ld_memory_mload_slot:
+  ld_memory lo A tn s t /\ FLOOKUP A k = SOME (b,c,sz) /\ delta+32 <= sz ==>
+  word_agree_except {j | j < 32 /\ b+delta+j IN tn.t_mem}
+    (mload (b+delta) s) (mload (c+delta) t)
+Proof
+  strip_tac >> irule ld_mload_masked >> simp[] >> rpt strip_tac >>
+  irule ld_memory_read_slot_masked >> simp[] >>
+  qexistsl_tac [`A`, `k`, `lo`, `sz`, `tn`] >> simp[GSYM ADD_ASSOC]
 QED
