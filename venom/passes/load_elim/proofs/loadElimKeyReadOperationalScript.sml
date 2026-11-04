@@ -3,6 +3,7 @@ Ancestors
   loadElimKeyRead memAliasProps mem2varBlockSimHelpers deadStoreElimProofs
   venomMemDefs venomEffects words venomInstProps
   basePtrDefs memLocDefs venomState memoryCopyElisionSound loadElimDefs venomInst
+  venomExecSemantics venomExecProofs
 
 Theorem le_memory_read_nonalias_store:
   wf_alias_sets aliases /\ ~ma_may_alias aliases readloc writeloc /\
@@ -188,4 +189,59 @@ Proof
   strip_tac >> drule_all le_configured_write_location >> strip_tac >>
   simp[load_get_write_key_def] >>
   irule le_segment_key_address >> gvs[] >> qexists `bp` >> simp[]
+QED
+
+Theorem le_terminator_readonly_fields:
+  step_inst fuel ctx inst s = OK t /\ is_terminator inst.inst_opcode ==>
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem le_step_readonly_fields:
+  step_inst fuel ctx inst s = OK t ==>
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section
+Proof
+  strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- (drule_all le_terminator_readonly_fields >> simp[]) >>
+  conj_tac
+  >- (drule_all step_preserves_call_ctx >> simp[]) >>
+  drule_all step_preserves_data_section >> simp[]
+QED
+
+Theorem le_calldata_read_step:
+  step_inst fuel ctx inst s = OK t ==>
+  le_read_address AddrSp_Calldata a t = le_read_address AddrSp_Calldata a s
+Proof
+  strip_tac >> drule le_step_readonly_fields >> simp[]
+QED
+
+Theorem le_data_read_step:
+  step_inst fuel ctx inst s = OK t ==>
+  le_read_address AddrSp_Data a t = le_read_address AddrSp_Data a s
+Proof
+  strip_tac >> drule le_step_readonly_fields >> simp[]
+QED
+
+Theorem le_calldata_read_phis:
+  eval_phis s insts = OK t ==>
+  le_read_address AddrSp_Calldata a t = le_read_address AddrSp_Calldata a s
+Proof
+  strip_tac >> drule eval_phis_only_updates_vs_vars >>
+  disch_then SUBST1_TAC >> simp[]
+QED
+
+Theorem le_data_read_phis:
+  eval_phis s insts = OK t ==>
+  le_read_address AddrSp_Data a t = le_read_address AddrSp_Data a s
+Proof
+  strip_tac >> drule eval_phis_only_updates_vs_vars >>
+  disch_then SUBST1_TAC >> simp[]
 QED
