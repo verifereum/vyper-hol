@@ -16,7 +16,7 @@
  * TOP-LEVEL:
  *   unwrap_storage_copy_sim      — storage and transient storage
  *   unwrap_runtime_code_copy_sim — code, at runtime (DLOAD)
- *   unwrap_ctor_code_copy_sim    — code, in the constructor (cheated)
+ *   unwrap_ctor_code_copy_sim    — code, in the constructor
  *)
 
 Theory exprSimCopy
@@ -1374,9 +1374,9 @@ QED
 
 Finalise unwrap_ctor_code_copy_base_sim
 
-(* Public constructor aggregate wrapper. The zero-base invariant is now
-   supplied by stmt_state_rel. Its remaining inherited admission concerns
-   composition with the checked base helper above and is owned separately. *)
+(* An aggregate in code, in the constructor: stmt_state_rel supplies the
+   zero base and local_ptrs_reserved the base variable's reservation, the
+   two extra premises of unwrap_ctor_code_copy_base_sim. *)
 Theorem unwrap_ctor_code_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -1393,5 +1393,14 @@ Theorem unwrap_ctor_code_copy_sim:
              (LocatedValue t p) s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  cheat
+  rpt strip_tac >>
+  `!s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+         (LocatedValue t p) s ==> immutable_base_zero cenv s` by
+    simp[vv_post_def, stmt_state_rel_def] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`,
+               `es'`, `v`, `t`, `p`, `op`, `R`] mp_tac
+    unwrap_ctor_code_copy_base_sim >>
+  impl_tac >- (simp[] >> metis_tac[local_ptrs_reserved_imm_base]) >>
+  strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  simp[]
 QED
