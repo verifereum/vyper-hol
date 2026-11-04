@@ -3032,6 +3032,211 @@ Proof
        aug_place_extcall_store_metadata, aug_place_default_return_metadata]
 QED
 
+Theorem aug_place_lower_value_metadata:
+  (!ty. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+        g cenv ty e) ==>
+  lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+  lower_value g cenv ty e
+Proof
+  strip_tac >> simp[exprLoweringTheory.lower_value_def, aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_multi_vvs_metadata:
+  !es. (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_multi_vvs f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es =
+  compile_multi_vvs g cenv es
+Proof
+  Induct >> simp[exprLoweringTheory.compile_multi_vvs_def] >> rpt strip_tac >>
+  gvs[]
+QED
+
+Theorem aug_place_multi_exprs_metadata:
+  !es. (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_multi_exprs f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es =
+  compile_multi_exprs g cenv es
+Proof
+  Induct >> simp[exprLoweringTheory.compile_multi_exprs_def] >> rpt strip_tac >>
+  gvs[] >> simp[exprLoweringTheory.lower_value_def, SRULE [] aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_make_tuple_metadata:
+  !es buf off. (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_make_tuple f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es buf off =
+  compile_make_tuple g cenv es buf off
+Proof
+  Induct >> simp[exprLoweringTheory.compile_make_tuple_def] >> rpt strip_tac >>
+  gvs[] >> simp[SRULE [] aug_place_memory_bytes_metadata,
+                SRULE [] aug_place_unwrap_metadata,
+                SRULE [] aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_make_array_elems_metadata:
+  !es et sz haslen buf idx. (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_make_array_elems f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es et sz haslen buf idx =
+  compile_make_array_elems g cenv es et sz haslen buf idx
+Proof
+  Induct >> simp[exprLoweringTheory.compile_make_array_elems_def] >> rpt strip_tac >>
+  gvs[] >> simp[SRULE [] aug_place_unwrap_metadata,
+                SRULE [] aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_make_array_metadata:
+  (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_make_array f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es et sz haslen buf =
+  compile_make_array g cenv es et sz haslen buf
+Proof
+  strip_tac >> gvs[] >>
+  drule (SRULE [] aug_place_make_array_elems_metadata) >>
+  simp[exprLoweringTheory.compile_make_array_def]
+QED
+
+Theorem aug_place_struct_lit_metadata:
+  !fields ty buf off. (!name e ety. MEM (name,e) fields ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety e = g cenv ety e) ==>
+  compile_struct_lit f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty fields buf off =
+  compile_struct_lit g cenv ty fields buf off
+Proof
+  Induct >> simp[exprLoweringTheory.compile_struct_lit_def] >>
+  qx_gen_tac `entry` >> PairCases_on `entry` >> rpt strip_tac >> gvs[] >>
+  `!ty buf off. compile_struct_lit f
+     (cenv with <|ce_module_var_type := m; ce_hashmap_info := h|>) ty fields buf off =
+     compile_struct_lit g cenv ty fields buf off` by
+    (rpt gen_tac >> first_x_assum irule >> metis_tac[]) >>
+  simp[exprLoweringTheory.compile_struct_lit_def,
+       SRULE [] aug_place_unwrap_metadata, SRULE [] aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_attribute_metadata:
+  (!ty. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty be =
+        g cenv ty be) ==>
+  compile_attribute f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty be fld =
+  compile_attribute g cenv rt ty be fld
+Proof
+  strip_tac >> simp[exprLoweringTheory.compile_attribute_def]
+QED
+
+Theorem aug_place_elem_size_metadata:
+  !loc ty. elem_size_in_location
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) loc ty =
+    elem_size_in_location cenv loc ty
+Proof
+  rpt gen_tac >> irule aug_place_elem_size_in_location_cong >> simp[]
+QED
+
+Theorem aug_place_subscript_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (supportedExprs$supported_expr tops be \/ supported_place_expr tops be \/
+   supported_effect_place_expr tops be) /\
+  (!e ty. (e = be \/ e = ix) ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_subscript f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty be ix =
+  compile_subscript g cenv rt ty be ix
+Proof
+  strip_tac >>
+  `place_type (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) be =
+   place_type cenv be` by (irule aug_place_place_type_metadata >> simp[] >> metis_tac[]) >>
+  `!loc. elem_size_in_location
+     (cenv with <|ce_module_var_type := m; ce_hashmap_info := h|>) loc =
+     elem_size_in_location cenv loc` by
+    simp[FUN_EQ_THM, SRULE [] aug_place_elem_size_metadata] >>
+  simp[exprLoweringTheory.compile_subscript_def,
+       exprLoweringTheory.lower_value_def, aug_place_unwrap_metadata,
+       aug_place_elem_size_metadata]
+QED
+
+Theorem aug_place_ext_kwarg_metadata:
+  (!ty. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_ext_call_kwarg f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt k e =
+  compile_ext_call_kwarg g cenv rt k e
+Proof
+  strip_tac >> simp[exprLoweringTheory.compile_ext_call_kwarg_def,
+    exprLoweringTheory.lower_value_def, aug_place_materialize_metadata,
+    aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_ext_kwargs_metadata:
+  !es ks. (!e ty. MEM e es ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_ext_call_kwargs f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ks es =
+  compile_ext_call_kwargs g cenv rt ks es
+Proof
+  Induct >> Cases_on `ks` >> simp[exprLoweringTheory.compile_ext_call_kwargs_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `compile_ext_call_kwarg f _ rt kw child` >>
+  `!ty. f (cenv with <|ce_module_var_type := m; ce_hashmap_info := h|>) ty child =
+        g cenv ty child` by metis_tac[] >>
+  drule (SRULE [] aug_place_ext_kwarg_metadata) >> simp[]
+QED
+
+Theorem aug_place_acc_metadata:
+  (!ty. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_acc f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e op =
+  compile_acc g cenv e op
+Proof
+  strip_tac >> Cases_on `op` >>
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_acc_def,
+       exprLoweringTheory.lower_value_def, aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_lowered_value_type_metadata:
+  !cenv e. lowered_value_type
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    lowered_value_type cenv e
+Proof
+  recInduct exprLoweringTheory.lowered_value_type_ind >>
+  simp[exprLoweringTheory.lowered_value_type_def]
+QED
+
+Theorem aug_place_ext_arg_types_metadata:
+  !cenv ts es. ext_call_arg_types
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ts es =
+    ext_call_arg_types cenv ts es
+Proof
+  recInduct exprLoweringTheory.ext_call_arg_types_ind >> rpt strip_tac >>
+  simp[exprLoweringTheory.ext_call_arg_types_def, aug_place_lowered_value_type_metadata]
+QED
+
+Theorem aug_place_name_metadata:
+  compile_name_vv (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+  compile_name_vv cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_name_vv_def]
+QED
+
+Theorem aug_place_addmod_names_metadata:
+  compile_addmod_names (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+  compile_addmod_names cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_addmod_names_def,
+       aug_place_name_metadata, aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_mulmod_names_metadata:
+  compile_mulmod_names (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+  compile_mulmod_names cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_mulmod_names_def,
+       aug_place_name_metadata, aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_powmod_names_metadata:
+  compile_powmod256_names (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+  compile_powmod256_names cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_powmod256_names_def,
+       aug_place_name_metadata, aug_place_unwrap_metadata]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
