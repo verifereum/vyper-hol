@@ -2322,7 +2322,9 @@ Resume dynamic_convert_lower_case[operand_value]:
     (qspecl_then [`func`, `es'`, `ctx`] mp_tac)) >>
   disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
   simp[] >> conj_tac
-  >- fs[expr_post_def] >>
+  >- (drule post_value_type_bytestring >>
+      disch_then (qspec_then `cenv` assume_tac) >>
+      fs[expr_post_def]) >>
   rpt strip_tac >> gvs[] >>
   drule_all dynamic_expr_post_convert >> simp[]
 QED
