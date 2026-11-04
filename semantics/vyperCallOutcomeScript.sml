@@ -39,9 +39,12 @@ val () = take_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_tr
 Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
     let (accounts, tStorage, logs) =
-      adopt_outcome rq outcome (st.accounts, st.tStorage, st.logs) in
+      adopt_outcome rq outcome
+        (st.accounts, st.tStorage, st.logs) in
     return () (st with <| accounts := accounts; tStorage := tStorage;
-                         logs := logs |>)
+                         logs := logs;
+                         pending_deletions := adopt_outcome_deletions rq outcome
+                           st.pending_deletions |>)
 End
 val () = adopt_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_trans;
 
@@ -61,17 +64,19 @@ Theorem adopt_call_outcome_equation:
     (INL (), if outcome.co_success /\ ~rq.cr_static then
        st with <|accounts := outcome.co_accounts;
                  tStorage := outcome.co_tStorage;
-                 logs := st.logs ++ outcome.co_logs|>
+                  logs := st.logs ++ outcome.co_logs;
+                  pending_deletions := outcome.co_toDelete ++ st.pending_deletions|>
      else st)
 Proof
-  rw[adopt_call_outcome_def, adopt_outcome_def, return_def]
+  rw[adopt_call_outcome_def, adopt_outcome_def,
+     adopt_outcome_deletions_def, return_def]
 QED
 
 Theorem adopt_call_outcome_frame:
   adopt_call_outcome rq outcome st = (res,st') ==>
   res = INL () /\
   st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
-                 logs := st'.logs|>
+                 logs := st'.logs; pending_deletions := st'.pending_deletions|>
 Proof
   rw[adopt_call_outcome_equation] >> gvs[]
 QED

@@ -170,7 +170,7 @@ Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+      expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
@@ -184,7 +184,7 @@ Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+      expr_sim_inv cenv cx env es /\ source_supply es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\

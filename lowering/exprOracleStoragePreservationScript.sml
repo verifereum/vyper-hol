@@ -11,7 +11,13 @@ Ancestors
   vyperTypeExprResult vyperValue vyperTypeEnv
   vyperTypeInvariants vyperTypeAssignContext vyperTypeBuiltins
   vyperTypeEvalSoundness vyperTypeValues
-Libs monadsyntax
+Libs monadsyntax vyperSourceSupplyLib
+
+val storage_gvs = gvs;
+val storage_drule_all = drule_all;
+fun gvs thms = vyperSourceSupplyLib.forward >> storage_gvs thms >>
+  vyperSourceSupplyLib.forward;
+fun drule_all th = vyperSourceSupplyLib.forward >> storage_drule_all th;
 
 Theorem eval_expr_oracle_storage_mutual:
   (!cx s. eval_stmt cx s = eval_stmt cx s) /\
@@ -19,7 +25,7 @@ Theorem eval_expr_oracle_storage_mutual:
   (!cx it. eval_iterator cx it = eval_iterator cx it) /\
   (!cx tyv id body vs. eval_for cx tyv id body vs = eval_for cx tyv id body vs) /\
   (!cx e. !env st res st'.
-    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    runtime_storage_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\ int_calls_expr e = [] /\
     ~supported_expr_exists expr_evm_run_root e /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -27,19 +33,19 @@ Theorem eval_expr_oracle_storage_mutual:
     (well_typed_expr env e ==> contract_storage_well_formed cx st') /\
     (!vt. type_place_expr env e = SOME vt ==> contract_storage_well_formed cx st')) /\
   (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
     int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx bt. !env vt st res st'.
-    type_place_target env bt = SOME vt /\ runtime_storage_consistent env cx st /\
+    type_place_target env bt = SOME vt /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
     int_calls_target bt = [] /\ ~supported_target_exists expr_evm_run_root bt /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_base_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tgt. !env ty st res st'.
-    well_typed_target env tgt ty /\ runtime_storage_consistent env cx st /\
+    well_typed_target env tgt ty /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target tgt) /\
     int_calls_target tgt = [] /\ ~supported_target_exists expr_evm_run_root tgt /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -47,7 +53,7 @@ Theorem eval_expr_oracle_storage_mutual:
   (!cx tgt v. assign_tuple_targets cx tgt v = assign_tuple_targets cx tgt v) /\
   (!cx tgts vs. assign_tuple_target_list cx tgts vs = assign_tuple_target_list cx tgts vs) /\
   (!cx es. !env st res st'.
-    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
+    well_typed_exprs env es /\ runtime_storage_consistent env cx st /\ source_supply st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
     int_calls_exprs es = [] /\ ~supported_exprs_exists expr_evm_run_root es /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -407,9 +413,39 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_RawRevert]:
       first_x_assum drule_all >> strip_tac >>
       Cases_on `args_res` >> gvs[bind_def, ignore_bind_def, type_check_def,
         assert_def, return_def, raise_def]
-      >- (Cases_on `LENGTH x = 1` >> gvs[] >> rpt strip_tac >> gvs[]) >>
+      >- (strip_tac >> gvs[AllCaseEqs()] >>
+          imp_res_tac lift_option_type_state >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[Once well_typed_expr_def]
+QED
+
+Theorem selfdestruct_tail_preserves_contract_storage[local]:
+  contract_storage_well_formed cx st /\
+  (do
+     update_accounts
+       (vfmExecution$transfer_value cx.txn.target target
+         (lookup_account cx.txn.target st.accounts).balance);
+     (if cx.txn.created_in_tx then do
+        update_accounts (\acc. update_account cx.txn.target
+          (lookup_account cx.txn.target acc with balance := 0) acc);
+        update_pending_deletions (CONS cx.txn.target)
+      od else return ());
+     raise HaltException
+   od) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  Cases_on `cx.txn.created_in_tx` >>
+  simp[bind_def, ignore_bind_def, update_accounts_def,
+       update_pending_deletions_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  irule contract_storage_well_formed_storage_frame >>
+  qexists_tac `st` >> simp[] >>
+  gen_tac >> Cases_on `b` >>
+  simp[vyperStorageBackendTheory.get_storage_def,
+       vfmExecutionTheory.transfer_value_def,
+       vfmStateTheory.update_account_def, vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM, AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> gvs[combinTheory.APPLY_UPDATE_THM]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
@@ -431,13 +467,11 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
           gvs[type_check_def, assert_def, return_def, raise_def]
           >- (Cases_on `dest_AddressV (HD x)` >> gvs[return_def, raise_def]
               >- (rpt strip_tac >> gvs[]) >>
-              Cases_on `transfer_value cx.txn.target x'
-                (lookup_account cx.txn.target args_st.accounts).balance args_st` >>
-              rename1 `transfer_value _ _ _ args_st = (transfer_res,transfer_st)` >>
-              drule_all transfer_value_preserves_contract_storage_well_formed >>
-              Cases_on `transfer_res` >>
-              gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-              rpt strip_tac >> gvs[]) >>
+              rpt strip_tac >>
+              qpat_assum `_ = (res,st')`
+                (assume_tac o SRULE [bind_def, ignore_bind_def, return_def, raise_def]) >>
+              drule_all (selfdestruct_tail_preserves_contract_storage |>
+                SRULE [bind_def, ignore_bind_def, return_def, raise_def]) >> simp[]) >>
           rpt strip_tac >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]

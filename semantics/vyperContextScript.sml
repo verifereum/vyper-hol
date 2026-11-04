@@ -28,6 +28,8 @@ Datatype:
   ; gas_price: num
   ; chain_id: num
   ; is_creation: bool
+  (* EIP-6780: the executing account was created in this transaction. *)
+  ; created_in_tx: bool
   (* Block context fields *)
   ; coinbase: address
   ; gas_limit: num
@@ -54,6 +56,7 @@ Definition empty_call_txn_def:
     gas_price := 0;
     chain_id := 0;
     is_creation := F;
+    created_in_tx := F;
     coinbase := 0w;
     gas_limit := 0;
     base_fee := 0;
