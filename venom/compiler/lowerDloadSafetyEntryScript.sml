@@ -2,7 +2,8 @@
 Theory lowerDloadSafetyEntry
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyBoundary lowerDloadSafetyKernel
-  ptrDiscipline contextCodegenRel
+  ptrDiscipline contextCodegenRel lowerDloadSafetyPhiEffects lowerDloadSafetyUpdates
+  lowerDloadConfiguredOrigins venomInst venomExecProofs unitShapeDefs pair pred_set
   o1PassContract unitTransformDefs finite_map list venomExecSemantics lowerDloadDefs
 
 Theorem ld_entry_phis:
@@ -84,4 +85,60 @@ Proof
   pop_assum strip_assume_tac >>
   drule_all ld_sync_entry >> disch_then (qspecl_then [`u`, `lo`] strip_assume_tac) >>
   metis_tac[]
+QED
+
+Theorem ld_entry_effect:
+  f.lf_fn = fn /\ f.lf_src = ss /\ f.lf_tgt = ts /\
+  f.lf_tv = tn.t_var /\
+  ld_vars P A f /\ ld_memory lo A tn ss ts /\ ld_nonghost tn ss ts /\
+  ss.vs_prev_bb = ts.vs_prev_bb /\ ss.vs_current_bb = ts.vs_current_bb /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  (!a. a IN FRANGE f.lf_H ==> a IN FDOM A) /\
+  enters_block (ld_image f) ts t1 ==>
+  ?s1 H'. enters_block fn ss s1 /\
+    ld_vars P A (f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
+      lf_tv := (entry_taint_vars fn ss tn).t_var|>) /\
+    ld_memory lo A (entry_taint_vars fn ss tn) s1 t1 /\
+    ld_nonghost (entry_taint_vars fn ss tn) s1 t1 /\
+    entry_prov fn ss (ld_erase A o_f f.lf_H) = ld_erase A o_f H' /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    s1 = ss with <|vs_vars := s1.vs_vars; vs_inst_idx := s1.vs_inst_idx|> /\
+    t1 = ts with <|vs_vars := t1.vs_vars; vs_inst_idx := t1.vs_inst_idx|>
+Proof
+  strip_tac >>
+  `enters_block fn ts t1` by
+    (irule lower_dload_function_supply_enters_block_origin >>
+     qexistsl_tac [`ld_image f`, `f.lf_supply`,
+       `SND (lower_dload_function_supply f.lf_supply fn)`] >>
+     gvs[ld_image_def]) >>
+  qpat_x_assum `enters_block fn ts t1` mp_tac >>
+  simp[enters_block_def] >> strip_tac >>
+  `EVERY (\i. MEM i (fn_insts f.lf_fn)) bb.bb_instructions` by
+    (drule lookup_block_MEM >> strip_tac >>
+     gvs[EVERY_MEM, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     rpt strip_tac >> qexists_tac `bb` >> simp[]) >>
+  gvs[] >>
+  `f.lf_src.vs_labels = f.lf_tgt.vs_labels` by fs[ld_nonghost_def] >>
+  `tn.t_var = f.lf_tv` by simp[] >>
+  drule_all ld_phis_effect >> strip_tac >>
+  `ss = f.lf_src with vs_vars := ss.vs_vars` by
+    metis_tac[ld_phis_only_vars] >>
+  `s_phi = f.lf_tgt with vs_vars := s_phi.vs_vars` by
+    metis_tac[ld_phis_only_vars] >>
+  qexistsl_tac [`ss with vs_inst_idx := phi_prefix_length bb.bb_instructions`,
+    `phis_prov f.lf_src.vs_prev_bb f.lf_H bb.bb_instructions`] >>
+  simp[entry_taint_vars_def, entry_prov_def] >>
+  conj_tac
+  >- (qpat_x_assum `ld_vars P A (f with <|lf_src := ss; lf_tgt := s_phi;
+        lf_H := _; lf_tv := _|>)` mp_tac >>
+      simp[ld_vars_def]) >>
+  conj_tac >- (fs[ld_memory_def] >> metis_tac[]) >>
+  conj_tac >- (fs[ld_nonghost_def] >> metis_tac[]) >>
+  conj_tac
+  >- metis_tac[ld_phis_prov_range, SUBSET_DEF] >>
+  conj_tac
+  >- (qpat_x_assum `ss = _ with vs_vars := _`
+        (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `s_phi = _ with vs_vars := _`
+    (fn th => once_rewrite_tac[th]) >> simp[]
 QED

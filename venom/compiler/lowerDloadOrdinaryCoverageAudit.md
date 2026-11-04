@@ -818,3 +818,29 @@ INVOKE/return and failing/terminal/current-instruction safety remain unfinished;
 .74's remaining-case ledger remains authoritative subject to the later checked
 ISTORE reconciliation. No theorem statement/definition was changed and the
 frozen contract's cheat remains unresolved.
+
+### Checked block-entry effect and corrected dependency inventory (.79)
+
+The .78 inspection missed existing stronger structural interfaces in
+`lowerDloadConfiguredOriginsScript.sml`: `lower_dload_insts_supply_phi_length`
+(:127ff) already proves PHI prefix length equality, and
+`lower_dload_insts_supply_eval_phis` (:152ff) proves evaluation identity.
+`lower_dload_function_supply_enters_block_origin` (:244ff) already combines
+inverse lookup, those identities and entry packaging. These are reused, not
+copied or reproved. Thus items 3 and the leading-PHI part of 4 above were
+missing from the diagnostic inventory, NOT missing from source reality.
+
+`lowerDloadSafetyUpdates` now exports `ld_set_prov_range`,
+`ld_phi_prov_range`, and `ld_phis_prov_range`; the latter is exactly
+`FRANGE (phis_prov prev H ins) SUBSET FRANGE H`. Selection reads original H,
+not the recursively updated map. `lowerDloadSafetyEntry.ld_entry_effect`
+exports the proposed schematic boundary without new hypotheses or definitions.
+It reuses enters_block_origin and ld_phis_effect and exposes vars/index-only
+poststate updates. This establishes selected range/erasure, source entry and
+post-PHI vars/memory/nonghost; it does not establish source activity or sync.
+
+Still unimplemented: successful terminator dispatch/destination reconstruction,
+post-entry source active/envelope reconstruction at PHI-prefix length,
+frame_reachable_block and same-frame owned coverage assembly. All allocation,
+expansion, call/return and terminal/current-raw integration obligations listed
+above also remain. No change to the frozen theorem or its original cheat.

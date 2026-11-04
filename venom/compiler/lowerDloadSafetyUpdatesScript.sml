@@ -205,3 +205,37 @@ Theorem ld_nonghost_update_var:
 Proof
   strip_tac >> gvs[ld_nonghost_def, update_var_def] >> metis_tac[]
 QED
+
+Theorem ld_set_prov_range:
+  FRANGE (set_prov H outs q) SUBSET
+    FRANGE H UNION {a | q = SOME a}
+Proof
+  Cases_on `outs`
+  >- (Cases_on `q` >>
+      simp[set_prov_def, SUBSET_DEF, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF] >>
+      metis_tac[]) >>
+  Cases_on `t` >> Cases_on `q` >>
+  simp[set_prov_def, SUBSET_DEF, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF,
+       FAPPLY_FUPDATE_THM] >> metis_tac[]
+QED
+
+Theorem ld_phi_prov_range:
+  phi_prov prev H inst = SOME a ==> a IN FRANGE H
+Proof
+  Cases_on `prev` >> simp[phi_prov_def] >>
+  Cases_on `resolve_phi x inst.inst_operands` >> simp[] >>
+  Cases_on `x'` >> simp[op_prov_def, FLOOKUP_DEF, IN_FRANGE] >>
+  metis_tac[]
+QED
+
+Theorem ld_phis_prov_range:
+  FRANGE (phis_prov prev H ins) SUBSET FRANGE H
+Proof
+  Induct_on `ins` >> simp[phis_prov_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  irule SUBSET_TRANS >>
+  qexists_tac `FRANGE (phis_prov prev H ins) UNION
+    {a | phi_prov prev H h = SOME a}` >>
+  conj_tac >- irule ld_set_prov_range >>
+  gvs[SUBSET_DEF] >> metis_tac[ld_phi_prov_range]
+QED
