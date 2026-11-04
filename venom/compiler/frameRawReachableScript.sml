@@ -1,7 +1,7 @@
 Theory frameRawReachable
 Ancestors
   contextRawReachable ptrDiscipline venomExecSemantics venomInst contextCodegenRel
-  crossBlockSimProps passSimulationDefs
+  crossBlockSimProps passSimulationDefs venomExecProofs
 
 Theorem raw_reachable_completed_invoke:
   !vs ctx caller callinst s nm ops callee args cs fuel ret se sr inst'.
@@ -140,4 +140,81 @@ Theorem frame_run_from_exec_return:
   run_blocks (SUC f) ctx fn cs = IntRet ret se
 Proof
   rpt strip_tac >> simp[Once run_blocks_unfold, run_block_def]
+QED
+
+Definition frame_tail_returns_def:
+  frame_tail_returns ctx fn s ret se <=>
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    ((?k. exec_block k ctx bb s = IntRet ret se) \/
+     (?k t h. exec_block k ctx bb s = OK t /\ ~t.vs_halted /\
+              run_blocks h ctx fn t = IntRet ret se))
+End
+
+Definition frame_prefix_def:
+  frame_prefix ctx fn cs s <=>
+  !ret se. frame_tail_returns ctx fn s ret se ==>
+    ?h. run_blocks h ctx fn cs = IntRet ret se
+End
+
+Theorem frame_prefix_entry:
+  enters_block fn cs s ==> frame_prefix ctx fn cs s
+Proof
+  rw[enters_block_def, frame_prefix_def, frame_tail_returns_def] >>
+  drule eval_phis_preserves_current_bb >> strip_tac >> gvs[]
+  >- (qexists_tac `SUC k` >> irule frame_run_from_exec_return >>
+      qexistsl [`bb`,`s_phi`] >> simp[]) >>
+  irule frame_run_prepend_block >>
+  qexistsl [`bb`,`k`,`h`,`t`] >> simp[run_block_def]
+QED
+
+Theorem frame_prefix_next:
+  frame_prefix ctx fn cs s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  ~is_terminator inst.inst_opcode /\ step_inst f ctx inst s = OK t /\
+  lookup_block (t with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb
+    fn.fn_blocks = SOME bb ==>
+  frame_prefix ctx fn cs (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rw[frame_prefix_def, frame_tail_returns_def] >> gvs[] >>
+  first_x_assum irule >> simp[frame_tail_returns_def] >>
+  all_tac
+  >- (disj1_tac >> irule frame_exec_prepend >>
+      conj_tac >- simp[] >>
+      qexistsl [`f`,`k`,`inst`,`t`] >> simp[]) >>
+  disj2_tac >>
+  `?j. exec_block j ctx bb s = OK t'` by
+    (irule frame_exec_prepend >> conj_tac >- simp[] >>
+     qexistsl [`f`,`k`,`inst`,`t`] >> simp[]) >>
+  qexistsl [`j`,`t'`,`h`] >> simp[]
+QED
+
+Theorem frame_prefix_return:
+  frame_prefix ctx fn cs s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst k ctx inst s = IntRet ret se ==>
+  ?h. run_blocks h ctx fn cs = IntRet ret se
+Proof
+  rw[frame_prefix_def] >> first_x_assum irule >>
+  simp[frame_tail_returns_def] >> disj1_tac >>
+  qexists_tac `k` >> simp[Once exec_block_def]
+QED
+
+Theorem frame_prefix_block:
+  frame_prefix ctx fn cs s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  is_terminator inst.inst_opcode /\ step_inst k ctx inst s = OK t /\
+  ~t.vs_halted /\ enters_block fn t s1 ==>
+  frame_prefix ctx fn cs s1
+Proof
+  rpt strip_tac >>
+  drule frame_prefix_entry >>
+  rw[frame_prefix_def] >>
+  `?h. run_blocks h ctx fn t = IntRet ret se` by metis_tac[] >>
+  qpat_x_assum `frame_prefix ctx fn cs s` mp_tac >>
+  rewrite_tac[frame_prefix_def] >> disch_then irule >>
+  simp[frame_tail_returns_def] >> disj2_tac >>
+  qexistsl [`k`,`t`,`h`] >> simp[Once exec_block_def]
 QED
