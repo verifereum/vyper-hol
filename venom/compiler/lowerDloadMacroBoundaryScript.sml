@@ -251,3 +251,106 @@ Proof
   qpat_assum `ld_owned_vars _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem ld_macro_alloca_step:
+  i.inst_opcode = ALLOCA /\ i.inst_operands = [Lit 32w] /\
+  i.inst_outputs = [av] ==>
+  step_inst fuel C i s = OK
+    (case FLOOKUP s.vs_allocas i.inst_id of
+       SOME (b,sz) => update_var av (n2w b) s
+     | NONE => update_var av (n2w s.vs_alloca_next)
+         (s with <|vs_allocas := s.vs_allocas |+ (i.inst_id,(s.vs_alloca_next,32));
+                   vs_alloca_next := s.vs_alloca_next + 32|>))
+Proof
+  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas i.inst_id`
+  >- simp[dimword_def] >>
+  rename1 `SOME p` >> PairCases_on `p` >> simp[]
+QED
+
+Theorem ld_load_first_prefix:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] ==>
+  (ld_target_prefix C [a;b;c;d] t0 u0 (SUC 0) t u <=>
+   ?r. r = (case FLOOKUP t0.vs_allocas a.inst_id of
+       SOME (bp,sz) => update_var av (n2w bp) t0
+     | NONE => update_var av (n2w t0.vs_alloca_next)
+         (t0 with <|vs_allocas := t0.vs_allocas |+ (a.inst_id,(t0.vs_alloca_next,32));
+                   vs_alloca_next := t0.vs_alloca_next + 32|>)) /\
+     t = r with vs_inst_idx := SUC t0.vs_inst_idx /\
+     u = step_taint a t0 r u0)
+Proof
+  strip_tac >> rewrite_tac[ld_target_prefix_step_iff] >>
+  simp[ld_target_prefix_empty] >>
+  drule_all ld_macro_alloca_step >> disch_then (fn th => rewrite_tac[th]) >> simp[]
+QED
+
+Theorem ld_configured_load_code:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
+  inst.inst_outputs = [out] /\
+  fresh_ir_var q = (av,q1) /\ fresh_ir_var q1 = (bv,q2) /\
+  fresh_inst_id q2 = (ai,q3) /\ fresh_inst_id q3 = (bi,q4) /\
+  fresh_inst_id q4 = (ci,q5) /\ fresh_inst_id q5 = (di,q6) ==>
+  lower_dload_inst_supply q inst =
+    ([<|inst_id := ai; inst_opcode := ALLOCA;
+        inst_operands := [Lit 32w]; inst_outputs := [av]|>;
+      <|inst_id := bi; inst_opcode := ADD;
+        inst_operands := [off; Label "code_end"]; inst_outputs := [bv]|>;
+      <|inst_id := ci; inst_opcode := CODECOPY;
+        inst_operands := [Var av; Var bv; Lit 32w]; inst_outputs := []|>;
+      <|inst_id := di; inst_opcode := MLOAD;
+        inst_operands := [Var av]; inst_outputs := [out]|>],q6)
+Proof
+  simp[lower_dload_inst_supply_def]
+QED
+
+Theorem ld_load_first_operands:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC 0) t u /\
+  (!v. op = Var v ==> v <> av) ==>
+  eval_operand op t = eval_operand op t0
+Proof
+  strip_tac >> drule_all ld_load_first_prefix >>
+  disch_then (fn th => gvs[th]) >>
+  Cases_on `FLOOKUP t0.vs_allocas a.inst_id`
+  >- (simp[ld_macro_operand_pc] >>
+      Cases_on `op` >> simp[eval_operand_def, update_var_def, lookup_var_def,
+        FLOOKUP_UPDATE] >> metis_tac[]) >>
+  rename1 `SOME p` >> PairCases_on `p` >>
+  simp[ld_macro_operand_pc] >>
+  irule eval_operand_update_var_other >> metis_tac[]
+QED
+
+Theorem ld_load_second_prefix:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ (!v. off = Var v ==> v <> av) ==>
+  (ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC 0)) t u <=>
+   ?r w x y. ld_target_prefix C [a;b;c;d] t0 u0 (SUC 0) r w /\
+     eval_operand off t0 = SOME x /\ eval_operand (Label "code_end") t0 = SOME y /\
+     t = (update_var bv (x + y) r) with vs_inst_idx := SUC r.vs_inst_idx /\
+     u = step_taint b r (update_var bv (x + y) r) w)
+Proof
+  strip_tac >> CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [ld_target_prefix_step_iff])) >> simp[] >>
+  drule_all ld_macro_add_step >> disch_then (fn th => rewrite_tac[th]) >>
+  eq_tac
+  >- (strip_tac >>
+      `eval_operand off v = eval_operand off t0` by
+        (irule ld_load_first_operands >> simp[] >>
+         qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
+      `eval_operand (Label "code_end") v = eval_operand (Label "code_end") t0` by
+        (irule ld_load_first_operands >> simp[] >>
+         qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
+      gvs[] >> gvs[AllCaseEqs()] >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `eval_operand off r = eval_operand off t0` by
+    (irule ld_load_first_operands >> simp[] >>
+         qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  `eval_operand (Label "code_end") r = eval_operand (Label "code_end") t0` by
+    (irule ld_load_first_operands >> simp[] >>
+         qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >> simp[]
+QED
