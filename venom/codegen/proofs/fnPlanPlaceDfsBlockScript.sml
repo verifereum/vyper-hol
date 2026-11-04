@@ -1,6 +1,6 @@
 Theory fnPlanPlaceDfsBlock
 Ancestors
-  fnPlanLineage stackPlanGen venomExecProps stackOpSim codegen asmToBytecodeProofs codegenEncodingWf
+  fnPlanLineage stackPlanGen venomExecProps stackOpSim asmSem codegen asmToBytecodeProofs codegenEncodingWf
   list rich_list arithmetic
 
 Theorem generate_context_regions_length:
@@ -220,4 +220,32 @@ Proof
   >- (drule (cj 2 compute_label_offsets_bound) >> strip_tac >>
       gvs[asm_symbols_ok_def, wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac)
   >> irule offset_to_pc_inverse_proof >> simp[symbolResolveTheory.asm_inst_size_def]
+QED
+
+Theorem labelled_asm_slice_placed:
+  !prog pre body post lbl.
+    prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog ==>
+    ?off. FLOOKUP (SND (compute_label_offsets prog)) lbl = SOME off /\
+          off < dimword (:256) /\
+          FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre) /\
+          asm_block_at prog (LENGTH pre) (AsmLabel lbl :: body)
+Proof
+  rpt strip_tac >>
+  `LENGTH pre < LENGTH prog /\ EL (LENGTH pre) prog = AsmLabel lbl` by
+    simp[EL_APPEND] >>
+  drule_all asm_symbols_ok_label_index >> strip_tac >>
+  qexists_tac `off` >> simp[] >>
+  simp[asm_block_at_def, EL_APPEND, EL_CONS]
+QED
+
+Theorem asm_slice_internal_labels:
+  !prog pre code post.
+    asm_symbols_ok prog /\ prog = pre ++ code ++ post ==>
+    !l j. j < LENGTH code /\ EL j code = AsmLabel l ==>
+    ?off. FLOOKUP (SND (compute_label_offsets prog)) l = SOME off /\
+          off < dimword (:256) /\
+          FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre + j)
+Proof
+  rpt strip_tac >> irule asm_symbols_ok_label_index >>
+  simp[EL_APPEND]
 QED
