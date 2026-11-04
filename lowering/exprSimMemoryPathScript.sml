@@ -47,14 +47,18 @@ Theorem emit_mload_endpoint:
   eval_operand arg s = SOME w /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  let u = (update_var (STRING #"%" (toString sa.cs_next_var))
-              (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx in
-    eval_operand op u = SOME (mload (w2n w) s) /\
-    u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand op ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx) = SOME (mload (w2n w) s) /\
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx).vs_current_bb = sb.cs_current_bb /\
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x w'. not_fresh_at sa x /\ lookup_var x s = SOME w' ==>
-             lookup_var x u = SOME w') /\
-    u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory
+             lookup_var x ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx) = SOME w') /\
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx).vs_allocas = s.vs_allocas /\ ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx).vs_memory = s.vs_memory
 Proof
   simp[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
        comp_ignore_bind_def, comp_return_def, emit_def] >>

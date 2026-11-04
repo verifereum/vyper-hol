@@ -38,6 +38,8 @@ Proof
          (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
       drule_all emit_mload_endpoint >> simp[GSYM markerTheory.Abbrev_def] >>
       strip_tac >>
+      `u.vs_current_bb = sb.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sb.cs_current_insts` by simp[Abbr `u`] >>
       qexistsl_tac [`v`, `u`] >> conj_tac
       >- (first_x_assum irule >>
           drule_all emit_mload_marked_path >> simp[Abbr `u`]) >>
