@@ -106,8 +106,7 @@ Proof
     conj_tac >- (rpt strip_tac >> drule mode_inst_ok_non_term >> simp[]) >>
     simp[]) >>
   `apply_groups_inst mode nop_set rep_map term = [term]` by (
-    simp[Abbr `term`, Abbr `nop_set`, Abbr `rep_map`,
-         apply_groups_inst_def]) >>
+    irule mmWfProofsTheory.apply_groups_inst_identity >> conj_tac >> first_assum ACCEPT_TAC) >>
   `!x. MEM (Var x) term.inst_operands ==> x NOTIN fresh` by
     fs[Abbr `term`] >>
   suspend "bridge"
@@ -132,7 +131,8 @@ Resume mm_block_simulates_mode_proof[bridge]:
     match_mp_tac mode_run_insts_lift_result >>
     (conj_tac >- fs[]) >> fs[])) >>
   disch_then (qspecl_then [`fuel`, `ctx`, `s`] mp_tac) >>
-  BETA_TAC >> rw[]
+  BETA_TAC >> REWRITE_TAC [AND_CLAUSES] >>
+  disch_then irule >> first_assum ACCEPT_TAC
 QED
 
 Finalise mm_block_simulates_mode_proof;
@@ -382,18 +382,17 @@ Proof
   (* For dp_src case: di' must = mi. But opcode DLOAD vs MSTORE *)
   (* For dp_dst case: mi' must = mi. Same inst => dp_out_var dp = dp_out_var dp'
      => dp.dp_dst = Var(dp_out_var dp) => contradicts dp's clause *)
-  TRY (
-    `di' = mi` by (
-      CCONTR_TAC >>
-      qpat_x_assum `!j. j < _ /\ j <> mi ==> ~MEM (Var _) _`
-        (qspec_then `di'` mp_tac) >> simp[MEM]) >>
-    gvs[]) >>
-  TRY (
-    `mi' = mi` by (
-      CCONTR_TAC >>
-      qpat_x_assum `!j. j < _ /\ j <> mi ==> ~MEM (Var _) _`
-        (qspec_then `mi'` mp_tac) >> simp[MEM]) >>
-    gvs[MEM] >> metis_tac[])
+  all_tac
+  >- (`di' = mi` by (
+        CCONTR_TAC >>
+        qpat_x_assum `!j. j < _ /\ j <> mi ==> ~MEM (Var _) _`
+          (qspec_then `di'` mp_tac) >> simp[MEM]) >>
+      gvs[]) >>
+  `mi' = mi` by (
+    CCONTR_TAC >>
+    qpat_x_assum `!j. j < _ /\ j <> mi ==> ~MEM (Var _) _`
+      (qspec_then `mi'` mp_tac) >> simp[MEM]) >>
+  gvs[MEM] >> metis_tac[]
 QED
 
 (* For an unchanged instruction (not DLOAD or MSTORE of any pair),
@@ -1164,12 +1163,9 @@ Proof
   simp[] >> strip_tac >>
   first_x_assum (qspecl_then [`fuel`, `ctx`, `s`, `s`] mp_tac) >>
   simp[] >>
-  strip_tac >> gvs[] >> (
-    DISJ1_TAC >> metis_tac[]
-    ORELSE
-    (DISJ2_TAC >> irule lift_result_state_equiv_mono >>
-     qexists_tac `mm_block_fresh_dload dfg bb` >> simp[])
-  )
+  strip_tac >> gvs[] >>
+  DISJ2_TAC >> irule lift_result_state_equiv_mono >>
+  qexists_tac `mm_block_fresh_dload dfg bb` >> simp[]
 QED
 
 Theorem ALL_DISTINCT_MAP_EL_IMP[local]:
@@ -1356,7 +1352,7 @@ Proof
     (* 1: non-empty *)
     simp[apply_groups_inst_nonempty],
     (* 2: terminator identity *)
-    simp[apply_groups_inst_def],
+    irule mmWfProofsTheory.apply_groups_inst_identity >> conj_tac >> first_assum ACCEPT_TAC,
     (* 3: non-term preservation, through the small structural interface. *)
     rpt strip_tac >> irule apply_groups_inst_non_terminator >> simp[]
   ]
@@ -1614,11 +1610,23 @@ Proof
   >>
   qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
   simp[Once step_inst_def] >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
-  rpt strip_tac >> gvs[] >>
-  (* The opaque DRET packing result still returns IntRet, never OK. *)
-  pairarg_tac >> gvs[]
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+  >- (simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+      rpt strip_tac >> gvs[])
+  >- (simp[Once step_inst_base_def, AllCaseEqs(), jump_to_def] >>
+      rpt strip_tac >> gvs[])
+  >- simp[Once step_inst_base_def, AllCaseEqs()]
+  >- simp[Once step_inst_base_def, AllCaseEqs()]
+  >- simp[Once step_inst_base_def, AllCaseEqs()]
+  >- simp[Once step_inst_base_def]
+  >- simp[Once step_inst_base_def]
+  >- (simp[Once step_inst_base_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >> pairarg_tac >> gvs[])
+  >- simp[Once step_inst_base_def, AllCaseEqs()]
+  >- simp[Once step_inst_base_def, AllCaseEqs()]
+  >> simp[Once step_inst_base_def]
 QED
 
 (* exec_block preserves vs_call_ctx: every step_inst OK preserves it. *)
