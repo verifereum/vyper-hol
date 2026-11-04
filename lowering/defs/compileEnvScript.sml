@@ -44,7 +44,7 @@ Theory compileEnv
 Ancestors
   immutableValue immutableEncoding vyperStorageLayoutSafety
   venomExecSemantics venomInst venomPolicyTypes
-  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI
+  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI vyperTypeSystem
   byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
@@ -1555,6 +1555,37 @@ Definition is_word_type_def:
   is_word_type (FlagT _) = T ∧
   is_word_type _ = F
 End
+
+Theorem type_widens_to_word:
+  !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
+Proof
+  rw[type_widens_to_def] >>
+  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+QED
+
+Theorem arg_type_fits_bytestring_source:
+  !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `u` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
+  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
 
 (* ===== Internal Calling Convention ===== *)
 

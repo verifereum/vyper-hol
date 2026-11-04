@@ -211,10 +211,5 @@ QED
 Theorem type_widens_to_word:
   !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
 Proof
-  rw[type_widens_to_def] >>
-  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
-  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
-  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
-  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
-  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+  metis_tac[compileEnvTheory.type_widens_to_word]
 QED
