@@ -5,6 +5,7 @@ Ancestors
   exprLowering exprLoweringProps compileEnv context fragExecMem fragExec
   vyperAST vyperValue vyperInterpreter vyperState loweringSlice exprSimLeaves
   exprSimHyps accountsRelProps vyperTypeGlobalLookupSoundness vyperTypeSystem
+  bodyMemoryPreds vyperTypeCallGraph
 
 Theorem body_unwrap_location_word_mem[local]:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
@@ -114,3 +115,85 @@ val () =
      then print "BODY_LOCATION_WORD_MEMORY_AUDIT OK\n"
      else raise Fail "located word consumer inherited admission"
   end;
+
+Theorem compile_toplevel_storage_word_sim_mem:
+  !ctx func cenv cx env ty ann src id es ts tr typ id_str.
+    expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+    is_word_type ann /\ get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+    expr_sim_mem ctx func cenv cx ty (TopLevelName ann (src,id)) es
+Proof
+  rpt strip_tac >> Cases_on `lookup_var_slot_from_layout cx tr src id_str`
+  >- (rw[expr_sim_mem_def] >>
+      qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+      simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+           return_def, raise_def, LET_THM] >>
+      strip_tac >> gvs[expr_res_ok_def]) >>
+  `expr_vv_sim_mem ctx func cenv cx ty (TopLevelName ann (src,id)) es` by
+    (irule compile_toplevel_name_vv_sim_mem >> metis_tac[]) >>
+  irule body_location_word_sim_mem >> simp[expr_type_def] >>
+  strip_tac >> drule_all toplevel_storage_ce_vars >> strip_tac >>
+  gen_tac >> Cases_on `tr` >>
+  simp[compile_expr_def, expr_type_def, contextTheory.mk_ptr_def]
+QED
+
+Theorem compile_toplevel_word_runtime_sim_mem:
+  !ctx func cenv cx env ty ann nsid es.
+    expr_sim_pre cenv cx env (TopLevelName ann nsid) es /\
+    is_word_type ann /\ ~cenv.ce_is_ctor ==>
+    expr_sim_mem ctx func cenv cx ty (TopLevelName ann nsid) es
+Proof
+  rpt strip_tac >> PairCases_on `nsid` >>
+  rename1 `TopLevelName ann (src,id)` >>
+  Cases_on `get_module_code cx src`
+  >- (rw[expr_sim_mem_def] >>
+      qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
+      simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+           return_def, raise_def, LET_THM] >>
+      strip_tac >> gvs[expr_res_ok_def]) >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `find_var_decl_by_name id ts`
+  >- (`env_consistent env cx es /\ state_well_typed es /\
+       well_typed_expr env (TopLevelName ann (src,id))` by
+        fs[expr_sim_pre_def, expr_sim_inv_def] >>
+      drule_all toplevel_find_NONE_bare_global >> strip_tac >>
+      `src = cenv.ce_module /\
+       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+         !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
+              off + type_memory_size tv < dimword (:256)` by
+        (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+      `expr_vv_sim_mem ctx func cenv cx ty (TopLevelName ann (src,id)) es` by
+        (irule compile_toplevel_name_vv_sim_mem >> metis_tac[]) >>
+      irule body_location_word_sim_mem >> simp[expr_type_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
+      simp[compile_expr_def, expr_type_def, contextTheory.mk_ptr_def]) >>
+  rename1 `find_var_decl_by_name id ts = SOME di` >>
+  PairCases_on `di` >> Cases_on `di0`
+  >~ [`HashMapVarDecl`]
+  >- (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+      metis_tac[TopLevelName_Type_HashMapVarDecl_impossible]) >>
+  irule compile_toplevel_storage_word_sim_mem >> metis_tac[]
+QED
+
+Theorem body_toplevel_storage_word_mem_case:
+  !cx ann src id ts tr typ id_str.
+    is_word_type ann /\ get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+    body_expr_mem_ok cx (TopLevelName ann (src,id))
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es` by
+    simp[expr_sim_pre_body, int_calls_expr_def] >>
+  metis_tac[compile_toplevel_storage_word_sim_mem, compile_toplevel_name_vv_sim_mem]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_TOPLEVEL_FORCED_WORD_MEMORY_AUDIT OK\n"
+     else raise Fail "forced toplevel word memory inherited admission"
+  end) [compile_toplevel_storage_word_sim_mem,
+        compile_toplevel_word_runtime_sim_mem, body_toplevel_storage_word_mem_case];
