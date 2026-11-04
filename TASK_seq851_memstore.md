@@ -172,7 +172,7 @@ holbuild -j4 build stmtSimAssignStorageCopyTheory stmtSimDeclMemTheory memoryLoc
 
 ## Background
 
-The lowering now types internal-call results at the callee's return type (`lowered_value_type_def`, `compile_call_def` in `lowering/defs/exprLoweringScript.sml`), and `body_inv_def` (`lowering/bodySimScript.sml`) carries `cenv.ce_func_return_type = build_func_return_type tops`. A call is typed so that the callee's `sig.ret_ty` widens to the call's `expr_type` (`type_widens_to`). `compile_stmt` stages an assignment's RHS at `lowered_value_type cenv e`. A storage copy whose destination is a bytestring now copies `type_memory_bytes cenv (lowered_value_type cenv e)` bytes (`copy_size`, `lowering/defs/stmtLoweringScript.sml` near line 405); `assign_storage_copy_suffix` still talks about `mem_size`.
+The lowering now types internal-call results at the callee's return type (`lowered_value_type_def`, `compile_call_def` in `lowering/defs/exprLoweringScript.sml`), and `body_inv_def` (`lowering/bodySimScript.sml`) carries `cenv.ce_func_return_type = build_func_return_type tops` and `acyclic_struct_metadata cenv.ce_struct_fields` (so a typed memory copy keeps its block open: `compile_store_memory_typed_open`, `exprOpenCopiesScript.sml`). A call is typed so that the callee's `sig.ret_ty` widens to the call's `expr_type` (`type_widens_to`). `compile_stmt` stages an assignment's RHS at `lowered_value_type cenv e`. A storage copy whose destination is a bytestring now copies `type_memory_bytes cenv (lowered_value_type cenv e)` bytes (`copy_size`, `lowering/defs/stmtLoweringScript.sml` near line 405); `assign_storage_copy_suffix` still talks about `mem_size`.
 
 Notes from read-only audits (not built):
 - `body_assign_local_memory` / `body_annassign_memory`: if `lowered_value_type cenv e = ty` for an internal call returning `ret`, then `ret` widens to `expr_type e` (call typing) and `expr_type e` widens to `ty` (`atarget_accepts`); widening is antisymmetric, so `expr_type e = ty`. A widened non-bytestring call (`DynArray[uint256,2]` into `DynArray[uint256,4]`) no longer reaches these theorems; it goes to the `_other` theorems. The bytestring disjunct with a narrower call result is covered by the bytestring copy, given `type_memory_bytes ret <= type_memory_bytes ty`.
@@ -183,7 +183,7 @@ Notes from read-only audits (not built):
 ## Domain Constraints
 
 - Keep every executable definition unchanged. No new premise beyond what this file allows, no feature exclusion, no new cheat.
-- The commit at HEAD titled `TEMP: stand-in cheats ...` stands in for proofs being repaired on another branch (`exprSimIfExp`, `exprSimOperators`' ternary cases, `body_ifexp_case`). Don't touch those theories or that commit.
+- The commit titled `TEMP: stand-in cheats ...` for the IfExp sim stands in for proofs being repaired on another branch (`exprSimIfExp`, `exprSimOperators`' ternary cases, `body_ifexp_case`). Don't touch those theories or that commit.
 - If an ancestor theory outside the five targets fails to build for a reason other than box load, stop and report it; don't repair it.
 - Search for existing helpers before adding one.
 - No `TRY`/`ORELSE` around `metis_tac` or other search. Never raise tactic timeouts. No `holbuild run`/`repl`, no Holmake, no `--skip-*` flags, no `--force`.

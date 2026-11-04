@@ -659,8 +659,8 @@ Theorem lowered_value_type_not_call_word[local]:
   !cenv e. (!a t es d. e <> Call a t es d) /\ ~is_word_type (expr_type e) ==>
            ~is_word_type (lowered_value_type cenv e)
 Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  rw[lowered_value_type_def, is_word_type_def, expr_type_def]
+  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >>
+  rw[exprLoweringTheory.lowered_value_type_def, is_word_type_def, expr_type_def]
 QED
 
 (* A supported reason is a string expression (supported_string_reason),
