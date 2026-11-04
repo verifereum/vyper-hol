@@ -1,6 +1,7 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
+  compileEnv valueEncoding
   exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
   vyperTyping
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -451,3 +452,33 @@ val () = List.app (fn th =>
         call_evaluation_safe_exprs_mem,
         int_calls_exprs_every_mem,
         expr_body_pre_builtin_arg];
+
+Theorem word_value_type_word:
+  !t. word_value_type t ==>
+      is_word_type t /\ ~is_ArrayT t /\ ~is_bytestring_type t
+Proof
+  Cases >> simp[word_value_type_def, is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt`) >>
+  simp[is_word_type_def, is_bytestring_type_def]
+QED
+
+Theorem word_value_type_memory_size:
+  !tenv t tv.
+    word_value_type t /\ evaluate_type tenv t = SOME tv ==>
+    type_memory_size tv = 32
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT DecimalT \/ t = BaseT BoolT \/ (?nsid. t = FlagT nsid)` by
+    (Cases_on `t` >> fs[word_value_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "WORD_TYPE_SOURCE_AUDIT OK\n"
+     else raise Fail "memory source fact inherited admission"
+  end) [word_value_type_word, word_value_type_memory_size];

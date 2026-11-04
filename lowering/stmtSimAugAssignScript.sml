@@ -151,19 +151,6 @@ Proof
   Cases_on `bop` >> rw[well_typed_binop_def, word_value_type_def] >> gvs[]
 QED
 
-Theorem word_value_type_memory_size:
-  !tenv t tv.
-    word_value_type t /\ evaluate_type tenv t = SOME tv ==>
-    type_memory_size tv = 32
-Proof
-  rpt strip_tac >>
-  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
-   t = BaseT DecimalT \/ t = BaseT BoolT \/ (?nsid. t = FlagT nsid)` by
-    (Cases_on `t` >> fs[word_value_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def]
-QED
-
 (* The source's operator on x's value and e's is the operator of the
    expression x op e annotated with x's type: the builtin reads its type
    argument from e's type, x op= e from x's place, and neither matters
@@ -264,7 +251,7 @@ Proof
   Cases_on `bop = NotIn`
   >- gvs[well_typed_binop_def, type_alloc_ok_def, is_word_type_def] >>
   drule_all well_typed_binop_augassign_word >> strip_tac >>
-  imp_res_tac exprSimOperatorsTheory.word_value_type_word >>
+  imp_res_tac exprSimSourceTheory.word_value_type_word >>
   simp[type_alloc_ok_def]
 QED
 

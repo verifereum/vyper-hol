@@ -1,6 +1,7 @@
 (* Actual typed copy producers: memory prefix and landing boundaries. *)
 Theory bodyCopyMemory
 Ancestors
+  bodyNameMemoryFacts
   bodyAllocMemory exprSimDefs exprSimBufferStore exprSimLiteralBuffer exprSimAlloc fragExec fragExecMem instMemFrontier
   stmtLowering
   allocaHistoryFragment exprLoweringProps exprLowering emitHelperProps emitHelper
