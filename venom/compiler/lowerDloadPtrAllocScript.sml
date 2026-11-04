@@ -132,3 +132,39 @@ Proof
   qpat_x_assum `!k j id jd b n c m. _` (qspecl_then [`SUC k`,`SUC j`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
+
+Theorem dload_frame_scratch_finite:
+  dload_frame_sites f ==> FINITE f.dr_scratch
+Proof
+  simp[dload_frame_sites_def] >> strip_tac >>
+  irule SUBSET_FINITE >> qexists_tac `FDOM f.dr_target` >>
+  simp[SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem dload_frame_original_insert:
+  dload_frame_sites f /\ id NOTIN f.dr_scratch ==>
+  dload_frame_sites
+    (f with <|dr_source := f.dr_source |+ (id,(b,n));
+              dr_target := f.dr_target |+ (id,(c,n))|>)
+Proof
+  simp[dload_frame_sites_def] >> strip_tac >> conj_tac
+  >- (gvs[DISJOINT_INSERT] >> SET_TAC[]) >> conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+      Cases_on `id' = id` >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+  Cases_on `id' = id` >> simp[] >> metis_tac[]
+QED
+
+Theorem dload_frame_scratch_insert:
+  dload_frame_sites f /\ id NOTIN FDOM f.dr_source ==>
+  dload_frame_sites
+    (f with <|dr_target := f.dr_target |+ (id,(c,32));
+              dr_scratch := id INSERT f.dr_scratch|>)
+Proof
+  simp[dload_frame_sites_def] >> strip_tac >> conj_tac
+  >- (gvs[DISJOINT_INSERT, DISJOINT_SYM] >> SET_TAC[]) >> conj_tac
+  >- (rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+      Cases_on `id' = id` >- simp[FLOOKUP_DEF] >> simp[] >> metis_tac[]) >>
+  rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+  Cases_on `id' = id` >> simp[] >> metis_tac[]
+QED
