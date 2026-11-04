@@ -61,6 +61,28 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem compile_toplevel_immutable_ptr:
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) ==>
+  compile_expr cenv ty (TopLevelName ann (src,id)) sa =
+    (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode),sa)
+Proof
+  simp[compile_expr_def, comp_return_def, vyperASTTheory.expr_type_def]
+QED
+
+Theorem toplevel_immutable_marked_exec:
+  get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\ ~s0.vs_halted ==>
+  gas_marked_exec F (ctx,func) (eval_expr cx (TopLevelName ann (src,id)))
+    (es,s0) [] (INL (PlaceR (ImmutablePlace src id []))) es (OK s0)
+Proof
+  strip_tac >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules] >>
+  lookup_global_tac >>
+  fs[get_immutables_def, get_address_immutables_def, lift_option_type_def,
+     bind_def, return_def, raise_def]
+QED
+
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
