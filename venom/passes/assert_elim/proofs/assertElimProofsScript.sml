@@ -1166,6 +1166,46 @@ Proof
   simp[range_edge_transfer_opt_def]
 QED
 
+(* The fixed-point join absorbs any sound refined incoming boundary.
+   Runtime producer validity is deliberately outside this interface. *)
+Theorem range_refined_boundary_entry_sound:
+  !fn pred succ rs s.
+    wf_function fn /\
+    MEM succ (cfg_analyze fn).cfg_dfs_pre /\
+    MEM pred (cfg_preds_of (cfg_analyze fn) succ) /\
+    df_widen_boundary NONE (range_analyze fn) pred = SOME rs /\
+    in_range_state
+      (range_branch_refine (dfg_build_function fn) fn.fn_blocks pred succ rs)
+      s.vs_vars ==>
+    range_sound (df_widen_entry NONE (range_analyze fn) succ) s
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `range_sound entry s` >>
+  qabbrev_tac `edges = MAP (\nbr. range_edge_transfer_opt
+    (dfg_build_function fn, fn.fn_blocks) nbr succ
+    (df_widen_boundary NONE (range_analyze fn) nbr))
+    (cfg_preds_of (cfg_analyze fn) succ)` >>
+  `MEM (SOME (range_branch_refine (dfg_build_function fn)
+    fn.fn_blocks pred succ rs)) edges` by
+    (simp[Abbr `edges`, MEM_MAP] >> qexists `pred` >>
+     simp[range_edge_transfer_opt_some]) >>
+  `edges <> []` by (strip_tac >> gvs[]) >>
+  drule_all range_fixpoint_absorbs >>
+  simp_tac std_ss [LET_THM] >>
+  qpat_assum `Abbrev (edges = _)`
+    (fn th => rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  qpat_assum `Abbrev (entry = _)`
+    (fn th => rewrite_tac[GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+  Cases_on `edges` >- fs[] >> simp[] >> strip_tac >>
+  Cases_on `entry = NONE` >- simp[range_sound_def] >>
+  Cases_on `entry = SOME FEMPTY` >- simp[range_sound_def, in_range_state_def] >>
+  `entry = FOLDL range_join_opt NONE (h::t)` by
+    (Cases_on `df_widen_visits (range_analyze fn) succ >= WIDEN_THRESHOLD` >>
+     gvs[] >> metis_tac[range_widen_opt_fixpoint_cases]) >>
+  qpat_x_assum `entry = FOLDL _ _ _` SUBST1_TAC >>
+  irule foldl_range_join_opt_sound >> metis_tac[]
+QED
+
 (* Successor soundness: after running a block at a fixpoint,
    the successor has range_sound, dfg_sound+ops_defined, and is in cfg_dfs_pre.
    Requires ssa_form + dfg_sound for edge_transfer soundness. *)
