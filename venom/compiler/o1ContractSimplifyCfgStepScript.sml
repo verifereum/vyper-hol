@@ -119,6 +119,16 @@ Proof
   gvs[EVERY_MEM, inst_shape_ok_def] >> metis_tac[]
 QED
 
+(* SimplifyCFG keeps the return-PC shape: RET's return PC, and every
+   copy of it, still flows from RETPC_PARAM through ASSIGNs and PHIs.
+   Admitted for now. *)
+Theorem simplify_cfg_retpc_shape_ok:
+  wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
+  retpc_shape_ok (simplify_cfg_fn fn)
+Proof
+  cheat
+QED
+
 Theorem simplify_cfg_fn_shape:
   o1_fn_shape ctx f ==> fn_shape_ok (FST (simplify_cfg_fn_with_labels f))
 Proof
@@ -140,6 +150,9 @@ Proof
   `call_checks_ok (FST (simplify_cfg_fn_with_labels f))` by
     (rewrite_tac[GSYM simplify_cfg_fn_def] >>
      irule simplify_cfg_call_checks_ok >> gvs[o1_fn_shape_def]) >>
+  `retpc_shape_ok (FST (simplify_cfg_fn_with_labels f))` by
+    (rewrite_tac[GSYM simplify_cfg_fn_def] >>
+     irule simplify_cfg_retpc_shape_ok >> gvs[o1_fn_shape_def]) >>
   gvs[label_map_transition_def, EVERY_MEM, fn_labels_def, MEM_MAP] >>
   metis_tac[]
 QED
