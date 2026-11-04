@@ -85,3 +85,85 @@ Proof
   >- (irule dft_ordinary_sync_outside >> simp[] >> metis_tac[]) >>
   irule dft_ordinary_sync_outside_gas_cover >> metis_tac[]
 QED
+
+Theorem dft_gas_orbit_event_forward:
+  !h c d i a.
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\
+  x.inst_operands = [] /\ y.inst_operands = [] /\
+  u <> v /\ x.inst_id <> y.inst_id /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  dft_occ_gas_event i a (FUNPOW (dft_occ_oracle_next w C) h c) ==>
+  ?t. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) t d)
+Proof
+  completeInduct_on `h` >> rpt strip_tac >>
+  drule_all dft_gas_sync_event_segment >>
+  disch_then (qspecl_then [`w`, `C`] strip_assume_tac) >>
+  Cases_on `h < k`
+  >- (fs[dft_segment_gas_cover_def] >> metis_tac[]) >>
+  `h - k < h /\ h = (h - k) + k` by decide_tac >>
+  first_x_assum (qspec_then `h - k` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`FUNPOW (dft_occ_oracle_next w C) k c`,
+     `FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d`,
+     `i`, `a`] mp_tac) >>
+  simp[GSYM FUNPOW_ADD] >> strip_tac >>
+  qexists_tac `j + t` >> simp[]
+QED
+
+Theorem dft_gas_orbit_event_backward:
+  !h c d i a.
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\
+  x.inst_operands = [] /\ y.inst_operands = [] /\
+  u <> v /\ x.inst_id <> y.inst_id /\
+  dft_ordinary_sync bb0 pre x y post c d /\
+  dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) h d) ==>
+  ?t. dft_occ_gas_event i a (FUNPOW (dft_occ_oracle_next w C) t c)
+Proof
+  completeInduct_on `h` >> rpt strip_tac >>
+  drule_all dft_gas_sync_event_segment >>
+  disch_then (qspecl_then [`w`, `C`] strip_assume_tac) >>
+  Cases_on `h < j`
+  >- (fs[dft_segment_gas_cover_def] >> metis_tac[]) >>
+  `h - j < h /\ h = (h - j) + j` by decide_tac >>
+  first_x_assum (qspec_then `h - j` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`FUNPOW (dft_occ_oracle_next w C) k c`,
+     `FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) j d`,
+     `i`, `a`] mp_tac) >>
+  simp[GSYM FUNPOW_ADD] >> strip_tac >>
+  qexists_tac `k + t` >> simp[]
+QED
+
+Theorem dft_gas_root_event_support:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\
+  x.inst_operands = [] /\ y.inst_operands = [] /\
+  u <> v /\ x.inst_id <> y.inst_id ==>
+  (!h i a. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w C) h
+      (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) ==>
+    ?t. dft_occ_gas_event i a
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) t
+        (dft_occ_init (DftOpen
+          (DftEnter (dft_gas_edit_fn bb0 pre x y post fn) 0 s) [] n)))) /\
+  (!h i a. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)) h
+      (dft_occ_init (DftOpen
+        (DftEnter (dft_gas_edit_fn bb0 pre x y post fn) 0 s) [] n))) ==>
+    ?t. dft_occ_gas_event i a
+      (FUNPOW (dft_occ_oracle_next w C) t
+        (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))))
+Proof
+  strip_tac >> conj_tac
+  >- (rpt strip_tac >> irule dft_gas_orbit_event_forward >>
+      metis_tac[dft_ordinary_sync_init]) >>
+  rpt strip_tac >> irule dft_gas_orbit_event_backward >>
+  metis_tac[dft_ordinary_sync_init]
+QED
