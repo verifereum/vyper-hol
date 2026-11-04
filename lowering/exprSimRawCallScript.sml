@@ -1814,6 +1814,194 @@ Proof
        jump_to_def]
 QED
 
+Theorem raw_call_finish_frag[local]:
+  compile_raw_call_finish to_op dp dl gas_op val_op
+    (if stat then StaticCall else RegularCall) cap T ov op sa = (result,sb) /\
+  emit_op (if stat then STATICCALL else CALL)
+    (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa = (ok,sc) /\
+  run_inst_seq (emitted_insts sa sc) s = OK t /\
+  eval_operand ok t = SOME (bool_to_word success) /\ fresh_vars_wrt sc t /\
+  stmt_state_rel ctx func cenv cx es' t /\ local_ptrs_reserved cenv sa /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  cap < dimword (:256) /\ LENGTH t.vs_returndata < dimword (:256) /\
+  (0 < cap ==> eval_operand ov t = SOME addr) ==>
+  frag_exec ctx sa sb (\u. u = s)
+    (\u. success /\ fresh_vars_wrt sb u /\
+      (!a w. eval_operand a t = SOME w ==> eval_operand a u = SOME w) /\
+      (if 0 < cap then result = ov /\ eval_operand result u = SOME addr /\
+         raw_call_finish_view u = raw_call_finish_view
+           (mstore (w2n addr) (n2w (MIN (LENGTH t.vs_returndata) cap)) t)
+       else result = Lit 0w /\ eval_operand result u = SOME 0w /\
+         raw_call_finish_view u = raw_call_finish_view t))
+    (\r. ?u. ~success /\ r = Abort Revert_abort u /\
+      u.vs_returndata = t.vs_returndata)
+Proof
+  strip_tac >> drule raw_call_finish_steps >> strip_tac >>
+  rename1 `fresh_label "call_failed" call_end = (fl,s2)` >>
+  `call_end = sc /\ success' = ok` by (Cases_on `stat` >> gvs[]) >> gvs[] >>
+  qpat_x_assum `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `(case _ of RegularCall => _ | DelegateCall => _ | StaticCall => _) _ = _` kall_tac >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx sa sb P Q R` >>
+  `cs_extends sa s3 /\ cs_extends s3 s5 /\ cs_extends s5 s7 /\
+   cs_extends s7 s9 /\ cs_extends s9 s10 /\ cs_extends s10 sb` by
+    suspend "extensions" >>
+  `cs_extends s3 sb` by
+    (irule cs_extends_trans >> qexists_tac `s5` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s7` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s9` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s10` >> simp[]) >>
+  irule frag_exec_seq >>
+  qexistsl_tac [`\u. u = t with vs_inst_idx := LENGTH s3.cs_current_insts`,`s3`] >>
+  simp[] >> conj_tac >- suspend "entry" >> suspend "branches"
+QED
+
+Resume raw_call_finish_frag[extensions]:
+  `cs_extends s10 sb` by
+    (Cases_on `0 < cap` >> gvs[comp_return_def]
+     >- (drule raw_call_success_code >> strip_tac >>
+         irule cs_extends_same_block >>
+         gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+     simp[cs_extends_refl]) >>
+  imp_res_tac cs_extends_fresh_label >>
+  imp_res_tac cs_extends_new_block >> imp_res_tac cs_extends_emit_inst >>
+  imp_res_tac loweringHaltTheory.compile_alloc_buffer_extends >>
+  `cs_appends (emit_op (if stat then STATICCALL else CALL)
+     (if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+      else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)])) /\
+   cs_appends (emit_op RETURNDATASIZE []) /\
+   cs_appends (emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds])` by
+    simp[cs_appends_emit_helpers] >>
+  fs[cs_appends_def] >>
+  conj_tac
+  >- (irule cs_extends_trans >> qexists_tac `call_end` >> simp[] >>
+      irule cs_extends_trans >> qexists_tac `s2` >> simp[]) >>
+  conj_tac
+  >- (irule cs_extends_trans >> qexists_tac `s4` >> simp[]) >>
+  conj_tac
+  >- (irule cs_extends_trans >> qexists_tac `s6` >> simp[]) >>
+  irule cs_extends_trans >> qexists_tac `s8` >> simp[]
+QED
+
+Resume raw_call_finish_frag[entry]:
+  imp_res_tac fresh_label_props >>
+  qpat_assum `emit_op (if _ then _ else _) _ sa = _`
+    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+  qpat_assum `emit_op (if _ then _ else _) _ sa = _`
+    (mp_then Any strip_assume_tac emit_op_extends) >>
+  `emitted_insts sa s3 = emitted_insts sa call_end` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_assum `s3.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `s2.cs_current_insts = _` (fn th => pure_rewrite_tac[th]) >>
+     REFL_TAC) >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >>
+  simp[Abbr `P`, rich_listTheory.IS_PREFIX_APPEND, mk_inst_def] >>
+  reverse conj_tac >- (Cases_on `stat` >> simp[is_terminator_def]) >>
+  rpt strip_tac >> gvs[] >> disj1_tac >> qexists_tac `t` >> fs[mk_inst_def]
+QED
+
+Resume raw_call_finish_frag[branches]:
+  irule raw_call_jnz_frag >>
+  goal_assum (drule_at (Pat `emit_inst`)) >>
+  goal_assum (drule_at (Pat `new_block`)) >>
+  qexistsl_tac [`if success then s10 else s5`,`success`] >>
+  `cs_extends s5 sb /\ cs_extends s3 s10` by
+    (conj_tac
+     >- (irule cs_extends_trans >> qexists_tac `s7` >> simp[] >>
+         irule cs_extends_trans >> qexists_tac `s9` >> simp[] >>
+         irule cs_extends_trans >> qexists_tac `s10` >> simp[]) >>
+     irule cs_extends_trans >> qexists_tac `s5` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s7` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s9` >> simp[]) >>
+  `fresh_vars_wrt s5 t /\ fresh_vars_wrt s10 t /\
+   local_ptrs_reserved cenv s5` by suspend "freshness" >>
+  imp_res_tac new_block_props >>
+  Cases_on `success` >> simp[instIdxIndepTheory.eval_op_inst_idx]
+  >- suspend "success" >> suspend "failure"
+QED
+
+Resume raw_call_finish_frag[freshness]:
+  imp_res_tac fresh_label_props >>
+  imp_res_tac new_block_props >>
+  qspecl_then [`JNZ`,`[ok;Label kl;Label fl]`,`[]`,`s3`] mp_tac ci_mono_emit_inst >>
+  qspecl_then [`RETURNDATASIZE`,`[]`,`s5`] mp_tac ci_mono_emit_op >>
+  qspecl_then [`0`,`s6`] mp_tac ci_mono_compile_alloc_buffer >>
+  qspecl_then [`RETURNDATACOPY`,`[buf.buf_operand;Lit 0w;rds]`,`s7`]
+    mp_tac ci_mono_emit_void >>
+  qspecl_then [`REVERT`,`[buf.buf_operand;rds]`,`[]`,`s8`] mp_tac ci_mono_emit_inst >>
+  qspecl_then [`if stat then STATICCALL else CALL`,
+    `if stat then [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     else [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]`,`sa`]
+    mp_tac ci_mono_emit_op >>
+  simp[ci_mono_def] >> rpt (disch_then strip_assume_tac) >>
+  `call_end.cs_next_var <= s5.cs_next_var /\
+   call_end.cs_next_var <= s10.cs_next_var /\
+   sa.cs_next_var <= s5.cs_next_var` by decide_tac >>
+  conj_tac >- (irule fresh_vars_wrt_mono >> qexists_tac `call_end` >> simp[]) >>
+  conj_tac >- (irule fresh_vars_wrt_mono >> qexists_tac `call_end` >> simp[]) >>
+  irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]
+QED
+
+Resume raw_call_finish_frag[success]:
+  Cases_on `0 < cap` >> fs[]
+  >- suspend "positive" >> suspend "zero"
+QED
+
+Resume raw_call_finish_frag[positive]:
+  qmatch_goalsub_abbrev_tac `frag_exec ctx s10 sb (\u. u = entry) Q R` >>
+  `fresh_vars_wrt s10 entry /\ eval_operand ov entry = SOME addr /\
+   LENGTH entry.vs_returndata < dimword (:256)` by
+    simp[Abbr `entry`, raw_call_control_operands, jump_to_def,
+         instIdxIndepTheory.eval_op_inst_idx] >>
+  drule_all raw_call_success_frag >>
+  disch_then (qspecl_then [`ctx`,`R`] mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_weaken) >>
+  simp[] >> rpt strip_tac >>
+  `!a w. eval_operand a t = SOME w ==> eval_operand a s'' = SOME w` by
+    (rpt strip_tac >> first_x_assum irule >>
+     simp[Abbr `entry`, raw_call_control_operands,
+          instIdxIndepTheory.eval_op_inst_idx]) >>
+  simp[Abbr `Q`] >>
+  qpat_x_assum `u with vs_vars := FEMPTY = _` mp_tac >>
+  simp[raw_call_finish_view_def, mstore_def, Abbr `entry`, jump_to_def] >>
+  simp[venom_state_component_equality]
+QED
+
+Resume raw_call_finish_frag[zero]:
+  fs[comp_return_def] >> gvs[] >>
+  irule frag_exec_refl >>
+  simp[Abbr `Q`, raw_call_control_operands,
+       instIdxIndepTheory.eval_op_inst_idx,
+       raw_call_finish_view_control, eval_operand_def]
+QED
+
+Resume raw_call_finish_frag[failure]:
+  `cs_extends sa s5 /\ cs_extends s7 sb /\ cs_extends s5 s9 /\
+   cs_extends s9 sb` by
+    (conj_tac >- (irule cs_extends_trans >> qexists_tac `s3` >> simp[]) >>
+     conj_tac >- (irule cs_extends_trans >> qexists_tac `s9` >> simp[] >>
+                  irule cs_extends_trans >> qexists_tac `s10` >> simp[]) >>
+     conj_tac >- (irule cs_extends_trans >> qexists_tac `s7` >> simp[]) >>
+     irule cs_extends_trans >> qexists_tac `s10` >> simp[]) >>
+  `fn_has_code s5 s7 func` by
+    (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`,`sa`] >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx s5 sb (\u. u = entry) Q R` >>
+  `fresh_vars_wrt s5 entry /\ stmt_state_rel ctx func cenv cx es' entry /\
+   LENGTH entry.vs_returndata < dimword (:256)` by
+    simp[Abbr `entry`, raw_call_control_operands,
+         stmt_state_rel_jump_to, stmt_state_rel_inst_idx, jump_to_def] >>
+  irule frag_exec_exit_prefix >> qexists_tac `s9` >> simp[] >>
+  irule raw_call_failure_frag >>
+  simp[Abbr `R`, Abbr `entry`, jump_to_def] >>
+  qexistsl_tac [`cenv`,`cx`,`es'`,`func`] >>
+  simp[stmt_state_rel_jump_to, stmt_state_rel_inst_idx] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (jump_to _ _)` mp_tac >>
+  simp[jump_to_def]
+QED
+
+Finalise raw_call_finish_frag
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
