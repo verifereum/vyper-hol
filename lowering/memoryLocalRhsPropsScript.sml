@@ -208,21 +208,7 @@ QED
 Theorem arg_type_fits_bytestring_source:
   !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `u` >> gvs[is_bytestring_type_def] >>
-  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
-  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
-  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
-      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
-      gvs[arg_type_fits_def, is_bytestring_type_def] >>
-      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
-      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
-  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
-  gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
-  gvs[arg_type_fits_def, is_bytestring_type_def]
+  metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
 Theorem memory_rhs_destination_bound:
