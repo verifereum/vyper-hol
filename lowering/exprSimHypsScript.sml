@@ -238,6 +238,7 @@ Ancestors
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
+  vyperTypeInitialState
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
   vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
@@ -1079,6 +1080,64 @@ Proof
     gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
         env_context_consistent_def] >>
   drule_all well_typed_expr_type_well_formed >> gvs[well_formed_type_def]
+QED
+
+Theorem callable_return_evaluates[local]:
+  !cx env src ts fn fm nr args dflts ret body.
+  functions_well_typed cx /\ env_context_consistent env cx /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) ==>
+  ?tv. evaluate_type (get_tenv cx) ret = SOME tv
+Proof
+  rw[functions_well_typed_def] >>
+  first_x_assum
+    (qspecl_then [`env.fn_sigs`, `env.bare_globals`,
+                  `env.bare_global_assignable`,
+                  `env.toplevel_vtypes`, `env.flag_members`] mp_tac) >>
+  impl_tac
+  >- (drule env_context_consistent_static_maps_function_side_condition >>
+      strip_tac >> gvs[env_context_consistent_def] >>
+      rw[] >> first_x_assum drule_all >> simp[]) >>
+  rename1 `lookup_callable_function _ _ _ = SOME (_,_,_,_,_,bd)` >>
+  disch_then
+    (qspecl_then [`src`, `fn`, `ts`, `fm`, `nr`, `args`, `dflts`, `ret`, `bd`] mp_tac) >>
+  simp[] >> strip_tac >> goal_assum (drule_at Any)
+QED
+
+Theorem signature_return_evaluates[local]:
+  functions_well_typed cx /\ env_context_consistent env cx /\
+  FLOOKUP env.fn_sigs fid = SOME sig ==>
+  ?tv. evaluate_type (get_tenv cx) sig.ret_ty = SOME tv
+Proof
+  strip_tac >> PairCases_on `fid` >>
+  `fn_sigs_consistent env.fn_sigs cx /\ fn_sigs_live env.fn_sigs cx` by
+    gvs[env_context_consistent_def] >>
+  gvs[fn_sigs_consistent_def, fn_sigs_live_def] >>
+  first_x_assum drule >> strip_tac >>
+  irule callable_return_evaluates >> metis_tac[]
+QED
+
+Theorem post_type_evaluates:
+  !cenv cx env e es.
+  expr_body_pre cenv cx env e es ==>
+  ?tv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv
+Proof
+  rpt strip_tac >>
+  drule expr_body_pre_type_evaluates >> strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+          lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+      `env_context_consistent env cx` by gvs[env_consistent_def] >>
+      drule_all signature_return_evaluates >> strip_tac >>
+      first_x_assum drule >> disch_then SUBST1_TAC >>
+      IF_CASES_TAC >> simp[] >>
+      Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[]) >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_not_int_call] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> gvs[]
 QED
 
 Theorem well_typed_expr_type_evaluates:
