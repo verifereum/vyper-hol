@@ -68,12 +68,14 @@ Proof
   gvs[]
 QED
 
-Theorem dload_control_singleton_next:
+Theorem dload_control_singleton_next_fields:
   !q f g s t i s1 t1 j.
     dload_control_match q f g s t i [i] 0 /\
     ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-    s1 = s with vs_vars := s1.vs_vars /\
-    t1 = t with vs_vars := t1.vs_vars /\
+    s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
+    s1.vs_inst_idx = s.vs_inst_idx /\
+    t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb /\
+    t1.vs_inst_idx = t.vs_inst_idx /\
     active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
     ?i' emitted'.
       dload_control_match q f g
@@ -82,9 +84,6 @@ Theorem dload_control_singleton_next:
       j = HD emitted'
 Proof
   rpt gen_tac >> strip_tac >>
-  `s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
-   t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb` by
-    (gvs[venomStateTheory.venom_state_component_equality]) >>
   qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
   simp[dload_control_match_def] >> strip_tac >>
   `?aq. lower_dload_blocks_supply q f.fn_blocks = (g.fn_blocks,aq)` by
@@ -116,6 +115,25 @@ Proof
   simp[active_inst_def] >> conj_tac
   >- (qexists_tac `EL bi f.fn_blocks` >> simp[EL_MEM, GSYM arithmeticTheory.ADD1]) >>
   qexists_tac `gb` >> simp[EL_MEM, Abbr `gb`, GSYM arithmeticTheory.ADD1]
+QED
+
+Theorem dload_control_singleton_next:
+  !q f g s t i s1 t1 j.
+    dload_control_match q f g s t i [i] 0 /\
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+    s1 = s with vs_vars := s1.vs_vars /\
+    t1 = t with vs_vars := t1.vs_vars /\
+    active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+    ?i' emitted'.
+      dload_control_match q f g
+        (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+        (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
+      j = HD emitted'
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule dload_control_singleton_next_fields >>
+  simp[] >> gvs[venomStateTheory.venom_state_component_equality] >>
+  metis_tac[]
 QED
 
 Theorem dload_actual_assign_next:
@@ -182,6 +200,37 @@ QED
    do not produce them.  Other opcodes, expansion prefixes, block transfers,
    calls, returns and forwarding remain open; this is not a full simulation. *)
 
+Theorem dload_singleton_reachable_next_fields:
+  frame_reachable vs C cs PG G tn f i s /\
+  dload_control_match q f g s t i [i] 0 /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK s1 /\
+  s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
+  s1.vs_inst_idx = s.vs_inst_idx /\
+  t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb /\
+  t1.vs_inst_idx = t.vs_inst_idx /\
+  active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ?i' emitted'.
+    frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
+      f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+    dload_control_match q f g
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
+    j = HD emitted'
+Proof
+  strip_tac >>
+  drule_all dload_control_singleton_next_fields >> strip_tac >>
+  qexistsl [`i'`,`emitted'`] >> simp[] >>
+  irule frame_reachable_next >> simp[] >>
+  `active_inst f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ i' _ _` mp_tac >>
+     simp[dload_control_match_def] >> metis_tac[]) >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `dload_control_match _ _ _ s t _ _ _` mp_tac >>
+  simp[dload_control_match_def] >> metis_tac[]
+QED
+
 Theorem dload_singleton_reachable_next:
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i [i] 0 /\
@@ -199,16 +248,9 @@ Theorem dload_singleton_reachable_next:
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted'
 Proof
-  strip_tac >>
-  drule_all dload_control_singleton_next >> strip_tac >>
-  qexistsl [`i'`,`emitted'`] >> simp[] >>
-  irule frame_reachable_next >> simp[] >>
-  `active_inst f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (qpat_x_assum `dload_control_match _ _ _ _ _ i' _ _` mp_tac >>
-     simp[dload_control_match_def] >> metis_tac[]) >>
-  simp[] >> conj_tac >- metis_tac[] >>
-  qpat_x_assum `dload_control_match _ _ _ s t _ _ _` mp_tac >>
-  simp[dload_control_match_def] >> metis_tac[]
+  strip_tac >> irule dload_singleton_reachable_next_fields >>
+  simp[] >> gvs[venomStateTheory.venom_state_component_equality] >>
+  metis_tac[]
 QED
 
 Theorem dload_actual_scalar_next:
