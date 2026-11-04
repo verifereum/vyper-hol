@@ -2902,3 +2902,160 @@ Proof
   `u.vs_memory = u'.vs_memory` by simp[Abbr `u`, Abbr `u'`, mstore_def] >>
   simp[mstore_def]
 QED
+
+Theorem probe_word_elem_round_storage:
+  !s i src dst.
+    contract_storage (probe_word_elem_round s i src dst) =
+      update_storage (dst+i) (mload (w2n (src+i*32w)) s) (contract_storage s)
+Proof
+  simp[probe_word_elem_round_def, probe_word_elem_body_state_def,
+       probe_word_elem_cond_state_def, jump_to_def, update_var_def,
+       mload_def, sstore_def, contract_storage_def, lookup_account_def]
+QED
+
+Theorem probe_word_elem_cond_storage_frame:
+  !s i lbl.
+    contract_storage (jump_to lbl (probe_word_elem_cond_state s i)) =
+      contract_storage s
+Proof
+  simp[contract_storage_def, jump_to_def, probe_word_elem_cond_state_def,
+       update_var_def]
+QED
+
+Theorem probe_word_elems_copied_storage:
+  !s src dst.
+    contract_storage (probe_word_elems_copied_state s src dst) =
+      update_storage (dst+1w) (mload (w2n (src+32w)) s)
+        (update_storage dst (mload (w2n src) s) (contract_storage s))
+Proof
+  simp[probe_word_elems_copied_state_def, probe_word_elem_cond_storage_frame,
+       probe_word_elem_round_storage] >>
+  simp[word_mul_n2w, word_add_n2w, WORD_ADD_0,
+       mload_def, probe_word_elem_round_scratch_frame]
+QED
+
+Theorem probe_word_copy_body_storage_frame:
+  !s i b lbl.
+    contract_storage (jump_to lbl (probe_word_copy_body_state s i b)) =
+      contract_storage s
+Proof
+  simp[contract_storage_def, jump_to_def, probe_word_copy_body_state_def,
+       update_var_def]
+QED
+
+Theorem probe_word_copy_cond_storage_frame:
+  !s i n lbl.
+    contract_storage (jump_to lbl (probe_word_copy_cond_state s i n)) =
+      contract_storage s
+Proof
+  simp[contract_storage_def, jump_to_def, probe_word_copy_cond_state_def,
+       update_var_def]
+QED
+
+Theorem probe_word_copy_setup_storage:
+  !s i n b.
+    contract_storage (probe_word_copy_setup_state s i n b) = contract_storage s /\
+    mload (w2n (b+32w)) (probe_word_copy_setup_state s i n b) =
+      mload (w2n (b+32w)) s /\
+    mload (w2n (b+64w)) (probe_word_copy_setup_state s i n b) =
+      mload (w2n (b+64w)) s
+Proof
+  rpt gen_tac >> conj_tac
+  >- simp[probe_word_copy_setup_state_def, probe_word_copy_body_storage_frame,
+          probe_word_copy_cond_storage_frame] >>
+  simp[mload_def, probe_word_copy_setup_scratch_frame]
+QED
+
+Theorem probe_word_elem_exit_storage_frame:
+  !s i lbl.
+    contract_storage (jump_to lbl (probe_word_elem_exit_state s i)) =
+      contract_storage s
+Proof
+  simp[contract_storage_def, jump_to_def, probe_word_elem_exit_state_def,
+       update_var_def]
+QED
+
+Theorem probe_word_copy_round_storage:
+  !s n b.
+    contract_storage (probe_word_copy_round s 0w n b) =
+      update_storage 2w (mload (w2n (b+64w)) s)
+        (update_storage 1w (mload (w2n (b+32w)) s) (contract_storage s))
+Proof
+  simp[probe_word_copy_round_def, probe_word_elem_exit_storage_frame,
+       probe_word_elems_copied_storage] >>
+  simp[word_mul_n2w, word_add_n2w, WORD_ADD_0] >>
+  simp[GSYM WORD_ADD_ASSOC, word_add_n2w, probe_word_copy_setup_storage]
+QED
+
+Theorem probe_word_copied_storage:
+  !s n b.
+    contract_storage (probe_word_copied_state s n b) =
+      if n = 0w then contract_storage s
+      else update_storage 2w (mload (w2n (b+64w)) s)
+        (update_storage 1w (mload (w2n (b+32w)) s) (contract_storage s))
+Proof
+  rpt gen_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, probe_word_copy_cond_storage_frame,
+       probe_word_copy_round_storage]
+QED
+
+Theorem probe_word_loaded_words:
+  !s b.
+    regions_disjoint (w2n (b+64w),32) (w2n (b+32w),32) ==>
+    mload (w2n (b+32w)) (probe_word_loaded_state s b) = sload 4w s /\
+    mload (w2n (b+64w)) (probe_word_loaded_state s b) = sload 5w s
+Proof
+  rpt strip_tac >>
+  `!p. mload p (probe_word_loaded_state s b) =
+    mload p (mstore (w2n (b+64w)) (sload 5w s)
+      (mstore (w2n (b+32w)) (sload 4w s)
+        (mstore (w2n b) (sload 3w s) s)))` by
+    simp[mload_def, probe_word_loaded_memory] >>
+  simp[mload_mstore_same, mload_mstore_disjoint]
+QED
+
+Theorem probe_word_load_exit_storage_frame:
+  !s b lbl p.
+    contract_storage (jump_to lbl (probe_word_load_exit_state s b)) =
+      contract_storage s /\
+    mload p (jump_to lbl (probe_word_load_exit_state s b)) = mload p s
+Proof
+  simp[contract_storage_def, mload_def, jump_to_def,
+       probe_word_load_exit_state_def, update_var_def]
+QED
+
+Theorem probe_word_final_storage:
+  !s. s.vs_alloca_next + 128 <= dimword (:256) ==>
+    contract_storage (probe_word_final_state s) =
+      if sload 3w s = 0w then update_storage 0w 0w (contract_storage s)
+      else update_storage 0w (sload 3w s)
+        (update_storage 2w (sload 5w s)
+          (update_storage 1w (sload 4w s) (contract_storage s)))
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `b = (n2w (s.vs_alloca_next+32):bytes32)` >>
+  qabbrev_tac `e = jump_to "@wcopy_cond_0" (probe_word_entry_state s)` >>
+  qabbrev_tac `l = probe_word_loaded_state e b` >>
+  qabbrev_tac `c = jump_to "@dyn_cond_3" (probe_word_load_exit_state l b)` >>
+  qabbrev_tac `d = probe_word_copied_state c (sload 3w s) b` >>
+  `probe_word_final_state s = sstore 0w (sload 3w s) (d with vs_inst_idx := 1)` by
+    simp[probe_word_final_state_def, Abbr `d`, Abbr `c`, Abbr `l`, Abbr `e`, Abbr `b`] >>
+  `contract_storage (probe_word_final_state s) =
+    update_storage 0w (sload 3w s) (contract_storage d)` by
+    simp[sstore_def, contract_storage_def, lookup_account_def] >>
+  `contract_storage e = contract_storage s` by
+    simp[Abbr `e`, contract_storage_def, jump_to_def,
+         probe_word_entry_state_def, update_var_def] >>
+  `regions_disjoint (w2n (b+64w),32) (w2n (b+32w),32)` by
+    (`s.vs_alloca_next+64 < dimword (:256) /\
+      s.vs_alloca_next+96 < dimword (:256)` by decide_tac >>
+     simp[Abbr `b`, word_add_n2w, w2n_n2w, arithmeticTheory.ADD_ASSOC,
+          venomMemDefsTheory.regions_disjoint_def]) >>
+  `mload (w2n (b+32w)) l = sload 4w s /\
+   mload (w2n (b+64w)) l = sload 5w s` by
+    (drule probe_word_loaded_words >>
+     disch_then (qspec_then `e` mp_tac) >> simp[Abbr `l`, sload_def]) >>
+  simp[Abbr `d`, probe_word_copied_storage, Abbr `c`,
+       probe_word_load_exit_storage_frame, Abbr `l`, probe_word_loaded_storage_frame] >>
+  Cases_on `sload 3w s = 0w` >> simp[]
+QED
