@@ -205,6 +205,8 @@ Definition opcode_fail_class_def:
   opcode_fail_class ASSERT = CanRevert /\
   opcode_fail_class ASSERT_UNREACHABLE = CanExHalt /\
   opcode_fail_class RETURNDATACOPY = CanExHalt /\
+  opcode_fail_class CREATE = CanExHalt /\
+  opcode_fail_class CREATE2 = CanExHalt /\
   opcode_fail_class INVALID = CanExHalt /\
   opcode_fail_class INVOKE = AnyFail /\
   opcode_fail_class _ = NoFail

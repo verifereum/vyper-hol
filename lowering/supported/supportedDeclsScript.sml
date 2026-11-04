@@ -170,7 +170,7 @@ Proof
 QED
 
 Theorem supported_public_variables_rejected:
-  ~supported_declaration_header tops (VariableDecl Public mut name ty slot)
+  ~supported_declaration_header tops (VariableDecl (Public nr) mut name ty slot)
 Proof
   Cases_on `mut` >> Cases_on `slot` >>
   simp[supported_declaration_header_def]

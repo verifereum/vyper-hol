@@ -305,7 +305,8 @@ QED
 Theorem compile_abi_clamp_basetype_footprint:
   !cl op st st'.
     compile_abi_clamp_basetype op cl st = ((), st') ==>
-    EVERY (\i. !s. inst_mem_below_frontier i s) (emitted_insts st st')
+    EVERY (\i. !s. inst_mem_below_frontier i s /\ inst_dload_in_section i s)
+      (emitted_insts st st')
 Proof
   Cases >> rpt gen_tac >>
   simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
@@ -317,7 +318,8 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   simp[emitted_insts_def] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
+  simp[mk_inst_def]
 QED
 
 Theorem compile_abi_clamp_basetype_mem_ok:
@@ -467,7 +469,8 @@ Resume decode_static_buf_mem_ok[pointers]:
     (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
   qpat_x_assum `emit_op ADD [dst; _] st1 = _`
     (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
-  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]
+  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
+  simp[mk_inst_def]
 QED
 Resume decode_static_buf_mem_ok[child]:
   qpat_x_assum `!dst src k st st' s p a. _` kall_tac >>

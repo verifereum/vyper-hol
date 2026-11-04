@@ -203,8 +203,9 @@ Proof
   simp[take_call_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
-  BasicProvers.every_case_tac >>
-  gvs[failed_outcome_def, call_outcome_request_def]
+  Cases_on `x` >> gvs[failed_outcome_def] >>
+  Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
+  gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
 
 Theorem eval_send_outcome_typed:
@@ -409,7 +410,8 @@ Proof
     vs_accounts := _; vs_transient := _; vs_logs := _;
     vs_pending_deletions := _; vs_returndata := _ |>` >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
-   s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
+   s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars /\
+   s'.vs_labels = t.vs_labels` by
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   irule frag_exec_run_inst_seq >>
   simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
@@ -428,8 +430,15 @@ Proof
          gvs[stmt_state_rel_def] >>
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
+      `immutable_base_zero cenv s'` by
+        (irule immutable_base_zero_frame >> qexists_tac `s` >>
+         fs[stmt_state_rel_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `t`] >> simp[]) >>
+      qexistsl_tac [`es1`, `t`] >> simp[] >>
+      qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
+        vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
+        vs_pending_deletions := _|>`
+        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>

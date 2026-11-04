@@ -1222,6 +1222,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_outcomes[simp]:
+  ∀cx st st' os.
+    preserves_tv cx st (st' with outcomes := os) ⇔ preserves_tv cx st st'
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_txn_eq:
   ∀cx cx' st st'.
     cx.txn = cx'.txn ⇒
@@ -1944,7 +1951,8 @@ Proof
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac result_array_length_state >>
-    imp_res_tac next_gas_reading_state >> gvs[] >>
+    imp_res_tac next_gas_reading_state >>
+    imp_res_tac precompile_call_success_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>
     gvs[get_accounts_def, return_def]) >>
   (* Pop *)
@@ -2417,13 +2425,14 @@ Theorem eval_preserves_tv:
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  ACCEPT_TAC (LIST_CONJ
+    (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
 QED
 
 Theorem eval_expr_results_preserves_tv:
   eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  MATCH_ACCEPT_TAC (cj 11 eval_preserves_tv_with_results)
 QED
 
 Theorem eval_stmt_preserves_tv:

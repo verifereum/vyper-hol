@@ -1,7 +1,8 @@
 (* Public source entry integration after ExtCall/Send activation.
    Reuse the permanent actual-CPS fixtures; do not replay generated suites here.
    Failure requests survive machine rollback; deployment failure intentionally
-   exposes only its exception. Defaults/constants execute concrete NONE. *)
+   exposes only its exception. Defaults share the call oracle; constants
+   execute concrete NONE. *)
 Theory vyperOracleIntegrationTest
 Ancestors
   vyperOracleEntryTest vyperSendCpsCVTest vyperExtCallCpsCVTest
@@ -134,7 +135,8 @@ QED
 
 Definition integration_defaults_constants_observe_def:
   integration_defaults_constants_observe =
-    let (r,am,rqs) = call_external (SOME [send_outcome T [] 17]) []
+    let (r,am,rqs) = call_external
+      (SOME [send_outcome T [] 17; send_outcome T [] 23]) []
       integration_machine (integration_tx "defaults") in
     let mods = [(NONE,
       [VariableDecl Private (Constant (send_call 0x99w 0)) "c" NoneT NONE;
@@ -142,15 +144,17 @@ Definition integration_defaults_constants_observe_def:
     let loaded = load_contract (SOME [send_outcome T [] 17]) []
       integration_machine (integration_tx "__init__") mods [] in
     r = INL NoneV /\
-    integration_request_fields rqs = [(10w,7,[],F,3,2w,4w)] /\
-    integration_machine_snapshot 17 9w 8w cpscv_adopted_logs am /\
+    integration_request_fields rqs =
+      [(0x99w,0,[],F,3,2w,4w); (10w,7,[],F,17,9w,8w)] /\
+    integration_machine_snapshot 23 9w 8w
+      (cpscv_adopted_logs ++ [<|logger := 11w; topics := [1w]; data := [8w]|>]) am /\
     (case loaded of INR _ => F | INL (am,rqs) =>
       integration_request_fields rqs = [(10w,7,[],F,3,2w,4w)] /\
       integration_machine_snapshot 17 9w 8w cpscv_adopted_logs am)
 End
 val () = cv_auto_trans integration_defaults_constants_observe_def;
 
-Theorem defaults_constants_do_not_consume_body_oracle:
+Theorem defaults_share_body_oracle_constants_do_not:
   integration_defaults_constants_observe
 Proof
   CONV_TAC cv_eval
@@ -239,14 +243,40 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed precompile (here SHA-256 at Address2) is answered without
-   consuming an outcome or recording a request, and a delegate raw_call runs
+(* A computed precompile (here SHA-256 at Address2) takes its success bit
+   from the head outcome and records no request; a delegate raw_call runs
    the callee, ignoring the oracle. *)
-Theorem RawCall_precompile_and_delegate_skip_oracle:
+Theorem RawCall_precompile_takes_outcome_delegate_skips_oracle:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
-    (INL (Value (BoolV T))) (SOME 1) send_initial_requests /\
+    (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
+  integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
+    (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
   integration_raw_call_observe T T 0 20w (SOME [send_outcome F [] 0])
     (INL (Value NoneV)) (SOME 1) send_initial_requests
+Proof
+  CONV_TAC cv_eval
+QED
+
+(* The sha256 builtin takes its success from the head outcome too: a
+   successful head gives the computed hash, a failed or missing one raises. *)
+Definition integration_sha256_observe_def:
+  integration_sha256_observe os =
+    let r = cpscv_run (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+              [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])
+              (send_state with outcomes := os) in
+      (ISL (FST r), FST r, OPTION_MAP LENGTH (SND r).outcomes)
+End
+val () = cv_auto_trans integration_sha256_observe_def;
+
+Theorem Sha256_builtin_takes_outcome:
+  FST (integration_sha256_observe
+    (SOME [send_outcome T [] 0; send_outcome F [] 0])) /\
+  SND (SND (integration_sha256_observe
+    (SOME [send_outcome T [] 0; send_outcome F [] 0]))) = SOME 1 /\
+  SND (integration_sha256_observe (SOME [send_outcome F [] 0])) =
+    (INR (Error (RuntimeError "precompile failed")), SOME 0) /\
+  SND (integration_sha256_observe (SOME [])) =
+    (INR (Error (RuntimeError "precompile failed")), SOME 0)
 Proof
   CONV_TAC cv_eval
 QED

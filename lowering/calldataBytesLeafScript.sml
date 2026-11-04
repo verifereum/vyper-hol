@@ -7,6 +7,20 @@ Ancestors
   emitHelperProps exprLoweringProps compileEnv emitHelper valueEncoding
   venomExecSemantics venomState venomInst words arithmetic list rich_list
 
+Theorem calldata_bytes_opcodes:
+  compile_abi_decode_to_buf dst src CALLDATALOAD hi (DecBytestring n) st = ((),st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  strip_tac >> Cases_on `hi = Lit 0w` >>
+  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+      fresh_id_def, emit_def, emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem calldata_bytes_accepted_sequence:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
@@ -229,6 +243,7 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
+  drule calldata_bytes_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bytes_prefix_safe) >>
@@ -254,6 +269,7 @@ Proof
   strip_tac >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decoder_bytes_shape >> strip_tac >>
+  drule calldata_bytes_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_bytes_prefix_safe) >>

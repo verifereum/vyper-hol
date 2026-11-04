@@ -78,7 +78,8 @@ QED
 Theorem mem_safe_block_run_inst_seq:
   !xs s fuel ctx bb.
     isPREFIX xs (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) xs /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) xs /\
     (!pre i post u. xs = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
       inst_mem_below_frontier i u) ==>
     (!u. run_inst_seq xs s = OK u ==>
@@ -101,7 +102,8 @@ Proof
        OK s1 => mem_safe_block fuel ctx bb (s1 with vs_inst_idx := SUC s.vs_inst_idx)
      | _ => T)` by
     (CONV_TAC (LAND_CONV (REWR_CONV mem_safe_block_def)) >>
-     simp[mem_safe_step_non_invoke, step_inst_non_invoke]) >>
+     asm_simp_tac (srw_ss())
+       [mem_safe_step_non_invoke, step_inst_non_invoke]) >>
   Cases_on `step_inst_base h s` >> gvs[] >>
   rename1 `step_inst_base h s = OK s1` >>
   `s1.vs_inst_idx = s.vs_inst_idx` by
@@ -131,7 +133,8 @@ Theorem frag_exec_mem_run_inst_seq:
   !ctx st st' P Q R.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     isPREFIX st.cs_current_insts st'.cs_current_insts /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
       (emitted_insts st st') /\
     (!s. P s ==>
        (!pre i post u. emitted_insts st st' = pre ++ i::post /\
@@ -144,6 +147,11 @@ Theorem frag_exec_mem_run_inst_seq:
 Proof
   rpt gen_tac >> strip_tac >>
   irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
-  simp[] >> rpt strip_tac >> first_x_assum drule >>
-  metis_tac[run_inst_seq_mem_ok_of_prefix_safe]
+  `EVERY (\i. i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+     (emitted_insts st st') /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st st')` by fs[EVERY_MEM] >>
+  simp[] >> rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[] >> irule run_inst_seq_mem_ok_of_prefix_safe >> rw[] >>
+  first_x_assum irule >> qexistsl_tac [`post`, `pre`] >> simp[]
 QED

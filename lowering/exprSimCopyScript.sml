@@ -16,7 +16,7 @@
  * TOP-LEVEL:
  *   unwrap_storage_copy_sim      — storage and transient storage
  *   unwrap_runtime_code_copy_sim — code, at runtime (DLOAD)
- *   unwrap_ctor_code_copy_sim    — code, in the constructor (cheated)
+ *   unwrap_ctor_code_copy_sim    — code, in the constructor
  *)
 
 Theory exprSimCopy
@@ -139,9 +139,17 @@ Proof
   conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
   conj_tac
+  >- (irule fmp_room_fields >> qexists_tac `s` >>
+      simp[] >> gvs[copy_static_def, venom_state_component_equality]) >>
+  conj_tac
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >> simp[] >>
       metis_tac[copy_buffer_local_region_frame]) >>
+  conj_tac
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+      rpt strip_tac >>
+      `not_fresh_at st x` by metis_tac[local_ptrs_reserved_imm_base] >>
+      simp[]) >>
   metis_tac[]
 QED
 
@@ -264,10 +272,33 @@ Proof
   gvs[regions_disjoint_def] >> metis_tac[]
 QED
 
+(* A copy of the slots a read of tv at w covers holds the decoded value's
+   live bytes, wherever the source agrees with the slots on that range. *)
+Theorem copied_storage_range_memory[local]:
+  !st rt w tv dst mem.
+    storage_range_agree st rt w tv /\
+    (!i. i < type_slot_size tv ==>
+      mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
+    storage_live_memory st (w2n w) tv dst mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
+  qpat_x_assum `!i. i < _ ==> _` drule >> strip_tac >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_word] >>
+  qpat_x_assum `storage_range_agree _ _ _ _` mp_tac >>
+  simp[accountsRelPropsTheory.storage_range_agree_def] >> strip_tac >>
+  `w2n w + i < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w i) = w2n w + i /\ (n2w (w2n w + i) : bytes32) = w + n2w i /\
+   (n2w (i + w2n w) : bytes32) = w + n2w i` by
+    (Cases_on `w` >> fs[wordsTheory.word_add_n2w]) >>
+  first_x_assum (qspecl_then [`w + n2w i`, `b`] mp_tac) >>
+  simp[vyperStorageTheory.read_slot_def]
+QED
+
 Theorem copy_buffer_storage_contents:
   !ctx func cenv cx es u t v a tr tv b z.
     stmt_state_rel ctx func cenv cx es u /\
-    storage_holds cx tr t (Value v) a es /\
+    storage_holds cx tr t (Value v) a es u /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     copy_prefix (if tr then LocTransient else LocStorage)
       a b (type_slot_size tv) u (type_slot_size tv) z ==>
@@ -285,16 +316,13 @@ Proof
   `val_wf tv v` by
     metis_tac[cj 1 decode_value_well_typed, value_has_type_val_wf] >>
   simp[val_footprint_le] >>
-  irule copied_storage_decode_in_memory >>
+  irule decode_value_live_memory >> conj_tac >- simp[] >>
+  qexistsl_tac [`w2n a`, `get_storage cx es tr`] >> simp[] >>
+  irule copied_storage_range_memory >>
+  qexists_tac `if tr then contract_transient u else contract_storage u` >>
   simp[] >>
-  qexistsl_tac [`cx`, `if tr then contract_transient u else contract_storage u`,
-               `get_storage cx es tr`, `tr`, `a`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> drule_all copy_prefix_word >>
-      Cases_on `tr` >> gvs[copy_runtime_word_def, sload_def, tload_def]) >>
-  Cases_on `tr` >>
-  gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-      get_storage_def, vfmStateTheory.lookup_account_def]
+  rpt strip_tac >> drule_all copy_prefix_word >>
+  Cases_on `tr` >> gvs[copy_runtime_word_def, sload_def, tload_def]
 QED
 
 (* An aggregate in storage or transient storage: SLOAD or TLOAD and an
@@ -310,7 +338,7 @@ Theorem storage_copy_suffix_value_frag:
       mid = (result,sb) /\
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
     stmt_state_rel ctx func cenv cx es u /\
-    storage_holds cx (loc = LocTransient) t (Value v) a es /\
+    storage_holds cx (loc = LocTransient) t (Value v) a es u /\
     evaluate_type (get_tenv cx) t = SOME tv /\ n = type_slot_size tv /\
     eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
     n < 2**256 /\ w2n w + 32*n < 2**256 ==>
@@ -400,7 +428,7 @@ Proof
     gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
        storage_holds cx (p.ptr_location = LocTransient)
-         (expr_type e) (Value v) a es'` by
+         (expr_type e) (Value v) a es' s1` by
     (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      Cases_on `p.ptr_location` >>
      gvs[vv_post_def, vv_holds_def]) >>
@@ -447,7 +475,10 @@ Proof
     (fs[type_memory_size_slots, wordsTheory.dimword_def] >> decide_tac) >>
   qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
   disch_then irule >> simp[] >>
-  `storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es'` by metis_tac[] >>
+  `storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' s1` by metis_tac[] >>
+  `storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es' u` by
+    (qpat_x_assum `storage_holds _ _ _ _ _ es' s1` mp_tac >>
+     simp[storage_holds_def]) >>
   drule_all (REWRITE_RULE[comp_ignore_bind_def] storage_copy_suffix_value_frag) >>
   disch_then (qspec_then `R` mp_tac) >>
   disch_then (mp_then Any mp_tac frag_exec_conseq) >>
@@ -1234,10 +1265,8 @@ Finalise unwrap_runtime_code_copy_sim
 (* An aggregate in code, in the constructor, given that the immutables
    region base is zero: ALLOCA a buffer, then per word ADD the base and
    ILOAD (an MLOAD) from the staged immutables region in memory, and
-   MSTORE into the buffer.  The constructor prologue sets the base to 0
-   (compile_fixed_region_with_id) and keeps the base variable reserved, so
-   the buffer's ALLOCA can't overwrite it.  unwrap_ctor_code_copy_sim gets
-   both from stmt_state_rel and local_ptrs_reserved once those carry them. *)
+   MSTORE into the buffer. stmt_state_rel supplies the zero base and
+   local_ptrs_reserved protects it from fresh allocation. *)
 Theorem unwrap_ctor_code_copy_base_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -1345,13 +1374,9 @@ QED
 
 Finalise unwrap_ctor_code_copy_base_sim
 
-(* An aggregate in code, in the constructor: an MLOAD from the immutables
-   buffer at its base variable plus the offset, per word.  Cheated: the
-   constructor's prologue sets the base variable to 0
-   (compile_fixed_region_with_id), but stmt_state_rel says nothing of the
-   base, so vv_post's offset can't be related to the memory the MLOAD
-   reads.  unwrap_ctor_immutable_word_sim, the one-word read, is cheated
-   for the same reason. *)
+(* An aggregate in code, in the constructor: stmt_state_rel supplies the
+   zero base and local_ptrs_reserved the base variable's reservation, the
+   two extra premises of unwrap_ctor_code_copy_base_sim. *)
 Theorem unwrap_ctor_code_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -1368,5 +1393,14 @@ Theorem unwrap_ctor_code_copy_sim:
              (LocatedValue t p) s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
-  cheat
+  rpt strip_tac >>
+  `!s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+         (LocatedValue t p) s ==> immutable_base_zero cenv s` by
+    simp[vv_post_def, stmt_state_rel_def] >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`,
+               `es'`, `v`, `t`, `p`, `op`, `R`] mp_tac
+    unwrap_ctor_code_copy_base_sim >>
+  impl_tac >- (simp[] >> metis_tac[local_ptrs_reserved_imm_base]) >>
+  strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
+  simp[]
 QED

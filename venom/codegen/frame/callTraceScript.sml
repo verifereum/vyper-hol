@@ -1,7 +1,6 @@
 (* Frame-local observers for the run_call execution boundary.
  * TOP-LEVEL: trace_obs, next_opcode, request_of, outcome_of, observe,
- * frame_obs_tr, frame_obs, full_call_trace, call_trace, gas_readings,
- * precompile_call_starved.
+ * frame_obs_tr, frame_obs, call_trace, call_requests, gas_readings.
  * Helper: observable_call (the Call/StaticCall stack-shape guard).
  * Totality uses only Verifereum's step gas-decrease theorem; semantic
  * trace/observer correctness is deliberately deferred to Milestone 2.1.
@@ -154,30 +153,20 @@ Definition frame_obs_def:
       <| entries := []; readings := []; pending := NONE |> es (step es)
 End
 
-Definition full_call_trace_def:
-  full_call_trace es = (frame_obs es).entries
+Definition call_trace_def:
+  call_trace es = (frame_obs es).entries
 End
 
-(* Keep every other call, including nonzero-value calls to these addresses
- * and precompiles outside the computed set 1/2/6/7. *)
-Definition call_trace_def:
-  call_trace es =
-    FILTER (\(rq, outcome). ~computed_precompile rq) (full_call_trace es)
+(* The requests the oracle-mode run records: computed-precompile calls
+ * (value 0 to 1/2/6/7) have no effects, so record_request leaves them out,
+ * though their outcomes still answer the run. *)
+Definition call_requests_def:
+  call_requests es =
+    FILTER (\rq. ~computed_precompile rq) (MAP FST (call_trace es))
 End
 
 Definition gas_readings_def:
   gas_readings es = (frame_obs es).readings
-End
-
-(* Valid computed input with a failed EVM outcome: insufficient forwarded
- * gas or call-depth failure. Invalid ecadd/ecmul input is NOT starvation.
- * Invalid ecrecover is valid here: its specified success output is []. *)
-Definition precompile_call_starved_def:
-  precompile_call_starved es <=>
-    ?rq outcome bs.
-      MEM (rq, outcome) (full_call_trace es) /\ rq.cr_value = 0 /\
-      precompile_result rq.cr_target rq.cr_data = SOME (SOME bs) /\
-      ~outcome.co_success
 End
 
 (* CREATE operands are value, offset, size, and (for CREATE2) salt, top first.
@@ -294,7 +283,7 @@ Theorem create_trace_same_depth:
       (LENGTH es.rollback.toDelete))]
 Proof
   strip_tac >>
-  simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
+  simp[call_trace_def, frame_obs_def] >>
   simp[Once frame_obs_tr_def, observe_def, observable_call_def] >>
   simp[Once frame_obs_tr_def, observe_def, create_request_not_computed]
 QED
@@ -313,7 +302,7 @@ Theorem create_trace_enter_return:
       (LENGTH es.rollback.toDelete))]
 Proof
   strip_tac >>
-  simp[call_trace_def, full_call_trace_def, frame_obs_def] >>
+  simp[call_trace_def, frame_obs_def] >>
   simp[Once frame_obs_tr_def, observe_def, observable_call_def] >>
   simp[Once frame_obs_tr_def, observe_def] >>
   simp[Once frame_obs_tr_def, observe_def, create_request_not_computed]

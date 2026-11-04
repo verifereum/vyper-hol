@@ -9,9 +9,9 @@
  *                     e is lowered at, and its size below 2 ** 64
  *   memory_rhs_destination_bound, memory_rhs_read_destination_footprint —
  *                     e's value fits the local's buffer
- *   memory_rhs_read_lowered_typed, memory_rhs_read_destination_typed,
+ *   memory_rhs_read_destination_typed,
  *   memory_rhs_read_local_type — e's value (read through read_result) has
- *                     its lowered type and the local's
+ *                     the local's type
  *   memory_rhs_runtime_layout, memory_rhs_lowered_runtime_layout — the
  *                     types evaluate, at the sizes type_memory_bytes gives
  *   memory_rhs_empty_read_total, memory_rhs_empty_read_destination,
@@ -76,15 +76,6 @@ Theorem allocation_limit_word_room:
   !sz. sz < 2 ** 64 ==> sz + 64 < dimword (:256)
 Proof
   simp[wordsTheory.dimword_def] >> decide_tac
-QED
-
-Theorem bytestring_memory_bytes_positive:
-  !cenv t. is_bytestring_type t ==> 0 < type_memory_bytes cenv t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
-  TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-  simp[is_bytestring_type_def, type_memory_bytes_def]
 QED
 
 Theorem arg_type_fits_bytestring_memory_bytes:
@@ -180,21 +171,7 @@ QED
 Theorem arg_type_fits_bytestring_source:
   !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `u` >> gvs[is_bytestring_type_def] >>
-  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
-  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
-  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
-      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
-      gvs[arg_type_fits_def, is_bytestring_type_def] >>
-      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
-      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
-  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
-  gvs[arg_type_fits_def, is_bytestring_type_def] >>
-  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
-  gvs[arg_type_fits_def, is_bytestring_type_def]
+  metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]
 QED
 
 Theorem memory_rhs_destination_bound:
@@ -245,72 +222,6 @@ Proof
   `((vyper_abi_size_bound env.type_defs (expr_type a) + 4) + 31) DIV 32 <=
     (n + 31) DIV 32` by
     (irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]) >> gvs[] >> decide_tac
-QED
-
-Theorem word_size_monotone:
-  !n m. n <= m ==> word_size n <= word_size m
-Proof
-  rpt strip_tac >> simp[vfmConstantsTheory.word_size_def] >>
-  irule arithmeticTheory.DIV_LE_MONOTONE >> simp[]
-QED
-
-Theorem memory_rhs_read_annotation_typed:
-  !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-    value_runtime_typed env (expr_type e) v
-Proof
-  rpt strip_tac >>
-  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-  disch_then (qspec_then `env` mp_tac) >>
-  gvs[expr_body_pre_def, expr_sim_inv_def]
-QED
-
-Theorem memory_rhs_read_lowered_typed:
-  !cenv e env tops cx es v es'.
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
-    value_runtime_typed env (lowered_value_type cenv e) v
-Proof
-  ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac
-  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
-      gvs[Once evaluate_def, bind_def, return_def, read_result_def,
-          evaluate_literal_def] >>
-      gvs[expr_body_pre_def, well_typed_expr_def, well_typed_literal_def,
-          well_formed_type_def, evaluate_type_def] >>
-      simp[value_runtime_typed_def, evaluate_type_def,
-           vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
-      gvs[type_slot_size_def, compatible_bound_def] >>
-      imp_res_tac word_size_monotone >> decide_tac)
-  >- (rpt gen_tac >> simp[lowered_value_type_def] >> strip_tac >>
-      gvs[Once evaluate_def, bind_def, return_def, read_result_def,
-          evaluate_literal_def] >>
-      gvs[expr_body_pre_def, well_typed_expr_def, well_typed_literal_def,
-          well_formed_type_def, evaluate_type_def] >>
-      simp[value_runtime_typed_def, evaluate_type_def,
-           vyperTypingTheory.value_has_type_def, compatible_bound_def] >>
-      gvs[type_slot_size_def, compatible_bound_def] >>
-      imp_res_tac word_size_monotone >> decide_tac)
-  >- (rpt gen_tac >> strip_tac >>
-      qpat_x_assum `supported_expr _ _` mp_tac >>
-      simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-           supported_type_builtin_form_def] >> strip_tac >>
-      Cases_on `args` >> gvs[] >>
-      rename1 `supported_pure_exprs tops (a :: tail)` >> Cases_on `tail` >> gvs[] >>
-      Cases_on `method_id` >> gvs[] >>
-      gvs[lowered_value_type_def, expr_body_pre_def] >>
-      rename1 `well_typed_expr env (TypeBuiltin ann (AbiEncode F (SOME mid)) target [a])` >>
-      `supported_tuple_type (expr_type a)` by
-        gvs[well_typed_expr_def, type_builtin_result_ok_def,
-            well_typed_type_builtin_args_def] >>
-      `well_typed_expr env
-        (TypeBuiltin
-          (BaseT (BytesT (Dynamic (abi_size_bound cenv.ce_struct_fields (expr_type a) + 4))))
-          (AbiEncode F (SOME mid)) target [a])` by
-        metis_tac[abi_encode_lowered_well_typed] >>
-      metis_tac[type_builtin_read_annotation_typed]) >>
-  rpt gen_tac >> strip_tac >> simp[lowered_value_type_def] >>
-  metis_tac[memory_rhs_read_annotation_typed]
 QED
 
 Theorem memory_rhs_read_destination_typed:

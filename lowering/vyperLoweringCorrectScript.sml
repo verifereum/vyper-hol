@@ -30,6 +30,8 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
  *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
+ *     every use is written on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
@@ -125,14 +127,12 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes /\
-    (!n. vs.vs_block_ctx.bc_blockhash n =
-         let idx = tx.block_number - n - 1 in
-         if n < tx.block_number /\ tx.block_number - 256 <= n /\
-            idx < LENGTH tx.block_hashes
-         then EL idx tx.block_hashes else 0w)
+    vs.vs_prev_hashes = tx.block_hashes
 End
 
+(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
+   is stated here too so the transaction premises read in one place, not as
+   a separate assumption. *)
 Definition initial_venom_state_rel_def:
   initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
@@ -896,17 +896,27 @@ QED
    lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
    builtin arities and distinct internal names; raw_shape_free_program
    excludes msg.gas values and raw_call (wider than the unit shape needs:
-   a plain raw_call passes it, but the body-shape proof lacks that case).
-   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
-   theorem's source domain, not the runtime immutable compiler. *)
+   a plain raw_call passes it, but the body-shape proof lacks that case). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    raw_shape_free_program tops /\ immutable_free_program tops
+    raw_shape_free_program tops
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
+QED
+
+(* S2b, planned admission: every variable a use in the lowering's code
+   reads is written on every path to the use.  SimplifyCFG's pre-walk
+   needs it. *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
+    ==> unit_defs_reach_uses unit
+Proof
+  cheat
 QED
 
 (* The runtime unit reserves no global memory. *)
@@ -976,14 +986,13 @@ QED
    o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
 Theorem lower_vyper_runtime_unit_o1_shape_extras:
   !tops rpolicy unit.
-    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
-    immutable_free_program tops
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
     ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   reverse conj_tac >- metis_tac[run_lowering_fmp_unsealed] >>
-  drule lower_vyper_runtime_unit_source_unit_ok_shape >>
+  drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
   impl_tac
   >- metis_tac[supported_program_runtime_bodies_shape_ok,
                supported_names_internal_names_distinct,

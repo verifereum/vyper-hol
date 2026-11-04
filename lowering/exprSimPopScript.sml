@@ -224,7 +224,7 @@ Proof
   irule step_MLOAD >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ISZERO[local]:
+Theorem pop_step_ISZERO:
   !id x out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id ISZERO [Var x] [out]) s =
@@ -234,7 +234,7 @@ Proof
   irule step_ISZERO >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ASSERT[local]:
+Theorem pop_step_ASSERT:
   !id x s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id ASSERT [Var x] []) s =
@@ -247,7 +247,7 @@ Proof
   irule step_ASSERT_ok >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_SUB_lit[local]:
+Theorem pop_step_SUB_lit:
   !id x c out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id SUB [Var x; Lit c] [out]) s =
@@ -267,7 +267,7 @@ Proof
   irule step_ADD >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_MUL_lit[local]:
+Theorem pop_step_MUL_lit:
   !id x c out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id MUL [Var x; Lit c] [out]) s =
@@ -277,7 +277,7 @@ Proof
   irule step_MUL >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ADD_var[local]:
+Theorem pop_step_ADD_var:
   !id x y out s.
     IS_SOME (lookup_var x s) /\ IS_SOME (lookup_var y s) ==>
     step_inst_base (mk_inst id ADD [Var x; Var y] [out]) s =
@@ -543,7 +543,8 @@ Theorem pop_stmt_state_rel:
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv es'.scopes u id b sz ==>
-       ?id0. local_region cenv es.scopes s0 id0 b sz) ==>
+       ?id0. local_region cenv es.scopes s0 id0 b sz) /\
+    immutable_base_zero cenv u ==>
     stmt_state_rel ctx func cenv cx es' u
 Proof
   rpt strip_tac >>
@@ -559,6 +560,7 @@ Proof
   `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>
   irule stmt_state_rel_allocas_frame >>
   qpat_assum `stmt_state_rel ctx _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >>
       qexistsl_tac [`s0`, `es`] >>
@@ -569,7 +571,9 @@ Proof
   >- (irule state_rel_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`es`, `s0`] >> simp[]) >>
-  simp[]
+  simp[] >>
+  qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>`
+    (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem pop_stmt_state_rel_scopes:
@@ -578,7 +582,8 @@ Theorem pop_stmt_state_rel_scopes:
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv sc u id b sz ==>
-       ?id0. local_region cenv es.scopes s0 id0 b sz) ==>
+       ?id0. local_region cenv es.scopes s0 id0 b sz) /\
+    immutable_base_zero cenv u ==>
     stmt_state_rel ctx func cenv cx (es with scopes := sc) u
 Proof
   rpt strip_tac >> irule pop_stmt_state_rel >> simp[] >>
@@ -693,6 +698,8 @@ Theorem pop_vv_post:
     (!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
                lookup_var q u = lookup_var q s0) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s0) /\
+    (!q. cenv.ce_imm_alloca = SOME (Var q) ==>
+         lookup_var q u = lookup_var q s0) /\
     lookup_var x6 u =
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
@@ -706,8 +713,12 @@ Theorem pop_vv_post:
       (u with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >>
-  `u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
+  `u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next /\
+   u.vs_labels = s0.vs_labels` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
+  `immutable_base_zero cenv u` by
+    (irule immutable_base_zero_frame >> qexists_tac `s0` >>
+     fs[stmt_state_rel_def]) >>
   drule_all pop_local_ptrs_rel >> strip_tac >>
   `s0.vs_alloca_next < dimword (:256)` by
     (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
@@ -733,7 +744,9 @@ Proof
     (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
   simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac
-  >- (irule pop_stmt_state_rel_scopes >> conj_tac
+  >- (irule pop_stmt_state_rel_scopes >>
+      qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>
+      qexists_tac `s0` >> conj_tac
       >- first_assum ACCEPT_TAC >>
       conj_tac
       >- (`local_region cenv es.scopes s0 id (w2n w) sz` by
@@ -742,7 +755,7 @@ Proof
           `u.vs_data_section = s0.vs_data_section` by
             (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
           drule_all pop_local_mstore_immutables >> simp[]) >>
-      qexists_tac `s0` >> simp[] >>
+      simp[] >>
       rpt strip_tac >> irule pop_regions_backwards >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[])
   >- (qpat_assum `read_result _ _ _ = _` (fn th =>
@@ -852,6 +865,8 @@ Proof
      `x <> x0 /\ x <> x1 /\ x <> x2 /\ x <> x3 /\ x <> x4 /\ x <> x5 /\
       x <> x6` by (rpt conj_tac >> CCONTR_TAC >> fs[]) >>
      fs[]) >>
+  `!q. cenv.ce_imm_alloca = SOME (Var q) ==> lookup_var q u = lookup_var q s` by
+    metis_tac[local_ptrs_reserved_imm_base] >>
   `w2n w + sz <= s.vs_alloca_next /\ 32 + n * type_memory_size etv <= sz` by
     fs[] >>
   `mload (w2n w) s = n2w (LENGTH vs)` by gvs[mload_def, mem_word_at_def] >>
