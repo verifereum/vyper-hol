@@ -119,6 +119,16 @@ Proof
     drule_all lift_sum_runtime_state] >> simp[]
 QED
 
+(* The static-frame checks leave the state alone. *)
+Theorem outcomes_frame_static[simp]:
+  outcomes_frame (check_not_static cx) /\
+  outcomes_frame (frame_call_value cx value_opt)
+Proof
+  rw[outcomes_frame_def] >>
+  Cases_on `frame_call_value cx value_opt st` >>
+  drule frame_call_value_state >> simp[]
+QED
+
 Theorem outcomes_frame_primitives[simp]:
   outcomes_frame (check b msg) /\ outcomes_frame (type_check b msg) /\
   outcomes_frame get_scopes /\ outcomes_frame (set_scopes scs) /\
@@ -497,7 +507,7 @@ val outcomes_suffix_frame_simps =
       [outcomes_frame_reads, outcomes_frame_read_results,
        outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise,
-       outcomes_frame_check_create_blueprint,
+       outcomes_frame_static, outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
        outcomes_frame_adopt,
        outcomes_frame_places, outcomes_frame_write_place,
