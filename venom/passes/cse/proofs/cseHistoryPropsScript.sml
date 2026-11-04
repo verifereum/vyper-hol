@@ -671,3 +671,129 @@ Proof
  rpt strip_tac >> simp[cse_source_history_def] >>
  qexistsl_tac [`events`, `[]`, `n`, `bb`, `s`, `t`] >> simp[]
 QED
+
+Theorem cse_prefix_source_history:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ case phase of
+   CseRun n s => (!bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+     ?a. df_at NONE (avail_analyze fn) s.vs_current_bb 0 = SOME a /\
+       (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+         cse_source_history (dfg_build_function fn) events e src))
+ | CseExec n bb s =>
+     ?a. df_at NONE (avail_analyze fn) bb.bb_label s.vs_inst_idx = SOME a /\
+       (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+         cse_source_history (dfg_build_function fn) events e src)
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- suspend "entry"
+ >- suspend "phi"
+ >- suspend "ordinary"
+ >> suspend "branch"
+QED
+Resume cse_prefix_source_history[entry]:
+ rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+ rpt strip_tac >>
+ `cse_prefix ctx fn fuel0 s0 [] (CseRun fuel0 s0)` by
+   simp[cse_prefix_empty] >>
+ drule_all cse_prefix_run_control >> strip_tac >>
+ drule_all cse_avail_entry_empty >> strip_tac >>
+ qexists_tac `a` >> simp[] >> metis_tac[]
+QED
+Resume cse_prefix_source_history[phi]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_run_control >> strip_tac >>
+ `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+ drule_all cse_avail_atomic_phi_some >> strip_tac >>
+ qexists_tac `a` >> simp[] >> rpt strip_tac >>
+ irule cse_source_history_append >> simp[cse_event_survives_def]
+QED
+Resume cse_prefix_source_history[ordinary]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL s.vs_inst_idx bb.bb_instructions = inst` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ gvs[] >> drule_all cse_avail_at_intra >>
+ simp[availExprDefsTheory.avail_transfer_opt_def] >> strip_tac >>
+ rpt gen_tac >> strip_tac >>
+ rename1 `FLOOKUP (avail_transfer_inst d j a) e = SOME xs` >>
+ qspecl_then [`d`, `j`, `a`, `e`, `src`] mp_tac cse_transfer_source_cases >>
+ (impl_tac >- metis_tac[]) >> strip_tac
+ >- (irule cse_source_history_append >>
+     simp[cse_event_survives_def]) >>
+ `src = j` by fs[availExprProofsTheory.avail_source_birth_def] >>
+ gvs[] >> irule cse_source_history_birth >> simp[]
+QED
+Resume cse_prefix_source_history[branch]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_terminator_boundary >> strip_tac >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+  EL s.vs_inst_idx bb.bb_instructions = inst` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ gvs[] >>
+ `SUC s.vs_inst_idx <= LENGTH bb.bb_instructions` by decide_tac >>
+ drule_all cse_avail_at_intra >>
+ simp[availExprDefsTheory.avail_transfer_opt_def,
+      availExprDefsTheory.avail_transfer_inst_def] >> strip_tac >>
+ rpt gen_tac >> strip_tac >>
+ drule_all cse_avail_boundary_member >> strip_tac >>
+ drule_all cse_avail_entry_predecessor >> strip_tac >>
+ qexists_tac `b'` >> simp[] >> rpt strip_tac >>
+ irule cse_source_history_append >>
+ simp[cse_event_survives_def, availExprProofsTheory.avail_source_survives_def] >>
+ metis_tac[]
+QED
+Finalise cse_prefix_source_history
+
+Theorem cse_prefix_run_source_history:
+ !ctx fn fuel0 s0 events n s bb.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseRun n s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+ ?a. df_at NONE (avail_analyze fn) s.vs_current_bb 0 = SOME a /\
+   (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+     cse_source_history (dfg_build_function fn) events e src)
+Proof
+ rpt strip_tac >> drule cse_prefix_source_history >> simp[]
+QED
+
+Theorem cse_prefix_exec_source_history:
+ !ctx fn fuel0 s0 events n bb s.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) ==>
+ ?a. df_at NONE (avail_analyze fn) bb.bb_label s.vs_inst_idx = SOME a /\
+   (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+     cse_source_history (dfg_build_function fn) events e src)
+Proof
+ rpt strip_tac >> drule cse_prefix_source_history >> simp[]
+QED
+
+Theorem cse_prefix_run_avail_history:
+ !ctx fn fuel0 s0 events n s bb e src xs.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseRun n s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ FLOOKUP (ae_lookup_inst fn s.vs_current_bb 0) e = SOME xs /\ MEM src xs ==>
+ cse_source_history (dfg_build_function fn) events e src
+Proof
+ rpt strip_tac >> drule_all cse_prefix_run_source_history >> strip_tac >>
+ gvs[availExprDefsTheory.ae_lookup_inst_def, availExprDefsTheory.avail_unwrap_def] >>
+ metis_tac[]
+QED
+
+Theorem cse_prefix_exec_avail_history:
+ !ctx fn fuel0 s0 events n bb s e src xs.
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ FLOOKUP (ae_lookup_inst fn bb.bb_label s.vs_inst_idx) e = SOME xs /\ MEM src xs ==>
+ cse_source_history (dfg_build_function fn) events e src
+Proof
+ rpt strip_tac >> drule_all cse_prefix_exec_source_history >> strip_tac >>
+ gvs[availExprDefsTheory.ae_lookup_inst_def, availExprDefsTheory.avail_unwrap_def] >>
+ metis_tac[]
+QED
