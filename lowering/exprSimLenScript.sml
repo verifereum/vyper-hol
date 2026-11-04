@@ -468,7 +468,6 @@ Theorem vv_holds_len_header_widens[local]:
     env.type_defs = get_tenv cx /\
     eval_result_typed (env,cx,es) tv (Type t) /\
     (!v. read_result cx tv es = (INL v,es) ==> value_has_type tvt v) /\
-    (vv_location vv = SOME LocCode ==> ~cenv.ce_is_ctor) /\
     result_array_length cx tv es = (INL n, es) ==>
     ?w. eval_operand (vv_operand vv) s = SOME w /\
         ptr_load_val cenv.ce_is_ctor
@@ -491,7 +490,11 @@ Proof
   >- (drule_all read_result_memory_header_widens >>
       simp[ptr_load_val_def, mload_def, mem_word_at_def])
   >~ [`immutable_holds`]
-  >- (drule_all immutable_holds_data >> strip_tac >> gvs[] >>
+  >- (Cases_on `cenv.ce_is_ctor`
+      >- (drule_all immutable_holds_memory >> strip_tac >> gvs[] >>
+          drule_all read_result_memory_header_widens >>
+          simp[ptr_load_val_def, mload_def, mem_word_at_def]) >>
+      drule_all immutable_holds_data >> strip_tac >> gvs[] >>
       drule_all read_result_memory_header_widens >>
       simp[ptr_load_val_def, mem_word_at_def])
   >>~- ([`val_in_memory _ _ _ _`],
