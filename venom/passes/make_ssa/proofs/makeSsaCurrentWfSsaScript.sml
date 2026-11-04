@@ -15,7 +15,10 @@ Ancestors
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
-  makeSsaCurrentAvailability venomExecProofs
+  makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
+  makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
+Libs
+  rich_listTheory
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
@@ -208,6 +211,20 @@ Proof
   Cases_on `pre` >> gvs[is_fn_path_def] >> metis_tac[]
 QED
 
+Theorem current_wf_first_visit_decomposition:
+  !path. is_fn_path fn path /\ path <> [] /\ LAST path = target ==>
+  ?pre suffix. path = pre ++ target::suffix /\
+    is_fn_path fn (pre ++ [target]) /\
+    HD (pre ++ [target]) = HD path /\ ~MEM target pre
+Proof
+  Induct >> simp[] >> gen_tac >> strip_tac >>
+  Cases_on `h = target`
+  >- (qexistsl_tac [`[]`, `path`] >> simp[is_fn_path_def]) >>
+  Cases_on `path` >> gvs[is_fn_path_def] >>
+  qexistsl_tac [`h::pre`, `suffix`] >> simp[] >>
+  Cases_on `pre` >> gvs[is_fn_path_def]
+QED
+
 Theorem current_wf_first_entry_path:
   fn_reachable fn target /\ fn_entry_label fn = SOME entry /\ entry <> target ==>
   ?path pred. is_fn_path fn path /\ path <> [] /\
@@ -216,13 +233,170 @@ Theorem current_wf_first_entry_path:
 Proof
   simp[fn_reachable_def] >> strip_tac >>
   drule rtc_to_fn_path >> strip_tac >>
-  drule_all current_path_first_target >> strip_tac >>
+  drule_all current_wf_first_visit_decomposition >> strip_tac >>
   `pre <> []` by (Cases_on `pre` >> gvs[]) >>
   Cases_on `pre` using SNOC_CASES >> gvs[SNOC_APPEND] >>
   rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
   drule current_wf_path_last_edge >> strip_tac >>
   qexists_tac `l ++ [x]` >> simp[] >>
   Cases_on `l` >> gvs[]
+QED
+
+Theorem current_wf_unique_output_block[local]:
+  ssa_form fn /\
+  MEM bb1 fn.fn_blocks /\ MEM inst1 bb1.bb_instructions /\ MEM v inst1.inst_outputs /\
+  MEM bb2 fn.fn_blocks /\ MEM inst2 bb2.bb_instructions /\ MEM v inst2.inst_outputs ==>
+  bb1 = bb2
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP
+    (\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) fn.fn_blocks))` by
+    fs[ssa_form_def, fn_insts_def, fn_insts_blocks_flat,
+      MAP_FLAT, FLAT_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+  irule (INST_TYPE [beta |-> ``:string``] all_distinct_flat_map_unique) >>
+  qexistsl_tac [`\bb. FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)`,
+    `fn.fn_blocks`, `v`] >> simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_wf_phi_first_source[local]:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM out inst.inst_outputs /\ phi_edge_uses_wf fn bb inst /\
+  is_fn_path fn path /\ path <> [] /\
+  (?entry. fn_entry_label fn = SOME entry /\ HD path = entry) /\
+  fn_cfg_edge fn (LAST path) bb.bb_label /\ ~MEM bb.bb_label path ==>
+  ?src db di. MEM (LAST path,src) (phi_pairs inst.inst_operands) /\
+    src <> out /\ MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM src di.inst_outputs /\ MEM db.bb_label path /\
+    fn_dominates fn db.bb_label (LAST path)
+Proof
+  strip_tac >>
+  `?src. MEM (LAST path,src) (phi_pairs inst.inst_operands)` by
+    (fs[phi_edge_uses_wf_def, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  `?pb. MEM pb fn.fn_blocks /\ pb.bb_label = LAST path /\
+    def_available_at fn pb NONE src` by metis_tac[phi_edge_uses_wf_def] >>
+  qpat_x_assum `def_available_at _ _ _ _` mp_tac >>
+  simp[def_available_at_def] >> strip_tac >>
+  `MEM def_bb.bb_label path` by
+    (fs[fn_dominates_def] >> first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `src <> out` by
+    (strip_tac >> gvs[] >>
+     `def_bb = bb` by metis_tac[current_wf_unique_output_block] >> gvs[]) >>
+  qexistsl_tac [`src`, `def_bb`, `def_inst`] >> fs[]
+QED
+
+Theorem current_wf_phi_nonself_source:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM out inst.inst_outputs /\ phi_edge_uses_wf fn bb inst /\
+  fn_reachable fn bb.bb_label /\ fn_entry_label fn = SOME entry /\
+  entry <> bb.bb_label ==>
+  ?pred src. MEM (pred,src) (phi_pairs inst.inst_operands) /\ src <> out
+Proof
+  strip_tac >> drule_all current_wf_first_entry_path >> strip_tac >>
+  `?src db di. MEM (LAST path,src) (phi_pairs inst.inst_operands) /\
+    src <> out /\ MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM src di.inst_outputs /\ MEM db.bb_label path /\
+    fn_dominates fn db.bb_label (LAST path)` by
+    (irule current_wf_phi_first_source >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem current_wf_phi_constant_source:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  MEM out inst.inst_outputs /\ phi_edge_uses_wf fn bb inst /\
+  fn_reachable fn bb.bb_label /\ fn_entry_label fn = SOME entry /\
+  entry <> bb.bb_label /\
+  (!p w. MEM (p,w) (phi_pairs inst.inst_operands) /\ w <> out ==> w = src) ==>
+  ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM src di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+    fn_dominates fn db.bb_label bb.bb_label
+Proof
+  strip_tac >> drule_all current_wf_first_entry_path >> strip_tac >>
+  `?src0 db di. MEM (LAST path,src0) (phi_pairs inst.inst_operands) /\
+    src0 <> out /\ MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM src0 di.inst_outputs /\ MEM db.bb_label path /\
+    fn_dominates fn db.bb_label (LAST path)` by
+    (irule current_wf_phi_first_source >> simp[] >> metis_tac[]) >>
+  `src0 = src` by metis_tac[] >> gvs[] >>
+  qexistsl_tac [`db`, `di`] >> simp[] >> conj_tac
+  >- metis_tac[] >>
+  simp[fn_dominates_def] >> rpt strip_tac >>
+  drule_all current_wf_first_visit_decomposition >> strip_tac >>
+  `pre <> []` by (Cases_on `pre` >> gvs[]) >>
+  Cases_on `pre` using SNOC_CASES >> gvs[SNOC_APPEND] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  drule current_wf_path_last_edge >> strip_tac >>
+  `?w db' di'. MEM (LAST (l ++ [x]),w) (phi_pairs inst.inst_operands) /\
+    w <> out /\ MEM db' fn.fn_blocks /\ MEM di' db'.bb_instructions /\
+    MEM w di'.inst_outputs /\ MEM db'.bb_label (l ++ [x]) /\
+    fn_dominates fn db'.bb_label (LAST (l ++ [x]))` by
+    (irule current_wf_phi_first_source >> simp[] >>
+     Cases_on `l` >> gvs[] >> metis_tac[]) >>
+  `w = src` by metis_tac[] >> gvs[] >>
+  `db' = db` by metis_tac[current_wf_unique_output_block] >> gvs[]
+QED
+
+Theorem current_wf_phi_slots[local]:
+  !ops. phi_well_formed ops ==> ops = current_phi_slots (phi_pairs ops)
+Proof
+  recInduct phi_well_formed_ind >> simp[phi_well_formed_def,
+    phi_pairs_def, current_phi_slots_def]
+QED
+
+Theorem current_wf_phi_cleanup_cases[local]:
+  inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = current_phi_slots slots /\
+  (?p w. MEM (p,w) slots /\ w <> out) ==>
+  simplify_current_phi inst = inst \/
+  ?src. simplify_current_phi inst =
+      inst with <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+    (!p w. MEM (p,w) slots /\ w <> out ==> w = src)
+Proof
+  strip_tac >>
+  qabbrev_tac `vals = MAP SND (FILTER (\slot. SND slot <> out) slots)` >>
+  `MEM w vals` by (simp[Abbr `vals`, MEM_MAP, MEM_FILTER] >> metis_tac[pairTheory.SND]) >>
+  Cases_on `vals` >- fs[] >>
+  qpat_x_assum `MEM _ (h::t)` kall_tac >> fs[] >>
+  Cases_on `EVERY (\w. w = h) t`
+  >- (disj2_tac >> qexists_tac `h` >> conj_tac
+      >- (irule current_phi_slots_constant >> metis_tac[]) >>
+      rpt strip_tac >>
+      `MEM w' (h::t)` by
+        (qpat_x_assum `_ = h::t` (SUBST1_TAC o SYM) >>
+         simp[MEM_MAP, MEM_FILTER] >> metis_tac[pairTheory.SND]) >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  disj1_tac >> fs[EVERY_MEM, EXISTS_MEM] >>
+  simp[simplify_current_phi_def, simplify_current_phi_raw_def,
+    current_phi_output_def, current_phi_slots_remove_self, current_phi_slots_values,
+    keep_current_phi_vars_def, EVERY_MEM] >>
+  Cases_on `!w. MEM w t ==> w = h` >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_wf_phi_cleanup_classification:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+  inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
+  phi_edge_uses_wf fn bb inst /\ fn_reachable fn bb.bb_label /\
+  fn_entry_label fn = SOME entry /\ entry <> bb.bb_label ==>
+  simplify_current_phi inst = inst \/
+  ?src db di.
+    simplify_current_phi inst =
+      inst with <|inst_opcode := ASSIGN; inst_operands := [Var src]|> /\
+    MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM src di.inst_outputs /\ db.bb_label <> bb.bb_label /\
+    fn_dominates fn db.bb_label bb.bb_label
+Proof
+  strip_tac >>
+  `MEM out inst.inst_outputs` by simp[] >>
+  `inst.inst_operands = current_phi_slots (phi_pairs inst.inst_operands)` by
+    metis_tac[phi_edge_uses_wf_def, current_wf_phi_slots] >>
+  drule_all current_wf_phi_nonself_source >> strip_tac >>
+  `simplify_current_phi inst = inst \/
+   ?v. simplify_current_phi inst =
+       inst with <|inst_opcode := ASSIGN; inst_operands := [Var v]|> /\
+     (!p w. MEM (p,w) (phi_pairs inst.inst_operands) /\ w <> out ==> w = v)` by
+    metis_tac[current_wf_phi_cleanup_cases]
+  >- simp[] >>
+  disj2_tac >> qexists_tac `v` >> simp[] >>
+  irule current_wf_phi_constant_source >> metis_tac[]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
