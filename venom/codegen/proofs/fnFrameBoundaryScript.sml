@@ -12,7 +12,8 @@
 
 Theory fnFrameBoundary
 Ancestors
-  genFrameSim frameRel contextCodegenRel codegenRel
+  fnFrameBoundaryGenRet genFrameSim frameRel contextCodegenRel codegenRel
+  stackOpAsmSim blockSimHelpers
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
 
@@ -87,7 +88,26 @@ Theorem gen_ret_frame_sim:
              read_byte b as'.as_memory = read_byte b mem0) /\
         shared_state_rel vs' as'
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_tac >>
+  drule_all ret_source_frame_boundary >>
+  disch_then (qspec_then `ra` strip_assume_tac) >>
+  drule_all ret_frame_prefix >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `asm_steps lo o2pc prog n as = AsmOK mid` >>
+  `FLOOKUP o2pc (w2n ra) = SOME pc_ret` by metis_tac[] >>
+  `asm_steps lo o2pc prog (SUC 0) mid =
+    AsmOK (mid with <| as_pc := pc_ret;
+      as_stack := REVERSE ret.iret_values ++ rest |>)` by
+    (pure_rewrite_tac[asm_steps_def] >>
+     qpat_x_assum `asm_block_at prog mid.as_pc _` mp_tac >>
+     simp[asm_block_at_def] >> strip_tac >>
+     `mid.as_pc < LENGTH prog` by decide_tac >>
+     gvs[asm_step_jump, asm_jump_def]) >>
+  qexistsl_tac [`n + SUC 0`,
+    `mid with <| as_pc := pc_ret; as_stack := REVERSE ret.iret_values ++ rest |>`] >>
+  conj_tac >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  gvs[shared_state_rel_def, venom_asm_terminal_rel_def]
 QED
 
 (* ===== INVOKE ===== *)
