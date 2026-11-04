@@ -3,6 +3,7 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadJointFrontier
   o1LowerDloadJointAllocation o1LowerDloadScratchCount
   o1LowerDloadOccurrenceHeadroom o1LowerDloadPairedAllocation
+  o1LowerDloadEnvironment o1LowerDloadMapEvolution
   finite_map words list pred_set
 
 Theorem ld_geometry_fresh_site[local]:
@@ -87,4 +88,25 @@ Proof
       rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >> decide_tac)
   >- (irule ld_allocas_fresh_site >> metis_tac[])
   >> simp[]
+QED
+
+Theorem ld_joint_saved_extend:
+  !U stk ts. ld_joint_saved C' sites X lo U stk ts /\
+  key NOTIN FDOM sites /\ ~MEM (FST key) (MAP (\f. f.of_owner) U) ==>
+  ld_joint_saved C' (sites |+ (key,(b,c,z))) X lo U stk ts
+Proof
+  Induct >> simp[ld_joint_saved_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `FST key <> h.of_owner` by simp[] >>
+  `!aid. key <> (h.of_owner,aid)` by (rpt strip_tac >> gvs[]) >>
+  qexists_tac `u` >>
+  qpat_x_assum `ld_joint_frame _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [ld_joint_frame_def] >> strip_tac >>
+      rpt conj_tac
+      >- (gvs[ld_env_agree_def] >> rpt strip_tac >>
+          irule ld_value_agree_extend >> metis_tac[])
+      >- (gvs[ld_params_agree_def] >> rpt strip_tac >>
+          irule ld_value_agree_extend >> metis_tac[])
+      >- (simp_tac (srw_ss()) [ld_joint_allocas_def, FLOOKUP_UPDATE] >>
+          fs[ld_joint_allocas_def] >> metis_tac[])
+      >> gvs[FLOOKUP_UPDATE] >> metis_tac[]
 QED
