@@ -801,158 +801,6 @@ Proof
   gvs[lineage_core_def] >> ASM_SET_TAC[]
 QED
 
-Theorem cleanup_retained_core:
-  !m core ps inputs physical retained removed.
-    lineage_core m core ps /\ ALL_DISTINCT core /\ EVERY is_var_operand core /\
-    set physical = set core DIFF set (MAP Var inputs) /\
-    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
-    removed = FILTER (\op. ~MEM op retained) physical ==>
-    ?n live.
-      mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack =
-        REPLICATE n dead_stack_marker ++ live /\
-      ALL_DISTINCT live /\ EVERY is_var_operand live /\
-      set live = set core INTER set (MAP Var inputs)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all below_all_live_core_prefix >>
-  disch_then (qspecl_then [`m`, `inputs`] strip_assume_tac) >>
-  `set retained = set pre` by
-    (simp[EXTENSION, MEM_FILTER] >> gvs[lineage_core_def] >>
-     ASM_SET_TAC[]) >>
-  `set removed = set physical DIFF set retained` by
-    (simp[EXTENSION, MEM_FILTER] >> metis_tac[]) >>
-  `DISJOINT (set (REPLICATE m dead_stack_marker ++ pre)) (set removed)` by
-    (`~MEM dead_stack_marker physical` by
-       (fs[EVERY_MEM] >>
-        `~is_var_operand dead_stack_marker` by
-          simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
-        ASM_SET_TAC[]) >>
-     gvs[] >> simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
-  `ps.ps_stack = (REPLICATE m dead_stack_marker ++ pre) ++ tail` by
-    fs[lineage_core_def] >>
-  `ALL_DISTINCT tail` by gvs[ALL_DISTINCT_APPEND] >>
-  drule_all popmany_plan_core >> strip_tac >>
-  `DISJOINT (set pre) (set core')` by
-    (fs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
-  `set core' = set core INTER set (MAP Var inputs)` by
-    (gvs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
-  qexistsl_tac [`m + LENGTH pre`, `core'`] >>
-  conj_tac
-  >- (qpat_x_assum `(SND (popmany_plan _ _)).ps_stack = _` SUBST1_TAC >>
-      irule mark_dead_stack_prefix >> simp[]) >>
-  simp[] >> fs[EVERY_MEM] >> gen_tac >> disch_tac >>
-  `MEM e core` by ASM_SET_TAC[] >> metis_tac[]
-QED
-
-Theorem cleanup_payload_inventory:
-  !S ps inputs layout to_pop physical retained removed ok promised result.
-    lineage_inventory S ps /\ set (MAP Var inputs) SUBSET S /\
-    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled /\
-    to_pop = FILTER (\v. ~MEM v inputs) layout /\
-    physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop) /\
-    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
-    removed = FILTER (\op. ~MEM op retained) physical /\
-    result =
-      (if NULL inputs /\ ok then
-         ps with <| ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
-                    ps_cleanup_promised := promised |>
-       else if ok then
-         (SND (popmany_plan removed ps)) with
-           <| ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
-              ps_cleanup_promised := promised |>
-       else SND (popmany_plan (MAP Var to_pop) ps)) ==>
-    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled) result
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `ok`
-  >- (Cases_on `NULL inputs`
-      >- suspend "empty"
-      >> suspend "marked") >>
-  suspend "popped"
-QED
-
-Resume cleanup_payload_inventory[empty]:
-  gvs[NULL_EQ] >>
-  fs[lineage_inventory_def] >>
-  simp[lineage_inventory_def, lineage_core_def] >>
-  qexistsl_tac [`LENGTH ps.ps_stack`, `[]`] >>
-  simp[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
-QED
-
-Resume cleanup_payload_inventory[marked]:
-  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
-  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
-  `?m core. lineage_core m core ps /\ ALL_DISTINCT core /\
-     EVERY is_var_operand core /\ DISJOINT (set core) (FDOM ps.ps_spilled) /\
-     set core UNION FDOM ps.ps_spilled = inventory_set` by
-    (fs[lineage_inventory_def] >> metis_tac[]) >>
-  `set physical = set core DIFF set (MAP Var inputs)` by
-    (qpat_x_assum `to_pop = _` SUBST_ALL_TAC >>
-     drule_all cleanup_physical_core >> simp[]) >>
-  drule_all cleanup_retained_core >> strip_tac >>
-  gvs[] >> simp[lineage_inventory_def, lineage_core_def, popmany_plan_spilled_unchanged] >>
-  qexistsl_tac [`n`, `live`] >> simp[] >>
-  conj_tac >- ASM_SET_TAC[] >>
-  conj_tac >- ASM_SET_TAC[] >>
-  fs[lineage_inventory_def] >> metis_tac[]
-QED
-
-Resume cleanup_payload_inventory[popped]:
-  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
-  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
-  gvs[] >>
-  `~MEM dead_stack_marker (MAP Var (FILTER (\v. ~MEM v inputs) layout))` by
-    simp[MEM_MAP, dead_stack_marker_def] >>
-  drule_all popmany_plan_lineage_inventory >>
-  `inventory_set DIFF (set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) INTER set ps.ps_stack) =
-     set (MAP Var inputs) UNION FDOM ps.ps_spilled` by
-    (`set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) =
-        set (MAP Var layout) DIFF set (MAP Var inputs)` by
-       (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> Cases >> simp[] >> metis_tac[]) >>
-     qpat_x_assum `lineage_inventory _ ps` mp_tac >>
-     rewrite_tac[lineage_inventory_def, lineage_core_def] >> strip_tac >>
-     `~MEM dead_stack_marker (MAP Var inputs)` by simp[MEM_MAP, dead_stack_marker_def] >>
-     `~MEM dead_stack_marker (MAP Var layout)` by simp[MEM_MAP, dead_stack_marker_def] >>
-     `DISJOINT (set (REPLICATE m dead_stack_marker)) (set (MAP Var layout))` by
-       (simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
-     gvs[] >> ASM_SET_TAC[]) >> simp[]
-QED
-
-Finalise cleanup_payload_inventory
-
-Theorem clean_stack_plan_active_inventory:
-  !S ps liveness cfg fn bb pred_lbl pred_bb inputs layout.
-    lineage_inventory S ps /\
-    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
-    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
-    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
-    inputs = input_vars_from pred_lbl bb.bb_instructions
-      (live_vars_at liveness bb.bb_label 0) /\
-    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
-    set (MAP Var inputs) SUBSET S /\
-    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled ==>
-    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled)
-      (SND (clean_stack_plan liveness cfg fn bb ps))
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[Once clean_stack_plan_def] >>
-  qpat_x_assum `inputs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  qpat_x_assum `layout = _` (fn th => pure_rewrite_tac[GSYM th]) >>
-  qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
-  qmatch_goalsub_abbrev_tac `FILTER (\op. below_all_live op inputs ps.ps_stack) physical` >>
-  qmatch_goalsub_abbrev_tac `FILTER (\op. ~MEM op retained) physical` >>
-  qmatch_goalsub_abbrev_tac `popmany_plan removed ps` >>
-  qmatch_goalsub_abbrev_tac `if NULL inputs /\ ok then _ else _` >>
-  irule cleanup_payload_inventory >>
-  goal_assum (drule_at Any) >>
-  qexistsl_tac [`ok`, `physical`,
-    `ps.ps_cleanup_promised \/ ~NULL retained`, `removed`, `retained`, `to_pop`] >>
-  simp[Abbr `to_pop`, Abbr `physical`, Abbr `retained`, Abbr `removed`] >>
-  Cases_on `ok` >> simp[] >>
-  Cases_on `NULL inputs` >> simp[] >>
-  pairarg_tac >> simp[]
-QED
-
 Theorem clean_stack_plan_noop:
   !liveness cfg fn bb ps.
     ~(?pred_lbl pred_bb.
@@ -1305,4 +1153,131 @@ Proof
   simp[APPEND_ASSOC, mark_dead_stack_prefix] >>
   fs[EVERY_MEM] >> rpt strip_tac >>
   `MEM e core` by ASM_SET_TAC[] >> metis_tac[]
+QED
+
+Theorem cleanup_retained_core:
+  !m core ps inputs physical retained removed.
+    lineage_core m core ps /\ ALL_DISTINCT core /\ EVERY is_var_operand core /\
+    set physical = set core DIFF set (MAP Var inputs) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical ==>
+    ?n live.
+      mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack =
+        REPLICATE n dead_stack_marker ++ live /\
+      ALL_DISTINCT live /\ EVERY is_var_operand live /\
+      set live = set core INTER set (MAP Var inputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ps.ps_alloc = ps.ps_alloc` by simp[] >>
+  drule_all cleanup_retained_prefix_replay >> strip_tac >>
+  qexistsl_tac [`m + LENGTH pre`, `live`] >> gvs[]
+QED
+
+Theorem cleanup_payload_inventory:
+  !S ps inputs layout to_pop physical retained removed ok promised result.
+    lineage_inventory S ps /\ set (MAP Var inputs) SUBSET S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled /\
+    to_pop = FILTER (\v. ~MEM v inputs) layout /\
+    physical = FILTER (\op. IS_SOME (stack_get_depth op ps.ps_stack)) (MAP Var to_pop) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical /\
+    result =
+      (if NULL inputs /\ ok then
+         ps with <| ps_stack := MAP (K dead_stack_marker) ps.ps_stack;
+                    ps_cleanup_promised := promised |>
+       else if ok then
+         (SND (popmany_plan removed ps)) with
+           <| ps_stack := mark_dead_stack retained (SND (popmany_plan removed ps)).ps_stack;
+              ps_cleanup_promised := promised |>
+       else SND (popmany_plan (MAP Var to_pop) ps)) ==>
+    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled) result
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ok`
+  >- (Cases_on `NULL inputs`
+      >- suspend "empty"
+      >> suspend "marked") >>
+  suspend "popped"
+QED
+
+Resume cleanup_payload_inventory[empty]:
+  gvs[NULL_EQ] >>
+  fs[lineage_inventory_def] >>
+  simp[lineage_inventory_def, lineage_core_def] >>
+  qexistsl_tac [`LENGTH ps.ps_stack`, `[]`] >>
+  simp[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE, combinTheory.K_DEF]
+QED
+
+Resume cleanup_payload_inventory[marked]:
+  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
+  `?m core. lineage_core m core ps /\ ALL_DISTINCT core /\
+     EVERY is_var_operand core /\ DISJOINT (set core) (FDOM ps.ps_spilled) /\
+     set core UNION FDOM ps.ps_spilled = inventory_set` by
+    (fs[lineage_inventory_def] >> metis_tac[]) >>
+  `set physical = set core DIFF set (MAP Var inputs)` by
+    (qpat_x_assum `to_pop = _` SUBST_ALL_TAC >>
+     drule_all cleanup_physical_core >> simp[]) >>
+  drule_all cleanup_retained_core >> strip_tac >>
+  gvs[] >> simp[lineage_inventory_def, lineage_core_def, popmany_plan_spilled_unchanged] >>
+  qexistsl_tac [`n`, `live`] >> simp[] >>
+  conj_tac >- ASM_SET_TAC[] >>
+  conj_tac >- ASM_SET_TAC[] >>
+  fs[lineage_inventory_def] >> metis_tac[]
+QED
+
+Resume cleanup_payload_inventory[popped]:
+  qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+  qmatch_goalsub_rename_tac `lineage_inventory inventory_set ps` >> disch_tac >>
+  gvs[] >>
+  `~MEM dead_stack_marker (MAP Var (FILTER (\v. ~MEM v inputs) layout))` by
+    simp[MEM_MAP, dead_stack_marker_def] >>
+  drule_all popmany_plan_lineage_inventory >>
+  `inventory_set DIFF (set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) INTER set ps.ps_stack) =
+     set (MAP Var inputs) UNION FDOM ps.ps_spilled` by
+    (`set (MAP Var (FILTER (\v. ~MEM v inputs) layout)) =
+        set (MAP Var layout) DIFF set (MAP Var inputs)` by
+       (simp[EXTENSION, MEM_MAP, MEM_FILTER] >> Cases >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `lineage_inventory _ ps` mp_tac >>
+     rewrite_tac[lineage_inventory_def, lineage_core_def] >> strip_tac >>
+     `~MEM dead_stack_marker (MAP Var inputs)` by simp[MEM_MAP, dead_stack_marker_def] >>
+     `~MEM dead_stack_marker (MAP Var layout)` by simp[MEM_MAP, dead_stack_marker_def] >>
+     `DISJOINT (set (REPLICATE m dead_stack_marker)) (set (MAP Var layout))` by
+       (simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+     gvs[] >> ASM_SET_TAC[]) >> simp[]
+QED
+
+Finalise cleanup_payload_inventory
+
+Theorem clean_stack_plan_active_inventory:
+  !S ps liveness cfg fn bb pred_lbl pred_bb inputs layout.
+    lineage_inventory S ps /\
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb /\
+    inputs = input_vars_from pred_lbl bb.bb_instructions
+      (live_vars_at liveness bb.bb_label 0) /\
+    layout = live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions) /\
+    set (MAP Var inputs) SUBSET S /\
+    S SUBSET set (MAP Var inputs) UNION set (MAP Var layout) UNION FDOM ps.ps_spilled ==>
+    lineage_inventory (set (MAP Var inputs) UNION FDOM ps.ps_spilled)
+      (SND (clean_stack_plan liveness cfg fn bb ps))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once clean_stack_plan_def] >>
+  qpat_x_assum `inputs = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `layout = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qabbrev_tac `to_pop = FILTER (\v. ~MEM v inputs) layout` >>
+  qmatch_goalsub_abbrev_tac `FILTER (\op. below_all_live op inputs ps.ps_stack) physical` >>
+  qmatch_goalsub_abbrev_tac `FILTER (\op. ~MEM op retained) physical` >>
+  qmatch_goalsub_abbrev_tac `popmany_plan removed ps` >>
+  qmatch_goalsub_abbrev_tac `if NULL inputs /\ ok then _ else _` >>
+  irule cleanup_payload_inventory >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`ok`, `physical`,
+    `ps.ps_cleanup_promised \/ ~NULL retained`, `removed`, `retained`, `to_pop`] >>
+  simp[Abbr `to_pop`, Abbr `physical`, Abbr `retained`, Abbr `removed`] >>
+  Cases_on `ok` >> simp[] >>
+  Cases_on `NULL inputs` >> simp[] >>
+  pairarg_tac >> simp[]
 QED
