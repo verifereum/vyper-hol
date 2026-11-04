@@ -16,10 +16,8 @@
  *   lower_dload_stage_dload_ok     - the DLOAD offset bound, vacuous after
  *   lower_dload_stage_headroom     - the DLOAD headroom bound, raw_mem_ok's
  *                                    frontier bound after
- *   lower_dload_stage_sim          - the runs match, up to the dead bytes D
- *   lower_dload_stage_mem          - raw memory of the output
- *   lower_dload_stage_ptr          - pointer discipline of the output
- *   lower_dload_stage_taint        - taint of the output within D
+ *   (the simulation and the raw memory, pointer and taint rows are in
+ *    o1ContractLowerDload{Sim,Mem,Ptr,Taint})
  *   o1_contract_lower_dload        - the contract theorem
  *)
 Theory o1ContractLowerDloadStage
@@ -27,7 +25,8 @@ Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list venomInst venomWf
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
-  venomFnScheduleRunner
+  venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
+  o1ContractLowerDloadPtr o1ContractLowerDloadTaint
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -231,60 +230,6 @@ Proof
   drule lower_dload_function_supply_labels >> strip_tac >>
   drule_all lower_dload_function_supply_invoke_targets >> strip_tac >>
   metis_tac[]
-QED
-
-(* ===== The reachable-state rows and the simulation ===== *)
-
-(* The simulation: every terminating run of C is matched by a run of C'
-   up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
-   the code_end-relative CODECOPY offset from wrapping; code_layout_valid
-   (in o1_run_state_ok) binds "code_end" to the code/data boundary; the
-   headroom bound (in o1_src_inv) and the callee-first order keep the
-   shifted alloca sites from wrapping; the pointer discipline and the
-   taint bound (in o1_src_inv) keep the shifted alloca addresses out of
-   what the run observes. *)
-Theorem lower_dload_stage_sim:
-  !rpolicy D view C C' vs names.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
-    ctx_sim D C C' vs vs
-Proof
-  cheat
-QED
-
-(* The output's reachable states keep raw memory safety. *)
-Theorem lower_dload_stage_mem:
-  !rpolicy D view C C' vs names.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
-    mem_inv raw_mem_ok C' vs
-Proof
-  cheat
-QED
-
-(* The output keeps the pointer discipline above the same fixed region. *)
-Theorem lower_dload_stage_ptr:
-  !rpolicy D view C C' vs names lo.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-    fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
-    ptr_discipline lo C' vs
-Proof
-  cheat
-QED
-
-(* The output's taint reaches only the dead bytes D. *)
-Theorem lower_dload_stage_taint:
-  !rpolicy D view C C' vs names.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
-    taint_within D C' vs
-Proof
-  cheat
 QED
 
 Theorem lower_dload_run_contract:

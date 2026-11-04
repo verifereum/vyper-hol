@@ -33,7 +33,9 @@
  * with a non-pointer, ASSIGN/PHI, and INVOKE arguments at P's positions
  * (fn_ptr_ok); and at every frame_reachable state each nonempty access
  * lies inside the site its address operand points into (access_ok), and
- * tainted data is only copied or stored (taint_ok).
+ * tainted data is only copied or stored (taint_ok).  The run starts with
+ * its alloca frontier at or above lo, so a pass that adds ALLOCA sites
+ * still places them at or above lo.
  *
  * ALLOCA and DALLOCA pointers are covered; GETFMP, SETFMP, RETFMP and
  * FMP_PARAM are excluded, as no source emits them.  After ConcretizeMemLoc, static
@@ -607,6 +609,7 @@ End
 
 Definition ptr_discipline_def:
   ptr_discipline (lo:num) ctx vs <=>
+    lo <= vs.vs_alloca_next /\
     ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
         !stk PG G tn fn inst s.
           frame_reachable vs ctx stk PG G tn fn inst s ==>

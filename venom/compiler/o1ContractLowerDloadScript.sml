@@ -18,7 +18,7 @@ Theory o1ContractLowerDload
 Ancestors
   o1PassContract lowerDloadDefs lowerDloadSupplyProofs venomPassDispatcher venomFnScheduleRunner
   unitShapeDefs venomWf irSupply venomInst stackPlanTypes list rich_list
-  contextCodegenRel stackPlanGen
+  contextCodegenRel stackPlanGen lowerDloadCallChecks
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -61,6 +61,33 @@ Proof
   Cases_on `i.inst_opcode = DLOADBYTES`
   >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
       rpt strip_tac >> gvs[is_terminator_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+(* DRET and DALLOCA instructions of the output are input ones. *)
+Theorem lower_dload_inst_supply_kept_dret:
+  lower_dload_inst_supply s i = (xs,t) /\ MEM j xs /\
+  j.inst_opcode = DRET ==> j = i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_kept_dalloca:
+  lower_dload_inst_supply s i = (xs,t) /\ MEM j xs /\
+  j.inst_opcode = DALLOCA ==> j = i
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
   rw[lower_dload_inst_supply_def] >> gvs[]
 QED
 
@@ -804,6 +831,8 @@ Proof
       `EVERY (\l. ~reserved_label l) (fn_labels g)` by gvs[] >>
       qpat_x_assum `fn_labels g = _` kall_tac >>
       gvs[fn_labels_def, EVERY_MAP, combinTheory.o_DEF]) >>
+  reverse conj_tac
+  >- metis_tac[lower_dload_function_supply_call_checks] >>
   irule lower_dload_function_supply_every >> conj_tac
   >- metis_tac[lower_dload_inst_supply_shape] >>
   qexistsl [`f`,`s`,`t`] >> simp[]
@@ -942,6 +971,20 @@ Proof
       qexistsl [`f`,`s`,`t`] >> gvs[wf_function_def, fn_has_entry_def])
   >- metis_tac[lower_dload_function_supply_invoke_ok]
   >- metis_tac[lower_dload_function_supply_label_refs]
+  >- (gvs[dretDesugarDefsTheory.no_dret_def] >> rpt strip_tac >>
+      drule_all lower_dload_function_supply_member >> strip_tac >>
+      drule_all lower_dload_inst_supply_kept_dret >> strip_tac >> gvs[] >>
+      metis_tac[])
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all lower_dload_function_supply_member >> strip_tac >>
+      drule_all lower_dload_inst_supply_kept_dalloca >> strip_tac >> gvs[] >>
+      `!x. gas_var g x ==> gas_var f x` by
+        (simp[gas_var_def] >> rpt strip_tac >>
+         drule lower_dload_function_supply_copy_phi >> simp[] >> metis_tac[]) >>
+      `!x. retpc_var g x ==> retpc_var f x` by
+        (simp[retpc_var_def] >> rpt strip_tac >>
+         drule lower_dload_function_supply_copy_phi >> simp[] >> metis_tac[]) >>
+      metis_tac[])
   >- (strip_tac >> gvs[] >> conj_tac
       >- metis_tac[lower_dload_function_supply_entry_no_return] >>
       metis_tac[lower_dload_function_supply_entry_no_params]) >>
