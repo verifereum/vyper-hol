@@ -136,3 +136,57 @@ Proof
   disch_then (qspec_then `s'` strip_assume_tac) >>
   simp[step_prov_def] >> irule ptr_owner_set_projection >> simp[]
 QED
+
+Theorem ptr_ledger_erases_extend:
+  ptr_ledger_erases births tagged numerical /\
+  (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site) ==>
+  ptr_ledger_erases births' tagged numerical
+Proof
+  simp[ptr_ledger_erases_def] >> strip_tac >> conj_tac
+  >- (gen_tac >> Cases_on `FLOOKUP tagged v` >> simp[] >>
+      `?site. FLOOKUP births x = SOME site` by
+        metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `?site. FLOOKUP births owner = SOME site` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem ptr_params_erases_extend:
+  ptr_params_erases births PT PG /\
+  (!owner site. FLOOKUP births owner = SOME site ==> FLOOKUP births' owner = SOME site) ==>
+  ptr_params_erases births' PT PG
+Proof
+  simp[ptr_params_erases_def, EVERY_MEM] >> strip_tac >> conj_tac
+  >- (simp[MAP_EQ_f] >> rpt strip_tac >>
+      Cases_on `e` >> simp[ptr_owner_project_def] >>
+      `x IN FDOM births` by
+        (qpat_x_assum `!p. MEM p PT ==> _` (qspec_then `SOME x` mp_tac) >> simp[]) >>
+      `?site. FLOOKUP births x = SOME site` by
+        metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `p` >> simp[] >>
+  `x IN FDOM births` by
+        (qpat_x_assum `!p. MEM p PT ==> _` (qspec_then `SOME x` mp_tac) >> simp[]) >>
+  `?site. FLOOKUP births x = SOME site` by
+    metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME] >>
+  metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]
+QED
+
+Theorem ptr_owner_alloca_insert:
+  ptr_ledger_erases births tagged numerical /\
+  owner NOTIN FDOM births /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s'.vs_allocas inst.inst_id = SOME site ==>
+  ptr_ledger_erases (births |+ (owner,site))
+    (set_prov tagged inst.inst_outputs (SOME owner))
+    (step_prov PG numerical inst s')
+Proof
+  strip_tac >>
+  `ptr_ledger_erases (births |+ (owner,site)) tagged numerical` by
+    (irule ptr_ledger_erases_extend >> qexists `births` >> simp[] >>
+     rpt strip_tac >> `owner' <> owner` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+     simp[FLOOKUP_UPDATE]) >>
+  simp[step_prov_def, out_prov_def] >>
+  `SOME site = ptr_owner_project (births |+ (owner,site)) (SOME owner)` by
+    simp[ptr_owner_project_def, FLOOKUP_UPDATE] >>
+  pop_assum SUBST1_TAC >> irule ptr_owner_set_projection >> simp[]
+QED
