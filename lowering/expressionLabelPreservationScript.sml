@@ -1238,7 +1238,7 @@ Proof
   rewrite_tac[builtinMathTheory.compile_pow_mod256_def] >> CONVERT_LEAF
 QED
 
-Theorem label_preserving_get_target_ptr[local]:
+Theorem label_preserving_get_target_ptr:
   (!c ty e s r t. cfn c ty e s = (r,t) ==>
     cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
   !target s r t. compile_get_target_ptr cfn cenv target s = (r,t) ==>
