@@ -4,6 +4,8 @@ Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
   stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
+  strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
+  stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -441,3 +443,132 @@ Proof
   simp[Once step_inst_def, Once step_inst_base_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[venomStateTheory.write_memory_with_expansion_def]
 QED
+
+Theorem simple_op_stack_frame:
+  !initial_fmp lo o2pc prog op ps vs st stk rest.
+    is_simple_stack_op op /\
+    FST (stack_op_wf lo op (LENGTH ps.ps_stack)) /\
+    plan_stack_rel lo vs ps.ps_stack stk /\
+    st.as_stack = stk ++ rest /\
+    asm_block_at prog st.as_pc (exec_stack_op initial_fmp op) ==>
+    ?stk'.
+      asm_steps lo o2pc prog (LENGTH (exec_stack_op initial_fmp op)) st =
+        AsmOK (st with <| as_stack := stk' ++ rest;
+          as_pc := st.as_pc + LENGTH (exec_stack_op initial_fmp op) |>) /\
+      plan_stack_rel lo vs (apply_simple_op lo op ps).ps_stack stk'
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  gvs[is_simple_stack_op_def]
+  >- (Cases_on `o'` >> gvs[is_simple_stack_op_def]
+      >- suspend "push_lit"
+      >> suspend "push_label")
+  >- suspend "pop"
+  >- suspend "swap"
+  >- suspend "dup"
+  >- suspend "label"
+  >> suspend "pushlabel"
+QED
+
+Resume simple_op_stack_frame[push_lit]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  qexists_tac `c :: stk` >>
+  conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      gvs[asm_block_at_def, asm_step_push_ok, asm_steps_def, asm_next_def,
+          GSYM asmIRTheory.encode_num_bytes_w2n_compute,
+          push_encode_roundtrip]) >>
+  irule plan_stack_rel_push >> simp[operand_val_def]
+QED
+
+Resume simple_op_stack_frame[push_label]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  Cases_on `FLOOKUP lo s` >> gvs[] >>
+  qexists_tac `n2w x :: stk` >> conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      drule asm_step_pushlabel_ok >>
+      disch_then (qspecl_then [`o2pc`, `st`] assume_tac) >>
+      gvs[asm_block_at_def, asm_steps_def, asm_next_def]) >>
+  irule plan_stack_rel_push >> simp[operand_val_def]
+QED
+
+Resume simple_op_stack_frame[label]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  qexists_tac `stk` >> simp[] >>
+  once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+  simp[Once asm_steps_def] >>
+  gvs[asm_block_at_def, asm_step_label_ok, asm_steps_def, asm_next_def] >>
+  qpat_x_assum `st.as_stack = _` (SUBST1_TAC o SYM) >>
+  simp[asm_state_component_equality]
+QED
+
+Resume simple_op_stack_frame[pushlabel]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  Cases_on `FLOOKUP lo s` >> gvs[] >>
+  qexists_tac `n2w x :: stk` >> conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      drule asm_step_pushlabel_ok >>
+      disch_then (qspecl_then [`o2pc`, `st`] assume_tac) >>
+      gvs[asm_block_at_def, asm_steps_def, asm_next_def]) >>
+  irule plan_stack_rel_push >> simp[operand_val_def]
+QED
+
+Resume simple_op_stack_frame[dup]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  rename1 `dup_name k` >>
+  `LENGTH stk = LENGTH ps.ps_stack` by gvs[plan_stack_rel_def] >>
+  qexists_tac `EL (k - 1) stk :: stk` >> conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      qspecl_then [`lo`, `o2pc`, `k - 1`, `st`] mp_tac asm_step_dup_ok >>
+      simp[] >> strip_tac >>
+      gvs[asm_block_at_def, asm_steps_def, asm_next_def, EL_APPEND_EQN]) >>
+  irule plan_stack_rel_push >> simp[] >>
+  drule plan_stack_rel_el >>
+  disch_then (qspec_then `k - 1` mp_tac) >>
+  `PRE (LENGTH ps.ps_stack + 1 - k) = LENGTH ps.ps_stack - k` by decide_tac >>
+  simp[EL_REVERSE]
+QED
+
+Resume simple_op_stack_frame[swap]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  `LENGTH stk = LENGTH ps.ps_stack` by gvs[plan_stack_rel_def] >>
+  qexists_tac `LUPDATE (HD stk) n (LUPDATE (EL n stk) 0 stk)` >>
+  conj_tac
+  >- (once_rewrite_tac[DECIDE ``1 = SUC 0``] >>
+      simp[Once asm_steps_def] >>
+      gvs[asm_block_at_def, asm_step_swap_ok, asm_steps_def, asm_next_def,
+          EL_APPEND_EQN, LUPDATE_APPEND1, HD_APPEND] >>
+      Cases_on `stk` >> gvs[]) >>
+  simp[Once LUPDATE_commutes] >>
+  irule plan_stack_rel_swap >> simp[]
+QED
+
+Resume simple_op_stack_frame[pop]:
+  gvs[exec_stack_op_def, stack_op_wf_def, apply_simple_op_def] >>
+  `LENGTH stk = LENGTH ps.ps_stack` by gvs[plan_stack_rel_def] >>
+  qexists_tac `DROP n stk` >> conj_tac
+  >- (`!k st. k <= LENGTH st.as_stack /\
+          asm_block_at prog st.as_pc (REPLICATE k (AsmOp "POP")) ==>
+          asm_steps lo o2pc prog k st =
+          AsmOK (st with <|as_stack := DROP k st.as_stack;
+                          as_pc := k + st.as_pc|>)` by
+        (Induct >- simp[asm_steps_def, asm_state_component_equality] >>
+         qx_gen_tac `s` >> strip_tac >>
+         Cases_on `s.as_stack` >> gvs[] >>
+         gvs[Once REPLICATE, asm_block_at_cons] >>
+         simp[Once asm_steps_def, asm_step_def, asm_step_op_def,
+              asm_step_memory_def, asm_step_arith_def, asm_step_compare_def,
+              asm_step_bitwise_def, asm_pop_def, asm_next_def] >>
+         `k + (s.as_pc + 1) = SUC k + s.as_pc` by decide_tac >>
+         asm_rewrite_tac[]) >>
+      first_x_assum (qspec_then `n` mp_tac) >>
+      disch_then (qspec_then `st` mp_tac) >>
+      `n - LENGTH ps.ps_stack = 0` by decide_tac >>
+      simp[DROP_APPEND]) >>
+  irule plan_stack_rel_pop >> simp[]
+QED
+
+Finalise simple_op_stack_frame

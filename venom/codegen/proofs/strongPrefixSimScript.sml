@@ -173,7 +173,7 @@ QED
 
 val dim256 = fcpLib.INDEX_CONV ``dimindex(:256)``;
 
-Theorem push_encode_roundtrip[local]:
+Theorem push_encode_roundtrip:
   word_of_bytes F (0w:bytes32)
     (REVERSE (encode_num_bytes (w2n (v:bytes32)))) = v
 Proof
@@ -201,7 +201,7 @@ QED
    Single-step asm_steps helper
    ========================================================================= *)
 
-Theorem LUPDATE_commutes[local]:
+Theorem LUPDATE_commutes:
   !a b i j (l:'a list). i <> j ==>
     LUPDATE a i (LUPDATE b j l) = LUPDATE b j (LUPDATE a i l)
 Proof
