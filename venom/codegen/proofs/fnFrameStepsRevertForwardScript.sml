@@ -2,7 +2,7 @@
 Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
-  stackPlanGen venomExecProofs removeUnusedSsaProofs
+  stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -292,5 +292,58 @@ Proof
    normalize_operand (dfg_build_function fn) [] op` by
     metis_tac[normalize_operand_resolve_block_assigns] >>
   simp[] >> Cases_on `op` >>
+  gvs[stackPlanTypesTheory.is_var_operand_def, normalize_operand_def]
+QED
+
+(* Future uses whose value has not yet been supplied by a suffix definition. *)
+Definition rf_live_use_def:
+  rf_live_use bb k j op <=>
+    ?r inst. k <= r /\ r <= j /\ get_instruction bb r = SOME inst /\
+      MEM op (compute_operands inst) /\
+      (!t di x. k <= t /\ t < r /\ get_instruction bb t = SOME di /\
+                op = Var x ==> ~MEM x di.inst_outputs)
+End
+
+Definition rf_value_inv_def:
+  rf_value_inv fn ra bb j lo entry k s <=>
+    !op. rf_live_use bb k j op ==>
+      operand_val (frame_view fn ra s) lo op =
+      operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)
+End
+
+Theorem rf_live_use_current:
+  get_instruction bb k = SOME inst /\ k <= j /\
+  MEM op (compute_operands inst) ==> rf_live_use bb k j op
+Proof
+  strip_tac >> simp[rf_live_use_def] >>
+  qexistsl_tac [`k`, `inst`] >> simp[] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem rf_live_use_backward:
+  rf_live_use bb (SUC k) j op /\ get_instruction bb k = SOME inst /\
+  (!x. op = Var x ==> ~MEM x inst.inst_outputs) ==>
+  rf_live_use bb k j op
+Proof
+  simp[rf_live_use_def] >> rpt strip_tac >>
+  qexistsl_tac [`r`, `inst'`] >> simp[] >>
+  rpt strip_tac >> Cases_on `t = k` >- gvs[] >>
+  `SUC k <= t` by decide_tac >> metis_tac[]
+QED
+
+Theorem rf_value_inv_entry:
+  (!r inst op. i <= r /\ get_instruction bb r = SOME inst /\
+    MEM op (compute_operands inst) /\ is_var_operand op /\
+    (!t di x. i <= t /\ t < r /\ get_instruction bb t = SOME di /\
+              op = Var x ==> ~MEM x di.inst_outputs) ==> owned op) /\
+  (!op. owned op ==>
+    operand_val (frame_view fn ra s) lo op =
+    operand_val (frame_view fn ra s) lo
+      (normalize_operand (dfg_build_function fn) [] op)) ==>
+  rf_value_inv fn ra bb j lo (frame_view fn ra s) i s
+Proof
+  simp[rf_value_inv_def, rf_live_use_def] >> rpt strip_tac >>
+  Cases_on `is_var_operand op`
+  >- (`owned op` by (first_x_assum irule >> metis_tac[]) >> simp[]) >>
+  Cases_on `op` >>
   gvs[stackPlanTypesTheory.is_var_operand_def, normalize_operand_def]
 QED
