@@ -506,3 +506,59 @@ The Terminal theory adds:
 These are local terminal transition interfaces, not a global reachability
 closure proof. C1.12.70.2 still must validate immediate-REVERT access and identify
 all required retained layout/provenance clauses before integration is safe.
+
+## 11. C70.2 terminal safety validation (memory-free)
+
+Checked exports in `lowerDloadPtrTerminalScript.sml`:
+
+- `dload_terminal_operand_origin` treats RETURNDATACOPY and REVERT together;
+  `dload_copy_operand_origin` retains its old statement as a specialization.
+  Source opaque-use shape excludes retpc operands; fn_ir_vars membership comes
+  from actual instruction membership, not from lookup success.
+- `dload_revert_scalar_clean` derives length provenance NONE and both operand
+  taints empty from fn_ptr_ok, source provenance support and source taint_ok.
+  Even when dst=sz, ptr_use_ok's single-occurrence restriction excludes pointer
+  length. `dload_terminal_revert_length` derives equal evaluated lengths using
+  vars_match(V) and equal labels, without a memory relation or all-U matching.
+- `dload_terminal_revert_taint` transports REVERT taint_ok using V-only variable
+  ghost equality. about_to_revert exempts only its memory-taint clause.
+- `dload_terminal_assign_access` and `dload_terminal_assign_taint` discharge
+  interior ASSIGN safety independently of forwarding exemption. In fact,
+  in_revert_forward marks only the two pair endpoints, NOT interior ASSIGNs.
+- `dload_terminal_forward_access` discharges REVERT access at an exempt target
+  endpoint. Pair endpoint membership still needs its lookup/index witnesses.
+- `dload_terminal_revert_access_values` checks access transport with live layout
+  and clean destination value matching, under explicit source non-forwarding.
+  Zero-length reads need no bounds. A scalar address remains identical, with
+  source access ruling out a nonempty above-lo scalar access. A pointer address
+  translates its within-site interval via dload_pointer_word_interval. No
+  memory agreement, shared store, or environment equality is used.
+- `dload_terminal_revert_access` combines these facts. Its explicit guard
+  implication `in_revert_forward f s ==> in_revert_forward g t` is essential:
+  source access_ok alone does not supply bounds when source forwarding holds.
+- `lower_dload_terminal_forward_guard` PROVES that implication from actual
+  source/target block lookups, a covering block supply, original operands in
+  its used-variable set, and target index equal to the emitted source-prefix
+  length. It invokes the existing lower_dload_block_supply_forward_pair for
+  either endpoint; it does not postulate source non-forwarding.
+- `dload_actual_terminal_revert_safety` is the checked combined safety consumer.
+  Source function membership is derived from frame_reachable, instruction
+  membership from active_inst, fn_ptr_ok from the static witness, opaque_use_ok
+  from o1_ctx_shape, and access_ok/taint_ok from source ptr_discipline. Its
+  remaining relational premises are precisely live layout, vars_match(V),
+  equal labels, source provenance support, and the block/prefix witnesses just
+  listed. No source success, scalar-length equality, or non-forwarding premise
+  is left externally assumed.
+
+### Integration ledger (not a claim of terminal closure)
+
+C70.3 must retain the concrete target block lookup and original-prefix supply
+index through terminal entry. For immediate mode they are the actual phase-zero
+control fields at the REVERT endpoint (the preceding copy leaves allocation
+and variable fields unchanged). For pair mode the actual target pair supplies
+endpoint exemption; interior ASSIGNs use unconditional safety and advance the
+identical suffix. The accepted slice/index origin lemmas and actual supply
+freshness witnesses are still needed to reconstruct the endpoint block/prefix
+fields if that route is used. Independent source/target reachability or an
+unindexed suffix is NOT enough to invoke the guard theorem. No theorem here
+claims reachable-constructor closure, nor does it discharge the frozen contract.

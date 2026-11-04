@@ -5,7 +5,7 @@ Ancestors
   lowerDloadDefs venomInst list rich_list unitShapeDefs lowerDloadPtrStatic
   lowerDloadPtrAggregate lowerDloadPtrPhi lowerDloadPtrCall venomState ptrDiscipline
   venomExecSemantics o1PassContract venomWf contextCodegenRel lowerDloadPtrOrdinary
-  lowerDloadPtrBlockEntry finite_map pred_set
+  lowerDloadPtrBlockEntry finite_map pred_set memLocDefs codegenRel pointerConfinedDefs
 
 (* Reverse prefix origin is independent of resolver equalities and freshness.
    Even malformed DLOAD branches cannot begin with ASSIGN or REVERT. *)
@@ -152,15 +152,24 @@ Proof
 QED
 
 (* Actual original operand membership also rules out opaque return PCs. *)
-Theorem dload_copy_operand_origin:
+Theorem dload_terminal_operand_origin:
   opaque_use_ok f /\ MEM i (fn_insts f) /\
-  i.inst_opcode = RETURNDATACOPY /\ MEM (Var v) i.inst_operands ==>
+  MEM i.inst_opcode [REVERT; RETURNDATACOPY] /\
+  MEM (Var v) i.inst_operands ==>
   v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}
 Proof
   strip_tac >> simp[] >> conj_tac
   >- metis_tac[fn_ir_vars_operand] >>
   strip_tac >> drule_all opaque_use_ok_retpc_use >>
-  simp[retpc_use_ok_def]
+  gvs[retpc_use_ok_def]
+QED
+
+Theorem dload_copy_operand_origin:
+  opaque_use_ok f /\ MEM i (fn_insts f) /\
+  i.inst_opcode = RETURNDATACOPY /\ MEM (Var v) i.inst_operands ==>
+  v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}
+Proof
+  metis_tac[dload_terminal_operand_origin, MEM]
 QED
 
 Theorem dload_copy_boundary_scalar_origin:
@@ -395,4 +404,219 @@ Proof
   simp[assign_step_success] >> rpt strip_tac >> gvs[] >>
   irule dload_terminal_assign_vars_match >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem dload_terminal_revert_taint:
+  i.inst_opcode = REVERT /\ taint_ok f tn i s /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  dload_vars_match fs V G H tn un s t ==>
+  taint_ok g un i t
+Proof
+  strip_tac >>
+  `!op. MEM op i.inst_operands ==> op_taint tn op = {}` by
+    (gvs[taint_ok_def] >> metis_tac[]) >>
+  simp[taint_ok_def, about_to_revert_def] >> rpt strip_tac >>
+  Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def] >>
+  rename1 `MEM (Var v) i.inst_operands` >>
+  Cases_on `MEM (Var v) i.inst_operands` >> simp[] >>
+  `v IN V` by metis_tac[] >>
+  qpat_x_assum `!v. v IN V ==> _` (qspec_then `v` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!op. MEM op _ ==> _` (qspec_then `Var v` mp_tac) >>
+  simp[]
+QED
+
+Theorem dload_terminal_forward_access:
+  in_revert_forward f t /\ i.inst_opcode = REVERT ==>
+  access_ok lo H f i t
+Proof
+  simp[access_ok_def]
+QED
+
+Theorem dload_terminal_assign_access:
+  i.inst_opcode = ASSIGN ==> access_ok lo H f i t
+Proof
+  simp[access_ok_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, mem_write_ops_def, mem_read_ops_def]
+QED
+
+
+Theorem dload_revert_scalar_clean:
+  i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
+  MEM i (fn_insts f) /\ fn_ptr_ok P f /\
+  FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s ==>
+  op_prov G sz = NONE /\ op_taint tn dst = {} /\ op_taint tn sz = {}
+Proof
+  strip_tac >>
+  `ptr_use_ok P (fn_pv P f) i` by metis_tac[fn_ptr_ok_def] >>
+  `!v. sz = Var v ==> v NOTIN fn_pv P f` by
+    (gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+         mem_write_ops_def, mem_read_ops_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `v` mp_tac) >>
+     simp[] >> strip_tac >> gvs[] >>
+     Cases_on `dst = Var v` >> gvs[FILTER]) >>
+  conj_tac
+  >- (Cases_on `sz` >> gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF] >> metis_tac[]) >>
+  gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem dload_terminal_revert_length:
+  i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
+  MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
+  FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
+  s.vs_labels = t.vs_labels /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t ==>
+  eval_operand sz s = eval_operand sz t
+Proof
+  strip_tac >> drule_all dload_revert_scalar_clean >> strip_tac >>
+  `!v. sz = Var v ==>
+    v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
+    (rpt strip_tac >> irule dload_terminal_operand_origin >> metis_tac[MEM]) >>
+  `eval_operand sz s = NONE <=> eval_operand sz t = NONE` by
+    (irule eval_operand_definedness >> simp[] >>
+     gvs[dload_vars_match_def] >> metis_tac[]) >>
+  irule scalar_operand_equal >> simp[] >>
+  qexistsl [`G`,`H`,`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
+            `fs`,`tn`,`un`] >> simp[]
+QED
+
+Theorem dload_terminal_revert_access_values:
+  i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
+  eval_operand dst s = SOME x /\ eval_operand dst t = SOME y /\
+  eval_operand sz s = SOME z /\ eval_operand sz t = SOME z /\
+  access_ok lo G f i s /\ ~in_revert_forward f s /\
+  dload_live_layout lo sf tf fs /\
+  dload_value_word fs {} (op_prov G dst) (op_prov H dst) x y ==>
+  access_ok lo H g i t
+Proof
+  strip_tac >>
+  gvs[access_ok_def, source_memory_write_ranges_def,
+      source_memory_read_ranges_def, memory_range_of_operands_def,
+      mem_write_ops_def, mem_read_ops_def] >>
+  Cases_on `op_prov G dst`
+  >- (Cases_on `op_prov H dst` >>
+      gvs[dload_value_word_def, word_agree_except_bits] >>
+      `x = y` by (simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
+      Cases_on `dst` >> gvs[op_prov_def] >> metis_tac[]) >>
+  PairCases_on `x'` >>
+  Cases_on `op_prov H dst` >> gvs[dload_value_word_def] >>
+  PairCases_on `x'` >> rpt strip_tac >>
+  qpat_x_assum `z <> 0w ==> _` drule >> strip_tac >>
+  gvs[op_prov_def] >>
+  drule dload_pointer_word_resolves >> strip_tac >> gvs[] >>
+  `w2n x <= b + sz'` by decide_tac >>
+  drule_all dload_pointer_word_interval >> strip_tac >>
+  simp[] >> decide_tac
+QED
+
+Theorem dload_terminal_revert_access:
+  i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
+  MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
+  FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
+  access_ok lo G f i s /\
+  (in_revert_forward f s ==> in_revert_forward g t) /\
+  s.vs_labels = t.vs_labels /\ dload_live_layout lo sf tf fs /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t ==>
+  access_ok lo H g i t
+Proof
+  strip_tac >> Cases_on `in_revert_forward g t`
+  >- (irule dload_terminal_forward_access >> simp[]) >>
+  `~in_revert_forward f s` by metis_tac[] >>
+  `!v. MEM (Var v) i.inst_operands ==>
+     v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
+    (rpt strip_tac >> irule dload_terminal_operand_origin >> metis_tac[MEM]) >>
+  `eval_operand dst s = NONE <=> eval_operand dst t = NONE` by
+    (irule eval_operand_definedness >> simp[] >>
+     gvs[dload_vars_match_def] >> metis_tac[MEM]) >>
+  `eval_operand sz s = eval_operand sz t` by
+    (irule dload_terminal_revert_length >> metis_tac[]) >>
+  Cases_on `eval_operand dst t`
+  >- simp[access_ok_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  Cases_on `eval_operand sz t`
+  >- simp[access_ok_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  Cases_on `eval_operand dst s` >- gvs[] >>
+  `op_taint tn dst = {}` by metis_tac[dload_revert_scalar_clean] >>
+  `dload_value_word fs {} (op_prov G dst) (op_prov H dst) x'' x` by
+    (qpat_assum `op_taint tn dst = {}` (fn th => once_rewrite_tac[GSYM th]) >>
+     irule dload_matched_operand >>
+     qexistsl [`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,
+               `s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
+  irule dload_terminal_revert_access_values >> metis_tac[]
+QED
+
+Theorem lower_dload_terminal_forward_guard:
+  o1_ctx_shape C /\ MEM f C.ctx_functions /\ MEM bb f.fn_blocks /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb g.fn_blocks = SOME bb' /\
+  lower_dload_block_supply bs bb = (bb',bt) /\
+  V SUBSET set bs.irs_used_vars /\
+  (!q v. MEM q bb.bb_instructions /\ MEM (Var v) q.inst_operands ==> v IN V) /\
+  lower_dload_insts_supply bs (TAKE s.vs_inst_idx bb.bb_instructions) =
+    (before,is) /\ t.vs_inst_idx = LENGTH before /\
+  in_revert_forward f s ==>
+  in_revert_forward g t
+Proof
+  strip_tac >>
+  qpat_x_assum `in_revert_forward f s` mp_tac >>
+  simp[in_revert_forward_def, revert_forward_at_def] >> strip_tac >>
+  drule_all lower_dload_block_supply_forward_pair >> strip_tac >>
+  gvs[] >> simp[in_revert_forward_def, revert_forward_at_def] >>
+  metis_tac[]
+QED
+
+(* The supply witnesses here are the block/prefix fields of actual control;
+   unlike the discarded candidate, no source non-forwarding is assumed. *)
+Theorem dload_actual_terminal_revert_safety:
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  frame_reachable vs C cs PG G tn f i s /\ active_inst f i s /\
+  i.inst_opcode = REVERT /\ i.inst_operands = [dst;sz] /\
+  MEM bb f.fn_blocks /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  lookup_block t.vs_current_bb g.fn_blocks = SOME bb' /\
+  lower_dload_block_supply bs bb = (bb',bt) /\
+  Used SUBSET set bs.irs_used_vars /\
+  (!q v. MEM q bb.bb_instructions /\ MEM (Var v) q.inst_operands ==> v IN Used) /\
+  lower_dload_insts_supply bs (TAKE s.vs_inst_idx bb.bb_instructions) =
+    (before,is) /\ t.vs_inst_idx = LENGTH before /\
+  FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
+  dload_live_layout lo sf tf fs /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t ==>
+  access_ok lo H g i t /\ taint_ok g un i t
+Proof
+  strip_tac >>
+  `MEM f C.ctx_functions` by
+    (drule frame_reachable_raw_certificate >> simp[] >> strip_tac >> simp[]) >>
+  `MEM i (fn_insts f)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `fn_ptr_ok P f` by metis_tac[EVERY_MEM] >>
+  `opaque_use_ok f` by
+    (qpat_x_assum `o1_ctx_shape C` mp_tac >>
+     simp[o1_ctx_shape_def, EVERY_MEM] >> strip_tac >>
+     first_x_assum drule >> simp[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `access_ok lo G f i s /\ taint_ok f tn i s` by
+    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
+     simp[ptr_discipline_def] >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `in_revert_forward f s ==> in_revert_forward g t` by
+    (strip_tac >> irule lower_dload_terminal_forward_guard >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (irule dload_terminal_revert_access >> metis_tac[]) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+    v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
+    (rpt strip_tac >> irule dload_terminal_operand_origin >> metis_tac[MEM]) >>
+  drule_all dload_terminal_revert_taint >> simp[]
+QED
+
+Theorem dload_terminal_assign_taint:
+  i.inst_opcode = ASSIGN ==> taint_ok f tn i s
+Proof
+  simp[taint_ok_def, source_memory_read_ranges_def]
 QED
