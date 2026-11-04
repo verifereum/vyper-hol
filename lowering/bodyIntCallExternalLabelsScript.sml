@@ -378,3 +378,92 @@ Proof
   qmatch_goalsub_abbrev_tac `if test then _ else _` >>
   Cases_on `test` >> simp[compiler_label_hoare_def]
 QED
+
+Theorem compiler_label_hoare_store_bytestring:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_store_bytestring src dst)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  irule compiler_label_hoare_preserves_reservation >>
+  metis_tac[compile_store_bytestring_label_bounds]
+QED
+
+Theorem compiler_label_hoare_stage_intcall_args:
+  !vals flags tys origin pending.
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stage_intcall_args cenv vals flags tys)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Induct
+  >- simp[compile_stage_intcall_args_def, compiler_label_hoare_typed_primitives] >>
+  rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
+  simp[compile_stage_intcall_args_def] >>
+  (rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+        >- simp[compiler_label_hoare_unwrap_value, compiler_label_hoare_typed_primitives] >>
+        gen_tac >> BETA_TAC) >> simp[compiler_label_hoare_typed_primitives]) >>
+  rename1 `compile_stage_intcall_args cenv (vv::vals) (flag::flags) (argty::tys)` >>
+  Cases_on `flag` >> simp[compile_stage_intcall_args_def, LET_THM, comp_ignore_bind_def] >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_unwrap_value, compiler_label_hoare_alloc_buffer,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >- simp[compiler_label_hoare_typed_primitives] >>
+      IF_CASES_TAC
+      >- (irule compiler_label_hoare_preserving_bind >>
+          simp[compiler_label_hoare_store_bytestring, compiler_label_hoare_typed_primitives]) >>
+      simp[compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+Theorem compiler_block_tail_store_multi_results:
+  !ops off. compiler_block_tail (store_multi_results buf ops off)
+Proof
+  Induct >> simp[store_multi_results_def, compiler_block_tail_primitives,
+                 comp_ignore_bind_def] >> rpt gen_tac >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[]
+QED
+
+Theorem compiler_label_hoare_store_multi_results:
+  !ops off origin pending.
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (store_multi_results buf ops off)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Induct >> simp[store_multi_results_def, compiler_label_hoare_typed_primitives,
+                 comp_ignore_bind_def] >> rpt gen_tac >>
+  rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_context_primitives,
+               compiler_label_hoare_typed_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[]
+QED
+
+Theorem compiler_label_hoare_fresh_vars:
+  !n origin pending.
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (fresh_vars n) (\r out. compiler_label_reservation origin pending out)
+Proof
+  Induct >> simp[emitHelperTheory.fresh_vars_def,
+                 compiler_label_hoare_typed_primitives] >> rpt gen_tac >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_context_primitives] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
+
+(* INVOKE targets are operands, not newly bound block labels.  The same
+   contract holds for every opcode and arbitrary operands. *)
+Theorem compiler_label_hoare_emit_multi_op:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (emit_multi_op opc args nouts)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  rewrite_tac[emitHelperTheory.emit_multi_op_def, comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_fresh_vars] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED

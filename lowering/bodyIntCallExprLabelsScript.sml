@@ -475,3 +475,32 @@ Proof
        >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
        gen_tac >> BETA_TAC) >> simp[compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compiler_block_tail_stage_intcall_args:
+  !vals flags tys.
+    compiler_block_tail (compile_stage_intcall_args cenv vals flags tys)
+Proof
+  Induct >> simp[compile_stage_intcall_args_def, compiler_block_tail_primitives] >>
+  rpt gen_tac >> Cases_on `flags` >> Cases_on `tys` >>
+  simp[compile_stage_intcall_args_def]
+  >> (rpt (irule compiler_block_tail_bind >> reverse conj_tac
+           >- simp[compiler_block_tail_unwrap_value, compiler_block_tail_primitives] >>
+           gen_tac >> BETA_TAC) >>
+      simp[compiler_block_tail_primitives]) >>
+  rename1 `compile_stage_intcall_args cenv (vv::vals) (flag::flags) (argty::tys)` >>
+  Cases_on `flag` >> simp[compile_stage_intcall_args_def, LET_THM,
+                           comp_ignore_bind_def] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  rpt (irule compiler_block_tail_bind >> reverse conj_tac
+       >- simp[compiler_block_tail_unwrap_value, compiler_block_tail_alloc_buffer,
+               compiler_block_tail_store_bytestring, compiler_block_tail_primitives] >>
+       gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives] >>
+  irule compiler_block_tail_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >- simp[compiler_block_tail_primitives] >>
+      IF_CASES_TAC >- (irule compiler_block_tail_bind >>
+        simp[compiler_block_tail_store_bytestring, compiler_block_tail_primitives]) >>
+      simp[compiler_block_tail_primitives]) >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_primitives]
+QED
