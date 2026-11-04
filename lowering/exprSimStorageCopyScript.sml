@@ -243,7 +243,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Theorem compile_storage_copy_certificate[local]:
+Theorem compile_storage_copy_certificate:
   !loc src dst n sa u sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) ==>
@@ -338,11 +338,13 @@ Proof
   simp[copy_static_def]
 QED
 
-Theorem copy_static_mstore[local,simp]:
+Theorem copy_static_mstore:
   copy_static (mstore b w s) = copy_static s
 Proof
   simp[copy_static_def, mstore_def, write_memory_with_expansion_def]
 QED
+
+val _ = augment_srw_ss [rewrites [copy_static_mstore]];
 
 Theorem copy_static_fields:
   copy_static s = copy_static t ==>
@@ -358,7 +360,7 @@ Proof
   simp[copy_static_def, venom_state_component_equality]
 QED
 
-Theorem copy_runtime_word_static[local]:
+Theorem copy_runtime_word_static:
   copy_static s = copy_static t ==>
   copy_runtime_word loc s a = copy_runtime_word loc t a
 Proof
@@ -377,13 +379,13 @@ Definition copy_prefix_def:
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory)
 End
 
-Theorem copy_prefix_zero[local]:
+Theorem copy_prefix_zero:
   copy_prefix loc a b n s 0 s
 Proof
   simp[copy_prefix_def]
 QED
 
-Theorem copy_prefix_transfer[local]:
+Theorem copy_prefix_transfer:
   copy_prefix loc a b n sbase k s /\
   copy_static t = copy_static s /\ t.vs_memory = s.vs_memory ==>
   copy_prefix loc a b n sbase k t
@@ -391,26 +393,32 @@ Proof
   rw[copy_prefix_def] >> metis_tac[]
 QED
 
-Theorem copy_prefix_update_var[local,simp]:
+Theorem copy_prefix_update_var:
   copy_prefix loc a b n sbase k (update_var x w s) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def, update_var_def]
 QED
 
-Theorem copy_prefix_jump[local,simp]:
+val _ = augment_srw_ss [rewrites [copy_prefix_update_var]];
+
+Theorem copy_prefix_jump:
   copy_prefix loc a b n sbase k (jump_to l s) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def, jump_to_def]
 QED
 
-Theorem copy_prefix_idx[local,simp]:
+val _ = augment_srw_ss [rewrites [copy_prefix_jump]];
+
+Theorem copy_prefix_idx:
   copy_prefix loc a b n sbase k (s with vs_inst_idx := i) =
   copy_prefix loc a b n sbase k s
 Proof
   simp[copy_prefix_def]
 QED
+
+val _ = augment_srw_ss [rewrites [copy_prefix_idx]];
 
 Theorem copy_prefix_word:
   copy_prefix loc a b n sbase n s /\ i < n ==>
@@ -427,7 +435,7 @@ Proof
   rw[copy_prefix_def] >> metis_tac[]
 QED
 
-Theorem copy_prefix_extend[local]:
+Theorem copy_prefix_extend:
   copy_prefix loc a b n sbase k s /\ k < n ==>
   copy_prefix loc a b n sbase (k+1)
     (mstore (b+32*k) (copy_runtime_word loc sbase (a+n2w k)) s)
@@ -1419,7 +1427,7 @@ Proof
       eval_operand_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_word_layout[local]:
+Theorem storage_copy_word_layout:
   !opc src dst sa u sb.
     do v <- emit_op opc [src]; emit_void MSTORE [dst; v] od sa = (u,sb) ==>
     same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\

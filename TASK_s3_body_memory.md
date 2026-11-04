@@ -252,11 +252,14 @@ The generic control proofs need the same history and guard plumbing.
   semantics/prop/vyperTypeBuiltinsScript.sml: split the repeated timed-out gvs
   at lines 1258–1260 into smaller simplification steps. This proof-only exception
   preserves its theorem statement, all definitions and the default 2.5s budget.
-  Export-only exception: in lowering/exprSimStorageCopyScript.sml, remove
-  [local] from storage_copy_source_run_effect,
-  storage_copy_destination_run_effect, storage_copy_increment_run_effect,
-  storage_copy_body_run and storage_copy_body_run_effect. Preserve every
-  statement and proof; memory consumers must reuse these existing facts.
+  Export-only exception: in lowering/exprSimStorageCopyScript.sml, existing
+  [local] lemmas required by additive memory consumers may be exported.
+  Preserve every statement and proof. Export formerly local simp lemmas with
+  theory-local rewrite registration, not new inherited simp rules. This
+  includes the source/destination/increment/body
+  execution facts and the copy_prefix/copy_static preservation facts.
+  Search this existing theory before adding any helper. Reuse its facts;
+  do not duplicate them with a body_ prefix or new local copies.
   Edit no other S1 proof. Build vyperTypeBuiltinsTheory, commit this repair
   separately, and report its exact hunk for the shared load-timeout record
   before continuing the conditional-expression consumer.
