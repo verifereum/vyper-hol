@@ -1656,6 +1656,20 @@ val _ = List.app (fn th =>
   if null (hyp th) then () else raise Fail "residual hypotheses in AO block phase")
   [ao_transform_blocks_supply_fn_bound, ao_transform_blocks_supply_fn_well_formed];
 
+Theorem ao_supply_covers_fn_bound:
+  ir_supply_covers_fn s fn ==>
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts fn)
+Proof
+  simp[ir_supply_covers_fn_def, irSupplyTheory.fn_ir_inst_ids_def,
+       irSupplyTheory.block_ir_inst_ids_def, listTheory.EVERY_FLAT,
+       listTheory.EVERY_MAP, listTheory.EVERY_MEM, fn_insts_def,
+       ao_mem_fn_insts_blocks] >>
+  simp[listTheory.MEM_FLAT, listTheory.MEM_MAP, irSupplyTheory.block_ir_inst_ids_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  qexists `MAP (\inst. inst.inst_id) bb.bb_instructions` >>
+  simp[listTheory.MEM_MAP] >> metis_tac[]
+QED
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
@@ -1666,5 +1680,33 @@ Theorem ao_preserves_wf_function_proof:
     ao_transform_function_supply sup fn = (fn', sup') ==>
     wf_function fn'
 Proof
-  cheat
+  map_every qx_gen_tac [`s`, `fn`, `fn'`, `sfinal`] >> strip_tac >>
+  drule ao_supply_covers_fn_bound >> strip_tac >>
+  qpat_x_assum `ao_transform_function_supply _ _ = _` mp_tac >>
+  simp[ao_transform_function_supply_def] >>
+  qmatch_goalsub_abbrev_tac `dfg_build_function fn0` >>
+  `wf_function fn0` by (irule ao_offset_fn_well_formed >> qexists `fn` >> simp[Abbr `fn0`]) >>
+  `EVERY inst_wf (fn_insts fn0)` by
+    (irule ao_offset_fn_inst_wf >> qexists `fn` >> simp[Abbr `fn0`]) >>
+  `EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts fn0)` by
+    (irule ao_offset_fn_inst_bound >> qexists `fn` >> simp[Abbr `fn0`]) >>
+  `EVERY (\p. EVERY (\op. get_label op = NONE) (SND p))
+      (ao_compute_fn_iszero_targets fn0)` by
+    (simp[Abbr `fn0`] >> irule ao_offset_fn_iszero_targets_label_free >> simp[]) >>
+  Cases_on `ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+    (ao_compute_fn_iszero_targets fn0) s fn0.fn_blocks` >>
+  simp[] >> disch_tac >>
+  drule_all ao_transform_blocks_supply_fn_well_formed >> strip_tac >>
+  drule_all ao_transform_blocks_supply_fn_bound >> strip_tac >>
+  irule ao_cmp_flip_function_supply_well_formed >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexists `sfinal` >> gvs[Abbr `fn0`]
 QED
+
+val _ = if null (hyp ao_preserves_wf_function_proof) andalso
+  null (hyp ao_supply_covers_fn_bound) then ()
+  else raise Fail "residual hypotheses in AO final theorem";
+
+val _ = if List.all (fn s => s = "DISK_THM")
+  (#1 (Tag.dest_tag (Thm.tag ao_preserves_wf_function_proof))) then ()
+  else raise Fail "oracle dependency in AO final theorem";
