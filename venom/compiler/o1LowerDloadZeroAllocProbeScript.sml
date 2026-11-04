@@ -2,7 +2,7 @@
    provenance, but an inserted scratch allocation can separate them. *)
 Theory o1LowerDloadZeroAllocProbe
 Ancestors
-  venomExecSemantics venomState venomInst ptrDiscipline words o1PassContract unitShapeDefs pointerConfinedDefs While unitTransformDefs lowerDloadDefs byte
+  venomExecSemantics venomState venomInst ptrDiscipline words o1PassContract unitShapeDefs pointerConfinedDefs While unitTransformDefs lowerDloadDefs byte spillSim
 
 (* Shared concrete syntax, not a new logical definition. *)
 val zero_alias_fn = ``mk_raw_function "entry"
@@ -31,8 +31,9 @@ QED
 Theorem zero_alias_ctx_shape:
   o1_ctx_shape (mk_venom_context [^zero_alias_fn] (SOME "entry"))
 Proof
-  EVAL_TAC >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
-  gvs[SRULE [mk_raw_function_def, default_internal_call_abi_def]
+  simp[reachable_inst_def] >> EVAL_TAC >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  gvs[reachable_inst_def, fn_insts_blocks_def, SRULE [mk_raw_function_def, default_internal_call_abi_def]
              zero_alias_no_opaque]
 QED
 
@@ -192,7 +193,9 @@ Theorem zero_alias_step1:
   step_inst fuel ^zero_alias_ctx ^za_i1 ^za_s1 = OK ^za_u1
 Proof
   EVAL_TAC >> simp[dimword_def] >>
-  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >>
+  simp[SRULE [word_of_bytes_def]
+    (Q.SPECL [`be`, `a`, `[]`] word_of_bytes_append_zeros)]
 QED
 
 Theorem zero_alias_step2:
@@ -212,7 +215,7 @@ QED
 Theorem zero_alias_step4:
   step_inst fuel ^zero_alias_ctx ^za_i4 ^za_s4 = OK ^za_u4
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[]
 QED
 
 Theorem zero_alias_step5:

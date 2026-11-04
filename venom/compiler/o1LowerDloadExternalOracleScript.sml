@@ -12,14 +12,16 @@ Theorem ld_take_outcome_masked_observation:
 Proof
   strip_tac >>
   `rq1.cr_target = rq2.cr_target /\ rq1.cr_value = rq2.cr_value /\
-   rq1.cr_data = rq2.cr_data` by
+   rq1.cr_kind = rq2.cr_kind /\ rq1.cr_data = rq2.cr_data` by
     (fs[request_agree_except_def, call_request_component_equality]) >>
   `computed_precompile rq1 = computed_precompile rq2` by
     simp[computed_precompile_def] >>
-  simp[take_outcome_def] >> Cases_on `computed_precompile rq2`
-  >- (Cases_on `precompile_result rq2.cr_target rq2.cr_data` >> simp[] >>
-      rename1 `precompile_result _ _ = SOME x` >> Cases_on `x` >> simp[]) >>
-  Cases_on `os` >> simp[]
+  Cases_on `os` >> simp[take_outcome_def, failed_outcome_def] >>
+  Cases_on `computed_precompile rq2` >> simp[] >>
+  Cases_on `precompile_result rq2.cr_target rq2.cr_data`
+  >- simp[failed_outcome_def] >>
+  rename1 `precompile_result _ _ = SOME x` >> Cases_on `x` >>
+  simp[failed_outcome_def] >> IF_CASES_TAC >> simp[failed_outcome_def]
 QED
 
 Theorem ld_consume_call_outcome_masked_observation:

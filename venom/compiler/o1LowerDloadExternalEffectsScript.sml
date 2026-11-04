@@ -17,19 +17,23 @@ Theorem ld_consume_call_outcome_shared:
 Proof
   strip_tac >>
   `rq1.cr_target = rq2.cr_target /\ rq1.cr_value = rq2.cr_value /\
-   rq1.cr_data = rq2.cr_data /\ rq1.cr_static = rq2.cr_static` by
+   rq1.cr_data = rq2.cr_data /\ rq1.cr_static = rq2.cr_static /\
+   rq1.cr_kind = rq2.cr_kind` by
     fs[request_agree_except_def, call_request_component_equality] >>
   `computed_precompile rq1 = computed_precompile rq2` by
     simp[computed_precompile_def] >>
   `s.vs_outcomes = t.vs_outcomes` by fs[ld_shared_agree_def] >>
   Cases_on `computed_precompile rq2`
-  >- (Cases_on `precompile_result rq2.cr_target rq2.cr_data` >>
-      gvs[consume_call_outcome_eq, take_outcome_def, record_request_def,
-          ld_shared_agree_def] >>
-      rename1 `precompile_result _ _ = SOME x` >> Cases_on `x` >>
+  >- (Cases_on `t.vs_outcomes` >>
       gvs[consume_call_outcome_eq, take_outcome_def, record_request_def,
           adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def,
-          ld_shared_agree_def]) >>
+          ld_shared_agree_def] >>
+      Cases_on `precompile_result rq2.cr_target rq2.cr_data`
+      >- gvs[adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def] >>
+      rename1 `precompile_result _ _ = SOME x` >> Cases_on `x` >>
+      gvs[adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def] >>
+      Cases_on `h.co_success` >>
+      gvs[adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def]) >>
   Cases_on `t.vs_outcomes` >>
   gvs[consume_call_outcome_eq, take_outcome_def, record_request_def,
       adopt_outcome_def, adopt_outcome_deletions_def, failed_outcome_def] >>
