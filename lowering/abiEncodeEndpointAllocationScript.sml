@@ -37,6 +37,8 @@ QED
 Theorem abi_encode_empty_source_shared_input:
   alloca_inv s /\
   abi_encoder_open_input ei at av sb 0 s.vs_memory /\
+  abi_footprint_disjoint sb 0
+    (abi_decoder_child_scratch (abi_decoder_ids first last) 0 cap s) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   LENGTH (enc at av) <= output_size /\ sb < dimword (:256) /\
