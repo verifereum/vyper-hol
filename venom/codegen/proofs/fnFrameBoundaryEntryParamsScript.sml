@@ -2,7 +2,7 @@ Theory fnFrameBoundaryEntryParams
 Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
-  arithmetic words unitShapeDefs venomWf
+  arithmetic words unitShapeDefs venomWf phiBlock
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -244,4 +244,66 @@ Theorem entry_bind_pairs_singleton[simp]:
   entry_bind_pairs [(x,v)] s = update_var x v s
 Proof
   simp[entry_bind_pairs_def]
+QED
+
+Definition entry_param_shape_def:
+  entry_param_shape s inst <=>
+    ?idx out. inst.inst_operands = [Lit idx] /\
+      inst.inst_outputs = [out] /\
+      (inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM \/
+       inst.inst_opcode = RETPC_PARAM) /\
+      (inst.inst_opcode <> RETPC_PARAM ==> w2n idx < LENGTH s.vs_params)
+End
+
+Definition entry_param_pairs_def:
+  entry_param_pairs s insts = MAP (\inst.
+    (HD inst.inst_outputs,
+     if inst.inst_opcode = RETPC_PARAM then s.vs_return_pc_token
+     else EL (w2n (case HD inst.inst_operands of Lit idx => idx | _ => 0w)) s.vs_params)) insts
+End
+
+Theorem entry_param_step:
+  entry_param_shape s inst ==>
+  step_inst fuel ctx inst s =
+    OK (entry_bind_pairs (entry_param_pairs s [inst]) s)
+Proof
+  rw[entry_param_shape_def] >>
+  simp[step_inst_non_invoke, step_inst_base_def,
+       entry_param_pairs_def, update_var_def]
+QED
+
+Theorem entry_param_run_insts:
+  !insts s. EVERY (entry_param_shape s) insts ==>
+    run_insts fuel ctx insts s =
+      OK (entry_bind_pairs (entry_param_pairs s insts) s)
+Proof
+  Induct >- simp[analysisSimDefsTheory.run_insts_def,
+                 entry_param_pairs_def] >>
+  rpt gen_tac >> simp[EVERY_DEF] >> strip_tac >>
+  drule entry_param_step >> disch_tac >>
+  simp[Once analysisSimDefsTheory.run_insts_def] >>
+  first_x_assum (qspec_then
+    `entry_bind_pairs (entry_param_pairs s [h]) s` mp_tac) >>
+  simp[entry_param_shape_def, entry_bind_pairs_preserves] >>
+  simp[entry_param_pairs_def, entry_bind_pairs_def,
+       entry_bind_pairs_normal, update_var_def] >>
+  disch_then irule >> gvs[EVERY_MEM, entry_param_shape_def]
+QED
+
+Theorem entry_param_skip_prefix:
+  EVERY (entry_param_shape s) insts /\
+  bb.bb_instructions = insts ++ suffix ==>
+  exec_block fuel ctx bb (s with vs_inst_idx := 0) =
+  exec_block fuel ctx bb
+    ((entry_bind_pairs (entry_param_pairs s insts) s) with
+      vs_inst_idx := LENGTH insts)
+Proof
+  strip_tac >>
+  qspec_then `insts` mp_tac phiBlockTheory.exec_block_skip_prefix_non_invoke >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `bb`, `s`, `0`] mp_tac) >>
+  simp[ADD_CLAUSES] >> disch_then irule >>
+  simp[entry_param_run_insts, EL_APPEND_EQN] >>
+  gvs[EVERY_MEM, entry_param_shape_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[is_terminator_def]
 QED
