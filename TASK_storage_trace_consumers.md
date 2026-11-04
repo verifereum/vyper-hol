@@ -2,6 +2,7 @@
 
 ## Meta
 - Scope is the following existing source-property theories, and this task file:
+- semantics/prop/vyperCallScript.sml
 - semantics/prop/vyperStoragePlaceProvenanceScript.sml
 - semantics/prop/vyperEvalOutcomeSuffixScript.sml
 - semantics/prop/vyperLookupStorageScopesScript.sml
@@ -109,7 +110,7 @@ new or stronger premise, new admission or dropped result is permitted.
   ends with Bot: sol (OpenAI GPT-6.1 Sol).
 
 ## Build
-`holbuild -j4 build vyperStoragePlaceProvenanceTheory vyperEvalOutcomeSuffixTheory vyperLookupStorageScopesTheory vyperTypeContractGetterTheory vyperStorageReadSoundnessTheory vyperTypeStatePreservationTheory vyperTargetPlaceWriteTheory vyperPlaceResultTypingTheory vyperTypeExternalCallMachineTheory vyperTypeContractSoundnessTheory vyperReadOnlyTargetsTheory vyperHashMapPreservationTheory vyperTypeConstantFoldTheory vyperPlaceTypingTheory vyperHashMapTheory vyperTypeEvalStoragePreservationTheory vyperLogPreservationTheory vyperExprNoControlTheory vyperTypeEvalSoundnessTheory vyperHashMapStorageTheory vyperStorageFrameTheory vyperTypeGlobalLookupSoundnessTheory vyperEvalPreservesScopesTheory vyperMachineFrameTheory`
+`holbuild -j4 build vyperCallTheory vyperStoragePlaceProvenanceTheory vyperEvalOutcomeSuffixTheory vyperLookupStorageScopesTheory vyperTypeContractGetterTheory vyperStorageReadSoundnessTheory vyperTypeStatePreservationTheory vyperTargetPlaceWriteTheory vyperPlaceResultTypingTheory vyperTypeExternalCallMachineTheory vyperTypeContractSoundnessTheory vyperReadOnlyTargetsTheory vyperHashMapPreservationTheory vyperTypeConstantFoldTheory vyperPlaceTypingTheory vyperHashMapTheory vyperTypeEvalStoragePreservationTheory vyperLogPreservationTheory vyperExprNoControlTheory vyperTypeEvalSoundnessTheory vyperHashMapStorageTheory vyperStorageFrameTheory vyperTypeGlobalLookupSoundnessTheory vyperEvalPreservesScopesTheory vyperMachineFrameTheory`
 The owner checked the producer and primitive state/scope/place frames. The full
 batch has not built yet; the four changed statements above have not all parsed
 because the same migration is needed in ancestors. Their old proofs remain.
