@@ -3374,6 +3374,61 @@ Proof
   simp[exprLoweringTheory.compile_builtin_dispatch_body_def]
 QED
 
+Theorem aug_place_builtin_metadata:
+  supported_builtin_form tops rt bi args /\
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_builtin_dispatch_body f
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty bi args st =
+  compile_builtin_dispatch_body g cenv rt ty bi args st
+Proof
+  let
+    val support = gvs[supportedExprFormsTheory.supported_builtin_form_def];
+    val first = namedCases_on `args` ["", "a t1"] >> support;
+    val second = namedCases_on `t1` ["", "b t2"] >> support;
+    val third = namedCases_on `t2` ["", "c t3"] >> support;
+    val fourth = namedCases_on `t3` ["", "d t4"] >> support;
+    val unary = first >> Cases_on `t1` >> support;
+    val binary = first >> second >> Cases_on `t2` >> support;
+    val ternary = first >> second >> third >> Cases_on `t3` >> support;
+    val quaternary = first >> second >> third >> fourth >> Cases_on `t4` >> support;
+    val finish = simp[exprLoweringTheory.compile_builtin_dispatch_body_def,
+      SRULE [] aug_place_acc_metadata, SRULE [] aug_place_memory_bytes_metadata,
+      SRULE [] aug_place_unwrap_metadata,
+      oneline exprLoweringTheory.compile_invert_def];
+  in
+    strip_tac >>
+    `!e ty. MEM e args ==>
+      lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+      lower_value g cenv ty e` by
+      (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
+    Cases_on `bi` >> support
+    >~ [`MakeArray et bd`] >-
+      (irule (SRULE [] aug_place_makearray_dispatch_metadata) >> simp[])
+    >~ [`Bop op`] >- (binary >>
+       `op <> In /\ op <> NotIn` by
+         (Cases_on `op` >> gvs[supportedExprFormsTheory.supported_binop_def]) >> finish)
+    >~ [`Not`] >- (unary >> finish)
+    >~ [`Neg`] >- (unary >> finish)
+    >~ [`Abs`] >- (unary >> finish)
+    >~ [`AsWeiValue denom`] >- (unary >> finish)
+    >~ [`Acc item`] >- (unary >> Cases_on `item` >>
+       simp[exprLoweringTheory.compile_builtin_dispatch_body_def,
+            exprLoweringTheory.compile_acc_def])
+    >~ [`BlockHash`] >- (unary >> finish)
+    >~ [`BlobHash`] >- (unary >> finish)
+    >~ [`Uint2Str n`] >- (unary >> finish)
+    >~ [`CalldataSlice n`] >- (unary >> finish)
+    >~ [`PowMod256`] >- (binary >> finish)
+    >~ [`ECAdd`] >- (binary >> finish)
+    >~ [`ECMul`] >- (binary >> finish)
+    >~ [`AddMod`] >- (ternary >> finish)
+    >~ [`MulMod`] >- (ternary >> finish)
+    >~ [`ECRecover`] >- (quaternary >> finish) >>
+    Cases_on `args` >> support >> finish
+  end
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
