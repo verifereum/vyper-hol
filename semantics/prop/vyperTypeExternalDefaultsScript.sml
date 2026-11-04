@@ -151,29 +151,6 @@ Proof
   first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >> simp[]
 QED
 
-Theorem body_entry_ready_nil_defaults:
-  body_entry_ready art cx scope st ==>
-  eval_external_defaults cx [] st = (INL [],st) /\
-  body_entry_ready art cx scope st
-Proof
-  simp[]
-QED
-
-(* In particular an internal-call default may change accounts.  Its effects
-   are retained, while only the caller's local scopes are restored. *)
-Theorem external_default_internal_call_effects:
-  eval_expr cx (Call ty (IntCall fn) args NONE)
-      (st with scopes := [FEMPTY]) = (INL (Value v), changed) ==>
-  eval_external_defaults cx [Call ty (IntCall fn) args NONE] st =
-      (INL [v], changed with scopes := st.scopes) /\
-  (SND (eval_external_defaults cx [Call ty (IntCall fn) args NONE] st)).accounts =
-      changed.accounts
-Proof
-  strip_tac >>
-  simp[eval_external_defaults_cons, read_result_def, evaluate_def,
-       bind_def, return_def]
-QED
-
 (* Fail rather than silently export an admitted prerequisite. *)
 val () = List.app (fn (_, th) =>
   if List.null (List.filter (fn s => s <> "DISK_THM")
