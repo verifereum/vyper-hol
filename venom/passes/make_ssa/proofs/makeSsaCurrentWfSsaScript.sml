@@ -1220,6 +1220,127 @@ Proof
   irule current_wf_nondefault_cut_output >> metis_tac[]
 QED
 
+Definition current_wf_precleanup_certificate_def:
+  current_wf_precleanup_certificate s fn renamed s' A H events <=>
+  ?defs ins si annsss ctrs visited.
+    defs = compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+    add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+      (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+        (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+    LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+      (ZIP (fn.fn_blocks,ins)) annsss /\
+    A = current_annotation_map ins annsss /\
+    current_tree_trace A (current_succ_map fn) (current_dom_tree fn)
+      si (init_current_rename_state defs) ins [] CurrentDefault []
+      ctrs s' renamed H visited events
+End
+
+Theorem current_wf_precleanup_certificate_stages:
+  current_structural_certificate s fn fn' s' A H events <=>
+  ?renamed. current_wf_precleanup_certificate s fn renamed s' A H events /\
+    fn' = fn with fn_blocks :=
+      simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed
+Proof
+  simp[current_structural_certificate_def, current_wf_precleanup_certificate_def] >>
+  metis_tac[]
+QED
+
+Theorem current_wf_precleanup_names:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s ==>
+  ?defs ins si.
+    defs = compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+    add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+      (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+        (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+    EVERY (current_event_names H (FLAT (MAP block_ir_vars ins))) events /\
+    EVERY (current_event_valid A (FLAT (MAP block_ir_vars ins))) events /\
+    EVERY (current_event_trace A H) events
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks /\
+    ssa_vars_covered si (FLAT (MAP block_ir_vars ins)) /\
+    ssa_vars_covered si (MAP FST (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))))` by
+    (irule current_insertion_initial_supply >> metis_tac[]) >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `ALL_DISTINCT (MAP FST (FLAT (FLAT annsss)))` by
+    (irule current_provenance_global_distinct >>
+     qexistsl_tac [`fn`, `fn.fn_blocks`] >> conj_tac
+     >- fs[wf_function_def, fn_labels_def] >>
+     fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     qexists_tac `EL n ins` >>
+     first_x_assum (qspec_then `n` mp_tac) >> simp[EL_ZIP]) >>
+  gvs[] >>
+  drule_all current_provenance_initial_tree_names >> strip_tac >>
+  drule_all current_wf_provenance_valid_events >> strip_tac >>
+  drule (cj 1 current_tree_trace_events) >> strip_tac >>
+  simp[]
+QED
+
+Theorem current_wf_precleanup_event:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events ==>
+  ?bb. lookup_block (current_event_label ev) renamed = SOME bb /\
+    current_edge_shape (current_event_renamed_block ev) bb
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `?before after. events = before ++ ev::after` by metis_tac[MEM_SPLIT] >>
+  drule_all current_trace_final_event >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[current_replay_edges_shape]
+QED
+
+Theorem current_wf_precleanup_output:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events /\ current_wf_output_at A H ev k tok /\
+  current_token_name H tok = SOME v ==>
+  ?bb. lookup_block (current_event_label ev) renamed = SOME bb /\
+    bb.bb_label = current_event_label ev /\
+    LENGTH bb.bb_instructions = LENGTH (current_event_renamed_block ev).bb_instructions /\
+    k < LENGTH bb.bb_instructions /\ MEM v (EL k bb.bb_instructions).inst_outputs
+Proof
+  strip_tac >> drule_all current_wf_precleanup_event >> strip_tac >>
+  qexists_tac `bb` >>
+  fs[current_wf_output_at_def, current_edge_shape_def, LIST_REL_EL_EQN] >>
+  conj_tac >- metis_tac[lookup_block_label] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem current_wf_event_source_cut_exists:
+  current_event_trace A H ev /\
+  n <= LENGTH (current_event_input_block ev).bb_instructions ==>
+  ?rs E. current_source_cut A ev n rs E
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_input_block_def] >>
+  metis_tac[current_source_cut_exists]
+QED
+
+Theorem current_wf_event_source_cut_step:
+  current_source_cut A ev n rs E /\
+  n < LENGTH (current_event_input_block ev).bb_instructions ==>
+  ?sm Hm sn rn Hn En.
+    current_inst_trace (EL n (A (current_event_label ev)))
+      (EL n (current_event_input_block ev).bb_instructions)
+      sm rs Hm E (EL n (current_event_renamed_block ev).bb_instructions)
+      sn rn Hn En /\
+    current_source_cut A ev (SUC n) rn En
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_input_block_def, current_event_label_def,
+    current_event_renamed_block_def] >>
+  metis_tac[current_source_cut_step]
+QED
+
 Theorem current_wf_entry_undemanded:
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
   fn_entry_label fn = SOME l ==> ~current_demand fn v l 0
