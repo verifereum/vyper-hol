@@ -1,6 +1,7 @@
 Theory fnPlanLineagePhiMaps
 Ancestors
   livenessDefs finite_map list rich_list indexedLists stackPlanGen cfgNormSupplyProofs venomInst
+  removeUnusedSsaProofs cfgNormBase
 
 Definition phi_operand_map_step_def:
   phi_operand_map_step (m : (string, num) fmap) (i, phi) =
@@ -234,4 +235,39 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `x = h` >> gvs[] >>
   `key h <> key x` by metis_tac[listTheory.MEM_MAP] >>
   simp[listTheory.FIND_thm]
+QED
+
+Definition native_phi_class_def:
+  native_phi_class p phis op =
+    case op of Var v => FLOOKUP (FST (build_phi_maps p phis)) v
+    | _ => NONE
+End
+
+Theorem native_phi_class_exact:
+  EVERY (\phi. phi_well_formed phi.inst_operands) phis /\
+  phi_uses_disjoint phis /\ i < LENGTH phis ==>
+  (MEM op (FILTER is_var_operand (EL i phis).inst_operands) <=>
+   native_phi_class p phis op = SOME i)
+Proof
+  strip_tac >>
+  `phi_well_formed (EL i phis).inst_operands` by
+    (gvs[listTheory.EVERY_EL] >> first_x_assum irule >> simp[]) >>
+  Cases_on `op` >>
+  simp[native_phi_class_def, stackPlanTypesTheory.is_var_operand_def,
+       listTheory.MEM_FILTER] >>
+  drule build_phi_maps_operand_class >>
+  disch_then (qspecl_then [`s`, `p`, `i`] mp_tac) >>
+  metis_tac[removeUnusedSsaProofsTheory.phi_well_formed_var_pair,
+            cfgNormBaseTheory.phi_pairs_mem_var]
+QED
+
+Theorem native_phi_class_use:
+  phi_uses_disjoint phis /\ native_phi_class p phis (Var v) = SOME i ==>
+  i < LENGTH phis /\ MEM v (inst_uses (EL i phis))
+Proof
+  simp[native_phi_class_def] >> strip_tac >>
+  drule build_phi_maps_operand_class >>
+  disch_then (qspecl_then [`v`, `p`, `i`] mp_tac) >>
+  simp[] >> strip_tac >> simp[inst_uses_def] >>
+  metis_tac[MEM_phi_pairs_SND_operand_vars]
 QED
