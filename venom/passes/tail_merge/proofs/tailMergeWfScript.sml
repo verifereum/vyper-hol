@@ -2,8 +2,8 @@
  * Tail Merge Pass — ssa_form and wf_function preservation
  *
  * The pass rewrites label operands of terminators and PHIs, then drops the
- * merged blocks; instruction outputs and ids are unchanged, so the
- * transformed function's instructions are a sublist of the original's.
+ * merged blocks; instruction outputs and ids are unchanged, so their
+ * projections in the transformed function are sublists of the originals.
  *)
 
 Theory tailMergeWf
