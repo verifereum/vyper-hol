@@ -4899,7 +4899,7 @@ Proof
   simp[finite_mapTheory.FDOM_DOMSUB]
 QED
 
-Theorem do_swap_spilled_unchanged[local]:
+Theorem do_swap_spilled_unchanged:
   !d ps. (SND (do_swap d ps)).ps_spilled = ps.ps_spilled
 Proof
   rpt gen_tac >> Cases_on `d = 0` >> simp[do_swap_def] >>

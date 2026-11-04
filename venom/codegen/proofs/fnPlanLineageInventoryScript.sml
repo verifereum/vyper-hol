@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageReplay stackPlanGen stackModel list rich_list
+  fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -308,4 +308,176 @@ Proof
   gvs[] >>
   `FDOM ps.ps_spilled = {}` by ASM_SET_TAC[] >>
   gvs[FDOM_EQ_EMPTY] >> metis_tac[]
+QED
+
+Theorem do_swap_core:
+  !d ps prefix core.
+    ps.ps_stack = prefix ++ core /\ d < LENGTH core /\
+    ALL_DISTINCT core ==>
+    (SND (do_swap d ps)).ps_stack = prefix ++ stack_swap d core /\
+    ALL_DISTINCT (stack_swap d core) /\
+    set (stack_swap d core) = set core
+Proof
+  rpt strip_tac
+  >- (simp[do_swap_stack_result, stack_swap_bottom_extension])
+  >- (Cases_on `d = 0`
+      >- simp[stack_swap_def, LUPDATE_SAME]
+      >> (`0 < d` by simp[] >> metis_tac[stack_swap_permutation]))
+  >> Cases_on `d = 0`
+  >- simp[stack_swap_def, LUPDATE_SAME]
+  >> (`0 < d` by simp[] >> metis_tac[stack_swap_permutation])
+QED
+
+Theorem stack_pop_swap_core:
+  !d prefix core.
+    d < LENGTH core /\ ALL_DISTINCT core ==>
+    ?core'.
+      stack_pop 1 (stack_swap d (prefix ++ core)) = prefix ++ core' /\
+      ALL_DISTINCT core' /\
+      set core' = set core DELETE (stack_peek d core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (stack_swap d core) /\
+   set (stack_swap d core) = set core` by
+    (Cases_on `d = 0`
+     >- simp[stack_swap_def, LUPDATE_SAME]
+     >> `0 < d` by simp[] >> metis_tac[stack_swap_permutation]) >>
+  `stack_swap d core <> []` by
+    (Cases_on `stack_swap d core` >> gvs[]) >>
+  `LAST (stack_swap d core) = stack_peek d core` by
+    (`PRE (LENGTH core) = LENGTH core - 1` by decide_tac >>
+     simp[LAST_EL, stack_swap_def, stack_peek_def, EL_LUPDATE] >>
+     rpt IF_CASES_TAC >> gvs[]) >>
+  qexists_tac `FRONT (stack_swap d core)` >>
+  conj_tac
+  >- (`LENGTH prefix <= LENGTH core + LENGTH prefix - 1` by decide_tac >>
+      simp[stack_swap_bottom_extension, stack_pop_def, TAKE_APPEND,
+           FRONT_BY_TAKE, TAKE_LENGTH_TOO_LONG]) >>
+  conj_tac >- simp[ALL_DISTINCT_FRONT] >>
+  `SNOC (LAST (stack_swap d core)) (FRONT (stack_swap d core)) =
+     stack_swap d core` by simp[SNOC_LAST_FRONT] >>
+  `~MEM (LAST (stack_swap d core)) (FRONT (stack_swap d core))` by
+    metis_tac[ALL_DISTINCT_SNOC] >>
+  `set core = stack_peek d core INSERT set (FRONT (stack_swap d core))` by
+    (qpat_x_assum `SNOC _ _ = _`
+       (mp_tac o AP_TERM ``set : 'a list -> 'a set``) >>
+     simp[SNOC_APPEND] >> SET_TAC[]) >>
+  ASM_SET_TAC[]
+QED
+
+Theorem stack_get_depth_core:
+  !core prefix op.
+    MEM op core ==>
+    ?d. stack_get_depth op (prefix ++ core) = SOME d /\
+        d < LENGTH core /\ stack_peek d core = op
+Proof
+  Induct_on `core` using SNOC_INDUCT >> simp[] >>
+  rpt gen_tac >> disch_tac >>
+  rename1 `op = last \/ MEM op core` >>
+  Cases_on `op = last`
+  >- (gvs[] >> qexists_tac `0` >>
+      simp[SNOC_APPEND, stack_get_depth_def, REVERSE_APPEND,
+           stack_find_def, stack_peek_def, EL_APPEND_EQN]) >>
+  gvs[MEM_SNOC] >>
+  first_x_assum drule >> disch_then (qspec_then `prefix` strip_assume_tac) >>
+  qexists_tac `SUC d` >>
+  conj_tac
+  >- gvs[stack_get_depth_def, REVERSE_SNOC, stack_find_def] >>
+  `SUC d = d + 1` by decide_tac >>
+  simp[] >> gvs[stack_peek_def, SNOC_APPEND, EL_APPEND_EQN]
+QED
+
+Theorem pop_core_operand:
+  !op prefix core ps.
+    MEM op core /\ ps.ps_stack = prefix ++ core /\ ALL_DISTINCT core ==>
+    ?d core'.
+      stack_get_depth op ps.ps_stack = SOME d /\
+      stack_pop 1 (SND (do_swap d ps)).ps_stack = prefix ++ core' /\
+      ALL_DISTINCT core' /\ set core' = set core DELETE op
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule stack_get_depth_core >>
+  disch_then (qspec_then `prefix` strip_assume_tac) >>
+  `d < LENGTH ps.ps_stack` by simp[] >>
+  drule_all stack_pop_swap_core >>
+  disch_then (qspec_then `prefix` strip_assume_tac) >>
+  qexistsl_tac [`d`, `core'`] >>
+  simp[do_swap_stack_result]
+QED
+
+Theorem popmany_fold_core[local]:
+  !to_pop prefix core ops ps.
+    ps.ps_stack = prefix ++ core /\ ALL_DISTINCT core /\
+    DISJOINT (set prefix) (set to_pop) ==>
+    ?core'.
+      (SND (FOLDL (\(ops, ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops, ps)
+        | SOME dist =>
+            (ops ++ FST (if dist = 0 then ([], ps) else do_swap dist ps) ++ [SOPop 1],
+             (SND (if dist = 0 then ([], ps) else do_swap dist ps)) with
+               ps_stack := stack_pop 1
+                 (SND (if dist = 0 then ([], ps) else do_swap dist ps)).ps_stack))
+        (ops, ps) to_pop)).ps_stack = prefix ++ core' /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set to_pop
+Proof
+  Induct_on `to_pop` >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `MEM h core`
+  >- (drule_all pop_core_operand >> strip_tac >>
+      `(if d = 0 then ([], ps) else do_swap d ps) = do_swap d ps` by
+        (Cases_on `d = 0` >> simp[do_swap_def]) >>
+      gvs[] >>
+      qmatch_goalsub_abbrev_tac `FOLDL delete_step (newops, newps) to_pop` >>
+      first_x_assum (qspecl_then [`prefix`, `core'`, `newops`, `newps`] mp_tac) >>
+      simp[Abbr `newps`] >>
+      `set core DELETE h DIFF set to_pop = set core DIFF (h INSERT set to_pop)` by
+        SET_TAC[] >>
+      simp[Abbr `delete_step`]) >>
+  `stack_get_depth h ps.ps_stack = NONE` by
+    (simp[stack_get_depth_NONE] >> rpt strip_tac >>
+     `MEM (stack_peek d (prefix ++ core)) (prefix ++ core)` by
+       (pure_rewrite_tac[stack_peek_def] >> irule EL_MEM >> simp[]) >> gvs[]) >>
+  gvs[] >>
+  `set core DIFF (h INSERT set to_pop) = set core DIFF set to_pop` by ASM_SET_TAC[] >>
+  simp[] >> first_x_assum irule >> simp[]
+QED
+
+Theorem popmany_individual_core:
+  !to_pop prefix core ps.
+    ps.ps_stack = prefix ++ core /\ ALL_DISTINCT core /\
+    DISJOINT (set prefix) (set to_pop) ==>
+    ?core'.
+      (SND (popmany_individual to_pop ps)).ps_stack = prefix ++ core' /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set to_pop
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[popmany_individual_def, LET_THM, pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  qmatch_goalsub_abbrev_tac `FOLDL delstep _ sorted` >>
+  `set sorted = set to_pop` by simp[Abbr `sorted`, EXTENSION, sortingTheory.QSORT_MEM] >>
+  qspec_then `sorted` mp_tac (SRULE [pairTheory.pair_CASE_def, pairTheory.UNCURRY] popmany_fold_core) >>
+  disch_then (qspecl_then [`prefix`, `core`, `[]`, `ps`] mp_tac) >>
+  simp[Abbr `delstep`]
+QED
+
+Theorem popmany_individual_spilled_unchanged:
+  !to_pop ps. (SND (popmany_individual to_pop ps)).ps_spilled = ps.ps_spilled
+Proof
+  rpt gen_tac >>
+  simp[popmany_individual_def, LET_THM, pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  qmatch_goalsub_abbrev_tac `FOLDL delstep _ sorted` >>
+  `!xs acc. (SND (FOLDL delstep acc xs)).ps_spilled = (SND acc).ps_spilled` by
+    (Induct >> simp[] >> rpt gen_tac >> Cases_on `acc` >>
+     simp[Abbr `delstep`] >>
+     Cases_on `stack_get_depth h r.ps_stack` >> simp[] >>
+     Cases_on `x = 0` >> simp[do_swap_spilled_unchanged]) >>
+  simp[]
+QED
+
+Theorem popmany_plan_spilled_unchanged:
+  !to_pop ps. (SND (popmany_plan to_pop ps)).ps_spilled = ps.ps_spilled
+Proof
+  Cases >> simp[popmany_plan_def, LET_THM] >> gen_tac >>
+  IF_CASES_TAC >> simp[popmany_individual_spilled_unchanged] >>
+  IF_CASES_TAC >> simp[popmany_individual_spilled_unchanged] >>
+  pairarg_tac >> gvs[] >> metis_tac[do_swap_spilled_unchanged, pairTheory.SND]
 QED
