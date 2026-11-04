@@ -534,3 +534,57 @@ components; H'=H. The common ordinary adapter supplies the successor location.
 No headroom, non-forward, or extra scalar-equality premise is required. Failed
 assertions (Abort), malformed/undefined guards (Error), current raw safety,
 control, PARAM ownership and exhaustive target-prefix coverage remain open.
+
+## Selected PARAM ownership checkpoint (C1.11.5.69)
+
+Consumer: `ld_param_effect` (ParamEffects:103-131) requires exactly
+`!j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==> j IN P f.lf_fn.fn_name`.
+It is needed to put PARAM's selected output in `fn_pv`, not to prove numerical
+parameter agreement. Do not replace it by equal erased allocation pairs.
+
+### Current clauses and the candidate sync projection
+
+Relation:47-66 constrains H's domain to `fn_pv` and relates parameter values by
+Q, but has no static positional constraint on Q. Relation:123-153 identifies
+PG with Q's OPTION_MAP erasure and saved cf_params with saved Q's erasure.
+Global:119-120 proves selected identities live, not positional permission.
+`EVERY(fn_ptr_ok P)` is already a sync clause; adding it again supplies no
+new reachability fact. A direct projection/simplification proof of the proposed
+ownership candidate therefore has no supplying clause. This is NOT a checked
+counterexample to the candidate: sync also contains source frame_reachable,
+which could support a new semantic provenance-support induction. No such
+induction theorem is currently supplied by ptrDiscipline. In particular it
+would have to carry support of G, ownership of PG, and saved caller ownership
+jointly; erased PG equality alone is not that induction.
+
+### Establishment and preservation table (exact existing interfaces)
+
+| Site | Existing checked interface | Remaining ownership obligation |
+|---|---|---|
+| Root | `ld_sync_entry` returns sync with stk=[], PG=[], G=FEMPTY; witness at Entry:54-56 has Q=[]; `ld_sync_source_entry` obtains P from o1_src_inv | Empty Q is vacuous even when initial vs_params is nonempty. Export through PG=[] and MAP length, or retain concrete entry witness. No new initial-state assumption needed. |
+| INVOKE selection | `ld_arguments_permission`: ld_vars P A f /\ ptr_use_ok P (fn_pv P f.lf_fn) inst /\ opcode=INVOKE /\ decode_invoke inst=SOME(nm,args) /\ k<LENGTH args /\ EL k (MAP(op_prov H) args)=SOME a ==> k IN P nm | Construct callee Q as exactly MAP(op_prov caller.H) args, and identify callee.fn_name=nm via lookup. `fn_ptr_ok_def` supplies ptr_use_ok from source inst membership; `ld_arguments_erasure` supplies PG equality; `ld_arguments_live` supplies liveness, independently. No new pointer argument observation lemma needed. |
+| Source call rule | frame_reachable_call (ptrDiscipline:484-494) sets PG=MAP(op_prov G) ops and saves caller PG in cf_params | This matches selected Q via `ld_arguments_erasure`, but does not itself assert ownership. Use permission at selected call construction, not inverse lookup of (base,size). |
+| Ordinary / PARAM / block / expansion | All frame updates retaining lf_fn and lf_Q preserve the ownership formula by substitution; PARAM updates H, not Q | Retain ownership for EVERY saved frame, not just active HD; the ordinary adapter's existing ld_pair conclusion does not expose such an invariant. Any caller that needs ownership after that adapter must track it alongside the chosen frame witnesses, or obtain a separate source-reachability theorem. |
+| Return | frame_reachable_ret (ptrDiscipline:495-508) restores f.cf_params and f.cf_fn; sync's saved-frame equations identify these with saved selected frame Q/function | Tail-frame ownership must have been retained while callee was active. Current callee Q cannot justify caller permission. Erasure restriction on A changes no Q positions or fn names. |
+
+### Minimal invariant proposal, not a new definition or theorem
+
+Carry alongside the coverage witness the single stack-wide formula
+`EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+                   j IN P f.lf_fn.fn_name) frames`.
+This is sufficient for the PARAM producer via HD; it is not a new hypothesis
+of the frozen theorem. Establish it at the root (empty Q), push it using
+`ld_arguments_permission`, preserve it when only src/tgt/H/tv/E change, and
+recover it on pop via EVERY's tail. Configured supply, serial, A and erasure
+changes do not affect it. No relation definition has been modified here.
+
+Concrete next decomposition for strategist review: (1) prove unique empty,
+frame-update, push and pop ownership boundaries in a task-created helper theory,
+using existing Arguments permission rather than copying it; (2) choose explicitly
+whether target-prefix witnesses carry the extra stack-wide formula, or instead
+prove the larger joint source provenance-support induction and derive ownership
+from sync. The first route is smaller but requires revising task-created
+coverage witness interfaces at their ownership threading points; a conditional
+PARAM coverage theorem alone is not a solution. Neither route is implemented
+or asserted proved by this diagnostic. No counterexample to the frozen contract
+has been produced. Terminal/current-state raw safety remains separate.
