@@ -116,6 +116,7 @@ Resume assign_tuple_targets_success_run[prefix_setup]:
     (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
   qpat_x_assum `(if flag then _ else _) su = _`
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
   drule_all tuple_assignment_prefix_run >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t w b sz. _`

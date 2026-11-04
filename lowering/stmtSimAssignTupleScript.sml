@@ -378,8 +378,11 @@ Proof
 QED
 
 Resume assign_tuple_locals_success_run[value]:
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> simp[]) >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   qpat_x_assum `expr_type e = TupleT tys`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>

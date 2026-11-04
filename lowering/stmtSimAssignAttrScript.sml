@@ -378,6 +378,7 @@ Theorem add_unwrap_post[local]:
   !func cenv cx e es sa sm sn su s0 es1 tv vv r v op dst bw off s.
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     ci_mono sa sm /\
+    post_value_type cenv e = expr_type e /\
     vv_post ctx func cenv cx e es sa sn s0 es1 tv vv r /\
     eval_operand dst r = SOME (bw + n2w off) /\
     expr_post ctx func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
@@ -525,6 +526,8 @@ Resume expr_add_unwrap_frag[read]:
         (mp_then Any irule frag_exec_weaken) >>
       simp[] >> rpt gen_tac >> strip_tac >>
       `ci_mono sa sm` by fs[ci_mono_def] >>
+      `post_value_type cenv e = expr_type e` by
+        simp[post_value_type_word] >>
       drule_all add_unwrap_post >> simp[]) >>
   rpt strip_tac >> Cases_on `bop` >> gvs[eval_operand_def, vv_post_def] >>
   qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` irule >> simp[]

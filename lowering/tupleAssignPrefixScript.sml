@@ -11,6 +11,7 @@ Libs
 Theorem tuple_assignment_prefix_run:
   !ctx func cenv cx e es es1 tys tvs vs sa su sl ss op staged elems s0 flag.
     expr_type e = TupleT tys /\
+    post_value_type cenv e = expr_type e /\
     (do result <- eval_expr cx e; read_result cx result od) es =
       (INL (ArrayV (TupleV vs)),es1) /\
     value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
@@ -62,8 +63,9 @@ Proof
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
   rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   qpat_x_assum `expr_type e = TupleT tys`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   suspend "stage"

@@ -328,6 +328,7 @@ QED
    its operand, and the assignment writes it into x. *)
 Theorem assign_local_memory_success_run:
   !ctx func cenv cx id e es es' tyv sa sb sf op p sz s0 loc info bytes.
+    post_value_type cenv e = expr_type e /\
     eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (INL (), es') /\
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -373,8 +374,9 @@ Proof
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by gvs[expr_val_at_def] >>
   `?sw. eval_operand op s1 = SOME sw /\
         val_in_memory tyv v (w2n sw) s1.vs_memory` by
@@ -428,6 +430,8 @@ Proof
   rename1 `unwrap_value _ _ _ = (op, sB)` >>
   Cases_on `res`
   >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
+      `post_value_type cenv e = expr_type e` by
+        (irule post_value_type_lowered >> simp[]) >>
       drule_all assign_local_memory_success_run >> strip_tac >>
       disj1_tac >> qexistsl [`t`, `cenv`] >>
       simp[stmt_lands_def, cenv_top_ext_refl] >>
@@ -569,6 +573,7 @@ Finalise local_memory_assign_widen_run
 
 Theorem assign_local_memory_widen_success_run:
   !ctx func cenv cx id e es es' vtyp sty etv tyv sa sb sf op p sz s0 loc info bytes.
+    post_value_type cenv e = expr_type e /\
     eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (INL (), es') /\
     ~is_word_type vtyp /\
     (expr_type e = vtyp \/ is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
@@ -616,8 +621,9 @@ Proof
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
     (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >>
@@ -670,6 +676,8 @@ Proof
   rename1 `unwrap_value _ _ _ = (op, sB)` >>
   Cases_on `res`
   >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
+      `post_value_type cenv e = expr_type e` by
+        metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
       drule_all assign_local_memory_widen_success_run >> strip_tac >>
       disj1_tac >> qexistsl [`t`, `cenv`] >>
       simp[stmt_lands_def, cenv_top_ext_refl] >>

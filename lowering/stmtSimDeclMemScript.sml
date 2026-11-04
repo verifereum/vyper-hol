@@ -696,6 +696,7 @@ Theorem annassign_memory_store_post_run[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
    sc rest a loc info bytes.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
     cs_extends sa sb /\ local_ptrs_reserved cenv sa /\
     ~is_word_type vtyp /\
@@ -737,10 +738,10 @@ Proof
   drule_then (drule_then assume_tac) compile_lower_value_var >>
   qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
+  qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
   `~is_word_type (expr_type e)` by
-    (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >>
-     gvs[is_bytestring_word_type]) >>
+    metis_tac[is_bytestring_word_type] >>
   `?sw. eval_operand op s = SOME sw /\
         val_in_memory etv v (w2n sw) s.vs_memory` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -787,6 +788,7 @@ QED
 
 Theorem annassign_memory_read_success_run:
   !ctx func cenv cx id vtyp e es es' etv tyv sty sa sb sf op p sz s0 w inst loc info bytes.
+    post_value_type cenv e = expr_type e /\
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (),es') /\
     ~is_word_type vtyp /\
     (expr_type e = vtyp \/
@@ -1013,6 +1015,12 @@ Resume compile_annassign_memory_widen_stmt_frag[success]:
      `val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)`
        suffices_by simp[] >>
      irule annassign_widen_footprint >> metis_tac[]) >>
+  `post_value_type c e = expr_type e` by
+    (qpat_x_assum `lowered_value_type cenv e = expr_type e \/ _`
+       strip_assume_tac
+     >- (irule post_value_type_lowered >>
+         metis_tac[declare_local_memory_types]) >>
+     simp[post_value_type_bytestring]) >>
   drule_all annassign_memory_read_success_run >> strip_tac >>
   drule_all annassign_word_top_ext >> strip_tac >>
   `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by

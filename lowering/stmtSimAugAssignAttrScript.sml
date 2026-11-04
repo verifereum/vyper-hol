@@ -356,7 +356,10 @@ Proof
   `?tv2. evaluate_type (get_tenv cx) (expr_type e) = SOME tv2` by
     fs[optionTheory.IS_SOME_EXISTS] >>
   `eval_operand rhs u = SOME (val_to_w256 v2)` by
-    (qpat_x_assum `expr_val_rel _ _ _ _ _`
+    (drule post_value_type_word >>
+     disch_then (qspec_then `cenv` assume_tac) >>
+     gvs[] >>
+     qpat_x_assum `expr_val_rel _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
      first_x_assum drule >> gvs[typed_val_to_w256_word_value]) >>
   `eval_operand cur u = SOME (val_to_w256 v1) /\
