@@ -3936,13 +3936,31 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_compile_multi_exprs]
-       >> rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
-       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+  (* Prove each branch once, then close every case of e by rewriting. *)
+  strip_tac >>
+  `∀x. ci_mono st (SND
+         (let (vv, st') = f cenv rhs_ty x st in
+          as_stack_val ret_ty
+            (compile_var_array_membership cenv needle vv rhs_ty is_in st')))`
+    by (gen_tac >> simp[LET_THM] >>
+        irule ci_mono_uncurry >> reverse conj_tac >- simp[] >>
+        rpt gen_tac >> BETA_TAC >>
+        simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]) >>
+  `∀elems. ci_mono st (SND
+         (let (ops, st') = compile_multi_exprs f cenv elems st in
+          if is_in then as_stack_val ret_ty (compile_list_membership_in needle ops st')
+          else as_stack_val ret_ty (compile_list_membership_notin needle ops st')))`
+    by (gen_tac >> simp[LET_THM] >>
+        irule ci_mono_uncurry >> reverse conj_tac
+        >- simp[ci_mono_compile_multi_exprs] >>
+        rpt gen_tac >> BETA_TAC >> IF_CASES_TAC >>
+        simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
+             ci_mono_compile_list_membership_notin]) >>
+  Cases_on `e`
+  >~ [`Builtin _ bt _`]
+  >- (Cases_on `bt` >> rewrite_tac[TypeBase.case_def_of ``:expr``] >>
+      BETA_TAC >> asm_rewrite_tac[TypeBase.case_def_of ``:builtin``]) >>
+  asm_rewrite_tac[TypeBase.case_def_of ``:expr``]
 QED
 
 Theorem ci_mono_builtin_bop[local]:
