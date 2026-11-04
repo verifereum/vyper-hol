@@ -177,3 +177,48 @@ Proof
        probe_es_def, sfields_tenv_consistent_def, popped_keys_indexed_def,
        place_map_tables_agree_on_defined_def]
 QED
+
+Definition probe_flags_def:
+  probe_flags = <|rcf_revert_on_failure := F; rcf_is_delegate := F;
+    rcf_is_static := F; rcf_max_outsize := 0; rcf_kws := []|>
+End
+
+Theorem probe_pre[local]:
+  expr_body_pre (cenv with ce_struct_fields := FEMPTY) probe_cx
+    (probe_env env)
+    (Call (BaseT BoolT) (RawCallCalldataTarget probe_flags)
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))] NONE) probe_es
+Proof
+  irule nonreverting_calldata_admissible >>
+  simp[probe_inv, probe_call_safe, probe_flags_def]
+QED
+
+Theorem retained_helper_counterexample[local]:
+  ?cenv cx env ann flags args dflt es.
+    expr_sim_inv cenv cx env es /\
+    expr_body_pre cenv cx env
+      (Call ann (RawCallCalldataTarget flags) args dflt) es /\
+    ~flags.rcf_revert_on_failure
+Proof
+  qexistsl_tac [`ARB with ce_struct_fields := FEMPTY`, `probe_cx`,
+    `probe_env ARB`, `BaseT BoolT`, `probe_flags`,
+    `[Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))]`, `NONE`, `probe_es`] >>
+  simp[probe_inv, probe_pre, probe_flags_def]
+QED
+
+(* Exact negation of the existing local calldata_call_pre proposition.
+   This does NOT negate compile_raw_call_calldata_case. *)
+Theorem retained_calldata_call_pre_false:
+  ~(!cenv cx env ann flags args dflt es.
+    expr_body_pre cenv cx env
+      (Call ann (RawCallCalldataTarget flags) args dflt) es ==>
+    ?addr kws. args = addr::kws /\ dflt = NONE /\
+      ann = raw_call_return_type flags /\
+      expr_type addr = BaseT AddressT /\
+      well_typed_exprs env args /\ raw_call_kws_ok flags kws /\
+      LENGTH kws = LENGTH flags.rcf_kws /\
+      flags.rcf_max_outsize < dimword (:256) /\
+      ~flags.rcf_is_delegate /\ flags.rcf_revert_on_failure)
+Proof
+  mp_tac retained_helper_counterexample >> metis_tac[]
+QED
