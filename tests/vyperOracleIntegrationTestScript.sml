@@ -239,12 +239,14 @@ Proof
   CONV_TAC cv_eval
 QED
 
-(* A computed precompile (here SHA-256 at Address2) is answered without
-   consuming an outcome or recording a request, and a delegate raw_call runs
+(* A computed precompile (here SHA-256 at Address2) takes its success bit
+   from the head outcome and records no request; a delegate raw_call runs
    the callee, ignoring the oracle. *)
-Theorem RawCall_precompile_and_delegate_skip_oracle:
+Theorem RawCall_precompile_takes_outcome_delegate_skips_oracle:
   integration_raw_call_observe F F 0 2w (SOME [send_outcome F [] 0])
-    (INL (Value (BoolV T))) (SOME 1) send_initial_requests /\
+    (INL (Value (BoolV F))) (SOME 0) send_initial_requests /\
+  integration_raw_call_observe F F 0 2w (SOME [send_outcome T [] 0])
+    (INL (Value (BoolV T))) (SOME 0) send_initial_requests /\
   integration_raw_call_observe T T 0 20w (SOME [send_outcome F [] 0])
     (INL (Value NoneV)) (SOME 1) send_initial_requests
 Proof

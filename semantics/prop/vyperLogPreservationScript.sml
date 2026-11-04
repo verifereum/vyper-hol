@@ -551,6 +551,8 @@ Proof
   >> BasicProvers.FULL_CASE_TAC
   >> gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def]
   >> first_x_assum drule >> simp[]
+  >> strip_tac >> imp_res_tac precompile_call_success_state >>
+  gvs[log_extends_def]
 QED
 
 Theorem case_stmt_return_some_logs[local]:

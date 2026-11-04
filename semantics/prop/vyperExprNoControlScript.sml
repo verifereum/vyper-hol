@@ -513,8 +513,15 @@ Proof
   rw[return_def, raise_def, no_control_exc_def]
 QED
 
+Theorem precompile_call_success_no_control:
+  precompile_call_success bt s = (INR exc, s') ==> no_control_exc exc
+Proof
+  strip_tac >> drule vyperStatePreservationTheory.precompile_call_success_exception >>
+  rw[] >> simp[no_control_exc_def]
+QED
+
 val helpers = [eval_create_no_control, check_create_blueprint_no_control,
-               next_gas_reading_no_control,
+               next_gas_reading_no_control, precompile_call_success_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
@@ -889,8 +896,10 @@ Resume canonical_eval_no_control_with_results[Builtin]:
   rpt strip_tac >>
   imp_res_tac result_array_length_no_control >>
   imp_res_tac next_gas_reading_no_control >>
+  imp_res_tac precompile_call_success_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
+  imp_res_tac lift_sum_no_control >>
   gvs[no_control_exc_def] >> metis_tac[]
 QED
 

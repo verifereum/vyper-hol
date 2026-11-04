@@ -120,6 +120,13 @@ Proof
   CASE_TAC >> simp[raise_def, return_def, machine_frame_def]
 QED
 
+Theorem machine_frame_precompile_call_success:
+  state_rel_frame machine_frame (precompile_call_success bt)
+Proof
+  rw[state_rel_frame_def] >> Cases_on `precompile_call_success bt st` >>
+  drule precompile_call_success_state >> rw[] >> simp[machine_frame_def]
+QED
+
 Theorem machine_frame_view_lock:
   state_rel_frame machine_frame (acquire_nonreentrant_lock addr slot T)
 Proof

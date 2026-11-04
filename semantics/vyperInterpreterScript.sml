@@ -1293,6 +1293,39 @@ End
 
 val () = cv_auto_trans next_gas_reading_def;
 
+(* sha256, ecrecover, ecadd and ecmul compile to an asserted STATICCALL of
+   a computed precompile (2, 1, 6, 7), which the EVM can fail for lack of
+   gas. With the oracle, that call's success is the next outcome's, as in
+   take_outcome; the value is still computed. *)
+Definition precompile_builtin_def[simp]:
+  precompile_builtin Sha256 = T ∧
+  precompile_builtin ECRecover = T ∧
+  precompile_builtin ECAdd = T ∧
+  precompile_builtin ECMul = T ∧
+  precompile_builtin _ = F
+End
+
+val () = cv_auto_trans precompile_builtin_def;
+
+Definition precompile_call_success_def:
+  precompile_call_success bt st =
+    if ¬precompile_builtin bt then return () st else
+    case st.outcomes of
+    | NONE => return () st
+    | SOME [] => check F "precompile failed" st
+    | SOME (outcome::rest) =>
+        check (call_outcome_success outcome) "precompile failed"
+          (st with outcomes := SOME rest)
+End
+
+val () = cv_auto_trans precompile_call_success_def;
+
+Theorem precompile_call_success_not_builtin[simp]:
+  ~precompile_builtin bt ==> precompile_call_success bt = return ()
+Proof
+  simp[FUN_EQ_THM, precompile_call_success_def]
+QED
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
@@ -1548,7 +1581,9 @@ Definition evaluate_def:
     else do
       vs <- eval_exprs cx es;
       acc <- get_accounts;
-      lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs
+      v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
+      precompile_call_success bt;
+      return v
     od;
     return $ Value v
   od ∧

@@ -98,6 +98,7 @@ Proof
               assert_def, return_def, raise_def, AllCaseEqs()] >>
           imp_res_tac result_array_length_state >>
           imp_res_tac next_gas_reading_state >>
+          imp_res_tac precompile_call_success_state >>
           imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
           first_x_assum drule >> simp[type_check_def, assert_def, return_def] >>
           metis_tac[])

@@ -318,7 +318,7 @@ Theorem success_requires_requests_and_effects:
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
+      LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
   simp[call_result_rel_def]
 QED

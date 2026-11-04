@@ -203,8 +203,9 @@ Proof
   simp[take_call_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
-  BasicProvers.every_case_tac >>
-  gvs[failed_outcome_def, call_outcome_request_def]
+  Cases_on `x` >> gvs[failed_outcome_def] >>
+  Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
+  gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
 
 Theorem eval_send_outcome_typed:

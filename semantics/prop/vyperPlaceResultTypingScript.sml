@@ -1371,11 +1371,13 @@ QED
 Theorem scope_pop_effect_array_primitives[simp]:
   scope_pop_effect (result_array_length cx tv) /\
   scope_pop_effect next_gas_reading /\
+  scope_pop_effect (precompile_call_success bt) /\
   scope_pop_effect (eval_raw_call cx flags target calldata amount gas)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
   FIRST (map (fn th => drule th >> rw[] >> simp[])
     [result_array_length_state, next_gas_reading_state,
+     precompile_call_success_state,
      eval_raw_call_preserves_non_accounts])
 QED
 
@@ -1413,6 +1415,8 @@ Proof
       Cases_on `bt = Env MsgGas` >> simp[] >>
       ho_match_mp_tac scope_pop_effect_bind >> conj_tac
       >- (first_x_assum irule >> metis_tac[]) >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 

@@ -400,7 +400,7 @@ Definition call_result_rel_def:
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")

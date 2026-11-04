@@ -102,8 +102,6 @@ The entire public theorem is:
   ==>
   ?r es'. run_call es = SOME (r, es') /\
     (frame_resource_starved es r es' \/
-     (precompile_call_starved es /\
-      ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
      call_result_rel tops ret am tx es r es')
 ```
 
