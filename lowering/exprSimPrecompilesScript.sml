@@ -26,7 +26,7 @@
  *     computed_suffix_success, computed_suffix_failure,
  *     computed_suffix_output, computed_suffix_preserves
  *   - ALLOCA'd buffers around a payload: allocated_payload_shape,
- *     allocated_payload_run, alloc_buffer_finish, state_allocations_disjoint,
+ *     allocated_payload_run, alloc_buffer_finish,
  *     precompile_alloca_immutable_disjoint
  *   - stack operands under their typed encoding (a bytes32 is not a
  *     word_value): typed_args_ready, typed_args_post, typed_args_ready_head,
@@ -48,7 +48,7 @@
 
 Theory exprSimPrecompiles
 Ancestors
-  list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins
+  list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins exprSimOperands
   exprSimLiteralBuffer abiDecodeStaticProps dftCommutation loweringHalt
   exprSimWordArgs exprSimOperators exprSimHash exprBopLowering exprLowering
   exprLoweringProps builtinMisc compileEnv
@@ -1071,18 +1071,6 @@ Theorem ecrecover_buffers_shape[local]:
 Proof
   strip_tac >> drule_all ecrecover_buffers_prefix_shape >> strip_tac >>
   qexistsl_tac [`ib`, `ob`, `sa`, `sb`, `sc`] >> simp[] >> metis_tac[]
-QED
-
-Theorem state_allocations_disjoint:
-  stmt_state_rel ctx func cenv cx es t /\
-  FLOOKUP t.vs_allocas a = SOME (p,n) /\
-  FLOOKUP t.vs_allocas b = SOME (q,m) /\ a <> b ==>
-  regions_disjoint p n q m
-Proof
-  simp[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def,
-       compileEnvTheory.regions_disjoint_def] >>
-  strip_tac >> first_x_assum drule >>
-  disch_then drule >> simp[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem alloc_buffer_finish:

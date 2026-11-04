@@ -42,7 +42,7 @@ Theory exprSimOperands
 Ancestors
   finite_map
   exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps
-  valueEncodingProofs venomState venomInst
+  valueEncodingProofs venomState venomInst venomMemDefs
 
 (* ===== Values in an expression's own allocations ===== *)
 
@@ -86,6 +86,18 @@ QED
 
 (* Helper: the allocation of an ALLOCA of func whose output is no live
    local's pointer lies clear of every live local's region. *)
+Theorem state_allocations_disjoint:
+  stmt_state_rel ctx func cenv cx es t /\
+  FLOOKUP t.vs_allocas a = SOME (p,n) /\
+  FLOOKUP t.vs_allocas b = SOME (q,m) /\ a <> b ==>
+  regions_disjoint p n q m
+Proof
+  simp[stmt_state_rel_def, alloca_inv_def, allocas_non_overlapping_def,
+       compileEnvTheory.regions_disjoint_def] >>
+  strip_tac >> first_x_assum drule >>
+  disch_then drule >> simp[arithmeticTheory.ADD_COMM]
+QED
+
 Theorem alloca_clear_of_locals:
   !func cenv cx es s inst q b sz n lb lsz ctx.
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
