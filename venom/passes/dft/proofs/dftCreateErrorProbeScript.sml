@@ -46,3 +46,23 @@ Proof
     (irule vfmContextLengthTheory.run_contexts_length_1 >> metis_tac[]) >>
   simp[create_probe_extract_none_iff]
 QED
+
+Theorem create_probe_constructor_wf_iff:
+  vfmExecutionProp$wf_state (make_venom_create_state s a gas value code) <=>
+  wf_accounts (transfer_value s.vs_call_ctx.cc_address a value s.vs_accounts)
+Proof
+  rewrite_tac[vfmExecutionPropTheory.wf_state_def] >>
+  simp[make_venom_create_state_def,
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmExecutionPropTheory.stack_room_ok_def,
+       vfmExecutionPropTheory.gas_stack_ok_def,
+       vfmExecutionPropTheory.outputTo_consistent_stack_def,
+       vfmExecutionPropTheory.outputTo_consistent_ctx_def,
+       make_rollback_def, vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem create_probe_fatal_keeps_state:
+  vfm_abort e ==> handle_step e es = (INR e,es)
+Proof
+  simp[vfmExecutionTheory.handle_step_def, vfmExecutionTheory.reraise_def]
+QED

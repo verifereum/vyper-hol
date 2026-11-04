@@ -249,3 +249,69 @@ The CREATE/MLOAD candidate remains unverified; no task counterexample follows.
 The environment provides dependency theories to holbuild but not their source
 paths in this worktree; DB queries through a temporary Theorem/FAIL_TAC probe
 were used for exact signatures, and all inspection dummy theorems were removed.
+
+## C3.2.41.2 constructor and fatal-handler boundary
+
+Two further checked interfaces (no execution enumeration):
+```
+wf_state (make_venom_create_state s a gas value code) <=>
+  wf_accounts (transfer_value s.vs_call_ctx.cc_address a value s.vs_accounts)
+vfm_abort e ==> handle_step e es = (INR e,es)
+```
+The first is `create_probe_constructor_wf_iff`; the second is
+`create_probe_fatal_keeps_state`. All parameters remain symbolic.
+
+Actual imported `vfmExecutionProp.wf_state_def` is the conjunction of:
+- contexts nonempty;
+- LENGTH contexts <= SUC context_limit;
+- EVERY (wf_context o FST) contexts;
+- EVERY wf_accounts (all_accounts es);
+- stack_room_ok es;
+- gas_stack_ok es;
+- outputTo_consistent_stack es.
+
+Constructor residual-obligation table:
+| Clause | Constructor status |
+| --- | --- |
+| nonempty / context limit | singleton contexts, automatic |
+| wf_context | initial_context, automatic by existing simp interface |
+| account validity | exactly wf_accounts of the transferred accounts; not automatic |
+| stack_room_ok / gas_stack_ok | singleton initial context, automatic after their definitions |
+| outputTo_consistent_stack | automatic: initial message outputTo=Code a and callee=a |
+
+The direct constituent `wf_accounts a <=> !x. wf_account_state (a x)`
+requires every account to satisfy
+`nonce < 2 ** 64 /\ LENGTH code <= 2 ** 14 + 2 ** 13`.
+Neither `o1_run_state_ok` nor its initial-state constituent supplies these:
+`o1_initial_state_ok` constrains only empty vars, not halted, empty memory,
+empty allocas, and alloca_next=0; run_state_ok additionally equates fmp and
+initial_fmp and requires code_layout_valid. In particular no account nonce
+or code-length premise is present. This is a missing safety route premise,
+NOT a demonstrated failure of extraction.
+
+Exact fatal handling clauses from `vfmExecution`:
+```
+handle_step e = if vfm_abort e then reraise e
+                else handle (handle_create e) handle_exception
+reraise e s = (INR e,s)
+```
+Fatal tags are SOME(OutsideDomain d), SOME Unimplemented, SOME Impossible;
+all other exception constructors and NONE are nonfatal. Thus a fatal
+handler preserves the *entire* current context stack; it does not unwind
+nested frames. A concrete reachable fatal event with more than one frame
+would survive that handler with multiple frames. No such reachability, nor
+OWHILE NONE, has been proved. The earlier conditional extraction theorem
+still additionally needs a SOME run and nonfatal result.
+
+Recommendation for the next semantic boundary: classify the reachability
+of OutsideDomain under the constructor's `Collect empty_domain` (and the
+permitted arbitrary account code), specifically whether nested frame entry
+can precede a fatal domain check. This is one concrete fatal source, not a
+proposal to enumerate arbitrary bytecode or prove universal termination.
+The missing wf_accounts premise alone does not license abandoning the
+frozen theorem. Parent suspicion gate remains unresolved.
+
+Evidence: constructor residual goals in m4439/m4443/m4447; direct constituent
+signatures m4451/m4455; exact reraise and initial-state clauses m4458.
+Temporary inspection theorems were removed; only the two checked lemmas
+above are retained.
