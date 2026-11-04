@@ -109,3 +109,73 @@ Proof
   goal_assum (drule_at (Pat `complete_alloc_positions_with_imports _ _ _ _ _ _ = SOME _`)) >>
   asm_rewrite_tac[] >> metis_tac[]
 QED
+
+Theorem ptr_two_allocas_multiple[local]:
+  !insts. MEM i insts /\ MEM j insts /\ i <> j /\
+    is_alloca_op i.inst_opcode /\ is_alloca_op j.inst_opcode ==>
+    insts_have_multiple_allocas insts
+Proof
+  Induct >> simp[insts_have_multiple_allocas_def] >> rpt strip_tac >>
+  Cases_on `is_alloca_op h.inst_opcode` >>
+  gvs[insts_have_multiple_allocas_def, EXISTS_MEM] >> metis_tac[]
+QED
+
+Theorem ptr_static_distinct_needs_liveness:
+  static_alloca_items fn = SOME items /\ MEM (a,sa) items /\
+  MEM (b,sb) items /\ a <> b ==> fn_needs_liveness_allocation fn
+Proof
+  strip_tac >>
+  drule static_alloca_items_MEM >>
+  disch_then (fn th => fs[th]) >>
+  simp[fn_needs_liveness_allocation_def] >>
+  irule ptr_two_allocas_multiple >>
+  metis_tac[venomInstTheory.is_alloca_op_def, optionTheory.SOME_11, pairTheory.PAIR_EQ]
+QED
+
+Theorem ptr_output_local_local_separation:
+  fn.fn_eom = NONE /\ fn_ptr_ok P fn /\
+  concretize_function_fuel_in_context fuel ctx reserved fn = SOME fn' /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  fn' = out.fpo_function /\
+  static_alloca_items fn = SOME items /\ MEM (a,sa) items /\ MEM (b,sb) items /\
+  a <> b /\ 0 < sa /\ 0 < sb /\
+  MEM (a,pa,sa) fn'.fn_mems_used /\ MEM (b,pb,sb) fn'.fn_mems_used /\
+  (!c p sz. MEM (c,p,sz) (imported_mems_used ctx fn) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
+  FLOOKUP (context_mem_livesets fuel ctx fn
+    (bp_analyze_fuel fuel (cfg_analyze fn) fn) (cfg_analyze fn)) a = SOME la /\
+  FLOOKUP (context_mem_livesets fuel ctx fn
+    (bp_analyze_fuel fuel (cfg_analyze fn) fn) (cfg_analyze fn)) b = SOME lb /\
+  MEM addr la /\ MEM addr lb ==>
+  reserved_intervals_disjoint (pa,sa) (pb,sb)
+Proof
+  strip_tac >>
+  `fn_needs_liveness_allocation fn` by metis_tac[ptr_static_distinct_needs_liveness] >>
+  drule_all ptr_fresh_layout_representation >> strip_tac >>
+  `items' = items` by
+    (qpat_x_assum `static_alloca_items fn = SOME items'` mp_tac >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
+  qpat_x_assum `(fn_needs_liveness_allocation fn \/ _) ==> _` mp_tac >>
+  simp[] >> strip_tac >>
+  `?p. FLOOKUP completed a = SOME p` by
+    (drule static_alloca_items_MEM >> disch_then (qspec_then `(a,sa)` mp_tac) >>
+     disch_then (fn th => fs[th]) >>
+     drule_all (cj 2 complete_alloc_positions_with_imports_success) >> metis_tac[]) >>
+  `?q. FLOOKUP completed b = SOME q` by
+    (drule static_alloca_items_MEM >> disch_then (qspec_then `(b,sb)` mp_tac) >>
+     disch_then (fn th => fs[th]) >>
+     drule_all (cj 2 complete_alloc_positions_with_imports_success) >> metis_tac[]) >>
+  `layout.cl_positions = completed` by metis_tac[ptr_mk_layout_positions] >>
+  `out.fpo_function = apply_context_concretize_layout ctx layout fn /\
+   FLOOKUP layout.cl_positions a = SOME p /\
+   FLOOKUP layout.cl_positions b = SOME q /\
+   MEM (a,pa,sa) out.fpo_function.fn_mems_used /\
+   MEM (b,pb,sb) out.fpo_function.fn_mems_used` by
+    (asm_rewrite_tac[] >> metis_tac[]) >>
+  `pa = p /\ pb = q` by metis_tac[ptr_step_layout_metadata_exact] >>
+  gvs[] >> irule ptr_production_completed_local_local >>
+  asm_rewrite_tac[] >>
+  goal_assum (drule_at (Pat `complete_alloc_positions_with_imports _ _ _ _ _ _ = SOME _`)) >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
