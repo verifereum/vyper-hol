@@ -32,6 +32,66 @@ Proof
   gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]
 QED
 
+Theorem ld_active_operand_ir_var:
+  active_inst fn inst s /\ MEM (Var v) inst.inst_operands ==>
+  MEM v (fn_ir_vars fn)
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    (fs[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
+  simp[NoAsms, fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  qexists_tac `FLAT (MAP inst_ir_vars bb.bb_instructions)` >>
+  conj_tac >- (qexists_tac `bb` >> simp[]) >>
+  simp[NoAsms, MEM_FLAT, MEM_MAP] >> qexists_tac `inst_ir_vars inst` >>
+  conj_tac >- (qexists_tac `inst` >> simp[]) >>
+  simp[inst_ir_vars_def, inst_uses_def] >> disj2_tac >>
+  qpat_x_assum `MEM (Var v) _` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+  simp[operand_vars_APPEND, operand_vars_def, operand_var_def]
+QED
+
+Theorem ld_active_operand_non_retpc:
+  opaque_use_ok fn /\ active_inst fn inst s /\
+  (!v. ~retpc_use_ok inst v) /\ MEM (Var v) inst.inst_operands ==>
+  ~retpc_var fn v
+Proof
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  metis_tac[opaque_use_ok_retpc_use]
+QED
+
+Theorem ld_joint_scalar_no_provenance:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  active_inst fn inst s /\ ~is_pointer_preserving_op inst.inst_opcode /\
+  ~MEM inst.inst_opcode [LT; GT; EQ; INVOKE] /\
+  mem_read_ops inst = NONE /\ mem_write_ops inst = NONE ==>
+  !op. MEM op inst.inst_operands ==> op_prov H op = NONE
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  qpat_x_assum `ptr_discipline _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+  drule frame_reachable_prov_support >>
+  disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `ptr_use_ok P (fn_pv P fn) inst` by
+    (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
+  rpt strip_tac >>
+  `op_prov G op = NONE` by (irule ld_scalar_no_provenance >> metis_tac[]) >>
+  drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
+  simp[occurrence_param_ok_def]
+QED
+
 Theorem ld_joint_scalar_operands_clean:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -47,43 +107,15 @@ Theorem ld_joint_scalar_operands_clean:
     eval_operand op s = eval_operand op t
 Proof
   strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_prov H op = NONE` by
+    metis_tac[ld_joint_scalar_no_provenance] >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  qpat_x_assum `ptr_discipline _ _ _`
-    (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
-  drule frame_reachable_prov_support >>
-  disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
-  `MEM inst (fn_insts fn)` by
-    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
-     metis_tac[MEM_EL]) >>
-  `ptr_use_ok P (fn_pv P fn) inst` by
-    (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `taint_ok fn tn inst s` by metis_tac[] >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
-    fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
   rpt strip_tac >>
-  `op_prov G op = NONE` by (irule ld_scalar_no_provenance >> metis_tac[]) >>
-  `op_prov H op = NONE` by
-    (drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
-     simp[occurrence_param_ok_def]) >>
-  `op_taint tn op = {}` by metis_tac[] >>
-  `!v. op = Var v ==> MEM v (fn_ir_vars fn)` by
-    (rpt strip_tac >>
-      `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
-        (fs[fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[]) >>
-      simp[NoAsms, fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-      qexists_tac `FLAT (MAP inst_ir_vars bb.bb_instructions)` >>
-      conj_tac >- (qexists_tac `bb` >> simp[]) >>
-      simp[NoAsms, MEM_FLAT, MEM_MAP] >> qexists_tac `inst_ir_vars inst` >>
-      conj_tac >- (qexists_tac `inst` >> simp[]) >>
-      simp[inst_ir_vars_def, inst_uses_def] >> disj2_tac >>
-      `MEM (Var v) inst.inst_operands` by metis_tac[] >>
-      qpat_x_assum `MEM (Var v) _` (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
-      simp[operand_vars_APPEND, operand_vars_def, operand_var_def]) >>
-  `!v. op = Var v ==> ~retpc_var fn v` by
-    (rpt strip_tac >> gvs[] >>
-     drule_all opaque_use_ok_retpc_use >> metis_tac[]) >>
-  simp[] >> irule ld_joint_operand_clean >> metis_tac[]
+  `op_prov H op = NONE /\ op_taint tn op = {}` by metis_tac[] >>
+  simp[] >> irule ld_joint_operand_clean >>
+  metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc]
 QED
 
 Theorem ld_joint_unary_operands_clean:
