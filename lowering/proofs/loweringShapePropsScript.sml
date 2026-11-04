@@ -13681,3 +13681,25 @@ Proof
        rpt gen_tac >> BETA_TAC >>
        simp[LET_THM, comp_return_labels, emit_void_labels, emit_op_labels])
 QED
+
+Theorem compile_list_membership_in_labels:
+  !needle ops s P. cs_extends s (SND (compile_list_membership_in needle ops s)) /\
+    EVERY P (added_labels s (SND (compile_list_membership_in needle ops s)))
+Proof
+  recInduct compile_list_membership_in_ind >> rpt gen_tac >>
+  simp[compile_list_membership_in_def, comp_return_labels, emit_op_labels] >>
+  rpt gen_tac >> disch_tac >> rpt gen_tac >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[emit_op_labels] >>
+  rpt gen_tac >> BETA_TAC >> irule comp_bind_labels >> simp[emit_op_labels]
+QED
+
+Theorem compile_list_membership_notin_labels:
+  !needle ops s P. cs_extends s (SND (compile_list_membership_notin needle ops s)) /\
+    EVERY P (added_labels s (SND (compile_list_membership_notin needle ops s)))
+Proof
+  recInduct compile_list_membership_notin_ind >> rpt gen_tac >>
+  simp[compile_list_membership_notin_def, comp_return_labels] >>
+  conj_tac >> rpt gen_tac >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac, disch_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels])
+QED
