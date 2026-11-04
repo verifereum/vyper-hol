@@ -2438,6 +2438,25 @@ Proof
       raise_def, vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
 QED
 
+(* Unlike expr_body_pre alone, the environment relations of state_rel rule
+   out a successful storage lookup compiled as an immutable pointer. *)
+Theorem related_global_code_place_origin:
+  !cenv cx ann md name off s p t.
+    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+    FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off) /\
+    eval_expr cx (TopLevelName ann (md,name)) s = (INL (PlaceR p),t) ==>
+    p = ImmutablePlace md name [] /\ t = s
+Proof
+  rpt strip_tac >>
+  gvs[Once evaluate_def, lookup_global_def,
+      bind_def, return_def, lift_option_type_def, raise_def,
+      get_immutables_def, get_address_immutables_def, lift_option_def,
+      vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+      var_decl_info_CASE_rator, AllCaseEqs()] >>
+  drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >>
+  Cases_on `tr` >> simp[]
+QED
+
 (* Conditional separation: the body precondition permits a compiler table
    override even when the successful source name denotes storage. This
    does not assert existence of a full frozen-theorem counterexample. *)
