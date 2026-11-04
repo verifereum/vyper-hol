@@ -548,6 +548,27 @@ Proof
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>
+  `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
+    (`declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+       simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+     `storage_layout_safe cx` by gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all
+       vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >>
+     simp[]) >>
+  `!s. stmt_state_rel ctx func cenv cx es s ==>
+       storage_range_agree (get_storage cx es tr)
+         (if tr then contract_transient s else contract_storage s)
+         (n2w slot) tvt` by
+    (rpt strip_tac >>
+     `storage_agree (storage_dead cx tr (get_storage cx es tr))
+        (get_storage cx es tr)
+        (if tr then contract_transient s else contract_storage s)` by
+       (Cases_on `tr` >>
+        gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+            transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+            vfmStateTheory.lookup_account_def]) >>
+     irule accountsRelPropsTheory.storage_range_agree_of_live >>
+     metis_tac[]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
   Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>

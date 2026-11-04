@@ -253,7 +253,9 @@ QED
    the return type in a type environment env_t of the parameters, which
    the compile env and the source state agree with and whose locals fit
    the allocation limit, and the external frame has no return PC and no
-   lock. *)
+   lock. expr_sim_inv's storage-variable clause (each storage variable has
+   its declared module type and no hash-map info) follows from body_inv
+   and the single-module fact via body_inv_storage_var_types. *)
 Theorem external_body_frame:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa.
