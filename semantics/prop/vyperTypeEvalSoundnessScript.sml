@@ -7331,6 +7331,11 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
       strip_tac >>
       qpat_x_assum `LENGTH (case topics of _ => _) <= 4` $
         mk_asm "topics_bound" >>
+      Cases_on `cx.txn.is_static`
+      >- (asm "topics_bound" (fn th =>
+            fs[th, type_check_def, bind_def, ignore_bind_def, assert_def,
+               return_def]) >>
+          gvs[no_type_error_result_def]) >>
       asm "topics_bound" (fn th =>
         fs[th, type_check_def, bind_def, ignore_bind_def, assert_def,
            return_def]) >>
@@ -7400,6 +7405,11 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_SelfDestructTarget]:
     >- (
       rename1 `exprs_runtime_typed env es vs` >>
       strip_tac >>
+      Cases_on `cx.txn.is_static`
+      >- (drule_all selfdestruct_args_runtime_typed_dest >> strip_tac >>
+          gvs[type_check_def, assert_def, lift_option_type_def, return_def,
+              bind_def, ignore_bind_def, raise_def,
+              no_type_error_result_def]) >>
       qspecl_then [`env`, `cx`, `es`, `vs`, `args_st`, `res`, `st'`]
         mp_tac selfdestruct_tail_result_sound_simp >>
       simp[type_check_def, assert_def, runtime_consistent_def] >>
@@ -8327,7 +8337,10 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
   gvs[push_function_def, return_def, AllCaseEqs()] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-  drule acquire_nonreentrant_lock_scopes >> simp[]
+  gvs[bind_def, AllCaseEqs()] >>
+  imp_res_tac acquire_nonreentrant_lock_scopes >>
+  Cases_on `FST tup = View \/ FST tup = Pure` >>
+  gvs[return_def, AllCaseEqs()]
 QED
 
 (* External calls evaluate every operand before the shared call helper. *)
@@ -9301,6 +9314,13 @@ Proof
       get_accounts_def, get_transient_storage_def, lift_option_def,
       bind_def, ignore_bind_def, check_def, assert_def] >>
   rpt strip_tac >> gvs[] >>
+  (* static frame: the outcomes case is on the post-check state *)
+  TRY (qpat_x_assum `option_CASE _ _ _ _ = _` mp_tac >> CASE_TAC >>
+       simp[bind_apply, ignore_bind_apply, return_def, raise_def,
+            AllCaseEqs(), get_accounts_def, get_transient_storage_def,
+            lift_option_def, bind_def, ignore_bind_def, check_def,
+            assert_def] >>
+       rpt strip_tac >> gvs[]) >>
   pairarg_tac >> gvs[bind_def, ignore_bind_def, check_def, assert_def,
                        return_def, raise_def, AllCaseEqs()]
 QED
@@ -9320,6 +9340,7 @@ Theorem eval_raw_call_success_value[local]:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
+  Cases_on `cx.txn.is_static` >> Cases_on `flags.rcf_is_static` >>
   simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        check_def, assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,

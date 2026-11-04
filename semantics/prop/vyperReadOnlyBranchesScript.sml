@@ -244,11 +244,13 @@ Theorem machine_frame_internal_lock:
     (if nr then
        case cx.nonreentrant_slot of
        | NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot T
+       | SOME slot => do acquire_nonreentrant_lock cx.txn.target slot T; return () od
      else return ())
 Proof
   Cases_on `nr` >> simp[] >> Cases_on `cx.nonreentrant_slot` >>
-  simp[machine_frame_view_lock, machine_frame_primitives]
+  simp[machine_frame_primitives, ignore_bind_def] >>
+  irule state_rel_frame_bind_guarded >>
+  simp[machine_frame_def, machine_frame_view_lock, machine_frame_primitives]
 QED
 
 Theorem machine_frame_switch_BoolV:

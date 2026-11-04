@@ -97,7 +97,7 @@ val extcall_boundary_simps =
    lift_sum_runtime_def, get_accounts_def];
 
 Theorem ExtCall_decode_errors_are_runtime:
-  st.outcomes = SOME os /\
+  ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
   take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
@@ -111,7 +111,7 @@ QED
 
 (* Failure propagates the actual bytes and does not adopt the outcome. *)
 Theorem ExtCall_revert_preserves_payload:
-  st.outcomes = SOME os /\
+  ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
   take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
@@ -125,7 +125,7 @@ QED
 (* Defaults are already evaluated operands, not expressions to run after
    adoption. Empty return data selects that captured value at the adopted state. *)
 Theorem ExtCall_default_selected_after_adoption:
-  st.outcomes = SOME os /\
+  ~cx.txn.is_static /\ st.outcomes = SOME os /\
   dest_AddressV target_v = SOME target /\ dest_NumV amount_v = SOME amount /\
   build_ext_calldata (get_tenv cx) func_name [] [] = SOME data /\
   take_call_outcome target data (SOME amount) st = (INL (rq,outcome),st1) /\
