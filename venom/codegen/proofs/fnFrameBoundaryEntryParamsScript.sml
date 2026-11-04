@@ -1276,3 +1276,20 @@ Proof
   gvs[context_venom_asm_rel_def, venom_asm_rel_def,
       plan_stack_rel_def, plan_spill_rel_def, operand_val_def]
 QED
+
+Theorem entry_local_footprint_outside_closure:
+  memory_rel alloc m0 m1 /\
+  MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+  r.sr_spill_base <= alloc.sa_spill_base /\
+  alloc.sa_next_offset <= r.sr_spill_end /\
+  ~closure_spill_byte ctx cplan name b ==>
+  read_byte b m1 = read_byte b m0
+Proof
+  strip_tac >>
+  `~(alloc.sa_spill_base <= b /\ b < alloc.sa_next_offset)` by
+    (strip_tac >>
+     qpat_x_assum `~closure_spill_byte _ _ _ _` mp_tac >>
+     simp[closure_spill_byte_def, fcgDefsTheory.fcg_path_def] >>
+     qexists `r` >> simp[relationTheory.RTC_REFL]) >>
+  gvs[memory_rel_def]
+QED
