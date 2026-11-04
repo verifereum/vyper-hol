@@ -13796,3 +13796,21 @@ Proof
        simp[comp_return_labels, compile_alloc_buffer_labels, emit_void_labels,
             emit_op_labels, emit_inst_labels, fresh_var_action_labels])
 QED
+
+Theorem as_stack_val_labels:
+  !ty p s P.
+    cs_extends s (SND p) /\ EVERY P (added_labels s (SND p)) ==>
+    cs_extends s (SND (as_stack_val ty p)) /\
+    EVERY P (added_labels s (SND (as_stack_val ty p)))
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[as_stack_val_def]
+QED
+
+Theorem as_ptr_val_labels:
+  !ty loc p s P.
+    cs_extends s (SND p) /\ EVERY P (added_labels s (SND p)) ==>
+    cs_extends s (SND (as_ptr_val ty loc p)) /\
+    EVERY P (added_labels s (SND (as_ptr_val ty loc p)))
+Proof
+  rpt gen_tac >> Cases_on `p` >> simp[as_ptr_val_def]
+QED
