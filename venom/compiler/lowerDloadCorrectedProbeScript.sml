@@ -3,7 +3,8 @@ Theory lowerDloadCorrectedProbe
 Ancestors
   lowerDloadProgramProbe o1PassContract lowerDloadDefs venomInst
   venomFnScheduleRunner fcgDefs unitShapeDefs venomState unitTransformDefs
-  finite_map vfmState ptrDiscipline contextCodegenRel venomExecSemantics
+  finite_map vfmState ptrDiscipline contextCodegenRel venomExecSemantics venomMemProps valueEncodingProofs
+  lowerDloadResetProbe venomCallOracleDefs extCallOracle codegenRel
 
 val _ = temp_overload_on ("corrected_helper",
   ``mk_raw_function "f" [<|bb_label := "f"; bb_instructions := [
@@ -226,4 +227,238 @@ val _ = temp_overload_on ("corrected_c1",
 val _ = temp_overload_on ("corrected_t2",
   ``step_taint (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1
       corrected_hs corrected_t1``);
+
+
+Theorem probe_frame_return[local]:
+  frame_reachable vs0 ctx
+    (<|cf_fn := caller; cf_inst := cin; cf_state := cs; cf_params := CPG;
+       cf_prov := CG; cf_tvar := CT|> :: stk) PG G tn fn ri s /\
+  active_inst fn ri s /\ step_inst fuel ctx ri s = IntRet ret se /\
+  bind_outputs cin.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state cs se)) = SOME sr /\
+  active_inst caller ni (sr with vs_inst_idx := SUC cs.vs_inst_idx) ==>
+  frame_reachable vs0 ctx stk CPG
+    (DRESTRICT CG (COMPL (set cin.inst_outputs)))
+    (tn with t_var := DRESTRICT CT (COMPL (set cin.inst_outputs)))
+    caller ni (sr with vs_inst_idx := SUC cs.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  drule frame_reachable_ret >> simp[] >> disch_then irule >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem corrected_caller_dload_reachable:
+  frame_reachable corrected_vs corrected_context [] []
+    (DRESTRICT FEMPTY (COMPL (set (mk_inst 3 INVOKE [Label "f"] []).inst_outputs)))
+    (corrected_t2 with t_var := DRESTRICT entry_taint.t_var
+      (COMPL (set (mk_inst 3 INVOKE [Label "f"] []).inst_outputs)))
+    corrected_entry (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_c1
+Proof
+  assume_tac corrected_helper_ret_reachable >>
+  drule probe_frame_return >>
+  simp[corrected_helper_ret, bind_outputs_def, adopt_return_fmp_def, mk_inst_def] >>
+  disch_then irule >>
+  simp[active_inst_def, mk_raw_function_def, init_venom_state_def,
+       merge_callee_state_def, mstore_def, update_var_def, mk_inst_def]
+QED
+
+Theorem corrected_return_projections:
+  corrected_c1.vs_alloca_next = 0 /\ corrected_c1.vs_allocas = FEMPTY /\
+  mload 0 corrected_c1 = 1w
+Proof
+  conj_tac >- simp[merge_callee_state_def, init_venom_state_def] >>
+  conj_tac >- simp[merge_callee_state_def, init_venom_state_def] >>
+  `mload 0 corrected_c1 = mload 0 corrected_hs` by
+    simp[mload_def, merge_callee_state_def] >>
+  simp[mload_mstore_same]
+QED
+
+val _ = temp_overload_on ("corrected_cd", ``update_var "d" 0w corrected_c1``);
+val _ = temp_overload_on ("corrected_c2",
+  ``corrected_cd with vs_inst_idx := SUC corrected_c1.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_ct",
+  ``corrected_t2 with t_var := DRESTRICT entry_taint.t_var
+      (COMPL (set (mk_inst 3 INVOKE [Label "f"] []).inst_outputs))``);
+val _ = temp_overload_on ("corrected_CG",
+  ``DRESTRICT FEMPTY (COMPL (set (mk_inst 3 INVOKE [Label "f"] []).inst_outputs))``);
+
+Theorem corrected_caller_dload:
+  !fuel. step_inst fuel corrected_context (mk_inst 4 DLOAD [Lit 0w] ["d"])
+    corrected_c1 = OK corrected_cd
+Proof
+  `corrected_c1.vs_data_section = []` by
+    simp[merge_callee_state_def, init_venom_state_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ st` >>
+  `st.vs_data_section = []` by simp[Abbr `st`] >>
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def] >>
+  simp[listTheory.TAKE_LENGTH_TOO_LONG, word_of_bytes_replicate_zero]
+QED
+
+Theorem corrected_caller_alloca_reachable:
+  frame_reachable corrected_vs corrected_context [] []
+    (step_prov [] corrected_CG (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_cd)
+    (step_taint (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_c1 corrected_cd corrected_ct)
+    corrected_entry (mk_inst 5 ALLOCA [Lit 32w] ["q"]) corrected_c2
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_caller_dload_reachable, corrected_caller_dload, mk_inst_def,
+       is_terminator_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+val _ = temp_overload_on ("corrected_cqa",
+  ``update_var "q" 0w (corrected_c2 with
+    <|vs_allocas := FEMPTY |+ (5,(0,32)); vs_alloca_next := 32|>)``);
+val _ = temp_overload_on ("corrected_c3",
+  ``corrected_cqa with vs_inst_idx := SUC corrected_c2.vs_inst_idx``);
+
+Theorem corrected_caller_alloca:
+  !fuel. step_inst fuel corrected_context (mk_inst 5 ALLOCA [Lit 32w] ["q"])
+    corrected_c2 = OK corrected_cqa
+Proof
+  `corrected_c2.vs_allocas = FEMPTY /\ corrected_c2.vs_alloca_next = 0` by
+    simp[merge_callee_state_def, init_venom_state_def, update_var_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ st` >>
+  `st.vs_allocas = FEMPTY /\ st.vs_alloca_next = 0` by simp[Abbr `st`] >>
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  simp[exec_alloca_def, wordsTheory.dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+val _ = temp_overload_on ("corrected_CG2",
+  ``step_prov [] corrected_CG (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_cd``);
+val _ = temp_overload_on ("corrected_ct2",
+  ``step_taint (mk_inst 4 DLOAD [Lit 0w] ["d"]) corrected_c1 corrected_cd corrected_ct``);
+
+Theorem corrected_caller_mload_reachable:
+  frame_reachable corrected_vs corrected_context [] []
+    (step_prov [] corrected_CG2 (mk_inst 5 ALLOCA [Lit 32w] ["q"]) corrected_cqa)
+    (step_taint (mk_inst 5 ALLOCA [Lit 32w] ["q"]) corrected_c2 corrected_cqa corrected_ct2)
+    corrected_entry (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_c3
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_caller_alloca_reachable, corrected_caller_alloca, mk_inst_def,
+       is_terminator_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+Theorem corrected_q_memory:
+  lookup_var "q" corrected_c3 = SOME 0w /\ mload 0 corrected_c3 = 1w
+Proof
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `mload 0 corrected_c3 = mload 0 corrected_c1` by simp[mload_def, update_var_def] >>
+  simp[corrected_return_projections]
+QED
+
+val _ = temp_overload_on ("corrected_cv", ``update_var "v" 1w corrected_c3``);
+val _ = temp_overload_on ("corrected_c4",
+  ``corrected_cv with vs_inst_idx := SUC corrected_c3.vs_inst_idx``);
+
+Theorem corrected_caller_mload:
+  !fuel. step_inst fuel corrected_context (mk_inst 6 MLOAD [Var "q"] ["v"])
+    corrected_c3 = OK corrected_cv
+Proof
+  mp_tac corrected_q_memory >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ st` >>
+  `lookup_var "q" st = SOME 0w /\ mload 0 st = 1w` by simp[Abbr `st`] >>
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def]
+QED
+
+val _ = temp_overload_on ("corrected_CG3",
+  ``step_prov [] corrected_CG2 (mk_inst 5 ALLOCA [Lit 32w] ["q"]) corrected_cqa``);
+val _ = temp_overload_on ("corrected_ct3",
+  ``step_taint (mk_inst 5 ALLOCA [Lit 32w] ["q"]) corrected_c2 corrected_cqa corrected_ct2``);
+
+Theorem corrected_caller_sstore_reachable:
+  frame_reachable corrected_vs corrected_context [] []
+    (step_prov [] corrected_CG3 (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_cv)
+    (step_taint (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_c3 corrected_cv corrected_ct3)
+    corrected_entry (mk_inst 7 SSTORE [Lit 0w; Var "v"] []) corrected_c4
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_caller_mload_reachable, corrected_caller_mload, mk_inst_def,
+       is_terminator_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+val _ = temp_overload_on ("corrected_cs", ``sstore 0w 1w corrected_c4``);
+val _ = temp_overload_on ("corrected_c5",
+  ``corrected_cs with vs_inst_idx := SUC corrected_c4.vs_inst_idx``);
+
+Theorem corrected_caller_sstore:
+  !fuel. step_inst fuel corrected_context (mk_inst 7 SSTORE [Lit 0w; Var "v"] [])
+    corrected_c4 = OK corrected_cs
+Proof
+  `lookup_var "v" corrected_c4 = SOME 1w` by
+    simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ st` >>
+  `lookup_var "v" st = SOME 1w` by simp[Abbr `st`] >>
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def]
+QED
+
+val _ = temp_overload_on ("corrected_CG4",
+  ``step_prov [] corrected_CG3 (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_cv``);
+val _ = temp_overload_on ("corrected_ct4",
+  ``step_taint (mk_inst 6 MLOAD [Var "q"] ["v"]) corrected_c3 corrected_cv corrected_ct3``);
+
+Theorem corrected_caller_call_reachable:
+  frame_reachable corrected_vs corrected_context [] []
+    (step_prov [] corrected_CG4 (mk_inst 7 SSTORE [Lit 0w; Var "v"] []) corrected_cs)
+    (step_taint (mk_inst 7 SSTORE [Lit 0w; Var "v"] []) corrected_c4 corrected_cs corrected_ct4)
+    corrected_entry
+    (mk_inst 8 CALL [Lit 0w; Lit 256w; Lit 0w; Lit 0w; Lit 0w; Lit 0w; Lit 0w] ["ok"])
+    corrected_c5
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_caller_sstore_reachable, corrected_caller_sstore, mk_inst_def,
+       is_terminator_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >> EVAL_TAC >> simp[]
+QED
+
+val _ = temp_overload_on ("corrected_outcome",
+  ``<|co_success := T; co_returnData := []; co_accounts := K empty_account_state;
+      co_tStorage := K (K (0w:bytes32)); co_logs := []; co_toDelete := []|>``);
+val _ = temp_overload_on ("corrected_call_inst",
+  ``mk_inst 8 CALL [Lit 0w; Lit 256w; Lit 0w; Lit 0w; Lit 0w; Lit 0w; Lit 0w] ["ok"]``);
+val _ = temp_overload_on ("corrected_call_post",
+  ``update_var "ok" 1w (SND (consume_call_outcome
+      (venom_call_request corrected_c5 256w 0w 0w 0w F) 0 0 corrected_c5))``);
+
+Theorem corrected_before_call:
+  ~corrected_c5.vs_call_ctx.cc_static /\
+  corrected_c5.vs_outcomes = [corrected_outcome] /\
+  sload 0w corrected_c5 = 1w
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem corrected_call_step:
+  !fuel. step_inst fuel corrected_context corrected_call_inst corrected_c5 = OK corrected_call_post
+Proof
+  mp_tac corrected_before_call >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ st` >>
+  `~st.vs_call_ctx.cc_static /\ st.vs_outcomes = [corrected_outcome]` by simp[Abbr `st`] >>
+  gen_tac >>
+  simp[Once step_inst_def, step_inst_base_def, mk_inst_def,
+       eval_operand_def, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
+  simp[consume_call_outcome_def, reset_probe_ordinary, take_outcome_def,
+       adopt_outcome_def, venom_call_request_def]
+QED
+
+Theorem corrected_caller_new_site:
+  new_site_bytes corrected_c2 corrected_cqa = {i | i < 32}
+Proof
+  `corrected_c2.vs_allocas = FEMPTY /\ corrected_c2.vs_fmp = 0w /\
+   corrected_cqa.vs_allocas = FEMPTY |+ (5,(0,32)) /\ corrected_cqa.vs_fmp = 0w` by
+    (rpt conj_tac >> EVAL_TAC) >>
+  qmatch_goalsub_abbrev_tac `new_site_bytes s t` >>
+  `s.vs_allocas = FEMPTY /\ s.vs_fmp = 0w /\
+   t.vs_allocas = FEMPTY |+ (5,(0,32)) /\ t.vs_fmp = 0w` by simp[Abbr `s`, Abbr `t`] >>
+  simp[new_site_bytes_def, FLOOKUP_UPDATE, pred_setTheory.EXTENSION] >>
+  metis_tac[]
+QED
 
