@@ -18,3 +18,9 @@ Theorem dse_equiv_halt_state:
 Proof
   simp[dse_equiv_def, halt_state_def, lookup_var_def]
 QED
+
+Theorem dse_equiv_revert_state:
+  dse_equiv sp s t ==> dse_equiv sp (revert_state s) (revert_state t)
+Proof
+  simp[dse_equiv_def, revert_state_def, lookup_var_def]
+QED
