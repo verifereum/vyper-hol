@@ -248,6 +248,54 @@ Proof
   rename1 `SOME loc` >> Cases_on `loc` >> simp[compiler_block_tail_primitives]
 QED
 
+Theorem compiler_block_tail_range_source_rounds:
+  compiler_block_tail
+    (case (start_e,end_e) of
+       (Literal _ (IntL a),Literal _ (IntL b)) => comp_return (Lit (i2w b - i2w a))
+     | _ => emit_op SUB [end_op;start_op])
+Proof
+  Cases_on `start_e` >> Cases_on `end_e` >>
+  simp[compiler_block_tail_primitives] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_block_tail_range_source_checks:
+  compiler_block_tail
+    (case (start_e,end_e) of
+       (Literal _ (IntL a),Literal _ (IntL b)) => comp_return ()
+     | _ => compile_range_bound_checks start_op end_op rounds bound signed)
+Proof
+  Cases_on `start_e` >> Cases_on `end_e` >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_range_bound_checks] >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  simp[compiler_block_tail_primitives, compiler_block_tail_range_bound_checks]
+QED
+
+Theorem compiler_label_hoare_range_source_rounds:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (case (start_e,end_e) of
+       (Literal _ (IntL a),Literal _ (IntL b)) => comp_return (Lit (i2w b - i2w a))
+     | _ => emit_op SUB [end_op;start_op])
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `start_e` >> Cases_on `end_e` >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_context_primitives] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_context_primitives]
+QED
+
+Theorem compiler_label_hoare_range_source_checks:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (case (start_e,end_e) of
+       (Literal _ (IntL a),Literal _ (IntL b)) => comp_return ()
+     | _ => compile_range_bound_checks start_op end_op rounds bound signed)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `start_e` >> Cases_on `end_e` >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_range_bound_checks] >>
+  rpt BasicProvers.TOP_CASE_TAC >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_range_bound_checks]
+QED
+
 Theorem compiler_block_tail_stmt_range:
   compiler_block_tail (lower_value compile_expr ce fty start_e) /\
   compiler_block_tail (lower_value compile_expr ce fty end_e) /\
@@ -257,7 +305,7 @@ Proof
   strip_tac >> rewrite_tac[compile_stmt_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
   rpt (irule compiler_block_tail_bind >> reverse conj_tac
        >- simp[compiler_block_tail_primitives, compiler_block_tail_declare_local,
-               compiler_block_tail_emit_local_alloca, compiler_block_tail_range_operands,
+               compiler_block_tail_emit_local_alloca, compiler_block_tail_range_source_rounds, compiler_block_tail_range_source_checks,
                compiler_block_tail_range_store, compiler_block_tail_jmp_if_not_terminated] >>
        gen_tac >> BETA_TAC) >>
   simp[compiler_block_tail_primitives]
@@ -276,7 +324,7 @@ Proof
   irule compiler_block_tail_declare_local_bind >> gen_tac >> strip_tac >> BETA_TAC >>
   rpt (irule compiler_block_tail_bind >> reverse conj_tac
        >- simp[compiler_block_tail_primitives, compiler_block_tail_emit_local_alloca,
-               compiler_block_tail_range_operands, compiler_block_tail_range_store,
+               compiler_block_tail_range_source_rounds, compiler_block_tail_range_source_checks, compiler_block_tail_range_store,
                compiler_block_tail_jmp_if_not_terminated] >> gen_tac >> BETA_TAC) >>
   simp[compiler_block_tail_primitives]
 QED
@@ -345,7 +393,7 @@ Proof
        >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
   irule compiler_label_hoare_new_block_bind >> simp[] >> rpt gen_tac >> BETA_TAC >>
   rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
-       >- simp[compiler_label_hoare_context_primitives, SRULE [] compiler_label_hoare_range_operands] >>
+       >- simp[compiler_label_hoare_context_primitives, SRULE [] compiler_label_hoare_range_source_rounds, SRULE [] compiler_label_hoare_range_source_checks] >>
        gen_tac >> BETA_TAC) >>
   irule compiler_label_hoare_new_block_bind >> simp[] >> rpt gen_tac >> BETA_TAC >>
   rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
@@ -386,6 +434,37 @@ Proof
   simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_iter_elem_copy]
 QED
 
+Theorem compiler_block_tail_guarded_assert:
+  compiler_block_tail
+    (if b then
+       do invalid <- emit_op GT [len; cap];
+          valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od
+     else return ())
+Proof
+  Cases_on `b` >> simp[compiler_block_tail_primitives] >>
+  rewrite_tac[comp_ignore_bind_def] >>
+  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives] >>
+  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_guarded_assert:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (if b then
+       do invalid <- emit_op GT [len; cap];
+          valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od
+     else return ())
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `b`
+  >- (rewrite_tac[comp_ignore_bind_def] >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
+  simp[compiler_label_hoare_def, comp_return_def]
+QED
+
 Theorem compiler_block_tail_iter_bound:
   compiler_block_tail
     (if dyn /\ bound > 0 then
@@ -393,11 +472,7 @@ Theorem compiler_block_tail_iter_bound:
           valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od
      else return ())
 Proof
-  IF_CASES_TAC >> simp[compiler_block_tail_primitives] >>
-  rewrite_tac[comp_ignore_bind_def] >>
-  irule compiler_block_tail_bind >> simp[compiler_block_tail_primitives] >>
-  gen_tac >> BETA_TAC >> irule compiler_block_tail_bind >>
-  simp[compiler_block_tail_primitives]
+  irule compiler_block_tail_guarded_assert
 QED
 
 Theorem compiler_label_hoare_iter_bound:
@@ -408,13 +483,7 @@ Theorem compiler_label_hoare_iter_bound:
      else return ())
     (\r out. compiler_label_reservation origin pending out)
 Proof
-  IF_CASES_TAC
-  >- (rewrite_tac[comp_ignore_bind_def] >>
-      irule compiler_label_hoare_preserving_bind >>
-      simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC >>
-      irule compiler_label_hoare_preserving_bind >>
-      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]) >>
-  simp[compiler_label_hoare_def, comp_return_def]
+  irule compiler_label_hoare_guarded_assert
 QED
 
 Theorem compiler_block_tail_stmt_array:
@@ -432,7 +501,8 @@ Proof
   irule compiler_block_tail_declare_local_bind >> gen_tac >> strip_tac >> BETA_TAC >>
   rpt (irule compiler_block_tail_bind >> reverse conj_tac
        >- simp[compiler_block_tail_primitives, compiler_block_tail_emit_local_alloca,
-               compiler_block_tail_iter_bound, compiler_block_tail_iter_store,
+               SRULE[comp_ignore_bind_def] compiler_block_tail_guarded_assert,
+               compiler_block_tail_iter_store,
                compiler_block_tail_jmp_if_not_terminated, compiler_block_tail_cond] >>
        gen_tac >> BETA_TAC) >>
   simp[compiler_block_tail_primitives]
@@ -487,7 +557,9 @@ Proof
        >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
   irule compiler_label_hoare_new_block_bind >> simp[] >> rpt gen_tac >> BETA_TAC >>
   rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
-       >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+       >- simp[compiler_label_hoare_context_primitives,
+               SRULE[comp_ignore_bind_def] compiler_label_hoare_guarded_assert] >>
+       gen_tac >> BETA_TAC) >>
   irule compiler_label_hoare_new_block_bind >> simp[] >> rpt gen_tac >> BETA_TAC >>
   rpt (irule compiler_label_hoare_preserving_bind >> reverse conj_tac
        >- simp[compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
