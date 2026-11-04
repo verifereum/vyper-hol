@@ -123,11 +123,12 @@ Proof
   simp[get_instruction_def, dft_gas_edit_block_def, EL_APPEND_EQN]
 QED
 
-Theorem dft_recursive_crossing_certificate:
+Theorem dft_recursive_crossing_certificate_witness:
   dft_recursive_crossing_ready f b q pre x call post s /\
   step_inst_base x s = OK t ==>
   ?us cert.
-    t = dft_pending_apply us s /\
+    (?done. cert = dft_forward_certificate f fn b q pre done x call post s t us) /\
+    t = dft_pending_apply us s /\ 
     EVERY (\p. MEM (FST p) x.inst_outputs) us /\
     dft_certificate_annotation (SOME cert) = DftPending us [] /\
     dft_provenanced_frame (dft_gas_edit_fn q pre x call post)
@@ -156,6 +157,22 @@ Proof
          APPEND_ASSOC] >>
      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> REFL_TAC) >>
   fs[EVERY_MEM, dft_recursive_crossing_ready_def] >> metis_tac[]
+QED
+
+Theorem dft_recursive_crossing_certificate:
+  dft_recursive_crossing_ready f b q pre x call post s /\
+  step_inst_base x s = OK t ==>
+  ?us cert.
+    t = dft_pending_apply us s /\
+    EVERY (\p. MEM (FST p) x.inst_outputs) us /\
+    dft_certificate_annotation (SOME cert) = DftPending us [] /\
+    dft_provenanced_frame (dft_gas_edit_fn q pre x call post)
+      (dft_gas_edit_block q pre x call post) (SOME cert)
+      (DftCaller fn 0 q call (t with vs_inst_idx := SUC s.vs_inst_idx))
+      (DftCaller (dft_gas_edit_fn q pre x call post fn) 0
+        (dft_gas_edit_block q pre x call post q) call s)
+Proof
+  strip_tac >> drule_all dft_recursive_crossing_certificate_witness >> metis_tac[]
 QED
 
 Definition dft_recursive_pre_phase_def:
@@ -195,7 +212,7 @@ Proof
   fs[EVERY_MEM] >> metis_tac[MEM]
 QED
 
-Theorem dft_recursive_crossing_enter:
+Theorem dft_recursive_crossing_enter_exact:
   dft_recursive_pre_phase f b q pre x call post certs fn s c d /\
   step_inst_base x s = OK t /\
   decode_invoke call = SOME (nm,ops) /\
@@ -203,6 +220,18 @@ Theorem dft_recursive_crossing_enter:
   eval_operands ops (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME args /\
   setup_callee callee args (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME cs ==>
   ?cert.
+    (?done us. cert = dft_forward_certificate f fn b q pre done x call post s t us) /\
+    (!ls rs nL nR.
+      c.dft_occ_core = DftOpen (DftAt fn 0 q s) ls nL /\
+      d.dft_occ_core = DftOpen (DftAt (dft_gas_edit_fn q pre x call post fn) 0
+        (dft_gas_edit_block q pre x call post q) s) rs nR ==>
+      (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_core =
+        DftOpen (DftEnter callee 0 cs)
+          (DftCaller fn 0 q call (t with vs_inst_idx := SUC s.vs_inst_idx)::ls) nL /\
+      (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_core =
+        DftOpen (DftEnter (dft_gas_edit_fn q pre x call post callee) 0 cs)
+          (DftCaller (dft_gas_edit_fn q pre x call post fn) 0
+            (dft_gas_edit_block q pre x call post q) call s::rs) nR) /\
     dft_recursive_enter_phase (dft_gas_edit_fn q pre x call post)
       (dft_gas_edit_block q pre x call post) (SOME cert::certs)
       (FUNPOW (dft_occ_oracle_next w C) 2 c)
@@ -222,7 +251,7 @@ Theorem dft_recursive_crossing_enter:
       dft_occ_count d
 Proof
   strip_tac >> fs[dft_recursive_pre_phase_def] >>
-  drule_all dft_recursive_crossing_certificate >>
+  drule_all dft_recursive_crossing_certificate_witness >>
   disch_then (qspec_then `fn` strip_assume_tac) >>
   drule dft_recursive_frames_ready >> strip_tac >>
   drule dft_recursive_crossing_positions >> strip_tac >>
@@ -266,8 +295,69 @@ Proof
     (fs[dft_recursive_crossing_ready_def] >> metis_tac[]) >>
   drule_all dft_provenanced_pending_push >>
   disch_then (qspec_then `w` strip_assume_tac) >>
+  drule_all dftInvokeOrdinaryBoundaryTheory.dft_pending_two_context_push_fields >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
   qexists `cert` >>
   simp[FUNPOW_2, dft_occ_count_def] >>
   simp[dft_recursive_enter_phase_def] >>
   metis_tac[]
+QED
+
+Theorem dft_recursive_crossing_enter_witness:
+  dft_recursive_pre_phase f b q pre x call post certs fn s c d /\
+  step_inst_base x s = OK t /\
+  decode_invoke call = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME args /\
+  setup_callee callee args (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME cs ==>
+  ?cert.
+    (?done us. cert = dft_forward_certificate f fn b q pre done x call post s t us) /\
+    dft_recursive_enter_phase (dft_gas_edit_fn q pre x call post)
+      (dft_gas_edit_block q pre x call post) (SOME cert::certs)
+      (FUNPOW (dft_occ_oracle_next w C) 2 c)
+      (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d) /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_path =
+      c.dft_occ_path ++ [(c.dft_occ_visit,call.inst_id)] /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_path =
+      c.dft_occ_path ++ [(c.dft_occ_visit,call.inst_id)] /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_visit = 0 /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_visit = 0 /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_saved =
+      (c.dft_occ_path,c.dft_occ_visit)::c.dft_occ_saved /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_saved =
+      (c.dft_occ_path,c.dft_occ_visit)::c.dft_occ_saved /\
+    dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 c) = dft_occ_count c /\
+    dft_occ_count (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d) =
+      dft_occ_count d
+Proof
+  strip_tac >> drule_all dft_recursive_crossing_enter_exact >> metis_tac[]
+QED
+
+Theorem dft_recursive_crossing_enter:
+  dft_recursive_pre_phase f b q pre x call post certs fn s c d /\
+  step_inst_base x s = OK t /\
+  decode_invoke call = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME args /\
+  setup_callee callee args (t with vs_inst_idx := SUC s.vs_inst_idx) = SOME cs ==>
+  ?cert.
+    dft_recursive_enter_phase (dft_gas_edit_fn q pre x call post)
+      (dft_gas_edit_block q pre x call post) (SOME cert::certs)
+      (FUNPOW (dft_occ_oracle_next w C) 2 c)
+      (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d) /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_path =
+      c.dft_occ_path ++ [(c.dft_occ_visit,call.inst_id)] /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_path =
+      c.dft_occ_path ++ [(c.dft_occ_visit,call.inst_id)] /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_visit = 0 /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_visit = 0 /\
+    (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_saved =
+      (c.dft_occ_path,c.dft_occ_visit)::c.dft_occ_saved /\
+    (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d).dft_occ_saved =
+      (c.dft_occ_path,c.dft_occ_visit)::c.dft_occ_saved /\
+    dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 c) = dft_occ_count c /\
+    dft_occ_count (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C) d) =
+      dft_occ_count d
+Proof
+  strip_tac >> drule_all dft_recursive_crossing_enter_witness >> metis_tac[]
 QED
