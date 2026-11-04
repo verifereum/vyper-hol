@@ -182,3 +182,54 @@ Proof
     metis_tac[ssa_form_position, listTheory.MEM_EL] >>
   gvs[]
 QED
+
+Theorem analyzed_live_backward_no_kill_path:
+  !tail fn d head_bb end_bb v.
+    wf_function fn /\ is_fn_path fn (d::tail) /\
+    EVERY (\lbl. cfg_reachable_of (cfg_analyze fn) lbl /\
+      MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+      ?bb. lookup_block lbl fn.fn_blocks = SOME bb) (d::tail) /\
+    EVERY (\lbl. !bb. lookup_block lbl fn.fn_blocks = SOME bb ==>
+      phi_block_ready (liveness_analyze fn) bb /\
+      EVERY (\inst. ~MEM v (inst_defs inst)) bb.bb_instructions) tail /\
+    lookup_block d fn.fn_blocks = SOME head_bb /\
+    lookup_block (LAST (d::tail)) fn.fn_blocks = SOME end_bb /\
+    MEM v (live_vars_at (liveness_analyze fn) (LAST (d::tail))
+      (LENGTH end_bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) d (LENGTH head_bb.bb_instructions))
+Proof
+  Induct_on `tail` >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  gvs[listTheory.EVERY_DEF] >>
+  `fn_cfg_edge fn d h /\ is_fn_path fn (h::tail)` by
+    gvs[venomWfTheory.is_fn_path_def] >>
+  `MEM v (live_vars_at (liveness_analyze fn) h (LENGTH bb.bb_instructions))` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `bb.bb_label = h` by metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `MEM h (cfg_succs_of (cfg_analyze fn) d)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >>
+  irule analyzed_ready_live_through_edge >> simp[] >>
+  qexists_tac `bb` >> simp[]
+QED
+
+Theorem analyzed_live_out_to_post_phis:
+  !fn d bb v.
+    wf_function fn /\ MEM d (cfg_analyze fn).cfg_dfs_pre /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    (!k. LENGTH (collect_phis bb.bb_instructions) <= k /\
+         k < LENGTH bb.bb_instructions ==>
+         ~MEM v (inst_defs (EL k bb.bb_instructions))) /\
+    MEM v (live_vars_at (liveness_analyze fn) d (LENGTH bb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) d
+      (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
+    (qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+     qpat_assum `bb.bb_instructions = _`
+       (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  disch_then (qspecl_then [`d`, `bb`] mp_tac) >>
+  simp[] >> disch_then irule >> simp[] >>
+  qexists_tac `LENGTH bb.bb_instructions` >> simp[]
+QED
