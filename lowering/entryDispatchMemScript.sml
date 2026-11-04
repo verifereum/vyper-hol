@@ -4,7 +4,7 @@ Ancestors
   memSafeRun venomExecSemantics venomExecProofs venomState venomInst
   instMemFrontier fragExecMem list moduleLoweringProps emitHelperProps
   compileEnv moduleLowering stateEquiv finite_map fragExec exprLoweringProps
-  emitHelper rich_list
+  emitHelper rich_list freshWrites
 
 Theorem mem_safe_run_terminator_intro[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -261,3 +261,101 @@ Proof
   qpat_x_assum `ss.vs_inst_idx = 0` (fn th =>
     simp[GSYM th, venom_state_component_equality])
 QED
+
+Theorem compile_selector_checks_mem_safe[local]:
+  !sels mid st st' fn ss m ctx.
+  compile_selector_checks mid sels st = ((), st') /\
+  fn_has_code st st' fn /\ eval_operand mid ss = SOME m /\
+  fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+  ss.vs_current_bb = st.cs_current_bb /\
+  ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (!t. vars_pc_only ss t /\ fresh_vars_wrt st' t /\
+       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x ss) /\
+       eval_operand mid t = SOME m /\ ~t.vs_halted ==>
+       case selector_hit m sels of
+         SOME lbl => (t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 ==>
+                       !n. mem_safe_blocks n ctx fn t)
+       | NONE => (t.vs_current_bb = st'.cs_current_bb /\
+                  t.vs_inst_idx = LENGTH st'.cs_current_insts ==>
+                  ((!n. mem_safe_run n ctx fn t) /\
+                   (st'.cs_current_insts = [] ==>
+                      !n. mem_safe_blocks n ctx fn t)))) ==>
+  (!n. mem_safe_run n ctx fn ss) /\
+  (st.cs_current_insts = [] ==> !n. mem_safe_blocks n ctx fn ss)
+Proof
+  Induct
+  >- (simp[compile_selector_checks_def, comp_return_def, selector_hit_def] >>
+      rpt strip_tac >> first_x_assum (qspec_then `ss` mp_tac) >>
+      simp[vars_pc_only_refl]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  `(!n. mem_safe_run n ctx fn ss)` suffices_by
+    (strip_tac >> simp[] >> strip_tac >>
+     `ss.vs_inst_idx = 0` by simp[] >>
+     drule_all selector_checks_entry_safe >> simp[]) >>
+  qpat_x_assum `compile_selector_checks _ _ _ = _` mp_tac >>
+  simp[Once compile_selector_checks_def, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `new_block next s6 = (_, s7)` >>
+  rename1 `emit_inst JMP _ _ s5 = (_, s6)` >>
+  rename1 `new_block yes s4 = (_, s5)` >>
+  rename1 `emit_inst JNZ _ _ s3 = (_, s4)` >>
+  rename1 `fresh_label "next" s2 = (_, s3)` >>
+  rename1 `fresh_label "match" s1 = (_, s2)` >>
+  rename1 `emit_op EQ _ st = (_, s1)` >>
+  rename1 `emit_inst JNZ _ _ s3 = (u, s4)` >> Cases_on `u` >>
+  rename1 `emit_inst JMP _ _ s5 = (u, s6)` >> Cases_on `u` >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  imp_res_tac (SRULE [cs_appends_def] (cj 1 cs_appends_emit_helpers)) >>
+  `cs_extends st s7` by
+    (irule cs_extends_trans >> qexists_tac `s1` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s2` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s3` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s4` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s5` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s6` >> simp[]) >>
+  `fn_has_code st s7 fn /\ fn_has_code s7 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule selector_clause_mem_safe >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (fn th => gen_tac >> irule th) >> asm_rewrite_tac [] >>
+  qexists_tac `m` >> asm_rewrite_tac [] >>
+  gen_tac >> strip_tac >>
+  suspend "clause_cont"
+QED
+
+Resume compile_selector_checks_mem_safe[clause_cont]:
+  Cases_on `m = n2w h0`
+  >- (qpat_x_assum `!t. vars_pc_only ss t /\ _ ==> _` (qspec_then `t` mp_tac) >>
+      `fresh_vars_wrt st' t` by
+        (irule fresh_vars_wrt_mono >> qexists_tac `s7` >>
+         asm_rewrite_tac [] >> drule compile_selector_checks_next_var >> simp[]) >>
+      asm_rewrite_tac [selector_hit_def, optionTheory.option_case_def] >>
+      BETA_TAC >> rewrite_tac []) >>
+  `s7.cs_current_insts = []` by
+    (drule new_block_props >> simp[]) >>
+  qpat_x_assum `!mid st st' fn ss m ctx. _` drule >>
+  disch_then (qspecl_then [`fn`, `t`, `m`, `ctx`] mp_tac) >>
+  asm_rewrite_tac [] >>
+  rewrite_tac [LENGTH] >> impl_tac
+  >- (gen_tac >> strip_tac >> suspend "miss_cont") >>
+  simp[]
+QED
+Resume compile_selector_checks_mem_safe[miss_cont]:
+  `vars_pc_only ss t'` by metis_tac[vars_pc_only_trans] >>
+  `!x. not_fresh_at st x ==> lookup_var x t' = lookup_var x ss` by
+    (rpt strip_tac >>
+     `not_fresh_at s7 x` by
+       (irule not_fresh_at_mono >> qexists_tac `st` >>
+        imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_inst_extends >>
+        imp_res_tac fresh_label_props >> imp_res_tac new_block_props >> simp[]) >>
+     metis_tac[]) >>
+  qpat_x_assum `!t. vars_pc_only ss t /\ _ ==> _` (qspec_then `t'` mp_tac) >>
+  asm_rewrite_tac [selector_hit_def] >> BETA_TAC >> simp[]
+QED
+Finalise compile_selector_checks_mem_safe
