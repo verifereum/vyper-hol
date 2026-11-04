@@ -453,3 +453,33 @@ This is successful entry/index/definedness transport ONLY. Pointer values,
 parallel provenance/taint, memory, allocation layouts and saved-frame
 relations remain separate central integration obligations. No full
 enters_block boundary-core transport has been proved.
+
+## Parallel PHI relational kernel (C1.12.4)
+
+Checked `dload_vars_match_phis` in PhiTheory with the exact planned kernel:
+equal predecessor and labels, initial dload_vars_match on tracked V,
+selected-input closure for tracked singleton outputs, and successful source
+and target eval_phis imply dload_vars_match after parallel phis_prov and
+phis_taint updates. Source and target selections read fixed pre-PHI inputs.
+The theorem does not require distinct outputs, SSA, or equal opaque values.
+`dload_matched_phi` supplies related selected values and equal taint masks;
+`dload_vars_match_write` handles paired singleton writes, including untracked
+outputs. Its explicit old taint-map arguments make record-update matching
+work directly at the tail-first PHI consumer.
+
+Selected-input closure remains an explicit premise: source provenance-domain
+support does NOT establish trackedness of scalar/opaque selected operands.
+For the eventual V excluding retpc variables, the static producer must rule
+out an opaque input flowing to a tracked PHI output (or show that output is
+opaque too). No such producer is certified by this checkpoint.
+
+By inspection, eval_phis changes only vs_vars (via update_var): memory,
+allocation maps/frontier, storage, transient storage, labels and control
+fields are unchanged. phis_prov changes the provenance map and phis_taint
+changes t_var only; other taint fields are retained by record update. These
+observations have NOT been promoted to a full boundary_core preservation
+proof. Actual transformed entry can use exact same-state PHI equality and
+E0060 success/definedness, but still needs tracked-input closure, paired
+control setup and assembly of untouched memory/frame fields. Calls/returns,
+allocation, external effects, forwarding and saved suffix transport remain
+unproved central obligations.
