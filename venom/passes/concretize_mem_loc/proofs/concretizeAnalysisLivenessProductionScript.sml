@@ -239,3 +239,65 @@ Proof
   simp[SRULE [] (Q.INST [`n` |-> `0:num`] (SPEC_ALL ml_used_record_bit_index))] >>
   simp[rich_listTheory.TAKE_SUC_BY_TAKE, rich_listTheory.SNOC_APPEND] >> metis_tac[]
 QED
+
+Theorem ml_production_liveat_cfg_edge:
+  wf_function fn /\ all_reachable fn /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bpr mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  MEM bb fn.fn_blocks /\
+  MEM l (cfg_succs_of (cfg_analyze fn) bb.bb_label) /\
+  MEM a (ml_lookup la (l,0)) ==>
+  MEM a (ml_lookup la (bb.bb_label,PRE (LENGTH bb.bb_instructions)))
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by
+    gvs[wf_function_def, EVERY_MEM, bb_well_formed_def] >>
+  `0 < LENGTH bb.bb_instructions` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `PRE (LENGTH bb.bb_instructions) < LENGTH bb.bb_instructions /\
+   SUC (PRE (LENGTH bb.bb_instructions)) = LENGTH bb.bb_instructions` by decide_tac >>
+  `DROP (LENGTH bb.bb_instructions)
+    (MAPi (\j (inst:instruction). (j,inst)) bb.bb_instructions) = []` by
+    metis_tac[listTheory.DROP_LENGTH_NIL, indexedListsTheory.LENGTH_MAPi] >>
+  drule_all ml_production_liveat_record >>
+  disch_then (qspec_then `a` (fn th => rewrite_tac[th])) >>
+  simp[SRULE [] (Q.INST [`n` |-> `0:num`] (SPEC_ALL ml_liveat_record_bit_index)),
+    ml_liveat_before_bit_def] >> metis_tac[]
+QED
+
+Theorem ml_production_used_pallocas:
+  wf_function fn /\ all_reachable fn /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bpr mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  MEM bb fn.fn_blocks /\ i < LENGTH bb.bb_instructions /\ MEM a pallocas ==>
+  MEM a (ml_lookup us (bb.bb_label,i))
+Proof
+  strip_tac >> drule_all ml_production_used_record >>
+  disch_then (qspec_then `a` (fn th => rewrite_tac[th])) >>
+  simp[SRULE [] (Q.INST [`n` |-> `0:num`] (SPEC_ALL ml_used_record_bit_index))]
+QED
+
+Theorem ml_production_used_cfg_edge:
+  wf_function fn /\ all_reachable fn /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bpr mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  MEM pred fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+  MEM pred.bb_label (cfg_preds_of (cfg_analyze fn) bb.bb_label) /\
+  MEM a (ml_lookup us (pred.bb_label,PRE (LENGTH pred.bb_instructions))) ==>
+  MEM a (ml_lookup us (bb.bb_label,0))
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by
+    gvs[wf_function_def, EVERY_MEM, bb_well_formed_def] >>
+  `0 < LENGTH bb.bb_instructions` by (Cases_on `bb.bb_instructions` >> gvs[]) >>
+  `FIND (\b. b.bb_label = pred.bb_label) fn.fn_blocks = SOME pred` by
+    (simp[GSYM venomInstTheory.lookup_block_def] >> irule MEM_lookup_block >>
+     gvs[wf_function_def, venomInstTheory.fn_labels_def]) >>
+  drule_all ml_production_used_record >>
+  disch_then (qspec_then `a` (fn th => rewrite_tac[th])) >>
+  simp[SRULE [] (Q.INST [`n` |-> `0:num`] (SPEC_ALL ml_used_record_bit_index))] >>
+  disj1_tac >> disj2_tac >> qexists_tac `pred.bb_label` >>
+  simp[ml_used_boundary_lookup_def]
+QED
