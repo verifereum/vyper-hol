@@ -4237,7 +4237,8 @@ Theorem probe_word_shrink_invoke_frame:
          (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
          (INL (Value (IntV 0)),es') /\ es'.scopes = es.scopes /\
          stmt_state_rel ctx func cenv probe_word_context es' t /\
-         wb_frame cenv es sa s t /\ lookup_var r t = SOME 0w /\
+         wb_frame cenv es sa s t /\ t.vs_allocas = s.vs_allocas /\
+         lookup_var r t = SOME 0w /\
          (!x. x <> r ==> lookup_var x t = lookup_var x s)) (\res. F)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -4418,4 +4419,135 @@ Proof
        mk_inst_def, is_terminator_def] >>
   pure_once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
   simp[rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def]
+QED
+
+Theorem probe_word_shrink_prefix:
+  !ctx func cenv env es sa sb s0 ty vv bufsz flags.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) /\
+    lookup_function
+      (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+         (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)
+      ctx.ctx_functions = SOME (probe_word_function with fn_name :=
+        internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+          (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor) /\
+    expr_body_pre cenv probe_word_context env
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es /\
+    compile_expr cenv ty
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa = (vv,sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv probe_word_context es s0 ==>
+    frag_exec ctx sa sb (\s. s = s0)
+      (\s. ?es'. eval_expr probe_word_context
+        (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+        (INL (Value (IntV 0)),es') /\
+        vv_post ctx func cenv probe_word_context
+          (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+          es sa sb s0 es' (Value (IntV 0)) vv s) (\res. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_word_shrink_alloca_member >> disch_then assume_tac >>
+  `MEM (mk_inst (sa.cs_next_id + 1) INVOKE
+      [Label (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+        (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)]
+      ["%" ++ toString (sa.cs_next_var + 1)]) (fn_insts func)` by
+    (drule probe_word_shrink_compile_expr >>
+     disch_then (qspecl_then [`sa`,`ty`] assume_tac) >> gvs[] >>
+     drule fn_has_code_same_block >> simp[] >> strip_tac >>
+     first_x_assum (qspec_then `1` mp_tac) >> simp[] >> strip_tac >>
+     irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+     gvs[get_instruction_def] >> metis_tac[listTheory.EL_MEM]) >>
+  drule_all probe_word_shrink_emit_layout >>
+  simp[LET_THM] >> strip_tac >>
+  fs[] >> drule_all (SRULE [] probe_word_shrink_alloca_frame) >>
+  disch_then (qspec_then `(\res. F)` assume_tac) >>
+  drule frag_exec_then >>
+  disch_then irule >>
+  reverse conj_tac >-
+    (conj_tac >- metis_tac[cs_extends_trans] >> simp[]) >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> gen_tac >> strip_tac >>
+  `local_ptrs_reserved cenv sA` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `STRING #"%" (toString (sa.cs_next_var + 1)) = "%" ++ toString sA.cs_next_var` by simp[] >>
+  `MEM (mk_inst sA.cs_next_id INVOKE
+      [Label (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+        (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)]
+      [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func)` by
+    (qpat_x_assum `STRING _ _ = STRCAT _ _` kall_tac >> simp[]) >>
+  drule_all probe_word_shrink_invoke_frame >> disch_then assume_tac >>
+  qpat_x_assum `frag_exec ctx sa sA _ _ _` kall_tac >>
+  drule frag_exec_then >> disch_then irule >>
+  reverse conj_tac >- metis_tac[cs_extends_trans] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> gen_tac >> strip_tac >>
+  qpat_x_assum `STRING _ _ = STRCAT _ _` kall_tac >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` kall_tac >>
+  `local_ptrs_rel func cenv es.scopes t` by
+    (fs[stmt_state_rel_def, state_rel_def]) >>
+  `!name off sz. local_region cenv es'.scopes t' name off sz ==>
+      regions_disjoint (w2n w) 32 off sz` by
+    (rpt strip_tac >>
+     `local_region cenv es.scopes t name off sz` by
+       (irule exprSimOpsTheory.local_region_frame >>
+        conj_tac >- (qexists_tac `func` >> simp[]) >>
+        qexistsl_tac [`sA`, `es'.scopes`, `t'`] >>
+        simp[] >> metis_tac[wb_frame_vars]) >>
+     first_x_assum irule >> goal_assum (drule_at Any)) >>
+  `STRING #"%" (toString sa.cs_next_var) <>
+      STRING #"%" (toString (sa.cs_next_var + 1)) /\
+   STRING #"%" (toString sa.cs_next_var) <>
+      STRING #"%" (toString (sa.cs_next_var + 2)) /\
+   STRING #"%" (toString (sa.cs_next_var + 1)) <>
+      STRING #"%" (toString (sa.cs_next_var + 2))` by simp[] >>
+  `lookup_var (STRING #"%" (toString sa.cs_next_var)) t' = SOME w` by
+    (first_x_assum (qspec_then `STRING #"%" (toString sa.cs_next_var)` mp_tac) >> simp[]) >>
+  `wb_frame cenv es sa s0 t'` by
+    (irule wb_frame_trans >> conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qexistsl_tac [`es`, `sA`, `t`] >> simp[]) >>
+     qexistsl_tac [`ctx`, `probe_word_context`, `func`] >> simp[]) >>
+  `not_local_ptr cenv es'.scopes (STRING #"%" (toString (sa.cs_next_var + 2)))` by
+    (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  `!x. not_fresh_at sa x ==> x <> STRING #"%" (toString (sa.cs_next_var + 2))` by
+    (simp[not_fresh_at_def] >> rpt strip_tac >> gvs[]) >>
+  `FLOOKUP t'.vs_allocas sa.cs_next_id = SOME (w2n w,32)` by simp[] >>
+  `!a off sz. FLOOKUP t'.vs_allocas a = SOME (off,sz) /\
+      a < sa.cs_next_id ==> regions_disjoint (w2n w) 32 off sz` by
+    (simp[] >> metis_tac[]) >>
+  `!n b sz. local_region cenv es'.scopes t' n b sz ==>
+      w2n w + 32 <= b \/ b + sz <= w2n w` by
+    metis_tac[regions_disjoint_def] >>
+  `sa.cs_next_id <= sa.cs_next_id /\ sa.cs_next_id < sb.cs_next_id` by simp[] >>
+  `(mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+      [STRING #"%" (toString sa.cs_next_var)]).inst_opcode = ALLOCA /\
+   (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+      [STRING #"%" (toString sa.cs_next_var)]).inst_id = sa.cs_next_id` by
+    simp[mk_inst_def] >>
+  drule_all probe_word_return_store_frame >> disch_then assume_tac >>
+  drule frag_exec_conseq >> disch_then irule >> simp[] >>
+  gen_tac >> strip_tac >>
+  `vv = LocatedValue (BaseT (UintT 256))
+      (base_ptr <|buf_operand := Var (STRING #"%" (toString sa.cs_next_var)); buf_size := 32|>)` by
+    (drule probe_word_shrink_compile_expr >>
+     disch_then (qspecl_then [`sa`, `ty`] assume_tac) >> gvs[]) >>
+  gvs[] >> irule vv_post_frame_intro >> simp[vyperASTTheory.expr_type_def]
+QED
+
+Theorem probe_word_shrink_vv_case:
+  !nocalls ctx func cenv bufsz flags.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) /\
+    lookup_function
+      (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+         (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)
+      ctx.ctx_functions = SOME (probe_word_function with fn_name :=
+        internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+          (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor) ==>
+    expr_vv_case nocalls ctx func cenv probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rw[expr_vv_case_def, exprSimTheory.expr_vv_sim_def] >>
+  Cases_on `stmt_state_rel ctx func cenv probe_word_context es s0`
+  >- (drule_all probe_word_shrink_prefix >> disch_then assume_tac >>
+      drule frag_exec_conseq >> disch_then irule >> simp[] >>
+      rpt strip_tac >> gvs[]) >>
+  simp[SF CONJ_ss, frag_exec_false_pre]
 QED
