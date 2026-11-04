@@ -1061,3 +1061,70 @@ Proof
   >- (irule dft_pending_done_abandon >> metis_tac[]) >>
   irule dft_pending_done_abandon_account >> metis_tac[]
 QED
+
+Theorem dft_pending_ready_gas_outputs:
+  dft_original_ready c /\ c.dft_occ_core = DftOpen (DftAt fn k b s) stack n /\
+  get_instruction b s.vs_inst_idx = SOME inst /\ inst.inst_opcode = GAS ==>
+  ?v. inst.inst_outputs = [v]
+Proof
+  strip_tac >> drule_all dft_original_runtime_at_projection >> strip_tac >>
+  `EVERY venomWf$inst_wf b.bb_instructions` by
+    (fs[dftProtectedRuntimeTheory.dft_original_cut_def] >>
+     metis_tac[dftMixedCrossingTheory.dft_original_schedule_instructions_wf]) >>
+  `MEM inst b.bb_instructions` by
+    (gvs[get_instruction_def] >> metis_tac[EL_MEM]) >>
+  `venomWf$inst_wf inst` by metis_tac[EVERY_MEM] >>
+  fs[venomWfTheory.inst_wf_def] >>
+  Cases_on `inst.inst_outputs` >> gvs[] >> Cases_on `t` >> gvs[]
+QED
+
+Theorem dft_pending_enter_not_interior[local]:
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_pos_slot C D j k f g b b' ==>
+  ~(j = fi /\ k = bi /\ phi_prefix_length b.bb_instructions = SUC (LENGTH pre))
+Proof
+  strip_tac >> Cases_on `j = fi /\ k = bi` >> gvs[] >>
+  fs[dft_pos_runtime_ready_def, dft_pos_slot_def] >> gvs[] >>
+  `phi_prefix_length (pre ++ [gas;call] ++ post) <= LENGTH pre` by
+    (irule dftRecursiveFixedStepTheory.dft_fixed_phi_bound >> simp[]) >> decide_tac
+QED
+
+Theorem dft_pending_enter_closed:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftEnter f 0 s) ls nL /\
+  r.dft_occ_core = DftOpen (DftEnter g 0 s) rs nR ==>
+  ?zs' H'.
+    dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+      (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+    pending_segment_account C D w 1 1 l r
+      (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_functions C D f g` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+        dft_pos_control_def] >> gvs[]) >>
+  `OPTREL (dft_pos_blocks C D f g)
+    (lookup_block s.vs_current_bb f.fn_blocks)
+    (lookup_block s.vs_current_bb g.fn_blocks)` by
+    (gvs[] >> irule dft_pos_edit_block_lookup >> simp[]) >>
+  Cases_on `lookup_block s.vs_current_bb f.fn_blocks`
+  >- (qexistsl [`[]`,`dft_pos_pending_gas_events zs ++ H`] >>
+      irule dft_pending_enter_missing >> metis_tac[]) >>
+  fs[optionTheory.OPTREL_def] >>
+  rename1 `lookup_block s.vs_current_bb f.fn_blocks = SOME b` >>
+  rename1 `lookup_block s.vs_current_bb g.fn_blocks = SOME b'` >>
+  `eval_phis s b.bb_instructions = eval_phis s b'.bb_instructions /\
+   phi_prefix_length b.bb_instructions = phi_prefix_length b'.bb_instructions` by
+    (gvs[] >> fs[dft_pos_runtime_ready_def] >>
+     metis_tac[dft_pos_edit_block_phis]) >>
+  drule dft_pos_blocks_slot >> strip_tac >>
+  drule_all dft_pending_enter_not_interior >> strip_tac >>
+  qexistsl [`zs`,`H`] >> Cases_on `eval_phis s b.bb_instructions`
+  >- (conj_tac >- (irule dft_pending_enter_success >> metis_tac[]) >>
+      irule dft_pending_enter_account >> metis_tac[]) >>
+  drule_at (Pat `eval_phis _ _ = _`) dft_pending_enter_phi_failure >>
+  simp[] >> disch_then irule >> gvs[] >> metis_tac[]
+QED
