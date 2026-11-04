@@ -106,13 +106,13 @@ def capture(manifest):
         pre.parse(source)
         tree = ast.parse(pre.reformatted_code)
         annotate_python_ast(tree, source, pre, source_id=entry.get("source_id", 0),
-                            module_path=str(path), resolved_path=str(path.resolve()))
+                            module_path=str(path), resolved_path=str(path))
         syntax = classify(convert(tree))
         keys.append(key)
         trees.append(syntax)
         policies.append(bool(pre.settings.nonreentrancy_by_default))
         interfaces.append(interface)
-        provenance.append({"key": key, "path": str(path.resolve()),
+        provenance.append({"key": key, "path": str(path),
                            "source_sha256": hashlib.sha256(source.encode()).hexdigest()})
     if not trees:
         raise ValueError("main source module is required")
