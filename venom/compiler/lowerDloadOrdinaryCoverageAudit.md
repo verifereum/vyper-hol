@@ -499,3 +499,17 @@ witness for every relevant reachable state. Current raw safety is required even
 when the active instruction subsequently Error/Abort/Halt. Neither checked
 arithmetic/reads nor CALL/STATICCALL successor consumers prove that obligation.
 No counterexample to the frozen statement has been established by this audit.
+
+### Classified read consumer reconciliation (C1.11.5.66)
+
+`lowerDloadSafetyClassifiedReadCoverage` now exports
+`ld_sync_classified_read_effect` and `ld_sync_classified_read_coverage` for exactly
+[MLOAD;ILOAD;LT;GT;EQ]. These discharge the two classified-read/comparison rows
+above. The additional ambient premise is `mem_inv dload_headroom_ok C vs0`;
+non-forward is required conditionally only for MLOAD/ILOAD. Active pointer
+validity comes from synchronization, without an extra context-wide pointer
+witness hypothesis. Target selected endpoints follow from slots/maps and ambient
+headroom. H' is witnessed by `set_prov H inst.inst_outputs NONE`; coverage uses
+the common OrdinaryCoverage adapter. This is successful live-successor coverage
+only: current raw safety, terminal alternatives, control and target-prefix
+integration remain open as described above.
