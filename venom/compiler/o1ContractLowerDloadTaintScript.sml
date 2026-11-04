@@ -12,6 +12,27 @@ Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list calleeTransport
 
+(* Agreement of the complete step_taint adoption guard; request streams
+   themselves may differ, only their change indicators must agree. *)
+Theorem ld_adoption_guard_agreement:
+  !s s' t t'.
+    s.vs_call_ctx.cc_static = t.vs_call_ctx.cc_static /\
+    s.vs_outcomes = t.vs_outcomes /\
+    s'.vs_outcomes = t'.vs_outcomes /\
+    ((s'.vs_requests <> s.vs_requests) <=>
+     (t'.vs_requests <> t.vs_requests)) ==>
+    ((~s.vs_call_ctx.cc_static /\
+      s'.vs_requests <> s.vs_requests /\
+      s'.vs_outcomes <> s.vs_outcomes /\
+      (HD s.vs_outcomes).co_success) <=>
+     (~t.vs_call_ctx.cc_static /\
+      t'.vs_requests <> t.vs_requests /\
+      t'.vs_outcomes <> t.vs_outcomes /\
+      (HD t.vs_outcomes).co_success))
+Proof
+  rpt strip_tac >> simp[]
+QED
+
 (* A complete untainted overwrite clears a word, even if the step also
    introduces fresh-site taint. *)
 Theorem mem_word_taint_overwrite:
