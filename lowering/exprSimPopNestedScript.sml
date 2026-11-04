@@ -59,6 +59,122 @@ Proof
   disch_tac >> irule target_place_sim >> metis_tac[]
 QED
 
+(* Diagnostic: capacity provenance alone does not make a nested header live.
+   Once the outer array has length zero, its first child's header is dead,
+   although that header is not dead relative to the child itself. *)
+Theorem nested_dead_header_probe[local]:
+  !st. lookup_storage (0w : bytes32) st = 0w ==>
+    dead_bytes st 0
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) 1 0 /\
+    ~dead_bytes st 1 (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) 1 0
+Proof
+  rpt strip_tac >> gvs[compileEnvTheory.dead_bytes_def, vyperValueTheory.type_slot_size_def]
+QED
+
+(* A storage pop returns a pointer and writes only the outer header; it
+   does not erase a nested header in the element that became dead. *)
+Theorem nested_pop_header_only_probe[local]:
+  !cx es tr.
+    lookup_storage (0w : bytes32) (get_storage cx es tr) = 1w ==>
+    pop_place cx
+      (StoragePlace tr 0w
+        (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1))) es =
+    (INL (PlaceR (StoragePlace tr 1w
+      (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))),
+     set_storage cx es tr
+       (apply_writes 0w [(0,0w)] (get_storage cx es tr)))
+Proof
+  rpt strip_tac >>
+  simp[pop_place_def, vyperStorageBackendTheory.get_storage_backend_eq,
+       bind_def, ignore_bind_def, return_def, check_def, assert_def,
+       vyperStorageBackendTheory.write_storage_slot_eq,
+       vyperStorageTheory.encode_value_def,
+       vyperStorageTheory.encode_base_to_slot_def,
+       integer_wordTheory.i2w_def]
+QED
+
+Theorem nested_header_update_agree_probe[local]:
+  !cx es tr s k.
+    k <> (0w : bytes32) /\
+    lookup_storage k (get_storage cx es tr) =
+      (if tr then tload k s else sload k s) ==>
+    lookup_storage k
+      (get_storage cx
+        (set_storage cx es tr
+          (apply_writes 0w [(0,0w)] (get_storage cx es tr))) tr) =
+      (if tr then tload k (tstore 0w 0w s)
+       else sload k (sstore 0w 0w s))
+Proof
+  rpt strip_tac >> Cases_on `tr` >>
+  gvs[vyperStorageBackendTheory.get_storage_after_set,
+      vyperStorageTheory.apply_writes_def,
+      venomStateTheory.tload_def, venomStateTheory.tstore_def,
+      venomStateTheory.sload_def, venomStateTheory.sstore_def,
+      venomStateTheory.contract_transient_def,
+      venomStateTheory.contract_storage_def,
+      vfmStateTheory.lookup_account_def,
+      vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+      combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem nested_retained_headers_run_probe[local]:
+  !cx es tr s id x0 x1 x2 x3 x4 x5 x6.
+    ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+    lookup_storage 0w (get_storage cx es tr) = 1w /\
+    (if tr then tload 0w s else sload 0w s) = 1w /\
+    (!k. k = 1w \/ k = 2w ==>
+      lookup_storage k (get_storage cx es tr) =
+        (if tr then tload k s else sload k s)) ==>
+    ?u.
+      pop_place cx (StoragePlace tr 0w
+        (ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))
+          (Dynamic 1)) (Dynamic 1))) es =
+        (INL (PlaceR (StoragePlace tr 1w
+          (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)))),
+         set_storage cx es tr
+           (apply_writes 0w [(0,0w)] (get_storage cx es tr))) /\
+      run_inst_seq
+        [mk_inst id (if tr then TLOAD else SLOAD) [Lit 0w] [x0];
+         mk_inst (id+1) ISZERO [Var x0] [x1];
+         mk_inst (id+2) ISZERO [Var x1] [x2];
+         mk_inst (id+3) ASSERT [Var x2] [];
+         mk_inst (id+4) SUB [Var x0; Lit 1w] [x3];
+         mk_inst (id+5) (if tr then TSTORE else SSTORE) [Lit 0w; Var x3] [];
+         mk_inst (id+6) ADD [Lit 0w; Lit 1w] [x4];
+         mk_inst (id+7) MUL [Var x3; Lit 3w] [x5];
+         mk_inst (id+8) ADD [Var x4; Var x5] [x6]] s = OK u /\
+      lookup_var x6 u = SOME 1w /\
+      (!k. k = 1w \/ k = 2w ==>
+        lookup_storage k
+          (get_storage cx (set_storage cx es tr
+            (apply_writes 0w [(0,0w)] (get_storage cx es tr))) tr) =
+          (if tr then tload k u else sload k u))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule dynarray_pop_storage_run >>
+  disch_then (qspecl_then [`tr`, `0w`, `s`, `id`, `3`] mp_tac) >>
+  Cases_on `tr` >> (gvs[] >> strip_tac >> qexists_tac `u` >>
+  gvs[wordsTheory.WORD_SUB_REFL, wordsTheory.word_add_n2w,
+      wordsTheory.word_mul_n2w] >> conj_tac
+  >- simp[pop_place_def, vyperStorageBackendTheory.get_storage_backend_eq,
+          bind_def, ignore_bind_def, return_def, check_def, assert_def,
+          vyperStorageBackendTheory.write_storage_slot_eq,
+          vyperStorageTheory.encode_value_def,
+          vyperStorageTheory.encode_base_to_slot_def,
+          integer_wordTheory.i2w_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >>
+  gvs[vyperStorageBackendTheory.get_storage_after_set,
+      vyperStorageTheory.apply_writes_def,
+      venomStateTheory.tload_def, venomStateTheory.tstore_def,
+      venomStateTheory.sload_def, venomStateTheory.sstore_def,
+      venomStateTheory.contract_transient_def,
+      venomStateTheory.contract_storage_def,
+      vfmStateTheory.lookup_account_def,
+      vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+      combinTheory.APPLY_UPDATE_THM])
+QED
+
 (* A storage or transient root.  compile_get_target_ptr hands out the
    array's header slot with location storage (transient), and the source's
    pop_place pops the StoragePlace there, so the run is
