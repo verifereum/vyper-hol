@@ -4,7 +4,7 @@ Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
   bodyLiteralMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
-  bodyUnopMemory bodyNegMemory bodyCalldataMemory
+  bodyUnopMemory bodyNegMemory bodyCalldataMemory bodyEnvMemory
   vyperTyping vyperValue vyperAST vyperTypeSystem
 
 Theorem body_ifexp_word_mem_case:
@@ -279,4 +279,24 @@ val () =
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_CALLDATALEN_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "CalldataLen closure inherited admission"
+  end;
+
+Theorem body_env_mem_case:
+  !cx ann item args. item <> PrevHash /\ item <> MsgGas ==>
+    body_expr_mem_ok cx (Builtin ann (Env item) args)
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `args = [] /\ ann = env_item_type item` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >> metis_tac[compile_env_body_sim_mem, compile_env_body_vv_sim_mem]
+QED
+
+val () =
+  let val th = body_env_mem_case
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_ENV_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "environment closure inherited admission"
   end;
