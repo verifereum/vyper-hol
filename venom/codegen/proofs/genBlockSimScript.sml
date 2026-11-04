@@ -267,7 +267,7 @@ Proof
   imp_res_tac prefix_wf_every_prefix_op >> gvs[]
 QED
 
-Theorem assert_plan_decompose[local]:
+Theorem assert_plan_decompose:
   !liveness dfg cfg fn inst nl ih nt bb ps ops ps' cond.
     inst.inst_opcode = ASSERT /\ inst_wf inst /\
     inst.inst_operands = [cond] /\
@@ -299,7 +299,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
-Theorem assert_unreachable_plan_decompose[local]:
+Theorem assert_unreachable_plan_decompose:
   !liveness dfg cfg fn inst nl ih nt bb ps ops ps' cond.
     inst.inst_opcode = ASSERT_UNREACHABLE /\ inst_wf inst /\
     inst.inst_operands = [cond] /\
@@ -701,7 +701,7 @@ Proof
           simp[EL_APPEND2, EL_REPLICATE]))
 QED
 
-Theorem asm_returndata_read_byte[local]:
+Theorem asm_returndata_read_byte:
   !off sz (mem : byte list).
     TAKE sz (DROP off (asm_expand_memory (off + sz) mem)) =
     GENLIST (\i. read_byte (off + i) mem) sz
@@ -794,7 +794,7 @@ Proof
 QED
 
 (* What step_inst REVERT produces *)
-Theorem step_inst_revert_abort[local]:
+Theorem step_inst_revert_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = REVERT /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -848,7 +848,7 @@ Proof
 QED
 
 (* What step_inst RETURNDATACOPY abort produces *)
-Theorem step_inst_returndatacopy_abort[local]:
+Theorem step_inst_returndatacopy_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = RETURNDATACOPY /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -873,7 +873,7 @@ Proof
 QED
 
 (* What step_inst ASSERT_UNREACHABLE abort produces *)
-Theorem step_inst_assert_unreachable_abort[local]:
+Theorem step_inst_assert_unreachable_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = ASSERT_UNREACHABLE /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -907,7 +907,7 @@ Proof
   simp[] >> every_case_tac >> gvs[]
 QED
 
-Theorem step_inst_assert_abort[local]:
+Theorem step_inst_assert_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = ASSERT /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -924,7 +924,7 @@ Proof
 QED
 
 (* RETURNDATACOPY terminal fault step: OOB produces AsmFault *)
-Theorem terminal_returndatacopy_fault_step[local]:
+Theorem terminal_returndatacopy_fault_step:
   !lo o2pc prog st dest_val src_val sz_val rest_stk vs.
     asm_block_at prog st.as_pc [AsmOp "RETURNDATACOPY"] /\
     st.as_stack = dest_val :: src_val :: sz_val :: rest_stk /\
@@ -975,7 +975,7 @@ Proof
 QED
 
 (* Equation form of asm_step for REVERT *)
-Theorem asm_step_revert_eq[local]:
+Theorem asm_step_revert_eq:
   !lo o2pc st off sz rest.
     st.as_stack = off :: sz :: rest ==>
     asm_step lo o2pc (AsmOp "REVERT") st =
@@ -1143,7 +1143,7 @@ Proof
         metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
   >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
 QED
-Theorem generated_plan_state_wf_residual_nil[local]:
+Theorem generated_plan_state_wf_residual_nil:
   !base ps.
     generated_plan_state_wf base ps ==>
     residual_budget_wf base [] ps
@@ -1736,7 +1736,7 @@ Proof
 QED
 
 (* 3-step terminal: PushLabel end_lbl; JUMPI (falls through, cond=0w); INVALID *)
-Theorem terminal_pushlabel_jumpi_invalid[local]:
+Theorem terminal_pushlabel_jumpi_invalid:
   !lo o2pc prog st end_lbl off rest_stk vs.
     asm_block_at prog st.as_pc
       [AsmPushLabel end_lbl; AsmOp "JUMPI"; AsmOp "INVALID";
@@ -1956,7 +1956,7 @@ Proof
   rewrite_tac[asm_steps_def] >> simp[asm_step_jumpi, asm_jumpi_def]
 QED
 
-Theorem asm_assert_zero_revert[local]:
+Theorem asm_assert_zero_revert:
   !lo o2pc prog st rest off pc vs.
     asm_block_at prog st.as_pc
       [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"] /\
@@ -1985,7 +1985,7 @@ Proof
 QED
 
 (* stack_find returns an index where the predicate holds *)
-Theorem stack_find_el[local]:
+Theorem stack_find_el:
   !P l d. stack_find P l = SOME d ==> P (EL d l)
 Proof
   Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>
@@ -3103,7 +3103,7 @@ Proof
 QED
 
 
-Theorem step_inst_create_abort[local]:
+Theorem step_inst_create_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = CREATE /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -3124,7 +3124,7 @@ Proof
 QED
 
 
-Theorem step_inst_create2_abort[local]:
+Theorem step_inst_create2_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = CREATE2 /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -3146,7 +3146,7 @@ Proof
 QED
 
 
-Theorem terminal_create_fault_step[local]:
+Theorem terminal_create_fault_step:
   !lo o2pc prog st value offset sz rest vs.
     asm_block_at prog st.as_pc [AsmOp "CREATE"] /\
     st.as_stack = value :: offset :: sz :: rest /\
@@ -3171,7 +3171,7 @@ Proof
 QED
 
 
-Theorem terminal_create2_fault_step[local]:
+Theorem terminal_create2_fault_step:
   !lo o2pc prog st value offset sz salt rest vs.
     asm_block_at prog st.as_pc [AsmOp "CREATE2"] /\
     st.as_stack = value :: offset :: sz :: salt :: rest /\

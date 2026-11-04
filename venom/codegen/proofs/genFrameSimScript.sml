@@ -1052,7 +1052,7 @@ Proof
   rename1 `inst.inst_operands = _ :: _ :: _ :: _ :: _ :: _ :: _ :: tail` >> Cases_on `tail` >> gvs[]
 QED
 
-Theorem context_reads_agree[local]:
+Theorem context_reads_agree:
   !cp inst vs m. source_memory_reads_disjoint cp inst vs /\
   context_memory_rel cp vs.vs_memory m ==>
   !i. source_memory_read_byte inst vs i ==>
