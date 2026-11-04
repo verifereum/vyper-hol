@@ -3369,9 +3369,12 @@ QED
 
 Theorem view_lock_prefix_execution:
   (nr ==> cx.nonreentrant_slot <> NONE) ==>
-  (do lock_if_nr cx nr T; action od) st = action st \/
+  ?observations.
+  (do lock_if_nr cx nr T; action od) st =
+    action (st with storage_trace := st.storage_trace ++ observations) \/
   ?msg. (do lock_if_nr cx nr T; action od) st =
-          (INR (Error (RuntimeError msg)),st)
+          (INR (Error (RuntimeError msg)),
+           st with storage_trace := st.storage_trace ++ observations)
 Proof
   strip_tac >> Cases_on `cx.nonreentrant_slot` >> Cases_on `nr` >>
   gvs[lock_if_nr_def, bind_def, ignore_bind_def, return_def, raise_def] >>

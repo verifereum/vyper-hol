@@ -4,15 +4,27 @@
 Status: approved for proof repair; independent statement and executable audits complete
 Created: 2026-11-04
 Location: project root
-Candidate anchor: 90e3e8f12, based on 92bea34aa
+Candidate anchor: 90e3e8f12; refreshed by merging current top 88b3b2592
 
 ## Theorem Statement (FROZEN)
 Every existing theorem statement and definition in semantics/ and frontend/
-is frozen exactly as supplied, including local helpers. The principal current
+is frozen exactly as supplied, including local helpers. The single authorized
+ghost-result correction is view_lock_prefix_execution, copied below in its
+updated frozen form. Its precondition and both concrete consumer statements
+are unchanged. The principal current
 statements are copied below. Do not modify this statement. Prove it as-is, or
 produce a counterexample. No additional premise is authorized.
 
 ```sml
+Theorem view_lock_prefix_execution:
+  (nr ==> cx.nonreentrant_slot <> NONE) ==>
+  ?observations.
+  (do lock_if_nr cx nr T; action od) st =
+    action (st with storage_trace := st.storage_trace ++ observations) \/
+  ?msg. (do lock_if_nr cx nr T; action od) st =
+          (INR (Error (RuntimeError msg)),
+           st with storage_trace := st.storage_trace ++ observations)
+
 Theorem storage_trace_frame_precompile_call_success:
   storage_trace_frame (precompile_call_success bt)
 
@@ -92,15 +104,17 @@ Theorem call_external_function_success_log_extends:
   ends with Bot: sol (OpenAI GPT-6.1 Sol).
 
 ## Build
-`holbuild -j4 build vyperConstEvalTheory vyperCallOutcomeBranchesTheory vyperCallOutcomeFrameTheory vyperCallOutcomePropsTheory vyperCallTheory vyperCreateFrameTheory vyperEvalExprPreservesScopesDomTheory vyperEvalMiscTheory vyperEvalOutcomeSuffixTheory vyperEvalPreservesImmutablesDomTheory vyperEvalPreservesScopesTheory vyperEvalPureExprTheory vyperExprNoControlTheory vyperHashMapPreservationTheory vyperHashMapTheory vyperHashMapStorageTheory vyperImmutableMetadataFrameTheory vyperImmutablesPreservationTheory vyperLookupStorageScopesTheory vyperLookupStorageTheory vyperMachineFrameTheory vyperPlaceFramesTheory vyperPlaceResultTypingTheory vyperPlaceTypingTheory vyperPureExprTheory vyperReadOnlyTargetsTheory vyperScopePreservationTheory vyperStatePreservationTheory vyperStorageBackendTheory vyperStorageFrameTheory vyperStoragePlaceProvenanceTheory vyperStorageReadSoundnessTheory vyperStorageTraceTheory vyperStorageWritePreservationTheory vyperTargetPlaceWriteTheory vyperTypeCallOutcomeTheory vyperTypeConstantFoldTheory vyperTypeContractGetterTheory vyperTypeEnvPreservationTheory vyperTypeEvalSoundnessTheory vyperTypeEvalStoragePreservationTheory vyperTypeExprSoundnessTheory vyperTypeExtCallSoundnessTheory vyperTypeGlobalLookupSoundnessTheory vyperTypeInitialStateTheory vyperTypeInvariantsTheory vyperTypeStatePreservationTheory vyperTypeStoragePreservationTheory vyperCallOutcomeTheory vyperCreateTheory vyperInterpreterTheory vyperStateTheory vyperStorageTraceTestTheory vyperTypeContractSoundnessTheory vyperTypeExternalCallMachineTheory vyperTypeEntryReadinessTheory vyperLogPreservationTheory`
+`holbuild -j4 build vyperConstEvalTheory vyperCallOutcomeBranchesTheory vyperCallOutcomeFrameTheory vyperCallOutcomePropsTheory vyperCallTheory vyperCreateFrameTheory vyperEvalExprPreservesScopesDomTheory vyperEvalMiscTheory vyperEvalOutcomeSuffixTheory vyperEvalPreservesImmutablesDomTheory vyperEvalPreservesScopesTheory vyperEvalPureExprTheory vyperExprNoControlTheory vyperHashMapPreservationTheory vyperHashMapTheory vyperHashMapStorageTheory vyperImmutableMetadataFrameTheory vyperImmutablesPreservationTheory vyperLookupStorageScopesTheory vyperLookupStorageTheory vyperMachineFrameTheory vyperPlaceFramesTheory vyperPlaceResultTypingTheory vyperPlaceTypingTheory vyperPureExprTheory vyperReadOnlyTargetsTheory vyperScopePreservationTheory vyperStatePreservationTheory vyperStorageBackendTheory vyperStorageFrameTheory vyperStoragePlaceProvenanceTheory vyperStorageReadSoundnessTheory vyperStorageTraceTheory vyperStorageWritePreservationTheory vyperTargetPlaceWriteTheory vyperTypeCallOutcomeTheory vyperTypeConstantFoldTheory vyperTypeContractGetterTheory vyperTypeEnvPreservationTheory vyperTypeEvalSoundnessTheory vyperTypeEvalStoragePreservationTheory vyperTypeExprSoundnessTheory vyperTypeExtCallSoundnessTheory vyperTypeGlobalLookupSoundnessTheory vyperTypeInitialStateTheory vyperTypeInvariantsTheory vyperTypeStatePreservationTheory vyperTypeStoragePreservationTheory vyperCallOutcomeTheory vyperCreateTheory vyperInterpreterTheory vyperStateTheory vyperStorageTraceTestTheory vyperTypeContractSoundnessTheory vyperTypeExternalCallMachineTheory vyperTypeEntryReadinessTheory vyperLogPreservationTheory vyperTypeExternalDefaultsTheory`
 
 The current-base definitions and statements have been independently inspected:
 the eleven-family trace-frame and unchanged physical soundness statements were
 judged PROVABLE; the executable definition audit also approved this exact port.
 The current primitive State, CallOutcome, Create, Interpreter and frame
-prerequisites built at the default budget. The precompile-success frame lemma
-has parsed but its short proof is incomplete. The complete batch has not parsed
-because ancestors require this same ghost-field migration.
+prerequisites built at the default budget. The first run also built
+vyperStorageTraceTheory, vyperTypeEvalSoundnessTheory, vyperTypeStmtSoundnessTheory
+and the legacy vyperTypeEvalStoragePreservationTheory. It repaired the live
+defaults/entry frames and reached the view-lock helper in ContractSoundness.
+The complete batch is still incomplete; deeper machine/log consumers remain.
 Keep the existing proofs; do not replace them with temporary admissions.
 
 ## Background
@@ -142,5 +156,18 @@ and frozen; this task repairs their physical-property consumers.
   meaningful legacy global-storage theorem; preserve its statements.
 
 ## Notes
+The first run checked a counterexample to the old exact-state
+view_lock_prefix_execution: read-only lock checks append StorageLock, including
+on failure. The owner weakens only that helper's conclusion to the actual ghost
+trace suffix. This is not a new assumption: the old result implies the new one
+by choosing observations=[]. Preserve every other supplied statement. The
+diagnostic counterexample was removed from the deliverable after its evidence
+was saved; no diagnostic theorem or new axiom is needed in the final theory.
+The current top's audited AbiDecode checker changes are retained as upstream
+definitions; do not undo them. The owner parse attempt rebuilt upstream typing prerequisites but was stopped
+by a service restart before reaching the new helper. Its statement has not
+yet been kernel-parsed after that base refresh; a fresh independent audit returned
+PROVABLE and confirmed both concrete consumer statements remain valid.
+
 The owner will check all frozen declarations, logs and exports after completion.
 Do not edit owner tracking files or Alan state by hand.
