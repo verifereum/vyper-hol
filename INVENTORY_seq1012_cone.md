@@ -93,28 +93,33 @@ PURE_ONCE_REWRITE_TAC[step_inst_base_def]. The large opcode case expression
 needs a targeted selector rewrite, not a timeout override. Previous successful
 checks of entryChecksProps are historical, not current default-timeout certification.
 
-## Exact residual target/failure partition
+## Current residual target/failure partition (E0042-E0044 repairs)
 
-Current direct failures (F):
-- exprSimAttribute: attr_vv_post physical/annotation struct mismatch (m0866).
-- ctorAbiActualArrayRun: ctor_actual_dynamic_array_loop_run tactic timeout (m0869).
-- entryChecksProps: step_cds_check_ops tactic timeout (m0872).
+Resolved and committed:
+- Attribute: rigid StructT boundary and approved local attr_vv_post equality;
+  exprSimAttribute passes m0902 (1439cc0f3).
+- Constructor liveness: single-operand boundary; Run, Closure, Recursive pass
+  m0916 (9b1a4f409), ctorAbiActual also finished in m0939.
+- Entry opcode projection simplification: entryChecksProps passes m0933
+  (49154ced8).
 
-Dependency-blocked or awaiting downstream verification (B):
-- exprSimTuple -> exprSimAttribute.
-- exprSimPlaces -> exprSimAttribute / exprSimTuple. Separately TASK's known
-  compile_subscript_tuple_sim annotation-offset limitation remains; not probed.
+Exact requested batch m0939 now reaches exprSimTuple.tuple_base_read line844.
+The local helper has vv_holds at post_value_type cenv obj but attempts to use
+base_vv_holds_loc at TupleT tys = expr_type obj, with no equality premise.
+The metis tactic times out; this is not checked falsehood evidence. This local
+arbitrary-child helper needs scoped repair/consumer classification. The TASK's
+known tuple-base limitation is still retained, not silently strengthened.
+
+Dependency-blocked targets:
+- exprSimTuple: tuple_base_read physical/annotation mismatch (m0939).
+- exprSimPlaces -> exprSimTuple; known compile_subscript_tuple_sim limitation.
 - exprSimMain -> exprSimPlaces.
-- bodySimExprCases -> exprSimMain / exprSimPlaces / exprSimAttribute.
-- ctorAbiActualArrayClosure -> ctorAbiActualArrayRun.
-- ctorAbiActualRecursive -> ctorAbiActualArrayClosure.
-- ctorAbiActual -> ctorAbiActualRecursive.
+- bodySimExprCases -> exprSimMain / exprSimPlaces.
 
-Every other TASK target has whole-target success evidence in the earlier S
-sections or the subsequent checked repairs/explicit finishes above. These are
-bounded historical/current checks, not a claim that an aborted broad build
-certifies all its input targets. Unchanged cached targets were not forcibly
-rebuilt. Final exact full build still fails and C2 audit remains pending.
+All remaining 105 TASK targets pass the filtered whole-target batch m0942
+(default limits, proof steps enabled, no forcing). Exact full build remains
+blocked by the four-target tuple closure. C2 final contract audit still pending.
+Probe cleanup scan m0943 finds no seq1012_ in lowering/*Script.sml.
 
 ## Approved helper and unsupported-consumer ledger
 
