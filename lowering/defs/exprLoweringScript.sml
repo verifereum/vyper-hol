@@ -219,20 +219,6 @@ Definition infer_array_location_def:
   infer_array_location cenv _ = LocMemory
 End
 
-(* Infer whether an array is dynamic (DynArray) or static (SArray).
-   Mirrors Python: isinstance(array_typ, DArrayT) vs SArrayT *)
-Definition infer_array_is_dynamic_def:
-  infer_array_is_dynamic cenv (Name _ var_name) =
-    (case cenv.ce_var_type var_name of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv (TopLevelName _ nsid) =
-    (case cenv.ce_module_var_type nsid of
-       SOME (ArrayT _ (Dynamic _)) => T
-     | _ => F) ∧
-  infer_array_is_dynamic cenv _ = T  (* default: assume dynamic for safety *)
-End
-
 (* Compute memory_bytes_required for an AST type.
    Mirrors Python: VyperType.memory_bytes_required (base.py, subscriptable.py).
    BytesT/StringT: 32 (length word) + ceil32(max_length) (data area).
@@ -2784,8 +2770,9 @@ Definition compile_call_def:
          let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
            gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
            out_val out_ptr st5 in
-         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
-         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)
+         let (_, st7) = emit_void SETFMP [data_ptr] st6 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st7)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st7)
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =

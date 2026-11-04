@@ -386,6 +386,27 @@ Definition phi_block_ready_def:
       (collect_phis bb.bb_instructions)
 End
 
+(* The planner plans each block once, from the stack of the first edge the
+   DFS takes into it, and reorders the stack to a block's live-in order only
+   on a JMP.  So the entry block, planned from the empty stack, must have no
+   predecessors (and so no PHIs, which would have no edge to read), and a
+   block with several predecessors must be entered from each by a JMP
+   (upstream venom_to_assembly assumes the same of a normalized CFG). *)
+Definition block_entries_ready_def:
+  block_entries_ready cfg fn ⇔
+    (case entry_block fn of
+       NONE => T
+     | SOME eb => NULL (cfg_preds_of cfg eb.bb_label) ∧
+                  NULL (collect_phis eb.bb_instructions)) ∧
+    EVERY (λbb. LENGTH (cfg_preds_of cfg bb.bb_label) ≤ 1 ∨
+             EVERY (λp. case lookup_block p fn.fn_blocks of
+                          NONE => F
+                        | SOME pb => ¬NULL pb.bb_instructions ∧
+                                     (LAST pb.bb_instructions).inst_opcode = JMP)
+               (cfg_preds_of cfg bb.bb_label))
+      fn.fn_blocks
+End
+
 (* The liveness analysis is only consulted when the function has a PHI. *)
 Definition phi_operands_ready_def:
   phi_operands_ready fn ⇔
@@ -404,6 +425,7 @@ Definition codegen_ready_fn_def:
     def_dominates_uses fn ∧
     single_use_form fn ∧
     cfg_is_normalized (cfg_analyze fn) fn ∧
+    block_entries_ready (cfg_analyze fn) fn ∧
     phi_operands_ready fn ∧
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
 End

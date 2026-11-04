@@ -146,6 +146,9 @@ Proof
   conj_tac
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       simp[write_memory_with_expansion_def]) >>
+  conj_tac
+  >- (irule fmp_room_fields >> qexists_tac `s` >>
+      simp[write_memory_with_expansion_def]) >>
   gvs[write_memory_with_expansion_def, immutable_alloca_sep_def,
       local_region_def, lookup_var_def] >> metis_tac[]
 QED

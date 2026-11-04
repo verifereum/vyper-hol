@@ -283,6 +283,9 @@ Proof
   conj_tac
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  conj_tac
+  >- (irule fmp_room_fields >> qexists_tac `s` >>
+      asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `local_ptrs_rel _ _ _ _` kall_tac >>
   qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>

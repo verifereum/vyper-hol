@@ -392,6 +392,11 @@ Proof
     (irule alloca_inv_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> gvs[stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule fmp_room_fields >> qexists_tac `s` >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     gvs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es t` by
     (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
      gvs[stmt_state_rel_def] >> rpt strip_tac >> qexists_tac `id` >>

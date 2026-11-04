@@ -508,12 +508,42 @@ End
 (* CREATE/CREATE2 share the observed outcome oracle with CALL. *)
 Definition exec_create_def:
   exec_create inst s value offset sz salt_opt =
-    let rq = venom_create_request s value offset sz salt_opt;
-        (output, s') = consume_create_outcome rq s
-    in case inst.inst_outputs of
-         [out] => OK (update_var out output s')
-       | _ => Error "create requires single output"
+    case inst.inst_outputs of
+      [out] =>
+        if w2n sz > 2 * max_code_size then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
+        else let rq = venom_create_request s value offset sz salt_opt;
+                 (output, s') = consume_create_outcome rq s
+             in OK (update_var out output s')
+    | _ => Error "create requires single output"
 End
+
+Theorem exec_create_abort_iff:
+  exec_create inst s v off sz salt = Abort a s' <=>
+  (?out. inst.inst_outputs = [out]) /\
+  w2n sz > 2 * max_code_size /\ a = ExHalt_abort /\
+  s' = halt_state (set_returndata [] s)
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
+  rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
+  IF_CASES_TAC >- (simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem exec_create_not_Halt:
+  exec_create inst s v off sz salt <> Halt s'
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
+  rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
+  IF_CASES_TAC >> simp[] >> simp[]
+QED
+
+Theorem exec_create_not_IntRet:
+  exec_create inst s v off sz salt <> IntRet vals s'
+Proof
+  Cases_on `inst.inst_outputs` >> simp[exec_create_def] >>
+  rename1 `h::t` >> Cases_on `t` >> simp[exec_create_def] >>
+  IF_CASES_TAC >> simp[] >> simp[]
+QED
 
 (* Bump-allocate: record region in vs_allocas without touching vs_memory.
    Memory is extended lazily by mstore when the region is actually written.

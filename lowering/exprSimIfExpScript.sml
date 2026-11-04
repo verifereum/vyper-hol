@@ -294,10 +294,15 @@ Theorem ifexp_alloc_preserves_holds[local]:
       q.vs_memory = s.vs_memory
 Proof
   rpt strip_tac >> drule_all alloc_buffer_frame_run >> strip_tac >>
+  `contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
+    metis_tac[exprSimAllocTheory.alloc_buffer_storage] >>
   `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
   `vv_holds cenv cx et raw vv es t` by
-    (Cases_on `vv` >> gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+    (Cases_on `vv` >>
+     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
+     metis_tac[]) >>
   qexistsl_tac [`t`, `w`] >> simp[]
 QED
 
@@ -523,11 +528,15 @@ Proof
   rpt strip_tac >>
   `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
   drule_all alloc_buffer_frame_run >> strip_tac >>
+  `contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
+    metis_tac[exprSimAllocTheory.alloc_buffer_storage] >>
   `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
     (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
   `vv_holds cenv cx (post_value_type cenv e) raw vv es' t` by
     (fs[vv_post_def] >> Cases_on `vv` >>
-     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
+     metis_tac[]) >>
   `!n b len. local_region cenv es'.scopes t n b len <=>
              local_region cenv es'.scopes s n b len` by
     (drule_all ifexp_alloc_local_regions >> simp[]) >>
@@ -869,7 +878,9 @@ Proof
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+       storage_holds_def, venomStateTheory.contract_storage_def,
+       venomStateTheory.contract_transient_def]
 QED
 
 Theorem ifexp_bytestring_adapter_sim[local]:

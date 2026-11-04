@@ -83,3 +83,26 @@ Proof
   simp[] >> rpt strip_tac >>
   Cases_on `v` >> gvs[value_has_type_def, val_store_size_def]
 QED
+
+(* A payload typed at two dynamic bounds fits either buffer. *)
+Theorem bytestring_val_footprint_le:
+  !tenv t1 t2 tv1 tv2 v.
+    is_bytestring_type t1 /\ is_bytestring_type t2 /\
+    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
+    value_has_type tv1 v /\ value_has_type tv2 v ==>
+    val_footprint tv1 v <= type_memory_size tv2
+Proof
+  rpt strip_tac >>
+  `val_footprint tv1 v = val_footprint tv2 v` by
+    metis_tac[bytestring_val_footprint_eq] >>
+  simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
+QED
+
+Theorem bytestring_memory_bytes_positive:
+  !cenv t. is_bytestring_type t ==> 0 < type_memory_bytes cenv t
+Proof
+  Cases_on `t` >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> simp[is_bytestring_type_def] >>
+  FIRST [rename1 `BytesT bd` >> Cases_on `bd`, all_tac] >>
+  simp[is_bytestring_type_def, type_memory_bytes_def]
+QED

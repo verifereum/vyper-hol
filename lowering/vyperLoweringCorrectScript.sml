@@ -125,14 +125,12 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes /\
-    (!n. vs.vs_block_ctx.bc_blockhash n =
-         let idx = tx.block_number - n - 1 in
-         if n < tx.block_number /\ tx.block_number - 256 <= n /\
-            idx < LENGTH tx.block_hashes
-         then EL idx tx.block_hashes else 0w)
+    vs.vs_prev_hashes = tx.block_hashes
 End
 
+(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
+   is stated here too so the transaction premises read in one place, not as
+   a separate assumption. *)
 Definition initial_venom_state_rel_def:
   initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\

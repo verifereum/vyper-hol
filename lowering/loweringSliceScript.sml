@@ -441,6 +441,9 @@ Proof
          qspecl_then [`func`, `s`, `inst`, `n`, `ctx`] mp_tac alloca_room_fresh >>
          fs[FLOOKUP_DEF]) >>
      qexists_tac `s` >> simp[update_var_def]) >>
+  `fmp_room ctx func s1` by
+    (irule fmp_room_exec_alloca >>
+     qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es s1` by
     (irule immutable_alloca_sep_exec_alloca >>
      qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def] >>
@@ -548,7 +551,7 @@ Proof
   qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
-   s'.vs_alloca_next = s.vs_alloca_next /\
+   s'.vs_alloca_next = s.vs_alloca_next /\ s'.vs_fmp = s.vs_fmp /\
    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
    s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
@@ -603,6 +606,8 @@ Proof
   `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func s'` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
     (irule immutable_alloca_sep_declare_local >>
      qexistsl_tac [`entry`, `es`, `id`, `inst`, `p`, `s`, `sz`, `w`] >>

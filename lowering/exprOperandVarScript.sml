@@ -850,10 +850,14 @@ Resume compiler_call_var[rawcalldata]:
   qpat_x_assum `(if _ then _ else _) = (vv,sb)` mp_tac >>
   IF_CASES_TAC >> simp[] >> strip_tac >>
   gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
-  irule compiler_raw_call_tail_var >>
-  first_assum (irule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
-  metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]
+  drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)
+    compiler_raw_call_tail_var >>
+  strip_tac >>
+  `not_fresh_at st6 x` by
+    (first_x_assum irule >> simp[] >>
+     first_assum (irule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
+     metis_tac[ci_mono_compile_msg_data_to_memory, pairTheory.SND]) >>
+  metis_tac[compiler_ci_mono_not_fresh, ci_mono_emit_void, pairTheory.SND]
 QED
 
 Resume compiler_call_var[send]:
