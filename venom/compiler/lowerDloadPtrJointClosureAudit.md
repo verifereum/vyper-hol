@@ -388,3 +388,54 @@ pair-converse/endpoint alignment, and about_to_revert-only entry residuals.
 No frozen-contract falsehood, complete terminal closure, or global induction
 has been established. This is a terminal diagnostic deliverable for strategist
 review, not authorization to add further isolated opcode inventory.
+
+## 8. Suffix origin repair (C1.12.68)
+
+The reverse-pair obligation in section 7 is superseded by the revised PLAN:
+retain the TARGET forwarding pair and synchronize an identical source suffix;
+there is no need to prove source resolver equalities or a source forwarding pair.
+
+lowerDloadPtrTerminalTheory now checks four interfaces, in abstraction order:
+
+* lower_dload_terminal_prefix_origin: any transformed ASSIGN/REVERT prefix is
+  literally the same source prefix, with the same supply at its end. Uses
+  nonempty/control-origin/special-emission facts, including malformed DLOAD and
+  DLOADBYTES fallback branches. No source shape or freshness premise is needed.
+* lower_dload_terminal_boundary_origin: reflects such a prefix after an actual
+  supplied left boundary; gives every intermediate transformed-prefix boundary.
+* lower_dload_terminal_index_origin: the TAKE/DROP index interface, including
+  the source length bound and identical source slice.
+* dload_control_terminal_slice_origin: lifts to actual dload_control_match at
+  phase zero, lookup of the target block, and target label distinctness. It
+  returns a member source block, its actual supply/prefix boundary, a source
+  slice identical to the target slice, every corresponding instruction equal,
+  and every corresponding transformed prefix. It does not assume the source
+  slice or source endpoint; they are derived. Control already supplies the
+  function transform field needed here; no additional ir_supply_covers_fn
+  premise is required by this structural argument.
+
+Literal use after a copy at source index a and target index aa:
+
+1. Given singleton copy control, apply existing
+   dload_control_singleton_next_fields with s1=s,t1=t. The target next active
+   instruction exists because the forwarding pair has aa<zz and its interval
+   supplies an instruction there. This produces phase-zero control at source
+   a+1 and target aa+1; it need not assume a successful source copy (semantics
+   is separately C1.12.69).
+2. Apply dload_control_terminal_slice_origin at that boundary with
+   d=zz-aa and mid=TAKE d (DROP (aa+1) tb.bb_instructions).
+   Target pair middle-ASSIGN and endpoint-REVERT give EVERY ASSIGN-or-REVERT
+   on this slice. The pair endpoint bound supplies its length premise.
+3. The returned length bound puts the source endpoint
+   z=(a+1)+(d-1)=a+(zz-aa) in bounds. Instruction equality at k=d-1 makes
+   that source endpoint REVERT. For all smaller k the same equality makes
+   the source instruction ASSIGN. Affine offsets obey z-a=zz-aa. Prefix
+   equality is returned for every k<=d, not inferred from current control.
+   The case zz=aa+1 is d=1: the same result gives an immediate REVERT with
+   no interior ASSIGNs and no separate structural induction case.
+
+These interfaces validate structural origin at the real block/control boundary.
+They do NOT establish successful source copy execution, source reachability
+advancement, retained terminal ghost relations, or immediate REVERT access
+transport. Those remain the separate C1.12.69/C1.12.70 integration obligations.
+Section 7's semantic scalar/label origins are not solved by this structural work.
