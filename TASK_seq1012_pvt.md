@@ -201,3 +201,23 @@ stmtSimLogScript.sml: compile_log_stmt_frag
 targetPlaceSimCasesScript.sml: target_subscript_case
 vyperLoweringCorrectScript.sml: vyper_to_venom_correct
 ```
+
+## Owner guidance: IfExp same-layout arms
+
+`compile_ifexp_vv_sim` (and `compile_ifexp_forced_frag`) are true as stated;
+don't build counterexamples to them. An arm with
+`same_memory_layout cenv (lowered_value_type cenv a) (expr_type a)` is an
+internal call whose physical type evaluates: `expr_body_pre` gives it
+(see `post_type_evaluates` in exprSimLen, which you may move to exprSimHyps
+and export), so invalid physical types such as `UintT 0` don't arise. The
+route: prove a transport lemma from the arm's facts at
+`post_value_type cenv a` to facts at `expr_type a`, at the level of
+`expr_val_rel`/`expr_val_at` (and `val_in_memory`), under
+`same_memory_layout`, `type_widens_to` (from `post_value_type_widens`) and
+evaluability of both types. Punnable leaves of equal size have the same
+encoding (equal words, or bytestrings of equal rounded size); arrays and
+tuples go elementwise. Then give the IfExp helpers that need it a form
+taking those facts at `expr_type a` instead of `expr_post`, or keep their
+equality premise and add a sibling that takes the transported facts. New
+helper lemmas are allowed; exported statements stay frozen except as the
+approved exception says.
