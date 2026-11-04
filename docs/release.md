@@ -62,3 +62,7 @@ sha256sum -c vyper-hol.hbx.sha256
 holbuild import vyper-hol.hbx
 holbuild build
 ```
+
+Importing into a cache that already holds vyper-hol theories built with
+different proof-timeout settings needs holbuild v0.12.1 or newer; v0.12.0
+rejects such entries as an action conflict.

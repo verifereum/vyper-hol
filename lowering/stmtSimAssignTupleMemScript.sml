@@ -36,8 +36,9 @@ Libs
    local's buffer; the local has the element's type, or both are
    bytestrings (a Bytes[10] element into a Bytes[64] local).  The lowering
    may stage a memory view's tuple in a fresh buffer first (MCOPY); the
-   theorem assumes CapMcopy, and the tuple's size bound, whenever an
-   element is memory-backed, staged or not.  It loads every element before storing any; a tuple that is
+   theorem assumes CapMcopy whenever an element is memory-backed, and the
+   tuple's size bound when e is also a memory view, the only source it
+   stages.  It loads every element before storing any; a tuple that is
    not staged lies where expr_val_at puts it, in e's own buffer or inside
    one local's region, so a store into x_i misses the elements after i. *)
 Theorem compile_assign_tuple_locals_memory_stmt_frag:
@@ -47,8 +48,9 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
     ids <> [] /\
     expr_type e = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
-    (EXISTS (\t. ~is_word_type t) tys ==>
-     cenv.ce_target CapMcopy /\ type_memory_size (TupleTV tvs) < dimword (:256)) /\
+    (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
+    (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
+     type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH ids ==>
        ?p sz vt.
          FLOOKUP cenv.ce_vars (EL i ids) = SOME (PtrVar (Var p) sz) /\

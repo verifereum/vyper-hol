@@ -374,94 +374,6 @@ Definition compile_external_return_def:
     od
 End
 
-(* ===== Get Target Ptr ===== *)
-(* Full target pointer dispatch for assignments.
-   Mirrors Python: vyper/codegen_venom/stmt.py:_get_target_ptr
-   Returns (operand, data_location option, place_ty option).
-   The descriptor tracks the current place, consuming one map/array layer
-   per subscript rather than inspecting the root target name. *)
-Definition compile_get_target_ptr_def:
-  compile_get_target_ptr cenv (NameTarget id) =
-    (case FLOOKUP cenv.ce_vars id of
-       SOME (MemLoc offset _) =>
-         return (Lit (n2w offset), SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | SOME (PtrVar ptr_op _) =>
-         return (ptr_op, SOME LocMemory, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode, OPTION_MAP ValPT (cenv.ce_var_type id))
-     | _ => return (Lit 0w, NONE, NONE)) ∧
-  compile_get_target_ptr cenv (TopLevelNameTarget nsid) =
-    (let pt = (case cenv.ce_hashmap_info nsid of
-                  SOME (_, kt, vt) => SOME (MapPT kt vt)
-                | NONE => OPTION_MAP ValPT (cenv.ce_module_var_type nsid)) in
-     case FLOOKUP cenv.ce_module_vars nsid of
-       SOME (StorageLoc slot) => return (Lit slot, SOME LocStorage, pt)
-     | SOME (TransientLoc slot) => return (Lit slot, SOME LocTransient, pt)
-     | SOME (ImmutableLoc offset) =>
-         return (Lit (n2w offset), SOME LocCode,
-                 OPTION_MAP ValPT (cenv.ce_module_var_type nsid))
-     | _ => return (Lit 0w, NONE, NONE)) ∧
-  compile_get_target_ptr cenv (SubscriptTarget bt idx_e) =
-    do result <- compile_get_target_ptr cenv bt;
-       let base_op = FST result in
-       let loc_opt = FST (SND result) in
-       let base_type_opt = SND (SND result) in
-       case base_type_opt of
-         SOME (MapPT kt vt) =>
-           do key_op <- lower_value compile_expr cenv (expr_type idx_e) idx_e;
-              hashed_key <- (if is_bytestring_type kt then
-                               compile_keccak256_key key_op F
-                             else return key_op);
-              slot_op <- compile_mapping_subscript base_op hashed_key;
-              return (slot_op, loc_opt, SOME (value_type_place vt))
-           od
-       | _ =>
-           do idx_op <- lower_value compile_expr cenv (expr_type idx_e) idx_e;
-              let loc = (case loc_opt of SOME l => l | NONE => LocMemory) in
-              let is_dynamic = (case base_type_opt of
-                                  SOME (ValPT (ArrayT _ (Dynamic _))) => T
-                                | _ => F) in
-              let elem_ty = (case base_type_opt of
-                               SOME (ValPT (ArrayT t _)) => t
-                             | _ => BaseT (UintT 256)) in
-              let ws = word_scale loc in
-              let elem_sz = elem_size_in_location cenv loc elem_ty in
-              let static_count = (case base_type_opt of
-                                    SOME (ValPT (ArrayT _ (Fixed n))) => n
-                                  | _ => 0) in
-              let is_signed_idx = is_signed_type (expr_type idx_e) in
-              let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
-              do elem_ptr <-
-                   compile_array_subscript base_op idx_op is_dynamic static_count
-                                           ws elem_sz is_signed_idx loader;
-                 return (elem_ptr, loc_opt, SOME (ValPT elem_ty))
-              od
-           od
-    od ∧
-  compile_get_target_ptr cenv (AttributeTarget bt field) =
-    do result <- compile_get_target_ptr cenv bt;
-       let base_op = FST result in
-       let loc_opt = FST (SND result) in
-       let base_type_opt = SND (SND result) in
-       let struct_name = (case base_type_opt of
-                            SOME (ValPT (StructT sn)) => nsid_to_string sn
-                          | _ => "") in
-       let fields = get_struct_fields cenv.ce_struct_fields struct_name in
-       let is_storage = (case loc_opt of
-                           SOME LocStorage => T
-                         | SOME LocTransient => T
-                         | _ => F) in
-       let field_offset =
-         (if is_storage then struct_field_offset_slots fields field
-          else struct_field_offset fields field) in
-       let field_type = (case ALOOKUP fields field of
-                           SOME (fty, _) => SOME (ValPT fty) | NONE => NONE) in
-       do ptr <- emit_op ADD [base_op; Lit (n2w field_offset)];
-          return (ptr, loc_opt, field_type)
-       od
-    od
-End
-
 (* ===== Assign Value ===== *)
 (* Dispatch assign by location and type.
 
@@ -638,7 +550,7 @@ End
 Definition compile_tuple_store_all_def:
   compile_tuple_store_all cenv [] [] [] = return () ∧
   compile_tuple_store_all cenv (src_ty :: src_tys) (BaseTarget bt :: targets) (val_op :: vals) =
-    do result <- compile_get_target_ptr cenv bt;
+    do result <- compile_get_target_ptr compile_expr cenv bt;
        dst_op <- return (FST result);
        loc_opt <- return (FST (SND result));
        dst_ty_opt <- return (SND (SND result));
@@ -726,7 +638,7 @@ End
 (* ===== Iter Loop Element Copy ===== *)
 (* Copy element from array to loop variable, location-aware.
    For memory: single mload/mcopy depending on size.
-   For storage/transient: sload/tload for single slot, multi-slot loop.
+   For storage/transient: the slot-to-memory word-copy loop.
    loc: source data_location (LocMemory, LocStorage, LocTransient, etc.)
    Mirrors Python: vyper/codegen_venom/stmt.py:_lower_iter_loop body element copy *)
 (* Copy one for-loop element from source to loop variable (in memory).
@@ -743,16 +655,11 @@ Definition compile_iter_elem_copy_def:
                          loc is_slot_addressed
                          (target_ty : type) (elem_ty : type) =
     if is_slot_addressed then
-      if elem_size = 1 then
-        (* Single slot: load from storage/transient, mstore to memory *)
-        do val_op <- compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc elem_ptr;
-           emit_void MSTORE [item_ptr; val_op]
-        od
-      else
-        (* Multi-slot: use compile_slot_to_memory from contextScript *)
-        do compile_slot_to_memory elem_ptr item_ptr elem_size loc;
-           return ()
-        od
+      (* Always the word-copy loop, a single slot included, as Python's
+         slot_to_memory *)
+      do compile_slot_to_memory elem_ptr item_ptr elem_size loc;
+         return ()
+      od
     else if loc ≠ LocMemory then
       (* Non-memory, byte-addressed: calldata/code/immutables.
          For ≤32B, single load+mstore. For >32B, location-specific bulk copy.
@@ -779,7 +686,7 @@ Definition compile_iter_elem_copy_def:
       compile_store_memory cenv elem_ptr item_ptr target_ty elem_ty
 End
 
-(* infer_array_location, infer_array_is_dynamic defined in exprLoweringScript.
+(* infer_array_location defined in exprLoweringScript.
    type_memory_bytes, elem_size_in_location, is_bytestring_type in compileEnvScript.
    (shared between compile_expr, for-iter loops, and typed copy) *)
 
@@ -936,13 +843,13 @@ Definition compile_stmt_def:
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Assign with _assign_value *)
   compile_stmt cenv lctx ty (Assign (BaseTarget bt) e) =
     (if has_length_word (expr_type e) ∧ is_empty_value_expr e then
-       do tgt_result <- compile_get_target_ptr cenv bt;
+       do tgt_result <- compile_get_target_ptr compile_expr cenv bt;
           compile_store_at_loc cenv.ce_imm_alloca (FST tgt_result) (Lit 0w) (FST (SND tgt_result))
        od
      else
      let src_ty = lowered_value_type cenv e in
      do src_vv <- compile_expr cenv (expr_type e) e;
-        tgt_result <- compile_get_target_ptr cenv bt;
+        tgt_result <- compile_get_target_ptr compile_expr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
         dst_ty_opt <- return (SND (SND tgt_result));
@@ -969,7 +876,7 @@ Definition compile_stmt_def:
      Handles memory, storage, transient targets.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_AugAssign *)
   compile_stmt cenv lctx ty (AugAssign target_ty bt bop e) =
-    do tgt_result <- compile_get_target_ptr cenv bt;
+    do tgt_result <- compile_get_target_ptr compile_expr cenv bt;
        dst_op <- return (FST tgt_result);
        dst_loc_opt <- return (FST (SND tgt_result));
        (* Python order: get_target → load current → eval RHS → binop → store *)
@@ -1095,8 +1002,8 @@ Definition compile_stmt_def:
         compile_revert_with_reason cenv msg_op reason_ty msg_mem_size
      od) ∧
 
-  (* Return NONE: emit STOP for external (with unlock), RET for internal.
-     Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return → _lower_external_return (unlocks first) *)
+  (* Internal returns use RET; constructor returns jump to their epilogue;
+     external returns unlock and STOP, as in Python's lower_Return. *)
   compile_stmt cenv lctx ty (Return NONE) =
     (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
@@ -1106,6 +1013,9 @@ Definition compile_stmt_def:
          od
      | SOME (PtrVar rpc _) => emit_inst RET [rpc] []
      | _ =>
+       (case cenv.ce_ctor_exit_label of
+          SOME exit_lbl => emit_inst JMP [Label exit_lbl] []
+        | NONE =>
          (* External: nonreentrant unlock + STOP *)
          let (is_nonreentrant, nkey, use_transient, is_view) =
            cenv.ce_nonreentrant in
@@ -1113,7 +1023,7 @@ Definition compile_stmt_def:
                compile_nonreentrant_unlock nkey use_transient is_view
              else return ());
             emit_inst STOP [] []
-         od) ∧
+         od)) ∧
 
   (* Return (SOME e): compile value, dispatch internal vs external.
      Mirrors Python: vyper/codegen_venom/stmt.py:lower_Return.
@@ -1239,9 +1149,9 @@ Definition compile_stmt_def:
      Creates 5-block CFG: entry → cond → body → incr → exit
      In the Vyper AST: For id typ (Range start end) n body
      Handles both static and dynamic ranges, signed and unsigned.
-     For nonliteral endpoint operands: rounds = end - start, assert start <= end,
+     For nonliteral source endpoints: rounds = end - start, assert start <= end,
      assert rounds <= bound (including when bound is zero).
-     For two literal endpoint operands: no runtime checks — relies on type checker
+     For two literal source endpoints: no runtime checks — relies on type checker
      having validated start <= end at compile time. Loop uses EQ termination
      (counter != end_val), matching Python exactly.
      PRECONDITION (static ranges): start <= end for unsigned, start <=_s end for
@@ -1270,11 +1180,12 @@ Definition compile_stmt_def:
            so fold only the subtraction which computes rounds; retain the ADD
            in Venom IR for identical stack planning. *)
         rounds <-
-          (case (start_op, end_op) of
-             (Lit start_w, Lit end_w) => return (Lit (end_w - start_w))
+          (case (start_e, end_e) of
+             (Literal _ (IntL start_n), Literal _ (IntL end_n)) =>
+               return (Lit (i2w end_n - i2w start_n))
            | _ => emit_op SUB [end_op; start_op]);
-        (case (start_op, end_op) of
-           (Lit _, Lit _) => return ()
+        (case (start_e, end_e) of
+           (Literal _ (IntL _), Literal _ (IntL _)) => return ()
          | _ => compile_range_bound_checks start_op end_op rounds bound is_signed);
         end_val <- emit_op ADD [start_op; rounds];
         emit_inst JMP [Label cond_lbl] [];
@@ -1308,10 +1219,13 @@ Definition compile_stmt_def:
   (* For: iter loop — for id in array
      Creates 5-block CFG: entry → cond → body → incr → exit
      Location-aware: handles memory, storage, transient, code, calldata.
-     is_dynamic: T for DynArray (has length word), F for SArray
+     The iterable's shape, length and element type come from its type
+     (DynArray: a length word, checked against the capacity in the entry
+     block; SArray: the static count), its location from its compiled
+     value, and the element size from the element type, all as Python's
+     array_typ and array_vv.location.  The loop variable is allocated after
+     the iterable is evaluated and its length loaded.
      word_scale: 1 for storage/transient, 32 for memory/code/calldata
-     elem_size: size of element in location units
-     load_opc: MLOAD/SLOAD/TLOAD/CALLDATALOAD/DLOADN
      is_slot_addressed: T for storage/transient
      SEMANTIC DIFFERENCE: The Vyper interpreter materializes the entire array
      to a value list before iterating (eval_iterator → read_result → extract_elements).
@@ -1322,27 +1236,22 @@ Definition compile_stmt_def:
      Correctness theorem needs precondition: loop body does not modify arr_e.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_iter_loop *)
   compile_stmt cenv lctx ty (For id fty (Array arr_e) bound body) =
-    (let is_dynamic = infer_array_is_dynamic cenv arr_e in
-     let loc = infer_array_location cenv arr_e in
-     let slot_addr = is_slot_addressed loc in
-     let ws = word_scale loc in
-     let elem_size = elem_size_in_location cenv loc fty in
-     let load_opc = load_opc_for loc in
-     do arr_vv <- compile_expr cenv (expr_type arr_e) arr_e;
+    (let arr_ty = expr_type arr_e in
+     let is_dynamic = (case arr_ty of ArrayT _ (Dynamic _) => T | _ => F) in
+     let count = (case arr_ty of ArrayT _ (Dynamic n) => n
+                               | ArrayT _ (Fixed n) => n
+                               | _ => 0) in
+     let arr_elem_ty = (case arr_ty of ArrayT et _ => et | _ => fty) in
+     do arr_vv <- compile_expr cenv arr_ty arr_e;
         arr_op <- return (vv_operand arr_vv);
+        loc <- return (case vv_location arr_vv of SOME l => l
+                                                | NONE => LocMemory);
         (* Load array length *)
         len_op <-
           (if is_dynamic then compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc arr_op
-           else return (Lit (n2w bound)));
+           else return (Lit (n2w count)));
         body_cenv <- declare_local cenv id fty;
         emit_local_alloca body_cenv id;
-        (* Bound check for DynArrays: length <= bound *)
-        (if is_dynamic ∧ bound > 0 then
-           do invalid <- emit_op GT [len_op; Lit (n2w bound)];
-              valid <- emit_op ISZERO [invalid];
-              emit_void ASSERT [valid]
-           od
-         else return ());
         entry_lbl <- fresh_label "iter_entry";
         cond_lbl <- fresh_label "iter_cond";
         body_lbl <- fresh_label "iter_body";
@@ -1354,6 +1263,13 @@ Definition compile_stmt_def:
         new_block entry_lbl;
         idx_var <- fresh_var;
         emit_inst ASSIGN [Lit 0w] [idx_var];
+        (* Bound check for DynArrays: length <= capacity *)
+        (if is_dynamic then
+           do invalid <- emit_op GT [len_op; Lit (n2w count)];
+              valid <- emit_op ISZERO [invalid];
+              emit_void ASSERT [valid]
+           od
+         else return ());
         emit_inst JMP [Label cond_lbl] [];
         (* Cond: check index == length *)
         new_block cond_lbl;
@@ -1362,8 +1278,10 @@ Definition compile_stmt_def:
         (* Body: compute element address, copy to loop var, execute body *)
         new_block body_lbl;
         (* offset_base: skip length word for DynArray *)
-        offset_base <- return (if is_dynamic then ws else 0);
-        idx_offset <- emit_op MUL [Var idx_var; Lit (n2w elem_size)];
+        offset_base <- return (if is_dynamic then word_scale loc else 0);
+        idx_offset <-
+          emit_op MUL [Var idx_var;
+                       Lit (n2w (elem_size_in_location cenv loc arr_elem_ty))];
         total_offset <-
           (if offset_base > 0 then
              emit_op ADD [Lit (n2w offset_base); idx_offset]
@@ -1375,15 +1293,15 @@ Definition compile_stmt_def:
            arr: DynArray[Bytes[540], 10]).
            Mirrors Python: store_memory(elem_addr, dst, target_type,
                             src_typ=array_typ.value_type) *)
-        arr_elem_ty <- return (case expr_type arr_e of
-                                  ArrayT et _ => et | _ => fty);
         (case FLOOKUP body_cenv.ce_vars id of
            SOME (MemLoc off _) =>
-             compile_iter_elem_copy cenv elem_ptr (Lit (n2w off)) elem_size
-                                    loc slot_addr fty arr_elem_ty
+             compile_iter_elem_copy cenv elem_ptr (Lit (n2w off))
+               (elem_size_in_location cenv loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
          | SOME (PtrVar ptr_op _) =>
-             compile_iter_elem_copy cenv elem_ptr ptr_op elem_size
-                                    loc slot_addr fty arr_elem_ty
+             compile_iter_elem_copy cenv elem_ptr ptr_op
+               (elem_size_in_location cenv loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
          | _ =>
              (* Unsupported: an iteration variable requires a memory binding. *)
              emit_void INVALID []);

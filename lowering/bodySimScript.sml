@@ -50,15 +50,18 @@ Ancestors
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps and module variable types, which no
-   declaration changes.  The source runs the runtime code (~cx.in_deploy),
+   has build_compile_env's hashmaps, module variable types and module
+   DynArray capacities, which no declaration changes.  cenv's target is the unit's policy target, as
+   set_*_package_target installs it, which run_lowering requires to have
+   MCOPY (lowering_policy_ok).  The source runs the runtime code (~cx.in_deploy),
    so an internal call finds its callee among the runtime unit's
    functions. *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\ ~cx.in_deploy /\
     (?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-                    ctx = unit.cu_context) /\
+                    ctx = unit.cu_context /\
+                    cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_info =
@@ -69,6 +72,8 @@ Definition body_inv_def:
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
     cenv.ce_hashmap_info = build_hashmap_info tops /\
+    cenv.ce_module_dynarray_capacity =
+      build_dynarray_capacity (collect_module_vars tops) /\
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id))
 End

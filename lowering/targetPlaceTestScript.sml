@@ -13,8 +13,8 @@ QED
 (* Equations expose the recursive boundary without assuming a root name.
    In particular the key computation is sequenced after the recursive base. *)
 Theorem target_map_step:
-  compile_get_target_ptr ce bt st = ((op, loc, SOME (MapPT kt vt)), st1) ==>
-  compile_get_target_ptr ce (SubscriptTarget bt key) st =
+  compile_get_target_ptr compile_expr ce bt st = ((op, loc, SOME (MapPT kt vt)), st1) ==>
+  compile_get_target_ptr compile_expr ce (SubscriptTarget bt key) st =
     (do key_op <- lower_value compile_expr ce (expr_type key) key;
         hashed <- (if is_bytestring_type kt then compile_keccak256_key key_op F
                    else return key_op);
@@ -41,7 +41,7 @@ Definition target_test_env_def:
 End
 
 Theorem target_transient_nonzero:
-  compile_get_target_ptr (target_test_env ce vt)
+  compile_get_target_ptr compile_expr (target_test_env ce vt)
     (TopLevelNameTarget (NONE,"m")) target_test_state =
   ((Lit 7w, SOME LocTransient, SOME (MapPT (BaseT (UintT 256)) vt)),
     target_test_state)
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem target_nested_map_descriptor:
-  SND (SND (FST (compile_get_target_ptr
+  SND (SND (FST (compile_get_target_ptr compile_expr
     (target_test_env ce (HashMapT (BaseT AddressT) (Type (BaseT (UintT 256)))))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
       (Literal (BaseT (UintT 256)) (IntL 3))) target_test_state))) =
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem target_map_value_descriptor_location:
-  let result = compile_get_target_ptr (target_test_env ce (Type t))
+  let result = compile_get_target_ptr compile_expr (target_test_env ce (Type t))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
       (Literal (BaseT (UintT 256)) (IntL 3))) target_test_state in
   FST (SND (FST result)) = SOME LocTransient /\
@@ -72,7 +72,7 @@ QED
 (* This equation distinguishes execution order even for effectful keys: the
    entire inner lower_value and hash precede the outer lower_value. *)
 Theorem target_nested_key_order:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     (target_test_env ce (HashMapT (BaseT (UintT 256)) (Type t)))
     (SubscriptTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m")) inner) outer) =
@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem target_local_module_collision:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     ((target_test_env ce vt) with <|
       ce_vars := FEMPTY |++ [("m", MemLoc 96 64)];
       ce_var_type := (\n. SOME (ArrayT (BaseT (UintT 256)) (Fixed 2))) |>)
@@ -106,7 +106,7 @@ Proof
 QED
 
 Theorem target_bytestring_key_hash:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     ((target_test_env ce (Type t)) with
       ce_hashmap_info := (\n. SOME (T, BaseT (StringT 10), Type t)))
     (SubscriptTarget (TopLevelNameTarget (NONE,"m")) key) =
@@ -134,7 +134,7 @@ QED
 
 (* The second subscript of a map-of-array is an array operation, not SHA3. *)
 Theorem target_map_array_continuation:
-  compile_get_target_ptr
+  compile_get_target_ptr compile_expr
     (target_test_env ce (Type (ArrayT (BaseT (UintT 256)) (Fixed 3))))
     (SubscriptTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
@@ -162,7 +162,7 @@ Definition target_struct_env_def:
 End
 
 Theorem target_map_struct_continuation:
-  compile_get_target_ptr (target_struct_env ce)
+  compile_get_target_ptr compile_expr (target_struct_env ce)
     (AttributeTarget
       (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
         (Literal (BaseT (UintT 256)) (IntL 1))) "b") =
@@ -184,7 +184,7 @@ QED
    map pointer. No blocks may hide persistent operations outside this trace. *)
 Definition target_transient_trace_def:
   target_transient_trace ce =
-    (do r <- compile_get_target_ptr (target_test_env ce (Type (BaseT (UintT 256))))
+    (do r <- compile_get_target_ptr compile_expr (target_test_env ce (Type (BaseT (UintT 256))))
           (SubscriptTarget (TopLevelNameTarget (NONE,"m"))
             (Literal (BaseT (UintT 256)) (IntL 3)));
         let loc = (case FST (SND r) of SOME l => l | NONE => LocMemory) in

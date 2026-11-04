@@ -412,19 +412,114 @@ Proof
   Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
   qspecl_then [`R_ok`,`R_term`,`v`,`v'`] mp_tac vsr_R_ok_R_term >> simp[]
 QED
+Theorem validity_state_frame[local]:
+  vsr_frame s = state_frame s
+Proof
+  simp[vsr_frame_def, stateFrameTheory.state_frame_def]
+QED
+
+Theorem validity_execution_frame[local]:
+  vsr_term_frame s = execution_frame s
+Proof
+  simp[vsr_term_frame_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem validity_state_equiv[local]:
+  state_equiv V s t <=>
+    (!x. x NOTIN V ==> lookup_var x s = lookup_var x t) /\
+    vsr_frame s = vsr_frame t
+Proof
+  simp_tac bool_ss [state_equiv_frame, validity_state_frame]
+QED
+
+Theorem validity_execution_equiv[local]:
+  execution_equiv V s t <=>
+    (!x. x NOTIN V ==> lookup_var x s = lookup_var x t) /\
+    vsr_term_frame s = vsr_term_frame t
+Proof
+  simp_tac bool_ss [execution_equiv_def, validity_execution_frame]
+QED
+
+Theorem validity_frame_labels[local]:
+  vsr_term_frame s = vsr_term_frame t ==> s.vs_labels = t.vs_labels
+Proof
+  disch_then (mp_tac o AP_TERM ``\s:venom_state. s.vs_labels``) >>
+  simp[vsr_term_frame_def]
+QED
+
+Theorem validity_state_update[local]:
+  state_equiv V s t ==>
+  state_equiv V (update_var x v s) (update_var x v t)
+Proof
+  simp_tac bool_ss [validity_state_equiv, vsr_frame_vars] >>
+  rpt strip_tac >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[lookup_var_def]
+QED
+
+Theorem validity_execution_update[local]:
+  execution_equiv V s t ==>
+  execution_equiv V (update_var x v s) (update_var x v t)
+Proof
+  simp_tac bool_ss [validity_execution_equiv, vsr_frame_vars] >>
+  rpt strip_tac >>
+  simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[lookup_var_def]
+QED
+
+Theorem validity_operand[local]:
+  vsr_term_frame s = vsr_term_frame t /\
+  (!x. op = Var x ==> lookup_var x s = lookup_var x t) ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >> drule validity_frame_labels >> strip_tac >>
+  Cases_on `op` >> simp[eval_operand_def]
+QED
+
+Theorem validity_weaken[local]:
+  V SUBSET U /\ state_equiv V s t ==> execution_equiv U s t
+Proof
+  simp_tac bool_ss [state_equiv_def, execution_equiv_def] >>
+  metis_tac[SUBSET_DEF]
+QED
+
+Theorem validity_state_reconstruct[local]:
+  state_equiv V s t /\ u.vs_vars = s.vs_vars /\
+  w.vs_vars = t.vs_vars /\ vsr_frame u = vsr_frame w ==>
+  state_equiv V u w
+Proof
+  simp_tac bool_ss [validity_state_equiv] >>
+  rpt strip_tac >> metis_tac[lookup_var_def]
+QED
+
+Theorem validity_execution_reconstruct[local]:
+  execution_equiv V s t /\ u.vs_vars = s.vs_vars /\
+  w.vs_vars = t.vs_vars /\ vsr_term_frame u = vsr_term_frame w ==>
+  execution_equiv V u w
+Proof
+  simp_tac bool_ss [validity_execution_equiv] >>
+  rpt strip_tac >> metis_tac[lookup_var_def]
+QED
+
 Theorem state_equiv_execution_equiv_valid_state_rel_proof:
   !vars. valid_state_rel (state_equiv vars) (execution_equiv vars)
 Proof
-  rw[valid_state_rel_def] >>
-  fs[state_equiv_def, execution_equiv_def,
-     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
-     stateFrameTheory.execution_frame_def,
-     update_var_def, lookup_var_def] >>
-  rpt strip_tac >>
-  simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
-  TRY (Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >> NO_TAC) >>
-  TRY (rw[] >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  metis_tac[]
+  gen_tac >> pure_rewrite_tac[valid_state_rel_def] >>
+  conj_tac >- simp_tac bool_ss [validity_state_equiv] >>
+  conj_tac >- simp_tac bool_ss [validity_execution_equiv] >>
+  conj_tac >- metis_tac[validity_state_update] >>
+  conj_tac >- metis_tac[validity_execution_update] >>
+  conj_tac >-
+    (rpt strip_tac >> irule validity_operand >>
+     full_simp_tac bool_ss [state_equiv_def, validity_execution_equiv] >> simp[]) >>
+  conj_tac >-
+    (rpt strip_tac >> irule validity_operand >>
+     full_simp_tac bool_ss [validity_execution_equiv] >> simp[]) >>
+  conj_tac >- metis_tac[validity_weaken, SUBSET_REFL] >>
+  conj_tac >- simp_tac bool_ss [validity_state_equiv] >>
+  conj_tac >- simp_tac bool_ss [validity_execution_equiv] >>
+  conj_tac >- metis_tac[validity_state_reconstruct] >>
+  metis_tac[validity_execution_reconstruct]
 QED
 
 (* Generalized: R_ok vars can differ from R_term vars' when vars SUBSET vars' *)
@@ -432,14 +527,20 @@ Theorem valid_state_rel_mixed_proof:
   !vars vars'. vars SUBSET vars' ==>
     valid_state_rel (state_equiv vars) (execution_equiv vars')
 Proof
-  rw[valid_state_rel_def] >>
-  fs[state_equiv_def, execution_equiv_def,
-     vsr_frame_def, vsr_term_frame_def, venom_state_component_equality,
-     stateFrameTheory.execution_frame_def,
-     update_var_def, lookup_var_def, SUBSET_DEF] >>
-  rpt strip_tac >>
-  simp[FLOOKUP_UPDATE, eval_operand_def, lookup_var_def] >>
-  TRY (Cases_on `op` >> fs[eval_operand_def, lookup_var_def] >> NO_TAC) >>
-  TRY (rw[] >> first_x_assum irule >> simp[] >> NO_TAC) >>
-  metis_tac[]
+  rpt strip_tac >> pure_rewrite_tac[valid_state_rel_def] >>
+  conj_tac >- simp_tac bool_ss [validity_state_equiv] >>
+  conj_tac >- simp_tac bool_ss [validity_execution_equiv] >>
+  conj_tac >- metis_tac[validity_state_update] >>
+  conj_tac >- metis_tac[validity_execution_update] >>
+  conj_tac >-
+    (rpt strip_tac >> irule validity_operand >>
+     full_simp_tac bool_ss [state_equiv_def, validity_execution_equiv] >> simp[]) >>
+  conj_tac >-
+    (rpt strip_tac >> irule validity_operand >>
+     full_simp_tac bool_ss [validity_execution_equiv] >> simp[]) >>
+  conj_tac >- metis_tac[validity_weaken] >>
+  conj_tac >- simp_tac bool_ss [validity_state_equiv] >>
+  conj_tac >- simp_tac bool_ss [validity_execution_equiv] >>
+  conj_tac >- metis_tac[validity_state_reconstruct] >>
+  metis_tac[validity_execution_reconstruct]
 QED

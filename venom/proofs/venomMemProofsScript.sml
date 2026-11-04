@@ -495,8 +495,6 @@ QED
 Triviality exec_create_not_terminal[local,simp]:
   (!inst (s:venom_state) value offset sz salt s'.
      exec_create inst s value offset sz salt <> Halt s') /\
-  (!inst (s:venom_state) value offset sz salt a s'.
-     exec_create inst s value offset sz salt <> Abort a s') /\
   (!inst (s:venom_state) value offset sz salt v s'.
      exec_create inst s value offset sz salt <> IntRet v s')
 Proof
@@ -825,7 +823,7 @@ Proof
   imp_res_tac exec_ext_call_preserves_alloca_fields >>
   imp_res_tac exec_delegatecall_preserves_alloca_fields >>
   imp_res_tac exec_create_preserves_alloca_fields >>
-  gvs[]
+  gvs[exec_create_abort_iff, halt_state_def, set_returndata_def]
 QED
 
 Triviality step_inst_base_sstore_alloca_fields[local]:

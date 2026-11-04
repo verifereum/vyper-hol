@@ -4,7 +4,7 @@
  * semantics only. No admitted simulator is used. *)
 Theory fnBoundaryProps
 Ancestors
-  venomToAsmProps codegenRel contextCodegenRel contextCodegenRelProps
+  venomToAsmProps frameRel codegenRel contextCodegenRel contextCodegenRelProps
   venomExecSemantics venomState asmSem list rich_list arithmetic
 
 (* Verifereum's overloaded [cp] is not a context-plan variable. *)

@@ -71,7 +71,7 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, tx_env_ok_def]
+  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,7 +81,7 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
@@ -123,16 +123,23 @@ Proof
 QED
 
 Theorem outcome_guard_success_only:
-  call_outcomes_ok tops am tx [] /\
-  call_outcomes_ok tops am tx [co with co_success := F] /\
-  (call_outcomes_ok tops am tx [co with co_success := T] <=>
+  call_outcomes_ok am tx [] /\
+  (call_outcomes_ok am tx [co with co_success := F] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx (xs ++ ys) <=>
-    call_outcomes_ok tops am tx xs /\ call_outcomes_ok tops am tx ys)
+  (call_outcomes_ok am tx [co with co_success := T] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
+    accounts_runtime_well_typed co.co_accounts /\
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <|accounts := co.co_accounts;
+                               tStorage := co.co_tStorage|>) [])) /\
+  (call_outcomes_ok am tx (xs ++ ys) <=>
+    call_outcomes_ok am tx xs /\ call_outcomes_ok am tx ys)
 Proof
   simp[call_outcomes_ok_def, EVERY_APPEND]
 QED
@@ -182,7 +189,7 @@ QED
    independent supported whitelist rejects public variables. Do not silently
    strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
 Theorem source_lookup_getter_outside_supported:
-  let tops = [VariableDecl Public Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
@@ -194,6 +201,19 @@ Proof
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
+Theorem raw_return_is_unwrapped:
+  tx_return_bytes
+    [FunctionDecl External Pure F T "raw" [] []
+       (BaseT (BytesT (Dynamic 8))) []]
+    (BaseT (BytesT (Dynamic 8))) (tx with function_name := "raw")
+    (vyperValue$BytesV [1w; 2w]) out <=>
+  out = [1w; 2w]
+Proof
+  simp[tx_return_bytes_def, lookup_raw_return_or_F_def,
+       lookup_raw_return_def, vyperValueTheory.raw_return_bytes_def] >>
+  metis_tac[]
+QED
+
 Theorem no_return_is_empty:
   return_bytes tops NoneT v out <=> out = []
 Proof
@@ -247,13 +267,14 @@ Definition dynamic_decode_program_def:
 End
 
 Theorem decoding_exemption_exact:
-  (decode_strictness_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid") /\
-  ~decode_strictness_exempt [] (RuntimeError "abi_decode invalid") /\
-  ~decode_strictness_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
-  ~decode_strictness_exempt dynamic_decode_program (TypeError "abi_decode invalid")
+  (unspecified_behaviour_exempt dynamic_decode_program e <=>
+    e = RuntimeError "abi_decode invalid" \/
+    e = RuntimeError "convert empty bytes to signed") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
+  ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
+  ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
 Proof
-  simp[decode_strictness_exempt_def, occurs_abi_decode_target_def,
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def,
     declaration_abi_decode_target_def, dynamic_decode_program_def,
     supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
     supportedExprTraverseTheory.supported_expr_exists_def,
@@ -262,13 +283,13 @@ Proof
 QED
 
 Theorem static_decode_does_not_exempt_invalid:
-  ~decode_strictness_exempt
+  ~unspecified_behaviour_exempt
     [FunctionDecl External View F F "decode" [] [] NoneT
       [Expr (TypeBuiltin (BaseT (UintT 256)) (AbiDecode F)
         (BaseT (UintT 256)) [Literal (BaseT (BytesT (Dynamic 32))) (BytesL [])])]]
     (RuntimeError "abi_decode invalid")
 Proof
-  simp[decode_strictness_exempt_def, occurs_abi_decode_target_def,
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def,
     declaration_abi_decode_target_def,
     supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
     supportedExprTraverseTheory.supported_expr_exists_def,
@@ -276,7 +297,7 @@ Proof
 QED
 
 Theorem source_exemption_triple:
-  (source_exempt tops (INR (Error e),am,rqs) <=> decode_strictness_exempt tops e) /\
+  (source_exempt tops (INR (Error e),am,rqs) <=> unspecified_behaviour_exempt tops e) /\
   ~source_exempt tops (INL v,am,rqs) /\
   ~source_exempt tops (INR (AssertException s),am,rqs) /\
   ~source_exempt tops (INR BreakException,am,rqs) /\
@@ -292,11 +313,12 @@ Theorem success_requires_requests_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
-      return_bytes tops ret v out /\
-      accounts_agree cx am'.accounts es'.rollback.accounts /\
+      tx_return_bytes tops ret tx v out /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
+      LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
   simp[call_result_rel_def]
 QED
@@ -314,10 +336,27 @@ QED
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel tops ret am tx es r es' <=>
-    decode_strictness_exempt tops e \/
+    unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
   simp[call_result_rel_def]
+QED
+
+Theorem empty_signed_conversion_accepts_any_outcome:
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+    (INR (Error (RuntimeError "convert empty bytes to signed")),am',rqs) ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  simp[call_result_rel_def, unspecified_behaviour_exempt_def]
+QED
+
+Theorem empty_signed_conversion_exemption_exact:
+  unspecified_behaviour_exempt [] (RuntimeError "convert empty bytes to signed") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV int bound") /\
+  ~unspecified_behaviour_exempt [] (RuntimeError "convert BytesV decimal bound") /\
+  ~unspecified_behaviour_exempt [] (TypeError "convert empty bytes to signed")
+Proof
+  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def]
 QED
 
 Theorem escaped_control_is_not_related:
@@ -333,3 +372,11 @@ Theorem escaped_control_is_not_related:
 Proof
   simp[call_result_rel_def]
 QED
+
+(* Boundary regressions must be kernel-closed, not inherited admissions. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean result boundary check: " ^ name)
+  end) (DB.thms "e2eBoundaryTest");

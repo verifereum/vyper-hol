@@ -37,8 +37,8 @@ Regenerate the oracle with the pinned Vyper installed in an isolated environment
 
 ```sh
 /path/to/vyper-env/bin/python lowering/defs/bytecode/python_o1_bytecode_oracle.py \
-  --expected-commit cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c \
-  --expected-python 3.14.4 --generator-uv 0.11.8 \
+  --expected-commit "$(cat VYPER_PIN)" \
+  --expected-python 3.11.11 --generator-uv 0.10.11 \
   --expected-install-root /path/to/vyper-env \
   --sources lowering/defs/bytecode/assignment-order/sources \
   --fixture-manifest lowering/defs/bytecode/assignment-order/fixtures.txt \

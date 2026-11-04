@@ -45,10 +45,10 @@ Proof
     metis_tac[is_bytestring_word_type] >>
   `val_in_memory dtv v (w2n sw) s.vs_memory` by
     (fs[] >> metis_tac[bytestring_val_in_memory_transfer]) >>
-  `val_footprint dtv v = val_footprint stv v` by
-    metis_tac[bytestring_val_footprint_eq] >>
-  `val_footprint dtv v <= MIN (type_memory_size stv) (type_memory_size dtv)` by
-    (simp[MIN_DEF] >> metis_tac[val_footprint_le, value_has_type_memory_wf]) >>
+  `val_store_size dtv v = val_store_size stv v` by
+    metis_tac[bytestring_val_store_size_eq] >>
+  `val_store_size dtv v <= MIN (type_memory_size stv) (type_memory_size dtv)` by
+    (simp[MIN_DEF] >> metis_tac[val_store_size_le, value_has_type_memory_wf]) >>
   irule compile_store_memory_run_frame_with_capacity >> simp[value_has_type_memory_wf] >>
   qexistsl_tac [`cenv`, `dst`, `src`, `sw`, `tenv`, `dty`] >>
   simp[value_has_type_memory_wf] >>

@@ -2,7 +2,7 @@ Theory immutableDeployExecution
 Ancestors
   immutableMemoryFrame immutableWordExecution moduleLowering
   exprLoweringProps venomInst venomExecSemantics venomState instIdxIndep fragExec
-  vyperCompiler
+  vyperCompiler moduleLoweringProps allocaSiteResource
 Libs wordsLib
 
 (* MCOPY runs before CODECOPY in the actual epilogue. Its source is thus
@@ -69,7 +69,18 @@ QED
 Theorem immutable_deploy_write_frame:
   eval_operand op (write_memory_with_expansion at bs s) = eval_operand op s /\
   (write_memory_with_expansion at bs s).vs_code = s.vs_code /\
-  (write_memory_with_expansion at bs s).vs_labels = s.vs_labels
+  (write_memory_with_expansion at bs s).vs_labels = s.vs_labels /\
+  (write_memory_with_expansion at bs s).vs_accounts = s.vs_accounts /\
+  (write_memory_with_expansion at bs s).vs_transient = s.vs_transient /\
+  (write_memory_with_expansion at bs s).vs_logs = s.vs_logs /\
+  (write_memory_with_expansion at bs s).vs_outcomes = s.vs_outcomes /\
+  (write_memory_with_expansion at bs s).vs_requests = s.vs_requests /\
+  (write_memory_with_expansion at bs s).vs_pending_deletions = s.vs_pending_deletions /\
+  (write_memory_with_expansion at bs s).vs_call_ctx = s.vs_call_ctx /\
+  (write_memory_with_expansion at bs s).vs_tx_ctx = s.vs_tx_ctx /\
+  (write_memory_with_expansion at bs s).vs_block_ctx = s.vs_block_ctx /\
+  (write_memory_with_expansion at bs s).vs_data_section = s.vs_data_section /\
+  (write_memory_with_expansion at bs s).vs_immutables = s.vs_immutables
 Proof
   Cases_on `op` >>
   simp[write_memory_with_expansion_def, eval_operand_def, lookup_var_def] >>
@@ -84,7 +95,16 @@ Theorem immutable_deploy_return_slice:
   pos < dimword (:256) /\ LENGTH bytes < dimword (:256) ==>
   ?s'. run_inst_seq
     [mk_inst id RETURN [dst; Lit (n2w (LENGTH bytes))] []] s = Halt s' /\
-    s'.vs_returndata = bytes /\ s'.vs_halted
+    s'.vs_returndata = bytes /\ s'.vs_halted /\
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_logs = s.vs_logs /\ s'.vs_outcomes = s.vs_outcomes /\
+    s'.vs_requests = s.vs_requests /\
+    s'.vs_pending_deletions = s.vs_pending_deletions /\
+    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_code = s.vs_code /\ s'.vs_labels = s.vs_labels
 Proof
   strip_tac >>
   `LENGTH bytes <= LENGTH (DROP pos s.vs_memory)` by
@@ -111,7 +131,16 @@ Theorem immutable_deploy_tail_execution:
        [Var buf; Label "runtime_begin"; Lit (n2w (LENGTH runtime))] [];
      mk_inst (id + 3) RETURN
        [Var buf; Lit (n2w (LENGTH runtime + LENGTH section))] []] s = Halt s' /\
-    s'.vs_returndata = runtime ++ section /\ s'.vs_halted
+    s'.vs_returndata = runtime ++ section /\ s'.vs_halted /\
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_logs = s.vs_logs /\ s'.vs_outcomes = s.vs_outcomes /\
+    s'.vs_requests = s.vs_requests /\
+    s'.vs_pending_deletions = s.vs_pending_deletions /\
+    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_code = s.vs_code /\ s'.vs_labels = s.vs_labels
 Proof
   strip_tac >>
   `pos < dimword (:256) /\ LENGTH runtime < dimword (:256) /\
@@ -154,7 +183,8 @@ Proof
   simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >> simp[Once run_inst_seq_def] >>
   simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
-       wordsTheory.w2n_n2w, listTheory.TAKE_APPEND1, halt_state_def, set_returndata_def]
+       wordsTheory.w2n_n2w, listTheory.TAKE_APPEND1, halt_state_def, set_returndata_def] >>
+  simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, immutable_deploy_write_frame, update_var_def]
 QED
 
 Theorem compile_constructor_epilogue_positive_insts:
@@ -216,11 +246,17 @@ Proof
   `st.cs_next_id + 2 = (st.cs_next_id + 1) + 1 /\
    st.cs_next_id + 3 = (st.cs_next_id + 1) + 2 /\
    st.cs_next_id + 4 = (st.cs_next_id + 1) + 3` by decide_tac >>
-  asm_rewrite_tac[] >> irule immutable_deploy_tail_execution >>
-  gvs[update_var_def, ASCIInumbersTheory.toString_11] >>
-  conj_tac >- (qexists_tac `codepos` >> simp[]) >>
-  qexists_tac `pos` >>
-  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  asm_rewrite_tac[] >>
+  drule_at (Pos (el 3)) immutable_deploy_tail_execution >>
+  disch_then (qspecl_then [`section`, `st.cs_next_id + 1`, `codepos`,
+                          `"%" ++ toString st.cs_next_var`] mp_tac) >>
+  (impl_tac >-
+    simp[update_var_def, eval_operand_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11]) >>
+  strip_tac >> qexists_tac `s'` >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  pure_rewrite_tac[stringTheory.STRCAT_def, listTheory.APPEND] >>
+  strip_tac >> asm_rewrite_tac[]
 QED
 
 Theorem immutable_deploy_runtime_only_tail:
@@ -234,17 +270,29 @@ Theorem immutable_deploy_runtime_only_tail:
     [mk_inst id CODECOPY
        [Var buf; Label "runtime_begin"; Lit (n2w (LENGTH runtime))] [];
      mk_inst (id + 1) RETURN [Var buf; Lit (n2w (LENGTH runtime))] []] s = Halt s' /\
-    s'.vs_returndata = runtime /\ s'.vs_halted
+    s'.vs_returndata = runtime /\ s'.vs_halted /\
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_logs = s.vs_logs /\ s'.vs_outcomes = s.vs_outcomes /\
+    s'.vs_requests = s.vs_requests /\
+    s'.vs_pending_deletions = s.vs_pending_deletions /\
+    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
+    s'.vs_block_ctx = s.vs_block_ctx /\
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_immutables = s.vs_immutables /\
+    s'.vs_code = s.vs_code /\ s'.vs_labels = s.vs_labels
 Proof
   strip_tac >> qabbrev_tac `s1 = write_memory_with_expansion pos runtime s` >>
   `step_inst_base (mk_inst id CODECOPY
     [Var buf; Label "runtime_begin"; Lit (n2w (LENGTH runtime))] []) s = OK s1` by
     simp[mk_inst_def, step_inst_base_def, immutable_deploy_eval_literal,
          immutable_deploy_eval_label, wordsTheory.w2n_n2w, Abbr `s1`] >>
-  simp[Once run_inst_seq_def] >> irule immutable_deploy_return_slice >> simp[] >>
-  qexists_tac `pos` >> simp[Abbr `s1`, immutable_deploy_write_frame,
-                          immutable_write_memory_slice] >>
-  fs[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``]
+  `eval_operand (Var buf) s1 = SOME (n2w pos) /\
+   TAKE (LENGTH runtime) (DROP pos s1.vs_memory) = runtime` by
+    simp[Abbr `s1`, immutable_deploy_write_frame, immutable_write_memory_slice] >>
+  drule_all immutable_deploy_return_slice >>
+  disch_then (qspec_then `id + 1` strip_assume_tac) >>
+  qexists_tac `s'` >> simp[Once run_inst_seq_def] >>
+  gvs[Abbr `s1`, immutable_deploy_write_frame]
 QED
 
 Theorem compile_constructor_epilogue_zero_insts:
@@ -285,11 +333,18 @@ Proof
     simp[mk_inst_def, step_inst_base_def, exec_alloca_def, eval_operand_def] >>
   gvs[] >>
   `st.cs_next_id + 2 = (st.cs_next_id + 1) + 1` by decide_tac >>
-  asm_rewrite_tac[] >> irule immutable_deploy_runtime_only_tail >>
-  gvs[update_var_def] >>
-  conj_tac >- (qexists_tac `codepos` >> simp[]) >>
-  qexists_tac `pos` >>
-  simp[eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
+  asm_rewrite_tac[] >>
+  `eval_operand (Var ("%" ++ toString st.cs_next_var))
+    (update_var ("%" ++ toString st.cs_next_var) (n2w pos) s) = SOME (n2w pos)` by
+    simp[eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  drule immutable_deploy_runtime_only_tail >>
+  disch_then (qspecl_then [`runtime`, `st.cs_next_id + 1`, `codepos`] mp_tac) >>
+  (impl_tac >- simp[update_var_def]) >>
+  strip_tac >> qexists_tac `s'` >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  pure_rewrite_tac[stringTheory.STRCAT_def, listTheory.APPEND] >>
+  strip_tac >> asm_rewrite_tac[]
 QED
 
 (* A terminal boundary for real blocks: the prefix is straight-line and
@@ -322,7 +377,20 @@ Theorem immutable_deploy_block_terminal_bridge:
   run_inst_seq (pre ++ [mk_inst id RETURN [dst;szop] []]) s = Halt final ==>
   ?final'. exec_block fuel ctx bb s = Halt final' /\
     final'.vs_returndata = final.vs_returndata /\
-    final'.vs_halted = final.vs_halted
+    final'.vs_halted = final.vs_halted /\ final'.vs_halted /\
+    final'.vs_accounts = final.vs_accounts /\
+    final'.vs_transient = final.vs_transient /\
+    final'.vs_logs = final.vs_logs /\
+    final'.vs_code = final.vs_code /\
+    final'.vs_call_ctx = final.vs_call_ctx /\
+    final'.vs_outcomes = final.vs_outcomes /\
+    final'.vs_requests = final.vs_requests /\
+    final'.vs_pending_deletions = final.vs_pending_deletions /\
+    final'.vs_tx_ctx = final.vs_tx_ctx /\
+    final'.vs_block_ctx = final.vs_block_ctx /\
+    final'.vs_data_section = final.vs_data_section /\
+    final'.vs_immutables = final.vs_immutables /\
+    final'.vs_labels = final.vs_labels
 Proof
   strip_tac >>
   `EVERY (\i. !s final. step_inst_base i s <> Halt final) pre` by
@@ -364,6 +432,13 @@ Proof
   `step_inst_base (mk_inst id RETURN [dst;szop] []) shifted =
      Halt (final with vs_inst_idx := s.vs_inst_idx + LENGTH pre)` by
     simp[Abbr `shifted`, immutable_deploy_return_index, exec_result_map_def] >>
+  `final.vs_halted` by
+    (qpat_x_assum `step_inst_base _ mid = Halt final` mp_tac >>
+     simp[mk_inst_def, step_inst_base_def] >>
+     Cases_on `eval_operand dst mid` >> simp[] >>
+     Cases_on `eval_operand szop mid` >>
+     simp[halt_state_def, set_returndata_def] >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   qexists_tac `final with vs_inst_idx := s.vs_inst_idx + LENGTH pre` >>
   simp[] >>
   simp[Once exec_block_def, get_instruction_def,
@@ -401,13 +476,144 @@ Proof
   simp[mk_inst_def]
 QED
 
+Theorem compile_constructor_epilogue_append:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  ~block_is_terminated st ==>
+  st'.cs_current_bb = st.cs_current_bb /\
+  st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'
+Proof
+  Cases_on `cap = 0` >>
+  simp[moduleLoweringTheory.compile_constructor_epilogue_def,
+       contextTheory.compile_alloc_buffer_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_return_def, compileEnvTheory.fresh_id_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, listTheory.DROP_APPEND, listTheory.APPEND_ASSOC]
+QED
+
+Theorem compile_constructor_epilogue_code_placement:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  fn_has_code st st' func /\ ~block_is_terminated st /\
+  s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions)
+Proof
+  strip_tac >> drule_all compile_constructor_epilogue_append >> strip_tac >>
+  fs[fn_has_code_def] >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+  qexists_tac `l` >>
+  qpat_x_assum `bb.bb_instructions = _` SUBST1_TAC >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC,
+                  rich_listTheory.DROP_LENGTH_APPEND] >> REFL_TAC
+QED
+
+Theorem compile_constructor_epilogue_alloca_member:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  fn_has_code st st' func /\ ~block_is_terminated st ==>
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w (rt + cap))]
+    ["%" ++ toString st.cs_next_var]) (fn_insts func)
+Proof
+  strip_tac >> drule_all compile_constructor_epilogue_append >> strip_tac >>
+  `MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w (rt + cap))]
+    ["%" ++ toString st.cs_next_var]) (emitted_insts st st')` by
+    (Cases_on `cap = 0`
+     >- (gvs[] >> drule compile_constructor_epilogue_zero_insts >> simp[]) >>
+     `0 < cap` by decide_tac >>
+     drule_all compile_constructor_epilogue_positive_insts >> simp[]) >>
+  fs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
+  gvs[listTheory.MEM_APPEND]
+QED
+
+Theorem compile_constructor_epilogue_related_alloca:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  fn_has_code st st' func /\ ~block_is_terminated st /\
+  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  rt + cap < dimword(:256) /\
+  (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st x)) ==>
+  ?t pos codepos.
+    step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w (rt + cap))]
+      ["%" ++ toString st.cs_next_var]) s = OK t /\
+    pos + rt + cap < dimword(:256) /\
+    eval_operand (Var ("%" ++ toString st.cs_next_var)) t = SOME (n2w pos) /\
+    FLOOKUP s.vs_labels "runtime_begin" = SOME codepos /\
+    (cap <> 0 ==> eval_operand imm
+      (update_var ("%" ++ toString (st.cs_next_var + 1))
+        (n2w (pos + rt)) t) = SOME 0w) /\
+    t.vs_memory = s.vs_memory /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_logs = s.vs_logs /\ t.vs_outcomes = s.vs_outcomes /\
+    t.vs_requests = s.vs_requests /\
+    t.vs_pending_deletions = s.vs_pending_deletions /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\
+    t.vs_data_section = s.vs_data_section /\
+    t.vs_immutables = s.vs_immutables /\
+    t.vs_code = s.vs_code /\ t.vs_labels = s.vs_labels
+Proof
+  strip_tac >> drule_all compile_constructor_epilogue_alloca_member >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `MEM inst (fn_insts func)` >>
+  `alloca_room ctx func s /\ alloca_inv s /\ immutable_base_zero cenv s` by
+    fs[stmt_state_rel_def] >>
+  `!b sz. FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     sz = w2n (n2w (rt + cap):bytes32)` by
+    (rpt strip_tac >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
+     qpat_x_assum `!inst n base sz. _` drule >>
+     disch_then (qspecl_then [`n2w (rt + cap)`, `b`, `sz`] mp_tac) >>
+     simp[Abbr `inst`, mk_inst_def]) >>
+  `inst.inst_opcode = ALLOCA /\
+   inst.inst_operands = [Lit (n2w (rt + cap))] /\
+   inst.inst_outputs = ["%" ++ toString st.cs_next_var]` by
+    simp[Abbr `inst`, mk_inst_def, NoAsms] >>
+  drule_all alloca_site_execute >> strip_tac >>
+  qpat_x_assum `!id p sz. _` kall_tac >>
+  qpat_x_assum `!b sz. _` kall_tac >>
+  `b + rt + cap < dimword(:256)` by
+    (drule alloca_room_next_lt >> gvs[wordsTheory.w2n_n2w] >> decide_tac) >>
+  `?codepos. FLOOKUP s.vs_labels "runtime_begin" = SOME codepos` by
+    fs[immutable_base_zero_alt, optionTheory.IS_SOME_EXISTS] >>
+  qexistsl_tac [`t`, `b`, `codepos`] >>
+  simp[Abbr `inst`, mk_inst_def, step_inst_base_def, eval_operand_def] >>
+  qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+  simp[exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas st.cs_next_id` >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[update_var_def, mk_inst_def] >>
+  rpt strip_tac >>
+  gvs[] >> Cases_on `imm` >>
+  gvs[immutable_base_zero_alt, eval_operand_def, lookup_var_def,
+      update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+      compileEnvTheory.not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.LE_ADD,
+            stringTheory.STRCAT_def, listTheory.APPEND]
+QED
+
 Theorem compile_constructor_epilogue_block_bridge:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) /\
   run_inst_seq (emitted_insts st st') s = Halt final ==>
   ?final'. exec_block fuel ctx bb s = Halt final' /\
     final'.vs_returndata = final.vs_returndata /\
-    final'.vs_halted = final.vs_halted
+    final'.vs_halted = final.vs_halted /\ final'.vs_halted /\
+    final'.vs_accounts = final.vs_accounts /\
+    final'.vs_transient = final.vs_transient /\
+    final'.vs_logs = final.vs_logs /\
+    final'.vs_code = final.vs_code /\
+    final'.vs_call_ctx = final.vs_call_ctx /\
+    final'.vs_outcomes = final.vs_outcomes /\
+    final'.vs_requests = final.vs_requests /\
+    final'.vs_pending_deletions = final.vs_pending_deletions /\
+    final'.vs_tx_ctx = final.vs_tx_ctx /\
+    final'.vs_block_ctx = final.vs_block_ctx /\
+    final'.vs_data_section = final.vs_data_section /\
+    final'.vs_immutables = final.vs_immutables /\
+    final'.vs_labels = final.vs_labels
 Proof
   strip_tac >> drule compile_constructor_epilogue_terminal_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -515,6 +721,159 @@ Proof
   CONV_TAC immutable_deploy_probe_conv
 QED
 
+
+(* Constructor Return's continuation needs the whole terminal world frame,
+   so the instruction-list result must survive lifting into the actual
+   function, including the instruction-index updates performed by exec_block. *)
+Theorem compile_constructor_epilogue_bytes_run_from:
+  !ctx func runtime section prefix args immutables_buf s st st'.
+    compile_constructor_epilogue (LENGTH runtime) (LENGTH section)
+      immutables_buf st = ((), st') /\
+    fn_has_code st st' func /\ ~block_is_terminated st /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts /\
+    fresh_vars_wrt st s /\
+    FLOOKUP s.vs_allocas st.cs_next_id = NONE /\
+    s.vs_alloca_next + LENGTH runtime + LENGTH section < dimword(:256) /\
+    LENGTH prefix < dimword(:256) /\
+    s.vs_code = prefix ++ runtime ++ args /\
+    FLOOKUP s.vs_labels "runtime_begin" = SOME (n2w (LENGTH prefix)) /\
+    (section <> [] ==>
+      ?p. eval_operand immutables_buf s = SOME p /\
+          TAKE (LENGTH section)
+            (DROP (w2n p) s.vs_memory ++ REPLICATE (LENGTH section) 0w) = section)
+    ==>
+    ?fuel final.
+      run_from fuel ctx func s = Halt final /\
+      final.vs_returndata = runtime ++ section /\ final.vs_halted /\
+      final.vs_accounts = s.vs_accounts /\
+      final.vs_transient = s.vs_transient /\
+      final.vs_logs = s.vs_logs /\
+      final.vs_code = s.vs_code /\
+      final.vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_constructor_epilogue_bytes >> strip_tac >>
+  drule_all compile_constructor_epilogue_code_placement >> strip_tac >>
+  drule_all compile_constructor_epilogue_block_bridge >>
+  disch_then (qspecl_then [`0`,`ctx`] strip_assume_tac) >>
+  qexistsl_tac [`0`,`final'`] >>
+  simp[run_from_def]
+QED
+
+Theorem compile_constructor_epilogue_padded_execution:
+  compile_constructor_epilogue rt cap imm st = ((),st') /\
+  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+  ~block_is_terminated st /\
+  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  rt + cap < dimword(:256) /\
+  (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
+    (!x. imm = Var x ==> not_fresh_at st x)) ==>
+  ?final codepos.
+    FLOOKUP s.vs_labels "runtime_begin" = SOME codepos /\
+    run_inst_seq (emitted_insts st st') s = Halt final /\ final.vs_halted /\
+    final.vs_returndata =
+      TAKE rt (DROP (w2n codepos) s.vs_code ++ REPLICATE rt 0w) ++
+      TAKE cap (s.vs_memory ++ REPLICATE cap 0w) /\
+    final.vs_accounts = s.vs_accounts /\ final.vs_transient = s.vs_transient /\
+    final.vs_logs = s.vs_logs /\ final.vs_outcomes = s.vs_outcomes /\
+    final.vs_requests = s.vs_requests /\
+    final.vs_pending_deletions = s.vs_pending_deletions /\
+    final.vs_call_ctx = s.vs_call_ctx /\ final.vs_tx_ctx = s.vs_tx_ctx /\
+    final.vs_block_ctx = s.vs_block_ctx /\
+    final.vs_data_section = s.vs_data_section /\
+    final.vs_immutables = s.vs_immutables /\
+    final.vs_code = s.vs_code /\ final.vs_labels = s.vs_labels
+Proof
+  strip_tac >> drule_all compile_constructor_epilogue_related_alloca >> strip_tac >>
+  qabbrev_tac `codebytes = DROP (w2n codepos) s.vs_code ++ REPLICATE rt 0w` >>
+  qabbrev_tac `runtime = TAKE rt codebytes` >>
+  qabbrev_tac `section = TAKE cap (s.vs_memory ++ REPLICATE cap 0w)` >>
+  `LENGTH runtime = rt /\ LENGTH section = cap` by
+    (simp[Abbr `runtime`, Abbr `codebytes`, Abbr `section`,
+          listTheory.LENGTH_TAKE, listTheory.LENGTH_APPEND,
+          listTheory.LENGTH] >> decide_tac) >>
+  `TAKE (LENGTH runtime)
+      (DROP (w2n codepos) t.vs_code ++ REPLICATE (LENGTH runtime) 0w) = runtime /\
+   TAKE (LENGTH section) (t.vs_memory ++ REPLICATE (LENGTH section) 0w) = section /\
+   FLOOKUP t.vs_labels "runtime_begin" = SOME (n2w (w2n codepos)) /\
+   pos + LENGTH runtime + LENGTH section < dimword(:256) /\
+   w2n codepos < dimword(:256)` by
+    (simp[Abbr `runtime`, Abbr `section`, Abbr `codebytes`, wordsTheory.w2n_lt] >>
+     fs[wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+     decide_tac) >>
+  Cases_on `cap = 0`
+  >- (`pos < dimword(:256) /\ LENGTH runtime < dimword(:256)` by
+        (qpat_assum `pos + rt + cap < _` mp_tac >>
+         qpat_assum `LENGTH runtime = rt` mp_tac >> decide_tac) >>
+      drule_all immutable_deploy_runtime_only_tail >>
+      disch_then (qspec_then `st.cs_next_id + 1` strip_assume_tac) >>
+      qpat_x_assum `cap = 0` SUBST_ALL_TAC >>
+      drule compile_constructor_epilogue_zero_insts >> strip_tac >>
+      qpat_x_assum `TAKE (LENGTH runtime) _ = runtime` kall_tac >>
+      qpat_x_assum `TAKE (LENGTH section) _ = section` kall_tac >>
+      qexistsl_tac [`s'`, `codepos`] >>
+      simp[Once run_inst_seq_def] >>
+      gvs[Abbr `runtime`, Abbr `section`, Abbr `codebytes`]) >>
+  `0 < cap` by decide_tac >>
+  `"%" ++ toString st.cs_next_var <> "%" ++ toString (st.cs_next_var + 1)` by
+    simp[ASCIInumbersTheory.toString_11] >>
+  `eval_operand imm (update_var ("%" ++ toString (st.cs_next_var + 1))
+     (n2w (pos + LENGTH runtime)) t) = SOME 0w` by
+    (qpat_assum `cap <> 0 ==> eval_operand _ _ = _` mp_tac >>
+     pure_rewrite_tac[stringTheory.STRCAT_def, listTheory.APPEND] >> simp[]) >>
+  drule_all immutable_deploy_tail_execution >>
+  disch_then (qspec_then `st.cs_next_id + 1` strip_assume_tac) >>
+  drule_all compile_constructor_epilogue_positive_insts >> strip_tac >>
+  qexistsl_tac [`s'`, `codepos`] >>
+  simp[Once run_inst_seq_def] >>
+  gvs[Abbr `runtime`, Abbr `section`, Abbr `codebytes`]
+QED
+
+(* A constructor Return may reach the epilogue from any related state,
+   including one whose allocation site has already run. *)
+Theorem compile_constructor_epilogue_padded_run_from:
+  !ctx func cenv cx es s st st' runtime_size immutables_len imm.
+    compile_constructor_epilogue runtime_size immutables_len imm st =
+      ((), st') /\
+    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+    ~block_is_terminated st /\
+    stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+    runtime_size + immutables_len < dimword(:256) /\
+    (immutables_len <> 0 ==>
+      cenv.ce_imm_alloca = SOME imm /\
+      (!x. imm = Var x ==> not_fresh_at st x)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?fuel final codepos.
+      FLOOKUP s.vs_labels "runtime_begin" = SOME codepos /\
+      run_from fuel ctx func s = Halt final /\ final.vs_halted /\
+      final.vs_returndata =
+        TAKE runtime_size
+          (DROP (w2n codepos) s.vs_code ++ REPLICATE runtime_size 0w) ++
+        TAKE immutables_len
+          (s.vs_memory ++ REPLICATE immutables_len 0w) /\
+      final.vs_accounts = s.vs_accounts /\
+      final.vs_transient = s.vs_transient /\
+      final.vs_logs = s.vs_logs /\
+      final.vs_outcomes = s.vs_outcomes /\
+      final.vs_requests = s.vs_requests /\
+      final.vs_pending_deletions = s.vs_pending_deletions /\
+      final.vs_call_ctx = s.vs_call_ctx /\
+      final.vs_tx_ctx = s.vs_tx_ctx /\
+      final.vs_block_ctx = s.vs_block_ctx /\
+      final.vs_data_section = s.vs_data_section /\
+      final.vs_immutables = s.vs_immutables /\
+      final.vs_code = s.vs_code /\ final.vs_labels = s.vs_labels
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_constructor_epilogue_padded_execution >> strip_tac >>
+  drule_all compile_constructor_epilogue_code_placement >> strip_tac >>
+  drule_all compile_constructor_epilogue_block_bridge >>
+  disch_then (qspecl_then [`0`,`ctx`] strip_assume_tac) >>
+  qexistsl_tac [`0`,`final'`,`codepos`] >>
+  simp[run_from_def]
+QED
 
 val _ = List.app (fn (name, th) => let
   val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
