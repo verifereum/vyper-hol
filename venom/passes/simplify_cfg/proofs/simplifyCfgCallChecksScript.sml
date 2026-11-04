@@ -12,7 +12,7 @@
 Theory simplifyCfgCallChecks
 Ancestors
   simplifyCfgDefs simplifyCfgCollapseShape simplifyCfgReferences cfgTransform cfgTransformProps venomExecProps
-  simplifyCfgStruct simplifyCfgLabelProps simplifyCfgInvariant simplifyCfgShape
+  simplifyCfgStruct simplifyCfgLabelProps simplifyCfgInvariant simplifyCfgShape simplifyCfgReachuses
   dftCallChecks unitShapeDefs venomWf venomInst list rich_list
 
 Theorem revert_path_fuel_mono:
@@ -634,6 +634,50 @@ Proof
   pure_once_rewrite_tac[revert_path_def] >>
   pure_rewrite_tac[EXISTS_MEM] >> qexists_tac `c` >>
   qpat_x_assum `bbs = _` kall_tac >> simp[]
+QED
+
+Theorem revert_path_map_observations:
+  !n bbs l f.
+  (!bb. MEM bb bbs ==>
+    (f bb).bb_label = bb.bb_label /\
+    ((f bb).bb_instructions = [] <=> bb.bb_instructions = []) /\
+    LAST (f bb).bb_instructions = LAST bb.bb_instructions /\
+    (EVERY (\i. i.inst_opcode <> INVOKE) (f bb).bb_instructions <=>
+     EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions)) /\
+  revert_path bbs n l ==> revert_path (MAP f bbs) n l
+Proof
+  Induct >- simp[revert_path_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `revert_path _ _ _` mp_tac >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> BETA_TAC >> strip_tac >>
+  rename1 `MEM bb bbs` >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> qexists_tac `f bb` >>
+  `MEM (f bb) (MAP f bbs)` by (simp[MEM_MAP] >> metis_tac[]) >>
+  first_assum (qspec_then `bb` mp_tac) >> simp[] >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem revert_path_update_succ_phi_labels:
+  !n bbs l old new succs.
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+    EVERY bb_well_formed bbs /\ revert_path bbs n l ==>
+    revert_path (update_succ_phi_labels old new bbs succs) n l
+Proof
+  rpt strip_tac >>
+  asm_simp_tac (srw_ss())
+    [simplifyCfgReachusesTheory.update_succ_phi_labels_exact] >>
+  irule revert_path_map_observations >> simp[] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[] >>
+  `bb_well_formed bb` by gvs[EVERY_MEM] >>
+  drule (phi_map_revert_observations |> Q.INST
+    [`f` |-> `\i. if i.inst_opcode <> PHI then i else subst_label_inst old new i`]
+    |> BETA_RULE) >>
+  disch_then (qspecl_then [`old`, `new`] mp_tac) >>
+  (impl_tac >- (conj_tac >- (gen_tac >> IF_CASES_TAC >> simp[subst_label_inst_def]) >> simp[])) >>
+  simp[]
 QED
 
 Theorem simplify_cfg_call_checks_ok:
