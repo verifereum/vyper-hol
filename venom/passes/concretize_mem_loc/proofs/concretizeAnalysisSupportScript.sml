@@ -82,47 +82,91 @@ Proof
   simp[pointer_derived_vars_roots, ptr_roots_finite, ptr_roots_def, SUBSET_DEF]
 QED
 
-Theorem bp_supported_fn_block:
-  !insts r. bp_supported (fn_pv P fn) r /\
+Theorem bp_supported_block:
+  (!r i. bp_supported pv r /\ MEM i (fn_insts fn) ==>
+    bp_supported pv (SND (bp_handle_inst r i))) ==>
+  !insts r. bp_supported pv r /\
     EVERY (\i. MEM i (fn_insts fn)) insts ==>
-    bp_supported (fn_pv P fn) (SND (bp_process_block r insts))
+    bp_supported pv (SND (bp_process_block r insts))
 Proof
-  Induct >> simp[bp_process_block_def] >> rpt strip_tac >>
+  strip_tac >> Induct >> simp[bp_process_block_def] >> rpt strip_tac >>
+  `bp_supported pv (SND (bp_handle_inst r h))` by metis_tac[] >>
+  first_x_assum drule >>
   Cases_on `bp_handle_inst r h` >> simp[] >>
-  pairarg_tac >> simp[] >>
-  drule_all bp_supported_fn_inst >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[]
+  pairarg_tac >> simp[]
 QED
 
-Theorem bp_supported_fn_pass_aux:
-  !order r. bp_supported (fn_pv P fn) r ==>
-    bp_supported (fn_pv P fn) (SND (bp_one_pass_aux fn r order))
+Theorem bp_supported_pass_aux:
+  (!r i. bp_supported pv r /\ MEM i (fn_insts fn) ==>
+    bp_supported pv (SND (bp_handle_inst r i))) ==>
+  !order r. bp_supported pv r ==>
+    bp_supported pv (SND (bp_one_pass_aux fn r order))
 Proof
-  Induct >> simp[bp_one_pass_aux_def] >> rpt strip_tac >>
+  strip_tac >> Induct >> simp[bp_one_pass_aux_def] >> rpt strip_tac >>
   Cases_on `FIND (\bb. bb.bb_label = h) fn.fn_blocks`
   >- (simp[] >> first_x_assum irule >> simp[]) >>
   rename1 `_ = SOME bb` >>
   `MEM bb fn.fn_blocks` by metis_tac[execEquivParamBaseTheory.FIND_MEM] >>
   `EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions` by
     (simp[EVERY_MEM] >> metis_tac[allocaRemapSSATheory.mem_fn_insts_intro]) >>
-  drule_all bp_supported_fn_block >> strip_tac >>
+  `bp_supported pv (SND (bp_process_block r bb.bb_instructions))` by
+    (irule bp_supported_block >> metis_tac[]) >>
   Cases_on `bp_process_block r bb.bb_instructions` >> gvs[] >>
   pairarg_tac >> simp[] >> first_x_assum drule >> simp[]
+QED
+
+Theorem bp_supported_fuel:
+  (!r i. bp_supported pv r /\ MEM i (fn_insts fn) ==>
+    bp_supported pv (SND (bp_handle_inst r i))) ==>
+  !n r. bp_supported pv r ==>
+    bp_supported pv (bp_iterate_fuel n fn order r)
+Proof
+  strip_tac >> Induct >> simp[bp_iterate_fuel_def] >> rpt strip_tac >>
+  `bp_supported pv (SND (bp_one_pass fn order r))` by
+    (simp[bp_one_pass_def] >> irule bp_supported_pass_aux >> metis_tac[]) >>
+  Cases_on `bp_one_pass fn order r` >> gvs[] >>
+  Cases_on `q` >> simp[]
+QED
+
+Theorem bp_supported_fn_block:
+  !insts r. bp_supported (fn_pv P fn) r /\
+    EVERY (\i. MEM i (fn_insts fn)) insts ==>
+    bp_supported (fn_pv P fn) (SND (bp_process_block r insts))
+Proof
+  rpt strip_tac >> irule bp_supported_block >> metis_tac[bp_supported_fn_inst]
+QED
+
+Theorem bp_supported_fn_pass_aux:
+  !order r. bp_supported (fn_pv P fn) r ==>
+    bp_supported (fn_pv P fn) (SND (bp_one_pass_aux fn r order))
+Proof
+  rpt strip_tac >> irule bp_supported_pass_aux >> metis_tac[bp_supported_fn_inst]
 QED
 
 Theorem bp_supported_fn_fuel:
   !n r. bp_supported (fn_pv P fn) r ==>
     bp_supported (fn_pv P fn) (bp_iterate_fuel n fn order r)
 Proof
-  Induct >> simp[bp_iterate_fuel_def] >> rpt strip_tac >>
-  `bp_supported (fn_pv P fn) (SND (bp_one_pass fn order r))` by
-    simp[bp_one_pass_def, bp_supported_fn_pass_aux] >>
-  Cases_on `bp_one_pass fn order r` >> gvs[] >>
-  Cases_on `q` >> simp[]
+  rpt strip_tac >> irule bp_supported_fuel >> metis_tac[bp_supported_fn_inst]
 QED
 
 Theorem bp_supported_production:
   bp_supported (fn_pv P fn) (bp_iterate_fuel n fn order FEMPTY)
 Proof
   irule bp_supported_fn_fuel >> simp[bp_supported_def, bp_get_ptrs_def]
+QED
+
+Theorem bp_supported_alloca_production:
+  bp_supported (pointer_derived_vars fn (alloca_roots fn))
+    (bp_iterate_fuel n fn order FEMPTY)
+Proof
+  `FINITE (alloca_roots fn)` by
+    (irule SUBSET_FINITE_I >> qexists `ptr_roots (\v k. F) fn` >>
+     simp[ptr_roots_finite, ptr_roots_def, SUBSET_DEF]) >>
+  irule bp_supported_fuel >> reverse conj_tac
+  >- simp[bp_supported_def, bp_get_ptrs_def] >>
+  rpt strip_tac >> irule bp_supported_inst >> simp[] >>
+  qexists `fn` >> simp[] >> conj_tac
+  >- metis_tac[pointer_derived_vars_closed] >>
+  simp[pointer_derived_vars_roots]
 QED

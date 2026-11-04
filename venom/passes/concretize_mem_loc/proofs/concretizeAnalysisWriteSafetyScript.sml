@@ -3,6 +3,7 @@ Ancestors
   ptrDiscipline arithmetic list finite_map concretizeAnalysisScanCoverage
   concretizePtrReadCoverage concretizeAnalysisBoundary concretizeMemLocDefs
   basePtrDefs frameOriginReachable frameOriginUpdates venomWf pred_set
+  concretizeAnalysisSupport
 
 Theorem confined_full_interval_start:
   !b off sz:num. b <= off /\ off + sz <= b + sz ==> off = b
@@ -61,4 +62,19 @@ Proof
   drule_all origin_frame_current_production_coverage >>
   simp[bp_bases_find_base_allocas] >>
   gvs[inst_write_op_def, find_base_allocas_opt_def]
+QED
+
+Theorem production_base_alloca_derived:
+  MEM (Allocation aid)
+    (find_base_allocas (bp_analyze_fuel fuel cfg fn) (Var v)) ==>
+  v IN pointer_derived_vars fn (alloca_roots fn)
+Proof
+  strip_tac >>
+  `bp_get_ptrs (bp_analyze_fuel fuel cfg fn) v <> []` by
+    (strip_tac >>
+     gvs[GSYM bp_bases_find_base_allocas, bp_bases_def]) >>
+  `bp_supported (pointer_derived_vars fn (alloca_roots fn))
+    (bp_analyze_fuel fuel cfg fn)` by
+    simp[bp_analyze_fuel_def, bp_supported_alloca_production] >>
+  gvs[bp_supported_def] >> metis_tac[]
 QED
