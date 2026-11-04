@@ -851,3 +851,36 @@ Resume typed_sarray_header_iteration[iteration_frame]:
   `lookup_var x u = lookup_var x s` by metis_tac[] >> simp[]
 QED
 Finalise typed_sarray_header_iteration
+
+Theorem typed_sarray_initial_cont[local]:
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st n sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. mem_cont_sim ctx fn s u /\ ~u.vs_halted /\ u.vs_inst_idx = 0 /\
+    u.vs_current_bb = fresh_label_output "typed_sa_cond" sa.cs_next_label /\
+    eval_operand (Var ("%" ++ toString sa.cs_next_var)) u = SOME 0w /\
+    (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
+      vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule_all typed_sarray_child_decompose >> strip_tac >>
+  map_every (fn pat => rpt (qpat_x_assum pat kall_tac))
+    [`compile_store_memory_typed _ _ _ _ _ _ = _`, `sb = _`,
+     `sc.cs_current_insts = _`, `cs_extends _ _`, `fn_has_code _ _ _`,
+     `ci_mono _ _`, `LENGTH sc.cs_current_insts = _`, `sc.cs_next_var = _`,
+     `isPREFIX _ _`] >>
+  `mem_cont_sim ctx fn s
+    (jump_to (fresh_label_output "typed_sa_cond" sa.cs_next_label)
+      (update_var ("%" ++ toString sa.cs_next_var) 0w s))` by
+    (irule typed_sa_initial_sim >> simp[] >> conj_tac
+     >- simp[typed_sa_header_insts_def, phi_prefix_length_def, mk_inst_def] >>
+     qexists_tac `sa.cs_next_id` >> simp[]) >>
+  goal_assum (drule_at Any) >>
+  simp[jump_to_def, update_var_def, eval_operand_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- simp[venom_state_component_equality] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
+
