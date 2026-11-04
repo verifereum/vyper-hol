@@ -4962,6 +4962,39 @@ Definition probe_deep_source_state_def:
       with <| scopes := [FEMPTY]; outcomes := SOME [] |>
 End
 
+Theorem probe_deep_source_typed:
+  state_well_typed probe_deep_source_state
+Proof
+  simp[vyperTypeInvariantsTheory.state_well_typed_def,
+       vyperTypeInvariantsTheory.scope_well_typed_def,
+       probe_deep_source_state_def, set_storage_backend_def,
+       bind_def, return_def, get_accounts_def, update_accounts_def, empty_state_def]
+QED
+
+Theorem probe_deep_source_accounts_typed:
+  accounts_well_typed probe_deep_source_state.accounts
+Proof
+  rw[vyperTypeInvariantsTheory.accounts_well_typed_def,
+     vyperTypeInvariantsTheory.account_well_typed_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``update_storage``]) >>
+  Cases_on `addr = 0w` >> simp[]
+QED
+
+Theorem probe_deep_source_env_consistent:
+  env_consistent probe_deep_env probe_deep_context probe_deep_source_state
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def, probe_deep_env_context] >>
+  conj_tac
+  >- (simp[vyperTypeInvariantsTheory.env_scopes_consistent_def,
+           probe_deep_env_def, probe_deep_source_state_def,
+           set_storage_backend_def, bind_def, get_accounts_def,
+           update_accounts_def, empty_state_def, lookup_scopes_def]) >>
+  rw[vyperTypeInvariantsTheory.env_immutables_consistent_def,
+     probe_deep_env_def, FLOOKUP_UPDATE, probe_deep_module_code] >>
+  gvs[AllCaseEqs()] >>
+  gvs[probe_deep_code_def, find_var_decl_by_name_def] >> EVAL_TAC >> simp[]
+QED
+
 Theorem probe_deep_source_call:
   eval_expr probe_deep_context
     (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
