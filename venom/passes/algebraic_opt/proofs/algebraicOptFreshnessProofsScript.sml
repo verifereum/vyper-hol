@@ -75,6 +75,37 @@ Proof
   metis_tac[ao_output_occurrence_blocks]
 QED
 
+Theorem ao_wf_instruction_index:
+  !fn bb i j.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    i < LENGTH bb.bb_instructions /\ j < LENGTH bb.bb_instructions /\
+    EL i bb.bb_instructions = EL j bb.bb_instructions ==> i = j
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\inst. inst.inst_id) bb.bb_instructions)` by
+    (fs[wf_function_def, fn_inst_ids_distinct_def] >>
+     qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
+     rewrite_tac[MEM_SPLIT] >> strip_tac >> gvs[] >>
+     fs[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]) >>
+  drule ALL_DISTINCT_EL_IMP >>
+  disch_then (qspecl_then [`i`, `j`] mp_tac) >> simp[EL_MAP]
+QED
+
+Theorem ao_available_at_index:
+  !fn bb k v.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    k < LENGTH bb.bb_instructions /\
+    def_available_at fn bb (SOME (EL k bb.bb_instructions)) v ==>
+    ?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+      MEM v di.inst_outputs /\ fn_dominates fn db.bb_label bb.bb_label /\
+      (db = bb ==> ?i. i < k /\ EL i bb.bb_instructions = di)
+Proof
+  rpt gen_tac >> simp[def_available_at_def] >> strip_tac >>
+  qexistsl [`def_bb`, `def_inst`] >> simp[] >> strip_tac >> gvs[] >>
+  `j = k` by (irule ao_wf_instruction_index >> metis_tac[]) >>
+  metis_tac[]
+QED
+
 Theorem ao_ssa_transition_writer:
   !fn bb j i x k phase s b.
     wf_ssa fn /\ MEM bb fn.fn_blocks /\
@@ -180,11 +211,11 @@ availability witnesses. Unfold wf_ssa/def_dominates_uses only in the future
 static boundary. Match their witnesses using ao_ssa_output_occurrence. For
 SOME, uniqueness of the producer occurrence with output x and of the operand
 definition with output z aligns the existential EL indices. Equality of two
-occurrences of the use instruction likewise uses its producer output when
-needed: the use instruction in this particular endpoint obligation need not
-have outputs, so equal instruction records alone must NOT silently be assumed
-to identify the actual endpoint index. Strict order against an earlier equal
-use occurrence would suffice, but that implication must be checked explicitly.
+occurrences of the use instruction is now handled by ao_wf_instruction_index:
+wf_function has globally distinct instruction IDs, so equal records identify
+the actual index even for output-free consumers. ao_available_at_index exports
+the actual-index availability witness. Thus the repeated ASSERT suspicion is
+excluded by a checked structural boundary, not by consumer output uniqueness.
 For NONE, non_terminator_before_terminator now supplies r < t.vs_inst_idx
 without any outgoing step. lookup_block_MEM/label and wf_function label
 uniqueness must align MEM blocks with lookups before crossing.
@@ -229,9 +260,10 @@ ordinary list equality, not a projection from a CFG path. No witness may be
 borrowed from a different history.
 
 Remaining mathematical outputs (recommend shallow allocation, no more audits):
-1. Static localization/bounds stated above, with output-free/repeated ordinary
-   consumer records explicitly checked. This is an unresolved implication,
-   not a proof failure or a verified counterexample.
+1. Static localization/bounds stated above. The actual-index SOME occurrence
+   issue is resolved by ao_available_at_index and ao_wf_instruction_index;
+   matching the producer/operand definition witnesses and exporting the full
+   dominance and position interface still requires proof.
 2. The EXACT writer-forces-producer proposal above, consuming those static
    facts and the three dynamic rows; no extra reachability assumptions.
 3. Last-producer freshness: on an entry-origin trace with initially absent x
