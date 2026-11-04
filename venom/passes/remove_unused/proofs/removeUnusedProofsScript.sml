@@ -2697,7 +2697,7 @@ QED
 (* SSA outputs uniqueness: same output variable → same (block, position).
    Combines all_distinct_flat_map_inj (cross-block) with
    all_distinct_outputs_unique_pos (within-block). *)
-Theorem ssa_form_position[local]:
+Theorem ssa_form_position:
   !fn bb1 n bb2 m v.
     ssa_form fn /\
     MEM bb1 fn.fn_blocks /\ n < LENGTH bb1.bb_instructions /\

@@ -89,3 +89,96 @@ Proof
      simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
   metis_tac[fn_reachable_has_block]
 QED
+
+Theorem ssa_output_position_unique:
+  !fn d bb j v lbl bb' k.
+    ssa_form fn /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH bb.bb_instructions /\
+    MEM v (EL j bb.bb_instructions).inst_outputs /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\
+    k < LENGTH bb'.bb_instructions /\
+    MEM v (EL k bb'.bb_instructions).inst_outputs ==>
+    lbl = d /\ k = j
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM bb fn.fn_blocks /\ MEM bb' fn.fn_blocks /\
+   bb.bb_label = d /\ bb'.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  metis_tac[ssa_form_position]
+QED
+
+Theorem ssa_phi_prefix_unique_definition:
+  !fn d bb j v lbl bb' k.
+    ssa_form fn /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (EL j (collect_phis bb.bb_instructions)).inst_outputs /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\
+    k < LENGTH bb'.bb_instructions /\
+    MEM v (EL k bb'.bb_instructions).inst_outputs ==>
+    lbl = d /\ k = j
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
+  `j < LENGTH bb.bb_instructions` by
+    (qpat_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
+  `EL j bb.bb_instructions = EL j (collect_phis bb.bb_instructions)` by
+    (qpat_assum `bb.bb_instructions = _`
+       (fn th => CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     simp[listTheory.EL_APPEND_EQN]) >>
+  `MEM v (EL j bb.bb_instructions).inst_outputs` by simp[] >>
+  metis_tac[ssa_output_position_unique]
+QED
+
+Theorem ssa_phi_prefix_other_block_no_defs:
+  !fn d bb j v lbl bb'.
+    ssa_form fn /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (EL j (collect_phis bb.bb_instructions)).inst_outputs /\
+    lookup_block lbl fn.fn_blocks = SOME bb' /\ lbl <> d ==>
+    EVERY (\inst. ~MEM v (inst_defs inst)) bb'.bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[listTheory.EVERY_EL, venomInstTheory.inst_defs_def] >>
+  metis_tac[ssa_phi_prefix_unique_definition]
+QED
+
+Theorem ssa_phi_prefix_tail_no_defs:
+  !fn d bb j v k.
+    ssa_form fn /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (EL j (collect_phis bb.bb_instructions)).inst_outputs /\
+    LENGTH (collect_phis bb.bb_instructions) <= k /\
+    k < LENGTH bb.bb_instructions ==>
+    ~MEM v (inst_defs (EL k bb.bb_instructions))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[venomInstTheory.inst_defs_def] >> strip_tac >>
+  `k = j` by metis_tac[ssa_phi_prefix_unique_definition] >>
+  decide_tac
+QED
+
+Theorem ssa_phi_prefix_available_dominates:
+  !fn d bb j v pb.
+    ssa_form fn /\
+    lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (EL j (collect_phis bb.bb_instructions)).inst_outputs /\
+    def_available_at fn pb NONE v ==>
+    fn_dominates fn d pb.bb_label
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[venomWfTheory.def_available_at_def] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = d` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  `MEM (EL j (collect_phis bb.bb_instructions)) bb.bb_instructions` by
+    metis_tac[listTheory.EL_MEM, livenessTransferProofsTheory.collect_phis_mem] >>
+  `bb = def_bb` by
+    metis_tac[ssa_form_position, listTheory.MEM_EL] >>
+  gvs[]
+QED
