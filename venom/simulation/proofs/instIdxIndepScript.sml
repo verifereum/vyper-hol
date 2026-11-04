@@ -383,6 +383,14 @@ val opcode_idx_tac =
   TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
   idx_cases_tac opcode_idx_ss;
 
+(* State writes first test the static-frame flag, which vs_inst_idx leaves
+   alone: split on it, then treat the write as usual. *)
+val static_idx_tac =
+  step_inst_base_opcode_tac >> Cases_on `s.vs_call_ctx.cc_static` >>
+  asm_simp_tac opcode_idx_ss [] >>
+  TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
+  idx_cases_tac opcode_idx_ss;
+
 (* Parameter access only inspects the operand/output envelope.  Keep EL and
    its bounds opaque: the global simpset uses bounds from conditional context
    to rewrite the lookup, although the same lookup occurs on both sides.
@@ -448,9 +456,9 @@ Proof
   >- opcode_idx_tac  (* MCOPY *)
   >- opcode_idx_tac  (* MEMTOP *)
   >- opcode_idx_tac  (* SLOAD *)
-  >- opcode_idx_tac  (* SSTORE *)
+  >- static_idx_tac  (* SSTORE *)
   >- opcode_idx_tac  (* TLOAD *)
-  >- opcode_idx_tac  (* TSTORE *)
+  >- static_idx_tac  (* TSTORE *)
   >- opcode_idx_tac  (* ILOAD *)
   >- opcode_idx_tac  (* ISTORE *)
   >- opcode_idx_tac  (* PHI *)
@@ -500,7 +508,7 @@ Proof
   >- envelope_idx_tac  (* DELEGATECALL *)
   >- envelope_idx_tac  (* CREATE *)
   >- envelope_idx_tac  (* CREATE2 *)
-  >- opcode_idx_tac  (* LOG *)
+  >- static_idx_tac  (* LOG *)
   >- opcode_idx_tac  (* ASSERT *)
   >- opcode_idx_tac  (* ASSERT_UNREACHABLE *)
   >- opcode_idx_tac  (* DLOAD *)
