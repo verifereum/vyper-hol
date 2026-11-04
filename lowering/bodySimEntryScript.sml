@@ -24,7 +24,9 @@ Ancestors
   allocLimitsProps supportedProgramProps exprSimHyps
   immutableLocationProps immutableSectionRel immutableRelation option pair
 Libs
-  monadsyntax
+  monadsyntax supportedEvalLib
+
+val () = supportedEvalLib.configure ();
 
 (* Rebuilding an internal callee's environment uses the same checked
    module metadata as its caller. *)
@@ -371,4 +373,121 @@ Proof
       disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
   simp[] >> drule_all supported_program_function >>
   simp[supported_function_body_def] >> metis_tac[]
+QED
+
+Theorem immutable_interval_bound_probe[local]:
+  supported_declaration_header []
+    (VariableDecl Private Immutable "large"
+      (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE) /\
+  assignable_type FEMPTY
+    (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) /\
+  evaluate_type FEMPTY
+    (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) =
+    SOME (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251))) /\
+  type_memory_size (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251))) =
+    dimword (:256) /\
+  compute_immutables_len (get_struct_fields FEMPTY)
+    [VariableDecl Private Immutable "large"
+      (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE] =
+    dimword (:256)
+Proof
+  CONV_TAC EVAL >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem immutable_program_support_probe[local]:
+  supported_program
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]]
+Proof
+  CONV_TAC EVAL
+QED
+
+Theorem immutable_contract_check_probe[local]:
+  IS_SOME (check_contract F [(0w,([],[]))] 0w
+    [(NONE,
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]])])
+Proof
+  CONV_TAC EVAL >> simp[wordsTheory.dimword_def]
+QED
+
+
+Theorem immutable_classify_probe[local]:
+  classify_functions
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] =
+  ([(Nonpayable,F,F,"foo",[],[],NoneT,[Pass])],[],NONE,NONE)
+Proof
+  CONV_TAC EVAL
+QED
+
+Theorem immutable_selectors_probe[local]:
+  build_selectors FEMPTY
+    [(Nonpayable,F,F,"foo",[],[],NoneT,[Pass])] =
+    [(3264763256,"fn_foo",F)]
+Proof
+  simp[build_selectors_def, compute_selector_def] >>
+  CONV_TAC (ONCE_DEPTH_CONV supportedEvalLib.function_selector_conv) >>
+  CONV_TAC EVAL
+QED
+
+Theorem immutable_runtime_acceptance_probe[local]:
+  IS_SOME (lower_vyper_runtime_unit
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]]
+    <|rpol_target := K T; rpol_frontend_dispatch := Linear;
+      rpol_final_assembly := FAP_Optimize|>)
+Proof
+  qmatch_goalsub_abbrev_tac `lower_vyper_runtime_unit tops policy` >>
+  `classify_functions tops =
+    ([(Nonpayable,F,F,"foo",[],[],NoneT,[Pass])],[],NONE,NONE)` by
+    simp[Abbr `tops`, immutable_classify_probe] >>
+  `build_selectors (type_env tops)
+    [(Nonpayable,F,F,"foo",[],[],NoneT,[Pass])] =
+    [(3264763256,"fn_foo",F)]` by
+    (simp[Abbr `tops`, vyperContextTheory.type_env_def,
+          vyperContextTheory.type_env_for_module_def] >>
+     CONV_TAC EVAL) >>
+  rewrite_tac[lower_vyper_runtime_unit_def] >> simp[] >>
+  qmatch_goalsub_abbrev_tac `package_external_fn tops F keys fn` >>
+  `fn_allocs_ok tops fn` by
+    (simp[Abbr `tops`, Abbr `fn`, fn_allocs_ok_def] >> CONV_TAC EVAL) >>
+  simp[Abbr `fn`, package_external_fn_def,
+       set_external_package_target_def, external_return_buffer_ok_def,
+       package_fallback_fn_def, set_fallback_package_target_def] >>
+  fs[build_positional_args_def, min_calldata_size_def,
+     update_cenv_nonreentrant_def] >>
+  `keys "foo" = 0` by (simp[Abbr `keys`, Abbr `tops`] >> CONV_TAC EVAL) >>
+  simp[] >>
+  qabbrev_tac `cenv = build_compile_env tops External Nonpayable "foo" [] NoneT [Pass] F` >>
+  qpat_assum `build_selectors _ _ = _` (fn th => rewrite_tac[th]) >>
+  simp[vyperCompilerTheory.run_lowering_def,
+       vyperCompilerTheory.lowering_policy_ok_def, Abbr `policy`] >>
+  simp[venomPolicyTypesTheory.target_capabilities_wf_def,
+       build_selectors_def, compute_selector_def] >>
+  CONV_TAC (ONCE_DEPTH_CONV supportedEvalLib.function_selector_conv) >>
+  simp[selectorDispatchTheory.calldata_method_id_def,
+       selector_has_trailing_zeroes_def] >>
+  qabbrev_tac `ep = ("fn_foo",
+    cenv with <|ce_target := K T; ce_nonreentrant := (F,0,F,F); ce_raw_return := F|>,
+    [],4,F,F,0,F,F,[Pass],NONE)` >>
+  simp[moduleLoweringTheory.compile_generate_runtime_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``moduleLowering$compile_external_fn_bodies``,
+     ``vyperCompiler$extract_context_with_internals``,
+     ``vyperCompiler$lowering_context_ok``]) >>
+  simp[Abbr `cenv`, Abbr `tops`] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``vyperCompiler$extract_context_with_internals``,
+     ``vyperCompiler$lowering_context_ok``]) >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``vyperCompiler$lowering_context_ok``]) >>
+  qmatch_goalsub_abbrev_tac `lowering_context_ok ctx` >>
+  `lowering_context_ok ctx` by (simp[Abbr `ctx`] >> CONV_TAC EVAL) >>
+  simp[]
 QED
