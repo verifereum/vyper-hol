@@ -11,7 +11,7 @@ Ancestors
 Theorem ld_numeric_operand_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  ~MEM inst.inst_opcode [ASSIGN;PHI;RET] /\ MEM op inst.inst_operands /\
+  ~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\ op_taint tn op = {} /\
   eval_operand op f.lf_tgt = SOME y ==>
   ?x. eval_operand op f.lf_src = SOME x /\
@@ -313,8 +313,12 @@ Theorem ld_oracle_call_taint:
   step_taint inst s ss tn = tn with <|
     t_var := set_var_taint tn.t_var inst.inst_outputs {};
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
-    t_stor := adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor;
-    t_trans := adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans |>
+    t_stor := adopt_reset inst
+      (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
+    t_trans := adopt_reset inst
+      (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>
 Proof
   strip_tac >>
   `written_taint tn inst s = {} /\ out_taint tn inst s = {}` by
@@ -396,6 +400,8 @@ Theorem ld_oracle_call_observed_effect:
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  (inst.inst_opcode = CALL ==> st = f.lf_src.vs_call_ctx.cc_static) /\
+  (inst.inst_opcode = STATICCALL ==> st) /\
   3 < LENGTH inst.inst_operands /\
   source_memory_write_ranges inst f.lf_src = [(w2n (ro:bytes32),w2n (rz:bytes32))] /\
   read_memory (w2n ao) (w2n az) f.lf_src =
@@ -480,6 +486,8 @@ Proof
     (qpat_x_assum `_ \/ _` strip_assume_tac >>
      simp[source_memory_write_ranges_def, fixed_source_write_range_def,
           memory_range_of_operands_def]) >>
+  `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by
+    fs[ld_nonghost_def] >>
   qpat_assum `exec_ext_call inst f.lf_tgt _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac ld_oracle_call_observed_effect) >>
   disch_then (qspecl_then [`tn`,`r`,`lo`,`x`,`P`,`A`] mp_tac) >>

@@ -98,7 +98,7 @@ QED
 
 Theorem ld_numeric_operand_nonopaque:
   fn_shape_ok fn /\ MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands /\
-  ~MEM inst.inst_opcode [ASSIGN; PHI; RET] ==>
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; RETFMP; DRET] ==>
   ~retpc_var fn v
 Proof
   strip_tac >> strip_tac >> drule_all lowerDloadSafetyBoundaryTheory.shape_retpc_operand_boundary >>
@@ -238,7 +238,7 @@ Theorem ld_vars_numeric_operands_equal:
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ~MEM inst.inst_opcode
-    [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
   (!v. MEM (Var v) inst.inst_operands ==>
     MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn) ==>
   eval_operands inst.inst_operands f.lf_src =

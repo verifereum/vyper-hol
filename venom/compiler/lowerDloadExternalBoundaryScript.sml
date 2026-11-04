@@ -15,12 +15,15 @@ Proof
   Cases_on `rq'.cr_value = 0` >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def] >>
   rename1 `precompile_result _ _ = SOME result` >>
-  Cases_on `result` >> simp[failed_outcome_def]
+  Cases_on `result` >> simp[failed_outcome_def] >>
+  Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq'.cr_kind = MessageCall` >> simp[] >>
+  Cases_on `h.co_success` >> simp[]
 QED
 
 Theorem ld_take_outcome_success:
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
-  rq.cr_data = rq'.cr_data ==>
+  rq.cr_data = rq'.cr_data /\ rq.cr_kind = rq'.cr_kind ==>
   (FST (take_outcome rq os)).co_success =
     (FST (take_outcome rq' os)).co_success
 Proof
@@ -29,12 +32,14 @@ Proof
   Cases_on `rq'.cr_value = 0` >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def] >>
   rename1 `precompile_result _ _ = SOME result` >>
-  Cases_on `result` >> simp[failed_outcome_def]
+  Cases_on `result` >> simp[failed_outcome_def] >>
+  Cases_on `rq'.cr_kind = MessageCall` >> simp[] >>
+  Cases_on `h.co_success` >> simp[]
 QED
 
 Theorem ld_take_outcome_returndata:
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
-  rq.cr_data = rq'.cr_data ==>
+  rq.cr_data = rq'.cr_data /\ rq.cr_kind = rq'.cr_kind ==>
   (FST (take_outcome rq os)).co_returnData =
     (FST (take_outcome rq' os)).co_returnData
 Proof
@@ -43,7 +48,9 @@ Proof
   Cases_on `rq'.cr_value = 0` >>
   gvs[take_outcome_def, computed_precompile_def, failed_outcome_def] >>
   rename1 `precompile_result _ _ = SOME result` >>
-  Cases_on `result` >> simp[failed_outcome_def]
+  Cases_on `result` >> simp[failed_outcome_def] >>
+  Cases_on `rq'.cr_kind = MessageCall` >> simp[] >>
+  Cases_on `h.co_success` >> simp[]
 QED
 
 Theorem ld_nonghost_accounts_empty:
@@ -74,29 +81,31 @@ Theorem ld_consume_adoption_cases[local]:
   rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
   rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  rq.cr_kind = MessageCall /\ rq.cr_kind = rq'.cr_kind /\
+  (inst.inst_opcode = CALL ==> rq.cr_static = s.vs_call_ctx.cc_static) /\
+  (inst.inst_opcode = STATICCALL ==> rq.cr_static) /\
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   s.vs_outcomes = t.vs_outcomes /\
   consume_call_outcome rq ro rs s = (w,ss) /\
   consume_call_outcome rq' ro' rs' t = (w',ts) ==>
-  (ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
-   ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient) \/
-  (ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient)
+  if inst.inst_opcode = CALL /\
+     (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
+  then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
+  else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
+       ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient
 Proof
   strip_tac >>
-  `computed_precompile rq = computed_precompile rq'` by
-    simp[computed_precompile_def] >>
-  Cases_on `computed_precompile rq'`
-  >- (Cases_on `precompile_result rq'.cr_target rq'.cr_data` >>
-      fs[computed_precompile_def] >>
-      rename1 `precompile_result _ _ = SOME result` >>
-      Cases_on `result` >> Cases_on `rq'.cr_static` >>
-      gvs[consume_call_outcome_eq, take_outcome_def, computed_precompile_def,
-          failed_outcome_def, adopt_outcome_def]) >>
-  Cases_on `t.vs_outcomes`
-  >- gvs[consume_call_outcome_eq, take_outcome_def,
-         failed_outcome_def, adopt_outcome_def] >>
-  rename1 `t.vs_outcomes = outcome::rest` >>
-  Cases_on `outcome.co_success /\ ~rq'.cr_static` >>
-  gvs[consume_call_outcome_eq, take_outcome_def, adopt_outcome_def]
+  namedCases_on `t.vs_outcomes` ["", "outcome rest"] >>
+  gvs[consume_call_outcome_eq, take_outcome_def, adopt_outcome_def,
+      failed_outcome_def] >>
+  Cases_on `precompile_result rq'.cr_target rq'.cr_data` >>
+  Cases_on `rq'.cr_value = 0` >>
+  Cases_on `rq'.cr_static` >> Cases_on `outcome.co_success` >>
+  gvs[consume_call_outcome_eq, take_outcome_def, adopt_outcome_def,
+      computed_precompile_def, failed_outcome_def] >>
+  gvs[record_request_def, computed_precompile_def] >>
+  Cases_on `x` >> gvs[failed_outcome_def]
 QED
 
 Theorem ld_consume_call_nonghost:
@@ -105,12 +114,19 @@ Theorem ld_consume_call_nonghost:
   rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
   rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  rq.cr_kind = rq'.cr_kind /\ rq.cr_kind = MessageCall /\
+  (inst.inst_opcode = CALL ==> rq.cr_static = s.vs_call_ctx.cc_static) /\
+  (inst.inst_opcode = STATICCALL ==> rq.cr_static) /\
   consume_call_outcome rq ro rs s = (w,ss) /\
   consume_call_outcome rq' ro' rs' t = (w',ts) /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   tn'.t_imm = tn.t_imm /\
-  tn'.t_stor = adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor /\
-  tn'.t_trans = adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans ==>
+  tn'.t_stor = adopt_reset inst
+    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
+  tn'.t_trans = adopt_reset inst
+    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans ==>
   ld_nonghost tn' ss ts
 Proof
   strip_tac >>
@@ -120,8 +136,15 @@ Proof
     (asm_rewrite_tac[] >> irule ld_take_outcome_rest >> simp[]) >>
   `(FST (take_outcome rq s.vs_outcomes)).co_returnData =
    (FST (take_outcome rq' t.vs_outcomes)).co_returnData` by
-    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> simp[]) >>
-  drule_all ld_consume_adoption_cases >> strip_tac >>
+    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> metis_tac[]) >>
+  `if inst.inst_opcode = CALL /\
+      (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+       ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success)
+   then ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient
+   else ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
+        ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient` by
+    (irule ld_consume_adoption_cases >> metis_tac[]) >>
+  pop_assum mp_tac >> IF_CASES_TAC >> strip_tac >>
   fs[adopt_reset_def] >>
   gvs[consume_call_outcome_eq] >>
   gvs[ld_nonghost_def, storage_agree_except_def, word_agree_except_def] >>
@@ -166,14 +189,21 @@ Theorem ld_consume_call_effect:
   rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
   rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  rq.cr_kind = rq'.cr_kind /\ rq.cr_kind = MessageCall /\
+  (inst.inst_opcode = CALL ==> rq.cr_static = s.vs_call_ctx.cc_static) /\
+  (inst.inst_opcode = STATICCALL ==> rq.cr_static) /\
   consume_call_outcome rq ro rs s = (w,ss) /\
   consume_call_outcome rq' rt rs t = (w',ts) /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   xs = TAKE rs ss.vs_returndata /\
   tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
   tn'.t_imm = tn.t_imm /\
-  tn'.t_stor = adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor /\
-  tn'.t_trans = adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans /\
+  tn'.t_stor = adopt_reset inst
+    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor /\
+  tn'.t_trans = adopt_reset inst
+    (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+     ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
      ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
@@ -189,10 +219,10 @@ Proof
   `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
   `(FST (take_outcome rq s.vs_outcomes)).co_success =
    (FST (take_outcome rq' t.vs_outcomes)).co_success` by
-    (asm_rewrite_tac[] >> irule ld_take_outcome_success >> simp[]) >>
+    (asm_rewrite_tac[] >> irule ld_take_outcome_success >> metis_tac[]) >>
   `(FST (take_outcome rq s.vs_outcomes)).co_returnData =
    (FST (take_outcome rq' t.vs_outcomes)).co_returnData` by
-    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> simp[]) >>
+    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> metis_tac[]) >>
   `ld_memory lo A tn'
     (write_memory_with_expansion ro xs s)
     (write_memory_with_expansion rt xs t)` by

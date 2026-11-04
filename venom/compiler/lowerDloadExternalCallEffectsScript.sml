@@ -12,6 +12,8 @@ Theorem ld_exec_ext_call_effect:
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  (inst.inst_opcode = CALL ==> st = s.vs_call_ctx.cc_static) /\
+  (inst.inst_opcode = STATICCALL ==> st) /\
   read_memory (w2n ao) (w2n az) s = read_memory (w2n at) (w2n az) t /\
   exec_ext_call inst t gt addr value at az rt rz st = OK ts /\
   (w2n rz = 0 \/ (w2n ro = w2n rt /\ w2n ro + w2n rz <= lo) \/
@@ -23,8 +25,10 @@ Theorem ld_exec_ext_call_effect:
     FLOOKUP ss.vs_vars out = SOME w /\ FLOOKUP ts.vs_vars out = SOME w /\
     tn' = tn with <|
       t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
-      t_stor := adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor;
-      t_trans := adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans |> /\
+      t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
+      t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss.vs_requests <> s.vs_requests /\
+        ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |> /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -49,8 +53,10 @@ Proof
   disch_then (SUBST_ALL_TAC o SYM) >>
   qabbrev_tac `mask = tn with <|
     t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss0.vs_returndata)};
-    t_stor := adopt_reset inst (ss0.vs_accounts <> s.vs_accounts) tn.t_stor;
-    t_trans := adopt_reset inst (ss0.vs_transient <> s.vs_transient) tn.t_trans |>` >>
+    t_stor := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+      ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_stor;
+    t_trans := adopt_reset inst (~s.vs_call_ctx.cc_static /\ ss0.vs_requests <> s.vs_requests /\
+      ss0.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans |>` >>
   `s.vs_call_ctx = t.vs_call_ctx` by metis_tac[ld_nonghost_def] >>
   `w = w' /\ ld_memory lo A mask ss0 ts0 /\ ld_nonghost mask ss0 ts0 /\
    ss0.vs_allocas = s.vs_allocas /\ ts0.vs_allocas = t.vs_allocas /\
