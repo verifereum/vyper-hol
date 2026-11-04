@@ -18,46 +18,32 @@ Theorem expr_sim_of_vv_sim_buffer:
     expr_sim ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, comp_bind_def] >>
-  Cases_on `compile_expr cenv ty e sa` >> rename1 `_ = (vv, sm)` >>
-  simp[] >> strip_tac >>
   qpat_x_assum `!tv es'. eval_expr _ _ _ = _ ==> _` kall_tac >>
   qpat_x_assum `!sa. ?t p sb. _` (qspec_then `sa` strip_assume_tac) >>
-  gvs[] >> rename1 `compile_expr cenv ty e sa = (LocatedValue t p, sm)` >>
-  drule compile_expr_extends >> strip_tac >>
-  drule unwrap_value_extends >> strip_tac >>
-  `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  `local_ptrs_reserved cenv sm` by
-    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
-  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-  simp[bind_def] >> Cases_on `raw`
-  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      `expr_vv_res_ok (INL r)` by
-        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
-                             raise_def, expr_res_ok_def]) >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
-      simp[] >> strip_tac >>
-      irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sm s0 es' r (LocatedValue t p) s`, `sm`] >>
-      simp[] >> conj_tac
-      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-          simp[FUN_EQ_THM]) >>
-      irule unwrap_memory_read_result_sim >> simp[]) >>
-  rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
-  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sm`] >> simp[] >> conj_tac
-  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[expr_exit_exception_transport]) >>
-  simp[fragExecTheory.frag_exec_false_pre]
+  drule_all lower_value_nonword_memory >> strip_tac >> gvs[] >>
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[forced_expr_admissible_raw] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sb`, `LocatedValue t p`, `s0`] mp_tac) >>
+  simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (drule_all buffer_memory_marked_read >> strip_tac >>
+          qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t'`] >>
+          simp[]) >>
+      Cases_on `res`
+      >- (Cases_on `r` >> gvs[expr_exit_def]) >>
+      rename1 `expr_exit (INR exc) r` >>
+      `expr_res_ok (INR exc : value + exception)` by
+        (Cases_on `exc` >> Cases_on `r` >>
+         gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
+         Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      simp[GSYM expr_exit_exception_transport] >>
+      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+  disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
 val () =
