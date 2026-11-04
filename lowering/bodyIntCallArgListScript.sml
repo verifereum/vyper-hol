@@ -3,7 +3,7 @@ Theory bodyIntCallArgList
 Ancestors
   list bodySim bodyIntCallArgLifetime exprLoweringProps vyperInterpreter vyperState
   exprSimAggregateSource exprLowering compileEnv fragExec exprSimHyps exprSim
-  exprSimUnwrap bodyIntCallCopyProbe bodyIntCallCopyContent
+  exprSimUnwrap bodyIntCallCopyProbe bodyIntCallCopyContent bodyIntCallStorageLayout
 
 (* Runtime forcing without an aggregate copy.  The restriction is explicit:
    the outstanding copy cases are not justified by this boundary. *)
