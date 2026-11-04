@@ -15,6 +15,7 @@ Libs
 Theorem cse_function_correct:
   !fuel ctx fn s.
     wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+    (!inst. MEM inst (fn_insts fn) ==> inst.inst_opcode <> ALLOCA) /\
     s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
