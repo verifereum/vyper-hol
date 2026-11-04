@@ -646,3 +646,53 @@ Proof
   drule venomFnScheduleRunnerPropsTheory.lookup_unique_function_member >>
   strip_tac >> metis_tac[ir_supply_covers_unit_member]
 QED
+
+(* Prefix freshness needs bounds on original ids, not arbitrary reservations. *)
+Theorem lower_dload_inst_supply_prefix:
+  lower_dload_inst_supply s i = (xs,t) ==>
+  s.irs_next_inst <= t.irs_next_inst /\
+  (?ids. t.irs_used_inst_ids = ids ++ s.irs_used_inst_ids /\
+     ALL_DISTINCT ids /\
+     EVERY (\k. s.irs_next_inst <= k /\ k < t.irs_next_inst) ids /\
+     EVERY (\j. j.inst_id = i.inst_id \/ MEM j.inst_id ids) xs) /\
+  (?vars. t.irs_used_vars = vars ++ s.irs_used_vars /\
+     ALL_DISTINCT vars /\
+     EVERY (\w. ~MEM w s.irs_used_vars) vars /\
+     EVERY (\w. MEM w (inst_ir_vars i) \/ MEM w vars)
+       (FLAT (MAP inst_ir_vars xs)))
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >>
+      map_every imp_res_tac [cj 1 fresh_ir_var_contract, cj 2 fresh_ir_var_contract,
+        cj 4 fresh_ir_var_contract, cj 6 fresh_ir_var_contract] >>
+      gvs[EVERY_MEM] >>
+      gvs[inst_ir_vars_def, inst_uses_def, operand_vars_def, operand_var_def] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >>
+      map_every imp_res_tac [cj 1 fresh_ir_var_contract, cj 2 fresh_ir_var_contract,
+        cj 4 fresh_ir_var_contract, cj 6 fresh_ir_var_contract] >>
+      gvs[EVERY_MEM] >>
+      gvs[inst_ir_vars_def, inst_uses_def, venomInstTheory.operand_vars_def,
+        venomInstTheory.operand_var_def] >>
+      Cases_on `venomInst$operand_var dst_op` >>
+      Cases_on `venomInst$operand_var src_op` >>
+      Cases_on `venomInst$operand_var size_op` >> gvs[] >> metis_tac[]) >>
+  simp[lower_dload_inst_supply_def] >> strip_tac >> gvs[] >>
+  simp[EVERY_MEM]
+QED
+
+Theorem lower_dload_inst_supply_distinct_ids:
+  lower_dload_inst_supply s i = (xs,t) ==>
+  ALL_DISTINCT (MAP (\j. j.inst_id) xs)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >>
+      map_every imp_res_tac [cj 4 fresh_ir_var_contract] >> gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac (cj 4 fresh_ir_var_contract) >> gvs[]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
