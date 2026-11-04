@@ -14,6 +14,53 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
+Theorem toplevel_immutable_lookup:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE /\
+  gas_admissible (eval_expr cx (TopLevelName ann (src,id))) expr_vv_res_ok es ==>
+  src = cenv.ce_module /\
+  ?off imms tv v.
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    ALOOKUP es.immutables cx.txn.target = SOME imms /\
+    FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+    evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
+    off + type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >>
+  `env_consistent env cx es /\ state_well_typed es /\
+   well_typed_expr env (TopLevelName ann (src,id))` by
+    fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_find_NONE_bare_global >> strip_tac >>
+  `src = cenv.ce_module /\
+   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+         !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
+              off + type_memory_size tv < dimword (:256)` by
+    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  simp[gas_admissible_def] >>
+  disch_then (qspec_then `es.gas_obs` mp_tac) >>
+  simp[] >> lookup_global_tac >>
+  fs[get_immutables_def, get_address_immutables_def, lift_option_type_def,
+       bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+  simp[return_def, raise_def, expr_vv_res_ok_def] >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables cenv.ce_module imms) id` >>
+  simp[return_def, raise_def, expr_vv_res_ok_def] >>
+  rename1 `FLOOKUP _ id = SOME tvv` >> PairCases_on `tvv` >>
+  `evaluate_type (get_tenv cx) ann = SOME tvv0` by
+    (fs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `value_has_type tvv0 tvv1` by
+    (fs[state_well_typed_def, EVERY_MEM] >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >> first_x_assum drule >>
+     simp[imms_well_typed_def] >>
+     qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
+     simp[get_source_immutables_def] >> CASE_TAC >> simp[] >>
+     metis_tac[]) >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
     expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
