@@ -6,6 +6,7 @@ Ancestors
   o1LowerDloadJointMemoryRead o1LowerDloadJointScalar o1LowerDloadOccurrence
   o1LowerDloadAddressArithmetic venomExecSemantics list unitShapeDefs memLocDefs
   o1PassContract pointerConfinedDefs venomInst contextCodegenRel
+  o1LowerDloadEnvironment o1LowerDloadOpaque venomWf
 
 Theorem ld_memory_agree_mstore_geometry:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
@@ -181,4 +182,109 @@ Proof
     fs[ld_joint_boundary_def] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
   disch_then irule >> simp[] >> metis_tac[])
+QED
+
+Theorem ld_joint_memory_update_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  active_inst fn inst s /\ ~MEM inst.inst_opcode [DLOAD; DLOADBYTES] /\
+  s1 = s with vs_memory := ms /\ t1 = t with vs_memory := mt /\
+  active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+  occ_frame_reachable vs C stk PG G tn1 fn inst2
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H /\
+  occurrence_annotation_ok n a U B HP H stk PG G
+    (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+  tn1.t_var = tn.t_var /\ tn1.t_stor = tn.t_stor /\
+  tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
+  ld_memory_agree sites lo tn1.t_mem s1.vs_memory t1.vs_memory ==>
+  ?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
+    ld_joint_boundary vs C C' lo D stk PG G tn1 fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+      n a U B HP H sites X ts
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> drule occ_frame_reachable_annotation >> simp[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[o1_fn_shape_def, venomWfTheory.wf_function_def,
+       fn_labels_def]) >>
+  qhdtm_assum `ld_joint_boundary`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
+  qhdtm_assum `ld_joint_frame`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
+  `active_inst fn inst2 (s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `active_inst fn inst2 _` mp_tac >> simp[active_inst_def]) >>
+  drule_all o1LowerDloadJointAssignTheory.ld_joint_control_unchanged_next >> strip_tac >>
+  qexistsl_tac [`u`,`fn'`] >> simp[] >>
+  qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+  qpat_x_assum `t1 = _` SUBST_ALL_TAC >>
+  gvs[venom_state_fupdcanon] >>
+  simp[ld_joint_boundary_def] >> conj_tac
+  >- (qexists_tac `u` >>
+      gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
+          ld_joint_allocas_def, ld_env_agree_def, op_taint_def] >>
+      conj_tac
+      >- (qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
+          simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
+      rpt strip_tac >> metis_tac[]) >>
+  gvs[o1LowerDloadSharedTheory.ld_shared_agree_def]
+QED
+
+Theorem ld_joint_mstore_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\
+  active_inst fn inst s /\ inst.inst_opcode = MSTORE /\ ~in_revert_forward fn s /\
+  step_inst fuel C inst s = OK s1 /\
+  active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  ?t1 u fn'. step_inst fuel C' inst t = OK t1 /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> drule_all ld_joint_mstore_step >> strip_tac >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+    gvs[ld_joint_boundary_def] >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `fn_inst_wf fn` by (fs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]) >>
+  `inst_wf inst` by
+    (fs[fn_inst_wf_def, active_inst_def] >> metis_tac[MEM_EL]) >>
+  `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES] /\
+   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    gvs[is_terminator_def] >>
+  `step_prov PG G inst s1 = G /\ occurrence_step a HP H inst s1 = H` by
+    simp[step_prov_def, occurrence_step_def, set_prov_def,
+         DRESTRICT_UNIV] >>
+  `occ_frame_reachable vs C stk PG G (step_taint inst s s1 tn) fn inst2
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
+    (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
+  `occurrence_annotation_ok n a U B HP H stk PG G
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule occurrence_annotation_next >>
+     disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
+     simp[occurrence_sites_step_def] >> gvs[]) >>
+  qexists_tac `t1` >> simp[] >>
+  `?ms mt. s1 = s with vs_memory := ms /\ t1 = t with vs_memory := mt` by
+    (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+     qpat_x_assum `step_inst fuel C' inst t = _` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[mstore_def] >> metis_tac[]) >>
+  irule ld_joint_memory_update_next >>
+  gvs[step_taint_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  qexists_tac `tn` >> simp[] >>
+  gvs[set_var_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+      DRESTRICT_UNIV]
 QED
