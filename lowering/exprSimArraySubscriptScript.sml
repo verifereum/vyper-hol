@@ -3684,3 +3684,142 @@ Proof
   drule_all immutable_holds_singleton_uint256_separation >> simp[] >>
   qexists `0w` >> simp[]
 QED
+
+Theorem compile_expr_code_empty_path_root:
+  !e cenv cx ty sc vv sc' es md nm t.
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop e /\ compile_expr cenv ty e sc = (vv,sc') /\
+  vv_location vv = SOME LocCode /\
+  eval_expr cx e es = (INL (PlaceR (ImmutablePlace md nm [])),t) ==>
+  ?ann off. e = TopLevelName ann (md,nm) /\
+    FLOOKUP cenv.ce_module_vars (md,nm) = SOME (ImmutableLoc off) /\
+    vv = LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode) /\
+    sc' = sc /\ t = es
+Proof
+  Cases >> rpt gen_tac >> strip_tac >>
+  all_tac >~ [`compile_expr _ _ (Name _ _) _ = _`] >- suspend "Name" >~
+  [`compile_expr _ _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
+  [`compile_expr _ _ (FlagMember _ _ _) _ = _`] >- suspend "Flag" >~
+  [`compile_expr _ _ (IfExp _ _ _ _) _ = _`] >- suspend "If" >~
+  [`compile_expr _ _ (Literal _ _) _ = _`] >- suspend "Literal" >~
+  [`compile_expr _ _ (StructLit _ _ _) _ = _`] >- suspend "Struct" >~
+  [`compile_expr _ _ (Subscript _ _ _) _ = _`] >- suspend "Subscript" >~
+  [`compile_expr _ _ (Attribute _ _ _) _ = _`] >- suspend "Attribute" >~
+  [`compile_expr _ _ (Builtin _ _ _) _ = _`] >- suspend "Builtin" >~
+  [`compile_expr _ _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "TypeBuiltin" >~
+  [`compile_expr _ _ (Pop _ _) _ = _`] >- suspend "Pop" >>
+  suspend "Call"
+QED
+
+Resume compile_expr_code_empty_path_root[Name]:
+  rename1 `Name ann name` >>
+  Cases_on `FLOOKUP cenv.ce_vars name` >>
+  gvs[Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_name_vv_def, comp_return_def,
+       comp_bind_def, comp_ignore_bind_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
+  rename1 `FLOOKUP cenv.ce_vars name = SOME vl` >> Cases_on `vl` >>
+  gvs[comp_return_def, comp_bind_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def]
+QED
+
+Resume compile_expr_code_empty_path_root[Global]:
+  rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
+  Cases_on `FLOOKUP cenv.ce_module_vars (nsid0,nsid1)` >>
+  gvs[Once exprLoweringTheory.compile_expr_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME vl` >> Cases_on `vl` >>
+  gvs[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> gvs[contextTheory.vv_location_def] >>
+  drule_all related_global_code_result_origin >> strip_tac >>
+  gvs[vyperASTTheory.expr_type_def]
+QED
+
+Resume compile_expr_code_empty_path_root[Flag]:
+  gvs[Once exprLoweringTheory.compile_expr_def, contextTheory.vv_location_def]
+QED
+Resume compile_expr_code_empty_path_root[If]:
+  gvs[] >> metis_tac[exprSimIfExpTheory.compile_expr_ifexp_not_code, pairTheory.FST]
+QED
+Resume compile_expr_code_empty_path_root[Literal]:
+  drule eval_expr_literal_value >> simp[]
+QED
+Resume compile_expr_code_empty_path_root[Struct]:
+  rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]
+QED
+Resume compile_expr_code_empty_path_root[Subscript]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule select_result_immutable_origin >> simp[]
+QED
+Resume compile_expr_code_empty_path_root[Attribute]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule select_result_immutable_origin >> simp[]
+QED
+Resume compile_expr_code_empty_path_root[Builtin]:
+  drule eval_expr_builtin_value >> simp[]
+QED
+Resume compile_expr_code_empty_path_root[TypeBuiltin]:
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+Resume compile_expr_code_empty_path_root[Pop]:
+  gvs[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def]
+QED
+Resume compile_expr_code_empty_path_root[Call]:
+  rename1 `eval_expr cx (Call ann target args kws) st = _` >>
+  Cases_on `target` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`]
+  >- (rename1 `Call ann (IntCall nsid) args kws` >>
+      PairCases_on `nsid` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+          AllCaseEqs()])
+  >~ [`eval_ext_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_ext_call_value >> simp[])
+  >~ [`eval_send _ _ _ _ = _`]
+  >- (rename1 `eval_send cx has_gas vs mid = _` >>
+      Cases_on `vs` >- gvs[eval_send_def, raise_def] >>
+      rename1 `eval_send cx has_gas (to_v::rest) mid = _` >>
+      Cases_on `rest` >>
+      gvs[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
+          vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[]) >>
+  qmatch_asmsub_rename_tac `eval_create cx kind _ _ _ _ _` >>
+  Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
+  drule eval_create_value >> simp[]
+QED
+Finalise compile_expr_code_empty_path_root
+
+(* Rebuild a current-module root at a later state from its own declaration,
+   not from an unrelated existential immutable_holds witness. No frame for
+   the later lookup or value is asserted by this theorem. *)
+Theorem compile_expr_code_empty_path_root_holds:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop e /\ compile_expr cenv ty e sc = (vv,sc') /\
+  vv_location vv = SOME LocCode /\
+  eval_expr cx e es =
+    (INL (PlaceR (ImmutablePlace cenv.ce_module nm [])),t) /\
+  FLOOKUP (case ALOOKUP later.immutables cx.txn.target of
+             NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
+    nm = SOME (tvt,v) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+  value_has_type tvt v /\
+  (!off. FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) ==>
+         off + type_memory_size tvt < dimword (:256)) ==>
+  vv_holds cenv cx (expr_type e)
+    (PlaceR (ImmutablePlace cenv.ce_module nm [])) vv later s
+Proof
+  rpt strip_tac >> drule_all compile_expr_code_empty_path_root >> strip_tac >>
+  gvs[vyperASTTheory.expr_type_def, vv_holds_def,
+      contextTheory.mk_ptr_def, eval_operand_def] >>
+  irule immutable_holds_root >>
+  goal_assum (drule_at Any) >> simp[]
+QED
