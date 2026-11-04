@@ -1089,3 +1089,50 @@ Proof
   simp[EL_APPEND2] >>
   qpat_x_assum `EL (k - LENGTH q') q'' = _` mp_tac >> simp[]
 QED
+
+Theorem lower_dload_insts_supply_position_unique:
+  !pre1 pre2 q before1 qi1 i1 code1 qn1 post1 j1
+              before2 qi2 i2 code2 qn2 post2 j2.
+    pre1 ++ i1::post1 = pre2 ++ i2::post2 /\
+    lower_dload_insts_supply q pre1 = (before1,qi1) /\
+    lower_dload_inst_supply qi1 i1 = (code1,qn1) /\
+    lower_dload_insts_supply q pre2 = (before2,qi2) /\
+    lower_dload_inst_supply qi2 i2 = (code2,qn2) /\
+    j1 < LENGTH code1 /\ j2 < LENGTH code2 /\
+    LENGTH before1 + j1 = LENGTH before2 + j2 ==>
+    LENGTH pre1 = LENGTH pre2 /\ j1 = j2
+Proof
+  Induct >> Cases_on `pre2` >> rpt gen_tac >> strip_tac
+  >- (qpat_x_assum `lower_dload_insts_supply q [] = (before1,qi1)` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      qpat_x_assum `lower_dload_insts_supply q [] = (before2,qi2)` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      gvs[])
+  >- (qpat_x_assum `lower_dload_insts_supply q [] = _` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      qpat_x_assum `[] ++ _ = _` mp_tac >>
+      pure_rewrite_tac[APPEND, CONS_11] >> strip_tac >> gvs[] >>
+      qpat_x_assum `lower_dload_insts_supply q (_::_) = _` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def] >>
+      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[])
+  >- (qpat_x_assum `!pre2. _` kall_tac >>
+      qpat_x_assum `lower_dload_insts_supply q [] = _` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      qpat_x_assum `_ = [] ++ _` mp_tac >>
+      pure_rewrite_tac[APPEND, CONS_11] >> strip_tac >> gvs[] >>
+      qpat_x_assum `lower_dload_insts_supply q (_::_) = _` mp_tac >>
+      pure_rewrite_tac[lower_dload_insts_supply_def] >>
+      simp[AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `!pre2. _` (mk_asm "ih") >>
+  qpat_x_assum `h'::_ ++ _ = _` mp_tac >>
+  pure_rewrite_tac[APPEND, CONS_11] >> strip_tac >> gvs[] >>
+  qpat_x_assum `lower_dload_insts_supply q (h::_) = (before1,qi1)` mp_tac >>
+  pure_rewrite_tac[lower_dload_insts_supply_def] >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  qpat_x_assum `lower_dload_insts_supply q (h::_) = (before2,qi2)` mp_tac >>
+  pure_rewrite_tac[lower_dload_insts_supply_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `LENGTH outs + j1 = LENGTH outs' + j2` by decide_tac >>
+  `pre1 ++ i1::post1 = t ++ i2::post2` by simp[] >>
+  asm_x "ih" drule_all >> simp[]
+QED
