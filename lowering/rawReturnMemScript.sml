@@ -173,6 +173,7 @@ Theorem compile_external_return_raw_unlock_frag_mem:
     compile_external_return (SOME op) prim T ei msz nr nkey ut iv st =
       (x, st') /\
     (nr /\ ~iv ==> ut) /\
+    (nr /\ ~iv ==> !s. P s ==> ~s.vs_call_ctx.cc_static) /\
     (!y. op = Var y ==> not_fresh_at st y) /\
     LENGTH bs < dimword (:256) /\
     (!s. P s ==>
