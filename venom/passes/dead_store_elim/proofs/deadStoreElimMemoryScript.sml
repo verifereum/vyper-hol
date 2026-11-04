@@ -188,3 +188,65 @@ Proof
   gvs[dse_pending_memory_def] >>
   simp[LENGTH_write_memory_with_expansion, MAX_DEF] >> decide_tac
 QED
+
+Theorem dse_pending_memory_common_write:
+  dse_pending_memory P s t ==>
+  dse_pending_memory P (write_memory_with_expansion a bytes s)
+    (write_memory_with_expansion a bytes t)
+Proof
+  strip_tac >> rewrite_tac[dse_pending_memory_def] >>
+  conj_tac
+  >- (gvs[dse_pending_memory_def, dse_equiv_def] >>
+      simp[write_memory_with_expansion_def, lookup_var_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      simp[dse_memory_byte_read_byte, read_byte_write_memory_with_expansion] >>
+      IF_CASES_TAC >- simp[] >>
+      rewrite_tac[GSYM dse_memory_byte_read_byte] >>
+      irule dse_pending_memory_byte >> qexists_tac `P` >> simp[]) >>
+  gvs[dse_pending_memory_def] >>
+  simp[LENGTH_write_memory_with_expansion, MAX_DEF] >> decide_tac
+QED
+
+(* Enlarging the exceptional union also needs its endpoint bound: an empty
+   interval contributes no bytes, but may still account for expansion. *)
+Theorem dse_pending_memory_subsume:
+  dse_pending_memory P s t /\
+  (!i. (!b n. MEM (b,n) Q ==> i < b \/ b+n <= i) ==>
+       (!b n. MEM (b,n) P ==> i < b \/ b+n <= i)) /\
+  MAX_LIST (MAP (\(b,n). b+n) P) <= MAX_LIST (MAP (\(b,n). b+n) Q) ==>
+  dse_pending_memory Q s t
+Proof
+  rewrite_tac[dse_pending_memory_def] >> rpt strip_tac
+  >- simp[]
+  >- metis_tac[]
+  >- simp[] >>
+  gvs[MAX_DEF] >> decide_tac
+QED
+
+Theorem dse_pending_memory_cover:
+  dse_pending_memory P s t ==>
+  dse_pending_memory
+    ((a,k)::FILTER (\(b,n). ~(a <= b /\ b+n <= a+k)) P) s t
+Proof
+  strip_tac >> irule dse_pending_memory_subsume >>
+  qexists_tac `P` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      Cases_on `a <= b /\ b+n <= a+k`
+      >- (first_x_assum (qspecl_then [`a`, `k`] mp_tac) >>
+          simp[] >> decide_tac) >>
+      first_x_assum irule >> simp[MEM_FILTER]) >>
+  mp_tac dse_pending_endpoint_filter >> simp[]
+QED
+
+Theorem dse_pending_memory_insert_cover:
+  dse_pending_memory P s t ==>
+  dse_pending_memory
+    ((a,LENGTH bytes)::FILTER (\(b,n). ~(a <= b /\ b+n <= a+LENGTH bytes)) P)
+    (write_memory_with_expansion a bytes s) t
+Proof
+  strip_tac >> drule dse_pending_memory_insert >>
+  disch_then (qspecl_then [`bytes`, `a`] assume_tac) >>
+  drule dse_pending_memory_cover >>
+  disch_then (qspecl_then [`LENGTH bytes`, `a`] mp_tac) >> simp[]
+QED
