@@ -70,7 +70,13 @@ Theorem eval_expr_unop_action:
    bind (bind (eval_expr cx e) (read_result cx))
      (\v es. (unop_result cx ann bi [expr_type e] v es, es)))
 Proof
-  cheat
+  strip_tac >>
+  `bi <> Len /\ builtin_args_length_ok bi 1` by
+    (gvs[builtin_args_length_ok_def]) >>
+  pure_rewrite_tac[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `bind (eval_expr cx (Builtin ann bi [e])) (read_result cx) x` >>
+  drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_unop_cases) >>
+  strip_tac >> gvs[bind_def]
 QED
 
 val () =
