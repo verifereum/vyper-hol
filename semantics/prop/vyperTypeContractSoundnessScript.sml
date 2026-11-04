@@ -860,7 +860,11 @@ Theorem call_lock_action_preserves_tv[local]:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) st = (res,st') ==>
   preserves_tv cx st st'
 Proof
@@ -877,7 +881,11 @@ Theorem call_body_prefix_preserves_tv[local]:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -904,7 +912,11 @@ Theorem call_body_prefix_lock_preserves_tv[local]:
   (do
      (case cx.nonreentrant_slot of
         NONE => raise (Error (TypeError "nonreentrant slot missing"))
-      | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view);
+      | SOME slot => do
+            acquire_nonreentrant_lock cx.txn.target slot
+              (is_view \/ cx.txn.is_static);
+            if is_view then return () else check_not_static cx
+          od);
      send_call_value mut cx;
      eval_stmts cx body
    od st = (res,st')) ==>
@@ -978,7 +990,11 @@ Theorem call_external_function_deploy_normal_success_lookup_transport:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -1013,7 +1029,11 @@ Theorem call_external_function_deploy_return_success_lookup_transport:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -1093,7 +1113,11 @@ Theorem call_external_function_deploy_success_cases:
            (if nr then
               case cx.nonreentrant_slot of
                 NONE => raise (Error (TypeError "nonreentrant slot missing"))
-              | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+              | SOME slot => do
+                    acquire_nonreentrant_lock cx.txn.target slot
+                      ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                    if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                  od
             else return ());
            send_call_value mut cx;
            eval_stmts cx body
@@ -1109,7 +1133,11 @@ Theorem call_external_function_deploy_success_cases:
            (if nr then
               case cx.nonreentrant_slot of
                 NONE => raise (Error (TypeError "nonreentrant slot missing"))
-              | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+              | SOME slot => do
+                    acquire_nonreentrant_lock cx.txn.target slot
+                      ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                    if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                  od
             else return ());
            send_call_value mut cx;
            eval_stmts cx body
@@ -1169,7 +1197,11 @@ Theorem call_lock_action_preserves_immutables[local]:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) st = (res,st') ==>
   st'.immutables = st.immutables
 Proof
@@ -1258,7 +1290,11 @@ Theorem call_lock_action_preserves_accounts_c53:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) st = (res,st') ==>
   st'.accounts = st.accounts
 Proof
@@ -1278,7 +1314,11 @@ Theorem call_lock_send_prefix_body_state_ready_c53:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx
    od (initial_state am [env] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),st)) ==>
@@ -1299,7 +1339,11 @@ Theorem call_lock_action_no_control_c53:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             (is_view \/ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
    else return ()) st = (INR exc,st') ==>
   no_control_exc exc
 Proof
@@ -1315,7 +1359,11 @@ Theorem call_lock_send_eval_no_loop_control_c53:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                (is_view \/ cx.txn.is_static);
+              if is_view then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body
@@ -1339,7 +1387,11 @@ Theorem call_lock_action_no_type_error_c53:
     ((if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ()) st)
 Proof
   rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
@@ -1403,8 +1455,11 @@ Proof
         (if nr then
            case cx.nonreentrant_slot of
              NONE => raise (Error (TypeError "nonreentrant slot missing"))
-           | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                            (mut = View \/ mut = Pure)
+           | SOME slot => do
+                 acquire_nonreentrant_lock cx.txn.target slot
+                   ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                 if (mut = View \/ mut = Pure) then return () else check_not_static cx
+               od
          else return ());
         send_call_value mut cx;
         eval_stmts cx body
@@ -1478,7 +1533,11 @@ Theorem call_lock_send_eval_prefix_no_type_error_c53[local]:
        (if nr then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                if (mut = View \/ mut = Pure) then return () else check_not_static cx
+              od
         else return ());
        send_call_value mut cx;
        eval_stmts cx body
@@ -1754,7 +1813,11 @@ Theorem call_body_prefix_preserves_immutables_dom[local]:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ());
      send_call_value mut cx;
      eval_stmts cx body

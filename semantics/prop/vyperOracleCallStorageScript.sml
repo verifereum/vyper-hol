@@ -75,7 +75,7 @@ Theorem eval_raw_call_oracle_storage_preserved:
   contract_storage_well_formed cx st'
 Proof
   Cases_on `st.outcomes` >> simp[] >>
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, COND_RATOR,
        vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
        vfmTypesTheory.sum_CASE_rator] >>

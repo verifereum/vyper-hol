@@ -613,7 +613,11 @@ Theorem intcall_lock_state_preserves_runtime_frame_storage[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
     lock_st.immutables = st.immutables /\
@@ -1627,7 +1631,7 @@ Theorem eval_raw_call_preserves_contract_storage:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
        append_logs_def, return_def, raise_def, COND_RATOR,
@@ -3810,8 +3814,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
        (if x''1 then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-              (x''0 = View \/ x''0 = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((x''0 = View \/ x''0 = Pure) \/ cx.txn.is_static);
+                if (x''0 = View \/ x''0 = Pure) then return () else check_not_static cx
+              od
         else return ()) (pre with scopes := args_st.scopes) = (lock_res,lock_st) ==>
        contract_storage_well_formed cx lock_st` by (
       rpt strip_tac >>
@@ -3823,8 +3830,11 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       `(if x''1 then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-              (x''0 = View \/ x''0 = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((x''0 = View \/ x''0 = Pure) \/ cx.txn.is_static);
+                if (x''0 = View \/ x''0 = Pure) then return () else check_not_static cx
+              od
         else return ()) (pre with scopes := args_st.scopes)` >>
     rename1 `_ (pre with scopes := args_st.scopes) = (lock_res,lock_st)` >>
     `contract_storage_well_formed cx lock_st` by (

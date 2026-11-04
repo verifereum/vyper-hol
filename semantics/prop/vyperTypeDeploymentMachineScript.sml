@@ -403,8 +403,11 @@ Theorem checked_constructor_prefix_run_preserves_machine_well_typed:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                      (mut = View \/ mut = Pure)
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+           if (mut = View \/ mut = Pure) then return () else check_not_static cx
+         od
    else return ()) (initial_state am_c [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) = (INL (),lock_st) /\
   send_call_value mut cx lock_st = (INL (),body_st) /\
   eval_stmts cx body body_st = (res,body_st') /\

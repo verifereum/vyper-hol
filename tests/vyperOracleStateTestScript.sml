@@ -281,7 +281,7 @@ Proof
   strip_tac >>
   simp[evaluate_def, evaluate_literal_def, read_result_def,
        type_check_def, assert_def, bind_def, ignore_bind_def, return_def] >>
-  simp[eval_send_def, frame_call_value_def, COND_RATOR, oracle_zero_send_operands, ext_call_kwarg_def,
+  simp[eval_send_def, frame_call_value_def, check_def, COND_RATOR, oracle_zero_send_operands, ext_call_kwarg_def,
        forwarded_gas_def, lift_option_type_def, get_accounts_def,
        get_transient_storage_def, type_check_def, assert_def,
        bind_def, ignore_bind_def, return_def] >>

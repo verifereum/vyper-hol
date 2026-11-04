@@ -855,7 +855,13 @@ Proof
   imp_res_tac push_log_log_extends >>
   first_x_assum drule >> strip_tac >>
   irule log_extends_trans >> goal_assum drule >>
-  simp[log_extends_append]
+  qpat_x_assum `_ s'' = (res,st')` mp_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def,
+       vyperStateTheory.push_log_def] >>
+  strip_tac >> gvs[log_extends_refl, log_extends_append]
 QED
 
 Theorem case_expr_name_logs[local]:
@@ -998,6 +1004,7 @@ Proof
   simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
        vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[log_extends_refl] >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >>
@@ -1045,6 +1052,26 @@ Proof
        vyperStateTheory.raise_def] >>
   rpt strip_tac >> gvs[] >>
   irule log_extends_eq_logs >> simp[]
+QED
+
+Theorem lock_cond_log_extends[local]:
+  !nr slot_opt addr is_view cx st res st'.
+    (if nr then
+       case slot_opt of
+         NONE => raise (Error (TypeError "nonreentrant slot missing"))
+       | SOME slot => do
+           acquire_nonreentrant_lock addr slot (is_view \/ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
+     else return ()) st = (res,st') ==>
+    log_extends st st'
+Proof
+  Cases_on `nr` >> Cases_on `slot_opt` >>
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       COND_RATOR, log_extends_refl, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_log_extends >>
+  gvs[log_extends_refl]
 QED
 
 Theorem release_nonreentrant_lock_log_extends[local]:
@@ -1315,10 +1342,8 @@ Proof
   gvs[log_extends_refl] >>
   `log_extends s'' s'⁴'` by
     (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
-     Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
-     simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
      rpt strip_tac >>
-     imp_res_tac acquire_nonreentrant_lock_log_extends >>
+     imp_res_tac lock_cond_log_extends >>
      gvs[log_extends_refl]) >>
   `log_extends (s'⁴' with scopes := [env]) s'⁵'` by
     (qpat_x_assum `finally _ _ _ = _` mp_tac >>
@@ -1369,8 +1394,11 @@ Theorem intcall_post_defaults_guarded_log_extends[local]:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ()) sg4 = (INL (),sg5) ==>
      push_function (src_id_opt,fn) env cx sg5 = (INL cxf,sg6) ==>
      !s0 r s1. eval_stmts cxf body s0 = (r,s1) ==>
@@ -1386,10 +1414,8 @@ Proof
   gvs[log_extends_refl] >>
   `log_extends s'' s'⁴'` by
     (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
-     Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
-     simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
      rpt strip_tac >>
-     imp_res_tac acquire_nonreentrant_lock_log_extends >>
+     imp_res_tac lock_cond_log_extends >>
      gvs[log_extends_refl]) >>
   `log_extends s'⁴' s'⁵'` by
     (irule log_extends_eq_logs >>
@@ -1420,8 +1446,11 @@ Theorem intcall_success_continuation_guarded_log_extends[local]:
       x <- if nr then
              case cx.nonreentrant_slot of
                NONE => raise (Error (TypeError "nonreentrant slot missing"))
-             | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                                (mut = View \/ mut = Pure)
+             | SOME slot => do
+                   acquire_nonreentrant_lock cx.txn.target slot
+                     ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                   if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                 od
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
       rv <- finally
@@ -1457,8 +1486,11 @@ Theorem intcall_success_continuation_guarded_log_extends[local]:
      (if nr then
         case cx.nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                         (mut = View \/ mut = Pure)
+        | SOME slot => do
+              acquire_nonreentrant_lock cx.txn.target slot
+                ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+              if (mut = View \/ mut = Pure) then return () else check_not_static cx
+            od
       else return ()) sg4 = (INL (),sg5) ==>
      push_function (src_id_opt,fn) env cx sg5 = (INL cxf,sg6) ==>
      !s0 r s1. eval_stmts cxf body s0 = (r,s1) ==>
@@ -1499,8 +1531,11 @@ Theorem intcall_success_continuation_log_extends[local]:
       x <- if nr then
              case cx.nonreentrant_slot of
                NONE => raise (Error (TypeError "nonreentrant slot missing"))
-             | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-                                (mut = View \/ mut = Pure)
+             | SOME slot => do
+                   acquire_nonreentrant_lock cx.txn.target slot
+                     ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                   if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                 od
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
       rv <- finally
@@ -1716,7 +1751,7 @@ Theorem eval_raw_call_log_extends:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,
@@ -1767,13 +1802,15 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+       vyperStateTheory.assert_def, vyperStateTheory.raise_def,
+       vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac type_check_state >> imp_res_tac lift_option_type_state >> gvs[] >>
-  imp_res_tac push_log_log_extends >> imp_res_tac return_state >> gvs[] >>
+  imp_res_tac push_log_log_extends >> gvs[] >>
   first_x_assum drule >> strip_tac >>
   irule log_extends_trans >> goal_assum drule >>
-  simp[log_extends_append]
+  simp[log_extends_refl, log_extends_append]
 QED
 
 Theorem case_expr_raw_revert_logs[local]:
@@ -2144,11 +2181,8 @@ Proof
             (rpt strip_tac >> gvs[] >> metis_tac[log_extends_trans]) >>
           qmatch_goalsub_abbrev_tac `lock after_defaults` >>
           `!s0 res s1. lock s0 = (res,s1) ==> log_extends s0 s1` by
-            (simp[Abbr `lock`] >> IF_CASES_TAC >>
-             simp[return_def, log_extends_refl] >>
-             Cases_on `cx.nonreentrant_slot` >>
-             simp[raise_def, log_extends_refl] >>
-             rpt strip_tac >> drule acquire_nonreentrant_lock_log_extends >> simp[]) >>
+            (simp[Abbr `lock`] >> rpt strip_tac >>
+             imp_res_tac lock_cond_log_extends) >>
           BasicProvers.TOP_CASE_TAC >>
           qmatch_asmsub_rename_tac `lock after_defaults = (lock_res,after_lock)` >>
           `log_extends after_defaults after_lock` by
