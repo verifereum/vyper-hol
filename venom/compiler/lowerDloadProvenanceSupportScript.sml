@@ -209,3 +209,20 @@ Proof
   Cases_on `ld_op_prov AG op = NONE` >> simp[] >>
   drule_all ld_op_support >> metis_tac[]
 QED
+
+Theorem ld_annotated_fn_member:
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  MEM fn ctx.ctx_functions
+Proof
+  strip_tac >> drule ld_annotated_prov_support_all >>
+  disch_then (qspec_then `P` mp_tac) >> simp[]
+QED
+
+Theorem ld_annotated_active_inst:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  active_inst fn inst s
+Proof
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt strip_tac
+QED

@@ -1,7 +1,7 @@
 Theory lowerDloadOrdinaryExecution
 Ancestors
   lowerDloadPairedBoundary lowerDloadOwnership ptrDiscipline
-  venomExecSemantics venomState lowerDloadClassify lowerDloadControlPosition
+  venomExecSemantics venomState execEquivParamBase lowerDloadControlPosition
   lowerDloadDefs o1ContractLowerDload lowerDloadOperand finite_map
 
 Theorem ld_owned_assign_backward:
@@ -48,7 +48,7 @@ Proof
   >- (gvs[eval_one_phi_def, AllCaseEqs()] >>
       rename1 `eval_operand op t = SOME y` >>
       `!v. op = Var v ==> v IN V` by
-        metis_tac[lowerDloadClassifyTheory.resolve_phi_MEM] >>
+        metis_tac[execEquivParamBaseTheory.resolve_phi_MEM] >>
       `eval_operand op s = NONE <=> eval_operand op t = NONE` by
         metis_tac[ld_owned_operand_defined] >>
       Cases_on `eval_operand op s` >> gvs[] >>
