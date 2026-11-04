@@ -1999,3 +1999,126 @@ Proof
   rewrite_tac[builtinHashingTheory.compile_sha256_bytesm_def,
     comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
 QED
+
+Theorem label_preserving_ecrecover[local]:
+  !s r t. compile_ecrecover h v rr ss s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_ecrecover_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ecadd_points[local]:
+  !s r t. compile_ecadd_points p1 p2 s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_ecadd_points_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ecmul_point[local]:
+  !s r t. compile_ecmul_point p v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinMiscTheory.compile_ecmul_point_def,
+    comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_method_id_hash[local]:
+  !s r t. compile_method_id_hash ty v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `ty` >> simp_tac (srw_ss())
+    [builtinHashingTheory.compile_method_id_hash_def]
+  >- (Cases_on `b` >> simp_tac (srw_ss())
+        [builtinHashingTheory.compile_method_id_hash_def]
+      >~ [`BytesT bound`] >- (Cases_on `bound` >> simp_tac (srw_ss())
+          [builtinHashingTheory.compile_method_id_hash_def] >>
+          metis_tac[label_preserving_keccak256_bytes,
+            label_preserving_keccak256_bytesm]) >>
+      metis_tac[label_preserving_keccak256_bytes]) >>
+  metis_tac[label_preserving_keccak256_bytes]
+QED
+
+Theorem label_preserving_method_id_runtime[local]:
+  !s r t. compile_method_id_runtime ty v isbytes s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinHashingTheory.compile_method_id_runtime_def,
+    comp_ignore_bind_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_method_id_hash] >> gen_tac >>
+  ntac 2 LABEL_BIND >> IF_CASES_TAC >- LABEL_LEAF >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_out_buf[local]:
+  !s r t. compile_slice_out_buf sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_slice_out_buf_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_data[local]:
+  !s r t. compile_slice_data len data_op off n sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_slice_data_def] >>
+  ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_bounds] >>
+  rewrite_tac[comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_calldata[local]:
+  !s r t. compile_slice_calldata off n sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_slice_calldata_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_out_buf] >>
+  Cases >> simp_tac (srw_ss()) [] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_bounds] >>
+  rewrite_tac[comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_code[local]:
+  !s r t. compile_slice_code off n sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_slice_code_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_out_buf] >>
+  Cases >> simp_tac (srw_ss()) [] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_bounds] >>
+  rewrite_tac[comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_extcode[local]:
+  !s r t. compile_slice_extcode addr off n buf data_op s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_bounds] >>
+  rewrite_tac[comp_ignore_bind_def] >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_uint2str[local]:
+  !s r t. compile_uint2str v n sz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinStringsTheory.compile_uint2str_def,
+    comp_ignore_bind_def] >> ntac 8 LABEL_BIND >>
+  ntac 6 LABEL_FRESH >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_builtin_len[local]:
+  !s r t. compile_builtin_len ctor imm v loc s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinSimpleTheory.compile_builtin_len_def] >>
+  metis_tac[label_preserving_ptr_load]
+QED
