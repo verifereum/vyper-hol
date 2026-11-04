@@ -709,6 +709,34 @@ Proof
   irule revert_path_update_succ_phi_labels >> simp[]
 QED
 
+Theorem can_bypass_jump_single_jmp:
+  bb_well_formed b /\ EVERY label_positions_ok b.bb_instructions /\
+  can_bypass_jump fn a b ==>
+  ?j target. b.bb_instructions = [j] /\ j.inst_opcode = JMP /\
+    j.inst_operands = [Label target] /\ bb_succs b = [target]
+Proof
+  strip_tac >>
+  `LENGTH b.bb_instructions = 1 /\ LENGTH (bb_succs b) = 1` by
+    fs[can_bypass_jump_def, num_succs_def] >>
+  Cases_on `b.bb_instructions` >> gvs[] >>
+  Cases_on `bb_succs b` >> gvs[] >>
+  drule shaped_bb_single_successor_jmp >> simp[]
+QED
+
+Theorem revert_path_single_jmp_target:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\ MEM b bbs /\
+  b.bb_instructions = [j] /\ j.inst_opcode = JMP /\
+  j.inst_operands = [Label target] /\ revert_path bbs n b.bb_label ==>
+  ?m. m < n /\ revert_path bbs m target
+Proof
+  strip_tac >> drule revert_path_step_witness >> strip_tac >>
+  `bb = b` by
+    (`lookup_block b.bb_label bbs = SOME bb /\
+      lookup_block b.bb_label bbs = SOME b` by
+       (conj_tac >> irule MEM_lookup_block >> simp[]) >> gvs[]) >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
