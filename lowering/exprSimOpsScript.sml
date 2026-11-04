@@ -56,11 +56,15 @@ Libs
 (* The source result of bop on two values, as eval_expr gives it for
    Builtin ann (Bop bop) [e1; e2] once the operands are evaluated to v1
    and v2 in the state es.  tys are the operands' static types,
-   [expr_type e1; expr_type e2], which evaluate_builtin takes for membership
-   in a static array. *)
+   [expr_type e1; expr_type e2].  Membership uses the interpreter's
+   dedicated type lookup and evaluate_membership path. *)
 Definition bop_result_def:
   bop_result cx ann bop tys v1 v2 (es:evaluation_state) =
-    case evaluate_builtin cx es.accounts ann (Bop bop) tys [v1; v2] of
+    case (if bop = In \/ bop = NotIn then
+            case evaluate_type (get_tenv cx) (EL 1 tys) of
+              NONE => INR (TypeError "Membership type")
+            | SOME tv => evaluate_membership tv (bop = NotIn) v1 v2
+          else evaluate_builtin cx es.accounts ann (Bop bop) tys [v1; v2]) of
       INL v => INL v
     | INR e => INR (Error e)
 End
@@ -123,6 +127,7 @@ Theorem eval_expr_bop_cases:
             res = bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')
 Proof
   rpt gen_tac >>
+  Cases_on `bop = In \/ bop = NotIn` >> (
   simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, builtin_args_length_ok_def] >>
   simp[Once evaluate_def, bind_def, return_def] >>
@@ -144,10 +149,10 @@ Proof
   >- (simp[] >> rw[] >> simp[]) >>
   rename1 `read_result cx r2 st2 = (INL v2, es2)` >>
   simp[Once evaluate_def, bind_def, return_def, get_accounts_def,
-       lift_sum_def, bop_result_def] >>
-  Cases_on `evaluate_builtin cx es2.accounts ann (Bop bop)
-              [expr_type e1; expr_type e2] [v1; v2]` >>
-  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
+       lift_sum_def, lift_option_type_def, type_check_def, assert_def,
+       bop_result_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[])
 QED
 
 (* A straight-line operator fragment from its run facts: when the source
@@ -728,12 +733,13 @@ Proof
 QED
 
 (* In and NotIn on two flags of a type with at most 256 members test the
-   words' common bits. *)
+   words' common bits.  A failed haystack-type lookup is a type error,
+   which expr_res_ok excludes. *)
 Theorem bop_result_flag_in:
   !cx ann bop m v1 v2 es.
     (bop = In \/ bop = NotIn) /\
     value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\
-    m <= 256 ==>
+    m <= 256 /\ expr_res_ok (bop_result cx ann bop tys v1 v2 es) ==>
     bop_result cx ann bop tys v1 v2 es =
       INL (BoolV
         (if bop = In then word_and (val_to_w256 v1) (val_to_w256 v2) <> 0w
@@ -743,8 +749,8 @@ Proof
   Cases_on `v1` >> gvs[value_has_type_def] >>
   Cases_on `v2` >> gvs[value_has_type_def] >>
   rename1 `bop_result _ _ _ tys (FlagV k1) (FlagV k2) _` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      binop_negate_def, val_to_w256_def] >>
+  gvs[bop_result_def, evaluate_membership_def, evaluate_binop_def,
+      binop_negate_def, val_to_w256_def, AllCaseEqs(), expr_res_ok_def] >>
   `k1 < 2 ** 256 /\ k2 < 2 ** 256` by
     (`2 ** m <= 2 ** 256` by simp[] >> conj_tac >>
      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
@@ -772,12 +778,13 @@ Theorem compile_flag_in_sim:
     binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  match_mp_tac binop_frag_straight >> conj_tac
+  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
+  strip_tac >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
     bop_result_flag_in >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  match_mp_tac binop_frag_straight >> conj_tac
-  >- (rpt gen_tac >> metis_tac[straight_fresh_flag_in]) >>
-  strip_tac >> disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
+  disj1_tac >> simp[word_value_def] >> rpt strip_tac >>
   qspecl_then [`bop`, `x`, `y`, `ty`, `bl`, `el`, `sa`, `op`, `sb`,
                `val_to_w256 v1`, `val_to_w256 v2`, `ss`] mp_tac
     compile_flag_in_correct >>

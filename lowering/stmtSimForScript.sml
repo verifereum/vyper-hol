@@ -162,7 +162,11 @@ Proof
     (rpt conj_tac >> gen_tac >>
      qpat_assum `cv = _` SUBST1_TAC >> qpat_assum `ev = _` SUBST1_TAC >>
      qpat_assum `dv = _` SUBST1_TAC >> qpat_assum `nv = _` SUBST1_TAC >>
-     irule reserved_fresh_not_local >> qexists_tac `sa` >> fs[]) >>
+     irule reserved_fresh_not_local >> qexists_tac `sa` >>
+     reverse conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `sb0.cs_next_var <= sb1.cs_next_var` mp_tac >>
+     qpat_x_assum `sb0.cs_next_var = _` SUBST1_TAC >>
+     simp[]) >>
   `local_ptrs_reserved bc sb0` by
     (irule local_ptrs_reserved_next_var >>
      qexists_tac `sa with cs_next_var := sa.cs_next_var + 1` >> simp[] >>

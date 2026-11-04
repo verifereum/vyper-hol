@@ -371,6 +371,17 @@ Definition constant_value_def:
              (case vs of
               | [v] => OPTION_MAP (\n. IntV (&n)) (constant_length v)
               | _ => NONE)
+           else if bt = Bop In \/ bt = Bop NotIn then
+             (case vs of
+              | [v1;v2] =>
+                  (case evaluate_type (type_env_all_modules mods)
+                           (expr_type (EL 1 es)) of
+                   | NONE => NONE
+                   | SOME tv =>
+                       (case evaluate_membership tv (bt = Bop NotIn) v1 v2 of
+                        | INL v => SOME v
+                        | INR _ => NONE))
+              | _ => NONE)
            else
              case evaluate_builtin (constant_context mods) empty_accounts
                     ty bt (MAP expr_type es) vs of

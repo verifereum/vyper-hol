@@ -998,9 +998,13 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
-  Cases_on `w = 0w` >> gvs[] >> metis_tac[]
+  conj_tac >- simp[] >>
+  rename1 `eval_operand cnd s = SOME w` >>
+  rename1 `frag_outcome ctx fn (jump_to (if w = 0w then body_lbl else exit) s) sb Q R` >>
+  qexistsl_tac [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
+                 `if w = 0w then body_lbl else exit`] >>
+  Cases_on `w = 0w` >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_def]
 QED
 
 Theorem frag_outcome_loop_cond[local]:
