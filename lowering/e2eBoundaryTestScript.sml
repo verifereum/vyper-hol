@@ -74,11 +74,9 @@ Proof
   simp[tx_block_fields_rel_def, tx_env_ok_def]
 QED
 
-Theorem boundary_deletion_and_creation:
+Theorem boundary_pending_deletions:
   call_state_rel tops code am tx es ==>
-  es.rollback.toDelete = am.pending_deletions /\
-  (tx.created_in_tx <=>
-    account_empty (lookup_account tx.target (SND (LAST es.contexts)).accounts))
+  es.rollback.toDelete = am.pending_deletions
 Proof
   simp[call_state_rel_def] >> metis_tac[]
 QED

@@ -9517,24 +9517,32 @@ Resume compile_return_some_shape[external]:
             simp[stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
          irule shape_step_return >> simp[]) >>
      irule shape_step_return >> simp[]) >>
-  (* Raw returns now copy into another fresh typed buffer. *)
-  stmt_bind `\v st. plain_operand st v` `raw_ret_op`
-    (IF_CASES_TAC
-     >- (stmt_bind `\buf st. plain_operand st buf.buf_operand /\ plain_operand st ret_op` `buf`
-           (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
-            simp[stmt_shape_stable_plain, compile_alloc_buffer_shape]) >>
-         stmt_sequence `\u st. plain_operand st buf.buf_operand`
-           (irule shape_step_conseq >>
-            qexistsl_tac [`compiler_label`,
-              `\st. plain_operand st buf.buf_operand /\
-                 (plain_operand st buf.buf_operand /\ plain_operand st ret_op)`,
-              `\u st. plain_operand st buf.buf_operand /\ T`] >>
-            rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
-            ho_match_mp_tac shape_step_frame >>
-            simp[stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
+  (* Raw returns unlock, then copy into another fresh typed buffer. *)
+  IF_CASES_TAC
+  >- (stmt_sequence `\u st. plain_operand st ret_op`
+        (IF_CASES_TAC
+         >- (irule shape_step_conseq >>
+             qexistsl_tac [`compiler_label`, `\st. plain_operand st ret_op /\ T`,
+                           `\u st. plain_operand st ret_op /\ T`] >>
+             rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+             ho_match_mp_tac shape_step_frame >>
+             simp[compile_nonreentrant_unlock_shape, stmt_shape_stable_plain]) >>
          irule shape_step_return >> simp[]) >>
-     irule shape_step_return >> simp[]) >>
-  irule (SRULE [] (Q.INST [`ret_val` |-> `SOME raw_ret_op`]
+      stmt_bind `\buf st. plain_operand st buf.buf_operand /\ plain_operand st ret_op` `buf`
+        (ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. T` >>
+         simp[stmt_shape_stable_plain, compile_alloc_buffer_shape]) >>
+      stmt_sequence `\u st. plain_operand st buf.buf_operand`
+        (irule shape_step_conseq >>
+         qexistsl_tac [`compiler_label`,
+           `\st. plain_operand st buf.buf_operand /\
+              (plain_operand st buf.buf_operand /\ plain_operand st ret_op)`,
+           `\u st. plain_operand st buf.buf_operand /\ T`] >>
+         rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+         ho_match_mp_tac shape_step_frame >>
+         simp[stmt_shape_stable_plain, cj 1 compile_typed_copy_shape]) >>
+      irule (SRULE [] (Q.INST [`ret_val` |-> `SOME buf.buf_operand`]
+        (SPEC_ALL compile_external_return_shape)))) >>
+  irule (SRULE [] (Q.INST [`ret_val` |-> `SOME ret_op`]
     (SPEC_ALL compile_external_return_shape)))
 QED
 Finalise compile_return_some_shape[local]
@@ -12128,8 +12136,7 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def,
-            expr_shape_root_def]
+  imp_res_tac supported_pure_shape >> res_tac >> fs[]
 QED
 
 Theorem supported_expr_shape[local]:

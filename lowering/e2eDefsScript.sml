@@ -141,8 +141,6 @@ Definition call_state_rel_def:
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
-      (tx.created_in_tx <=>
-        account_empty (lookup_account tx.target (SND (LAST es.contexts)).accounts)) /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\

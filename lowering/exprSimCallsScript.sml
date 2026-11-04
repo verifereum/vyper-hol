@@ -19,6 +19,10 @@
  *   - compile_create_sim: compile_call lowers CreateTarget to INVALID
  *     (builtinCreate's compile_create_* are not called yet), where the
  *     source can succeed.
+ *   - compile_selfdestruct_sim: Venom's SELFDESTRUCT predates EIP-6780.
+ *     It never adds a pending deletion, zeroes the balance even when the
+ *     beneficiary is the executing account, and keeps the return data,
+ *     where the source follows EIP-6780 (#1142).
  *   - compile_raw_call_sim and compile_raw_call_calldata_sim: the source
  *     raw_call runs the callee on the EVM even with the outcome oracle,
  *     where the lowered CALL/STATICCALL consumes an oracle outcome. With
