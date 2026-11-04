@@ -25,6 +25,8 @@ Definition gas_path_edge_def:
           ~entered.vs_halted /\
           r = OK (entered with vs_inst_idx :=
                     phi_prefix_length target.bb_instructions)) \/
+       (?lbl. is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+              middle = OK (jump_to lbl s) /\ r = middle) \/
        (exit_result middle /\ r = middle))
 End
 
@@ -52,7 +54,7 @@ QED
 Theorem gas_path_edge_normal:
   gas_path_edge ctx fn s n (OK t) ==> ~t.vs_halted
 Proof
-  rw[gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def] >>
+  rw[gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def, jump_to_def] >>
   Cases_on `step_inst fuel ctx inst s` >> gvs[fragExecTheory.exit_result_def]
 QED
 
@@ -79,6 +81,7 @@ Proof
   rw[gas_path_edge_def] >> gvs[exit_result_def]
   >- suspend "within"
   >- suspend "enter"
+  >- suspend "jump"
   >> (Cases_on `step_inst fuel' ctx inst s` >> gvs[exit_result_def])
 QED
 Resume gas_path_edge_continue[within]:
@@ -114,6 +117,13 @@ Resume gas_path_edge_continue[enter]:
   asm_simp_tac (srw_ss()) [run_from_def] >>
   CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
   asm_simp_tac (srw_ss()) [] >> simp[run_from_def]
+QED
+Resume gas_path_edge_continue[jump]:
+  qexists_tac `SUC fuel` >>
+  qspecl_then [`fuel`, `ctx`, `fn`, `s`, `bb`, `inst`, `lbl`,
+               `run_from fuel ctx fn (jump_to lbl s)`]
+    mp_tac run_from_jump_result >>
+  impl_tac >- metis_tac[step_inst_non_invoke] >> simp[]
 QED
 Finalise gas_path_edge_continue
 
