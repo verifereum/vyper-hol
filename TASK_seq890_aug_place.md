@@ -39,6 +39,8 @@ lowering and semantics definitions) are frozen.
 
 ## Completion Criteria
 
+- No `TRY` or `ORELSE` in new proofs: select goals explicitly (`>~`, `>-`, `>|`, `Cases_on` then per-case tactics). holbuild's step timeout is an exception `TRY` catches, so a TRY-filtered step can pass locally and hang in CI.
+
 - `holbuild -j4 build bodySimStmtCasesTheory` succeeds at the default 2.5s tactic timeout,
   with `body_augassign_place_pure` proved (no `cheat` in it or in any new lemma it uses).
   `body_augassign_place` is now a dispatch over `body_augassign_place_pure` and the residual
