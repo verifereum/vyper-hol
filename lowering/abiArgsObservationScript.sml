@@ -1,7 +1,7 @@
 Theory abiArgsObservation
 Ancestors
   fragExec venomExecProps venomExecProofs venomExecSemantics venomState
-  venomInstProofs1
+  venomInstProofs1 venomInst
 
 (* State-bearing results expose the immutable label environment. *)
 Definition abi_result_labels_def:
@@ -232,4 +232,73 @@ Theorem abi_run_from_halt_labels:
   run_from fuel ctx fn s = Halt t ==> t.vs_labels = s.vs_labels
 Proof
   strip_tac >> mp_tac abi_run_from_labels >> simp[abi_result_labels_def]
+QED
+
+Theorem abi_frag_halting_observer:
+  frag_exec ctx sa sb P Q (\r. F) /\
+  fn_has_code sa sb observer /\ P s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!t. ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+       ?fuel u. run_from fuel ctx observer t = Halt u /\
+                u.vs_labels = t.vs_labels) ==>
+  ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      t.vs_labels = s.vs_labels
+Proof
+  simp[frag_exec_def] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`observer`, `s`] mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `Q t` >>
+  `?fuel u. run_from fuel ctx observer t = Halt u /\
+            u.vs_labels = t.vs_labels` by metis_tac[] >>
+  `?fuel'. run_from fuel' ctx observer s = Halt u` by
+    (qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >> simp[]) >>
+  qexists_tac `t` >> simp[] >> metis_tac[abi_run_from_halt_labels]
+QED
+
+Theorem abi_stop_observer_contains:
+  fn_has_code sa sb fn /\
+  (!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb) ==>
+  fn_has_code sa sb
+    (fn with fn_blocks :=
+      <|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|> :: fn.fn_blocks)
+Proof
+  simp[fn_has_code_def, lookup_block_def] >> rpt strip_tac
+  >- (first_x_assum drule >> strip_tac >> simp[listTheory.FIND_thm] >> metis_tac[]) >>
+  simp[listTheory.FIND_thm]
+QED
+
+Theorem abi_stop_observer_halt:
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  run_from fuel ctx
+    (fn with fn_blocks :=
+      <|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|> :: fn.fn_blocks)
+    t = Halt (halt_state (t with vs_returndata := []))
+Proof
+  strip_tac >> irule run_from_halt >>
+  qexistsl_tac
+    [`<|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>`,
+     `mk_inst id STOP [] []`] >>
+  simp[lookup_block_def, listTheory.FIND_thm, get_instruction_def,
+       rich_listTheory.EL_APPEND2, mk_inst_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def]
+QED
+
+Theorem abi_stop_observer_endpoint:
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  ?fuel u. run_from fuel ctx
+    (fn with fn_blocks :=
+      <|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|> :: fn.fn_blocks)
+    t = Halt u /\ u.vs_labels = t.vs_labels
+Proof
+  strip_tac >> qexistsl_tac [`0`, `halt_state (t with vs_returndata := [])`] >>
+  simp[abi_stop_observer_halt, halt_state_def]
 QED
