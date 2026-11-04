@@ -354,3 +354,244 @@ Proof
          qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[] >> metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem ld_load_first_pointer:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC 0) t u ==>
+  (?p. eval_operand (Var av) t = SOME p) /\
+  t.vs_code = t0.vs_code /\ t.vs_memory = t0.vs_memory /\
+  t.vs_labels = t0.vs_labels /\
+  (!v. v <> av ==> lookup_var v t = lookup_var v t0)
+Proof
+  strip_tac >> drule_all ld_load_first_prefix >>
+  disch_then (fn th => gvs[th]) >>
+  Cases_on `FLOOKUP t0.vs_allocas a.inst_id`
+  >- simp[ld_macro_operand_pc, eval_operand_def, lookup_var_def,
+       update_var_def, FLOOKUP_UPDATE] >>
+  rename1 `SOME p` >> PairCases_on `p` >>
+  simp[ld_macro_operand_pc, eval_operand_def, lookup_var_def,
+    update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ld_load_second_values:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ av <> bv /\
+  (!v. off = Var v ==> v <> av) /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC 0)) t u ==>
+  ?p x y. eval_operand (Var av) t = SOME p /\
+    eval_operand (Var bv) t = SOME (x + y) /\
+    eval_operand off t0 = SOME x /\
+    eval_operand (Label "code_end") t0 = SOME y /\
+    t.vs_code = t0.vs_code /\ t.vs_memory = t0.vs_memory
+Proof
+  strip_tac >> drule_all ld_load_second_prefix >>
+  disch_then (fn th => gvs[th]) >>
+  drule_all (SRULE [] ld_load_first_pointer) >> strip_tac >>
+  `eval_operand (Var av) (update_var bv (x + y) r) =
+    eval_operand (Var av) r` by
+    (irule eval_operand_update_var_other >> simp[]) >>
+  simp[ld_macro_operand_pc] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ld_macro_load_step:
+  i.inst_opcode = MLOAD /\ i.inst_operands = [ptr] /\ i.inst_outputs = [out] ==>
+  step_inst fuel C i s =
+    case eval_operand ptr s of
+      SOME p => OK (update_var out (mload (w2n p) s) s)
+    | NONE => Error "undefined operand"
+Proof
+  strip_tac >> simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def]
+QED
+
+Theorem ld_load_third_prefix:
+  c.inst_opcode = CODECOPY /\
+  c.inst_operands = [Var av;Var bv;Lit 32w] ==>
+  (ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) t u <=>
+   ?r w p sum z.
+     ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC 0)) r w /\
+     eval_operand (Var av) r = SOME p /\
+     eval_operand (Var bv) r = SOME sum /\
+     z = write_memory_with_expansion (w2n p)
+       (TAKE 32 (DROP (w2n sum) r.vs_code ++ REPLICATE 32 0w)) r /\
+     t = z with vs_inst_idx := SUC r.vs_inst_idx /\
+     u = step_taint c r z w)
+Proof
+  strip_tac >> CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [ld_target_prefix_step_iff])) >>
+  simp[] >> drule_all ld_macro_copy_step >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[eval_operand_def, dimword_def, PULL_EXISTS, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem ld_load_fourth_prefix:
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\
+  d.inst_outputs = [out] ==>
+  (ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC (SUC 0)))) t u <=>
+   ?r w p z.
+     ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) r w /\
+     eval_operand (Var av) r = SOME p /\
+     z = update_var out (mload (w2n p) r) r /\
+     t = z with vs_inst_idx := SUC r.vs_inst_idx /\
+     u = step_taint d r z w)
+Proof
+  strip_tac >> CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [ld_target_prefix_step_iff])) >>
+  simp[] >> drule_all ld_macro_load_step >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[PULL_EXISTS, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_load_third_pointer:
+  c.inst_opcode = CODECOPY /\
+  c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) t u ==>
+  ?p. eval_operand (Var av) t = SOME p
+Proof
+  strip_tac >> drule_all ld_load_third_prefix >>
+  disch_then (fn th => gvs[th]) >>
+  simp[ld_macro_operand_pc, eval_operand_def, lookup_var_def,
+    write_memory_with_expansion_def] >>
+  gvs[eval_operand_def, lookup_var_def]
+QED
+
+Theorem ld_load_copy_exists:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ av <> bv /\
+  (!v. off = Var v ==> v <> av) /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] ==>
+  ((?t u. ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) t u) <=>
+   (?t u. ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC 0)) t u))
+Proof
+  strip_tac >> drule_all ld_load_third_prefix >>
+  disch_then (fn th => rewrite_tac[th]) >> simp[PULL_EXISTS] >>
+  eq_tac >- metis_tac[] >>
+  strip_tac >> gvs[] >> drule_all (SRULE [] ld_load_second_values) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_load_mload_exists:
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\ d.inst_outputs = [out] ==>
+  ((?t u. ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC (SUC 0)))) t u) <=>
+   (?t u. ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) t u))
+Proof
+  strip_tac >> drule_all ld_load_fourth_prefix >>
+  disch_then (fn th => rewrite_tac[th]) >> simp[PULL_EXISTS] >>
+  eq_tac >- metis_tac[] >>
+  strip_tac >> drule_all (SRULE [] ld_load_third_pointer) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_load_prefix_exists:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ av <> bv /\
+  (!v. off = Var v ==> v <> av) /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\ d.inst_outputs = [out] ==>
+  ((?t u. ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC (SUC 0)))) t u) <=>
+   (?x y. eval_operand off t0 = SOME x /\
+      eval_operand (Label "code_end") t0 = SOME y))
+Proof
+  strip_tac >> drule_all ld_load_mload_exists >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  drule_all ld_load_copy_exists >> disch_then (fn th => rewrite_tac[th]) >>
+  drule_all ld_load_second_prefix >> disch_then (fn th => rewrite_tac[th]) >>
+  drule_all ld_load_first_prefix >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[PULL_EXISTS]
+QED
+
+Theorem ld_load_source_success:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
+  inst.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t0 /\
+  (!v. off = Var v ==> v IN V) /\
+  eval_operand off t0 <> NONE ==>
+  ?z. step_inst fuel C inst s = OK z
+Proof
+  strip_tac >>
+  `eval_operand off s <> NONE` by
+    (drule ld_owned_operand_defined >>
+     disch_then (qspec_then `off` mp_tac) >> simp[] >> metis_tac[]) >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def] >>
+  Cases_on `eval_operand off s` >> gvs[]
+QED
+
+Theorem ld_load_completed_source_success:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ av <> bv /\
+  (!v. off = Var v ==> v <> av) /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\ d.inst_outputs = [out] /\
+  ld_target_prefix C' [a;b;c;d] t0 u0 (SUC (SUC (SUC (SUC 0)))) t u /\
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
+  inst.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t0 /\
+  (!v. off = Var v ==> v IN V) ==>
+  ?z. step_inst fuel C inst s = OK z
+Proof
+  strip_tac >>
+  `?x y. eval_operand off t0 = SOME x /\
+    eval_operand (Label "code_end") t0 = SOME y` by
+    (drule_all ld_load_prefix_exists >>
+     disch_then (qspecl_then [`u0`,`t0`,`C'`]
+       (fn th => rewrite_tac[GSYM th])) >>
+     goal_assum (drule_at Any)) >>
+  irule ld_load_source_success >>
+  qpat_assum `ld_owned_vars _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ld_load_add_error:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ (!v. off = Var v ==> v <> av) /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC 0) t u ==>
+  ((?e. step_inst fuel C b t = Error e) <=>
+   eval_operand off t0 = NONE \/ eval_operand (Label "code_end") t0 = NONE)
+Proof
+  strip_tac >>
+  `eval_operand off t = eval_operand off t0` by
+    (irule ld_load_first_operands >>
+     qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  `eval_operand (Label "code_end") t = eval_operand (Label "code_end") t0` by
+    (irule ld_load_first_operands >>
+     qpat_assum `ld_target_prefix _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  drule_all ld_macro_add_error >> simp[]
+QED
+
+Theorem ld_load_copy_no_error:
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\
+  a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\
+  b.inst_outputs = [bv] /\ av <> bv /\
+  (!v. off = Var v ==> v <> av) /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC 0)) t u ==>
+  ~(?e. step_inst fuel C c t = Error e)
+Proof
+  strip_tac >> drule_all ld_load_second_values >> strip_tac >>
+  drule_all ld_macro_copy_step >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[eval_operand_def]
+QED
+
+Theorem ld_load_mload_no_error:
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var bv;Lit 32w] /\
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\ d.inst_outputs = [out] /\
+  ld_target_prefix C [a;b;c;d] t0 u0 (SUC (SUC (SUC 0))) t u ==>
+  ~(?e. step_inst fuel C d t = Error e)
+Proof
+  strip_tac >> drule_all ld_load_third_pointer >> strip_tac >>
+  drule_all ld_macro_load_step >> disch_then (fn th => rewrite_tac[th]) >> simp[]
+QED
+
