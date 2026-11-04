@@ -563,7 +563,7 @@ Proof
   step_inst_base_opcode_tac >> gvs[AllCaseEqs()] >> rw[] >> gvs[]
 QED
 
-Theorem step_inst_base_abort_returndata[local]:
+Theorem step_inst_base_abort_returndata:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
@@ -606,7 +606,7 @@ Proof
 QED
 
 (* A non-terminator abort's type is fixed by its opcode's fail class. *)
-Theorem step_inst_base_abort_fail_class[local]:
+Theorem step_inst_base_abort_fail_class:
   !inst s a s'.
     step_inst_base inst s = Abort a s' /\
     ~is_terminator inst.inst_opcode ==>
