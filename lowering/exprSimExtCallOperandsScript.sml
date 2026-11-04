@@ -144,3 +144,70 @@ Proof
        valueEncodingTheory.typed_val_to_w256_def] >>
   Cases_on `b` >> simp[valueEncodingTheory.val_to_w256_def]
 QED
+
+Theorem compile_name_ptr_probe[local]:
+  FLOOKUP ce.ce_vars name = SOME (PtrVar ptr_op sz) ==>
+  compile_name_vv ce ty name st =
+    (LocatedValue ty (mk_ptr ptr_op LocMemory),st)
+Proof
+  simp[exprLoweringTheory.compile_name_vv_def, compileEnvTheory.comp_return_def]
+QED
+
+(* Producer audit (C1.P.2.1; not a proved capture theorem).
+
+   Source paths returning PlaceR, and compiler paths (line references refer
+   to vyperInterpreterScript, vyperStateScript, exprLoweringScript):
+   - Name: interpreter 1502-1505 -> MemoryPlace id [].  Lowering 2766,
+     1481-1493 -> LocatedValue LocMemory, literal MemLoc or PtrVar operand.
+     Needs local layout/region correspondence from stmt_state_rel.
+   - TopLevelName: interpreter 1507-1508, state 465-483 -> StoragePlace,
+     ImmutablePlace, or HashMapRef (not itself readable). Lowering 2820-2829
+     -> literal Storage/Transient/Code pointer from ce_module_vars.
+     Needs module layout and immutable sub-layout correspondence.
+   - IfExp: interpreter 1510-1513, state 1054-1068 -> retains ONLY memory
+     aggregate places; other places are forced to Value. Lowering 2767-2789
+     -> nonword LocatedValue LocMemory PHI, word StackValue PHI.
+     Needs chosen-branch provenance for a retained place, and branch operand
+     stability; condition/branch vv_post alone only relates current values.
+   - Subscript: interpreter 1524-1528, state 1166-1203 -> extends a place
+     (or HashMapRef), but selects Value from immediate Value bases.
+     Lowering 2268-2316 -> LocatedValue at the base location (memory default
+     for StackValue); pointer is tuple offset, hashed mapping key, or
+     array element pointer. Needs base provenance, captured index value,
+     and correct per-location offset/stride/metadata. Dynamic bounds are
+     checked at capture time, not rechecked in a future state.
+   - Attribute: interpreter 1530-1533 uses the same select_result; lowering
+     2321-2342 adds field offset to the recursively compiled base pointer.
+     Needs base provenance and correct field layout; Value bases instead
+     need snapshot-buffer framing, not mutable-place transport.
+   - Pop: interpreter 1548-1551, state 1217-1260 -> retained storage element
+     address or MemoryPlace path to the removed element, backed by popped
+     history; immutable pop returns Value. Lowering 2832 onwards uses target
+     pointer, loads/decrements length, returns LocatedValue element pointer.
+     Needs target provenance and old length, plus retained element bytes /
+     popped-history agreement after later operations.
+   Literal, FlagMember, StructLit, Builtin (including Len), TypeBuiltin and
+   Calls do not introduce PlaceR: interpreter 1509,1515-1522,1534-1546,
+   1552-1556,1558-1692 and their call helpers return Value or exceptions.
+
+   Recursive trace: Subscript(Name a, Name i) first captures MemoryPlace a[],
+   then reads i and appends ValueSubscript v to the captured path.  Compilation
+   first obtains a's pointer, then lower_value of i, then computes an element
+   pointer with the captured index and a capture-time length check.  Replaying
+   the expression in a future state is invalid if i changes.  The missing
+   induction premise must relate the retained a pointer and captured path,
+   not merely the current value of a or a future evaluation of this syntax.
+
+   Candidate boundary (UNPROVED): under expr_body_pre and existing operand
+   judgments, actual successful eval_expr/compile_expr fragment execution
+   admits a relational post containing source-place/compiled-address identity
+   (or framed Value snapshot), with frozen selection indices and base
+   metadata.  Eliminating that relation in future related states would give
+   delayed_capture.  stmt_state_rel supplies root layouts and vv_post supplies
+   current reads/frames; neither supplies recursive path identity.  For
+   Subscript/Attribute/IfExp/Pop a structural producer premise for the base,
+   chosen branch or target remains unproved. Existing expr_vv_case/results_case
+   supply no such recursive premise. No global induction or strengthened IH
+   is asserted here. Changing lengths and popped history must be covered by
+   the producer relation, not silently excluded as equal-state transport.
+*)
