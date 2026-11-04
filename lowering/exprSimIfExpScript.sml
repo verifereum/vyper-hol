@@ -21,7 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
-  list rich_list finite_map marker
+  list rich_list finite_map marker exprSimHyps
   fragExec exprSim exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
   exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
@@ -2282,4 +2282,88 @@ Proof
   simp[Once abi_size_bound_def, abi_embedded_static_size_def,
        Once vyperABITheory.vyper_abi_size_bound_def] >>
   irule ifexp_abi_members_bound >> simp[]
+QED
+
+Theorem ifexp_lowered_type_compatible:
+  !ce e env.
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t) /\
+  sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+  (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  lowered_value_type ce e = expr_type e \/
+  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+  same_memory_layout ce (lowered_value_type ce e) (expr_type e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def,
+       vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.type_builtin_result_ok_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       is_bytestring_type_def] >>
+  rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
+    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def] >>
+  `!xs. well_typed_exprs env xs ==>
+         EVERY (well_formed_type env.type_defs o expr_type) xs` by
+    (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def] >>
+     rpt strip_tac >> irule exprSafeOperandTheory.well_typed_expr_type_well_formed >>
+     goal_assum drule >> simp[]) >>
+  `EVERY (well_formed_type env.type_defs o expr_type) args` by metis_tac[] >>
+  `!xs acc. EVERY (well_formed_type env.type_defs o expr_type) xs ==>
+     ?tvs. evaluate_types env.type_defs (MAP expr_type xs) acc = SOME tvs` by
+    (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
+     rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
+  `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
+  qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
+  `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
+    (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
+       (`?tv. evaluate_type env.type_defs (expr_type (HD args)) = SOME tv` by
+          (gvs[LENGTH_EQ_NUM_compute, combinTheory.o_DEF,
+               evaluate_type_def, AllCaseEqs()]) >>
+        irule ifexp_abi_size_bound_source >> simp[] >> metis_tac[]) >>
+     irule ifexp_abi_tuple_size_bound_source >> simp[] >> metis_tac[]) >>
+  `abi_encode_method_id_size method_id = if IS_SOME method_id then 4 else 0` by
+    (Cases_on `method_id` >>
+     gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def,
+         vyperTypeSystemTheory.abi_encode_method_id_size_def,
+         vyperASTTheory.abi_encode_method_id_bytes_def]) >>
+  qpat_x_assum `abi_encode_size_ok _ _ _ _ _` mp_tac >>
+  simp[vyperTypeSystemTheory.abi_encode_size_ok_def] >>
+  Cases_on `args` >-
+    gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def] >>
+  simp[Abbr `enc_ty`, is_bytestring_type_def] >>
+  rename1 `h::rest` >> Cases_on `rest` >>
+  gvs[is_bytestring_type_def] >>
+  Cases_on `ensure` >> gvs[] >> decide_tac
+QED
+Theorem ifexp_body_pre_lowered_type_compatible:
+  expr_body_pre ce cx env e es /\
+  (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  lowered_value_type ce e = expr_type e \/
+  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+  same_memory_layout ce (lowered_value_type ce e) (expr_type e)
+Proof
+  strip_tac >> drule expr_body_pre_var_types_well_formed >> strip_tac >>
+  irule ifexp_lowered_type_compatible >> simp[] >> qexists_tac `env` >>
+  gvs[expr_body_pre_def, expr_sim_inv_def,
+      vyperTypeInvariantsTheory.env_consistent_def,
+      vyperTypeInvariantsTheory.env_context_consistent_def] >> metis_tac[]
+QED
+
+Theorem ifexp_body_pre_read_typed:
+  expr_body_pre ce cx env e es /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+  ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v
+Proof
+  rpt strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_at (Pat `bind _ _ _ = _`) vyperTypeEvalSoundnessTheory.eval_expr_read_type_sound >>
+  disch_then (qspec_then `env` mp_tac) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def,
+      vyperTypeExprSoundnessTheory.value_runtime_typed_def]
 QED
