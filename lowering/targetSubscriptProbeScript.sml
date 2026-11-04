@@ -4995,6 +4995,70 @@ Proof
   gvs[probe_deep_code_def, find_var_decl_by_name_def] >> EVAL_TAC >> simp[]
 QED
 
+Theorem probe_deep_declared_region:
+  !mid name subs tr slot tv.
+    declared_storage_region probe_deep_context mid name subs =
+      SOME (tr,slot,tv) <=>
+    mid = NONE /\ subs = [] /\ tr = F /\
+    tv = ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1) /\
+    ((name = "outer" /\ slot = 0w) \/ (name = "donor" /\ slot = 4w))
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[declared_storage_region_def] >> EVAL_TAC >>
+  Cases_on `name = "outer"` >> gvs[] >>
+  Cases_on `name = "donor"` >> gvs[] >>
+  Cases_on `subs = []` >> gvs[] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> metis_tac[]
+QED
+
+Theorem probe_deep_storage_var_info:
+  !mid name tr off tv.
+    storage_var_info probe_deep_context mid name = SOME (tr,off,tv) <=>
+    mid = NONE /\ tr = F /\
+    tv = ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) (Dynamic 1) /\
+    ((name = "outer" /\ off = 0) \/ (name = "donor" /\ off = 4))
+Proof
+  rpt gen_tac >> Cases_on `mid` >>
+  simp[vyperLookupStorageTheory.storage_var_info_def] >> EVAL_TAC >>
+  Cases_on `name = "outer"` >> gvs[] >>
+  Cases_on `name = "donor"` >> gvs[] >> EVAL_TAC >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> metis_tac[]
+QED
+
+Theorem probe_deep_layout_safe:
+  storage_layout_safe probe_deep_context
+Proof
+  rw[storage_layout_safe_def, vyperLookupStorageTheory.well_formed_layout_def,
+     probe_deep_declared_region, probe_deep_storage_var_info,
+     nonreentrant_slot_separated_def, probe_deep_context_def,
+     empty_evaluation_context_def] >>
+  gvs[probe_deep_layout, vyperStorageFrameTheory.ranges_disjoint_def, dimword_def,
+      fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_deep_storage_well_formed:
+  contract_storage_well_formed probe_deep_context probe_deep_source_state
+Proof
+  rw[contract_storage_well_formed_def,
+     vyperLookupStorageTheory.well_formed_storage_def,
+     vyperLookupStorageTheory.storage_var_in_range_def,
+     probe_deep_storage_var_info, probe_deep_declared_region,
+     get_storage_backend_eq] >>
+  gvs[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``slots_in_range``]) >>
+  EVAL_TAC >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >> EVAL_TAC
+QED
+
+Theorem probe_deep_oracle_storage:
+  oracle_storage_ok probe_deep_context probe_deep_source_state
+Proof
+  simp[vyperTypeStoragePreservationTheory.oracle_storage_ok_def,
+       probe_deep_source_state_def]
+QED
+
 Theorem probe_deep_source_call:
   eval_expr probe_deep_context
     (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
