@@ -1,7 +1,7 @@
 (* Operational consumers of the source-indexed relocation kernel. *)
 Theory o1LowerDloadMemoryConsumer
 Ancestors
-  o1LowerDloadRelocationKernel regularCallEmitSim venomExecSemantics
+  o1LowerDloadRelocationKernel regularCallEmitSim venomExecSemantics ptrDiscipline
   venomMemProps venomState list rich_list codegenRel finite_map words byte
 
 Theorem ld_mload_mapped_bytes:
@@ -63,14 +63,16 @@ QED
 
 (* Distinct protected sites are separated in both address spaces.  Zero-size
    sites are harmless: their byte projection has no instances. *)
-Theorem ld_memory_agree_mstore:
+Theorem ld_memory_agree_mstore_masked:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
   FLOOKUP sites owner = SOME (b,c,z) /\ j+32 <= z /\ lo <= b /\ lo <= c /\
   (!id b' c' z'. FLOOKUP sites id = SOME (b',c',z') ==>
      (b' = b /\ c' = c) \/
-     ((b'+z' <= b \/ b+z <= b') /\ (c'+z' <= c \/ c+z <= c'))) ==>
-  ld_memory_agree sites lo (mask DIFF {i | b+j <= i /\ i < b+j+32})
-    (mstore (b+j) v s).vs_memory (mstore (c+j) v t).vs_memory
+     ((b'+z' <= b \/ b+z <= b') /\ (c'+z' <= c \/ c+z <= c'))) /\
+  word_agree_except m v w ==>
+  ld_memory_agree sites lo
+    ((mask DIFF {i | b+j <= i /\ i < b+j+32}) UNION {b+j+k | k IN m})
+    (mstore (b+j) v s).vs_memory (mstore (c+j) w t).vs_memory
 Proof
   strip_tac >> rewrite_tac[ld_memory_agree_def] >> conj_tac
   >- (rpt strip_tac >>
@@ -81,14 +83,36 @@ Proof
   rpt strip_tac >>
   rename1 `FLOOKUP sites id = SOME (sb,tb,sz)` >>
   qpat_x_assum `!id b' c' z'. _` drule >> strip_tac
-  >- (gvs[] >> simp[ld_mstore_bytes] >>
-      Cases_on `j <= j' /\ j' < j+32` >> simp[] >>
+  >- (gnvs[] >> simp[ld_mstore_bytes] >>
+      Cases_on `j <= j' /\ j' < j+32`
+      >- (gnvs[] >>
+          `j' = j + (j'-j)` by decide_tac >>
+          `j'-j NOTIN m` by metis_tac[] >>
+          qpat_x_assum `word_agree_except _ _ _` mp_tac >>
+          simp[word_agree_except_def] >>
+          disch_then (qspec_then `j'-j` mp_tac) >> simp[]) >>
+      gvs[] >>
       irule ld_memory_agree_site_byte >>
       qexistsl_tac [`id`, `lo`, `mask`, `sites`, `sz`] >> gvs[]) >>
   `~(b+j <= sb+j' /\ sb+j' < b+j+32) /\
    ~(c+j <= tb+j' /\ tb+j' < c+j+32)` by decide_tac >>
   asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_site_byte >>
   qexistsl_tac [`id`, `lo`, `mask`, `sites`, `sz`] >> gvs[]
+QED
+
+Theorem ld_memory_agree_mstore:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  FLOOKUP sites owner = SOME (b,c,z) /\ j+32 <= z /\ lo <= b /\ lo <= c /\
+  (!id b' c' z'. FLOOKUP sites id = SOME (b',c',z') ==>
+     (b' = b /\ c' = c) \/
+     ((b'+z' <= b \/ b+z <= b') /\ (c'+z' <= c \/ c+z <= c'))) ==>
+  ld_memory_agree sites lo (mask DIFF {i | b+j <= i /\ i < b+j+32})
+    (mstore (b+j) v s).vs_memory (mstore (c+j) v t).vs_memory
+Proof
+  strip_tac >>
+  qspecl_then [`{}`, `v`] mp_tac
+    (Q.GENL [`m`, `w`] ld_memory_agree_mstore_masked) >>
+  simp[word_agree_except_def] >> disch_then irule >> metis_tac[]
 QED
 
 Theorem ld_step_mload_transfer:
