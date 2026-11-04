@@ -23,7 +23,7 @@ Ancestors
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
-  makeSsaCurrentPlacementCut
+  makeSsaCurrentPlacementCut ssaPipeline
 Libs
   rich_listTheory
 
@@ -1298,6 +1298,227 @@ Proof
   goal_assum (drule_at Any) >> simp[current_replay_edges_shape]
 QED
 
+Theorem current_wf_rename_operand_labels[local]:
+  !ops. MAP get_label (rename_current_operands rs ops) = MAP get_label ops
+Proof
+  Induct >> simp[rename_current_operands_def] >>
+  Cases_on `h` >> simp[rename_current_operands_def, venomStateTheory.get_label_def]
+QED
+
+Theorem current_wf_inst_trace_successors:
+  current_inst_trace aa inst s rs H E inst' s' rs' H' E' ==>
+  get_successors inst' = get_successors inst
+Proof
+  simp[current_inst_trace_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `inst.inst_opcode = PHI` >>
+  simp[get_successors_def, current_wf_rename_operand_labels]
+QED
+
+Theorem current_wf_local_trace_successors:
+  !aa xs s rs H E ys s' rs' H' E'.
+  current_local_trace aa xs s rs H E ys s' rs' H' E' ==>
+  MAP get_successors ys = MAP get_successors xs
+Proof
+  Induct >> simp[current_local_trace_def] >> rpt strip_tac >> gvs[] >>
+  drule current_wf_inst_trace_successors >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem current_wf_bb_successors:
+  MAP get_successors new.bb_instructions = MAP get_successors old.bb_instructions ==>
+  bb_succs new = bb_succs old
+Proof
+  strip_tac >>
+  `LENGTH new.bb_instructions = LENGTH old.bb_instructions` by
+    metis_tac[LENGTH_MAP] >>
+  qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LAST`) >>
+  Cases_on `new.bb_instructions` >> Cases_on `old.bb_instructions` >>
+  gvs[bb_succs_def, LAST_MAP]
+QED
+
+Theorem current_wf_edge_shape_successors:
+  current_edge_shape old new ==> bb_succs new = bb_succs old
+Proof
+  strip_tac >> irule current_wf_bb_successors >>
+  fs[current_edge_shape_def, LIST_REL_EL_EQN] >>
+  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
+  Cases_on `(EL x old.bb_instructions).inst_opcode = PHI` >>
+  gvs[get_successors_def, is_terminator_def]
+QED
+
+Theorem current_wf_event_trace_successors:
+  current_event_trace A H ev ==>
+  bb_succs (current_event_renamed_block ev) = bb_succs (current_event_input_block ev)
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_trace_def, current_event_renamed_block_def,
+    current_event_input_block_def] >> strip_tac >>
+  irule current_wf_bb_successors >> simp[] >>
+  drule current_wf_local_trace_successors >> simp[]
+QED
+
+Theorem current_wf_event_lookup_successors[local]:
+  (!ev. MEM ev events ==>
+    OPTION_MAP bb_succs (lookup_block (current_event_label ev) bbs) =
+      SOME (bb_succs (current_event_renamed_block ev))) ==>
+  !prior. OPTION_MAP bb_succs prior = OPTION_MAP bb_succs (lookup_block q bbs) ==>
+  OPTION_MAP bb_succs (FOLDL (current_event_lookup sm q) prior events) =
+    OPTION_MAP bb_succs (lookup_block q bbs)
+Proof
+  Induct_on `events` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >>
+  simp[current_event_lookup_def] >> Cases_on `q = current_event_label h` >> simp[]
+  >- metis_tac[current_event_edge_shape, current_wf_edge_shape_successors] >>
+  Cases_on `prior` >> gvs[] >>
+  metis_tac[current_event_edge_shape, current_wf_edge_shape_successors]
+QED
+
+Theorem current_wf_trace_successors:
+  current_tree_trace A sm tree s rs bbs H E visited
+    ctrs' s' bbs' H' visited' events /\
+  (!l. MEM l (dom_tree_labels tree) ==> IS_SOME (lookup_block l bbs)) /\
+  ALL_DISTINCT (dom_tree_labels tree) ==>
+  !q. OPTION_MAP bb_succs (lookup_block q bbs') =
+    OPTION_MAP bb_succs (lookup_block q bbs)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[current_tree_trace_event_labels_distinct] >>
+  `EVERY (current_event_trace A H') events` by
+    metis_tac[cj 1 current_tree_trace_events] >>
+  drule (cj 1 current_trace_lookup_fold) >> strip_tac >> simp[] >>
+  gen_tac >> irule current_wf_event_lookup_successors >>
+  simp[] >> rpt strip_tac >>
+  `MEM (current_event_label ev) (dom_tree_labels tree)` by
+    metis_tac[cj 1 makeSsaCurrentFinalBlockTheory.current_trace_event_labels, MEM_MAP] >>
+  `IS_SOME (lookup_block (current_event_label ev) bbs)` by metis_tac[] >>
+  Cases_on `lookup_block (current_event_label ev) bbs` >> gvs[] >>
+  `current_edge_shape x (current_event_input_block ev)` by
+    metis_tac[cj 1 current_trace_event_input_shape] >>
+  `current_event_trace A H' ev` by metis_tac[EVERY_MEM] >>
+  metis_tac[current_wf_edge_shape_successors, current_wf_event_trace_successors]
+QED
+
+Theorem current_wf_insertion_successors:
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks
+    (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))) = (ins,si) /\
+  wf_function fn ==>
+  !q. OPTION_MAP bb_succs (lookup_block q ins) =
+    OPTION_MAP bb_succs (lookup_block q fn.fn_blocks)
+Proof
+  strip_tac >> drule current_actual_insertion_prefix >> strip_tac >>
+  `MAP (\bb. bb.bb_label) ins = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `phi_extends fn.fn_blocks ins` by
+    (fs[phi_extends_def, LIST_REL_EL_EQN] >> rpt strip_tac >>
+     first_x_assum (qspec_then `j` mp_tac) >> impl_tac >- simp[] >>
+     strip_tac >> qexists_tac `pre` >>
+     fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     simp[build_phi_inst_supply_def]) >>
+  `succs_preserved fn.fn_blocks ins` by
+    (irule phi_extends_succs_preserved >> fs[wf_function_def, fn_labels_def]) >>
+  gen_tac >> Cases_on `lookup_block q ins` >>
+  Cases_on `lookup_block q fn.fn_blocks` >> gvs[succs_preserved_def]
+  >- (drule lookup_block_MEM >> strip_tac >>
+      `x.bb_label = q` by metis_tac[lookup_block_label] >>
+      `ALL_DISTINCT (MAP (\bb. bb.bb_label) ins)` by fs[wf_function_def, fn_labels_def] >>
+      `MEM q (MAP (\bb. bb.bb_label) ins)` by
+        (asm_rewrite_tac[] >> simp[MEM_MAP] >> metis_tac[]) >>
+      gvs[MEM_MAP] >>
+      `ALL_DISTINCT (MAP (\bb. bb.bb_label) ins)` by metis_tac[] >>
+      `lookup_block bb.bb_label ins = SOME bb` by
+        (irule MEM_lookup_block >> simp[]) >> gvs[]) >>
+  qpat_x_assum `!lbl bb. _` (qspec_then `q` mp_tac) >>
+  disch_then (qspec_then `x` mp_tac) >> simp[]
+QED
+
+Theorem current_wf_cfg_lookup:
+  ALL_DISTINCT (fn_labels f) ==>
+  (fn_cfg_edge f a b <=>
+    ?ss. OPTION_MAP bb_succs (lookup_block a f.fn_blocks) = SOME ss /\ MEM b ss)
+Proof
+  simp[fn_labels_def, fn_cfg_edge_def] >> strip_tac >> eq_tac >> rpt strip_tac
+  >- (drule_all MEM_lookup_block >> strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >> drule lookup_block_MEM >> strip_tac >> metis_tac[lookup_block_label]
+QED
+
+Theorem current_wf_precleanup_labels:
+  current_wf_precleanup_certificate s fn renamed s' A H events ==>
+  MAP (\bb. bb.bb_label) renamed = MAP (\bb. bb.bb_label) fn.fn_blocks
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
+  drule (cj 1 current_tree_trace_projection) >> strip_tac >>
+  drule (cj 1 rename_current_blocks_labels) >>
+  drule add_phi_nodes_supply_labels >> simp[]
+QED
+
+Theorem current_wf_precleanup_entry:
+  current_wf_precleanup_certificate s fn renamed s' A H events ==>
+  fn_entry_label (fn with fn_blocks := renamed) = fn_entry_label fn
+Proof
+  strip_tac >> drule current_wf_precleanup_labels >>
+  Cases_on `renamed` >> Cases_on `fn.fn_blocks` >>
+  simp[fn_entry_label_def, entry_block_def]
+QED
+
+Theorem current_wf_precleanup_successors:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb ==>
+  !q. OPTION_MAP bb_succs (lookup_block q renamed) =
+    OPTION_MAP bb_succs (lookup_block q fn.fn_blocks)
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >>
+  `MAP (\bb. bb.bb_label) ins = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==> IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  drule_all current_wf_trace_successors >> strip_tac >>
+  drule_all current_wf_insertion_successors >> simp[]
+QED
+
+Theorem current_wf_precleanup_cfg:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb ==>
+  fn_entry_label (fn with fn_blocks := renamed) = fn_entry_label fn /\
+  (!a b. fn_cfg_edge (fn with fn_blocks := renamed) a b <=> fn_cfg_edge fn a b)
+Proof
+  strip_tac >> conj_tac >- metis_tac[current_wf_precleanup_entry] >>
+  `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
+  `ALL_DISTINCT (fn_labels (fn with fn_blocks := renamed))` by
+    (drule current_wf_precleanup_labels >> fs[fn_labels_def]) >>
+  drule_all current_wf_precleanup_successors >> strip_tac >>
+  `!q. OPTION_MAP bb_succs (lookup_block q (fn with fn_blocks := renamed).fn_blocks) =
+    OPTION_MAP bb_succs (lookup_block q fn.fn_blocks)` by simp[] >>
+  metis_tac[current_wf_cfg_lookup]
+QED
+
+Theorem current_wf_precleanup_coverage:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM bb renamed ==>
+  ?ev. MEM ev events /\ current_event_label ev = bb.bb_label
+Proof
+  strip_tac >>
+  `MAP (\bb. bb.bb_label) renamed = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[current_wf_precleanup_labels] >>
+  `MEM bb.bb_label (fn_labels fn)` by
+    (fs[fn_labels_def] >> metis_tac[MEM_MAP]) >>
+  `MEM bb.bb_label (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  fs[current_wf_precleanup_certificate_def] >>
+  `MAP (\bb. bb.bb_label) ins = MAP (\bb. bb.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==> IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  drule_all current_tree_trace_event_coverage >> simp[]
+QED
+
 Theorem current_wf_precleanup_output:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
@@ -1685,6 +1906,16 @@ Proof
   `!path. is_fn_path g path <=> is_fn_path f path` by
     (irule current_wf_cfg_paths >> simp[]) >>
   simp[fn_reachable_def, fn_dominates_def]
+QED
+
+Theorem current_wf_precleanup_dominance:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb ==>
+  (fn_reachable (fn with fn_blocks := renamed) l <=> fn_reachable fn l) /\
+  (fn_dominates (fn with fn_blocks := renamed) d n <=> fn_dominates fn d n)
+Proof
+  strip_tac >> irule current_wf_cfg_dominance >>
+  metis_tac[current_wf_precleanup_cfg]
 QED
 
 Definition current_wf_block_replacement_def:
