@@ -653,3 +653,20 @@ Review question: authorize a real original-ALLOCA core transport leaf only after
 separately checking site-extension monotonicity and post-allocation bounds.
 The scratch runtime occurrence injection and callee-first live index certificate
 are independent unresolved integration producers, not consequences of core.
+
+## Runtime allocation support checkpoint (C1.12.17)
+
+`lowerDloadPtrRuntimeSupportTheory` now proves current and saved allocation
+FDOM support on each frame's function ALLOCA IDs directly by all five
+`frame_reachable` constructors, assuming an empty initial allocation table.
+Entry reuses `dload_enters_block_allocations`; ordinary steps use the footprint
+boundary; call pushes the caller certificate and starts empty; return restores
+the saved head certificate. The transformed-function corollary bounds
+`CARD (FDOM t.vs_allocas DIFF A)` by source DLOAD count using the accepted static
+budget theorem. No paired reachability hypothesis or relational core is used.
+
+Still unproved: identification/subset of relational `dr_scratch` with that runtime
+difference, original-site table correspondence, live source-function indices and
+their distinctness across the stack, and the full paired control/definedness and
+memory invariant. The single-frame runtime bound does not bound the stack sum
+without those remaining producers; it does not complete the frozen contract.
