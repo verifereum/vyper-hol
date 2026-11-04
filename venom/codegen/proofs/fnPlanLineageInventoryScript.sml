@@ -92,3 +92,109 @@ Theorem shared_phi_depth_probe[local]:
 Proof
   EVAL_TAC
 QED
+
+(* Concrete wide targets exercise both sides of SWAP16. *)
+Definition probe_targets_def:
+  probe_targets n = GENLIST (\i. Var (IMPLODE (REPLICATE (SUC i) #"x"))) n
+End
+
+Definition probe_join_def:
+  probe_join targets ps =
+    (FST (restore_spilled_plan targets ps) ++
+       FST (reorder_plan dfg_empty targets
+         (SND (restore_spilled_plan targets ps))),
+     SND (reorder_plan dfg_empty targets
+       (SND (restore_spilled_plan targets ps))))
+End
+
+Definition probe_spilled_state_def:
+  probe_spilled_state targets prefix =
+    (init_plan_state 0) with <|
+      ps_stack := prefix;
+      ps_spilled := FEMPTY |++ MAPi (\i op. (op, 32 * i)) targets |>
+End
+
+Theorem all_spilled_join_prefix_probe[local]:
+  EVERY (\n.
+    FST (probe_join (probe_targets n)
+      (probe_spilled_state (probe_targets n) [])) =
+    FST (probe_join (probe_targets n)
+      (probe_spilled_state (probe_targets n) [dead_stack_marker])))
+    [16; 17; 18]
+Proof
+  simp [EVERY_DEF] >> rpt conj_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
+QED
+
+Theorem mixed_wide_join_prefix_probe[local]:
+  EVERY (\n.
+    FST (probe_join (probe_targets n)
+      (probe_spilled_state (TL (probe_targets n)) [HD (probe_targets n)])) =
+    FST (probe_join (probe_targets n)
+      (probe_spilled_state (TL (probe_targets n))
+        [dead_stack_marker; HD (probe_targets n)]))) [17; 18]
+Proof
+  simp [EVERY_DEF] >> rpt conj_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
+QED
+
+Theorem spilled_join_stack_probe[local]:
+  EVERY (\n.
+    (SND (probe_join (probe_targets n)
+      (probe_spilled_state (probe_targets n) [dead_stack_marker]))).ps_stack =
+    dead_stack_marker ::
+    (SND (probe_join (probe_targets n)
+      (probe_spilled_state (probe_targets n) []))).ps_stack) [16; 17; 18]
+Proof
+  simp [EVERY_DEF] >> rpt conj_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
+QED
+
+Definition probe_param_fn_def:
+  probe_param_fn = mk_raw_function "entry"
+    [<| bb_label := "entry"; bb_instructions :=
+      [mk_inst 0 PARAM [Lit 0w] ["x"];
+       mk_inst 1 RETPC_PARAM [] ["retpc"];
+       mk_inst 2 RET [Var "x"; Var "retpc"] []] |>]
+End
+
+Theorem param_setup_prefix_probe[local]:
+  FST (prepare_params_plan (liveness_analyze probe_param_fn) probe_param_fn
+    (init_plan_state 0)) =
+  FST (prepare_params_plan (liveness_analyze probe_param_fn) probe_param_fn
+    ((init_plan_state 0) with ps_stack := [dead_stack_marker])) /\
+  (SND (prepare_params_plan (liveness_analyze probe_param_fn) probe_param_fn
+    ((init_plan_state 0) with ps_stack := [dead_stack_marker]))).ps_stack =
+  dead_stack_marker ::
+  (SND (prepare_params_plan (liveness_analyze probe_param_fn) probe_param_fn
+    (init_plan_state 0))).ps_stack
+Proof
+  conj_tac >> CONV_TAC (LAND_CONV EVAL) >>
+  CONV_TAC (RAND_CONV EVAL) >> REFL_TAC
+QED
+
+Theorem shared_phi_rename_probe[local]:
+  generate_phi_plan (mk_inst 0 PHI [Var "a"; Var "a"] ["out"])
+    ["out"] F ((init_plan_state 0) with ps_stack := [dead_stack_marker; Var "a"]) =
+  ([SOPoke 0 (Var "out")],
+    (init_plan_state 0) with ps_stack := [dead_stack_marker; Var "out"])
+Proof
+  irule EQ_TRANS >>
+  irule_at Any generate_phi_plan_rename_only >>
+  qexists_tac `0` >> EVAL_TAC
+QED
+
+(* Retaining the dead bottom segment preserves a marker-free live core;
+   empty inputs permit retaining the entire physical stack. *)
+Theorem cleanup_mark_partition_probe[local]:
+  FILTER (\op. below_all_live op ["c"] [Var "a"; Var "b"; Var "c"])
+    [Var "a"; Var "b"] = [Var "a"; Var "b"] /\
+  mark_dead_stack [Var "a"; Var "b"] [Var "a"; Var "b"; Var "c"] =
+    [dead_stack_marker; dead_stack_marker; Var "c"] /\
+  FILTER (\op. below_all_live op [] [Var "a"; Var "b"])
+    [Var "a"; Var "b"] = [Var "a"; Var "b"] /\
+  mark_dead_stack [Var "a"; Var "b"] [Var "a"; Var "b"] =
+    [dead_stack_marker; dead_stack_marker]
+Proof
+  EVAL_TAC
+QED
