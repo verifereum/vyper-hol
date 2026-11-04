@@ -423,3 +423,224 @@ Proof
      simp[SF CONJ_ss]) >>
   simp[step_prov_def] >> irule dload_boundary_core_target_temporary >> simp[]
 QED
+
+Theorem dload_scratch_alloca_result:
+  a.inst_opcode = ALLOCA /\ a.inst_outputs = [av] /\
+  off <> Var av /\ eval_operand off t = SOME x /\
+  exec_alloca a t (32w:bytes32) = OK u ==>
+  ?b n. lookup_var av u = SOME (n2w b) /\
+    FLOOKUP u.vs_allocas a.inst_id = SOME (b,n) /\
+    eval_operand off u = SOME x /\
+    u.vs_alloca_next <= t.vs_alloca_next + 32 /\
+    u.vs_code = t.vs_code /\ u.vs_data_section = t.vs_data_section /\
+    u.vs_labels = t.vs_labels
+Proof
+  strip_tac >>
+  gvs[exec_alloca_def, AllCaseEqs(), update_var_def, dimword_def] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `off` >> gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem dload_scratch_site_bounds:
+  dload_live_layout lo sf tf fs /\ j < LENGTH fs /\
+  aid IN (EL j fs).dr_scratch /\
+  FLOOKUP (EL j fs).dr_target aid = SOME (b,n) ==>
+  n = 32 /\ lo <= b /\ b+32 <= tf /\ b < dimword (:256)
+Proof
+  strip_tac >>
+  `dload_frame_sites (EL j fs)` by
+    (fs[dload_live_layout_def, EVERY_EL] >> metis_tac[]) >>
+  `n = 32` by (fs[dload_frame_sites_def] >> metis_tac[]) >>
+  `lo <= b /\ b+n <= tf` by (fs[dload_live_layout_def] >> metis_tac[]) >>
+  fs[dload_live_layout_def] >> decide_tac
+QED
+
+Theorem dload_four_step_boundary:
+  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
+  FDOM s.vs_allocas SUBSET orig /\ a.inst_id NOTIN orig /\
+  t.vs_alloca_next + 32 < dimword (:256) /\
+  i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
+  a.inst_opcode = ALLOCA /\ a.inst_operands = [Lit 32w] /\ a.inst_outputs = [av] /\
+  b.inst_opcode = ADD /\ b.inst_operands = [off;Label "code_end"] /\ b.inst_outputs = [cv] /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var av;Var cv;Lit 32w] /\ c.inst_outputs = [] /\
+  d.inst_opcode = MLOAD /\ d.inst_operands = [Var av] /\ d.inst_outputs = [out] /\
+  av <> cv /\ av NOTIN V /\ cv NOTIN V /\ off <> Var av /\
+  code_layout_valid t /\ eval_operand off s = SOME x /\ eval_operand off t = SOME x /\
+  eval_operand (Label "code_end") t = SOME e /\ w2n x + w2n e < dimword (:256) /\
+  dload_prefix_match fuel Ct PH [a;b;c;d] 4 t H un t4 H4 un4 ==>
+  ?s1 r1.
+    step_inst fuel C i s = OK s1 /\
+    r1.dr_source = r.dr_source /\ r1.dr_scratch = a.inst_id INSERT r.dr_scratch /\
+    dload_boundary_core lo (r1::rs) V Ws PG PH
+      (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
+Proof
+  strip_tac >> drule dload_four_step_replay >> strip_tac >>
+  `exec_alloca a t (32w:bytes32) = OK v1` by
+    (qpat_x_assum `step_inst fuel Ct a t = OK v1` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def]) >>
+  `v1.vs_alloca_next < dimword (:256)` by
+    (drule_all dload_scratch_alloca_result >> strip_tac >> decide_tac) >>
+  drule_all dload_boundary_core_scratch_alloca >> strip_tac >>
+  suspend "after_alloca"
+QED
+
+Resume dload_four_step_boundary[after_alloca]:
+  `dload_boundary_core lo (r1::rs) V Ws PG PH G H1 tn un1 s t1 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v1 _ _`
+       (mp_then Any mp_tac dload_boundary_core_index_update) >>
+     disch_then (qspecl_then [`SUC t.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
+     simp[]) >>
+  `step_inst_base b t1 = OK v2` by
+    (qpat_x_assum `step_inst fuel Ct b t1 = OK v2` mp_tac >>
+     simp[step_inst_non_invoke]) >>
+  `dload_boundary_core lo (r1::rs) V Ws PG PH G H2 tn un2 s v2 cs ds` by
+    (qpat_assum `H2 = _` SUBST1_TAC >>
+     qpat_assum `un2 = _` SUBST1_TAC >>
+     irule dload_boundary_core_add_temporary >> metis_tac[]) >>
+  `dload_boundary_core lo (r1::rs) V Ws PG PH G H2 tn un2 s t2 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v2 _ _`
+       (mp_then Any mp_tac dload_boundary_core_index_update) >>
+     disch_then (qspecl_then [`SUC t1.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
+     simp[]) >>
+  suspend "before_copy"
+QED
+Resume dload_four_step_boundary[before_copy]:
+  drule_all dload_scratch_alloca_result >>
+  disch_then (qx_choose_then `bb` (qx_choose_then `nn` strip_assume_tac)) >>
+  `eval_operand off t1 = SOME x /\
+   eval_operand (Label "code_end") t1 = SOME e` by
+    fs[eval_op_inst_idx, eval_operand_def] >>
+  `v2 = update_var cv (x+e) t1` by
+    (qpat_x_assum `step_inst_base b t1 = OK v2` mp_tac >>
+     simp[step_inst_base_def, exec_pure2_def] >>
+     gvs[eval_op_inst_idx, eval_operand_def]) >>
+  `eval_operand (Var av) t2 = SOME (n2w bb) /\
+   eval_operand (Var cv) t2 = SOME (x+e) /\
+   eval_operand (Lit 32w) t2 = SOME 32w /\
+   t2.vs_allocas = v1.vs_allocas /\
+   t2.vs_alloca_next = v1.vs_alloca_next` by
+    fs[eval_operand_def, eval_op_inst_idx, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  suspend "copy_fields"
+QED
+Resume dload_four_step_boundary[copy_fields]:
+  drule dload_boundary_layout >> strip_tac >>
+  `nn = 32 /\ lo <= bb /\ bb+32 <= t2.vs_alloca_next /\ bb < dimword (:256)` by
+    (irule dload_scratch_site_bounds >>
+     qexistsl [`a.inst_id`,`r1::rs`,`0`,`s.vs_alloca_next`] >>
+     simp[] >> fs[FLOOKUP_DEF]) >>
+  `(!z. z < lo ==> ~(bb <= z /\ z < bb+32)) /\
+   (!owner id aa cc m k. dload_live_site (r1::rs) owner id aa cc m /\ k < m ==>
+     ~(bb <= cc+k /\ cc+k < bb+32))` by
+    (irule dload_scratch_copy_separation >>
+     conj_tac
+     >- (qexistsl [`a.inst_id`,`0`] >> simp[] >> fs[FLOOKUP_DEF]) >>
+     metis_tac[]) >>
+  `step_inst_base c t2 = OK v3` by
+    (qpat_x_assum `step_inst fuel Ct c t2 = OK v3` mp_tac >>
+     simp[step_inst_non_invoke]) >>
+  `dload_boundary_core lo (r1::rs) V Ws PG PH G H3 tn un3 s v3 cs ds` by
+    (qpat_assum `H3 = _` SUBST1_TAC >> qpat_assum `un3 = _` SUBST1_TAC >>
+     irule dload_boundary_core_scratch_codecopy >>
+     simp[IgnAsm `t2 = _`, IgnAsm `H2 = _`, IgnAsm `un2 = _`,
+          w2n_n2w, LESS_MOD] >> metis_tac[]) >>
+  `dload_boundary_core lo (r1::rs) V Ws PG PH G H3 tn un3 s t3 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v3 _ _`
+       (mp_then Any mp_tac dload_boundary_core_index_update) >>
+     disch_then (qspecl_then [`SUC t2.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
+     simp[]) >>
+  suspend "after_copy"
+QED
+Resume dload_four_step_boundary[after_copy]:
+  `s.vs_data_section = t.vs_data_section` by
+    (last_assum (mp_then Any mp_tac dload_boundary_environment) >>
+     simp[dload_equal_environment_def, venom_state_component_equality]) >>
+  `lookup_var out t4 = SOME (word_of_bytes T (0w:bytes32)
+     (TAKE 32 (DROP (w2n x) s.vs_data_section ++ REPLICATE 32 0w)))` by
+    (drule_at (Pat `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _`)
+       dload_expansion_replay_value >> simp[]) >>
+  qmatch_asmsub_abbrev_tac `lookup_var out t4 = SOME value` >>
+  `eval_operand (Var av) t3 = SOME (n2w bb)` by
+    (drule_all dload_codecopy_state_ghost >> strip_tac >>
+     gvs[eval_operand_def, lookup_var_def, write_memory_with_expansion_def,
+         update_var_def]) >>
+  `v4 = update_var out value t3` by
+    (qpat_x_assum `step_inst fuel Ct d t3 = OK v4` mp_tac >>
+     simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def] >>
+     strip_tac >> gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `out_taint tn i s = {} /\ out_taint un3 d t3 = {}` by
+    (`mem_word_taint (mem_taint un2 c t2 v3) (w2n (n2w bb:bytes32)) = {}` by
+       (irule codecopy_scratch_step_untainted >>
+        simp[IgnAsm `t2 = _`] >> metis_tac[]) >>
+     `un3.t_mem = mem_taint un2 c t2 v3` by
+       (qpat_assum `un3 = _` SUBST1_TAC >>
+        simp_tac (srw_ss()) [step_taint_def]) >>
+     qpat_x_assum `un3 = _` kall_tac >>
+     qpat_x_assum `un2 = _` kall_tac >>
+     qpat_x_assum `t3 = _` kall_tac >>
+     qpat_x_assum `t2 = _` kall_tac >>
+     simp[out_taint_def]) >>
+  suspend "paired_read"
+QED
+Resume dload_four_step_boundary[paired_read]:
+  `step_inst fuel C i s = OK (update_var out value s)` by
+    (qpat_x_assum `s.vs_data_section = t.vs_data_section` kall_tac >>
+     simp[Abbr `value`] >> irule dload_source_read_step >> metis_tac[]) >>
+  `dload_boundary_core lo (r1::rs) V Ws PG PH
+     (step_prov PG G i (update_var out value s))
+     (step_prov PH H3 d (update_var out value t3))
+     (step_taint i s (update_var out value s) tn)
+     (step_taint d t3 (update_var out value t3) un3)
+     (update_var out value s) (update_var out value t3) cs ds` by
+    (irule dload_boundary_core_read_pair >> metis_tac[]) >>
+  qexistsl [`update_var out value s`,`r1`] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  qpat_assum `t4 = _` SUBST1_TAC >>
+  qpat_assum `H4 = _` SUBST1_TAC >>
+  qpat_assum `un4 = _` SUBST1_TAC >>
+  qpat_assum `v4 = _` SUBST1_TAC >>
+  first_assum (mp_then Any mp_tac dload_boundary_core_index_update) >>
+  disch_then (qspecl_then [`SUC t3.vs_inst_idx`,`SUC s.vs_inst_idx`] mp_tac) >>
+  simp_tac (srw_ss()) []
+QED
+Finalise dload_four_step_boundary
+
+Theorem dload_supply_replay_boundary:
+  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
+  FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
+  t.vs_alloca_next + 32 < dimword (:256) /\
+  i.inst_opcode = DLOAD /\ i.inst_operands = [off] /\ i.inst_outputs = [out] /\
+  lower_dload_inst_supply supply i = (xs,next) /\
+  (EL 0 xs).inst_outputs = [av] /\ (EL 1 xs).inst_outputs = [cv] /\
+  av <> cv /\ av NOTIN V /\ cv NOTIN V /\ off <> Var av /\
+  code_layout_valid s /\ dload_offset_ok C fn i s /\
+  eval_operand off s = SOME x /\ eval_operand off t = SOME x /\
+  dload_prefix_match fuel Ct PH xs 4 t H un t4 H4 un4 ==>
+  ?s1 r1. step_inst fuel C i s = OK s1 /\
+    r1.dr_source = r.dr_source /\
+    r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
+    dload_boundary_core lo (r1::rs) V Ws PG PH
+      (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds
+Proof
+  strip_tac >>
+  `dload_equal_environment s t` by (drule dload_boundary_environment >> simp[]) >>
+  `code_layout_valid t /\ s.vs_data_section = t.vs_data_section /\
+   s.vs_code = t.vs_code /\ s.vs_labels = t.vs_labels` by
+    (gvs[dload_equal_environment_def, venom_state_component_equality,
+         code_layout_valid_def] >> metis_tac[]) >>
+  `?e. eval_operand (Label "code_end") t = SOME e /\
+       w2n x + w2n e < dimword (:256)` by
+    (gvs[code_layout_valid_def, dload_offset_ok_def, eval_operand_def] >>
+     `LENGTH t.vs_code - LENGTH t.vs_data_section < dimword (:256)` by
+       (fs[dimword_def] >> decide_tac) >>
+     simp[w2n_n2w, LESS_MOD] >> metis_tac[]) >>
+  drule_all dload_supply_expansion >> strip_tac >> gvs[] >>
+  drule_at (Pat `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _`)
+    dload_four_step_boundary >> simp[] >>
+  disch_then drule >> simp[] >> metis_tac[]
+QED
