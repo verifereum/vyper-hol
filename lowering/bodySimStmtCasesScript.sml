@@ -4785,6 +4785,184 @@ Proof
       return_def]
 QED
 
+Theorem aug_place_update_lookup_other[local]:
+  !(k:bytes32) u st i.
+    i < dimword (:256) /\ i <> w2n k ==>
+    lookup_storage (n2w i) (update_storage k u st) = lookup_storage (n2w i) st
+Proof
+  rpt strip_tac >>
+  `(n2w i:bytes32) <> k` by
+    (disch_then (mp_tac o AP_TERM ``w2n:bytes32 -> num``) >>
+     asm_simp_tac pure_ss [wordsTheory.w2n_n2w,
+                          arithmeticTheory.LESS_MOD] >> simp[]) >>
+  simp[vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem aug_place_dead_bytes_field_update:
+  !fs fld off ctv bs k u st.
+    struct_field_slot fs fld = SOME (off,ctv) /\
+    bs + type_slot_size_fields fs <= dimword (:256) /\
+    bs + off <= w2n k /\ w2n k < bs + off + type_slot_size ctv /\
+    (!j byte. dead_bytes (update_storage k u st) (bs+off) ctv j byte <=>
+              dead_bytes st (bs+off) ctv j byte) ==>
+    !j byte. dead_bytes_fields (update_storage k u st) bs fs j byte <=>
+             dead_bytes_fields st bs fs j byte
+Proof
+  Induct_on `fs` >- simp[struct_field_slot_def] >>
+  Cases >> rpt gen_tac >> rename1 `(fid,fty)::fs` >>
+  simp[struct_field_slot_def, vyperValueTheory.type_slot_size_def] >>
+  strip_tac >> simp[dead_bytes_def] >>
+  Cases_on `fid = fld` >> gvs[] >> rpt gen_tac
+  >- (AP_TERM_TAC >> irule (cj 3 accountsRelPropsTheory.dead_bytes_frame) >>
+      rpt strip_tac >> irule aug_place_update_lookup_other >> decide_tac) >>
+  rename1 `struct_field_slot fs fld = SOME z` >> Cases_on `z` >> gvs[] >>
+  rename1 `struct_field_slot fs fld = SOME (off,ctv)` >>
+  `off + type_slot_size ctv <= type_slot_size_fields fs` by
+    (drule vyperStoragePlaceRegionTheory.struct_field_slot_end_bound >>
+     simp[vyperValueTheory.type_slot_size_def]) >>
+  `dead_bytes (update_storage k u st) bs fty j byte <=>
+   dead_bytes st bs fty j byte` by
+    (irule (cj 1 accountsRelPropsTheory.dead_bytes_frame) >> rpt strip_tac >>
+     irule aug_place_update_lookup_other >> decide_tac) >>
+  simp[] >> AP_TERM_TAC >> first_x_assum irule >> simp[] >>
+  qexistsl_tac [`ctv`, `fld`, `off`] >> metis_tac[]
+QED
+
+Theorem aug_place_dead_bytes_other_cell[local]:
+  i < n /\ h < n /\ h <> i /\ bs+n*type_slot_size tv <= dimword (:256) /\
+  bs+i*type_slot_size tv <= w2n k /\
+  w2n k < bs+i*type_slot_size tv+type_slot_size tv ==>
+  !j byte. dead_bytes (update_storage k u st) (bs+h*type_slot_size tv) tv j byte <=>
+           dead_bytes st (bs+h*type_slot_size tv) tv j byte
+Proof
+  strip_tac >> rpt gen_tac >>
+  `(h+1)*type_slot_size tv <= n*type_slot_size tv` by
+    simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+  `bs+h*type_slot_size tv+type_slot_size tv <= bs+i*type_slot_size tv \/
+   bs+i*type_slot_size tv+type_slot_size tv <= bs+h*type_slot_size tv` by
+    metis_tac[aug_place_cells_disjoint] >>
+  irule (cj 1 accountsRelPropsTheory.dead_bytes_frame) >> rpt strip_tac >>
+  irule aug_place_update_lookup_other >>
+  rule_assum_tac (PURE_REWRITE_RULE [arithmeticTheory.RIGHT_ADD_DISTRIB,
+                                    arithmeticTheory.MULT_CLAUSES]) >>
+  decide_tac
+QED
+
+Theorem aug_place_dead_bytes_array_fixed_update[local]:
+  i < n /\ bs+n*type_slot_size tv <= dimword (:256) /\
+  bs+i*type_slot_size tv <= w2n k /\
+  w2n k < bs+i*type_slot_size tv+type_slot_size tv /\
+  (!j byte. dead_bytes (update_storage k u st) (bs+i*type_slot_size tv) tv j byte <=>
+            dead_bytes st (bs+i*type_slot_size tv) tv j byte) ==>
+  !j byte. dead_bytes (update_storage k u st) bs (ArrayTV tv (Fixed n)) j byte <=>
+           dead_bytes st bs (ArrayTV tv (Fixed n)) j byte
+Proof
+  strip_tac >>
+  `!h j byte. h < n ==>
+     (dead_bytes (update_storage k u st) (bs+h*type_slot_size tv) tv j byte <=>
+      dead_bytes st (bs+h*type_slot_size tv) tv j byte)` by
+    (rpt strip_tac >> Cases_on `h = i` >- gvs[] >>
+     irule aug_place_dead_bytes_other_cell >> qexistsl_tac [`i`, `n`] >> simp[]) >>
+  simp[dead_bytes_def] >> metis_tac[]
+QED
+
+Theorem aug_place_dead_bytes_array_dynamic_update[local]:
+  i < n /\ bs+1+n*type_slot_size tv <= dimword (:256) /\
+  bs+1+i*type_slot_size tv <= w2n k /\
+  w2n k < bs+1+i*type_slot_size tv+type_slot_size tv /\
+  (!j byte. dead_bytes (update_storage k u st) (bs+1+i*type_slot_size tv) tv j byte <=>
+            dead_bytes st (bs+1+i*type_slot_size tv) tv j byte) ==>
+  !j byte. dead_bytes (update_storage k u st) bs (ArrayTV tv (Dynamic n)) j byte <=>
+           dead_bytes st bs (ArrayTV tv (Dynamic n)) j byte
+Proof
+  strip_tac >>
+  `lookup_storage (n2w bs) (update_storage k u st) = lookup_storage (n2w bs) st` by
+    (irule aug_place_update_lookup_other >> decide_tac) >>
+  `!h j byte. h < n ==>
+     (dead_bytes (update_storage k u st) (bs+1+h*type_slot_size tv) tv j byte <=>
+      dead_bytes st (bs+1+h*type_slot_size tv) tv j byte)` by
+    (rpt strip_tac >> Cases_on `h = i` >- gvs[] >>
+     irule aug_place_dead_bytes_other_cell >> qexistsl_tac [`i`, `n`] >> simp[]) >>
+  simp[dead_bytes_def] >> rpt gen_tac >>
+  eq_tac >> strip_tac >> qexists_tac `i'` >>
+  Cases_on `i' < w2n (lookup_storage (n2w bs) st)` >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_dead_bytes_array_update:
+  i < n /\
+  c = (if dyn then bs+1 else bs)+i*type_slot_size tv /\
+  bs+type_slot_size (ArrayTV tv (if dyn then Dynamic n else Fixed n)) <= dimword (:256) /\
+  c <= w2n k /\ w2n k < c+type_slot_size tv /\
+  (!j byte. dead_bytes (update_storage k u st) c tv j byte <=>
+            dead_bytes st c tv j byte) ==>
+  !j byte. dead_bytes (update_storage k u st) bs
+             (ArrayTV tv (if dyn then Dynamic n else Fixed n)) j byte <=>
+           dead_bytes st bs (ArrayTV tv (if dyn then Dynamic n else Fixed n)) j byte
+Proof
+  Cases_on `dyn` >> simp[vyperValueTheory.type_slot_size_def] >> strip_tac
+  >- (irule aug_place_dead_bytes_array_dynamic_update >>
+      reverse conj_tac >- simp[] >>
+      qexists_tac `i` >> gvs[]) >>
+  irule aug_place_dead_bytes_array_fixed_update >>
+  reverse conj_tac >- simp[] >> qexists_tac `i` >> gvs[]
+QED
+
+Theorem aug_place_subregion_mask[local]:
+  storage_subregion tv [sb] off leaf /\
+  ((?fs. tv = StructTV fs) \/ (?et bd. tv = ArrayTV et bd)) /\
+  bs + type_slot_size tv <= dimword (:256) /\
+  bs+off <= w2n k /\ w2n k < bs+off+type_slot_size leaf /\
+  (!j byte. dead_bytes (update_storage k u st) (bs+off) leaf j byte <=>
+            dead_bytes st (bs+off) leaf j byte) ==>
+  !j byte. dead_bytes (update_storage k u st) bs tv j byte <=>
+           dead_bytes st bs tv j byte
+Proof
+  reverse (strip_tac >> Cases_on `tv` >> gvs[])
+  >- (rename1 `ArrayTV et bd` >> Cases_on `sb` >>
+      gvs[vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+      rename1 `ValueSubscript key` >> Cases_on `key` >>
+      Cases_on `bd` >> gvs[vyperStoragePlaceRegionTheory.storage_subregion_def]
+      >- (irule aug_place_dead_bytes_array_fixed_update >>
+          reverse conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+          goal_assum (drule_at Any) >> gvs[]) >>
+      irule aug_place_dead_bytes_array_dynamic_update >>
+      reverse conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+      goal_assum (drule_at Any) >> gvs[]) >>
+  Cases_on `sb`
+  >- (rename1 `ValueSubscript key` >> Cases_on `key` >>
+      gvs[vyperStoragePlaceRegionTheory.storage_subregion_def]) >>
+  gvs[vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+  simp[dead_bytes_def] >> irule aug_place_dead_bytes_field_update >>
+  conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+  qexistsl_tac [`leaf`, `s`, `off`] >> gvs[]
+QED
+
+Theorem aug_place_storage_extend_mask:
+  extend_storage_place cx tr slot tv sb es =
+    (INL (StoragePlace tr child leaf),es') /\
+  ((?fs. tv = StructTV fs) \/ (?et bd. tv = ArrayTV et bd)) /\
+  w2n slot + type_slot_size tv <= dimword (:256) /\
+  w2n child <= w2n k /\ w2n k < w2n child+type_slot_size leaf /\
+  (!j byte. dead_bytes (update_storage k u st) (w2n child) leaf j byte <=>
+            dead_bytes st (w2n child) leaf j byte) ==>
+  !j byte. dead_bytes (update_storage k u st) (w2n slot) tv j byte <=>
+           dead_bytes st (w2n slot) tv j byte
+Proof
+  strip_tac >>
+  drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+  strip_tac >> gvs[] >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `0 < type_slot_size leaf` by decide_tac >>
+  `w2n slot + delta < dimword (:256)` by decide_tac >>
+  `w2n (slot + n2w delta) = w2n slot + delta` by
+    (simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+          arithmeticTheory.LESS_MOD]) >>
+  irule aug_place_subregion_mask >>
+  (conj_tac >- decide_tac) >> (conj_tac >- simp[]) >>
+  qexistsl_tac [`leaf`, `delta`, `sb`] >> gvs[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
