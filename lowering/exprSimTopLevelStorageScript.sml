@@ -1,7 +1,7 @@
 (* Counted top-level name simulation: storage. *)
 Theory exprSimTopLevelStorage
 Ancestors
-  exprSimTopLevelProps exprSimMemorySource
+  exprSimTopLevelProps exprSimMemorySource accountsRelProps
   exprSimProps exprSimHypsDefs exprSimDefs loweringPosts
   gasOutcome gasSummary gasSummaryCompose gasContext fragGasPath fragGasMode
   list finite_map exprLowering exprLoweringProps compileEnv context

@@ -36,7 +36,7 @@ holbuild -j2 build exprSimTopLevelStorageTheory
 
 ## Background
 
-The shared raw-expression judgment now carries actual counted target execution and uniform source gas tails. This existing leaf theorem retains its exact statement and old proof. It was extracted from exprSimLeaves into an independent owner so unrelated unfinished leaves do not block it. The shared pure prerequisites are extracted without changing their statements or proofs. The first pure-prerequisite build failed at a missing direct vyperTypeValues import; the import is repaired and a retry is running. This root has not yet been parsed under the new imports.
+The shared raw-expression judgment now carries actual counted target execution and uniform source gas tails. This existing leaf theorem retains its exact statement and old proof. It was extracted from exprSimLeaves into an independent owner so unrelated unfinished leaves do not block it. The shared pure prerequisites are extracted without changing their statements or proofs. The shared pure prerequisites now build (6.342s). The first four-root build stopped on the storage owner before parsing its root because accountsRelProps was missing from its direct imports; that import is repaired. Other roots were stopped with that build. This root has not yet been parsed under the new imports; an independent parse will run before the proof job.
 
 ## Domain Constraints
 
