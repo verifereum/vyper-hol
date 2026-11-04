@@ -2,7 +2,7 @@
 Theory exprSimExtCallOperands
 Ancestors
   exprSim exprSimHyps compileEnv context finite_map list arithmetic
-  venomState vyperState vyperValueOperation
+  venomState vyperState vyperValueOperation exprSimOps freshWrites
 
 Definition operand_frame_def:
   operand_frame cenv es s cut es' s' <=>
@@ -211,3 +211,35 @@ QED
    is asserted here. Changing lengths and popped history must be covered by
    the producer relation, not silently excluded as equal-state transport.
 *)
+
+Theorem operand_frame_trans:
+  local_ptrs_rel func ce es0.scopes s0 /\ local_ptrs_reserved ce cut0 /\
+  operand_frame ce es0 s0 cut0 es1 s1 /\
+  operand_frame ce es1 s1 cut1 es2 s2 /\
+  MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
+  cut0.cs_next_var <= cut1.cs_next_var /\
+  cut0.cs_next_id <= cut1.cs_next_id ==>
+  operand_frame ce es0 s0 cut0 es2 s2
+Proof
+  pure_rewrite_tac[operand_frame_def] >> strip_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at cut1 x` by metis_tac[not_fresh_at_mono] >>
+      metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP s1.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `aid < cut1.cs_next_id` by decide_tac >>
+      `!n b sz'. local_region ce es1.scopes s1 n b sz' ==>
+         off + sz <= b \/ b + sz' <= off` by
+        (rpt strip_tac >>
+         `local_region ce es0.scopes s0 n b sz'` by
+           (irule local_region_frame >>
+            conj_tac >- metis_tac[] >>
+            qexistsl_tac [`cut0`, `es1.scopes`, `s1`] >> simp[]) >>
+         metis_tac[]) >>
+      metis_tac[]) >>
+  irule locals_kept_trans >>
+  qexistsl_tac [`es1`, `cut0`, `s1`] >> simp[]
+QED
