@@ -381,10 +381,11 @@ Proof
      asm_rewrite_tac[]) >>
   qexists_tac `st' with as_stack := st'.as_stack ++ rest` >>
   simp[] >>
-  irule (Q.SPECL [`ctx`, `cplan`, `lo`, `fn`, `ra`, `rest`, `mem0`,
-                  `ps`, `vs`, `ast`, `ps'`, `vs'`, `st'`, `r`,
-                  `ast.as_memory`] frame_local_result) >>
-  simp[] >> fs[fn_frame_inv_def]
+  `~vs'.vs_halted /\ n2w cplan.cp_initial_fmp = vs'.vs_initial_fmp` by
+    fs[fn_frame_inv_def] >>
+  irule frame_local_result >> simp[] >>
+  conj_tac >- (qexists_tac `r` >> simp[]) >>
+  qexistsl_tac [`ast`, `ast.as_memory`, `ps`, `vs`] >> simp[]
 QED
 
 Theorem gas_inst_frame_sim:
