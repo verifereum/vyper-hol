@@ -13621,3 +13621,63 @@ Proof
        simp[LET_THM, compile_alloc_buffer_labels, load_bytestring_as_word_labels,
             comp_return_labels, emit_void_labels, emit_op_labels])
 QED
+
+Theorem compile_builtin_empty_complex_labels:
+  !size lw s P.
+    cs_extends s (SND (compile_builtin_empty_complex size lw s)) /\
+    EVERY P (added_labels s (SND (compile_builtin_empty_complex size lw s)))
+Proof
+  rpt gen_tac >> simp[builtinSimpleTheory.compile_builtin_empty_complex_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, compile_alloc_buffer_labels, compile_zero_words_labels,
+            comp_return_labels, emit_void_labels])
+QED
+
+Theorem compile_keccak256_key_labels:
+  !key b s P. cs_extends s (SND (compile_keccak256_key key b s)) /\
+    EVERY P (added_labels s (SND (compile_keccak256_key key b s)))
+Proof
+  rpt gen_tac >> simp[compile_keccak256_key_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_mapping_subscript_labels:
+  !base key s P. cs_extends s (SND (compile_mapping_subscript base key s)) /\
+    EVERY P (added_labels s (SND (compile_mapping_subscript base key s)))
+Proof
+  rpt gen_tac >> simp[compile_mapping_subscript_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, compile_alloc_buffer_labels, comp_return_labels,
+            emit_void_labels, emit_op_labels])
+QED
+
+Theorem compile_tuple_subscript_labels:
+  !base offset s P. cs_extends s (SND (compile_tuple_subscript base offset s)) /\
+    EVERY P (added_labels s (SND (compile_tuple_subscript base offset s)))
+Proof
+  simp[compile_tuple_subscript_def, emit_op_labels]
+QED
+
+Theorem compile_array_subscript_labels:
+  !base idx dyn count scale size signed loader s P.
+    (!op st. cs_extends st (SND (loader op st)) /\
+      EVERY P (added_labels st (SND (loader op st)))) ==>
+    cs_extends s
+      (SND (compile_array_subscript base idx dyn count scale size signed loader s)) /\
+    EVERY P (added_labels s
+      (SND (compile_array_subscript base idx dyn count scale size signed loader s)))
+Proof
+  rpt gen_tac >> disch_tac >> simp[compile_array_subscript_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_void_labels, emit_op_labels])
+QED
