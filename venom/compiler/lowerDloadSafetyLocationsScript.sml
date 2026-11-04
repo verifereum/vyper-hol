@@ -4,6 +4,14 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadConfiguredOrigins lowerDloadDefs
   venomExecSemantics venomWf venomInst contextCodegenRel o1ContractLowerDload list rich_list arithmetic
 
+Theorem ld_block_label_unique[local]:
+  ALL_DISTINCT (MAP (\b. b.bb_label) bs) /\
+  MEM x bs /\ MEM y bs /\ x.bb_label = y.bb_label ==> x = y
+Proof
+  Induct_on `bs` >> simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[MEM_MAP]
+QED
+
 Theorem lower_dload_insts_supply_singleton_next:
   j < LENGTH ins /\
   lower_dload_insts_supply u (TAKE j ins) = (pre,u0) /\
@@ -41,11 +49,7 @@ Proof
     (drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
   `MEM (EL bi fn.fn_blocks with bb_instructions := is) g.fn_blocks` by simp[] >>
   `bb = (EL bi fn.fn_blocks with bb_instructions := is)` by
-    (`!bs x y. ALL_DISTINCT (MAP (\b. b.bb_label) bs) /\
-        MEM x bs /\ MEM y bs /\ x.bb_label = y.bb_label ==> x = y` by
-       (Induct >> simp[] >> rpt strip_tac >> gvs[] >>
-        metis_tac[MEM_MAP]) >>
-     first_x_assum irule >> conj_tac >- simp[] >>
+    (irule ld_block_label_unique >> conj_tac >- simp[] >>
      qexists_tac `g.fn_blocks` >> asm_rewrite_tac[]) >>
   gvs[] >>
   qmatch_asmsub_abbrev_tac `j < LENGTH src` >>
@@ -68,4 +72,60 @@ Proof
   >- (qexists_tac `EL (LENGTH pre) fn.fn_blocks` >>
       simp[Abbr `src`, MEM_EL] >> metis_tac[]) >>
   qexists_tac `LENGTH pre` >> simp[Abbr `src`]
+QED
+
+Theorem ld_envelope_ordinary:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ ld_envelope u fn s s.vs_inst_idx X p /\
+  inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES ==>
+  X = [inst]
+Proof
+  simp[active_inst_def, ld_envelope_def] >> rpt strip_tac >>
+  `bb = EL bi fn.fn_blocks` by
+    (irule ld_block_label_unique >> conj_tac >- simp[] >>
+     qexists_tac `fn.fn_blocks` >> simp[MEM_EL] >> metis_tac[]) >>
+  gvs[] >> simp[lower_dload_inst_supply_def]
+QED
+
+Theorem ld_sync_ordinary_envelope:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES ==>
+  ?p. ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+      t.vs_inst_idx = p
+Proof
+  strip_tac >>
+  drule ld_sync_source >> strip_tac >>
+  `?X p. ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+         t.vs_inst_idx = p` by
+    (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ld_sync_def] >> simp[] >> strip_tac >>
+     qpat_x_assum `!j. _ ==> ?X. ld_envelope _ _ _ _ X _`
+       (qspec_then `0` mp_tac) >> simp[]) >>
+  `X = [inst]` by (irule ld_envelope_ordinary >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ld_envelope_active_head:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  ld_envelope u fn s j X p /\ t.vs_current_bb = s.vs_current_bb /\
+  t.vs_inst_idx = p /\
+  active_inst (FST (lower_dload_function_supply u fn)) ti t ==>
+  0 < LENGTH X /\ ti = EL 0 X
+Proof
+  simp[ld_envelope_def, active_inst_def] >> strip_tac >>
+  qabbrev_tac `g = FST (lower_dload_function_supply u fn)` >>
+  `lower_dload_function_supply u fn =
+    (g,SND (lower_dload_function_supply u fn))` by simp[Abbr `g`] >>
+  drule lower_dload_function_supply_block_at >>
+  disch_then (qspec_then `bi` mp_tac) >> simp[] >> strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) g.fn_blocks)` by
+    (drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
+  `bb = (EL bi fn.fn_blocks with bb_instructions := is)` by
+    (irule ld_block_label_unique >> conj_tac >- simp[] >>
+     qexists_tac `g.fn_blocks` >> simp[]) >>
+  gvs[] >>
+  drule_all lower_dload_insts_supply_at >> strip_tac >>
+  `X <> []` by metis_tac[lower_dload_inst_supply_nonempty] >>
+  gvs[] >> Cases_on `X` >> gvs[EL_APPEND]
 QED
