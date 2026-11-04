@@ -6279,7 +6279,10 @@ Proof
   >- (irule aug_place_range_word_offset >>
       gvs[Once vyperLookupStorageTheory.slots_in_range_def,
           cj 1 vyperLookupStorageTheory.array_slots_in_range_indexed]) >>
-  FAIL_TAC "dynamic indexed range"
+  irule aug_place_range_word_offset >>
+  gvs[Once vyperLookupStorageTheory.slots_in_range_def,
+      cj 2 vyperLookupStorageTheory.array_slots_in_range_indexed] >>
+  first_x_assum irule >> simp[vyperStorageTheory.read_slot_def]
 QED
 
 (* A field or element of a local, or of a storage or transient variable
