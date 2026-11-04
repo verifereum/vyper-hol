@@ -1,7 +1,7 @@
 Theory makeSsaCurrentOrdinary
 Ancestors
   makeSsaCurrentSimDefs makeSsaCurrentDefs venomExecSemantics venomState
-  stateFrame venomInst list rich_list
+  stateFrame venomInst venomWf list rich_list
 
 Theorem current_rename_operands_map:
   !ops. rename_current_operands rs ops =
@@ -258,4 +258,197 @@ Theorem current_nop_post_agreement_fails_probe:
 Proof
   simp[current_name_agree_def, latest_current_name_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >> EVAL_TAC
+QED
+
+Definition current_result_agree_def:
+  current_result_agree rt demand r r' <=>
+    case (r,r') of
+      (OK st, OK st') => execution_frame st = execution_frame st' /\
+        st.vs_current_bb = st'.vs_current_bb /\
+        st.vs_prev_bb = st'.vs_prev_bb /\ current_name_agree rt demand st st'
+    | (Halt st, Halt st') => execution_frame st = execution_frame st'
+    | (Abort a st, Abort a' st') => a = a' /\ execution_frame st = execution_frame st'
+    | (IntRet v st, IntRet v' st') => v = v' /\ execution_frame st = execution_frame st'
+    | (Error e, Error e') => e = e'
+    | _ => F
+End
+
+Theorem current_outputs_singleton_compatible:
+  current_outputs_compatible rs [x] rt ys demand <=>
+    ?y. ys = [y] /\ current_write_compatible rs rt x y demand
+Proof
+  simp[current_outputs_compatible_def, current_before_outputs_def] >>
+  metis_tac[]
+QED
+
+Theorem current_result_write_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_write_compatible rs rt x y demand /\
+  current_name_agree rs (FILTER (\v. v <> x) demand) st st' ==>
+  current_result_agree rt demand
+    (OK (update_var x w st)) (OK (update_var y w st'))
+Proof
+  strip_tac >>
+  `current_name_agree rt demand (update_var x w st) (update_var y w st')`
+    by (irule current_write_agree >> metis_tac[]) >>
+  gvs[current_result_agree_def, update_var_def]
+QED
+
+Theorem current_wf_nop_agree:
+  inst_wf inst /\ inst.inst_opcode = NOP /\ inst'.inst_opcode = NOP /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> gvs[inst_wf_def] >>
+  gvs[current_outputs_compatible_def, current_before_outputs_def] >>
+  simp[step_inst_base_def] >> simp[current_result_agree_def]
+QED
+
+Theorem current_single_output_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand
+    (case inst.inst_outputs of [x] => OK (update_var x w st) | _ => Error e)
+    (case inst'.inst_outputs of [y] => OK (update_var y w st') | _ => Error e)
+Proof
+  strip_tac >> drule current_outputs_compatible_length >> strip_tac >>
+  Cases_on `inst.inst_outputs` >-
+    gvs[exec_read0_def, current_outputs_compatible_def, current_result_agree_def] >>
+  rename1 `inst.inst_outputs = x::xs` >> Cases_on `xs`
+  >- (gvs[current_outputs_singleton_compatible] >>
+      simp[exec_read0_def] >> irule current_result_write_agree >>
+      gvs[current_before_outputs_cons, current_before_outputs_def] >> metis_tac[]) >>
+  Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `inst'.inst_outputs = y::ys` >> Cases_on `ys` >> gvs[] >>
+  simp[exec_read0_def, current_result_agree_def]
+QED
+
+Theorem current_exec_pure1_agree:
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (exec_pure1 f inst st) (exec_pure1 f inst' st')
+Proof
+  strip_tac >>
+  drule_all current_rename_operands_pointwise >> strip_tac >>
+  Cases_on `inst.inst_operands`
+  >- gvs[rename_current_operands_def, exec_pure1_def, current_result_agree_def] >>
+  rename1 `inst.inst_operands = op::ops` >> Cases_on `ops`
+  >- (gvs[LIST_REL_EL_EQN] >>
+      `eval_operand (HD (rename_current_operands rs [op])) st' = eval_operand op st`
+        by metis_tac[current_eval_operand_agree] >>
+      Cases_on `eval_operand (HD (rename_current_operands rs [op])) st'`
+      >- gvs[exec_pure1_def, current_result_agree_def] >>
+      gvs[] >> qpat_x_assum `SOME _ = eval_operand _ _` (assume_tac o SYM) >>
+      simp[exec_pure1_def] >>
+      irule current_single_output_agree >>
+      simp[] >> metis_tac[]) >>
+  gvs[current_rename_operands_map, exec_pure1_def, current_result_agree_def]
+QED
+
+Theorem current_exec_read0_agree:
+  f st = f st' /\ execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (exec_read0 f inst st) (exec_read0 f inst' st')
+Proof
+  strip_tac >> simp[exec_read0_def] >>
+  irule current_single_output_agree >> metis_tac[]
+QED
+
+Theorem current_exec_pure2_agree:
+  LENGTH inst.inst_operands = 2 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (exec_pure2 f inst st) (exec_pure2 f inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >>
+  gvs[LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >> rename1 `inst.inst_operands = [a;b]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  simp[exec_pure2_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_single_output_agree >> metis_tac[]
+QED
+
+Theorem current_exec_pure3_agree:
+  LENGTH inst.inst_operands = 3 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (exec_pure3 f inst st) (exec_pure3 f inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >>
+  gvs[LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >> rename1 `inst.inst_operands = [a;b;c]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand c st = _` (assume_tac o SYM) >>
+  simp[exec_pure3_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand c st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_single_output_agree >> metis_tac[]
+QED
+
+Theorem current_exec_read1_agree:
+  (!w. f w st = f w st') /\ LENGTH inst.inst_operands = 1 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (exec_read1 f inst st) (exec_read1 f inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >>
+  gvs[LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >> rename1 `inst.inst_operands = [a]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  simp[exec_read1_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_single_output_agree >> metis_tac[]
+QED
+
+(* ALLOCA's allocation key is an instruction id, so alpha correspondence
+   cannot forget ids even when its output names are compatible. *)
+Theorem current_alloca_distinct_id_probe:
+  !st. ~current_result_agree ([],[]) []
+    (exec_alloca
+      <|inst_id := 0; inst_opcode := ALLOCA; inst_operands := [Lit 1w]; inst_outputs := ["x"]|>
+      (st with vs_allocas := FEMPTY) 1w)
+    (exec_alloca
+      <|inst_id := 1; inst_opcode := ALLOCA; inst_operands := [Lit 1w]; inst_outputs := ["x"]|>
+      (st with vs_allocas := FEMPTY) 1w)
+Proof
+  simp[exec_alloca_def, finite_mapTheory.FLOOKUP_EMPTY, current_result_agree_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `execution_frame _ = _`
+    (mp_tac o AP_TERM ``\s:venom_state. FLOOKUP s.vs_allocas 0``) >>
+  simp[execution_frame_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
