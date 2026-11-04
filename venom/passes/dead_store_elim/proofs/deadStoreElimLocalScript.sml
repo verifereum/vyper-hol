@@ -1,7 +1,8 @@
 Theory deadStoreElimLocal
 Ancestors
   deadStoreElimPending deadStoreElimMemory deadStoreElimSafety deadStoreElimEquiv
-  deadStoreElimFrame deadStoreElimDefs venomState finite_map
+  deadStoreElimFrame deadStoreElimDefs venomState venomExecSemantics
+  basePtrDefs memLocDefs finite_map
 Libs
   deadStoreElimFrameLib
 
@@ -88,4 +89,26 @@ Proof
       dse_equiv_def, dse_pending_memory_def, dse_memory_byte_def,
       update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> Cases_on `x = v'` >> simp[]
+QED
+
+Theorem dse_local_agrees_undefined_read:
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\
+  bp_get_read_location bp (EL idx bb.bb_instructions) sp = ml_undefined ==>
+  s = t
+Proof
+  strip_tac >> drule_all dse_pending_at_undefined_read >> strip_tac >>
+  gvs[] >> drule dse_local_agrees_empty >> simp[]
+QED
+
+Theorem dse_local_agrees_undefined_read_step:
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\
+  bp_get_read_location bp (EL idx bb.bb_instructions) sp = ml_undefined ==>
+  step_inst fuel ctx (EL idx bb.bb_instructions) s =
+  step_inst fuel ctx (EL idx bb.bb_instructions) t
+Proof
+  strip_tac >> drule_all dse_local_agrees_undefined_read >> simp[]
 QED

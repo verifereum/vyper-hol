@@ -2,7 +2,7 @@ Theory deadStoreElimPending
 Ancestors
   deadStoreElimMemory deadStoreElimLocations deadStoreElimLiveness
   deadStoreElimDefs deadStoreElimEquiv venomState venomExecSemantics
-  memLocDefs words list rich_list combin arithmetic vfmState deadStoreElimFrame
+  memLocDefs memAliasDefs basePtrDefs finite_map words list rich_list combin arithmetic vfmState deadStoreElimFrame
 Libs
   deadStoreElimFrameLib
 
@@ -431,4 +431,19 @@ Proof
   qpat_x_assum `EVERY _ P` mp_tac >> simp[EVERY_MEM] >>
   disch_then drule >> simp[] >> strip_tac >>
   irule dse_region_matches_allocas_extend >> metis_tac[]
+QED
+
+Theorem dse_pending_at_undefined_read:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\
+  bp_get_read_location bp (EL idx bb.bb_instructions) sp = ml_undefined ==>
+  P = []
+Proof
+  strip_tac >> Cases_on `P` >- simp[] >>
+  rename1 `entry::rest` >> PairCases_on `entry` >>
+  `MEM (entry0,(entry1,entry2)) ((entry0,(entry1,entry2))::rest)` by simp[] >>
+  drule_all dse_pending_at_no_read >>
+  drule_all dse_pending_at_member >> strip_tac >>
+  simp[dse_inst_reads_alias_def, ma_may_alias_def, ml_undefined_def,
+       may_overlap_def]
 QED
