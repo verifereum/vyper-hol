@@ -84,6 +84,32 @@ Proof
   first_x_assum (qspec_then `SUC m` mp_tac) >> simp[]
 QED
 
+Theorem revert_path_minimal_blocks:
+  !n bbs l.
+    revert_path bbs n l /\
+    (!m. m < n ==> ~revert_path bbs m l) ==>
+    ?xs. LENGTH xs = n /\ ALL_DISTINCT xs /\
+      EVERY (\bb. MEM bb bbs /\ revert_path bbs n bb.bb_label) xs
+Proof
+  Induct >- simp[revert_path_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `n`
+  >- (qpat_assum `revert_path _ _ _` mp_tac >>
+      pure_once_rewrite_tac[revert_path_def] >>
+      pure_rewrite_tac[EXISTS_MEM] >>
+      disch_then (qx_choose_then `bb` strip_assume_tac) >>
+      qexists_tac `[bb]` >> simp[] >> metis_tac[]) >>
+  drule_all revert_path_minimal_step >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `bb::xs` >> simp[] >>
+  conj_tac
+  >- (strip_tac >>
+      gvs[EVERY_MEM] >>
+      first_x_assum (qspec_then `bb` mp_tac) >> simp[] >>
+      metis_tac[prim_recTheory.LESS_SUC_REFL]) >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[revert_path_fuel_mono, arithmeticTheory.LESS_EQ_SUC_REFL]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
