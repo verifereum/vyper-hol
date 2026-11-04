@@ -1,7 +1,8 @@
 Theory lowerDloadPtrBytesTransport
 Ancestors
-  lowerDloadPtrMemoryWrite lowerDloadPtrRel codegenRel memLocDefs ptrDiscipline
-  list pred_set words arithmetic finite_map
+  lowerDloadPtrMemoryWrite lowerDloadPtrRel lowerDloadPtrExpansionTransport
+  codegenRel memLocDefs ptrDiscipline
+  pointerConfinedDefs list pred_set words arithmetic finite_map
 
 Theorem dloadbytes_destination_region:
   i.inst_opcode = DLOADBYTES /\
@@ -65,4 +66,64 @@ Proof
   >- (irule dload_memory_match_clean_write >> simp[]) >>
   irule dload_memory_match_clean_write_region >>
   metis_tac[]
+QED
+
+Theorem dloadbytes_scalar_clean:
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
+  MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+  taint_ok fn tn i s ==>
+  op_prov G off = NONE /\ op_prov G sz = NONE /\
+  op_taint tn off = {} /\ op_taint tn sz = {}
+Proof
+  strip_tac >>
+  `ptr_use_ok P (fn_pv P fn) i` by metis_tac[fn_ptr_ok_def] >>
+  `!v. MEM (Var v) [off;sz] ==> v NOTIN fn_pv P fn` by
+    (gvs[ptr_use_ok_def, is_pointer_preserving_op_def,
+         mem_write_ops_def, mem_read_ops_def] >>
+     rpt strip_tac >> first_x_assum (qspec_then `v` mp_tac) >>
+     simp[] >> strip_tac >> gvs[] >>
+     Cases_on `dst = Var v` >> gvs[FILTER] >>
+     Cases_on `sz = Var v` >> gvs[] >>
+     Cases_on `off = Var v` >> gvs[]) >>
+  conj_tac
+  >- (Cases_on `off` >> gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF] >> metis_tac[]) >>
+  conj_tac
+  >- (Cases_on `sz` >> gvs[op_prov_def, FLOOKUP_DEF, SUBSET_DEF] >> metis_tac[]) >>
+  gvs[taint_ok_def] >> metis_tac[]
+QED
+
+Theorem dloadbytes_scalar_equal:
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
+  MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+  taint_ok fn tn i s /\ dload_vars_match fs V G H tn un s t /\
+  s.vs_labels = t.vs_labels /\
+  (!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V) /\
+  (eval_operand off s = NONE <=> eval_operand off t = NONE) /\
+  (eval_operand sz s = NONE <=> eval_operand sz t = NONE) ==>
+  eval_operand off s = eval_operand off t /\
+  eval_operand sz s = eval_operand sz t
+Proof
+  strip_tac >> drule_all dloadbytes_scalar_clean >> strip_tac >>
+  conj_tac >> irule scalar_operand_equal >> simp[] >>
+  qexistsl [`G`,`H`,`V`,`fs`,`tn`,`un`] >> simp[]
+QED
+
+Theorem dloadbytes_common_payload:
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
+  MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
+  taint_ok fn tn i s /\ dload_vars_match fs V G H tn un s t /\
+  s.vs_labels = t.vs_labels /\
+  (!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V) /\
+  (eval_operand off s = NONE <=> eval_operand off t = NONE) /\
+  (eval_operand sz s = NONE <=> eval_operand sz t = NONE) /\
+  s.vs_data_section = t.vs_data_section /\ code_layout_valid t /\
+  eval_operand (Label "code_end") t = SOME e /\
+  eval_operand off s = SOME a /\ eval_operand sz s = SOME z /\
+  w2n a + w2n e < dimword (:256) ==>
+  eval_operand off t = SOME a /\ eval_operand sz t = SOME z /\
+  TAKE (w2n z) (DROP (w2n (a+e)) t.vs_code ++ REPLICATE (w2n z) 0w) =
+  TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w)
+Proof
+  strip_tac >> drule_all dloadbytes_scalar_equal >> strip_tac >>
+  gvs[] >> drule_all dload_code_data_padded_slice >> simp[]
 QED

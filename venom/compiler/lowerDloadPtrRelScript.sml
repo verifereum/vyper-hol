@@ -362,3 +362,19 @@ Proof
   simp[dload_table_stack_initial, dload_vars_match_empty_provenance,
        dload_memory_match_empty]
 QED
+
+Theorem scalar_operand_equal:
+  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  (!v. op = Var v ==> v IN V) /\
+  op_prov G op = NONE /\ op_taint tn op = {} /\
+  (eval_operand op s = NONE <=> eval_operand op t = NONE) ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >> Cases_on `eval_operand op s` >- gvs[] >>
+  Cases_on `eval_operand op t` >- gvs[] >>
+  `dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) x x'` by
+    (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
+  Cases_on `op_prov H op` >>
+  gvs[dload_value_word_def, word_agree_except_bits] >>
+  simp[fcpTheory.CART_EQ] >> metis_tac[]
+QED
