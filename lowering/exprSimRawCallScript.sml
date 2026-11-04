@@ -423,6 +423,49 @@ QED
 
 Finalise raw_call_outbuf_positive_run
 
+Theorem raw_call_frame_footprint[local]:
+  expr_val_at cenv cx ty sa sb es v op s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  ~is_word_type ty /\ ~dynarray_type ty /\
+  eval_operand op s = SOME w /\ sb.cs_next_id <= sk.cs_next_id /\
+  wb_frame cenv es sk s t ==>
+  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  >- (fs[wb_frame_def] >>
+      `aid < sk.cs_next_id` by decide_tac >>
+      qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ _ = _` drule_all >>
+      disch_then (mp_tac o cj 1 o MATCH_MP valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+      disch_then (qspecl_then [`w2n w`, `val_footprint tv v`] mp_tac) >>
+      simp[])
+  >- (fs[wb_frame_def, locals_kept_def] >>
+      qpat_x_assum `!n b sz off len. _ ==> _` irule >>
+      qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> decide_tac)
+  >> simp[mem_bytes_at_def]
+QED
+
+Theorem raw_call_frame_bytes[local]:
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sb es (BytesV bs) op s /\
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
+  eval_operand op s = SOME (n2w b) /\ b < dimword (:256) /\
+  sb.cs_next_id <= sk.cs_next_id /\ wb_frame cenv es sk s t /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs ==>
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs
+Proof
+  strip_tac >>
+  `~is_word_type (BaseT (BytesT (Dynamic cap))) /\
+   ~dynarray_type (BaseT (BytesT (Dynamic cap)))` by
+    simp[is_word_type_def, dynarray_type_def] >>
+  drule_all raw_call_frame_footprint >>
+  simp[val_footprint_def, wordsTheory.w2n_n2w] >> strip_tac >>
+  drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+  disch_then (qspecl_then [`b+32`, `LENGTH bs`] mp_tac) >> simp[]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
