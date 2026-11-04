@@ -253,8 +253,9 @@ Theorem pop_step_SUB_lit[local]:
     step_inst_base (mk_inst id SUB [Var x; Lit c] [out]) s =
       OK (update_var out (THE (lookup_var x s) - c) s)
 Proof
-  rpt strip_tac >> Cases_on `lookup_var x s` >> gvs[] >>
-  irule step_SUB >> simp[eval_operand_def]
+  rpt strip_tac >> Cases_on `lookup_var x s`
+  >- gvs[] >>
+  asm_rewrite_tac[] >> irule step_SUB >> simp[eval_operand_def]
 QED
 
 Theorem pop_step_ADD_lit[local]:
@@ -263,8 +264,9 @@ Theorem pop_step_ADD_lit[local]:
     step_inst_base (mk_inst id ADD [Var x; Lit c] [out]) s =
       OK (update_var out (THE (lookup_var x s) + c) s)
 Proof
-  rpt strip_tac >> Cases_on `lookup_var x s` >> gvs[] >>
-  irule step_ADD >> simp[eval_operand_def]
+  rpt strip_tac >> Cases_on `lookup_var x s`
+  >- gvs[] >>
+  asm_rewrite_tac[] >> irule step_ADD >> simp[eval_operand_def]
 QED
 
 Theorem pop_step_MUL_lit[local]:
@@ -273,8 +275,9 @@ Theorem pop_step_MUL_lit[local]:
     step_inst_base (mk_inst id MUL [Var x; Lit c] [out]) s =
       OK (update_var out (THE (lookup_var x s) * c) s)
 Proof
-  rpt strip_tac >> Cases_on `lookup_var x s` >> gvs[] >>
-  irule step_MUL >> simp[eval_operand_def]
+  rpt strip_tac >> Cases_on `lookup_var x s`
+  >- gvs[] >>
+  asm_rewrite_tac[] >> irule step_MUL >> simp[eval_operand_def]
 QED
 
 Theorem pop_step_ADD_var[local]:
@@ -465,7 +468,7 @@ Proof
   `type_memory_bytes cenv ann = type_memory_size etv` by
     (irule expr_sim_inv_memory_size >> metis_tac[]) >>
   qexistsl_tac [`etv`, `vs`, `w`] >>
-  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, decide_tac, metis_tac[]]
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, (fs[dimword_def] >> NO_TAC), decide_tac, metis_tac[]]
 QED
 
 (* The local after the pop: its region holds the shortened array, and the
@@ -695,7 +698,9 @@ Theorem pop_vv_post:
     lookup_var x6 u =
       SOME (w + 32w + (n2w (LENGTH vs) - 1w) * n2w (type_memory_size etv)) /\
     EVERY (value_has_type etv) vs /\
-    evaluate_type (get_tenv cx) ann = SOME etv ==>
+    evaluate_type (get_tenv cx) ann = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+      SOME (ArrayTV etv (Dynamic n)) ==>
     vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
@@ -750,13 +755,13 @@ Proof
       `val_in_memory etv (LAST vs)
          (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv) u.vs_memory` by
         (irule pop_elem_in_memory >> simp[] >> metis_tac[]) >>
-      simp[] >> rpt strip_tac >>
-      TRY (qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >>
-           simp[] >> NO_TAC) >>
-      irule val_in_memory_word_type >> rpt conj_tac
-      >- metis_tac[]
-      >- gvs[EVERY_EL, LAST_EL, arithmeticTheory.PRE_SUB1] >>
-      qpat_x_assum `val_in_memory etv (LAST vs) _ _` mp_tac >> simp[])
+      `value_has_type etv (LAST vs)` by
+        gvs[EVERY_EL, LAST_EL, arithmeticTheory.PRE_SUB1] >>
+      `is_word_type ann ==>
+       mem_word_at (w2n w + 32 + (LENGTH vs - 1) * type_memory_size etv)
+         u.vs_memory = typed_val_to_w256 etv (LAST vs)` by
+        (strip_tac >> drule_all val_in_memory_word_type >> simp[]) >>
+      gvs[])
   >- (qpat_assum `read_result _ _ _ = _` (fn th =>
         simp[vv_at_def, contextTheory.mk_ptr_def, eval_operand_def,
              lookup_var_inst_idx, th]) >>
@@ -772,9 +777,21 @@ Proof
       conj_tac
       >- (qexistsl [`entry`, `ann`, `id`, `n`, `p`, `sz`,
                    `n2w (LENGTH vs) - 1w`, `w`] >> simp[]) >>
-      qexists `func` >> simp[]) >>
-  (* the variables and allocations clauses simplified away; the memory
-     frame is left *)
+      qexists `func` >> simp[])
+  >~ [`vv_place_ptr_rel`]
+  >- (rpt strip_tac >>
+      simp[vv_place_ptr_rel_def, placeProvenanceTheory.place_ptr_rel_def, contextTheory.mk_ptr_def,
+           eval_operand_def, lookup_var_inst_idx] >>
+      qexistsl [`w`, `32 + (LENGTH vs - 1) * type_memory_size etv`] >>
+      simp[placeProvenanceTheory.mem_path_offset_def,
+           placeProvenanceTheory.mem_step_offset_def] >>
+      conj_tac >- metis_tac[] >>
+      `n2w (LENGTH vs) - 1w = n2w (LENGTH vs - 1) : bytes32` by
+        simp[GSYM wordsTheory.n2w_sub] >>
+      fs[wordsTheory.word_add_n2w, wordsTheory.word_mul_n2w] >>
+      rewrite_tac[GSYM wordsTheory.word_add_n2w] >>
+      wordsLib.WORD_DECIDE_TAC) >>
+  (* The remaining conjunct is the memory frame. *)
   `32 <= sz` by (qpat_x_assum `32 + _ <= sz` mp_tac >> simp[]) >>
   rpt strip_tac >>
   `regions_disjoint off sz' (w2n w) sz` by
@@ -802,6 +819,17 @@ Proof
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   drule_all pop_name_facts >> strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
+     SOME (ArrayTV etv (Dynamic n))` by
+    (`expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     `IS_SOME (FLOOKUP env.var_types id)` by
+       (qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >> simp[]) >>
+     Cases_on `FLOOKUP env.var_types id` >> gvs[] >>
+     qpat_x_assum `!id ty. FLOOKUP env.var_types _ = _ ==> cenv.ce_var_type _ = _`
+       drule >> simp[] >> strip_tac >>
+     qpat_x_assum `!id ty entry. _ /\ _ ==> evaluate_type _ _ = _`
+       (drule_all_then mp_tac) >> simp[]) >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
   Cases_on `compile_dynarray_pop (Var p) 32 (type_memory_size etv)
               MLOAD MSTORE sa` >>
@@ -858,5 +886,5 @@ Proof
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `u = s with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |>` by
     (qpat_x_assum `u = _` mp_tac >> simp[venom_state_component_equality]) >>
-  drule_all pop_vv_post >> simp[]
+  drule_all (SRULE [] pop_vv_post) >> simp[]
 QED
