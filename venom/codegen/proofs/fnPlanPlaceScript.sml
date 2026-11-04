@@ -21,7 +21,7 @@
 Theory fnPlanPlace
 Ancestors
   fnPlanLineage codegen asmSem symbolResolve planExec stackPlanGen
-  stackPlanTypes fnPlanPlaceRevertPostamble
+  stackPlanTypes fnPlanPlaceRevertPostamble fnPlanPlaceFnRegion
 
 (* Used at each jump of the block induction: the successor's code
    (planned from its DFS state, fnPlanCover) is at the PC its label
@@ -97,7 +97,17 @@ Theorem fn_region_placed:
       FLOOKUP o2pc off = SOME pc /\
       asm_block_at prog pc (execute_plan cp.cp_initial_fmp r.sr_plan)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all context_region_leading_label >> strip_tac >>
+  gvs[] >>
+  drule codegen_region_slice >> simp[] >>
+  disch_then drule >> simp[] >>
+  disch_then (qspec_then `i` mp_tac) >> simp[] >> strip_tac >>
+  gvs[execute_plan_def, exec_stack_op_def] >>
+  drule (SRULE [] labelled_asm_slice_placed) >> strip_tac >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]) >>
+  metis_tac[]
 QED
 
 (* Used by the ASSERT case of the abort step (gen_inst_abort_frame_sim's
