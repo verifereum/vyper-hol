@@ -10,7 +10,7 @@
 Theory o1ContractLowerDloadTaint
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
-  lowerDloadDefs venomPassSchedule list
+  lowerDloadDefs venomPassSchedule list calleeTransport
 
 (* A complete untainted overwrite clears a word, even if the step also
    introduces fresh-site taint. *)
@@ -443,6 +443,16 @@ Proof
   disch_then (qspec_then `n` assume_tac) >>
   gvs[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Inherited memory/frontier and return memory projections are already
+   supplied by calleeTransport's setup_callee_shared_fields and
+   merge_callee_shared_fields. Only the empty callee site map is missing. *)
+Theorem setup_callee_allocas:
+  setup_callee fn args s = SOME u ==> u.vs_allocas = FEMPTY
+Proof
+  simp[venomExecSemanticsTheory.setup_callee_def] >>
+  strip_tac >> gvs[]
 QED
 
 (* The output's taint reaches only the dead bytes D. *)
