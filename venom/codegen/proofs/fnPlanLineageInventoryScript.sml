@@ -1249,3 +1249,60 @@ Proof
   qpat_x_assum `ps.ps_stack = _` (SUBST1_TAC o SYM) >>
   qpat_x_assum `qs.ps_stack = _` (SUBST1_TAC o SYM) >> simp[]
 QED
+
+Theorem cleanup_retained_prefix_replay:
+  !m n core ps qs inputs physical retained removed.
+    lineage_core m core ps /\ lineage_core n core qs /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\
+    ps.ps_alloc = qs.ps_alloc /\
+    set physical = set core DIFF set (MAP Var inputs) /\
+    retained = FILTER (\op. below_all_live op inputs ps.ps_stack) physical /\
+    removed = FILTER (\op. ~MEM op retained) physical ==>
+    ?pre live ops al.
+      set retained = set pre /\
+      popmany_plan removed ps =
+        (ops, ps with <|ps_stack := REPLICATE m dead_stack_marker ++ pre ++ live;
+                       ps_alloc := al|>) /\
+      popmany_plan removed qs =
+        (ops, qs with <|ps_stack := REPLICATE n dead_stack_marker ++ pre ++ live;
+                       ps_alloc := al|>) /\
+      mark_dead_stack retained (REPLICATE m dead_stack_marker ++ pre ++ live) =
+        REPLICATE (m + LENGTH pre) dead_stack_marker ++ live /\
+      mark_dead_stack retained (REPLICATE n dead_stack_marker ++ pre ++ live) =
+        REPLICATE (n + LENGTH pre) dead_stack_marker ++ live /\
+      ALL_DISTINCT live /\ EVERY is_var_operand live /\
+      set live = set core INTER set (MAP Var inputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all below_all_live_core_prefix >>
+  disch_then (qspecl_then [`m`, `inputs`] strip_assume_tac) >>
+  `set retained = set pre` by
+    (simp[EXTENSION, MEM_FILTER] >> gvs[lineage_core_def] >> ASM_SET_TAC[]) >>
+  `set removed = set physical DIFF set retained` by
+    (simp[EXTENSION, MEM_FILTER] >> metis_tac[]) >>
+  `!k. DISJOINT (set (REPLICATE k dead_stack_marker ++ pre)) (set removed)` by
+    (`~MEM dead_stack_marker physical` by
+       (fs[EVERY_MEM] >>
+        `~is_var_operand dead_stack_marker` by
+          simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
+        ASM_SET_TAC[]) >>
+     gvs[] >> simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+  `ALL_DISTINCT tail` by gvs[ALL_DISTINCT_APPEND] >>
+  `?ops live al.
+     popmany_plan removed ps =
+       (ops, ps with <|ps_stack := (REPLICATE m dead_stack_marker ++ pre) ++ live;
+                      ps_alloc := al|>) /\
+     popmany_plan removed qs =
+       (ops, qs with <|ps_stack := (REPLICATE n dead_stack_marker ++ pre) ++ live;
+                      ps_alloc := al|>) /\
+     ALL_DISTINCT live /\ set live = set tail DIFF set removed` by
+    (irule popmany_plan_prefix_frame >> gvs[lineage_core_def]) >>
+  `DISJOINT (set pre) (set live)` by
+    (gvs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
+  `set live = set core INTER set (MAP Var inputs)` by
+    (gvs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]) >>
+  qexistsl_tac [`pre`, `live`, `ops`, `al`] >>
+  simp[APPEND_ASSOC, mark_dead_stack_prefix] >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  `MEM e core` by ASM_SET_TAC[] >> metis_tac[]
+QED
