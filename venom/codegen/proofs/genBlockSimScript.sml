@@ -848,7 +848,7 @@ Proof
 QED
 
 (* What step_inst RETURNDATACOPY abort produces *)
-Theorem step_inst_returndatacopy_abort[local]:
+Theorem step_inst_returndatacopy_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = RETURNDATACOPY /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -924,7 +924,7 @@ Proof
 QED
 
 (* RETURNDATACOPY terminal fault step: OOB produces AsmFault *)
-Theorem terminal_returndatacopy_fault_step[local]:
+Theorem terminal_returndatacopy_fault_step:
   !lo o2pc prog st dest_val src_val sz_val rest_stk vs.
     asm_block_at prog st.as_pc [AsmOp "RETURNDATACOPY"] /\
     st.as_stack = dest_val :: src_val :: sz_val :: rest_stk /\
@@ -3103,7 +3103,7 @@ Proof
 QED
 
 
-Theorem step_inst_create_abort[local]:
+Theorem step_inst_create_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = CREATE /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -3124,7 +3124,7 @@ Proof
 QED
 
 
-Theorem step_inst_create2_abort[local]:
+Theorem step_inst_create2_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = CREATE2 /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -3146,7 +3146,7 @@ Proof
 QED
 
 
-Theorem terminal_create_fault_step[local]:
+Theorem terminal_create_fault_step:
   !lo o2pc prog st value offset sz rest vs.
     asm_block_at prog st.as_pc [AsmOp "CREATE"] /\
     st.as_stack = value :: offset :: sz :: rest /\
@@ -3171,7 +3171,7 @@ Proof
 QED
 
 
-Theorem terminal_create2_fault_step[local]:
+Theorem terminal_create2_fault_step:
   !lo o2pc prog st value offset sz salt rest vs.
     asm_block_at prog st.as_pc [AsmOp "CREATE2"] /\
     st.as_stack = value :: offset :: sz :: salt :: rest /\
