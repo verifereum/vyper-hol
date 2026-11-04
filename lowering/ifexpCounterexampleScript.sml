@@ -65,7 +65,8 @@ Proof
 QED
 
 Definition witness_callee_def:
-  witness_callee = venomInst$mk_raw_function "no_write"
+  witness_callee = venomInst$mk_raw_function
+    (compileEnv$internal_fn_label 0 "f" [] F)
     [<| bb_label := "entry";
         bb_instructions := [mk_inst 0 RET [Lit 0w] []] |>]
 End
@@ -118,4 +119,20 @@ Proof
        compileEnvTheory.is_word_type_def,
        compileEnvTheory.is_bytestring_type_def,
        compileEnvTheory.nsid_to_string_def, FLOOKUP_UPDATE]
+QED
+
+Theorem witness_call_compile:
+  compile_alloc_buffer 32 sa = (buf,sm) /\
+  emit_void INVOKE
+    [Label (compileEnv$internal_fn_label 0 "f" [] F); buf.buf_operand] sm =
+      ((),sb) ==>
+  compile_call cfn (witness_compile_env ce) rt ty (IntCall (NONE,"f")) [] NONE sa =
+    (LocatedValue (BaseT (UintT 0)) (base_ptr buf),sb)
+Proof
+  strip_tac >>
+  simp[Once exprLoweringTheory.compile_call_def,
+       witness_compile_env_def, compileEnvTheory.nsid_to_string_def,
+       exprLoweringTheory.compile_multi_vvs_def,
+       exprLoweringTheory.compile_stage_intcall_args_def,
+       compileEnvTheory.comp_return_def]
 QED
