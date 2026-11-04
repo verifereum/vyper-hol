@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyAmbient
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words
-  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline
+  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline unitMemInv
 
 Theorem ld_sync_labels:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -357,4 +357,79 @@ Proof
   >- (gvs[o1_ctx_shape_def, EVERY_MEM] >>
       metis_tac[o1_fn_shape_components]) >>
   qexistsl_tac [`f.cf_inst`, `n`] >> simp[is_terminator_def]
+QED
+
+Theorem ld_frame_reachable_certificate:
+  !vs0 C stk PG G tn fn inst s.
+    frame_reachable vs0 C stk PG G tn fn inst s ==>
+    o1_ctx_shape C ==>
+    MEM fn C.ctx_functions /\ raw_reachable vs0 C fn inst s /\
+    ?cs. ld_return_cont C fn cs s /\ ld_saved_calls vs0 C stk fn cs
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> conj_tac
+      >- metis_tac[lookup_function_MEM] >> conj_tac
+      >- metis_tac[raw_reachable_entry] >>
+      simp[ld_saved_calls_def] >>
+      qexists_tac `vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                              vs_inst_idx := 0 |>` >>
+      irule ld_return_cont_entry >>
+      gvs[o1_ctx_shape_def, EVERY_MEM] >>
+      metis_tac[lookup_function_MEM, o1_fn_shape_components])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      first_x_assum drule >> strip_tac >> simp[] >> conj_tac
+      >- metis_tac[raw_reachable_next] >>
+      qexists_tac `cs` >> simp[] >> irule ld_return_cont_next >>
+      gvs[o1_ctx_shape_def, EVERY_MEM] >>
+      metis_tac[o1_fn_shape_components])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      first_x_assum drule >> strip_tac >> simp[] >> conj_tac
+      >- metis_tac[raw_reachable_block] >>
+      qexists_tac `cs` >> simp[] >> irule ld_return_cont_block >>
+      gvs[o1_ctx_shape_def, EVERY_MEM] >>
+      metis_tac[o1_fn_shape_components])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      first_x_assum drule >> strip_tac >> conj_tac
+      >- metis_tac[lookup_function_MEM] >> conj_tac
+      >- metis_tac[raw_reachable_callee] >>
+      qexists_tac `cs` >> conj_tac
+      >- (irule ld_return_cont_entry >>
+          gvs[o1_ctx_shape_def, EVERY_MEM] >>
+          metis_tac[lookup_function_MEM, o1_fn_shape_components]) >>
+      irule ld_saved_calls_push >> metis_tac[])
+  >> rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `f.cf_inst.inst_opcode = INVOKE` by
+    (gvs[ld_saved_calls_def]) >>
+  drule_all ld_saved_calls_return >> strip_tac >> simp[] >> conj_tac
+  >- (irule raw_reachable_next >> simp[] >>
+      qexistsl_tac [`n`, `f.cf_inst`] >> simp[is_terminator_def]) >>
+  metis_tac[]
+QED
+
+Theorem ld_frame_raw_reachable:
+  o1_ctx_shape C /\ frame_reachable vs0 C stk PG G tn fn inst s ==>
+  raw_reachable vs0 C fn inst s
+Proof
+  metis_tac[ld_frame_reachable_certificate]
+QED
+
+Theorem ld_sync_source_mem_inv:
+  o1_ctx_shape C /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  mem_inv M C vs0 ==> M C fn inst s
+Proof
+  strip_tac >> drule ld_sync_source >> strip_tac >>
+  drule_all ld_frame_raw_reachable >>
+  gvs[mem_inv_raw_reachable]
+QED
+
+Theorem ld_sync_ambient_headroom:
+  o1_ctx_shape C /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  mem_inv dload_headroom_ok C vs0 ==>
+  t.vs_alloca_next < dimword(:256)
+Proof
+  strip_tac >> drule_all ld_sync_source_mem_inv >> strip_tac >>
+  drule_all ld_sync_target_headroom >> simp[]
 QED
