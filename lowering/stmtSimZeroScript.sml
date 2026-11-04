@@ -12,6 +12,22 @@ Proof
   simp[stmt_framed_frag_def, stmt_frag_def, alloca_prefix_def]
 QED
 
+Theorem stmt_post_nil[local]:
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  ~block_is_terminated sa /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  stmt_post ctx func cx lctx cenv cenv sa sa s (INL ())
+    (es with gas_obs := []) s
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[stmt_state_rel_inst_idx]) >>
+  pure_rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
+  simp[stmt_lands_def, cenv_top_ext_def, compile_env_component_equality]
+QED
+
 Theorem stmt_frag_nil:
   !ctx func cx lctx RetQ cenv ty es.
     stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty []) (eval_stmts cx []) es
@@ -23,11 +39,7 @@ Proof
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_rules,
           Once evaluate_def, return_def] >>
-  simp[stmt_post_def, fragExecTheory.exit_result_def] >>
-  fs[stmt_lands_def,
-       cenv_top_ext_def, compile_env_component_equality,
-       stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-       accounts_rel_def, immutables_rel_def, logs_rel_def,
-       immutable_alloca_sep_def]
+  simp[fragExecTheory.exit_result_def] >>
+  irule stmt_post_nil >> simp[]
 QED
 
