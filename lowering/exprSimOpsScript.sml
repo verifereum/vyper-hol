@@ -522,7 +522,8 @@ Proof
    eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> conj_tac
      >- (irule expr_val_rel_typed >> metis_tac[]) >>
-     irule eval_operand_frame >> metis_tac[]) >>
+     irule eval_operand_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`s1`, `t`] >> simp[]) >>
   (* the operator, from u *)
   qpat_x_assum `binop_frag_words _ _ _ _ _ _ _ _ _ tys _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_words_def]) >>
@@ -591,24 +592,6 @@ QED
 
 (* ===== Bitwise operators ===== *)
 
-(* proves bop_result_bitwise for one of the operations *)
-fun bop_bitwise_tac g =
-  (fs[bop_result_def, evaluate_builtin_def] >>
-   Cases_on `v1` >> Cases_on `v2` >>
-   gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
-       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
-       word_value_def] >>
-   FIRST [
-     (* flags *)
-     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
-     `~(z < 0)` by
-       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
-     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
-     pop_assum SUBST1_TAC >>
-     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
-     (* booleans *)
-     rpt (IF_CASES_TAC >> gvs[]) >>
-     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]) g;
 
 (* And, Or and XOr on two values give the word operation on their words.
    On integers the source checks the result against the type's bound;
@@ -635,11 +618,35 @@ Proof
      within_int_bound u (int_and i1 i2) /\ within_int_bound u (int_or i1 i2) /\
      within_int_bound u (int_xor i1 i2)` by
     simp[int_and_def, int_or_def, int_xor_def, within_int_bound_int_bitwise] >>
-  (* one operation at a time, each unfolding a third of the value pairs *)
-  gvs[]
-  >>~- ([`bop_result _ _ And tys _ _ _`], bop_bitwise_tac)
-  >>~- ([`bop_result _ _ Or tys _ _ _`], bop_bitwise_tac) >>
-  bop_bitwise_tac
+  gvs[] >> fs[bop_result_def, evaluate_builtin_def] >>
+  Cases_on `v1` >> Cases_on `v2`
+  >>~- ([`evaluate_binop _ _ And _ _`],
+        gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
+            val_to_w256_def, i2w_int_and, word_value_def]
+        >>~- ([`n2w (Num _)`],
+          qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+          `~(z < 0)` by simp[Abbr `z`, int_and_def, int_bitwise_neg] >>
+          `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+          pop_assum SUBST1_TAC >> simp[Abbr `z`, i2w_int_and, i2w_pos]) >>
+        rpt (IF_CASES_TAC >> gvs[]) >> simp[WORD_AND_CLAUSES])
+  >>~- ([`evaluate_binop _ _ Or _ _`],
+        gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
+            val_to_w256_def, i2w_int_or, word_value_def]
+        >>~- ([`n2w (Num _)`],
+          qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+          `~(z < 0)` by simp[Abbr `z`, int_or_def, int_bitwise_neg] >>
+          `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+          pop_assum SUBST1_TAC >> simp[Abbr `z`, i2w_int_or, i2w_pos]) >>
+        rpt (IF_CASES_TAC >> gvs[]) >> simp[WORD_OR_CLAUSES])
+  >>~- ([`evaluate_binop _ _ XOr _ _`],
+        gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
+            val_to_w256_def, i2w_int_xor, word_value_def]
+        >>~- ([`n2w (Num _)`],
+          qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+          `~(z < 0)` by simp[Abbr `z`, int_xor_def, int_bitwise_neg] >>
+          `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+          pop_assum SUBST1_TAC >> simp[Abbr `z`, i2w_int_xor, i2w_pos]) >>
+        rpt (IF_CASES_TAC >> gvs[]) >> simp[WORD_XOR_CLAUSES])
 QED
 
 (* The lowering emits the word operation, one instruction. *)
