@@ -1,6 +1,6 @@
 Theory makeSsaCurrentPairedWrites
 Ancestors
-  makeSsaCurrentWriteFootprint makeSsaCurrentOrdinary venomExecSemantics
+  makeSsaCurrentWriteFootprint makeSsaCurrentOrdinary makeSsaCurrentDefs venomExecSemantics
   venomState stateFrame finite_map list rich_list pair
   venomCallOracleProps venomCallOracleDefs
 
@@ -327,4 +327,264 @@ Proof
   conj_tac >- gvs[consume_call_outcome_eq] >>
   irule current_paired_single_output >> simp[Excl "consume_call_outcome_eq"] >>
   gvs[consume_call_outcome_eq]
+QED
+
+Theorem current_exec_delegatecall_paired:
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (exec_delegatecall inst st gas addr ao az ro rz)
+    (exec_delegatecall inst' st' gas addr ao az ro rz)
+Proof
+  strip_tac >> drule current_concrete_call_inputs_agree >> strip_tac >>
+  asm_simp_tac (srw_ss()) [exec_delegatecall_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result st 1w _ _ result` >>
+  `extract_venom_result st 1w (w2n ro) (w2n rz) result = NONE <=>
+   extract_venom_result st' 1w (w2n ro) (w2n rz) result = NONE`
+    by metis_tac[current_extract_result_agree] >>
+  Cases_on `extract_venom_result st 1w (w2n ro) (w2n rz) result`
+  >- gvs[] >>
+  PairCases_on `x` >>
+  drule_all (cj 2 current_extract_result_agree) >> strip_tac >> simp[] >>
+  rename1 `execution_frame x1 = execution_frame after'` >>
+  irule current_paired_result_rebase >> qexistsl_tac [`x1`,`after'`] >> simp[] >>
+  irule current_paired_single_output >> simp[]
+QED
+
+Theorem current_exec_create_paired:
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (exec_create inst st value off sz salt) (exec_create inst' st' value off sz salt)
+Proof
+  strip_tac >> drule current_create_request_agree >> strip_tac >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >>
+      gvs[exec_create_def] >> rename1 `LENGTH xs = LENGTH ys` >>
+      Cases_on `xs` >> Cases_on `ys` >> gvs[exec_create_def] >>
+      irule current_paired_after_unchanged >>
+      gvs[halt_state_def, set_returndata_def, execution_frame_def,
+          venom_state_component_equality]) >>
+  Cases_on `consume_create_outcome (venom_create_request st value off sz salt) st` >>
+  Cases_on `consume_create_outcome (venom_create_request st value off sz salt) st'` >>
+  drule_all current_consume_create_agree >> strip_tac >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
+  rename1 `execution_frame after = execution_frame after'` >>
+  irule current_paired_result_rebase >> qexistsl_tac [`after`,`after'`] >> simp[] >>
+  irule current_paired_single_output >> simp[]
+QED
+
+Theorem current_assign_paired:
+  inst.inst_opcode = ASSIGN /\ inst'.inst_opcode = ASSIGN /\
+  LIST_REL (\a b. eval_operand a st = eval_operand b st')
+    inst.inst_operands inst'.inst_operands /\
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> Cases_on `inst.inst_operands` >> Cases_on `inst'.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs] >> rename1 `LIST_REL _ tail tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[step_inst_base_opcode_eqs] >>
+  Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `LENGTH tail = LENGTH tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[] >>
+  rename1 `inst'.inst_operands = [a]` >>
+  Cases_on `eval_operand a st'` >> gvs[] >>
+  irule current_paired_after_single >> simp[]
+QED
+
+Theorem current_special_read0_paired:
+  (inst.inst_opcode = GETFMP \/ inst.inst_opcode = INITIAL_FMP) /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  LENGTH inst.inst_operands = LENGTH inst'.inst_operands /\
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_fmp = st'.vs_fmp /\ st.vs_initial_fmp = st'.vs_initial_fmp`
+    by (conj_tac >> qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. (s.vs_fmp,s.vs_initial_fmp)``) >>
+      simp[execution_frame_def]) >>
+  Cases_on `inst.inst_operands` >> Cases_on `inst'.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs] >>
+  Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `LENGTH tail = LENGTH tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[] >>
+  irule current_paired_after_single >> simp[]
+QED
+
+Theorem current_dalloca_paired:
+  inst.inst_opcode = DALLOCA /\ inst'.inst_opcode = DALLOCA /\
+  LIST_REL (\a b. eval_operand a st = eval_operand b st')
+    inst.inst_operands inst'.inst_operands /\
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_fmp = st'.vs_fmp` by
+    (qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >> simp[execution_frame_def]) >>
+  Cases_on `inst.inst_operands` >> Cases_on `inst'.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs] >> rename1 `LIST_REL _ tail tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[step_inst_base_opcode_eqs] >>
+  Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `LENGTH tail = LENGTH tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[] >>
+  rename1 `inst'.inst_operands = [a]` >>
+  Cases_on `eval_operand a st'` >> gvs[] >>
+  simp[current_paired_after_def, update_var_def, execution_frame_def] >>
+  conj_tac
+  >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+      simp[execution_frame_def, venom_state_component_equality]) >>
+  qexists_tac `[(0,st'.vs_fmp)]` >> simp[current_indexed_writes_def]
+QED
+
+Theorem current_param_paired:
+  (inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM \/
+   inst.inst_opcode = RETPC_PARAM) /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_params = st'.vs_params /\ st.vs_return_pc_token = st'.vs_return_pc_token`
+    by (conj_tac >> qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. (s.vs_params,s.vs_return_pc_token)``) >>
+      simp[execution_frame_def]) >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = op::tail` >>
+  Cases_on `tail` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  Cases_on `op` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >> gvs[] >>
+  rename1 `LENGTH xs = LENGTH ys` >>
+  Cases_on `xs` >> Cases_on `ys` >> gvs[] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  irule current_paired_after_single >> simp[]
+QED
+
+
+Theorem current_terminal_paired:
+  (inst.inst_opcode = STOP \/ inst.inst_opcode = SINK \/ inst.inst_opcode = INVALID) /\
+  inst'.inst_opcode = inst.inst_opcode /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> simp[step_inst_base_opcode_eqs] >>
+  irule current_paired_after_unchanged >>
+  gvs[halt_state_def, set_returndata_def, execution_frame_def, venom_state_component_equality]
+QED
+
+Theorem current_jump_paired:
+  execution_frame st = execution_frame st' /\ st.vs_current_bb = st'.vs_current_bb ==>
+  current_paired_after outs outs' st st' (jump_to lbl st) (jump_to lbl st')
+Proof
+  strip_tac >> irule current_paired_after_unchanged >>
+  gvs[jump_to_def, execution_frame_def, venom_state_component_equality]
+QED
+
+Theorem current_jmp_paired:
+  inst.inst_opcode = JMP /\ inst'.inst_opcode = JMP /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\ st.vs_current_bb = st'.vs_current_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> Cases_on `inst.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = op::tail` >> Cases_on `tail` >>
+  gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  Cases_on `op` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  irule current_jump_paired >> simp[]
+QED
+
+Theorem current_djmp_paired:
+  inst.inst_opcode = DJMP /\ inst'.inst_opcode = DJMP /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\ st.vs_current_bb = st'.vs_current_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  Cases_on `inst.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs, rename_current_operands_def] >>
+  rename1 `inst.inst_operands = op::tail` >>
+  `eval_operand (HD (rename_current_operands rs [op])) st' = eval_operand op st`
+    by (irule current_eval_operand_occurrence >> simp[] >> qexists_tac `op::tail` >> simp[]) >>
+  gvs[current_rename_operands_map] >>
+  rewrite_tac[GSYM current_rename_operands_map, current_rename_operands_extract_labels] >>
+  qmatch_goalsub_abbrev_tac `eval_operand renamed st'` >>
+  Cases_on `eval_operand renamed st'` >> gvs[] >>
+  Cases_on `extract_labels tail` >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >> irule current_jump_paired >> simp[]
+QED
+
+Theorem current_jnz_paired:
+  inst.inst_opcode = JNZ /\ inst'.inst_opcode = JNZ /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\ st.vs_current_bb = st'.vs_current_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = a::tail` >> Cases_on `tail` >>
+  gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = a::b::rest` >> Cases_on `b` >>
+  gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  Cases_on `rest` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = a::Label yes::c::last` >> Cases_on `c` >>
+  gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  Cases_on `last` >> gvs[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;Label yes;Label no]` >>
+  `eval_operand (HD (rename_current_operands rs [a])) st' = eval_operand a st`
+    by (irule current_eval_operand_occurrence >> simp[] >> qexists_tac `[a;Label yes;Label no]` >> simp[]) >>
+  gvs[current_rename_operands_map] >>
+  Cases_on `eval_operand a st` >> gvs[] >>
+  IF_CASES_TAC >> gvs[] >> irule current_jump_paired >> simp[]
+QED
+
+Theorem current_sha3_paired:
+  inst.inst_opcode = SHA3 /\ inst'.inst_opcode = SHA3 /\
+  LIST_REL (\a b. eval_operand a st = eval_operand b st')
+    inst.inst_operands inst'.inst_operands /\
+  LENGTH inst.inst_outputs = LENGTH inst'.inst_outputs /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb ==>
+  current_paired_result_writes inst.inst_outputs inst'.inst_outputs st st'
+    (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_memory = st'.vs_memory` by
+    (qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_memory``) >> simp[execution_frame_def]) >>
+  Cases_on `inst.inst_operands` >> Cases_on `inst'.inst_operands` >>
+  gvs[step_inst_base_opcode_eqs] >>
+  rename1 `LIST_REL _ tail tail'` >>
+  Cases_on `tail` >> Cases_on `tail'` >> gvs[step_inst_base_opcode_eqs] >>
+  rename1 `LIST_REL _ rest rest'` >>
+  Cases_on `rest` >> Cases_on `rest'` >> gvs[step_inst_base_opcode_eqs] >>
+  rename1 `inst'.inst_operands = [a;b]` >>
+  Cases_on `eval_operand a st'` >> gvs[] >>
+  Cases_on `eval_operand b st'` >> gvs[] >>
+  irule current_paired_single_output >> simp[]
 QED
