@@ -14,12 +14,31 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
+Theorem missing_module_not_gas_admissible[local]:
+  get_module_code cx src = NONE ==>
+  ~gas_admissible (eval_expr cx (TopLevelName ann (src,id)))
+    expr_vv_res_ok es
+Proof
+  strip_tac >> rewrite_tac[gas_admissible_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >>
+  lookup_global_tac >> simp[expr_vv_res_ok_def]
+QED
+
 Theorem compile_toplevel_no_module_sim:
   !ctx func cenv cx ty ann src id es.
     get_module_code cx src = NONE ==>
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  strip_tac >> gvs[expr_vv_res_ok_def, expr_res_ok_def]
+  metis_tac[missing_module_not_gas_admissible]
 QED
+
+val () =
+  let val (oracles, axioms) =
+        Tag.dest_tag (Thm.tag compile_toplevel_no_module_sim)
+  in
+    if null axioms andalso null (Thm.hyp compile_toplevel_no_module_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "TOPLEVEL_MISSING_AUDIT compile_toplevel_no_module_sim OK\n"
+    else raise Fail "compile_toplevel_no_module_sim: admitted proof dependency"
+  end;
