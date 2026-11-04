@@ -139,6 +139,15 @@ Proof
  simp[fn_inst_ids_distinct_def, fn_insts_def]
 QED
 
+Theorem ctor_operand_live[local]:
+  (!x. op = Var x ==> not_fresh_at st x) ==>
+  abi_decoder_operand_live st.cs_next_var op
+Proof
+  Cases_on `op` >>
+  simp[abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+       not_fresh_at_def]
+QED
+
 Theorem ctor_actual_dynamic_array_loop_run:
  (^C) ty tv /\
  (is_abi_dynamic ce.ce_struct_fields ty \/
@@ -165,8 +174,9 @@ Proof
  `abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var hi` by
-   (Cases_on `src` >> Cases_on `dst` >> Cases_on `hi` >>
-    fs[abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+   (rpt conj_tac >> irule ctor_operand_live >> rpt strip_tac >>
+    qpat_x_assum `!x. src = Var x \/ dst = Var x \/ hi = Var x ==> _`
+      irule >> simp[]) >>
  `loop_st.cs_next_var <= limit_st.cs_next_var` by
    fs[abi_decoder_recursive_loop_compiled_def] >>
  `32 <= type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\ d+32 <= D+N` by
