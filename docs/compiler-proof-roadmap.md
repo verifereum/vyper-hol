@@ -52,7 +52,7 @@ Their exact premises are in the linked owners and
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` ([source](../lowering/loweringRuntimeCorrectScript.sml)) | Raw lowering + supported syntax + typing/storage/deployment/valid call/initial state/outcome guards -> terminating `source_unit_execution_correct` | 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` (same owner) | Lowering + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** -> `raw_unit_memory_ok` | 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` (same owner) | S1 boundary + **non-exemption** + no `DALLOCA` -> `raw_unit_memory_ok` | 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` ([source](../venom/compiler/o1PipelineCorrectScript.sml)) | Actual O1 success + raw shape/entry/memory -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` (same owner) | O1 + generated plan + raw shape/entry/memory + initial FMP -> **one existential `Inv`** with output memory/reachability | 5 |
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + raw shape -> `unit_shape_ok` | 3 |

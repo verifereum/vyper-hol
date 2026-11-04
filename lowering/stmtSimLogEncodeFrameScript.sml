@@ -201,7 +201,7 @@ Theorem log_encode_allocation_frame[local]:
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
   t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
   t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
-  t.vs_fmp = s.vs_fmp ==>
+  t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t ==>
   stmt_state_rel ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -234,6 +234,7 @@ Theorem log_encode_continuation:
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     lookup_var p t = lookup_var p s) /\
+  (!x. ce.ce_imm_alloca = SOME (Var x) ==> lookup_var x t = lookup_var x s) /\
   abi_decode_footprint_frame fp s t /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     abi_footprint_disjoint lo sz fp) /\
@@ -272,6 +273,13 @@ Proof
        (drule log_encode_local_region_frame >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `immutable_base_zero ce t` by
+    (`immutable_base_zero ce s` by fs[stmt_state_rel_def] >>
+     irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+     qexists_tac `s` >>
+     qpat_x_assum `log_encode_external t = _`
+       (mp_tac o Q.AP_TERM `\x. x.vs_labels`) >>
+     simp[log_encode_external_def]) >>
   Cases_on `dyn` >> gvs[]
   >- (irule log_encode_allocation_frame >> asm_simp_tac bool_ss [] >>
       qexistsl_tac [`inst`,`n`,`s`] >> simp[] >>
@@ -327,6 +335,8 @@ Theorem log_scalar_tuple_continue:
   (!name entry v sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var v) sz) ==>
     abi_decoder_operand_live st.cs_next_var (Var v)) /\
+  (!x. ce.ce_imm_alloca = SOME (Var x) ==>
+    abi_decoder_operand_live st.cs_next_var (Var x)) /\
   (!name lo sz. local_region ce es.scopes initial name lo sz ==>
     abi_footprint_disjoint lo sz
       ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else []))) /\
@@ -363,16 +373,19 @@ Proof
     lookup_var v actual = lookup_var v initial` by
     (match_mp_tac (Q.INST [`nv` |-> `st.cs_next_var`] log_encode_local_operands) >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!x. ce.ce_imm_alloca = SOME (Var x) ==> lookup_var x actual = lookup_var x initial` by
+    (rpt strip_tac >>
+     `immutable_base_zero ce initial` by fs[stmt_state_rel_def] >>
+     `eval_operand (Var x) initial = SOME 0w` by fs[immutable_base_zero_def] >>
+     `eval_operand (Var x) actual = SOME 0w` by metis_tac[] >>
+     fs[eval_operand_def]) >>
   qexists_tac `actual` >> asm_simp_tac bool_ss [] >>
   irule log_encode_continuation >>
   qexistsl_tac [`(?infos. ei = AbiComplex infos)`,
     `(db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])`,
     `32`,`initial`,`st.cs_next_id`] >>
-  asm_simp_tac (srw_ss()) [] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (strip_tac >> qpat_x_assum `_ ==> fn_inst_ids_distinct func /\ _` mp_tac >> simp[] >>
-      strip_tac >> qexists_tac `inst` >> simp[dimword_def]) >>
-  first_assum ACCEPT_TAC
+  asm_simp_tac (srw_ss()) [] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  strip_tac >> qpat_x_assum `_ ==> fn_inst_ids_distinct func /\ _` mp_tac >> simp[] >>
+  strip_tac >> qexists_tac `inst` >> simp[dimword_def]
 QED
