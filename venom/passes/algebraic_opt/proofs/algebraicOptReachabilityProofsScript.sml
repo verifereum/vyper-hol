@@ -1,6 +1,6 @@
 Theory algebraicOptReachabilityProofs
 Ancestors
-  algebraicOptDefs venomExecSemantics venomState
+  algebraicOptDefs venomExecSemantics venomState venomInstProps venomExecProofs
 
 (* A chain boundary must retain a Boolean value at value-sensitive uses;
    at truthy uses the root word itself suffices. *)
@@ -108,4 +108,70 @@ Proof
         ao_source_prefix ctx fn s0 n j phase t` suffices_by metis_tac[] >>
   ho_match_mp_tac ao_source_prefix_ind >> rpt strip_tac >>
   metis_tac[ao_source_prefix_rules]
+QED
+
+Theorem ao_source_prefix_phi_handoff:
+  !ctx fn s0 n k s bb p.
+    ao_source_prefix ctx fn s0 n (SUC k) T s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK p ==>
+    ao_source_prefix ctx fn s0 n k F
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) /\
+    lookup_block
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_current_bb
+      fn.fn_blocks = SOME bb
+Proof
+  rpt strip_tac
+  >- (irule (cj 2 ao_source_prefix_rules) >> metis_tac[]) >>
+  drule eval_phis_preserves_current_bb >> simp[]
+QED
+
+Theorem ao_exec_block_prefix:
+  !ctx fn s0 n k s bb t.
+    ao_source_prefix ctx fn s0 n k F s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    exec_block k ctx bb s = OK t ==>
+    ao_source_prefix ctx fn s0 n k T t /\ ~t.vs_halted
+Proof
+  `!ctx fn s0 n k s bb t.
+    ao_source_prefix ctx fn s0 n k F s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    exec_block k ctx bb s = OK t ==>
+    ao_source_prefix ctx fn s0 n k T t`
+    suffices_by metis_tac[exec_block_OK_not_halted] >>
+  rpt gen_tac >>
+  qid_spec_tac `t` >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def, AllCaseEqs()] >> rpt strip_tac
+  >~ [`is_terminator inst.inst_opcode`]
+  >- (irule (cj 4 ao_source_prefix_rules) >> metis_tac[]) >>
+  `s''.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
+  `ao_source_prefix ctx fn s0 n k F
+     (s'' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (cj 3 ao_source_prefix_rules) >> metis_tac[]) >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (qspec_then
+    `s'' with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[]
+QED
+
+Theorem ao_source_prefix_block_edge:
+  !ctx fn s0 n k s bb p t.
+    ao_source_prefix ctx fn s0 n (SUC k) T s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    eval_phis s bb.bb_instructions = OK p /\
+    exec_block k ctx bb
+      (p with vs_inst_idx := phi_prefix_length bb.bb_instructions) = OK t ==>
+    ao_source_prefix ctx fn s0 n k T t /\
+    run_blocks (SUC k) ctx fn s = run_blocks k ctx fn t
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_source_prefix_phi_handoff >> strip_tac >>
+  drule_all ao_exec_block_prefix >> strip_tac >>
+  simp[Once run_blocks_def]
 QED
