@@ -502,7 +502,7 @@ Definition o1_src_inv_def:
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
     EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
-    taint_within D C vs
+    taint_within D C vs /\ mem_inv dload_offset_ok C vs
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
