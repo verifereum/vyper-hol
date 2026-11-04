@@ -683,3 +683,153 @@ Resume ld_source_annotation[ret]:
 QED
 
 Finalise ld_source_annotation
+
+(* Sites retained by one frame, and by the simultaneously live call stack.
+   Numeric equality of sites is deliberately not used to select an owner. *)
+Definition ld_selected_def:
+  ld_selected L AP AG site <=>
+    (?id. FLOOKUP L id = SOME site) \/
+    MEM (SOME site) AP \/ (?v. FLOOKUP AG v = SOME site)
+End
+
+Definition ld_live_def:
+  ld_live astk L AP AG site <=>
+    ld_selected L AP AG site \/
+    ?f. MEM f astk /\ ld_selected f.lf_local f.lf_params f.lf_prov site
+End
+
+Theorem ld_first_prov_selected:
+  !ops. ld_first_prov AG ops = SOME site ==>
+    ?v. FLOOKUP AG v = SOME site
+Proof
+  Induct >> simp[ld_first_prov_def, AllCaseEqs()] >>
+  metis_tac[ld_op_prov_selected]
+QED
+
+Theorem ld_out_prov_selected:
+  ld_out_prov AP AG L i = SOME site ==> ld_selected L AP AG site
+Proof
+  simp[ld_out_prov_def] >>
+  Cases_on `i.inst_opcode = ALLOCA`
+  >- (simp[ld_selected_def] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = PARAM`
+  >- (simp[AllCaseEqs()] >> rpt strip_tac >>
+      simp[ld_selected_def] >> metis_tac[MEM_EL]) >>
+  simp[] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  drule ld_first_prov_selected >> simp[ld_selected_def] >> metis_tac[]
+QED
+
+Theorem ld_step_selected:
+  ld_selected L AP (ld_step_prov AP AG L i) site ==>
+  ld_selected L AP AG site
+Proof
+  simp[ld_selected_def, ld_step_prov_def] >> rpt strip_tac
+  >- metis_tac[]
+  >- metis_tac[] >>
+  drule ld_set_prov_selected >> strip_tac
+  >- metis_tac[] >>
+  drule ld_out_prov_selected >> simp[ld_selected_def]
+QED
+
+Theorem ld_entry_selected:
+  ld_selected L AP (ld_entry_prov fn s AG) site ==>
+  ld_selected L AP AG site
+Proof
+  simp[ld_selected_def] >> rpt strip_tac >>
+  metis_tac[ld_entry_prov_selected]
+QED
+
+Theorem ld_call_selected:
+  ld_selected FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY site ==>
+  ld_selected L AP AG site
+Proof
+  simp[ld_selected_def, MEM_MAP] >> rpt strip_tac >>
+  metis_tac[ld_op_prov_selected]
+QED
+
+Theorem ld_restrict_selected:
+  ld_selected L AP (DRESTRICT AG keys) site ==> ld_selected L AP AG site
+Proof
+  simp[ld_selected_def, FLOOKUP_DRESTRICT, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_select_alloca_lookup:
+  ld_select_alloca k L i s = (k',L') ==>
+  k <= k' /\
+  (!id site. FLOOKUP L' id = SOME site ==>
+     FLOOKUP L id = SOME site \/ (FST site = (0,k) /\ k < k'))
+Proof
+  simp[ld_select_alloca_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), FLOOKUP_UPDATE] >> rpt strip_tac >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem ld_selected_serial_mono:
+  (k:num) <= k' /\
+  (!site. ld_selected (L:(num, (num # num) # (num # num)) fmap) AP
+                     (AG:(string, (num # num) # (num # num)) fmap) site ==>
+    FST (FST site) = (0:num) /\ SND (FST site) < k) /\
+  (!id site. FLOOKUP L' id = SOME site ==>
+    FLOOKUP L id = SOME site \/ (FST site = (0,k) /\ k < k')) ==>
+  !site. ld_selected L' AP AG site ==>
+    FST (FST site) = (0:num) /\ SND (FST site) < k'
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >>
+  `ld_selected L AP AG site \/ (FST site = (0,k) /\ k < k')` by
+    (gvs[ld_selected_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac
+  >- (first_x_assum (drule_then strip_assume_tac) >>
+      qpat_x_assum `!id site. _` kall_tac >>
+      conj_tac >- simp[] >>
+      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `k` >> simp[]) >>
+  simp[]
+QED
+
+Theorem ld_annotated_serial:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  !site. ld_live astk L AP AG site ==>
+    FST (FST site) = (0:num) /\ SND (FST site) < k
+Proof
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac
+  >- simp[ld_live_def, ld_selected_def]
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_annotated_serial[next]:
+  rpt gen_tac >> strip_tac >> gen_tac >> disch_tac >> drule ld_select_alloca_lookup >> strip_tac >>
+  `!site. ld_selected L AP AG site ==>
+     FST (FST site) = (0:num) /\ SND (FST site) < k` by
+    metis_tac[ld_live_def] >>
+  `!site. ld_selected L' AP AG site ==>
+     FST (FST site) = (0:num) /\ SND (FST site) < k'` by
+    (gen_tac >> disch_tac >> irule ld_selected_serial_mono >>
+     goal_assum (drule_at Any) >> qexistsl [`L`, `k`] >> simp[]) >>
+  qpat_x_assum `ld_live _ _ _ _ _` mp_tac >>
+  simp[ld_live_def] >> strip_tac
+  >- metis_tac[ld_step_selected] >>
+  `FST (FST site) = (0:num) /\ SND (FST site) < k` by
+    (qpat_x_assum `!site. ld_live _ _ _ _ site ==> _`
+       (qspec_then `site` mp_tac) >>
+     simp[ld_live_def] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Resume ld_annotated_serial[block]:
+  rpt strip_tac >> metis_tac[ld_live_def, ld_entry_selected]
+QED
+
+Resume ld_annotated_serial[call]:
+  rpt strip_tac >> gvs[ld_live_def] >>
+  metis_tac[ld_call_selected]
+QED
+
+Resume ld_annotated_serial[ret]:
+  rpt strip_tac >> gvs[ld_live_def] >>
+  metis_tac[ld_restrict_selected]
+QED
+
+Finalise ld_annotated_serial
