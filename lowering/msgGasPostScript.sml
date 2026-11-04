@@ -16,22 +16,6 @@ Proof
   Cases_on `args` >> simp[]
 QED
 
-Theorem msg_gas_state_frame:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
-    (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
-Proof
-  strip_tac >>
-  gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
-       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
-       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-       contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
-       venomMemDefsTheory.allocas_non_overlapping_def,
-       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
 Theorem msg_gas_post_frame[local]:
   compile_env_var MsgGas sa = (Var out,sb) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 ==>
