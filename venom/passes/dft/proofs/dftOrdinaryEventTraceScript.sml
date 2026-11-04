@@ -277,3 +277,82 @@ Proof
   conj_tac >- (irule dft_ordinary_stopped_cover >> simp[]) >>
   irule dft_ordinary_stopped_gas_cover >> simp[]
 QED
+
+Theorem dft_original_orbit_gas_forward:
+  !h c d i a.
+  dft_original_ordinary_environment Corig C L q pre x y post /\
+  dft_original_label_ready C L c /\ dft_ordinary_endpoint q pre x y post c d /\
+  dft_occ_gas_event i a (FUNPOW (dft_occ_oracle_next w C) h c) ==>
+  ?t. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) t d)
+Proof
+  completeInduct_on `h` >> rpt strip_tac >>
+  drule_all dft_original_endpoint_event_segment >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  Cases_on `h < k`
+  >- (fs[dft_segment_gas_cover_def] >> metis_tac[]) >>
+  `h - k < h /\ h = (h - k) + k` by decide_tac >>
+  first_x_assum (qspec_then `h - k` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`FUNPOW (dft_occ_oracle_next w C) k c`,
+     `FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) j d`,
+     `i`, `a`] mp_tac) >>
+  simp[GSYM FUNPOW_ADD] >> strip_tac >>
+  qexists_tac `j + t` >> simp[]
+QED
+
+Theorem dft_original_orbit_gas_backward:
+  !h c d i a.
+  dft_original_ordinary_environment Corig C L q pre x y post /\
+  dft_original_label_ready C L c /\ dft_ordinary_endpoint q pre x y post c d /\
+  dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) h d) ==>
+  ?t. dft_occ_gas_event i a (FUNPOW (dft_occ_oracle_next w C) t c)
+Proof
+  completeInduct_on `h` >> rpt strip_tac >>
+  drule_all dft_original_endpoint_event_segment >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  Cases_on `h < j`
+  >- (fs[dft_segment_gas_cover_def] >> metis_tac[]) >>
+  `h - j < h /\ h = (h - j) + j` by decide_tac >>
+  first_x_assum (qspec_then `h - j` mp_tac) >> simp[] >>
+  disch_then (qspecl_then
+    [`FUNPOW (dft_occ_oracle_next w C) k c`,
+     `FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) j d`,
+     `i`, `a`] mp_tac) >>
+  simp[GSYM FUNPOW_ADD] >> strip_tac >>
+  qexists_tac `k + t` >> simp[]
+QED
+
+Theorem dft_original_ordinary_root_gas_support:
+  dft_original_ordinary_environment Corig C s.vs_labels q pre x y post /\
+  dft_original_function f fn /\ fn_reachable f s.vs_current_bb /\
+  strict_dom_vars_defined f s /\ MEM fn C.ctx_functions ==>
+  (!h i a. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w C) h
+      (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))) ==>
+    ?t. dft_occ_gas_event i a
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) t
+        (dft_occ_init (DftOpen
+          (DftEnter (dft_gas_edit_fn q pre x y post fn) 0 s) [] n)))) /\
+  (!h i a. dft_occ_gas_event i a
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x y post C)) h
+      (dft_occ_init (DftOpen
+        (DftEnter (dft_gas_edit_fn q pre x y post fn) 0 s) [] n))) ==>
+    ?t. dft_occ_gas_event i a
+      (FUNPOW (dft_occ_oracle_next w C) t
+        (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))))
+Proof
+  strip_tac >>
+  `dft_original_label_ready C s.vs_labels
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))` by
+    (irule dft_original_label_root >> metis_tac[]) >>
+  `dft_ordinary_endpoint q pre x y post
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))
+    (dft_occ_init (DftOpen
+      (DftEnter (dft_gas_edit_fn q pre x y post fn) 0 s) [] n))` by
+    simp[dft_ordinary_endpoint_def, dft_ordinary_sync_init] >>
+  conj_tac
+  >- (rpt strip_tac >> irule dft_original_orbit_gas_forward >> metis_tac[]) >>
+  rpt strip_tac >> irule dft_original_orbit_gas_backward >> metis_tac[]
+QED
