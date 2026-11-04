@@ -7,7 +7,7 @@
 Theory simplifyCfgCorrectness
 Ancestors
   simplifyCfgProof simplifyCfgPhi2 simplifyCfgSsaform simplifyCfgWffn simplifyCfgJnzdist
-  simplifyCfgReach simplifyCfgDefs cfgWf unitShapeDefs venomInst
+  simplifyCfgReach simplifyCfgReachuses simplifyCfgDefs cfgWf unitShapeDefs venomInst
 
 Theorem simplify_cfg_pass_correct:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn /\
@@ -67,7 +67,13 @@ Theorem simplify_cfg_preserves_defs_reach_uses:
   simplify_cfg_fn_ok fn ==>
   fn_defs_reach_uses (simplify_cfg_fn fn)
 Proof
-  cheat
+  strip_tac >>
+  `scfg_reachuses_inv fn` by
+    (fs[simplifyCfgPhiRepairTheory.simplify_cfg_fn_ok_phi_safe, scfg_reachuses_inv_def] >>
+     metis_tac[fn_shape_ok_jnz_condition_ok]) >>
+  drule (simplify_cfg_iter_reachuses_inv |> SPEC_ALL) >>
+  simp[simplifyCfgDefsTheory.simplify_cfg_fn_def,
+    simplifyCfgDefsTheory.simplify_cfg_fn_with_labels_def, scfg_reachuses_inv_def]
 QED
 
 (* ===== Output shape ===== *)
