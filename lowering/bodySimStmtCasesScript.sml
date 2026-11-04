@@ -4769,6 +4769,22 @@ Proof
        venomStateTheory.tstore_def, LET_THM]
 QED
 
+Theorem aug_place_storage_query_metadata:
+  place_ptr_rel cenv cx s (PlaceR (StoragePlace tr slot tv)) w loc (Type ty) /\
+  read_place cx (StoragePlace tr slot tv) st = (INL cur,stc) /\
+  place_type_value cx (StoragePlace tr slot tv) stc = (INL ptv,stt) ==>
+  w = slot /\ loc = SOME (slot_loc tr) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  stc = st /\ stt = st /\ ptv = tv /\
+  read_storage_slot cx tr slot tv st = (INL cur,st)
+Proof
+  strip_tac >>
+  `stc = st /\ stt = st` by
+    metis_tac[read_place_state, place_type_value_state] >>
+  gvs[place_ptr_rel_def, read_place_def, place_type_value_def,
+      return_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
