@@ -144,8 +144,8 @@ QED
 Theorem supported_environment_crypto_builtin_coverage:
   EVERY (\item. supported_builtin_form [] (BaseT (UintT 256)) (Env item) [])
     [Sender; SelfAddr; ValueSent; TimeStamp; BlockNumber; BlobBaseFee; GasPrice;
-     PrevHash; ChainId; Coinbase; GasLimit; BaseFee; PrevRandao; TxOrigin] /\
-  ~supported_builtin_form [] (BaseT (UintT 256)) (Env MsgGas) [] /\
+     PrevHash; ChainId; Coinbase; GasLimit; BaseFee; PrevRandao; TxOrigin;
+     MsgGas] /\
   EVERY (\item. supported_builtin_form [] (BaseT (UintT 256))
     (Acc item) [expr_test_uint]) [Address; Balance; Codehash; Codesize; IsContract] /\
   ~supported_builtin_form [] (BaseT (UintT 256)) (Acc Code) [expr_test_uint] /\
