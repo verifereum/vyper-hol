@@ -819,3 +819,23 @@ Resume target_memory_array_static_suffix[oob]:
 QED
 
 Finalise target_memory_array_static_suffix
+
+(* Audit boundary only: provenance does not rule out this discrepancy.
+   Reachability of its premises after an actual base evaluation is separate. *)
+Theorem storage_array_capacity_length_discrepancy[local]:
+  !cx tr slot et cap i es ms.
+    0 <= i /\ cap <= Num i /\
+    Num i < w2n (lookup_storage slot (get_storage cx es tr)) ==>
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV et (Dynamic cap))))
+      (ValueSubscript (IntV i)) es =
+      (INR (Error (RuntimeError "array dynamic capacity oob")),es) /\
+    idx_in_range F (n2w (Num i))
+      (lookup_storage slot (get_storage cx es tr)) /\
+    ~expr_exit (INR (Error (RuntimeError "array dynamic capacity oob"))) (OK ms)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `Num i < dimword (:256)` by
+    (irule LESS_TRANS >> goal_assum (drule_at Any) >> simp[w2n_lt]) >>
+  simp[extend_place_storage_array_index, idx_in_range_def, expr_exit_def,
+       w2n_n2w, LESS_MOD]
+QED
