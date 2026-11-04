@@ -21,7 +21,7 @@
 Theory fnPlanPlace
 Ancestors
   fnPlanLineage codegen asmSem symbolResolve planExec stackPlanGen
-  stackPlanTypes
+  stackPlanTypes fnPlanPlaceRevertPostamble
 
 (* Used at each jump of the block induction: the successor's code
    (planned from its DFS state, fnPlanCover) is at the PC its label
@@ -120,5 +120,8 @@ Theorem revert_postamble_placed:
       FLOOKUP o2pc off = SOME pc /\
       asm_block_at prog pc (execute_plan cp.cp_initial_fmp revert_postamble)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all codegen_revert_slice >> strip_tac >>
+  drule_all labelled_asm_slice_placed >> strip_tac >>
+  metis_tac[]
 QED
