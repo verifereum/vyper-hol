@@ -101,15 +101,3 @@ Proof
   EVAL_TAC >> simp[eval_phis_def, phi_prefix_length_def]
 QED
 
-Theorem candidate_source_active:
-  (active_inst ^candidate_fn i ^source_s0 <=> i = mk_inst 0 ALLOCA [Lit 0w] ["p"]) /\
-  (active_inst ^candidate_fn i ^source_s1 <=> i = mk_inst 1 DLOAD [Lit 0w] ["x"]) /\
-  (active_inst ^candidate_fn i ^source_s2 <=> i = mk_inst 2 ALLOCA [Lit 0w] ["q"]) /\
-  (active_inst ^candidate_fn i ^source_s3 <=> i = mk_inst 3 EQ [Var "p"; Var "q"] ["e"]) /\
-  (active_inst ^candidate_fn i ^source_s4 <=> i = mk_inst 4 JNZ [Var "e"; Label "safe"; Label "bad"] []) /\
-  (active_inst ^candidate_fn i ^source_jump <=> i = mk_inst 5 STOP [] [])
-Proof
-  simp[active_inst_def, mk_raw_function_def, mk_inst_def,
-       init_venom_state_def, GSYM DISJ_ASSOC, LEFT_AND_OVER_OR,
-       EXISTS_OR_THM]
-QED
