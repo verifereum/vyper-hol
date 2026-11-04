@@ -65,7 +65,7 @@ Proof
   disj2_tac >> qexistsl [`SUC n`,`w'`] >> simp[]
 QED
 
-Theorem ptr_frame_operand_instructions[local]:
+Theorem ptr_frame_operand_instructions:
   !vs0 ctx stk PG G tn fn inst s.
   frame_reachable vs0 ctx stk PG G tn fn inst s ==>
   MEM inst (fn_insts fn) /\
