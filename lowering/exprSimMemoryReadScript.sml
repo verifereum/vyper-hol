@@ -36,10 +36,14 @@ Proof
   >- (gvs[unwrap_memory_compile] >>
       qabbrev_tac `u = (update_var (STRING #"%" (toString sm.cs_next_var))
          (mload (w2n w) s) s) with vs_inst_idx := SUC s.vs_inst_idx` >>
-      drule_all emit_mload_endpoint >> simp[GSYM markerTheory.Abbrev_def] >>
-      strip_tac >>
-      `u.vs_current_bb = sb.cs_current_bb /\
-       u.vs_inst_idx = LENGTH sb.cs_current_insts` by simp[Abbr `u`] >>
+      `eval_operand op u = SOME (mload (w2n w) s) /\
+       u.vs_current_bb = sb.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+       (!x w'. not_fresh_at sm x /\ lookup_var x s = SOME w' ==>
+          lookup_var x u = SOME w') /\
+       u.vs_allocas = s.vs_allocas /\ u.vs_memory = s.vs_memory` by
+        (qunabbrev_tac `u` >> irule emit_mload_endpoint >>
+         simp[] >> qexists_tac `p.ptr_operand` >> simp[]) >>
       qexistsl_tac [`v`, `u`] >> conj_tac
       >- (first_x_assum irule >>
           drule_all emit_mload_marked_path >> simp[Abbr `u`]) >>
