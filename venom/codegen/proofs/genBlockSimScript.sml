@@ -907,7 +907,7 @@ Proof
   simp[] >> every_case_tac >> gvs[]
 QED
 
-Theorem step_inst_assert_abort[local]:
+Theorem step_inst_assert_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = ASSERT /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -1956,7 +1956,7 @@ Proof
   rewrite_tac[asm_steps_def] >> simp[asm_step_jumpi, asm_jumpi_def]
 QED
 
-Theorem asm_assert_zero_revert[local]:
+Theorem asm_assert_zero_revert:
   !lo o2pc prog st rest off pc vs.
     asm_block_at prog st.as_pc
       [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"] /\
