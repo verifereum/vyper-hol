@@ -1,7 +1,7 @@
 (* Synchronized zero-prefix coverage and the grouped write consumer. *)
 Theory lowerDloadSafetyWriteCoverage
 Ancestors
-  lowerDloadSafetyLocations lowerDloadSafetyWriteAdvance
+  lowerDloadSafetyLocations lowerDloadSafetyWriteAdvance lowerDloadSafetyAmbient
   lowerDloadSafetyRelation lowerDloadSafetyKernel ptrDiscipline list
 
 Theorem ld_pair_zero:
@@ -76,4 +76,30 @@ Proof
   `active_inst (ld_image f) ti (ts with vs_inst_idx := SUC p)` by
     simp[ld_image_def, Abbr `newframe`] >>
   drule_all ld_pair_zero >> simp[]
+QED
+
+Theorem ld_sync_memory_write_coverage_ambient:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  ~in_revert_forward fn s /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\
+  step_inst fuel C' inst t = OK ts /\
+  active_inst (FST (lower_dload_function_supply f.lf_supply fn)) ti
+    (ts with vs_inst_idx := SUC t.vs_inst_idx) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) ==>
+  ld_pair lo P names Sigma C C' vs0 (ld_image f) ti
+    (ts with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  strip_tac >>
+  `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
+    (drule ld_sync_active >> simp[]) >>
+  drule_all ld_sync_fn_shape >> strip_tac >>
+  drule o1_fn_shape_components >> strip_tac >>
+  drule ld_sync_labels >> strip_tac >>
+  drule_all ld_sync_ambient_headroom >> strip_tac >>
+  drule_all ld_sync_memory_write_coverage >> simp[]
 QED
