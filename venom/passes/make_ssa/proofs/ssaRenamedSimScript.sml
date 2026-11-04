@@ -599,9 +599,10 @@ Proof
             rich_listTheory.MAP_HD, ssa_sim_def, lookup_var_def] >> NO_TAC) >>
   (* Static-frame guard: s1 took the non-static branch with defined
      operands, so its operand list evaluates *)
-  TRY (drule_all log_operands_defined >> simp[IS_SOME_EXISTS] >>
-       strip_tac >> gvs[] >> NO_TAC) >>
-  gvs[eval_operands_def]
+  gvs[eval_operands_def] >>
+  (* LOG: only its guard remains *)
+  drule_all log_operands_defined >> simp[optionTheory.IS_SOME_EXISTS] >>
+  strip_tac >> gvs[eval_operand_def]
 QED
 
 (* ==========================================================================
