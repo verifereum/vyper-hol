@@ -4,10 +4,10 @@ Ancestors
   venomExecProps venomExecProofs venomExecSemantics venomState venomInst finite_map list
   sccpCorrectnessProofs dftAvailability venomWf
 
-Theorem dft_occ_ordinary_fdom:
+Theorem dft_occ_nonphi_fdom:
   c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
   get_instruction bb s.vs_inst_idx = SOME inst /\ inst_wf inst /\
-  ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode /\
   inst.inst_opcode <> INVOKE /\
   (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftAt fn 0 bb t) stack' n'
   ==> FDOM t.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
@@ -27,6 +27,18 @@ Proof
        dft_fill_control_def] >> rpt strip_tac >> gvs[] >>
   irule step_inst_base_fdom >> simp[] >>
   metis_tac[is_pseudo_def]
+QED
+
+Theorem dft_occ_ordinary_fdom:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ inst_wf inst /\
+  ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\
+  (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftAt fn 0 bb t) stack' n'
+  ==> FDOM t.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs
+Proof
+  strip_tac >> irule dft_occ_nonphi_fdom >> goal_assum drule >>
+  simp[] >> metis_tac[is_pseudo_def]
 QED
 
 Theorem dft_occ_return_fdom:
@@ -313,4 +325,33 @@ Proof
   `!d v. MEM d bb.bb_instructions /\ MEM v d.inst_outputs ==>
       v IN FDOM s.vs_vars` by metis_tac[dft_cut_exit_outputs] >>
   fs[dft_activation_cut_def] >> metis_tac[]
+QED
+
+Theorem dft_activation_cut_nonphi:
+  dft_activation_cut fn bb s /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ inst_wf inst /\
+  inst.inst_opcode <> PHI /\ ~is_terminator inst.inst_opcode /\
+  inst.inst_opcode <> INVOKE /\
+  (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftAt fn 0 bb t) stack' n'
+  ==> dft_activation_cut fn bb t
+Proof
+  strip_tac >> drule_all dft_occ_nonphi_fdom >> strip_tac >>
+  drule_all dft_occ_ordinary_control >> strip_tac >>
+  irule dft_activation_cut_advance >> goal_assum drule >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem dft_occ_continuation_nonphi:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftAt fn 0 bb t) stack' n'
+  ==> inst.inst_opcode <> PHI
+Proof
+  strip_tac >> strip_tac >>
+  qpat_x_assum `(dft_occ_oracle_next _ _ _).dft_occ_core = _` mp_tac >>
+  simp[dft_occ_oracle_next_def, dft_next_inf_def, dft_erase_def,
+       dft_fill_def, dft_fill_control_def, dft_open_next_def,
+       step_inst_base_def, dft_open_deliver_def]
 QED
