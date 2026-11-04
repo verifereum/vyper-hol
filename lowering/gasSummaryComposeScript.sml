@@ -44,7 +44,8 @@ Theorem gas_source_ignore_return_exception_bind:
      (INR exc, fin with gas_obs := tail)
 Proof
   strip_tac >> gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
-  Cases_on `source (es with gas_obs := xs ++ tail)` >> Cases_on `q` >>
+  Cases_on `source (es with gas_obs := xs ++ tail)` >>
+  rename1 `source _ = (result, state)` >> Cases_on `result` >>
   simp[ignore_bind_def, bind_def, return_def]
 QED
 
