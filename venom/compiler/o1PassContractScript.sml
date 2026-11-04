@@ -48,8 +48,9 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  ptrDiscipline staticLayoutDefs venomState stateEquiv passSimulationDefs
-  vfmState extCallOracle finite_map dretDesugarDefs fcgDefs list
+  lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
+  passSimulationDefs vfmState extCallOracle finite_map dretDesugarDefs fcgDefs
+  list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -447,10 +448,13 @@ QED
 (* The initial state of a stage run: the pipeline's initial state, with
    the dynamic-memory pointer at the run's initial free-memory pointer,
    as the entry state has it (FmpLowering seeds its pointer variable from
-   vs_initial_fmp). *)
+   vs_initial_fmp), and "code_end" bound to the code/data boundary
+   (code_layout_valid), which LowerDload's ADD [_; Label "code_end"]
+   reads. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
-    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
@@ -463,14 +467,14 @@ End
 
 (* The stage contract of one pass run, between consecutive stage contexts
    C and C' and one initial state: every terminating run of C is matched
-   by a run of C' up to the dead bytes D, and the stage invariant I of C
-   becomes I' of C'.  pre
+   by a run of C' up to a well-formed set D of dead bytes, and the stage
+   invariant I of C becomes I' of C'.  pre
    relates the input to the output (an ordering the pass keeps, say); a
    fact about the input alone belongs in I. *)
 Definition o1_stage_contract_def:
   o1_stage_contract rpolicy D pass view pre I I' <=>
     !C C' vs.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
       ctx_sim D C C' vs vs /\ I' C' vs
 End
@@ -480,7 +484,7 @@ End
 Definition o1_stage_contract_gas_def:
   o1_stage_contract_gas rpolicy D pass view pre I I' <=>
     !C C' vs'.
-      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\
+      ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs' /\ I C vs' ==>
       ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\ I' C' vs'
 End
@@ -518,13 +522,17 @@ End
    taint reaching only the dead bytes D.  S3's conclusion, with
    well-formed global reservations, which max_live_eom (row 3 on)
    requires and the walk never changes; the lowering reserves nothing in
-   the runtime unit and one interval in the deploy unit. *)
+   the runtime unit and one interval in the deploy unit.  Also the no-wrap
+   bound on DLOAD/DLOADBYTES source offsets that LowerDload's expansion
+   needs (dload_offset_ok), and the alloca frontier headroom its new
+   scratch sites need (dload_headroom_ok). *)
 Definition o1_src_inv_def:
   o1_src_inv D C vs <=>
     reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
     EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
     (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
-    taint_within D C vs /\ fmp_free_ctx C
+    taint_within D C vs /\ fmp_free_ctx C /\
+    mem_inv dload_offset_ok C vs /\ mem_inv dload_headroom_ok C vs
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,

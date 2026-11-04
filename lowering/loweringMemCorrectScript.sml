@@ -16,13 +16,16 @@
  *   lower_vyper_runtime_unit_run_mem_safe -- the memory-safe run
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
- * Named admissions (cheats), each a memory twin of a piece S1 rests on:
+ * Named admissions (cheats); all but the last are memory twins of pieces
+ * S1 rests on:
  *   body_stmts_sim_mem -- body_stmts_sim with memory (#641's body
  *     footprint)
  *   external_entry_value_revert_mem, external_entry_reaches_body_mem --
  *     S1's entry bridge with memory (#639, #867)
  *   external_frame_ret_ok_mem -- the frame's returns with memory (#640),
  *     from entryHaltMem's return leaves
+ *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
+ *     DLOAD/DLOADBYTES offsets, which LowerDload's expansion needs
  *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and
  *     taint bound
  *)
@@ -35,7 +38,7 @@ Ancestors
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem stmtSim bodySim bodySimMain moduleLowering stmtLowering
-  vyperTypeSystem vyperState
+  vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
 
@@ -435,3 +438,62 @@ Proof
   simp[fixed_region_reserved_def]
 QED
 
+(* ADMITTED, S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES
+   offset, added to the length of the code before the data section, stays
+   below 2^256, so LowerDload's code_end-relative CODECOPY offset does not
+   wrap.  Proof idea: runtime immutable offsets lie inside the immutable
+   section, and code_layout_valid keeps the code within 2^255 bytes. *)
+Theorem lower_vyper_runtime_unit_dload_offset_ok:
+  !tops rpolicy unit am tx ret vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    code_layout_valid vs /\
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ==> mem_inv dload_offset_ok unit.cu_context vs
+Proof
+  cheat
+QED
+
+(* Every reachable alloca frontier, plus 32 bytes per DLOAD in the unit,
+   stays below 2^256, so LowerDload's scratch sites do not wrap:
+   alloca_frontier_inv bounds the frontier by unit_alloca_budget, and
+   lowering_context_ok, which run_lowering checks, leaves 32 bytes per
+   DLOAD above that budget. *)
+Theorem lower_vyper_runtime_unit_dload_headroom_ok:
+  !tops rpolicy unit am tx vs.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    initial_venom_state_rel tops am tx vs
+    ==> mem_inv dload_headroom_ok unit.cu_context vs
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  drule lowering_context_ok_integrity >> strip_tac >>
+  drule lowering_context_ok_static_integrity >> strip_tac >>
+  drule lowering_context_ok_dload_budget >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  simp[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+  qexists_tac `alloca_frontier_inv` >> rpt conj_tac
+  >- (irule alloca_frontier_inv_closed >> simp[])
+  >- (irule alloca_frontier_inv_entry >>
+      simp[ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def, listTheory.MEM_MAP,
+           reachable_call_graph_acyclic_def] >>
+      fs[initial_venom_state_rel_def] >> metis_tac[]) >>
+  rw[dload_headroom_ok_def, alloca_frontier_inv_def, ctx_dload_count_def] >>
+  fs[rich_listTheory.FILTER_FLAT, rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o,
+     combinTheory.o_DEF] >>
+  decide_tac
+QED

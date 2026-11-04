@@ -65,6 +65,31 @@ Proof
   simp[raw_mem_ok_def]
 QED
 
+Theorem dload_offset_ok_ctx_free:
+  dload_offset_ok ctx fn inst s ==> dload_offset_ok ctx' fn inst s
+Proof
+  simp[lowerDloadDefsTheory.dload_offset_ok_def]
+QED
+
+(* Pruning drops functions, so it keeps the DLOAD headroom bound. *)
+Theorem ctx_dload_count_prune:
+  ctx_dload_count (prune_unit_fcg_unreachable unit fcg).cu_context <=
+  ctx_dload_count unit.cu_context
+Proof
+  simp[prune_unit_fcg_unreachable_def,
+       lowerDloadDefsTheory.ctx_dload_count_def] >>
+  qspec_tac (`unit.cu_context.ctx_functions`, `fns`) >>
+  Induct >> rw[]
+QED
+
+Theorem dload_headroom_ok_prune:
+  dload_headroom_ok unit.cu_context fn inst s ==>
+  dload_headroom_ok (prune_unit_fcg_unreachable unit fcg).cu_context fn inst s
+Proof
+  simp[lowerDloadDefsTheory.dload_headroom_ok_def] >>
+  mp_tac ctx_dload_count_prune >> decide_tac
+QED
+
 Theorem o1_fn_passes_steps:
   o1_step_contracts_from rp 0 o1_fn_passes
 Proof
@@ -154,7 +179,7 @@ Theorem o1_mapped_pass_sim:
   unit'.cu_context.ctx_entry = unit.cu_context.ctx_entry /\
   unit'.cu_context.ctx_global_reserved = unit.cu_context.ctx_global_reserved /\
   ctx_fn_names unit'.cu_context = ctx_fn_names unit.cu_context /\
-  !vs. o1_run_state_ok vs /\ stage_inv unit.cu_context vs ==>
+  !vs. dead_wf D /\ o1_run_state_ok vs /\ stage_inv unit.cu_context vs ==>
        ctx_sim D unit.cu_context unit'.cu_context vs vs /\
        stage_inv unit'.cu_context vs
 Proof
@@ -186,7 +211,8 @@ Proof
        mid.cu_context.ctx_global_reserved =
          unit.cu_context.ctx_global_reserved /\
        ctx_fn_names mid.cu_context = ctx_fn_names unit.cu_context /\
-       !vs. o1_run_state_ok vs /\ o1_src_inv D unit.cu_context vs ==>
+       !vs. dead_wf D /\ o1_run_state_ok vs /\
+            o1_src_inv D unit.cu_context vs ==>
          ctx_sim D unit.cu_context mid.cu_context vs vs /\
          o1_src_inv D mid.cu_context vs` by
     (gen_tac >> irule o1_mapped_pass_sim >>
@@ -199,7 +225,8 @@ Proof
        unit'.cu_context.ctx_global_reserved =
          mid.cu_context.ctx_global_reserved /\
        ctx_fn_names unit'.cu_context = ctx_fn_names mid.cu_context /\
-       !vs. o1_run_state_ok vs /\ o1_src_inv D mid.cu_context vs ==>
+       !vs. dead_wf D /\ o1_run_state_ok vs /\
+            o1_src_inv D mid.cu_context vs ==>
          ctx_sim D mid.cu_context unit'.cu_context vs vs /\
          o1_src_inv D unit'.cu_context vs` by
     (gen_tac >> irule o1_mapped_pass_sim >>
@@ -233,7 +260,8 @@ QED
 Theorem o1_prune_sim:
   fcg = fcg_analyze unit.cu_context /\ o1_ctx_shape unit.cu_context /\
   unit.cu_context.ctx_entry = SOME entry /\
-  (!ctx ctx' fn inst s. M ctx fn inst s ==> M ctx' fn inst s) ==>
+  (!fn inst s. M unit.cu_context fn inst s ==>
+               M (prune_unit_fcg_unreachable unit fcg).cu_context fn inst s) ==>
   (!fuel vs. run_context fuel unit.cu_context vs =
              run_context fuel (prune_unit_fcg_unreachable unit fcg).cu_context vs) /\
   !vs. mem_inv M unit.cu_context vs ==>
@@ -273,6 +301,14 @@ Proof
   `mem_inv raw_mem_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
     (mp_tac (Q.INST [`M` |-> `raw_mem_ok`] o1_prune_sim) >>
      impl_tac >- (fs[] >> metis_tac[raw_mem_ok_ctx_free]) >>
+     strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
+  `mem_inv dload_offset_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
+    (mp_tac (Q.INST [`M` |-> `dload_offset_ok`] o1_prune_sim) >>
+     impl_tac >- (fs[] >> metis_tac[dload_offset_ok_ctx_free]) >>
+     strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
+  `mem_inv dload_headroom_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
+    (mp_tac (Q.INST [`M` |-> `dload_headroom_ok`] o1_prune_sim) >>
+     impl_tac >- (fs[] >> metis_tac[dload_headroom_ok_prune]) >>
      strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
   qpat_x_assum `fcg = _` kall_tac >>
   fs[o1_src_inv_def] >> rpt conj_tac
