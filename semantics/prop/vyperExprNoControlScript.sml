@@ -2,7 +2,8 @@ Theory vyperExprNoControl
 
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps
+  vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
@@ -569,13 +570,26 @@ val CALL_NO_CONTROL_STEP = FIRST [
   qpat_x_assum `_ = (INR _,_)` mp_tac >>
     BasicProvers.TOP_CASE_TAC >> simp[] >> strip_tac];
 
+Theorem eval_ext_call_effects_no_control:
+  eval_ext_call_effects cx target_addr calldata value_opt gas accounts st =
+    (INR exc, st') ==>
+  no_control_exc exc
+Proof
+  simp_tac bool_ss [eval_ext_call_effects_def, LET_THM] >> strip_tac >>
+  rpt CALL_NO_CONTROL_STEP
+QED
+
 Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  PairCases_on `sig` >> Cases_on `vs`
+  >- simp[eval_ext_call_def, raise_def, no_control_exc_def] >>
+  simp_tac bool_ss [eval_ext_call_def, LET_THM] >> strip_tac >>
+  rpt (FIRST [
+    qpat_x_assum `eval_ext_call_effects _ _ _ _ _ _ _ = (INR _,_)`
+      (ACCEPT_TAC o MATCH_MP eval_ext_call_effects_no_control),
+    CALL_NO_CONTROL_STEP])
 QED
 
 Theorem eval_send_no_control:
