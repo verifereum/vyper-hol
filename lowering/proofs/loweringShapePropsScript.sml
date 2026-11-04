@@ -13703,3 +13703,41 @@ Proof
   rpt (FIRST [irule comp_bind_labels >> conj_tac, disch_tac] >>
        rpt gen_tac >> BETA_TAC >> simp[emit_op_labels])
 QED
+
+(* Unlike ordinary bind, this rule retains the provenance of a fresh label. *)
+Theorem fresh_label_bind_labels:
+  !suffix k.
+    (!lbl s. isPREFIX "@" lbl ==>
+      cs_extends s (SND (k lbl s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (k lbl s)))) ==>
+    !s. cs_extends s (SND (comp_bind (fresh_label suffix) k s)) /\
+      EVERY (isPREFIX "@")
+        (added_labels s (SND (comp_bind (fresh_label suffix) k s)))
+Proof
+  rpt gen_tac >> disch_tac >> gen_tac >> simp[comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  drule fresh_label_prefix >> disch_tac >>
+  drule fresh_label_labels >>
+  disch_then (qspec_then `isPREFIX "@"` strip_assume_tac) >>
+  irule cs_extends_labels_trans >> qexists_tac `cs'` >>
+  simp[] >> first_x_assum (qspecl_then [`a`, `cs'`] mp_tac) >>
+  (impl_tac >- (Cases_on `a` >> gvs[])) >> simp[]
+QED
+
+Theorem new_block_action_labels:
+  !lbl s P. P lbl ==>
+    cs_extends s (SND (new_block lbl s)) /\
+    EVERY P (added_labels s (SND (new_block lbl s)))
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `new_block lbl s` >> simp[] >>
+  irule new_block_labels >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem fresh_var_action_labels:
+  !s P. cs_extends s (SND (fresh_var s)) /\
+    EVERY P (added_labels s (SND (fresh_var s)))
+Proof
+  rpt gen_tac >> Cases_on `fresh_var s` >> simp[] >>
+  drule fresh_var_labels >> simp[]
+QED
+
