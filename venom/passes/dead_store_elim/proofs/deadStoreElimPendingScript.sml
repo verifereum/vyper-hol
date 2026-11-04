@@ -479,3 +479,65 @@ Proof
   simp[dse_inst_reads_alias_def, ma_may_alias_def] >>
   metis_tac[memLocPropsTheory.may_overlap_sym]
 QED
+
+(* Concrete overwrites may discharge more entries than static clobbering
+   recognizes; only the forward coverage implication is needed. *)
+Theorem dse_pending_at_overwrite_step:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  EL idx bb.bb_instructions = inst /\
+  (!loc b m. MEM (loc,(b,m)) P /\ dse_inst_clobbers bp sp loc inst ==>
+    a <= b /\ b+m <= a+n) ==>
+  dse_pending_at cfg bp sp fn bb (SUC idx)
+    (FILTER (\(loc,(b,m)). ~(a <= b /\ b+m <= a+n)) P) s
+Proof
+  strip_tac >>
+  `dse_pending_at cfg bp sp fn bb idx
+    (FILTER (\(loc,(b,m)). ~(a <= b /\ b+m <= a+n)) P) s` by
+    (irule dse_pending_at_filter >> simp[]) >>
+  irule dse_pending_at_step >> simp[MEM_FILTER] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem dse_pending_at_cons:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  ml_is_fixed loc /\ loc.ml_size = SOME n /\ 0 < n /\
+  dse_region_matches loc s a n /\
+  dse_suffix_dead cfg FEMPTY bp loc sp fn bb idx /\
+  ((sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+    n = 1 /\ a < dimword (:256)) ==>
+  dse_pending_at cfg bp sp fn bb idx ((loc,(a,n))::P) s
+Proof
+  simp[dse_pending_at_def, key_ok_def] >> metis_tac[]
+QED
+
+Theorem dse_pending_at_insert_overwrite_step:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  EL idx bb.bb_instructions = inst /\
+  (!loc b m. MEM (loc,(b,m)) P /\ dse_inst_clobbers bp sp loc inst ==>
+    a <= b /\ b+m <= a+n) /\
+  ml_is_fixed newloc /\ newloc.ml_size = SOME n /\ 0 < n /\
+  dse_region_matches newloc s a n /\
+  dse_suffix_dead cfg FEMPTY bp newloc sp fn bb (SUC idx) /\
+  ((sp = AddrSp_Storage \/ sp = AddrSp_Transient) ==>
+    n = 1 /\ a < dimword (:256)) ==>
+  dse_pending_at cfg bp sp fn bb (SUC idx)
+    ((newloc,(a,n))::
+      FILTER (\(loc,(b,m)). ~(a <= b /\ b+m <= a+n)) P) s
+Proof
+  strip_tac >> irule dse_pending_at_cons >> simp[] >>
+  conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  irule (SRULE [] dse_pending_at_overwrite_step) >> metis_tac[]
+QED
+
+Theorem dse_pending_at_clobber_covered:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  MEM (loc,(b,m)) P /\ dse_inst_clobbers bp sp loc inst /\
+  dse_region_matches (bp_get_write_location bp inst sp) s a n /\
+  (bp_get_write_location bp inst sp).ml_size = SOME n ==>
+  a <= b /\ b+m <= a+n
+Proof
+  strip_tac >> drule_all dse_pending_at_member >> strip_tac >>
+  `completely_contains (bp_get_write_location bp inst sp) loc` by
+    fs[dse_inst_clobbers_def] >>
+  drule_all dse_region_matches_contains >> simp[]
+QED
