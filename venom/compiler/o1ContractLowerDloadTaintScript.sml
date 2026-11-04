@@ -57,6 +57,25 @@ Proof
   simp[step_taint_def, adopt_reset_def, store_taint_def, imm_taint_def]
 QED
 
+Theorem exec_alloca_repeated:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (off,sz) ==>
+  exec_alloca inst s n = OK (update_var out (n2w off) s)
+Proof
+  simp[venomExecSemanticsTheory.exec_alloca_def]
+QED
+
+Theorem exec_alloca_fresh:
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+  exec_alloca inst s n =
+    OK (update_var out (n2w s.vs_alloca_next)
+      (s with <| vs_allocas := s.vs_allocas |+
+                   (inst.inst_id,(s.vs_alloca_next,w2n n));
+                 vs_alloca_next := s.vs_alloca_next + w2n n |>))
+Proof
+  simp[venomExecSemanticsTheory.exec_alloca_def]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
