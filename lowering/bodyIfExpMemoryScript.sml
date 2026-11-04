@@ -614,3 +614,50 @@ val () = List.app (fn th =>
      else raise Fail "ifexp consumer memory inherited admission"
   end) [compile_ifexp_forced_frag_mem, readable_eval_frag_transport_mem,
         compile_ifexp_vv_sim_mem];
+
+Theorem compile_ifexp_word_sim_mem:
+  !ctx func cenv cx ty t c a b es.
+    is_word_type t /\
+    expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    (!e sa sb op. (e = a \/ e = b) /\
+       lower_value compile_expr cenv ty e sa = (op, sb) ==>
+       cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+       sa.cs_next_id <= sb.cs_next_id) /\
+    expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
+    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+       expr_sim_mem ctx func cenv cx ty a es1 /\
+       expr_sim_mem ctx func cenv cx ty b es1) ==>
+    expr_sim_mem ctx func cenv cx ty (IfExp t c a b) es
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[expr_sim_mem_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `compile_expr cenv ty (IfExp t c a b) sa` >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[exprLoweringTheory.lower_value_def, comp_bind_def] >> strip_tac >>
+  drule_all compile_expr_ifexp_states >> strip_tac >>
+  gvs[exprLoweringTheory.unwrap_value_def, comp_return_def] >>
+  irule frag_exec_mem_weaken >>
+  qexists_tac `\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s` >>
+  qexists_tac `\s. (?v. res = INL v /\
+    vv_post ctx func cenv cx (IfExp (expr_type a) c a b) es sa r s0 es'
+      (Value v) (StackValue (expr_type a) (Var rv)) s) /\
+    s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s` >>
+  qexists_tac `expr_exit res` >>
+  simp[] >> reverse conj_tac
+  >- (irule compile_ifexp_forced_frag_mem >> simp[] >> qexists_tac `ty` >>
+      simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  simp[] >> rpt strip_tac >>
+  drule exprSimUnwrapTheory.expr_post_of_vv_post_stack >> metis_tac[]
+QED
+
+val () =
+  let val th = compile_ifexp_word_sim_mem
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_IFEXP_WORD_SIM_MEMORY_AUDIT OK\n"
+     else raise Fail "ifexp word sim memory inherited admission"
+  end;
