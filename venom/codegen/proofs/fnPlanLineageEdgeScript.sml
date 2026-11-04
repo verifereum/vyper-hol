@@ -1,7 +1,7 @@
 Theory fnPlanLineageEdge
 Ancestors
   fnPlanLineageSuffix fnPlanLineageInventory fnPlanLineageLiveness
-  stackPlanGen venomInst
+  stackPlanGen venomInst venomWf venomExecProps cfgAnalysisProps list rich_list
 
 (* stack_get_depth_is_some supplies the generic membership/search boundary. *)
 Theorem generate_block_plan_jmp_target_hit:
@@ -33,4 +33,73 @@ Proof
   simp[join_target_ops_def] >>
   qpat_x_assum `set _ = set _` mp_tac >>
   simp[pred_setTheory.EXTENSION, listTheory.MEM_MAP] >> metis_tac[]
+QED
+
+Theorem non_param_insts_final_jmp[local]:
+  bb.bb_instructions <> [] /\ (LAST bb.bb_instructions).inst_opcode = JMP ==>
+  non_param_insts bb <> [] /\ LAST (non_param_insts bb) = LAST bb.bb_instructions
+Proof
+  strip_tac >>
+  `bb.bb_instructions = FRONT bb.bb_instructions ++ [LAST bb.bb_instructions]` by
+    metis_tac[APPEND_FRONT_LAST] >>
+  simp[non_param_insts_def] >>
+  pop_assum SUBST1_TAC >>
+  simp[FILTER_APPEND, is_param_opcode_def]
+QED
+
+Theorem ready_join_edge_terminator[local]:
+  codegen_ready_fn fn /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) ==>
+  pb.bb_instructions <> [] /\
+  (LAST pb.bb_instructions).inst_opcode = JMP /\
+  (LAST pb.bb_instructions).inst_operands = [Label succ]
+Proof
+  strip_tac >>
+  `MEM pb fn.fn_blocks /\ pb.bb_label = pred /\
+   MEM sb fn.fn_blocks /\ sb.bb_label = succ` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
+    metis_tac[cfg_edge_symmetry_uncond] >>
+  `block_entries_ready (cfg_analyze fn) fn /\ wf_function fn /\ fn_inst_wf fn` by
+    gvs[codegen_ready_fn_def] >>
+  `~NULL pb.bb_instructions /\ (LAST pb.bb_instructions).inst_opcode = JMP` by
+    (gvs[block_entries_ready_def, EVERY_MEM] >>
+     qpat_x_assum `!bb. MEM bb fn.fn_blocks ==> _`
+       (qspec_then `sb` mp_tac) >> simp[] >> strip_tac >>
+     first_x_assum (qspec_then `pb.bb_label` mp_tac) >> simp[]) >>
+  `pb.bb_instructions <> []` by gvs[NULL_EQ] >>
+  `MEM (LAST pb.bb_instructions) pb.bb_instructions` by metis_tac[LAST_MEM] >>
+  `inst_wf (LAST pb.bb_instructions)` by
+    (gvs[fn_inst_wf_def, EVERY_MEM] >>
+     first_x_assum irule >> qexists_tac `pb` >> simp[LAST_MEM, NULL_EQ]) >>
+  `?target. (LAST pb.bb_instructions).inst_operands = [Label target]` by
+    gvs[inst_wf_def] >>
+  `cfg_succs_of (cfg_analyze fn) pred = bb_succs pb` by
+    metis_tac[cfg_analyze_preserves_bb_succs] >>
+  gvs[NULL_EQ, bb_succs_def, get_successors_def, is_terminator_def,
+      venomStateTheory.get_label_def, nub_def, AllCaseEqs()] >>
+  qpat_x_assum `[_] = cfg_succs_of _ _` (assume_tac o SYM) >> gvs[]
+QED
+
+Theorem generate_block_plan_join_edge_suffix:
+  codegen_ready_fn fn /\
+  lookup_block pred fn.fn_blocks = SOME pb /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  generate_block_plan lv dfg (cfg_analyze fn) fn pb ps = SOME (ops, ps') ==>
+  ?prefix. ps'.ps_stack = prefix ++
+    MAP Var (input_vars_from pred sb.bb_instructions (live_vars_at lv succ 0))
+Proof
+  strip_tac >> drule_all ready_join_edge_terminator >> strip_tac >>
+  drule_all non_param_insts_final_jmp >> strip_tac >>
+  `pb.bb_label = pred` by metis_tac[lookup_block_label] >>
+  `join_target_ops lv fn pb.bb_label (LAST (non_param_insts pb)) =
+   SOME (MAP Var (input_vars_from pred sb.bb_instructions (live_vars_at lv succ 0)))` by
+    simp[join_target_ops_def] >>
+  `(LAST (non_param_insts pb)).inst_opcode = JMP` by simp[] >>
+  drule_all generate_block_plan_jmp_suffix >> simp[]
 QED
