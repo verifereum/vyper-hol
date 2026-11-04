@@ -114,15 +114,18 @@ Proof
 QED
 
 (* TSTORE writes its value at its key in the running contract's transient
-   storage. *)
+   storage, unless the frame is static. *)
 Theorem step_TSTORE:
   !op1 op2 v1 v2 id s.
     eval_operand op1 s = SOME v1 /\ eval_operand op2 s = SOME v2 ==>
-    step_inst_base (mk_inst id TSTORE [op1; op2] []) s = OK (tstore v1 v2 s)
+    step_inst_base (mk_inst id TSTORE [op1; op2] []) s =
+      if s.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] s))
+      else OK (tstore v1 v2 s)
 Proof
   rpt strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_write2_def]
+  simp[mk_inst_def, exec_write2_def, eval_operands_def]
 QED
 
 (* ===== Return bytes ===== *)
