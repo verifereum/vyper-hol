@@ -15154,3 +15154,95 @@ Proof
   ho_match_mp_tac pair_case_labels >> simp[emit_inst_labels,
     cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
+
+Theorem builtin_scalar_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  !bi. (bi = Neg \/ bi = Abs \/ bi = BlockHash \/ bi = BlobHash \/
+         bi = Ceil \/ bi = Floor \/ (?n. bi = Uint2Str n) \/
+         (?n. bi = CalldataSlice n) \/ bi = AddMod \/ bi = MulMod \/
+         bi = PowMod256) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, compile_keccak256_word_labels]) >>
+  FIRST [irule as_stack_val_labels, irule as_ptr_val_labels] >>
+  simp[compile_neg_labels,
+       compile_builtin_abs_labels, compile_blockhash_labels, compile_blobhash_labels,
+       compile_ceil_labels, compile_floor_labels, compile_uint2str_labels,
+       compile_slice_calldata_labels, compile_addmod_labels, compile_mulmod_labels,
+       compile_pow_mod256_labels, emit_op_labels]
+QED
+
+Theorem builtin_environment_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  !bi. ((?i. bi = Env i) \/ (?i. bi = Acc i) \/ bi = CalldataLen) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >>
+  simp[LET_THM] >> irule as_stack_val_labels >>
+  simp[compile_env_var_labels, compile_acc_labels, compile_builtin_calldatasize_labels]
+QED
+
+Theorem builtin_method_id_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty MethodId args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty MethodId args st)))
+Proof
+  disch_tac >> Cases_on `method_id_literal (HD args)` >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >>
+  simp[LET_THM, compile_literal_vv_labels] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule lower_value_labels >> simp[]) >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  FIRST [irule as_stack_val_labels, irule as_ptr_val_labels] >>
+  simp[compile_method_id_runtime_labels]
+QED
+
+Theorem compile_ecadd_points_labels:
+  !p1 p2 s. cs_extends s (SND (compile_ecadd_points p1 p2 s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_ecadd_points p1 p2 s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecadd_points_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[compile_alloc_buffer_labels,
+         emit_op_labels, emit_void_labels, comp_return_labels])
+QED
+
+Theorem compile_ecmul_point_labels:
+  !p scalar s. cs_extends s (SND (compile_ecmul_point p scalar s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_ecmul_point p scalar s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinMiscTheory.compile_ecmul_point_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[compile_alloc_buffer_labels,
+         emit_op_labels, emit_void_labels, comp_return_labels])
+QED
+
+Theorem builtin_ec_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  !bi. (bi = ECRecover \/ bi = ECAdd \/ bi = ECMul) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, unwrap_value_labels]) >>
+  FIRST [irule as_stack_val_labels, irule as_ptr_val_labels] >>
+  simp[compile_ecrecover_labels, compile_ecadd_points_labels, compile_ecmul_point_labels]
+QED
