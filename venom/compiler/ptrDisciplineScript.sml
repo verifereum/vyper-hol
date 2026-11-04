@@ -56,7 +56,7 @@ Theory ptrDiscipline
 Ancestors
   list pred_set finite_map pair words venomInst venomState
   venomExecSemantics codegenRel contextCodegenRel memLocDefs
-  pointerConfinedDefs passSimulationDefs
+  pointerConfinedDefs passSimulationDefs unitShapeDefs
 
 (* ===== The syntactic part ===== *)
 
@@ -618,10 +618,15 @@ Definition fixed_region_reserved_def:
                  i < pos + sz
 End
 
+(* fn_ptr_ok holds of each function and of its reachable part, which
+   passes that drop dead code (SimplifyCFG) keep.  It doesn't follow from
+   the function's: dropping dead code can shrink fn_pv, and a comparison
+   allowed on pointers may then compare a pointer with a non-pointer. *)
 Definition ptr_discipline_def:
   ptr_discipline (lo:num) ctx vs <=>
     lo <= vs.vs_alloca_next /\
-    ?P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+    ?P. EVERY (\fn. fn_ptr_ok P fn /\ fn_ptr_ok P (reachable_fn fn))
+          ctx.ctx_functions /\
         !stk PG G tn fn inst s.
           frame_reachable vs ctx stk PG G tn fn inst s ==>
           access_ok lo G fn inst s /\ taint_ok fn tn inst s /\
