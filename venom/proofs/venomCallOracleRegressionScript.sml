@@ -272,11 +272,9 @@ Theorem computed_call_preserves_pending_deletions:
       2w 0w 0w 0w F) 0 0
     (call_probe_state with vs_pending_deletions := [8w]))).vs_pending_deletions = [8w]
 Proof
-  simp[consume_call_outcome_eq, venom_call_request_def,
-       adopt_outcome_deletions_def, computed_precompile_def,
-       take_outcome_def, failed_outcome_def,
-       call_probe_state_def, init_venom_state_def, empty_call_context_def,
-       read_memory_def, w2w_n2w]
+  simp_tac (srw_ss()) [consume_call_outcome_eq] >>
+  irule adopt_outcome_deletions_computed >>
+  simp[computed_precompile_addresses, venom_call_request_def, w2w_n2w]
 QED
 
 (* A successful non-static outcome prepends its deletion delta to the queue;
