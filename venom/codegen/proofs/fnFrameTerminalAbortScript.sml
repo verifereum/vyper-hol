@@ -5,6 +5,7 @@ Ancestors
   stackPlanGen stackPlanOps stackPlanTypes stackModel venomInst
   asmFrame asmSem codegenRel frameRel contextCodegenRel genBlockSim
   preparedPrefixSim genFrameSim frameViewFacts frameViewMemory
+  venomState regularMemorySim
 
 (* A transient spill is covered by the output high-water mark even though
    the live spill map is empty again after restoration. *)
@@ -161,4 +162,29 @@ Theorem terminal_rel_frame_view_stack:
   venom_asm_terminal_rel vs st
 Proof
   simp[venom_asm_terminal_rel_def, frame_view_def]
+QED
+
+(* General terminal step: payload agreement is the only memory requirement. *)
+Theorem terminal_revert_step_payload:
+  asm_block_at prog st.as_pc [AsmOp "REVERT"] /\
+  st.as_stack = off :: sz :: tail /\
+  venom_asm_terminal_rel vs st /\
+  TAKE (w2n sz) (DROP (w2n off) vs.vs_memory ++ REPLICATE (w2n sz) 0w) =
+  TAKE (w2n sz) (DROP (w2n off) st.as_memory ++ REPLICATE (w2n sz) 0w) ==>
+  ?out.
+    asm_steps lo o2pc prog 1 st = AsmRevert out /\
+    venom_asm_terminal_rel
+      (revert_state (set_returndata
+        (TAKE (w2n sz) (DROP (w2n off) vs.vs_memory ++
+          REPLICATE (w2n sz) 0w)) vs)) out
+Proof
+  strip_tac >>
+  `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
+  drule asm_step_revert_eq >>
+  disch_then (qspecl_then [`lo`, `o2pc`] assume_tac) >>
+  gvs[asm_block_at_def] >>
+  gvs[venom_asm_terminal_rel_def, revert_state_def, set_returndata_def] >>
+  Cases_on `w2n sz = 0` >>
+  gvs[asm_returndata_read_byte, venom_returndata_read_byte]
 QED

@@ -701,7 +701,7 @@ Proof
           simp[EL_APPEND2, EL_REPLICATE]))
 QED
 
-Theorem asm_returndata_read_byte[local]:
+Theorem asm_returndata_read_byte:
   !off sz (mem : byte list).
     TAKE sz (DROP off (asm_expand_memory (off + sz) mem)) =
     GENLIST (\i. read_byte (off + i) mem) sz
@@ -794,7 +794,7 @@ Proof
 QED
 
 (* What step_inst REVERT produces *)
-Theorem step_inst_revert_abort[local]:
+Theorem step_inst_revert_abort:
   !fuel ctx inst vs a vs'.
     inst.inst_opcode = REVERT /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
@@ -975,7 +975,7 @@ Proof
 QED
 
 (* Equation form of asm_step for REVERT *)
-Theorem asm_step_revert_eq[local]:
+Theorem asm_step_revert_eq:
   !lo o2pc st off sz rest.
     st.as_stack = off :: sz :: rest ==>
     asm_step lo o2pc (AsmOp "REVERT") st =
