@@ -90,10 +90,9 @@ Definition target_has_internal_call_def:
     supported_target_exists expr_internal_call_root target
 End
 
-(* The calls the lowering proofs exclude: the ones the source runs on the
-   EVM even when it takes external calls from the outcome oracle, a delegate
-   raw_call (eval_raw_call's run_raw_call) and the creates (eval_create's
-   run_create_evm), and a raw_call without revert_on_failure.  The last is
+(* The calls the lowering proofs exclude: the creates, a delegate raw_call
+   (whose source evaluator runs the EVM even with the outcome oracle), and
+   a raw_call without revert_on_failure. The last is
    excluded because take_outcome answers a computed precompile without the
    oracle, as a success, while the EVM call can fail for lack of gas and an
    unchecked raw_call returns that failure as a value. *)
@@ -102,7 +101,7 @@ Definition expr_evm_run_root_def:
     (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
   expr_evm_run_root (Call ty (RawCallCalldataTarget flags) es default) =
     (flags.rcf_is_delegate \/ ~flags.rcf_revert_on_failure) /\
-  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof) es default) = T /\
+  expr_evm_run_root (Call ty (CreateTarget kind has_salt rof kw_order) es default) = T /\
   expr_evm_run_root _ = F
 End
 
