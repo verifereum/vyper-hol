@@ -281,7 +281,10 @@ End
    range and apart (storage_layout_safe), and every successful outcome
    still to consume leaves the regions decoding (oracle_storage_ok), as
    e2eDefs's source_storage_ok and call_outcomes_ok ask of the entry state
-   and the outcomes. *)
+   and the outcomes.  Every immutable or constant the source can read by
+   name (env.bare_globals) is an immutable of the module being lowered, at
+   an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
+   places a supported program's immutables (immutableLocationProps). *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -310,7 +313,12 @@ Definition expr_sim_inv_def:
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-               cenv.ce_hashmap_info nsid = NONE)
+               cenv.ce_hashmap_info nsid = NONE) /\
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+       src = cenv.ce_module /\
+       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+             !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+                  off + type_memory_size tv < dimword (:256))
 End
 
 (* The types whose values are word_values (loweringSlice): integers,

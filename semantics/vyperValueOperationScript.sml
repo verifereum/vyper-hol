@@ -601,7 +601,9 @@ Definition evaluate_convert_def:
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV uint bound")) ∧
   evaluate_convert _ (BytesV bs) (BaseT (IntT n)) =
-    (let i = w2i $ (word_of_bytes_be (PAD_LEFT 0w 32 bs) : bytes32) in
+    (if bs = [] then INR (RuntimeError "convert empty bytes to signed") else
+     let i = w2i ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
+                  (8 * (32 - LENGTH bs))) in
      if within_int_bound (Signed n) i
      then INL $ IntV i
      else INR (RuntimeError "convert BytesV int bound")) ∧
@@ -641,12 +643,12 @@ Definition evaluate_convert_def:
        if 0 ≤ i ∧ Num i < 2 ** m then INL $ FlagV (Num i)
        else INR (RuntimeError "convert int flag bound")
      | _ => INR (TypeError "convert to unknown flag")) ∧
-  (* IntV → BytesT: extract upper m bytes of big-endian 32-byte encoding.
-     For Fixed m: TAKE m gives bytesM. For Dynamic n: full 32 bytes if n >= 32.
+  (* IntV → BytesT: low m bytes, left-aligned.
+     For Fixed m: DROP (32-m) gives bytesM. For Dynamic n: full 32 bytes if n >= 32.
      Mirrors Python: convert.py _to_Bytes for integer sources. *)
   evaluate_convert _ (IntV i) (BaseT (BytesT (Fixed m))) =
     (if m ≤ 32
-     then INL $ BytesV (TAKE m (word_to_bytes_be ((i2w i):bytes32)))
+     then INL $ BytesV (DROP (32 - m) (word_to_bytes_be ((i2w i):bytes32)))
      else INR (RuntimeError "convert int to bytes")) ∧
   evaluate_convert _ (IntV i) (BaseT (BytesT (Dynamic n))) =
     (if n ≥ 32
@@ -660,14 +662,19 @@ Definition evaluate_convert_def:
     (if LENGTH s ≤ n
      then INL $ StringV s
      else INR (RuntimeError "convert string string bound")) ∧
-  evaluate_convert _ (StringV s) (BaseT (BytesT bd)) =
-    (if compatible_bound bd (LENGTH s)
+  evaluate_convert _ (StringV s) (BaseT (BytesT (Fixed m))) =
+    (if LENGTH s ≤ m
+     then INL $ BytesV (PAD_RIGHT 0w m (MAP (n2w o ORD) s))
+     else INR (RuntimeError "convert string bytes")) ∧
+  evaluate_convert _ (StringV s) (BaseT (BytesT (Dynamic n))) =
+    (if LENGTH s ≤ n
      then INL $ BytesV (MAP (n2w o ORD) s)
      else INR (RuntimeError "convert string bytes")) ∧
   evaluate_convert _ (BytesV bs) (BaseT DecimalT) =
-    bounded_decimal_op (w2i
+    (if bs = [] then INR (RuntimeError "convert empty bytes to signed") else
+     bounded_decimal_op (w2i
       ((word_of_bytes_be (PAD_RIGHT 0w 32 bs) : bytes32) >>
-       (8 * (32 - LENGTH bs)))) ∧
+       (8 * (32 - LENGTH bs))))) ∧
   evaluate_convert _ (IntV i) (BaseT DecimalT) =
     bounded_decimal_op (i * decimal_scale) ∧
   (* Check exact scaled bounds BEFORE truncation. Signed division truncates
