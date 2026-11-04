@@ -1,6 +1,6 @@
 Theory dftCreateErrorProbe
 Ancestors
-  o1PassContract venomExecSemantics vfmContextLength
+  o1PassContract venomExecSemantics vfmContextLength vfmDomainCollection
 
 Definition create_probe_state_def:
   create_probe_state = (init_venom_state "entry") with
@@ -65,4 +65,28 @@ Theorem create_probe_fatal_keeps_state:
   vfm_abort e ==> handle_step e es = (INR e,es)
 Proof
   simp[vfmExecutionTheory.handle_step_def, vfmExecutionTheory.reraise_def]
+QED
+
+Theorem create_probe_collect_domain_check:
+  domain_check err check upd_dom cont (s with msdomain := Collect d) =
+  cont (s with msdomain := Collect (upd_dom d))
+Proof
+  simp[vfmExecutionTheory.domain_check_def, vfmExecutionTheory.set_domain_def,
+       vfmExecutionTheory.ignore_bind_def, vfmExecutionTheory.return_def,
+       vfmExecutionTheory.bind_def]
+QED
+
+Theorem create_probe_minimal_no_outside:
+  computes_minimal_domain m /\ m s = (r,t) /\ s.msdomain = Collect d ==>
+  !x. r <> INR (SOME (OutsideDomain x))
+Proof
+  simp[vfmDomainCollectionTheory.computes_minimal_domain_def] >> metis_tac[]
+QED
+
+Theorem create_probe_collect_step_no_outside:
+  s.msdomain = Collect d /\ step s = (r,t) ==>
+  !x. r <> INR (SOME (OutsideDomain x))
+Proof
+  metis_tac[create_probe_minimal_no_outside,
+            vfmDomainCollectionTheory.step_computes_minimal_domain]
 QED

@@ -315,3 +315,54 @@ Evidence: constructor residual goals in m4439/m4443/m4447; direct constituent
 signatures m4451/m4455; exact reraise and initial-state clauses m4458.
 Temporary inspection theorems were removed; only the two checked lemmas
 above are retained.
+
+## C3.2.41.3 OutsideDomain under Collect
+
+Imported `vfmDomainCollection` builds successfully. Its exact interfaces:
+```
+computes_minimal_domain step
+computes_minimal_domain (step_call x)       (* x : opname *)
+computes_minimal_domain (step_create x)     (* x : bool *)
+(?d. s.msdomain = Collect d) /\ step s = (r,s') ==>
+  ?d. s'.msdomain = Collect d
+run s = OWHILE (ISL o FST) (step o SND) (INL (),s)
+```
+The first four are respectively step_computes_minimal_domain,
+step_call_computes_minimal_domain, step_create_computes_minimal_domain,
+and step_preserves_collect. None has a wf_state or wf_accounts premise.
+These call/create interfaces include their frame-entry effects; one need
+not assume that entering a nested frame resets the state's domain mode.
+The step preservation theorem applies regardless of context-stack length.
+
+Checked new boundary lemmas:
+- `create_probe_collect_domain_check`: domain_check on Collect d runs cont
+  after updating msdomain to Collect (upd_dom d), ignoring Enforce checks.
+  The parameter was renamed from `add` (a parsed library constant).
+- `create_probe_minimal_no_outside`: computes_minimal_domain m, m s=(r,t),
+  and s.msdomain=Collect d exclude every INR(SOME(OutsideDomain x)).
+- `create_probe_collect_step_no_outside`: specializes that interface to step.
+
+Actual computes_minimal_domain definition quantifies s,r,t,d and, when
+m s=(r,t) and s.msdomain=Collect d, conjoins: no OutsideDomain result;
+replay on any collecting input domain with an extended output domain;
+replay on sufficiently large enforcing domains; and an OutsideDomain
+result on insufficient enforcing domains. Only the first conjunct is
+needed for the retained no-OutsideDomain boundary.
+
+Consequently every finite iteration from make_venom_create_state stays
+Collect and excludes OutsideDomain at each step, including nested calls
+and creates. The run loop's body is exactly step on the preceding state.
+A global theorem lifting this induction through OWHILE was deliberately
+not developed in this bounded probe; the available one-step interfaces
+have no account-well-formedness gap for that lift. This rules out using a
+*finite collecting step* as the previously suggested OutsideDomain witness.
+It does not prove OWHILE termination or extraction success. Unimplemented,
+Impossible, and OWHILE NONE remain separate unresolved possibilities.
+No task falsehood follows; no unrelated simulation is authorized.
+
+Recommended next boundary for strategist decision: inspect existing
+interfaces excluding Unimplemented and Impossible in collecting executions,
+rather than revisiting OutsideDomain or arbitrary bytecode enumeration.
+Evidence: imported exact step/run signatures m4481; definition m4483;
+checked boundary build recorded with this episode. All temporary inspection
+theorems removed.
