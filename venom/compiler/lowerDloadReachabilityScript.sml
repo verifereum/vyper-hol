@@ -257,3 +257,42 @@ Proof
   drule ld_frame_suffix_complete >> simp[] >>
   disch_then irule >> metis_tac[]
 QED
+
+Theorem ld_frame_reachable_prefix:
+  !vs C stk PG G tn fn inst s.
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  o1_ctx_shape C ==>
+  ?s0. ld_stack_origin vs C stk fn s0 /\ frame_reach C fn s0 inst s
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt strip_tac
+  >- (irule_at Any ld_stack_origin_base >> simp[] >>
+      metis_tac[frame_reach_start])
+  >- (first_x_assum drule >> strip_tac >>
+      qexists_tac `s0` >> simp[] >>
+      irule frame_reach_next >> metis_tac[])
+  >- (first_x_assum drule >> strip_tac >>
+      qexists_tac `s0` >> simp[] >>
+      irule frame_reach_block >> metis_tac[])
+  >- (first_x_assum drule >> strip_tac >>
+      qexists_tac `cs` >> conj_tac
+      >- (irule ld_stack_origin_push >> simp[] >> metis_tac[])
+      >> metis_tac[frame_reach_start])
+  >> first_x_assum drule >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[ld_stack_origin_member] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (drule o1_ctx_shape_distinct_block_labels >> simp[EVERY_MEM]) >>
+  drule_all ld_frame_return_complete >> strip_tac >>
+  fs[ld_stack_origin_cons] >>
+  drule_all completed_callee_invoke_ok >> strip_tac >>
+  qexists_tac `caller0` >> simp[] >>
+  irule frame_reach_next >> simp[] >> qexistsl_tac [`m`, `f.cf_inst`] >>
+  simp[is_terminator_def]
+QED
+
+Theorem ld_frame_reachable_raw:
+  o1_ctx_shape C /\ frame_reachable vs C stk PG G tn fn inst s ==>
+  raw_reachable vs C fn inst s
+Proof
+  strip_tac >> drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_raw_reachable >> simp[]
+QED
