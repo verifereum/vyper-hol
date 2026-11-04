@@ -11,44 +11,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem return_forced_admissible[local]:
-  gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es ==>
-  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
-Proof
-  strip_tac >> rw[gas_admissible_def] >>
-  Cases_on `res` >- simp[expr_res_ok_def] >>
-  rename1 `INR ex` >>
-  `eval_stmt cx (Return (SOME e)) (es with gas_obs := gs) = (INR ex, ee)` by
-    (pure_rewrite_tac[eval_return_forced] >> simp[Once bind_def, SF ETA_ss]) >>
-  drule_all gas_admissible_result >> strip_tac >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >>
-  simp[bind_def] >> Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
-  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-  imp_res_tac read_result_no_control >>
-  imp_res_tac (cj 1 eval_expr_no_control) >>
-  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
-QED
-
-Theorem return_forced_exempt[local]:
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
-    (es,s0) marks (err,ee) (leaf,fin) ==>
-  gas_exempt_cert memory tops (ctx,func)
-    (ignore_bind (eval_stmt cx (Return (SOME e))) (return ()))
-    (es,s0) marks (err,ee) (leaf,fin)
-Proof
-  strip_tac >>
-  `ignore_bind (eval_stmt cx (Return (SOME e))) (return ()) =
-   bind (bind (eval_expr cx e) (read_result cx))
-     (\v. ignore_bind (raise (ReturnException v)) (return ()))` by
-    (simp[FUN_EQ_THM, ignore_bind_def, eval_return_forced, bind_def] >>
-     gen_tac >> Cases_on `eval_expr cx e x` >>
-     Cases_on `q` >> simp[raise_def] >>
-     rename1 `eval_expr cx e x = (INL raw, est)` >>
-     Cases_on `read_result cx raw est` >> Cases_on `q` >> simp[raise_def]) >>
-  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
-QED
-
 Theorem return_forced_source_normal[local]:
   (!tail. bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := xs ++ tail) = (INL v, fin with gas_obs := tail)) ==>

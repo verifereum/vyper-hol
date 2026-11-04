@@ -481,7 +481,9 @@ Proof
      gen_tac >> Cases_on `eval_expr cx e x` >>
      rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >>
      rename1 `read_result cx v est` >>
-     Cases_on `read_result cx v est` >> Cases_on `q` >> simp[raise_def]) >>
+     Cases_on `read_result cx v est` >>
+     rename1 `read_result cx v est = (forced,forced_es)` >>
+     Cases_on `forced` >> simp[raise_def]) >>
   pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
 QED
 
