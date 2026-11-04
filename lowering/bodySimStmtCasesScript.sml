@@ -49,6 +49,8 @@
 Theory bodySimStmtCases
 Ancestors
   exprSimHypsDefs
+  stmtSimZero
+  stmtSimDefs
   loweringPosts
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim

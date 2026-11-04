@@ -15,6 +15,7 @@
 
 Theory stmtSimForLoop
 Ancestors
+  stmtSimDefs
   loweringPosts
   stmtSim stmtSimForParts stmtSimDeclStore
   list rich_list finite_map pred_set

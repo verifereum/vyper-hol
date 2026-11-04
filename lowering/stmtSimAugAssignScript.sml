@@ -24,6 +24,7 @@
 Theory stmtSimAugAssign
 Ancestors
   exprSimHypsDefs
+  stmtSimDefs
   exprSimDefs
   loweringPosts
   allocLimits

@@ -18,6 +18,7 @@
 
 Theory stmtSimAssignTupleMem
 Ancestors
+  stmtSimDefs
   loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclMem

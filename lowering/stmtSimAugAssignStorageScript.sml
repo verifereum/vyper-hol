@@ -37,6 +37,7 @@
 Theory stmtSimAugAssignStorage
 Ancestors
   exprSimHypsDefs
+  stmtSimDefs
   loweringPosts
   allocLimits list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimOperators exprSimLeaves

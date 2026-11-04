@@ -32,6 +32,7 @@ Theory stmtSimAugAssignAttrStorage
 Ancestors
   exprSimProps
   exprSimHypsDefs
+  stmtSimDefs
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set alist

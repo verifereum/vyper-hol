@@ -2,6 +2,7 @@
 Theory bodyGasAdmissible
 Ancestors
   exprSimHypsDefs
+  stmtSimDefs
   exprSimHyps stmtSim gasContext vyperState vyperTypeExprSoundness
   vyperTypeStmtSoundness vyperTypeEvalSoundness
 

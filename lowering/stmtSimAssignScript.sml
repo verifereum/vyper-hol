@@ -18,6 +18,7 @@
 
 Theory stmtSimAssign
 Ancestors
+  stmtSimDefs
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set

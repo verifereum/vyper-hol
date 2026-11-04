@@ -25,6 +25,7 @@
  *)
 Theory loweringMemCorrect
 Ancestors
+  stmtSimDefs
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext

@@ -12,6 +12,7 @@
 
 Theory stmtSimFor
 Ancestors
+  stmtSimDefs
   loweringPosts
   stmtSim stmtSimForParts stmtSimForLoop
   list rich_list finite_map pred_set

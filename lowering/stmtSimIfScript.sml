@@ -13,6 +13,7 @@
 
 Theory stmtSimIf
 Ancestors
+  stmtSimDefs
   exprSimDefs
   loweringPosts
   stmtSim
