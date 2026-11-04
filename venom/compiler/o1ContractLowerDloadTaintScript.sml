@@ -334,6 +334,71 @@ Proof
   simp[step_taint_nonmemory]
 QED
 
+Theorem lower_dload_inst_supply_interval:
+  lower_dload_inst_supply s i = (outs,s') ==>
+  s.irs_next_inst <= s'.irs_next_inst /\
+  EVERY (\j. j = i \/
+    (s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst)) outs
+Proof
+  gvs[lower_dload_inst_supply_def, AllCaseEqs(),
+      irSupplyTheory.fresh_inst_id_def] >>
+  rpt strip_tac >>
+  imp_res_tac irSupplyTheory.fresh_ir_var_contract >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_interval:
+  !s outs s'. lower_dload_insts_supply s insts = (outs,s') ==>
+  s.irs_next_inst <= s'.irs_next_inst /\
+  EVERY (\j. MEM j insts \/
+    (s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst)) outs
+Proof
+  Induct_on `insts`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  drule lower_dload_inst_supply_interval >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[EVERY_MEM] >> rpt strip_tac >> res_tac >> gvs[] >> decide_tac
+QED
+
+Theorem lower_dload_blocks_supply_interval:
+  !s bs s'. lower_dload_blocks_supply s bbs = (bs,s') ==>
+  s.irs_next_inst <= s'.irs_next_inst /\
+  EVERY (\j. MEM j (fn_insts_blocks bbs) \/
+    (s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst))
+    (fn_insts_blocks bs)
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, venomInstTheory.fn_insts_blocks_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt strip_tac >>
+  drule lower_dload_insts_supply_interval >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[venomInstTheory.fn_insts_blocks_def, EVERY_MEM] >>
+  rpt strip_tac >> res_tac >> gvs[] >> decide_tac
+QED
+
+Theorem lower_dload_function_supply_interval:
+  lower_dload_function_supply s f = (g,s') ==>
+  s.irs_next_inst <= s'.irs_next_inst /\
+  EVERY (\j. MEM j (fn_insts f) \/
+    (s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst))
+    (fn_insts g)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_blocks_supply_interval >>
+  gvs[venomInstTheory.fn_insts_def]
+QED
+
+Theorem lower_dload_function_supply_old_id:
+  lower_dload_function_supply s f = (g,s') /\
+  MEM j (fn_insts g) /\ j.inst_id < s.irs_next_inst ==>
+  MEM j (fn_insts f)
+Proof
+  strip_tac >> drule lower_dload_function_supply_interval >>
+  simp[EVERY_MEM] >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
