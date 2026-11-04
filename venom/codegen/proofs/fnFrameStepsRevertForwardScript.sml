@@ -644,8 +644,11 @@ Proof
 QED
 
 Theorem do_restore_enclosed:
-  EVERY simple_or_spill (FST (do_restore at ps))
+  !at ps ops ps'. do_restore at ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
 Proof
+  rpt strip_tac >>
+  `EVERY simple_or_spill (FST (do_restore at ps))` suffices_by gvs[] >> pop_assum kall_tac >>
   simp[stackPlanOpsTheory.do_restore_def] >>
   Cases_on `FLOOKUP ps.ps_spilled at` >>
   simp[simple_or_spill_def]
@@ -666,8 +669,11 @@ Proof
 QED
 
 Theorem do_swap_enclosed:
-  EVERY simple_or_spill (FST (do_swap dist ps))
+  !dist ps ops ps'. do_swap dist ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
 Proof
+  rpt strip_tac >>
+  `EVERY simple_or_spill (FST (do_swap dist ps))` suffices_by gvs[] >> pop_assum kall_tac >>
   simp[stackPlanOpsTheory.do_swap_def] >>
   IF_CASES_TAC >- simp[] >>
   IF_CASES_TAC >- simp[simple_or_spill_def, is_simple_stack_op_def] >>
@@ -689,9 +695,9 @@ Proof
 QED
 
 Theorem reduce_depth_plan_enclosed:
-  !fuel target_ops target_op f target_len ps.
-    EVERY simple_or_spill
-      (FST (reduce_depth_plan fuel target_ops target_op f target_len ps))
+  !fuel target_ops target_op f target_len ps ops ps'.
+    reduce_depth_plan fuel target_ops target_op f target_len ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
 Proof
   Induct >> simp[stackPlanOpsTheory.reduce_depth_plan_def] >>
   rpt gen_tac >> IF_CASES_TAC >- simp[] >>
@@ -701,5 +707,185 @@ Proof
   Cases_on `select_spill_candidate ps.ps_stack target_ops x target_len`
   >- simp[] >>
   simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  metis_tac[do_spill_at_enclosed, pairTheory.FST]
+  strip_tac >> gvs[EVERY_APPEND] >>
+  conj_tac >- metis_tac[do_spill_at_enclosed, pairTheory.FST] >>
+  first_x_assum irule >> goal_assum (drule_at Any)
+QED
+
+Theorem emit_one_input_enclosed:
+  EVERY simple_or_spill (FST (emit_one_input opc nl at ps))
+Proof
+  Cases_on `at`
+  >- simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+          simple_or_spill_def, is_simple_stack_op_def]
+  >- (rename1 `Var v` >>
+      Cases_on `FLOOKUP ps.ps_spilled (Var v)` >>
+      simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def,
+           stackPlanOpsTheory.do_restore_def] >>
+      rpt IF_CASES_TAC >> simp[] >>
+      gvs[pairTheory.UNCURRY, simple_or_spill_def] >>
+      BasicProvers.CASE_TAC >> simp[do_dup_enclosed, simple_or_spill_def]) >>
+  simp[emit_one_input_def, stackPlanTypesTheory.is_var_operand_def] >>
+  IF_CASES_TAC >> simp[simple_or_spill_def, is_simple_stack_op_def]
+QED
+
+Theorem emit_input_plan_enclosed:
+  !inputs ps. EVERY simple_or_spill (FST (emit_input_plan opc inputs nl ps))
+Proof
+  Induct_on `inputs` >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[emit_one_input_enclosed, pairTheory.FST]
+QED
+
+
+Theorem reorder_one_enclosed:
+  !dfg targets idx op ps ops ps'.
+    reorder_one dfg targets idx op ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
+Proof
+  rpt gen_tac >> simp[stackPlanOpsTheory.reorder_one_def] >>
+  pairarg_tac >>
+  `EVERY simple_or_spill restore_ops` by
+    (Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+        (LENGTH targets) ps.ps_stack` >> gvs[] >>
+     Cases_on `FLOOKUP ps.ps_spilled op` >> gvs[] >>
+     drule do_restore_enclosed >> simp[]) >>
+  simp[] >> BasicProvers.CASE_TAC >- (strip_tac >> gvs[]) >>
+  pairarg_tac >>
+  `EVERY simple_or_spill reduce_ops` by
+    (Cases_on `x > 16` >> gvs[] >>
+     drule reduce_depth_plan_enclosed >> simp[]) >>
+  simp[] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps2.ps_stack` >- (strip_tac >> gvs[]) >>
+  simp[] >> IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+      pairarg_tac >> simp[] >> drule do_swap_enclosed >> strip_tac >>
+      pairarg_tac >> simp[] >> drule do_swap_enclosed >> strip_tac >>
+      strip_tac >> gvs[]) >>
+  pairarg_tac >> simp[] >> drule do_swap_enclosed >> strip_tac >>
+  pairarg_tac >> simp[] >> drule do_swap_enclosed >> strip_tac >>
+  strip_tac >> gvs[]
+QED
+
+Theorem reorder_fold_enclosed[local]:
+  !items ops ps.
+    EVERY simple_or_spill ops ==>
+    EVERY simple_or_spill (FST
+      (FOLDL (\(ops,ps) (idx,op).
+        (\(step_ops,ps'). (ops ++ step_ops,ps'))
+          (reorder_one dfg targets idx op ps)) (ops,ps) items))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  PairCases_on `h` >> simp[] >> pairarg_tac >> simp[] >>
+  first_x_assum irule >> simp[] >>
+  drule reorder_one_enclosed >> simp[]
+QED
+
+Theorem reorder_plan_enclosed:
+  !dfg targets ps ops ps'.
+    reorder_plan dfg targets ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
+Proof
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`MAPi (\i op. (i,op)) targets`, `[]`, `ps`]
+    reorder_fold_enclosed) >>
+  gvs[stackPlanOpsTheory.reorder_plan_def]
+QED
+
+Theorem popmany_fold_enclosed[local]:
+  !items ops ps.
+    EVERY simple_or_spill ops ==>
+    EVERY simple_or_spill (FST
+      (FOLDL (\(ops,ps) v.
+        case stack_get_depth v ps.ps_stack of
+          NONE => (ops,ps)
+        | SOME dist =>
+          (\(swap_ops,ps'). (ops ++ swap_ops ++ [SOPop 1],
+            ps' with ps_stack := stack_pop 1 ps'.ps_stack))
+          (if dist = 0 then ([],ps) else do_swap dist ps))
+        (ops,ps) items))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_depth h ps.ps_stack`
+  >- (simp[] >> first_x_assum irule >> simp[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  first_x_assum irule >> simp[simple_or_spill_def, is_simple_stack_op_def] >>
+  Cases_on `x = 0` >> gvs[] >> drule do_swap_enclosed >> simp[]
+QED
+
+Theorem popmany_individual_enclosed:
+  !items ps ops ps'. popmany_individual items ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_assum_abbrev_tac `popmany_individual items ps = result` >>
+  `EVERY simple_or_spill (FST (popmany_individual items ps))`
+    suffices_by gvs[Abbr `result`] >>
+  pop_assum kall_tac >> pop_assum kall_tac >>
+  simp[stackPlanOpsTheory.popmany_individual_def] >>
+  irule popmany_fold_enclosed >> simp[]
+QED
+
+Theorem popmany_plan_enclosed:
+  !items ps ops ps'. popmany_plan items ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
+Proof
+  Cases_on `items` >> simp[stackPlanOpsTheory.popmany_plan_def] >>
+  rpt gen_tac >> IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+          simp[simple_or_spill_def, is_simple_stack_op_def] >>
+          drule do_swap_enclosed >> simp[]) >>
+      metis_tac[popmany_individual_enclosed]) >>
+  metis_tac[popmany_individual_enclosed]
+QED
+
+Theorem optimistic_swap_plan_enclosed:
+  !dfg inst nl nt ps ops ps'.
+    optimistic_swap_plan dfg inst nl nt ps = (ops,ps') ==>
+    EVERY simple_or_spill ops
+Proof
+  rpt gen_tac >> simp[optimistic_swap_plan_def] >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  metis_tac[do_swap_enclosed]
+QED
+
+Theorem spill_free_preparation_simple:
+  !opc inputs nl ps input_ops ps1 dfg targets reorder_ops ps2.
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    reorder_plan dfg targets ps1 = (reorder_ops,ps2) /\
+    (!off. ~MEM (SOSpill off) (input_ops ++ reorder_ops) /\
+           ~MEM (SORestore off) (input_ops ++ reorder_ops)) ==>
+    EVERY is_simple_stack_op (input_ops ++ reorder_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule simple_or_spill_no_spills >> reverse conj_tac
+  >- (simp[EVERY_APPEND] >>
+      metis_tac[emit_input_plan_enclosed, reorder_plan_enclosed, pairTheory.FST]) >>
+  simp[]
+QED
+
+Theorem spill_free_postfix_simple:
+  !do_pop items ps pop_ops ps1 no_opt dfg inst nl nt opt_ops ps2.
+    (if do_pop then popmany_plan items ps else ([],ps)) = (pop_ops,ps1) /\
+    (if no_opt then ([],ps1) else optimistic_swap_plan dfg inst nl nt ps1) =
+      (opt_ops,ps2) /\
+    (!off. ~MEM (SOSpill off) (pop_ops ++ opt_ops) /\
+           ~MEM (SORestore off) (pop_ops ++ opt_ops)) ==>
+    EVERY is_simple_stack_op (pop_ops ++ opt_ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule simple_or_spill_no_spills >> reverse conj_tac
+  >- (simp[EVERY_APPEND] >> conj_tac
+      >- (Cases_on `do_pop` >> gvs[] >>
+          drule popmany_plan_enclosed >> simp[]) >>
+      Cases_on `no_opt` >> gvs[] >>
+      drule optimistic_swap_plan_enclosed >> simp[]) >>
+  simp[]
 QED
