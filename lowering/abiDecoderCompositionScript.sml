@@ -27,8 +27,19 @@ Theorem abi_decode_copy_step:
       (abi_decode_copy_bytes opc (w2n p) (w2n n) s) s)
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
-  simp[abi_decode_copy_opcode_def, abi_decode_copy_bytes_def,
-       abi_decode_source_def, Once step_inst_base_def, mk_inst_def, mcopy_def]
+  all_tac
+  >>~- ([`abi_decode_copy_opcode MLOAD`],
+        simp[abi_decode_copy_opcode_def, mk_inst_def] >>
+        simp[step_inst_base_opcode_eqs] >>
+        simp[abi_decode_copy_bytes_def, abi_decode_source_def, mcopy_def])
+  >>~- ([`abi_decode_copy_opcode CALLDATALOAD`],
+        simp[abi_decode_copy_opcode_def, mk_inst_def] >>
+        simp[step_inst_base_opcode_eqs] >>
+        simp[abi_decode_copy_bytes_def, abi_decode_source_def])
+  >>~- ([`abi_decode_copy_opcode DLOAD`],
+        simp[abi_decode_copy_opcode_def, mk_inst_def] >>
+        simp[step_inst_base_opcode_eqs] >>
+        simp[abi_decode_copy_bytes_def, abi_decode_source_def])
 QED
 
 Theorem abi_decode_copy_sequence:
