@@ -561,3 +561,39 @@ Proof
   gvs[AllCaseEqs()] >>
   CONV_TAC EVAL >> simp[FLOOKUP_UPDATE]
 QED
+
+Theorem immutable_complete_lookup_probe[local]:
+  env_consistent env cx es /\
+  get_module_code cx NONE = SOME
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] ==>
+  FLOOKUP env.bare_globals (NONE,"large") =
+    SOME (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251)))
+Proof
+  simp[env_consistent_def, env_context_consistent_def] >> rpt strip_tac >>
+  qpat_x_assum `bare_globals_complete _ _` mp_tac >>
+  simp[bare_globals_complete_def] >>
+  disch_then irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem immutable_endpoint_obstruction_probe[local]:
+  !cx cenv env es.
+  get_module_code cx NONE = SOME
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] ==>
+  ~expr_sim_inv cenv cx env es
+Proof
+  rpt strip_tac >>
+  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  drule_all immutable_complete_lookup_probe >> strip_tac >>
+  fs[expr_sim_inv_def] >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals _ = _ ==> _` drule >>
+  strip_tac >>
+  qpat_x_assum `!tv. evaluate_type _ _ = SOME tv ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[vyperValueTheory.evaluate_type_def,
+       valueEncodingTheory.type_memory_size_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def]
+QED
