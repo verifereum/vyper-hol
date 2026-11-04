@@ -326,3 +326,109 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   simp[Once lower_dload_insts_supply_def] >> gvs[APPEND_ASSOC]
 QED
+
+Theorem lower_dload_insts_supply_prefix_strict:
+  !ins u k a u1 b u2.
+  lower_dload_insts_supply u (TAKE j ins) = (a,u1) /\
+  lower_dload_insts_supply u (TAKE k ins) = (b,u2) /\
+  j < k /\ k <= LENGTH ins ==>
+  LENGTH a < LENGTH b
+Proof
+  Induct_on `j`
+  >- (rpt strip_tac >>
+      gvs[lower_dload_insts_supply_def] >>
+      drule lower_dload_insts_supply_length >>
+      simp[LENGTH_TAKE] >> decide_tac) >>
+  rpt gen_tac >> Cases_on `ins` >> Cases_on `k` >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_boundary_unique:
+  lower_dload_insts_supply u (TAKE j ins) = (a,u1) /\
+  lower_dload_insts_supply u (TAKE k ins) = (b,u2) /\
+  j <= LENGTH ins /\ k <= LENGTH ins /\ LENGTH a = LENGTH b ==>
+  j = k
+Proof
+  rpt strip_tac >> Cases_on `j < k`
+  >- (drule_all lower_dload_insts_supply_prefix_strict >> simp[]) >>
+  Cases_on `k < j`
+  >- (drule_all lower_dload_insts_supply_prefix_strict >> simp[]) >>
+  decide_tac
+QED
+
+(* Unique source boundary covering a target instruction, even when the
+   target instruction lies in the middle of a generated expansion. *)
+Theorem lower_dload_insts_supply_envelope:
+  lower_dload_insts_supply u ins = (xs,v) /\ n < LENGTH xs ==>
+  ?j pre u0 X u1 post k.
+    j < LENGTH ins /\
+    lower_dload_insts_supply u (TAKE j ins) = (pre,u0) /\
+    lower_dload_inst_supply u0 (EL j ins) = (X,u1) /\
+    lower_dload_insts_supply u1 (DROP (SUC j) ins) = (post,v) /\
+    xs = pre ++ X ++ post /\ n = LENGTH pre + k /\ k < LENGTH X
+Proof
+  strip_tac >> drule_all lower_dload_insts_supply_position >> strip_tac >>
+  qexists_tac `LENGTH pre` >>
+  simp[TAKE_APPEND, DROP_APPEND, EL_APPEND, DROP_LENGTH_TOO_LONG] >> metis_tac[]
+QED
+
+Theorem lower_dload_insts_supply_prefix_mono:
+  lower_dload_insts_supply u (TAKE j ins) = (a,u1) /\
+  lower_dload_insts_supply u (TAKE k ins) = (b,u2) /\
+  j <= k /\ k <= LENGTH ins ==>
+  LENGTH a <= LENGTH b
+Proof
+  rpt strip_tac >> Cases_on `j = k`
+  >- gvs[] >>
+  `j < k` by decide_tac >>
+  drule_all lower_dload_insts_supply_prefix_strict >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_envelope_order:
+  lower_dload_insts_supply u (TAKE j ins) = (a,u0) /\
+  lower_dload_inst_supply u0 (EL j ins) = (X,u1) /\
+  lower_dload_insts_supply u (TAKE k ins) = (b,u2) /\
+  j < k /\ k <= LENGTH ins ==>
+  LENGTH a + LENGTH X <= LENGTH b
+Proof
+  rpt strip_tac >>
+  `j < LENGTH ins` by decide_tac >>
+  drule_all lower_dload_insts_supply_next >> strip_tac >>
+  `SUC j <= k` by decide_tac >>
+  qpat_x_assum `lower_dload_insts_supply u (TAKE j ins) = _` kall_tac >>
+  qpat_x_assum `j < k` kall_tac >>
+  drule_all lower_dload_insts_supply_prefix_mono >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_envelope_unique:
+  lower_dload_insts_supply u (TAKE j ins) = (a,u0) /\
+  lower_dload_inst_supply u0 (EL j ins) = (X,u1) /\
+  lower_dload_insts_supply u (TAKE k ins) = (b,v0) /\
+  lower_dload_inst_supply v0 (EL k ins) = (Y,v1) /\
+  j < LENGTH ins /\ k < LENGTH ins /\
+  LENGTH a <= n /\ n < LENGTH a + LENGTH X /\
+  LENGTH b <= n /\ n < LENGTH b + LENGTH Y ==>
+  j = k
+Proof
+  rpt strip_tac >> Cases_on `j < k`
+  >- (`k <= LENGTH ins` by decide_tac >>
+      drule_all lower_dload_insts_supply_envelope_order >> decide_tac) >>
+  Cases_on `k < j`
+  >- (`j <= LENGTH ins` by decide_tac >>
+      drule_all lower_dload_insts_supply_envelope_order >> decide_tac) >>
+  decide_tac
+QED
+
+Theorem lower_dload_insts_supply_special:
+  EVERY (\i. ~MEM i.inst_opcode [DLOAD; DLOADBYTES]) ins ==>
+  lower_dload_insts_supply u ins = (ins,u)
+Proof
+  qid_spec_tac `u` >> Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt strip_tac >> gvs[] >>
+  `lower_dload_inst_supply u h = ([h],u)` by
+    (irule lower_dload_inst_supply_special >> simp[]) >>
+  simp[Once lower_dload_insts_supply_def]
+QED
