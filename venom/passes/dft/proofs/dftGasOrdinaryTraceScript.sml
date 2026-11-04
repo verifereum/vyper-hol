@@ -258,3 +258,344 @@ Proof
      fs[dft_original_block_def]) >>
   metis_tac[]
 QED
+
+Theorem dft_mixed_gas_next:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  get_instruction bb s.vs_inst_idx = SOME gas /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] ==>
+  dft_occ_oracle_next w C c = c with
+    <| dft_occ_core := DftOpen (DftAt fn 0 bb
+       ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s)
+         with vs_inst_idx := SUC s.vs_inst_idx)) stack (SUC n);
+       dft_occ_saved := if stack = [] then [] else c.dft_occ_saved |>
+Proof
+  strip_tac >>
+  `!f. dft_fill_frame 0 (dft_fill_frame 1 f) = dft_fill_frame 0 f` by
+    (Cases >> simp[dft_fill_frame_def]) >>
+  simp[dftOccurrenceReplayTheory.dft_occ_oracle_next_def, dft_occ_next_def,
+       dft_next_inf_def, dft_fill_def, dft_fill_control_def,
+       dft_open_next_def, dft_open_deliver_def, dft_open_continue_def,
+       is_terminator_def, dft_erase_def, dft_occ_update_def,
+       dftOccurrenceReplayTheory.dft_occ_address_def, MAP_MAP_o, combinTheory.o_DEF, SF ETA_ss] >>
+  Cases_on `stack` >> gvs[dft_occ_config_component_equality]
+QED
+
+(* Full-record successors retain the occurrence address and saved callers. *)
+Theorem dft_mixed_gas_first_success:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  get_instruction bb s.vs_inst_idx = SOME gas /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME inst /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = OK t ==>
+  FUNPOW (dft_occ_oracle_next w C) 2 c = c with
+    <| dft_occ_core := DftOpen (DftAt fn 0 bb
+      ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)
+        with vs_inst_idx := SUC (SUC s.vs_inst_idx))) stack (SUC n);
+       dft_occ_saved := if stack = [] then [] else c.dft_occ_saved |>
+Proof
+  strip_tac >>
+  `step_inst_base inst (update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s) =
+   OK (update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)` by
+    metis_tac[dftMixedResidualProbeTheory.dft_gas_value_ordinary_frame] >>
+  `step_inst_base inst ((update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s)
+       with vs_inst_idx := SUC s.vs_inst_idx) =
+   OK ((update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)
+       with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[instIdxIndepTheory.step_inst_inst_idx_indep,
+         instIdxIndepTheory.exec_result_map_def] >>
+  drule_all dft_mixed_gas_next >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  simp[FUNPOW_2] >>
+  qmatch_goalsub_abbrev_tac `dft_occ_oracle_next w C mid` >>
+  `mid.dft_occ_core = DftOpen (DftAt fn 0 bb
+     ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s)
+       with vs_inst_idx := SUC s.vs_inst_idx)) stack (SUC n)` by
+    simp[Abbr `mid`] >>
+  qpat_assum `mid.dft_occ_core = _` (mp_then Any mp_tac dft_occ_ordinary_next) >>
+  simp[venomExecSemanticsTheory.update_var_inst_idx] >>
+  disch_then (qspecl_then [`w`, `C`] mp_tac) >>
+  simp[Abbr `mid`, venomExecSemanticsTheory.update_var_inst_idx] >>
+  Cases_on `stack` >> gvs[dft_occ_config_component_equality]
+QED
+
+Theorem dft_mixed_gas_second_success:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME gas /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t ==>
+  FUNPOW (dft_occ_oracle_next w C) 2 c = c with
+    <| dft_occ_core := DftOpen (DftAt fn 0 bb
+      ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)
+        with vs_inst_idx := SUC (SUC s.vs_inst_idx))) stack (SUC n);
+       dft_occ_saved := if stack = [] then [] else c.dft_occ_saved |>
+Proof
+  strip_tac >> drule_all dft_occ_ordinary_next >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  simp[FUNPOW_2] >>
+  qmatch_goalsub_abbrev_tac `dft_occ_oracle_next w C mid` >>
+  `mid.dft_occ_core = DftOpen (DftAt fn 0 bb
+      (t with vs_inst_idx := SUC s.vs_inst_idx)) stack n` by simp[Abbr `mid`] >>
+  qpat_assum `mid.dft_occ_core = _`
+    (mp_then Any mp_tac dft_mixed_gas_next) >>
+  simp[Abbr `mid`] >>
+  disch_then (qspecl_then [`w`, `C`] mp_tac) >>
+  simp[venomStateTheory.update_var_def] >>
+  Cases_on `stack` >> gvs[dft_occ_config_component_equality]
+QED
+
+Theorem dft_mixed_safe_fill:
+  dft_edit_safe c /\ c.dft_occ_core = DftOpen ctl stack n ==>
+  MAP (dft_fill_frame 0) stack = stack
+Proof
+  strip_tac >> fs[dft_edit_safe_def, dft_edit_safe_core_def] >>
+  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  `dft_edit_frame_safe (EL x stack)` by metis_tac[EVERY_EL] >>
+  Cases_on `EL x stack` >> gvs[dft_edit_frame_safe_def, dft_fill_frame_def]
+QED
+
+Theorem dft_mixed_fill_edit_stack:
+  MAP (dft_fill_frame 0) stack = stack ==>
+  MAP (dft_fill_frame 0) (MAP (dft_edit_frame fm bm) stack) =
+    MAP (dft_edit_frame fm bm) stack
+Proof
+  `!f. dft_fill_frame 0 (dft_edit_frame fm bm f) =
+       dft_edit_frame fm bm (dft_fill_frame 0 f)` by
+    (Cases >> simp[dft_fill_frame_def, dft_edit_frame_def]) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF] >>
+  metis_tac[MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem dft_mixed_gas_first_sync_success:
+  q.bb_instructions = pre ++ [gas;inst] ++ post /\
+  dft_ordinary_sync q pre gas inst post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 q s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = OK t ==>
+  dft_ordinary_sync q pre gas inst post
+    (FUNPOW (dft_occ_oracle_next w C) 2 c)
+    (FUNPOW (dft_occ_oracle_next w
+      (dft_gas_edit_ctx q pre gas inst post C)) 2 d)
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `MAP (dft_fill_frame 0) stack = stack` by
+    (irule dft_mixed_safe_fill >> qexistsl_tac [`c`, `DftAt fn 0 q s`, `n`] >>
+     fs[dft_ordinary_sync_def]) >>
+  drule dft_mixed_fill_edit_stack >>
+  disch_then (qspecl_then [`dft_gas_edit_fn q pre gas inst post`,
+    `dft_gas_edit_block q pre gas inst post`] assume_tac) >>
+  drule_all dft_mixed_gas_first_success >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  drule_all dft_mixed_gas_second_success >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx q pre gas inst post C`] assume_tac) >>
+  simp[dft_ordinary_sync_def] >> conj_tac
+  >- (fs[dft_ordinary_sync_def] >> metis_tac[dft_gas_edit_safe_next, FUNPOW_2]) >>
+  conj_tac >- simp[dft_edit_cut_def] >>
+  fs[dft_ordinary_sync_def, dft_edit_occ_def, dft_edit_core_def,
+     dft_edit_control_def] >>
+  Cases_on `stack` >> gvs[dft_occ_config_component_equality]
+QED
+
+Theorem dft_mixed_gas_second_sync_success:
+  q.bb_instructions = pre ++ [inst;gas] ++ post /\
+  dft_ordinary_sync q pre inst gas post c d /\
+  c.dft_occ_core = DftOpen (DftAt fn 0 q s) stack n /\
+  s.vs_inst_idx = LENGTH pre /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = OK t ==>
+  dft_ordinary_sync q pre inst gas post
+    (FUNPOW (dft_occ_oracle_next w C) 2 c)
+    (FUNPOW (dft_occ_oracle_next w
+      (dft_gas_edit_ctx q pre inst gas post C)) 2 d)
+Proof
+  strip_tac >> drule_all dft_ordinary_sync_fetch >> strip_tac >>
+  `MAP (dft_fill_frame 0) stack = stack` by
+    (irule dft_mixed_safe_fill >> qexistsl_tac [`c`, `DftAt fn 0 q s`, `n`] >>
+     fs[dft_ordinary_sync_def]) >>
+  drule dft_mixed_fill_edit_stack >>
+  disch_then (qspecl_then [`dft_gas_edit_fn q pre inst gas post`,
+    `dft_gas_edit_block q pre inst gas post`] assume_tac) >>
+  drule_all dft_mixed_gas_second_success >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  drule_all dft_mixed_gas_first_success >>
+  disch_then (qspecl_then [`w`, `dft_gas_edit_ctx q pre inst gas post C`] assume_tac) >>
+  simp[dft_ordinary_sync_def] >> conj_tac
+  >- (fs[dft_ordinary_sync_def] >> metis_tac[dft_gas_edit_safe_next, FUNPOW_2]) >>
+  conj_tac >- simp[dft_edit_cut_def] >>
+  fs[dft_ordinary_sync_def, dft_edit_occ_def, dft_edit_core_def,
+     dft_edit_control_def] >>
+  Cases_on `stack` >> gvs[dft_occ_config_component_equality]
+QED
+
+Theorem dft_mixed_gas_first_abort:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  get_instruction bb s.vs_inst_idx = SOME gas /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME inst /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = Abort a t ==>
+  (FUNPOW (dft_occ_oracle_next w C) 2 c).dft_occ_core =
+    DftOpen (DftDone (Abort a
+      ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)
+        with vs_inst_idx := SUC s.vs_inst_idx))) stack (SUC n)
+Proof
+  strip_tac >>
+  `!y. MEM (Var y) inst.inst_operands ==> v <> y` by metis_tac[] >>
+  drule_all dftCommutationTheory.step_inst_base_frame >>
+  disch_then (qspecl_then [`s`,
+    `w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])`] mp_tac) >>
+  simp[dftCommutationTheory.map_result_state_def] >> strip_tac >>
+  `step_inst_base inst ((update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s)
+       with vs_inst_idx := SUC s.vs_inst_idx) =
+   Abort a ((update_var v
+     (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) t)
+       with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[instIdxIndepTheory.step_inst_inst_idx_indep,
+         instIdxIndepTheory.exec_result_map_def] >>
+  drule_all dft_mixed_gas_next >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  simp[FUNPOW_2] >>
+  qmatch_goalsub_abbrev_tac `(dft_occ_oracle_next w C mid).dft_occ_core` >>
+  `mid.dft_occ_core = DftOpen (DftAt fn 0 bb
+     ((update_var v (w (c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])) s)
+       with vs_inst_idx := SUC s.vs_inst_idx)) stack (SUC n)` by
+    simp[Abbr `mid`] >>
+  qpat_assum `mid.dft_occ_core = _` (mp_then Any mp_tac dft_occ_ordinary_abort) >>
+  simp[venomExecSemanticsTheory.update_var_inst_idx] >>
+  disch_then (qspecl_then [`w`, `C`] mp_tac) >> simp[]
+QED
+
+Theorem dft_mixed_abort_endpoint:
+  l.dft_occ_core = DftOpen (DftAt fnL 0 bbL s) stackL n /\
+  r.dft_occ_core = DftOpen (DftAt fnR 0 bbR s) stackR m /\
+  MAP (dft_fill_frame 0) stackL = stackL /\
+  get_instruction bbL s.vs_inst_idx = SOME gas /\
+  get_instruction bbL (SUC s.vs_inst_idx) = SOME inst /\
+  get_instruction bbR s.vs_inst_idx = SOME inst /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = Abort a t ==>
+  dft_gas_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w ctxL) 3 l)
+    (FUNPOW (dft_occ_oracle_next w ctxR) 2 r)
+Proof
+  strip_tac >> drule_all dft_mixed_gas_first_abort >>
+  disch_then (qspecl_then [`w`, `ctxL`] assume_tac) >>
+  drule_all dft_occ_ordinary_abort >>
+  disch_then (qspecl_then [`w`, `ctxR`] assume_tac) >>
+  `?u. (FUNPOW (dft_occ_oracle_next w ctxL) 3 l).dft_occ_core =
+     DftOpen (DftDone (Abort a u)) [] (SUC n)` by
+    (qpat_assum `(FUNPOW _ 2 l).dft_occ_core = _`
+       (mp_then Any mp_tac dft_occ_abort_clear) >>
+     disch_then (qspecl_then [`w`, `ctxL`] mp_tac) >>
+     `3 = SUC 2` by decide_tac >> metis_tac[FUNPOW_SUC]) >>
+  ` (FUNPOW (dft_occ_oracle_next w ctxR) 2 r).dft_occ_core =
+     DftOpen (DftDone (Abort a t)) [] m` by
+    (simp[FUNPOW_2] >> irule dft_occ_abort_clear >> metis_tac[]) >>
+  simp[dft_gas_ordinary_stopped_def] >> metis_tac[]
+QED
+
+Theorem dft_mixed_gas_first_events:
+  c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  get_instruction bb s.vs_inst_idx = SOME gas /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME inst /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\ inst.inst_opcode <> GAS ==>
+  ((?h. h < 2 /\ dft_occ_gas_event i a
+     (FUNPOW (dft_occ_oracle_next w C) h c)) <=>
+   i = gas /\ a = c.dft_occ_path ++ [(c.dft_occ_visit,gas.inst_id)])
+Proof
+  strip_tac >> drule_all dft_mixed_gas_next >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  `!h:num. h < 2 <=> h = 0 \/ h = 1` by decide_tac >>
+  simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM, FUNPOW] >>
+  gvs[dft_occ_gas_event_def,
+      dft_occ_event_def,
+      dftOccurrenceReplayTheory.dft_occ_address_def,
+      venomExecSemanticsTheory.update_var_inst_idx] >> metis_tac[]
+QED
+
+Theorem dft_mixed_success_gas_cover:
+  l.dft_occ_core = DftOpen (DftAt fnL 0 bbL s) stackL n /\
+  r.dft_occ_core = DftOpen (DftAt fnR 0 bbR s) stackR m /\
+  MAP (dft_fill_frame 0) stackL = stackL /\
+  MAP (dft_fill_frame 0) stackR = stackR /\
+  l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit /\
+  get_instruction bbL s.vs_inst_idx = SOME gas /\
+  get_instruction bbL (SUC s.vs_inst_idx) = SOME inst /\
+  get_instruction bbR s.vs_inst_idx = SOME inst /\
+  get_instruction bbR (SUC s.vs_inst_idx) = SOME gas /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\ step_inst_base inst s = OK t ==>
+  dft_segment_gas_cover w ctxL ctxR l r 2 2
+Proof
+  strip_tac >>
+  `!i a. (?h. h < 2 /\ dft_occ_gas_event i a
+     (FUNPOW (dft_occ_oracle_next w ctxL) h l)) <=>
+     i = gas /\ a = l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]` by
+    (rpt gen_tac >> irule dft_mixed_gas_first_events >> metis_tac[]) >>
+  `!i a. (?h. h < 2 /\ dft_occ_gas_event i a
+     (FUNPOW (dft_occ_oracle_next w ctxR) h r)) <=>
+     i = gas /\ a = l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]` by
+    (rpt gen_tac >> irule dft_ordinary_first_prefix_events >> metis_tac[]) >>
+  simp[dft_segment_gas_cover_def] >> metis_tac[]
+QED
+
+Theorem dft_mixed_abort_gas_events:
+  l.dft_occ_core = DftOpen (DftAt fnL 0 bbL s) stackL n /\
+  r.dft_occ_core = DftOpen (DftAt fnR 0 bbR s) stackR m /\
+  MAP (dft_fill_frame 0) stackL = stackL /\
+  get_instruction bbL s.vs_inst_idx = SOME gas /\
+  get_instruction bbL (SUC s.vs_inst_idx) = SOME inst /\
+  get_instruction bbR s.vs_inst_idx = SOME inst /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = Abort a t ==>
+  (!i addr. (?h. h < 3 /\ dft_occ_gas_event i addr
+     (FUNPOW (dft_occ_oracle_next w ctxL) h l)) <=>
+     i = gas /\ addr = l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]) /\
+  (!h i addr. h < 2 ==> ~dft_occ_gas_event i addr
+     (FUNPOW (dft_occ_oracle_next w ctxR) h r))
+Proof
+  strip_tac >> drule_all dft_mixed_gas_first_abort >>
+  disch_then (qspecl_then [`w`, `ctxL`] assume_tac) >>
+  drule_all dft_occ_ordinary_abort >>
+  disch_then (qspecl_then [`w`, `ctxR`] assume_tac) >>
+  conj_tac
+  >- (rpt gen_tac >>
+      `!h:num. h < 3 <=> h < 2 \/ h = 2` by decide_tac >>
+      simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      `~dft_occ_gas_event i addr (FUNPOW (dft_occ_oracle_next w ctxL) 2 l)` by
+        metis_tac[dft_done_no_gas_event] >> simp[] >>
+      irule dft_mixed_gas_first_events >> metis_tac[]) >>
+  rpt strip_tac >> `h = 0 \/ h = 1` by decide_tac
+  >- (gvs[FUNPOW] >> metis_tac[dft_at_no_gas_event]) >>
+  gvs[FUNPOW] >> metis_tac[dft_done_no_gas_event]
+QED
