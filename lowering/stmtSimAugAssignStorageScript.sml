@@ -291,7 +291,7 @@ Proof
   rename1 `compile_expr _ _ _ _ = (src_vv, st2)` >>
   Cases_on `unwrap_value cenv src_vv st2` >>
   rename1 `unwrap_value _ _ _ = (op, sb)` >>
-  Cases_on `tr` >> simp[]
+  Cases_on `tr` >> simp[comp_bind_def, comp_return_def]
 QED
 
 (* The code of self.x op= e is the code of self.x = self.x op e. *)

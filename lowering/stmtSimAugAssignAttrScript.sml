@@ -630,7 +630,8 @@ Theorem compile_augassign_attr_local_case:
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+    augassign_operand_ok ty bop e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))
@@ -728,7 +729,7 @@ Resume compile_augassign_attr_local_case[frag_pre]:
                       (case type_to_int_bound ty of
                          SOME u => u | NONE => Unsigned 0) ftv bop fv v2` >>
           gvs[expr_res_ok_def, stmt_res_ok_def]) >>
-      irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
+      irule augassign_binop_frag >> simp[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
@@ -748,7 +749,8 @@ Theorem compile_augassign_attr_local_stmt_frag:
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+    augassign_operand_ok ty bop e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e))

@@ -9,6 +9,10 @@ Ancestors
 Libs
   wordsLib
 
+val _ = augment_srw_ss [rewrites [powerSmallPropsTheory.power_bind_return,
+  powerSmallPropsTheory.power_bind_return_left,
+  powerSmallPropsTheory.power_bind_assoc]];
+
 Theorem power_nonnegative_word_bound:
   within_int_bound (if signed then Signed bits else Unsigned bits) e /\
   bits <= 256 /\ 0 <= e ==>

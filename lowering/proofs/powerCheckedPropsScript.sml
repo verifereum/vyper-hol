@@ -9,6 +9,10 @@ Ancestors
 Libs
   wordsLib
 
+val _ = augment_srw_ss [rewrites [powerSmallPropsTheory.power_bind_return,
+  powerSmallPropsTheory.power_bind_return_left,
+  powerSmallPropsTheory.power_bind_assoc]];
+
 Theorem power_literal_value:
   expr_int_literal e = SOME n /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV a),es') ==> a = n

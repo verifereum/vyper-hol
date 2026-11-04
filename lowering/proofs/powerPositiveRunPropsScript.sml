@@ -8,6 +8,10 @@ Ancestors
 Libs
   wordsLib
 
+val _ = augment_srw_ss [rewrites [powerSmallPropsTheory.power_bind_return,
+  powerSmallPropsTheory.power_bind_return_left,
+  powerSmallPropsTheory.power_bind_assoc]];
+
 Theorem compile_safe_pow_typed_exponent_run:
   compile_safe_pow x y (if signed then BaseT (IntT bits) else BaseT (UintT bits))
     NONE (SOME (&n)) st = (op,st') /\

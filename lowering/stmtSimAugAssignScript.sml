@@ -494,14 +494,12 @@ Theorem compile_augassign_local_stmt_frag:
     augassign_operand_ok ty bop e /\
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
-    (bop = Exp ==> nonneg_int_literal e) /\
-    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'
 Proof
   rpt strip_tac >> irule compile_augassign_local_case >>
-  fs[expr_sim_pre_body, expr_sim_ok_case, DISJ_IMP_THM] >>
+  fs[expr_sim_pre_body, expr_sim_ok_case] >>
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `T` >> simp[]
 QED

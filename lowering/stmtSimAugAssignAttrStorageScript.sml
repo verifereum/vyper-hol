@@ -513,7 +513,8 @@ Theorem compile_augassign_attr_storage_case:
     cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
-    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
+    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
+    augassign_operand_ok ty bop e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld)
@@ -555,7 +556,7 @@ Proof
          simp[] >>
          Cases_on `bop_result cx ty bop [ty; expr_type e] v1 v2 es1` >>
          gvs[expr_res_ok_def, stmt_res_ok_def, bop_result_def, AllCaseEqs()]) >>
-     irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
+     irule augassign_binop_frag >> simp[] >> metis_tac[]) >>
   `!v2 v. r1 = INL v2 /\
     bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v ==>
     encode_value ftv v = SOME [(0, val_to_w256 v)] /\

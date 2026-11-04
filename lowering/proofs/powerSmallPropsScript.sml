@@ -8,25 +8,30 @@ Ancestors
 Libs
   wordsLib
 
-Theorem power_bind_return[simp]:
+Theorem power_bind_return:
   (do v <- (m : 'a compiler); return v od) = m
 Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def, pairTheory.UNCURRY]
 QED
 
-Theorem power_bind_return_left[simp]:
+Theorem power_bind_return_left:
   (do v <- return a; f v od) = (f a : 'a compiler)
 Proof
   simp[FUN_EQ_THM, comp_bind_def, comp_return_def]
 QED
 
-Theorem power_bind_assoc[simp]:
+Theorem power_bind_assoc:
   (do b <- (do a <- (m : 'a compiler); f a od); g b od) =
   (do a <- m; b <- f a; g b od)
 Proof
   simp[FUN_EQ_THM, comp_bind_def] >> gen_tac >>
   Cases_on `m x` >> simp[]
 QED
+
+(* Monad laws for the power proofs only: exporting them as simp rules would
+   reshape compiler do-blocks in every descendant theory. *)
+val _ = augment_srw_ss [rewrites [power_bind_return, power_bind_return_left,
+                                  power_bind_assoc]];
 
 Theorem compile_safe_pow_primitive_exponent_run:
   compile_safe_pow x y ty NONE (SOME (&n)) st = (op,st') /\
