@@ -602,3 +602,109 @@ val _ = List.app (fn (name,th) =>
   [("inv_dynamic_local_type", inv_dynamic_local_type),
    ("operand_local_window_frame", operand_local_window_frame),
    ("vv_at_memory_frame", vv_at_memory_frame)];
+
+Theorem word_val_footprint[local]:
+  is_word_type t /\ evaluate_type tenv t = SOME tv ==>
+  val_footprint tv v = 32
+Proof
+  Cases_on `t` >> simp[is_word_type_def] >>
+  TRY (rename1 `BaseT bt` >> Cases_on `bt` >>
+       simp[is_word_type_def] >>
+       TRY (rename1 `BytesT bd` >> Cases_on `bd` >>
+            simp[is_word_type_def])) >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> Cases_on `v` >>
+  simp[val_footprint_def, valueEncodingTheory.type_memory_size_def]
+QED
+
+Theorem vv_holds_effect_free_frame:
+  vv_holds ce cx ty tv vv es s /\ vv_at ce cx ty lo hi es tv vv s /\
+  operand_frame ce es s hi es2 s2 /\ lo.cs_next_id <= hi.cs_next_id /\
+  expr_sim_inv ce cx env es /\ stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es2 s2 /\ local_ptrs_reserved ce hi /\
+  es2.scopes = es.scopes /\ es2.immutables = es.immutables /\
+  (!tr. get_storage cx es2 tr = get_storage cx es tr) /\
+  (case vv of StackValue _ op => eval_operand op s2 = eval_operand op s
+   | LocatedValue _ p => eval_operand p.ptr_operand s2 = eval_operand p.ptr_operand s) ==>
+  vv_holds ce cx ty tv vv es2 s2
+Proof
+  Cases_on `vv` >> simp[vv_holds_def] >> strip_tac
+  >- suspend "stack" >>
+  gvs[] >> Cases_on `p.ptr_location` >> gvs[]
+  >- suspend "memory"
+  >- suspend "storage"
+  >- suspend "storage"
+  >> suspend "code"
+QED
+
+Resume vv_holds_effect_free_frame[code]:
+  `?v. read_result cx tv es = (INL v,es)` by
+    fs[immutable_holds_def] >>
+  `read_result cx tv es2 = (INL v,es2)` by
+    (irule read_result_preserved_fields >> metis_tac[]) >>
+  metis_tac[immutable_holds_read_transport]
+QED
+
+Resume vv_holds_effect_free_frame[storage]:
+  markerLib.RESUME_TAC >> fs[storage_holds_def] >>
+  `read_result cx tv es2 = (INL v,es2)` by
+    (irule read_result_preserved_fields >> metis_tac[]) >>
+  simp[storage_holds_def] >>
+  fs[read_storage_slot_def, bind_def,
+     vyperStorageBackendTheory.get_storage_backend_eq, lift_option_def,
+     vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs()]
+QED
+
+Resume vv_holds_effect_free_frame[memory]:
+  `read_result cx tv es2 = (INL v,es2)` by
+    (irule read_result_preserved_fields >> metis_tac[]) >>
+  qexists_tac `v` >> simp[] >> rpt strip_tac >>
+  `mem_bytes_at (w2n w) (val_footprint tvt v) s2.vs_memory =
+   mem_bytes_at (w2n w) (val_footprint tvt v) s.vs_memory` by
+    (irule vv_at_memory_frame >>
+     goal_assum (drule_at (Pat `vv_at _ _ _ _ _ _ _ _ _`)) >>
+     metis_tac[]) >>
+  `val_wf tvt v` by
+    (fs[vv_at_def] >> metis_tac[]) >>
+  `val_in_memory tvt v (w2n w) s2.vs_memory` by
+    (irule val_in_memory_footprint_agree >> metis_tac[]) >>
+  simp[] >>
+  `val_footprint tvt v = 32` by metis_tac[word_val_footprint] >>
+  `mem_word_at (w2n w) s2.vs_memory = mem_word_at (w2n w) s.vs_memory` by
+    (gvs[] >> fs[valueEncodingTheory.mem_word_at_def,
+                valueEncodingTheory.mem_bytes_at_def]) >>
+  metis_tac[]
+QED
+
+Resume vv_holds_effect_free_frame[stack]:
+  `read_result cx tv es2 = (INL v,es2)` by
+    (irule read_result_preserved_fields >> metis_tac[]) >>
+  qexists_tac `v` >> simp[] >>
+  Cases_on `is_word_type ty`
+  >- (fs[expr_val_rel_def] >> metis_tac[]) >>
+  `vv_at ce cx ty lo hi es tv
+     (LocatedValue ty (mk_ptr o' LocMemory)) s` by
+    (fs[vv_at_def, expr_val_at_def, contextTheory.mk_ptr_def] >>
+     metis_tac[]) >>
+  fs[expr_val_rel_def] >> qx_gen_tac `tvt` >> strip_tac >>
+  `mem_bytes_at (w2n w) (val_footprint tvt v) s2.vs_memory =
+   mem_bytes_at (w2n w) (val_footprint tvt v) s.vs_memory` by
+    (irule vv_at_memory_frame >>
+     goal_assum (drule_at (Pat `operand_frame _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`)) >>
+     simp[contextTheory.mk_ptr_def] >> metis_tac[]) >>
+  irule val_in_memory_footprint_agree >> conj_tac
+  >- (qpat_x_assum `vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _` mp_tac >>
+      simp[vv_at_def, contextTheory.mk_ptr_def] >> metis_tac[]) >>
+  qexists_tac `s.vs_memory` >> simp[]
+QED
+
+Finalise vv_holds_effect_free_frame
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Operand scalar dependency: " ^ name) else ()
+  end)
+  [("word_val_footprint", word_val_footprint),
+   ("vv_holds_effect_free_frame", vv_holds_effect_free_frame)];
