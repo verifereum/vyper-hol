@@ -298,3 +298,143 @@ Proof
   simp[materialize_expr_post_inst_idx, venomStateTheory.eval_operand_def,
        venomStateTheory.lookup_var_def]
 QED
+
+Theorem materialize_rebase_post:
+  vv_post ctx func ce cx e es sa mid s0 es' tvv vv u /\
+  expr_post ctx func ce cx e es' (sa with cs_next_var := mid.cs_next_var)
+    su u es' v src z /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  local_ptrs_reserved ce sa /\ sa.cs_next_var <= mid.cs_next_var ==>
+  expr_post ctx func ce cx e es sa su s0 es' v src z
+Proof
+  strip_tac >>
+  `wb_frame ce es sa s0 u` by (gvs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame ce es' (sa with cs_next_var := mid.cs_next_var) u z` by
+    metis_tac[expr_post_frame] >>
+  `wb_frame ce es sa s0 z` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
+     >- (qexistsl [`es'`, `sa with cs_next_var := mid.cs_next_var`, `u`] >> simp[]) >>
+     metis_tac[]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_post_def, expr_val_at_def] >> strip_tac >>
+  gvs[wb_frame_def] >> metis_tac[]
+QED
+
+Theorem compile_materialize_vv_sim:
+  compile_materialize_vv ce (expr_type e) vv sm = (dst,sb) /\
+  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  read_result cx tvv es' = (INL v,es') /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  type_memory_size tv < 2 ** 64 /\
+  type_memory_size tv + 64 < dimword (:256) ==>
+  frag_exec ctx sm sb (\s. s = r)
+    (\s. expr_post ctx func ce cx e es sa sb s0 es' v dst s /\
+      ?w. eval_operand dst s = SOME w /\
+        FLOOKUP s.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_size tv) /\
+        val_in_memory tv v (w2n w) s.vs_memory) R
+Proof
+  strip_tac >> drule materialize_compile_trace >> strip_tac >>
+  `ci_mono sm mid /\ ci_mono mid su /\ ci_mono su sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer,
+      exprLoweringPropsTheory.ci_mono_unwrap_value,
+      exprLoweringPropsTheory.ci_mono_compile_store_memory, pairTheory.SND] >>
+  `cs_extends sm mid /\ cs_extends mid su /\ cs_extends su sb` by
+    gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `cs_extends mid sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sm mid func /\ fn_has_code mid sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `fn_has_code mid su func /\ fn_has_code su sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `sm.cs_next_id <= mid.cs_next_id` by gvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `type_memory_bytes ce (expr_type e) < dimword (:256)` by decide_tac >>
+  drule_all materialize_alloc_vv_sim >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  `local_ptrs_reserved ce mid` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sm` >> gvs[exprLoweringPropsTheory.ci_mono_def]) >>
+  `sa.cs_next_id <= mid.cs_next_id /\
+   (!x. vv_operand vv = Var x ==> not_fresh_at mid x)` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[not_fresh_at_mono]) >>
+  `lookup_var p u = SOME w` by gvs[venomStateTheory.eval_operand_def] >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+          ~is_word_type (expr_type e) ==>
+       type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+       type_memory_size tvt < 2 ** 64` by (rpt strip_tac >> gvs[]) >>
+  drule_all materialize_unwrap_owned_sim >>
+  disch_then (qspec_then `R` assume_tac) >>
+  qpat_x_assum `frag_exec ctx sm mid _ _ R`
+    (mp_then Any irule frag_exec_then) >> simp[] >>
+  qpat_x_assum `frag_exec ctx mid su _ _ R`
+    (mp_then Any irule frag_exec_then) >> simp[] >>
+  qx_gen_tac `z` >> strip_tac >>
+  suspend "store_continuation"
+QED
+
+Resume compile_materialize_vv_sim[store_continuation]:
+  `sa.cs_next_var <= mid.cs_next_var` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  drule_all materialize_rebase_post >> strip_tac >>
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`compile_materialize_vv _ _ _ _ = _`,
+     `vv_post _ _ _ _ _ _ _ sm _ _ _ _ _`,
+     `read_result _ _ _ = _`, `fn_inst_ids_distinct _`,
+     `fn_has_code sm sb _`, `fn_has_code mid sb _`,
+     `fn_has_code mid su _`, `fn_has_code su sb _`,
+     `eval_operand _ u = _`, `u.vs_memory = _`,
+     `!aid entry. FLOOKUP r.vs_allocas aid = _ ==> _`,
+     `!x. not_fresh_at sm x ==> _`,
+     `!tvt. evaluate_type _ _ = _ /\ _ ==> _`] >>
+  `local_ptrs_reserved ce su /\ not_fresh_at su p /\
+   sa.cs_next_var <= su.cs_next_var /\ sm.cs_next_id < sb.cs_next_id` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+               not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS,
+               arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `!x. src = Var x ==> not_fresh_at su x` by
+    (rpt strip_tac >> irule exprOperandVarTheory.compiler_unwrap_value_var >>
+     qexistsl [`ce`, `src`, `mid`, `vv`] >> simp[] >>
+     Cases_on `vv` >> gvs[vv_operand_def]) >>
+  `!name b len. local_region ce es'.scopes z name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` mp_tac >>
+     disch_then (qspecl_then [`name`, `b`, `len`] mp_tac) >>
+     `local_region ce es'.scopes u name b len` by
+       (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
+          (mp_then Any strip_assume_tac expr_post_frame) >>
+        irule exprSimOpsTheory.local_region_frame >>
+        conj_tac
+        >- (qexists_tac `func` >>
+            gvs[vv_post_def, exprLoweringPropsTheory.stmt_state_rel_def,
+                state_rel_def]) >>
+        qexistsl [`mid`, `es'.scopes`, `z`] >>
+        gvs[wb_frame_def, not_fresh_at_def]) >>
+     simp[regions_disjoint_def]) >>
+  `!name b len. local_region ce es.scopes s0 name b len ==>
+     w2n w + type_memory_size tv <= b \/ b + len <= w2n w` by
+    (rpt strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ z _ _ _ ==> _` irule >>
+     qexists_tac `name` >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     qexistsl [`s0`, `sa`, `es.scopes`] >>
+     drule expr_post_frame >> simp[wb_frame_def]) >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+          inst.inst_id = sm.cs_next_id` by
+    (goal_assum (drule_at Any) >> simp[venomInstTheory.mk_inst_def]) >>
+  `compile_store_memory ce src (Var p) (expr_type e) (expr_type e) su = ((),sb)` by metis_tac[] >>
+  drule_all materialize_store_post_sim >>
+  disch_then (qspec_then `R` mp_tac) >>
+  disch_then (mp_then Any irule frag_exec_conseq) >>
+  simp[] >> metis_tac[]
+QED
+Finalise compile_materialize_vv_sim
