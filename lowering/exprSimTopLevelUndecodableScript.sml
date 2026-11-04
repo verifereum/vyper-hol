@@ -14,23 +14,6 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
-Theorem admissible_toplevel_storage_lookup:
-  get_module_code cx src = SOME ts /\
-  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
-  gas_admissible (eval_expr cx (TopLevelName ann (src, id))) expr_vv_res_ok es ==>
-  ?slot tvt. lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-             evaluate_type (get_tenv cx) typ = SOME tvt
-Proof
-  strip_tac >>
-  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-  rewrite_tac[gas_admissible_def] >>
-  disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >>
-  lookup_global_tac >>
-  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
-  simp[raise_def, return_def, expr_vv_res_ok_def] >>
-  Cases_on `evaluate_type (get_tenv cx) typ` >>
-  simp[raise_def, return_def, expr_vv_res_ok_def]
-QED
 
 Theorem compile_toplevel_storage_undecodable_sim:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str.

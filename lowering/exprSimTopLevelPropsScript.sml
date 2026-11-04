@@ -94,3 +94,31 @@ Proof
   >- metis_tac[TopLevelName_nonbare_find_NONE_contradiction] >>
   drule_all env_consistent_bare_global_find_NONE >> strip_tac >> gvs[]
 QED
+
+Theorem admissible_toplevel_storage_lookup:
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
+  gas_admissible (eval_expr cx (TopLevelName ann (src, id))) expr_vv_res_ok es ==>
+  ?slot tvt. lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+             evaluate_type (get_tenv cx) typ = SOME tvt
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+  rewrite_tac[gas_admissible_def] >>
+  disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >>
+  lookup_global_tac >>
+  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
+  simp[raise_def, return_def, expr_vv_res_ok_def] >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >>
+  simp[raise_def, return_def, expr_vv_res_ok_def]
+QED
+
+Theorem missing_module_not_gas_admissible:
+  get_module_code cx src = NONE ==>
+  ~gas_admissible (eval_expr cx (TopLevelName ann (src,id)))
+    expr_vv_res_ok es
+Proof
+  strip_tac >> rewrite_tac[gas_admissible_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >>
+  lookup_global_tac >> simp[expr_vv_res_ok_def]
+QED

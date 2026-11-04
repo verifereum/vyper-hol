@@ -14,15 +14,6 @@ val lookup_global_tac =
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, LET_THM];
 
-Theorem missing_module_not_gas_admissible[local]:
-  get_module_code cx src = NONE ==>
-  ~gas_admissible (eval_expr cx (TopLevelName ann (src,id)))
-    expr_vv_res_ok es
-Proof
-  strip_tac >> rewrite_tac[gas_admissible_def] >> strip_tac >>
-  first_x_assum (qspec_then `[]` mp_tac) >>
-  lookup_global_tac >> simp[expr_vv_res_ok_def]
-QED
 
 Theorem compile_toplevel_no_module_sim:
   !ctx func cenv cx ty ann src id es.
