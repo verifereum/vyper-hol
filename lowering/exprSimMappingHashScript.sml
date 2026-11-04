@@ -359,3 +359,21 @@ Theorem scalar_key_val_wf_not_typing_probe[local]:
 Proof
   EVAL_TAC >> simp[]
 QED
+
+(* Constructor typing is essential: val_wf alone admits mismatched scalars.
+   In particular bytesN and address use their distinct padding directions. *)
+Theorem typed_scalar_hashmap_key:
+  !tenv kt tv kv.
+    hashmap_key_type kt /\ evaluate_type tenv kt = SOME tv /\
+    value_has_type tv kv /\ is_word_type kt ==>
+    typed_val_to_w256 tv kv = encode_hashmap_key kt kv
+Proof
+  rpt gen_tac >> Cases_on `kt` >>
+  simp[vyperTypeSystemTheory.hashmap_key_type_def,
+       vyperValueTheory.evaluate_type_def, is_word_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `kv` >>
+  gvs[vyperTypingTheory.value_has_type_def, typed_val_to_w256_def,
+      val_to_w256_def, encode_hashmap_key_def,
+      vyperTypeSystemTheory.hashmap_key_type_def, is_word_type_def]
+QED
