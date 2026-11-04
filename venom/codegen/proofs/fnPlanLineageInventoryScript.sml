@@ -1520,3 +1520,38 @@ Proof
   simp[] >>
   gvs[lineage_core_def, stackPlanTypesTheory.plan_state_component_equality]
 QED
+
+
+Theorem stack_dup_bottom_extension:
+  !d prefix core. d < LENGTH core ==>
+    stack_dup d (prefix ++ core) = prefix ++ stack_dup d core
+Proof
+  rpt strip_tac >>
+  `LENGTH (prefix ++ core) - 1 - d = LENGTH prefix + (LENGTH core - 1 - d)` by
+    (simp[] >> decide_tac) >>
+  simp[stack_dup_def, stack_peek_def, EL_APPEND2, SNOC_APPEND]
+QED
+
+Theorem do_dup_prefix_replay:
+  !d prefix prefix' core ps qs.
+    ps.ps_stack = prefix ++ core /\ qs.ps_stack = prefix' ++ core /\
+    ps.ps_alloc = qs.ps_alloc /\ d < LENGTH core ==>
+    ?ops al.
+      do_dup d ps =
+        (ops, ps with <|ps_stack := prefix ++ stack_dup d core; ps_alloc := al|>) /\
+      do_dup d qs =
+        (ops, qs with <|ps_stack := prefix' ++ stack_dup d core; ps_alloc := al|>)
+Proof
+  rpt strip_tac >> Cases_on `d <= 15`
+  >- (qexistsl_tac [`[SODup (d+1)]`, `ps.ps_alloc`] >>
+      simp[do_dup_def, stack_dup_bottom_extension,
+           stackPlanTypesTheory.plan_state_component_equality]) >>
+  `d - 15 <= LENGTH core` by decide_tac >>
+  `top_n (d - 15) ps.ps_stack = top_n (d - 15) core /\
+   top_n (d - 15) qs.ps_stack = top_n (d - 15) core` by
+    simp[top_n_def, TAKE_APPEND] >>
+  simp[do_dup_def, stack_dup_bottom_extension] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[stackPlanTypesTheory.plan_state_component_equality]
+QED
