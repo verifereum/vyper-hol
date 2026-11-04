@@ -94,7 +94,7 @@ Proof
   strip_tac >> gvs[dft_activation_cut_def, TAKE_APPEND1]
 QED
 
-Theorem dft_occ_ordinary_control[local]:
+Theorem dft_occ_ordinary_control:
   c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
   get_instruction bb s.vs_inst_idx = SOME inst /\
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
@@ -131,7 +131,7 @@ Proof
   rw[bind_outputs_def, AllCaseEqs()] >> simp[dft_foldl_update_current]
 QED
 
-Theorem dft_occ_return_control[local]:
+Theorem dft_occ_return_control:
   c.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
     (DftCaller fn 0 bb inst caller::stack) n /\
   inst.inst_opcode = INVOKE /\
@@ -153,7 +153,7 @@ Proof
   simp[adopt_return_fmp_def, merge_callee_state_def]
 QED
 
-Theorem dft_activation_cut_advance[local]:
+Theorem dft_activation_cut_advance:
   dft_activation_cut fn bb s /\ get_instruction bb s.vs_inst_idx = SOME inst /\
   t.vs_inst_idx = SUC s.vs_inst_idx /\ t.vs_current_bb = s.vs_current_bb /\
   FDOM t.vs_vars = FDOM s.vs_vars UNION set inst.inst_outputs ==>
