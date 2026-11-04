@@ -330,3 +330,44 @@ Proof
   irule aug_place_memory_word >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED
+
+Theorem aug_place_base_inv:
+  !t cenv cx env s r s'.
+    expr_sim_inv cenv cx env s /\ target_indices_pre cenv cx env t /\
+    eval_base_place cx t s = (r,s') ==> expr_sim_inv cenv cx env s'
+Proof
+  recInduct aug_place_scopes_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
+      rpt strip_tac >> imp_res_tac vyperStatePreservationTheory.lookup_global_state >> gvs[])
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+Resume aug_place_base_inv[subscript]:
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  strip_tac >> gvs[target_indices_pre_def] >>
+  imp_res_tac read_result_state >> imp_res_tac extend_place_state >> gvs[] >>
+  qpat_x_assum `!cenv cx env s r s'. _` drule_all >> strip_tac >>
+  first_x_assum (drule_then assume_tac) >>
+  drule_all expr_body_pre_eval_result >> simp[]
+QED
+Resume aug_place_base_inv[attribute]:
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  strip_tac >> gvs[target_indices_pre_def] >>
+  imp_res_tac extend_place_state >> gvs[] >> metis_tac[]
+QED
+Finalise aug_place_base_inv
+
+Theorem aug_place_target_inv:
+  expr_sim_inv cenv cx env s /\ target_indices_pre cenv cx env t /\
+  eval_target_place cx t s = (r,s') ==> expr_sim_inv cenv cx env s'
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac get_place_state >> gvs[] >> metis_tac[aug_place_base_inv]
+QED
