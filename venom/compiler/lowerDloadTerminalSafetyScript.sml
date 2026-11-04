@@ -88,3 +88,32 @@ Proof
   rpt strip_tac >> gvs[] >>
   drule_all ld_forward_suffix_step_frontier >> simp[]
 QED
+
+Theorem ld_invoke_no_return:
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm ctx.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  (!rv u. run_blocks fuel ctx callee cs <> IntRet rv u) ==>
+  step_inst fuel ctx inst s <> OK t /\
+  step_inst fuel ctx inst s <> IntRet ret t
+Proof
+  strip_tac >>
+  conj_tac >> once_rewrite_tac[step_inst_def] >> simp[] >>
+  Cases_on `run_blocks fuel ctx callee cs` >> gvs[]
+QED
+
+Theorem ld_forward_prefix_raw:
+  revert_forward_pair bb i j /\ s.vs_alloca_next < dimword (:256) /\
+  RTC (\x y. i <= x.vs_inst_idx /\ x.vs_inst_idx <= j /\
+       ?cur u. get_instruction bb x.vs_inst_idx = SOME cur /\
+         step_inst fuel ctx cur x = OK u /\
+         y = u with vs_inst_idx := SUC x.vs_inst_idx) s t /\
+  lookup_block t.vs_current_bb fn.fn_blocks = SOME bb /\
+  i <= t.vs_inst_idx /\ t.vs_inst_idx <= j /\
+  get_instruction bb t.vs_inst_idx = SOME inst ==>
+  raw_mem_ok ctx fn inst t
+Proof
+  strip_tac >> drule_all ld_forward_suffix_prefix_frontier >> strip_tac >>
+  irule ld_forward_suffix_raw >> conj_tac >- simp[] >>
+  qexistsl_tac [`bb`, `i`, `j`] >> simp[]
+QED
