@@ -10,7 +10,7 @@
  * is planned.
  *
  * TOP-LEVEL:
- *   dfs_block_state_reachable — CHEATED: every reachable block is planned
+ *   dfs_block_state_reachable — every reachable block is planned
  *                               and its code is a slice of the plan
  *)
 
@@ -321,5 +321,13 @@ Theorem dfs_block_state_reachable:
         SOME (block_ops, ps_dfs_after) /\
       fn_ops = pre ++ block_ops ++ post
 Proof
-  cheat
+  rpt strip_tac >> gvs[] >>
+  `?entry. fn_entry_label fn = SOME entry` by
+    metis_tac[fn_reachable_def] >>
+  drule_all cleanup_plan_entry_call >> strip_tac >>
+  `MEM lbl visited` by
+    (irule entry_traversal_reachable >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >>
+  drule (cj 1 traversal_dfs_witness) >>
+  disch_then irule >> simp[dfs_aux_call_entry]
 QED
