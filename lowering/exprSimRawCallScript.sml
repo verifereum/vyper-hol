@@ -29,7 +29,7 @@ Ancestors
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend vyperRawCallDataDomain
-  exprSimHash exprSimAlloc exprSimBuffer builtinSystem
+  exprSimHash exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
 Libs
   pairLib
 
@@ -240,6 +240,7 @@ Theorem raw_call_data_prefix_frame[local]:
     eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
     eval_operand data_op t = SOME (n2w (b + 32)) /\
     mem_bytes_at (b + 32) (LENGTH bs) t.vs_memory = bs /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
     (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sm x)
 Proof
@@ -465,6 +466,241 @@ Proof
   drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
   disch_then (qspecl_then [`b+32`, `LENGTH bs`] mp_tac) >> simp[]
 QED
+
+Theorem raw_call_addr_data_post[local]:
+  expr_post ctx func cenv cx d es1 s1 s2 ta es2 (BytesV bs) data td /\
+  expr_type d = BaseT (BytesT (Dynamic cap)) /\
+  evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  expr_val_rel cx (BaseT AddressT) av addr td /\
+  (!x. addr = Var x \/ data = Var x ==> not_fresh_at s2 x) /\
+  (!l. addr <> Label l) /\ local_ptrs_reserved cenv s2 /\
+  emit_op MLOAD [data] s2 = (len,s3) /\
+  emit_op ADD [data; Lit 32w] s3 = (ptr_op,s4) ==>
+  ?t b. run_inst_seq (emitted_insts s2 s4) td = OK t /\
+    expr_val_rel cx (BaseT AddressT) av addr t /\
+    eval_operand data td = SOME (n2w b) /\
+    eval_operand len t = SOME (n2w (LENGTH bs)) /\
+    eval_operand ptr_op t = SOME (n2w (b+32)) /\
+    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+    b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+    t.vs_memory = td.vs_memory /\ t.vs_allocas = td.vs_allocas /\
+    stmt_state_rel ctx func cenv cx es2 t /\ wb_frame cenv es2 s2 td t /\
+    (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x ==> not_fresh_at s4 x)
+Proof
+  strip_tac >>
+  drule_all hash_dynamic_post_view >> strip_tac >>
+  `b < dimword (:256)` by decide_tac >>
+  `stmt_state_rel ctx func cenv cx es2 td` by fs[expr_post_def] >>
+  `!x. data = Var x ==> not_fresh_at s2 x` by simp[] >>
+  drule_all raw_call_data_prefix_frame >> strip_tac >>
+  `s2.cs_next_var <= s4.cs_next_var` by
+    (metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND,
+       arithmeticTheory.LESS_EQ_TRANS]) >>
+  `!x. addr = Var x ==> not_fresh_at s4 x` by
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `s2` >> fs[ci_mono_def]) >>
+  `expr_val_rel cx (BaseT AddressT) av addr t` by
+    (qpat_x_assum `expr_val_rel cx (BaseT AddressT) av addr td` mp_tac >>
+     simp[expr_val_rel_def, is_word_type_def] >> strip_tac >>
+     qexists_tac `w` >> simp[] >>
+     irule exprSimOpsTheory.eval_operand_frame >> simp[] >>
+     qexistsl_tac [`s2`, `td`] >> fs[wb_frame_def]) >>
+  qexistsl_tac [`t`, `b`] >> simp[] >> metis_tac[]
+QED
+
+Theorem raw_call_addr_data_values[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (do r <- eval_expr cx a; read_result cx r od) es = (INL av,es1) /\
+  (do r <- eval_expr cx d; read_result cx r od) es1 = (rr,es2) ==>
+  expr_sim_inv cenv cx env es1 /\ expr_sim_inv cenv cx env es2 /\
+  expr_res_ok rr /\ value_has_type (BaseTV AddressT) av /\
+  ?cap. expr_type d = BaseT (BytesT (Dynamic cap)) /\
+    (!v. rr = INL v ==> ?bs. v = BytesV bs)
+Proof
+  strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  drule_all expr_body_pre_base_result >> strip_tac >>
+  `expr_body_pre cenv cx env d es1` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  drule_at (Pat `expr_body_pre _ _ _ d _`) expr_body_pre_base_result >>
+  simp[] >> strip_tac >> rpt strip_tac >>
+  first_x_assum drule >> Cases_on `v` >> simp[value_has_type_def]
+QED
+
+Theorem raw_call_addr_data_sim[local]:
+  exprs_case nocalls ctx func cenv cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  (nocalls ==> int_calls_expr (Call ann (RawCallTarget flags) (a::d::kws) dflt) = []) /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len,s3) /\
+  emit_op ADD [data; Lit 32w] s3 = (ptr_op,s4) /\
+  eval_exprs cx [a;d] es = (rr,es2) /\ fn_has_code sa s4 func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa s4 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\t. ?av bs es1 ta td b.
+      rr = INL [av;BytesV bs] /\
+      expr_post ctx func cenv cx a es sa s1 s0 es1 av addr ta /\
+      expr_post ctx func cenv cx d es1 s1 s2 ta es2 (BytesV bs) data td /\
+      expr_val_rel cx (BaseT AddressT) av addr t /\
+      eval_operand data td = SOME (n2w b) /\
+      eval_operand len t = SOME (n2w (LENGTH bs)) /\
+      eval_operand ptr_op t = SOME (n2w (b+32)) /\
+      mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+      b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+      t.vs_memory = td.vs_memory /\ t.vs_allocas = td.vs_allocas /\
+      stmt_state_rel ctx func cenv cx es2 t /\ wb_frame cenv es sa s0 t /\
+      (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x ==> not_fresh_at s4 x))
+    (wb_args_exit rr)
+Proof
+  strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
+  `ci_mono sa s1 /\ ci_mono s1 s2` by
+    (metis_tac[ci_mono_lower_value_cfn, compile_expr_ci_mono, pairTheory.SND]) >>
+  `ci_mono s2 s3 /\ ci_mono s3 s4` by
+    metis_tac[ci_mono_emit_op, pairTheory.SND] >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\ cs_extends s3 s4` by
+    fs[ci_mono_def] >>
+  `cs_extends s2 s4 /\ cs_extends s1 s4` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s4 func /\
+   fn_has_code s1 s2 func /\ fn_has_code s2 s4 func` by
+    metis_tac[fn_has_code_split] >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env a es` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `nocalls ==> int_calls_expr a = []` by
+    (fs[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem, MEM]) >>
+  `expr_sim ctx func cenv cx (BaseT AddressT) a es` by
+    (fs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
+  drule eval_exprs_cons_cases >> strip_tac
+  >- suspend "address_exit"
+  >> drule_all expr_body_pre_base_result >> strip_tac >>
+  `exprs_case nocalls ctx func cenv cx (d::kws)` by
+    (drule eval_expr_read_INL >> strip_tac >> fs[exprs_case_def] >> metis_tac[]) >>
+  `expr_body_pre cenv cx env d es1` by
+    (irule expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `nocalls ==> int_calls_expr d = []` by
+    (fs[int_calls_expr_def] >> metis_tac[int_calls_exprs_mem, MEM]) >>
+  `expr_sim ctx func cenv cx (expr_type d) d es1` by
+    (fs[exprs_case_def, expr_sim_case_def] >> metis_tac[]) >>
+  `local_ptrs_reserved cenv s1` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[ci_mono_def]) >>
+  qpat_x_assum `eval_exprs _ [d] _ = _` mp_tac >>
+  disch_then (strip_assume_tac o MATCH_MP eval_exprs_cons_cases) >>
+  gvs[eval_exprs_nil]
+  >- suspend "data_exit"
+  >> suspend "success"
+QED
+
+Resume raw_call_addr_data_sim[address_exit]:
+  gvs[] >> drule_all expr_body_pre_base_result >> strip_tac >>
+  irule expr_sim_suffix >> goal_assum (drule_at Any) >> simp[] >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
+  simp[wb_args_exit_def, expr_exit_def]
+QED
+
+Resume raw_call_addr_data_sim[data_exit]:
+  drule_all raw_call_addr_data_values >> strip_tac >>
+  irule expr_sim_suffix >>
+  qpat_assum `expr_sim _ _ _ _ _ a es` (irule_at Any) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >> simp[] >>
+  rpt strip_tac >>
+  irule frag_exec_conseq >>
+  irule_at Any expr_sim_suffix >>
+  qpat_assum `expr_sim _ _ _ _ _ d es1` (irule_at Any) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
+  simp[expr_post_def, wb_args_exit_def, expr_exit_def] >>
+  qexistsl_tac [`expr_exit (INR exc : value + exception)`, `\s. F`] >>
+  fs[expr_post_def]
+QED
+
+Resume raw_call_addr_data_sim[success]:
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- (irule frag_exec_pointwise >> simp[]) >>
+  drule_all raw_call_addr_data_values >> strip_tac >> gvs[] >>
+  irule expr_sim_suffix >>
+  qpat_assum `expr_sim _ _ _ _ _ a es` (irule_at Any) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >> simp[] >>
+  rpt strip_tac >>
+  irule frag_exec_pre_exit >> irule_at Any expr_sim_suffix >>
+  qpat_assum `expr_sim _ _ _ _ _ d es1` (irule_at Any) >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >> simp[] >>
+  qexists_tac `\r. F` >>
+  simp[wb_args_exit_def] >>
+  reverse conj_tac >- fs[expr_post_def] >>
+  rpt strip_tac >>
+  `safe_operand s1 addr` by
+    (irule lower_value_word_safe_operand >>
+     first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+     qexists_tac `env` >>
+     drule_at (Pat `expr_body_pre _ _ _ a _`) expr_body_pre_var_types_well_formed >>
+     fs[expr_body_pre_def, is_word_type_def]) >>
+  `(!x. addr = Var x ==> not_fresh_at s1 x) /\ (!l. addr <> Label l)` by
+    fs[safe_operand_def] >>
+  drule_all expr_post_operand_word >> strip_tac >>
+  `expr_val_rel cx (BaseT AddressT) v addr t'` by
+    (fs[expr_post_def, expr_val_rel_def] >>
+     gvs[is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
+  `evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap)))` by
+    (drule_at (Pat `expr_body_pre _ _ _ d _`) expr_body_pre_type_evaluates >>
+     simp[vyperValueTheory.evaluate_type_def]) >>
+  `!x. addr = Var x \/ data = Var x ==> not_fresh_at s2 x` by
+    (rpt strip_tac
+     >- (irule freshWritesTheory.not_fresh_at_mono >>
+         qexists_tac `s1` >> fs[ci_mono_def]) >>
+     metis_tac[compile_lower_value_var]) >>
+  `local_ptrs_reserved cenv s2` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `s1` >> fs[ci_mono_def]) >>
+  drule_all raw_call_addr_data_post >> strip_tac >>
+  suspend "run_packaging"
+QED
+
+Resume raw_call_addr_data_sim[run_packaging]:
+  `MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+   MAP FDOM es1.scopes = MAP FDOM es1'.scopes` by
+    metis_tac[forced_eval_expr_preserves_scopes_dom] >>
+  `wb_frame cenv es sa s0 t'` by
+    (irule wb_frame_trans >>
+     simp[] >> reverse conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexistsl_tac [`es1`, `s1`, `t`] >>
+     fs[expr_post_def, wb_frame_def, ci_mono_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es sa s0 t''` by
+    (irule wb_frame_trans >>
+     simp[] >> reverse conj_tac
+     >- (goal_assum (drule_at Any)) >>
+     qexistsl_tac [`es1'`, `s2`, `t'`] >>
+     fs[ci_mono_def] >> decide_tac) >>
+  irule frag_exec_run_inst_seq >>
+  conj_tac
+  >- (simp[] >>
+      qexistsl_tac [`es1`, `t`, `t'`, `b`] >>
+      simp[stmt_state_rel_inst_idx, wb_frame_def, lookup_var_def] >>
+      fs[wb_frame_def, lookup_var_def, expr_val_rel_def] >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
+  qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def,
+    rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def,
+    mk_inst_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def]
+QED
+
+Finalise raw_call_addr_data_sim
 
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
