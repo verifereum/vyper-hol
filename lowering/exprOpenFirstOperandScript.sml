@@ -11,7 +11,7 @@
 Theory exprOpenFirstOperand
 Ancestors
   exprSimHypsDefs
-  exprSimHyps allocLimits vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
+   allocLimits vyperTypeSystem vyperTypeCallStackSoundness vyperInterpreter
   vyperAST vyperState vyperTypeCallGraph list
 
 Theorem expr_body_pre_builtin_head:
@@ -21,6 +21,7 @@ Theorem expr_body_pre_builtin_head:
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
@@ -32,6 +33,7 @@ Theorem expr_body_pre_type_builtin_head:
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
+       supportedExprTraverseTheory.supported_expr_exists_def,
        supportedExprTraverseTheory.expr_has_evm_run_thm] >>
   metis_tac[call_evaluation_safe_append_left]
 QED
