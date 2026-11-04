@@ -79,3 +79,34 @@ Proof
   gvs[EVERY_EL, inst_defs_def] >> rpt strip_tac >>
   first_x_assum irule >> decide_tac
 QED
+
+Theorem reachable_phi_live_entry_representative:
+  wf_function fn /\ wf_ssa fn /\ fn_entry_label fn = SOME entry /\
+  fn_reachable fn lbl /\ lbl <> entry /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI ==>
+  ?p v. MEM (p,v) (phi_pairs inst.inst_operands) /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl 0)
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  drule_all fn_reachable_first_entry_predecessor >> strip_tac >>
+  `phi_edge_uses_wf fn bb inst` by
+    (gvs[wf_ssa_def, def_dominates_uses_def] >> metis_tac[]) >>
+  qpat_x_assum `phi_edge_uses_wf _ _ _` mp_tac >>
+  simp[phi_edge_uses_wf_def] >> strip_tac >>
+  `?v. MEM (p,v) (phi_pairs inst.inst_operands)` by
+    (qpat_assum `!pred. fn_cfg_edge _ _ _ <=> _`
+       (qspec_then `p` mp_tac) >> simp[] >>
+     disch_then (qx_choose_then `pair` strip_assume_tac) >>
+     PairCases_on `pair` >> gvs[] >> metis_tac[]) >>
+  qpat_assum `!pred v. MEM (pred,v) _ ==> _` drule >> strip_tac >>
+  `EVERY (\i. ~MEM v i.inst_outputs) bb.bb_instructions` by
+    (irule def_available_non_dominating_no_kill >>
+     goal_assum (drule_at Any) >> gvs[wf_ssa_def]) >>
+  qexistsl [`p`, `v`] >> simp[] >>
+  irule reachable_use_no_kill_live_entry >>
+  goal_assum (drule_at Any) >> simp[inst_uses_def] >>
+  metis_tac[cfgNormSupplyProofsTheory.MEM_phi_pairs_SND_operand_vars]
+QED
