@@ -167,3 +167,36 @@ uses the proposed forcing boundary to rule out z writers; W rules out other
 x writers and source_trace_non_writer transports both lookups. Neither first
 existence nor the endpoint forcing integration is certified by W/B/V alone.
 *)
+
+Theorem ao_source_trace_iszero_origin:
+  !trace ctx fn x value bp r prod.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x (SND (SND (LAST trace))) = SOME value /\
+    wf_ssa fn /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\
+    prod.inst_opcode = ISZERO /\ prod.inst_outputs = [x] ==>
+    ?front q u v back w.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = bp.bb_label /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      step_inst q ctx prod u = OK w /\
+      v = w with vs_inst_idx := SUC r
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_source_trace_lookup_origin >> strip_tac >>
+  `ao_source_step ctx fn a b` by
+    metis_tac[ao_source_trace_transition_split] >>
+  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
+  `lookup_block a2.vs_current_bb fn.fn_blocks = SOME bp /\
+   (if a1 then prod.inst_opcode = PHI
+    else a2.vs_inst_idx = r /\ ~is_terminator prod.inst_opcode)` by
+    (irule (INST_TYPE [alpha |-> ``:num``] ao_ssa_transition_writer) >>
+     simp[] >> qexistsl [`(b0,b1,b2)`, `a0`] >> simp[]) >>
+  Cases_on `a1` >- gvs[] >> gvs[] >>
+  qpat_x_assum `ao_source_step _ _ _ _` mp_tac >>
+  simp[Once ao_source_step_cases] >> strip_tac >> gvs[] >>
+  qexistsl [`front`, `a0`, `a2`, `back`, `t`] >> simp[] >>
+  conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  irule (cj 2 ao_source_step_rules) >> simp[] >> metis_tac[]
+QED

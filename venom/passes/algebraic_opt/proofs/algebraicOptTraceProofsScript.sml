@@ -702,3 +702,18 @@ Proof
   (impl_tac >- simp[]) >> strip_tac >>
   gvs[LAST_EL, EL_APPEND_EQN]
 QED
+
+Theorem ao_source_trace_lookup_origin:
+  !trace ctx fn x value.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x (SND (SND (LAST trace))) = SOME value ==>
+    ?front a b back.
+      trace = front ++ a::b::back /\ ao_transition_writes fn x a b
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`trace`, `ao_transition_writes fn x`] strip_assume_tac
+    ao_trace_last_event
+  >- (drule_all ao_source_trace_non_writer >> simp[]) >>
+  metis_tac[]
+QED
