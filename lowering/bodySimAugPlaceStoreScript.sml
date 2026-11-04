@@ -1,7 +1,7 @@
 Theory bodySimAugPlaceStore
 Ancestors
   bodySimAugPlaceLoad stmtSimAssignAttr valueEncodingProps valueEncodingProofs
-  valueEncoding targetPlaceSim vyperValue vyperTyping vyperValueOperation alist arithmetic list sorting relation
+  valueEncoding targetPlaceSim vyperValue vyperTyping vyperState vyperValueOperation alist arithmetic list sorting relation
 Libs
   wordsLib
 
@@ -167,3 +167,69 @@ Proof
   >- (irule aug_place_kvs_insert >> simp[]) >>
   rpt strip_tac >> gvs[aug_place_lookup_insert, AllCaseEqs()]
 QED
+
+Theorem aug_place_cells_disjoint:
+  !j k sz base. j <> k ==>
+    base+j*sz+sz <= base+k*sz \/ base+k*sz+sz <= base+j*sz
+Proof
+  rpt strip_tac >> Cases_on `j < k`
+  >- (disj1_tac >>
+      `(j+1)*sz <= k*sz` by simp[LE_MULT_RCANCEL] >>
+      pure_rewrite_tac [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES] >>
+      rule_assum_tac (PURE_REWRITE_RULE
+        [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >> decide_tac) >>
+  disj2_tac >>
+  `(k+1)*sz <= j*sz` by simp[LE_MULT_RCANCEL] >>
+  pure_rewrite_tac [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES] >>
+  rule_assum_tac (PURE_REWRITE_RULE
+    [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >> decide_tac
+QED
+
+Theorem aug_place_cell_preserved:
+  !tv v base j k mem mem'.
+    j <> k /\ val_wf tv v /\
+    val_in_memory tv v (base+j*type_memory_size tv) mem /\
+    (!q n. q+n <= base+k*type_memory_size tv \/
+       base+k*type_memory_size tv+type_memory_size tv <= q ==>
+       mem_bytes_at q n mem' = mem_bytes_at q n mem) ==>
+    val_in_memory tv v (base+j*type_memory_size tv) mem'
+Proof
+  rpt strip_tac >>
+  irule (cj 1 valueEncodingProofsTheory.val_in_memory_mem_agree_proof) >>
+  conj_tac >- simp[] >> qexists_tac `mem` >> simp[] >>
+  sym_tac >> first_x_assum irule >> metis_tac[aug_place_cells_disjoint]
+QED
+
+Theorem aug_place_kvs_wf_all:
+  !al tv bound.
+    kvs_val_wf al tv bound <=>
+    (!j v. MEM (j,v) al ==> j < bound /\ val_wf tv v)
+Proof
+  Induct >> simp[val_wf_def] >> gen_tac >> PairCases_on `h` >>
+  simp[val_wf_def] >> metis_tac[]
+QED
+
+Theorem aug_place_sparse_memory:
+  !al k child base tv bound mem mem'.
+    SORTED $< (MAP FST al) /\
+    val_wf (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV al)) /\
+    val_in_memory (ArrayTV tv (Fixed bound)) (ArrayV (SArrayV al)) base mem /\
+    val_in_memory tv child (base+k*type_memory_size tv) mem' /\
+    (!q n. q+n <= base+k*type_memory_size tv \/
+       base+k*type_memory_size tv+type_memory_size tv <= q ==>
+       mem_bytes_at q n mem' = mem_bytes_at q n mem) ==>
+    val_in_memory (ArrayTV tv (Fixed bound))
+      (ArrayV (SArrayV (if child = default_value tv then ADELKEY k al
+                       else insert_sarray k child al))) base mem'
+Proof
+  rpt gen_tac >> strip_tac >> irule aug_place_sparse_rebuild >>
+  gvs[val_wf_def, val_in_memory_def, aug_place_kvs_all, aug_place_kvs_wf_all] >>
+  conj_tac
+  >- (rpt strip_tac >> irule aug_place_cell_preserved >>
+      conj_tac >- metis_tac[] >>
+      qexistsl_tac [`k`, `mem`] >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]) >>
+  rpt strip_tac >> irule aug_place_cell_preserved >>
+  conj_tac >- simp[cj 1 val_wf_default_value_proof] >>
+  qexistsl_tac [`k`, `mem`] >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]
+QED
+
