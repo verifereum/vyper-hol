@@ -523,3 +523,14 @@ write row above. Local operand assembly proves equal scalar keys and masked
 adapter is used once. No headroom or non-forward premise is needed. As with the
 other grouped consumers, this does not discharge current raw safety, control,
 terminal alternatives or exhaustive target-prefix integration.
+
+### Identity/assertion consumer reconciliation (C1.11.5.68)
+
+`lowerDloadSafetyIdentityCoverage` exports `ld_sync_identity_effect` and
+`ld_sync_identity_coverage` for exactly [NOP;ASSERT;ASSERT_UNREACHABLE].
+Successful target assertions have equal scalar, untainted source guards; both
+physical states are unchanged. Empty outputs normalize provenance and all taint
+components; H'=H. The common ordinary adapter supplies the successor location.
+No headroom, non-forward, or extra scalar-equality premise is required. Failed
+assertions (Abort), malformed/undefined guards (Error), current raw safety,
+control, PARAM ownership and exhaustive target-prefix coverage remain open.
