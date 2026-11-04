@@ -410,11 +410,14 @@ val prev_bb_opcode_tac =
   prev_bb_dispatch_tac >>
   simp_tac opcode_prev_bb_ss [] >> prev_bb_exec_tac;
 
-(* State writes first test the static-frame flag, which vs_prev_bb leaves
-   alone: split on it, then treat the write as usual. *)
+(* State writes first test the static-frame flag and whether the operands
+   are defined, which vs_prev_bb leaves alone: split on that test, then
+   treat the write as usual. *)
 val prev_bb_static_tac =
-  prev_bb_dispatch_tac >> Cases_on `s.vs_call_ctx.cc_static` >>
-  asm_simp_tac opcode_prev_bb_ss [] >> prev_bb_exec_tac;
+  prev_bb_dispatch_tac >>
+  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+  asm_simp_tac (opcode_prev_bb_ss ++ rewrites [eval_ops_prev_bb]) [] >>
+  prev_bb_exec_tac;
 
 (* Keep EL, its bounds, and conditional payloads opaque in parameter access. *)
 val param_prev_bb_ss = pure_ss ++ boolSimps.BOOL_ss ++ rewrites

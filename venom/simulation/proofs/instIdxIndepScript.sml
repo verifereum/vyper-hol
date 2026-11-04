@@ -383,11 +383,13 @@ val opcode_idx_tac =
   TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
   idx_cases_tac opcode_idx_ss;
 
-(* State writes first test the static-frame flag, which vs_inst_idx leaves
-   alone: split on it, then treat the write as usual. *)
+(* State writes first test the static-frame flag and whether the operands
+   are defined, which vs_inst_idx leaves alone: split on that test, then
+   treat the write as usual. *)
 val static_idx_tac =
-  step_inst_base_opcode_tac >> Cases_on `s.vs_call_ctx.cc_static` >>
-  asm_simp_tac opcode_idx_ss [] >>
+  step_inst_base_opcode_tac >>
+  Cases_on `s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s)` >>
+  asm_simp_tac (opcode_idx_ss ++ rewrites [eval_ops_inst_idx]) [] >>
   TRY (irule exec_write2_idx >> simp_tac opcode_idx_ss [] >> NO_TAC) >>
   idx_cases_tac opcode_idx_ss;
 

@@ -599,16 +599,20 @@ Definition step_inst_base_def:
 
     (* Storage.  A static frame (cc_static) halts exceptionally at every
        state write: SSTORE, TSTORE, LOG, SELFDESTRUCT, CREATE/CREATE2 and a
-       CALL with value, as the EVM fails with WriteInStaticContext. *)
+       CALL with value, as the EVM fails with WriteInStaticContext.  The
+       check comes after the operands are evaluated, so an undefined operand
+       is still an Error. *)
     | SLOAD => exec_read1 (\key s. sload key s) inst s
     | SSTORE =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
         else exec_write2 (\key val s. sstore key val s) inst s
 
     (* Transient storage *)
     | TLOAD => exec_read1 (\key s. tload key s) inst s
     | TSTORE =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s))
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s))
         else exec_write2 (\key val s. tstore key val s) inst s
 
     (* Control flow - JMP *)
@@ -994,7 +998,8 @@ Definition step_inst_base_def:
        first; the remaining operands are in Python's physical stack order:
        topics, size, offset (rightmost operand at the top of the stack). *)
     | LOG =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           Lit tc :: rest =>
             let n = w2n tc in
@@ -1021,7 +1026,8 @@ Definition step_inst_base_def:
     (* Selfdestruct: transfer balance to beneficiary, then halt.
        Deprecated post-Cancun but still defined in Venom IR. *)
     | SELFDESTRUCT =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [addr_op] =>
             (case eval_operand addr_op s of
@@ -1085,7 +1091,8 @@ Definition step_inst_base_def:
         | _ => Error "delegatecall requires 6 operands")
 
     | CREATE =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
@@ -1096,7 +1103,8 @@ Definition step_inst_base_def:
         | _ => Error "create requires 3 operands")
 
     | CREATE2 =>
-        if s.vs_call_ctx.cc_static then Abort ExHalt_abort (halt_state (set_returndata [] s)) else
+        if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s) then
+          Abort ExHalt_abort (halt_state (set_returndata [] s)) else
         (case inst.inst_operands of
           [val_op; off_op; sz_op; salt_op] =>
             (case (eval_operand val_op s, eval_operand off_op s,
