@@ -67,14 +67,6 @@ Proof
   rw[inst_dload_in_data_def]
 QED
 
-Theorem inst_dload_in_data_inst_idx[simp]:
-  !inst s n.
-    inst_dload_in_data inst (s with vs_inst_idx := n) <=>
-    inst_dload_in_data inst s
-Proof
-  rw[inst_dload_in_data_def]
-QED
-
 (* The memory check along the runner: mem_safe_step checks an instruction
    and, for INVOKE, the callee's run; mem_safe_block every instruction
    exec_block runs; mem_safe_blocks every block run_blocks enters.  Where

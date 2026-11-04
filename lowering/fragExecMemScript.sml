@@ -526,6 +526,14 @@ QED
 
 (* ===== Straight-line sequences ===== *)
 
+Theorem inst_dload_in_data_inst_idx[simp]:
+  !inst s n.
+    inst_dload_in_data inst (s with vs_inst_idx := n) <=>
+    inst_dload_in_data inst s
+Proof
+  rw[inst_dload_in_data_def]
+QED
+
 (* Every instruction of a straight-line sequence is below the frontier, and
    starts its DLOAD offset within the data section, in the state it runs
    in. *)
