@@ -31,7 +31,7 @@ Theory emitHelperProps
 Ancestors
   fragGasPath gasCount fragExec
   exprLoweringProps localPtrsProps emitHelper compileEnv
-  venomExecSemantics venomState venomInst
+  venomExecSemantics venomExecProofs venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
   list pred_set arithmetic
 Libs
@@ -2639,4 +2639,20 @@ Proof
       with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by simp[update_var_def] >>
   drule (cj 1 gas_path_rules) >> strip_tac >>
   metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem step_revert_zero:
+  !id s.
+    ?s'. step_inst_base (mk_inst id REVERT [Lit 0w; Lit 0w] []) s =
+         Abort Revert_abort s'
+Proof
+  rpt gen_tac >> simp[venomInstTheory.mk_inst_def] >>
+  irule_at Any step_revert_behavior >> simp[eval_operand_def]
+QED
+
+Theorem step_invalid:
+  !id s.
+    ?s'. step_inst_base (mk_inst id INVALID [] []) s = Abort ExHalt_abort s'
+Proof
+  simp[venomInstTheory.mk_inst_def, step_inst_base_def]
 QED

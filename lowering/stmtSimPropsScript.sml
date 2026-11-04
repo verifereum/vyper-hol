@@ -277,3 +277,21 @@ Proof
   TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
 QED
 
+
+Theorem emit_abort_exit:
+  !ctx func opc ops st st' s0 RetQ es' res.
+    emit_inst opc ops [] st = ((), st') /\ fn_has_code st st' func /\
+    s0.vs_current_bb = st.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s0.vs_halted /\
+    opc <> INVOKE /\
+    (?a s'. step_inst_base (mk_inst st.cs_next_id opc ops []) s0 =
+              Abort a s' /\ expr_exit res (Abort a s')) ==>
+    ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+             stmt_exit RetQ es' res r
+Proof
+  rpt strip_tac >> drule emit_inst_extends >> strip_tac >>
+  `frag_exec ctx st st' (\s. s = s0) (\s. F) (stmt_exit RetQ es' res)` by
+    (irule frag_exec_step_abort >> fs[] >> qexists_tac `0` >>
+     fs[step_inst_non_invoke, venomInstTheory.mk_inst_def, stmt_exit_def]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >> simp[frag_exec_def]
+QED
