@@ -898,7 +898,7 @@ Theorem storage_trace_frame_precompile_call_success:
   storage_trace_frame (precompile_call_success bt)
 Proof
   rw[storage_trace_frame_def, precompile_call_success_def] >>
-  rpt BasicProvers.TOP_CASE_TAC >> gvs[return_def, check_def, raise_def, AllCaseEqs()]
+  rpt BasicProvers.TOP_CASE_TAC >> gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()]
 QED
 
 (* Deterministic composition at the frame boundary; recursive guards remain
