@@ -1,7 +1,8 @@
 (* Structural boundaries for revert forwarding. *)
 Theory fnFrameStepsRevertForward
 Ancestors
-  contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA
+  contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
+  stackPlanGen
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -65,4 +66,39 @@ Proof
   drule dfg_build_function_correct >> strip_tac >>
   `inst' = inst` by (irule ssa_unique_output >> metis_tac[]) >>
   gvs[]
+QED
+
+Theorem dfg_ordinary_use_available:
+  !fn bb use v def.
+    ssa_form fn /\ def_dominates_uses fn /\
+    MEM bb fn.fn_blocks /\ MEM use bb.bb_instructions /\
+    use.inst_opcode <> PHI /\ MEM (Var v) use.inst_operands /\
+    dfg_get_def (dfg_build_function fn) v = SOME def ==>
+    ?db. MEM db fn.fn_blocks /\ MEM def db.bb_instructions /\
+      MEM v def.inst_outputs /\ fn_dominates fn db.bb_label bb.bb_label /\
+      (db = bb ==> ?p q. p < q /\ q < LENGTH bb.bb_instructions /\
+        EL p bb.bb_instructions = def /\ EL q bb.bb_instructions = use)
+Proof
+  rpt strip_tac >>
+  `def_available_at fn bb (SOME use) v` by
+    (gvs[def_dominates_uses_def] >> metis_tac[]) >>
+  gvs[def_available_at_def] >>
+  `MEM def_inst (fn_insts fn)` by metis_tac[mem_fn_insts_intro] >>
+  drule_all dfg_build_function_ssa_def >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem dfg_assign_input_available:
+  !fn bb use v def.
+    codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+    MEM use bb.bb_instructions /\ use.inst_opcode = ASSIGN /\
+    use.inst_operands = [Var v] /\
+    dfg_get_def (dfg_build_function fn) v = SOME def ==>
+    ?db. MEM db fn.fn_blocks /\ MEM def db.bb_instructions /\
+      MEM v def.inst_outputs /\ fn_dominates fn db.bb_label bb.bb_label /\
+      (db = bb ==> ?p q. p < q /\ q < LENGTH bb.bb_instructions /\
+        EL p bb.bb_instructions = def /\ EL q bb.bb_instructions = use)
+Proof
+  rpt strip_tac >> irule dfg_ordinary_use_available >>
+  gvs[codegen_ready_fn_def] >> metis_tac[MEM]
 QED
