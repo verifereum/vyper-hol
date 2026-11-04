@@ -477,7 +477,7 @@ Proof
 QED
 
 
-Theorem typed_sarray_body_successor[local]:
+Theorem typed_sarray_body_successor:
   sc.cs_current_insts =
     [mk_inst id MUL [Var ("%" ++ toString sa.cs_next_var); Lit (n2w ss)]
        ["%" ++ toString (sa.cs_next_var+3)];
