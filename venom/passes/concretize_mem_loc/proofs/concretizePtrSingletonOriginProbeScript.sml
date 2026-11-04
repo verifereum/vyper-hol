@@ -804,3 +804,25 @@ Theorem sop_caller_lives_probe:
 Proof
   EVAL_TAC
 QED
+
+Theorem sop_lives_overlap:
+  MEM ("entry",2) (THE (FLOOKUP sop_caller_lives (Allocation 1))) /\
+  MEM ("entry",2) (THE (FLOOKUP sop_caller_lives (Allocation 101))) /\
+  MEM ("entry",3) (THE (FLOOKUP sop_caller_lives (Allocation 1))) /\
+  MEM ("entry",3) (THE (FLOOKUP sop_caller_lives (Allocation 101)))
+Proof
+  EVAL_TAC
+QED
+
+Definition sop_caller_layout_def:
+  sop_caller_layout = THE (compute_function_layout_fuel_in_context
+    (concretize_memloc_fuel sop_caller) sop_ctx1 [] sop_caller)
+End
+
+Theorem sop_caller_layout_probe:
+  FLOOKUP sop_caller_layout.cl_positions (Allocation 1) = SOME 32 /\
+  sop_caller_layout.cl_eom = 64
+Proof
+  EVAL_TAC
+QED
+
