@@ -6,7 +6,8 @@ Ancestors
   exprSim vyperTyping vyperValue compileEnv valueEncoding
   externalReturnNormalizeMem allocaSiteResource exprLoweringProps
   venomMemDefs venomExecSemantics finite_map stmtSimReturnWiden exprSimAlloc
-  stmtSimDecl loweringHalt
+  stmtSimDecl loweringHalt entryDispatchProps compileVyper allocLimitsProps
+  supportedProgram supportedDecls
 
 Theorem normalize_nonbytes_footprint[local]:
   evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\
@@ -217,4 +218,116 @@ Proof
   conj_tac >- metis_tac[cj 1 value_has_type_val_wf] >>
   conj_tac >- metis_tac[cj 1 value_has_type_val_wf] >>
   metis_tac[normalize_return_destination_positive]
+QED
+
+(* All recursive-copy windows refer to this one, real allocation endpoint.
+   The return-type allocation limit is kept explicit for the frame producer. *)
+Theorem normalize_return_typed_windows:
+  compile_alloc_buffer (type_memory_bytes cenv dty) sb = (buf,sc) /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  expr_val_at cenv cx sty sa sb es v src s /\ expr_val_rel cx sty v src s /\
+  type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
+  ~is_word_type dty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\
+  evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+     type_memory_bytes cenv ty = type_memory_size tv) /\
+  type_memory_bytes cenv dty < dimword (:256) /\
+  eval_operand src s = SOME p /\
+  (!x. src = Var x ==> not_fresh_at sb x) ==>
+  ?dtv t b.
+    evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
+    val_wf stv v /\ val_wf dtv v /\
+    type_memory_bytes cenv dty = type_memory_size dtv /\
+    exec_alloca (mk_inst sb.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes cenv dty))]
+      [STRING #"%" (toString sb.cs_next_var)]) s
+      (n2w (type_memory_bytes cenv dty) : bytes32) = OK t /\
+    eval_operand src t = SOME p /\ eval_operand buf.buf_operand t = SOME (n2w b) /\
+    alloca_room ctx func t /\ alloca_inv t /\
+    w2n p + type_memory_size stv <= t.vs_alloca_next /\
+    b + type_memory_size dtv <= t.vs_alloca_next /\
+    w2n p + type_memory_size stv < dimword (:256) /\
+    b + type_memory_size dtv < dimword (:256) /\
+    (w2n p + type_memory_size stv <= b \/ b + type_memory_size dtv <= w2n p) /\
+    val_in_memory stv v (w2n p) t.vs_memory /\ t.vs_memory = s.vs_memory
+Proof
+  strip_tac >> drule_all normalize_return_value_layout >> strip_tac >>
+  qpat_x_assum `!ty tv. evaluate_type _ _ = _ ==> _` kall_tac >>
+  drule_all normalize_return_alloc_windows >> strip_tac >>
+  `0 < type_memory_size stv` by metis_tac[normalize_return_source_positive] >>
+  `~is_word_type sty` by metis_tac[normalize_return_source_kinds] >>
+  `val_in_memory stv v (w2n p) t.vs_memory` by
+    gvs[expr_val_rel_def] >>
+  qexistsl_tac [`dtv`,`t`,`b`] >>
+  gvs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem normalize_function_return_limit[local]:
+  fn_allocs_ok tops (mut,(nr:bool),(rr:bool),(name:string),args,defaults,ret,fbody) /\
+  cenv.ce_struct_fields = make_struct_fields_map tops ==>
+  type_memory_bytes cenv ret < 2 ** 64
+Proof
+  strip_tac >>
+  `type_memory_bytes cenv ret = type_memory_bytes
+     (build_compile_env tops Internal mut name args ret fbody F) ret` by
+    (irule type_memory_bytes_struct_fields >>
+     simp[build_compile_env_ce_struct_fields]) >>
+  gvs[fn_allocs_ok_def]
+QED
+
+Theorem normalize_external_return_limit:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  lookup_function NONE name External tops = SOME (mut,nr,args,defaults,ret,fbody) /\
+  cenv.ce_struct_fields = make_struct_fields_map tops ==>
+  type_memory_bytes cenv ret < 2 ** 64
+Proof
+  strip_tac >>
+  `(!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops) /\
+   (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops)` by
+    (fs[supported_program_def, supported_declaration_headers_def,
+        listTheory.EVERY_MEM] >> rpt strip_tac >>
+     qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e` drule >>
+     simp[supported_declaration_header_def]) >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  Cases_on `name = "__default__"`
+  >- (gvs[] >> drule_all lookup_function_default >>
+      disch_then (qspec_then `NONE` mp_tac) >>
+      simp[] >> Cases_on `r1` >> simp[] >> PairCases_on `x` >>
+      strip_tac >> gvs[] >>
+      irule (SIMP_RULE (srw_ss()) [] normalize_function_return_limit) >> simp[] >>
+      irule_at Any lower_vyper_runtime_unit_allocs_ok >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  drule_all lookup_function_external_mem >> strip_tac >> gvs[] >>
+  irule (SIMP_RULE (srw_ss()) [] normalize_function_return_limit) >> simp[] >>
+  irule_at Any lower_vyper_runtime_unit_allocs_ok >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+(* The allocation-size and nominal-layout producers use the frozen frame's
+   actual package, argument registration and same_frame transport. *)
+Theorem normalize_external_frame_resources:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  source_typing_ok tops am tx /\ source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,nr,args,defaults,ret,fbody) /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops use_trans keys
+      (mut,nr,rr,tx.function_name,args,defaults,ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,payable,nr',key,ut,iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args off st = (cenv,sa) /\
+  same_frame cenv c ==>
+  acyclic_struct_metadata c.ce_struct_fields /\
+  (!ty tv. evaluate_type
+    (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+    ty = SOME tv ==> type_memory_bytes c ty = type_memory_size tv) /\
+  type_memory_bytes c ret < dimword (:256)
+Proof
+  strip_tac >> drule_all external_registered_struct_fields >> strip_tac >>
+  drule_all initial_return_frame_metadata >> strip_tac >>
+  drule_all same_frame_return_metadata >> strip_tac >>
+  `c.ce_struct_fields = make_struct_fields_map tops` by
+    fs[bodySimTheory.same_frame_def, compile_env_component_equality] >>
+  drule_all normalize_external_return_limit >> strip_tac >>
+  gvs[wordsTheory.dimword_def] >> decide_tac
 QED
