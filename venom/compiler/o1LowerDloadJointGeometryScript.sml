@@ -33,3 +33,16 @@ Proof
   rpt (IF_CASES_TAC >> gvs[]) >> rpt strip_tac >>
   fs[ld_joint_geometry_def] >> metis_tac[]
 QED
+
+Theorem ld_joint_geometry_extend_frontiers:
+  ld_joint_geometry sites X lo owners /\ id NOTIN FDOM sites /\
+  MEM (FST id) owners /\ lo <= b /\ lo <= c /\
+  b+z < dimword (:256) /\ c+z < dimword (:256) /\
+  (!jd d e w. FLOOKUP sites jd = SOME (d,e,w) /\ 0 < w ==>
+     d+w <= b /\ e+w <= c) /\
+  (!jd aid e. FLOOKUP X jd = SOME (aid,e) ==> e+32 <= c) ==>
+  ld_joint_geometry (sites |+ (id,(b,c,z))) X lo owners
+Proof
+  strip_tac >> drule_all ld_joint_geometry_extend_iff >>
+  disch_then (irule o iffRL) >> simp[] >> metis_tac[]
+QED
