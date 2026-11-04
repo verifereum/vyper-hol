@@ -294,3 +294,232 @@ Proof
   ho_match_mp_tac label_preserving_array_membership_loop >>
   metis_tac[label_preserving_ptr_load]
 QED
+
+Theorem label_preserving_extcodesize_check:
+  !s r t. compile_extcodesize_check addr s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[compile_extcodesize_check_def] >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_return_value_decode:
+  !s r t. compile_return_value_decode buf lo hi s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[compile_return_value_decode_def, comp_ignore_bind_def] >>
+  ntac 5 LABEL_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_select] >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ptr_store:
+  !s r t. compile_ptr_store ctor imm loc dst v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `loc` >> Cases_on `ctor` >> Cases_on `imm` >>
+  pure_rewrite_tac [contextTheory.compile_ptr_store_def,
+                   contextTheory.compile_imm_store_word_def] >>
+  CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+    (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_word_copy_loop:
+  !s r t. compile_word_copy_loop src dst n lloc sloc ctor s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_word_copy_loop_def] >>
+  simp_tac pure_ss [LET_THM] >> ntac 3 LABEL_FRESH >>
+  rewrite_tac[comp_ignore_bind_def] >> ntac 7 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_ptr_load] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_ptr_store] >> gen_tac >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_lit_byte_offset:
+  !s r t. compile_lit_byte_offset v off s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_lit_byte_offset_def] >> IF_CASES_TAC
+  >- LABEL_LEAF >> Cases_on `v` >> simp_tac (srw_ss()) [] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_imm_copy_to_memory:
+  !off s r t. compile_imm_copy_to_memory ctor imm src dst n off s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Induct_on `n` >> rewrite_tac[contextTheory.compile_imm_copy_to_memory_def]
+  >- (gen_tac >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_lit_byte_offset] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_ptr_load, contextTheory.compile_ptr_load_def] >>
+  gen_tac >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_lit_byte_offset] >> gen_tac >>
+  LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ensure_in_memory:
+  !s r t. compile_ensure_in_memory v loc bytes n ctor imm s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `loc` >>
+  rewrite_tac[contextTheory.compile_ensure_in_memory_def,
+    contextTheory.compile_storage_to_memory_def,
+    contextTheory.compile_transient_to_memory_def] >>
+  CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+    (RATOR_CONV (SIMP_CONV (srw_ss()) [])))))
+  >- LABEL_LEAF
+  >- (LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+      >- (IF_CASES_TAC >- (LABEL_BIND >> LABEL_LEAF) >>
+          ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+          >- metis_tac[label_preserving_word_copy_loop] >> LABEL_LEAF) >> LABEL_LEAF)
+  >- (LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+      >- (IF_CASES_TAC >- (LABEL_BIND >> LABEL_LEAF) >>
+          ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+          >- metis_tac[label_preserving_word_copy_loop] >> LABEL_LEAF) >> LABEL_LEAF)
+  >- (LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+      >- metis_tac[label_preserving_imm_copy_to_memory] >> LABEL_LEAF) >>
+  ntac 2 LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  LABEL_IGNORE >> ntac 2 LABEL_BIND >> LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Theorem label_preserving_copy_memory:
+  !s r t. compile_copy_memory dst src n s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `n` >> rewrite_tac[contextTheory.compile_copy_memory_def] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_copy_memory_dynamic:
+  !s r t. compile_copy_memory_dynamic dst src n s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_copy_memory_dynamic_def] >> LABEL_LEAF
+QED
+
+Theorem label_preserving_with_byte_offset:
+  !s r t. compile_with_byte_offset v off s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
+  IF_CASES_TAC >> LABEL_LEAF
+QED
+
+Theorem label_preserving_bytestring_copy_len:
+  !s r t. compile_bytestring_copy_len v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_bytestring_copy_len_def] >>
+  ntac 2 LABEL_BIND >> simp_tac pure_ss [LET_THM] >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_store_bytestring:
+  !s r t. compile_store_bytestring v dst s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_store_bytestring_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_bytestring_copy_len] >> gen_tac >> LABEL_LEAF
+QED
+
+val label_simps = label_simps @ [label_preserving_copy_memory,
+  label_preserving_copy_memory_dynamic, label_preserving_with_byte_offset,
+  label_preserving_store_bytestring];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+val LABEL_IGNORE = ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- LABEL_LEAF;
+
+Theorem label_preserving_typed_copy_mutual:
+  (!cenv dst dt src st s r t.
+    compile_store_memory_typed cenv dst dt src st s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!cenv dst src dts sts doff soff s r t.
+    compile_typed_copy_fields cenv dst src dts sts doff soff s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!cenv dst dt src st n s r t.
+    compile_copy_sarray_typed cenv dst dt src st n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!cenv dst dt cap src st s r t.
+    compile_copy_dynarray_typed cenv dst dt cap src st s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!cenv dst src dfs sfs doff soff s r t.
+    compile_struct_typed_copy cenv dst src dfs sfs doff soff s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t))
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  conj_tac >- suspend "dispatch" >>
+  conj_tac >- (rpt gen_tac >> rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >> LABEL_LEAF) >>
+  conj_tac >- (rpt gen_tac >> rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >> LABEL_LEAF) >>
+  conj_tac >- suspend "fields" >>
+  conj_tac >- suspend "sarray" >>
+  conj_tac >- suspend "dynarray" >>
+  conj_tac >- (rpt gen_tac >> rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >> LABEL_LEAF) >>
+  suspend "struct"
+QED
+
+Resume label_preserving_typed_copy_mutual[fields]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >>
+  ntac 2 LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Resume label_preserving_typed_copy_mutual[struct]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  ntac 2 LABEL_BIND >> LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Resume label_preserving_typed_copy_mutual[sarray]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >> IF_CASES_TAC >- LABEL_LEAF >>
+  ntac 3 LABEL_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_typed_copy_mutual[dynarray]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >>
+  simp_tac pure_ss [LET_THM] >>
+  rewrite_tac[comp_ignore_bind_def] >> ntac 7 LABEL_BIND >>
+  IF_CASES_TAC >- (LABEL_BIND >> LABEL_LEAF) >>
+  ntac 3 LABEL_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_typed_copy_mutual[dispatch]:
+  ntac 5 gen_tac >> strip_tac >>
+  rewrite_tac[Once contextTheory.compile_store_memory_typed_def] >>
+  IF_CASES_TAC >- (LABEL_BIND >> LABEL_LEAF) >>
+  IF_CASES_TAC >- LABEL_LEAF >> IF_CASES_TAC >- LABEL_LEAF >>
+  Cases_on `dt` >> Cases_on `st` >> gvs[] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac label_preserving_copy_memory >> gvs[] >>
+  Cases_on `b` >> Cases_on `b'` >> gvs[] >>
+  metis_tac[label_preserving_copy_memory]
+QED
+Finalise label_preserving_typed_copy_mutual
+
+Theorem label_preserving_store_memory:
+  !s r t. compile_store_memory cenv src dst dt st s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[contextTheory.compile_store_memory_def] >>
+  rpt IF_CASES_TAC >> rpt strip_tac >>
+  metis_tac[label_preserving_emit_void, label_preserving_store_bytestring,
+    label_preserving_typed_copy_mutual, label_preserving_copy_memory]
+QED
