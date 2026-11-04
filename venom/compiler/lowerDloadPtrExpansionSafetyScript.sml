@@ -1,6 +1,7 @@
 Theory lowerDloadPtrExpansionSafety
 Ancestors
   lowerDloadPtrPhase lowerDloadPtrExpansionTransport lowerDloadPtrTaint
+  lowerDloadPtrExpansion
   ptrDiscipline lowerDloadDefs venomExecSemantics venomState venomInst
   memLocDefs codegenRel contextCodegenRel instIdxIndep list words finite_map pred_set arithmetic
 
@@ -184,4 +185,59 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> asm "cached" (qspecl_then [`bb`,`n`] mp_tac) >> simp[]
+QED
+
+Theorem dloadbytes_two_prefix_safety:
+  a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\ a.inst_outputs = [cv] /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [Var dst;Var cv;sz] /\ c.inst_outputs = [] /\
+  dst <> cv /\ sz <> Var cv /\ FLOOKUP H0 dst = SOME (bb,n) /\
+  eval_operand (Var dst) t0 = SOME p /\ eval_operand sz t0 = SOME z /\
+  bb <= w2n p /\ w2n p + w2n z <= bb+n /\
+  op_taint un0 (Var dst) = {} /\ op_taint un0 off = {} /\ op_taint un0 sz = {} /\
+  dload_prefix_match fuel Ct PH [a;c] k t0 H0 un0 t H un /\ k < 2 ==>
+  access_ok lo H g (EL k [a;c]) t /\ taint_ok g un (EL k [a;c]) t
+Proof
+  strip_tac >> `k = 0 \/ k = 1` by decide_tac >>
+  qpat_x_assum `k = _` SUBST_ALL_TAC
+  >- (gvs[dload_prefix_zero] >> irule dload_add_safety >> simp[]) >>
+  drule (iffLR dload_prefix_first) >> strip_tac >>
+  qpat_x_assum `dload_prefix_match _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  gvs[] >> qpat_x_assum `step_inst _ _ a _ = _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `access_ok lo HH g c tt` >>
+  qmatch_goalsub_abbrev_tac `taint_ok g uu c tt` >>
+  `FLOOKUP HH dst = SOME (bb,n)` by
+    (simp[Abbr `HH`, step_prov_def, set_prov_def, out_prov_def] >>
+     Cases_on `first_prov H0 [off;Label "code_end"]` >>
+     simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]) >>
+  `eval_operand (Var dst) tt = SOME p /\ eval_operand sz tt = SOME z` by
+    (Cases_on `sz` >>
+     gvs[Abbr `tt`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `?v. eval_operand (Var cv) tt = SOME v` by
+    simp[Abbr `tt`, eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `op_taint uu (Var dst) = {} /\ op_taint uu (Var cv) = {} /\ op_taint uu sz = {}` by
+    (Cases_on `sz` >>
+     gvs[Abbr `uu`, step_taint_def, set_var_taint_def, out_taint_def,
+         op_taint_def, FLOOKUP_UPDATE, AllCaseEqs()]) >>
+  irule dload_codecopy_safe >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem dloadbytes_supply_prefix_safety:
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [Var dst;off;sz] /\ i.inst_outputs = [] /\
+  lower_dload_inst_supply supply i = (xs,next) /\ (EL 0 xs).inst_outputs = [cv] /\
+  dst <> cv /\ sz <> Var cv /\ FLOOKUP H0 dst = SOME (bb,n) /\
+  eval_operand (Var dst) t0 = SOME p /\ eval_operand sz t0 = SOME z /\
+  bb <= w2n p /\ w2n p + w2n z <= bb+n /\
+  op_taint un0 (Var dst) = {} /\ op_taint un0 off = {} /\ op_taint un0 sz = {} /\
+  dload_prefix_match fuel Ct PH xs k t0 H0 un0 t H un /\ k < 2 ==>
+  access_ok lo H g (EL k xs) t /\ taint_ok g un (EL k xs) t
+Proof
+  strip_tac >>
+  qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
+  simp[lower_dload_inst_supply_def] >> strip_tac >> gvs[AllCaseEqs()] >>
+  irule dloadbytes_two_prefix_safety >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
