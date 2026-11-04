@@ -481,3 +481,168 @@ Proof
   IF_CASES_TAC >> simp[popmany_individual_spilled_unchanged] >>
   pairarg_tac >> gvs[] >> metis_tac[do_swap_spilled_unchanged, pairTheory.SND]
 QED
+
+Theorem stack_pop_contiguous:
+  !base removed top.
+    stack_pop (LENGTH removed)
+      (stack_swap (LENGTH removed) (base ++ removed ++ [top])) = base ++ [top]
+Proof
+  rpt gen_tac >> Cases_on `removed`
+  >- simp[stack_pop_def, stack_swap_def, LUPDATE_SAME] >>
+  simp[stack_pop_def, stack_swap_def, EL_APPEND_EQN, LUPDATE_APPEND2,
+       LUPDATE_APPEND1, APPEND_ASSOC, LUPDATE_def, TAKE_APPEND,
+       TAKE_LENGTH_TOO_LONG, arithmeticTheory.ADD1]
+QED
+
+Theorem stack_peek_contiguous:
+  !base removed top.
+    MAP (\d. stack_peek d (base ++ removed ++ [top]))
+      (GENLIST SUC (LENGTH removed)) = REVERSE removed
+Proof
+  rpt gen_tac >> simp[LIST_EQ_REWRITE] >> rpt strip_tac >>
+  simp[EL_MAP, EL_GENLIST, stack_peek_def, EL_REVERSE, EL_APPEND_EQN,
+       arithmeticTheory.ADD1] >>
+  `LENGTH removed - (x + 1) = PRE (LENGTH removed - x)` by decide_tac >> simp[]
+QED
+
+Theorem pop_contiguous_core:
+  !ps prefix base removed top to_pop.
+    ps.ps_stack = prefix ++ (base ++ removed ++ [top]) /\
+    ALL_DISTINCT (base ++ removed ++ [top]) /\ set to_pop = set removed ==>
+    stack_pop (LENGTH removed) (SND (do_swap (LENGTH removed) ps)).ps_stack =
+      prefix ++ (base ++ [top]) /\
+    ALL_DISTINCT (base ++ [top]) /\
+    set (base ++ [top]) = set (base ++ removed ++ [top]) DIFF set to_pop
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH removed < LENGTH ps.ps_stack` by simp[] >>
+  conj_tac
+  >- (simp[do_swap_stack_result, APPEND_ASSOC, stack_pop_contiguous]) >>
+  gvs[ALL_DISTINCT_APPEND] >> ASM_SET_TAC[]
+QED
+
+Theorem contiguous_depths_core[local]:
+  !to_pop prefix core ps.
+    ps.ps_stack = prefix ++ core /\ set to_pop SUBSET set core /\
+    to_pop <> [] /\
+    is_contiguous_top (MAP THE (MAP (\op. stack_get_depth op ps.ps_stack) to_pop)) ==>
+    LENGTH to_pop < LENGTH core /\
+    set to_pop = set (MAP (\d. stack_peek d core) (GENLIST SUC (LENGTH to_pop)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op to_pop ==> ?d.
+     stack_get_depth op ps.ps_stack = SOME d /\
+     d < LENGTH core /\ stack_peek d core = op` by
+    (rpt strip_tac >> `MEM op core` by ASM_SET_TAC[] >>
+     drule stack_get_depth_core >> disch_then (qspec_then `prefix` mp_tac) >> simp[]) >>
+  qabbrev_tac `depths = MAP THE (MAP (\op. stack_get_depth op ps.ps_stack) to_pop)` >>
+  `!d. MEM d depths <=> ?op. MEM op to_pop /\ stack_get_depth op ps.ps_stack = SOME d` by
+    (simp[Abbr `depths`, MEM_MAP] >> metis_tac[optionTheory.THE_DEF]) >>
+  `!d. MEM d depths <=> MEM d (GENLIST SUC (LENGTH to_pop))` by
+    (qpat_x_assum `is_contiguous_top _` mp_tac >>
+     simp[is_contiguous_top_def, LET_THM, Abbr `depths`] >>
+     strip_tac >>
+     qpat_x_assum `QSORT _ _ = _` (mp_tac o AP_TERM ``set : num list -> num set``) >>
+     simp[EXTENSION, sortingTheory.QSORT_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (`0 < LENGTH to_pop` by (Cases_on `to_pop` >> gvs[]) >>
+      `MEM (LENGTH to_pop) (GENLIST SUC (LENGTH to_pop))` by
+        (simp[MEM_GENLIST] >> qexists_tac `LENGTH to_pop - 1` >> simp[]) >>
+      `MEM (LENGTH to_pop) depths` by metis_tac[] >>
+      qpat_x_assum `!d. MEM d depths <=> ?op. _`
+        (qspec_then `LENGTH to_pop` mp_tac) >> simp[] >> strip_tac >>
+      first_x_assum drule >> strip_tac >> gvs[]) >>
+  qpat_x_assum `ps.ps_stack = _` kall_tac >>
+  qpat_x_assum `set _ SUBSET _` kall_tac >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  qpat_x_assum `is_contiguous_top _` kall_tac >>
+  simp[EXTENSION, MEM_MAP] >> gen_tac >> eq_tac
+  >- (strip_tac >> first_x_assum drule >> strip_tac >>
+      qexists_tac `d` >> simp[] >> metis_tac[]) >>
+  strip_tac >>
+  `MEM d depths` by metis_tac[] >>
+  qpat_x_assum `!d. MEM d depths <=> ?op. _` (qspec_then `d` mp_tac) >>
+  simp[] >> strip_tac >> first_x_assum drule >> strip_tac >> gvs[]
+QED
+
+Theorem popmany_contiguous_core[local]:
+  !to_pop prefix core ps.
+    ps.ps_stack = prefix ++ core /\ ALL_DISTINCT core /\
+    set to_pop SUBSET set core /\ to_pop <> [] /\
+    is_contiguous_top (MAP THE (MAP (\op. stack_get_depth op ps.ps_stack) to_pop)) ==>
+    ?core'.
+      stack_pop (LENGTH to_pop) (SND (do_swap (LENGTH to_pop) ps)).ps_stack =
+        prefix ++ core' /\ ALL_DISTINCT core' /\
+      set core' = set core DIFF set to_pop
+Proof
+  rpt gen_tac >> strip_tac >> drule_all contiguous_depths_core >> strip_tac >>
+  `core <> []` by (strip_tac >> gvs[]) >>
+  `?rest top. core = SNOC top rest` by metis_tac[SNOC_CASES] >>
+  `LENGTH to_pop <= LENGTH rest` by gvs[] >>
+  `?base removed top. core = base ++ removed ++ [top] /\
+     LENGTH removed = LENGTH to_pop` by
+    (qexistsl_tac [`TAKE (LENGTH rest - LENGTH to_pop) rest`,
+                   `DROP (LENGTH rest - LENGTH to_pop) rest`, `top`] >>
+     conj_tac
+     >- (pure_rewrite_tac[GSYM APPEND_ASSOC, TAKE_DROP] >> simp[SNOC_APPEND]) >>
+     simp[LENGTH_DROP]) >>
+  `set to_pop = set removed` by
+    (qpat_x_assum `LENGTH removed = _` (assume_tac o SYM) >>
+     gvs[stack_peek_contiguous]) >>
+  qpat_x_assum `core = SNOC _ _` kall_tac >>
+  qpat_x_assum `set to_pop = set (MAP _ _)` kall_tac >>
+  qpat_x_assum `is_contiguous_top _` kall_tac >>
+  qpat_x_assum `core = _` SUBST_ALL_TAC >>
+  drule pop_contiguous_core >>
+  disch_then (qspec_then `to_pop` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem popmany_plan_core:
+  !to_pop prefix core ps.
+    ps.ps_stack = prefix ++ core /\ ALL_DISTINCT core /\
+    DISJOINT (set prefix) (set to_pop) ==>
+    ?core'.
+      (SND (popmany_plan to_pop ps)).ps_stack = prefix ++ core' /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set to_pop
+Proof
+  Cases >- simp[popmany_plan_def] >> rpt gen_tac >> strip_tac >>
+  simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`set (h::t) SUBSET set core` by
+            (rewrite_tac[SUBSET_DEF, LIST_TO_SET] >> gen_tac >> disch_tac >>
+             `IS_SOME (stack_get_depth x ps.ps_stack)` by
+               (fs[EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+             Cases_on `stack_get_depth x ps.ps_stack` >- fs[] >>
+             drule stack_get_depth_props >> strip_tac >>
+             `MEM x ps.ps_stack` by
+               (qpat_x_assum `stack_peek _ _ = x` (SUBST1_TAC o SYM) >>
+                pure_rewrite_tac[stack_peek_def] >> irule EL_MEM >> gvs[]) >>
+             gvs[] >> ASM_SET_TAC[]) >>
+          drule popmany_contiguous_core >>
+          disch_then (qspec_then `h::t` mp_tac) >> simp[] >>
+          pairarg_tac >> gvs[]) >>
+      drule popmany_individual_core >> disch_then (qspec_then `h::t` mp_tac) >> simp[]) >>
+  drule popmany_individual_core >> disch_then (qspec_then `h::t` mp_tac) >> simp[]
+QED
+
+Theorem popmany_plan_lineage_inventory:
+  !S ps to_pop.
+    lineage_inventory S ps /\ ~MEM dead_stack_marker to_pop ==>
+    lineage_inventory (S DIFF (set to_pop INTER set ps.ps_stack))
+      (SND (popmany_plan to_pop ps))
+Proof
+  rpt gen_tac >> simp[lineage_inventory_def, lineage_core_def] >>
+  rpt strip_tac >>
+  `DISJOINT (set (REPLICATE m dead_stack_marker)) (set to_pop)` by
+    (simp[DISJOINT_DEF, EXTENSION, MEM_REPLICATE] >> metis_tac[]) >>
+  drule_all popmany_plan_core >> strip_tac >>
+  qexistsl_tac [`m`, `core'`] >>
+  simp[lineage_core_def, popmany_plan_spilled_unchanged] >>
+  conj_tac
+  >- (fs[EVERY_MEM] >> rpt strip_tac >>
+      `MEM e core` by ASM_SET_TAC[] >> metis_tac[]) >>
+  conj_tac >- ASM_SET_TAC[] >>
+  ASM_SET_TAC[]
+QED
