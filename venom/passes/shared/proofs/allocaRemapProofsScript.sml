@@ -4099,7 +4099,8 @@ Proof
   (* Step 1: Identify the 3 opcodes that can produce Abort *)
   `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
    inst.inst_opcode = RETURNDATACOPY` by
-    (drule_all step_inst_base_abort_opcode >> simp[]) >>
+    (drule_all step_inst_base_abort_opcode >> strip_tac >>
+     gvs[is_ext_call_op_def]) >>
   (* Original exhaustive classification proof (the flat 101-goal simp
      exceeded the 10s tactic budget); reuse the existing classification.
   `inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE \/
