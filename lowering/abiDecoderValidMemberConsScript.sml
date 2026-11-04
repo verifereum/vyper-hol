@@ -8,7 +8,7 @@ Ancestors
   abiDecoderArraySetupCode abiDecoderDynamic abiDecoderDynamicLoopSetup abiDecoderArrayInitExec
   abiDecoderAllocation abiDecoderLoop abiDecoderValidMemberTail abiDecoderMembersCode
   abiDecoderValidMemberCursor abiDecoderValidMembersCorrect abiDecoderMemberInfos
-  abiDecoderMembers
+  abiDecoderMembers abiDecoderMemberCons
 
 (* A completed actual-source member preserves the enclosing source and inputs. *)
 Theorem abi_decoder_valid_member_after_head:
@@ -128,7 +128,7 @@ Theorem abi_decoder_valid_member_body_helper:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -143,7 +143,8 @@ Proof
   `abi_decode_source_opcode opc` by fs[abi_decoder_ranges_def] >>
   drule_all abi_decoder_member_body_code >> strip_tac >>
   `first <= ready.cs_next_id /\ st.cs_next_id <= ready.cs_next_id /\
-   ready.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+   ready.cs_next_var <= limit_st.cs_next_var` by
+    (fs[abi_decoder_entry_floor_def, Excl "enc_def"] >> decide_tac) >>
   drule_all (SIMP_RULE bool_ss [LET_THM] abi_decoder_valid_member_entry) >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial prepared` >>
@@ -197,7 +198,7 @@ Theorem abi_decoder_valid_member_body:
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi /\
-  abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor st /\
   end_st.cs_next_id <= last /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st initial /\ ~initial.vs_halted /\
   initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -251,9 +252,10 @@ Proof
   drule_all abi_decoder_members_cons_code >>
   disch_then (qx_choose_then `ops` (qx_choose_then `middle` (qx_choose_then `end_st`
     (MAP_EVERY assume_tac o CONJUNCTS)))) >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
   `end_st.cs_next_id <= last /\ first <= end_st.cs_next_id /\
    end_st.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= end_st.cs_next_var`
-    by decide_tac >>
+    by (fs[abi_decoder_entry_floor_def, Excl "enc_def"] >> decide_tac) >>
   mp_tac (SIMP_RULE bool_ss [LET_THM]
     (Q.INST [`ready` |-> `middle`, `pre` |-> `MAP (vyper_to_abi_type env) pretys`,
       `ats` |-> `MAP (vyper_to_abi_type env) tys`,
