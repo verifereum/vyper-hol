@@ -241,3 +241,77 @@ Proof
   simp[exec_alloca_def, update_var_def] >> rpt strip_tac >> gvs[] >>
   decide_tac
 QED
+
+Theorem exec_alloca_post_vars[local]:
+  i.inst_outputs = [out] /\ exec_alloca i s amount = OK s1 /\
+  FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) ==>
+  s1.vs_vars = s.vs_vars |+ (out,n2w b)
+Proof
+  simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >>
+  gvs[update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem alloca_var_ghosts[local]:
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) ==>
+  step_prov PG G i s1 = set_prov G [out] (SOME (b,n)) /\
+  (step_taint i s s1 tn).t_var = set_var_taint tn.t_var [out] {}
+Proof
+  strip_tac >> simp[step_prov_def, out_prov_def, step_taint_def] >>
+  namedCases_on `i.inst_operands` ["", "a ops"]
+  >- simp[out_taint_def] >>
+  namedCases_on `ops` ["", "b' rest"]
+  >- (simp[out_taint_def] >> Cases_on `eval_operand a s` >> simp[]) >>
+  Cases_on `rest` >> simp[out_taint_def] >>
+  Cases_on `eval_operand a s` >> simp[]
+QED
+
+Theorem dload_alloca_vars_transport:
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
+  dload_vars_match fs V G H tn un s t /\
+  (!owner id b c n. dload_live_site fs owner id b c n ==>
+                     dload_live_site gs owner id b c n) /\
+  FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) /\
+  FLOOKUP t1.vs_allocas i.inst_id = SOME (c,n) /\
+  dload_live_site gs owner i.inst_id b c n ==>
+  dload_vars_match gs V
+    (step_prov PG G i s1) (step_prov PH H i t1)
+    (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
+Proof
+  strip_tac >>
+  `s1.vs_vars = s.vs_vars |+ (out,n2w b)` by
+    (irule exec_alloca_post_vars >> metis_tac[]) >>
+  `t1.vs_vars = t.vs_vars |+ (out,n2w c)` by
+    (irule exec_alloca_post_vars >> metis_tac[]) >>
+  `dload_vars_match gs V G H tn un s t` by
+    (irule dload_vars_match_sites_mono >> metis_tac[]) >>
+  `dload_pointer_word gs (b,n) (c,n) (n2w b) (n2w c)` by
+    (simp[dload_pointer_word_def, WORD_SUB_REFL, WORD_ADD_0] >> metis_tac[]) >>
+  `step_prov PG G i s1 = set_prov G [out] (SOME (b,n)) /\
+   (step_taint i s s1 tn).t_var = set_var_taint tn.t_var [out] {}` by
+    (irule alloca_var_ghosts >> simp[]) >>
+  `step_prov PH H i t1 = set_prov H [out] (SOME (c,n)) /\
+   (step_taint i t t1 un).t_var = set_var_taint un.t_var [out] {}` by
+    (irule alloca_var_ghosts >> simp[]) >>
+  simp[dload_vars_match_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `v = out`
+  >- (gvs[lookup_var_def, set_prov_def, set_var_taint_def,
+          FLOOKUP_UPDATE, op_taint_def, dload_value_word_def]) >>
+  qpat_x_assum `dload_vars_match gs _ _ _ _ _ _ _` mp_tac >>
+  simp[dload_vars_match_def] >> disch_then (qspec_then `v` mp_tac) >>
+  simp[lookup_var_def, set_prov_def, set_var_taint_def,
+       FLOOKUP_UPDATE, op_taint_def] >> strip_tac >> gvs[]
+QED
+
+(* Allocation integration: in the fresh branch of dload_actual_alloca_next,
+   gs is the inserted head frame :: rs, fs is the old r :: rs.  The two
+   absent lookups and dload_live_site_original_insert provide site monotonicity;
+   exec_alloca supplies the post-table lookups at the old frontiers, and the
+   inserted head gives the owner-zero live-site witness.  In the repeated
+   branch gs = fs = r :: rs, monotonicity is reflexive, table-stack equality
+   supplies the post-table lookups and the unchanged head gives owner zero.
+   The stored n is used in both runs, not w2n amount in the repeated branch.
+   This interface closes actual variable/provenance/variable-taint matching
+   only.  Layout, saved metadata, other environment fields and full boundary
+   reconstruction still need separate integration. *)
