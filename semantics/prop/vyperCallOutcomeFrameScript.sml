@@ -92,6 +92,7 @@ Proof
 QED
 
 Theorem take_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
   take_call_outcome target calldata value_opt st = (res,st') ==>
   R st st'
@@ -102,6 +103,7 @@ Proof
 QED
 
 Theorem adopt_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
@@ -131,6 +133,7 @@ Proof
 QED
 
 Theorem checked_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -189,6 +192,7 @@ Proof
 QED
 
 Theorem ExtCall_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -216,6 +220,7 @@ Proof
 QED
 
 Theorem Send_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -270,7 +275,8 @@ Theorem take_adopt_call_outcome_effects:
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
                    accounts := st2.accounts; tStorage := st2.tStorage;
-                   logs := st2.logs; pending_deletions := st2.pending_deletions|> /\
+                   logs := st2.logs; pending_deletions := st2.pending_deletions;
+                   storage_trace := st2.storage_trace|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
       st2.accounts = outcome.co_accounts /\
       st2.tStorage = outcome.co_tStorage /\
