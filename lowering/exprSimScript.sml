@@ -31,10 +31,20 @@
  *                            data rounded up to whole words
  *   val_in_memory_word_type — a word type's value in memory: its word is
  *                            the typed encoding
- *   dynarray_type, dynarray_local, locals_kept — the frame on the live
- *                            locals' memory in expr_post: every byte of a
- *                            live local's region is kept, but a DynArray
- *                            local's length word
+ *   mem_path_offset_sound, mem_field_offset_sound — a path's (a field's)
+ *                            offset, from loweringPosts' mem_path_offset, is
+ *                            where subscripts_type (ALOOKUP) puts it, inside
+ *                            the type's bytes
+ *   mem_step_offset_shape — the four kinds of step
+ *   local_path_at_root, local_path_at_step, local_path_at_val_at,
+ *   local_val_at_base     — loweringPosts' local_path_at and local_val_at:
+ *                            a value sits at a path's offset in a local's
+ *                            region, or for a base value, a base type
+ *                            covering its bytes sits there
+ *   dynarray_free_base, dynarray_free_fixed,
+ *   mem_path_offset_dynarray_apart — a value with no dynamic array in it
+ *                            (dynarray_free) is apart from every length
+ *                            word that locals_kept exempts (dynarray_len_at)
  *   locals_kept_mem, locals_kept_mem_tail, locals_kept_regions,
  *   locals_kept_regions_tail — locals_kept from equal memory or from the
  *                            whole regions kept, and along such code
@@ -58,10 +68,13 @@
  * bytes, and val_in_memory with them (expr_val_rel_footprint_agree:
  * expr_val_at bounds the value's val_footprint bytes).  expr_post also
  * keeps the bytes of the live locals at its start (locals_kept), but the
- * length word of a DynArray local, which x.pop() writes; expr_val_at puts
- * no other value on such a length word.  expr_frag,
- * which relates values by val_to_w256, follows for a word type whose typed
- * encoding is val_to_w256 (expr_sim_expr_frag).
+ * length words of the dynamic arrays in them, which a pop writes;
+ * expr_val_at puts a value in a local at a path through the local's
+ * declared type (local_path_at), or a base value where such a path reaches
+ * a base type covering its bytes (local_val_at), so a value with no dynamic
+ * array in it is apart from those words (mem_path_offset_dynarray_apart).
+ * expr_frag, which relates values by val_to_w256, follows for a word type
+ * whose typed encoding is val_to_w256 (expr_sim_expr_frag).
  *
  * Not covered by the leaves here:
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
@@ -81,13 +94,15 @@
 Theory exprSim
 Ancestors
   loweringPosts
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set pair
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend accountsRelProps
+Libs
+  pairLib
 
 (* ===== The judgment ===== *)
 
@@ -151,6 +166,278 @@ Definition val_store_size_def:
          | _ => type_memory_size tv)
     | _ => type_memory_size tv
 End
+
+Theorem mem_path_offset_snoc:
+  !path tv k ptv sb k2 etv.
+    mem_path_offset tv path = SOME (k,ptv) /\
+    mem_step_offset ptv sb = SOME (k2,etv) ==>
+    mem_path_offset tv (path ++ [sb]) = SOME (k + k2,etv)
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem mem_field_offset_sound:
+  !fs fld k ftv.
+    mem_field_offset fs fld = SOME (k,ftv) ==>
+    ALOOKUP fs fld = SOME ftv /\
+    k + type_memory_size ftv <= type_memory_size_fields fs
+Proof
+  Induct >> simp[mem_field_offset_def] >> PairCases >>
+  simp[mem_field_offset_def, type_memory_size_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> simp[PULL_EXISTS, FORALL_PROD] >>
+  rpt strip_tac >> res_tac >> simp[]
+QED
+
+Theorem type_memory_size_list_take_el[local]:
+  !tvs n. n < LENGTH tvs ==>
+    type_memory_size_list (TAKE n tvs) + type_memory_size (EL n tvs) <=
+    type_memory_size_list tvs
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `n` >>
+  simp[type_memory_size_def] >> strip_tac >> res_tac >> simp[]
+QED
+
+Theorem mul_succ_le[local]:
+  !i n. i < n ==> !s. i * s + s <= n * s
+Proof
+  rpt strip_tac >> REWRITE_TAC [GSYM arithmeticTheory.MULT] >>
+  irule arithmeticTheory.LESS_MONO_MULT >> simp[]
+QED
+
+Theorem mem_step_offset_sound[local]:
+  !tv sb k etv.
+    mem_step_offset tv sb = SOME (k,etv) ==>
+    subscript_type tv sb = SOME etv /\
+    k + type_memory_size etv <= type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `tv` >> Cases_on `sb` >>
+  TRY (rename1 `ValueSubscript x` >> Cases_on `x`) >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
+  simp[mem_step_offset_def, subscript_type_def, type_memory_size_def] >>
+  rw[] >> gvs[] >>
+  TRY (drule mem_field_offset_sound >> simp[] >> NO_TAC) >>
+  TRY (drule type_memory_size_list_take_el >> simp[] >> NO_TAC) >>
+  qpat_x_assum `Num _ < _` (mp_tac o MATCH_MP mul_succ_le) >>
+  disch_then (qspec_then `type_memory_size etv` mp_tac) >> simp[]
+QED
+
+(* A path's offset is where the source's subscripts_type puts the path, and
+   the place's bytes lie inside the type's. *)
+Theorem mem_path_offset_sound:
+  !path tv k ptv.
+    mem_path_offset tv path = SOME (k,ptv) ==>
+    subscripts_type tv path = SOME ptv /\
+    k + type_memory_size ptv <= type_memory_size tv
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def, subscripts_type_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  drule mem_step_offset_sound >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[subscripts_type_def]
+QED
+
+Theorem dynarray_len_at_root:
+  !cenv n et m.
+    cenv.ce_var_type n = SOME (ArrayT et (Dynamic m)) ==>
+    dynarray_len_at cenv n 0
+Proof
+  rw[dynarray_len_at_def] >> qexists_tac `[]` >>
+  simp[type_path_offset_def]
+QED
+
+Theorem local_path_at_root:
+  !cenv cx n t0 tv0.
+    cenv.ce_var_type n = SOME t0 /\
+    evaluate_type (get_tenv cx) t0 = SOME tv0 ==>
+    local_path_at cenv cx n 0 tv0
+Proof
+  rw[local_path_at_def] >> qexists_tac `[]` >> simp[mem_path_offset_def]
+QED
+
+(* A step from where a value sits gives where its part sits. *)
+Theorem local_path_at_step:
+  !cenv cx n k tv sb k2 etv.
+    local_path_at cenv cx n k tv /\ mem_step_offset tv sb = SOME (k2,etv) ==>
+    local_path_at cenv cx n (k + k2) etv
+Proof
+  rw[local_path_at_def] >> drule_all mem_path_offset_snoc >> metis_tac[]
+QED
+
+Theorem dynarray_free_step[local]:
+  !tv sb k etv. dynarray_free tv /\ mem_step_offset tv sb = SOME (k,etv) ==>
+                dynarray_free etv
+Proof
+  rw[dynarray_free_def] >> strip_tac >>
+  first_x_assum (qspec_then `sb::path` mp_tac) >>
+  simp[mem_path_offset_def]
+QED
+
+Theorem mem_field_offset_apart[local]:
+  !fs id1 id2 k1 tv1 k2 tv2.
+    mem_field_offset fs id1 = SOME (k1,tv1) /\
+    mem_field_offset fs id2 = SOME (k2,tv2) /\ id1 <> id2 ==>
+    k1 + type_memory_size tv1 <= k2 \/ k2 + type_memory_size tv2 <= k1
+Proof
+  Induct >> simp[mem_field_offset_def] >> PairCases >>
+  rpt gen_tac >> simp[mem_field_offset_def] >>
+  rw[optionTheory.OPTION_MAP_EQ_SOME, EXISTS_PROD] >> gvs[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem take_succ_sum_le[local]:
+  !tvs i j. i < j /\ j <= LENGTH tvs ==>
+    type_memory_size_list (TAKE i tvs) + type_memory_size (EL i tvs) <=
+    type_memory_size_list (TAKE j tvs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `i` >> Cases_on `j` >>
+  simp[type_memory_size_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`n`, `n'`] mp_tac) >> simp[]
+QED
+
+Theorem num_lt_cases[local]:
+  !i j. i <> j /\ 0 <= i /\ 0 <= j ==> Num i < Num j \/ Num j < Num i
+Proof
+  rpt strip_tac >> `Num i <> Num j` by metis_tac[integerTheory.INT_OF_NUM] >>
+  decide_tac
+QED
+
+Theorem elems_apart[local]:
+  !i j s c. i <> j /\ 0 <= i /\ 0 <= j ==>
+    c + Num i * s + s <= c + Num j * s \/ c + Num j * s + s <= c + Num i * s
+Proof
+  rpt strip_tac >> drule_all num_lt_cases >> strip_tac
+  >- (disj1_tac >> `Num i * s + s <= Num j * s` by metis_tac[mul_succ_le] >>
+      decide_tac) >>
+  disj2_tac >> `Num j * s + s <= Num i * s` by metis_tac[mul_succ_le] >>
+  decide_tac
+QED
+
+Theorem fixed_elems_apart[local]:
+  !i j s. i <> j /\ 0 <= i /\ 0 <= j ==>
+    Num i * s + s <= Num j * s \/ Num j * s + s <= Num i * s
+Proof
+  rpt strip_tac >> drule_all elems_apart >>
+  disch_then (qspecl_then [`s`, `0`] mp_tac) >> simp[]
+QED
+
+Theorem tuple_elems_apart[local]:
+  !tvs i j. i <> j /\ 0 <= i /\ 0 <= j /\
+            Num i < LENGTH tvs /\ Num j < LENGTH tvs ==>
+    type_memory_size_list (TAKE (Num i) tvs) + type_memory_size (EL (Num i) tvs) <=
+      type_memory_size_list (TAKE (Num j) tvs) \/
+    type_memory_size_list (TAKE (Num j) tvs) + type_memory_size (EL (Num j) tvs) <=
+      type_memory_size_list (TAKE (Num i) tvs)
+Proof
+  rpt strip_tac >> drule_all num_lt_cases >> strip_tac
+  >- (disj1_tac >> irule take_succ_sum_le >> simp[]) >>
+  disj2_tac >> irule take_succ_sum_le >> simp[]
+QED
+
+(* The shape of a step: a field of a struct, or an element of an array or
+   a tuple. *)
+Theorem mem_step_offset_shape:
+  !tv sb k etv.
+    mem_step_offset tv sb = SOME (k,etv) ==>
+    (?fs id. tv = StructTV fs /\ sb = AttrSubscript id /\
+             mem_field_offset fs id = SOME (k,etv)) \/
+    (?i n. tv = ArrayTV etv (Fixed n) /\ sb = ValueSubscript (IntV i) /\
+           0 <= i /\ Num i < n /\ k = Num i * type_memory_size etv) \/
+    (?i n. tv = ArrayTV etv (Dynamic n) /\ sb = ValueSubscript (IntV i) /\
+           0 <= i /\ Num i < n /\ k = 32 + Num i * type_memory_size etv) \/
+    (?tvs i. tv = TupleTV tvs /\ sb = ValueSubscript (IntV i) /\
+             0 <= i /\ Num i < LENGTH tvs /\
+             k = type_memory_size_list (TAKE (Num i) tvs) /\
+             etv = EL (Num i) tvs)
+Proof
+  rpt gen_tac >> Cases_on `sb` >>
+  TRY (rename1 `ValueSubscript vv` >> Cases_on `vv`) >>
+  Cases_on `tv` >>
+  TRY (rename1 `ArrayTV _ bd` >> Cases_on `bd`) >>
+  simp[mem_step_offset_def] >> rw[] >> simp[]
+QED
+
+(* Two different steps from one type reach parts whose bytes are apart. *)
+Theorem mem_step_offset_apart[local]:
+  !tv sb1 sb2 k1 tv1 k2 tv2.
+    mem_step_offset tv sb1 = SOME (k1,tv1) /\
+    mem_step_offset tv sb2 = SOME (k2,tv2) /\ sb1 <> sb2 ==>
+    k1 + type_memory_size tv1 <= k2 \/ k2 + type_memory_size tv2 <= k1
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `mem_step_offset _ sb1 = _`
+    (strip_assume_tac o MATCH_MP mem_step_offset_shape) >>
+  qpat_x_assum `mem_step_offset _ sb2 = _`
+    (strip_assume_tac o MATCH_MP mem_step_offset_shape) >>
+  rpt BasicProvers.VAR_EQ_TAC >> full_simp_tac (srw_ss()) [] >>
+  rpt BasicProvers.VAR_EQ_TAC
+  >~ [`mem_field_offset`] >- metis_tac[mem_field_offset_apart]
+  >~ [`TAKE`] >- metis_tac[tuple_elems_apart]
+  >~ [`32 + _`] >- metis_tac[elems_apart] >>
+  metis_tac[fixed_elems_apart]
+QED
+
+Theorem mem_step_offset_dynarray_ge[local]:
+  !etv m sb k tv.
+    mem_step_offset (ArrayTV etv (Dynamic m)) sb = SOME (k,tv) ==> 32 <= k
+Proof
+  rpt strip_tac >> drule mem_step_offset_shape >> strip_tac >> gvs[]
+QED
+
+Theorem dynarray_free_base:
+  !bt. dynarray_free (BaseTV bt)
+Proof
+  rw[dynarray_free_def] >> Cases_on `path` >>
+  simp[mem_path_offset_def, AllCaseEqs(), optionTheory.OPTION_MAP_EQ_SOME,
+       EXISTS_PROD, PULL_EXISTS] >>
+  rpt strip_tac >> drule mem_step_offset_shape >> simp[]
+QED
+
+Theorem dynarray_free_fixed:
+  !etv n. dynarray_free etv ==> dynarray_free (ArrayTV etv (Fixed n))
+Proof
+  rw[dynarray_free_def] >> Cases_on `path` >>
+  simp[mem_path_offset_def, AllCaseEqs(), optionTheory.OPTION_MAP_EQ_SOME,
+       EXISTS_PROD, PULL_EXISTS] >>
+  rpt strip_tac >> drule mem_step_offset_shape >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+(* A value of a type free of dynamic arrays, on one path through tv0, is
+   apart from the length word of any dynamic array on another. *)
+Theorem mem_path_offset_dynarray_apart:
+  !p1 tv0 p2 k1 tv k2 etv m.
+    mem_path_offset tv0 p1 = SOME (k1,tv) /\ dynarray_free tv /\
+    mem_path_offset tv0 p2 = SOME (k2, ArrayTV etv (Dynamic m)) ==>
+    k1 + type_memory_size tv <= k2 \/ k2 + 32 <= k1
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[mem_path_offset_def, dynarray_free_def] >> metis_tac[]) >>
+  rename1 `mem_path_offset tv0 (sb1::p1) = _` >>
+  qpat_x_assum `mem_path_offset _ (sb1::_) = _` mp_tac >>
+  simp[Once mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `mem_step_offset tv0 sb1 = SOME (j1,ptv1)` >>
+  rename1 `mem_path_offset ptv1 p1 = SOME (j1',_)` >>
+  Cases_on `p2`
+  >- (gvs[mem_path_offset_def] >> drule mem_step_offset_dynarray_ge >> simp[]) >>
+  rename1 `mem_path_offset tv0 (sb2::p2) = _` >>
+  qpat_x_assum `mem_path_offset _ (sb2::_) = _` mp_tac >>
+  simp[Once mem_path_offset_def, AllCaseEqs(), EXISTS_PROD, PULL_EXISTS] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  rename1 `mem_step_offset tv0 sb2 = SOME (j2,ptv2)` >>
+  rename1 `mem_path_offset ptv2 p2 = SOME (j2',_)` >>
+  Cases_on `sb1 = sb2`
+  >- (gvs[] >> first_x_assum drule_all >> simp[]) >>
+  qspecl_then [`p1`, `ptv1`, `j1'`, `tv`] mp_tac mem_path_offset_sound >>
+  qspecl_then [`p2`, `ptv2`, `j2'`, `ArrayTV etv (Dynamic m)`] mp_tac
+    mem_path_offset_sound >>
+  qspecl_then [`tv0`, `sb1`, `sb2`, `j1`, `ptv1`, `j2`, `ptv2`] mp_tac
+    mem_step_offset_apart >>
+  simp[type_memory_size_def] >> rpt strip_tac >> decide_tac
+QED
 
 
 Theorem locals_kept_mem_tail:
@@ -306,6 +593,27 @@ Proof
           valueEncodingTheory.type_memory_size_def] >>
       qspec_then `n` mp_tac le_word_size_mul >> decide_tac) >>
   simp[]
+QED
+
+(* A value sits where local_path_at puts its type. *)
+Theorem local_path_at_val_at:
+  !cenv cx n k tv v.
+    local_path_at cenv cx n k tv ==> local_val_at cenv cx n k tv v
+Proof
+  simp[local_val_at_def]
+QED
+
+(* A base value no bigger than one where local_val_at puts it sits there
+   too: a bytestring convert keeps the pointer. *)
+Theorem local_val_at_base:
+  !cenv cx n k bt1 v bt2 v2.
+    local_val_at cenv cx n k (BaseTV bt1) v /\ val_wf (BaseTV bt1) v /\
+    val_footprint (BaseTV bt2) v2 <= val_footprint (BaseTV bt1) v ==>
+    local_val_at cenv cx n k (BaseTV bt2) v2
+Proof
+  rw[local_val_at_def] >> disj2_tac
+  >- (qexists_tac `bt1` >> drule val_footprint_le >> simp[]) >>
+  qexists_tac `bt0` >> simp[]
 QED
 
 (* A value's footprint is within the bytes storing it writes. *)
