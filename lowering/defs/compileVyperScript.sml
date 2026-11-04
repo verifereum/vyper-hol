@@ -493,6 +493,19 @@ Definition build_func_param_types_def:
     | _ => rest_map
 End
 
+(* Declared return types of the non-external functions, the first
+   declaration of a name winning, as in build_func_param_types. *)
+Definition build_func_return_type_def:
+  build_func_return_type ([] : toplevel list) = (K NoneT : string -> type) ∧
+  build_func_return_type (top :: rest) =
+    let rest_map = build_func_return_type rest in
+    case top of
+      FunctionDecl vis _ _ _ fname _ _ ret _ =>
+        if vis = External then rest_map
+        else (λs. if s = fname then ret else rest_map s)
+    | _ => rest_map
+End
+
 (* Function ids for internal labels (internal_fn_label): a function's
    position among the source's function declarations, counting from n, and
    the first non-external declaration of a name wins, as in
@@ -639,6 +652,7 @@ Definition build_compile_env_def:
        ce_imm_alloca := NONE;
        ce_func_info := func_info;
        ce_func_param_types := build_func_param_types tops;
+       ce_func_return_type := build_func_return_type tops;
        ce_func_ids := build_func_ids 0 tops;
        ce_nonreentrant := (F, 0n, use_transient_locks, mut = View);
        (* Default: overridden by package_*_fn from FunctionDecl raw_return field *)
@@ -683,6 +697,17 @@ Theorem build_compile_env_ce_func_param_types:
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_func_param_types =
     build_func_param_types tops
+Proof
+  rpt strip_tac
+  >> simp[build_compile_env_def]
+  >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem build_compile_env_ce_func_return_type:
+  !tops vis mut func_name args ret_type (body : stmt list) use_trans.
+    (build_compile_env tops vis mut func_name args ret_type body use_trans).
+      ce_func_return_type =
+    build_func_return_type tops
 Proof
   rpt strip_tac
   >> simp[build_compile_env_def]
@@ -829,14 +854,13 @@ Proof
   Induct >> simp[add_module_var_locations_def] >>
   rpt gen_tac >> simp[Once add_module_var_locations_def] >>
   strip_tac >> first_x_assum drule >>
-  Cases_on `h` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `option_CASE slot_opt no_slot with_slot` >>
-  Cases_on `slot_opt` >> simp[Abbr `no_slot`, Abbr `with_slot`] >>
-  rw[finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()] >>
-  gvs[AllCaseEqs()] >>
-  qmatch_asmsub_rename_tac `variable_mutability_CASE mut` >>
-  Cases_on `mut` >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  gvs[AllCaseEqs()] >> metis_tac[]
+  Cases_on `h` >> simp[]
+  >~ [`VariableDecl _ vloc _ _ vslot`]
+  >- (Cases_on `vslot` >> simp[] >> Cases_on `vloc` >>
+      rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[])
+  >~ [`HashMapDecl _ htr _ _ _ hslot`]
+  >- (Cases_on `hslot` >> simp[] >> Cases_on `htr` >>
+      rw[finite_mapTheory.FLOOKUP_UPDATE] >> simp[])
 QED
 
 Theorem add_immutable_locations_FLOOKUP:

@@ -74,6 +74,23 @@ Definition effective_decorators_def:
     else decs
 End
 
+(* The default guard applies to external functions that can read state.
+   An explicit decorator is retained for the header checker to validate. *)
+Theorem effective_decorators_pure:
+  MEM "pure" decs ==> effective_decorators nr_default decs = decs
+Proof
+  simp[effective_decorators_def]
+QED
+
+Theorem effective_decorators_nonreentrant:
+  MEM "nonreentrant" (effective_decorators nr_default decs) <=>
+  MEM "nonreentrant" decs ∨
+  (nr_default ∧ MEM "external" decs ∧ ¬MEM "pure" decs ∧
+   ¬MEM "reentrant" decs)
+Proof
+  Cases_on `MEM "nonreentrant" decs` >> rw[effective_decorators_def] >> gvs[]
+QED
+
 Definition translate_toplevel_def:
   (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default
       (JTL_FunctionDef name decs override_aliases args defaults
@@ -93,18 +110,19 @@ Definition translate_toplevel_def:
       (canonical_decl_type nominal_index all_import_maps type_ctx ret_ty ret_ann)
       (translate_stmts nominal_index all_import_maps body_ctx body))) /\
 
-  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient const_val) =
+  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_VariableDecl name ty ann_ty is_public is_immutable is_transient is_reentrant const_val) =
     SOME (VariableDecl
-      (if is_public then Public else Private)
+      (if is_public then Public (nr_default /\ ~is_reentrant /\
+        ~is_immutable /\ const_val = NONE) else Private)
       (translate_var_mutability expr_ctx is_immutable is_transient
         (case const_val of SOME _ => T | NONE => F) const_val)
       name
       (canonical_decl_type nominal_index all_import_maps type_ctx ty ann_ty)
       NONE)) /\
 
-  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_HashMapDecl name key_ty val_ty is_public is_transient) =
+  (translate_toplevel nominal_index all_import_maps expr_ctx type_ctx nr_default (JTL_HashMapDecl name key_ty val_ty is_public is_transient is_reentrant) =
     SOME (HashMapDecl
-      (if is_public then Public else Private)
+      (if is_public then Public (nr_default /\ ~is_reentrant) else Private)
       is_transient
       name
       (translate_type type_ctx key_ty)

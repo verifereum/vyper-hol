@@ -46,10 +46,6 @@
  *                              ce_module_vars,
  *                              so the lowering may emit INVALID where the
  *                              source reads a value (#563 for immutables).
- *   compile_prevhash_sim     — block.prevhash (row 5): the source raises a
- *                              RuntimeError where BLOCKHASH returns 0 (#671),
- *                              and call_ctx_rel does not relate the block
- *                              hashes.
  *   compile_msg_gas_sim      — msg.gas: the source reads the next of the
  *                              state's gas readings where the lowering emits
  *                              GAS, and call_ctx_rel does not relate the two;
@@ -61,7 +57,7 @@
 
 Theory exprSimLeaves
 Ancestors
-  list finite_map
+  list finite_map freshWrites builtinProps varsExt vyperContext exprSimUnop
   exprSim exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
   compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -352,10 +348,60 @@ QED
 
 (* ===== Environment reads ===== *)
 
+(* block.prevhash: compile_env_var PrevHash emits NUMBER, SUB 1,
+   BLOCKHASH, with no check.  call_ctx_rel's tx_env_ok makes the source's
+   evaluate_block_hash (block_number - 1) succeed (block_number <> 0 and
+   the hash list is nonempty) with EL 0 block_hashes, and its bc_blockhash
+   clause gives the same at block_number - 1.  Where tx_env_ok fails no
+   Venom state is related, so the error cases hold vacuously. *)
 Theorem compile_prevhash_sim:
   !cenv ann args. expr_sim_ok cenv (Builtin ann (Env PrevHash) args)
 Proof
-  cheat
+  rw[expr_sim_ok_def] >>
+  `args = [] /\ ann = env_item_type PrevHash` by
+    gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >> rw[expr_sim_def] >>
+  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  >- simp[frag_exec_def] >>
+  `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  `tx_env_ok cx.txn` by gvs[call_ctx_rel_def] >>
+  qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+       builtin_args_length_ok_def, read_result_def] >>
+  simp[Once evaluate_def, bind_def, read_result_def, return_def,
+       evaluate_builtin_def, tx_env_ok_evaluate_prevhash] >>
+  strip_tac >> gvs[] >>
+  drule lower_value_env >> strip_tac >>
+  irule frag_exec_conseq >>
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+                      s.vs_block_ctx = s0.vs_block_ctx`,
+                `\s. stmt_state_rel ctx func cenv cx es s /\
+                     eval_operand op s = SOME (HD cx.txn.block_hashes) /\
+                     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                            lookup_var x s = SOME w) /\
+                     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                              FLOOKUP s.vs_allocas aid = SOME b) /\
+                     s.vs_memory = s0.vs_memory`, `\r. F`] >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def,
+       vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,
+       PAD_RIGHT, length_word_to_bytes_be, word_of_bytes_be_to_bytes,
+       locals_kept_mem] >>
+  ho_match_mp_tac frag_exec_run_frame >>
+  qexists_tac `\a. F` >>
+  drule compile_prevhash_shape >> strip_tac >> simp[] >>
+  conj_tac
+  >- (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all compile_prevhash_frame >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[drop_fresh_def]) >>
+  rpt strip_tac >>
+  drule_all compile_prevhash_run >>
+  strip_tac >> drule call_ctx_rel_prevhash >> strip_tac >> gvs[] >>
+  goal_assum drule >> simp[]
 QED
 
 Theorem compile_msg_gas_sim:
@@ -506,6 +552,27 @@ Proof
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>
+  `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
+    (`declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
+       simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
+     `storage_layout_safe cx` by gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     drule_all
+       vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >>
+     simp[]) >>
+  `!s. stmt_state_rel ctx func cenv cx es s ==>
+       storage_range_agree (get_storage cx es tr)
+         (if tr then contract_transient s else contract_storage s)
+         (n2w slot) tvt` by
+    (rpt strip_tac >>
+     `storage_agree (storage_dead cx tr (get_storage cx es tr))
+        (get_storage cx es tr)
+        (if tr then contract_transient s else contract_storage s)` by
+       (Cases_on `tr` >>
+        gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+            transient_rel_def, vyperStorageBackendTheory.get_storage_def,
+            vfmStateTheory.lookup_account_def]) >>
+     irule accountsRelPropsTheory.storage_range_agree_of_live >>
+     metis_tac[]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
   Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>

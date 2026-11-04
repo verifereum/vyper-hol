@@ -71,7 +71,7 @@ Theorem block_environment_bounds:
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
 Proof
-  simp[tx_block_fields_rel_def, tx_env_ok_def]
+  simp[tx_block_fields_rel_def, compileEnvTheory.tx_env_ok_def]
 QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
@@ -81,7 +81,7 @@ Theorem no_genesis_or_unbounded_hash_environment:
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))
 Proof
-  simp[tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
+  simp[compileEnvTheory.tx_env_ok_def, arithmeticTheory.MIN_DEF] >> rw[] >> decide_tac
 QED
 
 (* ===== Exact source module/layout and independent hypotheses ===== *)
@@ -123,18 +123,23 @@ Proof
 QED
 
 Theorem outcome_guard_success_only:
-  call_outcomes_ok tops am tx [] /\
-  (call_outcomes_ok tops am tx [co with co_success := F] <=>
-    LENGTH co.co_returnData < dimword(:256)) /\
-  (call_outcomes_ok tops am tx [co with co_success := T] <=>
+  call_outcomes_ok am tx [] /\
+  (call_outcomes_ok am tx [co with co_success := F] <=>
     LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (initial_state (am with <|accounts := co.co_accounts;
                                tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx (xs ++ ys) <=>
-    call_outcomes_ok tops am tx xs /\ call_outcomes_ok tops am tx ys)
+  (call_outcomes_ok am tx [co with co_success := T] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
+    accounts_runtime_well_typed co.co_accounts /\
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <|accounts := co.co_accounts;
+                               tStorage := co.co_tStorage|>) [])) /\
+  (call_outcomes_ok am tx (xs ++ ys) <=>
+    call_outcomes_ok am tx xs /\ call_outcomes_ok am tx ys)
 Proof
   simp[call_outcomes_ok_def, EVERY_APPEND]
 QED
@@ -184,7 +189,7 @@ QED
    independent supported whitelist rejects public variables. Do not silently
    strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
 Theorem source_lookup_getter_outside_supported:
-  let tops = [VariableDecl Public Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
@@ -196,6 +201,19 @@ Proof
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
+Theorem raw_return_is_unwrapped:
+  tx_return_bytes
+    [FunctionDecl External Pure F T "raw" [] []
+       (BaseT (BytesT (Dynamic 8))) []]
+    (BaseT (BytesT (Dynamic 8))) (tx with function_name := "raw")
+    (vyperValue$BytesV [1w; 2w]) out <=>
+  out = [1w; 2w]
+Proof
+  simp[tx_return_bytes_def, lookup_raw_return_or_F_def,
+       lookup_raw_return_def, vyperValueTheory.raw_return_bytes_def] >>
+  metis_tac[]
+QED
+
 Theorem no_return_is_empty:
   return_bytes tops NoneT v out <=> out = []
 Proof
@@ -295,11 +313,12 @@ Theorem success_requires_requests_and_effects:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
-      return_bytes tops ret v out /\
-      accounts_agree cx am'.accounts es'.rollback.accounts /\
+      tx_return_bytes tops ret tx v out /\
+      accounts_agree cx am'.accounts
+        (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
       transient_agree cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
+      LIST_REL (request_agree cx) rqs (call_requests es))
 Proof
   simp[call_result_rel_def]
 QED

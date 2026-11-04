@@ -96,7 +96,9 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
+    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
@@ -177,12 +179,18 @@ Proof
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e. MEM e args ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
@@ -260,6 +268,10 @@ Resume compile_make_array_vv_case[tuple]:
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
@@ -345,7 +357,12 @@ Resume compile_make_array_vv_case[array]:
   simp[wordsTheory.dimword_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
-  conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+  conj_tac >-
+    (rpt gen_tac >>
+     qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+     qpat_x_assum `!name p n. local_region cenv es.scopes t name p n <=> _` mp_tac >>
+     qpat_x_assum `t.vs_memory = s0.vs_memory` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `LENGTH vs = LENGTH args` by (drule eval_exprs_length >> simp[]) >>
   Cases_on `bnd`
   >- (gvs[vyperValueTheory.compatible_bound_def] >>
@@ -357,7 +374,9 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
+    exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
+    (~nocalls ==> !e. MEM e (MAP SND fields) ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
     expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
@@ -366,7 +385,9 @@ QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e. MEM e args ==>
+       int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
     expr_sim_case nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args) /\
     expr_vv_case nocalls ctx func cenv cx
@@ -381,7 +402,7 @@ Theorem compile_struct_lit_sim:
     expr_vv_ok cenv (StructLit ann nsid fields)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_struct_lit_vv_case >> irule exprs_case_every_ok >>
+  irule compile_struct_lit_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_struct_fields >> metis_tac[]
 QED
 
@@ -391,7 +412,7 @@ Theorem compile_make_array_sim:
     expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
-  irule compile_make_array_vv_case >> irule exprs_case_every_ok >>
+  irule compile_make_array_vv_case >> simp[] >> irule exprs_case_every_ok >>
   irule expr_sim_below_args >> first_assum ACCEPT_TAC
 QED
 

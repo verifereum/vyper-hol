@@ -18,7 +18,7 @@
  *     other than NoneT and an empty struct is assignable, as the two above
  *     assume
  * Helpers:
- *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
+ *   vyper_to_abi_type_submap (abiTypeBoundProps) -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
  *   abi_props_vyper -- compile-side ABI sizes and flags are the source's
  *   abi_elem_props -- the same for a type in a smaller env than the map's
@@ -33,7 +33,7 @@
 
 Theory retAbiPlanProps
 Ancestors
-  compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
+  abiTypeBoundProps compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin abiLayoutSource
@@ -41,12 +41,19 @@ Ancestors
 
 (* ===== Source side ===== *)
 
-(* Evaluation and the ABI type are stable under a larger type env: a type
-   that evaluates names only structs its env has. *)
-Theorem vyper_to_abi_type_submap =
-  abiLayoutSourceTheory.vyper_to_abi_type_submap;
-
-Theorem vyper_to_abi_type_dynamic[local] = abiLayoutSourceTheory.vyper_to_abi_type_dynamic;
+(* vyperTypeABI has these two as local lemmas. *)
+Theorem vyper_to_abi_type_dynamic[local]:
+  (!tenv ty tv.
+     evaluate_type tenv ty = SOME tv ==>
+     is_dynamic (vyper_to_abi_type tenv ty) = vyper_is_dynamic tenv ty) /\
+  (!tenv ts acc tvs.
+     evaluate_types tenv ts acc = SOME tvs ==>
+     any_dynamic (vyper_to_abi_types tenv ts) = vyper_any_dynamic tenv ts)
+Proof
+  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, vyper_is_dynamic_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> TRY (Cases_on `bd`) >> gvs[vyper_is_dynamic_def]
+QED
 
 Theorem vyper_to_abi_static_length[local] = abiLayoutSourceTheory.vyper_to_abi_static_length;
 

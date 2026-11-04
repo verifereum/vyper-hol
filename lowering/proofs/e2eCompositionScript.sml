@@ -1,14 +1,14 @@
 (* PLAN §8.1 composition helpers. No stage theorem is used here.
  * TOP-LEVEL: raw-result termination/transport, source exemption,
  *   successful and failed frame composition, unconditional run_call totality.
- *   external_call_dead (definition), external_call_dead_wf,
+ *   external_call_dead_wf (external_call_dead is in vyperLoweringCorrect),
  *   external_call_result_rel_dead_transport — the source result's dead
  *   bytes, and the source relation's transport up to them.
  * Requests are compared only on success; abort kinds/data are not equated.
  *)
 Theory e2eComposition
 Ancestors
-  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract compileEnv
+  e2eDefs vyperLoweringCorrect unitTransformDefs o1PassContract ptrDiscipline compileEnv
   accountsRelProps codegenCorrectness
   passSimulationDefs stateEquiv venomExecSemantics venomState
   vyperInterpreter vyperValue vfmDecreasesGas vfmExecution frameOutcome callTrace
@@ -35,24 +35,6 @@ Proof
 QED
 
 (* ===== Raw termination and pipeline transport ===== *)
-
-(* The dead bytes of a source call's result: those storage_dead gives in
-   the running contract's storage and transient storage, by the layout the
-   success case of external_call_result_rel compares with.  The pipeline
-   may change them (o1PassContract's dead_result_rel); the source relation
-   already ignores them. *)
-Definition external_call_dead_def:
-  external_call_dead tx ((res : value + exception), am',
-                      (rqs : call_request list)) =
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-    <| d_stor := (\a st. if a = tx.target
-                         then {(k,b) | storage_dead cx F st (w2n k) b}
-                         else {});
-       d_trans := (\a st. if a = tx.target
-                          then {(k,b) | storage_dead cx T st (w2n k) b}
-                          else {});
-       d_imm := K {}; d_ret := K {} |>
-End
 
 Theorem initial_evaluation_context_txn[local,simp]:
   (initial_evaluation_context srcs layouts tx src_id_opt).txn = tx
@@ -177,6 +159,21 @@ Proof
   qexists_tac `a1` >> gvs[]
 QED
 
+(* Deleting the same accounts on both sides keeps them equal up to any
+   dead bytes: a deleted account is empty on both. *)
+Theorem accounts_agree_except_process_deletions:
+  !D ds a1 a2.
+    accounts_agree_except D a1 a2 ==>
+    accounts_agree_except D (process_deletions ds a1) (process_deletions ds a2)
+Proof
+  gen_tac >> Induct >> simp[process_deletions_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[accounts_agree_except_def, vfmStateTheory.update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rw[] >>
+  simp[storage_agree_except_def, word_agree_except_def]
+QED
+
 Theorem transient_agree_dead_trans[local]:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
   transient_agree cx t0 t1 /\
@@ -226,7 +223,8 @@ Proof
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
   rpt conj_tac
   >- gvs[]
-  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[])
+  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+      metis_tac[accounts_agree_except_process_deletions])
   >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
   gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
   irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]

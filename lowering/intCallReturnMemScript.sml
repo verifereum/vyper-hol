@@ -33,7 +33,7 @@ Definition intret_mem_q_def:
 End
 
 (* RET with only the return PC: an IntRet with no values. *)
-Theorem emit_ret_pc_frag[local]:
+Theorem emit_ret_pc_frag:
   !ctx sm sb rpc P Q R.
     emit_inst RET [rpc] [] sm = ((),sb) /\
     (!s. P s ==> (?pc. eval_operand rpc s = SOME pc) /\
@@ -72,6 +72,7 @@ Theorem compile_internal_return_memory_frag:
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. buf_op = Var x ==> not_fresh_at sa x) /\
     (!x. rpc = Var x ==> not_fresh_at sa x) /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sa x) /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
     val_wf tv v /\ type_memory_bytes cenv ty = type_memory_size tv /\
     w2n bw + type_memory_size tv + 64 < dimword (:256) /\
@@ -153,7 +154,8 @@ Resume compile_internal_return_memory_frag[store]:
   conj_tac
   >- (irule result_state_memory_frame >> simp[] >> qexists_tac `s` >>
       simp[local_region_def, lookup_scopes_def] >>
-      fs[venom_state_component_equality]) >>
+      fs[venom_state_component_equality] >>
+      metis_tac[]) >>
   qexists_tac `pc` >>
   qspecl_then [`rpc`, `sa`, `s`, `t1`] mp_tac store_result_operand_frame >>
   simp[]

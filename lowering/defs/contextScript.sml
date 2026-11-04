@@ -841,6 +841,35 @@ Definition compile_store_memory_def:
     else compile_copy_memory dst src (type_memory_bytes cenv dst_ty)
 End
 
+(* Memory laid out as src_ty can be read as dst_ty: nested arrays and tuples
+   need equal element and member sizes, which fix strides and offsets; a
+   wider top-level bound or capacity keeps the layout of the data present.
+   Mirrors Python: codegen/core.py punnable. *)
+Definition punnable_def:
+  punnable cenv (ArrayT src_elem _) (ArrayT dst_elem _) =
+    (type_memory_bytes cenv src_elem = type_memory_bytes cenv dst_elem ∧
+     punnable cenv src_elem dst_elem) ∧
+  punnable cenv src_ty (ArrayT _ _) = F ∧
+  punnable cenv (TupleT src_tys) (TupleT dst_tys) =
+    punnable_list cenv src_tys dst_tys ∧
+  punnable cenv src_ty (TupleT _) = F ∧
+  punnable cenv src_ty dst_ty = T ∧
+  punnable_list cenv [] [] = T ∧
+  punnable_list cenv (src_ty::src_tys) (dst_ty::dst_tys) =
+    (type_memory_bytes cenv src_ty = type_memory_bytes cenv dst_ty ∧
+     punnable cenv src_ty dst_ty ∧ punnable_list cenv src_tys dst_tys) ∧
+  punnable_list cenv _ _ = F
+End
+
+(* A flat copy of dst_ty's size from memory laid out as src_ty is a valid
+   dst_ty value, so the src_ty value can be used as dst_ty without a copy.
+   Mirrors Python: context.py same_memory_layout (vyperlang/vyper#5331). *)
+Definition same_memory_layout_def:
+  same_memory_layout cenv src_ty dst_ty =
+    (punnable cenv src_ty dst_ty ∧
+     type_memory_bytes cenv src_ty = type_memory_bytes cenv dst_ty)
+End
+
 (* NOTE: compile_store_complex_type and compile_copy_complex_type deleted —
    dead code. Actual callers use compile_word_copy_loop / compile_ptr_load
    directly with explicit is_ctor from cenv.ce_is_ctor. *)

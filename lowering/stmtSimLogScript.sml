@@ -25,6 +25,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec exprSim stmtSim stmtLowering exprLowering compileEnv
   supportedTypes vyperEvent vyperInterpreter vyperState vyperValue
+  stmtSimLogCompose
 Libs
   monadsyntax
 
@@ -54,7 +55,7 @@ End
    the ABI encoding of the non-indexed fields fit below 2 ** 256 (the
    lowering hands their sizes to ALLOCA as words).
 
-   Why it holds (unchecked intuition):
+   Why it holds (proved as compile_log_ready_stmt_frag in stmtSimLogCompose):
    - the source's encode_source_event cannot fail: the lengths of values,
      types and flags agree, each value has its type, and vyper_to_abi_base
      succeeds on every supported scalar type's value;
@@ -73,7 +74,7 @@ End
    - the two ALLOCAs and the encoder write only their own buffers, which
      stmt_state_rel's allocation facts keep apart from every live local. *)
 Theorem compile_log_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id args es res es' Inv h tys flags.
+  !ctx func cx lctx RetQ cenv ty id args es res es' Inv h tys flags env.
     eval_stmt cx (Log id args) es = (res, es') /\
     cenv.ce_event_info (nsid_to_string id) = SOME (h, tys, flags) /\
     lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id =
@@ -84,9 +85,22 @@ Theorem compile_log_stmt_frag:
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields
       (TupleT (log_non_indexed_types flags tys)) < dimword (:256) /\
-    log_args_ready ctx func cenv cx Inv args /\ Inv es ==>
+    log_args_ready ctx func cenv cx Inv args /\ Inv es /\
+    well_typed_exprs env args /\
+    (!id t. FLOOKUP env.var_types id = SOME t ==>
+       ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Log id args)) es res es'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> irule compile_log_ready_stmt_frag >>
+  reverse conj_tac >- (simp[] >> metis_tac[LENGTH_MAP]) >>
+  qexists_tac `\tail s. log_args_ready ctx func cenv cx Inv tail /\ Inv s` >> simp[] >>
+  rpt gen_tac >> simp[Once log_args_ready_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `Inv s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                    value_has_type tv v` by metis_tac[] >>
+  simp[] >> first_x_assum irule >>
+  qpat_x_assum `(do r <- eval_expr cx e; read_result cx r od) s = _` mp_tac >>
+  simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED

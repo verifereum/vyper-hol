@@ -260,8 +260,10 @@ Proof
        assert_def, raise_def]
 QED
 
-(* All output/revert/static/delegate variants use the same original bytes. *)
+(* All output/revert/static/delegate variants use the same original bytes
+   when the callee runs: without the oracle, or for a delegate call. *)
 Theorem raw_call_calldata_original_input_test:
+  (st.outcomes = NONE \/ flags.rcf_is_delegate) /\
   ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
   cx.txn.calldata = [1w; 2w; 3w; 4w; 10w; 11w; 99w] /\

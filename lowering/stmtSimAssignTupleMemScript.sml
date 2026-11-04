@@ -47,6 +47,7 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
       es = (res, es') /\
     ids <> [] /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>

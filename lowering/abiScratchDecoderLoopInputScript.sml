@@ -20,7 +20,8 @@ Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `site IN abi_decoder_ids first last` by simp[abi_decoder_ids_def] >>
   drule_all abi_decoder_budget_site_bounds >> strip_tac >>
-  `b + cap < dimword (:256)` by fs[abi_decoder_budget_def] >>
+  `b + cap < dimword (:256)` by
+    (drule abiDecoderIndexInitTheory.abi_decoder_budget_word_bound >> simp[]) >>
   `slot < dimword (:256)` by decide_tac >>
   qhdtm_x_assum `abi_scratch_decoder_input`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def]) >>
