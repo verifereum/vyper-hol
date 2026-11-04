@@ -5207,6 +5207,204 @@ Proof
   qexists_tac `tv` >> simp[]
 QED
 
+Theorem aug_place_emit_void_grows[local]:
+  emit_void opc ops sa = ((),sb) ==> cs_extends sa sb
+Proof
+  strip_tac >> drule emit_void_extends >> strip_tac >>
+  irule cs_extends_same_block >>
+  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem aug_place_emit_op_grows[local]:
+  emit_op opc ops sa = (v,sb) ==> cs_extends sa sb
+Proof
+  strip_tac >> drule emit_op_extends >> strip_tac >>
+  irule cs_extends_same_block >>
+  gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]
+QED
+
+Theorem aug_place_target_ptr_not_label:
+  compile_get_target_ptr cfn cenv t sa = (r,sb) /\
+  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+  !l. FST r <> Label l
+Proof
+  strip_tac >> gvs[Once exprLoweringTheory.compile_get_target_ptr_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+  >- (drule exprSafeOperandTheory.emit_op_safe_operand >>
+      simp[exprSafeOperandTheory.safe_operand_def]) >>
+  Cases_on `SND (SND result)` >> gvs[] >>
+  TRY (rename1 `SOME pt` >> Cases_on `pt` >> gvs[]) >>
+  gvs[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[exprSafeOperandBuiltinsTheory.subscript_pop_not_label]
+QED
+
+Theorem aug_place_body_memory:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es' id path st.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    eval_target_place cx t es = (INL (MemoryPlace id path),st) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule aug_place_typing >> strip_tac >>
+  `target_sim ctx func cenv cx env t es` by
+    (irule aug_place_stmt_target_sim >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         int_calls_stmt_def, call_evaluation_safe_def] >> metis_tac[]) >>
+  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  drule aug_place_code_parts >> strip_tac >>
+  `cs_extends sa s0'` by
+    (qspec_then `t` (qspec_then `cenv` (qspec_then `sa` mp_tac))
+       stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     simp[ci_mono_def]) >>
+  `cs_extends s0' sb` by
+    (FIRST [drule_all aug_place_emit_void_grows >> disch_then MATCH_ACCEPT_TAC,
+      `cs_extends s0' s1` by (drule_all aug_place_emit_op_grows >> simp[]) >>
+     `cs_extends s1 s2` by (drule (cj 2 compile_expr_grows) >> simp[]) >>
+     `cs_extends s2 s3` by (drule compile_binop_grows >> simp[]) >>
+     `cs_extends s3 sb` by (drule_all aug_place_emit_void_grows >> simp[]) >>
+     irule cs_extends_trans >> qexists_tac `s1` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s2` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s3` >> simp[]]) >>
+  `fn_has_code sa s0' func` by metis_tac[fn_has_code_split] >>
+  `frag_exec ctx sa s0'
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. target_post ctx func cenv cx es sa s0' s0 st
+       (PlaceR (MemoryPlace id path)) (Type ty) r s)
+    (expr_exit (INL (MemoryPlace id path)))` by
+    (drule_at (Pat `eval_target_place _ _ _ = _`)
+       targetPlaceSimCasesTheory.target_place_sim >> simp[] >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
+  gnvs[expr_exit_def] >>
+  (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[target_post_def, place_readable_def] >> strip_tac >>
+      FIRST [qpat_x_assum `FST (SND r) = NONE` assume_tac >>
+             gvs[place_ptr_rel_def] >> NO_TAC, all_tac] >>
+      `loc = LocMemory` by gvs[place_ptr_rel_def] >>
+      qpat_x_assum `loc = LocMemory` SUBST_ALL_TAC >>
+      `?info. supported_target_info tops bindings t = SOME info` by
+        metis_tac[aug_place_supported_stmt_target_info] >>
+      `?ptv. place_type_value cx (MemoryPlace id path) st = (INL ptv,st)` by
+        (drule_all aug_place_target_memory_live >> strip_tac >>
+         `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
+         qpat_x_assum `place_ptr_rel _ _ _ _ _ _ _` mp_tac >>
+         simp[place_ptr_rel_def] >> strip_tac >>
+         `tv0 = entry.type` by
+           metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+         drule mem_path_offset_sound >> strip_tac >>
+         `subscripts_type entry.type path = SOME tv` by metis_tac[] >>
+         qexists_tac `tv` >>
+         qpat_x_assum `st.scopes = es.scopes` kall_tac >>
+         simp[place_type_value_def, get_scopes_def, bind_def,
+              lift_option_type_def, lift_option_def, return_def]) >>
+      drule aug_place_eval_cases >> simp[] >> strip_tac >>
+      `target_indices_pre cenv cx env t` by
+        (irule aug_place_target_indices_pre >>
+         conj_tac >- simp[] >>
+         conj_tac >- gnvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+         conj_tac >- (qexistsl_tac [`bindings`, `tops`] >> simp[] >>
+                      fs[body_inv_def]) >>
+         qpat_x_assum `call_evaluation_safe _ _` mp_tac >>
+         simp[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_left]) >>
+      qpat_x_assum `case rr of INL _ => _ | INR _ => _` mp_tac >>
+      simp[aug_place_eval_bop] >> strip_tac >>
+      gnvs[] >>
+      `ci_mono s0' s1` by
+        (qspecl_then [`MLOAD`, `[FST r]`, `s0'`] mp_tac ci_mono_emit_op >> simp[]) >>
+      drule (cj 2 compile_expr_grows) >> strip_tac >>
+      drule exprSafeOperandTheory.emit_op_safe_operand >> strip_tac >>
+      `is_word_type (expr_type e)` by
+        metis_tac[exprSimOperatorsTheory.word_value_type_word] >>
+      `safe_operand s2 rhs` by
+        (drule exprWordOperandTheory.lower_value_word_safe_operand >>
+         disch_then irule >> simp[] >> qexists_tac `env` >> simp[] >>
+         `supportedExprs$supported_expr tops e` by fs[supported_stmt_def] >>
+         `expr_body_pre cenv cx env e es` by
+           (irule aug_place_rhs_pre >> metis_tac[]) >>
+         drule expr_body_pre_var_types_well_formed >> simp[]) >>
+      `case rr of
+         INL rv => (case bop_result cx ty bop [ty;expr_type e] v rv str of
+           INL v => write_place cx (MemoryPlace id path) v str = (res,es')
+         | INR ex => res = INR ex /\ es' = str)
+       | INR ex => res = INR ex /\ es' = str` by
+        (qpat_x_assum `case rr of INL _ => _ | INR _ => _` mp_tac >>
+         Cases_on `rr` >> simp[] >> strip_tac >>
+         drule_all aug_place_eval_bop >>
+         disch_then (irule o iffLR) >>
+         qexists_tac `ptv` >> simp[]) >>
+      `cs_extends s0' s3` by
+        (irule cs_extends_trans >> qexists_tac `s1` >>
+         conj_tac >- fs[ci_mono_def] >>
+         irule cs_extends_trans >> qexists_tac `s2` >> simp[] >>
+         drule compile_binop_grows >> simp[]) >>
+      `cs_extends s3 sb` by (drule aug_place_emit_void_grows >> simp[]) >>
+      `fn_has_code s0' s3 func` by metis_tac[fn_has_code_split] >>
+      `local_ptrs_reserved cenv s0'` by
+        (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
+         simp[] >>
+         qspec_then `t` (qspec_then `cenv` (qspec_then `sa` mp_tac))
+           stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+         simp[ci_mono_def]) >>
+      `!l. FST r <> Label l` by
+        (drule_all aug_place_target_ptr_not_label >> simp[]) >>
+      `cs_extends s0' s1 /\ s0'.cs_next_var <= s1.cs_next_var` by fs[ci_mono_def] >>
+      `(!z. cur = Var z ==> not_fresh_at s1 z) /\ (!l. cur <> Label l)` by
+        fs[exprSafeOperandTheory.safe_operand_def] >>
+      `(!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l)` by
+        fs[exprSafeOperandTheory.safe_operand_def] >>
+      `fn_has_code s0' sb func` by metis_tac[fn_has_code_split] >>
+      drule_all aug_place_memory_continue >>
+      simp[exprSafeOperandTheory.safe_operand_def, ci_mono_def] >>
+      simp[frag_exec_def] >>
+      disch_then (qspec_then `func` mp_tac) >> simp[] >>
+      (strip_tac
+      >- (rename1 `stmt_state_rel ctx func cenv cx es' sf` >>
+          disj1_tac >> qexistsl_tac [`sf`, `cenv`] >>
+          simp[stmt_lands_def, cenv_top_ext_refl] >>
+          `!x. not_fresh_at sa x ==> not_fresh_at s0' x` by
+            (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[] >>
+             qspec_then `t` (qspec_then `cenv` (qspec_then `sa` mp_tac))
+               stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >> simp[ci_mono_def]) >>
+          rpt conj_tac
+          >- (drule stmtSimDeclMemTheory.emit_void_nonterminator_open >> simp[venomInstTheory.is_terminator_def])
+          >- metis_tac[]
+          >- metis_tac[] >>
+          metis_tac[]) >>
+      `!err. run_from fuel ctx func s'' <> Error err` by
+        metis_tac[exit_result_not_error] >>
+      qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' ctx func s0 = _` drule >>
+      strip_tac >> disj2_tac >> qexists_tac `fuel'` >> simp[] >>
+      qpat_x_assum `expr_exit _ _` mp_tac >>
+      qpat_x_assum `case rr of INL rv => _ | INR ex => _` mp_tac >>
+      Cases_on `rr` >> simp[]
+      >- (Cases_on `bop_result cx ty bop [ty;expr_type e] v x str` >>
+          simp[expr_exit_def] >> rpt strip_tac >> gnvs[] >>
+          simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
+      rpt strip_tac >> gnvs[] >> simp[stmt_exit_def] >>
+      metis_tac[expr_exit_INR_type])) >>
+  gvs[expr_exit_def]
+
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
