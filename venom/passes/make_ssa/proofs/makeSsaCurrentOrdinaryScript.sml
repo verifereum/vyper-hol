@@ -955,3 +955,144 @@ Proof
   qexists_tac `rs` >>
   gvs[current_name_agree_def, lookup_var_def]
 QED
+
+Theorem current_write_memory_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand
+    (OK (write_memory_with_expansion off bytes st))
+    (OK (write_memory_with_expansion off bytes st'))
+Proof
+  strip_tac >> irule current_effect_agree >>
+  simp[write_memory_with_expansion_def] >> conj_tac
+  >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+      simp[execution_frame_def, venom_state_component_equality]) >>
+  qexistsl_tac [`st`,`st'`] >> simp[]
+QED
+
+Theorem current_copy3_agree:
+  (opc = CALLDATACOPY \/ opc = CODECOPY \/ opc = RETURNDATACOPY \/
+   opc = MCOPY \/ opc = DLOADBYTES) /\
+  inst.inst_opcode = opc /\ inst'.inst_opcode = opc /\
+  LENGTH inst.inst_operands = 3 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;b;c]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand c st = _` (assume_tac o SYM) >>
+  `st.vs_call_ctx = st'.vs_call_ctx /\ st.vs_code = st'.vs_code /\
+   st.vs_data_section = st'.vs_data_section /\ st.vs_memory = st'.vs_memory /\
+   st.vs_returndata = st'.vs_returndata` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  (Cases_on `eval_operand a st` >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand b st` >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand c st` >- simp[current_result_agree_def]) >>
+  simp[mcopy_def]
+  >~ [`current_result_agree _ _ (if _ then _ else _) _`]
+  >- (IF_CASES_TAC
+      >- gvs[current_result_agree_def, halt_state_def, set_returndata_def,
+             execution_frame_def, venom_state_component_equality,
+             current_name_agree_def, lookup_var_def] >>
+      simp[] >> irule current_write_memory_agree >> simp[]) >>
+  irule current_write_memory_agree >> simp[]
+QED
+
+Theorem current_extcodecopy_agree:
+  inst.inst_opcode = EXTCODECOPY /\ inst'.inst_opcode = EXTCODECOPY /\
+  LENGTH inst.inst_operands = 4 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;b;c;d]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand c st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand d st = _` (assume_tac o SYM) >>
+  `st.vs_accounts = st'.vs_accounts` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  (Cases_on `eval_operand a st` >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand b st` >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand c st` >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand d st` >- simp[current_result_agree_def]) >>
+  simp[] >> irule current_write_memory_agree >> simp[]
+QED
+
+Theorem current_eval_operands_subset:
+  !ops. execution_frame st = execution_frame st' /\
+  current_name_agree rs (operand_vars allops) st st' /\
+  (!op. MEM op ops ==> MEM op allops) ==>
+  eval_operands (rename_current_operands rs ops) st' = eval_operands ops st
+Proof
+  Induct >> simp[rename_current_operands_def, eval_operands_def] >>
+  rpt strip_tac >>
+  `eval_operand (HD (rename_current_operands rs [h])) st' = eval_operand h st`
+    by (irule current_eval_operand_occurrence >> metis_tac[]) >>
+  `eval_operands (rename_current_operands rs ops) st' = eval_operands ops st`
+    by (first_x_assum irule >> metis_tac[]) >>
+  Cases_on `h` >> gvs[rename_current_operands_def, eval_operands_def]
+QED
+
+Theorem current_log_agree:
+  inst.inst_opcode = LOG /\ inst'.inst_opcode = LOG /\
+  inst.inst_operands = Lit tc :: rest /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> reverse (Cases_on `LENGTH rest = w2n tc + 2`)
+  >- (gvs[rename_current_operands_def] >>
+      asm_rewrite_tac[step_inst_base_def] >>
+      simp[current_result_agree_def]) >>
+  `eval_operand (EL 0 (rename_current_operands rs (REVERSE rest))) st' =
+   eval_operand (EL 0 (REVERSE rest)) st` by
+    (`MEM (EL 0 (REVERSE rest)) (REVERSE rest)` by
+       (irule EL_MEM >> simp[]) >>
+     simp[current_rename_operands_el] >> irule current_eval_operand_occurrence >>
+     simp[] >> qexists_tac `inst.inst_operands` >> gvs[]) >>
+  `eval_operand (EL 1 (rename_current_operands rs (REVERSE rest))) st' =
+   eval_operand (EL 1 (REVERSE rest)) st` by
+    (`MEM (EL 1 (REVERSE rest)) (REVERSE rest)` by
+       (irule EL_MEM >> simp[]) >>
+     simp[current_rename_operands_el] >> irule current_eval_operand_occurrence >>
+     simp[] >> qexists_tac `inst.inst_operands` >> gvs[]) >>
+  `eval_operands (rename_current_operands rs (DROP 2 (REVERSE rest))) st' =
+   eval_operands (DROP 2 (REVERSE rest)) st` by
+    (irule current_eval_operands_subset >> simp[] >>
+     qexists_tac `inst.inst_operands` >> gvs[] >>
+     rpt strip_tac >> drule rich_listTheory.MEM_DROP_IMP >> simp[]) >>
+  gvs[rename_current_operands_def] >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  simp[GSYM current_rename_operands_reverse, GSYM current_rename_operands_drop] >>
+  (Cases_on `eval_operand (HD (REVERSE rest)) st`
+   >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operand (EL 1 (REVERSE rest)) st`
+   >- simp[current_result_agree_def]) >>
+  (Cases_on `eval_operands (DROP 2 (REVERSE rest)) st`
+   >- simp[current_result_agree_def]) >>
+  simp[] >> irule current_effect_agree >> simp[] >> conj_tac
+  >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+      simp[execution_frame_def, venom_state_component_equality]) >>
+  qexistsl_tac [`st`,`st'`] >> simp[]
+QED
