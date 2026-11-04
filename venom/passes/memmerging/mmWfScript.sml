@@ -1,17 +1,17 @@
 (*
  * Memmerging — Well-formedness Preservation (API)
  *
- * TOP-LEVEL:
+ * TOP-LEVEL (over transform_function_supply):
  *   mm_preserves_wf_function   — wf_function preserved
- *   mm_preserves_ssa_form      — ssa_form preserved (CHEATED, needs mm_fresh_names_ok)
+ *   mm_preserves_ssa_form      — ssa_form preserved
  *)
 
 Theory mmWf
 Ancestors
-  mmWfProofs
+  mmSupplyWfProofs mmSupplySsaProofs
 
 Theorem mm_preserves_wf_function =
-  mmWfProofsTheory.mm_preserves_wf_function
+  mmSupplyWfProofsTheory.mm_preserves_wf_function
 
 Theorem mm_preserves_ssa_form =
-  mmWfProofsTheory.mm_preserves_ssa_form
+  mmSupplySsaProofsTheory.mm_preserves_ssa_form
