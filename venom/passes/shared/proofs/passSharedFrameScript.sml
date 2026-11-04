@@ -838,6 +838,8 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v_b.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
+  `v_b.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx] >>
   `inst_a.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v_b.vs_returndata` by (
     strip_tac >> gvs[] >>
@@ -1439,6 +1441,8 @@ Proof
     metis_tac[step_preserves_control_flow] >>
   `v1.vs_params = s.vs_params /\ v2.vs_params = s.vs_params` by
     metis_tac[step_preserves_params] >>
+  `v1.vs_call_ctx = s.vs_call_ctx /\ v2.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx] >>
   (* Returndata agreement (needed for RETURNDATACOPY) *)
   `inst2.inst_opcode = RETURNDATACOPY ==>
    s.vs_returndata = v1.vs_returndata` by (
