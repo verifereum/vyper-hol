@@ -1,7 +1,7 @@
 (* Word-load/store boundaries for typed normalization. *)
 Theory typedCopyPtr
 Ancestors
-  typedCopyCompatibilityPtr normalizationPrefixPtr fragExecPtr entryHaltPtr bodyPtrDefs ptrSafeRun ptrDiscipline
+  typedCopyCompatibilityPtr normalizationPrefixPtr fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs venomInst venomState
   contextCodegenRelProps finite_map memLocDefs codegenRel contextCodegenRel fragExec
   typedCopyAgreement emitHelper compileEnv valueEncodingProps representationCleanPtr

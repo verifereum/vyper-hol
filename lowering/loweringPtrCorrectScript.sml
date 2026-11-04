@@ -32,8 +32,8 @@ Ancestors typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr ty
   venomInst contextCodegenRel ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs stmtSim bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
-  fragExecPtr entryHaltPtr typedCopyFieldsPtr typedCopyBytesRobustPtr
-  typedCopyOffsetPtr typedCopyBytesFieldsPtr typedCopyTuplePtr returnMetadataPtr
+  fragExecPtr typedCopyFieldsPtr typedCopyBytesRobustPtr
+  typedCopyOffsetPtr typedCopyBytesFieldsPtr typedCopyTuplePtr
   robustCopyTransportPtr staticTypeFitsPtr liveArrayTransportPtr structChildPtr
   wordCopyRobustPtr
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
