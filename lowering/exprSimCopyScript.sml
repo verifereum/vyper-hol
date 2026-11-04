@@ -1331,7 +1331,7 @@ Proof
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
   gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
   irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
-  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
        immutable_holds cenv cx t (Value v) a es'` by
     gvs[vv_post_def, vv_holds_def] >>
@@ -1401,8 +1401,8 @@ Resume unwrap_ctor_code_copy_base_sim[ctor_post]:
      >- gvs[] >>
      irule storage_copy_operand_preserved >> simp[] >>
      qexists_tac `mid` >> simp[]) >>
-  irule copy_buffer_post_transport >>
-  qpat_assum `t = expr_type e` (fn th => rewrite_tac[GSYM th]) >>
+  irule copy_buffer_post_transport_physical >>
+  qpat_assum `t = post_value_type cenv e` (fn th => rewrite_tac[GSYM th]) >>
   simp[] >>
   goal_assum (drule_at Any) >>
   simp[mk_inst_def, SF SFY_ss] >>
