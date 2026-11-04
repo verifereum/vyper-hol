@@ -1,8 +1,10 @@
-# C1.11.5.34 ordinary coverage checkpoint
+# Ordinary coverage checkpoint (reconciled through C1.11.5.51)
 
 This is an interface audit, not a theorem or a claim that the frozen contract is proved.
-Source snapshot: after 0bcbdd68c (classified MCOPY). No semantic definitions or theorem
-statements were changed. E0060/E0061 are the earlier terminal/assembly reports.
+Source snapshot: 765ee6583 (ambient grouped-write coverage). No semantic definitions or
+existing theorem statements were changed. E0060/E0061 are the earlier terminal/assembly
+reports. The external-effect proposals below are UNPROVED; the accepted write and
+ambient certificates are not reclassified as missing.
 
 ## Exhaustive opcode partition
 
@@ -19,8 +21,8 @@ Abbreviated source names below all live in venom/compiler/ and end in Script.sml
 | SHL, SHR, SAR | checked ld_shift_effect, lowerDloadSafetyShiftEffects:128 |
 | MLOAD | checked ld_mload_effect, lowerDloadSafetyMloadEffects:89; masked bytes, non-forward access |
 | ILOAD | checked ld_iload_effect, lowerDloadSafetyIloadEffects:66; actual memory read, scalar immutable offset |
-| MSTORE, MSTORE8 | checked ld_mstore_effect :46, ld_mstore8_effect :154 in lowerDloadSafetyMemoryWriteEffects; classification/operand premises NOT assembled |
-| MCOPY | checked ld_mcopy_effect, lowerDloadSafetyMemoryCopyEffects:42; independent classified addresses, snapshot mask; premises NOT assembled |
+| MSTORE, MSTORE8 | checked effects in lowerDloadSafetyMemoryWriteEffects; premises assembled by ld_sync_memory_write_effect (WriteAssembly:187); live-successor ld_pair coverage in WriteCoverage:81 |
+| MCOPY | checked ld_mcopy_effect (MemoryCopyEffects:42), ld_mcopy_zero_effect (EmptyCopy:15); grouped assembly and ambient live-successor coverage as for stores; zero-length needs no address containment |
 | SLOAD, TLOAD | checked ld_storage_read_effect, lowerDloadSafetyStorageReadEffects:111 |
 | SSTORE, TSTORE | checked ld_storage_write_effect, lowerDloadSafetyStorageWriteEffects:75; explicit scalar key and masked value premises NOT assembled |
 | ASSIGN | checked ld_assign_effect, lowerDloadSafetyAssignSteps:78 |
@@ -45,7 +47,7 @@ Abbreviated source names below all live in venom/compiler/ and end in Script.sml
 | ISTORE | missing memory+immutable-bookkeeping effect; cannot count ld_mstore_effect as covering this opcode. Offset is nonpointer by fn_ptr_ok, but word taint and t_imm update still needed |
 | SHA3 | missing read/observation effect. Non-forward taint_ok excludes tainted read bytes; classified memory read should give equal byte lists before hashing |
 | LOG | missing history-only effect; no need for historical logs equality (ld_nonghost omits logs), but shape, operand definedness, memory access and unchanged projections still needed |
-| CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2 | genuinely missing external-effect family. Need dispatch/helpers audit and equal semantic request inputs (not equality of historical requests), outcomes and masked account updates, copied return data, output/provenance/taint and frontier projections. taint_ok empties stor/trans for DELEGATECALL/CREATE/CREATE2 only. No exclusion argument exists |
+| CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2 | missing effects; dispatch/helpers audited below. CALL/STATICCALL need equal completion observations, NOT full request/outcome equality under masked storage; other three use equal concrete EVM inputs from empty storage masks. Returned bytes, masked adoption and scalar-output ghosts still need checked transport. No exclusion argument exists |
 | INVOKE | not ordinary base success: default base branch is Error; actual step_inst handles recursive run_blocks. E0060 ld_invoke_no_return excludes caller resumption for terminal callee; general successful-call/return transport belongs to parent, not checked effects |
 
 Every constructor is listed once. The default in step_inst_base has no other opcode
@@ -77,7 +79,15 @@ coverage statement must be ld_pair OR this explicit suffix witness. Neither gene
 REVERT nor RET automatically produces that witness. ld_forward_run_blocks_no_normal
 and ld_invoke_no_return forbid caller next for such a callee.
 
-## Exact candidate sequential advance consumer (NOT PROVED)
+## Sequential advance consumer (now checked)
+
+The candidate below is now `ld_sync_ordinary_advance` in
+lowerDloadSafetyAdvanceScript.sml:6-34. Its effect and next-location premises
+remain explicit, but reconstruction is no longer a missing theorem. For grouped
+writes, ld_sync_memory_write_advance and ld_sync_memory_write_coverage_ambient
+supply those premises from target success and a target active successor. Other
+families must still provide their effects. The historical GAP names below label
+inputs, not gaps in the checked constructor itself.
 
 The following is the common *assembly* interface, using existing relations only.
 It intentionally exposes its missing effect premise rather than asserting a new
@@ -142,57 +152,233 @@ allocas/frontiers, serial/fn/supply/Q/E and saved frames are unchanged, active
 reachability uses frame_reachable_next (ptrDiscipline:458-466), and the new head
 vars/tv/erasure are explicit. The global selected-range conjunct needs GAP H;
 its Q part is inherited. Memory/nonghost do not inspect instruction index
-(lowerDloadSafetyKernel:21-57). This is an audited candidate, not a checked HOL
-constructor proof.
+(lowerDloadSafetyKernel:21-57). This reconstruction is now a checked HOL
+constructor proof, with these inputs still explicit.
 
-## Classified-write premise ledger at that consumer
+## Reconciled classified-write ledger
 
-Use f=HD frames. ld_sync_active supplies ld_vars, source/target states and tv;
-ld_sync_memory supplies ld_memory and ld_nonghost; ld_sync_ghosts supplies erasure.
-ld_sync contains EVERY(ld_maps), FDOM A=ld_slots and member fn facts; ld_global is
-separate, not a consequence of ld_sync. ld_alloc_bounds and ld_alloc_separate
-(lowerDloadSafetyAllocBounds:6,23) supply overwrite separation only.
+The former missing-premise table is superseded by these checked interfaces:
 
-| Required premise | Present source/interface or exact remaining gap |
+| Premise | Checked supplier |
 |---|---|
-| opcode/operands and evaluated target arguments | OK inversion of dispatch (exec_write2 for stores, explicit MCOPY case); local step lemmas reconstruct but are not inversion lemmas |
-| source operand definedness | ld_vars_operand_defined; shape/member/nonopaque handling; inversion assembly still absent |
-| [] outputs | fn_inst_wf plus opcode cases; cannot infer from target OK |
-| source/target destination classification | MISSING write analogue of ld_read_access_cases. Need access_ok, ~in_revert_forward, source write range, selected/scalar observation, target no-wrap bound; numerical (b,sz) not unique ghost identity |
-| MCOPY source classification | ld_read_access_cases exists (:274) only for POSITIVE size and ~in_revert_forward. Need independent read operand mapping, correct mem_read_ops and source range, target c+sz<dimword; no general MCOPY consumer yet |
-| MCOPY shared length | numeric untainted/nonopaque restrictions + ld_vars_numeric_operands_equal / ld_ptr_use_scalar; must prove length operand is not permitted pointer-address position. Not supplied by raw safety alone |
-| zero-length classification | REAL INTERFACE GAP: access_ok only constrains nonempty ranges. Current effect demands low-or-slot even when len=0. Neither ld_read_access_cases nor future positive write inversion gives this. Need a zero-copy effect/assembly branch with no address classification, or a generalized effect interface approved by strategist. Do not add len>0 to frozen hypotheses |
-| MSTORE value word_agree_except(op_taint) | ld_vars_value/scalar, fn_ptr_ok disallows storing pointer values; need opcode-specific ptr-use and opaque exclusion, including duplicate operand cases |
-| MSTORE mask subset {j<32} | taint byte-width invariant needed from taint_within/step_taint reachability or a generic op_taint bound. Not a conclusion of ld_vars alone; no supplying theorem certified in this audit |
-| MSTORE8 low-byte equality | ld_vars masked observation plus low-byte untaintedness; step_taint MSTORE8 clears all destination taint, so cannot merely reuse arbitrary masked word agreement. Need show op_taint value empty from taint_ok (MSTORE8 not permitted tainted store opcode), then ld_word_agree_empty |
-| MCOPY copied-byte untaintedness | NOT required: ld_mcopy_effect handles snapshot source mask. No source/destination disjointness or positive length needed by that effect |
-| ghost update | effect proves erased step_prov unchanged for [] outputs; H'=H works. Raw G'=G plus empty outputs reconstruction uses step_inst_non_invoke |
-| maps/global/slots | provided by sync/global; preserve via unchanged allocas/frontiers. Need constructor/advance lemma rather than repeated ld_sync unfolding |
-| next envelope/index | effect projections alone insufficient; source index+1 corresponds to p+1 only for singleton unchanged envelope and valid next active instruction. Missing GAP L constructor |
+| operand definedness, scalar/value/address observation, ptr restrictions | WriteAssembly:9-110 (ld_write_value_nonpointer through ld_write_address_observation) |
+| positive write/read classification | ld_write_access_classified :112; ld_read_access_classified :126 |
+| zero MCOPY | ld_mcopy_zero_effect, EmptyCopy:15; no classification of an empty range |
+| word-byte width and MSTORE8 untainted low byte | TaintWidth and AssemblyPremises; consumed in ld_sync_memory_write_effect |
+| source success, post vars/memory/nonghost, unchanged erased provenance, live H | ld_sync_memory_write_effect, WriteAssembly:187-207 |
+| maps/global and next reconstruction | ld_sync_ordinary_advance, Advance:6; ld_sync_memory_write_advance, WriteAdvance:7 |
+| singleton envelope and active source successor | ld_sync_ordinary_envelope, Locations:90; ld_envelope_singleton_next :33; ld_envelope_active_head :109 |
+| source fn shape/wf/labels and target no-wrap | ld_sync_fn_shape, o1_fn_shape_components, ld_sync_labels, ld_sync_ambient_headroom in Ambient |
+| source reachability -> raw reachability and mem_inv use | ld_frame_reachable_certificate :362, ld_frame_raw_reachable :410, ld_sync_source_mem_inv :417 |
+| assembled live-successor pair | ld_sync_memory_write_coverage_ambient, WriteCoverage:81 |
 
-Access premises come from ptr_discipline at frame_reachable witnesses; taint_ok and
-within-D come from taint_within at the same witness. ld_sync records reachability,
-not these invariants as standalone conjuncts. Ambient source invariants must be
-passed/extracted. ld_read_access_cases target no-wrap premise is likewise not in
-ld_vars: derive from global head frontier and active headroom. Zero-size selected
-sites are not enough to infer actual address containment.
+The last theorem still requires ld_sync, ld_global, o1_ctx_shape C,
+ptr_discipline lo C vs0, mem_inv dload_headroom_ok C vs0,
+~in_revert_forward fn s, target OK, target next active instruction, configured
+supply and stack order. It does NOT establish prefix exhaustiveness, current
+instruction raw safety for every opcode, or a source invariant at an arbitrary
+reachable target state. A source headroom mem_inv is available from o1_src_inv
+only at final integration. Non-revert is a case alternative, not a projection
+of o1_src_inv. Source raw reachability certificates include saved continuation
+bookkeeping; they are not general successful external-call transport.
 
-## Grouped remaining dependency graph (proposal for strategist, not new PLAN IDs)
+## Grouped remaining dependency graph (proposal, not new PLAN IDs)
 
-1. Shape/member/active and source-invariant extraction + operand restrictions
-   -> classified access inversion (read/write, no-wrap), masked store observations.
-2. Resolve zero-length copy interface separately; do not make classifications
-   magically true. This blocks use of the current MCOPY effect in full assembly.
-3. Group external-byte copies + ISTORE with reusable overwrite boundaries;
-   group SHA3/LOG/control/assertions/identity/state reads with observation and
-   control projections; audit external-call/create helpers as one semantic boundary.
-4. Family effects + erased H/live-domain equations + index/envelope constructor
-   -> singleton sequential advance consumer above.
-5. Jump/block entry + ld_phis_effect -> block consumer; allocation/expansion
-   constructors and call/run/return remain wider parent dependencies.
-6. All local consumers + explicit terminal suffix alternative -> target-prefix
-   coverage -> raw target invariant -> frozen theorem integration.
+1. External effects: outcome selection with masked accounts for CALL/STATICCALL;
+   concrete EVM run-input equality for DELEGATECALL/CREATE/CREATE2; shared returned
+   byte writer; output and taint/provenance reconstruction. Detailed audit follows.
+2. Byte copies and immutable writes: CALLDATACOPY/CODECOPY/EXTCODECOPY,
+   ordinary RETURNDATACOPY (plus exceptional-path handling), ISTORE. Reuse the
+   checked low/slot overwrite boundaries and empty-write observation, not a second
+   memory model. Forwarding RETURNDATACOPY uses the existing suffix alternative.
+3. Observations/identity: SHA3, LOG, INITIAL_FMP, BUMP, NOP and assertions.
+   Existing read/pure/storage effects still need reachable premise assembly.
+4. Control/terminal: jump and PHI entry reconstruction; all terminal active-state
+   safety and the explicit revert-forward witness. RET and INVOKE require parent
+   call/run/return transport, not an ordinary OK consumer.
+5. Existing-effect assembly: reuse Advance/Locations/Ambient, then pair-zero;
+   do not duplicate grouped-write coverage. ALLOCA/DLOAD expansion completion has
+   separate map/scratch/phase obligations, not the ordinary constructor.
+6. All consumers + initialization + call-stack/expansion preservation -> target
+   prefix coverage -> raw target invariant -> frozen theorem integration.
 
-The immediate planning risk is not more isolated effect tactics: it is deriving
-classification and mask premises at reachable locations, especially zero length,
-and supplying a compact sync/next constructor. No completed parent is claimed.
+No completed parent or exhaustive ordinary theorem is claimed.
+
+## External-family semantic audit (.51; proposals are NOT checked)
+
+### Dispatch and observations actually used
+
+Exact dispatch references are venomExecSemanticsScript.sml:1053-1106.
+CALL requires seven defined operands, STATICCALL and DELEGATECALL six,
+CREATE three, CREATE2 four. Every branch requires exactly one output in its
+helper. Target OK therefore exposes these shapes, values and (for concrete EVM
+branches) successful extraction. Source definedness still needs ld_vars and the
+static nonopaque-use restrictions; target OK is not a source-success witness.
+
+| Opcode | Source-success witness required after target OK | Semantic input agreement |
+|---|---|---|
+| CALL | exec_ext_call at source evaluated args; same Boolean success word, no run termination premise | equal target/value/input bytes/static flag and equal vs_outcomes; gas must be defined but its value is ignored |
+| STATICCALL | same exec_ext_call witness with value=0 and static=T | equal target/input bytes/outcomes; static adoption disabled, gas ignored |
+| DELEGATECALL | same run evm_s and SOME extraction as target | equal concrete EVM execution_state from make_venom_delegatecall_state; gas, target and input bytes equal |
+| CREATE | same run evm_s and SOME extraction, output address equal | equal init code, sender account nonce, value, call context gas, concrete create state |
+| CREATE2 | same as CREATE, using salt/code-hash address | additionally equal salt; address_for_create2 sees equal init code |
+
+CALL/STATICCALL are NOT implemented by make_venom_call_state/run. The nearby
+comment at venomExecSemantics:304-313 is historical; actual exec_ext_call:477-484
+uses venom_call_request/consume_call_outcome. Request fields
+(venomCallOracleDefs:11-19) are target, value, memory input bytes, static flag,
+entire accounts and transient storage. They do NOT include gas, histories, oracle
+list, allocation frontier, immutables, transaction or block fields. In particular
+ld_nonghost does not imply request equality: masked caller storage may differ.
+Do not attempt a request-equality theorem under just ld_nonghost.
+
+Crucially take_outcome (extCallOracle:95-104) does not inspect masked storage:
+computed_precompile depends only on value/target/data (80-83). The ordinary
+nonempty case takes the identical head outcome, the empty case constructs a
+failed_outcome using each request's own accounts/transient, and computed cases
+also use that own-state failed_outcome, updating success/returnData. Thus full
+outcome record equality is unnecessary and generally false even in computed
+success. Need equality only of success, returnData, remaining outcomes, plus
+masked post accounts/transient. adopt_outcome (115-119) chooses common supplied
+accounts/transient on successful nonstatic ordinary adoption, or keeps each
+prestate otherwise; computed adoption supplies each request's own state.
+Histories are appended/kept but not read to choose a completion. Pending deletions
+are appended/kept (126-130), not used in outcome selection or ld_nonghost.
+
+DELEGATECALL uses actual run (venomExecSemantics:490-502). Code is looked up
+from target accounts; make_venom_delegatecall_state:389-403 reads call address,
+original caller, call value, static, supplied gas/calldata/code, all accounts and
+transient, and venom_to_tx_params:318-332. CREATE/CREATE2 (:509-526) use init
+bytes, sender account nonce (CREATE), salt/code-hash (CREATE2), cc_gas and value;
+make_venom_create_state:409-423 transfers value and builds rollback with all
+accounts/transient. make_sub_tx:336-345 and make_rollback:351-359 read no other
+Venom fields. All transaction/block/prev-hash inputs agree by ld_nonghost. Account
+nonstorage fields agree there too. taint_ok:573-575 supplies t_stor=t_trans={}
+for these three opcodes, turning masked agreement into full accounts/transient
+equality. This needs a small proved projection, not an assumption that storage
+is always equal. Their run input has no memory except the already-read input
+bytes, and no Venom logs/requests/immutables/frontier. Equal EVM inputs imply
+identical run result by congruence without proving EVM termination independently.
+
+### Post-state and ghost obligations
+
+extract_venom_result:437-468 requires SOME(result,final_state) with singleton
+contexts. It writes returndata, accounts, appended logs, memory and transient.
+Success takes final rollback accounts/transient; failure retains each prestate.
+CREATE uses retOff=retSize=0: no byte changes (memory list representation may
+still expand), so reuse read-byte equality for empty writes, NOT memory-list
+length equality. DELEGATECALL and oracle calls write only TAKE retSize returndata
+at retOff. Return buffer lengths and data agree; return addresses may relocate.
+
+All five preserve allocas, frontier, block labels, prev block, instruction index,
+params and return-PC fields before the explicit sequential increment. update_var
+binds their common scalar output. All outputs have empty out_taint (:332 onward).
+Use H' = FDIFF f.lf_H (set inst.inst_outputs), erase/step_prov update and live-range
+subset lemmas, as for existing scalar-output effects; do not leave stale selected
+provenance on an overwritten output. Output ld_vars also needs proof that this
+non-pointer-producing output cannot be an opaque or selected root use.
+
+Memory: new_site_bytes empty; step_writes (:267-273) truncates call writes to
+MIN requested length (LENGTH returndata); written_taint empty. Thus return bytes
+clear the corresponding source taint, while all other masked byte agreement is
+preserved by the general low/slot writers. CREATE/CREATE2 have no memory ranges.
+IMM taint and immutable maps stay unchanged. For CALL/STATICCALL step_taint
+adopt_reset (:397-410) depends on whether SOURCE accounts/transient changed,
+not whether target changed. Must case-split source change, actual adoption and
+computed/ordinary outcomes: if source changed, common ordinary adopted state
+agrees fully and cleared mask is valid; if unchanged, the old source mask suffices
+against adopted state. Do not assume the two change Booleans equal. Concrete EVM
+branches keep t_stor/t_trans (already empty), and equal extracted states suffice.
+ld_nonghost omits logs, requests and pending deletions, so no historical equality
+is needed; old immutable masks and equal call/tx/block/etc projections persist.
+
+### Access/taint premises and current-instruction safety
+
+memLocDefs:240-257 and :287-323 describe requested return writes and input reads.
+CALL uses ao/as at positions 3/4 and ro/rs at 5/6; STATICCALL/DELEGATECALL use
+2/3 and 4/5. CREATE/CREATE2 read offset/size at 1/2 and write no Venom memory.
+ptr_use_ok:85-100 allows a pointer only at the read/write ADDRESS position, once;
+it does not allow a pointer length, gas, account, value or salt. Numeric operand
+agreement must be proved for these shapes, including duplicate variable cases.
+All operand taints are empty by taint_ok:559-566. Input bytes are untainted by
+:567-572 outside about_to_revert; external effects cannot use the exception
+silently. Need either ~in_revert_forward plus its checked implications or an
+explicit terminal-forward alternative. Nonempty accesses classify via access_ok,
+ld_maps/global and positive read/write classification, giving equal relocated
+input bytes and safe target bounds. If input size=0, read_memory is [] at ANY
+address: no containment premise. If return size=0 or actual returndata=[], no
+bytes change; no address classification for the empty write is justified.
+For raw safety, however a nonzero REQUESTED return buffer still needs its full
+range below the frontier even when actual returndata is empty. Actual step_writes
+is insufficient to prove current raw_mem_ok. The write classification must use
+source_memory_write_ranges, not only the truncated step write. CREATE has only
+input raw bounds. Target headroom and source access facts can establish current
+raw safety without assuming step_inst succeeds; failed/undefined instructions
+cannot be discarded from raw_reachable. Forward suffix uses its explicit
+raw-safety witness separately.
+
+### Proposed HOL boundaries for review (not inserted in SML)
+
+First, a semantic selector boundary which deliberately does NOT require rq equality:
+
+```sml
+(* same exposed request inputs, possibly different account/storage fields *)
+rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
+rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static ==>
+ SND (take_outcome rq os) = SND (take_outcome rq' os) /\
+ (FST (take_outcome rq os)).co_success =
+   (FST (take_outcome rq' os)).co_success /\
+ (FST (take_outcome rq os)).co_returnData =
+   (FST (take_outcome rq' os)).co_returnData
+```
+
+Second, the empty-mask projection (general, not one per opcode):
+
+```sml
+ld_nonghost tn s t /\ tn.t_stor = {} /\ tn.t_trans = {} ==>
+ s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient
+```
+
+Then shared returned-byte update and masked account-adoption boundaries should
+be designed in the same theory, independent of operand lists. Concrete EVM input
+congruence should use the projection above plus ld_nonghost and equal input bytes,
+rather than a new EVM simulation relation. These smaller boundaries must be
+checked before authorizing the following grouped CONSUMER proposal:
+
+```sml
+ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+ptr_discipline lo C vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+~in_revert_forward fn s /\
+MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL;CREATE;CREATE2] /\
+step_inst fuel C' inst t = OK ts ==>
+?ss H'. step_inst fuel C inst s = OK ss /\
+ ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+                      lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
+ ld_memory lo A (step_taint inst s ss tn) ss ts /\
+ ld_nonghost (step_taint inst s ss tn) ss ts /\
+ step_prov PG G inst ss = ld_erase A o_f H' /\
+ (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+ ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+ ss.vs_alloca_next = s.vs_alloca_next /\
+ ts.vs_alloca_next = t.vs_alloca_next /\
+ ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+ ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+ ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+```
+
+Intended H' is the output-deletion map above. Active frame equalities are derived
+from ld_sync_active, not new hypotheses. This consumer remains unproved; further
+assembly uses existing ld_sync_ordinary_advance and Locations. The separate
+current-state safety consumer must omit target OK entirely and conclude
+raw_mem_ok C' (FST (lower_dload_function_supply f.lf_supply fn)) inst t,
+using the same sync/global/shape/discipline/headroom and non-revert premises.
+This is a proposed target, not an existing certificate.
+
+Diagnostic conclusion: no concrete frozen-hypothesis mismatch was established.
+Full CALL request equality IS an invalid intermediate goal; the correct boundary
+is equal observable completion with masked state adoption. The next proof work
+should validate these selector/empty-mask/update boundaries before attempting the
+grouped effect or any exhaustive target-prefix theorem. Integrity check:
+`holbuild(targets=[lowerDloadSafetyWriteCoverageTheory])` passed (TO_m3618),
+with no edits to executable proof source during this diagnostic.
