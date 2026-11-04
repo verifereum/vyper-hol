@@ -15457,3 +15457,41 @@ Proof
   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >> simp[emit_op_labels]) >>
   irule as_stack_val_labels >> simp[compile_binop_labels, emit_op_labels]
 QED
+
+Theorem builtin_slice_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Slice n) args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Slice n) args st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, compile_alloc_buffer_labels, emit_void_labels]) >>
+  rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, compile_alloc_buffer_labels, emit_void_labels]) >>
+  all_tac >>~- ([`cs_extends _ (SND (as_ptr_val _ _ _))`],
+       irule as_ptr_val_labels >> simp[compile_slice_calldata_labels,
+            compile_slice_code_labels, compile_slice_data_labels]) >>
+  (ho_match_mp_tac application_labels >> conj_tac
+   >- simp[compile_slice_out_buf_labels, compile_bytestring_src_labels] >>
+   map_every qx_gen_tac [`x`, `s`] >> PairCases_on `x` >> simp[] >>
+   rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+        simp[lower_value_labels]) >>
+   irule as_ptr_val_labels >> simp[compile_slice_extcode_labels, compile_slice_data_labels])
+QED
+
+Theorem compile_builtin_dispatch_body_labels:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> Cases_on `bi` >>
+  simp[builtin_scalar_labels, builtin_method_id_labels, builtin_branching_scalar_labels,
+       builtin_environment_labels, builtin_hash_labels, builtin_bop_labels,
+       builtin_ec_labels, builtin_concat_labels, builtin_makearray_labels, builtin_slice_labels]
+QED
