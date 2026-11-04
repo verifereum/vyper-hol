@@ -208,3 +208,76 @@ QED
    premises. The consumer must generalize over this accumulated prefix, not
    discard it at recursive run_blocks calls. No consumer theorem is claimed
    here, nor extraction/projection for complete executions. *)
+
+(* Exec phases denote the remaining function execution, including later blocks. *)
+Definition cse_after_block_def:
+ cse_after_block fuel ctx fn r =
+ case r of
+   OK t => if t.vs_halted then Halt t else run_blocks fuel ctx fn t
+ | other => other
+End
+
+Definition cse_resume_def:
+ (cse_resume ctx fn (CseRun fuel s) = run_blocks fuel ctx fn s) /\
+ (cse_resume ctx fn (CseExec fuel bb s) =
+   cse_after_block fuel ctx fn (exec_block fuel ctx bb s))
+End
+
+Theorem cse_after_block_results[simp]:
+ (!fuel ctx fn t. cse_after_block fuel ctx fn (OK t) =
+   if t.vs_halted then Halt t else run_blocks fuel ctx fn t) /\
+ (!fuel ctx fn e. cse_after_block fuel ctx fn (Error e) = Error e) /\
+ (!fuel ctx fn t. cse_after_block fuel ctx fn (Halt t) = Halt t) /\
+ (!fuel ctx fn a t. cse_after_block fuel ctx fn (Abort a t) = Abort a t) /\
+ (!fuel ctx fn vals t.
+   cse_after_block fuel ctx fn (IntRet vals t) = IntRet vals t)
+Proof
+ simp[cse_after_block_def]
+QED
+
+Theorem cse_resume_phi:
+ !ctx fn fuel s bb t.
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ eval_phis s bb.bb_instructions = OK t ==>
+ cse_resume ctx fn (CseRun (SUC fuel) s) =
+ cse_resume ctx fn (CseExec fuel bb
+   (t with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+Proof
+ rpt strip_tac >> simp[cse_resume_def, Once run_blocks_def] >>
+ Cases_on `exec_block fuel ctx bb
+   (t with vs_inst_idx := phi_prefix_length bb.bb_instructions)` >>
+ simp[cse_after_block_def]
+QED
+
+Theorem cse_resume_ordinary:
+ !ctx fn fuel bb s inst t.
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+ cse_resume ctx fn (CseExec fuel bb s) =
+ cse_resume ctx fn (CseExec fuel bb (t with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+ rpt strip_tac >> simp[cse_resume_def] >>
+ AP_TERM_TAC >> simp[Once exec_block_def]
+QED
+
+Theorem cse_resume_branch:
+ !ctx fn fuel bb s inst t.
+ get_instruction bb s.vs_inst_idx = SOME inst /\
+ step_inst fuel ctx inst s = OK t /\
+ is_terminator inst.inst_opcode /\ ~t.vs_halted ==>
+ cse_resume ctx fn (CseExec fuel bb s) = cse_resume ctx fn (CseRun fuel t)
+Proof
+ rpt strip_tac >> simp[cse_resume_def, Once exec_block_def]
+QED
+
+Theorem cse_prefix_resume:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ run_blocks fuel0 ctx fn s0 = cse_resume ctx fn phase
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac >> rpt gen_tac
+ >- simp[cse_resume_def]
+ >- (strip_tac >> drule_all cse_resume_phi >> metis_tac[])
+ >- (strip_tac >> drule_all cse_resume_ordinary >> metis_tac[]) >>
+ strip_tac >> drule_all cse_resume_branch >> metis_tac[]
+QED
