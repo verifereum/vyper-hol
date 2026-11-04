@@ -188,7 +188,6 @@ val scalar_literals_bytes_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^scalar_literals_bytes_rpolicy ^scalar_literals_bytes_unit``
 val scalar_literals_bytes_codegen_step2 = SIMP_CONV pure_ss
   [scalar_literals_bytes_execute_context_eval,
-   scalar_literals_bytes_data_asm_eval,
    scalar_literals_bytes_raw_asm_eval,
    scalar_literals_bytes_assembly_safe_eval,
    scalar_literals_bytes_symbols_ok_eval, AND_CLAUSES]

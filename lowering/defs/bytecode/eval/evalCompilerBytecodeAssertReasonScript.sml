@@ -216,7 +216,6 @@ val assert_reason_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^assert_reason_rpolicy ^assert_reason_unit``
 val assert_reason_codegen_step2 = SIMP_CONV pure_ss
   [assert_reason_execute_context_eval,
-   assert_reason_data_asm_eval,
    assert_reason_raw_asm_eval,
    assert_reason_assembly_safe_eval,
    assert_reason_symbols_ok_eval, AND_CLAUSES]

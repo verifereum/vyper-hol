@@ -192,7 +192,6 @@ val mixed_event_types_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^mixed_event_types_rpolicy ^mixed_event_types_unit``
 val mixed_event_types_codegen_step2 = SIMP_CONV pure_ss
   [mixed_event_types_execute_context_eval,
-   mixed_event_types_data_asm_eval,
    mixed_event_types_raw_asm_eval,
    mixed_event_types_assembly_safe_eval,
    mixed_event_types_symbols_ok_eval, AND_CLAUSES]
