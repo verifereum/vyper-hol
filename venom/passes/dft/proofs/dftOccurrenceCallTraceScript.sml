@@ -112,3 +112,91 @@ Theorem dft_mixed_phase_prefix:
 Proof
   metis_tac[dft_mixed_good_prefix, dft_mixed_good_phase]
 QED
+
+Theorem dft_mixed_sync_positive:
+  bb0.bb_instructions = pre ++ [gas;call] ++ post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM v call.inst_outputs /\
+  (!nm ops. decode_invoke call = SOME (nm,ops) ==> ~MEM (Var v) ops) /\
+  dft_mixed_sync bb0 pre gas call post v w l r /\ dft_mixed_safe_sync bb0 pre l ==>
+  ?a. 1 <= a /\ a <= 2 /\ dft_mixed_good bb0 pre gas call post v w
+    (FUNPOW (dft_occ_oracle_next w C) a l)
+    (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre gas call post C) r)
+Proof
+  strip_tac >>
+  `?ctl stack n. l.dft_occ_core = DftOpen ctl stack n /\
+    dft_fill_control 0 ctl = ctl` by metis_tac[dft_mixed_sync_def] >>
+  Cases_on `ctl`
+  >- (gvs[dft_fill_control_def] >> qexists_tac `1` >>
+      simp[dft_mixed_good_def] >> disj1_tac >>
+      irule dft_mixed_sync_enter_safe >> simp[])
+  >- suspend "at" >>
+  qexists_tac `1` >> simp[dft_mixed_good_def] >>
+  metis_tac[dft_mixed_sync_done_safe]
+QED
+
+Resume dft_mixed_sync_positive[at]:
+  gvs[dft_fill_control_def] >>
+  rename1 `l.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n` >>
+  Cases_on `bb = bb0 /\ s.vs_inst_idx = LENGTH pre`
+  >- (gvs[] >> qexists_tac `2` >> simp[FUNPOW_2, dft_mixed_good_def] >>
+      `dft_mixed_safe_sync bb pre
+        (dft_occ_oracle_next w C (dft_occ_oracle_next w C l))` by
+        metis_tac[dft_mixed_crossing_position] >>
+      metis_tac[dft_mixed_crossing]) >>
+  qexists_tac `1` >> simp[dft_mixed_good_def] >> disj1_tac >>
+  irule dft_mixed_sync_at_safe >> simp[] >>
+  metis_tac[dft_mixed_safe_sync_def]
+QED
+
+Finalise dft_mixed_sync_positive
+
+Theorem dft_mixed_good_two_progress:
+  bb0.bb_instructions = pre ++ [gas;call] ++ post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM v call.inst_outputs /\
+  (!nm ops. decode_invoke call = SOME (nm,ops) ==> ~MEM (Var v) ops) /\
+  dft_mixed_good bb0 pre gas call post v w l r ==>
+  ?a. 1 <= a /\ a <= 4 /\ dft_mixed_good bb0 pre gas call post v w
+    (FUNPOW (dft_occ_oracle_next w C) a l)
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre gas call post C)) 2 r)
+Proof
+  strip_tac >> Cases_on `dft_mixed_discharge bb0 pre gas call post v w l r`
+  >- (drule_all dft_mixed_discharge_next_safe >>
+      disch_then (qspec_then `C` strip_assume_tac) >>
+      drule_all dft_mixed_sync_positive >>
+      disch_then (qspec_then `C` strip_assume_tac) >>
+      qexists_tac `a` >> simp[FUNPOW_2] >> decide_tac) >>
+  `?a. 1 <= a /\ a <= 2 /\ dft_mixed_good bb0 pre gas call post v w
+    (FUNPOW (dft_occ_oracle_next w C) a l)
+    (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre gas call post C) r)` by
+    (gvs[dft_mixed_good_def]
+     >- (drule_all dft_mixed_sync_positive >>
+         disch_then (qspec_then `C` strip_assume_tac) >>
+         qexists_tac `a` >> gvs[dft_mixed_good_def]) >>
+     qexists_tac `1` >> simp[dft_mixed_good_def] >>
+     disj2_tac >> disj2_tac >> irule dft_mixed_cleared_next >> simp[]) >>
+  drule_all dft_mixed_good_next >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  qexists_tac `a' + a` >> simp[FUNPOW_ADD, FUNPOW_2] >> decide_tac
+QED
+
+Theorem dft_mixed_good_cofinal:
+  bb0.bb_instructions = pre ++ [gas;call] ++ post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM v call.inst_outputs /\
+  (!nm ops. decode_invoke call = SOME (nm,ops) ==> ~MEM (Var v) ops) ==>
+  !j l r. dft_mixed_good bb0 pre gas call post v w l r ==>
+  ?m. j <= m /\ m <= 4 * j /\ dft_mixed_good bb0 pre gas call post v w
+    (FUNPOW (dft_occ_oracle_next w C) m l)
+    (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre gas call post C)) (2*j) r)
+Proof
+  strip_tac >> Induct_on `j`
+  >- (rpt strip_tac >> qexists_tac `0` >> simp[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  drule_all dft_mixed_good_two_progress >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  qexists_tac `a + m` >>
+  `2 * SUC j = 2 + 2*j` by decide_tac >>
+  simp[FUNPOW_ADD] >> metis_tac[FUNPOW_COMM]
+QED
