@@ -4,7 +4,7 @@ Ancestors
   supportedStmts vyperState vyperInterpreter vyperMisc alist
   vyperStoragePlaceProvenance supportedTargets supportedDecls supportedExprForms
   targetPlaceSim vyperAST supportedProgram supportedExprTraverse supportedStmtTraverse
-  vyperTypeCallGraph
+  vyperTypeCallGraph supportedExprs bodyStorageCases
 
 (* Use the existing target-root traversal; read permission is deliberately
    independent of this write-root restriction. *)
@@ -512,4 +512,276 @@ Theorem supported_target_place_immutable_module:
   md = NONE
 Proof
   metis_tac[supported_target_root_main, main_root_target_place_immutable_module]
+QED
+
+Theorem supported_pure_foreign_frame:
+  (!tops e. supported_pure_expr tops e ==> foreign_frame_expr cx e) /\
+  (!tops es. supported_pure_exprs tops es ==> foreign_frame_exprs cx es) /\
+  (!tops fields. supported_pure_fields tops fields ==>
+    ~supported_fields_exists (foreign_frame_bad cx) fields /\
+    EVERY (foreign_frame_callee cx) (int_calls_named_exprs fields)) /\
+  (!tops e. supported_place_expr tops e ==> foreign_frame_expr cx e)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  rw[supported_pure_expr_def, foreign_frame_expr_def, foreign_frame_exprs_def,
+     supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND,
+     foreign_frame_bad_def, foreign_frame_bad_pop_def, expr_evm_run_root_def] >>
+  metis_tac[]
+QED
+
+Theorem supported_function_foreign_frame_callee:
+  IS_SOME (supported_function_decl tops callee Internal) /\
+  supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+  foreign_frame_callee cx callee
+Proof
+  PairCases_on `callee` >>
+  simp[foreign_frame_callee_def] >>
+  Cases_on `callee0 = NONE` >>
+  simp[supported_lookup_other_module] >> metis_tac[]
+QED
+
+Theorem supported_storage_dynamic_array_root_main:
+  supported_storage_dynamic_array tops id ==>
+  target_root_main (TopLevelNameTarget id)
+Proof
+  PairCases_on `id` >> Cases_on `id0 = NONE` >>
+  simp[supported_storage_dynamic_array_def, supported_lookup_other_module]
+QED
+
+Theorem supported_effect_foreign_frame:
+  (!tops e. supported_effect_expr tops e ==>
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    foreign_frame_expr cx e) /\
+  (!tops e. supported_effect_place_expr tops e ==>
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    foreign_frame_expr cx e)
+Proof
+  ho_match_mp_tac supported_effect_expr_ind >>
+  rw[supported_effect_expr_def] >>
+  gvs[foreign_frame_expr_def, foreign_frame_exprs_def,
+      supported_expr_exists_def, int_calls_expr_def, listTheory.EVERY_APPEND,
+      foreign_frame_bad_def, foreign_frame_bad_pop_def, expr_evm_run_root_def] >>
+  metis_tac[supported_pure_foreign_frame,
+            supported_function_foreign_frame_callee,
+            supported_storage_dynamic_array_root_main,
+            foreign_frame_expr_def, foreign_frame_exprs_def]
+QED
+
+Theorem supported_expr_foreign_frame:
+  supported_expr tops e /\ supported_program tops /\
+  get_module_code cx NONE = SOME tops ==> foreign_frame_expr cx e
+Proof
+  rw[supported_expr_def] >>
+  metis_tac[supported_pure_foreign_frame, supported_effect_foreign_frame]
+QED
+
+Theorem foreign_frame_leaf_context:
+  get_module_code cx NONE = get_module_code cy NONE ==>
+  foreign_frame_expr cx = foreign_frame_expr cy /\
+  foreign_frame_exprs cx = foreign_frame_exprs cy /\
+  foreign_frame_target cx = foreign_frame_target cy /\
+  foreign_frame_write_target cx = foreign_frame_write_target cy /\
+  foreign_frame_iterator cx = foreign_frame_iterator cy /\
+  foreign_frame_assert cx = foreign_frame_assert cy /\
+  foreign_frame_raise cx = foreign_frame_raise cy
+Proof
+  strip_tac >>
+  `(foreign_frame_callee cx : num option # string -> bool) = foreign_frame_callee cy` by
+    simp[FUN_EQ_THM, foreign_frame_callee_def] >>
+  `foreign_frame_bad cx = foreign_frame_bad cy` by
+    simp[FUN_EQ_THM, foreign_frame_bad_def] >>
+  rewrite_tac[FUN_EQ_THM, foreign_frame_expr_def, foreign_frame_exprs_def,
+       foreign_frame_target_def, foreign_frame_write_target_def,
+       foreign_frame_iterator_def, foreign_frame_assert_def, foreign_frame_raise_def] >>
+  qpat_x_assum `foreign_frame_callee cx = _` SUBST1_TAC >>
+  qpat_x_assum `foreign_frame_bad cx = _` SUBST1_TAC >> simp[]
+QED
+
+Theorem foreign_frame_assignment_context:
+  (!cx at. !cy. get_module_code cx NONE = get_module_code cy NONE ==>
+    foreign_frame_assignment cx at = foreign_frame_assignment cy at) /\
+  (!cx ats. !cy. get_module_code cx NONE = get_module_code cy NONE ==>
+    foreign_frame_assignments cx ats = foreign_frame_assignments cy ats)
+Proof
+  ho_match_mp_tac foreign_frame_assignment_ind >>
+  rw[foreign_frame_assignment_def] >>
+  metis_tac[foreign_frame_leaf_context]
+QED
+
+Theorem foreign_frame_stmt_context:
+  (!cx stmt. !cy. get_module_code cx NONE = get_module_code cy NONE ==>
+    foreign_frame_stmt cx stmt = foreign_frame_stmt cy stmt) /\
+  (!cx stmts. !cy. get_module_code cx NONE = get_module_code cy NONE ==>
+    foreign_frame_stmts cx stmts = foreign_frame_stmts cy stmts)
+Proof
+  ho_match_mp_tac foreign_frame_stmt_ind >>
+  rw[foreign_frame_stmt_def] >>
+  drule foreign_frame_leaf_context >> strip_tac >> gvs[]
+  >~ [`supported_opt_exists _ opt`]
+  >- (Cases_on `opt` >>
+      gvs[supported_expr_exists_def, int_calls_expr_def,
+          GSYM foreign_frame_expr_def])
+  >~ [`foreign_frame_assignment cx at`]
+  >- (drule (CONJUNCT1 foreign_frame_assignment_context) >>
+      disch_then (qspec_then `at` mp_tac) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem supported_target_info_foreign_frame:
+  !bt tops bindings.
+    IS_SOME (supported_target_info tops bindings bt) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    foreign_frame_write_target cx bt
+Proof
+  measureInduct_on `base_assignment_target_size bt` >>
+  rpt gen_tac >> strip_tac >>
+  `target_root_main bt` by metis_tac[supported_target_root_main] >>
+  simp[foreign_frame_write_target_def] >>
+  Cases_on `bt` >> gvs[supported_target_info_def, foreign_frame_target_eqs,
+                      optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >>
+  first_x_assum (qspec_then `b` mp_tac) >> simp[] >>
+  disch_then (qspec_then `bindings` mp_tac) >>
+  simp[foreign_frame_write_target_def] >>
+  metis_tac[supported_expr_foreign_frame]
+QED
+
+Theorem supported_target_foreign_frame:
+  supported_target tops bindings bt /\ supported_program tops /\
+  get_module_code cx NONE = SOME tops ==> foreign_frame_write_target cx bt
+Proof
+  strip_tac >>
+  `target_root_main bt` by metis_tac[supported_target_root_main] >>
+  simp[foreign_frame_write_target_def] >>
+  Cases_on `bt` >> gvs[supported_target_def, foreign_frame_target_eqs]
+  >~ [`foreign_frame_target cx bt'`]
+  >- (Cases_on `bt'` >> gvs[] >>
+      metis_tac[supported_expr_foreign_frame, foreign_frame_target_eqs]) >>
+  Cases_on `b` >> gvs[] >>
+  metis_tac[supported_expr_foreign_frame, foreign_frame_target_eqs]
+QED
+
+Theorem foreign_frame_assignments_every:
+  foreign_frame_assignments cx ats <=> EVERY (foreign_frame_assignment cx) ats
+Proof
+  Induct_on `ats` >> simp[foreign_frame_assignment_def]
+QED
+
+Theorem supported_assignment_foreign_frame:
+  supported_assignment tops bindings at e /\ supported_program tops /\
+  get_module_code cx NONE = SOME tops ==>
+  foreign_frame_assignment cx at /\ foreign_frame_expr cx e
+Proof
+  simp[supported_assignment_def] >> strip_tac >>
+  `foreign_frame_expr cx e` by (irule supported_expr_foreign_frame >>
+                               goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> Cases_on `at` >>
+  gvs[foreign_frame_assignment_def, foreign_frame_assignments_every]
+  >>~- ([`foreign_frame_write_target cx bt`],
+      Cases_on `supported_target_info tops bindings bt` >> gvs[] >>
+      metis_tac[supported_target_foreign_frame, supported_target_info_foreign_frame,
+                optionTheory.IS_SOME_EXISTS]) >>
+  irule listTheory.EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+  Cases >> simp[foreign_frame_assignment_def] >>
+  metis_tac[supported_target_foreign_frame]
+QED
+
+Theorem supported_reason_foreign_frame:
+  (!e. supported_string_reason tops e ==> foreign_frame_expr cx e) /\
+  (supported_assert_reason tops ar ==> foreign_frame_assert cx ar) /\
+  (supported_raise_reason tops rr ==> foreign_frame_raise cx rr)
+Proof
+  conj_asm1_tac
+  >- (Cases_on `e` >> simp[supported_string_reason_def]
+      >~ [`Literal ty lit`]
+      >- (simp[foreign_frame_expr_def, supported_expr_exists_def,
+               int_calls_expr_def, foreign_frame_bad_def,
+               foreign_frame_bad_pop_def, expr_evm_run_root_def]) >>
+      strip_tac >> irule (CONJUNCT1 supported_pure_foreign_frame) >>
+      goal_assum (drule_at Any)) >>
+  conj_tac
+  >- (Cases_on `ar` >> simp[supported_assert_reason_def] >> metis_tac[]) >>
+  Cases_on `rr` >> simp[supported_raise_reason_def] >> metis_tac[]
+QED
+
+Theorem foreign_frame_literal[simp]:
+  foreign_frame_expr cx (Literal ty lit)
+Proof
+  simp[foreign_frame_expr_def, supported_expr_exists_def, int_calls_expr_def,
+       foreign_frame_bad_def, foreign_frame_bad_pop_def, expr_evm_run_root_def]
+QED
+
+Theorem supported_iterator_foreign_frame:
+  supported_iterator tops ty it n ==> foreign_frame_iterator cx it
+Proof
+  Cases_on `it`
+  >- (rename1 `Array arr` >> Cases_on `arr` >>
+      simp[supported_iterator_def, foreign_frame_expr_def,
+           supported_expr_exists_def, int_calls_expr_def,
+           foreign_frame_bad_def, foreign_frame_bad_pop_def, expr_evm_run_root_def]) >>
+  rename1 `Range lo hi` >> Cases_on `lo` >>
+  simp[supported_iterator_def]
+  >~ [`Literal ty lit`]
+  >- (Cases_on `lit` >> Cases_on `hi` >>
+      simp[supported_iterator_def] >>
+      metis_tac[supported_pure_foreign_frame, foreign_frame_literal]) >>
+  metis_tac[supported_pure_foreign_frame]
+QED
+
+Theorem supported_aug_foreign_frame:
+  supported_aug_target tops bindings bt /\ supported_program tops /\
+  get_module_code cx NONE = SOME tops ==> foreign_frame_write_target cx bt
+Proof
+  strip_tac >> irule supported_target_info_foreign_frame >>
+  goal_assum (drule_at Any) >> qexists `bindings` >> simp[] >>
+  qpat_x_assum `supported_aug_target _ _ _` mp_tac >>
+  Cases_on `supported_target_info tops bindings bt` >>
+  simp[supported_aug_target_def]
+QED
+
+Theorem supported_append_foreign_frame:
+  supported_append_target tops bt ==> foreign_frame_write_target cx bt
+Proof
+  Cases_on `bt` >> simp[supported_append_target_def] >> strip_tac >>
+  simp[foreign_frame_write_target_def] >>
+  irule supported_storage_dynamic_array_root_main >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem supported_stmt_foreign_frame:
+  (!tops bindings stmt. supported_stmt tops bindings stmt ==>
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    foreign_frame_stmt cx stmt) /\
+  (!tops bindings stmts. supported_stmts tops bindings stmts ==>
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    foreign_frame_stmts cx stmts)
+Proof
+  ho_match_mp_tac supported_stmt_ind >>
+  rw[supported_stmt_def, foreign_frame_stmt_def]
+  >~ [`supported_assignment tops bindings at e`]
+  >- metis_tac[supported_assignment_foreign_frame]
+  >>~- ([`foreign_frame_write_target cx bt`],
+      metis_tac[supported_target_foreign_frame, supported_aug_foreign_frame,
+                supported_append_foreign_frame])
+  >>~- ([`foreign_frame_expr cx e`],
+      metis_tac[supported_expr_foreign_frame, supported_pure_foreign_frame,
+                supported_assignment_foreign_frame])
+  >>~- ([`supported_opt_exists _ opt`],
+      Cases_on `opt` >>
+      gvs[supported_expr_exists_def, int_calls_expr_def,
+          GSYM foreign_frame_expr_def] >>
+      metis_tac[supported_expr_foreign_frame])
+  >>~- ([`foreign_frame_assert cx ar`], metis_tac[supported_reason_foreign_frame])
+  >>~- ([`foreign_frame_raise cx rr`], metis_tac[supported_reason_foreign_frame])
+  >>~- ([`foreign_frame_iterator cx it`], metis_tac[supported_iterator_foreign_frame]) >>
+  gvs[supported_log_def] >> metis_tac[supported_pure_foreign_frame]
+QED
+
+Theorem supported_callable_foreign_frame:
+  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  lookup_callable_function deploy name tops = SOME (mut,nr,args,defaults,ret,stmts) ==>
+  defaults = [] /\ foreign_frame_stmts cx stmts
+Proof
+  strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
+  simp[] >> irule (CONJUNCT2 supported_stmt_foreign_frame) >>
+  goal_assum (drule_at Any) >> simp[]
 QED
