@@ -6,6 +6,30 @@ Ancestors
   stmtLowering exprLoweringProps localPtrsProps vyperInterpreter vyperState
   vyperEvalPreservesScopes list finite_map
 
+Theorem gas_admissible_stmts_head[local]:
+  gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_stmt cx stmt) (stmt_res_ok lctx) es
+Proof
+  rw[gas_admissible_def] >>
+  Cases_on `res` >- (rename1 `INL u` >> Cases_on `u` >> simp[stmt_res_ok_def]) >>
+  first_x_assum (qspec_then `gs` mp_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  metis_tac[]
+QED
+
+Theorem gas_admissible_stmts_tail[local]:
+  gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es /\
+  (!tail. eval_stmt cx stmt (es with gas_obs := xs ++ tail) =
+    (INL (), mid with gas_obs := tail)) ==>
+  gas_admissible (eval_stmts cx ss) (stmt_res_ok lctx)
+    (mid with gas_obs := [])
+Proof
+  rw[gas_admissible_def] >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def] >>
+  metis_tac[]
+QED
+
 Theorem stmt_frag_cons_env:
   !ctx func cx lctx RetQ cenv ty stmt ss es.
     (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
