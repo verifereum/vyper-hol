@@ -1130,7 +1130,7 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[run_inst_seq_def, step_SHR, step_SHL, mk_inst_def,
+  simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
   simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>

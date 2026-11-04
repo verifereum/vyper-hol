@@ -49,12 +49,15 @@ Ancestors
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
    has build_compile_env's hashmaps and module variable types, which no
-   declaration changes. *)
+   declaration changes.  cenv's target is the unit's policy target, as
+   set_*_package_target installs it, which run_lowering requires to have
+   MCOPY (lowering_policy_ok). *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
     (?rpolicy unit. lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-                    ctx = unit.cu_context) /\
+                    ctx = unit.cu_context /\
+                    cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
