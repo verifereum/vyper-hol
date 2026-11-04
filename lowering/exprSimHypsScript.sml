@@ -436,6 +436,25 @@ Proof
   gvs[int_calls_expr_def]
 QED
 
+(* An expression's value is described at a type its annotation widens: an
+   internal call's at its callee's declared return type, which the typing
+   lets the call site widen (well_typed_expr), and which expr_sim_inv says
+   cenv records. *)
+Theorem post_value_type_widens:
+  !cenv cx env es e.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e ==>
+    type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
+      gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
+          vyperASTTheory.expr_type_def] >>
+      rw[type_widens_to_def] >> res_tac >> gvs[]) >>
+  `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
+  simp[type_widens_to_def]
+QED
+
 Theorem expr_sim_pre_body_pre:
   !cenv cx env e es.
     expr_sim_pre cenv cx env e es ==> expr_body_pre cenv cx env e es
