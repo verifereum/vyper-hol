@@ -5,7 +5,7 @@ Ancestors
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
-  calleeTransport
+  calleeTransport stmtSimDecl exprSimWordArgs exprSimOperands
 
 Theorem frag_exec_refutation_probe:
   !ctx sa sb P Q R fn s.
@@ -4058,4 +4058,54 @@ Proof
   irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
   gvs[get_instruction_def] >>
   metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem probe_word_shrink_alloca_frame:
+  !ctx func cenv es sa sA s0 R.
+    emit_op ALLOCA [Lit 32w] sa =
+      (Var ("%" ++ toString sa.cs_next_var),sA) /\
+    stmt_state_rel ctx func cenv probe_word_context es s0 /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+           ["%" ++ toString sa.cs_next_var]) (fn_insts func) ==>
+    frag_exec ctx sa sA (\s. s = s0)
+      (\s. stmt_state_rel ctx func cenv probe_word_context es s /\
+           wb_frame cenv es sa s0 s /\
+           ?w. lookup_var ("%" ++ toString sa.cs_next_var) s = SOME w /\
+               FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n w,32) /\
+               (!aid off sz. aid < sa.cs_next_id /\
+                  FLOOKUP s.vs_allocas aid = SOME (off,sz) ==>
+                  regions_disjoint (w2n w) 32 off sz) /\
+               (!name off sz. local_region cenv es.scopes s name off sz ==>
+                  regions_disjoint (w2n w) 32 off sz)) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  `not_local_ptr cenv es.scopes ("%" ++ toString sa.cs_next_var)` by
+    (simp[] >> irule local_ptrs_reserved_fresh >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all annassign_alloca_op_framed_frag >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  `wb_frame cenv es sa s0 s1` by
+    (irule wb_frame_readonly_tail >>
+     qexistsl_tac [`sa`,`s0`] >> simp[wb_frame_refl] >>
+     rpt strip_tac >> rename1 `not_fresh_at sa x` >>
+     `x <> "%" ++ toString sa.cs_next_var` by
+       (qpat_x_assum `not_fresh_at _ _` mp_tac >>
+        rewrite_tac[not_fresh_at_def] >>
+        disch_then (qspec_then `sa.cs_next_var` mp_tac) >> simp[]) >>
+     gvs[]) >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+  strip_tac >> gvs[] >>
+  conj_tac
+  >- (rpt strip_tac >> irule state_allocations_disjoint >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> decide_tac) >>
+  rpt strip_tac >>
+  simp[compileEnvTheory.regions_disjoint_def] >>
+  irule alloca_clear_of_locals >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  simp[venomInstTheory.mk_inst_def] >> goal_assum (drule_at Any) >>
+  simp[venomInstTheory.mk_inst_def]
 QED
