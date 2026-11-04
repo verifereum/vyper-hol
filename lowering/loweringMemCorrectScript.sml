@@ -384,6 +384,7 @@ Proof
     fs[listTheory.EVERY_MEM] >>
   drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_run_ptr_safe_composed >> strip_tac >>
+  `0 <= vs.vs_alloca_next` by simp[] >>
   drule_all ptrSafeRunTheory.ptr_safe_ptr_discipline >> simp[]
 QED
 
