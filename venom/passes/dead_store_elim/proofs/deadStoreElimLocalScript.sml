@@ -3,7 +3,7 @@ Ancestors
   deadStoreElimPending deadStoreElimMemory deadStoreElimSafety deadStoreElimEquiv
   deadStoreElimFrame deadStoreElimDefs venomState venomExecSemantics
   basePtrDefs memLocDefs finite_map phiCongruence venomExecProofs
-  deadStoreElimLiveness list
+  deadStoreElimLiveness list vfmState
 Libs
   deadStoreElimFrameLib
 
@@ -192,4 +192,19 @@ Theorem dse_local_agrees_undefined_read_ok_inst_idx:
 Proof
   strip_tac >> drule_all dse_local_agrees_undefined_read_ok >>
   simp[dse_local_agrees_refl, dse_pending_at_empty]
+QED
+
+Theorem dse_local_agrees_account_code:
+  dse_local_agrees sp P s t ==>
+  (lookup_account addr s.vs_accounts).code =
+  (lookup_account addr t.vs_accounts).code
+Proof
+  strip_tac >>
+  Cases_on `sp = AddrSp_Storage`
+  >- (fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def] >>
+      Cases_on `addr = s.vs_call_ctx.cc_address`
+      >- (gvs[lookup_account_def] >>
+          metis_tac[dse_accounts_normalize_code]) >>
+      fs[lookup_account_def] >> metis_tac[dse_accounts_normalize_other]) >>
+  fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def]
 QED
