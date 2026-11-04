@@ -7,7 +7,7 @@ Ancestors
   moduleLoweringProps entryDispatchProps entryDecodeProps
   abiDecodeStaticProps entryDecodeStaticProps entryDecodePlanProps
   entryChecksProps
-  entryStateRel entryLocals
+  entryStateRel entryLocals ctorEntryLocals
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
   varsExt exprSim
