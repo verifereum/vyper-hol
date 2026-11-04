@@ -3,10 +3,23 @@ Ancestors
   pair vyperMisc vyperAST vyperValue vyperContext vyperState vyperStorageBackend vyperCreate vyperCreateFrame vyperInterpreter
   vyperLookup vyperScopePreservation vyperStatePreservation
   vyperPlaceFrames vyperEvalExprPreservesScopesDom
-  vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame
-  vyperImmutableMetadataFrame vyperAbiFrame vyperAbiMemoryProps
+  vyperImmutablesPreservation vyperCallFrame vyperCallOutcomeFrame vyperPlaceFrames
+  vyperImmutableMetadataFrame
 
-(* ===== Immutable domains: place metadata and delayed ABI captures ===== *)
+(* ========================================================================
+   Preservation of immutables domain through eval_expr / eval_stmts.
+
+   TOP-LEVEL:
+     eval_expr_preserves_immutables_addr_dom
+     eval_expr_preserves_immutables_dom
+     eval_base_place_preserves_immutables_addr_dom
+     eval_base_place_preserves_immutables_dom
+     eval_exprs_preserves_immutables_addr_dom
+     eval_stmts_preserves_immutables_addr_dom
+     eval_stmts_preserves_immutables_dom
+   ======================================================================== *)
+
+(* ===== Predicate bundling both domain properties ===== *)
 
 Definition preserves_immutables_dom_def:
   preserves_immutables_dom cx (st:evaluation_state) (st':evaluation_state) ⇔
@@ -31,9 +44,6 @@ Proof
   Cases_on `FLOOKUP (get_source_immutables src imms') n` >> gvs[]
 QED
 
-(* The place refactor supplies the stronger metadata frame, including errors.
-   ABI evaluation is included by the same evaluator frame, not by assuming
-   that captures leave the whole evaluation state unchanged. *)
 Theorem immutables_dom_extended[local]:
   (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
   (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒ preserves_immutables_dom cx st st') ∧
@@ -44,13 +54,11 @@ Theorem immutables_dom_extended[local]:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_immutables_dom cx st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_immutables_dom cx st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_immutables_dom cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_immutables_dom cx st st') /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> preserves_immutables_dom cx st st') /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> preserves_immutables_dom cx st st')
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_immutables_dom cx st st')
 Proof
   rpt conj_tac >> rpt strip_tac >>
   irule immutable_metadata_frame_preserves_dom >>
-  metis_tac[eval_metadata_frame_with_results]
+  metis_tac[eval_metadata_frame_mutual]
 QED
 
 (* ===== Main theorems ===== *)
@@ -139,15 +147,7 @@ Proof
   rw[preserves_immutables_dom_def]
 QED
 
-Theorem eval_abi_preserves_immutables_dom:
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==>
-    preserves_immutables_dom cx st st') /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==>
-    preserves_immutables_dom cx st st')
-Proof
-  metis_tac[immutables_dom_extended]
-QED
-
+(* Integration audit: immutable-domain exports must remain kernel closed. *)
 Theorem eval_expr_results_preserves_immutables_addr_dom:
   eval_expr_results cx es st = (res,st') ==>
     !tgt. IS_SOME (ALOOKUP st.immutables tgt) <=>
@@ -170,7 +170,6 @@ Proof
   rw[preserves_immutables_dom_def]
 QED
 
-(* Integration audit: immutable-domain exports must remain kernel closed. *)
 val () = List.app (fn (name,th) =>
   let val (oracles,_) = Tag.dest_tag (Thm.tag th)
   in if List.all (fn s => s = "DISK_THM") oracles then ()

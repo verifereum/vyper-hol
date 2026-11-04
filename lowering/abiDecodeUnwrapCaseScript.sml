@@ -11,14 +11,13 @@ Theorem compile_abi_decode_wrapping:
     compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiDecode unwrap) ret_ty args st =
     (let (data_vv,st1) = cfn ce (expr_type (HD args)) (HD args) st in
      let (data_op,st2) = unwrap_value ce data_vv st1 in
-     let (data_ptr,st3) = compile_abi_decode_input (expr_type (HD args)) data_op st2 in
      as_ptr_val vv_ty LocMemory
-       (lower_abi_decode data_ptr (type_to_abi_dec_info ce.ce_struct_fields ce wrapped_ty)
+       (lower_abi_decode data_op (type_to_abi_dec_info ce.ce_struct_fields ce wrapped_ty)
          (abi_static_size ce.ce_struct_fields wrapped_ty)
          (abi_size_bound ce.ce_struct_fields wrapped_ty)
-         (type_memory_bytes ce wrapped_ty) st3))
+         (type_memory_bytes ce wrapped_ty) st2))
 Proof
-  simp[compile_type_builtin_dispatch_body_def, abi_decode_type_def, LET_THM]
+  simp[compile_type_builtin_dispatch_body_def, LET_THM]
 QED
 
 Theorem abi_decode_output_size:

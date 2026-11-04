@@ -19,36 +19,6 @@ Ancestors
   vyperPlaceStoragePreservation vyperValue vyperMachineFrame
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
   supportedTargets supportedStmtTraverse list
-  bodyOracleCallStorage exprOracleStoragePreservation vyperAbiReadOnly vyperAbiOperand
-  vyperTypeEvalSoundness
-Libs monadsyntax
-
-Theorem body_main_calls_storage:
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
-  EVERY (\c. FST c = NONE) calls ==>
-  EVERY (oracle_internal_call_storage cx) calls
-Proof
-  Induct_on `calls` >> simp[] >> rpt strip_tac
-  >- (PairCases_on `h` >> gvs[] >>
-      irule supported_main_callee_storage >> goal_assum (drule_at Any) >> simp[]) >>
-  first_x_assum drule_all >> simp[]
-QED
-
-Theorem body_eval_abi_exprs_storage:
-  well_typed_exprs env es /\ supported_program tops /\
-  get_module_code cx NONE = SOME tops /\
-  ~supported_exprs_exists expr_evm_run_root es /\
-  EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
-  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
-  call_evaluation_safe cx (int_calls_exprs es) /\
-  IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-  eval_abi_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st'
-Proof
-  rpt strip_tac >>
-  `EVERY (oracle_internal_call_storage cx) (int_calls_exprs es)` by
-    (irule body_main_calls_storage >> goal_assum (drule_at Any) >> simp[]) >>
-  drule_all (cj 13 eval_expr_oracle_storage_results_mutual) >> simp[]
-QED
 
 Theorem supported_callable_body_contract:
   supported_program tops /\
@@ -512,56 +482,30 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem body_abi_encode_storage_args[local]:
-  (!r rt. eval_abi_exprs cx es st = (r,rt) ==> contract_storage_well_formed cx rt) /\
-  finally (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od)
-    (release_abi_captures mark) st = (res,rt) ==> contract_storage_well_formed cx rt
-Proof
-  strip_tac >> Cases_on `eval_abi_exprs cx es st` >>
-  rename1 `eval_abi_exprs cx es st = (args_res,args_st)` >>
-  `contract_storage_well_formed cx args_st` by metis_tac[] >> Cases_on `args_res`
-  >- (Cases_on `stage_abi_operands cx x args_st` >>
-      drule (cj 3 abi_readonly_states) >> strip_tac >> gvs[] >> Cases_on `q` >>
-      gvs[finally_def, bind_def, ignore_bind_def, release_abi_captures_def,
-          return_def, raise_def] >>
-      irule contract_storage_well_formed_storage_frame >>
-      qexists_tac `args_st` >> simp[] >> gen_tac >> Cases_on `b` >>
-      simp[vyperStorageBackendTheory.get_storage_def]) >>
-  gvs[finally_def, bind_def, ignore_bind_def, release_abi_captures_def, return_def, raise_def] >>
-  irule contract_storage_well_formed_storage_frame >> qexists_tac `args_st` >>
-  simp[] >> gen_tac >> Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def]
-QED
-
 Theorem body_eval_type_builtin_storage:
   contract_storage_well_formed cx st /\
   (!r s. type_builtin_args_length_ok tb (LENGTH es) /\
     eval_exprs cx es st = (r,s) ==> contract_storage_well_formed cx s) /\
-  (!r s. type_builtin_args_length_ok tb (LENGTH es) /\
-    eval_abi_exprs cx es st = (r,s) ==> contract_storage_well_formed cx s) /\
   eval_expr cx (TypeBuiltin ty tb typ es) st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
   strip_tac >>
-  Cases_on `type_builtin_args_length_ok tb (LENGTH es)`
-  >- (`!r rt. type_builtin_args cx tb es st = (r,rt) ==>
-          contract_storage_well_formed cx rt` by
-        (Cases_on `tb` >>
-         gvs[type_builtin_args_def, mark_abi_captures_def, bind_def, return_def] >>
-         rpt gen_tac >> strip_tac >>
-         drule_all body_abi_encode_storage_args >> simp[]) >>
-      qpat_x_assum `eval_expr _ (TypeBuiltin _ _ _ _) _ = _` mp_tac >>
-      simp_tac (srw_ss()) [Once evaluate_def, GSYM type_builtin_args_def,
-        bind_def, ignore_bind_def, type_check_def, assert_def, return_def, raise_def] >>
-      Cases_on `type_builtin_args cx tb es st` >>
-      rename1 `type_builtin_args cx tb es st = (args_res,args_st)` >>
-      `contract_storage_well_formed cx args_st` by metis_tac[] >>
-      Cases_on `args_res` >> gvs[]
-      >- (Cases_on `evaluate_type_builtin cx tb typ (MAP expr_type es) x` >>
-          simp[lift_sum_def, return_def, raise_def] >> strip_tac >> gvs[]) >>
-      strip_tac >> gvs[]) >>
   qpat_x_assum `eval_expr _ (TypeBuiltin _ _ _ _) _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def] >> strip_tac >> gvs[]
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def, ignore_bind_def,
+                      type_check_def, assert_def] >>
+  Cases_on `type_builtin_args_length_ok tb (LENGTH es)` >>
+  gvs[return_def, raise_def]
+  >- (Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+      `contract_storage_well_formed cx args_st` by metis_tac[] >>
+      Cases_on `args_res` >> gvs[bind_def, return_def, raise_def]
+      >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+          Cases_on `lift_sum (evaluate_type_builtin cx tb typ (MAP expr_type es) vs) args_st` >>
+          rename1 `lift_sum _ args_st = (lift_res,lift_st)` >>
+          imp_res_tac lift_sum_state >> gvs[] >>
+          Cases_on `lift_res` >> gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem body_eval_subscript_storage:

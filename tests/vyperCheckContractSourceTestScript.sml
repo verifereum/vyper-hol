@@ -18,7 +18,7 @@ fun audit th = let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
 (* The strict constant fixtures check to the same artifact on both routes. *)
 val () = app (fn name => let
   val file = {address=address,path=fixtures ^ name ^ ".json"}
-  val default = vyperCheckContractFrontendLib.check_constant_contract_file file
+  val default = vyperCheckContractFrontendLib.check_constant_contract_file_legacy file
   val source = vyperCheckContractFrontendLib.Source.check_constant_contract_file file
   val () = app audit [default,source]
   val () = if aconv (rhs (concl source)) (rhs (concl default)) then ()

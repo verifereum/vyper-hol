@@ -7,7 +7,7 @@ Ancestors
   vyperTypeValues vyperTypeSystem vyperTypeExprSoundness
   vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
   vyperTypeCallStackSoundness vyperTypeCallGraph vyperTypeCallGraphSoundness
-  vyperTypeStmtResult vyperCreateFrame vyperAbiMemoryProps vyperAbiFrame vyperAbiOperand
+  vyperTypeStmtResult vyperCreateFrame
 Libs
   wordsLib
 
@@ -1023,7 +1023,6 @@ Proof
   rpt strip_tac >>
   gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
       AllCaseEqs(), return_def, raise_def, bind_def, set_scopes_def] >>
-  imp_res_tac write_abi_memory_child_frame >> gvs[] >>
   qexists_tac `[(id,(x2,path))]` >>
   simp[scope_pop_trace_def, scope_pop_step_def, entry_pop_step_def] >>
   metis_tac[]
@@ -1097,8 +1096,7 @@ Proof
   rpt strip_tac >>
   gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
       AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac set_immutable_scopes >>
-  imp_res_tac write_abi_immutables_frame >> gvs[]
+  metis_tac[set_immutable_scopes]
 QED
 
 Theorem pop_place_scope_effect:
@@ -1418,22 +1416,10 @@ Proof
       gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 
-Theorem scope_pop_effect_abi_finally:
-  scope_pop_effect f /\ scope_pop_effect g ==> scope_pop_effect (finally f g)
-Proof
-  simp[scope_pop_effect_def, finally_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def] >>
-  metis_tac[scope_pop_trace_append]
-QED
-
 Theorem eval_typebuiltin_scope_effect[local]:
   (!st x middle.
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args" st = (INL x,middle)
-    ==> scope_pop_effect (case tb of AbiEncode _ _ => do
-          mark <- mark_abi_captures;
-          finally (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od)
-            (release_abi_captures mark)
-        od | _ => eval_exprs cx es)) ==>
+    ==> scope_pop_effect (eval_exprs cx es)) ==>
   scope_pop_effect (eval_expr cx (TypeBuiltin ty tb typ es))
 Proof
   strip_tac >> rewrite_tac[Once evaluate_def, ignore_bind_def] >>
@@ -1574,12 +1560,7 @@ fun POP_EFFECT_GUARD_TAC (asl,w) =
     val facts = facts @ map (SIMP_RULE bool_ss eqs) atoms
     fun discharge th =
       if is_imp (snd (strip_forall (concl th))) then
-        let
-          val guard = fst (dest_imp (snd (strip_forall (concl th))))
-          val next = tryfind (MATCH_MP th) facts handle HOL_ERR _ =>
-            (MATCH_MP th (REFL (lhs guard)) handle HOL_ERR _ =>
-             MATCH_MP th (REFL (rhs guard)))
-        in discharge next end
+        discharge (tryfind (MATCH_MP th) facts)
       else th
     fun close ih goal =
       if can (match_term (snd (strip_imp (snd (strip_forall (concl ih)))))) w then
@@ -1588,34 +1569,6 @@ fun POP_EFFECT_GUARD_TAC (asl,w) =
   in
     FIRST (map close facts) (asl,w)
   end;
-
-local
-  val relation = ``\(st:evaluation_state) st'. st'.scopes = st.scopes``;
-  fun spec th = INST [first (fn v => fst (dest_var v) = "R")
-    (free_vars (concl th)) |-> relation] th;
-  val primitives = spec state_rel_frame_abi_primitives;
-  val premise = prove(fst (dest_imp (concl primitives)), simp[]);
-  val frames = CONJUNCTS (MATCH_MP primitives premise) @
-    [MATCH_MP (spec state_rel_frame_abi_place) premise];
-in
-  val scope_pop_effect_abi_primitives = save_thm("scope_pop_effect_abi_primitives",
-    LIST_CONJ (map (MATCH_MP scope_pop_effect_frame) frames));
-end;
-val () = export_rewrites ["scope_pop_effect_abi_primitives"];
-
-val POP_EFFECT_ABI_TAC =
-  rewrite_tac[Once evaluate_def] >>
-  rpt (FIRST [POP_EFFECT_GUARD_TAC,
-    (simp[pop_place_scope_effect] >> NO_TAC),
-    ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac,
-    ho_match_mp_tac scope_pop_effect_abi_finally >> conj_tac,
-    CHANGED_TAC (rewrite_tac[ignore_bind_def, switch_BoolV_def]),
-    CONV_TAC (RAND_CONV BETA_CONV),
-    CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
-    gen_tac, strip_tac,
-    CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
-      (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
-    BasicProvers.PURE_TOP_CASE_TAC]);
 
 val POP_EFFECT_BIND_STEP = FIRST [
   POP_EFFECT_GUARD_TAC,
@@ -1676,9 +1629,7 @@ Theorem eval_mutual_scope_pop_effect_results[local]:
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
   (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!cx es. scope_pop_effect (eval_expr_results cx es)) /\
-  (!cx e. scope_pop_effect (eval_abi_expr cx e)) /\
-  (!cx es. scope_pop_effect (eval_abi_exprs cx es))
+  (!cx es. scope_pop_effect (eval_expr_results cx es))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >>
   rpt gen_tac >> rpt strip_tac >~
@@ -1702,8 +1653,7 @@ Proof
      eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
-     eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect] @
-    [POP_EFFECT_ABI_TAC])
+     eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])
 QED
 
 Resume eval_mutual_scope_pop_effect_results[ExtCall]:
@@ -1767,13 +1717,6 @@ Theorem eval_mutual_scope_pop_effect:
   (!cx bt. scope_pop_effect (eval_target_place cx bt)) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
   (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T)
-Proof
-  metis_tac[eval_mutual_scope_pop_effect_results]
-QED
-
-Theorem eval_abi_scope_pop_effect:
-  (!cx e. scope_pop_effect (eval_abi_expr cx e)) /\
-  (!cx es. scope_pop_effect (eval_abi_exprs cx es))
 Proof
   metis_tac[eval_mutual_scope_pop_effect_results]
 QED

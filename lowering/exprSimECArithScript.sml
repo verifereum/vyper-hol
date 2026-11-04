@@ -844,10 +844,7 @@ Proof
     (simp[comp_ignore_bind_def, comp_bind_assoc] >>
      simp[GSYM comp_ignore_bind_def]) >>
   pop_assum mp_tac >>
-  (* Unfold the outer bind only; simplification selects an inner bind. *)
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [comp_ignore_bind_def])) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [comp_bind_def])) >>
-  pure_rewrite_tac[LET_THM] >>
+  simp[Once comp_ignore_bind_def, Once comp_bind_def] >>
   pairarg_tac >> simp[] >> rename1 `_ sa = (u,sb)` >>
   Cases_on `u` >> strip_tac >>
   drule_all ec_point_transfers_run >> strip_tac >>
@@ -911,10 +908,7 @@ Proof
     (simp[comp_ignore_bind_def, comp_bind_assoc] >>
      simp[GSYM comp_ignore_bind_def]) >>
   pop_assum mp_tac >>
-  (* Keep the existential prefix in the conclusion folded as well. *)
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [comp_ignore_bind_def])) >>
-  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [comp_bind_def])) >>
-  pure_rewrite_tac[LET_THM] >>
+  simp[Once comp_ignore_bind_def, Once comp_bind_def] >>
   pairarg_tac >> simp[] >> rename1 `_ sa = (u,sc)` >>
   Cases_on `u` >> strip_tac >>
   `!x. MEM (Var x) [p;ib] ==> not_fresh_at sa x` by

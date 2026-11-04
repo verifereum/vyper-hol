@@ -5,7 +5,6 @@ Ancestors
   list option pair finite_map alist vyperState vyperMisc vyperTyping
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeStatePreservation vyperTypeEnv
   vyperPlaceTyping vyperPlaceFrames vyperLookup vyperAssignPreservesType
-  vyperPlaceStatePreservation vyperAbiWriteTyping vyperAbiStateTyping
   vyperImmutableMetadataFrame[ignore_grammar]
 
 Definition runtime_place_assignable_def:
@@ -169,90 +168,14 @@ Proof
   rw[replace_memory_entry_def, AllCaseEqs()] >> gvs[]
 QED
 
-(* ABI offsets use the declared path, including valid NoneTV endpoints. *)
-Theorem subscript_type_abi_offset:
-  subscript_type tv sb = SOME leaf ==>
-  ?off. abi_subscript_offset tv sb = SOME (off,leaf)
-Proof
-  Cases_on `tv` >> Cases_on `sb` >>
-  simp[subscript_type_def, abi_subscript_offset_def] >>
-  TRY (rename1 `ValueSubscript index_value` >> Cases_on `index_value` >>
-       simp[subscript_type_def, abi_subscript_offset_def]) >>
-  rpt strip_tac >> gvs[AllCaseEqs(), oEL_THM] >>
-  metis_tac[abi_field_offset_ALOOKUP]
-QED
-
-Theorem subscripts_type_abi_offset:
-  !path tv leaf. subscripts_type tv path = SOME leaf ==>
-  ?off. abi_path_offset tv path = SOME (off,leaf)
-Proof
-  Induct >> simp[subscripts_type_def, abi_path_offset_def] >>
-  rpt gen_tac >> qmatch_goalsub_rename_tac `subscript_type tv sb` >>
-  Cases_on `subscript_type tv sb` >> simp[] >> strip_tac >>
-  drule subscript_type_abi_offset >> strip_tac >>
-  first_x_assum drule >> strip_tac >> simp[]
-QED
-
-Theorem abi_child_writes_success:
-  subscripts_type root path = SOME leaf /\
-  IS_SOME (abi_operation_writes leaf child operation) ==>
-  !cx id st. ?rt.
-    write_abi_memory_child cx id root path child operation st = (INL (),rt)
-Proof
-  strip_tac >> rpt gen_tac >> drule subscripts_type_abi_offset >> strip_tac >>
-  gvs[IS_SOME_EXISTS] >> simp[write_abi_memory_child_def, return_def] >>
-  IF_CASES_TAC >> simp[]
-QED
-
-(* Logical replacement and mirrored footprint need not use the same operation. *)
-Theorem abi_write_typed_success:
-  assign_subscripts root old path dataop = INL new /\
-  value_has_type root new /\ well_formed_type_value root /\
-  subscripts_type root path = SOME leaf /\
-  (!v elem cap. mirrorop = AppendOp v /\ leaf = ArrayTV elem (Dynamic cap) ==>
-    value_has_type elem v) ==>
-  !cx id st src.
-  (?rt. write_abi_memory cx id root new path mirrorop st = (INL (),rt)) /\
-  (?rt. write_abi_immutables cx src id root new path mirrorop st = (INL (),rt))
-Proof
-  strip_tac >> rpt gen_tac >>
-  drule assign_subscripts_result_path >> strip_tac >>
-  drule subscripts_type_abi_offset >> strip_tac >>
-  `value_has_type leaf child` by
-    (irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `IS_SOME (abi_operation_writes leaf child mirrorop)` by
-    (irule abi_operation_writes_typed >> simp[]) >>
-  gvs[IS_SOME_EXISTS] >>
-  simp[write_abi_memory_def, write_abi_memory_child_def,
-       write_abi_immutables_def, return_def] >>
-  rpt IF_CASES_TAC >> simp[]
-QED
-
-Theorem abi_replace_typed_success:
-  assign_subscripts root old path (Replace v) = INL new /\
-  value_has_type root new /\ well_formed_type_value root /\
-  subscripts_type root path = SOME leaf ==>
-  !cx id st src.
-  (?rt. write_abi_memory cx id root new path (Replace v) st = (INL (),rt)) /\
-  (?rt. write_abi_immutables cx src id root new path (Replace v) st = (INL (),rt))
-Proof
-  strip_tac >> irule abi_write_typed_success >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`Replace v`,`old`] >> simp[]
-QED
-
-(* Active ABI mirrors encode the replacement, so writability alone no
-   longer rules out type errors. The public boundary already requires typing. *)
 Theorem write_memory_place_no_type_error:
-  state_well_typed st /\ runtime_place_typed cx st (MemoryPlace id path) tv /\
-  value_has_type tv v /\ runtime_place_writable cx st (MemoryPlace id path) /\
+  state_well_typed st /\ runtime_place_writable cx st (MemoryPlace id path) /\
   write_place cx (MemoryPlace id path) v st = (res,st') ==>
   no_type_error_result res
 Proof
-  rpt strip_tac >> fs[runtime_place_typed_memory] >>
+  rpt strip_tac >>
   qpat_x_assum `runtime_place_writable _ _ _` mp_tac >>
-  simp[NoAsms, runtime_place_writable_def] >> strip_tac >> gvs[] >>
+  simp[NoAsms, runtime_place_writable_def] >> strip_tac >>
   qmatch_assum_rename_tac `lookup_scopes id st.scopes = SOME entry` >>
   `EVERY scope_well_typed st.scopes` by fs[state_well_typed_def] >>
   drule_all scope_well_typed_lookup_scopes >> strip_tac >>
@@ -262,19 +185,7 @@ Proof
   Cases_on `replace_memory_entry entry path v` >>
   gvs[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
       type_check_def, assert_def, ignore_bind_def, lift_sum_def, set_scopes_def,
-      return_def, raise_def, no_type_error_result_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  rename1 `replace_memory_entry entry path v = INL updated` >>
-  `value_has_type updated.type updated.value` by
-    (drule_all replace_memory_entry_value_type >> simp[]) >>
-  `updated.type = entry.type` by metis_tac[replace_memory_entry_metadata] >>
-  `assign_subscripts entry.type entry.value path (Replace v) = INL updated.value` by
-    gvs[replace_memory_entry_def, AllCaseEqs()] >>
-  gvs[] >>
-  qmatch_asmsub_abbrev_tac `write_abi_memory _ _ _ _ _ _ before` >>
-  drule_all abi_replace_typed_success >>
-  disch_then (qspecl_then [`cx`,`id`,`before`,`NONE`] strip_assume_tac) >>
-  gvs[]
+      return_def, raise_def, no_type_error_result_def]
 QED
 
 Theorem immutable_metadata_frame_type_lookup:
@@ -354,8 +265,6 @@ Proof
   gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
       set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
   Cases_on `replace_memory_entry entry path v` >> gvs[return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  imp_res_tac write_abi_memory_typing_frame >> gvs[] >>
   drule find_containing_scope_structure >> strip_tac >>
   drule find_containing_scope_pre_none >> strip_tac >>
   drule replace_memory_entry_record >> strip_tac >> gvs[] >>
@@ -377,31 +286,23 @@ Proof
 QED
 
 Theorem write_immutable_place_no_type_error:
-  state_well_typed st /\ runtime_place_typed cx st (ImmutablePlace src id path) tv /\
-  value_has_type tv v /\ runtime_place_writable cx st (ImmutablePlace src id path) /\
+  state_well_typed st /\ runtime_place_writable cx st (ImmutablePlace src id path) /\
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
   no_type_error_result res
 Proof
-  rpt strip_tac >> fs[runtime_place_typed_immutable] >>
+  rpt strip_tac >>
   qpat_x_assum `runtime_place_writable _ _ _` mp_tac >>
-  simp[NoAsms, runtime_place_writable_def] >> strip_tac >> gvs[] >>
+  simp[NoAsms, runtime_place_writable_def] >> strip_tac >>
   qmatch_assum_rename_tac `FLOOKUP imms id = SOME (root,a)` >>
   drule_all get_immutables_success_typed >> strip_tac >>
   `!msg. assign_subscripts root a path (Replace v) <> INR (TypeError msg)` by
     (gen_tac >> irule assign_subscripts_replace_no_type_error >> simp[]) >>
   Cases_on `assign_subscripts root a path (Replace v)` >>
   qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [write_place_def, bind_def, ignore_bind_def,
-    lift_option_type_def, lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >> imp_res_tac set_immutable_success_from_get >>
-  gvs[no_type_error_result_def] >>
-  qmatch_assum_rename_tac `assign_subscripts root a path (Replace v) = INL new` >>
-  `value_has_type root new` by
-    (qspecl_then [`path`,`root`,`root`,`a`,`tv`,`v`,`new`]
-       mp_tac assign_subscripts_replace_type_metadata >> simp[]) >>
-  qmatch_asmsub_abbrev_tac `write_abi_immutables _ _ _ _ _ _ _ before` >>
-  drule_all abi_replace_typed_success >>
-  disch_then (qspecl_then [`cx`,`id`,`before`,`src`] strip_assume_tac) >> gvs[]
+  asm_simp_tac (srw_ss()) [write_place_def, bind_def, lift_option_type_def,
+    lift_sum_def, return_def, raise_def] >> strip_tac >>
+  FIRST [drule_all set_immutable_success_from_get >> simp[no_type_error_result_def],
+         gvs[no_type_error_result_def]]
 QED
 
 Theorem write_immutable_place_preserves_env_consistent:

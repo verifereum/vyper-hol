@@ -26,7 +26,7 @@ Ancestors
   allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
+  exprSimOperators exprSimLeaves powerCheckedProps loweringSlice stmtSim stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv valueEncoding
@@ -249,13 +249,40 @@ QED
 (* The checked augmented operand satisfies the ordinary builtin gate too. *)
 Theorem augassign_builtin_operands:
   augassign_operand_ok ty bop e ==>
-  builtin_operands_ok ty (Bop bop) [lhs; e]
+  builtin_operands_ok ty (Bop bop) [Name ty id; e]
 Proof
   Cases_on `bop` >>
   simp[augassign_operand_ok_def, builtin_operands_ok_def,
        power_operands_ok_def, integer_literal_expr_def] >>
   Cases_on `e` >> simp[power_exponent_ok_def] >>
   rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+(* Checked augmented operands provide exactly the literal provenance used by
+   compile_binop.  The left operand need not be a Name: this also covers
+   attribute and storage loads. *)
+Theorem augassign_binop_frag:
+  well_typed_binop ty bop ty (expr_type e) /\ augassign_operand_ok ty bop e /\
+  type_bits ty MOD 8 = 0 /\
+  word_value_type ty /\ word_value_type (expr_type e) /\
+  evaluate_type tenv ty = SOME tv1 /\ value_has_type tv1 v1 /\
+  evaluate_type tenv (expr_type e) = SOME tv2 /\ value_has_type tv2 v2 /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v2, es1) ==>
+  binop_frag ctx func cenv cx bop ty ty NONE
+    (if bop = Exp then expr_int_literal e else NONE)
+    [ty; expr_type e] v1 v2 es1
+Proof
+  rpt strip_tac >> reverse (Cases_on `bop = Exp`)
+  >- (irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
+  gvs[well_typed_binop_def, augassign_operand_ok_def] >>
+  `?n. expr_int_literal e = SOME n /\ 0 <= n` by
+    (Cases_on `e` >> gvs[power_exponent_ok_def] >>
+     rename1 `Literal ann lit` >> Cases_on `lit` >>
+     gvs[power_exponent_ok_def, expr_int_literal_def]) >>
+  `?a b. v1 = IntV a /\ v2 = IntV b` by metis_tac[int_type_value] >>
+  gvs[] >>
+  `b = n` by metis_tac[power_literal_value] >> gvs[] >>
+  irule binop_frag_power_values >> simp[] >> metis_tac[]
 QED
 
 (* The typing side: x op e meets expr_sim_pre where e does, x is a local
@@ -464,8 +491,11 @@ QED
 Theorem compile_augassign_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty0 env ty id bop e es res es'.
     eval_stmt cx (AugAssign ty (NameTarget id) bop e) es = (res, es') /\
+    augassign_operand_ok ty bop e /\
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    FLOOKUP env.var_types id = SOME ty /\ augassign_operand_ok ty bop e /\
+    FLOOKUP env.var_types id = SOME ty /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0 (AugAssign ty (NameTarget id) bop e)) es res es'

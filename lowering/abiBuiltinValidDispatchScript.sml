@@ -12,7 +12,6 @@ Theorem compile_abi_decode_memory_valid:
   let max_size = abi_size_bound ce.ce_struct_fields wrapped_ty in
   abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields ret_ty tv /\
   evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
-  expr_type (HD args) = BaseT (BytesT (Dynamic n)) /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic n))) srcptr,ready) /\
   srcptr.ptr_location = LocMemory /\

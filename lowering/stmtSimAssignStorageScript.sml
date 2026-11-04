@@ -214,7 +214,14 @@ Proof
      Cases_on `compile_expr cenv (expr_type e) e sa` >>
      rename1 `compile_expr _ _ _ _ = (src_vv, st2)` >>
      Cases_on `unwrap_value cenv src_vv st2` >>
-     rename1 `unwrap_value _ _ _ = (op, sb)` >> Cases_on `tr` >> simp[]) >>
+     rename1 `unwrap_value _ _ _ = (op, sb)` >>
+     Cases_on `tr` >> simp[]
+     >- (Cases_on `emit_void TSTORE [Lit slot; op] sb` >>
+         rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
+         simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]) >>
+     Cases_on `emit_void SSTORE [Lit slot; op] sb` >>
+     rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
+     simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]) >>
   `lower_value compile_expr cenv (expr_type e) e sa = (op, sb)` by
     simp[lower_value_def, comp_bind_def] >>
   `cs_extends sa sb` by

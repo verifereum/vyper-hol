@@ -9,17 +9,15 @@ Ancestors
   abiBuiltinAllocation abiTupleEncodeOwnedBytes abiTupleEncodeInput abiEncoderInput
   abiDecoderAllocation abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv builtinAbi
   exprLowering valueEncoding vyperABI contractABI venomMemDefs venomState venomExecSemantics
-  finite_map pred_set words list arithmetic abiBuiltinEncodeCode
+  finite_map pred_set words list arithmetic
 
 Theorem abi_scratch_builtin_producer_bounds:
-  p+abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) < dimword (:256) /\
+  p+(maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) < dimword (:256) /\
   payload_size <= maxlen ==>
   p < dimword (:256) /\ maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt) < dimword (:256) /\
   LENGTH (abi_builtin_encode_prefix method_id_opt)+payload_size <=
     maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)
 Proof
-  mp_tac (Q.SPECL [`maxlen`, `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4`]
-    abi_builtin_encode_alloc_size_bound) >>
   Cases_on `method_id_opt` >> simp[abi_scratch_builtin_prefix_length] >> decide_tac
 QED
 
@@ -60,7 +58,7 @@ Proof
 QED
 
 Theorem lower_abi_encode_scratch_produced_tuple_input:
-  let outsz = abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
+  let outsz = maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
   let allocated = abi_builtin_allocate_state start.cs_next_id outsz initial in
   let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
   let n = maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt) in
@@ -123,18 +121,14 @@ Proof
     abi_scratch_builtin_producer_site) >>
   impl_tac >- asm_simp_tac bool_ss [] >> disch_then assume_tac >>
   drule_all abi_scratch_builtin_effect_output_row >> disch_then assume_tac >>
-  mp_tac (Q.SPECL [`maxlen`, `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4`]
-    abi_builtin_encode_alloc_size_bound) >>
-  disch_then (assume_tac o PURE_REWRITE_RULE [GSYM abi_scratch_builtin_prefix_length]) >>
   drule_all abi_scratch_builtin_producer_frontier >>
   disch_then (assume_tac o PURE_REWRITE_RULE
     [GSYM abi_scratch_builtin_prefix_length, AC ADD_COMM ADD_ASSOC]) >>
   qexists_tac `actual` >> asm_rewrite_tac[] >> conj_tac
   >- (gen_tac >> irule abi_scratch_builtin_producer_input >> asm_rewrite_tac[] >>
       qexists_tac `p` >> asm_rewrite_tac[] >>
-      qpat_assum `32+maxlen+LENGTH _ <= _` mp_tac >>
       qpat_assum `p+_ <= actual.vs_alloca_next` mp_tac >>
-      POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
+      POP_ASSUM_LIST (K ALL_TAC) >> simp[AC ADD_COMM ADD_ASSOC]) >>
   map_every qx_gen_tac [`outer_id`, `q`, `outer_size`] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_builtin_allocate_separate >>
@@ -147,7 +141,6 @@ Proof
        (qspec_then `outer_id` mp_tac) >> asm_simp_tac bool_ss []) >>
   asm_rewrite_tac[] >> irule abi_scratch_builtin_producer_input >> asm_rewrite_tac[] >>
   qexists_tac `p` >> asm_rewrite_tac[] >>
-  qpat_assum `32+maxlen+LENGTH _ <= _` mp_tac >>
   qpat_assum `p+_ <= q \/ _` mp_tac >>
-  POP_ASSUM_LIST (K ALL_TAC) >> decide_tac
+  POP_ASSUM_LIST (K ALL_TAC) >> simp[AC ADD_COMM ADD_ASSOC]
 QED

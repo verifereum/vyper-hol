@@ -55,34 +55,6 @@ Proof
   simp[machine_frame_pop_memory_place]
 QED
 
-Theorem machine_frame_abi_arguments:
-  state_rel_frame machine_frame (eval_abi_exprs cx es) ==>
-  state_rel_frame machine_frame
-    (do mark <- mark_abi_captures;
-        finally (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od)
-          (release_abi_captures mark)
-     od)
-Proof
-  strip_tac >> match_mp_tac machine_frame_bind >> simp[machine_frame_abi] >>
-  gen_tac >> irule state_rel_frame_finally >>
-  simp[machine_frame_def, machine_frame_abi] >>
-  match_mp_tac machine_frame_bind >> simp[machine_frame_abi]
-QED
-
-Theorem machine_frame_abi_expr_pop:
-  ~toplevel_target bt /\
-  state_rel_frame machine_frame (eval_target_place cx bt) ==>
-  state_rel_frame machine_frame (eval_abi_expr cx (Pop ty bt))
-Proof
-  strip_tac >> simp[Once evaluate_def] >>
-  ho_match_mp_tac machine_frame_local_place_effect >> simp[] >>
-  rpt gen_tac >> match_mp_tac machine_frame_bind >>
-  simp[machine_frame_abi_place] >> gen_tac >>
-  match_mp_tac machine_frame_bind >> simp[machine_frame_abi] >> gen_tac >>
-  simp[ignore_bind_def] >> match_mp_tac machine_frame_bind >>
-  simp[machine_frame_pop_memory_place, machine_frame_return]
-QED
-
 Theorem machine_frame_stmt_append:
   ~toplevel_target bt /\
   state_rel_frame machine_frame (eval_target_place cx bt) /\

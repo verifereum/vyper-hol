@@ -2,14 +2,14 @@
    and registers, so producers can establish them before materializing input. *)
 Theory abiBuiltinEncodeResources
 Ancestors
-  abiBuiltinEncodeCode abiBuiltinEncodeInput abiBuiltinAllocation abiDecoderAllocation abiDecoderArrayInitExec
+  abiBuiltinEncodeInput abiBuiltinAllocation abiDecoderAllocation abiDecoderArrayInitExec
   abiDecoderReentry abiDecoderContract abiEncoderInput compileEnv venomState finite_map words
   list arithmetic
 
 Definition abi_builtin_encode_resources_def:
   abi_builtin_encode_resources st method_id_opt sb source_cap p maxlen first last b cap s <=>
     let mid_size = case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4 in
-    let outsz = abi_builtin_encode_alloc_size maxlen mid_size in
+    let outsz = maxlen+32+mid_size in
     sb+source_cap < dimword (:256) /\ p+outsz < dimword (:256) /\
     (sb+source_cap <= p \/ p+outsz <= sb) /\
     (method_id_opt = NONE \/ sb+source_cap <= p+32 \/ p+64 <= sb) /\
@@ -38,14 +38,14 @@ Theorem abi_builtin_encode_resources_transport:
 Proof
   strip_tac >>
   mp_tac (Q.INST [`site` |-> `st.cs_next_id`,
-    `outsz` |-> `abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
+    `outsz` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
     abi_builtin_allocate_state_transport) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST
     [`s` |-> `abi_builtin_allocate_state st.cs_next_id
-       (abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) s`,
+       (maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) s`,
      `t` |-> `abi_builtin_allocate_state st.cs_next_id
-       (abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) t`]
+       (maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) t`]
     abi_decoder_budget_transport) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   asm_simp_tac (srw_ss()) [abi_builtin_encode_resources_def, LET_THM]

@@ -33,7 +33,7 @@ Theory exprSimPop
 Ancestors
   list rich_list finite_map arithmetic words
   fragExec loweringSlice exprSim exprSimHyps exprSimLeaves exprSimAggregateLayout
-  exprSimAggregateEncoding exprLowering exprLoweringProps sourceAbiFrame emitHelper
+  exprSimAggregateEncoding exprLowering exprLoweringProps emitHelper
   emitHelperProps compileEnv localPtrsProps valueEncoding valueEncodingProps
   vyperAST vyperInterpreter vyperState vyperValue vyperValueOperation
   vyperLookup vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeEnv
@@ -111,18 +111,18 @@ Definition pop_name_entry_def:
 End
 
 Theorem eval_pop_name:
-  !cx ann id es res es' entry vs etv n.
+  !cx ann id es res es' entry vs.
     lookup_scopes id es.scopes = SOME entry /\ entry.assignable /\
-    entry.value = ArrayV (DynArrayV vs) /\ entry.type = ArrayTV etv (Dynamic n) /\
+    entry.value = ArrayV (DynArrayV vs) /\
     eval_expr cx (Pop ann (NameTarget id)) es = (res, es') ==>
     (vs = [] /\ res = INR (Error (RuntimeError "pop empty memory array"))) \/
     (vs <> [] /\
      res = INL (PlaceR (MemoryPlace id
                           [ValueSubscript (IntV &(LENGTH vs - 1))])) /\
-     ?pre env rest abi.
+     ?pre env rest.
        find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
-       es' = es with <|scopes :=
-         pre ++ env |+ (id, pop_name_entry entry vs) :: rest; abi_memory := abi|>)
+       es' = es with scopes :=
+         pre ++ env |+ (id, pop_name_entry entry vs) :: rest)
 Proof
   rpt gen_tac >> strip_tac >>
   drule lookup_scopes_find_containing_scope >> strip_tac >>
@@ -135,10 +135,8 @@ Proof
        raise_def, lift_sum_def, read_memory_path_def, evaluate_subscripts_def,
        check_def, popped_value_def, pop_element_def, assign_subscripts_def,
        set_scopes_def, record_pop_def, pop_name_entry_def] >>
-  Cases_on `vs = []` >>
-  simp[raise_def, return_def, bind_def, write_abi_memory_child_def,
-       abi_path_offset_def, abi_operation_writes_def] >>
-  rw[] >> gvs[evaluation_state_component_equality]
+  Cases_on `vs = []` >> simp[raise_def, return_def, bind_def] >>
+  rw[] >> gvs[]
 QED
 
 (* Reading the popped element's place after the pop: the shortened array
@@ -677,7 +675,7 @@ Proof
 QED
 
 Theorem pop_vv_post:
-  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 abi ctx.
+  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
     stmt_state_rel ctx func cenv cx es s0 /\
     local_ptrs_rel func cenv es.scopes s0 /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
@@ -699,9 +697,9 @@ Theorem pop_vv_post:
     EVERY (value_has_type etv) vs /\
     evaluate_type (get_tenv cx) ann = SOME etv ==>
     vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
-      (es with <|scopes :=
+      (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
-           :: rest; abi_memory := abi|>)
+           :: rest)
       (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
       (LocatedValue ann (mk_ptr (Var x6) LocMemory))
       (u with vs_inst_idx := k)
@@ -728,11 +726,9 @@ Proof
   `LENGTH vs - 1 < LENGTH vs` by decide_tac >>
   `read_result cx
      (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
-     (es with <|scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest;
-                abi_memory := abi|>) =
+     (es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest) =
    (INL (LAST vs),
-    es with <|scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest;
-              abi_memory := abi|>)` by
+    es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)` by
     (irule read_result_pop_name >> fs[lookup_scopes_update] >> metis_tac[]) >>
   simp[vv_post_def, expr_type_def, stmt_state_rel_inst_idx, lookup_var_inst_idx] >>
   rpt conj_tac

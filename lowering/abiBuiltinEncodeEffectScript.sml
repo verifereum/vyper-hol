@@ -1,5 +1,5 @@
-(* Whole-action frame records the rounded output capacity and the full-word
-   selector store separately; the returned selector prefix is only four bytes. *)
+(* Whole-action frame includes both the returned buffer and the actual method
+   store, which may extend beyond a short nominal output allocation. *)
 Theory abiBuiltinEncodeEffect
 Ancestors
   abiBuiltinEncodeSetup abiBuiltinAllocation abiDecoderEffect abiDecoderFrame

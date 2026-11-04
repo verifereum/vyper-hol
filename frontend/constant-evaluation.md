@@ -152,8 +152,7 @@ from an invalid present value instead of silently choosing a default.
 ## Semantic and compiler guarantees
 
 Retention, checking and compilation equations are not definitions of source
-meaning. The separate [sourceMeaning.md](sourceMeaning.md) and
-[sourceMeaningLocation.md](sourceMeaningLocation.md) relations derive staged
+meaning. The separate [sourceMeaning.md](sourceMeaning.md) relations derive staged
 computations from original syntax, then relate them to emitted code. Their
 binding, type-environment, layout and independent-derivation hypotheses remain
 explicit; shared scalar/runtime primitives and incomplete language coverage are

@@ -75,7 +75,7 @@ Proof
 QED
 
 Definition source_meaning_example_initial_def:
-  source_meaning_example_initial flag st = st with <| abi_memory := [];
+  source_meaning_example_initial flag st = st with <|
     scopes := [FEMPTY |+ ("x",<| assignable := T; type := BaseTV (UintT 256); value := IntV 4; popped := [] |>)
       |+ ("flag",<| assignable := T; type := BaseTV BoolT; value := BoolV flag; popped := [] |>)] |>
 End

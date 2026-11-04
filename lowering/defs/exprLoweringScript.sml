@@ -162,7 +162,8 @@ Definition lowered_value_type_def:
   lowered_value_type cenv (Literal (BaseT (BytesT (Dynamic _))) (BytesL bs)) =
     BaseT (BytesT (Dynamic (LENGTH bs))) ∧
   lowered_value_type cenv (TypeBuiltin _ (AbiEncode ensure method_id) _ args) =
-    (let enc_ty = abi_encode_type ensure (MAP expr_type args) in
+    (let enc_ty = if LENGTH args = 1 ∧ ¬ensure then expr_type (HD args)
+                  else TupleT (MAP expr_type args) in
      BaseT (BytesT (Dynamic
        (abi_size_bound cenv.ce_struct_fields enc_ty +
         if IS_SOME method_id then 4 else 0)))) ∧
@@ -2252,14 +2253,13 @@ Termination
 End
 
 (* Stage evaluated arguments in the contiguous ABI tuple memory layout.
-   Keep ADD and MCOPY even at zero offsets/sizes, matching the builtin
-   tuple constructor and preserving its instruction IDs. *)
+   Keep ADD even at offset zero, matching Vyper's tuple construction. *)
 Definition compile_store_abi_tuple_def:
   compile_store_abi_tuple cenv buf off [] = return () ∧
   compile_store_abi_tuple cenv buf off ((v,ty)::rest) =
     do dst <- emit_op ADD [buf; Lit (n2w off)];
        (if is_word_type ty then emit_void MSTORE [dst; v]
-        else emit_void MCOPY [dst; v; Lit (n2w (type_memory_bytes cenv ty))]);
+        else compile_copy_memory dst v (type_memory_bytes cenv ty));
        compile_store_abi_tuple cenv buf (off + type_memory_bytes cenv ty) rest
     od
 End
@@ -3183,31 +3183,49 @@ Definition compile_type_builtin_dispatch_body_def:
           let (raw, st4) = compile_extract32_load src_len src_data off_op st3 in
           as_stack_val vv_ty (compile_clamp_basetype raw ret_ty st4))
      | AbiEncode ensure method_id =>
-         (let arg_tys = MAP expr_type args in
-          let enc_ty = abi_encode_type ensure arg_tys in
+         (let method_id_word = OPTION_MAP bytes_method_id_word method_id in
+          if LENGTH args = 1 ∧ ¬ensure then
+          let e1 = HD args in
+          let src_ty = expr_type e1 in
+          let enc_ty = src_ty in
           let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
           let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
-          let method_id_word = OPTION_MAP bytes_method_id_word method_id in
-          (* Python evaluates and unwraps ALL children before allocating or
-             storing the staging tuple. Do not use compile_make_tuple here:
-             that interleaves evaluation with stores and changes effects. *)
-          let (ops, st1) = compile_multi_exprs compile_expr cenv args st in
-          let (src_op, st2) = compile_abi_encode_input cenv ensure arg_tys ops st1 in
+          if is_word_type src_ty then
+            (* Prim word: stage to temp memory for encoder *)
+            let (v, st1) = lower_value compile_expr cenv src_ty e1 st in
+            let (tmp_alloc, st2) = compile_alloc_buffer 32 st1 in
+            let tmp = tmp_alloc.buf_operand in
+            let (_, st3) = emit_void MSTORE [tmp; v] st2 in
+            as_ptr_val vv_ty LocMemory
+              (lower_abi_encode ensure method_id_word tmp enc_info maxlen st3)
+          else
+            let (src_vv, st1) = compile_expr cenv src_ty e1 st in
+            let (src_op, st2) = unwrap_value cenv src_vv st1 in
+            as_ptr_val vv_ty LocMemory
+              (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2)
+          else
+          let arg_tys = MAP expr_type args in
+          let enc_ty = TupleT arg_tys in
+          let enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv enc_ty in
+          let maxlen = abi_size_bound cenv.ce_struct_fields enc_ty in
+          let (vs, st1) = compile_multi_exprs compile_expr cenv args st in
+          let (tup_alloc, st2) =
+                compile_alloc_buffer (type_memory_bytes cenv enc_ty) st1 in
+          let tup = tup_alloc.buf_operand in
+          let (_, st3) = compile_store_abi_tuple cenv tup 0 (ZIP (vs, arg_tys)) st2 in
           as_ptr_val vv_ty LocMemory
-            (lower_abi_encode ensure method_id_word src_op enc_info maxlen st2))
+            (lower_abi_encode ensure method_id_word tup enc_info maxlen st3))
      | AbiDecode unwrap =>
          (let e1 = HD args in
           let (data_vv, st1) = compile_expr cenv (expr_type e1) e1 st in
           let (data_op, st2) = unwrap_value cenv data_vv st1 in
-          let (data_ptr, st3) = compile_abi_decode_input (expr_type e1) data_op st2 in
-          (* The ABI wrapper changes offsets and bounds, not the result's
-             Vyper type: its sole element has memory offset zero. *)
-          let dec_ty = abi_decode_type unwrap ret_ty in
-          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv dec_ty in
-          let abi_min = abi_static_size cenv.ce_struct_fields dec_ty in
-          let abi_max = abi_size_bound cenv.ce_struct_fields dec_ty in
-          let out_size = type_memory_bytes cenv dec_ty in
-          as_ptr_val vv_ty LocMemory (lower_abi_decode data_ptr dec_info abi_min abi_max out_size st3)))
+          let wty = if unwrap /\ needs_external_call_wrap ret_ty then
+                      TupleT [ret_ty] else ret_ty in
+          let dec_info = type_to_abi_dec_info cenv.ce_struct_fields cenv wty in
+          let abi_min = abi_static_size cenv.ce_struct_fields wty in
+          let abi_max = abi_size_bound cenv.ce_struct_fields wty in
+          let out_size = type_memory_bytes cenv wty in
+          as_ptr_val vv_ty LocMemory (lower_abi_decode data_op dec_info abi_min abi_max out_size st2)))
 End
 
 Definition compile_expr_raw_def:

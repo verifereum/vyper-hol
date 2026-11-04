@@ -77,9 +77,7 @@ Proof
     metis_tac[fn_has_code_split] >>
   `fn_has_code sl ss func /\ fn_has_code ss sf func` by
     metis_tac[fn_has_code_split] >>
-  conj_tac >- simp[] >>
-  qexistsl_tac [`vv`, `sc`, `op`, `su`, `staged`, `sl`, `elems`, `ss`] >>
-  asm_rewrite_tac []
+  simp[]
 QED
 
 Theorem assign_tuple_locals_memory_success_run:

@@ -5,30 +5,6 @@ Ancestors
   builtinAbi abiEncoder context compileEnv emitHelper emitHelperProps exprLoweringProps
   list rich_list arithmetic words venomInst
 
-(* Physical capacity only: the length word plus a word-rounded payload. *)
-Definition abi_builtin_encode_alloc_size_def:
-  abi_builtin_encode_alloc_size maxlen mid_size =
-    32 + ((maxlen + mid_size + 31) DIV 32) * 32
-End
-
-Theorem abi_builtin_encode_alloc_size_bound:
-  !maxlen mid_size. 32 + maxlen + mid_size <= abi_builtin_encode_alloc_size maxlen mid_size
-Proof
-  rpt gen_tac >> pure_rewrite_tac [abi_builtin_encode_alloc_size_def] >>
-  mp_tac (Q.SPEC `maxlen + mid_size + 31`
-    (MATCH_MP DIVISION (DECIDE ``0 < 32``))) >> decide_tac
-QED
-
-(* Empty and word-sized payloads distinguish physical capacity from byte length. *)
-Theorem abi_builtin_encode_alloc_size_examples:
-  abi_builtin_encode_alloc_size 0 0 = 32 /\
-  abi_builtin_encode_alloc_size 0 4 = 64 /\
-  abi_builtin_encode_alloc_size 32 0 = 64 /\
-  abi_builtin_encode_alloc_size 32 4 = 96
-Proof
-  simp[abi_builtin_encode_alloc_size_def]
-QED
-
 Definition abi_builtin_encode_method_id_def:
   abi_builtin_encode_method_id method_id_opt buf =
     case method_id_opt of
@@ -42,9 +18,9 @@ End
 Definition abi_builtin_encode_setup_def:
   abi_builtin_encode_setup method_id_opt maxlen =
     let mid_size = case method_id_opt of SOME _ => 4 | NONE => 0 in
-    do buf <- compile_alloc_buffer (abi_builtin_encode_alloc_size maxlen mid_size);
-       abi_builtin_encode_method_id method_id_opt buf.buf_operand;
+    do buf <- compile_alloc_buffer (maxlen + 32 + mid_size);
        data_ptr <- emit_op ADD [buf.buf_operand; Lit (n2w (32 + mid_size))];
+       abi_builtin_encode_method_id method_id_opt buf.buf_operand;
        return (buf.buf_operand,data_ptr)
     od
 End
@@ -70,7 +46,6 @@ Proof
   Cases_on `method_id_opt` >>
   simp_tac (srw_ss()) [FUN_EQ_THM, lower_abi_encode_def, abi_builtin_encode_setup_def,
     abi_builtin_encode_method_id_def, abi_builtin_encode_finish_def,
-    abi_builtin_encode_alloc_size_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   rpt gen_tac >> rpt (pairarg_tac >> gvs[])
 QED
@@ -94,20 +69,20 @@ QED
 
 Theorem abi_builtin_encode_setup_trace:
   abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) ==>
-  ?buf allocated data_ptr method_st.
-    compile_alloc_buffer (abi_builtin_encode_alloc_size maxlen (case method_id_opt of SOME _ => 4 | NONE => 0))
+  ?buf allocated data_ptr address_st.
+    compile_alloc_buffer (maxlen + 32 + (case method_id_opt of SOME _ => 4 | NONE => 0))
       st = (buf,allocated) /\
-    abi_builtin_encode_method_id method_id_opt buf.buf_operand allocated = ((),method_st) /\
     emit_op ADD [buf.buf_operand; Lit (n2w (32 +
-      (case method_id_opt of SOME _ => 4 | NONE => 0)))] method_st = (data_ptr,ready) /\
+      (case method_id_opt of SOME _ => 4 | NONE => 0)))] allocated = (data_ptr,address_st) /\
+    abi_builtin_encode_method_id method_id_opt buf.buf_operand address_st = ((),ready) /\
     ops = (buf.buf_operand,data_ptr)
 Proof
   simp_tac bool_ss [abi_builtin_encode_setup_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def, LET_THM] >> pairarg_tac >> strip_tac >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   rename1 `compile_alloc_buffer _ st = (buf,allocated)` >>
-  rename1 `emit_op ADD _ method_st = (data_ptr,ready)` >>
-  qexistsl_tac [`buf`, `allocated`, `data_ptr`, `method_st`] >> simp[]
+  rename1 `emit_op ADD _ allocated = (data_ptr,address_st)` >>
+  qexistsl_tac [`buf`, `allocated`, `data_ptr`, `address_st`] >> simp[]
 QED
 
 Theorem abi_builtin_encode_setup_shape:

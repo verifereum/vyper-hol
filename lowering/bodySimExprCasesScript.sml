@@ -1,8 +1,8 @@
 (*
  * The body simulation of S1: expression cases (#636, #638)
  *
- * One lemma for each ordinary expression case that bodySimBound's
- * bounded induction does not close in a line or two.  An expression with
+ * One lemma for each expression case of evaluate_ind that bodySimMain's
+ * body_sim_mutual does not close in a line or two.  An expression with
  * no internal call simulates by compile_expr_sim (body_expr_ok_intro);
  * each case's GAP is the expression with one, and the internal call
  * itself is the call step (#638, body_intcall_case).

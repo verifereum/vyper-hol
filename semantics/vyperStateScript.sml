@@ -137,13 +137,6 @@ Datatype:
   ; pending_deletions: address list
   ; outcomes: extCallOracle$call_outcome list option
   ; requests: extCallOracle$call_request list
-  (* Word-addressed backing stores for outstanding ABI memory operands.
-     The key identifies the source frame/local; operand tokens are list indices.
-     Writes preserve unused capacity, in particular cells beyond a popped length. *)
-  ; abi_memory: ((nsid list # identifier) # storage) list
-  (* Constructor immutable backing is frame-wide, not an ABI temporary.
-     Immutable unwrap copies from this arena; pop only updates its length. *)
-  ; abi_immutables: ((address # nsid) # storage) list
   ; gas_obs: bytes32 list
   |>
 End
@@ -158,8 +151,6 @@ Definition empty_state_def:
     pending_deletions := [];
     outcomes := NONE;
     requests := [];
-    abi_memory := [];
-    abi_immutables := [];
     gas_obs := []
   |>
 End
@@ -689,85 +680,6 @@ val () = set_variable_def
             ignore_bind_def, LET_RATOR, UNCURRY, option_CASE_rator]
   |> cv_auto_trans;
 
-(* ===== Backing memory for delayed ABI operands ===== *)
-
-(* Word offsets share storage's recursive layout.  Only the word addressing is
-   reused: these stores are local memory, never account/transient storage. *)
-Definition abi_field_offset_def:
-  abi_field_offset id [] = NONE ∧
-  abi_field_offset id ((name,tv)::fields) =
-    if id = name then SOME (0n,tv)
-    else OPTION_MAP (λ(off,t). (type_slot_size tv + off,t))
-      (abi_field_offset id fields)
-End
-
-Definition abi_subscript_offset_def:
-  abi_subscript_offset (ArrayTV tv bd) (ValueSubscript (IntV i)) =
-    (if 0 ≤ i ∧ Num i < bound_length bd then
-       SOME ((case bd of Fixed _ => 0 | Dynamic _ => 1) +
-             Num i * type_slot_size tv, tv)
-     else NONE) ∧
-  abi_subscript_offset (TupleTV tvs) (ValueSubscript (IntV i)) =
-    (if 0 ≤ i then
-       let off = SUM (MAP type_slot_size (TAKE (Num i) tvs)) in
-       case oEL (Num i) tvs of NONE => NONE | SOME tv => SOME (off,tv)
-     else NONE) ∧
-  abi_subscript_offset (StructTV fields) (AttrSubscript id) =
-    abi_field_offset id fields ∧
-  abi_subscript_offset _ _ = NONE
-End
-
-Definition abi_path_offset_def:
-  abi_path_offset tv [] = SOME (0n,tv) ∧
-  abi_path_offset tv (sub::subs) =
-    (case abi_subscript_offset tv sub of
-     | NONE => NONE
-     | SOME (off,t) =>
-       case abi_path_offset t subs of
-       | NONE => NONE
-       | SOME (off',t') => SOME (off + off',t'))
-End
-
-Definition capture_abi_memory_def:
-  capture_abi_memory cx id tv v st =
-    case encode_value tv v of
-    | NONE => raise (Error (TypeError "ABI memory encoding")) st
-    | SOME writes =>
-        return (LENGTH st.abi_memory)
-          (st with abi_memory := st.abi_memory ++
-            [((cx.stk,id), apply_writes 0w writes empty_storage)])
-End
-
-(* Capture an already resolved child in its root's arena. The live root can
-   have shortened ancestors: overlay the authoritative retained child without
-   projecting through those ancestors again. Keep the root key and offset so
-   subsequent writes to the same local still update this capture. *)
-Definition capture_abi_memory_at_def:
-  capture_abi_memory_at cx id root v off tv child st =
-    case encode_value root v of
-    | NONE => raise (Error (TypeError "ABI memory encoding")) st
-    | SOME root_writes =>
-        case encode_value tv child of
-        | NONE => raise (Error (RuntimeError "ABI retained memory encoding")) st
-        | SOME writes =>
-            return (LENGTH st.abi_memory)
-              (st with abi_memory := st.abi_memory ++
-                [((cx.stk,id), apply_writes (n2w off) writes
-                    (apply_writes 0w root_writes empty_storage))])
-End
-
-(* Capture a constructor/code location, not the copy made by ABI unwrap.
-   Separate keys prevent collisions with local names and other modules. *)
-Definition capture_abi_immutable_def:
-  capture_abi_immutable cx src id tv v st =
-    case encode_value tv v of
-    | NONE => raise (Error (TypeError "ABI immutable encoding")) st
-    | SOME writes =>
-        return (LENGTH st.abi_immutables)
-          (st with abi_immutables := st.abi_immutables ++
-            [((cx.txn.target,(src,id)), apply_writes 0w writes empty_storage)])
-End
-
 (* assignment to existing locations *)
 
 (* Type paths are independent of the current dynamic lengths. *)
@@ -853,13 +765,6 @@ Proof
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
 
-val () = cv_auto_trans abi_field_offset_def;
-val () = cv_auto_trans abi_subscript_offset_def;
-val () = cv_auto_trans abi_path_offset_def;
-val () = cv_auto_trans capture_abi_memory_def;
-val () = cv_auto_trans capture_abi_memory_at_def;
-val () = cv_auto_trans capture_abi_immutable_def;
-
 (* mutating inside arrays, structs, hashmaps *)
 
 Datatype:
@@ -912,84 +817,6 @@ Proof
   \\ ASSUM_LIST (fn ihs => CONV_TAC (mk_pre_cleanup_conv
        (Rewrite.add_rewrites pre_constructor_rewrites ihs)))
 QED
-
-(* Mirror the actual write footprint, not a re-encoding of unrelated cells.
-   In particular pop writes only the length and append only the new element. *)
-Definition abi_operation_writes_def:
-  abi_operation_writes (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) PopOp =
-    SOME [(0n,n2w (LENGTH vs))] ∧
-  abi_operation_writes (ArrayTV tv (Dynamic n)) (ArrayV (DynArrayV vs)) (AppendOp v) =
-    (case encode_value tv v of
-     | NONE => NONE
-     | SOME writes => SOME ((0n,n2w (LENGTH vs)) ::
-         MAP (λ(off,w). (1 + (LENGTH vs - 1) * type_slot_size tv + off,w)) writes)) ∧
-  abi_operation_writes tv v ao = encode_value tv v
-End
-
-(* Retained popped ancestors still have their type-directed arena offset. *)
-Definition write_abi_memory_child_def:
-  write_abi_memory_child cx id tv subs child ao st =
-    if ¬EXISTS (λ(key,mem). key = (cx.stk,id)) st.abi_memory then return () st
-    else
-      case abi_path_offset tv subs of
-      | NONE => raise (Error (TypeError "ABI memory write path")) st
-      | SOME (off,t) =>
-          case abi_operation_writes t child ao of
-          | NONE => raise (Error (TypeError "ABI memory write encoding")) st
-          | SOME writes => return () (st with abi_memory updated_by
-              MAP (λ(key,mem). (key, if key = (cx.stk,id)
-                then apply_writes (n2w off) writes mem else mem)))
-End
-
-val () = cv_auto_trans abi_operation_writes_def;
-val () = write_abi_memory_child_def
-  |> SRULE [FUN_EQ_THM, prod_CASE_rator, option_CASE_rator,
-            sum_CASE_rator, LET_THM]
-  |> cv_auto_trans;
-
-Definition write_abi_memory_def:
-  write_abi_memory cx id tv v subs ao st =
-    if ¬EXISTS (λ(key,mem). key = (cx.stk,id)) st.abi_memory then return () st
-    else case evaluate_subscripts tv v subs of
-    | INR err => raise (Error err) st
-    | INL child => write_abi_memory_child cx id tv subs child ao st
-End
-
-val () = write_abi_memory_def
-  |> SRULE [FUN_EQ_THM, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
-(* Mirror only written cells.  Keeping unused cells is essential for the
-   element pointer returned by pop before immutable unwrap copies it. *)
-Definition write_abi_immutables_def:
-  write_abi_immutables cx src id tv v subs ao st =
-    if ¬EXISTS (λ(key,mem). key = (cx.txn.target,(src,id))) st.abi_immutables
-    then return () st
-    else
-      case abi_path_offset tv subs of
-      | NONE => raise (Error (TypeError "ABI immutable write path")) st
-      | SOME (off,t) =>
-        case evaluate_subscripts tv v subs of
-        | INR err => raise (Error err) st
-        | INL child =>
-          case abi_operation_writes t child ao of
-          | NONE => raise (Error (TypeError "ABI immutable write encoding")) st
-          | SOME writes => return () (st with abi_immutables updated_by
-              MAP (λ(key,mem). (key, if key = (cx.txn.target,(src,id))
-                then apply_writes (n2w off) writes mem else mem)))
-End
-
-val () = write_abi_immutables_def
-  |> SRULE [FUN_EQ_THM, prod_CASE_rator, option_CASE_rator,
-            sum_CASE_rator, LET_THM]
-  |> cv_auto_trans;
-
-Datatype:
-  location
-  = ScopedVar identifier
-  | ImmutableVar (num option) identifier  (* source_id, var_name *)
-  | TopLevelVar (num option) identifier   (* source_id, var_name *)
-End
 
 (* Walk through nested array subscripts computing the final element slot *)
 Definition resolve_array_element_def:
@@ -1177,18 +1004,13 @@ Definition write_place_def:
       (find_containing_scope id sc) "write_place local";
     type_check entry.assignable "write_place not assignable";
     entry' <- lift_sum (replace_memory_entry entry path v);
-    set_scopes (pre ++ (env |+ (id,entry'))::rest);
-    (* A stale target is a no-op, including in outstanding ABI captures. *)
-    case evaluate_subscripts entry.type entry.value path of
-    | INR _ => return ()
-    | INL _ => write_abi_memory cx id entry.type entry'.value path (Replace v)
+    set_scopes (pre ++ (env |+ (id,entry'))::rest)
   od /\
   write_place cx (ImmutablePlace src id path) v = do
     imms <- get_immutables cx src;
     tva <- lift_option_type (FLOOKUP imms id) "write_place immutable";
     new <- lift_sum (assign_subscripts (FST tva) (SND tva) path (Replace v));
-    set_immutable cx src id (FST tva) new;
-    write_abi_immutables cx src id (FST tva) new path (Replace v)
+    set_immutable cx src id (FST tva) new
   od
 End
 
@@ -1424,7 +1246,6 @@ Definition pop_place_def:
             | NONE => INR err));
     history <<- record_pop path arr popped prior_history;
     set_scopes (pre ++ (env |+ (id,entry with <|value := updated; popped := history|>))::rest);
-    write_abi_memory_child cx id entry.type path shortened PopOp;
     return (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])))
   od /\
   (* The source compiler rejects immutable mutation after initialization. Keep
@@ -1436,7 +1257,6 @@ Definition pop_place_def:
     popped <- lift_sum (popped_value arr);
     updated <- lift_sum (assign_subscripts (FST tva) (SND tva) path PopOp);
     set_immutable cx src id (FST tva) updated;
-    write_abi_immutables cx src id (FST tva) updated path PopOp;
     return (Value popped)
   od /\
   pop_place cx _ = raise (Error (TypeError "pop_place"))
@@ -1455,30 +1275,6 @@ Definition append_place_def:
     write_storage_slot cx tr (slot + n2w (1 + len * type_slot_size tv)) tv v;
     write_storage_slot cx tr slot (BaseTV (UintT 256)) (IntV &(len + 1))
   od /\
-  append_place cx (MemoryPlace id path) v = do
-    tv <- place_type_value cx (MemoryPlace id path);
-    old <- read_place cx (MemoryPlace id path);
-    updated <- lift_sum (append_element tv old v);
-    sc <- get_scopes;
-    (pre,env,entry,rest) <- lift_option_type
-      (find_containing_scope id sc) "write_place local";
-    type_check entry.assignable "write_place not assignable";
-    entry' <- lift_sum (replace_memory_entry entry path updated);
-    set_scopes (pre ++ (env |+ (id,entry'))::rest);
-    case evaluate_subscripts entry.type entry.value path of
-    | INR _ => return ()
-    | INL _ => write_abi_memory_child cx id entry.type path updated (AppendOp v)
-  od /\
-  append_place cx (ImmutablePlace src id path) v = do
-    tv <- place_type_value cx (ImmutablePlace src id path);
-    old <- read_place cx (ImmutablePlace src id path);
-    updated <- lift_sum (append_element tv old v);
-    imms <- get_immutables cx src;
-    tva <- lift_option_type (FLOOKUP imms id) "write_place immutable";
-    new <- lift_sum (assign_subscripts (FST tva) (SND tva) path (Replace updated));
-    set_immutable cx src id (FST tva) new;
-    write_abi_immutables cx src id (FST tva) new path (AppendOp v)
-  od /\
   append_place cx p v = do
     tv <- place_type_value cx p;
     old <- read_place cx p;
@@ -1488,8 +1284,7 @@ Definition append_place_def:
 End
 
 val () = append_place_def
-  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
-            prod_CASE_rator, sum_CASE_rator,
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
             place_CASE_rator, type_value_CASE_rator, bound_CASE_rator]
   |> cv_auto_trans;
 

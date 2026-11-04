@@ -2,9 +2,8 @@
 Theory vyperLoadTimingTest
 Ancestors
   vyperSmallStep vyperState vyperMisc jsonToVyper finite_map While pair
-  vyperTypeContract vyperInterpreter vyperAbiOperand
 Libs
-  jsonASTLib cv_transLib finite_mapLib wordsLib vyperCheckContractLib
+  jsonASTLib cv_transLib finite_mapLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["fixtures/load_timing"]
@@ -162,93 +161,6 @@ Theorem nested_pop_uses_retained_inner_location:
     nested_retained_pop_program [] empty_state) = INL (IntV 5)
 Proof
   CONV_TAC cv_eval
-QED
-
-(* ABI-wrap the source-derived nested-pop expression, retaining its exact
-   declaration and index AST. This is f() -> Bytes[32] with return
-   abi_encode(d[0][d.pop()[0][0]].pop()). No index is reconstructed. *)
-val nested_abi_program = rhs (concl (EVAL
-  ``case nested_retained_pop_program of
-    [FunctionDecl vis mut nr raw id params dflts ret
-      [decl; Return (SOME e)]] =>
-      [FunctionDecl vis mut nr raw id params dflts
-        (BaseT (BytesT (Dynamic 32)))
-        [decl; Return (SOME (TypeBuiltin (BaseT (BytesT (Dynamic 32)))
-          (AbiEncode T NONE) (TupleT [expr_type e]) [e]))]]
-    | _ => []``));
-
-Definition nested_retained_abi_program_def:
-  nested_retained_abi_program = ^nested_abi_program
-End
-val () = cv_auto_trans nested_retained_abi_program_def;
-
-Theorem nested_retained_abi_program_checked:
-  IS_SOME (check_contract F [] (0w : address)
-    [(NONE, nested_retained_abi_program)])
-Proof
-  simp[nested_retained_abi_program_def] >>
-  CONV_TAC (RAND_CONV vyperCheckContractLib.check_contract_conv) >> simp[]
-QED
-
-Theorem abi_encode_nested_pop_uses_retained_inner_location:
-  FST (load_timing_run nested_retained_pop_context
-    nested_retained_abi_program [] empty_state) =
-    INL (BytesV (REPLICATE 31 0w ++ [5w]))
-Proof
-  CONV_TAC cv_eval
-QED
-
-(* Exercise the CPS entry explicitly as well as the direct evaluator. *)
-Definition load_timing_run_cps_def:
-  load_timing_run_cps cx program args = do
-    (mut,nr,params,dflts,ret,ss) <- lift_option_type
-      (lookup_function NONE "f" External program) "load timing entry";
-    env <- lift_option_type (bind_arguments (get_tenv cx) params args)
-             "load timing arguments";
-    set_scopes [env];
-    try (do (λst. fromk (cont (eval_stmts_cps cx ss st DoneK))); return NoneV od)
-      handle_function
-  od
-End
-
-Theorem load_timing_run_cps_eq:
-  load_timing_run_cps = load_timing_run
-Proof
-  simp_tac bool_ss [FUN_EQ_THM, load_timing_run_cps_def, load_timing_run_def,
-    GSYM eval_stmts_eq_cont_cps] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp_tac bool_ss []
-QED
-
-Theorem abi_encode_nested_pop_cps_exact:
-  FST (load_timing_run_cps nested_retained_pop_context
-    nested_retained_abi_program [] empty_state) =
-    INL (BytesV (REPLICATE 31 0w ++ [5w]))
-Proof
-  simp[load_timing_run_cps_eq, abi_encode_nested_pop_uses_retained_inner_location]
-QED
-
-(* A fresh capture must keep the root-relative alias, not put the retained
-   child in an unrelated snapshot/root. Later writes update the same cells. *)
-Definition retained_abi_state_def:
-  retained_abi_state = empty_state with scopes :=
-    [FEMPTY |+ ("d", <| assignable := T;
-      type := ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 2))
-                (Dynamic 2)) (Dynamic 2);
-      value := ArrayV (DynArrayV []);
-      popped := [([ValueSubscript (IntV 0)],
-        ArrayV (DynArrayV [ArrayV (DynArrayV [IntV 0; IntV 5])]))] |>)]
-End
-
-Theorem retained_abi_capture_later_pop_aliases:
-  FST ((do
-    arg <- abi_place_operand empty_evaluation_context
-      (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 0)]);
-    pop_place empty_evaluation_context
-      (MemoryPlace "d" [ValueSubscript (IntV 0); ValueSubscript (IntV 0)]);
-    read_abi_operand empty_evaluation_context arg
-  od) retained_abi_state) = INL (ArrayV (DynArrayV [IntV 0]))
-Proof
-  EVAL_TAC
 QED
 
 Theorem call_storage_argument_reads_after_later_argument:

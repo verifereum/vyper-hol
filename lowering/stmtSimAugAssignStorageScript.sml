@@ -292,12 +292,6 @@ Proof
   Cases_on `unwrap_value cenv src_vv st2` >>
   rename1 `unwrap_value _ _ _ = (op, sb)` >>
   Cases_on `tr` >> simp[]
-  >- (Cases_on `emit_void TSTORE [Lit slot; op] sb` >>
-      rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-      simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]) >>
-  Cases_on `emit_void SSTORE [Lit slot; op] sb` >>
-  rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
-  simp[] >> strip_tac >> gvs[comp_bind_def, comp_return_def]
 QED
 
 (* The code of self.x op= e is the code of self.x = self.x op e. *)
@@ -330,6 +324,19 @@ QED
 
 (* ===== The operator ===== *)
 
+(* The existing augmented-RHS gate supplies the ordinary builtin gate
+   for a storage load as the left operand, just as for a local name. *)
+Theorem augassign_toplevel_builtin_operands[local]:
+  augassign_operand_ok ty bop e ==>
+  builtin_operands_ok ty (Bop bop) [TopLevelName ty nsid; e]
+Proof
+  Cases_on `bop` >>
+  simp[augassign_operand_ok_def, builtin_operands_ok_def,
+       power_operands_ok_def, integer_literal_expr_def] >>
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal ann lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
 (* The typing side: self.x op e meets expr_body_pre where e does, x is a
    module variable of type ty and the type checker accepts self.x op= e. *)
 Theorem expr_body_pre_augassign_toplevel:
@@ -347,7 +354,7 @@ Proof
   `ty <> NoneT` by
     (strip_tac >> drule_all well_typed_binop_augassign_word >>
      simp[word_value_type_def]) >>
-  drule augassign_builtin_operands >> strip_tac >>
+  drule augassign_toplevel_builtin_operands >> strip_tac >>
   PairCases_on `nsid` >>
   gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,

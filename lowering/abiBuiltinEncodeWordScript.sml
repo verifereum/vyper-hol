@@ -46,9 +46,7 @@ Theorem compile_abi_encode_memory_trace:
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   strip_tac >>
-  gvs[compile_type_builtin_dispatch_body_def, abi_encode_type_def,
-      compile_multi_exprs_def, lower_value_def, unwrap_value_def,
-      compile_abi_encode_input_def, comp_bind_def, comp_return_def, LET_THM] >>
+  gvs[compile_type_builtin_dispatch_body_def, unwrap_value_def, comp_return_def, LET_THM] >>
   drule as_ptr_val_result >> simp[]
 QED
 
@@ -66,9 +64,7 @@ Theorem compile_abi_encode_word_trace:
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   strip_tac >>
-  gvs[compile_type_builtin_dispatch_body_def, abi_encode_type_def,
-      compile_multi_exprs_def, compile_abi_encode_input_def,
-      comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  gvs[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >>
   rename1 `compile_alloc_buffer 32 arg_st = (buf,allocated)` >>
   rename1 `emit_void MSTORE [buf.buf_operand;value_op] allocated = ((),staged)` >>
@@ -77,52 +73,6 @@ Proof
   qexists_tac `out` >> simp[]
 QED
 
-(* The dispatcher uses the parity-preserving tuple constructor, including a
-   raw zero-length MCOPY. *)
-Theorem compile_abi_encode_tuple_input_trace:
-  ~(LENGTH args = 1 /\ ~ensure) /\
-  compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
-  compile_type_builtin_dispatch_body cfn ce vv_ty ty (AbiEncode ensure method_id) ret_ty args origin =
-    (vv,final) ==>
-  ?buf allocated staged out.
-    compile_alloc_buffer (type_memory_bytes ce (TupleT (MAP expr_type args))) arg_st = (buf,allocated) /\
-    compile_create_tuple_in_memory buf.buf_operand
-      (MAP (\(op,ty). (op,is_word_type ty,type_memory_bytes ce ty))
-        (ZIP (ops,MAP expr_type args))) 0 allocated = ((),staged) /\
-    lower_abi_encode ensure (OPTION_MAP bytes_method_id_word method_id) buf.buf_operand
-      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP expr_type args)))
-      (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
-    vv = LocatedValue vv_ty (mk_ptr out LocMemory)
-Proof
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [compile_type_builtin_dispatch_body_def,
-    abi_encode_type_def, compile_abi_encode_input_def, type_memory_bytes_def,
-    comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >> strip_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
-  rename1 `compile_alloc_buffer _ arg_st = (buf,allocated)` >>
-  rename1 `compile_create_tuple_in_memory _ _ _ allocated = ((),staged)` >>
-  drule as_ptr_val_result >> strip_tac >>
-  rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
-  qexistsl_tac [`buf`, `allocated`, `staged`, `out`] >> simp[] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> first_assum ACCEPT_TAC
-QED
-
-(* Both tuple constructors emit raw MCOPY, even for zero-sized slots; their
-   instruction IDs and compiler states agree for every argument size. *)
-Theorem compile_abi_tuple_staging_eq:
-  !xs ce buf off.
-    compile_create_tuple_in_memory buf
-      (MAP (\(op,ty). (op,is_word_type ty,type_memory_bytes ce ty)) xs) off =
-    compile_store_abi_tuple ce buf off xs
-Proof
-  Induct
-  >- simp[compile_create_tuple_in_memory_def, compile_store_abi_tuple_def] >>
-  rpt gen_tac >> Cases_on `h` >> rename1 `(value_op,value_ty)::xs` >>
-  simp[compile_create_tuple_in_memory_def, compile_store_abi_tuple_def]
-QED
-
-(* Unconditional compatibility trace for the tuple execution proofs. *)
 Theorem compile_abi_encode_tuple_trace:
   ~(LENGTH args = 1 /\ ~ensure) /\
   compile_multi_exprs cfn ce args origin = (ops,arg_st) /\
@@ -136,12 +86,15 @@ Theorem compile_abi_encode_tuple_trace:
       (abi_size_bound ce.ce_struct_fields (TupleT (MAP expr_type args))) staged = (out,final) /\
     vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
-  strip_tac >> drule_all compile_abi_encode_tuple_input_trace >> strip_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [compile_type_builtin_dispatch_body_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[]) >>
   rename1 `compile_alloc_buffer _ arg_st = (buf,allocated)` >>
-  rename1 `compile_create_tuple_in_memory _ _ _ allocated = ((),staged)` >>
+  rename1 `compile_store_abi_tuple _ _ _ _ allocated = ((),staged)` >>
+  drule as_ptr_val_result >> strip_tac >>
   rename1 `lower_abi_encode _ _ _ _ _ staged = (out,final)` >>
-  qexistsl_tac [`buf`, `allocated`, `staged`, `out`] >>
-  gvs[compile_abi_tuple_staging_eq]
+  qexists_tac `out` >> simp[]
 QED
 
 (* ===== Correct ===== *)
@@ -174,7 +127,7 @@ Theorem compile_abi_encode_memory_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     abi_builtin_encode_effect first last ready final limit_st p
-      (abi_builtin_encode_alloc_size maxlen (LENGTH (abi_encode_method_id_bytes method_id)))
+      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -411,7 +364,7 @@ Theorem compile_abi_encode_word_source:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_encode_method_id_bytes method_id)))))
       (BytesV bytes) p actual.vs_memory /\
     abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-      (abi_builtin_encode_alloc_size maxlen (LENGTH (abi_encode_method_id_bytes method_id)))
+      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
       (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -436,8 +389,7 @@ Proof
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `abi_decode_sim ctx func staged_state actual` >>
   `abi_builtin_encode_staged_effect first last arg_st final limit_st sb 32 p
-    (abi_builtin_encode_alloc_size (abi_size_bound ce.ce_struct_fields (expr_type e))
-      (LENGTH (abi_encode_method_id_bytes method_id)))
+    (abi_size_bound ce.ce_struct_fields (expr_type e)+32+LENGTH (abi_encode_method_id_bytes method_id))
     (case method_id of NONE => 0 | SOME _ => 32) b cap prepared actual` by
     (irule abi_builtin_encode_producer_compose >>
      qexistsl_tac [`staged_state`, `staged`] >> asm_simp_tac bool_ss [] >> decide_tac) >>

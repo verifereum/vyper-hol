@@ -2,7 +2,6 @@ Theory vyperSmallStep
 Ancestors
   arithmetic combin pair list While
   vyperMisc vyperNsidFmap vyperValue vyperContext vyperState vyperCreate vyperInterpreter vyperABI
-  vyperAbiOperand vyperAST
   vyperCallOutcome[ignore_grammar]
 Libs
   cv_transLib wordsLib
@@ -58,17 +57,6 @@ Datatype:
   | BuiltinK type builtin (type list) eval_continuation
   | LenK eval_continuation
   | TypeBuiltinK type_builtin type (type list) eval_continuation
-  | AbiIfK expr expr eval_continuation
-  | AbiUnwrapK eval_continuation
-  | AbiSubscriptK type expr eval_continuation
-  | AbiSubscriptK1 type abi_operand eval_continuation
-  | AbiAttributeK identifier eval_continuation
-  | AbiPopK eval_continuation
-  | AbiSnapshotK eval_continuation
-  | AbiExprsK (expr list) eval_continuation
-  | AbiExprsK1 abi_operand eval_continuation
-  | AbiStageK eval_continuation
-  | AbiReleaseK num num eval_continuation
   | CallSendK bool eval_continuation
   | ExtTargetK bool bool ext_call_sig ext_call_opts (expr list) eval_continuation
   | ExtArgsK bool bool ext_call_sig ext_call_opts (value list) (expr list) eval_continuation
@@ -103,8 +91,6 @@ Datatype:
   | ApplyTv eval_result
   | ApplyVal value
   | ApplyVals (value list)
-  | ApplyAbiOperand abi_operand
-  | ApplyAbiOperands (abi_operand list)
   | ApplyResults (eval_result list)
   | ApplyPlace place
 End
@@ -191,14 +177,7 @@ Definition eval_expr_cps_def:
     (case type_check (type_builtin_args_length_ok tb (LENGTH es))
             "TypeBuiltin args" st of
         (INR ex, st) => AK cx8 (ApplyExc ex) st k
-      | (INL tv, st) =>
-          case tb of
-          | AbiEncode _ _ =>
-              eval_abi_exprs_cps cx8 es st
-                (AbiStageK (AbiReleaseK (LENGTH st.abi_memory) (LENGTH st.abi_immutables)
-                  (TypeBuiltinK tb typ (MAP expr_type es) k)))
-          | _ => eval_exprs_cps cx8 es st
-              (TypeBuiltinK tb typ (MAP expr_type es) k)) ∧
+      | (INL tv, st) => eval_exprs_cps cx8 es st (TypeBuiltinK tb typ (MAP expr_type es) k)) ∧
   eval_expr_cps cx9 (Call _ (Send has_gas) es _) st k =
     (case type_check (LENGTH es = if has_gas then 3 else 2) "Send args" st of
        (INR ex, st) => AK cx9 (ApplyExc ex) st k
@@ -251,31 +230,12 @@ Definition eval_expr_cps_def:
     eval_expr_cps cx12 e st (ExprsK es k) ∧
   eval_expr_results_cps cx [] st k = AK cx (ApplyResults []) st k ∧
   eval_expr_results_cps cx (e::es) st k =
-    eval_expr_cps cx e st (ExprResultsK es k) ∧
-  eval_abi_expr_cps cx (Name _ id) st k =
-    liftk cx ApplyAbiOperand (lookup_abi_local cx id st) k ∧
-  eval_abi_expr_cps cx (TopLevelName _ (src,id)) st k =
-    liftk cx ApplyAbiOperand (lookup_abi_global cx src id st) k ∧
-  eval_abi_expr_cps cx (IfExp _ test yes no) st k =
-    eval_expr_cps cx test st (AbiIfK yes no k) ∧
-  eval_abi_expr_cps cx (Subscript _ base index) st k =
-    eval_abi_expr_cps cx base st (AbiSubscriptK (expr_type base) index k) ∧
-  eval_abi_expr_cps cx (Attribute _ base id) st k =
-    eval_abi_expr_cps cx base st (AbiAttributeK id k) ∧
-  eval_abi_expr_cps cx (Pop _ target) st k =
-    eval_target_place_cps cx target st (AbiPopK k) ∧
-  eval_abi_expr_cps cx e st k =
-    eval_expr_cps cx e st (AbiSnapshotK k) ∧
-  eval_abi_exprs_cps cx [] st k = AK cx (ApplyAbiOperands []) st k ∧
-  eval_abi_exprs_cps cx (e::es) st k =
-    eval_abi_expr_cps cx e st (AbiUnwrapK (AbiExprsK es k))
+    eval_expr_cps cx e st (ExprResultsK es k)
 Termination
   WF_REL_TAC ‘measure (λx. case x of
-    | INL (cx,e,st,k) => 2 * expr_size e
-    | INR (INL (cx,es,st,k)) => 2 * list_size expr_size es
-    | INR (INR (INL (cx,es,st,k))) => 2 * list_size expr_size es
-    | INR (INR (INR (INL (cx,e,st,k)))) => 2 * expr_size e + 1
-    | INR (INR (INR (INR (cx,es,st,k)))) => 2 * list_size expr_size es + 1)’
+    | INL (cx,e,st,k) => expr_size e
+    | INR (INL (cx,es,st,k)) => list_size expr_size es
+    | INR (INR (cx,es,st,k)) => list_size expr_size es)’
   \\ rw[list_size_SUM_MAP, MAP_MAP_o, ETA_AX,
         list_size_pair_size_map, builtin_args_length_ok_def, check_def, type_check_def,
         assert_def, LENGTH_EQ_NUM_compute] \\ rw[]
@@ -286,73 +246,17 @@ Termination
   \\ strip_tac \\ decide_tac
 End
 
-(* The ABI helpers are monadic definitions; expose their state argument before
-   CV translation, just as for the state/storage helpers. *)
-val () = cv_auto_trans abi_primitive_def;
-
-Theorem value_type_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (valOf (TypeBase.read {Thy = "vyperAST", Tyop = "value_type"}));
-
-Theorem abi_operand_CASE_rator =
-  DatatypeSimps.mk_case_rator_thm_tyinfo
-    (valOf (TypeBase.read {Thy = "vyperAbiOperand", Tyop = "abi_operand"}));
-
-val abi_cv_equation =
-  SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
-         COND_RATOR, prod_CASE_rator, sum_CASE_rator,
-         option_CASE_rator, var_decl_info_CASE_rator,
-         abi_operand_CASE_rator, value_type_CASE_rator, type_value_CASE_rator,
-         eval_result_CASE_rator, place_CASE_rator, value_CASE_rator,
-         array_value_CASE_rator, bound_CASE_rator,
-         UNCURRY, LET_THM, lift_option_type_def, lift_option_def, lift_sum_def];
-
-val () = List.app (cv_auto_trans o abi_cv_equation)
-  [capture_abi_memory_def, lookup_abi_local_def, lookup_abi_memory_place_def,
-   lookup_abi_immutable_def,
-   lookup_abi_global_def, read_abi_operand_def, unwrap_abi_operand_def,
-   check_abi_projection_def, project_abi_operand_def,
-   subscript_abi_operand_def, attribute_abi_operand_def];
-
-val project_abi_path_pre_def = project_abi_path_def
-  |> abi_cv_equation |> cv_auto_trans_pre "project_abi_path_pre";
-
-Theorem project_abi_path_pre[cv_pre]:
-  ∀subs cx arg st. project_abi_path_pre cx arg subs st
-Proof
-  Induct >> rw[Once project_abi_path_pre_def] >>
-  gvs[CaseEq"prod", CaseEq"sum"]
-QED
-
-val () = List.app (cv_auto_trans o abi_cv_equation)
-  [abi_target_operand_def, abi_pop_pointer_def, abi_place_operand_def];
-
-val stage_abi_operands_pre_def = stage_abi_operands_def
-  |> abi_cv_equation |> cv_auto_trans_pre "stage_abi_operands_pre";
-
-Theorem stage_abi_operands_pre[cv_pre]:
-  ∀args cx st. stage_abi_operands_pre cx args st
-Proof
-  Induct >> rw[Once stage_abi_operands_pre_def] >>
-  gvs[CaseEq"prod", CaseEq"sum"]
-QED
-
-val () = release_abi_captures_def |> abi_cv_equation |> cv_auto_trans;
-
 val eval_expr_cps_pre_def = eval_expr_cps_def
    |> SRULE
         [liftk1, bind_def, ignore_bind_def,
          LET_RATOR, option_CASE_rator,
          sum_CASE_rator, prod_CASE_rator, lift_option_def]
-   |> cv_auto_trans_pre
-        "eval_expr_cps_pre eval_exprs_cps_pre eval_expr_results_cps_pre eval_abi_expr_cps_pre eval_abi_exprs_cps_pre";
+   |> cv_auto_trans_pre "eval_expr_cps_pre eval_exprs_cps_pre eval_expr_results_cps_pre";
 
 Theorem eval_expr_cps_pre[cv_pre]:
   (∀a b c d. eval_expr_cps_pre a b c d) ∧
   (∀x y z w. eval_exprs_cps_pre x y z w) ∧
-  (∀x y z w. eval_expr_results_cps_pre x y z w) ∧
-  (∀a b c d. eval_abi_expr_cps_pre a b c d) ∧
-  (∀a b c d. eval_abi_exprs_cps_pre a b c d)
+  (∀x y z w. eval_expr_results_cps_pre x y z w)
 Proof
   ho_match_mp_tac eval_expr_cps_ind \\ rw[]
   \\ rw[Once eval_expr_cps_pre_def]
@@ -542,18 +446,6 @@ Definition apply_exc_def:
   apply_exc cx ex st (BuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (LenK k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (TypeBuiltinK _ _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiIfK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiUnwrapK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiSubscriptK _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiSubscriptK1 _ _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiAttributeK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiPopK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiSnapshotK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiExprsK _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiExprsK1 _ k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiStageK k) = AK cx (ApplyExc ex) st k ∧
-  apply_exc cx ex st (AbiReleaseK mark imm_mark k) =
-    liftk cx (K (ApplyExc ex)) (release_abi_captures (mark,imm_mark) st) k ∧
   apply_exc cx ex st (CallSendK _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtTargetK _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
   apply_exc cx ex st (ExtArgsK _ _ _ _ _ _ k) = AK cx (ApplyExc ex) st k ∧
@@ -600,12 +492,6 @@ Definition apply_place_def:
     eval_expr_cps cx e st (AppendK1 p k) /\
   apply_place cx p st (PopK k) =
     liftk cx ApplyTv (pop_place cx p st) k /\
-  apply_place cx p st (AbiPopK k) =
-    liftk cx ApplyAbiOperand (do
-      arg <- abi_place_operand cx p;
-      ptr <- abi_pop_pointer cx arg;
-      pop_place cx p;
-      return ptr od st) k /\
   apply_place cx p st (AssignK1 pv k) =
     liftk cx (K Apply) (do
       v <- read_result cx pv;
@@ -759,17 +645,6 @@ Definition apply_val_def:
   apply_val cx v st (ArrayK arr_typ k) = apply_val_array cx arr_typ v st k ∧
   apply_val cx v st (RangeK1 e k) = eval_expr_cps cx e st (RangeK2 v k) ∧
   apply_val cx v2 st (RangeK2 v1 k) = apply_val_range2 cx v1 v2 st k ∧
-  apply_val cx v st (AbiIfK yes no k) =
-    (case v of
-       BoolV T => eval_abi_expr_cps cx yes st (AbiUnwrapK k)
-     | BoolV F => eval_abi_expr_cps cx no st (AbiUnwrapK k)
-     | _ => apply_exc cx (Error (TypeError "not BoolV")) st k) ∧
-  apply_val cx v st (AbiSubscriptK1 typ arg k) =
-    liftk cx ApplyAbiOperand (do
-      tv <- lift_option_type (evaluate_type (get_tenv cx) typ) "Subscript array type";
-      subscript_abi_operand cx tv arg v od st) k ∧
-  apply_val cx v st (AbiSnapshotK k) =
-    AK cx (ApplyAbiOperand (AbiSnapshot v)) st k ∧
   apply_val cx v st (IfExpK e2 e3 k) =
     (case v of
        BoolV T => eval_expr_cps cx e2 st (ConditionalK k)
@@ -806,8 +681,6 @@ Definition apply_vals_def:
       v <- lift_sum $ evaluate_builtin cx acc ty bt tys vs;
       return $ Value v
     od st) k ∧
-  apply_vals cx vs st (AbiReleaseK mark imm_mark k) =
-    liftk cx (K (ApplyVals vs)) (release_abi_captures (mark,imm_mark) st) k ∧
   apply_vals cx vs st (TypeBuiltinK tb typ tys k) =
     liftk cx ApplyTv (do
       v <- lift_sum $ evaluate_type_builtin cx tb typ tys vs;
@@ -975,39 +848,6 @@ End
 
 val () = cv_auto_trans nextk_def;
 
-(* ABI operands carry captured addresses, never syntax to re-evaluate. *)
-Definition apply_abi_operand_def:
-  apply_abi_operand cx arg st (AbiUnwrapK k) =
-    liftk cx ApplyAbiOperand (unwrap_abi_operand cx arg st) k ∧
-  apply_abi_operand cx arg st (AbiSubscriptK typ index k) =
-    eval_expr_cps cx index st (AbiSubscriptK1 typ arg k) ∧
-  apply_abi_operand cx arg st (AbiAttributeK id k) =
-    liftk cx ApplyAbiOperand (attribute_abi_operand cx arg id st) k ∧
-  apply_abi_operand cx arg st (AbiExprsK es k) =
-    eval_abi_exprs_cps cx es st (AbiExprsK1 arg k) ∧
-  apply_abi_operand cx arg st DoneK = AK cx (ApplyAbiOperand arg) st DoneK ∧
-  apply_abi_operand cx arg st _ =
-    AK cx (ApplyExc (Error (TypeError "apply_abi_operand k"))) st DoneK
-End
-
-val () = apply_abi_operand_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
-Definition apply_abi_operands_def:
-  apply_abi_operands cx args st (AbiExprsK1 arg k) =
-    AK cx (ApplyAbiOperands (arg::args)) st k ∧
-  apply_abi_operands cx args st (AbiStageK k) =
-    liftk cx ApplyVals (stage_abi_operands cx args st) k ∧
-  apply_abi_operands cx args st DoneK = AK cx (ApplyAbiOperands args) st DoneK ∧
-  apply_abi_operands cx args st _ =
-    AK cx (ApplyExc (Error (TypeError "apply_abi_operands k"))) st DoneK
-End
-
-val () = apply_abi_operands_def
-  |> SRULE [liftk1, prod_CASE_rator, sum_CASE_rator]
-  |> cv_auto_trans;
-
 (* Captured arguments keep their locations until the caller stages values. *)
 Definition apply_results_def:
   apply_results cx results st (ExprResultsK1 tv k) =
@@ -1050,37 +890,11 @@ Definition stepk_def:
      | ApplyTv tv => apply_tv cx tv st k
      | ApplyVal v => apply_val cx v st k
      | ApplyVals vs => apply_vals cx vs st k
-     | ApplyAbiOperand arg => apply_abi_operand cx arg st k
-     | ApplyAbiOperands args => apply_abi_operands cx args st k
      | ApplyResults results => apply_results cx results st k
      | ApplyPlace p => apply_place cx p st k
 End
 
 val () = cv_auto_trans stepk_def;
-
-(* Cleanup runs on success and failure, before the enclosing continuation.
-   TAKE preserves writes to older stores while dropping this ABI scope's tokens. *)
-Theorem abi_release_step:
-  stepk (AK cx (ApplyVals vs) st (AbiReleaseK mark imm_mark k)) =
-    AK cx (ApplyVals vs) (st with <|
-      abi_memory := TAKE mark st.abi_memory;
-      abi_immutables := TAKE imm_mark st.abi_immutables |>) k ∧
-  stepk (AK cx (ApplyExc ex) st (AbiReleaseK mark imm_mark k)) =
-    AK cx (ApplyExc ex) (st with <|
-      abi_memory := TAKE mark st.abi_memory;
-      abi_immutables := TAKE imm_mark st.abi_immutables |>) k
-Proof
-  simp[stepk_def, apply_vals_def, apply_exc_def,
-       release_abi_captures_def, return_def, liftk1]
-QED
-
-Theorem abi_release_preserves_older_store:
-  token < mark ∧ token < LENGTH st.abi_memory ⇒
-  EL token (st with abi_memory := TAKE mark st.abi_memory).abi_memory =
-  EL token st.abi_memory
-Proof
-  simp[EL_TAKE]
-QED
 
 Definition cont_def:
   cont ak = OWHILE (λak. nextk ak ≠ DoneK) stepk ak
@@ -1133,29 +947,6 @@ QED
 
 
 
-
-Theorem cont_frame:
-  k ≠ DoneK ⇒
-  cont (AK cx a st k) = cont (stepk (AK cx a st k))
-Proof
-  simp[cont_def, Once OWHILE_THM]
-QED
-
-Theorem type_builtin_CASE_abi:
-  (case tb of AbiEncode _ _ => x | _ => y) =
-  if (∃a b. tb = AbiEncode a b) then x else y
-Proof
-  Cases_on `tb` >> simp[]
-QED
-
-val ABI_CPS_CASE_TAC =
-  simp[bind_def, return_def, liftk1, cont_frame, stepk_def,
-       apply_abi_operand_def, apply_abi_operands_def,
-       apply_tv_def, apply_val_def, apply_exc_def, apply_place_def] >>
-  rpt (CASE_TAC >> gvs[bind_def, return_def, raise_def, liftk1,
-       cont_frame, stepk_def, apply_abi_operand_def, apply_abi_operands_def,
-       apply_tv_def, apply_val_def, apply_exc_def, apply_place_def,
-       switch_BoolV_def]);
 
 Theorem cont_step[local]:
   !a. nextk a <> DoneK ==> cont a = cont (stepk a)
@@ -1217,11 +1008,7 @@ Theorem eval_cps_mutual:
  (∀cx gs vs st k. cont (assign_tuple_target_list_cps cx gs vs st k) =
    cont (liftk cx (K Apply) (assign_tuple_target_list cx gs vs st) k)) /\
  (∀cx es st k. cont (eval_expr_results_cps cx es st k) =
-   cont (liftk cx ApplyResults (eval_expr_results cx es st) k)) /\
- (∀cx e st k. cont (eval_abi_expr_cps cx e st k) =
-   cont (liftk cx ApplyAbiOperand (eval_abi_expr cx e st) k)) /\
- (∀cx es st k. cont (eval_abi_exprs_cps cx es st k) =
-   cont (liftk cx ApplyAbiOperands (eval_abi_exprs cx es st) k))
+   cont (liftk cx ApplyResults (eval_expr_results cx es st) k))
 Proof
   ho_match_mp_tac evaluate_ind
   >> pure_rewrite_tac [liftk1]
@@ -1638,34 +1425,13 @@ Proof
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
     >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
     >> rw[Once OWHILE_THM, stepk_def, apply_place_def, bind_def, liftk1] )
-  \\ conj_tac >- ( (* eval_expr (TypeBuiltin ...): ABI has its own operand phase. *)
-    rpt gen_tac \\ strip_tac
-    \\ reverse (Cases_on `∃a b. tb = AbiEncode a b`)
-    (* Keep the shared snapshot proof as individually timed steps: the
-       composite tactic exceeds the 2.5s contract for Epsilon after merging. *)
-    >- (Cases_on `tb` \\ gvs[] \\ (
-        rw[eval_expr_cps_def, Once evaluate_def, ignore_bind_def, bind_def]
-        \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-        \\ gvs[] \\ first_x_assum drule \\ rw[]
-        \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
-        >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
-        >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1]))
-    \\ gvs[]
-    \\ rw[eval_expr_cps_def, Once evaluate_def, ignore_bind_def, bind_def]
-    \\ CASE_TAC \\ gvs[] \\ reverse CASE_TAC \\ gvs[]
-    \\ gvs[mark_abi_captures_def, return_def]
-    \\ first_x_assum drule \\ rw[]
-    \\ gvs[cont_def, liftk1, finally_def, bind_def, ignore_bind_def,
-           release_abi_captures_def, return_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, apply_abi_operands_def,
-          bind_def, liftk1, release_abi_captures_def, return_def]
-    \\ CASE_TAC \\ reverse CASE_TAC
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, apply_vals_def,
-          bind_def, liftk1, release_abi_captures_def, return_def]
-    \\ rw[Once OWHILE_THM, stepk_def, apply_exc_def, apply_vals_def,
-          bind_def, liftk1]
-    \\ gvs[raise_def, return_def] )
+  \\ conj_tac >- ( (* eval_expr (TypeBuiltin ...) *)
+    rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    \\ gvs[] \\ first_x_assum drule \\ rw[]
+    \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
+    >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
+    >> rw[Once OWHILE_THM, stepk_def, apply_vals_def, bind_def, liftk1] )
   \\ conj_tac >- ( (* eval_expr (Call (Send has_gas) es _) *)
     rw[eval_expr_cps_def, evaluate_def, ignore_bind_def, bind_def]
     \\ CASE_TAC \\ gvs[cont_def] \\ reverse CASE_TAC
@@ -1805,31 +1571,30 @@ Proof
       simp[return_def, ignore_bind_def, bind_def] >>
       AP_TERM_TAC >>
       gvs[push_function_def, return_def] >>
-      (* Split only the scrutinee: CASE_TAC's global datatype rewrites
-         traverse the large continuation datatype unnecessarily here. *)
+      (* chains are pure computation; dead assumptions only slow simp down *)
       POP_ASSUM_LIST (K ALL_TAC) >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] )
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] )
     >> simp[Once OWHILE_THM, stepk_def, apply_def, liftk1]
     >> simp[bind_def, return_def, ignore_bind_def]
     >> gvs[push_function_def, return_def]
     >> AP_TERM_TAC >>
       POP_ASSUM_LIST (K ALL_TAC) >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[return_def, raise_def] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[] >>
-      BasicProvers.PURE_CASE_TAC >> simp[])
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[return_def, raise_def] >>
+      CASE_TAC >> simp[] >>
+      CASE_TAC >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
+      ALL_TAC >| [CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC, CASE_TAC] >> simp[] >>
+      CASE_TAC >> simp[])
   (* ===== Chain interaction builtins ===== *)
   (* All 5 new cases: CPS eval_exprs then continuation matches big-step body.
      Pattern: unfold both sides, use IH for eval_exprs, match continuation bodies. *)
@@ -1955,85 +1720,6 @@ Proof
   >> suspend "Places"
 QED
 
-Resume eval_cps_mutual[Places]:
-  conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
-  >> conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
-  >> conj_tac >- suspend "BasePlaceAttribute"
-  >> conj_tac >- suspend "BasePlaceSubscript"
-  >> conj_tac >- suspend "TargetPlace"
-  >> conj_tac >- suspend "TupleStore"
-  >> conj_tac >- suspend "TupleStores"
-  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, return_def]
-  >> conj_tac >- suspend "TupleStoresCons"
-  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
-  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
-  >> conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def]
-  >> conj_tac >- suspend "ExprResultsCons"
-  >> suspend "ABI"
-QED
-
-Resume eval_cps_mutual[ABI]:
-  rpt conj_tac
-  \\ rpt strip_tac
-  \\ simp_tac std_ss [Once evaluate_def]
-  \\ rw[Once eval_expr_cps_def, liftk1]
-  \\ ALL_TAC >|
-    [(simp[bind_def] >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> first_x_assum drule >> first_x_assum drule >> rw[]
-      >> simp[switch_BoolV_def, bind_def, cont_frame, stepk_def, apply_tv_def, liftk1]
-      >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> IF_CASES_TAC >> gvs[return_def]
-      >- (simp[cont_frame, stepk_def, apply_val_def] >>
-          CASE_TAC >> reverse CASE_TAC >>
-          simp[cont_frame, stepk_def, apply_abi_operand_def, apply_exc_def, bind_def, liftk1])
-      >> IF_CASES_TAC >> gvs[return_def]
-      >- (simp[cont_frame, stepk_def, apply_val_def] >>
-          CASE_TAC >> reverse CASE_TAC >>
-          simp[cont_frame, stepk_def, apply_abi_operand_def, apply_exc_def, bind_def, liftk1])
-      >> simp[raise_def, cont_frame, stepk_def, apply_val_def, apply_exc_def]
-      >> rename1 `test ≠ BoolV T` >> Cases_on `test` >> gvs[cont_apply_exc]),
-     (simp[bind_def] >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> simp[cont_frame, stepk_def, apply_abi_operand_def]
-      >> first_x_assum drule >> rw[]
-      >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> simp[cont_frame, stepk_def, apply_tv_def, liftk1]
-      >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> simp[cont_frame, stepk_def, apply_val_def, liftk1, bind_def]),
-     ABI_CPS_CASE_TAC,
-     (simp[bind_def, UNCURRY] >> CASE_TAC >> reverse CASE_TAC
-      >- simp[cont_frame, stepk_def, apply_exc_def]
-      >> simp[cont_frame, stepk_def, apply_place_def, liftk1, bind_def, ignore_bind_def]),
-     ABI_CPS_CASE_TAC, ABI_CPS_CASE_TAC,
-     ABI_CPS_CASE_TAC, ABI_CPS_CASE_TAC, ABI_CPS_CASE_TAC,
-     ABI_CPS_CASE_TAC, ABI_CPS_CASE_TAC,
-     (simp[bind_def] >>
-      Cases_on `eval_abi_expr cx e st` >>
-      rename1 `eval_abi_expr cx e st = (res,st1)` >>
-      Cases_on `res` >>
-      gvs[cont_frame, stepk_def, apply_abi_operand_def, apply_exc_def, liftk1] >>
-      rename1 `eval_abi_expr cx e st = (INL arg,st1)` >>
-      Cases_on `unwrap_abi_operand cx arg st1` >>
-      rename1 `unwrap_abi_operand cx arg st1 = (res,st2)` >>
-      Cases_on `res` >>
-      gvs[cont_frame, stepk_def, apply_abi_operand_def, apply_exc_def, liftk1] >>
-      first_x_assum drule_all >> strip_tac >> gvs[] >>
-      Cases_on `eval_abi_exprs cx es st2` >>
-      rename1 `eval_abi_exprs cx es st2 = (res,st3)` >>
-      Cases_on `res` >>
-      simp[cont_frame, stepk_def, apply_abi_operands_def, apply_exc_def,
-           liftk1, return_def])]
-  \\ gvs[]
-  \\ Cases_on `k = DoneK`
-  \\ gvs[cont_frame, stepk_def, apply_exc_def]
-  \\ first_x_assum drule_all \\ strip_tac
-  \\ gvs[cont_frame, stepk_def, apply_abi_operands_def, apply_exc_def, liftk1]
-QED
-
 Resume eval_cps_mutual[AssignPlace]:
   rpt gen_tac >> strip_tac
   >> pure_once_rewrite_tac [eval_stmt_cps_def, evaluate_def]
@@ -2085,6 +1771,22 @@ Resume eval_cps_mutual[AugAssign]:
   >- rw[Once OWHILE_THM, stepk_def, apply_exc_def]
   >> rw[Once OWHILE_THM, stepk_def, apply_val_def, liftk1, bind_def]
 QED
+Resume eval_cps_mutual[Places]:
+  conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
+  >> conj_tac >- rw[eval_base_place_cps_def, evaluate_def, liftk1]
+  >> conj_tac >- suspend "BasePlaceAttribute"
+  >> conj_tac >- suspend "BasePlaceSubscript"
+  >> conj_tac >- suspend "TargetPlace"
+  >> conj_tac >- suspend "TupleStore"
+  >> conj_tac >- suspend "TupleStores"
+  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, return_def]
+  >> conj_tac >- suspend "TupleStoresCons"
+  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
+  >> conj_tac >- rw[assign_tuple_targets_cps_def, evaluate_def, raise_def]
+  >> conj_tac >- rw[eval_expr_cps_def, evaluate_def, return_def]
+  >> suspend "ExprResultsCons"
+QED
+
 Resume eval_cps_mutual[ExprResultsCons]:
   rw[eval_expr_cps_def, evaluate_def, bind_def]
   >> CASE_TAC >> gvs[cont_def] >> reverse CASE_TAC
@@ -2157,31 +1859,6 @@ Resume eval_cps_mutual[TupleStoresCons]:
   >> first_x_assum drule >> rw[]
 QED
 Finalise eval_cps_mutual
-
-Theorem eval_abi_expr_cps_eq = cj 12 eval_cps_mutual;
-Theorem eval_abi_exprs_cps_eq = cj 13 eval_cps_mutual;
-
-(* Staging starts only after every argument has evaluated and unwrapped. *)
-Theorem eval_abi_exprs_stage_cps_eq:
-  cont (eval_abi_exprs_cps cx es st (AbiStageK k)) =
-  cont (liftk cx ApplyVals
-    (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od st) k)
-Proof
-  simp[eval_abi_exprs_cps_eq, bind_def] >>
-  Cases_on `eval_abi_exprs cx es st` >>
-  rename1 `eval_abi_exprs cx es st = (res,rt)` >>
-  Cases_on `res` >>
-  simp[liftk1, cont_frame, stepk_def, apply_abi_operands_def, apply_exc_def]
-QED
-
-Theorem abi_stage_step_read_only:
-  stage_abi_operands cx args st = (INL vs,rt) ⇒
-  stepk (AK cx (ApplyAbiOperands args) st (AbiStageK k)) =
-  AK cx (ApplyVals vs) st k
-Proof
-  strip_tac >> drule stage_abi_operands_preserves_state >>
-  simp[stepk_def, apply_abi_operands_def, liftk1]
-QED
 
 Theorem eval_cps_eq:
   (!cx s st k. cont (eval_stmt_cps cx s st k) =
@@ -2374,9 +2051,7 @@ Proof
   rw[cont_pre_IS_SOME_cont]
   \\ qspecl_then[`cx`,`e`,`st`,`DoneK`]mp_tac $ cj 5 eval_cps_eq
   \\ rw[cont_def]
-  \\ Cases_on `eval_expr cx e st`
-  \\ rename1 `eval_expr cx e st = (res,rt)`
-  \\ Cases_on `res` \\ gvs[]
+  \\ CASE_TAC \\ CASE_TAC \\ gvs[]
   \\ rw[Once OWHILE_THM]
 QED
 Theorem cont_pre_eval_stmts_cps[cv_pre]:

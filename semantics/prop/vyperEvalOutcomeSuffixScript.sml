@@ -4,7 +4,7 @@ Theory vyperEvalOutcomeSuffix
 Ancestors
   list pair option vyperMisc vyperState vyperInterpreter vyperCreate
   vyperStatePreservation vyperCallFrame vyperStorageBackend vyperCallOutcome
-  vyperCallOutcomeProps vyperPlaceFrames vyperAbiFrame vyperCallOutcomeFrame
+  vyperCallOutcomeProps vyperPlaceFrames
 Libs monadsyntax pairLib
 
 Definition outcomes_frame_def:
@@ -119,25 +119,6 @@ Proof
     drule_all lift_sum_runtime_state] >> simp[]
 QED
 
-val outcomes_frame_abi = save_thm("outcomes_frame_abi",
-  state_rel_frame_abi_primitives
-  |> Q.INST [`R` |-> `λs t. t.outcomes = s.outcomes`]
-  |> SRULE [state_rel_frame_def, GSYM outcomes_frame_def]
-  |> CONV_RULE (DEPTH_CONV ETA_CONV));
-
-val outcomes_frame_abi_place =
-  state_rel_frame_abi_place
-  |> Q.INST [`R` |-> `λs t. t.outcomes = s.outcomes`]
-  |> SRULE [state_rel_frame_def, GSYM outcomes_frame_def]
-  |> CONV_RULE (DEPTH_CONV ETA_CONV);
-
-Theorem outcomes_frame_abi_memory_child[local]:
-  outcomes_frame (write_abi_memory_child cx id tv subs child ao)
-Proof
-  simp[outcomes_frame_def, write_abi_memory_child_def] >> gen_tac >>
-  rpt CASE_TAC >> simp[return_def, raise_def]
-QED
-
 Theorem outcomes_frame_primitives[simp]:
   outcomes_frame (check b msg) /\ outcomes_frame (type_check b msg) /\
   outcomes_frame get_scopes /\ outcomes_frame (set_scopes scs) /\
@@ -224,8 +205,7 @@ fun OUTCOMES_FACT_TAC index (g as (_,w)) =
 
 val assign_outcomes_frame_facts =
   List.concat (List.map (CONJUNCTS o SPEC_ALL)
-    [outcomes_frame_reads, outcomes_frame_primitives, outcomes_frame_abi,
-     outcomes_frame_abi_place, outcomes_frame_abi_memory_child,
+    [outcomes_frame_reads, outcomes_frame_primitives,
      outcomes_frame_resolve_array,
      outcomes_frame_return, outcomes_frame_raise]);
 
@@ -295,7 +275,7 @@ val OUTCOMES_FRAME_TAC =
     if not (same_const (rator w) ``outcomes_frame``) then NO_TAC g
     else (FIRST [CHANGED_TAC (simp_tac bool_ss
       [FORALL_PROD, pair_case_thm, UNCURRY, outcomes_frame_reads,
-       outcomes_frame_primitives, outcomes_frame_abi, outcomes_frame_handlers,
+       outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise]),
     first_assum ACCEPT_TAC,
     CHANGED_TAC (fn (asl,w) =>
@@ -532,8 +512,7 @@ val outcomes_suffix_frame_simps =
   List.map (GEN_ALL o MATCH_MP outcomes_suffix_frame o SPEC_ALL)
     (List.concat (List.map (CONJUNCTS o SPEC_ALL)
       [outcomes_frame_reads, outcomes_frame_read_results,
-       outcomes_frame_primitives, outcomes_frame_abi, outcomes_frame_abi_place,
-       outcomes_frame_abi_memory_child, outcomes_frame_handlers,
+       outcomes_frame_primitives, outcomes_frame_handlers,
        outcomes_frame_return, outcomes_frame_raise, outcomes_frame_create,
        outcomes_frame_check_create_blueprint,
        outcomes_frame_resolve_array,
@@ -587,9 +566,9 @@ val lock_helper_defs = [lock_if_nr_def, unlock_if_nr_def, is_view_mut_def];
 
 (* Backward IH application leaves only witnessed successful-prefix guards. *)
 val OUTCOMES_GUARD_TAC =
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [ignore_bind_def]) >> first_x_assum irule >>
+  first_x_assum irule >>
   rpt (first_assum (irule_at Any)) >>
-  simp[ignore_bind_def] >> rpt (first_assum (irule_at Any));
+  simp[ignore_bind_def];
 
 val OUTCOMES_CONSTRUCTOR_TAC =
   rpt strip_tac >> simp_tac bool_ss (Once evaluate_def :: lock_helper_defs) >>
@@ -607,15 +586,11 @@ Theorem eval_outcomes_suffix_with_results:
   (!cx t. outcomes_suffix (eval_target_place cx t)) /\
   (!cx g v. outcomes_suffix (assign_tuple_targets cx g v)) /\
   (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs)) /\
-  (!cx es. outcomes_suffix (eval_expr_results cx es)) /\
-  (!cx e. outcomes_suffix (eval_abi_expr cx e)) /\
-  (!cx es. outcomes_suffix (eval_abi_exprs cx es))
+  (!cx es. outcomes_suffix (eval_expr_results cx es))
 Proof
   ho_match_mp_tac evaluate_ind >>
   map_every (fn n => conj_tac >- suspend ("c" ^ Int.toString n))
-    (List.tabulate (60, fn n => n + 1)) >>
-  conj_tac >- suspend "c61" >>
-  rpt conj_tac >> OUTCOMES_CONSTRUCTOR_TAC
+    (List.tabulate (60, fn n => n + 1)) >> suspend "c61"
 QED
 
 Resume eval_outcomes_suffix_with_results[c1]:
@@ -809,212 +784,6 @@ QED
 
 Finalise eval_outcomes_suffix_with_results
 
-(* Legacy target dispatch, subsumed by eval_outcomes_suffix_with_results.
-  (!cx e. outcomes_suffix (eval_abi_expr cx e)) /\
-  (!cx es. outcomes_suffix (eval_abi_exprs cx es))
-Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
-  TRY strip_tac >> TRY (rename1 `ExtCall` >> suspend "ExtCall") >>
-  TRY (rename1 `eval_abi_expr` >>
-    simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC) >>
-  TRY (rename1 `eval_abi_exprs` >>
-    simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC) >>
-  OUTCOMES_SUSPEND_CASE
-QED
-
-Resume eval_outcomes_suffix_mutual[ExtCall]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-
-Resume eval_outcomes_suffix_mutual[eval_stmt_Pass]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Continue]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Break]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Return_NONE]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Return_SOME]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseBare]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseUnreachable]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseReason]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Raise_RaiseCustomError]:
-  Cases_on `err` >> simp[Once evaluate_def] >> rpt CASE_TAC >>
-  OUTCOMES_SUFFIX_TAC >> first_x_assum irule >> simp[]
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertBare]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertUnreachable]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertReason]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Assert_AssertCustomError]:
-  Cases_on `err` >> simp[Once evaluate_def] >> rpt CASE_TAC >>
-  OUTCOMES_SUFFIX_TAC >> first_x_assum irule >> metis_tac[]
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Log]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_AnnAssign]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Append]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Assign]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_AugAssign]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_If]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_For]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmt_Expr]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmts_NIL]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_stmts_CONS]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_iterator_Array]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_iterator_Range]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_target_BaseTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_target_TupleTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_targets_NIL]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_targets_CONS]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_base_target_NameTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_base_target_TopLevelNameTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_base_target_AttributeTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_base_target_SubscriptTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_for_NIL]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_for_CONS]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Name]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_TopLevelName]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_FlagMember]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_IfExp]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Literal]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_StructLit]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Subscript]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Attribute]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Builtin]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Pop]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_TypeBuiltin]:
-  Cases_on `tb` >> gvs[] >>
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_Send]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_IntCall]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_RawCallTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_RawCallCalldataTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_RawLog]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_RawRevert]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_SelfDestructTarget]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_expr_Call_CreateTarget]:
-  Cases_on `kind` >> Cases_on `has_salt` >> gvs[] >>
-  simp[Once evaluate_def] >>
-  OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_exprs_NIL]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC
-QED
-Resume eval_outcomes_suffix_mutual[eval_exprs_CONS]:
-  simp[Once evaluate_def] >> OUTCOMES_SUFFIX_TAC >> OUTCOMES_FRAME_TAC >> OUTCOMES_FINISH_TAC
-QED
-
-Finalise eval_outcomes_suffix_mutual
-
-Theorem eval_outcome_suffix_mutual:
-  (!cx s st res st'. eval_stmt cx s st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx it st res st'. eval_iterator cx it st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx tgt st res st'. eval_target cx tgt st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx tgts st res st'. eval_targets cx tgts st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx bt st res st'. eval_base_target cx bt st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx tyv id body vs st res st'. eval_for cx tyv id body vs st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx e st res st'. eval_expr cx e st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx es st res st'. eval_exprs cx es st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes)
-*)
 Theorem eval_outcomes_suffix_mutual:
   (!cx s. outcomes_suffix (eval_stmt cx s)) /\
   (!cx ss. outcomes_suffix (eval_stmts cx ss)) /\
@@ -1025,9 +794,7 @@ Theorem eval_outcomes_suffix_mutual:
   (!cx t. outcomes_suffix (eval_base_place cx t)) /\
   (!cx t. outcomes_suffix (eval_target_place cx t)) /\
   (!cx g v. outcomes_suffix (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs)) /\
-  (!cx e. outcomes_suffix (eval_abi_expr cx e)) /\
-  (!cx es. outcomes_suffix (eval_abi_exprs cx es))
+  (!cx gs vs. outcomes_suffix (assign_tuple_target_list cx gs vs))
 Proof
   metis_tac[eval_outcomes_suffix_with_results]
 QED
@@ -1038,22 +805,6 @@ Proof
   metis_tac[eval_outcomes_suffix_with_results]
 QED
 
-(* Legacy target form, superseded by the place exports below.
-(* Minimal true replacement: the NONE field is preserved, on every result.
-   SOME execution is governed by the independently proved suffix above. *)
-Theorem eval_outcomes_preserved_mutual:
-  (!cx s st res st'. st.outcomes = NONE /\ eval_stmt cx s st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx ss st res st'. st.outcomes = NONE /\ eval_stmts cx ss st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx it st res st'. st.outcomes = NONE /\ eval_iterator cx it st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx tgt st res st'. st.outcomes = NONE /\ eval_target cx tgt st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx tgts st res st'. st.outcomes = NONE /\ eval_targets cx tgts st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx bt st res st'. st.outcomes = NONE /\ eval_base_target cx bt st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx tyv id body vs st res st'. st.outcomes = NONE /\ eval_for cx tyv id body vs st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx e st res st'. st.outcomes = NONE /\ eval_expr cx e st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx es st res st'. st.outcomes = NONE /\ eval_exprs cx es st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx e st res st'. st.outcomes = NONE /\ eval_abi_expr cx e st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx es st res st'. st.outcomes = NONE /\ eval_abi_exprs cx es st = (res,st') ==> st'.outcomes = st.outcomes)
-*)
 Theorem eval_expr_results_outcome_suffix:
   eval_expr_results cx es st = (res,st') ==>
     outcome_suffix st.outcomes st'.outcomes
@@ -1076,9 +827,7 @@ Theorem eval_outcome_suffix_mutual:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes) /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes)
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> outcome_suffix st.outcomes st'.outcomes)
 Proof
   rpt conj_tac >> rpt strip_tac >>
   metis_tac[outcomes_suffix_result, eval_outcomes_suffix_mutual]
@@ -1094,9 +843,7 @@ Theorem eval_outcomes_preserved_mutual:
   (!cx t st res st'. st.outcomes = NONE /\ eval_base_place cx t st = (res,st') ==> st'.outcomes = st.outcomes) /\
   (!cx t st res st'. st.outcomes = NONE /\ eval_target_place cx t st = (res,st') ==> st'.outcomes = st.outcomes) /\
   (!cx g v st res st'. st.outcomes = NONE /\ assign_tuple_targets cx g v st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx gs vs st res st'. st.outcomes = NONE /\ assign_tuple_target_list cx gs vs st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx e st res st'. st.outcomes = NONE /\ eval_abi_expr cx e st = (res,st') ==> st'.outcomes = st.outcomes) /\
-  (!cx es st res st'. st.outcomes = NONE /\ eval_abi_exprs cx es st = (res,st') ==> st'.outcomes = st.outcomes)
+  (!cx gs vs st res st'. st.outcomes = NONE /\ assign_tuple_target_list cx gs vs st = (res,st') ==> st'.outcomes = st.outcomes)
 Proof
   rpt conj_tac >> rpt strip_tac >>
   imp_res_tac eval_outcome_suffix_mutual >>
@@ -1113,9 +860,7 @@ Theorem eval_outcomes_frame_mutual:
   (!cx t. outcomes_NONE_frame (eval_base_place cx t)) /\
   (!cx t. outcomes_NONE_frame (eval_target_place cx t)) /\
   (!cx g v. outcomes_NONE_frame (assign_tuple_targets cx g v)) /\
-  (!cx gs vs. outcomes_NONE_frame (assign_tuple_target_list cx gs vs)) /\
-  (!cx e. outcomes_NONE_frame (eval_abi_expr cx e)) /\
-  (!cx es. outcomes_NONE_frame (eval_abi_exprs cx es))
+  (!cx gs vs. outcomes_NONE_frame (assign_tuple_target_list cx gs vs))
 Proof
   simp[outcomes_NONE_frame_def] >> rpt conj_tac >> rpt strip_tac >>
   metis_tac[eval_outcomes_suffix_mutual, outcomes_suffix_def,

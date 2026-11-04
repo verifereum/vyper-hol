@@ -3,48 +3,11 @@ Theory vyperReadOnlyEval
 Ancestors
   vyperReadOnlyBranches vyperReadOnlyCalls vyperReadOnlySyntax vyperReadOnlyTargets
   vyperMachineFrame vyperTypeContract vyperInterpreter vyperCallOutcomeFrame vyperState
-  vyperAST sorting vyperAbiOperand
+  vyperAST sorting
 Libs monadsyntax
 
 val () = monadsyntax.enable_monad "vyper_evaluation";
 val _ = Parse.hide "body";
-
-(* Discharge threaded ABI hypotheses before splitting their continuations. *)
-fun READ_ONLY_ABI_IH_TAC (asl,w) =
-  let
-    val facts = List.concat (map (CONJUNCTS o ASSUME) asl);
-    fun discharge th =
-      if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts)
-      else th;
-  in
-    FIRST (map (fn th => fn g => MATCH_ACCEPT_TAC
-      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g)
-      facts) (asl,w)
-  end;
-
-val READ_ONLY_ABI_STEP = FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS (SPEC_ALL machine_frame_abi))),
-  MATCH_ACCEPT_TAC machine_frame_read_result,
-  MATCH_ACCEPT_TAC machine_frame_return,
-  READ_ONLY_ABI_IH_TAC,
-  MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac >-
-    simp[machine_frame_def] >> conj_tac,
-  CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-  CONV_TAC (RAND_CONV BETA_CONV),
-  gen_tac, strip_tac,
-  CHANGED_TAC (asm_simp_tac (srw_ss()) [machine_frame_primitives]),
-  first_assum MATCH_ACCEPT_TAC,
-  BasicProvers.PURE_TOP_CASE_TAC];
-
-val READ_ONLY_ABI_TAC =
-  rpt strip_tac >>
-  TRY (irule machine_frame_abi_expr_pop >>
-       gvs[Once expr_mutability_ok_def, call_mutability_ok_def] >>
-       metis_tac[]) >>
-  gvs[expr_mutability_ok_def] >> simp[Once evaluate_def] >>
-  rpt READ_ONLY_ABI_STEP >>
-  first_x_assum irule >> goal_assum (drule_at Any) >> simp[];
 
 Theorem evaluate_read_only:
   (!cx s. !mods. read_only_context mods cx /\ stmt_mutability_ok mods View s ==>
@@ -68,11 +31,7 @@ Theorem evaluate_read_only:
   (!cx gs vs. !mods. read_only_context mods cx /\ EVERY (atarget_mutability_ok mods View) gs ==>
      state_rel_frame machine_frame (assign_tuple_target_list cx gs vs)) /\
   (!cx es. !mods. read_only_context mods cx /\ EVERY (expr_mutability_ok mods View) es ==>
-     state_rel_frame machine_frame (eval_expr_results cx es)) /\
-  (!cx e. !mods. read_only_context mods cx /\ expr_mutability_ok mods View e ==>
-     state_rel_frame machine_frame (eval_abi_expr cx e)) /\
-  (!cx es. !mods. read_only_context mods cx /\ EVERY (expr_mutability_ok mods View) es ==>
-     state_rel_frame machine_frame (eval_abi_exprs cx es))
+     state_rel_frame machine_frame (eval_expr_results cx es))
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac
   >- simp[Once evaluate_def, machine_frame_primitives]
@@ -137,8 +96,7 @@ Proof
   >- simp[Once evaluate_def, machine_frame_primitives]
   >- simp[Once evaluate_def, machine_frame_primitives]
   >- simp[Once evaluate_def, machine_frame_primitives]
-  >- suspend "expr_results_cons"
-  >> READ_ONLY_ABI_TAC
+  >> suspend "expr_results_cons"
 QED
 
 Resume evaluate_read_only[return_some]:
@@ -381,12 +339,10 @@ Resume evaluate_read_only[annassign_value]:
 QED
 
 Resume evaluate_read_only[expr_type_builtin]:
-  rpt strip_tac >> gvs[Once expr_mutability_ok_def, mark_abi_captures_def, return_def] >>
-  simp[Once evaluate_def, ignore_bind_def] >>
+  rpt strip_tac >> gvs[Once expr_mutability_ok_def] >> simp[Once evaluate_def, ignore_bind_def] >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def, machine_frame_primitives] >>
   rpt strip_tac >> irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >>
-  conj_tac >- suspend "type_builtin_value" >>
-  Cases_on `tb` >> simp[] >> metis_tac[machine_frame_abi_arguments]
+  conj_tac >- suspend "type_builtin_value" >> metis_tac[]
 QED
 
 Resume evaluate_read_only[type_builtin_value]:
@@ -658,23 +614,10 @@ QED
 
 Finalise evaluate_read_only
 
-Theorem machine_frame_eval_abi_expr:
-  read_only_context mods cx /\ expr_mutability_ok mods View e ==>
-  state_rel_frame machine_frame (eval_abi_expr cx e)
-Proof
-  metis_tac[evaluate_read_only |> cj 12]
-QED
-
-Theorem machine_frame_eval_abi_exprs:
-  read_only_context mods cx /\ EVERY (expr_mutability_ok mods View) es ==>
-  state_rel_frame machine_frame (eval_abi_exprs cx es)
-Proof
-  metis_tac[evaluate_read_only |> cj 13]
-QED
-
 Theorem machine_frame_eval_stmts:
   read_only_context mods cx /\ stmts_mutability_ok mods View body ==>
   state_rel_frame machine_frame (eval_stmts cx body)
 Proof
   metis_tac[ evaluate_read_only |> cj 2 ]
 QED
+

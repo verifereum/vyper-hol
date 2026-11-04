@@ -56,8 +56,8 @@ Theorem abi_scratch_builtin_setup_reach:
   abi_builtin_encode_setup method_id_opt maxlen st = (ops,ready) /\ fn_has_code st ready func /\
   ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
     FLOOKUP initial.vs_allocas st.cs_next_id =
-      SOME (p,abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4))) /\
-  p+abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4) < dimword (:256) /\
+      SOME (p,maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))) /\
+  p+maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4) < dimword (:256) /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
@@ -66,7 +66,7 @@ Theorem abi_scratch_builtin_setup_reach:
     mem_bytes_at (p+32) (LENGTH (abi_builtin_encode_prefix method_id_opt)) actual.vs_memory =
       abi_builtin_encode_prefix method_id_opt /\ fresh_vars_wrt limit_st actual /\
     abi_builtin_encode_setup_frame st.cs_next_var st.cs_next_id
-      (abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4)) p
+      (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4)) p
       (case method_id_opt of NONE => 0 | SOME _ => 32) initial actual /\
     actual.vs_current_bb = ready.cs_current_bb /\ actual.vs_inst_idx = LENGTH ready.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -74,13 +74,12 @@ Proof
   Cases_on `method_id_opt` >>
   simp_tac (srw_ss()) [abi_builtin_encode_prefix_def, abi_builtin_encode_method_bytes_length] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS)
-  >- (`abi_builtin_encode_alloc_size maxlen 0 < dimword (:256)` by decide_tac >>
+  >- (`maxlen+32 < dimword (:256)` by decide_tac >>
       drule_all abi_builtin_encode_setup_none_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
       rename1 `abi_decode_sim ctx func initial actual` >>
       drule abi_scratch_builtin_none_frame >> disch_then (qspec_then `p` assume_tac) >>
       qexists_tac `actual` >> asm_simp_tac (srw_ss()) [mem_bytes_at_def]) >>
-  mp_tac (Q.SPECL [`maxlen`, `4`] abi_builtin_encode_alloc_size_bound) >> disch_tac >>
-  `abi_builtin_encode_alloc_size maxlen 4 < dimword (:256) /\ p+32 < dimword (:256)` by decide_tac >>
+  `maxlen+36 < dimword (:256) /\ p+32 < dimword (:256)` by decide_tac >>
   RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [GSYM ADD_ASSOC]) >>
   drule_all abi_builtin_encode_method_setup_reach >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func initial actual` >>
@@ -260,7 +259,7 @@ Theorem lower_abi_encode_scratch:
       (vyperValue$BytesV (abi_builtin_encode_prefix method_id_opt ++ enc at av)) p actual.vs_memory /\
     abi_encoder_input (type_to_abi_enc_info sf ce ty) at av sb source_cap actual.vs_memory /\
     abi_scratch_builtin_effect first last start final limit_st p
-      (abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4))
+      (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))
       (case method_id_opt of NONE => 0 | SOME _ => 32) b cap initial actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
@@ -271,8 +270,6 @@ Proof
   drule abi_builtin_encode_setup_shape >> strip_tac >> drule abi_builtin_encode_setup_live >> strip_tac >>
   qpat_assum `abi_scratch_builtin_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o SIMP_RULE bool_ss [abi_scratch_builtin_pre_def, LET_THM]) >>
-  mp_tac (Q.SPECL [`maxlen`, `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4`]
-    abi_builtin_encode_alloc_size_bound) >> disch_tac >>
   `ready.cs_next_var <= limit_st.cs_next_var /\ first <= ready.cs_next_id` by decide_tac >>
   mp_tac (Q.INST [`st` |-> `start`, `ctx` |-> `ctx`] abi_scratch_builtin_setup_reach) >>
   impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> strip_tac >>
@@ -289,11 +286,11 @@ Proof
     abi_scratch_builtin_body_finish) >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `abi_decode_sim ctx func prepared actual` >>
   `abi_scratch_effect first last ready.cs_next_id final.cs_next_id ready.cs_next_var limit_st p
-    (abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4)) b cap prepared actual` by
+    (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4)) b cap prepared actual` by
     (irule abi_scratch_effect_widen >> qexistsl_tac [`p`, `final.cs_next_id`, `ready.cs_next_id`,
        `ready.cs_next_var`, `32+(case method_id_opt of NONE => 0 | SOME _ => 4)+LENGTH (enc at av)`] >>
      asm_simp_tac bool_ss [LESS_EQ_REFL] >> decide_tac) >>
-  mp_tac (Q.INST [`st` |-> `start`, `outsz` |-> `abi_builtin_encode_alloc_size maxlen
+  mp_tac (Q.INST [`st` |-> `start`, `outsz` |-> `maxlen+32+
     (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`,
     `write_size` |-> `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 32`]
     abi_scratch_builtin_effect_compose) >> impl_tac >- (asm_simp_tac bool_ss [] >> decide_tac) >> disch_tac >>
@@ -333,18 +330,15 @@ Proof
 QED
 
 Theorem abi_scratch_builtin_store_separate:
-  (sb+source_cap <= p \/ p+abi_builtin_encode_alloc_size maxlen
-    (case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) <= sb) /\
+  (sb+source_cap <= p \/ p+(maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) <= sb) /\
   (method_id_opt = NONE \/ sb+source_cap <= p+32 \/ p+64 <= sb) ==>
   sb+source_cap <= p+32 \/ p+32+(case method_id_opt of NONE => 0 | SOME _ => 32) <= sb
 Proof
-  mp_tac (Q.SPECL [`maxlen`, `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4`]
-    abi_builtin_encode_alloc_size_bound) >>
   Cases_on `method_id_opt` >> simp[] >> decide_tac
 QED
 
 Theorem abi_scratch_builtin_pre_caller:
-  let outsz = abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
+  let outsz = maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
   let allocated = abi_builtin_allocate_state st.cs_next_id outsz initial in
   let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
   alloca_inv initial /\ cap < dimword (:256) /\
@@ -363,25 +357,23 @@ Theorem abi_scratch_builtin_pre_caller:
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `site` |-> `st.cs_next_id`,
-    `outsz` |-> `abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
+    `outsz` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
     abi_scratch_builtin_allocate_buffers) >> impl_tac >- asm_simp_tac bool_ss [] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qabbrev_tac `allocated = abi_builtin_allocate_state st.cs_next_id
-    (abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) initial` >>
+    (maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)) initial` >>
   qabbrev_tac `cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated)` >>
   `abi_decoder_budget first last 0 cap allocated` by
     (qunabbrev_tac `cap` >> irule abi_caller_allocation_budget_zero >>
      asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC) >>
   `~(st.cs_next_id IN abi_decoder_ids first last)` by (simp[abi_decoder_ids_def] >> decide_tac) >>
-  mp_tac (Q.SPECL [`maxlen`, `case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4`]
-    abi_builtin_encode_alloc_size_bound) >> disch_tac >>
   mp_tac (Q.INST [`initial` |-> `allocated:venom_state`, `ids` |-> `abi_decoder_ids first last`,
     `output_id` |-> `st.cs_next_id`, `d` |-> `p:num`, `b` |-> `0:num`,
-    `output_size` |-> `abi_builtin_encode_alloc_size maxlen (case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
+    `output_size` |-> `maxlen+32+(case (method_id_opt:bytes32 option) of NONE => 0 | SOME _ => 4)`]
     abi_scratch_array_entry_buffers) >>
   impl_tac >- (asm_simp_tac (srw_ss()) [] >> decide_tac) >> strip_tac >>
   qpat_assum `abi_footprint_disjoint sb source_cap
-    [(p,abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4))]`
+    [(p,maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))]`
     (assume_tac o SIMP_RULE (srw_ss()) [abi_footprint_disjoint_def]) >>
   drule_all abi_scratch_builtin_store_separate >> disch_tac >>
   PURE_REWRITE_TAC [abi_scratch_builtin_pre_def, LET_THM] >> BETA_TAC >>
@@ -391,7 +383,7 @@ Proof
 QED
 
 Theorem lower_abi_encode_scratch_caller:
-  let outsz = abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
+  let outsz = maxlen+32+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4) in
   let allocated = abi_builtin_allocate_state start.cs_next_id outsz initial in
   let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
   lower_abi_encode ensure method_id_opt src (type_to_abi_enc_info sf ce ty) maxlen start = (out,final) /\
@@ -461,7 +453,7 @@ Theorem lower_abi_encode_scratch_source:
     abi_encoder_input (type_to_abi_enc_info ce.ce_struct_fields ce enc_ty)
       (vyper_to_abi_type (get_tenv cx) enc_ty) av sb source_cap actual.vs_memory /\
     abi_scratch_builtin_effect first last start final limit_st p
-      (abi_builtin_encode_alloc_size maxlen (LENGTH (abi_encode_method_id_bytes method_id)))
+      (maxlen+32+LENGTH (abi_encode_method_id_bytes method_id))
       (case method_id of NONE => 0 | SOME _ => 32) b cap initial actual /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual

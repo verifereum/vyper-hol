@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem abi_tuple_encode_copy_write:
-  ~is_word_type ty /\ emit_void MCOPY [dst;op;Lit (n2w (type_memory_bytes ce ty))] st = ((),final) /\
+  ~is_word_type ty /\ compile_copy_memory dst op (type_memory_bytes ce ty) st = ((),final) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\ fresh_vars_wrt limit_st s /\
   abi_tuple_encode_input sf ce ty at av op next lo hi s ==>
   ?actual. run_inst_seq (emitted_insts st final) s = OK actual /\ inst_extends st final /\
@@ -46,6 +46,14 @@ Proof
   `abi_encoder_input (type_to_abi_enc_info sf ce ty) at av sb
      (type_memory_bytes ce ty) s.vs_memory` by
     (irule abi_encoder_input_capacity >> qexists_tac `source_cap` >> asm_rewrite_tac[]) >>
+  Cases_on `type_memory_bytes ce ty = 0`
+  >- (gvs[compile_copy_memory_def, comp_return_def] >>
+      `abi_encoder_input (type_to_abi_enc_info sf ce ty) at av d 0 s.vs_memory` by
+        (drule abi_encoder_input_relocate >>
+         disch_then (qspecl_then [`d`, `s.vs_memory`] mp_tac) >> simp[mem_bytes_at_def]) >>
+      qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def, inst_extends_def, abi_decode_frame_def]) >>
+  `emit_void MCOPY [dst;op;Lit (n2w (type_memory_bytes ce ty))] st = ((),final)` by
+    (Cases_on `type_memory_bytes ce ty` >> gvs[compile_copy_memory_def]) >>
   mp_tac (Q.INST [`src` |-> `op`, `dst` |-> `dst`,
     `len` |-> `Lit (n2w (type_memory_bytes ce ty))`, `cnt` |-> `type_memory_bytes ce ty`,
     `db` |-> `d`, `st'` |-> `final`] abi_encoder_emit_copy) >>
@@ -62,7 +70,7 @@ QED
 
 Theorem abi_tuple_encode_write:
   (if is_word_type ty then emit_void MSTORE [dst;op]
-   else emit_void MCOPY [dst;op;Lit (n2w (type_memory_bytes ce ty))]) st = ((),final) /\
+   else compile_copy_memory dst op (type_memory_bytes ce ty)) st = ((),final) /\
   eval_operand dst s = SOME (n2w d) /\ d < dimword (:256) /\ fresh_vars_wrt limit_st s /\
   abi_tuple_encode_input sf ce ty at av op next lo hi s ==>
   ?actual. run_inst_seq (emitted_insts st final) s = OK actual /\ inst_extends st final /\
@@ -83,8 +91,8 @@ Theorem abi_tuple_encode_slot_shape:
   isPREFIX st.cs_current_insts final.cs_current_insts /\ inst_extends st final /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st final)
 Proof
-  Cases_on `is_word_type ty` >>
-  asm_simp_tac (srw_ss()) [compile_abi_tuple_slot_def,
+  Cases_on `is_word_type ty` >> Cases_on `type_memory_bytes ce ty` >>
+  asm_simp_tac (srw_ss()) [compile_abi_tuple_slot_def, compile_copy_memory_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
     fresh_var_def, fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   simp[inst_extends_def, emitted_insts_def] >> pure_rewrite_tac [GSYM APPEND_ASSOC] >>

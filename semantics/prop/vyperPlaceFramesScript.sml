@@ -28,37 +28,30 @@ Proof
   simp[write_place_def] >> metis_tac[write_storage_slot_immutables]
 QED
 
-(* A place write also mirrors outstanding ABI captures of its root. *)
 Theorem write_memory_place_frame:
   write_place cx (MemoryPlace id path) v st = (res,st') ==>
-  ?sc mem. st' = st with <|scopes := sc; abi_memory := mem|>
+  ?sc. st' = st with scopes := sc
 Proof
-  simp[write_place_def, write_abi_memory_def, write_abi_memory_child_def,
-       bind_def, get_scopes_def, lift_option_type_def,
+  simp[write_place_def, bind_def, get_scopes_def, lift_option_type_def,
        type_check_def, assert_def, lift_sum_def, set_scopes_def,
        return_def, raise_def, UNCURRY] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
            lift_sum_def, set_scopes_def, return_def, raise_def]) >>
-  rpt strip_tac >> qexistsl_tac [`st'.scopes`, `st'.abi_memory`] >>
-  gvs[write_abi_memory_def, write_abi_memory_child_def, AllCaseEqs(),
-      return_def, raise_def, evaluation_state_component_equality]
+  rpt strip_tac >> qexists `st'.scopes` >> gvs[]
 QED
 
 Theorem write_immutable_place_frame:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
-  ?imms mem. st' = st with <|immutables := imms; abi_immutables := mem|>
+  ?imms. st' = st with immutables := imms
 Proof
-  simp[write_place_def, write_abi_immutables_def, bind_def, get_immutables_def,
+  simp[write_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
        set_immutable_def, set_address_immutables_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, type_check_def, assert_def,
            lift_sum_def, set_scopes_def, return_def, raise_def]) >>
-  rpt strip_tac >> qexistsl_tac [`st'.immutables`, `st'.abi_immutables`] >>
-  gvs[write_abi_immutables_def, get_address_immutables_def,
-      set_address_immutables_def, bind_def, lift_option_type_def,
-      AllCaseEqs(), return_def, raise_def, evaluation_state_component_equality]
+  rpt strip_tac >> qexists `st'.immutables` >> gvs[evaluation_state_component_equality]
 QED
 
 Theorem write_place_logs:
@@ -66,7 +59,7 @@ Theorem write_place_logs:
 Proof
   Cases_on `p`
   >- (simp[write_storage_place_eq] >>
-      Cases_on `encode_value t v` >> simp[] >> rpt strip_tac >> gvs[])
+      Cases_on `encode_value t v` >> simp[] >> rpt strip_tac >> gvs[]) 
   >- (strip_tac >> drule write_memory_place_frame >> strip_tac >> gvs[]) >>
   strip_tac >> drule write_immutable_place_frame >> strip_tac >> gvs[]
 QED
@@ -90,7 +83,7 @@ Theorem write_memory_place_storage:
   !b. get_storage cx st' b = get_storage cx st b
 Proof
   rpt strip_tac >> drule write_memory_place_frame >> strip_tac >>
-  Cases_on `b` >> gvs[get_storage_scopes, get_storage_def]
+  gvs[get_storage_scopes]
 QED
 
 Theorem write_immutable_place_storage:
@@ -109,14 +102,10 @@ Proof
   Cases_on `p`
   >- (metis_tac[write_storage_place_immutables])
   >- (metis_tac[write_memory_place_immutables]) >>
-  simp[write_place_def, write_abi_immutables_def, bind_def, ignore_bind_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_type_def, lift_sum_def,
+  simp[write_place_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, lift_sum_def,
        set_immutable_def, set_address_immutables_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, get_address_immutables_def,
-           set_address_immutables_def, lift_option_type_def,
-           write_abi_immutables_def, return_def, raise_def]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
   rpt strip_tac >> gvs[] >>
   Cases_on `cx.txn.target = addr` >>
   gvs[ALOOKUP_ADELKEY]
@@ -132,14 +121,10 @@ Proof
   Cases_on `p`
   >- (metis_tac[write_storage_place_immutables, optionTheory.SOME_11])
   >- (metis_tac[write_memory_place_immutables, optionTheory.SOME_11]) >>
-  simp[write_place_def, write_abi_immutables_def, bind_def, ignore_bind_def,
-       get_immutables_def, get_address_immutables_def,
-       lift_option_type_def, lift_sum_def,
+  simp[write_place_def, bind_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, lift_sum_def,
        set_immutable_def, set_address_immutables_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, get_address_immutables_def,
-           set_address_immutables_def, lift_option_type_def,
-           write_abi_immutables_def, return_def, raise_def]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
   rpt strip_tac >> gvs[] >>
   simp[set_source_immutables_def, get_source_immutables_def,
        ALOOKUP_ADELKEY, FLOOKUP_UPDATE] >>

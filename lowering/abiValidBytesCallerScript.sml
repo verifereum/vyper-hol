@@ -10,7 +10,6 @@ Theorem compile_abi_decode_memory_valid_bytes:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ret_ty then TupleT [ret_ty] else ret_ty in
   let min_size = abi_static_size ce.ce_struct_fields wrapped_ty in
   let max_size = abi_size_bound ce.ce_struct_fields wrapped_ty in
-  expr_type (HD args) = BaseT (BytesT (Dynamic input_bound)) /\
   (ret_ty = BaseT (BytesT (Dynamic n)) \/ ret_ty = BaseT (StringT n)) /\
   evaluate_type (get_tenv cx) ret_ty = SOME tv /\
   evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
@@ -97,7 +96,6 @@ Theorem compile_abi_decode_bytes_source_caller:
   let wrapped_ty = if unwrap /\ needs_external_call_wrap ret_ty then TupleT [ret_ty] else ret_ty in
   let min_size = abi_static_size ce.ce_struct_fields wrapped_ty in
   let max_size = abi_size_bound ce.ce_struct_fields wrapped_ty in
-  expr_type (HD args) = BaseT (BytesT (Dynamic input_bound)) /\
   (ret_ty = BaseT (BytesT (Dynamic n)) \/ ret_ty = BaseT (StringT n)) /\
   evaluate_type (get_tenv cx) ret_ty = SOME tv /\
   evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\

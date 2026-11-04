@@ -10,7 +10,7 @@ Ancestors
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeEnv vyperTypeEnvExtension vyperTypeEnvPreservation vyperTypeScopePop
   vyperTypeABI vyperTypeBindArguments vyperTypeExprResult vyperTypeStmtResult
-  vyperTypeGlobalLookupSoundness
+  vyperTypeExtCallSoundness vyperTypeGlobalLookupSoundness
   vyperTypeBuiltins vyperTypeExprSoundness vyperTypeAssignSoundness
   vyperExprNoControl vyperScopePreservation vyperEvalPreservesScopes
   vyperEvalMisc vyperStatePreservation vyperAssignPreservesType vyperTypeStatePreservation

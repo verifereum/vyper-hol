@@ -5,7 +5,6 @@ Ancestors
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
   vyperMisc vyperImmutablesPreservation vyperStatePreservation vyperPlaceFrames
-  vyperAbiFrame vyperAbiMemoryProps
 
 (* Preserve the existing statement-list free variables against crypto's body. *)
 val _ = hide "body";
@@ -225,8 +224,6 @@ Proof
       MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
    (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==>
       MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-   (!(cx:evaluation_context) (es:expr list). T) /\
-   (!(cx:evaluation_context) (e:expr). T) /\
    (!(cx:evaluation_context) (es:expr list). T)` suffices_by metis_tac[] >>
   ho_match_mp_tac evaluate_ind >> simp[] >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -685,92 +682,7 @@ Proof
   rpt (first_x_assum drule >> strip_tac >> gvs[])
 QED
 
-(* Legacy target-only induction; canonical place interface follows.
-Theorem case_BaseTarget_dom[local]:
-  ∀cx bt.
-    (∀st res st'. eval_base_target cx bt st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_target cx (BaseTarget bt) st = (res, st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  Cases_on `x` >> gvs[return_def]
-QED
-
-Theorem case_TupleTarget_dom[local]:
-  ∀cx gs.
-    (∀st res st'. eval_targets cx gs st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_target cx (TupleTarget gs) st = (res, st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_target _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  imp_res_tac return_scopes >> gvs[]
-QED
-
-Theorem case_eval_targets_nil_dom[local]:
-  ∀cx st res st'.
-    eval_targets cx [] st = (res, st') ⇒
-    MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  simp[evaluate_def, return_def]
-QED
-
-Theorem case_eval_targets_cons_dom[local]:
-  ∀cx g gs.
-    (∀st res st'. eval_target cx g st = (res, st') ⇒
-       MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-    (∀s'' gv t.
-       eval_target cx g s'' = (INL gv,t) ⇒
-       ∀st res st'.
-         eval_targets cx gs st = (res, st') ⇒
-         MAP FDOM st.scopes = MAP FDOM st'.scopes) ⇒
-    ∀st res st'.
-      eval_targets cx (g::gs) st = (res, st') ⇒
-      MAP FDOM st.scopes = MAP FDOM st'.scopes
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `eval_targets _ _ _ = _` mp_tac >>
-  simp[evaluate_def, bind_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  imp_res_tac return_scopes >> gvs[] >>
-  rpt (first_x_assum drule >> strip_tac >> gvs[])
-QED
-
-(* ------------------------------------------------------------------------
-   Main Mutual Induction Theorem
-
-   Combines all cases via ho_match_mp_tac evaluate_ind.
-   ------------------------------------------------------------------------ *)
-Theorem scopes_dom_mutual[local]:
-  (∀cx s st res st'. eval_stmt cx s st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-  (∀cx ss st res st'. eval_stmts cx ss st = (res, st') ⇒ preserves_scopes_dom st st') ∧
-  (∀cx it st res st'. eval_iterator cx it st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx g st res st'. eval_target cx g st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx gs st res st'. eval_targets cx gs st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx bt st res st'. eval_base_target cx bt st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx tyv nm body vs st res st'. eval_for cx tyv nm body vs st = (res, st') ⇒
-     preserves_scopes_dom st st') ∧
-  (∀cx e st res st'. eval_expr cx e st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx es st res st'. eval_exprs cx es st = (res, st') ⇒
-     MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes) ∧
-  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ MAP FDOM st.scopes = MAP FDOM st'.scopes)
-*)
-(* Canonical place/ABI scope-domain interface. *)
+(* Canonical ten-function scope-domain interface. *)
 Theorem scopes_dom_extended[local]:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> preserves_scopes_dom st st') /\
   (!cx ss st res st'. eval_stmts cx ss st = (res,st') ==> preserves_scopes_dom st st') /\
@@ -782,9 +694,7 @@ Theorem scopes_dom_extended[local]:
   (!cx bt st res st'. eval_target_place cx bt st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes) /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> MAP FDOM st.scopes = MAP FDOM st'.scopes)
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac
   (* === Statement cases === *)
@@ -878,9 +788,7 @@ Proof
   >- metis_tac[place_evaluators_scopes_dom]
   >- gvs[Once evaluate_def, raise_def]
   >- gvs[Once evaluate_def, raise_def]
-  >> metis_tac[eval_expr_results_preserves_scopes_dom,
-               eval_abi_expr_preserves_scopes_dom,
-               eval_abi_exprs_preserves_scopes_dom]
+  >> metis_tac[eval_expr_results_preserves_scopes_dom]
 QED
 
 (* ------------------------------------------------------------------------
@@ -982,8 +890,6 @@ Theorem new_in_head_extended[local]:
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
   (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
   (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
-  (!(cx:evaluation_context) (es:expr list). T) /\
-  (!(cx:evaluation_context) (e:expr). T) /\
   (!(cx:evaluation_context) (es:expr list). T)
 Proof
   ho_match_mp_tac evaluate_ind
@@ -1219,7 +1125,7 @@ Proof
   >> conj_tac >- simp[] (* SelfDestructTarget: T *)
   >> conj_tac >- simp[] (* CreateTarget: T *)
   >> conj_tac >- simp[] (* exprs []: T *)
-  >> simp[] (* remaining expression/list/resolver/tuple/ABI clauses are vacuous *)
+  >> simp[] (* remaining expression/list/resolver/tuple clauses are vacuous *)
 QED
 
 Theorem eval_stmts_new_in_head_not_in_tail:
@@ -1363,7 +1269,6 @@ Proof
           set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
       rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
       drule find_containing_scope_structure >> strip_tac >> gvs[] >>
-      imp_res_tac write_abi_memory_frame >> gvs[] >>
       imp_res_tac replace_memory_entry_metadata >>
       gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
       Cases_on `i < LENGTH x0` >> gvs[rich_listTheory.EL_APPEND1] >>
@@ -1371,15 +1276,12 @@ Proof
       gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[write_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+  simp[write_place_def, bind_def, lift_option_type_def, lift_sum_def,
        get_immutables_def, get_address_immutables_def, set_immutable_def,
        set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, return_def, raise_def,
-           get_address_immutables_def, set_address_immutables_def,
-           lift_option_type_def]) >>
+       gvs[bind_def, return_def, raise_def]) >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac write_abi_immutables_frame >> gvs[] >>
   gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
       get_source_immutables_def, set_source_immutables_def] >>
   rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -1510,108 +1412,15 @@ QED
 Theorem append_place_preserves_tv:
   append_place cx p v st = (res,st') ==> preserves_tv cx st st'
 Proof
-(* Legacy eager-target preservation proof, superseded by places.
-  ho_match_mp_tac assign_target_ind >>
-  conj_tac >- (
-    (* ScopedVar *)
-    rpt strip_tac >>
-    gvs[assign_target_def, bind_def, raise_def,
-       get_scopes_def, return_def, option_CASE_rator,
-       lift_option_def, AllCaseEqs()] >>
-    pairarg_tac >> gvs[] >>
-    drule find_containing_scope_structure >> strip_tac >> gvs[] >>
-    gvs[type_check_def, assert_def, sum_CASE_rator,
-       lift_sum_def, set_scopes_def, bind_def, ignore_bind_def,
-       return_def, raise_def, AllCaseEqs()] >>
-    imp_res_tac assign_result_state >> imp_res_tac write_abi_memory_frame >>
-    imp_res_tac write_abi_immutables_frame >> gvs[] >>
-    gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
-    Cases_on`i < LENGTH pre` \\ gvs[rich_listTheory.EL_APPEND1] >>
-    Cases_on`i > LENGTH pre` \\
-    gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
-        arithmeticTheory.PRE_SUB1] >>
-    `i = LENGTH pre` by DECIDE_TAC >> gvs[] >>
-    gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  conj_tac >- (
-    (* TopLevelVar *)
-    rpt strip_tac >>
-    imp_res_tac assign_target_toplevel_scopes_immutables >>
-    gvs[preserves_tv_def] ) >>
-  conj_tac >- (
-    (* ImmutableVar — scopes unchanged; same as TopLevelVar pattern *)
-    rpt strip_tac >>
-    qpat_x_assum `assign_target _ _ _ _ = _` mp_tac >>
-    simp[Once vyperStateTheory.assign_target_def, bind_def,
-        return_def, vyperStateTheory.raise_def, ignore_bind_def,
-        vyperStateTheory.lift_option_def, vyperStateTheory.lift_option_type_def,
-        vyperStateTheory.lift_sum_def,
-        vyperStateTheory.get_immutables_def,
-        vyperStateTheory.get_address_immutables_def,
-        vyperStateTheory.set_immutable_def,
-        vyperStateTheory.set_address_immutables_def,
-        AllCaseEqs()] >>
-    rpt strip_tac >> gvs[] >>
-    imp_res_tac assign_result_state >>
-    imp_res_tac write_abi_immutables_frame >> gvs[] >>
-    gvs[AllCaseEqs(),raise_def,return_def,preserves_tv_def,
-        option_CASE_rator, sum_CASE_rator] >>
-    gvs[get_source_immutables_def,set_source_immutables_def] >>
-    rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-    rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]) >>
-  (* TupleTargetV Replace + error cases + assign_targets *)
-  rpt strip_tac
-  >> gvs[vyperStateTheory.assign_target_def, bind_def, return_def,
-         vyperStateTheory.raise_def, ignore_bind_def,
-         vyperStateTheory.type_check_def, AllCaseEqs()]
-  >> TRY (gvs[vyperStateTheory.assert_def] >>
-         first_x_assum drule_all >> strip_tac >> gvs[] >> NO_TAC)
-  >> first_x_assum drule
-  >> first_x_assum drule
-  >> metis_tac[preserves_tv_trans]
-*)
   Cases_on `p`
   >- (strip_tac >> irule preserves_tv_eq >>
-      metis_tac[append_storage_place_scopes_immutables])
-  >- (rename1 `MemoryPlace id path` >> strip_tac >>
-      gvs[append_place_def, bind_def, ignore_bind_def, lift_sum_def,
-          return_def, raise_def, AllCaseEqs()] >>
-      imp_res_tac place_type_value_state >> imp_res_tac read_place_state >> gvs[] >>
-      fs[GSYM lift_sum_def] >> imp_res_tac lift_sum_state >> gvs[] >>
-      qmatch_goalsub_rename_tac `preserves_tv cx before _` >>
-      Cases_on `find_containing_scope id before.scopes` >>
-      gvs[get_scopes_def, lift_option_type_def, return_def, raise_def,
-          bind_def, ignore_bind_def] >>
-      rename1 `find_containing_scope id before.scopes = SOME x` >>
-      PairCases_on `x` >>
-      gvs[type_check_def, assert_def, bind_def, ignore_bind_def, lift_sum_def,
-          set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      imp_res_tac write_abi_memory_child_frame >> gvs[] >>
-      drule find_containing_scope_structure >> strip_tac >> gvs[] >>
-      imp_res_tac replace_memory_entry_metadata >>
-      gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
-      Cases_on `i < LENGTH x0` >> gvs[rich_listTheory.EL_APPEND1] >>
-      Cases_on `i > LENGTH x0` >>
-      gvs[rich_listTheory.EL_APPEND, rich_listTheory.EL_CONS,
-          arithmeticTheory.PRE_SUB1] >>
-      `i = LENGTH x0` by decide_tac >>
-      gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[append_place_def, bind_def, ignore_bind_def, lift_sum_def,
-       lift_option_type_def, get_immutables_def, get_address_immutables_def,
-       set_immutable_def, set_address_immutables_def,
-       return_def, raise_def, AllCaseEqs()] >>
+      metis_tac[append_storage_place_scopes_immutables]) >>
+  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >>
-    gvs[bind_def, ignore_bind_def, get_address_immutables_def,
-        set_address_immutables_def, lift_option_type_def, return_def, raise_def]) >>
+       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
   rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
-  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac write_abi_immutables_frame >> gvs[] >>
-  gvs[lift_option_type_def, option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
-  gvs[preserves_tv_def, get_source_immutables_def, set_source_immutables_def] >>
-  rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]
+  gvs[] >> metis_tac[write_place_preserves_tv]
 QED
 
 Theorem pop_place_preserves_tv:
@@ -1628,9 +1437,7 @@ Proof
           check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
       fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
       imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >> gvs[] >>
-      pairarg_tac >>
-      gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
-      imp_res_tac write_abi_memory_child_frame >> gvs[] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
       drule find_containing_scope_structure >> strip_tac >> gvs[] >>
       gvs[preserves_tv_def] >> rpt gen_tac >> strip_tac >>
       Cases_on `i < LENGTH x0` >> gvs[rich_listTheory.EL_APPEND1] >>
@@ -1642,11 +1449,8 @@ Proof
   simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
        get_immutables_def, get_address_immutables_def, set_immutable_def,
        set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-    gvs[bind_def, ignore_bind_def, get_address_immutables_def,
-        set_address_immutables_def, lift_option_type_def, return_def, raise_def]) >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac write_abi_immutables_frame >> gvs[] >>
   gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
       get_source_immutables_def, set_source_immutables_def] >>
   rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
@@ -1776,71 +1580,6 @@ Proof
   res_tac >> fs[]
 QED
 
-Theorem ptv_abi_relation[local]:
-  (!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==> preserves_tv cx s u) /\
-  (!s mem. preserves_tv cx s (s with abi_memory := mem)) /\
-  (!s mem. preserves_tv cx s (s with abi_immutables := mem))
-Proof
-  conj_tac >- metis_tac[preserves_tv_trans] >> simp[preserves_tv_def]
-QED
-
-Theorem ptv_abi_pure_frames[local]:
-  state_rel_frame (preserves_tv cx) (return x) /\
-  state_rel_frame (preserves_tv cx) (raise e) /\
-  state_rel_frame (preserves_tv cx) (type_check b msg) /\
-  state_rel_frame (preserves_tv cx) (check b msg) /\
-  state_rel_frame (preserves_tv cx) (lift_option opt msg) /\
-  state_rel_frame (preserves_tv cx) (lift_option_type opt msg) /\
-  state_rel_frame (preserves_tv cx) (lift_sum rs) /\
-  state_rel_frame (preserves_tv cx) (read_result cx tv) /\
-  state_rel_frame (preserves_tv cx) (pop_place cx target)
-Proof
-  simp[state_rel_frame_result] >> rpt strip_tac >>
-  FIRST [drule return_state, drule raise_state, drule type_check_state,
-    drule check_state, drule lift_option_state, drule lift_option_type_state,
-    drule lift_sum_state, drule read_result_state,
-    drule pop_place_preserves_tv] >> simp[]
-QED
-
-local
-  val relation = ``preserves_tv cx``;
-  fun spec th = ISPEC relation (GEN (first (fn v => fst (dest_var v) = "R")
-    (free_vars (concl th))) th);
-  val result = spec state_rel_frame_result;
-  val bind = spec state_rel_frame_bind_guarded;
-  val finally = spec state_rel_frame_finally;
-  val leaves = CONJUNCT1 ptv_abi_relation ::
-    CONJUNCTS (MATCH_MP (spec state_rel_frame_abi_primitives) ptv_abi_relation) @
-    [MATCH_MP (spec state_rel_frame_abi_place) ptv_abi_relation] @
-    CONJUNCTS ptv_abi_pure_frames;
-  fun ih (asl,w) =
-    let
-      val norm = SIMP_RULE bool_ss [oneTheory.one, ignore_bind_def];
-      val facts = List.concat (map (CONJUNCTS o norm o ASSUME) asl);
-      fun discharge th = if is_imp (snd (strip_forall (concl th))) then
-        discharge (tryfind (MATCH_MP th) facts) else th;
-    in FIRST (map (fn th => fn g => MATCH_ACCEPT_TAC
-      (discharge (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] th)) g) facts) (asl,w) end;
-in
-  val PTV_ABI_TAC =
-    rpt (fn g as (_,w) => if is_forall w andalso
-      type_of (#1 (dest_forall w)) <> ``:evaluation_state`` then gen_tac g else NO_TAC g) >>
-    (fn g as (_,w) => if is_imp w then strip_tac g else ALL_TAC g) >>
-    CONV_TAC (REWR_CONV (GSYM result)) >>
-    CONV_TAC (RAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
-    RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM result]) >>
-    rpt (FIRST [FIRST (map MATCH_ACCEPT_TAC leaves), ih,
-      MATCH_MP_TAC bind >> conj_tac, MATCH_MP_TAC finally >> conj_tac,
-      CONV_TAC (RAND_CONV BETA_CONV),
-      CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-      CONV_TAC (RAND_CONV (REWR_CONV switch_BoolV_def)),
-      CHANGED_TAC (simp_tac bool_ss [pairTheory.UNCURRY, pairTheory.pair_case_thm]),
-      gen_tac, strip_tac, conj_tac,
-      CHANGED_TAC (fn (asl,w) => simp_tac (srw_ss())
-        (map ASSUME (List.filter (not o is_forall) asl)) (asl,w)),
-      BasicProvers.PURE_TOP_CASE_TAC]);
-end;
-
 val PLACE_TV_TAC =
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
@@ -1872,9 +1611,7 @@ Theorem eval_preserves_tv_with_results:
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st') /\
-  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ preserves_tv cx st st') /\
-  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ preserves_tv cx st st')
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st')
 Proof
   ho_match_mp_tac evaluate_ind >>
   conj_tac >- rw[evaluate_def, return_def] >>
@@ -2177,28 +1914,20 @@ Proof
     gvs[get_accounts_def, return_def]) >>
   (* Pop *)
   conj_tac >- (
-(* Legacy Pop dispatch.
-    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac assign_target_preserves_tv >> gvs[] >>
-    TRY (first_x_assum drule_all >> rw[] >> NO_TAC) >>
-    pairarg_tac >> gvs[bind_apply, AllCaseEqs(), return_def] >>
-    imp_res_tac lift_option_type_state >>
-    imp_res_tac assign_target_preserves_tv >> gvs[] >>
-    first_x_assum drule_all >> strip_tac >>
-    irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]) >>
-  (* TypeBuiltin: guarded eager and delayed ABI induction hypotheses. *)
-  conj_tac >- suspend "TypeBuiltin_ptv" >>
-*)
     rpt strip_tac >>
     qpat_x_assum `eval_expr _ (Pop _ _) _ = _` mp_tac >>
     simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
     imp_res_tac pop_place_preserves_tv >>
     rpt (first_x_assum drule_all >> strip_tac) >>
     metis_tac[preserves_tv_trans]) >>
-  (* TypeBuiltin: both eager values and delayed ABI captures. *)
-  conj_tac >- suspend "TypeBuiltin_ptv" >>
+  (* TypeBuiltin *)
+  conj_tac >- (
+    rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+    gvs[Once evaluate_def, bind_apply, AllCaseEqs(),
+        ignore_bind_apply, return_def] >>
+    imp_res_tac type_check_state >>
+    imp_res_tac lift_sum_state >> gvs[] >>
+    first_x_assum drule_all >> rw[]) >>
   (* Send and ExtCall: operands, then eval_send / eval_ext_call, which
      preserve scopes and immutables. *)
   conj_tac >- (
@@ -2347,20 +2076,30 @@ Proof
    first_x_assum drule_all >> strip_tac >>
    irule preserves_tv_trans >> first_assum (irule_at Any) >>
    gvs[return_def]) >>
-  rpt conj_tac >> FIRST [PTV_ABI_TAC >> NO_TAC,
-    (rpt gen_tac >> strip_tac >>
-     qmatch_goalsub_rename_tac `assign_tuple_targets cx (TupleTarget gs) tuple_value` >>
-     Cases_on `tuple_value` >>
-     TRY (simp[Once evaluate_def, raise_def] >> NO_TAC) >>
-     rename1 `ArrayV arr` >> Cases_on `arr` >> gvs[Once evaluate_def, raise_def]),
-    PLACE_TV_TAC]
+  rpt conj_tac >> rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(), return_def, raise_def] >>
+  rpt strip_tac >>
+  imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
+  imp_res_tac read_result_state >> imp_res_tac get_place_state >>
+  imp_res_tac extend_place_state >> imp_res_tac lookup_global_state >>
+  imp_res_tac read_result_state >>
+  imp_res_tac lift_sum_state >> imp_res_tac read_result_state >>
+  imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
+  gvs[get_scopes_def, return_def] >>
+  rpt (first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  imp_res_tac lift_option_type_state >> gvs[]
+  (* Subscript success, read failure, and expression failure. *)
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  (* Single tuple target: evaluate the place, then write. *)
+  >- (irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[])
+  (* Tuple targets require constructor analysis before applying the IH. *)
+  >- (Cases_on `v` >> gvs[raise_def] >> Cases_on `a` >>
+      gvs[raise_def] >> first_x_assum drule >> simp[])
+  (* Target-list head followed by its tail. *)
+  >> irule preserves_tv_trans >> first_assum (irule_at Any) >> simp[]
 QED
-
-Resume eval_preserves_tv_with_results[TypeBuiltin_ptv]:
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >> PTV_ABI_TAC
-QED
-
-(* IntCall_ptv is resumed below; finalise after both deferred cases. *)
 
 Theorem try_handle_function_state[local]:
   !f s. SND (try f handle_function s) = SND (f s)
@@ -2641,9 +2380,7 @@ Theorem eval_preserves_tv:
   (!cx t st res st'. eval_base_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> preserves_tv cx st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> preserves_tv cx st st') /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> preserves_tv cx st st')
+  (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
   metis_tac[eval_preserves_tv_with_results]
 QED

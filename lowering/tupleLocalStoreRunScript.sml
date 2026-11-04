@@ -421,7 +421,7 @@ Resume tuple_store_mixed_locals_run[tail_premises]:
   >- suspend "tail_destinations"
   >- suspend "tail_layout"
   >- suspend "tail_memory"
-  >> fs[]
+  >> asm_rewrite_tac []
 QED
 
 Resume tuple_store_mixed_locals_run[tail_fresh]:

@@ -3,7 +3,7 @@ Theory vyperExprNoControl
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
   vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
-  vyperRuntimeAccounts vyperState vyperAbiOperand vyperStorageBackend vyperPlaceFrames
+  vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
 
@@ -168,6 +168,7 @@ Theorem transfer_value_no_control:
   ∀from to amt s exc s'.
   transfer_value from to amt s = (INR exc, s') ⇒ no_control_exc exc
 Proof
+  (* Original concrete implementation proof:
   rpt gen_tac >>
   rename1 `transfer_value fromAddr toAddr amount st = (INR exc, st') ⇒ no_control_exc exc` >>
   Cases_on `amount = 0 ∨ fromAddr = toAddr`
@@ -176,6 +177,8 @@ Proof
     get_accounts_def, return_def, update_accounts_def]
   >> strip_tac >> gvs[AllCaseEqs(), return_def]
   >> imp_res_tac check_no_control
+  *)
+  rpt strip_tac >> drule concrete_send_error >> rw[no_control_exc_def]
 QED
 
 Theorem get_immutables_no_control:
@@ -312,39 +315,6 @@ Proof
              no_control_exc_def])
 QED
 
-Theorem write_abi_immutables_no_control:
-  write_abi_immutables cx src id tv v subs ao st = (INR exc,rt) ==>
-  no_control_exc exc
-Proof
-  rw[write_abi_immutables_def, AllCaseEqs(), return_def, raise_def,
-     no_control_exc_def]
-QED
-
-(* Legacy assign_target helper table (place helpers follow).
-val at_helpers = [write_abi_immutables_no_control,
-  lift_option_no_control, lift_option_type_no_control,
-  lift_sum_no_control, check_no_control, type_check_no_control,
-  write_storage_slot_no_control, assign_result_no_control,
-  read_storage_slot_no_control, lookup_global_no_control,
-  set_global_no_control, set_immutable_no_control,
-  get_immutables_no_control, resolve_array_element_no_control];
-*)
-Theorem write_abi_memory_child_no_control:
-  write_abi_memory_child cx id tv path v ao st = (INR exc,rt) ==>
-  no_control_exc exc
-Proof
-  rw[write_abi_memory_child_def, AllCaseEqs(), return_def, raise_def,
-     no_control_exc_def]
-QED
-
-Theorem write_abi_memory_no_control:
-  write_abi_memory cx id tv v subs ao st = (INR exc,rt) ==>
-  no_control_exc exc
-Proof
-  rw[write_abi_memory_def, write_abi_memory_child_def, AllCaseEqs(),
-     return_def, raise_def, no_control_exc_def]
-QED
-
 Theorem read_place_no_control:
   read_place cx p st = (INR exc,st') ==> no_control_exc exc
 Proof
@@ -416,12 +386,10 @@ Proof
     get_scopes_def, set_scopes_def, return_def, prod_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def,
-      sum_CASE_rator, AllCaseEqs()] >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
   metis_tac[write_storage_slot_no_control, get_immutables_no_control,
     set_immutable_no_control, lift_option_type_no_control,
-    type_check_no_control, lift_sum_no_control,
-    write_abi_memory_no_control, write_abi_immutables_no_control]
+    type_check_no_control, lift_sum_no_control]
 QED
 
 Theorem extend_storage_place_no_control:
@@ -483,20 +451,15 @@ Proof
   map_every qid_spec_tac [`st'`, `exc`, `st`, `v`, `p`, `cx`] >>
   ho_match_mp_tac append_place_ind >> rpt gen_tac >>
   simp[append_place_def, bind_def, ignore_bind_def, return_def,
-    get_scopes_def, set_scopes_def, prod_CASE_rator, sum_CASE_rator] >>
+    prod_CASE_rator, sum_CASE_rator] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def,
-    return_def, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()]) >>
   FIRST [
     qpat_x_assum `get_storage_backend _ tr _ = (INR _,_)` mp_tac >>
       Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
         get_transient_storage_def, get_accounts_def, return_def],
     metis_tac[check_no_control, write_storage_slot_no_control,
       place_type_value_no_control, read_place_no_control, lift_sum_no_control,
-      write_place_no_control, get_immutables_no_control,
-      set_immutable_no_control, lift_option_type_no_control,
-      type_check_no_control, write_abi_memory_child_no_control,
-      write_abi_immutables_no_control]]
+      write_place_no_control]]
 QED
 
 Theorem pop_place_no_control:
@@ -515,8 +478,7 @@ Proof
         get_transient_storage_def, get_accounts_def, return_def],
     metis_tac[check_no_control, type_check_no_control, write_storage_slot_no_control,
       get_immutables_no_control, set_immutable_no_control, lift_option_type_no_control,
-      lift_sum_no_control, write_abi_memory_child_no_control,
-      write_abi_immutables_no_control, no_control_exc_def]]
+      lift_sum_no_control, no_control_exc_def]]
 QED
 
 val at_mono = [bind_def, ignore_bind_def, return_def, raise_def,
@@ -525,17 +487,9 @@ val at_mono = [bind_def, ignore_bind_def, return_def, raise_def,
   vyperValueTheory.type_value_CASE_rator,
   vyperASTTheory.bound_CASE_rator,
   COND_RATOR, LET_THM, get_scopes_def, set_scopes_def,
-  write_abi_memory_def, no_control_exc_def];
+  no_control_exc_def];
 
 (* ===== Shared tactic definitions ===== *)
-
-val mono = [bind_def, ignore_bind_def, return_def, raise_def,
-            prod_CASE_rator, sum_CASE_rator, option_CASE_rator,
-            COND_RATOR, LET_THM,
-            get_scopes_def, get_accounts_def, get_transient_storage_def,
-            update_accounts_def, update_transient_def,
-            mark_abi_memory_def, release_abi_memory_def,
-            mark_abi_captures_def, release_abi_captures_def, finally_def];
 
 Theorem eval_create_no_control[local]:
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (INR ex, st') ==>
@@ -559,188 +513,7 @@ Proof
   rw[return_def, raise_def, no_control_exc_def]
 QED
 
-(* ===== ABI operand helpers ===== *)
-
-val abi_mono = [bind_def, ignore_bind_def, return_def, raise_def,
-  prod_CASE_rator, sum_CASE_rator, option_CASE_rator, COND_RATOR,
-  LET_THM, no_control_exc_def, lift_option_def, lift_option_type_def,
-  lift_sum_def, check_def, assert_def, capture_abi_memory_def,
-  capture_abi_immutable_def, get_scopes_def,
-  get_storage_backend_eq, pairTheory.ELIM_UNCURRY];
-
-Theorem read_abi_operand_no_control:
-  !cx arg st exc rt.
-  read_abi_operand cx arg st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `arg` >> simp[read_abi_operand_def, read_storage_slot_eq] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  gvs(abi_mono @ [AllCaseEqs()])
-QED
-
-Theorem unwrap_abi_operand_no_control:
-  !cx arg st exc rt.
-  unwrap_abi_operand cx arg st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `arg` >> simp[unwrap_abi_operand_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule read_abi_operand_no_control, drule read_storage_slot_no_control] >>
-  simp[no_control_exc_def]
-QED
-
-Theorem lookup_abi_local_no_control:
-  !cx id st exc rt.
-  lookup_abi_local cx id st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  simp[lookup_abi_local_def, capture_abi_memory_def, get_scopes_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  gvs(abi_mono @ [AllCaseEqs()])
-QED
-
-Theorem lookup_abi_memory_place_no_control:
-  !cx id path st exc rt.
-  lookup_abi_memory_place cx id path st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  simp[lookup_abi_memory_place_def] >> rpt strip_tac >>
-  gvs(abi_mono @ [capture_abi_memory_at_def, AllCaseEqs()]) >>
-  gvs(abi_mono @ [capture_abi_memory_at_def, AllCaseEqs()])
-QED
-
-Theorem lookup_abi_immutable_no_control:
-  !cx src id st exc rt.
-  lookup_abi_immutable cx src id st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  simp[lookup_abi_immutable_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  TRY (drule get_immutables_no_control >> simp[no_control_exc_def] >> NO_TAC) >>
-  gvs(abi_mono @ [AllCaseEqs()])
-QED
-
-Theorem lookup_abi_global_no_control:
-  !cx src id st exc rt.
-  lookup_abi_global cx src id st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  simp[lookup_abi_global_def] >> rpt strip_tac >>
-  gvs(abi_mono @ [var_decl_info_CASE_rator, AllCaseEqs()]) >>
-  FIRST [drule lookup_abi_immutable_no_control,
-         drule lookup_global_no_control, drule read_result_no_control] >>
-  simp[no_control_exc_def]
-QED
-
-Theorem check_abi_projection_no_control:
-  !cx arg tv sub st exc rt.
-  check_abi_projection cx arg tv sub st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `tv` >> Cases_on `sub` >>
-  simp[check_abi_projection_def, return_def] >>
-  TRY (rename1 `ValueSubscript v` >> Cases_on `v` >>
-       simp[check_abi_projection_def, return_def]) >>
-  TRY (rename1 `ArrayTV t bd` >> Cases_on `bd` >>
-       simp[check_abi_projection_def, return_def]) >>
-  TRY (rpt strip_tac >> drule check_no_control >> simp[] >> NO_TAC) >>
-  Cases_on `arg` >>
-  simp[check_abi_projection_def, get_storage_backend_eq] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  gvs(abi_mono @ [AllCaseEqs()])
-QED
-
-Theorem project_abi_operand_no_control:
-  !cx arg sub st exc rt.
-  project_abi_operand cx arg sub st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `arg` >> Cases_on `sub` >> simp[project_abi_operand_def] >>
-  TRY (rename1 `AbiMapping tr slot kt vt` >> Cases_on `vt` >>
-       simp[project_abi_operand_def]) >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule check_abi_projection_no_control >> simp[no_control_exc_def],
-    qmatch_asmsub_rename_tac `value_type_CASE vt _ _` >>
-    Cases_on `vt` >> gvs(abi_mono @ [AllCaseEqs()])]
-QED
-
-Theorem subscript_abi_operand_no_control:
-  !cx tv arg index st exc rt.
-  subscript_abi_operand cx tv arg index st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `arg` >> simp[subscript_abi_operand_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [eval_result_CASE_rator, AllCaseEqs()]) >>
-  drule project_abi_operand_no_control >> simp[no_control_exc_def]
-QED
-
-Theorem attribute_abi_operand_no_control:
-  !cx arg id st exc rt.
-  attribute_abi_operand cx arg id st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `arg` >> simp[attribute_abi_operand_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  drule project_abi_operand_no_control >> simp[no_control_exc_def]
-QED
-
-Theorem project_abi_path_no_control:
-  !subs arg st exc rt.
-  project_abi_path cx arg subs st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Induct >> simp[project_abi_path_def, return_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule project_abi_operand_no_control, first_x_assum drule] >>
-  simp[no_control_exc_def]
-QED
-
-(* Compatibility helper for callers still using the ABI target projection
-   operation; evaluator mutation itself now captures an already resolved place. *)
-Theorem abi_target_operand_no_control:
-  !cx loc subs st exc rt.
-  abi_target_operand cx loc subs st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `loc` >> Cases_on `subs` >> simp[abi_target_operand_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule lookup_abi_local_no_control, drule lookup_abi_global_no_control,
-         drule lookup_abi_immutable_no_control,
-         drule project_abi_path_no_control] >> simp[no_control_exc_def]
-QED
-
-Theorem abi_place_operand_no_control:
-  !cx p st exc rt.
-  abi_place_operand cx p st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Cases_on `p` >> simp[abi_place_operand_def, return_def] >>
-  TRY (rename1 `ImmutablePlace src id path` >> Cases_on `path` >>
-       simp[abi_place_operand_def, raise_def, no_control_exc_def]) >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule lookup_abi_memory_place_no_control,
-         drule lookup_abi_immutable_no_control,
-         drule project_abi_path_no_control] >> simp[no_control_exc_def]
-QED
-
-Theorem abi_pop_pointer_no_control:
-  !cx arg st exc rt.
-  abi_pop_pointer cx arg st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  simp[abi_pop_pointer_def] >> rpt strip_tac >>
-  gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule read_abi_operand_no_control >> simp[no_control_exc_def] >> NO_TAC,
-    qmatch_asmsub_rename_tac `read_abi_operand _ _ _ = (INL v,_)` >>
-    Cases_on `v` >> gvs(abi_mono @ [AllCaseEqs()]) >>
-    qmatch_asmsub_rename_tac `array_value_CASE av _ _ _` >>
-    Cases_on `av` >> gvs(abi_mono @ [AllCaseEqs()]) >>
-    drule project_abi_operand_no_control >> simp[no_control_exc_def]]
-QED
-
-Theorem stage_abi_operands_no_control:
-  !args st exc rt.
-  stage_abi_operands cx args st = (INR exc,rt) ==> no_control_exc exc
-Proof
-  Induct >> simp[stage_abi_operands_def, return_def] >>
-  rpt strip_tac >> gvs(abi_mono @ [AllCaseEqs()]) >>
-  FIRST [drule read_abi_operand_no_control, first_x_assum drule] >>
-  simp[no_control_exc_def]
-QED
-
-val helpers = [read_abi_operand_no_control, unwrap_abi_operand_no_control,
-               lookup_abi_local_no_control, lookup_abi_global_no_control,
-               subscript_abi_operand_no_control, attribute_abi_operand_no_control,
-               abi_place_operand_no_control, abi_pop_pointer_no_control,
-               stage_abi_operands_no_control,
-               eval_create_no_control, check_create_blueprint_no_control,
+val helpers = [eval_create_no_control, check_create_blueprint_no_control,
                next_gas_reading_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
@@ -800,33 +573,6 @@ Theorem eval_ext_call_no_control:
   eval_ext_call cx static skip_check sig opts vs st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-(* Earlier inlined call proof, superseded by the effects boundary below.
-  (* Separate independent modes before expanding the nested monadic cases. *)
-  Cases_on `static` >> Cases_on `st.outcomes` >>
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, lift_option_def, lift_option_type_def,
-       check_def, lift_sum_runtime_def, update_accounts_def,
-       update_transient_def, append_logs_def, take_call_outcome_def,
-       adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[no_control_exc_def] >| [
-    gvs[AllCaseEqs(), no_control_exc_def],
-    gvs[AllCaseEqs(), no_control_exc_def],
-    rename1 `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >>
-    Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >| [
-      gvs[] >> gvs[AllCaseEqs(), no_control_exc_def],
-      rename1 `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest) = SOME kw_value` >>
-      Cases_on `dest_NumV kw_value` >> gvs[] >>
-      gvs[AllCaseEqs(), no_control_exc_def]],
-    rename1 `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >>
-    Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >| [
-      gvs[] >> gvs[AllCaseEqs(), no_control_exc_def],
-      rename1 `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest) = SOME kw_value` >>
-      Cases_on `dest_NumV kw_value` >> gvs[] >>
-      gvs[AllCaseEqs(), no_control_exc_def]]]
-*)
   PairCases_on `sig` >> Cases_on `vs` >>
   simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
   rpt CALL_NO_CONTROL_STEP
@@ -1033,95 +779,16 @@ val canonical_no_control_ind = evaluate_ind
               `\cx t. !s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc`,
               `\cx t. !s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc`,
               `\cx g v. T`, `\cx gs vs. T`,
-              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`,
-              `\cx e. !s exc st'. eval_abi_expr cx e s = (INR exc,st') ==> no_control_exc exc`,
-              `\cx es. !s exc st'. eval_abi_exprs cx es s = (INR exc,st') ==> no_control_exc exc`]
+              `\cx es. !s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 
-(* Legacy target induction, replaced by canonical place/ABI induction.
-Theorem eval_expr_no_control_with_bt:
-  (∀cx bt s exc st'.
-    eval_base_target cx bt s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx e s exc st'.
-    eval_expr cx e s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx es s exc st'.
-    eval_exprs cx es s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx e s exc st'.
-    eval_abi_expr cx e s = (INR exc, st') ⇒
-    no_control_exc exc) ∧
-  (∀cx es s exc st'.
-    eval_abi_exprs cx es s = (INR exc, st') ⇒
-    no_control_exc exc)
-Proof
-  ho_match_mp_tac eval_expr_bt_ind >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- (
-    rename1`SubscriptTarget` >>
-    unfold_tac >>
-    PairCases_on`x` >>
-    gvs[bind_def, return_def, AllCaseEqs()] >>
-    resolve_tac) >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- (
-    rename1`Pop` >>
-    unfold_tac >>
-    PairCases_on`x` >>
-    gvs[bind_def, return_def, AllCaseEqs()] >>
-    resolve_tac) >>
-  conj_tac >- (
-    rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >| [
-      unfold_tac, unfold_tac, unfold_tac, unfold_tac,
-      unfold_tac, unfold_tac, unfold_tac,
-      unfold_tac >> gvs[mark_abi_captures_def, return_def] >> res_tac]) >>
-  conj_tac >- (
-    rpt strip_tac >> pop_assum mp_tac >>
-    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-         assert_def, return_def, raise_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[no_control_exc_def] >>
-    imp_res_tac eval_send_no_control >> gvs[no_control_exc_def] >>
-    first_x_assum (qspecl_then [`s`, `s`] mp_tac) >>
-    simp[type_check_def, assert_def, return_def] >>
-    disch_then drule >> simp[]) >>
-  conj_tac >- (
-    rpt strip_tac >> pop_assum mp_tac >>
-    simp[Once evaluate_def, bind_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[] >>
-    imp_res_tac eval_ext_call_no_control >> res_tac) >>
-  conj_tac >- (rpt gen_tac >> strip_tac >>
-    match_mp_tac int_call_no_control >>
-    metis_tac[]) >>
-  conj_tac >- (rpt strip_tac >> drule_all raw_call_no_control >> simp[]) >>
-  conj_tac >- (rpt strip_tac >> drule_all raw_call_calldata_no_control >> simp[]) >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- unfold_tac >>
-  conj_tac >- suspend "CreateTarget" >>
-  rpt conj_tac >> unfold_tac >>
-  qmatch_asmsub_rename_tac `eval_base_target _ _ _ = (INL locsubs,_)` >>
-  PairCases_on `locsubs` >> gvs(mono @ [AllCaseEqs()]) >> resolve_tac
-*)
 Theorem canonical_eval_no_control_with_results:
   (!cx e s exc st'. eval_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx es s exc st'. eval_exprs cx es s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_base_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
   (!cx t s exc st'. eval_target_place cx t s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx e s exc st'. eval_abi_expr cx e s = (INR exc,st') ==> no_control_exc exc) /\
-  (!cx es s exc st'. eval_abi_exprs cx es s = (INR exc,st') ==> no_control_exc exc)
+  (!cx es s exc st'. eval_expr_results cx es s = (INR exc,st') ==> no_control_exc exc)
 Proof
   ho_match_mp_tac canonical_no_control_ind >>
   conj_tac >- (simp[Once evaluate_def, bind_def, ignore_bind_def,
@@ -1154,19 +821,9 @@ Proof
   conj_tac >- suspend "PlaceSubscript" >>
   conj_tac >- suspend "TargetPlace" >>
   conj_tac >- simp[Once evaluate_def, return_def] >>
-  conj_tac >- (rpt strip_tac >> pop_assum mp_tac >>
-    simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-    rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  rpt conj_tac >> rpt strip_tac >> pop_assum mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-       switch_BoolV_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >>
-  metis_tac[read_result_no_control, pop_place_no_control,
-    lookup_abi_local_no_control, lookup_abi_global_no_control,
-    unwrap_abi_operand_no_control, subscript_abi_operand_no_control,
-    attribute_abi_operand_no_control, abi_place_operand_no_control,
-    abi_pop_pointer_no_control, lift_option_type_no_control,
-    no_control_exc_def]
+  rpt strip_tac >> pop_assum mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Resume canonical_eval_no_control_with_results[IfExp]:
@@ -1219,14 +876,10 @@ Resume canonical_eval_no_control_with_results[Pop]:
 QED
 
 Resume canonical_eval_no_control_with_results[TypeBuiltin]:
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >>
   rpt strip_tac >> pop_assum mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def, return_def,
-       finally_def, mark_abi_captures_def, release_abi_captures_def,
-       raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[mark_abi_captures_def, return_def] >>
-  metis_tac[type_check_no_control, lift_sum_no_control,
-            stage_abi_operands_no_control]
+    AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[type_check_no_control, lift_sum_no_control]
 QED
 
 Resume canonical_eval_no_control_with_results[Send]:
@@ -1351,15 +1004,6 @@ Proof
   metis_tac[canonical_eval_no_control_with_results]
 QED
 
-Theorem eval_abi_expr_no_control:
-  (∀cx e s exc st'.
-    eval_abi_expr cx e s = (INR exc,st') ⇒ no_control_exc exc) ∧
-  (∀cx es s exc st'.
-    eval_abi_exprs cx es s = (INR exc,st') ⇒ no_control_exc exc)
-Proof
-  metis_tac[canonical_eval_no_control_with_results]
-QED
-
 Theorem eval_expr_no_control:
   (∀cx e s exc st'.
     eval_expr cx e s = (INR exc, st') ⇒
@@ -1390,7 +1034,7 @@ val tuple_no_control_ind = evaluate_ind
               `\cx t. T`, `\cx t. T`,
               `\cx g v. !st exc st'. assign_tuple_targets cx g v st = (INR exc,st') ==> no_control_exc exc`,
               `\cx gs vs. !st exc st'. assign_tuple_target_list cx gs vs st = (INR exc,st') ==> no_control_exc exc`,
-              `\cx es. T`, `\cx e. T`, `\cx es. T`]
+              `\cx es. T`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> PURE_REWRITE_RULE [FORALL_SIMP, AND_CLAUSES, IMP_CLAUSES];
 

@@ -1,21 +1,9 @@
 Theory vyperScopePreservation
 Ancestors
   vyperAST vyperMisc vyperState vyperStorageBackend vyperValue vyperInterpreter vyperImmutablesPreservation
-  vyperStatePreservation vyperAbiMemoryProps
+  vyperStatePreservation
 
 (* ===== Lemmas about scopes preservation ===== *)
-
-(* Pop/append mirror a selected child, including retained stale memory. *)
-Theorem write_abi_memory_child_frame:
-  write_abi_memory_child cx id tv path v ao st = (res,st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables /\
-  st'.accounts = st.accounts /\ st'.tStorage = st.tStorage /\
-  st'.logs = st.logs /\ st'.pending_deletions = st.pending_deletions /\
-  st'.outcomes = st.outcomes /\ st'.requests = st.requests
-Proof
-  rw[write_abi_memory_child_def, AllCaseEqs(), return_def, raise_def] >>
-  gvs[AllCaseEqs(), return_def, raise_def]
-QED
 
 (* Basic monad operations preserve scopes *)
 Theorem return_scopes:
@@ -310,42 +298,6 @@ Theorem append_storage_place_scopes_immutables:
     append_place cx (StoragePlace tr slot tv) v st = (res, st') ⇒
     st'.scopes = st.scopes ∧ st'.immutables = st.immutables
 Proof
-(* Legacy assign_target induction, superseded by place operations.
-  ho_match_mp_tac assign_target_ind
-  (* ScopedVar *)
-  >> conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    gvs[assign_target_def, bind_def, get_scopes_def, return_def, lift_option_def] >>
-    Cases_on `find_containing_scope id st.scopes` >> gvs[return_def, raise_def] >>
-    PairCases_on `x` >>
-    gvs[assign_target_def, bind_def, get_scopes_def, return_def, raise_def,
-        lift_option_def, type_check_def, assert_def, lift_sum_def,
-        ignore_bind_def, set_scopes_def, AllCaseEqs(), sum_CASE_rator] >>
-    imp_res_tac assign_result_scopes >>
-    imp_res_tac write_abi_memory_frame >> gvs[] >>
-    drule find_containing_scope_map_fdom >> simp[])
-  (* TopLevelVar *)
-  >> conj_tac >- (
-    rpt gen_tac >> strip_tac >>
-    imp_res_tac assign_target_toplevel_scopes_immutables >> gvs[]
-    )
-  (* remaining cases: ImmutableVar, TupleTargetV, assign_targets *)
-  >> rpt conj_tac
-  >> rpt gen_tac
-  >> TRY (strip_tac >> imp_res_tac assign_target_toplevel_scopes_immutables >> gvs[] >> NO_TAC)
-  >> simp[Once assign_target_def, bind_def, return_def, raise_def, check_def, type_check_def, assert_def,
-          ignore_bind_def, lift_option_def, lift_option_type_def, lift_sum_def, get_scopes_def, set_scopes_def,
-          get_immutables_def, get_address_immutables_def, set_immutable_def,
-          set_address_immutables_def, AllCaseEqs()]
-  >> rpt strip_tac >> gvs[]
-  >> TRY (res_tac >> gvs[] >> NO_TAC)
-  >> TRY (imp_res_tac assign_result_scopes >> gvs[] >>
-          drule find_containing_scope_map_fdom >> simp[] >> NO_TAC)
-  >> TRY (first_x_assum drule >> gvs[] >> NO_TAC)
-  >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])
-  >> imp_res_tac assign_result_scopes >>
-     imp_res_tac write_abi_immutables_frame >> gvs[]
-*)
   rpt gen_tac >>
   Cases_on `case tv of ArrayTV etv bd => bd | _ => Fixed 0` >>
   Cases_on `tv` >> gvs[] >>
@@ -396,14 +348,12 @@ Proof
       gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
           set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
       BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def] >>
-      imp_res_tac write_abi_memory_frame >> gvs[] >>
       drule find_containing_scope_map_fdom >> simp[]) >>
   simp[write_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
-  rpt strip_tac >> imp_res_tac write_abi_immutables_frame >> gvs[] >>
   metis_tac[set_immutable_scopes]
 QED
 
@@ -412,32 +362,11 @@ Theorem append_place_scopes_dom:
   MAP FDOM st.scopes = MAP FDOM st'.scopes
 Proof
   Cases_on `p`
-  >- metis_tac[append_storage_place_scopes_immutables]
-  >- (rename1 `MemoryPlace id path` >> strip_tac >>
-      gvs[append_place_def, bind_def, ignore_bind_def, lift_sum_def,
-          return_def, raise_def, AllCaseEqs()] >>
-      imp_res_tac place_type_value_state >> imp_res_tac read_place_state >> gvs[] >>
-      fs[GSYM lift_sum_def] >> imp_res_tac lift_sum_state >> gvs[] >>
-      qmatch_goalsub_rename_tac `MAP FDOM before.scopes = _` >>
-      Cases_on `find_containing_scope id before.scopes` >>
-      gvs[get_scopes_def, lift_option_type_def, return_def, raise_def,
-          bind_def, ignore_bind_def] >>
-      rename1 `find_containing_scope id before.scopes = SOME found` >>
-      PairCases_on `found` >>
-      gvs[type_check_def, assert_def, bind_def, ignore_bind_def, lift_sum_def,
-          set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-      imp_res_tac write_abi_memory_child_frame >> gvs[] >>
-      drule find_containing_scope_map_fdom >> simp[]) >>
-  simp[append_place_def, bind_def, ignore_bind_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, lift_option_type_def,
-       return_def, raise_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
-  imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac write_abi_immutables_frame >>
-  imp_res_tac set_immutable_scopes >> gvs[]
+  >- metis_tac[append_storage_place_scopes_immutables] >>
+  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+           get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
+  metis_tac[place_type_value_state, read_place_state, write_place_scopes_dom]
 QED
 
 Theorem pop_place_scopes_dom:
@@ -454,17 +383,13 @@ Proof
           check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
       fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
       imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >> gvs[] >>
-      pairarg_tac >>
-      gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
-      imp_res_tac write_abi_memory_child_frame >> gvs[] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
       drule find_containing_scope_map_fdom >> simp[]) >>
   simp[pop_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
-  rpt strip_tac >> imp_res_tac write_abi_memory_frame >>
-  imp_res_tac write_abi_immutables_frame >>
   metis_tac[set_immutable_scopes]
 QED
 

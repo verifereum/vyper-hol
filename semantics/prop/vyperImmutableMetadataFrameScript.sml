@@ -2,8 +2,7 @@ Theory vyperImmutableMetadataFrame
 Ancestors
   list option pair finite_map alist vyperAST vyperState vyperInterpreter
   vyperCallOutcomeFrame vyperPlaceFrames vyperStatePreservation
-  vyperImmutablesPreservation vyperCreate vyperCreateFrame vyperAbiFrame
-  vyperMachineFrame vyperAbiMemoryProps
+  vyperImmutablesPreservation vyperCreate vyperCreateFrame
 
 (* Resolved immutable paths retain their declared type across expression effects.
    Values may change; presence and declared type metadata may not. *)
@@ -62,15 +61,14 @@ Theorem write_place_immutable_metadata_frame:
   write_place cx (ImmutablePlace src id path) v st = (res,st') ==>
   immutable_metadata_frame st st'
 Proof
-  simp[write_place_def, write_abi_immutables_def,
-       bind_def, ignore_bind_def, lift_option_type_def,
+  simp[write_place_def, bind_def, ignore_bind_def, lift_option_type_def,
        lift_sum_def, vyperMiscTheory.option_CASE_rator,
        vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
-  imp_res_tac vyperStatePreservationTheory.get_immutables_state >> gvs[] >>
+  `s'' = st` by metis_tac[vyperStatePreservationTheory.get_immutables_state, SND] >>
+  gvs[] >>
   PairCases_on `tva` >> gvs[] >>
-  drule_all set_immutable_existing_metadata_frame >> strip_tac >>
-  fs[immutable_metadata_frame_def] >> first_assum MATCH_ACCEPT_TAC
+  drule_all set_immutable_existing_metadata_frame >> simp[]
 QED
 
 Theorem write_place_metadata_frame:
@@ -88,21 +86,13 @@ Theorem append_place_metadata_frame:
 Proof
   rpt gen_tac >> Cases_on `p`
   >- (strip_tac >> irule immutable_metadata_frame_eq >>
-      metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables])
-  >- (strip_tac >> irule immutable_metadata_frame_eq >>
-      drule (machine_frame_append_memory_place |> SRULE [state_rel_frame_result]) >>
-      simp[machine_frame_def]) >>
-  strip_tac >> gvs[append_place_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+      metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
+  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >>
+       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
+  rpt strip_tac >>
   imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  imp_res_tac lift_sum_state >> imp_res_tac get_immutables_state >>
-  imp_res_tac lift_option_type_state >> gvs[] >>
-  gvs[lift_option_type_def, lift_sum_def, return_def, raise_def,
-      vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-      AllCaseEqs()] >>
-  rename1 `FLOOKUP imms id = SOME entry` >> PairCases_on `entry` >> gvs[] >>
-  imp_res_tac write_abi_immutables_frame >>
-  drule_all set_immutable_existing_metadata_frame >> strip_tac >>
-  fs[immutable_metadata_frame_def] >> first_assum MATCH_ACCEPT_TAC
+  gvs[] >> metis_tac[write_place_metadata_frame, immutable_metadata_frame_refl]
 QED
 
 Theorem pop_place_metadata_frame:
@@ -112,18 +102,24 @@ Proof
   rpt gen_tac >> Cases_on `p`
   >- (strip_tac >> irule immutable_metadata_frame_eq >>
       metis_tac[vyperScopePreservationTheory.pop_storage_place_scopes_immutables])
-  >- (strip_tac >> irule immutable_metadata_frame_eq >>
-      drule (machine_frame_pop_memory_place |> SRULE [state_rel_frame_result]) >>
-      simp[machine_frame_def]) >>
-  simp[pop_place_def, write_abi_immutables_def,
-       bind_def, ignore_bind_def, lift_option_type_def,
+  >- (rename1 `MemoryPlace id path` >> strip_tac >>
+      Cases_on `find_containing_scope id st.scopes` >>
+      gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+          return_def, raise_def, immutable_metadata_frame_refl] >> PairCases_on `x` >>
+      gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
+          check_def, set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+      fs[GSYM lift_sum_def, GSYM lift_option_type_def] >>
+      imp_res_tac lift_sum_state >> imp_res_tac lift_option_type_state >>
+      gvs[immutable_metadata_frame_refl] >>
+      pairarg_tac >> gvs[bind_def, ignore_bind_def, set_scopes_def, return_def] >>
+      irule immutable_metadata_frame_eq >> simp[]) >>
+  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
        lift_sum_def, vyperMiscTheory.option_CASE_rator,
        vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   imp_res_tac get_immutables_state >> gvs[] >>
   PairCases_on `tva` >> gvs[] >>
-  drule_all set_immutable_existing_metadata_frame >> strip_tac >>
-  fs[immutable_metadata_frame_def] >> first_assum MATCH_ACCEPT_TAC
+  drule_all set_immutable_existing_metadata_frame >> simp[]
 QED
 
 Theorem metadata_frame_locals[local]:
@@ -290,48 +286,6 @@ Proof
     state_rel_frame_def, return_def, raise_def]
 QED
 
-Theorem metadata_frame_abi_relation[local]:
-  (!s t u. immutable_metadata_frame s t /\ immutable_metadata_frame t u ==>
-     immutable_metadata_frame s u) /\
-  (!s mem. immutable_metadata_frame s (s with abi_memory := mem)) /\
-  (!s mem. immutable_metadata_frame s (s with abi_immutables := mem))
-Proof
-  conj_tac >- metis_tac[immutable_metadata_frame_trans] >>
-  conj_tac >> rpt gen_tac >> irule immutable_metadata_frame_eq >> simp[]
-QED
-
-Theorem metadata_frame_abi[local]:
-  state_rel_frame immutable_metadata_frame (read_abi_operand cx arg) /\
-  state_rel_frame immutable_metadata_frame (unwrap_abi_operand cx arg) /\
-  state_rel_frame immutable_metadata_frame (stage_abi_operands cx args) /\
-  state_rel_frame immutable_metadata_frame (lookup_abi_local cx id) /\
-  state_rel_frame immutable_metadata_frame (lookup_abi_immutable cx src id) /\
-  state_rel_frame immutable_metadata_frame (lookup_abi_global cx src id) /\
-  state_rel_frame immutable_metadata_frame (check_abi_projection cx arg tv sub) /\
-  state_rel_frame immutable_metadata_frame (project_abi_operand cx arg sub) /\
-  state_rel_frame immutable_metadata_frame (subscript_abi_operand cx tv arg index) /\
-  state_rel_frame immutable_metadata_frame (attribute_abi_operand cx arg id) /\
-  state_rel_frame immutable_metadata_frame (project_abi_path cx arg subs) /\
-  state_rel_frame immutable_metadata_frame (abi_target_operand cx loc subs) /\
-  state_rel_frame immutable_metadata_frame (abi_pop_pointer cx arg) /\
-  state_rel_frame immutable_metadata_frame (capture_abi_memory cx id tv v) /\
-  state_rel_frame immutable_metadata_frame (capture_abi_immutable cx src id tv v) /\
-  state_rel_frame immutable_metadata_frame (write_abi_memory cx id tv v subs ao) /\
-  state_rel_frame immutable_metadata_frame (write_abi_immutables cx src id tv v subs ao) /\
-  state_rel_frame immutable_metadata_frame mark_abi_memory /\
-  state_rel_frame immutable_metadata_frame (release_abi_memory mark) /\
-  state_rel_frame immutable_metadata_frame mark_abi_captures /\
-  state_rel_frame immutable_metadata_frame (release_abi_captures marks)
-Proof
-  irule state_rel_frame_abi_primitives >> metis_tac[metadata_frame_abi_relation]
-QED
-
-Theorem metadata_frame_abi_place[local]:
-  state_rel_frame immutable_metadata_frame (abi_place_operand cx p)
-Proof
-  irule state_rel_frame_abi_place >> metis_tac[metadata_frame_abi_relation]
-QED
-
 val METADATA_LOCALS = MATCH_MP state_rel_frame_locals_primitives metadata_frame_locals;
 val METADATA_TAKE = MATCH_MP state_rel_frame_locals_take metadata_frame_locals;
 
@@ -342,8 +296,7 @@ val metadata_frame_net =
     val leaves = metadata_frame_reads :: metadata_frame_primitives ::
       metadata_frame_next_gas_reading ::
       metadata_frame_storage :: metadata_frame_mutations :: metadata_frame_write ::
-      metadata_frame_handlers :: metadata_frame_abi :: metadata_frame_abi_place ::
-      METADATA_LOCALS :: [METADATA_TAKE]
+      metadata_frame_handlers :: METADATA_LOCALS :: [METADATA_TAKE]
     val structural = List.foldl (fn (th,net) => Net.insert
       (snd (dest_imp (concl th)), MATCH_MP_TAC th >> conj_tac) net)
       Net.empty (map SPEC_ALL rules)
@@ -467,9 +420,7 @@ Theorem eval_metadata_frame_with_results:
   (!cx t st res st'. eval_target_place cx t st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> immutable_metadata_frame st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx e st res st'. eval_abi_expr cx e st = (res,st') ==> immutable_metadata_frame st st') /\
-  (!cx es st res st'. eval_abi_exprs cx es st = (res,st') ==> immutable_metadata_frame st st')
+  (!cx es st res st'. eval_expr_results cx es st = (res,st') ==> immutable_metadata_frame st st')
 Proof
   ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt strip_tac >>
   qpat_assum `_ = (res,st')` (fn th =>
@@ -510,18 +461,6 @@ Resume eval_metadata_frame_with_results[IntCallFrames]:
 QED
 
 Finalise eval_metadata_frame_with_results
-
-Theorem eval_abi_expr_immutable_metadata_frame:
-  eval_abi_expr cx e st = (res,st') ==> immutable_metadata_frame st st'
-Proof
-  metis_tac[eval_metadata_frame_with_results |> cj 12]
-QED
-
-Theorem eval_abi_exprs_immutable_metadata_frame:
-  eval_abi_exprs cx es st = (res,st') ==> immutable_metadata_frame st st'
-Proof
-  metis_tac[eval_metadata_frame_with_results |> cj 13]
-QED
 
 Theorem eval_metadata_frame_mutual:
   (!cx s st res st'. eval_stmt cx s st = (res,st') ==> immutable_metadata_frame st st') /\

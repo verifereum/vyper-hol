@@ -525,7 +525,11 @@ Proof
      `!x. v = Var x ==> not_fresh_at st1 x` by metis_tac[] >>
      metis_tac[compiler_type_convert_var])
   >~ [`lower_abi_encode _ _ _ _ _ _`] >-
-    (qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
+    (qmatch_goalsub_rename_tac `if LENGTH args = 1 /\ ~ensure then _ else _` >>
+     Cases_on `LENGTH args = 1 /\ ~ensure` >>
+     Cases_on `is_word_type (expr_type (HD args))` >> simp[] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     qmatch_goalsub_abbrev_tac `as_ptr_val vt LocMemory result` >>
      Cases_on `result` >> gvs[as_ptr_val_def, markerTheory.Abbrev_def] >>
      rpt strip_tac >> gvs[contextTheory.vv_operand_def, contextTheory.mk_ptr_def] >>
      qpat_x_assum `_ = lower_abi_encode _ _ _ _ _ _` (mp_tac o SYM) >>
@@ -1673,8 +1677,7 @@ Proof
       `lower_value f ce ty (EL 1 args) sc = lower_value g ce ty (EL 1 args) sc` by
         (irule compiler_lower_value_reserved_cong >> simp[]) >>
       simp[]) >>
-  (* ABI encode lowers every argument, transporting reservation between them. *)
-  AP_TERM_TAC >> irule compiler_multi_exprs_reserved_cong >> simp[]
+  simp[]
 QED
 
 (* Advance one explicit callback let, transporting reservation from its

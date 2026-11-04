@@ -5,8 +5,7 @@
 The opt-in `sourceMeaning*` theories define source meaning independently of
 emitted runtime syntax. They do not redirect ordinary frontend entry points or
 weaken backend preconditions. See [constant-evaluation.md](constant-evaluation.md)
-for the cross-cutting design and trust boundary, and
-[sourceMeaningLocation.md](sourceMeaningLocation.md) for location-sensitive forms.
+for the cross-cutting design and trust boundary.
 
 `VYPER_PIN` determines the source arithmetic specification, described in
 [sourceConstCore.md](sourceConstCore.md) and
@@ -105,8 +104,7 @@ proved. It preserves the interpreter's evaluation of data followed by
 `Error (RuntimeError "raw_revert")`, not EVM revert-payload semantics.
 
 Dynamic comparisons/aggregates, subscripts, runtime builtins, ABI operations,
-`raw_call`, and storage/immutable assignments use the separate
-[location-sensitive relation](sourceMeaningLocation.md), not the pure relation.
+`raw_call`, and storage/immutable assignments are outside the pure relation.
 General inference/type/module completeness and arbitrary environment agreement
 remain outside these results.
 
@@ -192,7 +190,6 @@ From the repository root:
 holbuild build sourceMeaningProgramTestTheory sourceMeaningCallTestTheory \
   sourceMeaningCheckedTestTheory sourceMeaningAggregateTestTheory \
   sourceMeaningExportTestTheory sourceMeaningWitnessTestTheory \
-  sourceMeaningLocationTestTheory sourceMeaningLocationWitnessTestTheory \
   --skip-checkpoints --tactic-timeout 2.5
 ```
 

@@ -28,7 +28,7 @@ Theory stmtSimAssignStore
 Ancestors
   list rich_list finite_map pred_set
   fragExec localPtrsProps loweringSlice exprSim stmtSimDeclStore stmtSimDecl
-  exprLowering stmtLowering exprLoweringProps sourceAbiFrame
+  exprLowering stmtLowering exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup
   venomExecSemantics venomExecProofs venomInst venomState emitHelperProps
@@ -43,19 +43,18 @@ Proof
 QED
 
 (* write_place on a local: unless it fails with a type error (not in
-   scope, not assignable, unencodable ABI write), it replaces the value of id
-   in the scope that holds it, clears its pop history, and mirrors any live
-   ABI captures. The compiler relation ignores the capture arena. *)
+   scope, not assignable), it replaces the value of id in the scope that
+   holds it, and clears the entry's pop history. *)
 Theorem write_place_local:
   !cx id v es res es'.
     write_place cx (MemoryPlace id []) v es = (res, es') /\
     (!m. res <> INR (Error (TypeError m))) ==>
-    ?pre env entry rest abi.
+    ?pre env entry rest.
       find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
       entry.assignable /\ res = INL () /\
-      es' = es with <|scopes :=
+      es' = es with scopes :=
               pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
-              rest; abi_memory := abi|>
+              rest
 Proof
   rpt gen_tac >>
   simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
@@ -66,10 +65,7 @@ Proof
   simp[raise_def, return_def] >>
   rename1 `SOME q` >> PairCases_on `q` >> Cases_on `q2.assignable` >>
   gvs[assert_def, ignore_bind_def, bind_def, return_def, raise_def,
-      set_scopes_def, write_abi_memory_def, write_abi_memory_child_def,
-      evaluate_subscripts_def, abi_path_offset_def, abi_operation_writes_def,
-      AllCaseEqs()] >>
-  rw[] >> gvs[evaluation_state_component_equality]
+      set_scopes_def]
 QED
 
 (* The local id, held at p in the scope find_containing_scope finds,

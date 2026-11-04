@@ -73,9 +73,7 @@ and explicit full-source body and signature expectations. It filters only
 `address_bytes32` from the shared 27-case inventory: those wide runtime
 conversions remain ordinary inherited claims, not full-Source inference.
 This separate suite is not the hybrid bridge's residual-body oracle.
-`sourceOrdinaryProgramMeaningTest` links body and compile/body certificates;
-`sourceMeaningWitnessTest` and `sourceMeaningLocationWitnessTest` retain the
-independent staged-meaning and location-sensitive witnesses. Their supported-body
+`sourceMeaningWitnessTest` retains the independent staged-meaning witnesses. Their supported-body
 scope, independent-derivation and context premises still apply.
 
 ## Fixture provenance
@@ -146,8 +144,7 @@ python tests/sourceOrdinaryPinTest.py
 holbuild -j1 --maxheap 6000 build \
   sourceOrdinaryProgramInventoryTestTheory sourceLegacyCompatibilityTestTheory \
   sourceModuleParityTheory sourceOrdinaryAcceptanceTestTheory \
-  sourceMeaningWitnessTestTheory sourceMeaningLocationWitnessTestTheory \
-  sourceOrdinaryProgramMeaningTestTheory \
+  sourceMeaningWitnessTestTheory \
   vyperCheckContractFrontendLibTestTheory vyperCheckContractLibTestTheory \
   vyperTypeBuiltinsTheory vyperTypeContractSoundnessTheory \
   supportedExprFormPropsTheory vyperLoweringCorrectTheory \

@@ -705,6 +705,15 @@ Proof
 QED
 
 
+
+
 (* eval_for preservation depends on statement-list soundness and therefore lives
    in vyperTypeStmtSoundnessScript.sml to avoid a StatePreservation ->
    StmtSoundness -> StatePreservation cycle. *)
+
+
+
+(* Weak wrappers without shape/context premises - derived directly from the
+   mutual theorem.  C5 statement branches that only need preservation can use
+   these without deriving assign_operation_matches_target_shape or
+   assign_target_assignable_context. *)

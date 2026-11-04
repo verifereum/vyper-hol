@@ -18,7 +18,6 @@ Theorem compile_abi_decode_memory_valid_caller:
   assignable_type (type_env tops) ret_ty /\
   evaluate_type (type_env tops) ret_ty = SOME tv /\
   evaluate_type_builtin cx (AbiDecode unwrap) ret_ty arg_tys [BytesV bs] = INL v /\
-  expr_type (HD args) = BaseT (BytesT (Dynamic n)) /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic n))) srcptr,ready) /\
   srcptr.ptr_location = LocMemory /\

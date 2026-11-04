@@ -8,7 +8,7 @@ Ancestors
   abiScratchFrameCompose abiEncoderInputFrame abiEncoderInput abiBuiltinEncodeSetup
   abiBuiltinEncodeEffect abiBuiltinAllocation abiScratchBuiltinOwnership abiDecoderAllocation
   abiDecoderFootprint abiDecoderFrame abiDecoderPrimitiveLoopFrames abiDecoderReentry compileEnv
-  venomState finite_map pred_set words list arithmetic abiBuiltinEncodeCode
+  venomState finite_map pred_set words list arithmetic
 
 Definition abi_scratch_builtin_effect_def:
   abi_scratch_builtin_effect first last st final limit_st p outsz write_size b cap s t <=>
@@ -119,7 +119,7 @@ QED
 Theorem abi_scratch_builtin_source:
   abi_scratch_builtin_pre ei at av st method_id_opt src sb source_cap p maxlen first last b cap initial /\
   abi_scratch_builtin_effect first last st final limit_st p
-    (abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4))
+    (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4))
     (case method_id_opt of NONE => 0 | SOME _ => 32) b cap initial actual ==>
   abi_encoder_input ei at av sb source_cap actual.vs_memory
 Proof
@@ -129,11 +129,11 @@ Proof
   qpat_assum `abi_scratch_builtin_effect _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_builtin_effect_def]) >>
   `abi_footprint_disjoint sb source_cap
-    ([(p,abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4));
+    ([(p,maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4));
       (p+32,case method_id_opt of NONE => 0 | SOME _ => 32)] ++
       abi_decoder_child_scratch (abi_decoder_ids first last) b cap
         (abi_builtin_allocate_state st.cs_next_id
-          (abi_builtin_encode_alloc_size maxlen (case method_id_opt of NONE => 0 | SOME _ => 4)) initial))` by
+          (maxlen+32+(case method_id_opt of NONE => 0 | SOME _ => 4)) initial))` by
     asm_simp_tac (srw_ss()) [abi_scratch_disjoint_cons] >>
   drule_all abi_encoder_input_frame >> simp[]
 QED

@@ -1,8 +1,8 @@
 (*
  * The body simulation of S1: its judgments (#636, #637, #638)
  *
- * S1's body simulation is one theorem proved by induction on evaluate's
- * termination bounds (bodySimBound, bodySimMain), so the
+ * S1's body simulation is one theorem proved by evaluate_ind
+ * (bodySimMain): a predicate for each of evaluate's functions, so the
  * internal-call case can use the callee body's statement predicate.
  *   - Expressions (body_expr_ok): expr_sim and expr_vv_sim, under
  *     expr_sim_pre less its int_calls_expr e = [], in a frame of the
@@ -28,7 +28,7 @@
  *   body_stmt_ok, body_stmts_ok, body_iterator_ok, body_for_ok,
  *   body_expr_ok, body_exprs_ok, body_base_target_ok,
  *   body_tuple_target_ok, body_tuple_targets_ok, body_results_ok
- *                       — the ordinary simulation predicates
+ *                       — the predicates of the induction
  *)
 
 Theory bodySim

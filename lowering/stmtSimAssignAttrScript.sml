@@ -38,7 +38,7 @@ Ancestors
   exprSimAggregateChildren exprSimAttributeFields freshWrites
   stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssignStore
   stmtSimAssign
-  stmtSimAssignMem stmtSimAugAssign sourceAbiFrame
+  stmtSimAssignMem stmtSimAugAssign
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   exprOperandVar compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
@@ -146,20 +146,20 @@ Proof
 QED
 
 (* Writing v at x.f, where x's value has field f: unless it fails with a
-   type error, x's value gets v at f and live ABI captures are mirrored. *)
+   type error (x not assignable), x's value gets v at f. *)
 Theorem write_place_attr_local:
   !cx id fld v es res es' entry vals old.
     write_place cx (MemoryPlace id [AttrSubscript fld]) v es = (res, es') /\
     lookup_scopes id es.scopes = SOME entry /\
     entry.value = StructV vals /\ ALOOKUP vals fld = SOME old /\
     (!m. res <> INR (Error (TypeError m))) ==>
-    ?pre env rest abi.
+    ?pre env rest.
       find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
       res = INL () /\
-      es' = es with <|scopes :=
+      es' = es with scopes :=
               pre ++ (env |+ (id, entry with
                         <|value := StructV (AFUPDKEY fld (K v) vals);
-                          popped := []|>)) :: rest; abi_memory := abi|>
+                          popped := []|>)) :: rest
 Proof
   rpt gen_tac >>
   simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
@@ -173,10 +173,7 @@ Proof
   gvs[] >> Cases_on `entry.assignable` >>
   gvs[assert_def, raise_def, return_def, replace_memory_entry_def,
       evaluate_subscripts_def, assign_subscripts_def, LET_THM, lift_sum_def,
-      set_scopes_def, bind_def, ignore_bind_def, write_abi_memory_def,
-      write_abi_memory_child_def, abi_path_offset_def,
-      abi_operation_writes_def, AllCaseEqs()] >>
-  rw[] >> gvs[evaluation_state_component_equality]
+      set_scopes_def, bind_def, ignore_bind_def]
 QED
 
 (* x.f = e, unless it fails with a type error: e's forced value r, and
@@ -551,7 +548,7 @@ Theorem assign_attr_local_source:
       (!ex. r = INR ex ==> res = INR ex /\ es' = es1) /\
       (!v. r = INL v ==>
            res = INL () /\
-           ?pre env1 entry rest fs vals ftv abi.
+           ?pre env1 entry rest fs vals ftv.
              find_containing_scope id es1.scopes =
                SOME (pre, env1, entry, rest) /\
              entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -560,10 +557,10 @@ Theorem assign_attr_local_source:
              struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
              evaluate_type (get_tenv cx) fty = SOME ftv /\
              store_lays_out ftv ftv v /\
-             es' = es1 with <|scopes :=
+             es' = es1 with scopes :=
                pre ++ (env1 |+ (id, entry with
                          <|value := StructV (AFUPDKEY fld (K v) vals);
-                           popped := []|>)) :: rest; abi_memory := abi|>)
+                           popped := []|>)) :: rest)
 Proof
   rpt gen_tac >> strip_tac >>
   `!m. res <> INR (Error (TypeError m))` by
@@ -586,7 +583,6 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[value_has_type_def, expr_result_typed_def, expr_runtime_typed_def,
       value_result_typed_def] >>
-  qexists_tac `abi` >> simp[] >>
   irule store_lays_out_typed >> simp[] >>
   qexistsl_tac [`expr_type e`, `get_tenv cx`] >> simp[]
 QED
@@ -681,7 +677,7 @@ Theorem assign_attr_local_frag:
     expr_res_ok r /\
     (!v. r = INL v ==>
          res = INL () /\
-         ?pre env1 entry rest fs vals ftv abi.
+         ?pre env1 entry rest fs vals ftv.
            find_containing_scope id es1.scopes =
              SOME (pre, env1, entry, rest) /\
            entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -690,10 +686,10 @@ Theorem assign_attr_local_frag:
            struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
            evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
            store_lays_out ftv ftv v /\
-           es' = es1 with <|scopes :=
+           es' = es1 with scopes :=
              pre ++ (env1 |+ (id, entry with
                        <|value := StructV (AFUPDKEY fld (K v) vals);
-                         popped := []|>)) :: rest; abi_memory := abi|>) ==>
+                         popped := []|>)) :: rest) ==>
     frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>

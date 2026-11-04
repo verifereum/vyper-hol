@@ -1,27 +1,21 @@
-(* Predict the tuple producer's encoder-entry allocation site. Every slot
-   emits ADD and a write, including raw MCOPY for zero-sized complex slots. *)
+(* Predict the tuple producer's encoder-entry allocation site from argument
+   types alone, including the one-instruction zero-sized copy case. *)
 Theory abiTupleEncodeCounters
 Ancestors
-  abiTupleEncodePrepare abiTupleProps compileEnv context exprLowering
+  abiTupleEncodePrepare abiTupleEncodePrepare abiTupleProps compileEnv context exprLowering
   emitHelper emitHelperProps exprLoweringProps words list arithmetic
 
 Definition abi_tuple_encode_inst_count_def:
-  abi_tuple_encode_inst_count (ce:compile_env) (tys:type list) =
-    SUM (MAP (\ty. 2) tys)
+  abi_tuple_encode_inst_count ce tys =
+    SUM (MAP (\ty. if is_word_type ty \/ type_memory_bytes ce ty <> 0 then 2 else 1) tys)
 End
-
-Theorem abi_tuple_encode_inst_count_length:
-  abi_tuple_encode_inst_count ce tys = 2 * LENGTH tys
-Proof
-  Induct_on `tys` >> gvs[abi_tuple_encode_inst_count_def] >> decide_tac
-QED
 
 Theorem abi_tuple_encode_slot_id:
   compile_abi_tuple_slot ce buf off op ty st = ((),final) ==>
-  final.cs_next_id = st.cs_next_id+2
+  final.cs_next_id = st.cs_next_id+(if is_word_type ty \/ type_memory_bytes ce ty <> 0 then 2 else 1)
 Proof
-  Cases_on `is_word_type ty` >>
-  asm_simp_tac (srw_ss()) [compile_abi_tuple_slot_def,
+  Cases_on `is_word_type ty` >> Cases_on `type_memory_bytes ce ty` >>
+  asm_simp_tac (srw_ss()) [compile_abi_tuple_slot_def, compile_copy_memory_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def, emit_op_def, emit_void_def,
     fresh_var_def, fresh_id_def, emit_def] >> rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED

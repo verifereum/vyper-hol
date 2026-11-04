@@ -19,12 +19,12 @@ Theorem assign_tuple_target_local:
   !cx id v es res es'.
     assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (res, es') /\
     (!m. res <> INR (Error (TypeError m))) ==>
-    ?pre env entry rest abi.
+    ?pre env entry rest.
       find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
       res = INL () /\
-      es' = es with <|scopes :=
+      es' = es with scopes :=
               pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
-              rest; abi_memory := abi|>
+              rest
 Proof
   rpt gen_tac >>
   simp[Once evaluate_def, bind_def] >>
@@ -152,11 +152,10 @@ Theorem assign_tuple_target_list_local_cons:
   !cx id ids v vs es es'.
     assign_tuple_target_list cx (MAP (BaseTarget o NameTarget) (id::ids))
       (v::vs) es = (INL (), es') ==>
-    ?pre env entry rest es1 abi.
+    ?pre env entry rest es1.
       find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
-      es1 = es with <|scopes :=
-        pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest;
-        abi_memory := abi|> /\
+      es1 = es with scopes :=
+        pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest /\
       assign_tuple_target_list cx (MAP (BaseTarget o NameTarget) ids) vs es1 =
         (INL (), es')
 Proof

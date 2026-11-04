@@ -4,8 +4,7 @@ Ancestors
   vyperTypeInvariants vyperPlaceResultTyping vyperPlaceWriteSoundness
   vyperTypeStatePreservation vyperAssignPreservesType vyperTypeExprSoundness
   vyperPlaceTyping vyperStorageBackend vyperLookup vyperValueOperation
-  vyperPlaceStatePreservation vyperPlaceInvariants vyperAbiMutationSoundness
-  vyperAbiWriteTyping
+  vyperPlaceStatePreservation vyperPlaceInvariants
 
 Theorem append_nonstorage_place_sound:
   (!tr slot tv. p <> StoragePlace tr slot tv) /\
@@ -35,7 +34,9 @@ Proof
       >- (rename1 `append_element _ _ _ = INL updated` >>
           `value_has_type (ArrayTV etv (Dynamic n)) updated` by
             metis_tac[append_element_preserves_type] >>
-          drule_all append_nonstorage_updated_sound >> simp[]) >>
+          `write_place cx p updated st = (res,st')` by
+            (Cases_on `p` >> gvs[append_place_def, bind_def, lift_sum_def, return_def]) >>
+          drule_all write_place_sound >> simp[]) >>
       rename1 `append_element _ _ _ = INR err` >>
       `res = INR (Error err) /\ st' = st` by
         (Cases_on `p` >> gvs[append_place_def, bind_def, lift_sum_def, raise_def]) >>
@@ -203,22 +204,12 @@ Proof
            type_check_def, assert_def, check_def, ignore_bind_def, lift_sum_def,
            popped_value_def, pop_element_def, return_def, raise_def] >>
       Cases_on `l = []` >> simp[return_def, raise_def, no_type_error_result_def] >>
-      `value_has_type (ArrayTV etv (Dynamic n)) (ArrayV (DynArrayV (FRONT l)))` by
-        (irule pop_element_preserves_type >> qexists_tac `ArrayV (DynArrayV l)` >>
-         simp[pop_element_def, value_has_type_def]) >>
-      `IS_SOME (abi_operation_writes (ArrayTV etv (Dynamic n))
-         (ArrayV (DynArrayV (FRONT l))) PopOp)` by
-        (irule abi_operation_writes_typed >> simp[]) >>
       Cases_on `evaluate_subscripts entry.type entry.value path` >>
       simp[return_def, raise_def] >>
       gvs[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
           AllCaseEqs(), return_def, raise_def, bind_def, set_scopes_def,
           no_type_error_result_def] >>
-      strip_tac >> gvs[bind_def, set_scopes_def, return_def, raise_def] >>
-      qmatch_asmsub_abbrev_tac `write_abi_memory_child _ _ _ _ _ _ before` >>
-      drule_all abi_child_writes_success >>
-      disch_then (qspecl_then [`cx`,`id`,`before`] strip_assume_tac) >>
-      gvs[no_type_error_result_def]) >>
+      strip_tac >> gvs[bind_def, set_scopes_def, return_def, raise_def]) >>
   rename1 `read_memory_path entry path = INR err` >>
   `!msg. err <> TypeError msg` by metis_tac[read_memory_path_typed_error] >>
   gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
@@ -281,7 +272,7 @@ QED
 
 Theorem pop_memory_place_state_frame:
   pop_place cx (MemoryPlace id path) st = (res,st') ==>
-  st' = st with <|scopes := st'.scopes; abi_memory := st'.abi_memory|>
+  st' = st with scopes := st'.scopes
 Proof
   simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def] >>
   Cases_on `find_containing_scope id st.scopes`
@@ -305,8 +296,7 @@ Proof
   simp[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
        AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, write_abi_memory_child_def,
-      return_def, raise_def, AllCaseEqs(), evaluation_state_component_equality]
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, raise_def]
 QED
 
 Theorem pop_memory_place_sound:
@@ -324,11 +314,7 @@ Proof
          EVERY (\ev. entry_pop_event_valid (SND ev)) events` by
         (irule pop_place_valid_scope_trace >> goal_assum (drule_at Any) >>
          simp[] >> metis_tac[]) >>
-      drule_all runtime_consistent_scope_pop_trace >> strip_tac >>
-      `runtime_consistent env cx st' <=>
-       runtime_consistent env cx (st with scopes := st'.scopes)` by
-        (irule runtime_consistent_abi_observations >>
-         fs[evaluation_state_component_equality]) >> gvs[]) >>
+      drule_all runtime_consistent_scope_pop_trace >> metis_tac[]) >>
   irule pop_memory_place_no_type_error >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[runtime_consistent_def]
@@ -336,14 +322,13 @@ QED
 
 Theorem pop_memory_place_success:
   pop_place cx (MemoryPlace id path) st = (INL pv,st') ==>
-  ?pre frame entry rest vs updated history memory.
+  ?pre frame entry rest vs updated history.
     find_containing_scope id st.scopes = SOME (pre,frame,entry,rest) /\
     read_memory_path entry path = INL (ArrayV (DynArrayV vs)) /\ vs <> [] /\
     pv = PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs - 1))])) /\
-    st' = st with <|scopes := pre ++
+    st' = st with scopes := pre ++
       (frame |+ (id,entry with <|value := updated;
-        popped := record_pop path (ArrayV (DynArrayV vs)) (LAST vs) history|>))::rest;
-      abi_memory := memory|>
+        popped := record_pop path (ArrayV (DynArrayV vs)) (LAST vs) history|>))::rest
 Proof
   simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
        return_def, raise_def] >>
@@ -363,8 +348,7 @@ Proof
   simp[vyperMiscTheory.sum_CASE_rator, vyperMiscTheory.option_CASE_rator,
        AllCaseEqs(), return_def, raise_def] >>
   rpt strip_tac >> gvs[] >>
-  gvs[bind_def, ignore_bind_def, set_scopes_def, write_abi_memory_child_def,
-      return_def, raise_def, AllCaseEqs(), evaluation_state_component_equality] >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def, raise_def] >>
   metis_tac[]
 QED
 
@@ -475,10 +459,7 @@ Proof
           lift_option_type_def, lift_sum_def, popped_value_def,
           return_def, raise_def, no_type_error_result_def] >>
       gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-      strip_tac >> gvs[AllCaseEqs(), no_type_error_result_def] >>
-      imp_res_tac write_abi_immutables_runtime_frame >> gvs[] >>
-      drule_all pop_abi_immutables_replace_no_type_error >>
-      gvs[no_type_error_result_def]) >>
+      strip_tac >> gvs[AllCaseEqs(), no_type_error_result_def]) >>
   rename1 `evaluate_subscripts root a path = INR err` >>
   `!msg. err <> TypeError msg` by metis_tac[evaluate_subscripts_typed_error] >>
   gvs[pop_place_def, bind_def, lift_option_type_def, lift_sum_def,

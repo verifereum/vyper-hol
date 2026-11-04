@@ -14,11 +14,7 @@ Proof
   Cases_on `result` >> simp[as_ptr_val_def]
 QED
 
-(* Dynamic bytes are already length-prefixed memory inputs. The AST type
-   matters here: an arbitrary callback can otherwise return a dynamic Bytes
-   value for a fixed-Bytes AST, whose input helper emits materialization. *)
 Theorem compile_abi_decode_memory_trace:
-  expr_type (HD args) = BaseT (BytesT (Dynamic n)) /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic n))) srcptr,ready) /\
   srcptr.ptr_location = LocMemory /\
@@ -36,8 +32,7 @@ Theorem compile_abi_decode_memory_trace:
     (out,final) /\ vv = LocatedValue vv_ty (mk_ptr out LocMemory)
 Proof
   strip_tac >>
-  gvs[compile_type_builtin_dispatch_body_def, abi_decode_type_def,
-      compile_abi_decode_input_def, unwrap_value_def, is_word_type_def,
+  gvs[compile_type_builtin_dispatch_body_def, unwrap_value_def, is_word_type_def,
       comp_return_def, LET_THM] >>
   drule as_ptr_val_result >> simp[]
 QED
@@ -49,7 +44,6 @@ Theorem compile_abi_decode_memory_canonical:
   let wrapped_v = if wrapped then ArrayV (TupleV [v]) else v in
   let min_size = abi_static_size ce.ce_struct_fields wrapped_ty in
   let max_size = abi_size_bound ce.ce_struct_fields wrapped_ty in
-  expr_type (HD args) = BaseT (BytesT (Dynamic n)) /\
   cfn ce (expr_type (HD args)) (HD args) origin =
     (LocatedValue (BaseT (BytesT (Dynamic n))) srcptr,ready) /\
   srcptr.ptr_location = LocMemory /\

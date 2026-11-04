@@ -251,6 +251,12 @@ Proof
   rename1 `emit_op _ _ _ = (dst, sn)` >> simp[] >>
   Cases_on `unwrap_value cenv vv sn` >>
   rename1 `unwrap_value _ _ _ = (op, su)` >> simp[]
+  >- (Cases_on `emit_void TSTORE [dst; op] su` >>
+      rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
+      simp[comp_bind_def, comp_return_def]) >>
+  Cases_on `emit_void SSTORE [dst; op] su` >>
+  rename1 `emit_void _ _ _ = (u, sc)` >> Cases_on `u` >>
+  simp[comp_bind_def, comp_return_def]
 QED
 
 (* An SSTORE or TSTORE at a variable holding a slot, run. *)

@@ -55,19 +55,6 @@ Proof
   simp[evaluate_type_builtin_def, get_tenv_constant_context]
 QED
 
-(* Constant type builtins never take AbiEncode's capture/staging path. *)
-Theorem constant_type_builtin_eval_expr[local]:
-  constant_type_builtin tb ==>
-  eval_expr cx (TypeBuiltin ty tb typ es) = do
-    type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
-    vs <- eval_exprs cx es;
-    v <- lift_sum $ evaluate_type_builtin cx tb typ (MAP expr_type es) vs;
-    return $ Value v
-  od
-Proof
-  Cases_on `tb` >> simp[constant_type_builtin_def, Once evaluate_def]
-QED
-
 Theorem constant_length_result_array_length:
   !v n cx st.
   constant_length v = SOME n ==>
@@ -742,7 +729,7 @@ Proof
        disch_then (qspecl_then [`v8`,`tv`] mp_tac) >>
        gvs[artifact_env_def, get_tenv_constant_context]) >>
     qexists `Value v` >>
-    simp[constant_type_builtin_eval_expr, bind_def, ignore_bind_def, type_check_def, assert_def,
+    simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, return_def, expr_type_def, eval_result_typed_def,
          read_result_def, value_runtime_typed_def, constant_result_shape_def] >>
     metis_tac[])
@@ -1044,7 +1031,7 @@ Resume constant_eval_expr_fold_agreement[type_builtin]:
        constant_value mods (constant_machine_immutables am cx.txn.target) e = SOME v` by
     (fs[EVERY_MEM] >> metis_tac[constant_exprs_MEM_typed]) >>
   qpat_x_assum `eval_expr _ (TypeBuiltin _ _ _ _) _ = _` mp_tac >>
-  simp[constant_type_builtin_eval_expr, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        lift_sum_def, return_def] >> strip_tac >>
   gvs[sum_CASE_rator, AllCaseEqs()] >>
   drule_all constant_eval_exprs_fold_lift >> strip_tac >>

@@ -1,7 +1,7 @@
 Theory vyperLookup
 Ancestors
   vyperMisc vyperContext vyperState vyperStorage vyperInterpreter vyperValue
-  vyperValueOperation vyperTyping vyperEncodeDecode vyperAbiMemoryProps
+  vyperValueOperation vyperTyping vyperEncodeDecode
 Libs
   wordsLib
 
@@ -518,30 +518,15 @@ Proof
   rw[] >> CCONTR_TAC >> gs[]
 QED
 
-Theorem lookup_name_write_abi_memory[simp]:
-  lookup_name (SND (write_abi_memory cx id tv v subs ao st)) n = lookup_name st n
-Proof
-  simp[lookup_name_def]
-QED
-
-Theorem update_name_abi_memory[simp]:
-  (update_name st n v).abi_memory = st.abi_memory
-Proof
-  Cases_on `find_containing_scope n st.scopes` >>
-  simp[update_name_def] >- (Cases_on `st.scopes` >> simp[]) >>
-  PairCases_on `x` >> simp[]
-QED
-
-(* Exact continuation: scope replacement happens even if ABI mirroring fails. *)
 Theorem write_memory_place_name:
-  ∀cx st n v entry.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ⇒
+  ∀cx st n v.
+    var_assignable st n ⇒
       write_place cx (MemoryPlace n []) v st =
-      write_abi_memory cx n entry.type v [] (Replace v) (update_name st n v)
+      (INL (), update_name st n v)
 Proof
-  rw[lookup_name_typed_def] >>
+  rw[var_assignable_def, lookup_name_typed_def] >>
   `IS_SOME (find_containing_scope n st.scopes)`
-    by (irule lookup_scopes_find_containing >> simp[]) >>
+    by metis_tac[lookup_scopes_find_containing, optionTheory.IS_SOME_EXISTS] >>
   Cases_on `find_containing_scope n st.scopes` >- gvs[] >>
   PairCases_on `x` >> gvs[] >>
   drule find_containing_scope_lookup >> strip_tac >> gvs[] >>
@@ -552,37 +537,6 @@ Proof
        type_check_def, assert_def]
 QED
 
-(* Legacy eager-target helpers, replaced by the place boundaries below.
-Theorem assign_target_name_replace_irrelevant_memory:
-  ∀cx st n v.
-    var_assignable st n ∧
-    ¬EXISTS (λ(key,mem). key = (cx.stk,n)) st.abi_memory ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
-      (INL NONE, update_name st n v)
-Proof
-  rw[var_assignable_def] >>
-  mp_tac (Q.SPECL [`cx`,`st`,`n`,`v`,`entry`] assign_target_name_replace) >>
-  simp[write_abi_memory_def, bind_def, ignore_bind_def, return_def]
-QED
-
-Theorem assign_target_name_replace_empty_memory:
-  ∀cx st n v.
-    var_assignable st n ∧ st.abi_memory = [] ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Replace v) st =
-      (INL NONE, update_name st n v)
-Proof
-  rpt strip_tac >> irule assign_target_name_replace_irrelevant_memory >> simp[]
-QED
-
-Theorem assign_target_name_update:
-  ∀cx st n ty bop v'.
-    lookup_name_typed st n = SOME entry ∧ var_assignable st n ∧
-    evaluate_binop (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
-                   entry.type bop entry.value v' = INL new_v ⇒
-    assign_target cx (BaseTargetV (ScopedVar n) []) (Update ty bop v') st =
-    (do write_abi_memory cx n entry.type new_v [] (Update ty bop v');
-        return NONE od) (update_name st n new_v)
-*)
 Theorem assign_subscripts_success_read:
   !path tv a ao a'.
     assign_subscripts tv a path ao = INL a' ==>
@@ -604,8 +558,7 @@ Theorem write_memory_place_subscripts:
   ∀cx st n path v entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value path (Replace v) = INL a' ⇒
-    write_place cx (MemoryPlace n path) v st =
-      write_abi_memory cx n entry.type a' path (Replace v) (update_name st n a')
+    write_place cx (MemoryPlace n path) v st = (INL (), update_name st n a')
 Proof
   rpt gen_tac >> strip_tac >>
   drule assign_subscripts_success_read >> strip_tac >>
@@ -620,26 +573,6 @@ Proof
        ignore_bind_def, set_scopes_def, update_name_def,
        type_check_def, assert_def]
 QED
-
-(* Legacy state-only target corollary.
-Theorem assign_target_name_subscripts_state:
-  ∀cx st n sbs ao entry a'.
-    lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
-    assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    SND (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st) =
-      SND (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-             (update_name st n a'))
-Proof
-  rpt strip_tac >> drule_all assign_target_name_subscripts >>
-  disch_then (qspec_then `cx` SUBST1_TAC) >>
-  Cases_on `write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-               (update_name st n a')` >>
-  Cases_on `q` >> simp[ignore_bind_def, bind_def] >>
-  Cases_on `ao` >>
-  simp[assign_result_def, bind_def, return_def, lift_sum_def] >>
-  rpt (CASE_TAC >> gvs[return_def, raise_def])
-QED
-*)
 
 Theorem assign_subscripts_PopOp_assign_result:
   ∀tv a subs a'.
@@ -666,29 +599,11 @@ Proof
   simp[AllCaseEqs()] >> gvs[AllCaseEqs()]
 QED
 
-(* Legacy eager-target success statement.
-    assign_subscripts entry.type entry.value (REVERSE sbs) ao = INL a' ⇒
-    (ISL (FST (assign_target cx (BaseTargetV (ScopedVar n) sbs) ao st)) ⇔
-     ISL (FST (write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-                 (update_name st n a'))))
-Proof
-  rpt strip_tac >> drule_all assign_target_name_subscripts >>
-  disch_then (qspec_then `cx` SUBST1_TAC) >>
-  Cases_on `write_abi_memory cx n entry.type a' (REVERSE sbs) ao
-               (update_name st n a')` >>
-  Cases_on `q` >> simp[ignore_bind_def, bind_def] >>
-  Cases_on `ao` >> simp[assign_result_def, return_def, bind_def, lift_sum_def]
-  >> drule assign_subscripts_PopOp_assign_result >> strip_tac >>
-     gvs[return_def, raise_def] >>
-     Cases_on `popped_value v` >> gvs[return_def]
-*)
 Theorem write_memory_place_subscripts_valid:
   ∀cx st n path v entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
     assign_subscripts entry.type entry.value path (Replace v) = INL a' ⇒
-    (ISL (FST (write_place cx (MemoryPlace n path) v st)) ⇔
-     ISL (FST (write_abi_memory cx n entry.type a' path (Replace v)
-                (update_name st n a'))))
+    ISL (FST (write_place cx (MemoryPlace n path) v st))
 Proof
   rpt strip_tac >> drule_all write_memory_place_subscripts >> simp[]
 QED
@@ -698,19 +613,10 @@ Theorem append_memory_place_implies_var_assignable:
     ISL (FST (append_place cx (MemoryPlace n path) v st)) ⇒
     var_assignable st n
 Proof
-  rpt strip_tac >>
-  gvs[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
+  rpt strip_tac >> gvs[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[get_scopes_def, lift_option_type_def, return_def, raise_def,
-      ignore_bind_def, bind_def] >>
-  qmatch_goalsub_rename_tac `var_assignable before n` >>
-  Cases_on `find_containing_scope n before.scopes` >> gvs[return_def, raise_def] >>
-  rename1 `find_containing_scope n before.scopes = SOME found` >>
-  PairCases_on `found` >> drule find_containing_scope_lookup >>
-  gvs[return_def, bind_def, lift_sum_def, type_check_def, assert_def,
-      var_assignable_def, lookup_name_typed_def] >>
-  rw[] >> CCONTR_TAC >> gs[]
+  metis_tac[place_type_value_state, read_place_state,
+            write_memory_place_implies_var_assignable, pairTheory.FST, sumTheory.ISL]
 QED
 
 Theorem pop_memory_place_implies_var_assignable:
@@ -755,7 +661,6 @@ QED
 Theorem pop_memory_place_subscripts_valid:
   ∀cx st n path entry a'.
     lookup_name_typed st n = SOME entry ∧ entry.assignable ∧
-    st.abi_memory = [] ∧
     assign_subscripts entry.type entry.value path PopOp = INL a' ⇒
     ISL (FST (pop_place cx (MemoryPlace n path) st))
 Proof
@@ -780,7 +685,7 @@ Proof
        lift_option_type_def, lift_sum_def, popped_value_def,
        pop_element_def, read_memory_path_def,
        ignore_bind_def, set_scopes_def, check_def,
-       type_check_def, assert_def, write_abi_memory_child_def]
+       type_check_def, assert_def]
 QED
 
 (* ===== lookup_name_typed after update_name ===== *)

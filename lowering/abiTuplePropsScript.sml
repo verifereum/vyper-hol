@@ -49,7 +49,7 @@ QED
 (* The write half of a slot; ADD is composed separately below. *)
 Theorem abi_tuple_write_correct:
   (if is_word_type ty then emit_void MSTORE [dst; op]
-   else emit_void MCOPY [dst; op; Lit (n2w (type_memory_bytes cenv ty))]) st = ((),st') /\
+   else compile_copy_memory dst op (type_memory_bytes cenv ty)) st = ((),st') /\
   eval_operand dst ss = SOME (n2w d) /\ d < dimword (:256) /\
   type_memory_bytes cenv ty < dimword (:256) /\
   abi_tuple_input cenv ty tv v op ss /\ fresh_vars_wrt st ss ==>
@@ -68,10 +68,15 @@ Proof
       qexists_tac `mstore d (typed_val_to_w256 tv v) ss` >>
       gvs[w2n_n2w, abi_tuple_word_mstore] >>
       metis_tac[mstore_mem_bytes_at_disjoint, arithmeticTheory.ADD_COMM]) >>
-  `eval_operand (Lit (n2w (type_memory_size tv))) ss = SOME (n2w (type_memory_size tv))` by
-    simp[eval_operand_lit] >>
-  drule_all emit_void_MCOPY_correct >> strip_tac >>
-  drule emit_void_extends >> strip_tac >>
+  Cases_on `type_memory_bytes cenv ty = 0`
+  >- (gvs[contextTheory.compile_copy_memory_def, comp_return_def] >>
+      qexists_tac `ss` >> simp[emitted_insts_def, run_inst_seq_def, same_blocks_def] >>
+      irule val_in_memory_relocate >> simp[] >>
+      qexistsl_tac [`ss.vs_memory`, `0`, `w2n p`] >>
+      simp[mem_bytes_at_def]) >>
+  `type_memory_size tv > 0` by simp[] >>
+  drule_all compile_copy_memory_correct >> strip_tac >>
+  drule compile_copy_memory_extends >> strip_tac >>
   qexists_tac `mcopy d (w2n p) (type_memory_size tv) ss` >>
   gvs[w2n_n2w, mcopy_establishes_val_in_memory] >>
   metis_tac[mcopy_mem_bytes_at_disjoint, arithmeticTheory.ADD_COMM]
@@ -81,7 +86,7 @@ Definition compile_abi_tuple_slot_def:
   compile_abi_tuple_slot cenv buf off op ty =
     do dst <- emit_op ADD [buf; Lit (n2w off)];
        if is_word_type ty then emit_void MSTORE [dst; op]
-       else emit_void MCOPY [dst; op; Lit (n2w (type_memory_bytes cenv ty))]
+       else compile_copy_memory dst op (type_memory_bytes cenv ty)
     od
 End
 

@@ -2,7 +2,7 @@ Theory vyperPlaceTyping
 Ancestors
   list option pair finite_map vyperMisc vyperState vyperTyping vyperTypeInvariants
   vyperTypeEnv vyperStatePreservation vyperTypeStatePreservation vyperPlaceInvariants
-  vyperPlaceStatePreservation vyperPlaceFrames vyperAbiMemoryProps vyperAbiStateTyping
+  vyperPlaceStatePreservation vyperPlaceFrames
 
 Theorem runtime_place_typed_storage[simp]:
   runtime_place_typed cx st (StoragePlace tr slot ptv) tv <=>
@@ -166,8 +166,6 @@ Proof
   gvs[bind_def, ignore_bind_def, lift_sum_def, type_check_def, assert_def,
       set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
   Cases_on `replace_memory_entry x2 path v` >> gvs[return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
-  imp_res_tac write_abi_memory_frame >> gvs[] >>
   drule vyperLookupTheory.find_containing_scope_structure >> strip_tac >>
   drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >>
   gvs[state_well_typed_def, EVERY_APPEND] >>
@@ -188,11 +186,10 @@ Proof
   rw[runtime_place_typed_immutable] >>
   `value_has_type root a /\ well_formed_type_value root` by
     metis_tac[get_immutables_success_typed] >>
-  gvs[write_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
+  gvs[write_place_def, bind_def, lift_option_type_def, lift_sum_def,
       return_def, raise_def, AllCaseEqs()] >>
   Cases_on `assign_subscripts root a path (Replace v)` >>
-  gvs[bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
-  imp_res_tac write_abi_immutables_typing_frame >> gvs[] >>
+  gvs[return_def, raise_def] >>
   irule set_immutable_preserves_state_well_typed >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[assign_subscripts_replace_type_metadata]

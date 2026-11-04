@@ -6,7 +6,7 @@ Ancestors
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
-  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts vyperAbiOperand
+  vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
 Libs
   cv_transLib wordsLib intLib monadsyntax
 
@@ -396,9 +396,8 @@ Theorem order_custom_error_args_exprs_bound:
   exprs_bound ts es = exprs_bound ts (custom_error_exprs err)
 Proof
   Cases_on `err` >>
-  rename1 `CustomError id positional kwargs` >>
-  Cases_on `positional` >>
-  Cases_on `kwargs`
+  Cases_on `l` >>
+  Cases_on `l0`
   >- simp[order_custom_error_args_def, custom_error_exprs_def]
   >- (rw[order_custom_error_args_def, custom_error_exprs_def] >>
       drule order_custom_error_kwargs_exprs_bound >> simp[])
@@ -1384,20 +1383,6 @@ val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
 
 (* top-level definition of the Vyper interpreter *)
 
-(* Resolve once with the general place semantics, then capture the ABI arena.
-   In particular target index expressions are never evaluated a second time. *)
-Definition abi_place_operand_def:
-  abi_place_operand cx (StoragePlace tr slot tv) = return (AbiStorage tr slot tv) ∧
-  abi_place_operand cx (MemoryPlace id path) =
-    lookup_abi_memory_place cx id path ∧
-  abi_place_operand cx (ImmutablePlace src id []) =
-    raise (Error (TypeError "ABI immutable pop")) ∧
-  abi_place_operand cx (ImmutablePlace src id path) = do
-    arg <- lookup_abi_immutable cx src id;
-    project_abi_path cx arg path
-  od
-End
-
 Definition evaluate_def:
   eval_stmt cx Pass = return () ∧
   eval_stmt cx Continue = raise ContinueException ∧
@@ -1624,15 +1609,7 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (TypeBuiltin _ tb typ es) = do
     type_check (type_builtin_args_length_ok tb (LENGTH es)) "TypeBuiltin args";
-    vs <- (case tb of
-      | AbiEncode _ _ => do
-          mark <- mark_abi_captures;
-          finally (do
-            args <- eval_abi_exprs cx es;
-            stage_abi_operands cx args
-          od) (release_abi_captures mark)
-        od
-      | _ => eval_exprs cx es);
+    vs <- eval_exprs cx es;
     v <- lift_sum $ evaluate_type_builtin cx tb typ (MAP expr_type es) vs;
     return $ Value v
   od ∧
@@ -1820,45 +1797,6 @@ Definition evaluate_def:
     res <- eval_expr cx e;
     rest <- eval_expr_results cx es;
     return (res::rest)
-  od ∧
-  (* ABI lowering unwraps words and storage copies before the next argument;
-     complex memory remains an address until the separate staging phase. *)
-  eval_abi_expr cx (Name _ id) = lookup_abi_local cx id ∧
-  eval_abi_expr cx (TopLevelName _ (src,id)) = lookup_abi_global cx src id ∧
-  eval_abi_expr cx (IfExp _ cond yes no) = do
-    test <- eval_expr cx cond;
-    arg <- switch_BoolV cx test (eval_abi_expr cx yes) (eval_abi_expr cx no);
-    unwrap_abi_operand cx arg
-  od ∧
-  eval_abi_expr cx (Subscript _ base index) = do
-    arg <- eval_abi_expr cx base;
-    index <- eval_expr cx index;
-    index <- read_result cx index;
-    tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type base)) "Subscript array type";
-    subscript_abi_operand cx tv arg index
-  od ∧
-  eval_abi_expr cx (Attribute _ base id) = do
-    arg <- eval_abi_expr cx base;
-    attribute_abi_operand cx arg id
-  od ∧
-  eval_abi_expr cx (Pop ty target) = do
-    p <- eval_target_place cx target;
-    arg <- abi_place_operand cx p;
-    ptr <- abi_pop_pointer cx arg;
-    pop_place cx p;
-    return ptr
-  od ∧
-  eval_abi_expr cx e = do
-    tv <- eval_expr cx e;
-    v <- read_result cx tv;
-    return (AbiSnapshot v)
-  od ∧
-  eval_abi_exprs cx [] = return [] ∧
-  eval_abi_exprs cx (e::es) = do
-    arg <- eval_abi_expr cx e;
-    arg <- unwrap_abi_operand cx arg;
-    args <- eval_abi_exprs cx es;
-    return (arg::args)
   od
 Termination
   qexists_tac `measure (λx. case x of
@@ -1873,9 +1811,7 @@ Termination
   | INR (INR (INR (INR (INR (INR (INR (INL (cx,t)))))))) => 4 * base_target_bound (remcode cx) t + 1
   | INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,g,v))))))))) => 4 * target_bound (remcode cx) g + 2
   | INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,gs,vs)))))))))) => 4 * targets_bound (remcode cx) gs + 2
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,es))))))))))) => 4 * exprs_bound (remcode cx) es
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INL (cx,e)))))))))))) => 4 * expr_bound (remcode cx) e + 1
-  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))))) => 4 * exprs_bound (remcode cx) es + 1)`
+  | INR (INR (INR (INR (INR (INR (INR (INR (INR (INR (cx,es)))))))))) => 4 * exprs_bound (remcode cx) es)`
   \\ conj_tac >- simp[prim_recTheory.WF_measure]
   \\ rpt conj_tac
   \\ TRY (MATCH_ACCEPT_TAC custom_error_exprs_size)
@@ -2058,8 +1994,6 @@ Definition initial_state_def:
    ; pending_deletions := am.pending_deletions
    ; outcomes := NONE
    ; requests := []
-   ; abi_memory := []
-   ; abi_immutables := []
    ; gas_obs := []
    |>
 End

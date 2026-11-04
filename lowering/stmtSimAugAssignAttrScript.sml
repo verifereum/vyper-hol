@@ -39,7 +39,7 @@ Ancestors
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimBuffer
   exprSimAttributeFields
   stmtSim stmtSimDecl stmtSimDeclMem stmtSimDeclStore stmtSimAssign
-  stmtSimAugAssign stmtSimAssignAttr sourceAbiFrame
+  stmtSimAugAssign stmtSimAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperTyping
@@ -456,17 +456,17 @@ Theorem write_attr_local_typed:
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) ==>
     res = INL () /\
-    ?pre env1 entry rest fs vals ftv abi.
+    ?pre env1 entry rest fs vals ftv.
       find_containing_scope id es1.scopes = SOME (pre, env1, entry, rest) /\
       entry.type = StructTV fs /\ entry.value = StructV vals /\
       fields_layout (get_struct_fields cenv.ce_struct_fields
                        (nsid_to_string sid)) fs /\
       struct_has_type fs vals /\ ALOOKUP fs fld = SOME ftv /\
       evaluate_type (get_tenv cx) fty = SOME ftv /\
-      es' = es1 with <|scopes :=
+      es' = es1 with scopes :=
         pre ++ (env1 |+ (id, entry with
                   <|value := StructV (AFUPDKEY fld (K v) vals);
-                    popped := []|>)) :: rest; abi_memory := abi|>
+                    popped := []|>)) :: rest
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all expr_sim_inv_local >> strip_tac >>
@@ -554,16 +554,16 @@ Theorem augassign_attr_local_frag:
     (!v2 v. r1 = INL v2 /\
             bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v ==>
             res = INL () /\
-            ?pre env1 entry rest fs vals abi.
+            ?pre env1 entry rest fs vals.
               find_containing_scope id es1.scopes =
                 SOME (pre, env1, entry, rest) /\
               entry.type = StructTV fs /\ entry.value = StructV vals /\
               fields_layout flds fs /\ struct_has_type fs vals /\
               ALOOKUP fs fld = SOME ftv /\
-              es' = es1 with <|scopes :=
+              es' = es1 with scopes :=
                 pre ++ (env1 |+ (id, entry with
                           <|value := StructV (AFUPDKEY fld (K v) vals);
-                            popped := []|>)) :: rest; abi_memory := abi|>) ==>
+                            popped := []|>)) :: rest) ==>
     frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -630,7 +630,6 @@ Theorem compile_augassign_attr_local_case:
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
-    augassign_operand_ok ty bop e /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
@@ -729,7 +728,7 @@ Resume compile_augassign_attr_local_case[frag_pre]:
                       (case type_to_int_bound ty of
                          SOME u => u | NONE => Unsigned 0) ftv bop fv v2` >>
           gvs[expr_res_ok_def, stmt_res_ok_def]) >>
-      irule augassign_binop_frag >> simp[] >> metis_tac[]) >>
+      irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   Cases_on `evaluate_binop
               (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
@@ -746,7 +745,6 @@ Theorem compile_augassign_attr_local_stmt_frag:
     eval_stmt cx (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e)
       es = (res, es') /\
     expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es /\
-    augassign_operand_ok ty bop e /\
     FLOOKUP env.var_types id = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\

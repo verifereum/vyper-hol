@@ -1,7 +1,6 @@
 Theory vyperPureExpr
 Ancestors
-  vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation
-  vyperPlaceFrames vyperAbiOperand vyperAbiFrame vyperAbiReadOnly vyperAbiAppendFrame vyperCallOutcomeFrame
+  vyperMisc vyperContext vyperState vyperStorageBackend vyperInterpreter vyperLookup vyperStatePreservation vyperPlaceFrames
 
 (* Pure expressions: expressions that do not modify state.  msg.gas is not
    pure: it consumes a gas reading. *)
@@ -39,12 +38,10 @@ local
   val p8 = ``\(cx:evaluation_context) (g:assignment_target) (v:value). T``
   val p9 = ``\(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T``
   val p10 = ``\(cx:evaluation_context) (es:expr list). T``
-  val p11 = ``\cx e. !st res st'. eval_abi_expr cx e st = (res,st') ==> pure_expr e ==> abi_append st st'``
-  val p12 = ``\cx es. !st res st'. eval_abi_exprs cx es st = (res,st') ==> EVERY pure_expr es ==> abi_append st st'``
 in
   val expr_state_ind_principle =
     CONV_RULE (DEPTH_CONV BETA_CONV)
-      (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12] evaluate_ind)
+      (SPECL [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10] evaluate_ind)
 end
 
 Theorem canonical_observations_state[local]:
@@ -220,8 +217,6 @@ Proof
   rw[pure_expr_def]
 QED
 
-(* Obsolete eager-only helper retained. The mutual TypeBuiltin proof below
-   now uses allocation-only framing for delayed ABI operands.
 Theorem case_TypeBuiltin[local]:
   ∀cx ty tb typ es.
     (∀s'' x t.
@@ -238,8 +233,6 @@ Proof
   gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
   metis_tac[]
 QED
-
-*)
 
 (* All Call cases are vacuously true since pure_expr (Call _ _ _) = F *)
 Theorem case_Call[local]:
@@ -280,38 +273,7 @@ QED
    Main Mutual Induction Theorem
 
    Assembles individual case lemmas into the full mutual induction.
-   Ordinary pure expressions preserve the complete state. Delayed pure ABI
-   operands may append local/immutable captures, but preserve all existing cells
-   and all other fields. The outer AbiEncode releases both suffixes on errors too.
-
-   We use a specialized version of evaluate_ind with:
-   - P0-P3 and P6-P10 (statements/places/tuple assignment/results) = T
-   - P4/P5 = complete state preservation under purity
-   - P11/P12 = allocation-only ABI framing under purity
-   ------------------------------------------------------------------------ *)
-
-(* Derive specialized induction principle for expr_state_mutual.
-   This encapsulates the SML needed to specialize evaluate_ind. *)
-(* Historical pre-place specialization (superseded above).
-local
-  val p0 = ``\(cx:evaluation_context) (s:stmt). T``
-  val p1 = ``\(cx:evaluation_context) (ss:stmt list). T``
-  val p2 = ``\(cx:evaluation_context) (it:iterator). T``
-  val p3 = ``\(cx:evaluation_context) (g:assignment_target). T``
-  val p4 = ``\(cx:evaluation_context) (gs:assignment_target list). T``
-  val p5 = ``\(cx:evaluation_context) (t:base_assignment_target). T``
-  val p6 = ``\(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T``
-  val p7 = ``\cx e. !st res st'. eval_expr cx e st = (res, st') ==> pure_expr e ==> st = st'``
-  val p8 = ``\cx es. !st res st'. eval_exprs cx es st = (res, st') ==> EVERY pure_expr es ==> st = st'``
-  val p9 = ``\cx e. !st res st'. eval_abi_expr cx e st = (res,st') ==> pure_expr e ==> abi_append st st'``
-  val p10 = ``\cx es. !st res st'. eval_abi_exprs cx es st = (res,st') ==> EVERY pure_expr es ==> abi_append st st'``
-  val spec_ind = SPECL [p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10] evaluate_ind
-  val spec_ind_beta = CONV_RULE (DEPTH_CONV BETA_CONV) spec_ind
-in
-  val expr_state_ind_principle = save_thm("expr_state_ind_principle", spec_ind_beta)
-end
-*)
-(* The canonical place specialization assigns whole-state preservation
+   The canonical ten-function specialization assigns whole-state preservation
    to P4 (eval_expr) and P5 (eval_exprs), and T to every other predicate.
    Dispatch examines only the conclusion spine, never the guarded IHs.
    ------------------------------------------------------------------------ *)
@@ -323,53 +285,8 @@ Theorem expr_state_mutual[local]:
   (∀cx e st res st'.
      eval_expr cx e st = (res, st') ⇒ pure_expr e ⇒ st = st') ∧
   (∀cx es st res st'.
-     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
-  (∀cx e st res st'. eval_abi_expr cx e st = (res,st') ⇒ pure_expr e ⇒ abi_append st st') ∧
-  (∀cx es st res st'. eval_abi_exprs cx es st = (res,st') ⇒ EVERY pure_expr es ⇒ abi_append st st')
+     eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st')
 Proof
-  MP_TAC expr_state_ind_principle >> impl_tac >- (
-    rpt conj_tac >>
-    (* Do not simplify purity inside the guarded IHs: internal calls have
-       large default-argument guards. Unfold only the conclusion's purity
-       assumption, once, and leave the case-lemma IHs unchanged. *)
-    TRY (rpt (gen_tac ORELSE disch_tac) >> ACCEPT_TAC TRUTH) >>
-    TRY (rpt strip_tac >>
-         qpat_x_assum `pure_expr _` mp_tac >>
-         CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [pure_expr_def])) >>
-         simp_tac bool_ss [] >> NO_TAC) >-
-    metis_tac[case_Name] >-
-    metis_tac[case_TopLevelName] >-
-    metis_tac[case_FlagMember] >-
-    ACCEPT_TAC case_IfExp >-
-    metis_tac[case_Literal] >-
-    metis_tac[case_StructLit] >-
-    ACCEPT_TAC case_Subscript >-
-    ACCEPT_TAC case_Attribute >-
-    ACCEPT_TAC case_Builtin >-
-    suspend "TypeBuiltin" >-
-    metis_tac[case_eval_exprs_nil] >-
-    ACCEPT_TAC case_eval_exprs_cons >>
-    rpt strip_tac >>
-    FIRST [qpat_x_assum `eval_abi_expr _ _ _ = _` mp_tac,
-           qpat_x_assum `eval_abi_exprs _ _ _ = _` mp_tac] >>
-    simp[Once evaluate_def, bind_def, ignore_bind_def,
-      return_def, raise_def, AllCaseEqs(), switch_BoolV_def] >>
-    rpt strip_tac >> gvs[pure_expr_def] >>
-    imp_res_tac abi_readonly_states >>
-    imp_res_tac lift_option_type_state >> imp_res_tac read_result_state >> gvs[] >>
-    TRY (FIRST [drule (lookup_abi_local_append |> SRULE [state_rel_frame_result]),
-      drule (lookup_abi_global_append |> SRULE [state_rel_frame_result])] >>
-      simp[] >> NO_TAC) >>
-    res_tac >> gvs[] >>
-    TRY (qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
-      rpt IF_CASES_TAC >> simp[raise_def] >> strip_tac >> gvs[]) >>
-    res_tac >> gvs[] >>
-    TRY (irule abi_append_trans >> first_assum (irule_at Any) >> first_assum ACCEPT_TAC) >>
-    qpat_x_assum `∀st res rt. eval_abi_expr _ _ st = (res,rt) ⇒ _` drule >>
-    strip_tac >> drule_all abi_append_trans >> simp[]
-  ) >>
-  simp[]
-(* Incoming eager-only dispatcher, superseded by ABI-aware induction above.
   let
     fun spine tm ants =
       if is_forall tm then spine (snd (dest_forall tm)) ants
@@ -422,28 +339,7 @@ Proof
     mp_tac expr_state_ind_principle >>
     (impl_tac >- (rpt conj_tac >> dispatch)) >> simp[]
   end
-*)
 QED
-
-Resume expr_state_mutual[TypeBuiltin]:
-  rpt gen_tac >> strip_tac >> Cases_on `tb` >> gvs[] >>
-  rpt strip_tac >>
-  gvs[pure_expr_def, Once evaluate_def, bind_def, ignore_bind_def,
-    type_check_def, assert_def, return_def, raise_def, AllCaseEqs(),
-    mark_abi_captures_def, ETA_THM] >>
-  imp_res_tac lift_sum_state >> gvs[] >> res_tac >> gvs[] >>
-  `state_rel_frame abi_append (eval_abi_exprs cx es)` by
-    (simp[state_rel_frame_result] >> first_assum MATCH_ACCEPT_TAC) >>
-  `!args. state_rel_frame abi_append (stage_abi_operands cx args)` by
-    (gen_tac >> irule abi_append_readonly >> simp[abi_readonly_primitives]) >>
-  `state_rel_frame abi_append
-     (do args <- eval_abi_exprs cx es; stage_abi_operands cx args od)` by
-    (irule state_rel_frame_bind_guarded >> simp[] >>
-     metis_tac[abi_append_trans]) >>
-  drule_all abi_append_finally_state >> simp[]
-QED
-
-Finalise expr_state_mutual
 
 (* ------------------------------------------------------------------------
    Main Theorems

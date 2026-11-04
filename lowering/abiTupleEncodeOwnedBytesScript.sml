@@ -110,8 +110,8 @@ Proof
   drule_all abi_tuple_encode_nonword_source_input_full >> simp[]
 QED
 
-(* Count/data observations need only a 32+maxlen-byte source window.
-   This also supports producers whose allocation includes rounding padding. *)
+(* Ordinary byte producers supply count/data observations and own 32+maxlen
+   bytes. Their unused semantic rounding padding may overlap the tuple buffer. *)
 Theorem abi_tuple_encode_owned_bytes_capacity:
   32+n <= type_memory_bytes ce (BaseT (BytesT (Dynamic n)))
 Proof
@@ -143,8 +143,8 @@ Proof
   simp[is_word_type_def, abi_tuple_encode_owned_bytes_capacity]
 QED
 
-(* A 68-byte payload needs only 100 observed source bytes, while its semantic
-   capacity (and the encoder's rounded physical allocation) is 128 bytes. *)
+(* With 64 encoded bytes and a four-byte method ID, actual allocation is 100.
+   Full 128-byte separation is false; separation of the owned 100 bytes holds. *)
 Theorem abi_tuple_encode_method_bytes_extent:
   type_memory_bytes ce (BaseT (BytesT (Dynamic 68))) = 128 /\
   ~(p+type_memory_bytes ce (BaseT (BytesT (Dynamic 68))) <= p+100 \/ p+228 <= p) /\

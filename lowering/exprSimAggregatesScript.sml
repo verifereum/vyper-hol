@@ -576,9 +576,7 @@ Proof
   Cases_on `args` >> simp[raise_def] >>
   simp[Once evaluate_def, bind_def, read_result_def, return_def] >>
   Cases_on `evaluate_type_builtin cx tb t [] []` >>
-  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def] >>
-  (* The bound-builtin cases expose the non-ABI eval_exprs path. *)
-  gvs[Once evaluate_def, read_result_def, return_def, raise_def]
+  simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[expr_res_ok_def]
 QED
 
 (* max_value, min_value and epsilon of a numeric type: a Lit of the bound,

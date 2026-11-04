@@ -1,8 +1,8 @@
 (* The machine-visible projection, independent of scopes and oracle bookkeeping. *)
 Theory vyperMachineFrame
 Ancestors
-  pair vyperState vyperCallOutcome vyperInterpreter vyperCallOutcomeFrame
-  vyperStatePreservation vyperAbiFrame
+  vyperState vyperCallOutcome vyperInterpreter vyperCallOutcomeFrame
+  vyperStatePreservation
 
 Definition machine_frame_def:
   machine_frame (s:evaluation_state) (t:evaluation_state) <=>
@@ -21,16 +21,6 @@ Theorem machine_frame_trans:
   machine_frame s t /\ machine_frame t u ==> machine_frame s u
 Proof
   simp[machine_frame_def]
-QED
-
-val machine_frame_abi = save_thm("machine_frame_abi",
-  state_rel_frame_abi_primitives |> Q.INST [`R` |-> `machine_frame`] |>
-  SIMP_RULE (srw_ss()) [machine_frame_trans, machine_frame_def]);
-
-Theorem machine_frame_abi_place:
-  state_rel_frame machine_frame (abi_place_operand cx p)
-Proof
-  irule state_rel_frame_abi_place >> simp[machine_frame_trans, machine_frame_def]
 QED
 
 Theorem machine_frame_reconstruct:
@@ -262,41 +252,42 @@ Proof
   simp[state_rel_frame_def, return_def]
 QED
 
-Theorem machine_frame_write_abi_memory_child:
-  state_rel_frame machine_frame (write_abi_memory_child cx id tv path v ao)
-Proof
-  simp[state_rel_frame_def, write_abi_memory_child_def] >> gen_tac >>
-  rpt (BasicProvers.PURE_TOP_CASE_TAC >>
-       simp[machine_frame_def, return_def, raise_def])
-QED
-
-val MACHINE_MEMORY_TAC = rpt (FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS (SPEC_ALL machine_frame_primitives))),
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS (SPEC_ALL machine_frame_abi))),
-  MATCH_ACCEPT_TAC machine_frame_read_place,
-  MATCH_ACCEPT_TAC machine_frame_place_type_value,
-  MATCH_ACCEPT_TAC machine_frame_write_abi_memory_child,
-  simp[state_rel_frame_def, machine_frame_def, return_def, raise_def] >> NO_TAC,
-  MATCH_MP_TAC machine_frame_bind >> conj_tac,
-  CONV_TAC (RAND_CONV BETA_CONV),
-  CONV_TAC (RAND_CONV (REWR_CONV ignore_bind_def)),
-  CHANGED_TAC (simp_tac (srw_ss()) [LET_THM, pair_case_thm, UNCURRY]),
-  gen_tac, BasicProvers.PURE_TOP_CASE_TAC]);
-
 Theorem machine_frame_write_memory_place:
   state_rel_frame machine_frame (write_place cx (MemoryPlace id path) v)
 Proof
-  simp_tac bool_ss [write_place_def] >> MACHINE_MEMORY_TAC
+  simp[write_place_def, state_rel_frame_def, get_scopes_def, bind_def,
+       ignore_bind_def, lift_option_type_def, lift_sum_def,
+       type_check_def, assert_def, set_scopes_def, return_def] >>
+  gen_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  PairCases_on `x` >>
+  gvs[bind_def, ignore_bind_def, assert_def, set_scopes_def,
+      lift_sum_def, return_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def]
 QED
 
 Theorem machine_frame_append_memory_place:
   state_rel_frame machine_frame (append_place cx (MemoryPlace id path) v)
 Proof
-  simp_tac bool_ss [append_place_def] >> MACHINE_MEMORY_TAC
+  simp[append_place_def] >>
+  rpt (simp[] >> match_mp_tac machine_frame_bind >> conj_tac >-
+    simp[machine_frame_place_type_value, machine_frame_read_place,
+         machine_frame_primitives] >> gen_tac) >>
+  simp[machine_frame_write_memory_place]
 QED
 
 Theorem machine_frame_pop_memory_place:
   state_rel_frame machine_frame (pop_place cx (MemoryPlace id path))
 Proof
-  simp_tac bool_ss [pop_place_def] >> MACHINE_MEMORY_TAC
+  simp[pop_place_def, state_rel_frame_def, get_scopes_def, bind_def,
+       ignore_bind_def, lift_option_type_def, lift_sum_def,
+       type_check_def, check_def, assert_def, set_scopes_def, return_def] >>
+  gen_tac >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  PairCases_on `x` >>
+  gvs[bind_def, ignore_bind_def, assert_def, set_scopes_def,
+      lift_sum_def, return_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  gvs[bind_def, ignore_bind_def, set_scopes_def, return_def]
 QED
