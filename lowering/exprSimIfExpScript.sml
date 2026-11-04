@@ -2074,3 +2074,50 @@ Proof
   strip_tac >> first_x_assum drule_all >> disch_then (SUBST1_TAC o SYM) >>
   simp[MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
+
+Theorem ifexp_abi_missing_struct[local]:
+  FLOOKUP sf (nsid_to_string nsid) = NONE ==>
+  ~is_abi_dynamic sf (StructT nsid) /\
+  abi_size_bound sf (StructT nsid) = 0 /\
+  abi_static_size sf (StructT nsid) = 0
+Proof
+  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
+       Once abi_static_size_def]
+QED
+
+Theorem ifexp_abi_members_dynamic[local]:
+  !tys. EVERY (\ty. is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) tys ==>
+  EXISTS (is_abi_dynamic sf) tys ==> vyper_any_dynamic env tys
+Proof
+  Induct >> simp[vyperABITheory.vyper_is_dynamic_def] >> metis_tac[]
+QED
+
+Theorem ifexp_abi_members_bound[local]:
+  !tys. EVERY (\ty.
+    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
+    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
+    (~is_abi_dynamic sf ty ==>
+       abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys ==>
+  SUM (MAP (\t. (if is_abi_dynamic sf t then 32 else abi_static_size sf t) +
+                 (if is_abi_dynamic sf t then abi_size_bound sf t else 0)) tys)
+    <= vyper_abi_size_bound_list env tys
+Proof
+  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  Cases_on `is_abi_dynamic sf h` >> Cases_on `vyper_is_dynamic env h` >>
+  gvs[] >> decide_tac
+QED
+
+Theorem ifexp_abi_static_members_bound[local]:
+  !tys. EVERY (\ty.
+    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
+    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
+    (~is_abi_dynamic sf ty ==>
+       abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys /\
+  ~EXISTS (is_abi_dynamic sf) tys ==>
+  SUM (MAP (abi_static_size sf) tys) <= vyper_abi_size_bound_list env tys
+Proof
+  Induct >> simp[vyperABITheory.vyper_abi_size_bound_def] >> rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `vyper_is_dynamic env h` >> gvs[] >> decide_tac
+QED
