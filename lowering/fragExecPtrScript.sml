@@ -87,7 +87,7 @@ Proof
        source_memory_write_ranges_def, source_memory_read_ranges_def,
        memory_range_of_operands_def, mk_inst_def, eval_operand_def] >>
   conj_tac >-
-    (rpt strip_tac >> simp[mem_read_ops_def] >> metis_tac[]) >>
+    (rpt strip_tac >> gvs[mem_read_ops_def] >> metis_tac[]) >>
   conj_tac >-
     (gen_tac >> Cases_on `op = Var p` >> gvs[] >>
      Cases_on `op = Lit n` >> gvs[op_taint_def]) >>
