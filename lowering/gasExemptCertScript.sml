@@ -179,7 +179,53 @@ Theorem gas_exempt_cert_execution:
     gas_focus_path (ctx, func) s0 (LENGTH marks) (leaf, finish) /\
     unspecified_behaviour_exempt tops err
 Proof
-  (* New frozen theorem, awaiting the independent prover. *)
-  cheat
+  let
+    val normal = rpt gen_tac >> simp[] >> strip_tac >>
+      conj_tac
+      >- (irule gas_marked_source_bind_normal >>
+          qexistsl_tac [`ctx`, `func`, `mid`, `t`, `v`] >>
+          simp[evaluation_state_component_equality]) >>
+      simp[LENGTH_APPEND] >>
+      metis_tac[gas_marked_exec_def, gas_focus_path_rules]
+    val error = rpt gen_tac >> simp[] >> strip_tac >>
+      irule gas_source_ignore_return_exception_bind >> simp[]
+  in
+  qsuff_tac
+    `!memory tops p source start marks out endpoint.
+       gas_exempt_cert memory tops p source start marks out endpoint ==>
+       (!tail. source ((FST start) with gas_obs :=
+          gas_explicit marks (SND start).vs_gas_readings ++ tail) =
+          (INR (Error (FST out)), (SND out) with gas_obs := tail)) /\
+       gas_focus_path p (SND start) (LENGTH marks) endpoint /\
+       unspecified_behaviour_exempt tops (FST out)`
+  >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  ho_match_mp_tac gas_exempt_cert_ind >> rpt conj_tac
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      drule gas_exempt_origin_execution >>
+      drule gas_exempt_origin_classified >>
+      simp[gas_marked_exec_def] >> metis_tac[gas_focus_path_rules])
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- normal
+  >- error
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      irule gas_source_finally_exception >> qexists_tac `mid` >>
+      simp[evaluation_state_component_equality])
+  >- (rpt gen_tac >> simp[] >> strip_tac >>
+      irule gas_source_try_exception >> qexists_tac `mid` >>
+      simp[evaluation_state_component_equality])
+  >> rpt gen_tac >> simp[] >> strip_tac >>
+  drule gas_invoke_entry_readings >> strip_tac >>
+  conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules]
+  end
 QED
-
