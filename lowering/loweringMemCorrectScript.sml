@@ -236,15 +236,14 @@ Theorem external_body_not_empty_bytes_error:
     res <> INR (Error (RuntimeError "convert empty bytes to signed"))
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >>
-  disch_then (qspec_then `orc` assume_tac) >>
-  `initial_state am [env] with
-     <| outcomes := orc; requests := []; gas_obs := [] |> =
-   initial_state am [env] with <| outcomes := orc; requests := [] |>` by
-    simp[initial_state_def] >>
+  drule_all call_external_selected_body >> strip_tac >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
+  `es0 with scopes := [env] = es0` by
+    (qpat_assum `es0.scopes = [env]` (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, source_exempt_def,
+      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def, source_exempt_def,
       unspecified_behaviour_exempt_def]
 QED
 
