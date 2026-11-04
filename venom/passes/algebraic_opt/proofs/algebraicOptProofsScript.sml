@@ -1,7 +1,6 @@
 Theory algebraicOptProofs
 Ancestors
   algebraicOptDefs venomWf venomFnScheduleRunner unitShapeDefs
-  algebraicOptCounterexample
 
 (* Algebraic optimization, with inserted instructions named from the
    supply, preserves the result of a run from the function's entry, up to
