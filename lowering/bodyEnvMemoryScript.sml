@@ -1,7 +1,8 @@
 (* Ordinary environment reads: actual no-memory opcode execution. *)
 Theory bodyEnvMemory
 Ancestors
-  bodyUnopMemory bodyMemoryDefs bodyMemoryPreds exprSimDefs exprSimLeaves exprSimHyps
+  exprSimSource exprSimMemoryValues fragGasPathMem fragGasSeqMem gasCount gasContext
+  exprSimMemoryStack bodyMemoryDefs bodyMemoryPreds exprSimDefs exprSimProps exprSimHypsDefs
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec valueEncoding valueEncodingProofs vyperValue vyperAST venomExecSemantics
