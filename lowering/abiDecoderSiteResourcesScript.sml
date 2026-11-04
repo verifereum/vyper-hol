@@ -1,7 +1,7 @@
 (* Resource credit for actual generated ALLOCA sites, including site reuse. *)
 Theory abiDecoderSiteResources
 Ancestors
-  abiDecoderCode abiDecoderFootprint abiCallerAllocation localPtrsProps
+  abiDecoderCode abiDecoderFootprint abiDecoderFrame abiCallerAllocation localPtrsProps
   finite_map pred_set arithmetic words list rich_list venomExecSemantics venomState venomMemDefs
 
 Definition abi_decoder_sites_def:
@@ -239,4 +239,70 @@ Proof
   rpt (qpat_x_assum `abi_decoder_code_member _ _` kall_tac) >>
   qpat_x_assum `~abi_decoder_code_member _ _` kall_tac >>
   metis_tac[abi_decoder_site_allocation]
+QED
+
+Theorem abi_decoder_site_budget_frontier:
+  abi_decoder_site_budget ids cap s ==>
+  FINITE ids /\ alloca_inv s /\ s.vs_alloca_next <= cap /\ cap < dimword (:256)
+Proof
+  pure_rewrite_tac[abi_decoder_site_budget_def] >> strip_tac >>
+  rpt conj_tac >> simp[] >> decide_tac
+QED
+
+Theorem abi_decoder_site_excludes_live:
+  abi_decoder_site_budget ids cap s /\ child SUBSET ids /\ live NOTIN child /\
+  FLOOKUP s.vs_allocas live = SOME (p,n) ==>
+  abi_footprint_disjoint p n (abi_decoder_child_scratch child 0 cap s)
+Proof
+  strip_tac >> drule abi_decoder_site_budget_frontier >> strip_tac >>
+  `FINITE child` by metis_tac[SUBSET_FINITE] >>
+  irule abi_caller_allocation_scratch >>
+  simp[] >> qexistsl_tac [`n`, `live`, `p`] >> simp[]
+QED
+
+Theorem abi_decoder_site_raw_resources:
+  abi_decoder_site_budget ids cap s /\
+  FLOOKUP s.vs_allocas source_id = SOME (source_base,source_cap) /\
+  FLOOKUP s.vs_allocas output_id = SOME (d,outsz) /\
+  source_id <> output_id /\ source_id NOTIN ids /\ output_id NOTIN ids /\
+  source_base <= sb /\ sb + len <= source_base + source_cap ==>
+  sb + len < dimword (:256) /\ d + outsz < dimword (:256) /\
+  abi_footprint_disjoint d outsz (abi_decoder_child_scratch ids 0 cap s) /\
+  abi_footprint_disjoint sb len
+    ((d,outsz)::abi_decoder_child_scratch ids 0 cap s)
+Proof
+  strip_tac >> drule abi_decoder_site_budget_frontier >> strip_tac >>
+  `sb + len <= s.vs_alloca_next` by
+    (irule abi_caller_allocation_end >> simp[] >>
+     qexistsl_tac [`source_cap`, `source_id`, `source_base`] >> simp[]) >>
+  `d + outsz <= s.vs_alloca_next` by
+    (irule abi_caller_allocation_end >> simp[] >>
+     qexistsl_tac [`outsz`, `output_id`, `d`] >> simp[]) >>
+  `abi_footprint_disjoint d outsz (abi_decoder_child_scratch ids 0 cap s)` by
+    (irule abi_caller_allocation_scratch >>
+     simp[] >> qexistsl_tac [`outsz`, `output_id`, `d`] >> simp[]) >>
+  `abi_footprint_disjoint sb len (abi_decoder_child_scratch ids 0 cap s)` by
+    (irule abi_caller_allocation_scratch >>
+     simp[] >> qexistsl_tac [`source_cap`, `source_id`, `source_base`] >> simp[]) >>
+  drule_all abi_caller_allocation_separate >> strip_tac >>
+  fs[abi_footprint_disjoint_def] >> rpt strip_tac >>
+  gvs[] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_LESS_TRANS]
+QED
+
+Theorem abi_decoder_site_caller_raw_resources:
+  FINITE ids /\ alloca_inv s /\
+  s.vs_alloca_next + 32 * CARD (ids DIFF FDOM s.vs_allocas) < dimword (:256) /\
+  (!id p sz. id IN ids /\ FLOOKUP s.vs_allocas id = SOME (p,sz) ==> sz = 32) /\
+  FLOOKUP s.vs_allocas source_id = SOME (source_base,source_cap) /\
+  FLOOKUP s.vs_allocas output_id = SOME (d,outsz) /\
+  source_id <> output_id /\ source_id NOTIN ids /\ output_id NOTIN ids /\
+  source_base <= sb /\ sb + len <= source_base + source_cap ==>
+  sb + len < dimword (:256) /\ d + outsz < dimword (:256) /\
+  abi_footprint_disjoint d outsz (abi_decoder_child_scratch ids 0
+    (s.vs_alloca_next + 32 * CARD (ids DIFF FDOM s.vs_allocas)) s) /\
+  abi_footprint_disjoint sb len ((d,outsz)::abi_decoder_child_scratch ids 0
+    (s.vs_alloca_next + 32 * CARD (ids DIFF FDOM s.vs_allocas)) s)
+Proof
+  strip_tac >> drule_all abi_decoder_site_budget_intro >> strip_tac >>
+  drule_all abi_decoder_site_raw_resources >> simp[]
 QED
