@@ -119,6 +119,26 @@ Proof
   simp[type_memory_bytes_def, MULT_COMM]
 QED
 
+Theorem abi_tuple_encode_bytes_window_source_input:
+  type_memory_bytes ce (BaseT (BytesT (Dynamic n))) < dimword (:256) /\
+  abi_decoder_operand_live next op /\ eval_operand op s = SOME source_word /\
+  mload (w2n source_word) s = n2w (LENGTH bs) /\
+  mem_bytes_at (w2n source_word+32) (LENGTH bs) s.vs_memory = bs /\
+  LENGTH bs <= n /\ n < dimword (:256) /\
+  32 + LENGTH bs <= cap /\ cap <= type_memory_bytes ce (BaseT (BytesT (Dynamic n))) /\
+  (w2n source_word+cap <= lo \/ hi <= w2n source_word) ==>
+  abi_tuple_encode_input sf ce (BaseT (BytesT (Dynamic n)))
+    (vyper_to_abi_type env (BaseT (BytesT (Dynamic n)))) (contractABI$BytesV bs)
+    op next lo hi s
+Proof
+  strip_tac >> irule abi_tuple_encode_nonword_source_input >>
+  simp[is_word_type_def] >>
+  qexists_tac `cap` >>
+  simp[is_word_type_def, abi_encoder_input_bytes_iff, type_to_abi_enc_info_def,
+       vyper_to_abi_type_def, has_type_def, valid_bytes_bound_def, valid_length_def,
+       mem_word_at_eq_mload]
+QED
+
 Theorem abi_tuple_encode_owned_bytes_source_input:
   type_memory_bytes ce (BaseT (BytesT (Dynamic n))) < dimword (:256) /\
   abi_decoder_operand_live next op /\ eval_operand op s = SOME source_word /\
