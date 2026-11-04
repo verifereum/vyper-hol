@@ -1594,6 +1594,83 @@ Proof
   cheat
 QED
 
+(* An immutable outside the constructor has no type as a target: the
+   runtime checker leaves bare_global_assignable empty
+   (bare_global_assignable_complete), and the immutable is a bare global
+   (bare_globals_complete), which type_place_target rejects. *)
+Theorem immutable_target_untyped_runtime[local]:
+  !tops ctx cenv cx env es nsid ty.
+    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    ~cx.in_deploy /\ supported_immutable_type tops nsid = SOME ty ==>
+    type_place_target env (TopLevelNameTarget nsid) = NONE
+Proof
+  rpt strip_tac >> PairCases_on `nsid` >>
+  Cases_on `supported_variable_decl tops (nsid0,nsid1)` >>
+  gvs[supported_immutable_type_def] >>
+  PairCases_on `x` >> gvs[AllCaseEqs()] >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  `get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
+  `env_context_consistent env cx` by
+    gvs[expr_sim_inv_def, env_consistent_def] >>
+  `FLOOKUP env.bare_globals (NONE,nsid1) = SOME ty /\
+   env.bare_global_assignable = FEMPTY` by
+    (gvs[env_context_consistent_def, bare_globals_complete_def,
+         bare_global_assignable_complete_def] >> metis_tac[]) >>
+  Cases_on `type_place_target env (TopLevelNameTarget (NONE,nsid1))` >>
+  gvs[vyperTypeEnvTheory.type_place_target_TopLevelNameTarget]
+QED
+
+(* RESIDUAL (constructor immutables): assignment to an immutable in the
+   constructor, where the immutable is assignable.  Waits on the body
+   induction for the constructor (body_inv keyed on cx.in_deploy). *)
+Theorem body_assign_immutable_deploy:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'
+   nsid.
+    cx.in_deploy /\
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
+    t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
+Proof
+  cheat
+QED
+
+(* An immutable target: at runtime it does not type
+   (immutable_target_untyped_runtime); in the constructor,
+   body_assign_immutable_deploy. *)
+Theorem body_assign_immutable:
+  !cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'
+   nsid.
+    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
+    body_expr_ok cx e /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+    call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (Assign (BaseTarget t) e) es = (res, es') /\
+    t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget t) e)) es res es'
+Proof
+  rpt strip_tac >> Cases_on `cx.in_deploy`
+  >- (irule body_assign_immutable_deploy >> metis_tac[]) >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  drule_all immutable_target_untyped_runtime >> strip_tac >>
+  gvs[type_stmt_def, atarget_accepts_def]
+QED
+
 (* RESIDUAL (#637 assignments): the other base targets.
    - A local in memory that body_assign_local_memory leaves: a value
      that widens to a type other than a bytestring (type_widens_to: a
@@ -1602,8 +1679,6 @@ QED
      body_assign_toplevel_copy's: a DynArray (compile_dynarray_to_storage),
      a value of a narrower type (a widened bytestring), or a type of size
      0: no statement lemma.
-   - An immutable (supported_target's supported_immutable_type): no
-     statement lemma.
    - A field or element target (body_assign_place_word/_copy take the
      rest) of an aggregate type the value widens to other than a
      bytestring: no statement lemma, as for a local. *)
@@ -1626,6 +1701,8 @@ Theorem body_assign_other:
               (expr_type e = ty \/ is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\
+             IS_SOME (supported_immutable_type tops nsid)) /\
     ~(?nsid mut ty slot.
         t = TopLevelNameTarget nsid /\
         supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
@@ -1678,6 +1755,9 @@ Proof
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_assign_toplevel_word >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   IS_SOME (supported_immutable_type tops nsid)`
+  >- (gvs[] >> irule body_assign_immutable >> metis_tac[]) >>
   Cases_on `?nsid mut ty slot.
               t = TopLevelNameTarget nsid /\
               supported_variable_decl tops nsid =
@@ -2253,10 +2333,68 @@ Proof
   cheat
 QED
 
-(* RESIDUAL (#637 augmented assignment): a top-level target other than a
-   word storage or transient variable (supported_scalar_target), that is
-   an immutable (supported_target's supported_immutable_type): no
-   statement lemma.  Locals, fields and elements have theirs above. *)
+(* RESIDUAL (constructor immutables): augmented assignment to an immutable
+   in the constructor.  Waits on the body induction for the constructor
+   (body_inv keyed on cx.in_deploy). *)
+Theorem body_augassign_immutable_deploy:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es' nsid.
+    cx.in_deploy /\
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  cheat
+QED
+
+(* An immutable target: at runtime it does not type
+   (immutable_target_untyped_runtime); in the constructor,
+   body_augassign_immutable_deploy. *)
+Theorem body_augassign_immutable:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es' nsid.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  rpt strip_tac >> Cases_on `cx.in_deploy`
+  >- (irule body_augassign_immutable_deploy >> metis_tac[]) >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  drule_all immutable_target_untyped_runtime >> strip_tac >>
+  gvs[type_stmt_def, well_typed_target_def]
+QED
+
+(* RESIDUAL (#637 augmented assignment): a top-level target that is
+   neither a word storage or transient variable (supported_scalar_target)
+   nor an immutable, which only supported_aug_target can admit: no
+   statement lemma.  Locals, fields, elements and immutables have theirs
+   above. *)
 Theorem body_augassign_other:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -2276,6 +2414,8 @@ Theorem body_augassign_other:
     ~(?id. t = NameTarget id) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\
              supported_scalar_target tops nsid) /\
+    ~(?nsid. t = TopLevelNameTarget nsid /\
+             IS_SOME (supported_immutable_type tops nsid)) /\
     ~(?id fld. t = AttributeTarget (NameTarget id) fld) /\
     ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
                  supported_storage_field_write tops nsid fld) /\
@@ -2304,6 +2444,9 @@ Proof
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
       irule body_augassign_toplevel_word >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   IS_SOME (supported_immutable_type tops nsid)`
+  >- (gvs[] >> irule body_augassign_immutable >> metis_tac[]) >>
   Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
   >- (gvs[] >> irule body_augassign_attr_local >> metis_tac[]) >>
   Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
