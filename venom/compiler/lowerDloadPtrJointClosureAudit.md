@@ -261,3 +261,28 @@ that conditional. Request strategist review of coherent interface repair and
 terminal closure, not another isolated opcode leaf. No new checked probe was needed: the mismatch
 is directly visible in current theorem premises. No claim of falsehood of the
 frozen statement is made.
+
+## 6. Tracked-set interface repair (C1.12.66)
+
+`dload_tracked_backward_next` and `dloadbytes_tracked_next`, in
+lowerDloadPtrBackwardNextScript.sml, now give the general implementations with
+independent V (relational values) and U (definedness). Historical actual-next
+statements are unchanged and their proofs are short specializations. The
+hardwired-set failure described in section 3 is historical evidence motivating
+this repair, not a remaining obstacle to these two new interfaces.
+
+Both original-variable use sites were checked by temporary local probe theorems:
+V = set(fn_ir_vars f) DIFF {v | retpc_var f v}, U = set(fn_ir_vars f).
+Each used original-name freshness only, derived fresh NOTIN V by set difference,
+then applied the corresponding general next theorem with drule_all. DLOAD and
+DLOADBYTES probe builds passed (TO_ld_ptr_v2-20261104T185312Z_m5199_t001,
+TO_ld_ptr_v2-20261104T185312Z_m5201_t001). The probes were removed to avoid
+retaining near-duplicate specializations.
+
+The probes kept operand membership/non-retpc premises explicit: DLOAD requires
+`!v. off = Var v ==> v IN U /\ ~retpc_var f v`; DLOADBYTES requires the same for
+every variable operand. They did not claim supply freshness proves non-retpc use,
+source safety, or scratch headroom. No Support/Stack/Saved/Cover propagation or
+terminal closure was established by these interface checks. The old forward
+DLOAD consumer in ExpansionNext retains its independent clean-offset boundary
+interface; this repair does not require an import cycle from it to BackwardNext.
