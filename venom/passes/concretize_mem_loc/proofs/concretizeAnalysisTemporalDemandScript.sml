@@ -486,8 +486,8 @@ Theorem concretize_cached_read_liveat:
   ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
     (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
-  EL n (q0::qs) = JointConfig stk0 PG0 G0 tn0 fn inst0 s0 oms0 om0 hs0 h0 /\
-  LENGTH stk0 = d /\ FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  activation_cache (EL n (q0::qs)) d fn aid (b,sz) /\
   EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\ LENGTH stk = d /\
   FLOOKUP om v = SOME (OriginLocal aid,(b,sz)) /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
@@ -495,7 +495,7 @@ Theorem concretize_cached_read_liveat:
   (!k. n <= k /\ k <= j ==> d <= activation_depth (EL k (q0::qs))) /\
   (!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d) /\
   (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
-  MEM (Allocation aid) (ml_lookup la (s0.vs_current_bb,s0.vs_inst_idx))
+  MEM (Allocation aid) (ml_lookup la p)
 Proof
   strip_tac >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
@@ -514,14 +514,7 @@ Proof
   `activation_guard (EL j (q0::qs)) d
      (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst)` by
     gvs[activation_guard_def] >>
-  `activation_cache (EL n (q0::qs)) d fn aid (b,sz)` by
-    gvs[activation_cache_def] >>
-  `active_inst fn inst0 s0` by
-    (irule reachable_active >>
-     `joint_config_reachable vs0 C (EL n (q0::qs))` by
-       (irule trace_config_at >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
-  `activation_location (EL n (q0::qs)) d fn (s0.vs_current_bb,s0.vs_inst_idx)` by
-    gvs[activation_location_def] >>
+
   `active_inst fn inst s` by
     metis_tac[joint_origin_history_projection, frame_history_active] >>
   `activation_location (EL j (q0::qs)) d fn (s.vs_current_bb,s.vs_inst_idx)` by
@@ -534,6 +527,70 @@ Proof
   goal_assum (drule_at (Pat `active_inst fn inst s`)) >>
   qexists_tac `byte` >> gvs[ml_read_gen_def] >>
   qexistsl_tac [`j`,`lo`,`names`,`observed`] >> gvs[]
+QED
+
+Theorem concretize_untainted_local_read_liveat_at_location:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  EL j (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\ LENGTH stk = d /\
+  FLOOKUP om v = SOME (OriginLocal aid,(b,sz)) /\
+  mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  b <= byte /\ byte < b + sz /\ byte IN joint_reads (EL j (q0::qs)) /\ lo <= byte /\
+  byte NOTIN joint_mem_taint (EL j (q0::qs)) /\ ~in_revert_forward fn s /\
+  (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) ==>
+  MEM (Allocation aid) (ml_lookup la p)
+Proof
+  strip_tac >>
+  `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
+    metis_tac[trace_config_at] >>
+  `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
+    (gvs[joint_config_reachable_def] >>
+     drule joint_origin_history_erasure >> strip_tac >>
+     metis_tac[origin_frame_current_cache]) >>
+  `activation_cache (EL j (q0::qs)) d fn aid (b,sz)` by
+    gvs[activation_cache_def] >>
+  `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `!k. n <= k /\ k <= j ==>
+    d <= activation_depth (EL k (q0::qs)) /\
+    activation_cache (EL k (q0::qs)) d fn aid (b,sz)` by
+    (rpt gen_tac >> strip_tac >> irule joint_untainted_demand_cache >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+     qexists_tac `byte` >> simp[] >> qexists_tac `n` >> simp[]) >>
+  `activation_cache (EL n (q0::qs)) d fn aid (b,sz)` by
+    (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+  `!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d` by
+    (rpt strip_tac >>
+     `joint_nonrevert (EL k (q0::qs))` by
+       (irule joint_trace_nonrevert_read_at >>
+        goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+        qexistsl_tac [`byte`,`j`] >> simp[joint_nonrevert_def]) >>
+     Cases_on `EL k (q0::qs)` >>
+     gvs[joint_nonrevert_def, activation_nonrevert_def]) >>
+  irule concretize_cached_read_liveat >>
+  goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `activation_location _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP om _ = _`)) >>
+  goal_assum (drule_at (Pat `mem_read_ops _ = _`)) >>
+  qexists_tac `byte` >> simp[] >> metis_tac[]
 QED
 
 Theorem concretize_untainted_local_read_liveat:
@@ -563,40 +620,18 @@ Theorem concretize_untainted_local_read_liveat:
   MEM (Allocation aid) (ml_lookup la (s0.vs_current_bb,s0.vs_inst_idx))
 Proof
   strip_tac >>
-  `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
-    metis_tac[trace_config_at] >>
-  `FLOOKUP s.vs_allocas aid = SOME (b,sz)` by
-    (gvs[joint_config_reachable_def] >>
-     drule joint_origin_history_erasure >> strip_tac >>
-     metis_tac[origin_frame_current_cache]) >>
-  `activation_cache (EL j (q0::qs)) d fn aid (b,sz)` by
-    gvs[activation_cache_def] >>
-  `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
-  `!k. n <= k /\ k <= j ==>
-    d <= activation_depth (EL k (q0::qs)) /\
-    activation_cache (EL k (q0::qs)) d fn aid (b,sz)` by
-    (rpt gen_tac >> strip_tac >> irule joint_untainted_demand_cache >>
-     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-     qexists_tac `byte` >> simp[] >> qexists_tac `n` >> simp[]) >>
-  `FLOOKUP s0.vs_allocas aid = SOME (b,sz)` by
-    (first_x_assum (qspec_then `n` mp_tac) >> simp[activation_cache_def]) >>
-  `!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d` by
-    (rpt strip_tac >>
-     `joint_nonrevert (EL k (q0::qs))` by
-       (irule joint_trace_nonrevert_read_at >>
-        goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-        qexistsl_tac [`byte`,`j`] >> simp[joint_nonrevert_def]) >>
-     Cases_on `EL k (q0::qs)` >>
-     gvs[joint_nonrevert_def, activation_nonrevert_def]) >>
-  irule concretize_cached_read_liveat >>
+  `active_inst fn inst0 s0` by
+    (irule reachable_active >>
+     `joint_config_reachable vs0 C (EL n (q0::qs))` by
+       (irule trace_config_at >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
+  irule concretize_untainted_local_read_liveat_at_location >>
   goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `EL n (_::_) = _`)) >>
-  goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
   goal_assum (drule_at (Pat `FLOOKUP om _ = _`)) >>
   goal_assum (drule_at (Pat `mem_read_ops _ = _`)) >>
-  qexists_tac `byte` >> simp[] >> metis_tac[]
+  goal_assum (drule_at (Pat `EL j (_::_) = _`)) >>
+  goal_assum (drule_at (Pat `o1_walk_view _ _ _ _ _`)) >>
+  qexists_tac `byte` >> simp[] >>
+  qexistsl_tac [`lo`,`n`,`names`] >> simp[activation_location_def]
 QED
