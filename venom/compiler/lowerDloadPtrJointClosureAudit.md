@@ -224,9 +224,13 @@ exported theorems or a proposed blanket conditional closure axiom.
    use checks; Defs must include opaque variables as above. Generic operand and
    memory transports plus accepted opcode facts are inputs, not a complete
    dispatcher. Terminal safety is described in item 3. allocas_from uses layout
-   and tables. The DALLOCA conditional requires a separate below-initial-FMP
-   bound: o1_fn_shape:340-351 does NOT exclude DALLOCA (it only restricts
-   gas/retpc outputs). This bound is not silently an invariant field.
+   and tables. CORRECTION (C1.12.65): although o1_fn_shape:340-351 does not
+   exclude DALLOCA, the full o1_src_inv_def:540 DOES. Existing
+   lower_dload_stage_no_dalloca transports this absence to C'. The checked
+   consumer lower_dload_src_inv_below_fmp (lowerDloadPtrStaticScript.sml)
+   discharges the target conditional vacuously for every t. No below-initial-FMP
+   bound on relocated sites is needed. The earlier resource concern overlooked
+   the full invariant, and is resolved; it is not a counterexample path.
 5. Resource origins: target and source reachability plus source callee_first
    yield live indices/support through dload_joint_runtime_scratch_budget.
    That theorem STILL requires exact scratch identity, length alignment and
@@ -234,7 +238,9 @@ exported theorems or a proposed blanket conditional closure axiom.
    Source headroom comes via frame-to-raw mem_inv bridge; target frontier
    inequality additionally needs the scratch-budget layout bound. No external
    target headroom hypothesis is licensed. All these origins must be applied
-   anew after push/pop and at proper-prefix anchors.
+   anew after push/pop and at proper-prefix anchors. These dimword scratch
+   headroom obligations are independent of the now-resolved DALLOCA conditional;
+   absence of DALLOCA does not itself supply scratch frontier headroom.
 
 Remaining singleton semantic families (including storage/calls/creation and
 memory/environment observations) must be dispatched against their current
@@ -248,8 +254,10 @@ these closure obligations.
 Current candidate fails the consumer-composition test before global induction:
 restricted original V is not accepted by the actual expansion wrappers.
 Forwarding entry/success reflection and interval successor closure also remain
-unproved, and the safety extraction DALLOCA conditional needs explicit origin.
-Request strategist review of coherent interface repair and terminal closure,
-not another isolated opcode leaf. No new checked probe was needed: the mismatch
+unproved. The safety extraction DALLOCA conditional is now checked from the full
+source invariant by lower_dload_src_inv_below_fmp; lowerDloadPtrStaticTheory
+built successfully (TO_ld_ptr_v2-20261104T185312Z_m5175_t001). This resolves only
+that conditional. Request strategist review of coherent interface repair and
+terminal closure, not another isolated opcode leaf. No new checked probe was needed: the mismatch
 is directly visible in current theorem premises. No claim of falsehood of the
 frozen statement is made.
