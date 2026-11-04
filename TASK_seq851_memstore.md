@@ -161,7 +161,7 @@ In `stmtSimAssignStorageCopyScript.sml`, the local lemmas `storage_copy_lowered_
 ## Completion Criteria
 
 - `stmtSimAssignStorageCopyTheory`, `stmtSimDeclMemTheory`, `memoryLocalRhsPropsTheory`, `bodySimStmtCasesTheory` and `bodySimDeclCasesTheory` build with the command below at the default per-step limit.
-- No new `cheat` in these five theories. Cheats already there (`body_assign_other`, `body_annassign_other`, and others present before this task) stay as they are.
+- No new `cheat` in these five theories. Cheats already there (`body_assign_other`, `body_annassign_other`, `body_assign_widened_aggregate_call`, `body_annassign_widened_aggregate_call`, and others present before this task) stay as they are.
 - No changed premises beyond what this file allows.
 
 ## Build
