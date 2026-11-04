@@ -2,6 +2,7 @@
 Theory entryCompileIntervals
 Ancestors
   moduleLowering compileEnv context fragExec stmtLoweringMono abiDecoderAppend
+  abiDecoderCounters exprLoweringProps
 
 Theorem cs_appends_decode_args:
   !xs ce off opc hi adj. cs_appends (compile_decode_args ce xs off opc hi adj)
@@ -101,18 +102,115 @@ Proof
     irule cs_appends_ignore_bind, conj_tac])
 QED
 
+Theorem vars_mono_decode_args[local]:
+  !xs ce off opc hi adj. abi_decoder_vars_mono (compile_decode_args ce xs off opc hi adj)
+Proof
+  Induct >> simp[compile_decode_args_def, abi_decoder_vars_mono_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_decode_args_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+    abi_decoder_vars_mono_abi_clamp, cj 1 abi_decoder_vars_mono_mutual,
+    abi_decoder_vars_mono_return]),
+    gen_tac, irule abi_decoder_vars_mono_bind,
+    irule abi_decoder_vars_mono_ignore_bind, conj_tac, IF_CASES_TAC]) >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[abi_decoder_vars_mono_return] >>
+  rename1 `SOME loc` >> Cases_on `var_location_decode_operand loc` >>
+  simp[abi_decoder_vars_mono_return, abi_decoder_vars_mono_prims] >>
+  rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+    cj 1 abi_decoder_vars_mono_mutual]), gen_tac,
+    irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind, conj_tac])
+QED
+
+Theorem vars_mono_register_positional_args[local]:
+  !xs ce off. abi_decoder_vars_mono (compile_register_positional_args ce xs off)
+Proof
+  Induct >> simp[compile_register_positional_args_def, abi_decoder_vars_mono_return] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_register_positional_args_def] >>
+  Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
+  rename1 `SOME loc` >> Cases_on `var_location_memory_size loc` >> simp[] >>
+  rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_abi_alloc_buffer,
+    vars_mono_decode_args, abi_decoder_vars_mono_return]), gen_tac,
+    irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind, conj_tac])
+QED
+
+Theorem vars_mono_nonreentrant[local]:
+  abi_decoder_vars_mono (compile_nonreentrant_lock key trans view) /\
+  abi_decoder_vars_mono (compile_nonreentrant_unlock key trans view)
+Proof
+  simp[compile_nonreentrant_lock_def, compile_nonreentrant_unlock_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_prims, abi_decoder_vars_mono_return]),
+    gen_tac, irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind,
+    conj_tac, IF_CASES_TAC])
+QED
+
+Theorem vars_mono_stmts[local]:
+  abi_decoder_vars_mono (compile_stmts ce lc ty stmts)
+Proof
+  simp[abi_decoder_vars_mono_def] >>
+  metis_tac[ci_mono_def, cj 2 compile_stmt_ci_mono]
+QED
+
+Theorem vars_mono_comp_get[local]:
+  abi_decoder_vars_mono comp_get
+Proof
+  simp[abi_decoder_vars_mono_def, comp_get_def]
+QED
+
+Theorem vars_mono_guarded_body[local]:
+  abi_decoder_vars_mono (compile_guarded_body ce nr key trans view stmts rt)
+Proof
+  simp[compile_guarded_body_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[vars_mono_nonreentrant, vars_mono_stmts,
+    vars_mono_comp_get, abi_decoder_vars_mono_prims, abi_decoder_vars_mono_return]),
+    gen_tac, irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind,
+    conj_tac, IF_CASES_TAC]) >> Cases_on `rt` >> simp[abi_decoder_vars_mono_prims]
+QED
+
+Theorem vars_mono_external_function_body[local]:
+  abi_decoder_vars_mono (compile_external_function_body ce args nr key trans view stmts rt)
+Proof
+  simp[compile_external_function_body_def] >> irule abi_decoder_vars_mono_bind >>
+  simp[vars_mono_register_positional_args, vars_mono_guarded_body]
+QED
+
+Theorem vars_mono_entry_checks[local]:
+  abi_decoder_vars_mono (compile_entry_checks mc pay)
+Proof
+  simp[compile_entry_checks_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_prims, abi_decoder_vars_mono_return]),
+    gen_tac, irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind,
+    conj_tac, IF_CASES_TAC])
+QED
+
+Theorem external_prefix_counter_growth[local]:
+  (compile_entry_checks mc pay sa = ((),sb) ==> sa.cs_next_var <= sb.cs_next_var) /\
+  (compile_external_function_body ce args nr key trans view stmts rt sa = ((),sb) ==>
+    sa.cs_next_var <= sb.cs_next_var) /\
+  (new_block lbl sa = (v,sb) ==> sa.cs_next_var <= sb.cs_next_var)
+Proof
+  rpt conj_tac >> strip_tac
+  >- (mp_tac vars_mono_entry_checks >>
+      simp[abi_decoder_vars_mono_def] >> metis_tac[pairTheory.SND])
+  >- (mp_tac vars_mono_external_function_body >>
+      simp[abi_decoder_vars_mono_def] >> metis_tac[pairTheory.SND]) >>
+  gvs[new_block_def]
+QED
+
 Theorem external_fn_selected_check_intervals:
   !fns sa sx.
     MEM (lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt) fns /\
     compile_external_fn_bodies fns sa = ((),sx) ==>
     ?sc sd. compile_entry_checks mc pay sc = ((),sd) /\
       sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
-      cs_extends sa sc /\ cs_extends sc sd /\ cs_extends sd sx
+      cs_extends sa sc /\ cs_extends sc sd /\ cs_extends sd sx /\
+      sa.cs_next_var <= sc.cs_next_var
 Proof
   Induct >> simp[compile_external_fn_bodies_def] >>
   gen_tac >> PairCases_on `h` >> rpt gen_tac >>
   simp[compile_external_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  imp_res_tac external_prefix_counter_growth >>
   drule (SRULE [cs_appends_def] (cj 2 cs_appends_prims)) >> strip_tac >>
   drule (SRULE [cs_appends_def] cs_appends_entry_checks) >> strip_tac >>
   drule (SRULE [cs_appends_def] cs_appends_external_function_body) >> strip_tac >>
@@ -122,7 +220,7 @@ Proof
       conj_tac >- gvs[new_block_def] >>
       conj_tac >- gvs[new_block_def] >> metis_tac[cs_extends_trans]) >>
   first_x_assum drule >> strip_tac >>
-  qexistsl_tac [`sc`, `sd`] >> simp[] >> metis_tac[cs_extends_trans]
+  qexistsl_tac [`sc`, `sd`] >> simp[] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem cs_appends_runtime_fallback_suffix:
