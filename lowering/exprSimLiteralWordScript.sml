@@ -12,7 +12,7 @@ Ancestors
   venomExecSemantics venomInst venomState
   vyperLookupStorage vyperStorageBackend
 
-Theorem literal_read_all_tails[local]:
+Theorem literal_read_all_tails:
   !cx ann l es tail.
     bind (eval_expr cx (Literal ann l)) (read_result cx)
       (es with gas_obs := tail) =
@@ -67,3 +67,12 @@ Proof
   qexistsl_tac [`[]`, `evaluate_literal l`, `es`, `s0`] >>
   irule literal_word_prefix >> simp[]
 QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_literal_word_sim)
+  in
+    if null axioms andalso null (Thm.hyp compile_literal_word_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "LITERAL_WORD_AUDIT compile_literal_word_sim OK\n"
+    else raise Fail "compile_literal_word_sim: admitted proof dependency"
+  end;
