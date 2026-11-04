@@ -1,6 +1,7 @@
 Theory loadElimSolverProvenance
 Ancestors
   loadElimLatticeSoundHelpers loadElimDefs loadElimTransferProvenance
+  loadElimConvergence
   dfAnalyzeProps dfAnalyzeDefs cfgDefs venomWf finite_map list rich_list
 
 Theorem le_join_selected_lookup:
@@ -111,12 +112,8 @@ Proof
   simp[TAKE_SUC, FOLDL_APPEND]
 QED
 
-Theorem le_analyze_boundary_absorbs[local]:
+Theorem le_analyze_boundary_absorbs:
   wf_function fn /\
-  is_fixpoint (df_process_block Forward NONE load_join load_transfer
-    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
-    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
-    (load_analyze ctx fn) /\
   MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
   df_boundary NONE (load_analyze ctx fn) lbl =
@@ -125,15 +122,12 @@ Theorem le_analyze_boundary_absorbs[local]:
 Proof
   simp[load_analyze_def] >> rpt strip_tac >>
   irule (cj 1 (SRULE [LET_THM] df_boundary_fixpoint)) >>
-  simp[] >> metis_tac[]
+  simp[] >> metis_tac[le_load_analyze_fixpoint, loadElimSolverHelpersTheory.le_solver_process_def,
+    load_analyze_def]
 QED
 
-Theorem le_analyze_entry_join[local]:
+Theorem le_analyze_entry_join:
   wf_function fn /\
-  is_fixpoint (df_process_block Forward NONE load_join load_transfer
-    load_edge_transfer ctx (OPTION_MAP (\l. (l,SOME FEMPTY)) (fn_entry_label fn))
-    (cfg_analyze fn) fn.fn_blocks) (cfg_analyze fn).cfg_dfs_pre
-    (load_analyze ctx fn) /\
   MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
   lookup_block lbl fn.fn_blocks = SOME bb ==>
   df_at NONE (load_analyze ctx fn) lbl 0 =
@@ -143,7 +137,8 @@ Theorem le_analyze_entry_join[local]:
 Proof
   simp[load_analyze_def] >> rpt strip_tac >>
   irule (cj 1 (SRULE [LET_THM] df_at_inter_transfer)) >>
-  simp[] >> metis_tac[]
+  simp[] >> metis_tac[le_load_analyze_fixpoint, loadElimSolverHelpersTheory.le_solver_process_def,
+    load_analyze_def]
 QED
 
 Theorem le_empty_join_no_lookup[local]:
