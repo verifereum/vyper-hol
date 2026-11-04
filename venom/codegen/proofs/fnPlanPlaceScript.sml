@@ -22,6 +22,7 @@ Theory fnPlanPlace
 Ancestors
   fnPlanLineage codegen asmSem symbolResolve planExec stackPlanGen
   stackPlanTypes fnPlanPlaceRevertPostamble fnPlanPlaceFnRegion
+  fnPlanPlaceDfsBlock
 
 (* Used at each jump of the block induction: the successor's code
    (planned from its DFS state, fnPlanCover) is at the PC its label
@@ -68,7 +69,29 @@ Theorem dfs_block_code_placed:
              ?off'. FLOOKUP lo l = SOME off' /\ off' < dimword (:256) /\
                     FLOOKUP o2pc off' = SOME (pc + j))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ctx = _` SUBST_ALL_TAC >>
+  qpat_x_assum `lo = _` SUBST_ALL_TAC >>
+  qpat_x_assum `o2pc = _` SUBST_ALL_TAC >>
+  rename1 `generate_context_plan _ = SOME plan` >>
+  drule generate_context_plan_regions_length >> strip_tac >>
+  `MEM r plan.cp_regions` by metis_tac[listTheory.MEM_EL] >>
+  drule_all dfs_block_plan_contained >> strip_tac >>
+  drule_all codegen_region_subplan_contained >> strip_tac >>
+  drule_all generate_block_plan_leading_label >> strip_tac >>
+  drule codegen_assembly_symbols_ok >> strip_tac >>
+  qpat_x_assum `block_ops = _` SUBST_ALL_TAC >>
+  fs[execute_plan_def, exec_stack_op_def] >>
+  qabbrev_tac `asm_tail = FLAT (MAP (exec_stack_op plan.cp_initial_fmp) tail)` >>
+  `prog = pre' ++ (AsmLabel lbl :: asm_tail) ++ post'` by simp[] >>
+  drule_all labelled_asm_slice_placed >> strip_tac >>
+  drule asm_slice_internal_labels >>
+  disch_then (qspecl_then [`pre'`, `AsmLabel lbl :: asm_tail`, `post'`] mp_tac) >>
+  strip_tac >>
+  qpat_x_assum `prog = pre' ++ [AsmLabel lbl] ++ asm_tail ++ post'`
+    (fn th => rewrite_tac[GSYM th]) >>
+  qexistsl_tac [`off`, `LENGTH pre'`] >> simp[arithmeticTheory.ADD_COMM] >>
+  metis_tac[listTheory.LENGTH, arithmeticTheory.ADD_COMM]
 QED
 
 (* Used for INVOKE (gen_invoke_frame_sim's callee-placement premise: the
