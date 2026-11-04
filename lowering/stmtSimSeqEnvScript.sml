@@ -6,7 +6,7 @@ Ancestors
   stmtLowering exprLoweringProps localPtrsProps vyperInterpreter vyperState
   vyperEvalPreservesScopes list finite_map
 
-Theorem gas_admissible_stmts_head[local]:
+Theorem gas_admissible_stmts_head:
   gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es ==>
   gas_admissible (eval_stmt cx stmt) (stmt_res_ok lctx) es
 Proof
@@ -17,7 +17,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem gas_admissible_stmts_tail[local]:
+Theorem gas_admissible_stmts_tail:
   gas_admissible (eval_stmts cx (stmt::ss)) (stmt_res_ok lctx) es /\
   (!tail. eval_stmt cx stmt (es with gas_obs := xs ++ tail) =
     (INL (), mid with gas_obs := tail)) ==>
@@ -30,7 +30,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem stmt_post_normal_entry[local]:
+Theorem stmt_post_normal_entry:
   stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
   ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= sm.cs_next_var ==>
   cenv_top_ext cenv c mid.scopes /\
@@ -43,7 +43,7 @@ Proof
   metis_tac[cenv_top_ext_return_pc]
 QED
 
-Theorem stmt_post_exception_endpoint[local]:
+Theorem stmt_post_exception_endpoint:
   res <> INL () /\
   stmt_post ctx func cx lctx cenv c sa sm s0 res ee t ==>
   stmt_post ctx func cx lctx cenv c' sa sb s0 res ee t
@@ -52,7 +52,7 @@ Proof
   gvs[stmt_lands_def] >> metis_tac[]
 QED
 
-Theorem stmt_post_sequence[local]:
+Theorem stmt_post_sequence:
   stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) mid t /\
   stmt_post ctx func cx lctx c c' sm sb t res ee u /\
   sa.cs_next_var <= sm.cs_next_var /\

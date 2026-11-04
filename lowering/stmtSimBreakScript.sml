@@ -9,7 +9,7 @@ Libs
   monadsyntax
 
 
-Theorem stmt_post_break[local]:
+Theorem stmt_post_break:
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted ==>
   stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sb s0
     (INR BreakException) (es with gas_obs := []) (jump_to ex s0)

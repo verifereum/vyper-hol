@@ -1,7 +1,7 @@
 (* Compiled statement environments, reservations and frame facts. *)
 Theory stmtSimProps
 Ancestors
-  fragGasPath gasCount stmtSimDefs
+  fragGasPath fragGasPathMem gasCount stmtSimDefs memSafeRun instMemFrontier
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
@@ -90,6 +90,32 @@ Proof
   rw[cenv_top_ext_def, compileEnvTheory.compile_env_component_equality]
 QED
 
+Theorem emit_jump_zero_path_mem:
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id JMP [Label lbl] []] /\
+  fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
+  gas_path_mem ctx func s 0 (OK (jump_to lbl s))
+Proof
+  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id JMP [Label lbl] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_mem_edge ctx func s 0 (OK (jump_to lbl s))` by
+    (rewrite_tac[gas_path_mem_edge_def] >> simp[] >>
+     qexists_tac `0:num` >>
+     `mem_safe_step 0 ctx (mk_inst sa.cs_next_id JMP [Label lbl] []) s` by
+       (simp[mem_safe_step_non_invoke, mk_inst_def] >>
+        irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
+          step_jmp_behavior, is_terminator_def] >>
+     metis_tac[]) >>
+  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
+  metis_tac[gas_path_mem_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
 Theorem emit_jump_zero_path:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_current_insts = sa.cs_current_insts ++
@@ -99,18 +125,8 @@ Theorem emit_jump_zero_path:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
   gas_path ctx func s 0 (OK (jump_to lbl s))
 Proof
-  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id JMP [Label lbl] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `gas_path_edge ctx func s 0 (OK (jump_to lbl s))` by
-    (rewrite_tac[gas_path_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     metis_tac[]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+  strip_tac >> drule_all emit_jump_zero_path_mem >>
+  metis_tac[gas_path_mem_exec]
 QED
 
 Theorem run_from_jump_end:
