@@ -181,3 +181,32 @@ QED
    remain predecessor obligations: variable-only execution and index advance
    do not produce them.  Other opcodes, expansion prefixes, block transfers,
    calls, returns and forwarding remain open; this is not a full simulation. *)
+
+Theorem dload_singleton_reachable_next:
+  frame_reachable vs C cs PG G tn f i s /\
+  dload_control_match q f g s t i [i] 0 /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+  ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK s1 /\
+  s1 = s with vs_vars := s1.vs_vars /\
+  t1 = t with vs_vars := t1.vs_vars /\
+  active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ?i' emitted'.
+    frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
+      f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+    dload_control_match q f g
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
+    j = HD emitted'
+Proof
+  strip_tac >>
+  drule_all dload_control_singleton_next >> strip_tac >>
+  qexistsl [`i'`,`emitted'`] >> simp[] >>
+  irule frame_reachable_next >> simp[] >>
+  `active_inst f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ i' _ _` mp_tac >>
+     simp[dload_control_match_def] >> metis_tac[]) >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `dload_control_match _ _ _ s t _ _ _` mp_tac >>
+  simp[dload_control_match_def] >> metis_tac[]
+QED
