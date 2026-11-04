@@ -237,3 +237,108 @@ OK or IntRet. It therefore cannot have a sequential successor through any
 frame_reachable rule. None of these observations proves relational closure:
 that remains blocked pending the explicit support, memory, PHI, call/return,
 and forwarding-taint obligations above.
+
+## Source provenance support checkpoint (C1.12.3.1)
+
+The syntax obligation described as unresolved at lines 183-187 is now proved:
+`lower_dload_insts_supply_forward_pair` and the source-context-facing
+`lower_dload_block_supply_forward_pair` in lowerDloadPtrForwardScript.sml.
+This does not close the replay/safety obligations at lines 189-200.
+
+### Candidate and adversarial branch check
+
+The source-only candidate is domain support for G in fn_pv P fn, support of
+non-NONE PG positions in P fn.fn_name, and both properties for every saved
+caller. This is NOT yet a theorem. No counterexample was found by inspecting
+all five frame_reachable constructors and all branches of out_prov/set_prov.
+The examination did not reveal a necessary o1_ctx_shape premise for this
+*domain-only* candidate: malformed instructions either kill provenance or
+still propagate along an existing static def-use edge. This does not assert
+that domain support proves provenance/value soundness.
+
+For induction, also carry MEM fn C.ctx_functions and
+`!f. MEM f stk ==> MEM f.cf_fn C.ctx_functions`, or first prove that membership
+as a separate reachability fact. The candidate as originally phrased does
+not include these auxiliary induction facts; static fn_ptr_ok for a restored
+caller cannot be recovered merely from its parameter/provenance support.
+Lookup membership is available from venomInst.lookup_function_mem/MEM.
+An active instruction belongs to fn_insts via active_inst's block lookup,
+get_instruction's bounded EL, and fn_insts_blocks_MEM.
+
+| Constructor | Source-only support origin and remaining closure |
+|---|---|
+| entry | G=FEMPTY, PG=[], stk=[]: support is immediate. This constructor does NOT apply entry_prov, even though enters_block evaluates PHI values. For support this empty map is harmless. Function membership follows from lookup. |
+| next | PG/stk unchanged. set_prov either updates a SINGLE output with SOME site or DRESTRICTs all outputs. ALLOCA/DALLOCA singleton outputs are ptr_roots, regardless of the actual site value. PARAM can yield SOME only with literal index in PG bounds and non-NONE slot; PG support puts it in P, hence its singleton output is a root. ADD/SUB/ASSIGN SOME first_prov must come from a Var operand whose name is in FDOM G, hence fn_pv; pointer_derived_vars_edge puts every output in fn_pv. Every other opcode has out_prov=NONE. Malformed ALLOCA/DALLOCA multiple outputs are killed by set_prov; malformed PARAM operands yield NONE. |
+| block | entry_prov selects a block of this function or is identity. phis_prov reads phi_prov from the SAME G0 for every PHI. An unsupported, malformed or missing predecessor selection yields NONE and kills outputs. A SOME selected Var is an operand member (existing resolve_phi_MEM), its provenance comes from G0, and the PHI static edge contains its outputs. Recursion changes only the accumulation map, not G0. Stop at first non-PHI. |
+| call | Snapshot preserves caller G/PG and static membership. New callee G=FEMPTY. At k<LENGTH(MAP (op_prov G) ops), a non-NONE entry implies EL k ops=Var v with v in FDOM G. Caller fn_ptr_ok supplies ptr_use_ok. Its INVOKE clause uses exactly the decoded args (not inst_operands including the label), so k is already the argument index and no +/-1 adjustment is permitted. decode_invoke is functional; lookup identifies callee.fn_name=nm. Then k IN P callee.fn_name. No callee_first or context shape premise supplies or is needed for this argument. |
+| ret | Caller PG is restored from f.cf_params. Saved domain support and FDOM_DRESTRICT imply support for the restored, output-killed provenance. Remaining stack is a sublist of the old stack; saved membership recovers fn_ptr_ok for the restored caller. Current callee PG/G support does not imply caller support and cannot replace the saved conjunct. |
+
+### Existing interfaces to reuse (do not duplicate)
+
+- lowerDloadPtrClosure.pointer_derived_vars_edge: finite roots plus an
+  instruction member, pointer-preserving opcode and supported Var input
+  imply supported output. pointer_use_vars_contains gives root inclusion.
+- lowerDloadPtrStatic.FINITE_ptr_roots: finiteness is already proved.
+- execEquivParamBase.resolve_phi_MEM:
+  `resolve_phi prev ops = SOME op ==> MEM op ops` (quantified over all three).
+  Other upstream copies exist; use an allowed existing version, not the
+  owner-prohibited lowerDloadClassify theory and not another duplicate.
+- finite_map.FDOM_DRESTRICT is the general domain equality. Restriction
+  support alone is a direct set-theoretic corollary, so no new duplicate
+  DRESTRICT-domain theorem was added.
+
+### Checked small support boundaries
+
+New lowerDloadPtrSupportScript.sml exports:
+
+```
+op_prov_outside_support:
+  FDOM G SUBSET V /\ (!v. op = Var v ==> v NOTIN V) ==>
+  op_prov G op = NONE
+
+set_prov_support:
+  FDOM G SUBSET V /\
+  (!v site. outs = [v] /\ p = SOME site ==> v IN V) ==>
+  FDOM (set_prov G outs p) SUBSET V
+
+out_prov_param_supported:
+  inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] /\
+  (!k. k < LENGTH PG /\ EL k PG <> NONE ==> k IN positions) /\
+  out_prov PG G inst s' <> NONE ==> w2n idx IN positions
+```
+
+set_prov_support exercises the existing DRESTRICT law in its kill branch and
+requires support only for the actual singleton/SOME update branch. The PARAM
+probe formally excludes out-of-range and unmarked positions. All three pass
+holbuild lowerDloadPtrSupportTheory (TO_ld_ptr_v2-20261104T033958Z_m1510_t001).
+
+### Missing closure statements for strategist review (not assumed facts)
+
+1. Non-PHI output support:
+   `MEM inst (fn_insts fn) /\ FDOM G SUBSET fn_pv P fn /\
+    (!k. k < LENGTH PG /\ EL k PG <> NONE ==> k IN P fn.fn_name) /\
+    inst.inst_outputs = [v] /\ out_prov PG G inst s' <> NONE ==>
+    v IN fn_pv P fn`.
+   Derive step_prov domain support with set_prov_support. This does not need
+   successful execution as a premise; the updated state is used only for the
+   site value, not its domain.
+2. Parallel PHI support:
+   `FDOM G0 SUBSET fn_pv P fn /\
+    (!inst. MEM inst xs ==> MEM inst (fn_insts fn)) ==>
+    FDOM (phis_prov prev G0 xs) SUBSET fn_pv P fn`.
+   Then entry_prov support by block membership. Keep G0 fixed under induction
+   on xs; no sequential substitution of PHI input provenance.
+3. Decoded argument support:
+   `fn_ptr_ok P caller /\ MEM inv (fn_insts caller) /\
+    inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm,ops) /\
+    FDOM G SUBSET fn_pv P caller ==>
+    !k. k < LENGTH (MAP (op_prov G) ops) /\
+        EL k (MAP (op_prov G) ops) <> NONE ==> k IN P nm`.
+   Use ptr_use_ok, EL_MAP and a Var operand inversion; no label-index shift.
+4. Joint source frame support: the candidate plus active/saved function
+   membership for induction. Entry/call use context lookup, next/block use
+   (1)/(2), ret uses saved facts and FDOM_DRESTRICT. This full induction is
+   deliberately not attempted before review.
+
+None of these source-only closures supplies paired opaque definedness,
+post-expansion memory transport, scratch budget or saved suffix layout.
