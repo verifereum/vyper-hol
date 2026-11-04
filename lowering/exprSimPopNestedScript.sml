@@ -277,6 +277,97 @@ Proof
 QED
 
 
+(* Different copy branch: a live outer element contains an inner array
+   that becomes empty. Source sparse encoding skips its dead descendants;
+   the generated multi-word copy still writes their capacity words. *)
+Definition nested_inner_shrink_type_def[local]:
+  nested_inner_shrink_type =
+    ArrayTV (ArrayTV (ArrayTV
+      (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Fixed 1)) (Dynamic 1)) (Dynamic 1)
+End
+
+Definition nested_inner_shrink_ast_type_def[local]:
+  nested_inner_shrink_ast_type =
+    ArrayT (ArrayT (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 1)) (Fixed 1))
+      (Dynamic 1)) (Dynamic 1)
+End
+
+Theorem nested_inner_shrink_sizes_probe[local]:
+  !cenv.
+    type_memory_bytes cenv nested_inner_shrink_ast_type = 128 /\
+    type_slot_size nested_inner_shrink_type = 4
+Proof
+  gen_tac >> EVAL_TAC
+QED
+
+Theorem nested_inner_shrink_dispatch_probe[local]:
+  !cenv tr sa.
+    compile_assign_value cenv (Lit 0w)
+      (if tr then LocTransient else LocStorage) (Lit 0w) F
+      (SOME LocMemory) nested_inner_shrink_ast_type nested_inner_shrink_ast_type
+      (SOME (3,96)) 128 sa =
+    compile_dynarray_to_storage (Lit 0w) (Lit 0w) 3 96 tr sa
+Proof
+  rpt gen_tac >> Cases_on `tr` >>
+  simp[compile_assign_value_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_return_def]
+QED
+
+Theorem nested_inner_shrink_encode_probe[local]:
+  encode_value nested_inner_shrink_type
+    (ArrayV (DynArrayV [ArrayV (DynArrayV [])])) = SOME [(0,1w);(1,0w)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_inner_shrink_memory_probe[local]:
+  val_in_memory nested_inner_shrink_type
+    (ArrayV (DynArrayV [ArrayV (DynArrayV [])])) 0
+    (word_to_bytes (1w:bytes32) T ++ REPLICATE 96 (0w:word8))
+Proof
+  CONV_TAC (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))
+QED
+
+Definition nested_inner_shrink_function_def[local]:
+  nested_inner_shrink_function tr =
+    let st = SND (compile_dynarray_to_storage (Lit 0w) (Lit 0w) 3 96 tr
+                   (initial_compile_state "entry")) in
+    let st' = SND (emit_void STOP [] st) in
+    mk_raw_function "entry"
+      (REVERSE st'.cs_blocks ++
+       [<|bb_label := st'.cs_current_bb;
+          bb_instructions := st'.cs_current_insts|>])
+End
+
+Theorem nested_inner_shrink_run_probe[local]:
+  !ctx tr. case run_blocks 24 ctx (nested_inner_shrink_function tr)
+    ((if tr then tstore else sstore) 3w 7w
+      ((if tr then tstore else sstore) 2w 1w
+      ((if tr then tstore else sstore) 1w 1w
+      ((if tr then tstore else sstore) 0w 1w
+      ((init_venom_state "entry") with vs_memory :=
+        word_to_bytes (1w:bytes32) T ++ REPLICATE 96 (0w:word8)))))) of
+    Halt s =>
+      (if tr then tload else sload) 0w s = 1w /\
+      (if tr then tload else sload) 1w s = 0w /\
+      (if tr then tload else sload) 2w s = 0w /\
+      (if tr then tload else sload) 3w s = 0w
+  | _ => F
+Proof
+  rpt gen_tac >> Cases_on `tr` >> CONV_TAC (computeLib.CBV_CONV
+    (wordsLib.add_words_compset true (computeLib.copy (computeLib.the_compset()))))
+QED
+
+Theorem nested_inner_shrink_source_probe[local]:
+  !st. lookup_storage (2w:bytes32) st = 1w ==>
+    lookup_storage 2w (apply_writes (0w:bytes32) [(0,1w);(1,0w)] st) = 1w
+Proof
+  simp[vyperStorageTheory.apply_writes_def,
+       vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
+       combinTheory.APPLY_UPDATE_THM]
+QED
+
 (* A storage or transient root.  compile_get_target_ptr hands out the
    array's header slot with location storage (transient), and the source's
    pop_place pops the StoragePlace there, so the run is
