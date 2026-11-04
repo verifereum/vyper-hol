@@ -1152,3 +1152,30 @@ Proof
   strip_tac >> irule ao_range_supported_initial_sound >>
   metis_tac[ao_range_at_inst_support]
 QED
+
+Theorem ao_range_step_sound:
+  wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  SUC idx <= LENGTH bb.bb_instructions /\
+  in_range_state (range_at_inst (range_analyze fn) lbl idx) s.vs_vars /\
+  step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s' ==>
+  in_range_state (range_at_inst (range_analyze fn) lbl (SUC idx)) s'.vs_vars
+Proof
+  strip_tac >> drule_all rangeAnalysisProofsTheory.range_intra_transfer >>
+  simp[range_at_inst_def] >> strip_tac >>
+  Cases_on `df_widen_at NONE (range_analyze fn) lbl idx` >>
+  gvs[range_at_inst_def,range_transfer_opt_def,range_unwrap_def] >>
+  irule rangeAnalysisProofsTheory.per_inst_range_sound >> metis_tac[]
+QED
+
+Theorem ao_range_eval_operand_sound:
+  in_range_state (range_at_inst ra lbl idx) s.vs_vars /\
+  eval_operand op s = SOME w ==>
+  in_range (range_get_range ra lbl idx op) w
+Proof
+  strip_tac >> irule rangeAnalysisProofsTheory.range_get_range_sound_proof >>
+  conj_tac
+  >- (Cases_on `op` >> gvs[venomStateTheory.eval_operand_def]) >>
+  qexists `s.vs_vars` >> simp[] >>
+  Cases_on `op` >> gvs[venomStateTheory.eval_operand_def,venomStateTheory.lookup_var_def]
+QED
