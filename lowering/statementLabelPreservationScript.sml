@@ -393,3 +393,119 @@ Proof
   gen_tac >> STMT_BIND >> metis_tac[label_preserving_internal_return]
 QED
 
+
+Theorem label_preserving_reason_message[local]:
+  !e s r t. compile_reason_message ce e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases >> simp_tac (srw_ss()) [compile_reason_message_def] >>
+  all_tac >~ [`Literal ty lit`] >-
+    (Cases_on `ty` >> simp_tac (srw_ss()) [compile_reason_message_def] >>
+     all_tac >~ [`Literal (BaseT bt) lit`] >-
+       (Cases_on `bt` >> simp_tac (srw_ss()) [compile_reason_message_def] >>
+        all_tac >~ [`Literal (BaseT (StringT n)) lit`] >-
+          (Cases_on `lit` >> simp_tac (srw_ss()) [compile_reason_message_def] >>
+           all_tac >~ [`compile_bytelike_literal`] >-
+             (ho_match_mp_tac label_preserving_bind >> conj_tac
+              >- metis_tac[label_preserving_bytelike_literal] >> gen_tac >> STMT_LEAF) >>
+           metis_tac[label_preserving_compile_expr]) >>
+        metis_tac[label_preserving_compile_expr]) >>
+     metis_tac[label_preserving_compile_expr]) >>
+  metis_tac[label_preserving_compile_expr]
+QED
+
+Theorem label_preserving_compile_stmt_mutual:
+  (!ce lc ty stmt s r t. compile_stmt ce lc ty stmt s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!ce lc ty stmts s r t. compile_stmts ce lc ty stmts s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t))
+Proof
+  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac
+  >- suspend "pass" >- suspend "expr" >- suspend "annassign"
+  >- suspend "assign" >- suspend "augassign" >- suspend "assert_bare"
+  >- suspend "assert_unreachable" >- suspend "assert_reason" >- suspend "log"
+  >- suspend "raise_bare" >- suspend "raise_unreachable" >- suspend "raise_reason"
+  >- suspend "return_none" >- suspend "return_some" >- suspend "append"
+  >- suspend "tuple" >- suspend "if" >- suspend "range" >- suspend "iter"
+  >- (rewrite_tac[compile_stmt_def] >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_IGNORE >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_IGNORE >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_IGNORE >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_IGNORE >> STMT_LEAF)
+  >- (rewrite_tac[compile_stmt_def] >> STMT_LEAF)
+  >> suspend "cons"
+QED
+
+Resume label_preserving_compile_stmt_mutual[pass]:
+  rewrite_tac[compile_stmt_def] >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[expr]:
+  ntac 4 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- metis_tac[label_preserving_compile_expr] >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[raise_bare]:
+  rewrite_tac[compile_stmt_def] >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[raise_unreachable]:
+  rewrite_tac[compile_stmt_def] >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[assert_bare]:
+  ntac 4 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_stmt_lower_value] >> gen_tac >>
+  ntac 2 STMT_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  ntac 4 STMT_BIND >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[assert_unreachable]:
+  ntac 4 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_stmt_lower_value] >> gen_tac >>
+  ntac 2 STMT_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  ntac 4 STMT_BIND >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[raise_reason]:
+  ntac 4 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  simp_tac pure_ss [LET_THM] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_reason_message] >> gen_tac >>
+  metis_tac[label_preserving_revert_reason]
+QED
+
+Resume label_preserving_compile_stmt_mutual[assert_reason]:
+  ntac 5 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_stmt_lower_value] >> gen_tac >>
+  ntac 2 STMT_FRESH >> rewrite_tac[comp_ignore_bind_def] >>
+  ntac 4 STMT_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_reason_message] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_revert_reason] >> gen_tac >> STMT_BIND >> STMT_LEAF
+QED
+
+Resume label_preserving_compile_stmt_mutual[tuple]:
+  ntac 5 gen_tac >> rewrite_tac[compile_stmt_def] >> simp_tac pure_ss [LET_THM] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_compile_expr] >> gen_tac >> STMT_BIND >>
+  metis_tac[label_preserving_tuple_unpack]
+QED
+
+Resume label_preserving_compile_stmt_mutual[augassign]:
+  ntac 7 gen_tac >> rewrite_tac[compile_stmt_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (match_mp_tac label_preserving_get_target_ptr >>
+      metis_tac[label_preserving_compile_expr]) >> gen_tac >> ntac 2 STMT_BIND >>
+  Cases_on `FST (SND a)` >> simp_tac pure_ss [optionTheory.option_CLAUSES]
+  >- STMT_LEAF >> ntac 3 STMT_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_stmt_lower_value] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_binop] >> gen_tac >> STMT_LEAF
+QED
