@@ -4692,6 +4692,48 @@ Proof
   drule_all aug_place_memory_continue_ready >> simp[]
 QED
 
+Theorem aug_place_storage_load_frag:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,sb) /\
+  eval_operand dst s0 = SOME slot /\
+  storage_holds cx tr ty (Value v) slot es /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v /\
+  local_ptrs_reserved cenv sa /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand dst s = SOME slot /\
+         eval_operand cur s = SOME (val_to_w256 v) /\
+         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                lookup_var x s = SOME u) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         s.vs_memory = s0.vs_memory) R
+Proof
+  strip_tac >>
+  `frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand cur s = SOME (val_to_w256 v) /\
+         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                lookup_var x s = SOME u) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         s.vs_memory = s0.vs_memory) R` by
+    (irule loweringSliceTheory.emit_op_frag >>
+     reverse conj_tac >- simp[] >>
+     qexistsl_tac [`[dst]`, `if tr then TLOAD else SLOAD`] >> simp[] >>
+     conj_tac >- (Cases_on `tr` >> simp[venomInstTheory.is_terminator_def]) >>
+     conj_tac >- (Cases_on `tr` >> simp[]) >> strip_tac >>
+     `(if tr then tload slot s0 else sload slot s0) = val_to_w256 v` by
+       (drule_all exprSimUnwrapTheory.storage_holds_load >>
+        simp[typed_val_to_w256_word_value]) >>
+     gen_tac >> Cases_on `tr` >>
+     gvs[venomExecSemanticsTheory.step_inst_base_def,
+         venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]) >>
+  first_x_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
+  rpt strip_tac >> Cases_on `dst` >>
+  gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
