@@ -528,3 +528,78 @@ Recommended checkpoint: design the actual collecting structural safety
 preservation/terminal interface (or choose a checked realizable fatal
 probe), without assuming wf_accounts or beginning C3.3. All temporary
 signature-print diagnostics have been removed.
+
+## C3.2.41.6 account-independent push boundary (bounded diagnostic)
+
+The full candidate `step_inner_push_structure` with `wf_state s` replaced
+by `create_frame_safe s` is NOT proved. The following smaller boundaries
+are now checked in dftCreateErrorProbeTheory:
+
+- `create_probe_initial_context_safe`: for arbitrary callee, code, static,
+  output destination and transaction, `wf_context (initial_context ... )`.
+  Its proof uses the actual initial_context/initial_msg_params definitions;
+  parsed-code equality is supplied by construction, without any code-size
+  or account validity premise.
+- `create_probe_call_parent_structure`: under create_frame_safe s, a
+  growing step_call preserves the tail below the parent and the parent's
+  msgParams, leaves parent stack length strictly below stack_limit, and
+  makes parent gasUsed monotone. No wf_accounts or Collect premise.
+- `create_probe_create_parent_structure`: the analogous step_create facts,
+  with MAP FST equality below the parent. No account validity premise.
+
+Exact imported full candidate boundary (notation EL for list indexing):
+```
+wf_state s /\ step_inner s = (r,t) /\
+LENGTH t.contexts > LENGTH s.contexts ==>
+LENGTH t.contexts = LENGTH s.contexts + 1 /\
+MAP FST (TL (TL t.contexts)) = MAP FST (TL s.contexts) /\
+LENGTH (FST (EL 1 t.contexts)).stack < stack_limit /\
+(FST (EL 1 t.contexts)).gasUsed >= (FST (HD s.contexts)).gasUsed /\
+(FST (HD s.contexts)).gasUsed +
+ ((FST (HD t.contexts)).msgParams.gasLimit -
+  (FST (HD t.contexts)).gasUsed) <= (FST (EL 1 t.contexts)).gasUsed /\
+(FST (EL 1 t.contexts)).msgParams = (FST (HD s.contexts)).msgParams
+```
+Applying this imported theorem to the candidate reduced, after unfolding
+only wf_state/create_frame_safe, to exactly
+`EVERY wf_accounts (all_accounts s)`. That is an unavailable hypothesis,
+not a proof that the candidate needs accounts semantically. The temporary
+candidate and print diagnostics were removed; no admitted theorem remains.
+
+The problematic producer clauses are now more precisely isolated:
+`vfmRunCall.step_call_grow_parent_gas_ok` still requires wf_state s,
+is_call op and op <> Create /\ op <> Create2, besides nonempty contexts,
+the step equation and growth; its conclusion is the child-unused-gas
+inequality above. `step_create_grow_parent_gas_ok` also still requires
+wf_state s. In contrast the parent stack-room lemmas require only
+wf_context of the old head, and both gas-monotonicity lemmas require only
+nonempty contexts, the step equation and growth. Existing call/create
+push_structure lemmas preserve the parent's message without wf_state.
+These distinctions are why the new checked partial interfaces are valid;
+we have NOT simply deleted wf_state from the gas-bound theorem.
+
+Original proof access obstruction: DB metadata locates the full theorem at
+`$(verifereum)/spec/prop/vfmRunCallScript.sml`, line 2316. The loaded HOL
+path database returns NONE for `lookup_holpath {vname="verifereum"}`;
+the project contains no vfmRunCall source file and no public
+.holbuild/gen directory. Thus its proof's transitive uses of wf_state
+could not be inspected. Dependency theory values/definitions are loaded
+and usable, but this source-path macro is not resolved in that environment.
+This is a bounded proof-interface obstruction, NOT evidence of task
+falsehood or of a runtime failure, and NOT a general tooling blocker.
+
+Actual proceed_create constructs an initial_context after account updates
+and then pushes it. Actual proceed_call constructs an initial_context,
+pushes it, THEN dispatches precompiles if the address is in
+precompile_addresses. The new initial-context theorem proves arbitrary
+code parsing at construction; it does not prove wf_context after that
+precompile dispatch or through step_inner. Remaining account-free push
+work must supply the child gas bound, the length/step_inner dispatch
+boundary, and preservation of child wf_context after dispatch. Collect
+has not been needed for any of the checked partial facts. No terminal
+singleton, step closure, extraction safety, or gate release is claimed.
+
+Evidence: exact full signature m4594; gas producer signatures and source
+metadata m4607; stack producer signatures m4615; constructor definitions
+m4620/m4621; exact candidate residual goal m4623; clean checked partial
+boundary build m4625.

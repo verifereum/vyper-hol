@@ -180,3 +180,45 @@ Proof
   drule_all create_probe_run_singleton >> simp[]
 QED
 
+
+Theorem create_probe_initial_context_safe:
+  wf_context (initial_context callee code static rd tx)
+Proof
+  simp[vfmExecutionPropTheory.wf_context_def,
+       vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem create_probe_frame_safe_head[local]:
+  create_frame_safe s ==> s.contexts <> [] /\ wf_context (FST (HD s.contexts))
+Proof
+  Cases_on `s.contexts` >> simp[create_frame_safe_def]
+QED
+
+Theorem create_probe_call_parent_structure:
+  create_frame_safe s /\ step_call op s = (r,t) /\
+  LENGTH t.contexts > LENGTH s.contexts ==>
+  TL (TL t.contexts) = TL s.contexts /\
+  (FST (HD (TL t.contexts))).msgParams = (FST (HD s.contexts)).msgParams /\
+  LENGTH (FST (HD (TL t.contexts))).stack < stack_limit /\
+  (FST (HD s.contexts)).gasUsed <= (FST (EL 1 t.contexts)).gasUsed
+Proof
+  strip_tac >> drule create_probe_frame_safe_head >> strip_tac >>
+  drule_all vfmRunCallTheory.step_call_push_structure >> strip_tac >>
+  drule_all vfmRunCallTheory.step_call_grow_parent_stack_room >> strip_tac >>
+  drule_all vfmRunCallTheory.step_call_grow_parent_gas_monotone >> simp[]
+QED
+
+Theorem create_probe_create_parent_structure:
+  create_frame_safe s /\ step_create two s = (r,t) /\
+  LENGTH t.contexts > LENGTH s.contexts ==>
+  MAP FST (TL (TL t.contexts)) = MAP FST (TL s.contexts) /\
+  (FST (HD (TL t.contexts))).msgParams = (FST (HD s.contexts)).msgParams /\
+  LENGTH (FST (HD (TL t.contexts))).stack < stack_limit /\
+  (FST (HD s.contexts)).gasUsed <= (FST (EL 1 t.contexts)).gasUsed
+Proof
+  strip_tac >> drule create_probe_frame_safe_head >> strip_tac >>
+  drule_all vfmRunCallTheory.step_create_push_structure >> strip_tac >>
+  drule_all vfmRunCallTheory.step_create_grow_parent_stack_room >> strip_tac >>
+  drule_all vfmRunCallTheory.step_create_grow_parent_gas_monotone >> simp[]
+QED
