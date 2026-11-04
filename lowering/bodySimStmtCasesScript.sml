@@ -1795,7 +1795,8 @@ Theorem body_assign_tuple_locals[local]:
       es = (res, es') /\
     ids <> [] /\
     EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
-                     0 < type_memory_bytes cenv ty) ids ==>
+                     0 < type_memory_bytes cenv ty) ids /\
+    lowered_value_type cenv e = expr_type e ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
@@ -1848,7 +1849,7 @@ Proof
   >~ [`value_has_type (TupleTV _) _`]
   >- (rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
       gvs[value_runtime_typed_def]) >>
-  first_assum ACCEPT_TAC
+  fs[]
 QED
 
 (* The locals a tuple is assigned to take memory: their types are the
@@ -1911,6 +1912,35 @@ Proof
   cheat
 QED
 
+(* RESIDUAL (#767): a tuple of locals assigned an internal call whose return
+   type widens to the call's type (type_widens_to: a tuple elementwise), so
+   the tuple is unpacked at the callee's return type. *)
+Theorem body_assign_tuple_widened_call[local]:
+  !cx ids e tops ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\ supported_expr tops e /\
+    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
+    type_stmt env ret_ty
+      (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) =
+      SOME env' /\
+    stmt_exprs_ok cenv
+      (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt
+         (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)) /\
+    eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
+      es = (res, es') /\
+    ids <> [] /\
+    EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                     0 < type_memory_bytes cenv ty) ids /\
+    lowered_value_type cenv e <> expr_type e ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty
+         (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
+      es res es'
+Proof
+  cheat
+QED
+
 Theorem body_assign_tuple_case:
   !cx gs e.
     (!s'' tv t s'3' v t'.
@@ -1927,7 +1957,9 @@ Proof
       `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
                         0 < type_memory_bytes cenv ty) ids` by
         (fs[EVERY_MEM] >> metis_tac[]) >>
-      irule body_assign_tuple_locals >> metis_tac[]) >>
+      Cases_on `lowered_value_type cenv e = expr_type e`
+      >- (irule body_assign_tuple_locals >> metis_tac[]) >>
+      irule body_assign_tuple_widened_call >> metis_tac[]) >>
   irule body_assign_tuple_other >> metis_tac[]
 QED
 
