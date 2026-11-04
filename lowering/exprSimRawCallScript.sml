@@ -1250,6 +1250,64 @@ Proof
   simp[not_fresh_at_def]
 QED
 
+(* The two new blocks are essential: the failure arm is not a linear prefix
+   of the successful arm.  Leave the final length-store program packaged. *)
+Theorem raw_call_finish_steps[local]:
+  compile_raw_call_finish to_op dp dl gas_op val_op call_ty cap T ov op sa =
+    (result,sb) ==>
+  ?success s1 fl s2 kl s3 s4 u4 s5 rds s6 buf s7 s8 s9 u9 s10.
+    (case call_ty of
+       DelegateCall => emit_op DELEGATECALL [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     | StaticCall => emit_op STATICCALL [gas_op;to_op;dp;dl;op;Lit (n2w cap)]
+     | RegularCall => emit_op CALL [gas_op;to_op;val_op;dp;dl;op;Lit (n2w cap)]) sa =
+        (success,s1) /\
+    fresh_label "call_failed" s1 = (fl,s2) /\
+    fresh_label "call_ok" s2 = (kl,s3) /\
+    emit_inst JNZ [success;Label kl;Label fl] [] s3 = ((),s4) /\
+    new_block fl s4 = (u4,s5) /\
+    emit_op RETURNDATASIZE [] s5 = (rds,s6) /\
+    compile_alloc_buffer 0 s6 = (buf,s7) /\
+    emit_void RETURNDATACOPY [buf.buf_operand;Lit 0w;rds] s7 = ((),s8) /\
+    emit_inst REVERT [buf.buf_operand;rds] [] s8 = ((),s9) /\
+    new_block kl s9 = (u9,s10) /\
+    (if 0 < cap then
+       do len <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [len;Lit (n2w cap)];
+          capped <- compile_select cmp len (Lit (n2w cap));
+          emit_void MSTORE [ov;capped]; return ov od
+     else return (Lit 0w)) s10 = (result,sb)
+Proof
+  simp[compile_raw_call_finish_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  fs[arithmeticTheory.GREATER_DEF]
+QED
+
+(* Forward the full returndata, irrespective of the success buffer capacity. *)
+Theorem raw_call_failure_run[local]:
+  eval_operand dst s = SOME w /\
+  eval_operand size_op s = SOME (n2w (LENGTH s.vs_returndata)) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?t. run_inst_seq
+    [mk_inst iid RETURNDATACOPY [dst;Lit 0w;size_op] [];
+     mk_inst jid REVERT [dst;size_op] []] s = Abort Revert_abort t /\
+    t.vs_returndata = s.vs_returndata
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst iid RETURNDATACOPY [dst;Lit 0w;size_op] []) s =
+     OK (write_memory_with_expansion (w2n w) s.vs_returndata s)` by
+    (irule raw_call_failure_copy >> simp[]) >>
+  simp[Once run_inst_seq_def] >>
+  `eval_operand dst (write_memory_with_expansion (w2n w) s.vs_returndata s) = SOME w /\
+   eval_operand size_op (write_memory_with_expansion (w2n w) s.vs_returndata s) =
+      SOME (n2w (LENGTH s.vs_returndata))` by
+    (Cases_on `dst` >> Cases_on `size_op` >>
+     gvs[eval_operand_def, lookup_var_def, write_memory_with_expansion_def, LET_THM]) >>
+  simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+       GSYM mem_bytes_at_def, hash_write_memory_read_self,
+       revert_state_def, set_returndata_def]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
