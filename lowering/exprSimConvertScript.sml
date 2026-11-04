@@ -109,6 +109,19 @@ Proof
   simp[read_result_def, return_def, raise_def] >> rw[] >> gvs[]
 QED
 
+Theorem eval_expr_convert_of_child:
+  !cx ann ty e es v ee.
+    bind (eval_expr cx e) (read_result cx) es = (INL v, ee) ==>
+    bind (eval_expr cx (TypeBuiltin ann Convert ty [e])) (read_result cx) es =
+      (convert_result cx (expr_type e) ty v, ee)
+Proof
+  rpt strip_tac >>
+  Cases_on `bind (eval_expr cx (TypeBuiltin ann Convert ty [e]))
+                 (read_result cx) es` >>
+  drule (SRULE [SF ETA_ss] eval_expr_convert_cases) >>
+  strip_tac >> gvs[]
+QED
+
 (* ===== The conversion's fragment ===== *)
 
 (* The conversion's fragment, from the argument holding v1 in a state
