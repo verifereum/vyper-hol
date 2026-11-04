@@ -432,3 +432,152 @@ Proof
     (irule lower_dload_inst_supply_special >> simp[]) >>
   simp[Once lower_dload_insts_supply_def]
 QED
+
+(* A stable list interface for the two endpoints and their ASSIGN-only gap. *)
+Theorem revert_forward_pair_segment:
+  bb.bb_instructions = pre ++ a::mid ++ b::post /\
+  EVERY (\i. i.inst_opcode = ASSIGN) mid /\
+  a.inst_opcode = RETURNDATACOPY /\ a.inst_operands = [p;src;rds] /\
+  b.inst_opcode = REVERT /\ b.inst_operands = [p';rds'] /\
+  resolve_block_assigns (REVERSE pre) src = Lit 0w /\
+  resolve_block_assigns (REVERSE pre) p =
+    resolve_block_assigns (REVERSE (pre ++ a::mid)) p' /\
+  resolve_block_assigns (REVERSE pre) rds =
+    resolve_block_assigns (REVERSE (pre ++ a::mid)) rds' ==>
+  revert_forward_pair bb (LENGTH pre) (LENGTH pre + SUC (LENGTH mid))
+Proof
+  strip_tac >> simp[revert_forward_pair_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `?n. k = LENGTH pre + SUC n /\ n < LENGTH mid` by
+        (qexists_tac `k - LENGTH pre - 1` >> decide_tac) >>
+      gvs[get_instruction_def, EL_APPEND, EVERY_MEM] >>
+      metis_tac[MEM_EL]) >>
+  qexistsl_tac [`a`,`b`,`p`,`src`,`rds`,`p'`,`rds'`] >>
+  simp[get_instruction_def, EL_APPEND, TAKE_APPEND, TAKE_LENGTH_TOO_LONG] >>
+  simp[DECIDE ``n - (n + SUC m) = 0``]
+QED
+
+Theorem revert_forward_pair_split:
+  revert_forward_pair bb i j ==>
+  ?pre a mid b post p src rds p' rds'.
+    bb.bb_instructions = pre ++ a::mid ++ b::post /\
+    i = LENGTH pre /\ j = LENGTH pre + SUC (LENGTH mid) /\
+    EVERY (\x. x.inst_opcode = ASSIGN) mid /\
+    a.inst_opcode = RETURNDATACOPY /\ a.inst_operands = [p;src;rds] /\
+    b.inst_opcode = REVERT /\ b.inst_operands = [p';rds'] /\
+    resolve_block_assigns (REVERSE pre) src = Lit 0w /\
+    resolve_block_assigns (REVERSE pre) p =
+      resolve_block_assigns (REVERSE (pre ++ a::mid)) p' /\
+    resolve_block_assigns (REVERSE pre) rds =
+      resolve_block_assigns (REVERSE (pre ++ a::mid)) rds'
+Proof
+  rw[revert_forward_pair_def, get_instruction_def] >>
+  qexistsl_tac [`TAKE i bb.bb_instructions`,`EL i bb.bb_instructions`,
+    `TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)`,
+    `EL j bb.bb_instructions`,`DROP (SUC j) bb.bb_instructions`,
+    `p`,`src`,`rds`,`p'`,`rds'`] >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `j - SUC i <= LENGTH bb.bb_instructions - SUC i` by decide_tac >>
+  `bb.bb_instructions = TAKE i bb.bb_instructions ++
+     EL i bb.bb_instructions :: DROP (SUC i) bb.bb_instructions` by
+    metis_tac[DROP_CONS_EL, TAKE_DROP] >>
+  `TAKE j bb.bb_instructions = TAKE i bb.bb_instructions ++
+     EL i bb.bb_instructions ::
+       TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)` by
+    (qpat_assum `bb.bb_instructions = _` (fn th =>
+       GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+     simp[TAKE_APPEND] >>
+     `j - i = SUC (j - SUC i)` by decide_tac >>
+     simp[TAKE_TAKE, MIN_DEF, ADD1]) >>
+  `DROP (j - SUC i) (DROP (SUC i) bb.bb_instructions) =
+     EL j bb.bb_instructions :: DROP (SUC j) bb.bb_instructions` by
+    (`j - SUC i + SUC i = j` by decide_tac >>
+     simp[DROP_DROP, DROP_CONS_EL]) >>
+  conj_tac
+  >- metis_tac[TAKE_DROP, APPEND_ASSOC, CONS_APPEND] >>
+  qpat_x_assum `bb.bb_instructions = _` kall_tac >>
+  simp[LENGTH_TAKE, LENGTH_DROP] >>
+  simp[EVERY_EL, EL_TAKE, EL_DROP] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
+QED
+
+Theorem lower_dload_insts_supply_revert_forward:
+  lower_dload_insts_supply u bb.bb_instructions = (ys,v) /\
+  EVERY inst_wf bb.bb_instructions /\
+  (!inst w. MEM inst bb.bb_instructions /\ MEM (Var w) inst.inst_operands ==>
+     MEM w u.irs_used_vars) /\
+  revert_forward_pair bb i j ==>
+  ?pi ui pj uj.
+    lower_dload_insts_supply u (TAKE i bb.bb_instructions) = (pi,ui) /\
+    lower_dload_insts_supply u (TAKE j bb.bb_instructions) = (pj,uj) /\
+    revert_forward_pair (bb with bb_instructions := ys) (LENGTH pi) (LENGTH pj)
+Proof
+  strip_tac >> drule revert_forward_pair_split >> strip_tac >> gvs[] >>
+  `EVERY (\x. ~MEM x.inst_opcode [DLOAD;DLOADBYTES]) (a::mid ++ [b])` by
+    (gvs[EVERY_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `lower_dload_insts_supply u pre` >>
+  rename1 `lower_dload_insts_supply u pre = (xs,u0)` >>
+  `lower_dload_insts_supply u0 (a::mid ++ [b]) = (a::mid ++ [b],u0)` by
+    (irule lower_dload_insts_supply_special >> simp[]) >>
+  `lower_dload_insts_supply u0 (a::mid ++ b::post) =
+     ((a::mid ++ [b]) ++ FST (lower_dload_insts_supply u0 post),
+       SND (lower_dload_insts_supply u0 post))` by
+    (`a::mid ++ b::post = (a::mid ++ [b]) ++ post` by simp[] >>
+     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV)
+       empty_rewrites [th]) >>
+     irule lower_dload_insts_supply_append_eq >>
+     qexists_tac `u0` >> simp[]) >>
+  `lower_dload_insts_supply u (pre ++ a::mid ++ b::post) =
+    (xs ++ a::mid ++ b::FST (lower_dload_insts_supply u0 post),
+     SND (lower_dload_insts_supply u0 post))` by
+    (pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+     irule lower_dload_insts_supply_append_eq >> qexists_tac `u0` >> simp[]) >>
+  `lower_dload_insts_supply u0 (a::mid) = (a::mid,u0)` by
+    (irule lower_dload_insts_supply_special >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `lower_dload_insts_supply u (pre ++ a::mid) = (xs ++ a::mid,u0)` by
+    (irule lower_dload_insts_supply_append_eq >> qexists_tac `u0` >> simp[]) >>
+  gvs[] >>
+  qexistsl_tac [`xs`,`u0`,`xs ++ a::mid`,`u0`] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG,
+       DECIDE ``(n:num) - (n + SUC m) = 0``] >>
+  irule revert_forward_pair_segment >>
+  simp[] >> suspend "resolve"
+QED
+
+Resume lower_dload_insts_supply_revert_forward[resolve]:
+  `!op. MEM op [p;src;rds] ==>
+    resolve_block_assigns (REVERSE xs) op =
+    resolve_block_assigns (REVERSE pre) op` by
+    (rpt strip_tac >>
+     qpat_assum `lower_dload_insts_supply u pre = _`
+       (mp_then Any mp_tac lower_dload_insts_supply_resolve) >>
+     disch_then (qspecl_then [`[]`,`op`] mp_tac) >> simp[] >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  `!op. MEM op [p';rds'] ==>
+    resolve_block_assigns (REVERSE (xs ++ a::mid)) op =
+    resolve_block_assigns (REVERSE (pre ++ a::mid)) op` by
+    (rpt strip_tac >>
+     qpat_assum `lower_dload_insts_supply u (pre ++ a::mid) = _`
+       (mp_then Any mp_tac lower_dload_insts_supply_resolve) >>
+     disch_then (qspecl_then [`[]`,`op`] mp_tac) >> simp[] >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  simp[]
+QED
+
+Finalise lower_dload_insts_supply_revert_forward
+
+Theorem lower_dload_insts_supply_revert_at:
+  lower_dload_insts_supply u bb.bb_instructions = (ys,v) /\
+  EVERY inst_wf bb.bb_instructions /\
+  (!inst w. MEM inst bb.bb_instructions /\ MEM (Var w) inst.inst_operands ==>
+     MEM w u.irs_used_vars) /\
+  lower_dload_insts_supply u (TAKE i bb.bb_instructions) = (pre,u0) /\
+  revert_forward_at bb i ==>
+  revert_forward_at (bb with bb_instructions := ys) (LENGTH pre)
+Proof
+  rw[revert_forward_at_def] >>
+  drule_all lower_dload_insts_supply_revert_forward >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
