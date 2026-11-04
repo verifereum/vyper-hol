@@ -263,3 +263,63 @@ Proof
     by decide_tac >>
   metis_tac[]
 QED
+
+(* Future typing is supplied by source operand preservation, not vv_post. *)
+Definition typed_capture_def:
+  typed_capture ctx func ce cx env ty tv vv lo hi es s <=>
+    !es' s' hi' v.
+      expr_sim_inv ce cx env es' /\
+      stmt_state_rel ctx func ce cx es' s' /\
+      MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+      hi.cs_next_var <= hi'.cs_next_var /\ hi.cs_next_id <= hi'.cs_next_id /\
+      operand_frame ce es s hi es' s' /\
+      read_result cx tv es' = (INL v,es') ==>
+      vv_holds ce cx ty tv vv es' s' /\
+      vv_at ce cx ty lo hi' es' tv vv s'
+End
+
+Theorem typed_capture_holds:
+  typed_capture ctx func ce cx env ty tv vv lo hi es s /\
+  expr_sim_inv ce cx env es' /\
+  stmt_state_rel ctx func ce cx es' s' /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  hi.cs_next_var <= hi'.cs_next_var /\ hi.cs_next_id <= hi'.cs_next_id /\
+  operand_frame ce es s hi es' s' /\
+  read_result cx tv es' = (INL v,es') ==>
+  vv_holds ce cx ty tv vv es' s'
+Proof
+  simp[typed_capture_def] >> metis_tac[]
+QED
+
+Theorem typed_capture_at:
+  typed_capture ctx func ce cx env ty tv vv lo hi es s /\
+  expr_sim_inv ce cx env es' /\
+  stmt_state_rel ctx func ce cx es' s' /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  hi.cs_next_var <= hi'.cs_next_var /\ hi.cs_next_id <= hi'.cs_next_id /\
+  operand_frame ce es s hi es' s' /\
+  read_result cx tv es' = (INL v,es') ==>
+  vv_at ce cx ty lo hi' es' tv vv s'
+Proof
+  simp[typed_capture_def] >> metis_tac[]
+QED
+
+Theorem typed_capture_rebase:
+  typed_capture ctx func ce cx env ty tv vv lo hi es s /\
+  local_ptrs_rel func ce es.scopes s /\ local_ptrs_reserved ce hi /\
+  operand_frame ce es s hi es1 s1 /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  hi.cs_next_var <= hi1.cs_next_var /\ hi.cs_next_id <= hi1.cs_next_id ==>
+  typed_capture ctx func ce cx env ty tv vv lo hi1 es1 s1
+Proof
+  pure_rewrite_tac[typed_capture_def] >> rpt strip_tac >>
+  `operand_frame ce es s hi es' s'` by
+    (irule operand_frame_trans >>
+     conj_tac >- simp[] >>
+     conj_tac >- metis_tac[] >>
+     qexistsl_tac [`hi1`, `es1`, `s1`] >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by metis_tac[] >>
+  `hi.cs_next_var <= hi'.cs_next_var /\ hi.cs_next_id <= hi'.cs_next_id`
+    by decide_tac >>
+  metis_tac[]
+QED
