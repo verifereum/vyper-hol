@@ -123,6 +123,11 @@ Proof
        eval_operand_update_var, eval_operand_lit]
 QED
 
+local
+  val jmp_opcode_eqs = List.filter (fn th =>
+    aconv ``JMP`` (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem abi_decode_backedge_control:
   bb.bb_instructions = prefix ++ abi_decode_backedge_insts id iv nv ip hdr /\
   s.vs_inst_idx = LENGTH prefix /\ ~s.vs_halted /\
@@ -140,9 +145,10 @@ Proof
   strip_tac >> simp[] >>
   simp[Once exec_block_def, get_instruction_def, abi_decode_backedge_insts_def,
        listTheory.EL_APPEND_EQN] >>
-  simp[step_inst_def, Once step_inst_base_def, mk_inst_def, is_terminator_def,
-       jump_to_def, mstore_def, update_var_def]
+  simp(jmp_opcode_eqs @ [step_inst_non_invoke, mk_inst_def, is_terminator_def,
+       jump_to_def, mstore_def, update_var_def])
 QED
+end
 
 Theorem abi_decode_header_observations:
   abi_decode_footprint_frame fp s

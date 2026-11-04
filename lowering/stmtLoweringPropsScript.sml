@@ -49,6 +49,11 @@ Proof
 QED
 
 (* --- Continue: jumps to increment label --- *)
+local
+  val jmp_opcode_eqs = List.filter (fn th =>
+    aconv ``JMP`` (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem compile_continue_correct:
   ∀ cenv exit_lbl incr_lbl ty ss st st'.
     compile_stmt cenv (InLoop exit_lbl incr_lbl) ty Continue st = ((), st')
@@ -60,8 +65,10 @@ Proof
      fresh_id_def, emit_def, venomInstTheory.mk_inst_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
   >> simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
           rich_listTheory.DROP_LENGTH_NIL, comp_return_def, comp_bind_def, comp_ignore_bind_def]
-  >> simp[run_inst_seq_def, step_inst_base_def, comp_return_def, comp_bind_def, comp_ignore_bind_def]
+  >> simp(jmp_opcode_eqs @ [run_inst_seq_def, comp_return_def,
+       comp_bind_def, comp_ignore_bind_def])
 QED
+end
 
 (* Every theorem here is closed. *)
 val () = List.app

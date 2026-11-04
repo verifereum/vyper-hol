@@ -4,6 +4,12 @@ Ancestors
   abiDecoderComposition abiDecoderContract emitHelperProps exprLoweringProps
   venomExecSemantics venomInst venomState compileEnv valueEncoding emitHelper
 
+local
+  val copy_opcode_eqs = List.filter (fn th =>
+    List.exists (fn opc => aconv opc (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+      [``MCOPY``, ``CALLDATACOPY``, ``DLOADBYTES``])
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem abi_decode_copy_vars:
   emit_void (abi_decode_copy_opcode opc) [dst;src;sz] st = ((),st') /\
   abi_decode_source_opcode opc /\
@@ -14,11 +20,12 @@ Proof
   gvs[abi_decode_source_opcode_def, abi_decode_copy_opcode_def] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   pure_rewrite_tac[run_inst_seq_def] >>
-  simp_tac (srw_ss()) [Once step_inst_base_def, mk_inst_def] >>
+  simp_tac (srw_ss()) (copy_opcode_eqs @ [mk_inst_def]) >>
   strip_tac >>
   gvs[AllCaseEqs()] >>
   gvs[mcopy_def, write_memory_with_expansion_def, AllCaseEqs()]
 QED
+end
 
 Theorem abi_decode_copy_fresh:
   emit_void (abi_decode_copy_opcode opc) [dst;src;sz] st = ((),st') /\

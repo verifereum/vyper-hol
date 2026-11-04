@@ -3356,7 +3356,8 @@ Resume eval_scc_type_sound_results_mutual[If]:
   qpat_x_assum `st1 with scopes := FEMPTY::st1.scopes = st2` kall_tac >>
   conj_tac >- (
     rpt strip_tac >> qunabbrev_tac`P` >> BETA_TAC >>
-    simp[Abbr`st2`] >>
+    simp_tac (srw_ss()) [Abbr`st2`] >>
+    asm_rewrite_tac[] >>
     conj_tac >- (
       irule push_scope_preserves_state_well_typed >>
       qexistsl_tac [`st1`,`()`] >>
@@ -7512,7 +7513,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
@@ -7615,7 +7615,9 @@ Resume eval_scc_type_sound_results_mutual[Exprs_cons]:
     `runtime_consistent env cx st1` by simp[runtime_consistent_def] >>
     Cases_on `read_result cx x st1` >>
     rename1 `read_result cx x st1 = (mr,stm)` >>
-    drule_all live_result_read_typed >> strip_tac >> gvs[] >>
+    drule_all live_result_read_typed >> strip_tac >>
+    qpat_x_assum `stm = st1` SUBST_ALL_TAC >>
+    simp_tac (srw_ss()) [] >>
     Cases_on `mr`
     >- (
       Cases_on `eval_exprs cx es st1` >>
@@ -7676,7 +7678,7 @@ Resume eval_scc_type_sound_results_mutual[Trace_Results_cons]:
   qpat_x_assum `well_typed_exprs env (e::es)` mp_tac >>
   rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
   qpat_x_assum `eval_expr_results _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  simp_tac (srw_ss()) [Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   qpat_x_assum `!env st res st'. _ ==> typed_scope_transition _ _`
     (drule_at (Pat `eval_expr _ _ _ = _`)) >>
@@ -9051,13 +9053,14 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >>
   qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
-  Cases_on `prefix_res` >> gvs[]
+  Cases_on `prefix_res` >> simp_tac (srw_ss()) [] >> asm_rewrite_tac []
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
       Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
       rename1 `check_create_blueprint has_salt prefix prefix_st = (gate_res,gate_st)` >>
       `gate_st = prefix_st` by metis_tac[check_create_blueprint_result_state] >>
-      gvs[] >> Cases_on `gate_res` >> gvs[]
+      qpat_x_assum `gate_st = prefix_st` SUBST_ALL_TAC >>
+      Cases_on `gate_res` >> simp_tac (srw_ss()) [] >> asm_rewrite_tac []
       >- suspend "TraceBlueprintSuffix" >>
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[]

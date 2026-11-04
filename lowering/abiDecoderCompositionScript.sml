@@ -18,6 +18,12 @@ End
 
 (* Snapshot copy: memory overlap is legal for this single operation. Future
    reads require a separate source-disjointness invariant. *)
+local
+  val copy_opcode_eqs = List.filter (fn th =>
+    List.exists (fn opc => aconv opc (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+      [``MCOPY``, ``CALLDATACOPY``, ``DLOADBYTES``])
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem abi_decode_copy_step:
   abi_decode_source_opcode opc /\
   eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
@@ -28,8 +34,10 @@ Theorem abi_decode_copy_step:
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
   simp[abi_decode_copy_opcode_def, abi_decode_copy_bytes_def,
-       abi_decode_source_def, Once step_inst_base_def, mk_inst_def, mcopy_def]
+       abi_decode_source_def] >>
+  simp(copy_opcode_eqs @ [mk_inst_def, mcopy_def])
 QED
+end
 
 Theorem abi_decode_copy_sequence:
   emit_void (abi_decode_copy_opcode opc) [dst;src;sz_op] st = ((),st') /\
@@ -79,6 +87,11 @@ Proof
 QED
 
 (* A header has no PHIs; entering it selects exactly one successor. *)
+local
+  val jnz_opcode_eqs = List.filter (fn th =>
+    aconv ``JNZ`` (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem abi_decode_header_step:
   eval_operand cond s = SOME w /\ ~s.vs_halted ==>
   run_block fuel ctx
@@ -90,10 +103,13 @@ Proof
   `eval_operand cond (s with vs_inst_idx := 0) = SOME w` by
     (Cases_on `cond` >> gvs[eval_operand_def, lookup_var_def]) >>
   simp[run_block_def, eval_phis_def, phi_prefix_length_def, mk_inst_def] >>
-  simp[Once exec_block_def, get_instruction_def, step_inst_def,
-       Once step_inst_base_def, is_terminator_def, jump_to_def] >>
-  Cases_on `w = 0w` >> simp[]
+  pure_once_rewrite_tac[exec_block_def] >>
+  simp[get_instruction_def] >>
+  simp[step_inst_def] >>
+  simp(jnz_opcode_eqs @ [is_terminator_def]) >>
+  Cases_on `w = 0w` >> simp[jump_to_def]
 QED
+end
 
 (* Zero iterations: the continuation is arbitrary and is NOT executed by
    this probe. Lookup equalities expose the precise label-containment premise. *)

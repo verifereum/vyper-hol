@@ -574,8 +574,20 @@ Theorem eval_ext_call_no_control:
   no_control_exc exc
 Proof
   PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac >>
-  rpt CALL_NO_CONTROL_STEP
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >> strip_tac
+  >~ [`raise _ _ = _`] >- gvs[raise_def, no_control_exc_def] >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP
+  >~ [`lift_option_type _ _ _ = (INR _,_)`]
+  >- (drule lift_option_type_no_control >> simp[]) >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP
+  >>~- ([`lift_option_type _ _ _ = (INR _,_)`],
+         drule lift_option_type_no_control >> simp[]) >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP >>
+  CALL_NO_CONTROL_STEP >> CALL_NO_CONTROL_STEP
 QED
 
 Theorem eval_send_no_control:

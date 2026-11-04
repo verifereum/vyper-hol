@@ -1,7 +1,7 @@
 (* Source selection boundaries for array read simulation. *)
 Theory exprSimArraySubscript
 Ancestors
-  compileEnv exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
+  compileEnv exprLoweringProps exprOperandVar exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
   vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
 
@@ -1582,4 +1582,50 @@ Proof
     (gen_tac >> drule_all eval_expr_noeffect_storage >> simp[]) >>
   gvs[storage_holds_def, read_result_def, read_place_def,
       vyperStorageBackendTheory.read_storage_slot_eq, AllCaseEqs()]
+QED
+
+(* Compiler metadata and operand frames between two expression fragments. *)
+Theorem compile_expr_local_ptrs_reserved:
+  compile_expr cenv ty e sa = (vv, sb) /\
+  local_ptrs_reserved cenv sa ==>
+  local_ptrs_reserved cenv sb
+Proof
+  strip_tac >> drule (cj 1 compile_expr_grows) >> strip_tac >>
+  irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]
+QED
+
+Theorem lower_value_local_ptrs_reserved:
+  lower_value compile_expr cenv ty e sa = (op, sb) /\
+  local_ptrs_reserved cenv sa ==>
+  local_ptrs_reserved cenv sb
+Proof
+  strip_tac >> drule (cj 2 compile_expr_grows) >> strip_tac >>
+  irule local_ptrs_reserved_next_var >> qexists `sa` >> simp[]
+QED
+
+Theorem expr_post_cenv_ptr_vars:
+  local_ptrs_reserved cenv sa /\
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s1 ==>
+  !n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+             lookup_var q s0 = SOME w ==> lookup_var q s1 = SOME w
+Proof
+  simp[expr_post_def, local_ptrs_reserved_def] >> rpt strip_tac >>
+  `not_fresh_at sa q` by metis_tac[] >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_expr_operand_expr_post_frame:
+  compile_expr cenv ty obj sa = (bvv, sm) /\
+  local_ptrs_reserved cenv sa /\
+  ((!l. vv_operand bvv <> Label l) \/ s1.vs_labels = s0.vs_labels) /\
+  expr_post ctx func cenv cx idx es sm sn s0 es' v op s1 ==>
+  !w. eval_operand (vv_operand bvv) s0 = SOME w ==>
+      eval_operand (vv_operand bvv) s1 = SOME w
+Proof
+  strip_tac >>
+  `!x. vv_operand bvv = Var x ==> not_fresh_at sm x` by
+    (metis_tac[cj 1 exprOperandVarTheory.compiler_compile_var]) >>
+  rpt strip_tac >> Cases_on `vv_operand bvv` >>
+  gvs[venomStateTheory.eval_operand_def] >>
+  fs[expr_post_def] >> first_x_assum irule >> metis_tac[]
 QED

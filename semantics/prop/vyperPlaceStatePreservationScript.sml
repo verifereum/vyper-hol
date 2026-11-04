@@ -251,7 +251,11 @@ Proof
   gen_tac >> Cases_on `h`
   >- (Cases_on `v` >> simp[subscripts_type_def, Once assign_subscripts_def] >>
       rpt gen_tac >> strip_tac >>
-      gvs[subscripts_type_def, AllCaseEqs()] >>
+      qpat_x_assum `(case subscript_type _ _ of NONE => NONE | SOME _ => _) = SOME _` mp_tac >>
+      simp_tac std_ss [subscripts_type_def, optionTheory.option_case_eq] >>
+      strip_tac >>
+      qpat_x_assum `_ = INL new` mp_tac >>
+      simp_tac std_ss [AllCaseEqs()] >> strip_tac >> gvs[] >>
       rename1 `subscript_type root_tv (ValueSubscript (IntV i)) = SOME etv` >>
       `well_formed_type_value etv` by metis_tac[subscript_type_well_formed] >>
       `value_has_type etv v'` by metis_tac[array_index_type_metadata] >>

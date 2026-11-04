@@ -1416,11 +1416,23 @@ Proof
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
   simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  qmatch_goalsub_rename_tac `place_type_value cx pp st` >>
+  Cases_on `place_type_value cx pp st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value _ _ _ = (rt, _)` >>
+  Cases_on `rt` >> simp[]
+  >>~- ([`(INR _,_) = _ ==> _`],
+         strip_tac >> gvs[] >> irule preserves_tv_eq >> simp[]) >>
+  qmatch_goalsub_rename_tac `read_place cx pp ss` >>
+  Cases_on `read_place cx pp ss` >>
+  drule read_place_state >> strip_tac >> gvs[] >>
+  rename1 `read_place _ _ _ = (rv, _)` >>
+  Cases_on `rv` >> simp[]
+  >>~- ([`(INR _,_) = _ ==> _`],
+         strip_tac >> gvs[] >> irule preserves_tv_eq >> simp[]) >>
+  BasicProvers.FULL_CASE_TAC >> simp[return_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[write_place_preserves_tv, preserves_tv_eq]
 QED
 
 Theorem pop_place_preserves_tv:

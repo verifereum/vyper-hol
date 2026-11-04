@@ -258,6 +258,11 @@ Proof
   irule observer_run_prefix_aux >> metis_tac[]
 QED
 
+local
+  val setfmp_opcode_eqs = List.filter (fn th =>
+    aconv ``SETFMP`` (rhs (fst (dest_imp (snd (strip_forall (concl th)))))))
+    (CONJUNCTS step_inst_base_opcode_eqs)
+in
 Theorem observer_same_block_probe:
   ~s.vs_halted /\ s.vs_current_bb = "entry" /\ s.vs_inst_idx = 0 ==>
   local_prefix ctx
@@ -270,8 +275,8 @@ Proof
   qexists_tac `s with <|vs_fmp := 7w; vs_inst_idx := 1|>` >> conj_tac
   >- (simp[abi_observer_step_def, lookup_block_def, get_instruction_def, listTheory.FIND_thm] >>
       qexists_tac `s with vs_fmp := 7w` >>
-      simp[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
-           eval_operand_def, is_terminator_def]) >>
+      simp(setfmp_opcode_eqs @ [step_inst_non_invoke, mk_inst_def,
+           eval_operand_def, is_terminator_def])) >>
   irule (cj 1 local_prefix_rules) >> simp[]
 QED
 
@@ -569,9 +574,10 @@ Theorem observer_old_prefix_region_closed:
 Proof
   rw[observer_region_closed_def, abi_observer_step_def] >>
   gvs[lookup_block_def, listTheory.FIND_thm, get_instruction_def] >>
-  gvs[step_inst_non_invoke, Once step_inst_base_def, mk_inst_def,
-      is_terminator_def, eval_operand_def]
+  gvs(setfmp_opcode_eqs @ [step_inst_non_invoke, mk_inst_def,
+      is_terminator_def, eval_operand_def])
 QED
+end
 
 Theorem observer_old_stop_or_invoke_not_closed:
   old = mk_inst 9 STOP [] [] \/ old.inst_opcode = INVOKE ==>
