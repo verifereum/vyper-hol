@@ -112,3 +112,11 @@ Resume run_inst_seq_abort_gas_path[abort]:
   simp[] >> irule gas_marked_path_abort >> metis_tac[]
 QED
 Finalise run_inst_seq_abort_gas_path
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag run_inst_seq_abort_gas_path) in
+    if null (Thm.hyp run_inst_seq_abort_gas_path) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then
+      print "GAS_SEQ_ABORT_AUDIT OK\n"
+    else raise Fail "run_inst_seq_abort_gas_path: admitted dependency"
+  end;
