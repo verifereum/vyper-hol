@@ -4,6 +4,7 @@ Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
   bodyLiteralMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
+  bodyUnopMemory vyperTyping vyperValue vyperAST vyperTypeSystem
 
 Theorem body_ifexp_word_mem_case:
   !cx t c a b. is_word_type t /\
@@ -96,4 +97,37 @@ val () =
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_ATTRIBUTE_NAME_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "attribute name closure memory inherited admission"
+  end;
+
+Theorem body_not_bool_mem_case:
+  !cx ann e. expr_type e = BaseT BoolT /\ body_expr_mem_ok cx e ==>
+    body_expr_mem_ok cx (Builtin ann Not [e])
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `ann = BaseT BoolT` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule expr_body_pre_builtin_arg >> simp[] >>
+     qexistsl_tac [`BaseT BoolT`, `[e]`, `Not`, `es`] >> simp[]) >>
+  `expr_sim_mem ctx func cenv cx (BaseT BoolT) e es` by
+    metis_tac[body_expr_mem_ok_def] >>
+  `!v es1. (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) ==>
+      ?b. v = BoolV b` by
+    (rpt gen_tac >> strip_tac >>
+     `word_value_type (expr_type e)` by simp[word_value_type_def] >>
+     drule_all expr_body_pre_word_result >> strip_tac >>
+     gvs[evaluate_type_def] >> Cases_on `v` >> gvs[value_has_type_def]) >>
+  metis_tac[compile_not_bool_sim_mem, compile_not_bool_vv_sim_mem]
+QED
+
+val () =
+  let val th = body_not_bool_mem_case
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NOT_BOOL_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "Boolean Not closure inherited admission"
   end;
