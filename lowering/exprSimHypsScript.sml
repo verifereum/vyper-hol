@@ -408,7 +408,8 @@ Definition expr_sim_pre_def:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
-    ~expr_has_evm_run e
+    ~expr_has_evm_run e /\
+    ~supported_expr_exists call_operands_effect_root e
 End
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
@@ -421,6 +422,7 @@ Definition expr_body_pre_def:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
+    ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
                       get_module_code cx NONE = SOME tops)
@@ -957,7 +959,10 @@ Proof
      byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
   drule_all alloc_limits_exprs_mem >>
-  gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+  gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every] >> metis_tac[]
 QED
 
 Theorem well_typed_exprs_member:
@@ -998,7 +1003,10 @@ Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def] >>
   imp_res_tac int_calls_exprs_every_mem >>
-  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED

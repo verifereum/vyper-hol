@@ -100,6 +100,14 @@ Definition expr_evm_run_root_def:
   expr_evm_run_root _ = F
 End
 
+Definition call_operands_effect_root_def:
+  call_operands_effect_root (Call ty (ExtCall s k sig opts) args d) =
+    EXISTS expr_has_effect (DROP 1 args) /\
+  call_operands_effect_root (Call ty (IntCall id) args d) =
+    EXISTS expr_has_effect args /\
+  call_operands_effect_root _ = F
+End
+
 Definition expr_has_evm_run_def:
   expr_has_evm_run e <=> supported_expr_exists expr_evm_run_root e
 End
@@ -140,6 +148,38 @@ Theorem supported_exprs_exists_every:
   supported_exprs_exists p es <=> EXISTS (supported_expr_exists p) es
 Proof
   Induct_on `es` >> simp[supported_expr_exists_def]
+QED
+
+Theorem call_operands_effect_extcall_tail:
+  ~supported_expr_exists call_operands_effect_root
+    (Call ty (ExtCall s k sig opts) args d) ==>
+  EVERY (\e. ~expr_has_effect e) (DROP 1 args)
+Proof
+  strip_tac >>
+  `~call_operands_effect_root (Call ty (ExtCall s k sig opts) args d)` by
+    metis_tac[supported_expr_exists_root] >>
+  qpat_x_assum `~call_operands_effect_root _` mp_tac >>
+  pure_rewrite_tac[call_operands_effect_root_def] >>
+  simp[EVERY_MEM, EXISTS_MEM] >> metis_tac[]
+QED
+
+(* The restriction deliberately starts after the target. *)
+Theorem call_operands_effect_target_probe[local]:
+  expr_has_effect (Pop ty (NameTarget id)) /\
+  ~supported_expr_exists call_operands_effect_root
+    (Call ty (ExtCall s k sig opts) [Pop ty (NameTarget id)] NONE)
+Proof
+  simp[expr_has_effect_def, supported_expr_exists_def,
+       expr_effect_root_def, call_operands_effect_root_def]
+QED
+
+Theorem supported_expr_exists_call_operands:
+  ~supported_expr_exists p (Call ty ct args d) ==>
+  EVERY (\e. ~supported_expr_exists p e) args /\
+  ~supported_opt_exists p d
+Proof
+  pure_rewrite_tac[supported_expr_exists_def] >>
+  simp[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem supported_fields_exists_every:
