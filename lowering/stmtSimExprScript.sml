@@ -75,6 +75,17 @@ Proof
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
+Theorem expr_stmt_post[local]:
+  vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+  ~t.vs_halted /\ ~block_is_terminated sb /\
+  t.vs_current_bb = sb.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) ee t
+Proof
+  simp[vv_post_def, stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  metis_tac[]
+QED
+
 Theorem compile_expr_stmt_frag_ok:
   !ctx func cx lctx RetQ cenv ty e es.
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
