@@ -141,3 +141,13 @@ QED
 
 (* Resolved PHI values use ld_owned_operand_value directly: resolution only
    identifies the operand and adds no further value hypothesis. *)
+
+Theorem ld_positive_site_owner_unique:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+  ld_live astk L AP AG (oa,(bs,sz)) /\
+  ld_live astk L AP AG (ob,(bs,sz)) /\ 0 < sz ==> oa = ob
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule ld_annotated_owner_separation >>
+  disch_then (qspecl_then [`(oa,(bs,sz))`, `(ob,(bs,sz))`] mp_tac) >> simp[]
+QED
