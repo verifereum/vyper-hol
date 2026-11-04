@@ -6896,7 +6896,18 @@ Theorem body_augassign_place_pure:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
-  cheat
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Cases_on `eval_target_place cx t es` >> rename1 `_ = (rp,st)` >>
+  Cases_on `rp`
+  >- (rename1 `eval_target_place cx t es = (INL p,st)` >>
+      `?pt. supported_target_info tops bindings t = SOME pt` by
+        (irule aug_place_supported_stmt_target_info >> metis_tac[]) >>
+      drule_all aug_place_supported_success_kind >> strip_tac >> gnvs[]
+      >- (irule aug_place_body_memory >> metis_tac[]) >>
+      `EVERY (supported_pure_expr tops) (target_indices t)` by
+        metis_tac[aug_place_name_root_memory, place_distinct] >>
+      irule aug_place_body_storage >> metis_tac[]) >>
+  irule aug_place_body_target_failure >> metis_tac[]
 QED
 
 (* RESIDUAL (captured storage slots): a field or element of a storage or
