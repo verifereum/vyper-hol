@@ -1363,3 +1363,65 @@ Proof
    (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[]) >>
  metis_tac[]
 QED
+
+Theorem cse_available_before_final_nonwriter[local]:
+ def_available_at fn bb NONE v /\
+ get_instruction bb k = SOME term /\ SUC k = LENGTH bb.bb_instructions /\
+ term.inst_outputs = [] ==>
+ def_available_at fn bb (SOME term) v
+Proof
+ simp[def_available_at_def] >> strip_tac >>
+ qexistsl [`def_bb`, `def_inst`] >> simp[] >> strip_tac >> gvs[] >>
+ `?i. i < LENGTH bb.bb_instructions /\ EL i bb.bb_instructions = def_inst` by
+   metis_tac[MEM_EL] >>
+ `i <> k` by (strip_tac >> gvs[get_instruction_def]) >>
+ qexistsl [`i`, `k`] >> gvs[get_instruction_def] >> decide_tac
+QED
+
+Theorem cse_prefix_phi_incoming_last_write:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n pred_bb p) /\
+ get_instruction pred_bb p.vs_inst_idx = SOME term /\
+ step_inst n ctx term p = OK s /\ is_terminator term.inst_opcode /\
+ ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+ MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI /\
+ MEM (pred_bb.bb_label,v) (phi_pairs phi.inst_operands) ==>
+ ?pre ev post. events ++ [CseStep n pred_bb term p s] = pre ++ [ev] ++ post /\
+ cse_event_writes ev v /\ EVERY (\e. ~cse_event_writes e v) post /\
+ lookup_var v s = lookup_var v (cse_event_output ev)
+Proof
+ strip_tac >> drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_terminator_boundary >> strip_tac >>
+ `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ `phi_edge_uses_wf fn bb phi` by
+   (qpat_x_assum `wf_ssa fn` mp_tac >>
+    simp[wf_ssa_def, def_dominates_uses_def] >> strip_tac >>
+    first_x_assum (qspecl_then [`bb`, `phi`] mp_tac) >> simp[]) >>
+ `?incoming_bb. MEM incoming_bb fn.fn_blocks /\
+   incoming_bb.bb_label = pred_bb.bb_label /\
+   def_available_at fn incoming_bb NONE v` by
+   (qpat_x_assum `phi_edge_uses_wf fn bb phi` mp_tac >>
+    simp[phi_edge_uses_wf_def] >> strip_tac >>
+    first_x_assum (qspecl_then [`pred_bb.bb_label`, `v`] mp_tac) >>
+    simp[] >> metis_tac[]) >>
+ `incoming_bb = pred_bb` by
+   (`ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+      gvs[wf_function_def, fn_labels_def] >>
+    `lookup_block incoming_bb.bb_label fn.fn_blocks = SOME incoming_bb` by
+      metis_tac[MEM_lookup_block] >> gvs[]) >>
+ `inst_wf term` by
+   (qpat_x_assum `fn_inst_wf fn` mp_tac >> simp[fn_inst_wf_def] >>
+    disch_then (qspecl_then [`pred_bb`, `term`] mp_tac) >>
+    impl_tac >- (conj_tac >- metis_tac[lookup_block_MEM] >>
+                 gvs[get_instruction_def, AllCaseEqs()] >>
+                 simp[MEM_EL] >> qexists `p.vs_inst_idx` >> simp[]) >> simp[]) >>
+ `term.inst_outputs = []` by metis_tac[terminator_no_outputs] >>
+ `def_available_at fn pred_bb (SOME term) v` by
+   (irule cse_available_before_final_nonwriter >> metis_tac[]) >>
+ drule_all cse_prefix_available_last_write >> strip_tac >>
+ `lookup_var v s = lookup_var v p` by
+   (drule_all step_terminator_preserves_vars >> simp[]) >>
+ qexistsl [`pre`, `ev`, `post ++ [CseStep n pred_bb term p s]`] >>
+ simp[APPEND_ASSOC, EVERY_APPEND, cse_event_writes_def, lookup_var_def] >>
+ gvs[lookup_var_def]
+QED
