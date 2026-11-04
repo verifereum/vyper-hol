@@ -16068,3 +16068,48 @@ Proof
   drule cs_extends_labels >> disch_then SUBST1_TAC >>
   gvs[MEM_APPEND, EVERY_MEM] >> metis_tac[]
 QED
+
+(* Fallback bodies add only compiler-generated labels, independently of locations. *)
+Theorem compile_fallback_body_labels:
+  !cenv pay nr k t v body rt s.
+    cs_extends s (SND (compile_fallback_body cenv pay nr k t v body rt s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_fallback_body cenv pay nr k t v body rt s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_fallback_body_def] >>
+  stmt_labels_chain (compile_guarded_body_labels :: stmt_labels_rws)
+QED
+
+Theorem compile_internal_param_decls_labels[local]:
+  !params idx s.
+    cs_extends s (SND (compile_internal_param_decls params idx s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_internal_param_decls params idx s)))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[compile_internal_param_decls_def, comp_return_labels] >>
+  PairCases_on `h` >> once_rewrite_tac[compile_internal_param_decls_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem materialize_internal_params_labels[local]:
+  !captured ce s.
+    cs_extends s (SND (materialize_internal_params ce captured s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (materialize_internal_params ce captured s)))
+Proof
+  Induct >> rpt gen_tac
+  >- simp[materialize_internal_params_def, comp_return_labels] >>
+  PairCases_on `h` >> once_rewrite_tac[materialize_internal_params_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem compile_fixed_region_with_id_labels[local]:
+  !sz s. cs_extends s (SND (compile_fixed_region_with_id sz s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_fixed_region_with_id sz s)))
+Proof
+  simp[compile_fixed_region_with_id_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+       cs_extends_def, added_labels_def, all_blocks_def]
+QED
