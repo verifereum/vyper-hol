@@ -1916,7 +1916,7 @@ Theorem body_augassign_attr_storage[local]:
        place_type_value cx p s'4' = (INL ptv,t'3') ==>
        body_expr_ok cx e) /\
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     supported_storage_field_write tops (src, id) fld /\
     type_stmt env ret_ty
       (AugAssign ty (AttributeTarget (TopLevelNameTarget (src, id)) fld) bop e)

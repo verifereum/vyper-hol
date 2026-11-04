@@ -163,15 +163,11 @@ Theorem call_external_transaction_pending_deletions:
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
-  >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-      rw[] >> simp[]) >>
+  >- gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def] >>
   rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
   reverse (Cases_on `exn = HaltException`)
   >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
-  gvs[] >> qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-  simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  rw[] >> simp[]
+  gvs[call_external_def, AllCaseEqs(), finalize_pending_deletions_def]
 QED
 
 Theorem load_contract_pending_deletions:

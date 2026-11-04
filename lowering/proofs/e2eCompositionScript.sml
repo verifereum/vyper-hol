@@ -54,8 +54,9 @@ Proof
   PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
   gvs[unit_result_rel_def, external_call_result_rel_def, AllCaseEqs(),
       observable_equiv_def] >>
-  rpt strip_tac >> gvs[] >> rpt CASE_TAC >> gvs[] >>
-  rename1 `abort_before <> Revert_abort` >> Cases_on `abort_before` >> gvs[]
+  rpt strip_tac >> gvs[] >> Cases_on `src0` >> gvs[] >>
+  Cases_on `a` >> Cases_on `a'` >> gvs[] >>
+  Cases_on `y` >> TRY (rename1 `Error err` >> Cases_on `err`) >> gvs[]
 QED
 
 (* ===== Frame composition, separated by semantic outcome ===== *)

@@ -7987,8 +7987,6 @@ Resume compile_expr_body_shape[call]:
   >- (irule compile_call_raw_log_shape >> simp[])
   >~ [`compile_call _ _ _ _ RawRevert _ _`]
   >- (irule compile_call_raw_revert_shape >> simp[])
-  >~ [`compile_call _ _ _ _ (RawCallTarget _) _ _`]
-  >- shape_send_invalid_tac
   >~ [`compile_call _ _ _ _ (CreateTarget _ _ _) _ _`]
   >- shape_send_invalid_tac >>
   gvs[] >> shape_send_invalid_tac

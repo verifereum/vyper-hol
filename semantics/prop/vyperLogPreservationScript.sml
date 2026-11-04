@@ -2636,7 +2636,7 @@ Proof
                else return ();
                send_call_value mut cx;
                eval_stmts cx body
-             od) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
+             od) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
   Cases_on `q` >> gvs[AllCaseEqs(), machine_log_extends_refl] >>
   Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
                case cx.nonreentrant_slot of

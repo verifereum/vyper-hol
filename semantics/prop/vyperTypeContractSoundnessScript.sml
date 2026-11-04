@@ -1185,10 +1185,17 @@ Theorem call_external_function_success_result_cases[local]:
       safe_cast tv v_ret = SOME v_cast /\
       am_out = abstract_machine_from_state srcs exps layouts st_unlocked))
 Proof
-  PairCases_on `body_res` >>
-  Cases_on `body_res0` >> gvs[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  metis_tac[]
+  namedCases_on `body_res` ["tag st_body"] >>
+  Cases_on `tag`
+  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
+      Cases_on `res` >> gvs[]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> simp[] >>
+  rename1 `safe_cast _ v_ret` >>
+  namedCases_on `unlock st_body` ["res st_unlocked"] >>
+  Cases_on `res` >> simp[] >>
+  Cases_on `evaluate_type tenv ret` >> simp[] >>
+  rename1 `safe_cast tv v_ret` >>
+  Cases_on `safe_cast tv v_ret` >> gvs[]
 QED
 
 Theorem call_external_function_result_preserves_exports[local]:
@@ -1215,11 +1222,22 @@ Theorem call_external_function_result_preserves_exports[local]:
      | (INR e, st) => (INR e, am, st.requests)) = (result, am_out, rqs) ==>
   am_out.exports = am.exports
 Proof
-  PairCases_on `body_res` >>
-  Cases_on `body_res0` >>
-  simp[abstract_machine_from_state_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[abstract_machine_from_state_def]) >>
-  rw[] >> simp[]
+  rewrite_tac[triple_identity] >>
+  namedCases_on `body_res` ["tag st_body"] >>
+  Cases_on `tag`
+  >- (namedCases_on `unlock st_body` ["res st_unlocked"] >>
+      Cases_on `res` >> rpt strip_tac >>
+      contract_gvs[abstract_machine_from_state_def]) >>
+  rename1 `INR exc` >> Cases_on `exc` >>
+  simp[abstract_machine_from_state_def] >> rpt strip_tac >>
+  contract_gvs[] >>
+  rename1 `safe_cast _ v_ret` >>
+  namedCases_on `unlock st_body` ["res st_unlocked"] >>
+  Cases_on `res` >> contract_gvs[abstract_machine_from_state_def] >>
+  Cases_on `evaluate_type tenv ret` >> contract_gvs[] >>
+  rename1 `safe_cast tv v_ret` >>
+  Cases_on `safe_cast tv v_ret` >> rpt strip_tac >>
+  contract_gvs[abstract_machine_from_state_def]
 QED
 
 Theorem call_external_function_deploy_success_cases:
@@ -1829,16 +1847,30 @@ Proof
   gvs[AllCaseEqs(), return_def, raise_def,
       vyperTypeExprSoundnessTheory.no_type_error_eval_def,
       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  qmatch_asmsub_abbrev_tac `FST prefix` >>
+  Cases_on `prefix` >> Cases_on `q`
+  >- (qpat_x_assum `!msg. FST _ <> _` kall_tac >>
+      qpat_x_assum `Abbrev _` kall_tac >>
+      qpat_x_assum `(\(res,am_out,rqs). (res,am_out,rqs)) _ = _` mp_tac >>
+      simp_tac (srw_ss()) [] >>
+      Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
+        case lookup_nonreentrant_slot am.layouts tx.target of
+          NONE => return () | SOME slot => release_nonreentrant_lock tx.target slot
+        else return ()) r` >> Cases_on `q` >>
+      simp_tac (srw_ss()) [] >>
+      unabbrev_all_tac >>
+      Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
+      Cases_on `nr` >> Cases_on `mut` >>
+      gvs[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+          get_transient_storage_def, update_transient_def,
+          return_def, raise_def, assert_def, check_def]) >>
+  Cases_on `y` >>
   qpat_x_assum `!msg. FST _ <> INR (Error (TypeError msg))`
     (qspec_then `msg` mp_tac) >>
   qpat_x_assum `(\(res,am_out,rqs). (res,am_out,rqs)) _ = _` mp_tac >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[return_def, raise_def,
-        vyperTypeExprSoundnessTheory.no_type_error_eval_def,
-        vyperTypeExprSoundnessTheory.no_type_error_result_def]) >>
-  gvs[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  asm_simp_tac (srw_ss()) [AllCaseEqs(),
+    vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   rpt strip_tac >>
-  FIRST
-    [qpat_x_assum `safe_cast ret_tv v = NONE` assume_tac >>
      `do
         (if nr then
            case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
@@ -1848,28 +1880,28 @@ Proof
         send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
         eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
       od (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs|>) = (INR (ReturnException v),r)` by
-       gvs[bind_def, ignore_bind_def, initial_evaluation_context_def] >>
+       (qpat_x_assum `Abbrev _` mp_tac >>
+        simp_tac (srw_ss()) [markerTheory.Abbrev_def, bind_apply,
+          ignore_bind_apply, initial_evaluation_context_def] >> metis_tac[]) >>
+     qpat_x_assum `Abbrev _` kall_tac >>
      `value_has_type ret_tv v` by (
        gvs[initial_state_def] >>
        drule_all (SRULE [initial_state_def]
          (Q.INST [`rqs` |-> `[]`]
            call_lock_send_eval_return_typed_c53)) >>
        strip_tac >> gvs[]) >>
-     drule vyperTypingTheory.safe_cast_well_typed >> gvs[],
-     qpat_x_assum
-       `(if nr /\ mut <> View /\ mut <> Pure then
-           case lookup_nonreentrant_slot am.layouts tx.target of
-             NONE => return ()
-           | SOME slot => release_nonreentrant_lock tx.target slot
-         else return ()) r = (INR y,r'')` mp_tac >>
+     drule vyperTypingTheory.safe_cast_well_typed >> strip_tac >>
+     qpat_x_assum `(\(res,am_out,rqs). (res,am_out,rqs)) _ = _` mp_tac >>
+     Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
+       case lookup_nonreentrant_slot am.layouts tx.target of
+         NONE => return () | SOME slot => release_nonreentrant_lock tx.target slot
+       else return ()) r` >> Cases_on `q` >>
+     asm_simp_tac (srw_ss()) [] >>
      Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
-     Cases_on `nr` >>
-     Cases_on `mut` >>
+     Cases_on `nr` >> Cases_on `mut` >>
      gvs[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
          get_transient_storage_def, update_transient_def,
-         return_def, raise_def, assert_def, check_def,
-         vyperTypeExprSoundnessTheory.no_type_error_eval_def,
-         vyperTypeExprSoundnessTheory.no_type_error_result_def]]
+         return_def, raise_def, assert_def, check_def]
 QED
 
 Theorem checked_explicit_external_entry_no_type_error_selected[local]:

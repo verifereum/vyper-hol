@@ -3985,6 +3985,14 @@ Proof
        ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
 
+val membership_finish_tac =
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_compile_multi_exprs]
+       >> rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
+       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership];
+
 Theorem ci_mono_builtin_membership[local]:
   (∀ce t e s. ci_mono s (SND (f ce t e s))) ⇒
   ci_mono st (SND
@@ -3998,13 +4006,9 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> Cases_on `e` >> simp[LET_THM] >> rpt TOP_CASE_TAC >>
-  rpt (irule ci_mono_uncurry >> reverse conj_tac
-       >- simp[ci_mono_compile_multi_exprs]
-       >> rpt gen_tac >> BETA_TAC) >>
-  rpt IF_CASES_TAC >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
-       ci_mono_compile_list_membership_notin, ci_mono_compile_var_array_membership]
+  strip_tac >> Cases_on `e` >> simp[LET_THM]
+  >~ [`Builtin t b l`] >- (Cases_on `b` >> simp[] >> membership_finish_tac) >>
+  membership_finish_tac
 QED
 
 Theorem ci_mono_builtin_bop[local]:
