@@ -3455,3 +3455,165 @@ Proof
   drule_all probe_word_merged_storage >> disch_then (fn th => rewrite_tac[th]) >>
   gvs[sload_def, wordsTheory.w2n_eq_0]
 QED
+
+Theorem probe_word_load_round_accounts[local]:
+  !s i b. (probe_word_load_round s i b).vs_accounts = s.vs_accounts
+Proof
+  simp[probe_word_load_round_def, jump_to_def, probe_word_load_cond_state_def,
+       probe_word_load_state_def, update_var_def, mstore_def]
+QED
+
+Theorem probe_word_loaded_accounts[local]:
+  !s b. (probe_word_loaded_state s b).vs_accounts = s.vs_accounts
+Proof
+  simp[probe_word_loaded_state_def, jump_to_def, probe_word_load_cond_state_def,
+       update_var_def, probe_word_load_round_accounts]
+QED
+
+(* Overwriting the active account's storage erases precisely the effect
+   of a copy round; all other addresses and account metadata are retained. *)
+Theorem probe_word_elem_round_accounts_overwrite[local]:
+  !s i src dst a stor.
+    s.vs_call_ctx.cc_address = a ==>
+    (a =+ (lookup_account a (probe_word_elem_round s i src dst).vs_accounts
+      with storage := stor)) (probe_word_elem_round s i src dst).vs_accounts =
+       (a =+ (lookup_account a s.vs_accounts with storage := stor)) s.vs_accounts
+Proof
+  rpt strip_tac >>
+  simp[probe_word_elem_round_def, jump_to_def, probe_word_elem_cond_state_def,
+       probe_word_elem_body_state_def, update_var_def, sstore_def, lookup_account_def]
+QED
+
+Theorem probe_word_elems_copied_accounts_overwrite[local]:
+  !s src dst a stor.
+    s.vs_call_ctx.cc_address = a ==>
+    (a =+ (lookup_account a (probe_word_elems_copied_state s src dst).vs_accounts
+      with storage := stor)) (probe_word_elems_copied_state s src dst).vs_accounts =
+       (a =+ (lookup_account a s.vs_accounts with storage := stor)) s.vs_accounts
+Proof
+  rpt strip_tac >>
+  simp[probe_word_elems_copied_state_def, jump_to_def,
+       probe_word_elem_cond_state_def, update_var_def,
+       probe_word_elem_round_accounts_overwrite, probe_word_elem_round_call_ctx]
+QED
+
+Theorem probe_word_copy_body_accounts[local]:
+  !s i b. (probe_word_copy_body_state s i b).vs_accounts = s.vs_accounts
+Proof
+  simp[probe_word_copy_body_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_setup_accounts[local]:
+  !s i n b. (probe_word_copy_setup_state s i n b).vs_accounts = s.vs_accounts
+Proof
+  simp[probe_word_copy_setup_state_def, jump_to_def, probe_word_copy_body_accounts,
+       probe_word_copy_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_round_accounts_overwrite[local]:
+  !s i n b a stor.
+    s.vs_call_ctx.cc_address = a ==>
+    (a =+ (lookup_account a (probe_word_copy_round s i n b).vs_accounts
+      with storage := stor)) (probe_word_copy_round s i n b).vs_accounts =
+       (a =+ (lookup_account a s.vs_accounts with storage := stor)) s.vs_accounts
+Proof
+  rpt strip_tac >>
+  simp[probe_word_copy_round_def, jump_to_def, probe_word_elem_exit_state_def,
+       update_var_def, probe_word_elems_copied_accounts_overwrite,
+       probe_word_copy_setup_call_ctx, probe_word_copy_setup_accounts]
+QED
+
+Theorem probe_word_copied_accounts_overwrite[local]:
+  !s n b a stor.
+    s.vs_call_ctx.cc_address = a ==>
+    (a =+ (lookup_account a (probe_word_copied_state s n b).vs_accounts
+      with storage := stor)) (probe_word_copied_state s n b).vs_accounts =
+       (a =+ (lookup_account a s.vs_accounts with storage := stor)) s.vs_accounts
+Proof
+  rpt strip_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, jump_to_def, probe_word_copy_cond_state_def,
+       update_var_def, probe_word_copy_round_accounts_overwrite]
+QED
+
+Theorem probe_word_final_accounts:
+  !s.
+    (probe_word_final_state s).vs_accounts =
+      (s.vs_call_ctx.cc_address =+
+        (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with
+          storage := contract_storage (probe_word_final_state s))) s.vs_accounts
+Proof
+  gen_tac >>
+  qabbrev_tac `b = (n2w (s.vs_alloca_next+32):bytes32)` >>
+  qabbrev_tac `e = jump_to "@wcopy_cond_0" (probe_word_entry_state s)` >>
+  qabbrev_tac `l = probe_word_loaded_state e b` >>
+  qabbrev_tac `c = jump_to "@dyn_cond_3" (probe_word_load_exit_state l b)` >>
+  qabbrev_tac `d = probe_word_copied_state c (sload 3w s) b` >>
+  `e.vs_call_ctx = s.vs_call_ctx /\ e.vs_accounts = s.vs_accounts` by
+    simp[Abbr `e`, jump_to_def, probe_word_entry_state_def, update_var_def] >>
+  `l.vs_call_ctx = s.vs_call_ctx /\ l.vs_accounts = s.vs_accounts` by
+    simp[Abbr `l`, probe_word_loaded_accounts, probe_word_loaded_call_ctx] >>
+  `c.vs_call_ctx = s.vs_call_ctx /\ c.vs_accounts = s.vs_accounts` by
+    simp[Abbr `c`, jump_to_def, probe_word_load_exit_state_def, update_var_def] >>
+  `d.vs_call_ctx = s.vs_call_ctx` by simp[Abbr `d`, probe_word_copied_call_ctx] >>
+  `probe_word_final_state s = sstore 0w (sload 3w s) (d with vs_inst_idx := 1)` by
+    simp[probe_word_final_state_def, Abbr `d`, Abbr `c`, Abbr `l`, Abbr `e`, Abbr `b`] >>
+  asm_rewrite_tac[] >>
+  simp[sstore_def, contract_storage_def, lookup_account_def] >>
+  simp[GSYM lookup_account_def, Abbr `d`, probe_word_copied_accounts_overwrite]
+QED
+
+Theorem probe_word_merged_accounts:
+  !s args cs out.
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_call_ctx.cc_address = probe_word_context.txn.target ==>
+    let t = update_var out 0w (merge_callee_state s (probe_word_final_state cs)) in
+    t.vs_accounts = (probe_word_context.txn.target =+
+      (lookup_account probe_word_context.txn.target s.vs_accounts with
+        storage := contract_storage t)) s.vs_accounts /\
+    t.vs_transient = s.vs_transient
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  `contract_storage (update_var out 0w (merge_callee_state s (probe_word_final_state cs))) =
+    contract_storage (probe_word_final_state cs)` by
+    simp[contract_storage_def, update_var_def, probe_word_final_call_ctx] >>
+  gs[update_var_def, probe_word_final_runtime_frame] >>
+  once_rewrite_tac[probe_word_final_accounts] >> simp[]
+QED
+
+Theorem probe_word_invoke_accounts_summary:
+  !cenv env e0 es s args cs out.
+    expr_body_pre cenv probe_word_context env e0 es /\
+    storage_agree
+      (storage_dead probe_word_context F (get_storage probe_word_context es F))
+      (get_storage probe_word_context es F) (contract_storage s) /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    setup_callee probe_word_function args s = SOME cs /\
+    accounts_rel probe_word_context es s /\
+    s.vs_call_ctx.cc_address = probe_word_context.txn.target ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      accounts_rel probe_word_context es'
+        (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_pre_shapes >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_copy_symbolic_success >>
+  simp[wordsTheory.n2w_w2n] >>
+  (impl_tac >- metis_tac[wordsTheory.n2w_w2n]) >>
+  strip_tac >>
+  drule_all probe_word_invoke_storage_summary >> strip_tac >>
+  gvs[] >>
+  qmatch_goalsub_abbrev_tac `set_storage _ _ F stor` >>
+  irule accountsRelPropsTheory.accounts_rel_set_storage >>
+  qexistsl [`es`, `s`, `stor`,
+    `contract_storage (merge_callee_state s (probe_word_final_state cs))`] >>
+  simp[set_storage_backend_eq] >>
+  drule_all probe_word_merged_accounts >>
+  disch_then (qspec_then `out` mp_tac) >>
+  gvs[get_storage_after_set, update_var_def, contract_storage_def]
+QED
