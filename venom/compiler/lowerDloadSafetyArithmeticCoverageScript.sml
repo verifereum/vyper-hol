@@ -15,7 +15,7 @@ Proof
   Cases_on `FLOOKUP H s` >> simp[] >> metis_tac[IN_FRANGE_FLOOKUP]
 QED
 
-Theorem ld_set_first_prov_selected[local]:
+Theorem ld_set_first_prov_selected:
   (!a. a IN FRANGE H ==> a IN FDOM A) ==>
   !a. a IN FRANGE (set_prov H outs (first_prov H ops)) ==> a IN FDOM A
 Proof
