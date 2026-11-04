@@ -4584,3 +4584,43 @@ val () =
       print "SHRINK_SIM_AUDIT probe_word_shrink_sim_case OK\n"
     else raise Fail "probe_word_shrink_sim_case: admitted proof dependency"
   end;
+
+Theorem probe_word_outer_zero_eval:
+  !es. eval_base_place probe_word_context
+    (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+      (Literal (BaseT (UintT 256)) (IntL 0))) es =
+    extend_place probe_word_context
+      (PlaceR (StoragePlace F 0w
+        (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1))))
+      (ValueSubscript (IntV 0)) es
+Proof
+  gen_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``extend_place``]) >>
+  simp[dimword_def, type_slot_size_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``, return_def, raise_def]
+QED
+
+Theorem probe_word_outer_zero_compile:
+  !cenv.
+    FLOOKUP cenv.ce_module_vars (NONE,"outer") = SOME (StorageLoc 0w) /\
+    cenv.ce_hashmap_info (NONE,"outer") = NONE /\
+    cenv.ce_module_var_type (NONE,"outer") = SOME probe_word_outer_type ==>
+    compile_get_target_ptr compile_expr cenv
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0))) =
+    (do p <- compile_array_subscript (Lit 0w) (Lit 0w) T 0 1 2 F
+       (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocStorage);
+        return (p,SOME LocStorage,SOME (ValPT (ArrayT (BaseT (UintT 256)) (Dynamic 1))))
+     od)
+Proof
+  rpt strip_tac >>
+  simp[FUN_EQ_THM] >> gen_tac >>
+  simp[exprLoweringTheory.compile_get_target_ptr_def, probe_word_outer_type_def, LET_THM,
+       exprLoweringTheory.lower_value_def, Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.unwrap_value_def, exprLoweringTheory.compile_literal_vv_def,
+       comp_bind_def, comp_return_def,
+       vyperASTTheory.expr_type_def, word_scale_def, elem_size_in_location_def,
+       is_signed_type_def, is_slot_addressed_def, type_memory_bytes_def,
+       integer_wordTheory.i2w_def]
+QED
+
