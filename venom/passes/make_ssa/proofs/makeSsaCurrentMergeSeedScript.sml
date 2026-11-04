@@ -1,6 +1,7 @@
 Theory makeSsaCurrentMergeSeed
 Ancestors makeSsaCurrentTokenOwnership makeSsaCurrentGraphCut
-  makeSsaCurrentTokens list
+  makeSsaCurrentTokens makeSsaCurrentAnalysis dominatorProofs
+  dominatorAnalysisProps dominatorDefs cfgDefs list
 
 Theorem current_output_inserted_origin[local]:
   !xs j t. current_output_token v l i j xs t = CurrentInserted w h ==>
@@ -45,4 +46,37 @@ Proof
   strip_tac >> drule current_block_inserted_origin >>
   simp[current_inherited_token_def] >> strip_tac >> simp[] >>
   drule current_chain_inserted_origin >> simp[]
+QED
+
+Theorem current_exit_inserted_dominates:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM p (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps p /\
+  current_block_token fn ins v p
+    (current_inherited_token fn ins v (REVERSE ps)) = CurrentInserted w h ==>
+  dominates (dom_analyze (cfg_analyze fn) fn) h p
+Proof
+  strip_tac >> drule current_exit_inserted_origin >> simp[] >> strip_tac
+  >- (gvs[] >> metis_tac[dom_self, current_all_labels_reachable]) >>
+  drule_all current_actual_chain_membership >>
+  metis_tac[strict_dominates_def]
+QED
+
+Theorem current_nonentry_nonself_predecessor:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM h (fn_labels fn) /\ h <> eb.bb_label ==>
+  ?p. MEM p (cfg_preds_of (cfg_analyze fn) h) /\
+    cfg_reachable_of (cfg_analyze fn) p /\
+    ~dominates (dom_analyze (cfg_analyze fn) fn) h p /\
+    (!ps. MEM p (fn_labels fn) /\
+      current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps p ==>
+      current_block_token fn ins v p
+        (current_inherited_token fn ins v (REVERSE ps)) <> CurrentInserted v h)
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) h` by
+    metis_tac[current_all_labels_reachable] >>
+  drule_all exists_pred_not_dominated >> strip_tac >>
+  goal_assum $ drule_at Any >> simp[] >>
+  metis_tac[current_exit_inserted_dominates]
 QED
