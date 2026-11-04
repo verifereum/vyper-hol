@@ -471,7 +471,8 @@ Theorem body_raw_call_case:
     body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt strip_tac >>
-  irule compile_raw_call_case >> metis_tac[body_exprs_ok_case]
+  `exprs_case F ctx func cenv cx es` by metis_tac[body_exprs_ok_case] >>
+  simp[compile_raw_call_case]
 QED
 
 (* GAP (#636 operands with internal calls): raw_call with calldata.  Its
