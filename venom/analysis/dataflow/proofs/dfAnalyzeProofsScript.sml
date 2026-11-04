@@ -200,7 +200,7 @@ QED
    process lbl st ≠ st for the new df_process_block (no inst update,
    conditional boundary update). This equivalence enables using the
    worklist theorems which require changed ⟺ ≠. *)
-Theorem df_process_changed_equiv[local]:
+Theorem df_process_changed_equiv:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
     let process = df_process_block dir bottom join transfer edge_transfer
                                    ctx entry_val cfg bbs in

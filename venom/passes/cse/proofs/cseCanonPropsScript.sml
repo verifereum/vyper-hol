@@ -1,5 +1,6 @@
 Theory cseCanonProps
-Ancestors cseDefs availExprDefs dfAnalyzeDefs
+Ancestors cseDefs availExprDefs availExprAnalysisProps dfAnalyzeDefs dfAnalyzeProps
+          worklistProps cfgAnalysisProps
 
 (* These are syntactic matching facts, not runtime value equalities. *)
 Theorem operand_ids_match_length:
@@ -221,12 +222,6 @@ Definition cse_avail_weight_def:
  CARD (FDOM a) + SIGMA (\k. LENGTH (a ' k)) (FDOM a)
 End
 
-Theorem cse_avail_meet_domain:
- !a b. FDOM (avail_meet_two a b) = FDOM a INTER FDOM b
-Proof
- simp[avail_meet_two_def, finite_mapTheory.FUN_FMAP_DEF]
-QED
-
 Theorem cse_avail_meet_apply:
  !a b k. k IN FDOM a /\ k IN FDOM b ==>
  (avail_meet_two a b) ' k = FILTER (\i. MEM i (b ' k)) (a ' k)
@@ -241,7 +236,7 @@ Theorem cse_avail_meet_sum_le:
              (FDOM (avail_meet_two a b)) <=
        SIGMA (\k. LENGTH (a ' k)) (FDOM a)
 Proof
- rpt gen_tac >> simp[cse_avail_meet_domain] >>
+ rpt gen_tac >> simp[avail_meet_two_FDOM] >>
  irule arithmeticTheory.LESS_EQ_TRANS >>
  qexists_tac `SIGMA (\k. LENGTH (a ' k)) (FDOM a INTER FDOM b)` >>
  conj_tac
@@ -258,7 +253,7 @@ Proof
  mp_tac (Q.SPECL [`a`, `b`] cse_avail_meet_sum_le) >>
  `CARD (FDOM (avail_meet_two a b)) <= CARD (FDOM a)` by
    (irule pred_setTheory.CARD_SUBSET >>
-    simp[cse_avail_meet_domain, pred_setTheory.INTER_SUBSET]) >>
+    simp[avail_meet_two_FDOM, pred_setTheory.INTER_SUBSET]) >>
  simp[cse_avail_weight_def]
 QED
 
@@ -279,7 +274,7 @@ Proof
  spose_not_then assume_tac >>
  `CARD (FDOM (avail_meet_two a b)) < CARD (FDOM a)` by
    (irule pred_setTheory.CARD_PSUBSET >>
-    gvs[cse_avail_meet_domain, pred_setTheory.PSUBSET_DEF,
+    gvs[avail_meet_two_FDOM, pred_setTheory.PSUBSET_DEF,
         pred_setTheory.INTER_SUBSET]) >>
  mp_tac (Q.SPECL [`a`, `b`] cse_avail_meet_sum_le) >>
  gvs[cse_avail_weight_def]
@@ -296,7 +291,7 @@ Proof
  >- (simp[finite_mapTheory.FLOOKUP_DEF]) >>
  simp[finite_mapTheory.FLOOKUP_DEF] >>
  `k IN FDOM b` by
-   metis_tac[cse_avail_meet_domain, pred_setTheory.IN_INTER] >>
+   metis_tac[avail_meet_two_FDOM, pred_setTheory.IN_INTER] >>
  simp[cse_avail_meet_apply] >>
  irule cse_filter_length_eq >>
  spose_not_then assume_tac >>
@@ -308,7 +303,7 @@ Proof
    (irule pred_setTheory.SUM_IMAGE_MONO_LESS >> rpt conj_tac
     >- (rpt strip_tac >>
         `x IN FDOM b` by
-          metis_tac[cse_avail_meet_domain, pred_setTheory.IN_INTER] >>
+          metis_tac[avail_meet_two_FDOM, pred_setTheory.IN_INTER] >>
         simp[cse_avail_meet_apply, rich_listTheory.LENGTH_FILTER_LEQ])
     >- (qexists_tac `k` >> simp[cse_avail_meet_apply]) >> simp[]) >>
  gvs[cse_avail_weight_def]
@@ -416,15 +411,9 @@ Proof
  qx_gen_tac `l` >> Cases_on `k = l` >> simp[]
 QED
 
-(* Worklist API ledger:
-   - This discharges changed-step descent for valid labels k IN U, including
-     both first materialization and contraction of an existing boundary.
-   - wl_iterate_fixpoint_process_restricted instead requires an increasing
-     scalar m with a uniform bound b. No such m/b is supplied here: first
-     materialization has no asserted bound on its second coordinate.
-   - Preservation of a reachable-state invariant, dependency completeness,
-     initial worklist coverage and closure of valid labels remain separate.
-   Thus this local theorem does not assert analysis convergence/provenance. *)
+(* Local descent includes first materialization and contraction of an existing
+   boundary. The WF API below uses this lexicographic rank directly, without
+   an increasing bounded scalar. Descent alone does not assert provenance. *)
 Theorem cse_process_boundary_rank:
  !U dir transfer edge ctx entry cfg bbs k st.
  FINITE U /\ k IN U /\
@@ -441,4 +430,60 @@ Proof
  IF_CASES_TAC >> gvs[] >>
  simp[cse_boundary_update_function] >>
  irule cse_boundary_rank_meet >> simp[]
+QED
+
+Theorem cse_avail_meet_absorb:
+ !a b. avail_meet_two (avail_meet_two a b) b = avail_meet_two a b
+Proof
+ rpt gen_tac >>
+ simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+      finite_mapTheory.FLOOKUP_DEF, avail_meet_two_FDOM] >>
+ gen_tac >> IF_CASES_TAC >> simp[] >>
+ gvs[pred_setTheory.IN_INTER] >>
+ simp[cse_avail_meet_apply, avail_meet_two_FDOM,
+      rich_listTheory.FILTER_FILTER]
+QED
+
+Theorem cse_avail_meet_opt_absorb:
+ !a b. avail_meet_opt (avail_meet_opt a b) b = avail_meet_opt a b
+Proof
+ Cases >> Cases >> simp[avail_meet_opt_def, cse_avail_meet_absorb] >>
+ simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM,
+      finite_mapTheory.FLOOKUP_DEF, avail_meet_two_FDOM] >>
+ gen_tac >> IF_CASES_TAC >> simp[cse_avail_meet_apply] >>
+ simp[listTheory.FILTER_EQ_ID, listTheory.EVERY_MEM]
+QED
+
+(* This is the boundary_result of df_analyze, before df_populate_inst.
+   Transfer and entry are arbitrary; only the contracting join is used here. *)
+Theorem cse_boundary_result_fixpoint:
+ !fn transfer edge ctx entry.
+ wf_function fn ==>
+ let cfg = cfg_analyze fn in
+ let bbs = fn.fn_blocks in
+ let st0 = init_df_state NONE (MAP (\bb. bb.bb_label) bbs) in
+ let initial = case entry of NONE => st0 | SOME (lbl,v) =>
+   st0 with ds_boundary := st0.ds_boundary |+ (lbl,v) in
+ let process = df_process_block Forward NONE avail_meet_opt
+                 transfer edge ctx entry cfg bbs in
+ let changed = (\lbl old new.
+   df_boundary NONE new lbl <> df_boundary NONE old lbl) in
+ is_fixpoint process cfg.cfg_dfs_pre
+   (SND (wl_iterate changed process (cfg_succs_of cfg) cfg.cfg_dfs_pre initial))
+Proof
+ rpt gen_tac >> strip_tac >> simp_tac bool_ss [LET_THM] >>
+ irule (Q.ISPEC `($< LEX $<) : num # num -> num # num -> bool`
+          wl_iterate_fixpoint_wf) >>
+ simp[SRULE [LET_THM] df_process_changed_equiv,
+      pairTheory.WF_LEX, prim_recTheory.WF_LESS] >> conj_tac
+ >- (qexistsl_tac [`\st. T`,
+       `\st. cse_boundary_rank (set (fn_labels fn)) (df_boundary NONE st)`,
+       `\lbl. MEM lbl (fn_labels fn)`] >>
+     simp[pairTheory.WF_LEX, prim_recTheory.WF_LESS, listTheory.EVERY_MEM] >>
+     rpt conj_tac
+     >- (rpt strip_tac >> irule cse_process_boundary_rank >> simp[])
+     >- (metis_tac[cfg_analyze_succ_labels]) >>
+     metis_tac[dfAnalyzePropsTheory.cfg_dfs_pre_subset_fn_labels]) >>
+ irule (SRULE [LET_THM] (Q.SPEC `Forward` df_process_deps_complete)) >>
+ simp[cfg_edge_symmetry_uncond, cse_avail_meet_opt_absorb]
 QED

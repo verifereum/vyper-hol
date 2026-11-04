@@ -457,3 +457,15 @@ Theorem df_valid_inst_keys_card:
 Proof
   ACCEPT_TAC dfAnalyzeProofsTheory.df_valid_inst_keys_card
 QED
+
+(* Boundary change is exactly a state change for boundary-only processing. *)
+Theorem df_process_changed_equiv:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
+    let process = df_process_block dir bottom join transfer edge_transfer
+                                   ctx entry_val cfg bbs in
+    let changed = (\lbl (old:'a df_state) new.
+                     df_boundary bottom new lbl <> df_boundary bottom old lbl) in
+    changed lbl st (process lbl st) <=> process lbl st <> st
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.df_process_changed_equiv
+QED
