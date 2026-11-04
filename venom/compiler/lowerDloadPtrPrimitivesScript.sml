@@ -66,3 +66,32 @@ Proof
   disch_then (qspec_then `szword` mp_tac) >>
   gvs[venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
+
+(* Two distinct zero-size sites have identical numeric provenance before
+   a scratch allocation is inserted between them. *)
+Theorem zero_site_comparison_before:
+  access_ok 0
+    (FEMPTY |+ ("p", (0,0)) |+ ("q", (0,0))) fn
+    (venomInst$mk_inst 3 EQ [Var "p"; Var "q"] ["c"])
+    (s with vs_vars := FEMPTY |+ ("p", 0w) |+ ("q", 0w))
+Proof
+  simp[access_ok_def, venomInstTheory.mk_inst_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem zero_site_comparison_after:
+  ~access_ok 0
+    (FEMPTY |+ ("p", (0,0)) |+ ("q", (32,0))) fn
+    (venomInst$mk_inst 3 EQ [Var "p"; Var "q"] ["c"])
+    (s with vs_vars := FEMPTY |+ ("p", 0w) |+ ("q", 32w))
+Proof
+  simp[access_ok_def, venomInstTheory.mk_inst_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  qexistsl [`"p"`, `"q"`] >> simp[]
+QED
