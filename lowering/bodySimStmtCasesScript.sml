@@ -3734,6 +3734,149 @@ Proof
   irule (SRULE [] aug_place_compile_expr_metadata) >> metis_tac[]
 QED
 
+Theorem aug_place_expr_post_metadata:
+  expr_post ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    cx e es sa sb s0 es' v op s <=>
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  simp[expr_post_def, aug_place_stmt_state_rel_metadata, expr_val_at_def,
+       local_region_def, locals_kept_def, dynarray_local_def]
+QED
+
+Theorem aug_place_vv_holds_metadata:
+  vv_holds (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    cx t tv vv es s <=> vv_holds cenv cx t tv vv es s
+Proof
+  Cases_on `vv` >> simp[vv_holds_def, immutable_holds_def] >>
+  CASE_TAC >> simp[immutable_holds_def]
+QED
+
+Theorem aug_place_vv_post_metadata:
+  vv_post ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    cx e es sa sb s0 es' tv vv s <=>
+  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
+Proof
+  simp[vv_post_def, aug_place_stmt_state_rel_metadata, aug_place_vv_holds_metadata,
+       vv_at_def, expr_val_at_def, local_region_def, locals_kept_def,
+       dynarray_local_def] >> Cases_on `vv` >> simp[vv_at_def, expr_val_at_def,
+       local_region_def, dynarray_local_def]
+QED
+
+Theorem aug_place_expr_sim_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  supportedExprs$supported_expr tops e ==>
+  (expr_sim ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx ty e es <=>
+   expr_sim ctx func cenv cx ty e es)
+Proof
+  strip_tac >>
+  `compile_expr (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+   compile_expr cenv ty e` by
+    (irule aug_place_compile_supported_expr_metadata >> metis_tac[]) >>
+  simp[expr_sim_def, exprLoweringTheory.lower_value_def, comp_bind_def,
+       SRULE [] aug_place_unwrap_metadata,
+       SRULE [] aug_place_stmt_state_rel_metadata,
+       SRULE [] aug_place_local_ptrs_reserved_metadata,
+       SRULE [] aug_place_expr_post_metadata]
+QED
+
+Theorem aug_place_expr_vv_sim_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  supportedExprs$supported_expr tops e ==>
+  (expr_vv_sim ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx ty e es <=>
+   expr_vv_sim ctx func cenv cx ty e es)
+Proof
+  strip_tac >>
+  `compile_expr (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+   compile_expr cenv ty e` by
+    (irule aug_place_compile_supported_expr_metadata >> metis_tac[]) >>
+  simp[expr_vv_sim_def, SRULE [] aug_place_stmt_state_rel_metadata,
+       SRULE [] aug_place_local_ptrs_reserved_metadata,
+       SRULE [] aug_place_vv_post_metadata]
+QED
+
+Theorem aug_place_body_expr_cases_metadata:
+  body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
+  env_context_consistent env0 cx /\
+  (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+     h k = cenv.ce_hashmap_info k) /\
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  supportedExprs$supported_expr tops e ==>
+  expr_sim_case F ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx e /\
+  expr_vv_case F ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx e
+Proof
+  strip_tac >>
+  simp[expr_sim_case_def, expr_vv_case_def] >> conj_tac >> rpt strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (irule (SRULE [] aug_place_uniform_body_pre_backward) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es` by
+    (gvs[body_expr_ok_def] >> first_x_assum irule >> metis_tac[]) >>
+  metis_tac[SRULE [] aug_place_expr_sim_metadata,
+            SRULE [] aug_place_expr_vv_sim_metadata]
+QED
+
+Theorem aug_place_target_idx_metadata:
+  !t.
+  body_base_target_ok cx t /\ body_inv tops ctx cenv cx /\
+  env_context_consistent env0 cx /\
+  (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+     h k = cenv.ce_hashmap_info k) /\
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  IS_SOME (supported_target_info tops bindings t) ==>
+  target_idx_case F ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx t
+Proof
+  `(!e:expr. T) /\ (!t.
+    body_base_target_ok cx t /\ body_inv tops ctx cenv cx /\
+    env_context_consistent env0 cx /\
+    (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+       h k = cenv.ce_hashmap_info k) /\
+    (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+    (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+    IS_SOME (supported_target_info tops bindings t) ==>
+    target_idx_case F ctx func
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx t)`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[body_base_target_ok_def, target_idx_case_def] >>
+  rpt conj_tac >> rpt gen_tac
+  >~ [`IS_SOME (supported_target_info tops bindings (SubscriptTarget t e))`]
+    >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume aug_place_target_idx_metadata[attribute]:
+  simp[supportedTargetsTheory.supported_target_info_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >>
+  Cases_on `supported_target_info tops bindings t` >> gvs[]
+QED
+
+Resume aug_place_target_idx_metadata[subscript]:
+  rpt gen_tac >> disch_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `supportedExprs$supported_expr tops e /\
+   IS_SOME (supported_target_info tops bindings t)` by
+    (qpat_x_assum `IS_SOME _` mp_tac >>
+     simp[supportedTargetsTheory.supported_target_info_def] >>
+     Cases_on `supportedExprs$supported_expr tops e` >> simp[] >>
+     Cases_on `supported_target_info tops bindings t` >> simp[]) >>
+  conj_tac >- (first_x_assum irule >> simp[]) >>
+  strip_tac >> irule (SRULE [] aug_place_body_expr_cases_metadata) >>
+  metis_tac[]
+QED
+
+Finalise aug_place_target_idx_metadata
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
