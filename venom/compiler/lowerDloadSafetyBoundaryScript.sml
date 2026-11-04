@@ -16,7 +16,7 @@ Theorem shape_retpc_operand_boundary:
   fn_shape_ok fn /\ retpc_var fn x /\ MEM inst (fn_insts fn) /\
   MEM (Var x) inst.inst_operands ==>
   inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
-  (inst.inst_opcode = RET /\
+  (MEM inst.inst_opcode [RET; RETFMP; DRET] /\
    ?front. inst.inst_operands = front ++ [Var x] /\ ~MEM (Var x) front)
 Proof
   strip_tac >>
@@ -59,7 +59,7 @@ QED
    variable, hence omission needs opaque-variable treatment, not blanket
    equality of untainted variables. shape_retpc_operand_boundary checks
    that all statically token-derived uses are ASSIGN, PHI or the UNIQUE
-   final RET operand. RET evaluates its operand list but discards its final
+   final operand of RET, RETFMP or DRET. RET evaluates its operand list but discards its final
    value with FRONT; it does not compare that value to any continuation.
    Numeric token values therefore need not agree, but definedness and
    propagation through selected copy/phi still must be in the relation.
