@@ -1387,6 +1387,14 @@ Definition state_rel_def:
      LIST_REL (request_agree cx) vs.requests ss.vs_requests)
 End
 
+Theorem state_rel_gas_obs:
+  state_rel func cenv cx (es with gas_obs := readings) s =
+  state_rel func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
+
 (* ===== Result Relation ===== *)
 
 (* Maps Vyper evaluation results to Venom exec_result.
@@ -1446,6 +1454,18 @@ Definition result_rel_def:
   (* Everything else: no relation *)
   (result_rel _ _ _ _ _ _ = F)
 End
+
+Theorem result_rel_gas_obs:
+  result_rel func ret_tv cenv cx (res, es with gas_obs := readings) r =
+  result_rel func ret_tv cenv cx (res, es) r
+Proof
+  Cases_on `res`
+  >- (rename1 `INL u` >> Cases_on `u` >> Cases_on `r` >>
+      simp[result_rel_def, state_rel_gas_obs]) >>
+  rename1 `INR exc` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[result_rel_def, state_rel_gas_obs] >>
+  Cases_on `a` >> simp[result_rel_def]
+QED
 
 (* ===== Type Classification ===== *)
 

@@ -49,6 +49,13 @@ Definition intret_q_def:
            result_rel func ret_tv cenv cx (INR (ReturnException v), es) r
 End
 
+Theorem intret_q_gas_obs:
+  intret_q func cenv cx ret_tv v (es with gas_obs := readings) r =
+  intret_q func cenv cx ret_tv v es r
+Proof
+  simp[intret_q_def, result_rel_gas_obs]
+QED
+
 (* No scope holds a local once the frame is left. *)
 Theorem state_rel_scopes_nil:
   !func cenv cx es s.
