@@ -1202,3 +1202,115 @@ Proof
   Cases_on `ty` >> rewrite_tac[compile_invert_def] >>
   simp_tac pure_ss [LET_THM] >> CONVERT_LEAF
 QED
+
+Theorem label_preserving_as_stack_val[local]:
+  (!s r t. f s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. as_stack_val ty (f s) = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `f s` >>
+  simp[as_stack_val_def] >> strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem label_preserving_mod_names[local]:
+  (!s r t. compile_addmod_names cenv rt aty a bty b mty m s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!s r t. compile_mulmod_names cenv rt aty a bty b mty m s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!s r t. compile_powmod256_names cenv rt aty a bty b s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t))
+Proof
+  rpt conj_tac >> rewrite_tac[compile_addmod_names_def,
+    compile_mulmod_names_def, compile_powmod256_names_def] >>
+  ntac 4 (ho_match_mp_tac (PURE_REWRITE_RULE [comp_bind_def]
+    label_preserving_bind) >> conj_tac
+    >- metis_tac[label_preserving_name_vv, label_preserving_unwrap_value] >> gen_tac) >>
+  all_tac >>~- ([`compile_name_vv cenv mty m`],
+    ntac 2 (ho_match_mp_tac (PURE_REWRITE_RULE [comp_bind_def]
+      label_preserving_bind) >> conj_tac
+      >- metis_tac[label_preserving_name_vv, label_preserving_unwrap_value] >> gen_tac) >>
+    ho_match_mp_tac label_preserving_as_stack_val >>
+    rewrite_tac[builtinMathTheory.compile_addmod_def,
+      builtinMathTheory.compile_mulmod_def, comp_ignore_bind_def] >>
+    CONVERT_BIND >> CONVERT_LEAF) >>
+  ho_match_mp_tac label_preserving_as_stack_val >>
+  rewrite_tac[builtinMathTheory.compile_pow_mod256_def] >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_get_target_ptr[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !target s r t. compile_get_target_ptr cfn cenv target s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> ho_match_mp_tac
+    (SRULE [] (Q.SPEC `\e. T` vyperASTTheory.base_assignment_target_induction)) >>
+  rpt conj_tac >> rewrite_tac[compile_get_target_ptr_def] >>
+  all_tac >- (gen_tac >> Cases_on `FLOOKUP cenv.ce_vars s` >>
+    simp_tac (srw_ss()) [] >> all_tac >- CONVERT_LEAF >>
+    Cases_on `x` >> simp_tac (srw_ss()) [] >> CONVERT_LEAF)
+  >- (gen_tac >> Cases_on `FLOOKUP cenv.ce_module_vars p` >>
+    simp_tac (srw_ss()) [LET_THM] >> all_tac >- CONVERT_LEAF >>
+    Cases_on `x` >> simp_tac (srw_ss()) [] >> CONVERT_LEAF) >>
+  all_tac >~ [`struct_field_offset`] >-
+   (rpt gen_tac >> strip_tac >> gen_tac >>
+    (ho_match_mp_tac label_preserving_bind >> conj_tac >- metis_tac[]) >>
+    gen_tac >> simp_tac pure_ss [LET_THM] >>
+    CONVERT_BIND >> CONVERT_LEAF) >>
+  rpt gen_tac >> strip_tac >>
+  (ho_match_mp_tac label_preserving_bind >> conj_tac >- metis_tac[]) >>
+  gen_tac >> simp_tac pure_ss [LET_THM] >>
+  Cases_on `SND (SND result)` >>
+  simp_tac (srw_ss()) [] >> all_tac
+  >- (CALLBACK_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- (ho_match_mp_tac label_preserving_array_subscript >>
+          rpt strip_tac >> metis_tac[label_preserving_ptr_load]) >>
+      gen_tac >> CONVERT_LEAF) >>
+  Cases_on `x` >> simp_tac (srw_ss()) [] >> all_tac
+  >- (CALLBACK_BIND >> IF_CASES_TAC >>
+      ntac 2 (ho_match_mp_tac label_preserving_bind >> conj_tac
+        >- metis_tac[label_preserving_return, label_preserving_keccak256_key,
+                    label_preserving_mapping_subscript] >> gen_tac) >> CONVERT_LEAF) >>
+  CALLBACK_BIND >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (ho_match_mp_tac label_preserving_array_subscript >>
+      rpt strip_tac >> metis_tac[label_preserving_ptr_load]) >>
+  gen_tac >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_msg_data_to_memory[local]:
+  !s r t. builtinSystem$compile_msg_data_to_memory s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinSystemTheory.compile_msg_data_to_memory_def,
+    contextTheory.compile_alloc_dynamic_def, comp_ignore_bind_def] >> ntac 3 CONVERT_BIND >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_raw_call_outbuf[local]:
+  !s r t. builtinSystem$compile_raw_call_outbuf n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinSystemTheory.compile_raw_call_outbuf_def] >>
+  IF_CASES_TAC >> simp_tac pure_ss [LET_THM] >>
+  LABEL_BIND >> rpt CONVERT_BIND >> CONVERT_LEAF
+QED
+
+Theorem label_preserving_raw_call_finish[local]:
+  !s r t. builtinSystem$compile_raw_call_finish addr dp len gas value ct n rof ov op s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinSystemTheory.compile_raw_call_finish_def,
+    comp_ignore_bind_def] >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (Cases_on `ct` >> simp_tac (srw_ss()) [] >> CONVERT_LEAF) >> gen_tac >>
+  IF_CASES_TAC
+  >- (ntac 2 LABEL_FRESH >> ntac 7 LABEL_BIND >>
+      IF_CASES_TAC >- (ntac 2 CONVERT_BIND >>
+        ho_match_mp_tac label_preserving_bind >> conj_tac
+        >- metis_tac[label_preserving_select] >> gen_tac >>
+        CONVERT_BIND >> CONVERT_LEAF) >> CONVERT_LEAF) >>
+  IF_CASES_TAC >> simp_tac pure_ss [LET_THM] >>
+  all_tac >- (ntac 2 CONVERT_BIND >>
+    ho_match_mp_tac label_preserving_bind >> conj_tac
+    >- metis_tac[label_preserving_select] >> gen_tac >> CONVERT_BIND >>
+    LABEL_BIND >> ntac 3 CONVERT_BIND >> CONVERT_LEAF) >> CONVERT_LEAF
+QED
