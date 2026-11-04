@@ -91,6 +91,7 @@ Theorem for_body_entry_alloca[local]:
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
+    bc.ce_imm_alloca = cenv.ce_imm_alloca /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
@@ -185,6 +186,7 @@ Theorem for_body_entry:
     (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
     bc.ce_module_vars = cenv.ce_module_vars /\
     bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
+    bc.ce_imm_alloca = cenv.ce_imm_alloca /\
     not_local_ptr cenv esk.scopes dv /\
     not_local_ptr bc (FEMPTY :: esk.scopes) p /\ dv <> p /\ dv <> cv /\
     MEM ainst (fn_insts func) /\ ainst.inst_opcode = ALLOCA /\
@@ -370,7 +372,8 @@ Theorem for_iteration_alloca[local]:
 Proof
   rpt gen_tac >> REWRITE_TAC [for_code_def] >> strip_tac >>
   `bc.ce_module_vars = cenv.ce_module_vars /\
-   bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
+   bc.ce_module = cenv.ce_module /\ bc.ce_is_ctor = cenv.ce_is_ctor /\
+   bc.ce_imm_alloca = cenv.ce_imm_alloca` by
     (qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
   drule_all for_body_entry_alloca >> strip_tac >>

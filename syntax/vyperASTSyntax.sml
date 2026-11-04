@@ -426,7 +426,7 @@ val (RawLog_tm, is_RawLog) = syntax0 "RawLog"
 val (RawRevert_tm, is_RawRevert) = syntax0 "RawRevert"
 val (SelfDestructTarget_tm, is_SelfDestructTarget) = syntax0 "SelfDestructTarget"
 val (CreateTarget_tm, mk_CreateTarget_tm, dest_CreateTarget_tm, is_CreateTarget) =
-  syntax_fns3 "vyperAST" "CreateTarget"
+  syntax_fns4 "vyperAST" "CreateTarget"
 
 val (AssertBare_tm, is_AssertBare) = syntax0 "AssertBare"
 val (AssertUnreachable_tm, is_AssertUnreachable) = syntax0 "AssertUnreachable"
@@ -476,7 +476,7 @@ val (Pure_tm, is_Pure) = syntax0 "Pure"
 val (View_tm, is_View) = syntax0 "View"
 val (Nonpayable_tm, is_Nonpayable) = syntax0 "Nonpayable"
 val (Payable_tm, is_Payable) = syntax0 "Payable"
-val (Public_tm, is_Public) = syntax0 "Public"
+val (Public_tm, mk_Public, dest_Public, is_Public) = syntax_fns1 "vyperAST" "Public"
 val (Private_tm, is_Private) = syntax0 "Private"
 val (Constant_tm, mk_Constant_tm, dest_Constant_tm, is_Constant) = syntax_fns1 "vyperAST" "Constant"
 val (Immutable_tm, is_Immutable) = syntax0 "Immutable"
@@ -632,7 +632,7 @@ datatype call_target_view =
   | VRawLog
   | VRawRevert
   | VSelfDestructTarget
-  | VCreateTarget of term * term * term
+  | VCreateTarget of term * term * term * term
 
 fun view_call_target tm =
   if is_IntCall tm then VIntCall (dest_IntCall_tm tm)

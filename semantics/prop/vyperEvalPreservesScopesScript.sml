@@ -1,6 +1,7 @@
 Theory vyperEvalPreservesScopes
 Ancestors
   pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
+  vyperImmutableMetadataFrame
   vyperTypeInvariants
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
@@ -23,6 +24,7 @@ Theorem preserves_scopes_dom_var_in_scope:
     preserves_scopes_dom st st' ⇒
     var_in_scope st' n
 Proof
+  rpt gen_tac >>
   simp[preserves_scopes_dom_def] >> rpt strip_tac >-
   (* Empty scopes case: contradicts var_in_scope *)
   gvs[var_in_scope_iff_lookup_name_typed, lookup_name_typed_def, lookup_scopes_def] >>
@@ -1220,6 +1222,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_outcomes[simp]:
+  ∀cx st st' os.
+    preserves_tv cx st (st' with outcomes := os) ⇔ preserves_tv cx st st'
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_txn_eq:
   ∀cx cx' st st'.
     cx.txn = cx'.txn ⇒
@@ -1409,17 +1418,39 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
 QED
 
+Theorem append_place_fallback_preserves_tv[local]:
+  (do tv <- place_type_value cx p;
+      old <- read_place cx p;
+      updated <- lift_sum (append_element tv old v);
+      write_place cx p updated
+   od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  simp[bind_def] >>
+  Cases_on `place_type_value cx p st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value _ _ _ = (tv_result,_)` >>
+  Cases_on `tv_result`
+  >- (gvs[] >> rename1 `place_type_value cx p s = (INL tv,s)` >>
+      Cases_on `read_place cx p s` >>
+      drule read_place_state >> strip_tac >> gvs[] >>
+      rename1 `read_place _ _ _ = (place_read_sum,_)` >>
+      Cases_on `place_read_sum`
+      >- (gvs[] >> rename1 `read_place cx p s = (INL old,s)` >>
+          Cases_on `append_element tv old v` >>
+          simp[lift_sum_def, return_def, raise_def, preserves_tv_refl] >>
+          metis_tac[write_place_preserves_tv]) >>
+      simp[raise_def, preserves_tv_refl]) >>
+  simp[raise_def, preserves_tv_refl]
+QED
+
 Theorem append_place_preserves_tv:
   append_place cx p v st = (res,st') ==> preserves_tv cx st st'
 Proof
   Cases_on `p`
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def,
-       vyperMiscTheory.sum_CASE_rator, AllCaseEqs()] >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  rewrite_tac[append_place_def] >>
+  MATCH_ACCEPT_TAC append_place_fallback_preserves_tv
 QED
 
 Theorem pop_place_preserves_tv:
@@ -1445,15 +1476,27 @@ Proof
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >>
       gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[] >>
-  gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
-      get_source_immutables_def, set_source_immutables_def] >>
-  rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]
+  strip_tac >>
+  drule pop_place_metadata_frame >> strip_tac >>
+  `st'.scopes = st.scopes` by
+    (qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+     simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
+          lift_sum_def, vyperMiscTheory.option_CASE_rator,
+          vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+     rpt strip_tac >> imp_res_tac get_immutables_state >> gvs[] >>
+     metis_tac[set_immutable_scopes]) >>
+  gvs[preserves_tv_def] >> rpt strip_tac >>
+  qpat_x_assum `immutable_metadata_frame _ _` mp_tac >>
+  simp[immutable_metadata_frame_def] >> strip_tac >>
+  qpat_x_assum `!addr. IS_SOME _ <=> _`
+    (qspec_then `cx.txn.target` assume_tac) >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspecl_then [`src`,`id`] mp_tac) >>
+  simp[] >>
+  Cases_on `FLOOKUP (get_source_immutables src x') id` >> simp[] >>
+  PairCases_on `x''` >> simp[]
 QED
 (* TODO(cleanup): this generic handle_function state-frame fact belongs with
    the interpreter/function-call support lemmas once those are split out. *)
@@ -1916,7 +1959,8 @@ Proof
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac result_array_length_state >>
-    imp_res_tac next_gas_reading_state >> gvs[] >>
+    imp_res_tac next_gas_reading_state >>
+    imp_res_tac precompile_call_success_state >> gvs[] >>
     rpt(first_x_assum drule >> rw[]) >>
     gvs[get_accounts_def, return_def]) >>
   (* Pop *)
@@ -2004,7 +2048,7 @@ Proof
     gvs[get_scopes_def, return_def, bind_apply, ignore_bind_apply,
         finally_def, set_scopes_def, return_def] >>
     Cases_on `eval_exprs cxd needed_dflts (r' with scopes := [FEMPTY])` >>
-    Cases_on `q` >> gvs[return_def, raise_def] >>
+    Cases_on `q` >> full_simp_tac std_ss [return_def, raise_def] >>
     first_x_assum drule_all >> strip_tac >>
     (* Derive preserves_tv cx from preserves_tv cxd via txn_eq *)
     drule preserves_tv_restore_scopes >>
@@ -2389,13 +2433,14 @@ Theorem eval_preserves_tv:
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  ACCEPT_TAC (LIST_CONJ
+    (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
 QED
 
 Theorem eval_expr_results_preserves_tv:
   eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  MATCH_ACCEPT_TAC (cj 11 eval_preserves_tv_with_results)
 QED
 
 Theorem eval_stmt_preserves_tv:
@@ -2464,3 +2509,37 @@ val () = List.app (fn (name,th) =>
        List.all (fn s => s = "DISK_THM") oracles then ()
     else raise Fail ("vyperEvalPreservesScopes." ^ name ^ ": admitted dependency")
   end) (DB.thms "vyperEvalPreservesScopes");
+
+Theorem preserves_tv_final_frame:
+  preserves_tv cx st mid /\
+  st'.scopes = mid.scopes /\ st'.immutables = mid.immutables ==>
+  preserves_tv cx st st'
+Proof
+  metis_tac[preserves_tv_trans, preserves_tv_eq]
+QED
+
+Theorem ExtCall_outcome_preserves_tv:
+  (!bs s res t. k bs s = (res,t) ==> preserves_tv cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_tv cx s t /\ preserves_tv cx t u ==>
+            preserves_tv cx s u` by metis_tac[preserves_tv_trans] >>
+  `!s os rqs. preserves_tv cx s
+      (s with <|outcomes := os; requests := rqs|>)` by simp[preserves_tv_def] >>
+  `!s accounts transient logs pending. preserves_tv cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
+  `!s. preserves_tv cx s s` by simp[] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_tv cx`]) >> simp[]
+QED

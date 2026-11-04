@@ -1,5 +1,8 @@
 (* The former zero-array boundary now executes successfully for every unused
-   payload offset. The old readable-type exclusion is still exhibited below. *)
+   payload offset. The old readable-type exclusion is still exhibited below,
+   but only on a type the source no longer admits: evaluate_type rejects an
+   array of bound 0, as Vyper does, so abi_decoder_readable_head excludes
+   nothing that evaluates. *)
 Theory abiDecoderReadabilityBoundary
 Ancestors
   abiDecoderReadableTypes abiDecoderMemberSetup abiDecoderContract abiEncoder
@@ -11,9 +14,8 @@ Libs
 Theorem zero_fixed_array_member_source:
   let ty = TupleT [ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 0)] in
   let bs = word_to_bytes (4096w:256 word) T in
-  evaluate_type FEMPTY ty =
-    SOME (TupleTV [ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 0)]) /\
-  assignable_type FEMPTY ty /\
+  evaluate_type FEMPTY ty = NONE /\
+  ~assignable_type FEMPTY ty /\
   evaluate_abi_decode FEMPTY ty bs = INL (ArrayV (TupleV [ArrayV (SArrayV [])])) /\
   ~abi_decoder_readable_type FEMPTY ty
 Proof

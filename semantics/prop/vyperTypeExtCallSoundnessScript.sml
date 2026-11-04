@@ -10,7 +10,7 @@ Ancestors
   list rich_list pred_set prim_rec arithmetic finite_map option pair sum
   vyperAST vyperValue vyperValueOperation vyperMisc vyperABI
   vyperCreate vyperCreateFrame vyperInterpreter vyperState vyperContext vyperStorage vyperTyping
-  vyperRuntimeAccounts vyperCallFrame
+  vyperRuntimeAccounts vyperCallFrame vfmExecutionProp[ignore_grammar]
   vyperTypeExtCallCore[ignore_grammar] vyperTypeCallOutcome[ignore_grammar] vyperCallOutcomeProps[ignore_grammar]
   vyperEncodeDecode vyperArith vyperTypeSystem vyperTypeInvariants vyperTypeValues
   vyperTypeArgFits
@@ -438,6 +438,35 @@ Proof
   Cases_on `v_addr` >> gvs[value_has_type_def, dest_AddressV_def]
 QED
 
+(* The result and state after raw_call's revert/output post-processing, from
+   a runtime-consistent state, for either call outcome. *)
+val RAW_CALL_FINISH_TAC =
+  rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
+    expr_runtime_typed_def, value_result_typed_def, value_has_type_def,
+    raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
+  (mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
+   impl_tac >- simp[] >> TRY strip_tac >>
+   gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
+       raw_call_return_type_def] >> decide_tac);
+
+val RAW_CALL_RUN_TAC =
+  Cases_on `run_raw_call cx flags target_addr calldata amount gas
+    st.accounts st.tStorage` >>
+  simp[]
+  >- (strip_tac >> gvs[no_type_error_result_def]) >>
+  PairCases_on `x` >> simp[] >>
+  `accounts_well_typed x2` by (
+    fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
+  `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
+    (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
+  `runtime_consistent env cx
+    ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
+    qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
+      mp_tac runtime_consistent_logs_append >> simp[]) >>
+  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
+  Cases_on `flags.rcf_max_outsize = 0` >>
+  simp[] >> RAW_CALL_FINISH_TAC;
+
 (* Shared execution is independent of how the input bytes were obtained. *)
 Theorem eval_raw_call_result_sound:
   runtime_consistent env cx st /\
@@ -450,32 +479,33 @@ Theorem eval_raw_call_result_sound:
     expr_result_typed env e tv)
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  fs[eval_raw_call_def, type_check_def, assert_def, bind_def, ignore_bind_def,
-       return_def, get_accounts_def, get_transient_storage_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def] >>
-  TRY (strip_tac >> gvs[no_type_error_result_def] >> NO_TAC) >>
-  PairCases_on `x` >> simp[] >>
-  `accounts_well_typed x2` by (
-    fs[runtime_consistent_def] >> drule_all run_raw_call_accounts_well_typed >> simp[]) >>
-  `runtime_consistent env cx (st with <|accounts := x2; tStorage := x3|>)` by
-    (drule_all update_accounts_transient_runtime_consistent >> simp[]) >>
-  `runtime_consistent env cx
-    ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by (
-    qspecl_then [`env`, `cx`, `st with <|accounts := x2; tStorage := x3|>`, `x4`]
-      mp_tac runtime_consistent_logs_append >> simp[]) >>
-  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rpt strip_tac >> gvs[no_type_error_result_def, expr_result_typed_def,
-    expr_runtime_typed_def, value_result_typed_def, value_has_type_def,
-    raw_call_return_type_def, evaluate_type_def, is_HashMapRef_def] >>
-  mp_tac (Q.SPEC `flags.rcf_max_outsize` (GEN_ALL raw_call_bytes_slot_size_bound)) >>
-  impl_tac >- simp[] >> TRY strip_tac >>
-  gvs[listTheory.LENGTH_TAKE_EQ, value_has_type_def, evaluate_type_def,
-      raw_call_return_type_def] >> decide_tac
+  simp[eval_raw_call_def, type_check_def, assert_def, bind_def,
+       ignore_bind_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
+       option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  Cases_on `flags.rcf_is_delegate` >> Cases_on `IS_SOME st.outcomes` >>
+  simp[]
+  >>~- ([`take_call_outcome _ _ _ _`],
+    (Cases_on `take_call_outcome target_addr calldata
+        (if flags.rcf_is_static then NONE else SOME amount) st` >>
+      rename1 `take_call_outcome _ _ _ _ = (taken,mid)` >>
+      `runtime_consistent env cx mid` by
+        (drule_all take_call_outcome_runtime_consistent >> simp[]) >>
+      Cases_on `taken` >> simp[]
+      >- (rename1 `take_call_outcome _ _ _ _ = (INL ro,_)` >> PairCases_on `ro` >>
+          Cases_on `adopt_call_outcome ro0 ro1 mid` >>
+          rename1 `adopt_call_outcome ro0 ro1 mid = (adopted,final)` >>
+          drule vyperCallOutcomeTheory.adopt_call_outcome_frame >>
+          strip_tac >> gvs[] >>
+          `runtime_consistent env cx final` by
+            (drule_all take_adopt_call_outcome_runtime_consistent >> simp[]) >>
+          Cases_on `ro1.co_success` >> Cases_on `flags.rcf_revert_on_failure` >>
+          Cases_on `flags.rcf_max_outsize = 0` >>
+          simp[] >> RAW_CALL_FINISH_TAC) >>
+      strip_tac >> drule vyperCallOutcomePropsTheory.take_call_outcome_error >>
+      strip_tac >> gvs[no_type_error_result_def])) >>
+  RAW_CALL_RUN_TAC
 QED
 
 Theorem raw_log_args_runtime_typed_dest:
@@ -830,7 +860,18 @@ Proof
   simp[account_well_typed_def, vfmStateTheory.empty_account_state_def]
 QED
 
-(* The target account is not reset: its existing balance plus the endowment
+Theorem accounts_well_typed_clear_storage[local]:
+  accounts_well_typed accounts ==>
+  accounts_well_typed (vfmExecution$clear_storage address accounts)
+Proof
+  rw[accounts_well_typed_def, account_well_typed_def,
+     vfmExecutionTheory.clear_storage_def,
+     vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  IF_CASES_TAC >> gvs[]
+QED
+
+(* The target balance is preserved: its existing balance plus the endowment
    must fit in a 256-bit word before the prelude can preserve typedness. *)
 Theorem create_prelude_accounts_well_typed:
   !sender address value accounts.
@@ -844,7 +885,8 @@ Proof
   simp[create_prelude_accounts_def, combinTheory.o_THM] >>
   irule vfm_transfer_value_accounts_well_typed >>
   simp[lookup_account_increment_nonce_balance,
-       accounts_well_typed_increment_nonce] >>
+       clear_storage_nonce_code_balance,
+       accounts_well_typed_increment_nonce, accounts_well_typed_clear_storage] >>
   CONV_TAC (LAND_CONV (REWR_CONV arithmeticTheory.ADD_COMM)) >>
   qpat_x_assum `_ + value < _` mp_tac >> simp[]
 QED
@@ -871,12 +913,31 @@ Proof
   gvs[]
 QED
 
+Theorem create_oracle_result_accounts_well_typed:
+  accounts_well_typed st.accounts /\
+  create_oracle_result salt value code rof st = (res,st') ==>
+  accounts_well_typed st'.accounts
+Proof
+  Cases_on `salt` >> Cases_on `st.outcomes` >>
+  gvs[create_oracle_result_def, vyperCallOutcomeTheory.take_create_outcome_def] >>
+  rpt strip_tac >> gvs[] >> pairarg_tac >>
+  rw[vyperCallOutcomeTheory.adopt_call_outcome_equation,
+     vyperCallOutcomeTheory.create_outcome_request_def] >>
+  gvs[AllCaseEqs(), evaluation_state_accfupds,
+      accounts_runtime_well_typed_accounts_well_typed] >>
+  gvs[vyperCallOutcomeTheory.adopt_call_outcome_equation,
+      vyperCallOutcomeTheory.create_outcome_request_def] >>
+  Cases_on `outcome.co_success` >> Cases_on `outcome.co_created = 0w` >>
+  gvs[evaluation_state_accfupds]
+QED
+
 Theorem eval_create_accounts_well_typed:
   accounts_well_typed st.accounts /\
   eval_create cx kind has_salt rof arg_tys vs blueprint_size st = (res, st') ==>
   accounts_well_typed st'.accounts
 Proof
   strip_tac >>
+  Cases_on `st.outcomes` >- (
   Cases_on `dest_create_args kind has_salt vs` >-
     gvs[eval_create_def, bind_def, lift_option_type_def, return_def, raise_def] >>
   rename1 `dest_create_args kind has_salt vs = SOME ops` >>
@@ -948,7 +1009,12 @@ Proof
           `accounts_well_typed x1` by
             (drule_all run_create_evm_accounts_well_typed >> simp[]) >>
           simp[evaluation_state_accounts_tStorage_acc,
-               evaluation_state_accfupds])])]
+               evaluation_state_accfupds])])]) >>
+  gvs[eval_create_def, bind_def, ignore_bind_def, lift_option_type_def,
+      get_accounts_def, check_def, assert_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  gvs[option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  drule_all create_oracle_result_accounts_well_typed >> simp[]
 QED
 
 Theorem create_tail_result_sound_simp:
@@ -962,7 +1028,7 @@ Theorem create_tail_result_sound_simp:
     (!msg. res <> INR (Error (TypeError msg))) /\
     (case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -990,7 +1056,7 @@ Proof
   (* the returned value is either the created address or a zero address *)
   `case res of
      | INL tv => expr_result_typed env
-         (Call (BaseT AddressT) (CreateTarget kind has_salt rof) es NONE) tv
+         (Call (BaseT AddressT) (CreateTarget kind has_salt rof kw_order) es NONE) tv
      | INR _ => T` by (
     gvs[runtime_consistent_def] >>
     qpat_x_assum `eval_create _ _ _ _ _ _ _ _ = _` mp_tac >>
@@ -1005,6 +1071,10 @@ Proof
              value_result_typed_def, value_has_type_def,
              is_HashMapRef_def]) >>
     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    TRY (qpat_x_assum `create_oracle_result _ _ _ _ _ = _` mp_tac >>
+         Cases_on `res` >> simp[] >> strip_tac >>
+         drule create_oracle_result_address >> strip_tac >>
+         gvs[value_result_typed_def, value_has_type_def, is_HashMapRef_def] >> NO_TAC) >>
     first_x_assum mp_tac >>
     strip_tac >>
     gvs[get_transient_storage_def, get_pending_deletions_def,

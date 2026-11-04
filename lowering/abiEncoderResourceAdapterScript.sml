@@ -1,5 +1,7 @@
 (* Resource-boundary diagnostics for the frozen source encoder contract.
-   These concern internal runner premises, not execution counterexamples. *)
+   These concern internal runner premises, not execution counterexamples.
+   The zero-size source type below no longer evaluates: evaluate_type
+   rejects an array of bound 0, as Vyper does. *)
 Theory abiEncoderResourceAdapter
 Ancestors
   abiEncoderProps abiEncoderOpenInput abiEncoderOpenInputFrame
@@ -10,8 +12,7 @@ Ancestors
 
 Theorem abi_encoder_zero_source_separation_diagnostic:
   evaluate_type FEMPTY
-    (TupleT [ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 0)]) =
-    SOME (TupleTV [ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 0)]) /\
+    (TupleT [ArrayT (BaseT (BytesT (Dynamic 1))) (Fixed 0)]) = NONE /\
   type_memory_size
     (TupleTV [ArrayTV (BaseTV (BytesT (Dynamic 1))) (Fixed 0)]) = 0 /\
   venomMemDefs$regions_disjoint (16,0) (0,32) /\
@@ -103,7 +104,9 @@ Proof
     abi_encoder_fragment_missing, GSYM abi_encoder_fragment_ids] >>
   strip_tac >> `lo <= top` by decide_tac >>
   `lo + (top-lo) = top` by decide_tac >>
-  asm_simp_tac bool_ss [] >>
+  qpat_x_assum `lo + (top-lo) = top`
+    (fn th => pure_rewrite_tac [th]) >>
+  ntac 3 (conj_tac >- first_assum ACCEPT_TAC) >>
   qpat_x_assum `alloca_inv s` mp_tac >>
   pure_rewrite_tac[alloca_inv_def, alloca_next_valid_def,
     allocas_non_overlapping_def] >> strip_tac >>

@@ -19,6 +19,7 @@
  *)
 Theory exprSimBufferEmptyExec
 Ancestors
+  exprSimAlloc
   exprSimBuffer exprSimBufferEmpty builtinSimple exprSimBufferStore
   exprSimLiteralBuffer exprSimOps freshWrites valueEncodingProps
   exprSimWordArgs emitHelperProps exprLoweringProps compileEnv context
@@ -168,7 +169,10 @@ Proof
       first_x_assum irule >> decide_tac)
   >- (rpt gen_tac >> strip_tac >>
       `not_fresh_at sa p` by
-        (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[]) >>
+        (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> simp[])
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `cenv.ce_is_ctor ==> _` mp_tac >> asm_rewrite_tac[] >>
   disch_then (qspecl_then [`name`, `tv`, `v`, `off`] mp_tac) >>

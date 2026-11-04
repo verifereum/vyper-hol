@@ -41,7 +41,7 @@ Proof
   qexistsl_tac [`mut`,`args`,`body`] >> simp[encode_create_ctor_args_def]
 QED
 
-(* The guard is Call-specific, not a ban on Pop or computed precompiles.
+(* The guard is a ban on Calls and the precompile builtins, not on Pop.
    Inspect nested expressions/reasons/branches as well as direct statement
    roots. The function lookup does not need already-deployed source code. *)
 Theorem constructor_call_exclusion:
@@ -69,10 +69,15 @@ Proof
        dest_Deploy_Fn_def]
 QED
 
-Theorem constructor_computed_builtin_not_call:
-  constructor_call_free
+(* A precompile builtin is excluded like a Call; another builtin is not. *)
+Theorem constructor_precompile_builtin_excluded:
+  ~constructor_call_free
     [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
       [Expr (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+         [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]] /\
+  constructor_call_free
+    [FunctionDecl Deploy Payable F F "__init__" [] [] NoneT
+      [Expr (Builtin (BaseT (BytesT (Fixed 32))) Keccak256
          [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])]]
 Proof
   EVAL_TAC >> simp[] >> EVAL_TAC
@@ -206,7 +211,7 @@ QED
 
 Theorem deploy_error_case:
   deploy_result_rel tops bc tx es r es' (INR (Error e)) <=>
-  decode_strictness_exempt tops e \/
+  unspecified_behaviour_exempt tops e \/
   ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
 Proof
   simp[deploy_result_rel_def]
@@ -216,7 +221,7 @@ Theorem deploy_failure_not_success:
   es.contexts = [(ctxt,rb)] ==>
   ~deploy_result_rel tops bc tx es (INR NONE) es' (INR (AssertException s)) /\
   (deploy_result_rel tops bc tx es (INR NONE) es' (INR (Error e)) <=>
-   decode_strictness_exempt tops e)
+   unspecified_behaviour_exempt tops e)
 Proof
   simp[deploy_result_rel_def, frame_outcome_def]
 QED
@@ -230,12 +235,13 @@ Proof
 QED
 
 Theorem deploy_exemption_exact:
-  decode_strictness_exempt tops e <=>
-  e = RuntimeError "abi_decode invalid" /\
-  ?ty. occurs_abi_decode_target ty tops /\
-       is_dynamic (vyper_to_abi_type (type_env tops) ty)
+  unspecified_behaviour_exempt tops e <=>
+  (e = RuntimeError "abi_decode invalid" /\
+   ?ty. occurs_abi_decode_target ty tops /\
+        is_dynamic (vyper_to_abi_type (type_env tops) ty)) \/
+  e = RuntimeError "convert empty bytes to signed"
 Proof
-  simp[decode_strictness_exempt_def]
+  simp[unspecified_behaviour_exempt_def]
 QED
 
 Theorem deploy_prefix_guard:

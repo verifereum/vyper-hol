@@ -29,11 +29,11 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_function_flags_defaults_reject:
+Theorem supported_function_flags_defaults:
   ~supported_declaration_header []
     (FunctionDecl External View T F "f" [] [] NoneT []) /\
-  ~supported_declaration_header []
-    (FunctionDecl Internal Pure F T "f" [] [] NoneT []) /\
+  supported_declaration_header []
+    (FunctionDecl External Pure F T "f" [] [] (BaseT (BytesT (Dynamic 8))) []) /\
   ~supported_declaration_header []
     (FunctionDecl External View F F "f" [("x", BaseT BoolT)]
       [Literal (BaseT BoolT) (BoolL T)] NoneT [])
@@ -66,7 +66,7 @@ QED
 
 Theorem supported_storage_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
-    [VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
+    [VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Transient "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
@@ -82,7 +82,7 @@ QED
 
 Theorem supported_hashmap_declarations_reject:
   EVERY (\top. ~supported_declaration_header [] top)
-    [HashMapDecl Public F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
+    [HashMapDecl (Public F) F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT BoolT) (Type (BaseT (UintT 256))) NONE;
      HashMapDecl Private F "m" (BaseT DecimalT) (Type (BaseT (UintT 256))) (SOME 0);
      HashMapDecl Private F "m" (BaseT AddressT) (Type (BaseT BoolT)) (SOME 0)]

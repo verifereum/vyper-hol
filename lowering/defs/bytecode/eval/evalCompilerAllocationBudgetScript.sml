@@ -90,7 +90,7 @@ Theorem allocation_lowering_original_points_eval:
       [mk_inst 70 DALLOCA [Lit 1w] ["p"];
        mk_inst 400 JNZ [Var "flag";Label "yes";Label "no"] []]) =
   SOME ([ASSIGN;ADD;NOT;AND;BUMP;ASSIGN;JNZ], [1;2;3;4;5;6;400],
-    [[Var "mark"]; [Lit 1w;Lit 31w]; [Lit 31w];
+    [[Var "mark"]; [Lit 31w;Lit 1w]; [Lit 31w];
      [Var "formal_var_0";Var "formal_var_1"];
      [Var "runner";Var "formal_var_2"]; [Var "p"];
      [Var "flag";Label "yes";Label "no"]], [(("entry",2),"endpoint")])
