@@ -86,3 +86,24 @@ Proof
     (Induct >> simp[fn_insts_blocks_def, MAP_APPEND]) >>
   simp[wf_function_def, fn_inst_ids_distinct_def, fn_insts_def]
 QED
+
+Theorem ao_name_inserts_supply_fresh:
+  !inserts s named t.
+    ao_name_inserts_supply s inserts = (named,t) ==>
+    ALL_DISTINCT (MAP (\(a,(out,id,v)). v) named) /\
+    DISJOINT (set (MAP (\(a,(out,id,v)). v) named)) (set s.irs_used_vars)
+Proof
+  Induct >- simp[ao_name_inserts_supply_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  rewrite_tac[ao_name_inserts_supply_def] >>
+  Cases_on `fresh_inst_id s` >>
+  rename1 `fresh_inst_id s = (id,s1)` >>
+  Cases_on `fresh_ir_var s1` >>
+  rename1 `fresh_ir_var s1 = (v,s2)` >>
+  Cases_on `ao_name_inserts_supply s2 inserts` >>
+  simp[] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule fresh_ir_var_contract >> strip_tac >>
+  gvs[fresh_inst_id_def, DISJOINT_DEF, EXTENSION] >>
+  metis_tac[]
+QED
