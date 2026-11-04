@@ -2032,3 +2032,45 @@ Proof
   qexists_tac `ty` >> simp[] >> metis_tac[]
 QED
 
+Theorem ifexp_sfields_partial[local]:
+  sfields_tenv_consistent sf env ==>
+  !nsid args fields.
+    FLOOKUP env nsid = SOME (StructArgs args) /\
+    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args
+Proof
+  simp[sfields_tenv_consistent_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!nsid args. FLOOKUP env nsid = SOME (StructArgs args) ==> _` drule >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `MAP FST fields = _` mp_tac >>
+  qpat_x_assum `MAP (FST o SND) fields = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  qid_spec_tac `args` >> Induct_on `fields` >> Cases_on `args` >>
+  simp[pairTheory.FORALL_PROD] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ifexp_sfields_partial_delete[local]:
+  (!nsid args fields.
+    FLOOKUP env nsid = SOME (StructArgs args) /\
+    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
+  !key nsid args fields.
+    FLOOKUP (env \\ key) nsid = SOME (StructArgs args) /\
+    FLOOKUP (sf \\ nsid_to_string key) (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args
+Proof
+  simp[DOMSUB_FLOOKUP_THM, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ifexp_sfields_partial_types[local]:
+  (!nsid args fields.
+    FLOOKUP env nsid = SOME (StructArgs args) /\
+    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args) /\
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+  MAP (FST o SND) fields = MAP SND args
+Proof
+  strip_tac >> first_x_assum drule_all >> disch_then (SUBST1_TAC o SYM) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
+QED
