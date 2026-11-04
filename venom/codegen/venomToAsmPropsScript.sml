@@ -85,7 +85,15 @@ End
    gen_fn_frame_simulation below.  Deriving this entry form from it needs
    a simulation of the whole entry block (its parameter prefix turns
    fn_entry_state_rel into fn_frame_inv) and the preservation of the
-   shared fields along run_blocks. *)
+   shared fields along run_blocks.
+
+   fn is reachable in the call graph: the planner's acyclicity check covers
+   only reachable functions, so this rules out unreachable recursion.  No
+   instruction of fn is GAS, an interim premise while the assembly's gas
+   readings are unconstrained.  No operand of fn is a dead_stack_marker, as
+   gen_fn_frame_simulation and lineage_state_block_plan assume.  vs_labels
+   agrees with the assembly label offsets, so Label operands have the same
+   value in Venom and in the assembly. *)
 Theorem gen_fn_simulation:
   !fuel rpolicy unit cp prog i r fn vs as Inv ra pc_ret rest.
     let ctx = unit.cu_context;
@@ -96,6 +104,12 @@ Theorem gen_fn_simulation:
     unit_shape_ok unit /\
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS) bb.bb_instructions)
+      fn.fn_blocks /\
+    EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
+      inst.inst_operands) bb.bb_instructions) fn.fn_blocks /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
@@ -129,7 +143,9 @@ QED
    The code at as.as_pc is the current block's DFS code, planned from
    ps_dfs.  ps is the state fn_frame_inv is about: the lineage state of the
    run-time path to the block (fnPlanLineage), which differs from ps_dfs at
-   a join entered from a predecessor other than the DFS's first.  That a
+   a join entered from a predecessor other than the DFS's first.  It is
+   stated as a lineage_entry from pred, the block vs_prev_bb names, so the
+   planner state matches the edge whose PHI values the block reads.  That a
    lineage state regenerates the block's DFS code is the successor-transfer
    obligation lineage_state_block_plan; its premise that no operand of fn
    is a dead_stack_marker is not implied by the others here, so it is
@@ -142,10 +158,20 @@ QED
    them, which fn_entry_state_rel describes instead.  mem0 is the assembly
    memory at frame entry, so the return clause can state the preservation
    of every spill byte outside the frame's call-graph closure.
-   retpc_shape_ok makes the code's final JUMP land at pc_ret. *)
+
+   fn is reachable in the call graph: the planner's acyclicity check covers
+   only reachable functions, so this rules out unreachable recursion.  No
+   instruction of fn is GAS, an interim premise while the assembly's gas
+   readings are unconstrained.  vs_labels agrees with the assembly label
+   offsets, so Label operands have the same value in Venom and in the
+   assembly.  DFG alias soundness: an operand of the block that the block
+   does not itself define has the value of every DFG-equivalent operand on
+   ps's stack or in its spill map, which the planner's alias-only reorder
+   steps rely on; operands the block defines are left out, as at block
+   entry they are unset or hold a value from an earlier pass of a loop. *)
 Theorem gen_fn_frame_simulation:
   !fuel rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth
-   spill_base lbl_ctr fn_ops ps_end bb ps ps_dfs block_ops ps_dfs_after
+   spill_base lbl_ctr fn_ops ps_end bb pred ps ps_dfs block_ops ps_dfs_after
    vs as Inv ra pc_ret rest mem0.
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
@@ -155,7 +181,10 @@ Theorem gen_fn_frame_simulation:
     unit_shape_ok unit /\
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
-    retpc_shape_ok fn /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS) bb.bb_instructions)
+      fn.fn_blocks /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
@@ -171,9 +200,10 @@ Theorem gen_fn_frame_simulation:
       inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
-    lineage_state liveness dfg cfg fn
+    lineage_entry liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)
-      vs.vs_current_bb ps /\
+      pred bb.bb_label ps /\
+    vs.vs_prev_bb = SOME pred /\
     dfs_block_state liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)
       vs.vs_current_bb ps_dfs /\
@@ -181,6 +211,14 @@ Theorem gen_fn_frame_simulation:
       SOME (block_ops, ps_dfs_after) /\
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp block_ops) /\
     fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    (!op at.
+       (?inst. MEM inst bb.bb_instructions /\ MEM op inst.inst_operands) /\
+       (!x inst. op = Var x /\ MEM inst bb.bb_instructions ==>
+                 ~MEM x inst.inst_outputs) /\
+       (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg op at ==>
+       operand_val (frame_view fn ra vs) lo op =
+       operand_val (frame_view fn ra vs) lo at) /\
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
     ==>
     (!vs'. run_blocks fuel ctx fn vs = Halt vs' ==>
