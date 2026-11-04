@@ -364,7 +364,7 @@ Proof
   strip_tac >> gvs[]
 QED
 
-Theorem membership_bind_safe[local]:
+Theorem membership_bind_safe:
   ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
    (!v s r t. safe_operand s op /\ k v s = (r,t) ==> safe_operand t r)) ==>
   !s r t. safe_operand s op /\ comp_bind m k s = (r,t) ==>
@@ -376,7 +376,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem membership_ignore_bind_safe[local]:
+Theorem membership_ignore_bind_safe:
   ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
    (!s r t. safe_operand s op /\ k s = (r,t) ==> safe_operand t r)) ==>
   !s r t. safe_operand s op /\ comp_ignore_bind m k s = (r,t) ==>
@@ -389,7 +389,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem membership_fresh_bind_safe[local]:
+Theorem membership_fresh_bind_safe:
   (!z s r t. safe_operand s (Var z) /\ k z s = (r,t) ==>
     safe_operand t r) ==>
   !s r t. comp_bind fresh_var k s = (r,t) ==> safe_operand t r
@@ -398,7 +398,7 @@ Proof
   metis_tac[fresh_var_safe_operand]
 QED
 
-Theorem membership_bind_counter_mono[local]:
+Theorem membership_bind_counter_mono:
   ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
    (!v s r t. k v s = (r,t) ==> s.cs_next_var <= t.cs_next_var)) ==>
   !s r t. comp_bind m k s = (r,t) ==> s.cs_next_var <= t.cs_next_var
