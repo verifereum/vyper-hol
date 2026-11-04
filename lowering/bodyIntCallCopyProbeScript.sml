@@ -271,3 +271,36 @@ QED
    frame over hs, retaining each original lo. Neither the existing
    vv_post_deferred_prefix (compile_expr only) nor this diagnostic proves it.
 *)
+
+(* Readiness audit (C1.6.2.12.8).
+   CHECKED: unwrap_runtime_noncopy_sim handles StackValue, LocMemory and
+   word values only. compile_storage_copy_content_frag proves modular
+   SLOAD/TLOAD word contents, disjoint byte-window frame, old registers and
+   record restoration, but requires destination room/counter bounds and
+   does not identify any typed value. Existing type_memory_size_slots,
+   expr_sim_inv_memory_size and val_in_memory_relocate are reusable, not
+   missing obligations. vv_post_deferred_prefix is checked for expression
+   evaluation, not forcing; it is not an unwrap composition theorem.
+
+   UNPROVED semantic outputs, in dependency order:
+   - decoder-to-memory transfer for all type_value branches, including
+     sparse/default arrays, tuples, structs, canonical scalars and bytes;
+     its exact-slot premise must be supplied via a live-byte-aware
+     source/target storage bridge, NOT original-source full-slot equality;
+   - DLOAD counted-copy content/frame, including compiler's zero branch,
+     with the exact contract above; existing relocation then handles code;
+   - allocation identity/separation/room for both fresh and replay ALLOCA,
+     with actual-function code membership, distinct ids and size facts;
+   - runtime clean aggregate unwrap combining contents, typed transfer,
+     allocation, stmt_state_rel and expr_post frames; repair the proposed
+     unrestricted interface above to carry missing caller facts;
+   - single-held-entry frame (including memory-valued StackValue), its
+     EVERY lift with each lo unchanged, and raw read_result adaptation;
+   - deferred-list forcing composition using that EVERY-preserving unwrap,
+     then staging and indexed parameter binding/capacity correspondence.
+   The single-entry/EVERY target is written explicitly immediately above;
+   the original unframed target is at lines 110-118 and its missing premises
+   are explicitly identified by the allocation diagnostic. No diagnostic
+   comment in this file is a theorem. Parent forcing is NOT ready to close.
+   A semantic implementation PLAN is required before any of these proofs.
+*)
