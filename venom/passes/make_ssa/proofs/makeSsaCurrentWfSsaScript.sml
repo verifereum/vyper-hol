@@ -4178,6 +4178,20 @@ Proof
   metis_tac[]
 QED
 
+Theorem current_wf_phi_context_event_labels_distinct:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb ==>
+  ALL_DISTINCT (MAP current_event_label events)
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  gvs[current_wf_precleanup_certificate_def] >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  metis_tac[cj 1 current_trace_event_labels_distinct]
+QED
+
 Theorem current_wf_exceptional_inserted_pair_values:
   current_wf_phi_context s fn renamed s' A H events /\
   entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
@@ -4210,6 +4224,132 @@ Proof
   `current_event_exit_env ev' v = CurrentDefault v \/
    current_event_exit_env ev' v = CurrentOriginal h k 0` by metis_tac[] >>
   fs[current_token_name_def] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem current_wf_exceptional_inserted_pair_exists:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  k < LENGTH old.bb_instructions /\ (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] /\
+  current_token_name H (CurrentOriginal h k 0) = SOME n /\
+  (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+  MAP FST pairs = (case ALOOKUP (current_pred_map fn) h of SOME ps => ps | NONE => []) ==>
+  ?p. MEM (p,n) pairs
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_prefix >> strip_tac >>
+  drule_all current_wf_exceptional_inserted_tokens >> strip_tac >>
+  `MEM h (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
+    (drule ALOOKUP_current_pred_map >> disch_tac >>
+     qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
+  `wf_function fn` by fs[current_wf_phi_context_def] >>
+  `MEM (current_event_label ev) (MAP FST pairs)` by
+    metis_tac[current_cfg_edge_preds] >>
+  `?w. MEM (current_event_label ev,w) pairs` by
+    (fs[MEM_MAP] >> metis_tac[pairTheory.PAIR]) >>
+  `?i. i < LENGTH pairs /\ EL i pairs = (current_event_label ev,w)` by
+    metis_tac[MEM_EL] >>
+  drule_all current_wf_inserted_phi_pair >> strip_tac >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[current_wf_phi_context_event_labels_distinct] >>
+  `ev' = ev` by
+    (gvs[MEM_EL] >> metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP, EL_MAP]) >>
+  gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem current_wf_exceptional_original_source:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h renamed = SOME new /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] ==>
+  ?r slots n. current_wf_original_phi_at fn A renamed h k r slots /\
+    current_token_name H (CurrentOriginal h k 0) = SOME n /\
+    MEM n (EL r new.bb_instructions).inst_outputs /\
+    simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions
+Proof
+  strip_tac >>
+  `fn_phis_non_degenerate fn` by fs[current_wf_phi_context_def] >>
+  `MEM (EL k old.bb_instructions) (fn_insts fn)` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     metis_tac[lookup_block_MEM, EL_MEM]) >>
+  `?p w. MEM (p,w) (phi_pairs (EL k old.bb_instructions).inst_operands)` by
+    (fs[fn_phis_non_degenerate_def] >> metis_tac[]) >>
+  `?i. i < LENGTH (phi_pairs (EL k old.bb_instructions).inst_operands) /\
+    EL i (phi_pairs (EL k old.bb_instructions).inst_operands) = (p,w)` by
+    metis_tac[MEM_EL] >>
+  mp_tac (Q.INST [`slots` |-> `phi_pairs (EL k old.bb_instructions).inst_operands`,
+    `v` |-> `w`] (SPEC_ALL current_wf_original_phi_slot)) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `0 < LENGTH (EL k old.bb_instructions).inst_outputs` by simp[] >>
+  drule_all current_wf_original_phi_output >> strip_tac >>
+  qexistsl_tac [`q`, `phi_pairs (EL k old.bb_instructions).inst_operands`, `n'`] >>
+  simp[] >> metis_tac[current_wf_original_phi_retained, optionTheory.SOME_11]
+QED
+
+Theorem current_wf_exceptional_inserted_copy:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  k < LENGTH old.bb_instructions /\ (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] ==>
+  ?r slots n. current_wf_original_phi_at fn A renamed h k r slots /\
+    MEM n (EL r new.bb_instructions).inst_outputs /\ n <> v /\
+    simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions /\
+    (EL q new.bb_instructions).inst_outputs = [v] /\
+    simplify_current_phi (EL q new.bb_instructions) =
+      (EL q new.bb_instructions) with <|inst_opcode := ASSIGN; inst_operands := [Var n]|>
+Proof
+  strip_tac >> drule_all current_wf_exceptional_original_source >> strip_tac >>
+  drule_all current_wf_inserted_phi_slots >> strip_tac >>
+  drule_all current_wf_exceptional_inserted_pair_values >> strip_tac >>
+  drule_all current_wf_exceptional_inserted_pair_exists >> strip_tac >>
+  `(EL q new.bb_instructions).inst_opcode = PHI` by
+    (fs[current_wf_inserted_phi_at_def] >> metis_tac[optionTheory.SOME_11]) >>
+  qexistsl_tac [`r`, `slots`, `n`] >> simp[] >>
+  qabbrev_tac `vals = MAP SND (FILTER (\slot. SND slot <> v) pairs)` >>
+  `MEM n vals` by
+    (simp[Abbr `vals`, MEM_MAP, MEM_FILTER] >> metis_tac[pairTheory.SND]) >>
+  `EVERY (\w. w = n) vals` by
+    (simp[Abbr `vals`, EVERY_MEM, MEM_MAP, MEM_FILTER] >>
+     rpt strip_tac >> PairCases_on `y` >> gvs[] >> metis_tac[]) >>
+  Cases_on `vals` >- fs[] >>
+  fs[] >> irule current_phi_slots_constant >> metis_tac[]
+QED
+
+Theorem current_wf_inserted_phi_producer:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new ==>
+  phi_edge_uses_wf (fn with fn_blocks := renamed) new (EL q new.bb_instructions) \/
+  ?k r slots n. current_wf_original_phi_at fn A renamed h k r slots /\
+    MEM n (EL r new.bb_instructions).inst_outputs /\ n <> v /\
+    simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions /\
+    (EL q new.bb_instructions).inst_outputs = [v] /\
+    simplify_current_phi (EL q new.bb_instructions) =
+      (EL q new.bb_instructions) with <|inst_opcode := ASSIGN; inst_operands := [Var n]|>
+Proof
+  strip_tac >>
+  Cases_on `!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs`
+  >- (disj1_tac >> metis_tac[current_wf_inserted_phi_edge_wf]) >>
+  gvs[NOT_FORALL_THM] >> disj2_tac >>
+  `?k. k < LENGTH old.bb_instructions /\ EL k old.bb_instructions = di` by
+    metis_tac[MEM_EL] >>
+  `fn_inst_wf fn` by fs[current_wf_phi_context_def] >>
+  `inst_wf di` by metis_tac[fn_inst_wf_def, lookup_block_MEM] >>
+  `di.inst_outputs = [v]` by
+    (qpat_x_assum `inst_wf di` mp_tac >>
+     simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> strip_tac >> gvs[]) >>
+  `?r slots n. current_wf_original_phi_at fn A renamed h k r slots /\
+    MEM n (EL r new.bb_instructions).inst_outputs /\ n <> v /\
+    simplify_current_phi (EL r new.bb_instructions) = EL r new.bb_instructions /\
+    (EL q new.bb_instructions).inst_outputs = [v] /\
+    simplify_current_phi (EL q new.bb_instructions) =
+      (EL q new.bb_instructions) with <|inst_opcode := ASSIGN; inst_operands := [Var n]|>` by
+    (irule current_wf_exceptional_inserted_copy >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
