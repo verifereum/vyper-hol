@@ -3892,3 +3892,68 @@ Proof
   IF_CASES_TAC >- (strip_tac >> gvs[probe_word_internal_label_mismatch]) >>
   gvs[venomInstTheory.lookup_function_def]
 QED
+
+Theorem setup_callee_blocks_cong:
+  !f g args s. f.fn_blocks = g.fn_blocks ==>
+    setup_callee f args s = setup_callee g args s
+Proof
+  simp[setup_callee_def]
+QED
+
+Theorem probe_word_renamed_lookup:
+  !name.
+    lookup_function name [probe_word_function with fn_name := name] =
+      SOME (probe_word_function with fn_name := name)
+Proof
+  simp[venomInstTheory.lookup_function_def, listTheory.FIND_thm]
+QED
+
+Theorem probe_word_renamed_invoke:
+  !name ctx ops s args cs fuel id out.
+    lookup_function name ctx.ctx_functions =
+      SOME (probe_word_function with fn_name := name) /\
+    eval_operands ops s = SOME args /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    (sload 3w s = 0w \/ sload 3w s = 1w) /\
+    setup_callee probe_word_function args s = SOME cs ==>
+    step_inst ((if sload 3w s = 0w then 11 else 19) + fuel) ctx
+      (mk_inst id INVOKE (Label name :: ops) [out]) s =
+    OK (update_var out 0w
+      (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule probe_word_setup_observations >> strip_tac >>
+  `sload 3w cs = sload 3w s` by simp[sload_def] >>
+  `!n. run_blocks n ctx (probe_word_function with fn_name := name) cs =
+        run_blocks n ctx probe_word_function cs` by
+    (gen_tac >> irule venomExecProofsTheory.run_blocks_eq_from_run_block_eq >> simp[]) >>
+  qspecl_then [`cs`, `fuel`, `ctx`] mp_tac probe_word_run_function >>
+  simp[] >> strip_tac >>
+  `setup_callee (probe_word_function with fn_name := name) args s = SOME cs` by
+    (qpat_x_assum `setup_callee _ _ _ = SOME cs` mp_tac >>
+     simp[setup_callee_def]) >>
+  simp[Once step_inst_def, decode_invoke_def, bind_outputs_def, adopt_return_fmp_def]
+QED
+
+
+(* Consumer retest after name transport:
+   Both expr_sim_case and expr_vv_case unfold to frag_exec with arbitrary
+   env, ty, es, sa, s0; the former has the five-instruction lower_value
+   fragment and expr_post, the latter compile_expr's four-instruction
+   prefix and vv_post. The name constraint is now inhabited by the singleton
+   in probe_word_renamed_lookup, and the state equation is unchanged in
+   probe_word_renamed_invoke. setup exists by probe_word_setup_exists.
+
+   Important remaining allocation branch: the earlier A+160 accounting is
+   only for a fresh caller ALLOCA. exec_alloca_def explicitly reuses a
+   recorded allocation if FLOOKUP s0.vs_allocas sa.cs_next_id = SOME (off,sz).
+   Neither fn_inst_ids_distinct nor local_ptrs_reserved asserts this lookup
+   is NONE. alloca_room_fresh requires inst.inst_id NOTIN FDOM s0.vs_allocas;
+   its freshness premise has not been derived at these consumers. The
+   existing-allocation branch must be handled rather than assuming a bump
+   of 32 unconditionally. stmt_state_rel does force sz=32 for that recorded
+   ALLOCA once membership in fn_insts func is established. Its separation
+   from live local regions still needs the appropriate configuration/frame
+   interface before the caller's MSTORE can establish locals_kept.
+   These are residual integration obligations, not checked impossibility.
+*)
