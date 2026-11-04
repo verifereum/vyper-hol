@@ -1143,7 +1143,7 @@ Proof
         metis_tac[LIST_ELEM_COUNT_MEM] >> decide_tac)
   >> first_x_assum (qspec_then `x` mp_tac) >> simp[]
 QED
-Theorem generated_plan_state_wf_residual_nil[local]:
+Theorem generated_plan_state_wf_residual_nil:
   !base ps.
     generated_plan_state_wf base ps ==>
     residual_budget_wf base [] ps
@@ -1985,7 +1985,7 @@ Proof
 QED
 
 (* stack_find returns an index where the predicate holds *)
-Theorem stack_find_el[local]:
+Theorem stack_find_el:
   !P l d. stack_find P l = SOME d ==> P (EL d l)
 Proof
   Induct_on `l` >> simp[stack_find_def] >> rpt strip_tac >>
