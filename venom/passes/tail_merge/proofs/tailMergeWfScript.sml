@@ -149,8 +149,48 @@ Proof
   simp[fn_entry_label_def, entry_block_def] >> rpt strip_tac >> simp[]
 QED
 
+Theorem succs_closed_merge_filter[local]:
+  !func entry.
+    ALL_DISTINCT (fn_labels func) /\ fn_succs_closed func ==>
+    let m = compute_merge_map (block_sigs func entry func.fn_blocks) [] in
+    fn_succs_closed (func with fn_blocks :=
+      FILTER (\bb. ~MEM bb.bb_label (MAP FST m))
+        (MAP (subst_block_labels_block m) func.fn_blocks))
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[fn_succs_closed_def, fn_labels_def, labels_filter_subst,
+       listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
+  rpt strip_tac >> gvs[bb_succs_subst_block_labels] >>
+  `MEM l (fn_labels func)` by metis_tac[fn_succs_closed_def] >>
+  drule_all compute_merge_map_image_survives >>
+  disch_then (qspec_then `entry` mp_tac) >>
+  simp[listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  strip_tac >>
+  qexists_tac `subst_block_labels_block
+    (compute_merge_map (block_sigs func entry func.fn_blocks) []) bb` >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem tail_merge_fn_wf_function:
   !func. wf_function func ==> wf_function (tail_merge_fn func)
 Proof
-  cheat
+  gen_tac >> strip_tac >> rw[tail_merge_fn_def] >>
+  Cases_on `fn_entry_label func` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  simp[subst_block_labels_fn_def] >>
+  qmatch_goalsub_abbrev_tac `FILTER P (MAP (subst_block_labels_block m) _)` >>
+  `fn_succs_closed (func with fn_blocks :=
+      FILTER P (MAP (subst_block_labels_block m) func.fn_blocks))` by
+    (simp[Abbr `P`, Abbr `m`] >>
+     gvs[wf_function_def] >> drule_all succs_closed_merge_filter >>
+     disch_then (qspec_then `x` mp_tac) >> simp[]) >>
+  gvs[wf_function_def] >>
+  simp[fn_labels_def, Abbr `P`, labels_filter_subst] >>
+  rpt conj_tac
+  >- (irule labels_filter_distinct >> gvs[fn_labels_def])
+  >- (simp[fn_has_entry_def] >> irule entry_filter_subst_nonempty >>
+      qexists_tac `x` >> simp[Abbr `m`, compute_merge_map_entry_survives])
+  >- (mp_tac wf_blocks_filter_subst >>
+      simp[listTheory.EVERY_MEM] >> metis_tac[])
+  >> gvs[fn_inst_ids_distinct_def] >> metis_tac[ids_filter_subst]
 QED
