@@ -27,7 +27,7 @@ Ancestors
   exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst
   venomState exprSimLiteralBuffer words integer_word vfmConstants valueEncodingProps
-  valueTypingMemoryProps
+  valueTypingMemoryProps copyFwdEquiv allocaRemapDefs valueEncodingProofs
 Libs
   pairLib intLib
 
@@ -359,6 +359,889 @@ Proof
   irule ifexp_vv_at_alloc_frame >> qexistsl_tac [`s`, `sa`] >> simp[]
 QED
 
+Theorem ifexp_bytestring_adapter_parts[local]:
+  !cenv t arm_ty vv sa op sb.
+    ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
+    is_bytestring_type t /\ compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) ==>
+    ?buf sm src sn.
+      compile_alloc_buffer (type_memory_bytes cenv t) sa = (buf,sm) /\
+      unwrap_value cenv vv sm = (src,sn) /\
+      compile_store_bytestring src buf.buf_operand sn = ((),sb) /\
+      op = buf.buf_operand
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_ifexp_arm_def, compile_store_memory_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem ifexp_mcopy_window[local]:
+  !dst src n s k. k <= n ==>
+    mem_bytes_at dst k (mcopy dst src n s).vs_memory =
+    mem_bytes_at src k s.vs_memory
+Proof
+  rpt strip_tac >> irule LIST_EQ >>
+  simp_tac bool_ss [LENGTH_mem_bytes_at_proof] >> rpt strip_tac >>
+  asm_simp_tac bool_ss [EL_mem_bytes_at, GSYM mem_byte_at_def] >>
+  pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >>
+  irule (SRULE [LET_THM] mcopy_establishes_equiv) >> decide_tac
+QED
+
+Theorem ifexp_mcopy_exterior[local]:
+  !dst src n s a k. a + k <= dst \/ dst + n <= a ==>
+    mem_bytes_at a k (mcopy dst src n s).vs_memory =
+    mem_bytes_at a k s.vs_memory
+Proof
+  rpt strip_tac >> irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  simp[EL_mem_bytes_at, GSYM mem_byte_at_def] >>
+  irule (SRULE [LET_THM] mcopy_preserves_disjoint) >>
+  qexists_tac `k` >> simp[]
+QED
+
+Theorem ifexp_store_bytestring_encoding[local]:
+  !src dst sa sb s w d len tv v.
+    compile_store_bytestring src dst sa = ((),sb) /\
+    eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    mload (w2n w) s = n2w len /\
+    val_in_memory tv v (w2n w) s.vs_memory /\ val_wf tv v /\
+    val_store_size tv v = 32 + 32 * word_size len /\
+    type_memory_size tv < dimword (:256) ==>
+    ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      val_in_memory tv v (w2n d) q.vs_memory /\
+      LENGTH s.vs_memory <= LENGTH q.vs_memory /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+      (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
+Proof
+  rpt strip_tac >>
+  `32 + 32 * word_size len <= type_memory_size tv` by
+    metis_tac[val_store_size_le] >>
+  `val_footprint tv v <= 32 + 32 * word_size len` by
+    metis_tac[val_footprint_le_store_size] >>
+  `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
+  drule_all ifexp_store_bytestring_run >> strip_tac >>
+  qexists_tac `q` >> simp[] >> conj_tac
+  >- (irule exprSimMemoryTransportTheory.val_in_memory_relocate_footprint >>
+      simp[] >> qexistsl_tac [`s.vs_memory`, `w2n w`] >> simp[] >>
+      sym_tac >> irule ifexp_mcopy_window >> decide_tac) >>
+  conj_tac
+  >- simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+          arithmeticTheory.MAX_DEF] >>
+  rpt strip_tac >> irule ifexp_mcopy_exterior >> decide_tac
+QED
+
+Theorem ifexp_immutable_destination_sep[local]:
+  !ctx func cenv cx es s inst dst sz.
+    stmt_state_rel ctx func cenv cx es s /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,sz) ==>
+    cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) dst sz
+Proof
+  rpt strip_tac >> fs[stmt_state_rel_def, immutable_alloca_sep_def] >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Theorem ifexp_bytestring_store_state[local]:
+  !ctx func cenv cx es src dst sa sb s w d len tv v inst.
+    compile_store_bytestring src dst sa = ((),sb) /\
+    eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    mload (w2n w) s = n2w len /\
+    val_in_memory tv v (w2n w) s.vs_memory /\ val_wf tv v /\
+    val_store_size tv v = 32 + 32 * word_size len /\
+    type_memory_size tv < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv) /\
+    (!name b sz. local_region cenv es.scopes s name b sz ==>
+      b + sz <= w2n d \/ w2n d + type_memory_size tv <= b) ==>
+    ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      stmt_state_rel ctx func cenv cx es q /\
+      val_in_memory tv v (w2n d) q.vs_memory /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
+      (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
+        mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory)
+Proof
+  rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es q` by
+    (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
+     conj_tac
+     >- (rpt strip_tac >>
+         qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+         gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     rpt strip_tac >>
+     qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     drule_all ifexp_immutable_destination_sep >>
+     simp[regions_disjoint_def]) >>
+  qexists_tac `q` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
+QED
+
+Theorem ifexp_destination_at[local]:
+  !cenv cx ty tv v sa sb es op s w aid.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ val_wf tv v /\
+    eval_operand op s = SOME w /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n w,type_memory_size tv) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+      w2n w + type_memory_size tv <= b \/ b + sz <= w2n w) ==>
+    expr_val_at cenv cx ty sa sb es v op s
+Proof
+  rpt strip_tac >> simp[expr_val_at_def] >> rpt strip_tac >> gvs[] >>
+  disj1_tac >>
+  qexistsl_tac [`aid`, `w2n w`, `type_memory_size tv`] >> simp[] >>
+  conj_tac >- (drule val_store_size_le >>
+    qspecl_then [`tv`, `v`] mp_tac val_footprint_le_store_size >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem ifexp_alloc_preserves_post[local]:
+  !ctx func cenv cx e es origin sa sm buf sz s0 es' raw vv s.
+    compile_alloc_buffer sz sa = (buf,sm) /\
+    vv_post ctx func cenv cx e es origin sa s0 es' raw vv s /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+    origin.cs_next_var <= sa.cs_next_var /\ sz < dimword (:256) /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sa x) ==>
+    ?q w. run_inst_seq (emitted_insts sa sm) s = OK q /\
+      vv_post ctx func cenv cx e es origin sm s0 es' raw vv q /\
+      eval_operand buf.buf_operand q = SOME w /\
+      FLOOKUP q.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
+      q.vs_memory = s.vs_memory
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
+  `eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s` by
+    (Cases_on `vv_operand vv` >> gvs[eval_operand_def]) >>
+  `vv_holds cenv cx (expr_type e) raw vv es' t` by
+    (fs[vv_post_def] >> Cases_on `vv` >>
+     gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
+  `!n b len. local_region cenv es'.scopes t n b len <=>
+             local_region cenv es'.scopes s n b len` by
+    (drule_all ifexp_alloc_local_regions >> simp[]) >>
+  `vv_at cenv cx (expr_type e) origin sm es' raw vv t` by
+    (irule ifexp_vv_at_alloc_frame >> qexistsl_tac [`s`, `sa`] >>
+     fs[vv_post_def] >> decide_tac) >>
+  qexistsl_tac [`t`, `w`] >> simp[vv_post_def] >>
+  fs[vv_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sa x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
+  >- metis_tac[] >>
+  irule locals_kept_mem_tail >> qexists_tac `s` >> simp[]
+QED
+
+(* Rebase variables without changing allocation ownership. *)
+Theorem ifexp_expr_val_at_start_var[local,simp]:
+  expr_val_at ce cx ty (sa with cs_next_var := n) sb es v op s <=>
+  expr_val_at ce cx ty sa sb es v op s
+Proof
+  simp[expr_val_at_def]
+QED
+
+Theorem ifexp_vv_at_start_var[local,simp]:
+  vv_at ce cx ty (sa with cs_next_var := n) sb es tv vv s <=>
+  vv_at ce cx ty sa sb es tv vv s
+Proof
+  Cases_on `vv` >> simp[vv_at_def]
+QED
+
+Theorem ifexp_vv_post_rebase[local]:
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r ==>
+  vv_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    sm r es' tv vv r
+Proof
+  simp[vv_post_def]
+QED
+
+Theorem ifexp_unwrap_value_rebased_sim[local]:
+  unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  read_result cx tv es' = (INL v,es') /\
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+         ~is_word_type (expr_type e) ==>
+         type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+         type_memory_size tvt < 2 ** 64) ==>
+  frag_exec ctx sm su (\s. s = r)
+    (\s. expr_post ctx func ce cx e es'
+      (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
+Proof
+  strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac
+    [`\s. vv_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) sm r es' (Value v) vv s`,
+     `\s. expr_post ctx func ce cx e es'
+        (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
+  simp[] >> conj_tac
+  >- (drule ifexp_vv_post_rebase >> strip_tac >>
+      drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
+  `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sm` >> simp[]) >>
+  irule unwrap_value_sim >> simp[]
+QED
+
+Theorem ifexp_expr_post_rebased_operand[local]:
+  expr_post ctx func ce cx e es (sa with cs_next_var := sm.cs_next_var)
+    su r es' v op s /\ not_fresh_at sm x /\
+  eval_operand (Var x) r = SOME w ==>
+  eval_operand (Var x) s = SOME w
+Proof
+  simp[eval_operand_def, expr_post_def, not_fresh_at_def] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Theorem ifexp_rebased_store_run[local]:
+  compile_store_bytestring src (Var x) sn = ((),sb) /\
+  expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
+    sn r es' v src s /\
+  not_fresh_at sm x /\ eval_operand (Var x) r = SOME d /\
+  sm.cs_next_var <= sn.cs_next_var /\
+  (!z. src = Var z ==> not_fresh_at sn z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sn /\
+  is_bytestring_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ type_memory_size tv < dimword (:256) /\
+  stmt_state_rel ctx func ce cx es' r /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP r.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv) /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tv <= b) ==>
+  ?q. run_inst_seq (emitted_insts sn sb) s = OK q /\
+    val_in_memory tv v (w2n d) q.vs_memory /\
+    stmt_state_rel ctx func ce cx es' q /\
+    eval_operand (Var x) q = SOME d /\
+    (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
+      lookup_var z q = SOME a) /\
+    (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
+      FLOOKUP q.vs_allocas aid = SOME b) /\
+    (!a k. a + k <= w2n d \/ w2n d + type_memory_size tv <= a ==>
+      mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    locals_kept ce es' r q
+Proof
+  strip_tac >>
+  `eval_operand (Var x) s = SOME d` by
+    (drule_all ifexp_expr_post_rebased_operand >> simp[]) >>
+  `!n b k. local_region ce es'.scopes s n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tv <= b` by
+    (rpt strip_tac >>
+     `local_region ce es'.scopes r n b k` by
+       (irule local_region_frame >> conj_tac
+        >- (qexists_tac `func` >>
+            gvs[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`sm`, `es'.scopes`, `s`] >>
+        gvs[expr_post_def, not_fresh_at_def]) >> metis_tac[]) >>
+  `!z. src = Var z \/ Var x = Var z ==> not_fresh_at sn z` by
+    (rpt strip_tac >> gvs[] >> metis_tac[not_fresh_at_mono]) >>
+  `expr_val_rel cx (expr_type e) v src s /\
+   stmt_state_rel ctx func ce cx es' s` by gvs[expr_post_def] >>
+  drule_all ifexp_copy_source_bounds >> strip_tac >>
+  `val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
+  `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv)` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  drule_all ifexp_bytestring_store_state >> strip_tac >>
+  `q.vs_allocas = s.vs_allocas` by
+    (qpat_assum `q with <|vs_vars := _; vs_memory := _|> = s`
+      (mp_tac o AP_TERM ``\z. z.vs_allocas``) >> simp[]) >>
+  `locals_kept ce es' r q` by
+    (irule locals_kept_regions_tail >> qexists_tac `s` >>
+     reverse conj_tac >- gvs[expr_post_def] >>
+     rpt strip_tac >> metis_tac[]) >>
+  qexists_tac `q` >> simp[] >>
+  gvs[expr_post_def, not_fresh_at_def, eval_operand_def] >>
+  rpt conj_tac >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem ifexp_rebased_old_memory[local]:
+  vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
+  expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
+    sn r es' v src s /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  FLOOKUP s.vs_allocas dest_id = SOME (dst,cap) /\
+  origin.cs_next_id <= dest_id /\
+  (!a k. a + k <= dst \/ dst + cap <= a ==>
+    mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) ==>
+  !aid off sz.
+    FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\
+    (!n b k. local_region ce es.scopes s0 n b k ==>
+      off + sz <= b \/ b + k <= off) ==>
+    mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s0.vs_memory
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `!n b k. local_region ce es'.scopes r n b k ==>
+    off + sz <= b \/ b + k <= off` by
+    (rpt strip_tac >>
+     `local_region ce es.scopes s0 n b k` by
+       (irule local_region_frame >> conj_tac
+        >- (qexists_tac `func` >>
+            gvs[stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`origin`, `es'.scopes`, `r`] >>
+        gvs[vv_post_def]) >> metis_tac[]) >>
+  `FLOOKUP r.vs_allocas aid = SOME (off,sz)` by
+    (fs[vv_post_def] >> metis_tac[]) >>
+  `mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz r.vs_memory` by
+    (fs[expr_post_def] >>
+     qpat_x_assum `!aid off sz. _` irule >> simp[] >>
+     conj_tac >- metis_tac[] >> qexists_tac `aid` >> simp[]) >>
+  `mem_bytes_at off sz r.vs_memory = mem_bytes_at off sz s0.vs_memory` by
+    (fs[vv_post_def] >> metis_tac[]) >>
+  `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  `off + sz <= dst \/ dst + cap <= off` by
+    (fs[expr_post_def, stmt_state_rel_def,
+        venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.allocas_non_overlapping_def,
+        venomMemDefsTheory.regions_disjoint_def] >>
+     qpat_x_assum `!a1 a2 b1 sz1 b2 sz2. _ /\ FLOOKUP s.vs_allocas a1 = _ /\ _ ==> _`
+       (qspecl_then [`aid`, `dest_id`, `off`, `sz`, `dst`, `cap`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem ifexp_rebased_store_post_run[local]:
+  compile_store_bytestring src (Var x) sn = ((),sb) /\
+  vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
+  expr_post ctx func ce cx e es' (origin with cs_next_var := sm.cs_next_var)
+    sn r es' v src s /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  origin.cs_next_var <= sm.cs_next_var /\
+  origin.cs_next_id <= inst.inst_id /\ inst.inst_id < sb.cs_next_id /\
+  not_fresh_at sm x /\ eval_operand (Var x) r = SOME d /\
+  sm.cs_next_var <= sn.cs_next_var /\
+  (!z. src = Var z ==> not_fresh_at sn z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sn /\
+  is_bytestring_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ type_memory_size tv < dimword (:256) /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP r.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv) /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tv <= b) ==>
+  ?q. run_inst_seq (emitted_insts sn sb) s = OK q /\
+    expr_post ctx func ce cx e es origin sb s0 es' v (Var x) q
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func ce cx es' r` by fs[vv_post_def] >>
+  drule_all ifexp_rebased_store_run >> strip_tac >>
+  `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv)` by
+    (fs[expr_post_def] >> metis_tac[]) >>
+  `!aid off sz.
+    FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < origin.cs_next_id /\
+    (!n b k. local_region ce es.scopes s0 n b k ==>
+      off + sz <= b \/ b + k <= off) ==>
+    mem_bytes_at off sz q.vs_memory = mem_bytes_at off sz s0.vs_memory` by
+    (drule ifexp_rebased_old_memory >> disch_then drule >>
+     disch_then (qspecl_then [`q`, `w2n d`, `inst.inst_id`, `type_memory_size tv`] mp_tac) >>
+     fs[arithmeticTheory.ADD_COMM] >> strip_tac >> rpt gen_tac >> strip_tac >>
+     qpat_x_assum `!aid off sz. _` irule >> simp[] >>
+     conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+     qexists_tac `aid` >> simp[]) >>
+  `val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
+  `!n b k. local_region ce es'.scopes q n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tv <= b` by
+    (rpt strip_tac >>
+     `local_region ce es'.scopes r n b k` by
+       (irule local_region_frame >> conj_tac
+        >- (qexists_tac `func` >>
+            gvs[stmt_state_rel_def, state_rel_def]) >>
+        qexistsl_tac [`sm`, `es'.scopes`, `q`] >> simp[]) >> metis_tac[]) >>
+  `expr_val_at ce cx (expr_type e) origin sb es' v (Var x) q` by
+    (irule ifexp_destination_at >>
+     qexistsl_tac [`inst.inst_id`, `tv`, `d`] >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!n b k. local_region ce es'.scopes q n b k ==> _` drule >>
+     decide_tac) >>
+  `~is_word_type (expr_type e)` by
+    (Cases_on `expr_type e` >> gvs[is_bytestring_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[is_bytestring_type_def, is_word_type_def]) >>
+  `expr_val_rel cx (expr_type e) v (Var x) q` by
+    simp[expr_val_rel_def] >>
+  `locals_kept ce es s0 q` by
+    (irule locals_kept_trans >> qexistsl_tac [`es'`, `origin`, `r`] >>
+     fs[vv_post_def]) >>
+  qexists_tac `q` >> simp[expr_post_def] >>
+  fs[vv_post_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x'` by metis_tac[not_fresh_at_mono] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ifexp_expr_post_inst_idx[local,simp]:
+  expr_post ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
+  expr_post ctx func ce cx e es sa sb s0 es' v op s
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
+       expr_val_at_def, lookup_var_def, local_region_def]
+QED
+
+Theorem ifexp_store_bytestring_straight[local]:
+  compile_store_bytestring src dst sa = ((),sb) ==>
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
+       IS_PREFIX_APPEND, venomInstTheory.mk_inst_def, is_terminator_def]
+QED
+
+Theorem ifexp_unwrap_store_sim[local]:
+  unwrap_value ce vv sm = (src,sn) /\
+  compile_store_bytestring src (Var x) sn = ((),sb) /\
+  vv_post ctx func ce cx e es origin sm s0 es' raw vv r /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id /\
+  origin.cs_next_id <= inst.inst_id /\ inst.inst_id < sm.cs_next_id /\
+  not_fresh_at sm x /\ eval_operand (Var x) r = SOME d /\
+  ci_mono sm sn /\ ci_mono sn sb /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sn /\
+  read_result cx raw es' = (INL v,es') /\
+  is_bytestring_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  value_has_type tv v /\ type_memory_bytes ce (expr_type e) = type_memory_size tv /\
+  type_memory_size tv < 2 ** 64 /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP r.vs_allocas inst.inst_id = SOME (w2n d,type_memory_size tv) /\
+  (!n b k. local_region ce es'.scopes r n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tv <= b) ==>
+  frag_exec ctx sm sb (\s. s = r)
+    (\s. expr_post ctx func ce cx e es origin sb s0 es' v (Var x) s) R
+Proof
+  strip_tac >>
+  `!z. src = Var z ==> not_fresh_at sn z` by
+    (drule_at (Pos hd) exprOperandVarTheory.compiler_unwrap_value_var >>
+     Cases_on `vv` >> simp[vv_operand_def] >> metis_tac[]) >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    ~is_word_type (expr_type e) ==>
+    type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64` by (rpt strip_tac >> gvs[]) >>
+  irule frag_exec_seq >>
+  qexistsl_tac
+    [`\s. expr_post ctx func ce cx e es'
+       (origin with cs_next_var := sm.cs_next_var) sn r es' v src s`, `sn`] >>
+  fs[ci_mono_def] >> conj_tac
+  >- (irule ifexp_unwrap_value_rebased_sim >> simp[] >>
+      qexistsl_tac [`es`, `s0`, `raw`, `vv`] >> simp[]) >>
+  irule frag_exec_run_inst_seq >>
+  drule ifexp_store_bytestring_straight >> strip_tac >> simp[] >>
+  rpt strip_tac >>
+  `type_memory_size tv < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
+  `inst.inst_id < sb.cs_next_id` by decide_tac >>
+  drule_all (SRULE [arithmeticTheory.ADD_COMM] ifexp_rebased_store_post_run) >> strip_tac >>
+  disj1_tac >> qexists_tac `q` >> simp[]
+QED
+
+Theorem ifexp_vv_post_inst_idx[local]:
+  vv_post ctx func cenv cx e es sa sb s0 es' raw vv (s with vs_inst_idx := n) <=>
+  vv_post ctx func cenv cx e es sa sb s0 es' raw vv s
+Proof
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  Cases_on `vv` >>
+  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
+       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
+QED
+
+Theorem ifexp_bytestring_adapter_sim[local]:
+  !ctx func cenv cx e t arm_ty vv sa op sb raw es' v tvt origin es s0 R.
+    expr_type e = t /\ is_bytestring_type t /\
+    ~is_word_type t /\ ~same_memory_layout cenv arm_ty t /\
+    compile_ifexp_arm cenv t arm_ty vv sa = (op,sb) /\
+    read_result cx raw es' = (INL v,es') /\
+    evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v /\
+    type_memory_bytes cenv t = type_memory_size tvt /\
+    type_memory_size tvt < 2 ** 64 /\
+    stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv origin /\
+    origin.cs_next_var <= sa.cs_next_var /\
+    origin.cs_next_id <= sa.cs_next_id /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sa x) ==>
+    frag_exec ctx sa sb
+      (\s. vv_post ctx func cenv cx e es origin sa s0 es' raw vv s)
+      (\s. expr_post ctx func cenv cx e es origin sb s0 es' v op s) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
+  `ci_mono sa sm` by
+    (qspec_then `type_memory_bytes cenv t` (qspec_then `sa` mp_tac)
+       ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sm sn` by
+    (qspecl_then [`cenv`, `vv`, `sm`] mp_tac ci_mono_unwrap_value >> simp[]) >>
+  `ci_mono sn sb` by
+    (qspecl_then [`src`, `buf.buf_operand`, `sn`] mp_tac
+       ci_mono_compile_store_bytestring >> simp[]) >>
+  `local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+   local_ptrs_reserved cenv sn` by
+    (gvs[ci_mono_def] >> metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\
+   fn_has_code sn sb func` by
+    (gvs[ci_mono_def] >> metis_tac[fn_has_code_split, cs_extends_trans]) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
+      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+     qpat_x_assum `fn_has_code sa sm func` mp_tac >>
+     simp[fn_has_code_def, IS_PREFIX_APPEND] >> strip_tac >>
+     irule lookup_block_fn_insts >> goal_assum (drule_at Any) >> simp[MEM_APPEND]) >>
+  `type_memory_bytes cenv t < dimword (:256)` by
+    (fs[dimword_def] >> decide_tac) >>
+  irule frag_exec_seq >>
+  qexistsl_tac
+    [`\s. ?d. vv_post ctx func cenv cx e es origin sm s0 es' raw vv s /\
+          eval_operand buf.buf_operand s = SOME d /\
+          FLOOKUP s.vs_allocas sa.cs_next_id = SOME (w2n d,type_memory_size tvt)`, `sm`] >>
+  fs[ci_mono_def] >>
+  `cs_extends sm sb` by metis_tac[cs_extends_trans] >> simp[] >> conj_tac
+  >- (irule frag_exec_run_inst_seq >>
+      drule loweringHaltTheory.compile_alloc_buffer_insts >> strip_tac >>
+      simp[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND,
+           venomInstTheory.mk_inst_def, is_terminator_def] >>
+      rpt strip_tac >> drule_all ifexp_alloc_preserves_post >>
+      strip_tac >> disj1_tac >> qexists_tac `q` >>
+      fs[emitted_insts_def, DROP_LENGTH_APPEND, venomInstTheory.mk_inst_def] >>
+      fs[ifexp_vv_post_inst_idx, eval_operand_def, lookup_var_def] >>
+      qpat_x_assum `run_inst_seq _ s = OK q` mp_tac >> simp[DROP_LENGTH_APPEND] >>
+      qpat_x_assum `eval_operand buf.buf_operand q = SOME w` mp_tac >>
+      simp[eval_operand_def, lookup_var_def]) >>
+  irule frag_exec_pointwise >> qx_gen_tac `r` >> simp[] >> strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at sm x` by
+    metis_tac[not_fresh_at_mono] >>
+  `origin.cs_next_var <= sm.cs_next_var /\ origin.cs_next_id <= sm.cs_next_id` by
+    decide_tac >>
+  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+  `not_local_ptr cenv es'.scopes (STRING #"%" (toString sa.cs_next_var))` by
+    (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!n b k. local_region cenv es'.scopes r n b k ==>
+    b + k <= w2n d \/ w2n d + type_memory_size tvt <= b` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n d) (type_memory_size tvt) b k` suffices_by
+       simp[regions_disjoint_def, DISJ_COMM] >>
+     irule localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
+     qexistsl_tac [`cenv`, `func`, `mk_inst sa.cs_next_id ALLOCA
+       [Lit (n2w (type_memory_bytes cenv t))]
+       [STRING #"%" (toString sa.cs_next_var)]`, `n`,
+       `STRING #"%" (toString sa.cs_next_var)`, `es'.scopes`, `r`] >>
+     simp[venomInstTheory.mk_inst_def] >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ r` mp_tac >>
+     simp[vv_post_def, stmt_state_rel_def, state_rel_def]) >>
+  simp[] >>
+  irule ifexp_unwrap_store_sim >>
+  simp[ci_mono_def] >>
+  conj_tac
+  >- (qexistsl_tac [`d`, `mk_inst sa.cs_next_id ALLOCA
+        [Lit (n2w (type_memory_bytes cenv t))]
+        [STRING #"%" (toString sa.cs_next_var)]`] >>
+      gvs[venomInstTheory.mk_inst_def, arithmeticTheory.ADD_COMM] >>
+      rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  qexistsl_tac [`raw`, `sn`, `src`, `vv`] >> gvs[]
+QED
+
+Theorem ifexp_copy_arm_success[local]:
+  expr_vv_sim ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) arm_ty vv sm = (op,sb) /\
+  eval_expr cx e es = (INL raw,es') /\
+  read_result cx raw es' = (INL v,es') /\
+  is_bytestring_type (expr_type e) /\ ~is_word_type (expr_type e) /\
+  ~same_memory_layout ce arm_ty (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v /\
+  type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+  type_memory_size tvt < 2 ** 64 /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. expr_post ctx func ce cx e es sa sb s0 es' v op s)
+    (expr_exit (INL raw))
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by
+    (drule (cj 1 compile_expr_grows) >> simp[ci_mono_def]) >>
+  `ci_mono sm sb` by
+    (qspecl_then [`ce`, `expr_type e`, `arm_ty`, `vv`, `sm`] mp_tac
+       ci_mono_compile_ifexp_arm >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  `local_ptrs_reserved ce sm` by
+    metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
+  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
+    metis_tac[eval_expr_preserves_scopes_dom] >>
+  `expr_vv_res_ok (INL raw)` by
+    (Cases_on `raw` >> gvs[expr_vv_res_ok_def, read_result_def, raise_def]) >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `INL raw`, `es'`, `s0`] mp_tac) >>
+  simp[expr_vv_res_ok_def] >>
+  disch_then (mp_tac o MATCH_MP frag_exec_then) >>
+  simp[SF CONJ_ss] >> disch_then irule >>
+  fs[ci_mono_def] >>
+  qx_gen_tac `r` >> strip_tac >>
+  irule frag_exec_conseq >>
+  qexistsl_tac [`\s. vv_post ctx func ce cx e es sa sm s0 es' raw vv s`,
+    `\s. expr_post ctx func ce cx e es sa sb s0 es' v op s`, `expr_exit (INL raw)`] >>
+  simp[] >> irule ifexp_bytestring_adapter_sim >> simp[] >>
+  qexists_tac `arm_ty` >> simp[]
+QED
+
+Theorem ifexp_different_type_unwrap[local]:
+  !ce e ty sa vv sb.
+    lowered_value_type ce e <> expr_type e /\
+    ~is_word_type (expr_type e) /\
+    ~is_word_type (lowered_value_type ce e) /\
+    compile_expr ce ty e sa = (vv,sb) ==>
+    ?op. unwrap_value ce vv sb = (op,sb) /\
+         lower_value compile_expr ce ty e sa = (op,sb)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def] >>
+  rpt strip_tac
+  >- (qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+           compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
+      pairarg_tac >> gvs[] >> rpt strip_tac >> gvs[expr_type_def] >>
+      simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
+           comp_return_def, lower_value_def, comp_bind_def,
+           Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+           compile_literal_vv_def])
+  >- suspend "bytes"
+  >- suspend "abi"
+  >> suspend "call"
+QED
+
+Resume ifexp_different_type_unwrap[bytes]:
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+       compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> rpt strip_tac >> gvs[expr_type_def] >>
+  simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
+       comp_return_def, lower_value_def, comp_bind_def,
+       Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
+       compile_literal_vv_def]
+QED
+Resume ifexp_different_type_unwrap[abi]:
+  `?op. unwrap_value ce vv sb = (op,sb)` suffices_by
+    (strip_tac >> qexists_tac `op` >>
+     simp[lower_value_def, comp_bind_def]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_def), compile_expr_body_def, expr_type_def] >>
+  simp[Once (cj 3 compile_expr_def), compile_type_builtin_dispatch_body_def] >>
+  rpt IF_CASES_TAC >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[oneline as_ptr_val_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
+  simp[unwrap_value_def, mk_ptr_def, comp_return_def]
+QED
+Resume ifexp_different_type_unwrap[call]:
+  `?op. unwrap_value ce vv sb = (op,sb)` suffices_by
+    (strip_tac >> qexists_tac `op` >>
+     simp[lower_value_def, comp_bind_def]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[Once (cj 1 compile_expr_def), compile_expr_body_def,
+       expr_type_def, compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[unwrap_value_def, base_ptr_def, comp_return_def]
+QED
+Finalise ifexp_different_type_unwrap
+
+Theorem ifexp_actual_arm_sim[local]:
+  expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  (~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+     ~is_word_type (expr_type e) ==>
+     type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+     type_memory_size tvt < 2 ** 64) /\
+  eval_expr cx e es = (eres,es') /\ expr_read_res_ok cx es' eres /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  (!raw v. eres = INL raw /\ read_result cx raw es' = (INL v,es') ==>
+     ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. ?v. res = INL v /\ expr_post ctx func ce cx e es sa sb s0 es' v op s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  Cases_on `is_word_type (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
+  >- (`lower_value compile_expr ce ty e sa = (op,sb)` by
+        (simp[lower_value_def, comp_bind_def] >>
+         drule compile_ifexp_arm_unwrap >> simp[] >> metis_tac[]) >>
+      `expr_res_ok res` by
+        (Cases_on `eres` >> gvs[expr_read_res_ok_def, bind_def, expr_res_ok_def]) >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[expr_sim_def] >>
+      disch_then (qspecl_then [`sa`, `sb`, `op`, `res`, `es'`, `s0`] mp_tac) >>
+      simp[SF CONJ_ss]) >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    (conj_tac
+     >- (drule (cj 1 compile_expr_grows) >> simp[ci_mono_def]) >>
+     qspecl_then [`ce`, `expr_type e`, `lowered_value_type ce e`, `vv`, `sm`]
+       mp_tac ci_mono_compile_ifexp_arm >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  Cases_on `eres`
+  >- suspend "success"
+  >> suspend "exit"
+QED
+
+Resume ifexp_actual_arm_sim[success]:
+  `is_bytestring_type (expr_type e)` by metis_tac[ifexp_copy_types] >>
+  `same_memory_layout ce (expr_type e) (expr_type e)` by
+    simp[same_memory_layout_def, ifexp_layout_refl] >>
+  gvs[expr_read_res_ok_def, bind_def] >>
+  `!z. vv_operand vv = Var z ==> not_fresh_at sm z` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  `expr_exit (INL v) = expr_exit (INL x)` by simp[FUN_EQ_THM] >>
+  pop_assum SUBST1_TAC >>
+  irule ifexp_copy_arm_success >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`lowered_value_type ce e`, `ty`] >> simp[]
+QED
+
+Resume ifexp_actual_arm_sim[exit]:
+  qpat_x_assum `~is_word_type _ ==> _` kall_tac >>
+  gvs[bind_def, expr_read_res_ok_def] >>
+  `expr_vv_res_ok (INR y)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `vv`, `INR y`, `es'`, `s0`] mp_tac) >>
+  simp[SF CONJ_ss] >> strip_tac >>
+  irule frag_exec_exit_prefix >>
+  qexists_tac `sm` >> fs[ci_mono_def] >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >>
+  simp[expr_exit_exception_transport]
+QED
+
+Finalise ifexp_actual_arm_sim
+
+Theorem ifexp_forced_arm_sim[local]:
+  expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  (~is_word_type (expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/
+    is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
+  (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+     ~is_word_type (expr_type e) ==>
+     type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+     type_memory_size tvt < 2 ** 64) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\
+  expr_res_ok res /\
+  (!v. res = INL v ==>
+     ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. ?v. res = INL v /\ expr_post ctx func ce cx e es sa sb s0 es' v op s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  Cases_on `is_word_type (expr_type e) \/
+    same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
+  >- (`lower_value compile_expr ce ty e sa = (op,sb)` by
+        (simp[lower_value_def, comp_bind_def] >>
+         drule compile_ifexp_arm_unwrap >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[expr_sim_def] >>
+      disch_then (qspecl_then [`sa`, `sb`, `op`, `res`, `es'`, `s0`] mp_tac) >>
+      simp[SF CONJ_ss]) >>
+  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (raw,rs)` >>
+  Cases_on `raw`
+  >- suspend "read"
+  >> suspend "raw_exit"
+QED
+
+Resume ifexp_forced_arm_sim[read]:
+  `read_result cx x rs = (res,es')` by gvs[bind_def] >>
+  drule read_result_state >> strip_tac >> gnvs[] >>
+  Cases_on `res`
+  >- (irule ifexp_actual_arm_sim >>
+      simp[expr_read_res_ok_def] >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  suspend "read_exit"
+QED
+Resume ifexp_forced_arm_sim[raw_exit]:
+  irule ifexp_actual_arm_sim >> simp[expr_read_res_ok_def, bind_def] >>
+  conj_tac
+  >- (qpat_x_assum `(do r <- eval_expr cx e; read_result cx r od) es = _` mp_tac >>
+      simp[bind_def] >> metis_tac[]) >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `ty` >> simp[]
+QED
+Resume ifexp_forced_arm_sim[read_exit]:
+  `same_memory_layout ce (expr_type e) (expr_type e)` by
+    simp[same_memory_layout_def, ifexp_layout_refl] >>
+  `lowered_value_type ce e <> expr_type e /\
+   ~is_word_type (expr_type e) /\
+   ~is_word_type (lowered_value_type ce e)` by
+    (conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
+     `is_bytestring_type (lowered_value_type ce e)` by
+       metis_tac[ifexp_copy_types] >>
+     Cases_on `lowered_value_type ce e` >> gvs[is_bytestring_type_def] >>
+     rename1 `is_bytestring_type (BaseT bt)` >>
+     Cases_on `bt` >> gvs[is_bytestring_type_def, is_word_type_def] >>
+     rename1 `is_bytestring_type (BaseT (BytesT bd))` >>
+     Cases_on `bd` >> gvs[is_bytestring_type_def, is_word_type_def]) >>
+  drule_all ifexp_different_type_unwrap >> strip_tac >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    (conj_tac
+     >- (drule (cj 1 compile_expr_grows) >> simp[ci_mono_def]) >>
+     qspecl_then [`ce`, `expr_type e`, `lowered_value_type ce e`, `vv`, `sm`]
+       mp_tac ci_mono_compile_ifexp_arm >> simp[]) >>
+  `fn_has_code sa sm func` by metis_tac[ci_mono_def, fn_has_code_split] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `op'`, `INR y`, `es'`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_exit_prefix >> qexists_tac `sm` >>
+  conj_tac >- metis_tac[ci_mono_def] >>
+  conj_tac >- metis_tac[ci_mono_def] >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]
+QED
+Finalise ifexp_forced_arm_sim
+
 (* What compile_expr emits for an IfExp. *)
 Theorem compile_expr_ifexp:
   !cenv ty t c a b st vv st'.
@@ -601,8 +1484,11 @@ QED
    ASSIGN run to bn with eop's word in rv. *)
 Theorem ifexp_arm_frag:
   !ctx func cenv cx ty e es1 res es' bs bm bn eop rv tt lbl.
-    expr_sim ctx func cenv cx ty e es1 /\
-    lower_value compile_expr cenv ty e bs = (eop, bm) /\
+    (!u. stmt_state_rel ctx func cenv cx es1 u ==>
+      frag_exec ctx bs bm (\s. s = u)
+        (\s. ?v. res = INL v /\
+          expr_post ctx func cenv cx e es1 bs bm u es' v eop s)
+        (expr_exit res)) /\
     emit_inst ASSIGN [eop] [rv] bm = ((), bn) /\
     (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\ expr_res_ok res /\
     fn_has_code bs bm func /\ fn_inst_ids_distinct func /\
@@ -618,11 +1504,9 @@ Theorem ifexp_arm_frag:
 Proof
   rpt strip_tac >>
   `cs_extends bm bn` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ ty e es1`
-    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`bs`, `bm`, `eop`, `res`, `es'`, `jump_to lbl tt`]
-                mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  qpat_x_assum `!u. stmt_state_rel _ _ _ _ _ u ==> _`
+    (qspec_then `jump_to lbl tt` mp_tac) >>
+  (impl_tac >- simp[stmt_state_rel_jump_to]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
   disch_then (qspecl_then [`\s. s = jump_to lbl tt`, `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[stmt_state_rel_jump_to]) >>
@@ -750,13 +1634,16 @@ Theorem ifexp_branch_sim:
   !ctx func cenv cx ty t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
    bs bm bn bo bx bp tl el xl bl lbl rv cond_op eop.
     expr_type c = BaseT BoolT /\ expr_sim ctx func cenv cx (BaseT BoolT) c es /\
-    expr_sim ctx func cenv cx ty e es1 /\
+    (!u. stmt_state_rel ctx func cenv cx es1 u ==>
+      frag_exec ctx bs bm (\s. s = u)
+        (\s. ?v. res = INL v /\
+          expr_post ctx func cenv cx e es1 bs bm u es' v eop s)
+        (expr_exit res)) /\
     (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV bv), es1) /\
     (do result <- eval_expr cx e; read_result cx result od) es1 = (res, es') /\ expr_res_ok res /\ expr_type e = t /\
     lower_value compile_expr cenv (BaseT BoolT) c sa = (cond_op, s1) /\
     emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
     new_block tl s6 = (x6, s7) /\
-    lower_value compile_expr cenv ty e bs = (eop, bm) /\
     emit_inst ASSIGN [eop] [rv] bm = ((), bn) /\
     emit_inst JMP [Label xl] [] bn = ((), bo) /\
     new_block lbl bo = (bx, bp) /\
@@ -971,6 +1858,16 @@ QED
 Theorem compile_ifexp_forced_frag[local]:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (~is_word_type t ==>
+     !e. (e = a \/ e = b) ==>
+         lowered_value_type cenv e = expr_type e \/
+         is_bytestring_type (expr_type e) /\
+         is_bytestring_type (lowered_value_type cenv e) /\
+         arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
+       type_memory_bytes cenv t = type_memory_size tvt /\
+       type_memory_size tvt < 2 ** 64) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
@@ -981,7 +1878,12 @@ Theorem compile_ifexp_forced_frag[local]:
     expr_sim ctx func cenv cx (BaseT BoolT) c es /\
     (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
        expr_sim ctx func cenv cx ty a es1 /\
-       expr_sim ctx func cenv cx ty b es1) ==>
+       expr_sim ctx func cenv cx ty b es1 /\
+       expr_vv_sim ctx func cenv cx ty a es1 /\
+       expr_vv_sim ctx func cenv cx ty b es1 /\
+       !e v es2. (e = a \/ e = b) /\
+         (do r <- eval_expr cx e; read_result cx r od) es1 = (INL v, es2) ==>
+         ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
     !sa sb vv res es' s0.
       compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
       (do result <- eval_expr cx (IfExp t c a b); read_result cx result od) es = (res, es') /\ expr_res_ok res /\
@@ -1013,23 +1915,75 @@ Proof
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
   >- (qpat_x_assum `!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = _ ==> _` drule >>
-      strip_tac >> Cases_on `bv` >> fs[]
-      >- (irule ifexp_branch_sim >> simp[cs_extends_refl] >>
-          qpat_assum `lower_value _ _ _ a s7 = _` (irule_at Any) >>
-          qpat_assum `emit_inst ASSIGN [aop] _ _ = _` (irule_at Any) >>
-          qpat_assum `emit_inst JMP _ _ s9 = _` (irule_at Any) >>
-          qpat_assum `new_block el s10 = _` (irule_at Any) >>
-          simp[] >> qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
-          qpat_assum `new_block tl s6 = _` (irule_at Any) >> simp[cs_extends_refl]) >>
-      irule ifexp_branch_sim >> simp[cs_extends_refl] >>
-      qpat_assum `lower_value _ _ _ b s11 = _` (irule_at Any) >>
-      qpat_assum `emit_inst ASSIGN [bop] _ _ = _` (irule_at Any) >>
-      qpat_assum `emit_inst JMP _ _ s13 = _` (irule_at Any) >>
-      qpat_assum `new_block xl s14 = _` (irule_at Any) >>
-      simp[] >> qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `new_block tl s6 = _` (irule_at Any) >> simp[cs_extends_refl]) >>
+      strip_tac >>
+      rename1 `(do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV cond_bool),es1)` >>
+      Cases_on `cond_bool` >> simp[]
+      >- suspend "then_arm" >>
+      suspend "else_arm") >>
   gvs[expr_res_ok_def]
 QED
+
+Resume compile_ifexp_forced_frag[then_arm]:
+  irule ifexp_branch_sim >>
+  qpat_assum `emit_inst ASSIGN [aop] _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_inst JMP _ _ s9 = _` (irule_at Any) >>
+  qpat_assum `new_block el s10 = _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `new_block tl s6 = _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ c sa = _` (irule_at Any) >>
+  qpat_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` (irule_at Any) >>
+  qexistsl_tac [`a`, `s7`, `tl`] >> simp[cs_extends_refl] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- gvs[] >>
+  rpt strip_tac >> irule ifexp_forced_arm_sim >>
+  qpat_assum `compile_expr _ _ a s7 = _` (irule_at Any) >> simp[] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum (irule o SIMP_RULE (srw_ss()) []) >>
+               qexistsl_tac [`a`, `es'`] >> gvs[]) >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `cs_extends s5 s6` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s1 s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends sa s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends s8 s9 /\ cs_extends s9 s10` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s10 s11` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s8 s11` by metis_tac[cs_extends_trans] >>
+  `cs_extends s8 sb` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_mid]
+QED
+
+Resume compile_ifexp_forced_frag[else_arm]:
+  irule ifexp_branch_sim >>
+  qpat_assum `emit_inst ASSIGN [bop] _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_inst JMP _ _ s13 = _` (irule_at Any) >>
+  qpat_assum `new_block xl s14 = _` (irule_at Any) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `new_block tl s6 = _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ c sa = _` (irule_at Any) >>
+  qpat_assum `(do result <- eval_expr cx c; read_result cx result od) es = _` (irule_at Any) >>
+  qexistsl_tac [`b`, `s11`, `el`] >> simp[cs_extends_refl] >>
+  conj_tac >- metis_tac[] >>
+  reverse conj_tac >- gvs[] >>
+  rpt strip_tac >> irule ifexp_forced_arm_sim >>
+  qpat_assum `compile_expr _ _ b s11 = _` (irule_at Any) >> simp[] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum (irule o SIMP_RULE (srw_ss()) []) >>
+               qexistsl_tac [`b`, `es'`] >> gvs[]) >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `cs_extends s5 s6` by metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s1 s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends sa s11` by metis_tac[cs_extends_trans] >>
+  `cs_extends s12 s13 /\ cs_extends s13 s14` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s14 sb` by metis_tac[cs_extends_new_block] >>
+  `cs_extends s12 sb` by metis_tac[cs_extends_trans] >>
+  metis_tac[fn_has_code_mid]
+QED
+Finalise compile_ifexp_forced_frag
 
 Theorem compile_ifexp_vv_sim:
   !ctx func cenv cx ty t c a b es.
@@ -1073,6 +2027,8 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   irule readable_eval_frag_transport >>
   simp[] >> rpt strip_tac >>
-  irule compile_ifexp_forced_frag >> simp[] >> qexists_tac `ty` >> simp[] >>
-  first_assum ACCEPT_TAC
+  irule compile_ifexp_forced_frag >> simp[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qexists_tac `ty` >> simp[] >> metis_tac[]
 QED
+
