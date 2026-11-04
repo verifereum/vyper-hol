@@ -13,6 +13,7 @@ Theory makeSsaCurrentWfSsa
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
+  makeSsaCurrentSourceCuts
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
@@ -28,6 +29,43 @@ Proof
   Cases_on `inst.inst_opcode = PHI` >> gvs[] >>
   first_x_assum (qspec_then `j` mp_tac) >>
   Cases_on `EL j anns` >> simp[]
+QED
+
+(* Updates cannot invent a token: its owner was assigned in the prefix,
+   or the token was inherited at entry. *)
+Theorem current_wf_fold_origin[local]:
+  !anns E v.
+  FOLDL (\env (t,w). (w =+ t) env) E anns v = E v \/
+  MEM (FOLDL (\env (t,w). (w =+ t) env) E anns v,v) anns
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  rpt gen_tac >> simp[] >>
+  first_x_assum (qspecl_then [`(h1 =+ h0) E`, `v`] mp_tac) >>
+  Cases_on `h1 = v` >> simp[combinTheory.APPLY_UPDATE_THM] >>
+  metis_tac[]
+QED
+
+Theorem current_wf_local_origin[local]:
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' ==>
+  E' v = E v \/ ?k. k < LENGTH annss /\ MEM (E' v,v) (EL k annss)
+Proof
+  strip_tac >> drule current_local_trace_exit_env >> strip_tac >>
+  qspec_then `FLAT annss` (qspecl_then [`E`, `v`] mp_tac)
+    current_wf_fold_origin >>
+  simp[MEM_FLAT, MEM_EL] >> metis_tac[]
+QED
+
+Theorem current_wf_source_cut_origin[local]:
+  current_source_cut A
+    (l,bb,s0,rs0,H0,E0,ren,s1,rs1,H1,E1,bbs1,bbs2) n rs E ==>
+  E v = E0 v \/ ?k. k < n /\ MEM (E v,v) (EL k (A l))
+Proof
+  simp[current_source_cut_def] >> rpt strip_tac >>
+  qpat_x_assum `current_local_trace aq xq _ _ _ _ _ _ _ _ _` kall_tac >>
+  drule current_wf_local_origin >>
+  disch_then (qspec_then `v` strip_assume_tac)
+  >- simp[] >>
+  disj2_tac >> qexists_tac `k` >> simp[EL_APPEND_EQN]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
