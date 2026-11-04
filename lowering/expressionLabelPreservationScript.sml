@@ -2307,3 +2307,136 @@ Resume label_preserving_builtin_body[slice]:
 QED
 
 Finalise label_preserving_builtin_body
+
+Theorem label_preserving_result_snd[local]:
+  (!s r t. f s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s. cs_extends s (SND (f s)) /\
+    EVERY jump_label_ok (added_labels s (SND (f s)))
+Proof
+  strip_tac >> gen_tac >> Cases_on `f s` >> gvs[] >> metis_tac[]
+QED
+
+Theorem label_preserving_mod_names_snd[local]:
+  (cs_extends s (SND (compile_addmod_names c rt at a bt b mt m s)) /\
+   EVERY jump_label_ok (added_labels s
+     (SND (compile_addmod_names c rt at a bt b mt m s)))) /\
+  (cs_extends s (SND (compile_mulmod_names c rt at a bt b mt m s)) /\
+   EVERY jump_label_ok (added_labels s
+     (SND (compile_mulmod_names c rt at a bt b mt m s)))) /\
+  (cs_extends s (SND (compile_powmod256_names c rt at a bt b s)) /\
+   EVERY jump_label_ok (added_labels s
+     (SND (compile_powmod256_names c rt at a bt b s))))
+Proof
+  rpt conj_tac >>
+  metis_tac[label_preserving_result_snd, label_preserving_mod_names]
+QED
+
+Theorem label_preserving_expr_body[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!c rt ty bi args s r t. bfn c rt ty bi args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!c vt ty tb rt args s r t. tfn c vt ty tb rt args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ty e s r t.
+    compile_expr_body cfn bfn tfn cenv ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `e` >>
+  simp_tac (srw_ss()) [compile_expr_body_def, LET_THM]
+  >~ [`compile_name_vv`] >- metis_tac[label_preserving_name_vv]
+  >~ [`compile_literal_vv`] >- metis_tac[label_preserving_literal_vv]
+  >~ [`compile_subscript`] >- metis_tac[label_preserving_subscript]
+  >~ [`compile_attribute`] >- metis_tac[label_preserving_attribute]
+  >~ [`compile_call`] >- metis_tac[label_preserving_call]
+  >~ [`expr_type (TypeBuiltin _ _ _ _)`] >- metis_tac[]
+  >~ [`fresh_label`] >- suspend "ifexp"
+  >~ [`compile_struct_lit`] >- suspend "struct"
+  >~ [`FLOOKUP`] >- suspend "topname"
+  >~ [`compile_get_target_ptr`] >- suspend "pop"
+  >~ [`expr_type (Builtin _ _ _)`] >- suspend "builtin" >>
+  strip_tac >> gvs[] >>
+  simp[cs_extends_refl, added_labels_def, all_blocks_def, LENGTH_MAP,
+    DROP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Resume label_preserving_expr_body[struct]:
+  CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_struct_lit >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_expr_body[topname]:
+  Cases_on `FLOOKUP cenv.ce_module_vars p` >>
+  simp_tac (srw_ss()) []
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  Cases_on `x` >> simp_tac (srw_ss()) []
+  >~ [`emit_inst`] >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[])
+  >~ [`emit_inst`] >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  strip_tac >> gvs[] >>
+  simp[cs_extends_refl, added_labels_def, all_blocks_def, LENGTH_MAP,
+    DROP_APPEND, DROP_LENGTH_TOO_LONG]
+QED
+
+Resume label_preserving_expr_body[pop]:
+  CALL_PAIR label_preserving_get_target_ptr >>
+  CALL_PAIR label_preserving_dynarray_pop >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_expr_body[ifexp]:
+  CALL_VALUE >>
+  CALL_PAIR label_preserving_fresh_var >>
+  CALL_PAIR label_preserving_fresh_label >>
+  CALL_PAIR label_preserving_fresh_label >>
+  CALL_PAIR label_preserving_fresh_label >>
+  CALL_PAIR label_preserving_emit_inst >>
+  CALL_PAIR label_preserving_new_block >>
+  CALL_VALUE >>
+  CALL_PAIR label_preserving_emit_inst >>
+  CALL_PAIR label_preserving_emit_inst >>
+  CALL_PAIR label_preserving_new_block >>
+  CALL_VALUE >>
+  CALL_PAIR label_preserving_emit_inst >>
+  CALL_PAIR label_preserving_emit_inst >>
+  CALL_PAIR label_preserving_new_block >>
+  Cases_on `is_word_type (expr_type (IfExp t' e' e0 e1))` >>
+  simp_tac (srw_ss()) [] >> strip_tac >> gvs[] >>
+  map_every (fn st => irule label_extends_trans >> qexists st >> simp[] >>
+    once_rewrite_tac[CONJ_COMM])
+    [`st1`, `st2`, `st3`, `st4`, `st5`, `st6`, `st7`, `st8`,
+     `st9`, `st10`, `st11`, `st12`, `st13`, `st14`]
+QED
+
+Resume label_preserving_expr_body[builtin]:
+  `!c rt ty bi args s.
+     cs_extends s (SND (bfn c rt ty bi args s)) /\
+     EVERY jump_label_ok (added_labels s (SND (bfn c rt ty bi args s)))` by
+    (rpt gen_tac >> irule label_preserving_result_snd >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `action = (r,t)` >>
+  `cs_extends s (SND action) /\
+    EVERY jump_label_ok (added_labels s (SND action))` suffices_by
+      (rpt strip_tac >> gvs[]) >>
+  unabbrev_all_tac >>
+  simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  all_tac >~ [`compile_powmod256_names`] >-
+    (Cases_on `b` >> asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd]) >>
+  Cases_on `h` >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  BasicProvers.TOP_CASE_TAC >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd] >>
+  Cases_on `b` >>
+  asm_simp_tac (srw_ss()) [label_preserving_mod_names_snd]
+QED
+Finalise label_preserving_expr_body
