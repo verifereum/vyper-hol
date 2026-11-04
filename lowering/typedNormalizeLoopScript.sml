@@ -121,7 +121,10 @@ Theorem typed_sarray_child_decompose[local]:
     ~is_abi_dynamic ce.ce_struct_fields dt) /\
   compile_copy_sarray_typed ce dst dt src st ncount sa = ((),sb) /\
   fn_has_code sa sb fn ==>
-  ?sc ec.
+  ?sc ec body_bb.
+    lookup_block sc.cs_current_bb fn.fn_blocks = SOME body_bb /\
+    isPREFIX sc.cs_current_insts body_bb.bb_instructions /\
+    phi_prefix_length body_bb.bb_instructions = 0 /\
     compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+6))) dt
       (Var ("%" ++ toString (sa.cs_next_var+5))) st sc = ((),ec) /\
@@ -188,7 +191,15 @@ Proof
   `cs_extends entry sb` by metis_tac[cs_extends_trans] >>
   `fn_has_code sa entry fn /\ fn_has_code ec sb fn` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
-  qexistsl_tac [`entry`, `ec`] >> simp[Abbr `entry`] >>
+  `?body_bb. lookup_block entry.cs_current_bb fn.fn_blocks = SOME body_bb /\
+    isPREFIX entry.cs_current_insts body_bb.bb_instructions` by
+    (irule fn_has_code_start >> qexists_tac `ec` >> simp[]) >>
+  `phi_prefix_length body_bb.bb_instructions = 0` by
+    (qpat_x_assum `isPREFIX entry.cs_current_insts _` mp_tac >>
+     Cases_on `body_bb.bb_instructions` >>
+     simp[Abbr `entry`] >> strip_tac >>
+     gvs[phi_prefix_length_def, mk_inst_def]) >>
+  qexistsl_tac [`entry`, `ec`, `body_bb`] >> simp[Abbr `entry`] >>
   qpat_x_assum `fn_has_code sa entry fn` mp_tac >>
   simp[fn_has_code_def, emitted_blocks_def,
        DISJ_IMP_THM, FORALL_AND_THM] >>
