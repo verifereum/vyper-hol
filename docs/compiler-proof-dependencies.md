@@ -95,7 +95,7 @@ admissions. Generic composition and each L1–L13 have none. See [source owners 
 |---|---|---|---|
 | S1 | `loweringRuntimeCorrect.lower_vyper_runtime_unit_correct` | raw lowering, boundary/entry facts -> terminating source-unit execution | Milestone 6 |
 | S2 | `vyperLoweringCorrect.lower_vyper_runtime_unit_source_unit_ok` | lowering + supported syntax -> `o1_source_unit_ok` | Milestone 5 |
-| S3 | `vyperLoweringCorrect.lower_vyper_runtime_unit_memory_ok` | S1 boundary + non-exemption -> `raw_unit_memory_ok` | Milestone 5 |
+| S3 | `loweringMemCorrect.lower_vyper_runtime_unit_memory_ok` | S1 boundary + non-exemption + no `DALLOCA` -> `raw_unit_memory_ok` | Milestone 5 |
 | S3d | `loweringMemCorrect.lower_vyper_runtime_unit_dload_offset_ok` | S1 boundary + `code_layout_valid` + non-exemption -> `mem_inv dload_offset_ok` (DLOAD/DLOADBYTES offsets plus the code prefix stay below 2^256) | Milestone 5 |
 | S4 | `o1PipelineCorrect.run_venom_pipeline_correct` | exact O1 success, raw shape/entry/memory, `o1_run_state_ok` (incl. `code_layout_valid`), DLOAD offset bound (`mem_inv dload_offset_ok`) -> forward simulation up to any well-formed dead-byte set `D` (`ctx_sim D`, `dead_wf D`) | Milestone 3 |
 | S5 | `o1PipelineCorrect.o1_pipeline_memory_obligations` | O1, generated plan, raw shape/entry/memory -> existential `Inv`, output memory/reachability | Milestone 5 |

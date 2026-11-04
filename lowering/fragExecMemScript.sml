@@ -393,19 +393,10 @@ Proof
   Cases_on `r` >> gvs[]
 QED
 
-Theorem resolve_block_assigns_non_var[local]:
-  !l op. (!v. op <> Var v) ==> resolve_block_assigns l op = op
+Theorem same_after_assigns_refl[local]:
+  !l op. same_after_assigns l op op
 Proof
-  Cases_on `l` >> Cases_on `op` >> simp[resolve_block_assigns_def]
-QED
-
-Theorem resolve_block_assigns_no_outputs[local]:
-  !inst rest op.
-    inst.inst_outputs = [] ==>
-    resolve_block_assigns (inst :: rest) op = resolve_block_assigns rest op
-Proof
-  rpt strip_tac >> Cases_on `op` >>
-  simp[resolve_block_assigns_def, resolve_block_assigns_non_var]
+  Cases >> simp[same_after_assigns_def]
 QED
 
 (* Adjacent RETURNDATACOPY [p; 0; rds] and REVERT [p; rds] form a pair. *)
@@ -426,8 +417,7 @@ Proof
         (TAKE i bb.bb_instructions)` by
     metis_tac[rich_listTheory.SNOC_EL_TAKE] >>
   gvs[revert_forward_pair_def, listTheory.REVERSE_SNOC,
-      resolve_block_assigns_no_outputs, resolve_block_assigns_non_var,
-      mk_inst_def] >>
+      resolve_block_assigns_def, same_after_assigns_refl, mk_inst_def] >>
   rpt strip_tac >>
   `~(k < SUC i)` by (qpat_x_assum `i < k` mp_tac >> simp[]) >>
   gvs[]

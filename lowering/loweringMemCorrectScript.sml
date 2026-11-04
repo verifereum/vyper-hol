@@ -16,18 +16,18 @@
  *   lower_vyper_runtime_unit_run_mem_safe -- the memory-safe run
  *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
  *     DLOAD/DLOADBYTES offsets, from the memory-safe run's DLOAD check
+ *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and
+ *     taint bound, from loweringPtrCorrect's pointer-safe run, which rests
+ *     on that theory's admissions
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
- * Named admissions (cheats); all but the last are memory twins of pieces
- * S1 rests on:
+ * Named admissions (cheats), all memory twins of pieces S1 rests on:
  *   body_stmts_sim_mem -- body_stmts_sim with memory (#641's body
  *     footprint)
  *   external_entry_value_revert_mem, external_entry_reaches_body_mem --
  *     S1's entry bridge with memory (#639, #867)
  *   external_frame_ret_ok_mem -- the frame's returns with memory (#640),
  *     from entryHaltMem's return leaves
- *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and
- *     taint bound
  *)
 Theory loweringMemCorrect
 Ancestors
@@ -38,8 +38,8 @@ Ancestors
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem stmtSim bodySim bodySimMain moduleLowering stmtLowering
-  vyperTypeSystem vyperState lowerDloadDefs
+  entryHaltMem loweringPtrCorrect stmtSim bodySim bodySimMain moduleLowering
+  stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
 
@@ -346,14 +346,13 @@ Proof
   irule external_entry_value_revert_mem >> metis_tac[]
 QED
 
-(* S3's pointer discipline and taint bound: planned admission, Milestone 5.
-   The rest of o1PassContract's source invariant (o1_src_inv), which the O1
-   pipeline's simulation (S4) takes beside raw_unit_memory_ok: every
-   reachable access other than a revert forward stays in the frame's
-   allocations or above the empty reserved region, and what a call request
-   or the result reads from moved memory is bounded by the call's dead
-   bytes.  Proof idea: the same allocation-budget and buffer-layout
-   induction as lower_vyper_runtime_unit_run_mem_safe. *)
+(* S3's pointer discipline and taint bound: the rest of o1PassContract's
+   source invariant (o1_src_inv), which the O1 pipeline's simulation (S4)
+   takes beside raw_unit_memory_ok.  From the pointer-safe run
+   (lower_vyper_runtime_unit_run_ptr_safe_composed) through the bridge
+   ptr_safe_ptr_discipline; its distinct labels are
+   lowering_context_ok's.  No DALLOCA is the O1 source shape's
+   (o1_source_unit_ok_no_dalloca), which S4 has. *)
 Theorem lower_vyper_runtime_unit_ptr_taint:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -364,13 +363,29 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    ~ctx_has_dalloca unit.cu_context
     ==> ptr_discipline 0 unit.cu_context vs /\
         taint_within
           (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
           unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  drule_all lower_vyper_runtime_unit_fn_ptr_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_run_ptr_safe_composed >> strip_tac >>
+  drule_all ptrSafeRunTheory.ptr_safe_ptr_discipline >> simp[]
 QED
 
 (* S3, Milestone 5: the memory-safe run (above) through the bridge
@@ -380,7 +395,8 @@ QED
    function with an entry block, distinct labels, an acyclic reachable call
    graph, the allocation budget below the word size) are
    lowering_context_ok, which run_lowering checks.  The other conjuncts
-   come from run_lowering: no eom, and no reserved global region. *)
+   come from run_lowering: no eom, and no reserved global region.  No
+   DALLOCA is the O1 source shape's, as for the pointer discipline. *)
 Theorem lower_vyper_runtime_unit_memory_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -391,7 +407,8 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
+    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    ~ctx_has_dalloca unit.cu_context
     ==> raw_unit_memory_ok unit.cu_context vs /\
         EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
         fixed_region_reserved 0 unit.cu_context /\
