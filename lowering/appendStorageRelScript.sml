@@ -232,6 +232,7 @@ Proof
   strip_tac >>
   drule_all stmt_state_rel_append_storage_updates >>
   disch_then (qspec_then `w` assume_tac) >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all append_storage_word_success >> strip_tac >> gvs[] >>
   `!st1 st2. set_storage cx (set_storage cx es tr st1) tr st2 =
     set_storage cx es tr st2` by

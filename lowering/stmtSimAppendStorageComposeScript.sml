@@ -292,7 +292,8 @@ Theorem append_storage_word_value_frag[local]:
 Proof
   strip_tac >> drule_all append_storage_header_agree >> strip_tac >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
-  >- (`res = INL ()` by
+  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      `res = INL ()` by
         metis_tac[append_storage_word_success, pairTheory.PAIR_EQ, sumTheory.INL_11] >>
       `eval_operand (Lit slot) s = SOME slot` by simp[eval_operand_def] >>
       `!x. Lit slot = Var x ==> not_fresh_at sb x` by simp[] >>

@@ -32,6 +32,7 @@ Proof
 QED
 
 Theorem append_storage_word_success:
+  ~cx.txn.is_static /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\
   len < cap /\ type_slot_size tv = 1 /\
   encode_value tv v = SOME [(0,w)] ==>

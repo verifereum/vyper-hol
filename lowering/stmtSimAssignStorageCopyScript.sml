@@ -31,7 +31,7 @@ Libs
 (* A typed source value always has a successful storage write. *)
 Theorem typed_storage_copy_write[local]:
   !cx tr slot tvt v es.
-    value_has_type tvt v ==>
+    ~cx.txn.is_static /\ value_has_type tvt v ==>
     ?writes.
       encode_value tvt v = SOME writes /\
       write_storage_slot cx tr slot tvt v es =
@@ -666,6 +666,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_then (qspec_then `tr` assume_tac) storage_copy_initial_agree >>
   drule_all storage_agree_copy_region >> strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq] >>
   irule storage_copy_state_fold >> simp[]
 QED
@@ -749,11 +750,17 @@ Theorem storage_copy_bulk_run[local]:
                ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> strip_tac >>
+  `~s.vs_call_ctx.cc_static` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     Cases_on `tr` >>
+     simp[storage_copy_backend_fold, stmt_state_rel_def,
+          compileEnvTheory.state_rel_def]) >>
   drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
     compile_store_copy_frag >>
   simp[eval_operand_def] >>
   disch_then (qspecl_then [`ctx`, `s`, `b`, `\r. F`] mp_tac) >>
-  (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
+  (impl_tac >- (Cases_on `tr` >> simp[] >> first_assum ACCEPT_TAC)) >>
+  strip_tac >>
   drule stmtSimDeclTheory.frag_exec_no_exit_run >> disch_then drule >>
   disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >>
   qexists_tac `t` >> simp[] >>
@@ -794,6 +801,12 @@ Theorem storage_copy_one_run[local]:
                ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> strip_tac >>
+  `~s.vs_call_ctx.cc_static` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ ((if _ then _ else _) _ _ _)`
+       mp_tac >>
+     Cases_on `tr` >>
+     simp[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def,
+          LET_THM]) >>
   `frag_exec ctx sa sb (\t. t = s)
      (\t. stmt_state_rel ctx func cenv cx es' t /\
        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -1012,7 +1025,8 @@ Proof
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   drule_all eval_assign_toplevel >> strip_tac >>
   drule_all storage_copy_empty_rhs >> strip_tac >> gvs[]
-  >- (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
       simp[write_storage_slot_eq, apply_writes_def, wordsTheory.WORD_ADD_0] >>
       strip_tac >> gvs[] >>
       `FLOOKUP cenv.ce_module_vars (src,id) =
@@ -1094,8 +1108,9 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all eval_assign_toplevel >> strip_tac >>
   Cases_on `r` >> gvs[]
-  >- (drule typed_storage_copy_write >>
-      disch_then (qspecl_then [`cx`, `tr`, `n2w slot`, `es1`] strip_assume_tac) >>
+  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      drule_all typed_storage_copy_write >>
+      disch_then (qspecl_then [`tr`, `n2w slot`, `es1`] strip_assume_tac) >>
       gvs[] >>
       `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
         simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
