@@ -4,7 +4,7 @@ Ancestors
   supportedStmts vyperState vyperInterpreter vyperMisc alist
   vyperStoragePlaceProvenance supportedTargets supportedDecls supportedExprForms
   targetPlaceSim vyperAST supportedProgram supportedExprTraverse supportedStmtTraverse
-  vyperTypeCallGraph supportedExprs bodyStorageCases
+  vyperTypeCallGraph supportedExprs bodyStorageCases vyperCallOutcomeFrame vyperPlaceFrames vyperMachineFrame
 
 (* Use the existing target-root traversal; read permission is deliberately
    independent of this write-root restriction. *)
@@ -784,4 +784,831 @@ Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
   simp[] >> irule (CONJUNCT2 supported_stmt_foreign_frame) >>
   goal_assum (drule_at Any) >> simp[]
+QED
+
+(* Equality of the complete source map, at an arbitrary contract address. *)
+Definition foreign_immutable_frame_def:
+  foreign_immutable_frame md addr (s:evaluation_state) (t:evaluation_state) <=>
+    (case ALOOKUP t.immutables addr of
+       NONE => FEMPTY | SOME imms => get_source_immutables md imms) =
+    (case ALOOKUP s.immutables addr of
+       NONE => FEMPTY | SOME imms => get_source_immutables md imms)
+End
+
+Theorem foreign_immutable_frame_refl[simp]:
+  foreign_immutable_frame md addr s s
+Proof
+  simp[foreign_immutable_frame_def]
+QED
+
+Theorem foreign_immutable_frame_trans:
+  foreign_immutable_frame md addr s t /\ foreign_immutable_frame md addr t u ==>
+  foreign_immutable_frame md addr s u
+Proof
+  simp[foreign_immutable_frame_def]
+QED
+
+Theorem foreign_immutable_frame_eq:
+  t.immutables = s.immutables ==> foreign_immutable_frame md addr s t
+Proof
+  simp[foreign_immutable_frame_def]
+QED
+
+Theorem foreign_immutable_frame_bind:
+  state_rel_frame (foreign_immutable_frame md addr) f /\
+  (!s v t. f s = (INL v,t) ==>
+    state_rel_frame (foreign_immutable_frame md addr) (g v)) ==>
+  state_rel_frame (foreign_immutable_frame md addr) (bind f g)
+Proof
+  strip_tac >> irule state_rel_frame_bind_guarded >> simp[] >>
+  metis_tac[foreign_immutable_frame_trans]
+QED
+
+Theorem foreign_immutable_frame_state:
+  (!s res t. f s = (res,t) ==> t = s) ==>
+  state_rel_frame (foreign_immutable_frame md addr) f
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[]
+QED
+
+Theorem foreign_immutable_frame_eq_op:
+  (!s res t. f s = (res,t) ==> t.immutables = s.immutables) ==>
+  state_rel_frame (foreign_immutable_frame md addr) f
+Proof
+  simp[state_rel_frame_result] >> metis_tac[foreign_immutable_frame_eq]
+QED
+
+Theorem write_place_foreign_frame:
+  (!src name path. p = ImmutablePlace src name path ==> src <> md) ==>
+  state_rel_frame (foreign_immutable_frame md addr) (write_place cx p v)
+Proof
+  Cases_on `p` >> strip_tac >> simp[state_rel_frame_result]
+  >- (rpt strip_tac >> irule foreign_immutable_frame_eq >>
+      drule vyperPlaceFramesTheory.write_storage_place_immutables >> simp[])
+  >- (rpt strip_tac >> irule foreign_immutable_frame_eq >>
+      drule vyperPlaceFramesTheory.write_memory_place_immutables >> simp[]) >>
+  rpt strip_tac >> simp[foreign_immutable_frame_def] >>
+  irule write_place_other_module >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem append_place_foreign_frame:
+  (!src name path. p = ImmutablePlace src name path ==> src <> md) ==>
+  state_rel_frame (foreign_immutable_frame md addr) (append_place cx p v)
+Proof
+  Cases_on `p`
+  >- (strip_tac >> irule foreign_immutable_frame_eq_op >>
+      metis_tac[vyperScopePreservationTheory.append_storage_place_scopes_immutables]) >>
+  strip_tac >> simp[state_rel_frame_result, append_place_def, bind_def,
+    lift_sum_def, return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac vyperStateTheory.place_type_value_state >>
+  imp_res_tac vyperStateTheory.read_place_state >> gvs[] >>
+  gvs[GSYM lift_sum_def] >>
+  imp_res_tac vyperStatePreservationTheory.lift_sum_state >> gvs[]
+  >~ [`write_place cx (MemoryPlace _ _) _ _ = _`]
+  >- (irule foreign_immutable_frame_eq >>
+      drule write_memory_place_immutables >> simp[]) >>
+  simp[foreign_immutable_frame_def] >>
+  irule write_place_other_module >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem foreign_immutable_frame_reads:
+  state_rel_frame (foreign_immutable_frame md addr) (read_result cx tv) /\
+  state_rel_frame (foreign_immutable_frame md addr) (read_results cx results) /\
+  state_rel_frame (foreign_immutable_frame md addr) (select_result cx ann tv sb) /\
+  state_rel_frame (foreign_immutable_frame md addr) (conditional_result cx tv) /\
+  state_rel_frame (foreign_immutable_frame md addr) (lookup_global cx src id) /\
+  state_rel_frame (foreign_immutable_frame md addr) (lookup_flag_mem cx nsid mid) /\
+  state_rel_frame (foreign_immutable_frame md addr) (read_storage_slot cx b slot ty) /\
+  state_rel_frame (foreign_immutable_frame md addr) (result_array_length cx tv) /\
+  state_rel_frame (foreign_immutable_frame md addr) (lift_sum z) /\
+  state_rel_frame (foreign_immutable_frame md addr) (get_immutables cx src) /\
+  state_rel_frame (foreign_immutable_frame md addr) (get_place pv) /\
+  state_rel_frame (foreign_immutable_frame md addr) (read_place cx p) /\
+  state_rel_frame (foreign_immutable_frame md addr) (place_type_value cx p) /\
+  state_rel_frame (foreign_immutable_frame md addr) (extend_place cx pv sb) /\
+  state_rel_frame (foreign_immutable_frame md addr) (resolve_array_element cx b slot ty subs)
+Proof
+  rpt conj_tac >> irule foreign_immutable_frame_state >> rpt strip_tac
+  >~ [`read_result _ _ _ = _`] >- (drule vyperStateTheory.read_result_state >> simp[])
+  >~ [`read_results _ _ _ = _`] >- (drule vyperStateTheory.read_results_state >> simp[])
+  >~ [`select_result _ _ _ _ _ = _`] >- (drule vyperPlaceFramesTheory.select_result_state >> simp[])
+  >~ [`conditional_result _ _ _ = _`] >- (drule vyperStatePreservationTheory.conditional_result_state >> simp[])
+  >~ [`lookup_global _ _ _ _ = _`] >- (drule vyperStatePreservationTheory.lookup_global_state >> simp[])
+  >~ [`lookup_flag_mem _ _ _ _ = _`] >- (drule vyperStatePreservationTheory.lookup_flag_mem_state >> simp[])
+  >~ [`read_storage_slot _ _ _ _ _ = _`] >- (drule vyperStatePreservationTheory.read_storage_slot_state >> simp[])
+  >~ [`result_array_length _ _ _ = _`] >- (drule vyperStatePreservationTheory.result_array_length_state >> simp[])
+  >~ [`lift_sum _ _ = _`] >- (drule vyperStatePreservationTheory.lift_sum_state >> simp[])
+  >~ [`get_immutables _ _ _ = _`] >- (drule vyperStatePreservationTheory.get_immutables_state >> simp[])
+  >~ [`get_place _ _ = _`] >- (drule vyperPlaceFramesTheory.get_place_state >> simp[])
+  >~ [`read_place _ _ _ = _`] >- (drule vyperStateTheory.read_place_state >> simp[])
+  >~ [`place_type_value _ _ _ = _`] >- (drule vyperStateTheory.place_type_value_state >> simp[])
+  >~ [`extend_place _ _ _ _ = _`] >- (drule vyperPlaceFramesTheory.extend_place_state >> simp[]) >>
+  drule vyperStatePreservationTheory.resolve_array_element_state >> simp[]
+QED
+
+
+Theorem foreign_immutable_frame_primitives:
+  state_rel_frame (foreign_immutable_frame md addr) get_scopes /\
+  state_rel_frame (foreign_immutable_frame md addr) (set_scopes scs) /\
+  state_rel_frame (foreign_immutable_frame md addr) push_scope /\
+  state_rel_frame (foreign_immutable_frame md addr) pop_scope /\
+  state_rel_frame (foreign_immutable_frame md addr) (push_scope_with_var nm ty v) /\
+  state_rel_frame (foreign_immutable_frame md addr) (new_variable id ty v) /\
+  state_rel_frame (foreign_immutable_frame md addr) (append_logs ls) /\
+  state_rel_frame (foreign_immutable_frame md addr) (push_log lg) /\
+  state_rel_frame (foreign_immutable_frame md addr) (get_pending_deletions) /\
+  state_rel_frame (foreign_immutable_frame md addr) (update_pending_deletions fp) /\
+  state_rel_frame (foreign_immutable_frame md addr) (push_function fn sc cx) /\
+  state_rel_frame (foreign_immutable_frame md addr) (pop_function scs)
+Proof
+  rpt conj_tac >> irule foreign_immutable_frame_eq_op >>
+  simp[get_scopes_def, set_scopes_def, push_scope_def, pop_scope_def,
+    push_scope_with_var_def, new_variable_def, append_logs_def, push_log_def,
+    get_pending_deletions_def, update_pending_deletions_def,
+    push_function_def, pop_function_def, bind_def, ignore_bind_def,
+    return_def, raise_def, lift_option_type_def, type_check_def,
+    assert_def, check_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[set_scopes_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `s.scopes` >> gvs[set_scopes_def, return_def, raise_def]
+QED
+
+Theorem pop_place_foreign_frame:
+  (!src name path. p = ImmutablePlace src name path ==> src <> md) ==>
+  state_rel_frame (foreign_immutable_frame md addr) (pop_place cx p)
+Proof
+  Cases_on `p`
+  >- (strip_tac >> irule foreign_immutable_frame_eq_op >>
+      metis_tac[vyperScopePreservationTheory.pop_storage_place_scopes_immutables])
+  >- (rename1 `MemoryPlace id path` >> strip_tac >>
+      irule foreign_immutable_frame_eq_op >> rpt strip_tac >>
+      rename1 `pop_place cx (MemoryPlace id path) st = (res,st')` >>
+      `machine_frame st st'` by
+        (metis_tac[SRULE [state_rel_frame_result] machine_frame_pop_memory_place]) >>
+      gvs[machine_frame_def]) >>
+  strip_tac >> simp[state_rel_frame_result, foreign_immutable_frame_def] >>
+  rpt strip_tac >> irule pop_place_other_module >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem foreign_frame_exprs_every:
+  foreign_frame_exprs cx es <=> EVERY (foreign_frame_expr cx) es
+Proof
+  Induct_on `es` >> simp[]
+QED
+
+Theorem foreign_frame_custom_error_args:
+  foreign_frame_exprs cx (custom_error_exprs err) /\
+  order_custom_error_args params err = SOME es ==> foreign_frame_exprs cx es
+Proof
+  strip_tac >> drule order_custom_error_args_perm >>
+  gvs[foreign_frame_exprs_every] >>
+  metis_tac[sortingTheory.PERM_EVERY]
+QED
+
+Theorem foreign_immutable_frame_locks:
+  state_rel_frame (foreign_immutable_frame md addr) (lock_if_nr cx nr view) /\
+  state_rel_frame (foreign_immutable_frame md addr) (unlock_if_nr cx nr view)
+Proof
+  Cases_on `nr` >> Cases_on `view` >>
+  Cases_on `cx.nonreentrant_slot` >>
+  simp[lock_if_nr_def, unlock_if_nr_def] >> rpt conj_tac >>
+  irule foreign_immutable_frame_eq_op >> rpt strip_tac >>
+  gvs[return_def, raise_def] >>
+  metis_tac[vyperStatePreservationTheory.acquire_nonreentrant_lock_immutables,
+    vyperStatePreservationTheory.release_nonreentrant_lock_immutables]
+QED
+
+Theorem foreign_immutable_frame_empty_defaults:
+  state_rel_frame (foreign_immutable_frame md addr)
+    (finally (do set_scopes [FEMPTY]; eval_exprs cx [] od) (set_scopes prev))
+Proof
+  irule state_rel_frame_finally >>
+  conj_tac >- metis_tac[foreign_immutable_frame_trans] >>
+  simp[foreign_immutable_frame_primitives] >>
+  rewrite_tac[ignore_bind_def] >> irule foreign_immutable_frame_bind >>
+  simp[foreign_immutable_frame_primitives] >> rpt strip_tac >>
+  simp[Once evaluate_def, state_rel_frame_def, return_def]
+QED
+
+Theorem foreign_immutable_frame_function_tail:
+  !body. state_rel_frame (foreign_immutable_frame md addr) (eval_stmts cxf body) ==>
+  state_rel_frame (foreign_immutable_frame md addr)
+    (finally (try (do eval_stmts cxf body; return NoneV od) handle_function)
+      (do pop_function prev; unlock_if_nr cx nr view od))
+Proof
+  rpt strip_tac >> irule state_rel_frame_finally >>
+  conj_tac >- metis_tac[foreign_immutable_frame_trans] >>
+  conj_tac
+  >- (irule state_rel_frame_try >>
+      conj_tac >- metis_tac[foreign_immutable_frame_trans] >>
+      conj_tac
+      >- (gen_tac >> Cases_on `e` >>
+          simp[handle_function_def, state_rel_frame_def, return_def, raise_def]) >>
+      rewrite_tac[ignore_bind_def] >>
+      irule foreign_immutable_frame_bind >> simp[] >> rpt strip_tac >>
+      simp[state_rel_frame_def, return_def]) >>
+  rewrite_tac[ignore_bind_def] >> irule foreign_immutable_frame_bind >>
+  simp[foreign_immutable_frame_primitives] >> rpt strip_tac >>
+  rewrite_tac[GSYM unlock_if_nr_def] >>
+  metis_tac[foreign_immutable_frame_locks]
+QED
+
+Theorem foreign_frame_stmts_push_function:
+  !stmts. foreign_frame_stmts cx stmts /\
+    push_function fn sc cx s = (INL cxf,t) ==>
+    foreign_frame_stmts cxf stmts
+Proof
+  rpt strip_tac >> gvs[push_function_def, return_def] >>
+  qspecl_then [`cx`, `stmts`, `cx with stk updated_by CONS fn`] mp_tac
+    (CONJUNCT2 foreign_frame_stmt_context) >>
+  simp[vyperContextTheory.get_module_code_def]
+QED
+
+Theorem eval_bind_return[local]:
+  bind (return v) k = k v
+Proof
+  simp[FUN_EQ_THM, bind_def, return_def]
+QED
+
+Theorem eval_bind_assert_true[local]:
+  bind (assert T e) k = k ()
+Proof
+  simp[FUN_EQ_THM, bind_def, assert_def]
+QED
+
+Theorem eval_foreign_immutable_frame_mutual:
+  (!cx stmt s res t md addr.
+    md <> NONE /\ foreign_frame_stmt cx stmt /\ eval_stmt cx stmt s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx stmts s res t md addr.
+    md <> NONE /\ foreign_frame_stmts cx stmts /\ eval_stmts cx stmts s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx it s res t md addr.
+    md <> NONE /\ foreign_frame_iterator cx it /\ eval_iterator cx it s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx tyv nm body vs s res t md addr.
+    md <> NONE /\ foreign_frame_stmts cx body /\ eval_for cx tyv nm body vs s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx e s res t md addr.
+    md <> NONE /\ foreign_frame_expr cx e /\ eval_expr cx e s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx es s res t md addr.
+    md <> NONE /\ foreign_frame_exprs cx es /\ eval_exprs cx es s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx bt s res t md addr.
+    md <> NONE /\ foreign_frame_target cx bt /\ eval_base_place cx bt s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx bt s res t md addr.
+    md <> NONE /\ foreign_frame_target cx bt /\ eval_target_place cx bt s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx at v s res t md addr.
+    md <> NONE /\ foreign_frame_assignment cx at /\ assign_tuple_targets cx at v s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx ats vs s res t md addr.
+    md <> NONE /\ EVERY (foreign_frame_assignment cx) ats /\ assign_tuple_target_list cx ats vs s = (res,t) ==>
+    foreign_immutable_frame md addr s t) /\
+  (!cx es s res t md addr.
+    md <> NONE /\ foreign_frame_exprs cx es /\ eval_expr_results cx es s = (res,t) ==>
+    foreign_immutable_frame md addr s t)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`eval_stmt cx Pass`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_stmt cx Break`]
+  >- (simp[Once evaluate_def, raise_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_stmt cx Continue`]
+  >- (simp[Once evaluate_def, raise_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_stmts cx []`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_exprs cx []`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_expr_results cx []`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]) >>
+  all_tac
+  >~ [`eval_stmt cx (Return NONE)`]
+  >- (simp[Once evaluate_def, raise_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_expr cx (Literal ty lit)`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]) >>
+  all_tac
+  >~ [`eval_stmt cx (Return (SOME e))`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        bind_def, raise_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_stmt cx (Raise RaiseBare)`]
+  >- (simp[Once evaluate_def, raise_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_stmt cx (Raise RaiseUnreachable)`]
+  >- (simp[Once evaluate_def, raise_def] >> rpt strip_tac >> gvs[])
+  >~ [`eval_expr cx (Name ty id)`]
+  >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
+        type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >~ [`eval_expr cx (TopLevelName ty src_name)`]
+  >- (PairCases_on `src_name` >> rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac vyperStatePreservationTheory.lookup_global_state >> gvs[])
+  >~ [`eval_expr cx (FlagMember ty nsid mid)`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac vyperStatePreservationTheory.lookup_flag_mem_state >> gvs[]) >>
+  (* Statement results. *)
+  all_tac
+  >~ [`eval_stmt cx (Raise (RaiseReason e))`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        bind_def, raise_def, lift_option_type_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[GSYM lift_option_type_def] >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      gvs[] >> metis_tac[])
+  >~ [`eval_stmt cx (Expr e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        bind_def, type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      metis_tac[])
+  >~ [`eval_stmts cx (stmt::stmts)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        ignore_bind_def, bind_def, AllCaseEqs()] >>
+      metis_tac[foreign_immutable_frame_trans])
+  >~ [`eval_exprs cx (e::es)`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      metis_tac[foreign_immutable_frame_trans])
+  >~ [`eval_expr_results cx (e::es)`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_stmt cx (Raise (RaiseCustomError err))`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def] >>
+      Cases_on `err` >> gvs[Once evaluate_def, bind_def, raise_def,
+        lift_option_def, option_CASE_rator, AllCaseEqs()] >>
+      imp_res_tac foreign_frame_custom_error_args >>
+      gvs[GSYM lift_option_def] >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_state >> gvs[return_def] >>
+      metis_tac[]) >>
+  (* Assertions and declarations. *)
+  all_tac
+  >~ [`eval_stmt cx (Assert e AssertBare)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        switch_BoolV_def, bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >> metis_tac[])
+  >~ [`eval_stmt cx (Assert e AssertUnreachable)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        switch_BoolV_def, bind_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_stmt cx (Assert e (AssertReason reason))`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        switch_BoolV_def, bind_def, raise_def, return_def, lift_option_type_def,
+        option_CASE_rator, COND_RATOR, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_stmt cx (Assert e (AssertCustomError err))`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def] >> Cases_on `err` >>
+      gvs[Once evaluate_def, switch_BoolV_def, bind_def, raise_def, return_def,
+        lift_option_def, option_CASE_rator, COND_RATOR, AllCaseEqs()] >>
+      imp_res_tac foreign_frame_custom_error_args >>
+      imp_res_tac read_result_state >> gvs[return_def] >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_stmt cx (Log id es)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def, bind_def,
+        lift_option_def, option_CASE_rator, push_log_def, append_logs_def,
+        return_def, raise_def, AllCaseEqs()] >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_stmt cx (AnnAssign id typ e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, Once evaluate_def,
+        bind_def, AllCaseEqs()] >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      imp_res_tac read_result_state >> gvs[] >>
+      imp_res_tac (SRULE [state_rel_frame_result] (cj 6 foreign_immutable_frame_primitives)) >>
+      qpat_x_assum `!st tyv t. _ ==> _` (drule_then assume_tac) >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+  (* Append and assignment. *)
+  all_tac
+  >~ [`eval_stmt cx (Append bt e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, foreign_frame_write_target_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> gvs[] >>
+      qpat_x_assum `!st p t. _ ==> _` (drule_then assume_tac) >>
+      `!src name path. p = ImmutablePlace src name path ==> src <> md` by
+        (rpt strip_tac >> gvs[] >>
+         drule_all main_root_target_place_immutable_module >> simp[]) >>
+      qpat_x_assum `!st res t md addr. _ /\ eval_target_place _ _ _ = _ ==> _`
+        (drule_all_then assume_tac) >>
+      qpat_x_assum `!st res t md addr. _ /\ eval_expr _ _ _ = _ ==> _`
+        (drule_all_then assume_tac) >>
+      drule append_place_foreign_frame >>
+      simp[state_rel_frame_result] >> strip_tac >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_stmt cx (Assign (BaseTarget bt) e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, foreign_frame_assignment_def,
+        foreign_frame_write_target_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> gvs[] >>
+      qpat_x_assum `!st pv t. _ ==> _` (drule_then assume_tac)
+      >~ [`write_place cx p v u = (res,t)`]
+      >- (`!src name path. p = ImmutablePlace src name path ==> src <> md` by
+        (rpt strip_tac >> gvs[] >>
+         drule_all main_root_target_place_immutable_module >> simp[]) >>
+      qpat_x_assum `!st res t md addr. _ /\ eval_target_place _ _ _ = _ ==> _`
+        (drule_all_then assume_tac) >>
+      qpat_x_assum `!st res t md addr. _ /\ eval_expr _ _ _ = _ ==> _`
+        (drule_all_then assume_tac) >>
+      drule write_place_foreign_frame >>
+      simp[state_rel_frame_result] >> strip_tac >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  (* Tuple and augmented assignment. *)
+  all_tac
+  >~ [`eval_stmt cx (Assign (TupleTarget gs) e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> gvs[] >>
+      qpat_x_assum `!st tv t st' v t'. _ ==> _` (drule_all_then assume_tac) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_stmt cx (AugAssign ty bt bop e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def, foreign_frame_write_target_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> imp_res_tac read_place_state >>
+      imp_res_tac place_type_value_state >>
+      imp_res_tac vyperStatePreservationTheory.lift_sum_state >> gvs[] >>
+      qpat_x_assum `!st p t st' cur t' st'' ptv t''. _ ==> _`
+        (drule_all_then assume_tac)
+      >~ [`write_place cx p v u = (res,t)`]
+      >- (`!src name path. p = ImmutablePlace src name path ==> src <> md` by
+            (rpt strip_tac >> gvs[] >>
+             drule_all main_root_target_place_immutable_module >> simp[]) >>
+          qpat_x_assum `!st res t md addr. _ /\ eval_target_place _ _ _ = _ ==> _`
+            (drule_all_then assume_tac) >>
+          drule write_place_foreign_frame >>
+          simp[state_rel_frame_result] >> strip_tac >>
+          gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  (* Conditionals and for loops. *)
+  all_tac
+  >~ [`eval_stmt cx (If e ss1 ss2)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      gvs[ignore_bind_def, bind_def, finally_def, switch_BoolV_def,
+        return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      imp_res_tac (SRULE [state_rel_frame_result] (cj 3 foreign_immutable_frame_primitives)) >>
+      imp_res_tac (SRULE [state_rel_frame_result] (cj 4 foreign_immutable_frame_primitives)) >>
+      gvs[push_scope_def, set_scopes_def, return_def]
+      >>~- ([`eval_expr cx e s = (INL tv,u)`],
+            ntac 2 (qpat_x_assum `!st tv t. _ ==> _` (drule_then assume_tac)) >>
+            qpat_x_assum `!st res t md addr. _ /\ eval_expr _ _ _ = _ ==> _`
+              (drule_all_then assume_tac)
+            >>~- ([`eval_stmts cx ss u = (r,t)`],
+                  first_x_assum (drule_all_then assume_tac) >>
+                  gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+            gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_stmt cx (For nm typ it n stmts)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_stmt_def] >>
+      qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      gvs[check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      gvs[ignore_bind_def, bind_def, assert_def, return_def, raise_def,
+        COND_RATOR, AllCaseEqs()] >>
+      qpat_x_assum `!st tyv t. _ ==> _` (drule_then assume_tac)
+      >>~- ([`eval_for cx tyv nm stmts vs u = (res,t)`],
+            qpat_x_assum `!st tyv t st' vs t'. _ ==> _` (drule_all_then assume_tac) >>
+            metis_tac[foreign_immutable_frame_trans]) >>
+      metis_tac[]) >>
+  (* Iterators and remaining cases. *)
+  all_tac
+  >~ [`eval_iterator cx (Array e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_iterator_def] >>
+      qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
+      gvs[] >> metis_tac[])
+  >~ [`eval_iterator cx (Range e1 e2)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_iterator_def] >>
+      qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperStatePreservationTheory.lift_sum_state >> gvs[] >>
+      qpat_x_assum `!st tv t st' v t'. _ ==> _` (drule_all_then assume_tac) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_for cx tyv nm stmts [] s`]
+  >- (simp[Once evaluate_def, return_def] >> rpt strip_tac >> gvs[]) >>
+  all_tac
+  >~ [`eval_target_place cx bt`, `eval_base_place cx bt`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperPlaceFramesTheory.get_place_state >> gvs[] >> metis_tac[]) >>
+  (* Target and expression clauses. *)
+  all_tac
+  >~ [`eval_base_place cx (NameTarget id)`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, get_scopes_def, bind_def,
+        ignore_bind_def, type_check_def, assert_def, return_def, raise_def,
+        COND_RATOR, AllCaseEqs()])
+  >~ [`eval_base_place cx (TopLevelNameTarget src_name)`]
+  >- (PairCases_on `src_name` >> rpt strip_tac >> gvs[Once evaluate_def] >>
+      imp_res_tac vyperStatePreservationTheory.lookup_global_state >> gvs[])
+  >~ [`eval_base_place cx (AttributeTarget bt id)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_target_def] >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperPlaceFramesTheory.extend_place_state >> gvs[] >> metis_tac[])
+  >~ [`eval_base_place cx (SubscriptTarget bt e)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_target_def] >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperPlaceFramesTheory.extend_place_state >> gvs[] >>
+      qpat_x_assum `!st pv t. _ ==> _` (drule_then assume_tac) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`assign_tuple_targets cx (TupleTarget ats)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_assignment_def, foreign_frame_assignments_every] >>
+      qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, vyperValueTheory.value_CASE_rator,
+        vyperValueTheory.array_value_CASE_rator,
+        raise_def, AllCaseEqs()] >> strip_tac >> gvs[] >> metis_tac[])
+  >~ [`assign_tuple_targets cx (BaseTarget bt)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_assignment_def, foreign_frame_write_target_def] >>
+      qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac
+      >~ [`write_place cx p v u = (res,t)`]
+      >- (`!src name path. p = ImmutablePlace src name path ==> src <> md` by
+            (rpt strip_tac >> gvs[] >>
+             drule_all main_root_target_place_immutable_module >> simp[]) >>
+          drule write_place_foreign_frame >> simp[state_rel_frame_result] >> strip_tac >>
+          gvs[foreign_immutable_frame_def] >> metis_tac[]) >> metis_tac[]) >>
+  (* Pop, lists and expressions. *)
+  all_tac
+  >~ [`eval_expr cx (Pop ty bt)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 6 foreign_frame_expr_children) >>
+      gvs[foreign_frame_write_target_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac
+      >~ [`pop_place cx p u = (res,t)`]
+      >- (`!src name path. p = ImmutablePlace src name path ==> src <> md` by
+            (rpt strip_tac >> gvs[] >>
+             drule_all main_root_target_place_immutable_module >> simp[]) >>
+          drule pop_place_foreign_frame >> simp[state_rel_frame_result] >> strip_tac >>
+          gvs[foreign_immutable_frame_def] >> metis_tac[]) >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_expr cx (Attribute ty e id)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 3 foreign_frame_expr_children) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >> metis_tac[])
+  >~ [`eval_expr cx (Subscript ty obj key)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 2 foreign_frame_expr_children) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+      qpat_x_assum `!st res t. _ ==> _` (drule_then assume_tac) >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_expr cx (Call ty RawLog es opt)`]
+  >- (rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, lift_option_type_def, push_log_def, append_logs_def,
+        return_def, raise_def, COND_RATOR, option_CASE_rator, AllCaseEqs()] >> strip_tac >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[])
+  >~ [`eval_expr cx (Call ty RawRevert es opt)`]
+  >- (rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_expr cx (Call ty SelfDestructTarget es opt)`]
+  >- (rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+        lift_option_type_def, option_CASE_rator, get_accounts_def,
+        return_def, raise_def, COND_RATOR, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperStatePreservationTheory.transfer_value_immutables >>
+      gvs[foreign_immutable_frame_def] >> metis_tac[])
+  >~ [`eval_expr cx (Call ty (RawCallTarget flags) es opt)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_expr_def, supported_expr_exists_def,
+        foreign_frame_bad_def, expr_evm_run_root_def])
+  >~ [`eval_expr cx (Call ty (RawCallCalldataTarget flags) es opt)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_expr_def, supported_expr_exists_def,
+        foreign_frame_bad_def, expr_evm_run_root_def])
+  >~ [`eval_expr cx (Call ty (Send gas) es opt)`]
+  >- (rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+      strip_tac >> imp_res_tac eval_send_preserves_non_accounts >>
+      gvs[foreign_immutable_frame_def, type_check_def, assert_def, return_def] >>
+      metis_tac[]) >>
+  (* Remaining calls and lists. *)
+  all_tac
+  >~ [`assign_tuple_target_list cx [] []`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, return_def])
+  >~ [`assign_tuple_target_list cx (at::ats) (v::vs)`]
+  >- (rpt strip_tac >> gvs[] >>
+      qpat_x_assum `assign_tuple_target_list _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+      strip_tac >> gvs[] >>
+      metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_expr cx (StructLit ty (src,name) fields)`]
+  >- (rpt strip_tac >> drule foreign_frame_structlit_fields >>
+      simp[listTheory.EVERY_MAP] >> strip_tac >>
+      `foreign_frame_exprs cx (MAP SND fields)` by
+        (qpat_x_assum `EVERY _ fields` mp_tac >>
+         qid_spec_tac `fields` >> Induct >> simp[]) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      strip_tac >> metis_tac[])
+  >~ [`eval_expr cx (TypeBuiltin ty tb typ es)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 5 foreign_frame_expr_children) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, lift_sum_def, return_def, raise_def, COND_RATOR,
+        sum_CASE_rator, AllCaseEqs()] >> strip_tac >>
+      gvs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+  all_tac
+  >~ [`eval_expr cx (IfExp ty c a b)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 1 foreign_frame_expr_children) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, switch_BoolV_def, bind_def, return_def,
+        raise_def, COND_RATOR, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
+      gvs[] >> metis_tac[foreign_immutable_frame_trans]) >>
+  all_tac
+  >~ [`eval_expr cx (Builtin ty bt es)`]
+  >- (rpt strip_tac >> imp_res_tac (cj 4 foreign_frame_expr_children) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+        assert_def, lift_sum_def, return_def, raise_def, get_accounts_def,
+        COND_RATOR, sum_CASE_rator, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac vyperStatePreservationTheory.result_array_length_state >>
+      imp_res_tac vyperStatePreservationTheory.next_gas_reading_state >>
+      gvs[foreign_immutable_frame_def, type_check_def, assert_def, return_def]
+      >>~- ([`foreign_frame_expr cx (Builtin ty Len es)`],
+        `foreign_frame_expr cx (HD es)` by
+          (Cases_on `es` >> gvs[vyperContextTheory.builtin_args_length_ok_def]) >>
+        metis_tac[]) >> metis_tac[]) >>
+  (* Loops and calls. *)
+  all_tac
+  >~ [`eval_expr cx (Call ty (CreateTarget kind salt rof) es opt)`]
+  >- (rpt strip_tac >> gvs[foreign_frame_expr_def, supported_expr_exists_def,
+        foreign_frame_bad_def, expr_evm_run_root_def])
+  >~ [`assign_tuple_target_list cx (a::ats) []`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, raise_def])
+  >~ [`assign_tuple_target_list cx [] (v::vs)`]
+  >- (rpt strip_tac >> gvs[Once evaluate_def, raise_def]) >>
+  all_tac
+  >~ [`eval_for cx ty nm ss (v::vs)`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `eval_for _ _ _ _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >>
+      strip_tac >>
+      imp_res_tac (SRULE [state_rel_frame_result] (cj 5 foreign_immutable_frame_primitives)) >>
+      gvs[]
+      >~ [`push_scope_with_var nm ty v s = (INL (),u)`]
+      >- (first_x_assum (drule_then assume_tac) >>
+          Cases_on `broke` >> gvs[COND_RATOR, return_def, ignore_bind_def]
+          >>~- ([`eval_for cx ty nm ss vs u' = (res,t)`],
+            first_x_assum (drule_all_then assume_tac) >>
+            gvs[finally_def, try_def, bind_def, ignore_bind_def, return_def,
+              handle_loop_exception_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+            imp_res_tac (SRULE [state_rel_frame_result] (cj 4 foreign_immutable_frame_primitives)) >>
+            gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+          gvs[finally_def, try_def, bind_def, ignore_bind_def, return_def,
+            handle_loop_exception_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+          imp_res_tac (SRULE [state_rel_frame_result] (cj 4 foreign_immutable_frame_primitives)) >>
+          gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      all_tac
+      >~ [`push_scope_with_var nm ty v s = (INL (),u)`]
+      >- (first_x_assum (drule_then assume_tac) >>
+          gvs[finally_def, try_def, bind_def, ignore_bind_def, return_def,
+            handle_loop_exception_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+          imp_res_tac (SRULE [state_rel_frame_result] (cj 4 foreign_immutable_frame_primitives)) >>
+          gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      metis_tac[]) >>
+  (* Internal and external calls. *)
+  all_tac
+  >~ [`eval_expr cx (Call ty (ExtCall static skip sig opts) es opt)`]
+  >- (rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+      `!n. foreign_frame_exprs cx (TAKE n es) /\
+           foreign_frame_exprs cx (DROP n es)` by
+        (gvs[foreign_frame_exprs_every] >>
+         metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+      `!n m. foreign_frame_exprs cx (TAKE n (DROP m es))` by
+        (gvs[foreign_frame_exprs_every] >>
+         metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP]) >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_results_state >>
+      imp_res_tac eval_ext_call_preserves_non_accounts >> gvs[]
+      >>~- ([`eval_expr_results cx xs u = (INL results,w)`],
+        qpat_x_assum `!a b c d e f. _ ==> _` (drule_all_then assume_tac) >>
+        qpat_x_assum `!a b c. _ ==> _` (drule_then assume_tac) >>
+        gvs[foreign_immutable_frame_def] >> metis_tac[])
+      >>~- ([`eval_expr_results cx xs u = (INR err,w)`],
+        qpat_x_assum `!a b c. _ ==> _` (drule_then assume_tac) >>
+        gvs[foreign_immutable_frame_def] >> metis_tac[]) >>
+      metis_tac[]) >>
+  (* Internal call: guarded composition of administrative frames. *)
+  rpt strip_tac >> imp_res_tac foreign_frame_call_args >>
+  drule foreign_frame_intcall_callee >>
+  simp[foreign_frame_callee_def] >> strip_tac >>
+  rule_assum_tac (SIMP_RULE (srw_ss())
+    [type_check_def, assert_def, lift_option_type_def, option_CASE_rator,
+     return_def, raise_def, AllCaseEqs()]) >>
+  qpat_x_assum `src_id_opt = NONE` SUBST_ALL_TAC >>
+  Cases_on `lookup_callable_function cx.in_deploy fn tops`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+        ignore_bind_def, lift_option_type_def, return_def, raise_def,
+        COND_RATOR, AllCaseEqs()] >> strip_tac >> gvs[]) >>
+  rename1 `lookup_callable_function cx.in_deploy fn tops = SOME tup` >>
+  PairCases_on `tup` >>
+  drule_all supported_callable_foreign_frame >> strip_tac >>
+  gvs[] >>
+  Cases_on `MEM (NONE,fn) cx.stk`
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+        return_def, raise_def, ignore_bind_def] >> strip_tac >>
+      gvs[assert_def, ignore_bind_def, bind_def, raise_def]) >>
+  reverse (Cases_on `LENGTH es = LENGTH tup2`)
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, type_check_def, assert_def, bind_def,
+        ignore_bind_def, lift_option_type_def, return_def, raise_def] >>
+      strip_tac >> gvs[]) >>
+  qpat_x_assum `_ ==> !s'' res t' md' addr. _` (mp_tac) >>
+  simp[] >> disch_tac >>
+  qpat_assum `eval_expr _ _ _ = _` (mp_then Any irule state_rel_frame_at) >>
+  qpat_x_assum `eval_expr _ _ _ = _` kall_tac >>
+  simp[Once evaluate_def, type_check_def, assert_def,
+    lift_option_type_def, return_def, ignore_bind_def] >>
+  simp[eval_bind_return, eval_bind_assert_true] >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac
+  >- (simp[state_rel_frame_result] >> rpt strip_tac >>
+      first_x_assum irule >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >> BETA_TAC >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac >- simp[foreign_immutable_frame_primitives] >>
+  rpt strip_tac >> BETA_TAC >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac
+  >- (rewrite_tac[GSYM ignore_bind_def] >>
+      irule foreign_immutable_frame_empty_defaults) >>
+  rpt strip_tac >> BETA_TAC >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac >- simp[foreign_immutable_frame_reads] >>
+  rpt strip_tac >> BETA_TAC >>
+  rename1 `bind_arguments (get_tenv cx) tup2 (vs ++ dflt_vs)` >>
+  Cases_on `bind_arguments (get_tenv cx) tup2 (vs ++ dflt_vs)`
+  >- (irule foreign_immutable_frame_state >>
+      simp[bind_def, raise_def]) >>
+  simp[eval_bind_return] >>
+  Cases_on `evaluate_type (get_tenv cx) tup4`
+  >- (irule foreign_immutable_frame_state >>
+      simp[bind_def, raise_def]) >>
+  simp[eval_bind_return] >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac
+  >- (rewrite_tac[GSYM lock_if_nr_def] >>
+      metis_tac[foreign_immutable_frame_locks]) >>
+  rpt strip_tac >> BETA_TAC >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac >- simp[foreign_immutable_frame_primitives] >>
+  rpt strip_tac >> BETA_TAC >>
+  rename1 `(if tup1 then _ else _) lockst = (INL lockval,lockend)` >>
+  Cases_on `lockval` >>
+  `LENGTH es <= LENGTH tup2 /\ LENGTH tup2 <= LENGTH es` by simp[] >>
+  rule_assum_tac (REWRITE_RULE [ignore_bind_def]) >>
+  qpat_x_assum `!a b c d e f g h i j. _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_x_assum `!a b c d e f g h i j. _` mp_tac >>
+  rpt (disch_then drule) >> strip_tac >>
+  drule_all foreign_frame_stmts_push_function >> strip_tac >>
+  irule foreign_immutable_frame_bind >>
+  reverse conj_tac
+  >- (rewrite_tac[GSYM ignore_bind_def, CONJ_ASSOC] >>
+      irule (REWRITE_RULE [unlock_if_nr_def, DE_MORGAN_THM, CONJ_ASSOC]
+        foreign_immutable_frame_function_tail) >>
+      simp[state_rel_frame_result] >> rpt strip_tac >>
+      first_x_assum irule >> simp[] >> goal_assum (drule_at Any)) >>
+  rpt strip_tac >> BETA_TAC >>
+  irule foreign_immutable_frame_state >>
+  simp[bind_def, return_def, raise_def, option_CASE_rator, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
