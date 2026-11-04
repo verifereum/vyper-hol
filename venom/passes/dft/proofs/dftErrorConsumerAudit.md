@@ -366,3 +366,91 @@ rather than revisiting OutsideDomain or arbitrary bytecode enumeration.
 Evidence: imported exact step/run signatures m4481; definition m4483;
 checked boundary build recorded with this episode. All temporary inspection
 theorems removed.
+
+## C3.2.41.4 Remaining fatal routes and totality audit
+
+**Correction to the earlier termination residual:** loaded
+`vfmDecreasesGas.run_eq_tr` is unconditional:
+```
+run s = case run_tr (step s) of (x,y) => SOME (INR x,y)
+run_tr (r,s) = case r of INL _ => run_tr (step s) | INR x => (x,s)
+```
+The second function is defined by well-founded recursion, not OWHILE.
+`decreases_gas_cred_step` states `decreases_gas_cred T 0 0 step` without
+premises. Thus no CREATE-constructor invariant is needed for run totality.
+The new checked `create_probe_run_not_none` excludes NONE for **every** es;
+`create_probe_extract_run_none_iff` reduces extraction failure exactly to a
+SOME result with final context length different from one. This is a theorem
+application, not an inference merely from finite gas. Earlier loaded-name
+search for "terminat" missed the relevant interface.
+
+Production-site inspection of loaded vfm definitions (excluding generated
+CV conversions and datatype eliminators) found:
+- No Unimplemented-producing runtime clause in this inspection. The tag
+  occurs in vfm_abort and the exception datatype. This is **not** yet a
+  compositional theorem excluding Unimplemented from step/run.
+- `get_current_context`, `get_original`, `set_current_context`,
+  `set_original`, and `pop_context` fail Impossible if contexts=[].
+- `unuse_gas n` asserts n <= current_context.gasUsed with Impossible.
+- `dispatch_precompiles a` falls back to fail Impossible outside its listed
+  addresses (1..17 and 256).
+- `vfmDecreasesGas.pop_helper` asserts 1 < number of contexts with
+  Impossible. It is an auxiliary proof interface, not evidence it is an
+  independently reachable runtime branch.
+- `step_inst_def` covers all opcode constructors, including Invalid as
+  fail InvalidOpcode; it has no direct Unimplemented fallback.
+
+Exact applicable or conditional imported interfaces:
+```
+vfmExecutionProp.step_preserves_nonempty_contexts:
+  s.contexts <> [] ==> (SND (step s)).contexts <> []
+vfmExecutionProp.run_preserves_nonempty_contexts:
+  run s = SOME rs /\ s.contexts <> [] ==> (SND rs).contexts <> []
+vfmRunWithinFrame.dispatch_precompiles_inr_not_reverted_not_abort:
+  s.contexts <> [] /\ fIN a precompile_addresses /\
+  dispatch_precompiles a s = (INR e,s') ==>
+  ~vfm_abort e /\ e <> SOME Reverted
+vfmHandleStep.gas_stack_ok_parent_has_child_unused:
+  gas_stack_ok s /\ LENGTH s.contexts >= 2 ==>
+  (FST (EL 1 s.contexts)).gasUsed >=
+  (FST (HD s.contexts)).msgParams.gasLimit -
+  (FST (HD s.contexts)).gasUsed
+vfmRunCall.step_preserves_gas_stack_ok:
+  wf_state s ==> gas_stack_ok (SND (step s))
+vfmRunCall.run_preserves_wf_state:
+  wf_state s /\ run s = SOME (r,s') ==> wf_state s'
+vfmContextLength.run_contexts_length_1:
+  run s = SOME (r,t) /\ wf_state s /\
+  (!e. r = INR e ==> ~vfm_abort e) ==> LENGTH t.contexts = 1
+```
+Here gas_stack_ok bounds each parent's gasUsed below by unused gas in
+its child prefix; wf_context bounds stack length/gasUsed and equates parsed
+code to parse_code. The constructor discharges initial context, gas-stack,
+output and stack-room constraints, but full wf_state still requires exactly
+wf_accounts of the transferred accounts (create_probe_constructor_wf_iff).
+The task's o1_run_state_ok does not supply that premise. Consequently the
+wf_state-based preservation route cannot simply be instantiated. The
+precompile theorem itself has no account-validity premise; a global proof
+would still need to show dispatch only occurs at those addresses and that
+all intermediate helper contexts are nonempty. Nonempty preservation at the
+step boundary alone does not establish every internal pop/unuse assertion.
+
+Residual table:
+| route | classification | exact remaining obligation |
+|---|---|---|
+| OWHILE/run NONE | proved excluded unconditionally | none; run_eq_tr and new checked theorem |
+| finite Collect OutsideDomain | already proved excluded | global final-result lift remains separate |
+| precompile Impossible fallback | excluded conditionally by existing theorem | nonempty dispatch input and address membership at call site |
+| empty-context Impossible | boundary nonemptiness preserved without wf_accounts | internal helper sequencing/pop guards, not just step endpoints |
+| unuse_gas Impossible | conditional gas-stack interface exists | establish adequate gas-stack safety under permitted accounts without assuming full wf_state |
+| Unimplemented | no producer found in loaded-definition inspection | compositional step/run exclusion not yet proved |
+| nonsingleton final contexts | unresolved, only possible extraction-failure route | singleton result under actual task premises (or concrete nested fatal execution) |
+
+No realizable fatal counterexample or frozen-task falsehood was obtained.
+Recommended strategist decision: replace the obsolete run-NONE suspicion
+with the single concrete residual of final context-stack safety, and decide
+whether weaker account-independent gas-stack/handler safety suffices before
+requesting a universal no-Error theorem. Do not release C3.3 on this audit.
+Evidence: exact totality signatures m4525; production clauses m4521;
+nonempty/precompile/gas-stack interfaces m4529. Temporary DB-print diagnostics
+were removed; only two small theorem applications are retained.

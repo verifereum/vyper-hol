@@ -90,3 +90,17 @@ Proof
   metis_tac[create_probe_minimal_no_outside,
             vfmDomainCollectionTheory.step_computes_minimal_domain]
 QED
+
+Theorem create_probe_run_not_none:
+  run es <> NONE
+Proof
+  simp[vfmDecreasesGasTheory.run_eq_tr] >>
+  Cases_on `vfmDecreasesGas$run_tr (step es)` >> simp[]
+QED
+
+Theorem create_probe_extract_run_none_iff:
+  extract_venom_result s output off len (run es) = NONE <=>
+  ?result fs. run es = SOME (result,fs) /\ LENGTH fs.contexts <> 1
+Proof
+  simp[create_probe_extract_none_iff, create_probe_run_not_none]
+QED
