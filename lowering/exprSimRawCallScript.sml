@@ -24,7 +24,7 @@ Ancestors
   list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
-  exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
+  exprLoweringProps emitHelper emitHelperProps compileEnv localPtrsProps valueEncoding
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
@@ -1130,6 +1130,125 @@ Resume raw_call_prefix_sim[gas_code]:
 QED
 
 Finalise raw_call_prefix_sim
+
+(* Oracle tail, independent of the expression producing calldata. *)
+Theorem raw_call_oracle_step:
+  stmt_state_rel ctx func cenv cx es s /\ inst.inst_outputs = [out] /\
+  w2w aw = target /\
+  w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
+  stat = IS_NONE value_opt /\
+  take_call_outcome target (read_memory (w2n ao) (w2n az) s) value_opt es =
+    (INL (rq,outcome),es1) /\
+  (!name b sz. local_region cenv es.scopes s name b sz ==>
+     b + sz <= w2n ro \/ w2n ro + w2n rz <= b) /\
+  (cenv.ce_is_ctor ==> !name tv v off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+      | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+    off + type_memory_size tv <= w2n ro \/ w2n ro + w2n rz <= off) ==>
+  ?t. exec_ext_call inst s (gas:bytes32) aw vw ao az (ro:bytes32) (rz:bytes32) stat =
+        OK (update_var out (if outcome.co_success then 1w else 0w) t) /\
+    t = s with <| vs_outcomes := t.vs_outcomes; vs_requests := t.vs_requests;
+      vs_accounts := t.vs_accounts; vs_transient := t.vs_transient;
+      vs_logs := t.vs_logs; vs_pending_deletions := t.vs_pending_deletions;
+      vs_returndata := t.vs_returndata; vs_memory := t.vs_memory |> /\
+    t.vs_memory = (write_memory_with_expansion (w2n ro)
+      (TAKE (w2n rz) outcome.co_returnData) s).vs_memory /\
+    t.vs_returndata = outcome.co_returnData /\
+    mem_bytes_at (w2n ro) (LENGTH (TAKE (w2n rz) outcome.co_returnData)) t.vs_memory =
+      TAKE (w2n rz) outcome.co_returnData /\
+    state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) t
+Proof
+  strip_tac >>
+  `state_rel func cenv cx es s` by fs[stmt_state_rel_def] >>
+  drule_all exec_ext_call_oracle_step >>
+  disch_then (strip_assume_tac o Q.ISPECL [`gas:bytes32`, `ro:bytes32`, `rz:bytes32`]) >>
+  suspend "output_frame"
+QED
+
+Resume raw_call_oracle_step[output_frame]:
+  qabbrev_tac `payload = TAKE (w2n rz) outcome.co_returnData` >>
+  qabbrev_tac `dst = w2n ro` >>
+  `LENGTH payload <= w2n rz` by simp[Abbr `payload`, LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (write_memory_with_expansion dst payload s)` by
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     conj_tac >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
+     conj_tac >- simp[write_memory_with_expansion_def, LET_THM] >>
+     reverse conj_tac >- fs[state_rel_def] >>
+     rpt strip_tac >> irule hash_write_memory_disjoint >>
+     first_x_assum drule_all >> decide_tac) >>
+  `stmt_state_rel ctx func cenv cx es (write_memory_with_expansion dst payload s)` by
+    (irule write_memory_stmt_state_rel >> simp[] >>
+     rpt strip_tac >> first_x_assum drule >> simp[Abbr `dst`] >> decide_tac) >>
+  suspend "oracle_fields"
+QED
+
+Resume raw_call_oracle_step[oracle_fields]:
+  `s' = (write_memory_with_expansion dst payload s) with
+    <| vs_outcomes := s'.vs_outcomes; vs_requests := s'.vs_requests;
+       vs_accounts := s'.vs_accounts; vs_transient := s'.vs_transient;
+       vs_logs := s'.vs_logs; vs_pending_deletions := s'.vs_pending_deletions;
+       vs_returndata := s'.vs_returndata |>` by
+    (qpat_x_assum `_ = _ with <| vs_outcomes := _; vs_requests := _;
+       vs_accounts := _; vs_transient := _; vs_logs := _;
+       vs_pending_deletions := _; vs_returndata := _; vs_memory := _ |>` mp_tac >>
+     qpat_x_assum `s'.vs_memory = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[venom_state_component_equality, write_memory_with_expansion_def, LET_THM]) >>
+  `local_ptrs_rel func cenv es.scopes s' /\
+   immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s'` by
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ (write_memory_with_expansion _ _ _)` mp_tac >>
+     qpat_x_assum `_ = _ with <| vs_outcomes := _; vs_requests := _;
+       vs_accounts := _; vs_transient := _; vs_logs := _;
+       vs_pending_deletions := _; vs_returndata := _ |>` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >> once_asm_rewrite_tac[] >>
+     simp[local_ptrs_rel_oracle_fields, stmt_state_rel_def, state_rel_def,
+          immutables_rel_def] >> strip_tac >> simp[]) >>
+  qexists_tac `s'` >> simp[hash_write_memory_read_self] >>
+  metis_tac[]
+QED
+
+Finalise raw_call_oracle_step
+
+(* Turn the parametric external-call equation into emitted code execution. *)
+Theorem raw_call_emit_run:
+  emit_op (if static_call then STATICCALL else CALL)
+    (if static_call then [gas_op; to_op; ao_op; az_op; ro_op; rz_op]
+     else [gas_op; to_op; val_op; ao_op; az_op; ro_op; rz_op]) sm = (ok_op,sb) /\
+  eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
+  eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
+  eval_operand ro_op s = SOME ro /\ eval_operand rz_op s = SOME rz /\
+  (~static_call ==> eval_operand val_op s = SOME vw) /\
+  exec_ext_call
+    (mk_inst sm.cs_next_id (if static_call then STATICCALL else CALL)
+      (if static_call then [gas_op; to_op; ao_op; az_op; ro_op; rz_op]
+       else [gas_op; to_op; val_op; ao_op; az_op; ro_op; rz_op])
+      [STRING #"%" (toString sm.cs_next_var)])
+    s gas aw (if static_call then 0w else vw) ao az ro rz
+    (static_call \/ s.vs_call_ctx.cc_static) = OK t ==>
+  run_inst_seq (emitted_insts sm sb) s = OK t
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  Cases_on `static_call` >>
+  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def]
+QED
+
+(* A fresh result variable is disjoint from source locals even after adoption. *)
+Theorem raw_call_result_frame:
+  emit_op opc ops sm = (ok_op,sb) /\ local_ptrs_reserved cenv sm /\
+  state_rel func cenv cx es t ==>
+  ?u. u = update_var (STRING #"%" (toString sm.cs_next_var)) w t /\
+    eval_operand ok_op u = SOME w /\ state_rel func cenv cx es u /\
+    u.vs_memory = t.vs_memory /\ u.vs_returndata = t.vs_returndata
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var)) w t` >>
+  simp[eval_operand_def, lookup_var_update_var] >>
+  irule state_rel_update_var >> simp[] >>
+  irule fresh_not_local_ptr >> qexists_tac `sm` >>
+  simp[not_fresh_at_def]
+QED
 
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
