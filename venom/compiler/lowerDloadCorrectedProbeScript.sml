@@ -721,3 +721,97 @@ Proof
   conj_tac >- ACCEPT_TAC corrected_assert_active >>
   ACCEPT_TAC corrected_caller_call_reachable
 QED
+
+Theorem corrected_active_unique:
+  !fn i j s. MEM fn [corrected_entry; corrected_helper] /\
+    active_inst fn i s /\ active_inst fn j s ==> i = j
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[active_inst_def, mk_raw_function_def]
+QED
+
+Theorem corrected_assert_value:
+  lookup_var "ok" corrected_c6 = SOME 1w
+Proof
+  qmatch_goalsub_abbrev_tac `lookup_var _ ((update_var _ _ s) with vs_inst_idx := n)` >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem corrected_assert_step:
+  !fuel. step_inst fuel corrected_context (mk_inst 9 ASSERT [Var "ok"] [])
+    corrected_c6 = OK corrected_c6
+Proof
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ s` >>
+  `lookup_var "ok" s = SOME 1w` by simp[Abbr `s`, corrected_assert_value] >>
+  gen_tac >> simp[Once step_inst_def, step_inst_base_def, mk_inst_def,
+                 eval_operand_def]
+QED
+
+val _ = temp_overload_on ("corrected_c7",
+  ``corrected_c6 with vs_inst_idx := SUC corrected_c6.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_CG7",
+  ``step_prov [] corrected_CG6 (mk_inst 9 ASSERT [Var "ok"] []) corrected_c6``);
+val _ = temp_overload_on ("corrected_ct7",
+  ``step_taint (mk_inst 9 ASSERT [Var "ok"] []) corrected_c6 corrected_c6 corrected_ct6``);
+
+Theorem corrected_suffix_storage:
+  sload 0w corrected_c7 = 0w
+Proof
+  qmatch_goalsub_abbrev_tac `sload _ (s with vs_inst_idx := n)` >>
+  `s.vs_accounts = K empty_account_state` by
+    (simp_tac pure_ss [Abbr `s`, venomStateTheory.venom_state_accfupds,
+                       combinTheory.K_THM, corrected_post_call_accounts] >> REFL_TAC) >>
+  simp[sload_def, contract_storage_def] >> EVAL_TAC
+QED
+
+Theorem corrected_sload_step:
+  !fuel. step_inst fuel corrected_context (mk_inst 10 SLOAD [Lit 0w] ["w"])
+    corrected_c7 = OK (update_var "w" 0w corrected_c7)
+Proof
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ s` >>
+  `sload 0w s = 0w` by simp[Abbr `s`, corrected_suffix_storage] >>
+  gen_tac >> simp[Once step_inst_def, step_inst_base_def, mk_inst_def,
+                 exec_read1_def, eval_operand_def]
+QED
+
+val _ = temp_overload_on ("corrected_cw", ``update_var "w" 0w corrected_c7``);
+val _ = temp_overload_on ("corrected_c8",
+  ``corrected_cw with vs_inst_idx := SUC corrected_c7.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_CG8",
+  ``step_prov [] corrected_CG7 (mk_inst 10 SLOAD [Lit 0w] ["w"]) corrected_cw``);
+val _ = temp_overload_on ("corrected_ct8",
+  ``step_taint (mk_inst 10 SLOAD [Lit 0w] ["w"]) corrected_c7 corrected_cw corrected_ct7``);
+val _ = temp_overload_on ("corrected_css", ``sstore 1w 0w corrected_c8``);
+val _ = temp_overload_on ("corrected_stop_state",
+  ``corrected_css with vs_inst_idx := SUC corrected_c8.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_stop_prov",
+  ``step_prov [] corrected_CG8 (mk_inst 11 SSTORE [Lit 1w; Var "w"] []) corrected_css``);
+val _ = temp_overload_on ("corrected_stop_taint",
+  ``step_taint (mk_inst 11 SSTORE [Lit 1w; Var "w"] []) corrected_c8 corrected_css corrected_ct8``);
+val _ = temp_overload_on ("corrected_stop_post",
+  ``halt_state (corrected_stop_state with vs_returndata := [])``);
+
+Theorem corrected_suffix_store_value:
+  lookup_var "w" corrected_c8 = SOME 0w
+Proof
+  qmatch_goalsub_abbrev_tac `lookup_var _ ((update_var _ _ s) with vs_inst_idx := n)` >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem corrected_suffix_sstore_step:
+  !fuel. step_inst fuel corrected_context (mk_inst 11 SSTORE [Lit 1w; Var "w"] [])
+    corrected_c8 = OK corrected_css
+Proof
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ s` >>
+  `lookup_var "w" s = SOME 0w` by simp[Abbr `s`, corrected_suffix_store_value] >>
+  gen_tac >> simp[Once step_inst_def, step_inst_base_def, mk_inst_def,
+                 exec_write2_def, eval_operand_def]
+QED
+
+Theorem corrected_stop_step:
+  !fuel. step_inst fuel corrected_context (mk_inst 12 STOP [] [])
+    corrected_stop_state = Halt corrected_stop_post
+Proof
+  qmatch_goalsub_abbrev_tac `step_inst _ _ _ s` >>
+  simp[Once step_inst_def, step_inst_base_def, mk_inst_def]
+QED
