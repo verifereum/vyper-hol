@@ -2,7 +2,7 @@ Theory lowerDloadOracleCallAssembly
 Ancestors
   lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
-  lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
+  lowerDloadSafetyKernel lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
   memLocDefs pointerConfinedDefs codegenRel contextCodegenRel venomInst finite_map pred_set list words arithmetic
 
 (* A numeric use observes either a selected translated pointer or an
@@ -333,4 +333,103 @@ Proof
   Cases_on `tn` >>
   simp[step_taint_def, mem_taint_def, store_taint_def, imm_taint_def,
        taint_component_equality]
+QED
+
+(* Variable agreement observes only the two variable maps and parameter lists. *)
+Theorem ld_vars_state_cong:
+  !s f t P A. s.vs_vars = f.lf_src.vs_vars /\ t.vs_vars = f.lf_tgt.vs_vars /\
+  s.vs_params = f.lf_src.vs_params /\ t.vs_params = f.lf_tgt.vs_params ==>
+  (ld_vars P A (f with <|lf_src := s; lf_tgt := t|>) <=> ld_vars P A f)
+Proof
+  simp[ld_vars_def]
+QED
+
+Theorem ld_oracle_call_vars:
+  ld_vars P A f /\ MEM out (fn_ir_vars f.lf_fn) /\
+  ss.vs_vars = f.lf_src.vs_vars |+ (out,w) /\
+  ts.vs_vars = f.lf_tgt.vs_vars |+ (out,w) /\
+  ss.vs_params = f.lf_src.vs_params /\
+  ts.vs_params = f.lf_tgt.vs_params ==>
+  ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+    lf_H := set_prov f.lf_H [out] NONE;
+    lf_tv := set_var_taint f.lf_tv [out] {}|>)
+Proof
+  strip_tac >>
+  `ld_vars P A (f with <|
+    lf_src := f.lf_src with vs_vars := f.lf_src.vs_vars |+ (out,w);
+    lf_tgt := f.lf_tgt with vs_vars := f.lf_tgt.vs_vars |+ (out,w);
+    lf_H := set_prov f.lf_H [out] NONE;
+    lf_tv := set_var_taint f.lf_tv [out] {}|>)` by
+    (irule ld_vars_write >> simp[set_var_taint_def, FLOOKUP_UPDATE,
+       ld_word_agree_empty]) >>
+  qspecl_then [`ss`,`f with <|
+    lf_src := f.lf_src with vs_vars := f.lf_src.vs_vars |+ (out,w);
+    lf_tgt := f.lf_tgt with vs_vars := f.lf_tgt.vs_vars |+ (out,w);
+    lf_H := set_prov f.lf_H [out] NONE;
+    lf_tv := set_var_taint f.lf_tv [out] {}|>`,`ts`]
+    mp_tac ld_vars_state_cong >> simp[]
+QED
+
+Theorem ld_effect_var_mask[simp]:
+  (ld_memory lo A (tn with t_var := tv) s t <=> ld_memory lo A tn s t) /\
+  (ld_nonghost (tn with t_var := tv) s t <=> ld_nonghost tn s t)
+Proof
+  simp[ld_memory_def, ld_nonghost_def]
+QED
+
+
+(* exec_ext_call ignores gas and converts ret offsets/sizes with w2n.
+   Fix the independent type parameters at the bytes32 operand interface. *)
+val call_effect = INST_TYPE [
+  ``:'a`` |-> ``:256 word``, ``:'e`` |-> ``:256 word``,
+  ``:'b`` |-> ``:256``, ``:'c`` |-> ``:256``, ``:'d`` |-> ``:256``]
+  ld_exec_ext_call_effect;
+
+Theorem ld_oracle_call_observed_effect:
+  ld_vars P A f /\ MEM inst (fn_insts f.lf_fn) /\
+  ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
+  tn.t_var = f.lf_tv /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a k u v z b c sz.
+    FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
+    a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  3 < LENGTH inst.inst_operands /\
+  source_memory_write_ranges inst f.lf_src = [(w2n (ro:bytes32),w2n (rz:bytes32))] /\
+  read_memory (w2n ao) (w2n az) f.lf_src =
+    read_memory (w2n at) (w2n az) f.lf_tgt /\
+  exec_ext_call inst f.lf_tgt (gas:bytes32) addr value at az (rt:bytes32) rz st = OK ts /\
+  (w2n rz = 0 \/ (w2n ro = w2n rt /\ w2n ro + w2n rz <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz)) ==>
+  ?ss. exec_ext_call inst f.lf_src gas addr value ao az ro rz st = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+      lf_H := set_prov f.lf_H inst.inst_outputs NONE;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
+    ss.vs_prev_bb = f.lf_src.vs_prev_bb /\ ts.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+    ss.vs_inst_idx = f.lf_src.vs_inst_idx /\ ts.vs_inst_idx = f.lf_tgt.vs_inst_idx
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all call_effect >> disch_then (qspec_then `gas` strip_assume_tac) >>
+  `ss.vs_vars = f.lf_src.vs_vars |+ (out,w) /\
+   ss.vs_params = f.lf_src.vs_params /\ ss.vs_fmp = f.lf_src.vs_fmp` by
+    (qpat_assum `exec_ext_call inst f.lf_src _ _ _ _ _ _ _ _ = _`
+       (mp_then Any mp_tac ld_exec_ext_call_frame) >> simp[]) >>
+  `ts.vs_vars = f.lf_tgt.vs_vars |+ (out,w) /\
+   ts.vs_params = f.lf_tgt.vs_params /\ ts.vs_fmp = f.lf_tgt.vs_fmp` by
+    (qpat_assum `exec_ext_call inst f.lf_tgt _ _ _ _ _ _ _ _ = _`
+       (mp_then Any mp_tac ld_exec_ext_call_frame) >> simp[]) >>
+  `step_taint inst f.lf_src ss tn = tn' with
+     t_var := set_var_taint f.lf_tv [out] {}` by
+    (drule_all ld_oracle_call_taint >> simp[]) >>
+  qpat_x_assum `tn' = _` kall_tac >>
+  qexists_tac `ss` >> simp[] >> irule ld_oracle_call_vars >> simp[] >>
+  conj_tac >- (qexists_tac `w` >> simp[]) >>
+  irule ld_inst_output_ir >> qexists_tac `inst` >> simp[]
 QED
