@@ -394,3 +394,81 @@ Proof
   >- (irule typed_dynarray_equal_exterior >> decide_tac) >>
   rpt strip_tac >> irule typed_dynarray_equal_exterior >> simp[]
 QED
+
+Theorem dyn_prefix_bind_op[local]:
+  comp_bind (emit_op opc ops) k sa =
+  k (Var ("%" ++ toString sa.cs_next_var))
+    (sa with <|cs_next_var := sa.cs_next_var+1;
+               cs_next_id := sa.cs_next_id+1;
+               cs_current_insts := sa.cs_current_insts ++
+                 [mk_inst sa.cs_next_id opc ops ["%" ++ toString sa.cs_next_var]]|>)
+Proof
+  simp[comp_bind_def, emit_op_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+Theorem dyn_prefix_bind_void[local]:
+  comp_ignore_bind (emit_void opc ops) k sa =
+  k (sa with <|cs_next_id := sa.cs_next_id+1;
+               cs_current_insts := sa.cs_current_insts ++
+                 [mk_inst sa.cs_next_id opc ops []]|>)
+Proof
+  simp[comp_bind_def, emit_void_def, fresh_id_def,
+       emit_def, comp_ignore_bind_def, comp_return_def]
+QED
+
+Theorem typed_dynarray_compiler_prefix:
+  compile_copy_dynarray_typed ce dst dt cap src st sa = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  let code =
+    [mk_inst sa.cs_next_id MLOAD [src] ["%" ++ toString sa.cs_next_var];
+     mk_inst (sa.cs_next_id+1) GT
+       [Var ("%" ++ toString sa.cs_next_var);Lit (n2w cap)]
+       ["%" ++ toString (sa.cs_next_var+1)];
+     mk_inst (sa.cs_next_id+2) ISZERO
+       [Var ("%" ++ toString (sa.cs_next_var+1))]
+       ["%" ++ toString (sa.cs_next_var+2)];
+     mk_inst (sa.cs_next_id+3) ASSERT
+       [Var ("%" ++ toString (sa.cs_next_var+2))] [];
+     mk_inst (sa.cs_next_id+4) MSTORE
+       [dst;Var ("%" ++ toString sa.cs_next_var)] [];
+     mk_inst (sa.cs_next_id+5) ADD [src;Lit 32w]
+       ["%" ++ toString (sa.cs_next_var+3)];
+     mk_inst (sa.cs_next_id+6) ADD [dst;Lit 32w]
+       ["%" ++ toString (sa.cs_next_var+4)]]
+  in ?sm. sm.cs_current_bb = sa.cs_current_bb /\
+    sm.cs_current_insts = sa.cs_current_insts ++ code /\
+    sm.cs_blocks = sa.cs_blocks /\ sm.cs_next_label = sa.cs_next_label /\
+    sm.cs_next_var = sa.cs_next_var+5 /\ sm.cs_next_id = sa.cs_next_id+7 /\
+    ci_mono sa sm /\ ci_mono sm sb /\ fn_has_code sa sm fn
+Proof
+  strip_tac >> pure_rewrite_tac[LET_THM] >>
+  qpat_x_assum `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  pure_rewrite_tac[Once compile_store_memory_typed_def, LET_THM] >> BETA_TAC >>
+  ntac 7 (once_rewrite_tac[dyn_prefix_bind_op, dyn_prefix_bind_void] >>
+          simp_tac (srw_ss()) [ADD_ASSOC, APPEND_ASSOC]) >>
+  qmatch_goalsub_abbrev_tac `(if _ then fast else slow) sm` >>
+  `!sx. ci_mono sx (SND (fast sx))` by
+    (simp_tac bool_ss [Abbr `fast`, compile_copy_memory_dynamic_def] >>
+     rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind] >>
+          rpt conj_tac >> rpt gen_tac) >>
+     simp[ci_mono_emit_op, ci_mono_emit_void]) >>
+  `!sx. ci_mono sx (SND (slow sx))` by
+    (simp_tac bool_ss [Abbr `slow`] >>
+     rpt (FIRST [irule ci_mono_bind, irule ci_mono_ignore_bind,
+          (simp[ci_mono_fresh_label, ci_mono_fresh_var, ci_mono_emit_inst,
+                ci_mono_emit_op, ci_mono_new_block, ci_mono_comp_return,
+                cj 1 ci_mono_typed_memory_family] >> NO_TAC)] >>
+          rpt conj_tac >> rpt gen_tac >> BETA_TAC)) >>
+  strip_tac >>
+  `ci_mono sm sb` by
+    (Cases_on `type_memory_bytes ce dt = type_memory_bytes ce st /\ dt = st` >>
+     gvs[] >> metis_tac[pairTheory.SND]) >>
+  `ci_mono sa sm` by
+    simp[Abbr `sm`, ci_mono_def, cs_extends_def, IS_PREFIX_APPEND] >>
+  `fn_has_code sa sm fn` by
+    metis_tac[fn_has_code_split, ci_mono_def] >>
+  qexists_tac `sm` >> simp[] >>
+  simp[Abbr `sm`, GSYM ADD_ASSOC, GSYM APPEND_ASSOC]
+
+QED
