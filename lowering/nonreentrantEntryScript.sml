@@ -43,7 +43,9 @@ Theorem transient_lock_steps[local]:
   step_inst_base (mk_inst id TLOAD ops outs) s =
     exec_read1 tload (mk_inst id TLOAD ops outs) s /\
   step_inst_base (mk_inst id TSTORE ops outs) s =
-    exec_write2 tstore (mk_inst id TSTORE ops outs) s /\
+    (if s.vs_call_ctx.cc_static /\ IS_SOME (eval_operands ops s) then
+       Abort ExHalt_abort (halt_state (set_returndata [] s))
+     else exec_write2 tstore (mk_inst id TSTORE ops outs) s) /\
   step_inst_base (mk_inst id ASSERT [a] []) s =
     (case eval_operand a s of
        SOME c => if c = 0w then
@@ -59,14 +61,14 @@ Proof
       CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >> REFL_TAC) >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[mk_inst_def]) >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[lock_opcode] >>
   simp[mk_inst_def]
 QED
 
 Theorem transient_lock_run[local]:
   compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-  fresh_vars_wrt st s0 ==>
+  fresh_vars_wrt st s0 /\ ~s0.vs_call_ctx.cc_static ==>
   (?t. run_inst_seq (emitted_insts st st') s0 = OK t /\
        tload (n2w nkey) s0 <> 1w /\
        vars_pc_only (if is_view then s0 else tstore (n2w nkey) 1w s0) t /\
@@ -120,11 +122,12 @@ Proof
 QED
 
 (* Transient locks leave the memory and allocation frame intact. A view
-   checks the same lock but never acquires it. *)
+   checks the same lock but never acquires it. Outside a static frame, the
+   TSTORE that acquires the lock succeeds. *)
 Theorem compile_nonreentrant_lock_frag_mem:
   !ctx nkey is_view st st' s0.
     compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-    fresh_vars_wrt st s0 ==>
+    fresh_vars_wrt st s0 /\ ~s0.vs_call_ctx.cc_static ==>
     frag_exec_mem ctx st st' (\s. s = s0)
       (\t. tload (n2w nkey) s0 <> 1w /\
            vars_pc_only (if is_view then s0
