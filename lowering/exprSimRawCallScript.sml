@@ -1451,6 +1451,101 @@ Proof
   simp[emitted_insts_def, run_inst_seq_def, eval_operand_def]
 QED
 
+(* Enter either finish block from the JNZ, without linearising the CFG. *)
+Theorem raw_call_jnz_frag[local]:
+  emit_inst JNZ [ok;Label kl;Label fl] [] sa = ((),sj) /\
+  new_block fl sj = (old,sf) /\ cs_extends sf sb /\
+  cs_extends sa bs /\ cs_extends bs sb /\
+  bs.cs_current_bb = (if success then kl else fl) /\
+  bs.cs_current_insts = [] /\ eval_operand ok t = SOME (bool_to_word success) /\
+  frag_exec ctx bs sb (\s. s = jump_to bs.cs_current_bb t) Q R ==>
+  frag_exec ctx sa sb (\s. s = t) Q R
+Proof
+  strip_tac >> pure_rewrite_tac[frag_exec_def] >> BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `s = t` SUBST_ALL_TAC >>
+  `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id JNZ [ok;Label kl;Label fl] [])` by
+    (irule fn_has_code_emit_new_block >>
+     goal_assum (drule_at (Pat `fn_has_code`)) >>
+     goal_assum (drule_at (Pat `emit_inst`)) >>
+     goal_assum (drule_at (Pat `new_block`)) >> simp[cs_extends_refl]) >>
+  `step_inst_base (mk_inst sa.cs_next_id JNZ [ok;Label kl;Label fl] []) t =
+     OK (jump_to bs.cs_current_bb t)` by
+    (simp[mk_inst_def] >> drule venomExecProofsTheory.step_jnz_behavior >>
+     disch_then (fn th => simp[th]) >>
+     Cases_on `success` >> simp[bool_to_word_def]) >>
+  irule frag_exec_enter >> conj_tac >- simp[] >>
+  qexistsl_tac [`\s. s = jump_to bs.cs_current_bb t`,
+    `bb`,`mk_inst sa.cs_next_id JNZ [ok;Label kl;Label fl] []`,`bs`] >>
+  simp[mk_inst_def, is_terminator_def] >>
+  irule fn_has_code_mid >> conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `fn_has_code`)) >> simp[cs_extends_refl]
+QED
+
+Theorem raw_call_success_code[local]:
+  (do len <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [len;Lit (n2w cap)];
+      capped <- compile_select cmp len (Lit (n2w cap));
+      emit_void MSTORE [ov;capped]; return ov od) sa = (result,sb) ==>
+  same_blocks sa sb /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts sa sb)
+Proof
+  simp[compile_select_def, comp_bind_def, emit_op_def, fresh_var_def,
+       fresh_id_def, comp_ignore_bind_def, comp_return_def, emit_def,
+       emit_void_def] >> strip_tac >> gvs[] >>
+  simp[same_blocks_def, emitted_insts_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  pure_rewrite_tac [rich_listTheory.DROP_LENGTH_APPEND] >>
+  simp[mk_inst_def, is_terminator_def]
+QED
+
+Theorem raw_call_success_frag[local]:
+  (do len <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [len;Lit (n2w cap)];
+      capped <- compile_select cmp len (Lit (n2w cap));
+      emit_void MSTORE [ov;capped]; return ov od) sa = (result,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand ov s = SOME addr /\
+  cap < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) ==>
+  frag_exec ctx sa sb (\t. t = s)
+    (\t. ?u. result = ov /\ eval_operand result t = SOME addr /\
+       fresh_vars_wrt sb t /\
+       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+       t = (mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) cap)) u)
+         with vs_inst_idx := LENGTH sb.cs_current_insts /\
+       u with vs_vars := FEMPTY = s with vs_vars := FEMPTY) R
+Proof
+  strip_tac >> drule raw_call_success_code >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all raw_call_success_run >> strip_tac >> disj1_tac >>
+  goal_assum (drule_at Any) >> qexists_tac `u` >>
+  gvs[eval_operand_def, lookup_var_def, fresh_vars_wrt_def]
+QED
+
+Theorem raw_call_revert_frag[local]:
+  emit_inst REVERT [dst;size_op] [] sa = ((),sb) /\
+  eval_operand dst s = SOME addr /\ eval_operand size_op s = SOME szw /\
+  R (Abort Revert_abort
+    (revert_state (set_returndata (mem_bytes_at (w2n addr) (w2n szw) s.vs_memory) s))) ==>
+  frag_exec ctx sa sb (\t. t = s) Q R
+Proof
+  strip_tac >>
+  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id REVERT [dst;size_op] []]` by
+    (qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+     simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  irule frag_exec_step_abort >> simp[] >>
+  qexists_tac `0` >>
+  simp[step_inst_non_invoke, mk_inst_def, Once step_inst_base_def,
+       GSYM mem_bytes_at_def]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
