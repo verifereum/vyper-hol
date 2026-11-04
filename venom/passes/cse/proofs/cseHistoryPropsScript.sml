@@ -797,3 +797,159 @@ Proof
  gvs[availExprDefsTheory.ae_lookup_inst_def, availExprDefsTheory.avail_unwrap_def] >>
  metis_tac[]
 QED
+
+Definition cse_event_input_def:
+ (cse_event_input (CsePhi n bb s t) = s) /\
+ (cse_event_input (CseStep n bb inst s t) = s)
+End
+Definition cse_event_output_def:
+ (cse_event_output (CsePhi n bb s t) = t) /\
+ (cse_event_output (CseStep n bb inst s t) = t)
+End
+Definition cse_phase_state_def:
+ (cse_phase_state (CseRun n s) = s) /\
+ (cse_phase_state (CseExec n bb s) = s)
+End
+Definition cse_event_writes_def:
+ (cse_event_writes (CsePhi n bb s t) v <=>
+   ?inst. MEM inst (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+          MEM v inst.inst_outputs) /\
+ (cse_event_writes (CseStep n bb inst s t) v <=> MEM v inst.inst_outputs)
+End
+
+Theorem cse_phi_prefix_nonoutput:
+ !insts s t v. eval_phis s insts = OK t /\
+ (!inst. MEM inst (TAKE (phi_prefix_length insts) insts) ==>
+   ~MEM v inst.inst_outputs) ==>
+ lookup_var v t = lookup_var v s
+Proof
+ Induct >> simp[phi_prefix_length_def, eval_phis_def] >>
+ rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >> simp[] >>
+ Cases_on `eval_one_phi s h` >> simp[] >>
+ rename1 `eval_one_phi s h = SOME pair` >> PairCases_on `pair` >>
+ Cases_on `eval_phis s insts` >> simp[] >> strip_tac >> gvs[] >>
+ `MEM pair0 h.inst_outputs` by metis_tac[eval_one_phi_output_mem] >>
+ `pair0 <> v` by metis_tac[] >>
+ `lookup_var v v' = lookup_var v s` by
+   (first_x_assum irule >> simp[]) >>
+ simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+ gvs[lookup_var_def]
+QED
+
+Theorem cse_prefix_nonwriting_events:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ (!ev. MEM ev events ==> !v. ~cse_event_writes ev v ==>
+   lookup_var v (cse_event_output ev) = lookup_var v (cse_event_input ev))
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> simp[MEM_APPEND] >> rpt strip_tac >>
+ gvs[cse_event_writes_def, cse_event_input_def, cse_event_output_def]
+ >- (irule cse_phi_prefix_nonoutput >> simp[] >> metis_tac[])
+ >- metis_tac[step_preserves_non_output_vars]
+ >> metis_tac[step_terminator_preserves_vars]
+QED
+
+Theorem cse_prefix_binding_fold:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ !v. lookup_var v (cse_phase_state phase) =
+ FOLDL (\acc ev. if cse_event_writes ev v then
+          lookup_var v (cse_event_output ev) else acc)
+   (lookup_var v s0) events
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >>
+ simp[cse_phase_state_def, rich_listTheory.FOLDL_APPEND,
+      cse_event_writes_def, cse_event_output_def, lookup_var_def] >>
+ rpt gen_tac >> IF_CASES_TAC >> simp[]
+ >- (`lookup_var v t = lookup_var v s` by
+       (irule cse_phi_prefix_nonoutput >> simp[] >> metis_tac[]) >>
+     gvs[cse_phase_state_def, lookup_var_def])
+ >- (drule_all step_preserves_non_output_vars >>
+     gvs[cse_phase_state_def, lookup_var_def])
+ >> drule_all step_terminator_preserves_vars >>
+    gvs[cse_phase_state_def, lookup_var_def]
+QED
+
+Theorem cse_binding_fold_nonwriting[local]:
+ !events v acc.
+ EVERY (\ev. ~cse_event_writes ev v) events ==>
+ FOLDL (\a ev. if cse_event_writes ev v then
+          lookup_var v (cse_event_output ev) else a) acc events = acc
+Proof
+ Induct >> simp[] >> rpt strip_tac >> simp[]
+QED
+
+Theorem cse_prefix_initial_binding:
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ EVERY (\ev. ~cse_event_writes ev v) events ==>
+ lookup_var v (cse_phase_state phase) = lookup_var v s0
+Proof
+ strip_tac >> drule cse_prefix_binding_fold >>
+ disch_then (qspec_then `v` mp_tac) >>
+ simp[cse_binding_fold_nonwriting]
+QED
+
+Theorem cse_prefix_last_write_binding:
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ events = pre ++ [ev] ++ post /\ cse_event_writes ev v /\
+ EVERY (\e. ~cse_event_writes e v) post ==>
+ lookup_var v (cse_phase_state phase) = lookup_var v (cse_event_output ev)
+Proof
+ strip_tac >> drule cse_prefix_binding_fold >>
+ disch_then (qspec_then `v` mp_tac) >>
+ simp[rich_listTheory.FOLDL_APPEND, cse_binding_fold_nonwriting]
+QED
+
+Theorem cse_events_last_write[local]:
+ !events v.
+ EVERY (\ev. ~cse_event_writes ev v) events \/
+ ?pre ev post. events = pre ++ [ev] ++ post /\
+ cse_event_writes ev v /\ EVERY (\e. ~cse_event_writes e v) post
+Proof
+ Induct >> simp[] >> rpt gen_tac >>
+ Cases_on `EVERY (\ev. ~cse_event_writes ev v) events`
+ >- (Cases_on `cse_event_writes h v` >> simp[] >>
+     qexistsl [`[]`, `h`, `events`] >> simp[]) >>
+ first_x_assum (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+ qexistsl [`h::pre`, `ev`, `post`] >> simp[]
+QED
+
+Theorem cse_prefix_last_write_or_initial:
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ (EVERY (\ev. ~cse_event_writes ev v) events /\
+  lookup_var v (cse_phase_state phase) = lookup_var v s0) \/
+ ?pre ev post. events = pre ++ [ev] ++ post /\
+ cse_event_writes ev v /\ EVERY (\e. ~cse_event_writes e v) post /\
+ lookup_var v (cse_phase_state phase) = lookup_var v (cse_event_output ev)
+Proof
+ strip_tac >> qspecl_then [`events`, `v`] strip_assume_tac cse_events_last_write
+ >- (disj1_tac >> simp[] >> irule cse_prefix_initial_binding >> metis_tac[]) >>
+ disj2_tac >> qexistsl [`pre`, `ev`, `post`] >> simp[] >>
+ irule cse_prefix_last_write_binding >> metis_tac[]
+QED
+
+Theorem cse_prefix_suffix_binding:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ !pre ev post v. events = pre ++ [ev] ++ post /\
+ EVERY (\e. ~cse_event_writes e v) post ==>
+ lookup_var v (cse_phase_state phase) = lookup_var v (cse_event_output ev)
+Proof
+ ho_match_mp_tac cse_prefix_ind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac
+ >- gvs[]
+ >> Cases_on `post` using SNOC_CASES
+ >> gvs[SNOC_APPEND, APPEND_ASSOC, APPEND_11, EVERY_APPEND,
+        cse_phase_state_def, cse_event_output_def, lookup_var_def]
+ >> first_x_assum (qspecl_then [`pre`, `ev`, `l`, `v`] mp_tac)
+ >> simp[] >> strip_tac
+ >- (`lookup_var v t = lookup_var v s` by
+       (irule cse_phi_prefix_nonoutput >>
+        gvs[cse_event_writes_def] >> metis_tac[]) >>
+     gvs[lookup_var_def])
+ >- (gvs[cse_event_writes_def] >>
+     drule_all step_preserves_non_output_vars >> gvs[lookup_var_def])
+ >> drule_all step_terminator_preserves_vars >> gvs[lookup_var_def]
+QED
