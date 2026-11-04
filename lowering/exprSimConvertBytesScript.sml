@@ -770,12 +770,20 @@ Theorem convert_readonly_state_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `tt = _` (fn th => once_rewrite_tac[th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
-  fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-  first_x_assum drule_all >> strip_tac >>
-  `not_fresh_at sa p` by
-    (fs[local_ptrs_reserved_def] >> res_tac) >>
-  qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]
+  irule stmt_state_rel_vars_frame >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+      qpat_x_assum `!name' entry' p' sz'. _` drule_all >> strip_tac >>
+      `not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> res_tac) >>
+      qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]) >>
+  rpt strip_tac >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_imm_base] >>
+  `lookup_var p s = SOME 0w` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_alt,
+        lookup_var_def] >> metis_tac[]) >>
+  qpat_x_assum `!z w. _ ==> lookup_var _ _ = _`
+    (qspecl_then [`p`, `0w`] mp_tac) >> simp[lookup_var_def]
 QED
 
 Theorem convert_readonly_frag:
