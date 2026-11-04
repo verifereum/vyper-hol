@@ -743,7 +743,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok tops am tx (MAP SND (call_trace es))
+    call_outcomes_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -774,7 +774,7 @@ Proof
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-   call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
+   call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `source_unit_execution_correct tops ret am tx unit vs` by
     (irule lower_vyper_runtime_unit_correct >> simp[] >>
