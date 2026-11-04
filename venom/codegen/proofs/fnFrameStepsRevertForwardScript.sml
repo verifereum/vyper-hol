@@ -263,3 +263,16 @@ Proof
       qexists_tac `rank` >> simp[] >> metis_tac[]) >>
   simp[normalize_operand_def]
 QED
+
+Theorem normalize_operand_resolve_block_assigns:
+  !fn insts op. codegen_ready_fn fn /\
+    EVERY (\inst. MEM inst (fn_insts fn)) insts ==>
+    normalize_operand (dfg_build_function fn) [] (resolve_block_assigns insts op) =
+    normalize_operand (dfg_build_function fn) [] op
+Proof
+  rpt strip_tac >> irule resolve_block_assigns_cong >> rpt strip_tac >>
+  irule normalize_operand_codegen_assign >> conj_tac >- simp[] >>
+  qexists_tac `inst` >> simp[] >>
+  irule dfg_build_function_ssa_def >>
+  gvs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[]
+QED
