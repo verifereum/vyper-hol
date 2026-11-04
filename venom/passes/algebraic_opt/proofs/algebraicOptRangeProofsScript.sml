@@ -666,3 +666,46 @@ Proof
   first_x_assum (qspec_then `q` mp_tac) >>
   simp[dfAnalyzeWidenDefsTheory.df_widen_entry_def]
 QED
+
+(* External-input diagnostic: no instruction defines the branch operand. *)
+Definition ao_range_external_probe_def:
+  ao_range_external_probe = mk_raw_function "external_probe"
+    [<| bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 JMP [Label "tail"] []] |>;
+     <| bb_label := "tail"; bb_instructions :=
+       [mk_inst 1 JNZ [Var "external";Label "done";Label "entry"] []] |>;
+     <| bb_label := "done"; bb_instructions := [mk_inst 2 STOP [] []] |>]
+End
+
+Theorem ao_range_external_wf:
+  wf_function ao_range_external_probe /\
+  fn_inst_wf ao_range_external_probe /\
+  EVERY label_positions_ok (fn_insts ao_range_external_probe)
+Proof
+  rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem ao_range_external_edge:
+  range_edge_transfer_opt
+    (dfg_build_function ao_range_external_probe,ao_range_external_probe.fn_blocks)
+    "tail" "entry" (SOME FEMPTY) = SOME FEMPTY
+Proof
+  EVAL_TAC
+QED
+
+Theorem ao_range_external_not_ssa:
+  ~wf_ssa ao_range_external_probe
+Proof
+  simp[venomWfTheory.wf_ssa_def,venomWfTheory.def_dominates_uses_def,
+       ao_range_external_probe_def,venomInstTheory.mk_raw_function_def,
+       venomInstTheory.mk_inst_def,venomWfTheory.def_available_at_def] >>
+  EVAL_TAC >> simp[listTheory.MEM] >>
+  qexistsl [`<| bb_label := "tail"; bb_instructions :=
+    [mk_inst 1 JNZ [Var "external";Label "done";Label "entry"] []] |>`,
+    `mk_inst 1 JNZ [Var "external";Label "done";Label "entry"] []`] >>
+  simp[venomInstTheory.mk_inst_def] >>
+  rpt gen_tac >> spose_not_then strip_assume_tac >>
+  Cases_on `def_bb = <| bb_label := "entry"; bb_instructions :=
+    [mk_inst 0 JMP [Label "tail"] []] |>` >>
+  gvs[listTheory.MEM,venomInstTheory.mk_inst_def]
+QED
