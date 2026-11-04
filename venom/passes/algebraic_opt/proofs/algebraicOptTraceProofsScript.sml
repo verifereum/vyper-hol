@@ -444,3 +444,73 @@ Proof
   Cases_on `a1` >- metis_tac[ao_source_step_no_entry_entry] >>
   drule ao_source_step_exit >> simp[]
 QED
+
+Theorem ao_trace_avoids_source:
+  !trace P. trace <> [] /\ ~P (LAST trace) /\
+    ao_trace_avoids (\a b. P a) trace ==> EVERY (\a. ~P a) trace
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `trace` >>
+  simp[ao_trace_avoids_def] >> metis_tac[LAST_DEF, NOT_CONS_NIL]
+QED
+
+Theorem ao_trace_final_visit_split:
+  !trace. trace <> [] /\ ~FST (SND (LAST trace)) ==>
+    EVERY (\a. ~FST (SND a)) trace \/
+    ?front a b back. trace = front ++ a::b::back /\
+      FST (SND a) /\ EVERY (\c. ~FST (SND c)) (b::back)
+Proof
+  rpt strip_tac >>
+  qspec_then `trace` (qspec_then `\a b. FST (SND a)` strip_assume_tac)
+    ao_trace_last_event
+  >- (disj1_tac >> ho_match_mp_tac ao_trace_avoids_source >> simp[]) >>
+  `EVERY (\c. ~FST (SND c)) (b::back)` by
+    (ho_match_mp_tac ao_trace_avoids_source >> simp[] >>
+     metis_tac[LAST_APPEND_CONS, LAST_DEF]) >>
+  disj2_tac >> qexistsl [`front`,`a`,`b`,`back`] >> gvs[]
+QED
+
+Theorem ao_source_trace_final_visit:
+  !trace ctx fn.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    ~FST (SND (LAST trace)) ==>
+    EVERY (\a. ~FST (SND a)) trace \/
+    ?front k s j t back bb p.
+      trace = front ++ (k,T,s)::(j,F,t)::back /\
+      EVERY (\c. ~FST (SND c)) ((j,F,t)::back) /\
+      ao_source_trace ctx fn (front ++ [(k,T,s)]) /\
+      ao_source_trace ctx fn ((j,F,t)::back) /\
+      ao_source_step ctx fn (k,T,s) (j,F,t) /\
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      eval_phis s bb.bb_instructions = OK p /\
+      t = p with vs_inst_idx := phi_prefix_length bb.bb_instructions /\
+      (!i. i < LENGTH ((j,F,t)::back) ==>
+        (SND (SND (EL i ((j,F,t)::back)))).vs_inst_idx =
+          phi_prefix_length bb.bb_instructions + i)
+Proof
+  rpt strip_tac >> drule_all ao_trace_final_visit_split >> strip_tac
+  >- simp[] >>
+  disj2_tac >>
+  `ao_source_trace ctx fn (front ++ [a]) /\ ao_source_step ctx fn a b /\
+    ao_source_trace ctx fn (b::back)` by
+    metis_tac[ao_source_trace_transition_split] >>
+  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
+  drule ao_source_step_entry >> strip_tac >>
+  qexistsl [`front`,`a0`,`a2`,`b0`,`back`,`bb`,`p`] >> simp[] >>
+  gvs[] >>
+  qspec_then `(b0,F,p with vs_inst_idx := phi_prefix_length bb.bb_instructions)::back`
+    mp_tac ao_source_trace_sequential_positions >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_source_trace_single_visit_label:
+  !tail ctx fn a.
+    ao_source_trace ctx fn (a::tail) /\
+    EVERY (\b. ~FST (SND b)) tail ==>
+    EVERY (\b. (SND (SND b)).vs_current_bb =
+      (SND (SND a)).vs_current_bb) (a::tail)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[ao_source_trace_def] >> strip_tac >>
+  drule_all ao_source_step_stutter >> strip_tac >>
+  first_x_assum (qspecl_then [`ctx`,`fn`,`h`] mp_tac) >>
+  simp[]
+QED
