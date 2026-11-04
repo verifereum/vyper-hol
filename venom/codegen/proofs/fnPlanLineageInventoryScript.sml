@@ -1,6 +1,8 @@
 Theory fnPlanLineageInventory
 Ancestors
   fnPlanLineageReplay stackPlanGen stackModel list rich_list
+Libs
+  pred_setTheory finite_mapTheory stackPlanOpsTheory
 
 (* Stack-only comparison; state-field agreement is a separate obligation. *)
 Definition bottom_dead_equiv_def:
@@ -197,4 +199,85 @@ Theorem cleanup_mark_partition_probe[local]:
     [dead_stack_marker; dead_stack_marker]
 Proof
   EVAL_TAC
+QED
+
+Definition lineage_core_def:
+  lineage_core m core ps <=>
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core
+End
+
+Definition lineage_inventory_def:
+  lineage_inventory S ps <=>
+    ?m core. lineage_core m core ps /\ ALL_DISTINCT core /\
+      EVERY is_var_operand core /\
+      DISJOINT (set core) (FDOM ps.ps_spilled) /\
+      set core UNION FDOM ps.ps_spilled = S /\
+      (!op. op IN FDOM ps.ps_spilled ==> is_var_operand op)
+End
+
+Theorem lineage_inventory_stack_subset:
+  !S ps. lineage_inventory S ps ==>
+    set ps.ps_stack SUBSET (dead_stack_marker INSERT S)
+Proof
+  simp[lineage_inventory_def, lineage_core_def] >> rpt strip_tac >>
+  gvs[SUBSET_DEF, MEM_APPEND, MEM_REPLICATE] >> metis_tac[IN_UNION]
+QED
+
+Theorem lineage_inventory_spilled_subset:
+  !S ps. lineage_inventory S ps ==> FDOM ps.ps_spilled SUBSET S
+Proof
+  simp[lineage_inventory_def] >> SET_TAC[]
+QED
+
+Theorem do_restore_lineage_inventory:
+  !S ps op. lineage_inventory S ps ==>
+    lineage_inventory S (SND (do_restore op ps))
+Proof
+  rpt gen_tac >> Cases_on `FLOOKUP ps.ps_spilled op`
+  >- simp[do_restore_def] >>
+  simp[do_restore_def, lineage_inventory_def, lineage_core_def] >>
+  rpt strip_tac >>
+  `op IN FDOM ps.ps_spilled` by gvs[FLOOKUP_DEF] >>
+  `~MEM op core` by metis_tac[DISJOINT_DEF, EXTENSION, IN_INTER, NOT_IN_EMPTY] >>
+  qexistsl_tac [`m`, `core ++ [op]`] >>
+  simp[stack_push_def, ALL_DISTINCT_APPEND, EVERY_APPEND, FDOM_DOMSUB] >>
+  ASM_SET_TAC[]
+QED
+
+Theorem restore_spilled_plan_lineage_inventory:
+  !ops S ps. lineage_inventory S ps ==>
+    lineage_inventory S (SND (restore_spilled_plan ops ps))
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt strip_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[do_restore_lineage_inventory, pairTheory.SND]
+QED
+
+Theorem do_restore_spilled_domain:
+  !op ps. FDOM (SND (do_restore op ps)).ps_spilled =
+    FDOM ps.ps_spilled DELETE op
+Proof
+  rpt gen_tac >> Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[do_restore_def, FDOM_DOMSUB] >>
+  gvs[FLOOKUP_DEF] >> ASM_SET_TAC[]
+QED
+
+Theorem restore_spilled_plan_domain:
+  !ops ps. FDOM (SND (restore_spilled_plan ops ps)).ps_spilled =
+    FDOM ps.ps_spilled DIFF set ops
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  first_x_assum (qspec_then `ps1` mp_tac) >> simp[] >> strip_tac >>
+  qspecl_then [`h`, `ps`] mp_tac do_restore_spilled_domain >>
+  simp[] >> strip_tac >> ASM_SET_TAC[]
+QED
+
+Theorem restore_spilled_plan_inventory_exhausted:
+  !S ps ops. lineage_inventory S ps /\ S SUBSET set ops ==>
+    (SND (restore_spilled_plan ops ps)).ps_spilled = FEMPTY
+Proof
+  rpt strip_tac >>
+  drule lineage_inventory_spilled_subset >> strip_tac >>
+  simp[GSYM FDOM_EQ_EMPTY, restore_spilled_plan_domain] >> ASM_SET_TAC[]
 QED
