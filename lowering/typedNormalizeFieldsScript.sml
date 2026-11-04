@@ -22,7 +22,7 @@ Proof
       is_terminator_def, rich_listTheory.IS_PREFIX_APPEND, cs_extends_def]
 QED
 
-Theorem normalize_byte_offset_cont:
+Theorem normalize_byte_offset_cont[local]:
   compile_with_byte_offset op off sa = (out,sb) /\
   eval_operand op s = SOME a /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
@@ -54,7 +54,7 @@ QED
 
 (* Expose the actual recursive child's compiler states; in particular the
    tail starts at the child's returned state, not at either offset state. *)
-Theorem normalize_fields_cons_states:
+Theorem normalize_fields_cons_states[local]:
   compile_typed_copy_fields ce dst src (dt::dts) (st::sts) doff soff sa =
     ((),sb) ==>
   ?dp sc sp sd se.
@@ -76,7 +76,7 @@ QED
 (* I carries the complete source and completed destination prefix.  The
    callback covers the two offset instructions followed by an arbitrary
    recursive child CFG.  No fixed fresh-counter increments are imposed. *)
-Theorem normalize_fields_sequence:
+Theorem normalize_fields_sequence[local]:
   (!dt st dts sts doff soff sa dp sc sp sd se s.
     Inv (dt::dts) (st::sts) doff soff sa s /\
     compile_with_byte_offset dst doff sa = (dp,sc) /\
@@ -108,7 +108,7 @@ Proof
   simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
 QED
 
-Theorem normalize_struct_cons_states:
+Theorem normalize_struct_cons_states[local]:
   ALOOKUP src_fields name = SOME (st,ssz) /\
   compile_struct_typed_copy ce dst src ((name,dt,dsz)::rest)
     src_fields doff soff sa = ((),sb) ==>
@@ -130,7 +130,7 @@ QED
 
 (* Lookup stays explicit here.  The nominal-identity consumer must justify
    it using distinct names, rather than silently taking the fallback type. *)
-Theorem normalize_struct_sequence:
+Theorem normalize_struct_sequence[local]:
   (!name dt dsz rest doff soff sa dp sc sp sd se s st ssz.
     Inv ((name,dt,dsz)::rest) doff soff sa s /\
     ALOOKUP src_fields name = SOME (st,ssz) /\
@@ -170,4 +170,51 @@ Proof
   simp_tac (bool_ss ++ pairSimps.PAIR_ss)
     [listTheory.MAP, listTheory.SUM, combinTheory.o_THM,
      AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem normalize_field_offsets_cont[local]:
+  compile_with_byte_offset dst doff sa = (dp,sc) /\
+  compile_with_byte_offset src soff sc = (sp,sd) /\
+  eval_operand dst s = SOME d /\ eval_operand src s = SOME p /\
+  (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) /\
+  fn_has_code sa sd fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  sa.cs_next_var <= sd.cs_next_var /\
+  (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
+  ?u. mem_cont_sim ctx fn s u /\
+      eval_operand dp u = SOME (d + n2w doff) /\
+      eval_operand sp u = SOME (p + n2w soff) /\
+      ~u.vs_halted /\ u.vs_current_bb = sd.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+      (u with <|vs_vars := s.vs_vars; vs_current_bb := s.vs_current_bb;
+                vs_inst_idx := s.vs_inst_idx; vs_prev_bb := s.vs_prev_bb|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> imp_res_tac normalize_byte_offset_straight >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `!x. dst = Var x ==> not_fresh_at sa x` by metis_tac[] >>
+  drule_all normalize_byte_offset_cont >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_x_assum `compile_with_byte_offset dst doff sa = _` kall_tac >>
+  `eval_operand src t = SOME p` by
+    (Cases_on `src` >> gvs[eval_operand_def, venom_state_component_equality] >>
+     metis_tac[]) >>
+  `!x. src = Var x ==> not_fresh_at sc x` by
+    (rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  drule_all normalize_byte_offset_cont >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `mem_cont_sim ctx fn t u` >>
+  `eval_operand dp u = SOME (d + n2w doff)` by
+    (Cases_on `dp` >> gvs[eval_operand_def, venom_state_component_equality] >>
+     metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sc x` by
+    (simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  conj_tac >- decide_tac >>
+  conj_tac >- (rpt strip_tac >> gvs[not_fresh_at_def] >>
+    metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+  qexists_tac `u` >> simp[] >>
+  conj_tac >- (irule mem_cont_sim_trans >> metis_tac[]) >>
+  gvs[venom_state_component_equality]
 QED
