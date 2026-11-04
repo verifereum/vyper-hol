@@ -309,3 +309,91 @@ Proof
   conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_label] >>
   irule (cj 2 ao_source_step_rules) >> simp[] >> metis_tac[]
 QED
+
+Theorem ao_iszero_observation_location:
+  !fn bp r prod x target t use_opt.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    MEM bp fn.fn_blocks /\ get_instruction bp r = SOME prod /\
+    prod.inst_opcode = ISZERO /\ prod.inst_outputs = [x] /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) ==>
+    fn_dominates fn bp.bb_label target.bb_label /\
+    (bp = target ==> r < t.vs_inst_idx)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM target fn.fn_blocks` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  fs[def_available_at_def] >>
+  qpat_x_assum `MEM def_inst def_bb.bb_instructions` mp_tac >>
+  rewrite_tac[MEM_EL] >> strip_tac >>
+  `get_instruction def_bb n = SOME def_inst` by simp[get_instruction_def] >>
+  `def_bb = bp /\ n = r /\ def_inst = prod` by
+    (irule ao_ssa_output_occurrence >> metis_tac[MEM]) >> gvs[] >>
+  strip_tac >> gvs[] >> Cases_on `use_opt` >> gvs[]
+  >- (`bb_well_formed bp` by metis_tac[wf_function_def] >>
+      irule venomExecPropsTheory.non_terminator_before_terminator >>
+      metis_tac[is_terminator_def]) >>
+  `j = t.vs_inst_idx` by
+    (irule ao_wf_instruction_index >>
+     gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[]) >>
+  `i = n` by
+    (irule ao_wf_instruction_index >> qexistsl [`bp`, `fn`] >>
+     gvs[get_instruction_def, AllCaseEqs()]) >>
+  gvs[]
+QED
+
+Theorem ao_iszero_writer_location:
+  !ctx fn bp r prod x z k phase s b.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    MEM bp fn.fn_blocks /\ get_instruction bp r = SOME prod /\
+    prod.inst_opcode = ISZERO /\ prod.inst_outputs = [x] /\
+    prod.inst_operands = [Var z] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    ao_source_step ctx fn (k,phase,s) b /\
+    ao_transition_writes fn z (k,phase,s) b ==>
+    ?db d di q v.
+      MEM db fn.fn_blocks /\ get_instruction db d = SOME di /\
+      MEM z di.inst_outputs /\ fn_dominates fn db.bb_label bp.bb_label /\
+      b = (q,F,v) /\ v.vs_current_bb = db.bb_label /\
+      (db = bp ==> v.vs_inst_idx <= r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `r < LENGTH bp.bb_instructions /\ EL r bp.bb_instructions = prod` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `MEM prod bp.bb_instructions` by metis_tac[MEM_EL] >>
+  `def_available_at fn bp (SOME prod) z` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  `?db di. MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+    MEM z di.inst_outputs /\ fn_dominates fn db.bb_label bp.bb_label /\
+    (db = bp ==> ?i. i < r /\ EL i bp.bb_instructions = di)` by
+    (irule ao_available_at_index >> simp[]) >>
+  qpat_x_assum `MEM di db.bb_instructions` mp_tac >>
+  rewrite_tac[MEM_EL] >> strip_tac >>
+  `get_instruction db n = SOME di` by simp[get_instruction_def] >>
+  drule_all ao_ssa_transition_writer >> strip_tac >>
+  PairCases_on `b` >> Cases_on `phase` >> gvs[]
+  >- (Cases_on `b1`
+      >- metis_tac[ao_source_step_no_entry_entry] >>
+      drule ao_source_step_entry >> strip_tac >> gvs[] >>
+      qexistsl [`bb`, `n`, `EL n bb.bb_instructions`] >>
+      simp[GSYM MEM_EL] >>
+      metis_tac[venomExecPropsTheory.lookup_block_label]) >>
+  Cases_on `b1`
+  >- (drule ao_source_step_exit >> strip_tac >> gvs[] >>
+      metis_tac[]) >>
+  drule ao_source_step_sequential >> strip_tac >> gvs[] >>
+  qexistsl [`bb`, `s.vs_inst_idx`, `EL s.vs_inst_idx bb.bb_instructions`] >>
+  simp[GSYM MEM_EL] >>
+  `s.vs_current_bb = bb.bb_label` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  simp[] >> strip_tac >> gvs[] >>
+  `i = s.vs_inst_idx` by
+    (irule ao_wf_instruction_index >> qexistsl [`bb`, `fn`] >> simp[]) >>
+  decide_tac
+QED
