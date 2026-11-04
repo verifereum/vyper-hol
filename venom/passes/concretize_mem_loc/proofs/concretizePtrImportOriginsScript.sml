@@ -113,6 +113,26 @@ Proof
   gvs[lookup_function_def]
 QED
 
+Theorem ptr_stage_observed_callee:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  ctx_fn_names observed.cu_context = ctx_fn_names C /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  MEM name (fn_invoke_targets fn) /\
+  lookup_function name observed.cu_context.ctx_functions = SOME callee ==>
+  ?g'. lookup_function name C'.ctx_functions = SOME g' /\
+    g'.fn_mems_used = callee.fn_mems_used
+Proof
+  rpt strip_tac >>
+  `ctx_fn_names C = ctx_fn_names C'` by metis_tac[ptr_stage_names] >>
+  `MEM name (ctx_fn_names observed.cu_context)` by
+    metis_tac[lookup_function_mem, ctx_fn_names_def] >>
+  `?g'. lookup_function name C'.ctx_functions = SOME g'` by
+    (Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
+     metis_tac[lookup_function_not_mem, ctx_fn_names_def]) >>
+  drule_all ptr_o1_walk_callee_mems >> strip_tac >>
+  gvs[] >> goal_assum drule >> simp[]
+QED
+
 Theorem ptr_stage_import_lookup:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
   ctx_fn_names observed.cu_context = ctx_fn_names C /\
@@ -123,14 +143,8 @@ Theorem ptr_stage_import_lookup:
     MEM item g'.fn_mems_used
 Proof
   rpt strip_tac >> drule ptr_import_mems_origin >> strip_tac >>
-  `ctx_fn_names C = ctx_fn_names C'` by metis_tac[ptr_stage_names] >>
-  `MEM name (ctx_fn_names observed.cu_context)` by
-    metis_tac[lookup_function_mem, ctx_fn_names_def] >>
-  `?g'. lookup_function name C'.ctx_functions = SOME g'` by
-    (Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
-     metis_tac[lookup_function_not_mem, ctx_fn_names_def]) >>
-  drule_all ptr_o1_walk_callee_mems >> strip_tac >>
-  gvs[] >> goal_assum drule >> simp[]
+  drule_all ptr_stage_observed_callee >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem ptr_step_mems_origin:
@@ -289,4 +303,42 @@ Proof
   gvs[concretize_function_fuel_in_context_def, fn_has_static_layout_def,
       AllCaseEqs(), apply_context_concretize_layout_def] >>
   metis_tac[ptr_unique_mems_functional]
+QED
+
+Theorem ptr_stage_lookup_mems_canonical:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\
+  lookup_function name C'.ctx_functions = SOME g /\
+  MEM (a,p,sz) g.fn_mems_used ==>
+  ?owner i owner_out. MEM owner C.ctx_functions /\ MEM i (fn_insts owner) /\
+    i.inst_opcode = ALLOCA /\ a = Allocation i.inst_id /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME owner_out /\
+    MEM (a,p,sz) owner_out.fn_mems_used /\
+    fcg_path C name owner.fn_name /\
+    (owner.fn_name = name \/ list_precedes owner.fn_name name names)
+Proof
+  strip_tac >> drule_all ptr_stage_lookup_origin >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `fn.fn_name = name` by metis_tac[ptr_lookup_name] >>
+  `fn.fn_eom = NONE` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+     disch_then drule >> simp[]) >>
+  qpat_x_assum `out.fpo_function = g` (SUBST_ALL_TAC o SYM) >>
+  drule_all ptr_step_mems_origin >> strip_tac
+  >- (qexistsl [`fn`,`i`,`out.fpo_function`] >>
+      simp[fcg_path_def, relationTheory.RTC_REFL]) >>
+  drule_all ptr_stage_import_lookup >> strip_tac >>
+  `list_precedes name' name names` by
+    (gvs[callee_first_def] >> metis_tac[]) >>
+  fs[list_precedes_iff] >>
+  drule_all ptr_stage_mems_canonical >> strip_tac >>
+  `fn_directly_calls C fn.fn_name name'` by
+    (simp[fn_directly_calls_scan, GSYM fn_invoke_targets_def] >>
+     qexists `fn` >> simp[]) >>
+  `fcg_path C fn.fn_name owner.fn_name` by
+    (gvs[fcg_path_def] >> metis_tac[relationTheory.RTC_RULES]) >>
+  qexistsl [`owner`,`i'`,`owner_out`] >> simp[] >>
+  gvs[list_precedes_iff] >> metis_tac[arithmeticTheory.LESS_TRANS]
 QED
