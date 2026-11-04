@@ -3,6 +3,48 @@ Theory bodyIntCallArgList
 Ancestors
   list bodySim bodyIntCallArgLifetime exprLoweringProps vyperInterpreter vyperState
   exprSimAggregateSource exprLowering compileEnv fragExec exprSimHyps exprSim
+  exprSimUnwrap
+
+(* Runtime forcing without an aggregate copy.  The restriction is explicit:
+   the outstanding copy cases are not justified by this boundary. *)
+Theorem unwrap_runtime_noncopy_sim:
+  !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
+    unwrap_value cenv vv sm = (op, sb) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\ ~cenv.ce_is_ctor /\
+    (case vv of StackValue ty operand => T
+     | LocatedValue ty p => p.ptr_location = LocMemory \/ is_word_type ty) ==>
+    frag_exec ctx sm sb
+      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+Proof
+  rpt strip_tac >> Cases_on `vv`
+  >- (gvs[unwrap_value_def, comp_return_def] >> irule frag_exec_refl >>
+      rw[] >> metis_tac[expr_post_of_vv_post_stack]) >>
+  rename1 `LocatedValue t p` >>
+  Cases_on `p.ptr_location = LocCalldata`
+  >- (irule frag_exec_conseq >>
+      qexistsl_tac [`\s. F`, `\s. F`, `R`] >>
+      gvs[frag_exec_false_pre, vv_post_calldata]) >>
+  Cases_on `p.ptr_location = LocMemory`
+  >- (irule unwrap_memory_sim >> simp[]) >>
+  `is_word_type t` by gvs[] >>
+  Cases_on `p.ptr_location = LocCode`
+  >- (irule unwrap_runtime_immutable_word_sim >>
+      gvs[unwrap_value_def, contextTheory.compile_ptr_load_def,
+          contextTheory.compile_imm_load_word_def]) >>
+  irule unwrap_storage_word_sim >> simp[] >>
+  Cases_on `p.ptr_location` >> gvs[]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag unwrap_runtime_noncopy_sim)
+  in
+    if null axioms andalso null (Thm.hyp unwrap_runtime_noncopy_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "RUNTIME_NONCOPY_AUDIT unwrap_runtime_noncopy_sim OK\n"
+    else raise Fail "unwrap_runtime_noncopy_sim has unproved dependencies"
+  end;
 
 Theorem body_results_head_vv_sim:
   body_inv tops ctx cenv cx /\ body_results_ok cx (e::rest) /\
