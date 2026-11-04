@@ -2,6 +2,7 @@
 Theory lowerDloadPtrJointNext
 Ancestors
   lowerDloadPtrJointEntry lowerDloadPtrOrdinary lowerDloadPtrRel
+  lowerDloadPtrAggregate lowerDloadPtrCall ptrDiscipline
   o1ContractLowerDload lowerDloadDefs venomExecSemantics venomInst
   contextCodegenRel venomExecProofs list rich_list
 
@@ -116,3 +117,67 @@ Proof
   >- (qexists_tac `EL bi f.fn_blocks` >> simp[EL_MEM, GSYM arithmeticTheory.ADD1]) >>
   qexists_tac `gb` >> simp[EL_MEM, Abbr `gb`, GSYM arithmeticTheory.ADD1]
 QED
+
+Theorem dload_actual_assign_next:
+  frame_reachable vs C cs PG G tn f i s /\
+  frame_reachable vs C' ds PH H un g i t /\
+  dload_control_match q f g s t i [i] 0 /\ i.inst_opcode = ASSIGN /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  (!v. v IN {v | ?ci. MEM ci (fn_insts f) /\
+           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)} ==>
+       (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  step_inst fuel C' i t = OK t1 /\
+  active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  ?s1 i' emitted'.
+    step_inst fuel C i s = OK s1 /\
+    frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
+      f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
+    dload_control_match q f g
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
+    j = HD emitted' /\
+    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+      (step_prov PG G i s1) (step_prov PH H i t1)
+      (step_taint i s s1 tn) (step_taint i t t1 un)
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx) cs ds /\
+    (!v. v IN {v | ?ci. MEM ci (fn_insts f) /\
+           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)} ==>
+       (lookup_var v (s1 with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
+        lookup_var v (t1 with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
+    s1 = s with vs_vars := s1.vs_vars /\ t1 = t with vs_vars := t1.vs_vars
+Proof
+  strip_tac >>
+  `MEM i (fn_insts f)` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
+     simp[dload_control_match_def, active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[EL_MEM]) >>
+  `s.vs_labels = t.vs_labels` by
+    (drule dload_boundary_environment >> simp[dload_equal_environment_def, venomStateTheory.venom_state_component_equality]) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+      v IN {v | ?ci. MEM ci (fn_insts f) /\
+         (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}` by
+    (simp[] >> metis_tac[]) >>
+  drule_all dload_boundary_core_assign_index >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  drule_all dload_control_singleton_next >> strip_tac >>
+  qexistsl [`s'`,`i'`,`emitted'`] >> simp[] >>
+  irule frame_reachable_next >> simp[is_terminator_def] >>
+  `active_inst f i' (s' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ i' _ _` mp_tac >>
+     simp[dload_control_match_def] >> metis_tac[]) >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `dload_control_match _ _ _ s t _ _ _` mp_tac >>
+  simp[dload_control_match_def] >> metis_tac[]
+QED
+
+(* Constructor audit: dload_actual_assign_next is the ASSIGN boundary branch
+   of the intended induction on target frame_reachable.  Entry is supplied by
+   dload_actual_joint_entry.  This branch derives source success, successor
+   activity and reachability; none is assumed at the successor.  Allocation
+   frames fs, saved callers cs/ds, and Ws are retained unchanged.  Separate
+   saved-layout, supply, live-function-index and runtime scratch certificates
+   remain predecessor obligations: variable-only execution and index advance
+   do not produce them.  Other opcodes, expansion prefixes, block transfers,
+   calls, returns and forwarding remain open; this is not a full simulation. *)
