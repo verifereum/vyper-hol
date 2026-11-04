@@ -3,7 +3,7 @@ Theory lowerDloadConfiguredOrigins
 Ancestors
   o1ContractLowerDload o1PassContract lowerDloadDefs
   venomPassDispatcher irSupply venomExecSemantics contextCodegenRel
-  venomInst venomWf list rich_list arithmetic
+  venomInst venomWf venomFnScheduleRunner venomExecProofs passSharedDefs list rich_list arithmetic
 
 Theorem lower_dload_insts_supply_at:
   lower_dload_insts_supply u ins = (outs,v) /\ j < LENGTH ins ==>
@@ -162,12 +162,38 @@ Proof
   first_x_assum drule >> simp[eval_phis_def]
 QED
 
+Theorem lower_dload_inst_supply_used_vars_mono:
+  lower_dload_inst_supply u i = (xs,v) /\ MEM w u.irs_used_vars ==>
+  MEM w v.irs_used_vars
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
+  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_used_vars_mono:
+  !u xs v. lower_dload_insts_supply u ins = (xs,v) /\ MEM w u.irs_used_vars ==>
+  MEM w v.irs_used_vars
+Proof
+  Induct_on `ins`
+  >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule_all lower_dload_inst_supply_used_vars_mono >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
 Theorem lower_dload_blocks_supply_lookup:
   !u cs v. lower_dload_blocks_supply u bs = (cs,v) /\
   lookup_block label bs = SOME b ==>
   ?u0 is u1.
     lower_dload_insts_supply u0 b.bb_instructions = (is,u1) /\
-    lookup_block label cs = SOME (b with bb_instructions := is)
+    lookup_block label cs = SOME (b with bb_instructions := is) /\
+    (!w. MEM w u.irs_used_vars ==> MEM w u0.irs_used_vars)
 Proof
   Induct_on `bs`
   >- simp[lookup_block_def, FIND_thm] >>
@@ -177,7 +203,9 @@ Proof
   Cases_on `h.bb_label = label` >> gvs[]
   >- (qexistsl_tac [`u`,`insts`,`s1`] >> simp[FIND_thm]) >>
   simp[FIND_thm] >>
-  gvs[GSYM lookup_block_def] >> first_x_assum drule_all >> simp[]
+  gvs[GSYM lookup_block_def] >> first_x_assum drule_all >> strip_tac >>
+  qexistsl_tac [`u0`,`is`,`u1`] >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> metis_tac[lower_dload_insts_supply_used_vars_mono]
 QED
 
 Theorem lower_dload_function_supply_enters_block:
@@ -245,31 +273,6 @@ Proof
       gvs[inst_wf_def] >>
       Cases_on `op` >> gvs[resolve_block_assigns_def] >> metis_tac[]) >>
   simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem lower_dload_inst_supply_used_vars_mono:
-  lower_dload_inst_supply u i = (xs,v) /\ MEM w u.irs_used_vars ==>
-  MEM w v.irs_used_vars
-Proof
-  Cases_on `i.inst_opcode = DLOAD`
-  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
-      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
-  Cases_on `i.inst_opcode = DLOADBYTES`
-  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
-      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[] >> metis_tac[]) >>
-  simp[lower_dload_inst_supply_def] >> rpt strip_tac >> gvs[]
-QED
-
-Theorem lower_dload_insts_supply_used_vars_mono:
-  !u xs v. lower_dload_insts_supply u ins = (xs,v) /\ MEM w u.irs_used_vars ==>
-  MEM w v.irs_used_vars
-Proof
-  Induct_on `ins`
-  >- simp[lower_dload_insts_supply_def] >>
-  rpt gen_tac >>
-  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
-  drule_all lower_dload_inst_supply_used_vars_mono >> strip_tac >>
-  first_x_assum drule_all >> simp[]
 QED
 
 Theorem lower_dload_insts_supply_resolve:
@@ -580,4 +583,39 @@ Proof
   rw[revert_forward_at_def] >>
   drule_all lower_dload_insts_supply_revert_forward >> strip_tac >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_revert_forward:
+  lower_dload_function_supply u f = (g,v) /\
+  EVERY inst_wf (fn_insts f) /\ ir_supply_covers_fn u f /\
+  in_revert_forward f s ==>
+  ?bb u0 ys u1 pre u2.
+    lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+    lower_dload_insts_supply u0 bb.bb_instructions = (ys,u1) /\
+    lookup_block s.vs_current_bb g.fn_blocks =
+      SOME (bb with bb_instructions := ys) /\
+    lower_dload_insts_supply u0 (TAKE s.vs_inst_idx bb.bb_instructions) = (pre,u2) /\
+    in_revert_forward g (s with vs_inst_idx := LENGTH pre)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), in_revert_forward_def] >>
+  strip_tac >> gvs[] >>
+  drule_all lower_dload_blocks_supply_lookup >> strip_tac >>
+  `MEM bb f.fn_blocks` by
+    metis_tac[lookup_block_MEM] >>
+  `EVERY inst_wf bb.bb_instructions` by
+    (gvs[fn_insts_def, fn_insts_blocks_def, EVERY_MEM] >>
+     metis_tac[fn_insts_blocks_MEM]) >>
+  `!inst w. MEM inst bb.bb_instructions /\ MEM (Var w) inst.inst_operands ==>
+     MEM w u0.irs_used_vars` by
+    (rpt strip_tac >> first_x_assum irule >>
+     gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+     first_x_assum irule >>
+     simp[fn_ir_vars_def, block_ir_vars_def, inst_ir_vars_def,
+          MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+     qexistsl_tac [`bb`,`inst`] >>
+     simp[inst_uses_def, MEM_operand_vars_eq_Var]) >>
+  Cases_on `lower_dload_insts_supply u0 (TAKE s.vs_inst_idx bb.bb_instructions)` >>
+  rename1 `lower_dload_insts_supply u0 (TAKE s.vs_inst_idx bb.bb_instructions) = (pre,u2)` >>
+  drule_all lower_dload_insts_supply_revert_at >> strip_tac >>
+  qexistsl_tac [`u0`,`is`,`u1`,`pre`,`u2`] >> simp[] >> metis_tac[]
 QED
