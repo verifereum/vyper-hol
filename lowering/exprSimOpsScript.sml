@@ -866,8 +866,42 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-(* A storage read is a fresh register write even in an arbitrary register file.
-   Retain the exact non-register frame, with the fragment's index normalized. *)
+(* A one-operand read is a fresh register write even in an arbitrary register
+   file. Retain the exact non-register frame, with the index normalized.
+   INVOKE is excluded because its execution is not given by step_inst_base. *)
+Theorem emit_op_read_frame_frag:
+  !ctx func cenv cx es sa sb a p s0 opc v.
+    emit_op opc [a] sa = (p,sb) /\
+    ~is_terminator opc /\ opc <> INVOKE /\
+    (!id dst. step_inst_base (mk_inst id opc [a] [dst]) s0 =
+       OK (update_var dst v s0)) /\
+    local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+        eval_operand p s = SOME v /\
+        (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
+        (s with <|vs_vars := s0.vs_vars; vs_inst_idx := s0.vs_inst_idx|>) = s0)
+      (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  simp[emit_op_def, fresh_var_def, emit_inst_def, fresh_id_def,
+       emit_def, comp_bind_def, comp_return_def] >>
+  simp[emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
+  irule frag_exec_run_inst_seq >>
+  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
+       rich_listTheory.IS_PREFIX_APPEND, mk_inst_def] >>
+  rpt strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) v s0` >>
+  simp[run_inst_seq_def, GSYM mk_inst_def, stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- (irule stmt_state_rel_update_var >> simp[] >>
+      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  simp[eval_operand_def, update_var_def, lookup_var_def,
+       FLOOKUP_UPDATE] >> rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
 Theorem emit_op_SLOAD_frag:
   !ctx func cenv cx es sa sb a p s0 b.
     emit_op SLOAD [a] sa = (p,sb) /\
@@ -881,22 +915,6 @@ Theorem emit_op_SLOAD_frag:
         (s with <|vs_vars := s0.vs_vars; vs_inst_idx := s0.vs_inst_idx|>) = s0)
       (\r. F)
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
-  simp[emit_op_def, fresh_var_def, emit_inst_def, fresh_id_def,
-       emit_def, comp_bind_def, comp_return_def] >>
-  simp[emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >> gvs[] >>
-  irule frag_exec_run_inst_seq >>
-  simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
-       rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
-  rpt strip_tac >> gvs[] >>
-  qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (sload b s0) s0` >>
-  drule step_SLOAD >>
-  disch_then (qspecl_then [`sa.cs_next_id`, `STRING #"%" (toString sa.cs_next_var)`] assume_tac) >>
-  simp[run_inst_seq_def, GSYM mk_inst_def, stmt_state_rel_inst_idx] >>
-  conj_tac
-  >- (irule stmt_state_rel_update_var >> simp[] >>
-      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  simp[eval_operand_def, update_var_def, lookup_var_def,
-       FLOOKUP_UPDATE] >> rpt strip_tac >> gvs[not_fresh_at_def]
+  rpt strip_tac >> irule emit_op_read_frame_frag >>
+  simp[] >> qexistsl_tac [`a`, `SLOAD`] >> simp[is_terminator_def, step_SLOAD]
 QED
