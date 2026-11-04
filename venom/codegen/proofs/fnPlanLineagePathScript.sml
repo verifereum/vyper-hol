@@ -1,7 +1,7 @@
 Theory fnPlanLineagePath
 Ancestors
   fnPlanLineagePhiActivation fnPlanLineageLiveness stackPlanGen livenessDefs
-  livenessAnalysisProps cfgAnalysisProps
+  livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
 
 Theorem analyzed_ready_live_through_edge:
   !fn lbl bb pred pred_bb v.
@@ -36,13 +36,14 @@ QED
    - reachable_phi_incoming_live_out supplies the actual predecessor seed.
    - analyzed_ready_live_through_edge above transports an exit seed through
      a ready block with no definition of v, without any incoming-use seed.
-   - Existing native path bridge: dominates_path_no_revisit[local] in
+   - Existing native path bridge: dominates_path_no_revisit in
      venom/passes/remove_unused/proofs/removeUnusedProofsScript.sml
      (lines 1734-1752) already proves, under wf_function fn and
      fn_dominates fn d p, existence of a native path d::tail ending at p
      with ~MEM d tail. It uses local rtc_to_is_fn_path,
      last_occurrence_split and is_fn_path_suffix. Do not duplicate it.
-     Reuse/extraction needs ancestor-level planning; it is not exported.
+     Exported at its single definition site for reuse here, along with
+     ssa_unique_var_defined_at; their proof dependencies stay local.
      The remaining strengthened interface must additionally supply vertex
      reachability, lookup witnesses and analyzed-CFG edge membership.
      Empty tail covers d=p.

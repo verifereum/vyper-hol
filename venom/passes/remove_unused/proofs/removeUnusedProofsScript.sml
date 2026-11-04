@@ -1549,7 +1549,7 @@ Proof
 QED
 
 (* Under ssa_form, var_defined_at for v determines the block and index *)
-Theorem ssa_unique_var_defined_at[local]:
+Theorem ssa_unique_var_defined_at:
   !fn def_bb def_idx v lbl idx.
     wf_function fn /\ ssa_form fn /\
     MEM def_bb fn.fn_blocks /\
@@ -1731,7 +1731,7 @@ Proof
 QED
 
 (* From dominance + reachability: path from d to n not revisiting d (except at start) *)
-Theorem dominates_path_no_revisit[local]:
+Theorem dominates_path_no_revisit:
   !fn d n.
     wf_function fn /\ fn_dominates fn d n ==>
     ?path. is_fn_path fn (d :: path) /\ LAST (d :: path) = n /\ ~MEM d path
