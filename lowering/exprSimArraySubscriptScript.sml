@@ -4200,3 +4200,45 @@ Proof
   simp[] >> disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
   qexistsl [`es`,`mid`] >> simp[]
 QED
+
+Theorem expr_body_pre_after_eval:
+  expr_body_pre cenv cx env e mid /\ expr_body_pre cenv cx env idx mid /\
+  eval_expr cx idx mid = (res,later) ==>
+  expr_body_pre cenv cx env e later
+Proof
+  strip_tac >> drule_all expr_body_pre_eval_result >> strip_tac >>
+  fs[expr_body_pre_def]
+QED
+
+Theorem eval_immutable_root_after_eval:
+  expr_body_pre cenv cx env (TopLevelName a (md,nm)) mid /\
+  expr_body_pre cenv cx env idx mid /\
+  eval_expr cx (TopLevelName a (md,nm)) mid =
+    (INL (PlaceR (ImmutablePlace md nm [])),mid) /\
+  eval_expr cx idx mid = (res,later) ==>
+  eval_expr cx (TopLevelName a (md,nm)) later =
+    (INL (PlaceR (ImmutablePlace md nm [])),later)
+Proof
+  strip_tac >>
+  `env_context_consistent env cx /\ well_typed_expr env (TopLevelName a (md,nm))` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
+  `?ty. FLOOKUP env.bare_globals (md,nm) = SOME ty` by
+    (drule_at (Pat `eval_expr _ _ _ = _`)
+       eval_expr_immutable_bare_global >> disch_then irule >> simp[]) >>
+  `?tops. get_module_code cx md = SOME tops /\ find_var_decl_by_name nm tops = NONE` by
+    (qpat_x_assum `eval_expr _ (TopLevelName _ _) _ = _` mp_tac >>
+     simp[Once evaluate_def] >> strip_tac >>
+     drule lookup_global_immutable_origin >> simp[]) >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  `env_consistent env cx later` by fs[expr_sim_inv_def] >>
+  `IS_SOME (FLOOKUP (get_source_immutables md
+    (case ALOOKUP later.immutables cx.txn.target of SOME imms => imms | NONE => [])) nm)` by
+    (fs[env_consistent_def, env_immutables_consistent_def] >>
+     qpat_x_assum `!src id ty. _` drule >> simp[]) >>
+  gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `FLOOKUP _ nm = SOME entry` >> PairCases_on `entry` >>
+  irule eval_immutable_root >> conj_tac
+  >- (Cases_on `ALOOKUP later.immutables cx.txn.target` >>
+      gvs[get_source_immutables_def] >> goal_assum (drule_at Any)) >>
+  qexists `tops` >> simp[]
+QED
