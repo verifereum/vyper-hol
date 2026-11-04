@@ -11,16 +11,6 @@ Ancestors
 val () = computeLib.add_funs
   [wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``];
 
-Theorem remainder_method_id_gate_removed:
-  source_expr_remainder tops (Builtin (BaseT (BytesT (Fixed 4))) MethodId []) /\
-  ~supported_expr tops (Builtin (BaseT (BytesT (Fixed 4))) MethodId []) /\
-  ~well_typed_expr env (Builtin (BaseT (BytesT (Fixed 4))) MethodId [])
-Proof
-  simp[source_expr_remainder_def, source_pure_expr_remainder_def,
-       source_builtin_remainder_def, supported_expr_def, supported_pure_expr_def,
-       supported_effect_expr_def, supported_builtin_form_def, typed_method_id_rejected]
-QED
-
 Theorem remainder_power_gate_removed:
   source_pure_expr_remainder tops
     (Builtin (BaseT (UintT 256)) (Bop Exp)

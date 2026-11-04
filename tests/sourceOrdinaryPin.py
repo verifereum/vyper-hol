@@ -50,6 +50,7 @@ PIN_ONLY_CASES = {
         (('pkg', 'lib_a'), 'relative_uses/pkg/lib_a.vy'),
         (('pkg', 'lib_b'), 'relative_uses/pkg/lib_b.vy')],
     'mutability': [(('main',), 'mutability.vy')],
+    'operator_forms': [(('main',), 'operator_forms.vy')],
     'nonreentrancy_pragma': [(('main',), 'nonreentrancy_pragma/main.vy')],
     'uninitialized_import': [(('main',), 'uninitialized_import/main.vy'),
         (('lib',), 'uninitialized_import/lib.vy'), (('mid',), 'uninitialized_import/mid.vy')],
@@ -74,6 +75,7 @@ INHERITED_SOURCE_IDS = {
     # Independent evidence: mutability.json and the two corresponding main.json
     # fixtures (module resolved_path/source_id), not compiler traversal order.
     'mutability': {('main',): 0},
+    'operator_forms': {('main',): 0},
     'nonreentrancy_pragma': {('main',): 0},
     'uninitialized_import': {('main',): 0, ('lib',): 1, ('mid',): 2},
 }
@@ -87,8 +89,8 @@ def check_inventory(base):
     assert ordinary == expected, ('ordinary fixture inventory drift',
         {'unlisted': sorted(ordinary - expected), 'missing': sorted(expected - ordinary)})
     assert len(CASES) == 27
-    assert len(PIN_ONLY_CASES) == 8
-    assert len(ordinary) == 35  # 27 retained HOL cases plus eight pin/capture-only cases
+    assert len(PIN_ONLY_CASES) == 9
+    assert len(ordinary) == 36  # 27 retained HOL cases plus nine pin/capture-only cases
 
 
 def check_inherited_ids(annotated, entries, ids):

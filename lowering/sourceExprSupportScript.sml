@@ -1,5 +1,5 @@
 (* #543: transparent expression remainder, including nested pure/effect
-   places. Only the builtin MethodId/Exp gates differ from supportedExprs;
+   places. Only the builtin Exp gate differs from supportedExprs;
    checker-derived equivalence includes intermediate storage map places. *)
 Theory sourceExprSupport
 Ancestors

@@ -67,46 +67,6 @@ Proof
   drule well_typed_power_literal_exponent_nonnegative >> simp[]
 QED
 
-(* Shifts are not covered by the power checker repair.  In particular it
-   would be unsound to remove their width/nonnegative-count gates. *)
-Theorem checker_admits_negative_shift:
-  well_typed_expr env (Builtin (BaseT (IntT 256)) (Bop ShL)
-    [Literal (BaseT (IntT 256)) (IntL 1);
-     Literal (BaseT (IntT 256)) (IntL (-1))]) /\
-  evaluate_binop (Signed 256) tv ShL (IntV 1) (IntV (-1)) =
-    INR (RuntimeError "ShL0") /\
-  ~supported_binop ShL (BaseT (IntT 256)) (BaseT (IntT 256)) F F
-Proof
-  rpt conj_tac >>
-  simp[well_typed_expr_def, well_typed_literal_def, well_formed_type_def,
-       evaluate_type_def, well_typed_builtin_app_def, well_typed_binop_def,
-       builtin_operands_ok_def, within_int_bound_def, expr_type_def,
-       evaluate_binop_def, supported_binop_def, supported_unsigned_type_def]
-QED
-
-Theorem checker_admits_untruncated_narrow_shift:
-  well_typed_expr env (Builtin (BaseT (UintT 8)) (Bop ShL)
-    [Literal (BaseT (UintT 8)) (IntL 128);
-     Literal (BaseT (UintT 8)) (IntL 1)]) /\
-  evaluate_binop (Unsigned 8) tv ShL (IntV 128) (IntV 1) = INL (IntV 0) /\
-  compile_binop ShL x y (BaseT (UintT 8)) NONE NONE = emit_op SHL [y; x] /\
-  word_lsl (128w : bytes32) 1 = 256w /\
-  ~supported_binop ShL (BaseT (UintT 8)) (BaseT (UintT 8)) F F
-Proof
-  rpt conj_tac >>
-  simp[well_typed_expr_def, well_typed_literal_def, well_formed_type_def,
-       evaluate_type_def, well_typed_builtin_app_def, well_typed_binop_def,
-       builtin_operands_ok_def, within_int_bound_def, expr_type_def,
-       evaluate_binop_def, supported_binop_def, compile_binop_def,
-       word_lsl_n2w]
-  >- (mp_tac (Q.SPECL [`1`, `128`]
-        (INST_TYPE [alpha |-> ``:8``] i2w_int_shift_left)) >>
-      disch_then (mp_tac o AP_TERM ``\w:word8. &w2n w : int``) >>
-      simp[w2n_i2w, i2w_pos, word_lsl_n2w, w2n_n2w,
-           dimword_def, EVAL ``dimindex (:8)``]) >>
-  simp[EVAL ``dimindex (:256)``]
-QED
-
 Theorem well_typed_power_lowering_bounded_exponent:
   well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) /\
   expr_int_literal base_e = NONE ==>

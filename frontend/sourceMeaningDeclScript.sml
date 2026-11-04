@@ -97,6 +97,8 @@ Proof
       simp[source_meaning_execute_def])
   >- (gvs[source_module_body_def, source_module_signature_def, source_module_variable_def,
         source_meaning_bind_success] >>
+      Cases_on `MEM SCQ_Reentrant (source_type_qualifiers resolution)` >>
+      gvs[source_meaning_bind_success] >>
       simp[source_meaning_decl_code_def] >> rpt strip_tac >>
       `source_meaning_locals [] ctx` by simp[source_meaning_locals_def] >>
       drule_all source_meaning_expression_transport >>

@@ -1,5 +1,5 @@
 (* #543 TOP-LEVEL: source_program_remainder, checked_program_remainder.
-   This transparent whitelist differs ONLY in MethodId/Exp expression gates
+   This transparent whitelist differs ONLY in Exp expression gates
    and Exp AugAssign's literal gate. All headers, names, effects, widths,
    nested-place types, return layouts, loop and binding restrictions are retained. Defaults
    are still excluded by the unchanged declaration headers; their checked

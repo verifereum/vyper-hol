@@ -198,10 +198,10 @@ class FixtureInventoryTest(unittest.TestCase):
             'defaults_control', 'deployment', 'nonreentrant', 'transient_storage',
             'abi_encode', 'imported_interface', 'interface_struct_return', 'duplicate_interface',
             'daddy'})
-        self.assertEqual(len(CASES) + len(PIN_ONLY_CASES), 35)
+        self.assertEqual(len(CASES) + len(PIN_ONLY_CASES), 36)
         self.assertEqual(set(PIN_ONLY_CASES), {'attribute_initializes', 'nested_initializes',
             'imported_constants', 'interface_struct', 'relative_uses', 'mutability',
-            'nonreentrancy_pragma', 'uninitialized_import'})
+            'operator_forms', 'nonreentrancy_pragma', 'uninitialized_import'})
 
     def test_new_unlisted_upstream_fixture_reject(self):
         (self.base/'new.vy').touch()

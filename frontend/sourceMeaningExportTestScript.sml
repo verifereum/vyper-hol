@@ -32,6 +32,11 @@ Definition source_meaning_export_fctx_def:
     source_module_function_context source_meaning_export_ctx "read" [] []
 End
 
+(* The context's fields, evaluated outside the proof: the record is large. *)
+val export_fctx_fields = map EVAL
+  [``source_meaning_export_fctx.sm_scopes``, ``source_meaning_export_fctx.sm_table``,
+   ``source_meaning_export_fctx.sm_constants``];
+
 Theorem source_meaning_export_body_source:
   source_meaning_bodies [] source_meaning_export_fctx (BaseT (UintT 256))
     [SS_Return (SOME (SX_Name "A"))]
@@ -43,7 +48,7 @@ Proof
   simp[sourceMeaningStmtDefsTheory.empty] >>
   irule sourceMeaningStmtDefsTheory.return_value >>
   irule sourceMeaningDefsTheory.constant >> qexists_tac `SCV_Int 6` >>
-  EVAL_TAC >> simp[] >> EVAL_TAC
+  simp export_fctx_fields >> EVAL_TAC >> simp[] >> EVAL_TAC
 QED
 
 Theorem source_meaning_export_source:

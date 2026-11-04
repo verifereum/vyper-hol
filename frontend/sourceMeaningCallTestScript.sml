@@ -71,7 +71,8 @@ Proof
         source_meaning_call_fctx_fields, source_meaning_call_ctx_fields] >>
       rpt conj_tac >> EVAL_TAC >> simp[] >> EVAL_TAC) >>
   irule source_meaning_call_constant >>
-  simp[source_meaning_stage_def, GSYM source_meaning_const_correct] >>
+  simp[source_meaning_stage_def, GSYM source_meaning_const_correct,
+    source_meaning_call_fctx_fields, source_meaning_call_ctx_fields] >>
   EVAL_TAC >> simp[] >> EVAL_TAC
 QED
 

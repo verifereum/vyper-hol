@@ -3,7 +3,7 @@ Ancestors
   sourceConstASTLibTest sourceConstEvalProps sourceConstBuiltinTest
   sourceConstEnvTest sourceConstValueTest sourceSyntaxLibTest
   sourceResolveTest sourceTypeTest sourceTypeProvenance sourceTypeFrontendLibTest
-  powerDomainProps vyperPowerDomainTest abiBuiltinDispatchTest abiAliasRegression
+  powerDomainProps vyperPowerDomainTest
 
 (* Audit only the new, locally verified work. Existing lowering simulations
    contain admissions and are deliberately NOT certified by this audit.
@@ -34,5 +34,4 @@ val () = List.app audit_source_elaboration
    "sourceSyntax", "sourceSyntaxLibTest", "sourceResolve", "sourceResolveModules",
    "sourceResolveProps", "sourceResolveTest", "sourceTypeDefs", "sourceTypeResolve",
    "sourceTypeProps", "sourceTypeProvenance", "sourceTypeTest",
-   "sourceTypeFrontendLibTest", "powerDomainProps", "vyperPowerDomainTest",
-   "abiBuiltinDispatchTest", "abiAliasRegression"];
+   "sourceTypeFrontendLibTest", "powerDomainProps", "vyperPowerDomainTest"];

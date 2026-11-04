@@ -10,7 +10,6 @@ Definition source_builtin_remainder_def:
         if op = Exp then supported_integer_type (expr_type a)
         else supported_binop op (expr_type a) (expr_type b)
           (supported_integer_literal a) (supported_nonnegative_literal b)
-    | (MethodId, args) => T
     | (Not, [a]) => ty = BaseT BoolT \/ ty = BaseT (UintT 256)
     | (Neg, [a]) => supported_signed_type ty \/ ty = BaseT DecimalT
     | (Abs, [a]) => ty = BaseT (IntT 256)
@@ -33,14 +32,8 @@ Definition source_builtin_remainder_def:
     | _ => F
 End
 
-Theorem typed_method_id_rejected:
-  ~well_typed_expr env (Builtin ty MethodId es)
-Proof
-  simp[Once well_typed_expr_def, well_typed_builtin_app_def]
-QED
-
 Theorem builtin_remainder_other:
-  blt <> MethodId /\ blt <> Bop Exp ==>
+  blt <> Bop Exp ==>
   (source_builtin_remainder tops ty blt es <=> supported_builtin_form tops ty blt es)
 Proof
   Cases_on `blt` >> simp[source_builtin_remainder_def, supported_builtin_form_def]
@@ -61,9 +54,7 @@ Theorem typed_builtin_remainder:
   well_typed_expr env (Builtin ty blt es) ==>
   (source_builtin_remainder tops ty blt es <=> supported_builtin_form tops ty blt es)
 Proof
-  strip_tac >> Cases_on `blt = MethodId`
-  >- gvs[typed_method_id_rejected] >>
-  Cases_on `blt = Bop Exp`
+  strip_tac >> Cases_on `blt = Bop Exp`
   >- (gvs[] >> drule well_typed_power_arguments >> strip_tac >> gvs[] >>
       drule typed_power_support >> simp[source_builtin_remainder_def]) >>
   irule builtin_remainder_other >> simp[]

@@ -1,5 +1,5 @@
 (* #543 support boundary. TOP-LEVEL: checked_source_builtin_support,
-   source_expr_method_id_erased, source_expr_power_supported,
+   source_expr_power_supported,
    source_expr_local_tuple_index, supported_local_tuple_read,
    checked_local_tuple_read_support. No global whitelist is weakened.
    Local tuple reads use the main nested-place support rules; checking supplies
@@ -10,8 +10,8 @@ Ancestors
   supportedExprForms supportedExprs supportedTypes exprLowering
   vyperTypeSystem vyperAST list integer sourceBuiltinSupport
 
-(* Exactly the builtin-form remainder after discharging residual MethodId
-   and the Exp literal-operand gate. All other operations, widths, effects,
+(* Exactly the builtin-form remainder after discharging the Exp
+   literal-operand gate. All other operations, widths, effects,
    conversions and storage shapes retain their original restrictions. This
    is only a builtin-form predicate, NOT a program whitelist replacement. *)
 Definition source_builtin_support_remainder_def:
@@ -38,14 +38,6 @@ Theorem checked_source_builtin_support:
 Proof
   strip_tac >> drule source_expr_elaborate_typed >> strip_tac >>
   drule typed_builtin_remainder >> simp[source_builtin_support_remainder_def]
-QED
-
-Theorem source_expr_method_id_erased:
-  source_expr_elaborate fuel env scopes table constants bindings ty original <>
-    SC_Value (Builtin ret MethodId es)
-Proof
-  strip_tac >> drule source_expr_elaborate_typed >>
-  simp[typed_method_id_rejected]
 QED
 
 Theorem source_expr_power_supported:

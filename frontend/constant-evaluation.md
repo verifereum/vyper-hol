@@ -168,7 +168,7 @@ backend linking instead of flattening identities.
 At the checked ordinary boundary,
 `sourceOrdinarySupport.source_ordinary_checked_remainder` and
 `source_ordinary_compiled_supported_program` use genuine checking to discharge
-redundant MethodId/Exp/Exp-AugAssign source-domain gates. The underlying
+redundant Exp/Exp-AugAssign source-domain gates. The underlying
 `sourceProgramSupport.checked_program_remainder` states that successful
 checking makes `source_program_remainder tops` equivalent to
 `supported_program tops` for a member module. All unrelated lowering restrictions

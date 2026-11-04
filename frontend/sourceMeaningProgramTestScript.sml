@@ -7,6 +7,16 @@ Ancestors
 Libs
   intLib wordsLib
 
+(* Evaluated outside the proof: the function context is a large record. *)
+val example_fctx_eq = let
+  val l = EVAL ``source_module_function_context source_meaning_example_ctx "f"
+        [SourceArg "x" (SOME source_meaning_example_uint);
+         SourceArg "flag" (SOME (SCA_Name ["bool"]))]
+        [("x",BaseT (UintT 256));("flag",BaseT BoolT)]``
+  val r = EVAL ``source_meaning_example_fctx``
+in if aconv (rhs (concl l)) (rhs (concl r)) then TRANS l (SYM r)
+   else raise Fail "function context differs from source_meaning_example_fctx" end;
+
 Theorem source_meaning_example_entry:
   source_meaning_entry source_meaning_example_program [["main"]]
     source_meaning_example_registry ["main"] source_meaning_example_syntax
@@ -27,7 +37,7 @@ Proof
   `source_module_function_context source_meaning_example_ctx "f"
     [SourceArg "x" (SOME source_meaning_example_uint);
      SourceArg "flag" (SOME (SCA_Name ["bool"]))]
-    [("x",BaseT (UintT 256));("flag",BaseT BoolT)] = source_meaning_example_fctx` by EVAL_TAC >>
+    [("x",BaseT (UintT 256));("flag",BaseT BoolT)] = source_meaning_example_fctx` by ACCEPT_TAC example_fctx_eq >>
   simp[source_meaning_example_source]
 QED
 

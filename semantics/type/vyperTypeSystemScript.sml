@@ -941,11 +941,74 @@ Definition well_typed_iterator_def:
      is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
+(* ===== Power-domain inversion from genuine typing ===== *)
+
+Theorem integer_literal_expr_cases:
+  integer_literal_expr e <=> ?ty n. e = Literal ty (IntL n)
+Proof
+  Cases_on `e` >> simp[integer_literal_expr_def] >>
+  rename1 `Literal ty lit` >> Cases_on `lit` >> simp[integer_literal_expr_def]
+QED
+
+Theorem power_exponent_ok_cases:
+  power_exponent_ok ty e <=>
+    ?lit_ty n. e = Literal lit_ty (IntL n) /\
+               0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  Cases_on `e` >> simp[power_exponent_ok_def] >>
+  rename1 `Literal lit_ty lit` >> Cases_on `lit` >> simp[power_exponent_ok_def]
+QED
+
+Theorem well_typed_power_operands:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) ==>
+  power_operands_ok ty base_e exponent
+Proof
+  simp[Once well_typed_expr_def, builtin_operands_ok_def]
+QED
+
+Theorem well_typed_power_arguments:
+  well_typed_expr env (Builtin ty (Bop Exp) es) ==>
+  ?base_e exponent. es = [base_e; exponent] /\ power_operands_ok ty base_e exponent
+Proof
+  strip_tac >> fs[Once well_typed_expr_def, builtin_operands_ok_def] >>
+  Cases_on `es` >> gvs[] >>
+  rename1 `well_typed_exprs env (first::tail)` >>
+  Cases_on `tail` >> gvs[] >>
+  rename1 `well_typed_exprs env (first::second::rest)` >>
+  Cases_on `rest` >> gvs[]
+QED
+
+Theorem well_typed_power_has_integer_literal:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) ==>
+  (?lit_ty n. base_e = Literal lit_ty (IntL n)) \/
+  (?lit_ty n. exponent = Literal lit_ty (IntL n))
+Proof
+  strip_tac >> drule well_typed_power_operands >>
+  simp[power_operands_ok_def, integer_literal_expr_cases,
+       power_exponent_ok_cases] >> metis_tac[]
+QED
+
+Theorem well_typed_power_literal_exponent_nonnegative:
+  well_typed_expr env
+    (Builtin ty (Bop Exp) [base_e; Literal lit_ty (IntL n)]) ==> 0 <= n
+Proof
+  strip_tac >> drule well_typed_power_operands >> simp[power_operands_ok_def]
+QED
+
+Theorem well_typed_power_nonliteral_base_exponent:
+  well_typed_expr env (Builtin ty (Bop Exp) [base_e; exponent]) /\
+  ~integer_literal_expr base_e ==>
+  ?lit_ty n. exponent = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  strip_tac >> drule well_typed_power_operands >>
+  simp[power_operands_ok_def, power_exponent_ok_cases] >> metis_tac[]
+QED
+
 Definition well_typed_custom_error_def:
   well_typed_custom_error env err =
     well_typed_exprs env (custom_error_exprs err)
 End
-
 
 (* ===== Executable statement typing ===== *)
 
@@ -1017,6 +1080,53 @@ Termination
     case x of INL(_,_,t) => stmt_size t
             | INR(_,_,ts) => list_size stmt_size ts)`
 End
+
+Definition well_typed_stmt_def:
+  well_typed_stmt env ret_ty s = IS_SOME (type_stmt env ret_ty s)
+End
+
+Definition well_typed_stmts_def:
+  well_typed_stmts env ret_ty ss = IS_SOME (type_stmts env ret_ty ss)
+End
+
+(* ===== Mutation-domain inversion ===== *)
+
+Theorem well_typed_pop_target_mutable:
+  well_typed_expr env (Pop ty tgt) ==> target_mutable env tgt
+Proof
+  simp[Once well_typed_expr_def]
+QED
+
+Theorem type_stmt_append_target_mutable:
+  type_stmt env ret_ty (Append tgt e) = SOME env' ==> target_mutable env tgt
+Proof
+  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem type_stmt_augassign_target_mutable:
+  type_stmt env ret_ty (AugAssign ty tgt bop e) = SOME env' ==>
+  target_mutable env tgt
+Proof
+  simp[Once type_stmt_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem type_stmt_power_augassign_exponent:
+  type_stmt env ret_ty (AugAssign ty target Exp rhs) = SOME env' ==>
+  ?lit_ty n. rhs = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  simp[Once type_stmt_def, augassign_operand_ok_def, power_exponent_ok_cases,
+       AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem well_typed_power_augassign_exponent:
+  well_typed_stmt env ret_ty (AugAssign ty target Exp rhs) ==>
+  ?lit_ty n. rhs = Literal lit_ty (IntL n) /\
+             0 <= n /\ Num n <= integer_value_bits ty
+Proof
+  simp[well_typed_stmt_def, IS_SOME_EXISTS] >>
+  metis_tac[type_stmt_power_augassign_exponent]
+QED
 
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through

@@ -173,9 +173,10 @@ Proof
   >> qpat_x_assum `source_module_statement _ _ _ _ = _` mp_tac >>
   Cases_on `fuel` >> simp_tac (srw_ss()) [Once source_module_statements_def,
     source_meaning_bind_pair_success, source_meaning_bind_success] >>
-  strip_tac >> gvs[] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   drule_all source_meaning_expression_transport >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
-  simp[Once evaluate_def, source_meaning_run_def]
+  simp[Once evaluate_def, source_meaning_run_def] >>
+  metis_tac[]
 QED

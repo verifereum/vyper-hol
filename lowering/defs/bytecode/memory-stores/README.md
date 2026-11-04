@@ -29,19 +29,18 @@ The theory is included in the default lowering rollup.
 `source/method_id_lit.json` is genuine pre-erasure syntax captured by
 `tools/source_module_loader.py` at `annotate_python_ast-before-get_node`, not
 reconstructed from annotated/folded values. The capture records the Vyper pin,
-source SHA-256 and original path; the manifest explicitly assigns source ID 0
-and canonical namespace `main` (runtime module ID `NONE`). Reproduce from the
-repository root, using the existing pinned environment (Vyper commit
-`cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c`):
+source SHA-256 and repository-relative path; the manifest explicitly assigns
+source ID 0 and canonical namespace `main` (runtime module ID `NONE`).
+Reproduce from the repository root, with a Python environment whose `vyper`
+is the checkout at `VYPER_PIN`:
 
 ```sh
-PYTHONPATH="$PWD/.agent-files/folded-value-validation/vyper-src" \
-  .agent-files/folded-value-validation/venv/bin/python tools/source_module_loader.py \
+PYTHONPATH=<vyper checkout at VYPER_PIN> python tools/source_module_loader.py \
   lowering/defs/bytecode/memory-stores/source/method_id_lit.manifest.json \
   lowering/defs/bytecode/memory-stores/source/method_id_lit.json
 ```
 
-Absolute provenance paths reflect the checkout used for capture. The witness
+The witness
 pairs that capture with the unchanged `oracle/method_id_lit.json`, inherits only
 layout/runtime-context claims (no executable bodies), and checks deployment and
 runtime on the normalized modules before comparing both bytecodes to the
