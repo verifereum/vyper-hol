@@ -1254,3 +1254,58 @@ Proof
   qpat_x_assum `execution_frame _ = _` mp_tac >>
   simp[execution_frame_def, venom_state_component_equality]
 QED
+
+Theorem current_result_error_agree[simp]:
+  current_result_agree rt demand (Error e) (Error e)
+Proof
+  simp[current_result_agree_def]
+QED
+
+Theorem current_create_agree:
+  (inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2) /\
+  inst_wf inst /\ inst'.inst_opcode = inst.inst_opcode /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >>
+  asm_rewrite_tac[step_inst_base_def] >> simp[] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  irule current_exec_create_agree >> metis_tac[]
+QED
+
+Theorem current_external_call_agree:
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL \/
+   inst.inst_opcode = DELEGATECALL) /\
+  inst_wf inst /\ inst'.inst_opcode = inst.inst_opcode /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_call_ctx = st'.vs_call_ctx`
+    by (qpat_x_assum `execution_frame _ = _`
+          (mp_tac o AP_TERM ``\s:venom_state. s.vs_call_ctx``) >>
+        simp[execution_frame_def]) >>
+  drule_all current_rename_operands_pointwise >>
+  gvs[inst_wf_def, LENGTH_EQ_NUM_compute, current_rename_operands_map, LIST_REL_def] >>
+  strip_tac >>
+  rpt (qpat_x_assum `eval_operand _ st = eval_operand _ st'` (assume_tac o SYM)) >>
+  asm_rewrite_tac[step_inst_base_def] >> simp[] >>
+  qpat_x_assum `inst'.inst_operands = _` kall_tac >>
+  rpt (qpat_x_assum `eval_operand _ st' = _` kall_tac) >>
+  rpt (BasicProvers.TOP_CASE_TAC >> pure_asm_rewrite_tac[optionTheory.option_case_def, current_result_error_agree]) >>
+  FIRST [irule current_exec_ext_call_agree, irule current_exec_delegatecall_agree] >>
+  metis_tac[]
+QED
+
