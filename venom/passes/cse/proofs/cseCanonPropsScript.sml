@@ -953,3 +953,147 @@ Proof
     fs[venomWfTheory.wf_function_def]) >>
  drule cfg_dfs_pre_succs_closed >> simp[listTheory.EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem cse_static_trace_availability:
+ !fn ps. cse_static_trace fn ps ==> wf_function fn /\ fn_inst_wf fn ==>
+ !lbl k. LAST ps = (lbl,k) ==>
+ ?a. df_at NONE (avail_analyze fn) lbl k = SOME a /\
+     (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+       ?q. MEM q (FRONT ps) /\ cse_point_has_id fn q src.inst_id)
+Proof
+ gen_tac >> ho_match_mp_tac cse_static_trace_strongind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+     `MEM entry (cfg_analyze fn).cfg_dfs_pre` by
+       (gvs[venomInstTheory.fn_entry_label_def] >>
+        Cases_on `entry_block fn` >> gvs[] >>
+        drule cfg_analyze_preorder_entry_first >>
+        Cases_on `(cfg_analyze fn).cfg_dfs_pre` >> simp[]) >>
+     drule_all cse_avail_entry_empty >> metis_tac[]) 
+ >- suspend "intra"
+ >> suspend "edge"
+QED
+
+Resume cse_static_trace_availability[intra]:
+ rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+ `?a. df_at NONE (avail_analyze fn) lbl k = SOME a /\
+   (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+     ?q. MEM q (FRONT ps) /\ cse_point_has_id fn q src.inst_id)` by metis_tac[] >>
+ `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+   metis_tac[cse_static_trace_reachable, cse_static_trace_nonempty,
+             rich_listTheory.MEM_LAST, listTheory.list_CASES] >>
+ `SUC k <= LENGTH bb.bb_instructions` by simp[] >>
+ drule_all cse_avail_at_intra >> simp[] >> strip_tac >>
+ qexists_tac `avail_transfer_inst (dfg_build_function fn) (EL k bb.bb_instructions) a` >>
+ simp[avail_transfer_opt_def, GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >>
+ rpt strip_tac >>
+ `((?xs. FLOOKUP a e = SOME xs /\ MEM src xs) /\
+    avail_source_survives e (EL k bb.bb_instructions)) \/
+   avail_source_birth (dfg_build_function fn) e src (EL k bb.bb_instructions)`
+   by metis_tac[cse_transfer_source_cases] >>
+ pop_assum strip_assume_tac
+ >- (qpat_x_assum `!e src. _` (qspecl_then [`e`, `src`] mp_tac) >>
+     impl_tac >- metis_tac[] >> strip_tac >>
+     qexists_tac `q` >> simp[] >>
+     qspec_then `ps` strip_assume_tac rich_listTheory.SNOC_CASES >>
+     gvs[GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >>
+     simp[rich_listTheory.SNOC_APPEND]) >>
+ fs[availExprProofsTheory.avail_source_birth_def] >>
+ qexists_tac `(lbl,k)` >>
+ simp[cse_point_has_id_def] >>
+ metis_tac[cse_static_trace_nonempty, rich_listTheory.MEM_LAST, listTheory.list_CASES]
+QED
+
+Resume cse_static_trace_availability[edge]:
+ rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+ `?a. df_at NONE (avail_analyze fn) lbl (LENGTH bb.bb_instructions) = SOME a /\
+   (!e src. (?xs. FLOOKUP a e = SOME xs /\ MEM src xs) ==>
+     ?q. MEM q (FRONT ps) /\ cse_point_has_id fn q src.inst_id)` by metis_tac[] >>
+ `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+   metis_tac[cse_static_trace_reachable, cse_static_trace_nonempty,
+             rich_listTheory.MEM_LAST, listTheory.list_CASES] >>
+ `MEM next (cfg_succs_of (cfg_analyze fn) lbl)` by
+   (gvs[venomWfTheory.fn_cfg_edge_def] >>
+    irule bb_succs_in_cfg_succs >> fs[venomWfTheory.wf_function_def]) >>
+ `MEM lbl (cfg_preds_of (cfg_analyze fn) next)` by
+   metis_tac[cfg_edge_symmetry_uncond] >>
+ `MEM next (cfg_analyze fn).cfg_dfs_pre` by
+   (drule cfg_dfs_pre_succs_closed >> simp[listTheory.EVERY_MEM]) >>
+ drule_all cse_avail_boundary_member >> strip_tac >>
+ drule_all cse_avail_entry_predecessor >> strip_tac >>
+ qexists_tac `b'` >> simp[GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >>
+ rpt strip_tac >>
+ `?q. MEM q (FRONT ps) /\ cse_point_has_id fn q src.inst_id` by metis_tac[] >>
+ qexists_tac `q` >> simp[] >>
+ qspec_then `ps` strip_assume_tac rich_listTheory.SNOC_CASES >>
+ gvs[GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >>
+ simp[rich_listTheory.SNOC_APPEND]
+QED
+Finalise cse_static_trace_availability
+
+Theorem cse_point_has_id_injective:
+ !fn p q id. wf_function fn /\ cse_point_has_id fn p id /\
+ cse_point_has_id fn q id ==> p = q
+Proof
+ rpt gen_tac >> PairCases_on `p` >> PairCases_on `q` >>
+ strip_tac >> fs[cse_point_has_id_def] >>
+ `MEM bb fn.fn_blocks /\ MEM bb' fn.fn_blocks` by
+   metis_tac[lookup_block_MEM] >>
+ `MEM id (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM id (MAP (\i. i.inst_id) bb'.bb_instructions)` by
+   (simp[listTheory.MEM_MAP] >> metis_tac[listTheory.EL_MEM]) >>
+ `?pre post. fn.fn_blocks = pre ++ bb::post` by metis_tac[listTheory.MEM_SPLIT] >>
+ fs[venomWfTheory.wf_function_def, venomWfTheory.fn_inst_ids_distinct_def,
+    listTheory.MAP_APPEND, listTheory.FLAT_APPEND, listTheory.ALL_DISTINCT_APPEND]
+ >- (`MEM id (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) pre))` by
+       (simp_tac bool_ss [listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+        qexists_tac `MAP (\i. i.inst_id) bb'.bb_instructions` >>
+        simp[] >> qexists_tac `bb'` >> simp[]) >> metis_tac[])
+ >- (conj_tac >- metis_tac[lookup_block_label] >>
+     gvs[] >> metis_tac[listTheory.ALL_DISTINCT_EL_IMP, listTheory.EL_MAP, listTheory.LENGTH_MAP]) >>
+ `MEM id (FLAT (MAP (\b. MAP (\i. i.inst_id) b.bb_instructions) post))` by
+   (simp_tac bool_ss [listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+    qexists_tac `MAP (\i. i.inst_id) bb'.bb_instructions` >>
+        simp[] >> qexists_tac `bb'` >> simp[]) >> metis_tac[]
+QED
+
+Theorem cse_avail_source_path_preorder:
+ !fn lbl k bb src e.
+ wf_function fn /\ fn_inst_wf fn /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\ k < LENGTH bb.bb_instructions /\
+ avail_get_source (ae_lookup_inst fn lbl k) e = SOME src ==>
+ cse_path_preorder fn src.inst_id (EL k bb.bb_instructions).inst_id
+Proof
+ rpt gen_tac >> strip_tac >> rw[cse_path_preorder_def] >>
+ `cse_point_has_id fn (lbl,k) (EL k bb.bb_instructions).inst_id` by
+   simp[cse_point_has_id_def] >>
+ `LAST ps = (lbl,k)` by metis_tac[cse_point_has_id_injective] >> gvs[] >>
+ drule_all cse_static_trace_availability >>
+ strip_tac >>
+ gvs[ae_lookup_inst_def, avail_unwrap_def, avail_get_source_def, AllCaseEqs()] >>
+ `?q. MEM q (FRONT ps) /\ cse_point_has_id fn q src.inst_id` by
+   (first_x_assum irule >> goal_assum drule >> simp[]) >>
+ qexists_tac `q` >> simp[] >>
+ qspec_then `ps` strip_assume_tac rich_listTheory.SNOC_CASES >>
+ gvs[GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >>
+ simp[rich_listTheory.SNOC_APPEND]
+QED
+
+Theorem compute_canon_path_preorder:
+ !fn k. wf_function fn /\ fn_inst_wf fn ==>
+ cse_path_preorder fn
+   (canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) k) k
+Proof
+ rpt strip_tac >> irule compute_canon_preorder >>
+ simp[cse_path_preorder_reflexive, cse_path_preorder_transitive] >>
+ rpt strip_tac >> drule cse_canon_record_prefix >> strip_tac >>
+ `MEM (ae,inst) (cse_canon_inputs (avail_analyze fn) fn)` by simp[] >>
+ pop_assum mp_tac >>
+ simp_tac bool_ss [cse_canon_inputs_def, listTheory.MEM_FLAT, listTheory.MEM_MAP,
+      indexedListsTheory.MEM_MAPi, PULL_EXISTS] >>
+ rpt strip_tac >> gvs[] >>
+ irule cse_avail_source_path_preorder >>
+ simp[ae_lookup_inst_def] >>
+ qexistsl_tac [`mk_expr (dfg_build_function fn) (EL idx bb.bb_instructions)`, `bb.bb_label`] >>
+ simp[] >> irule MEM_lookup_block >>
+ fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]
+QED
