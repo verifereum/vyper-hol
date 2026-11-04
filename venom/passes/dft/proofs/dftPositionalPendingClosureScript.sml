@@ -1,0 +1,451 @@
+Theory dftPositionalPendingClosure
+Ancestors
+  dftPositionalPendingGas dftPositionalSegment dftPositionalStep
+  dftPositionalReturn dftOccurrenceMachine dftOccurrenceReplay
+  dftOpenMachine dftOpenErase dftOriginalRuntime dftPositionalPhase
+  dftOccurrenceSuspended dftPositionalEdit dftPositionalRuntime
+  dftPositionalGasSegment
+  contextRawReachable venomExecSemantics venomInst venomState list arithmetic
+
+Definition dft_pending_segment_hits_def:
+  dft_pending_segment_hits C w a l inst addr =
+    SUM (GENLIST (\j. if dft_occ_gas_event inst addr
+      (FUNPOW (dft_occ_oracle_next w C) j l) then 1 else 0) a)
+End
+
+Definition dft_pending_ledger_hits_def:
+  dft_pending_ledger_hits B inst addr =
+    LENGTH (FILTER (\e. e = (inst,addr)) B)
+End
+
+Definition pending_segment_account_def:
+  pending_segment_account C D w a b l r B B' <=>
+    (!inst addr.
+      dft_pending_segment_hits C w a l inst addr +
+        dft_pending_ledger_hits B inst addr =
+      dft_pending_segment_hits D w b r inst addr +
+        dft_pending_ledger_hits B' inst addr) /\
+    dft_occ_count (FUNPOW (dft_occ_oracle_next w C) a l) +
+      dft_occ_count r + LENGTH B =
+    dft_occ_count (FUNPOW (dft_occ_oracle_next w D) b r) +
+      dft_occ_count l + LENGTH B' /\
+    (!j f inst s. j < a /\
+      dft_open_observe f inst s
+        (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+      inst_mem_ranges inst s <> [] ==>
+      ?k g t. k < b /\ dft_pos_functions C D f g /\
+        dft_open_observe g inst t
+          (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+        t.vs_memory = s.vs_memory /\ inst_mem_ranges inst t = inst_mem_ranges inst s) /\
+    (!k g inst t. k < b /\
+      dft_open_observe g inst t
+        (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+      inst_mem_ranges inst t <> [] ==>
+      ?j f s. j < a /\ dft_pos_functions C D f g /\
+        dft_open_observe f inst s
+          (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+        t.vs_memory = s.vs_memory /\ inst_mem_ranges inst t = inst_mem_ranges inst s)
+End
+
+Theorem dft_pending_segment_hits_small[simp]:
+  dft_pending_segment_hits C w 0 l inst addr = 0 /\
+  dft_pending_segment_hits C w 1 l inst addr =
+    (if dft_occ_gas_event inst addr l then 1 else 0) /\
+  dft_pending_segment_hits C w 2 l inst addr =
+    (if dft_occ_gas_event inst addr l then 1 else 0) +
+    (if dft_occ_gas_event inst addr (dft_occ_oracle_next w C l) then 1 else 0)
+Proof
+  simp[dft_pending_segment_hits_def, GENLIST, SUM]
+QED
+
+Theorem dft_pending_ledger_hits_small[simp]:
+  dft_pending_ledger_hits [] inst addr = 0 /\
+  dft_pending_ledger_hits (e::B) inst addr =
+    (if e = (inst,addr) then 1 else 0) + dft_pending_ledger_hits B inst addr /\
+  dft_pending_ledger_hits (B ++ B') inst addr =
+    dft_pending_ledger_hits B inst addr + dft_pending_ledger_hits B' inst addr
+Proof
+  simp[dft_pending_ledger_hits_def, FILTER_APPEND_DISTRIB] >>
+  Cases_on `e = (inst,addr)` >> simp[]
+QED
+
+Theorem dft_pending_account_zero:
+  pending_segment_account C D w 0 0 l r B B
+Proof simp[pending_segment_account_def, ADD_COMM]
+QED
+
+Theorem dft_pending_account_one_transfer:
+  dft_pos_segment_account C D w 1 1 l r /\
+  dft_occ_count (dft_occ_oracle_next w C l) + dft_occ_count r =
+    dft_occ_count (dft_occ_oracle_next w D r) + dft_occ_count l ==>
+  pending_segment_account C D w 1 1 l r B B
+Proof
+  simp[dft_pos_segment_account_def, pending_segment_account_def] >>
+  rpt strip_tac >> simp[]
+QED
+
+Theorem dft_pending_account_phase_transfer:
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  dft_pos_pending_gas_events zs ++ H = dft_pos_pending_gas_events zs' ++ H' /\
+  dft_pos_segment_account C D w 1 1 l r ==>
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  strip_tac >>
+  `dft_occ_count l = dft_occ_count r +
+      LENGTH (dft_pos_pending_gas_events zs ++ H) /\
+   dft_occ_count (dft_occ_oracle_next w C l) =
+     dft_occ_count (dft_occ_oracle_next w D r) +
+      LENGTH (dft_pos_pending_gas_events zs' ++ H')` by
+    (fs[dft_pos_pending_aligned_phase_def] >>
+     every_drule dft_pos_pending_gas_phase_count >> simp[]) >>
+  `LENGTH (dft_pos_pending_gas_events zs ++ H) =
+   LENGTH (dft_pos_pending_gas_events zs' ++ H')` by metis_tac[] >>
+  gvs[] >> irule dft_pending_account_one_transfer >> simp[]
+QED
+
+Theorem dft_pending_enter_account:
+  l.dft_occ_core = DftOpen (DftEnter f 0 s) ls nL /\
+  r.dft_occ_core = DftOpen (DftEnter g 0 s) rs nR ==>
+  pending_segment_account C D w 1 1 l r B B
+Proof
+  strip_tac >>
+  `dft_pos_segment_account C D w 1 1 l r` by
+    (irule dft_pos_enter_account >> metis_tac[]) >>
+  `dft_occ_count (dft_occ_oracle_next w C l) = nL /\
+   dft_occ_count (dft_occ_oracle_next w D r) = nR` by
+    metis_tac[dft_pos_enter_count] >>
+  irule dft_pending_account_one_transfer >> gvs[dft_occ_count_def]
+QED
+
+Theorem dft_pending_enter_success:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftEnter f 0 s) ls nL /\
+  r.dft_occ_core = DftOpen (DftEnter g 0 s) rs nR /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  lookup_block s.vs_current_bb g.fn_blocks = SOME bb' /\
+  eval_phis s bb.bb_instructions = OK sp /\
+  eval_phis s bb'.bb_instructions = OK sp /\
+  phi_prefix_length bb.bb_instructions = phi_prefix_length bb'.bb_instructions /\
+  dft_pos_slot C D j k f g bb bb' /\
+  ~(j = fi /\ k = bi /\ phi_prefix_length bb.bb_instructions = SUC (LENGTH pre)) ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+   l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit /\
+   l.dft_occ_saved = r.dft_occ_saved /\ LENGTH l.dft_occ_saved = LENGTH zs /\
+   nL = nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H /\
+   dft_original_ready l /\ dft_original_ready r /\
+   dft_pos_pending_saved zs l.dft_occ_saved` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+    metis_tac[dft_pos_pending_gas_stack_fill] >>
+  `(ls = [] ==> l.dft_occ_saved = []) /\
+   (rs = [] ==> r.dft_occ_saved = [])` by
+    metis_tac[dft_pos_pending_gas_stack_length, LENGTH_NIL] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  `!fr. dft_fill_frame 0 (dft_fill_frame 1 fr) = dft_fill_frame 0 fr` by
+    (Cases >> simp[dft_fill_frame_def]) >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def, dft_erase_def,
+    MAP_MAP_o, combinTheory.o_DEF, dft_occ_update_def] >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_control_def] >>
+  Cases_on `ls` >> Cases_on `rs` >> gvs[SF ETA_ss] >>
+  qexistsl [`j`,`k`] >> simp[]
+QED
+
+Theorem dft_pending_plain_call_success:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  ~(j = fi /\ k = bi /\ s.vs_inst_idx = LENGTH pre) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb' s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  lookup_function nm D.ctx_functions = SOME callee' /\
+  dft_pos_functions C D callee callee' /\
+  eval_operands ops s = SOME args /\
+  setup_callee callee args s = SOME cs /\ setup_callee callee' args s = SOME cs ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+   l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit /\
+   l.dft_occ_saved = r.dft_occ_saved /\ LENGTH l.dft_occ_saved = LENGTH zs /\
+   nL = nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H /\
+   dft_original_ready l /\ dft_original_ready r /\
+   dft_pos_pending_saved zs l.dft_occ_saved` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+    metis_tac[dft_pos_pending_gas_stack_fill] >>
+  `dft_pos_pending_gas_frame w C D fi bi pre gas call post NONE
+    (DftCaller f 0 bb inst s) (DftCaller g 0 bb' inst s)` by
+    (simp[dft_pos_pending_gas_frame_def] >> irule dft_pos_plain_frame >> metis_tac[]) >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  `!fr. dft_fill_frame 0 (dft_fill_frame 1 fr) = dft_fill_frame 0 fr` by
+    (Cases >> simp[dft_fill_frame_def]) >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def, dft_open_invoke_def,
+    dft_erase_def, dft_fill_frame_def, MAP_MAP_o, combinTheory.o_DEF,
+    dft_occ_update_def, SF ETA_ss] >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_pending_gas_stack_def, dft_pos_pending_gas_events_def,
+    dft_pos_control_def] >> metis_tac[]
+QED
+
+Theorem dft_pending_plain_return_success:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H l r /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
+    (DftCaller g 0 bb' inst s::rs) nR /\
+  dft_restore inst.inst_outputs ret cs s = SOME a ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  strip_tac >>
+  `dft_pos_pending_gas_frame w C D fi bi pre gas call post NONE
+     lf (DftCaller g 0 bb' inst s) /\
+   dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+   l.dft_occ_saved = r.dft_occ_saved /\
+   LENGTH l.dft_occ_saved = SUC (LENGTH zs) /\
+   nL = nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H /\
+   dft_original_ready l /\ dft_original_ready r /\
+   dft_pos_pending_saved (NONE::zs) l.dft_occ_saved` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+       dft_pos_pending_gas_stack_def, dft_pos_pending_gas_events_def] >> gvs[]) >>
+  Cases_on `l.dft_occ_saved` >> gvs[] >> PairCases_on `h` >>
+  `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+    metis_tac[dft_pos_pending_gas_stack_fill] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  fs[dft_pos_pending_gas_frame_def, dft_pos_frame_def] >> gvs[] >>
+  `dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftAt f 0 b
+      (a with vs_inst_idx := SUC s.vs_inst_idx)) ls
+        (nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H);
+      dft_occ_path := h0; dft_occ_visit := h1; dft_occ_saved := t|>` by
+    (irule dft_suspend_pop >> simp[]) >>
+  `dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftAt g 0 bb'
+      (a with vs_inst_idx := SUC s.vs_inst_idx)) rs nR;
+      dft_occ_path := h0; dft_occ_visit := h1; dft_occ_saved := t|>` by
+    (irule dft_suspend_pop >> simp[]) >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_control_def] >> metis_tac[]
+QED
+
+Theorem dft_pending_at_ordinary:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  (j <> fi \/ k <> bi \/ s.vs_inst_idx <> LENGTH pre) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb' s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> GAS ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+   l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit /\
+   l.dft_occ_saved = r.dft_occ_saved /\ LENGTH l.dft_occ_saved = LENGTH zs /\
+   nL = nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H /\
+   dft_original_ready l /\ dft_original_ready r /\
+   dft_pos_pending_saved zs l.dft_occ_saved` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `dft_pos_functions C D f g` by
+    (fs[dft_pos_slot_def, dft_pos_functions_def] >> metis_tac[]) >>
+  `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+    metis_tac[dft_pos_pending_gas_stack_fill] >>
+  `(ls = [] ==> l.dft_occ_saved = []) /\
+   (rs = [] ==> r.dft_occ_saved = [])` by
+    metis_tac[dft_pos_pending_gas_stack_length, LENGTH_NIL] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  `!fr. dft_fill_frame 0 (dft_fill_frame 1 fr) = dft_fill_frame 0 fr` by
+    (Cases >> simp[dft_fill_frame_def]) >>
+  Cases_on `step_inst_base inst s` >- suspend "ok" >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def, dft_open_deliver_def,
+    dft_open_continue_def, dft_erase_def, MAP_MAP_o, combinTheory.o_DEF,
+    dft_occ_update_def, SF ETA_ss] >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_control_def] >>
+  Cases_on `ls` >> Cases_on `rs` >> gvs[SF ETA_ss] >> metis_tac[]
+QED
+
+Resume dft_pending_at_ordinary[ok]:
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (Cases_on `v.vs_halted` >>
+      gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+        dft_fill_def, dft_fill_control_def, dft_open_next_def, dft_open_deliver_def,
+        dft_open_continue_def, dft_erase_def, MAP_MAP_o, combinTheory.o_DEF,
+        dft_occ_update_def, SF ETA_ss] >>
+      simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+        dft_pos_control_def] >>
+      Cases_on `ls` >> Cases_on `rs` >> gvs[SF ETA_ss] >> metis_tac[]) >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def, dft_open_deliver_def,
+    dft_open_continue_def, dft_erase_def, MAP_MAP_o, combinTheory.o_DEF,
+    dft_occ_update_def, SF ETA_ss] >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_control_def] >>
+  Cases_on `ls` >> Cases_on `rs` >> gvs[SF ETA_ss] >> metis_tac[]
+QED
+Finalise dft_pending_at_ordinary
+
+Theorem dft_pending_at_gas:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  (j <> fi \/ k <> bi \/ SUC s.vs_inst_idx <> SUC (LENGTH pre)) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb' s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = GAS /\ inst.inst_outputs = [u] ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+   l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit /\
+   l.dft_occ_saved = r.dft_occ_saved /\ LENGTH l.dft_occ_saved = LENGTH zs /\
+   nL = nR + LENGTH (dft_pos_pending_gas_events zs) + LENGTH H /\
+   dft_original_ready l /\ dft_original_ready r /\
+   dft_pos_pending_saved zs l.dft_occ_saved` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+    metis_tac[dft_pos_pending_gas_stack_fill] >>
+  `(ls = [] ==> l.dft_occ_saved = []) /\
+   (rs = [] ==> r.dft_occ_saved = [])` by
+    metis_tac[dft_pos_pending_gas_stack_length, LENGTH_NIL] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  `dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftAt f 0 bb
+      ((update_var u (w (l.dft_occ_path ++ [(l.dft_occ_visit,inst.inst_id)])) s)
+        with vs_inst_idx := SUC s.vs_inst_idx)) ls (SUC nL);
+      dft_occ_saved := if ls = [] then [] else l.dft_occ_saved|>` by
+    (qpat_assum `l.dft_occ_core = _`
+       (mp_then (Pat `_.dft_occ_core = _`) mp_tac dft_pos_gas_one_step) >>
+     simp[]) >>
+  `dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftAt g 0 bb'
+      ((update_var u (w (r.dft_occ_path ++ [(r.dft_occ_visit,inst.inst_id)])) s)
+        with vs_inst_idx := SUC s.vs_inst_idx)) rs (SUC nR);
+      dft_occ_saved := if rs = [] then [] else r.dft_occ_saved|>` by
+    (qpat_assum `r.dft_occ_core = _`
+       (mp_then (Pat `_.dft_occ_core = _`) mp_tac dft_pos_gas_one_step) >>
+     simp[]) >>
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+    dft_pos_control_def, update_var_def] >>
+  Cases_on `ls` >> Cases_on `rs` >> gvs[] >> metis_tac[]
+QED
+
+Theorem dft_pending_at_outside_account:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_pos_slot C D j k f g bb bb' /\
+  (j <> fi \/ k <> bi \/
+    (s.vs_inst_idx <> LENGTH pre /\ s.vs_inst_idx <> SUC (LENGTH pre))) /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  dft_pos_pending_gas_events zs ++ H = dft_pos_pending_gas_events zs' ++ H' ==>
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  irule dft_pending_account_phase_transfer >>
+  `l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `dft_pos_segment_account C D w 1 1 l r` by
+    (irule dft_pos_at_outside_account >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem dft_pending_done_account:
+  l.dft_occ_core = DftOpen (DftDone result) ls nL /\
+  r.dft_occ_core = DftOpen (DftDone result) rs nR ==>
+  pending_segment_account C D w 1 1 l r B B
+Proof
+  strip_tac >> irule dft_pending_account_one_transfer >>
+  `dft_pos_segment_account C D w 1 1 l r` by
+    (irule dft_pos_done_one_account >> metis_tac[]) >>
+  simp[] >> metis_tac[dftRecursiveFixedSegmentTheory.dft_fixed_done_count, ADD_COMM]
+QED
+
+Theorem dft_pending_plain_call_runtime:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  ~(j = fi /\ k = bi /\ s.vs_inst_idx = LENGTH pre) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb' s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `?callee'. lookup_function nm D.ctx_functions = SOME callee' /\
+     dft_pos_functions C D callee callee'` by
+    (metis_tac[dft_pos_edit_function_lookup, optionTheory.OPTREL_def,
+       optionTheory.NOT_SOME_NONE, optionTheory.option_case_def]) >>
+  `setup_callee callee' args s = SOME cs` by
+    metis_tac[dft_pos_edit_setup] >>
+  irule dft_pending_plain_call_success >> metis_tac[]
+QED
+
+Theorem dft_pending_enter_runtime:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftEnter f 0 s) ls nL /\
+  r.dft_occ_core = DftOpen (DftEnter g 0 s) rs nR /\
+  lookup_block s.vs_current_bb f.fn_blocks = SOME bb /\
+  lookup_block s.vs_current_bb g.fn_blocks = SOME bb' /\
+  eval_phis s bb.bb_instructions = OK sp /\
+  dft_pos_slot C D j k f g bb bb' /\
+  ~(j = fi /\ k = bi /\ phi_prefix_length bb.bb_instructions = SUC (LENGTH pre)) ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 1 1 l r B B
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `dft_pos_blocks C D f g bb bb'` by
+    (fs[dft_pos_slot_def, dft_pos_blocks_def] >> metis_tac[]) >>
+  `eval_phis s bb.bb_instructions = eval_phis s bb'.bb_instructions /\
+   phi_prefix_length bb.bb_instructions = phi_prefix_length bb'.bb_instructions` by
+    (irule dft_pos_edit_block_phis >> fs[dft_pos_runtime_ready_def] >> metis_tac[]) >>
+  conj_tac >- (irule dft_pending_enter_success >> metis_tac[]) >>
+  irule dft_pending_enter_account >> metis_tac[]
+QED
