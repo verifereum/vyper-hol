@@ -1,7 +1,7 @@
 Theory abiEncodeArgsSim
 Ancestors
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows
-  compileEnv exprSim exprSimHyps exprSimWordArgs
+  compileEnv exprSim exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
 
 Definition abi_args_post_def:
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s <=>
@@ -438,6 +438,69 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem abi_args_materialize_not_label:
+  compile_materialize_vv ce ty vv sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[exprLoweringTheory.compile_materialize_vv_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[exprSafeOperandTheory.alloc_buffer_not_label]
+QED
+
+Theorem abi_args_name_label_forward[local]:
+  FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz) /\
+  ~is_word_type (expr_type (Name ann id)) ==>
+  lower_value compile_expr ce ty (Name ann id) sa = (Label l,sa)
+Proof
+  simp[exprLoweringTheory.lower_value_def, comp_bind_def,
+       Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_expr_body_def,
+       exprLoweringTheory.compile_name_vv_def,
+       exprLoweringTheory.unwrap_value_def, contextTheory.mk_ptr_def,
+       comp_return_def]
+QED
+
+Theorem abi_args_state_rel_controls:
+  stmt_state_rel ctx func ce cx es
+    (s with <|vs_labels := labels; vs_halted := halted;
+              vs_current_bb := bb; vs_inst_idx := idx|>) <=>
+  stmt_state_rel ctx func ce cx es s
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       venomStateTheory.lookup_var_def, storage_rel_def, transient_rel_def,
+       accounts_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       exprLoweringPropsTheory.alloca_room_def,
+       exprLoweringPropsTheory.pending_alloca_size_def,
+       exprLoweringPropsTheory.immutable_alloca_sep_def]
+QED
+
+Theorem abi_args_success_not_label:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  !l. op <> Label l
+Proof
+  strip_tac >> gen_tac >> strip_tac >> gvs[] >>
+  qabbrev_tac `z = s0 with <|vs_labels := FEMPTY; vs_halted := F;
+    vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts|>` >>
+  `stmt_state_rel ctx func ce cx es z` by
+    simp[Abbr `z`, abi_args_state_rel_controls] >>
+  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  drule_all expr_sim_apply >> disch_then (qspec_then `z` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule_at (Pat `frag_exec`) abi_lower_value_label_observer >>
+  simp[Abbr `z`, expr_post_def, expr_val_rel_def,
+       venomStateTheory.eval_operand_def] >> gvs[] >> metis_tac[]
+QED
+
 Theorem abi_args_uncaptured_cons_sim:
   expr_sim ctx func ce cx (expr_type e) e es /\
   lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
@@ -549,4 +612,144 @@ Proof
   Cases_on `tvv` >>
   simp[expr_vv_res_ok_def, vyperStateTheory.read_result_def,
        expr_res_ok_def] >> EVAL_TAC >> rpt strip_tac >> gvs[]
+QED
+
+Theorem abi_args_exit_inr:
+  expr_exit (INR exc : 'a + exception) =
+  expr_exit (INR exc : value list + exception)
+Proof
+  simp[FUN_EQ_THM] >> qx_gen_tac `r` >> Cases_on `exc` >> Cases_on `r` >>
+  simp[expr_exit_def] >> rename1 `Error err` >> Cases_on `err` >>
+  simp[expr_exit_def]
+QED
+
+Theorem abi_args_vv_error_prefix:
+  expr_vv_sim ctx func ce cx (expr_type e) e es /\
+  compile_expr ce (expr_type e) e sa = (vv,mid) /\
+  eval_expr cx e es = (INR exc,es') /\
+  expr_res_ok (INR exc : value + exception) /\
+  fn_has_code sa mid func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ cs_extends sa mid /\ cs_extends mid sb ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
+    Q (wb_args_exit (INR exc))
+Proof
+  strip_tac >>
+  `expr_vv_res_ok (INR exc)` by
+    (gvs[expr_vv_res_ok_def, expr_res_ok_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_def] >> disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
+  gvs[wb_args_exit_def] >> irule fragExecTheory.frag_exec_exit_prefix >>
+  goal_assum (drule_at Any) >> gvs[abi_args_exit_inr]
+QED
+
+Theorem abi_args_vv_read_error_prefix:
+  expr_vv_sim ctx func ce cx (expr_type e) e es /\
+  compile_expr ce (expr_type e) e sa = (vv,mid) /\
+  eval_expr cx e es = (INL tvv,es') /\
+  read_result cx tvv es' = (INR exc,es') /\
+  expr_res_ok (INR exc : value + exception) /\
+  fn_has_code sa mid func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ cs_extends sa mid /\ cs_extends mid sb ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
+    Q (wb_args_exit (INR exc))
+Proof
+  strip_tac >>
+  `expr_vv_res_ok (INL tvv)` by metis_tac[abi_args_read_vv_res_ok] >>
+  `expr_exit (INL tvv) = (\r. F)` by simp[FUN_EQ_THM] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_vv_sim_def] >> disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
+  disch_then (mp_then Any mp_tac fragExecTheory.frag_exec_weaken) >>
+  disch_then (qspecl_then
+    [`\s. s = s0 /\ stmt_state_rel ctx func ce cx es s`,
+     `\s. F`, `wb_args_exit (INR exc)`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >> drule abi_args_vv_post_read >>
+      strip_tac >> gvs[]) >>
+  strip_tac >> irule fragExecTheory.frag_exec_exit_prefix >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem compile_abi_encode_args_sim:
+  !args ctx func ce cx Inv env es sa ops sb rr es' s0.
+    abi_args_ready ctx func ce cx Inv args /\ Inv es /\
+    (!s. Inv s ==> expr_sim_inv ce cx env s) /\
+    compile_abi_encode_args compile_expr ce args sa = (ops,sb) /\
+    eval_exprs cx args es = (rr,es') /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
+      (\s. ?vs. rr = INL vs /\ abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s)
+      (wb_args_exit rr)
+Proof
+  Induct
+  >- (simp[exprLoweringTheory.compile_abi_encode_args_def, comp_return_def,
+           eval_exprs_nil] >> rpt strip_tac >> irule abi_args_nil_sim) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `abi_args_ready ctx func ce cx Inv (e::args)` >>
+  reverse (Cases_on `stmt_state_rel ctx func ce cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel ctx func ce cx es s) = (\s. F)` by
+        (simp[FUN_EQ_THM] >> metis_tac[]) >>
+      simp[] >> irule fragExecTheory.frag_exec_false_pre) >>
+  gvs[abi_args_compile_cons] >>
+  drule_all abi_args_ready_head >> strip_tac >>
+  `ci_mono sa mid` by
+    metis_tac[cj 1 exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND] >>
+  `ci_mono mid sm` by
+    (Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce args` >> gvs[] >>
+     metis_tac[exprLoweringPropsTheory.ci_mono_compile_materialize_vv,
+               exprLoweringPropsTheory.ci_mono_unwrap_value, pairTheory.SND]) >>
+  `ci_mono sm sb` by metis_tac[abi_args_compile_mono, pairTheory.SND] >>
+  `cs_extends sa mid /\ cs_extends mid sm /\ cs_extends sm sb /\
+   cs_extends mid sb /\ cs_extends sa sm` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa mid func /\ fn_has_code mid sm func /\
+   fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fragExecTheory.fn_has_code_mid, cs_extends_refl] >>
+  `local_ptrs_reserved ce mid /\ local_ptrs_reserved ce sm` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]) >>
+  drule eval_exprs_cons_cases >> strip_tac
+  >- (`expr_res_ok (INR exc : value + exception)` by metis_tac[] >>
+      gvs[] >>
+      Cases_on `eval_expr cx e es` >>
+      rename1 `eval_expr cx e es = (raw,es1)` >>
+      Cases_on `raw`
+      >- (rename1 `INL tvv` >>
+          `es' = es1` by
+            (gvs[vyperStateTheory.bind_def] >> metis_tac[vyperStateTheory.read_result_state]) >>
+          gvs[vyperStateTheory.bind_def] >> irule abi_args_vv_read_error_prefix >> metis_tac[]) >>
+      gvs[vyperStateTheory.bind_def] >> irule abi_args_vv_error_prefix >> metis_tac[]) >>
+  rename1 `eval_exprs cx args es1 = (rr1,es')` >>
+  `abi_args_ready ctx func ce cx Inv args` by metis_tac[abi_args_ready_tail] >>
+  `Inv es1 /\ MAP FDOM es.scopes = MAP FDOM es1.scopes` by metis_tac[] >>
+  `expr_sim_inv ce cx env es1` by metis_tac[] >>
+  `MAP FDOM es'.scopes = MAP FDOM es1.scopes` by
+    metis_tac[vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom] >>
+  `!t. frag_exec ctx sm sb (\s. s = t /\ stmt_state_rel ctx func ce cx es1 s)
+    (\s. ?vs. rr1 = INL vs /\ abi_args_post ctx func ce cx es1 sm sb t es' args tail vs s)
+    (wb_args_exit rr1)` by metis_tac[] >>
+  reverse (Cases_on `~is_word_type (expr_type e) /\ exprs_can_mutate ce args`)
+  >- (gvs[] >>
+      `lower_value compile_expr ce (expr_type e) e sa = (op,sm)` by
+        simp[exprLoweringTheory.lower_value_def, comp_bind_def] >>
+      `!l. op <> Label l` by metis_tac[abi_args_success_not_label] >>
+      `!x. op = Var x ==> not_fresh_at sm x` by
+        metis_tac[compiler_lower_value_var, compiler_compile_var] >>
+      `~is_word_type (expr_type e) ==> es'.scopes = es1.scopes` by
+        metis_tac[eval_exprs_no_mutation_scopes] >>
+      irule abi_args_uncaptured_cons_sim >> simp[] >>
+      qexists_tac `env` >>
+      gvs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  gvs[] >>
+  drule eval_expr_read_INL >> strip_tac >>
+  `t = es1` by metis_tac[vyperStateTheory.read_result_state] >> gvs[] >>
+  rename1 `eval_expr cx e es = (INL tvv,es1)` >>
+  `expr_vv_res_ok (INL tvv)` by metis_tac[abi_args_read_vv_res_ok] >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at mid x` by
+    metis_tac[compiler_compile_var] >>
+  `!l. op <> Label l` by metis_tac[abi_args_materialize_not_label] >>
+  `!x. op = Var x ==> not_fresh_at sm x` by
+    metis_tac[compiler_materialize_vv_var] >>
+  irule abi_args_captured_cons_sim >> simp[] >> metis_tac[]
 QED
