@@ -1165,7 +1165,11 @@ Theorem body_assign_local_memory_read[local]:
     (expr_type e = ty \/ is_bytestring_type ty) /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
-    lookup_scopes id es1.scopes = SOME entry ==>
+    lookup_scopes id es1.scopes = SOME entry /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     entry.type = tyv /\ value_has_type tyv v /\
     val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
@@ -1190,7 +1194,11 @@ Theorem body_assign_local_memory:
     FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
     (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
-     has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
+     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       es res es'
@@ -1227,8 +1235,7 @@ Proof
   irule compile_assign_local_memory_widen_stmt_frag >> gns[] >>
   rpt conj_tac >>~- ([`val_footprint _ _ <= _`],
     rpt gen_tac >> strip_tac >> metis_tac[body_assign_local_memory_read, type_widens_to_def]) >>
-  metis_tac[lowered_value_type_shape, type_widens_to_def,
-            arg_type_fits_bytestring_source]
+  metis_tac[type_widens_to_def, arg_type_fits_bytestring_source]
 QED
 
 (* An assignment to a word field of a local struct: stmtSimAssignAttr's
@@ -1599,6 +1606,35 @@ Proof
   cheat
 QED
 
+(* RESIDUAL (#767): a memory-backed local assigned an internal call whose
+   return type widens to the call's type other than as a bytestring
+   (type_widens_to: a DynArray of a smaller bound, a tuple elementwise). *)
+Theorem body_assign_widened_aggregate_call:
+  !cx id e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'
+   ty.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (Assign (BaseTarget (NameTarget id)) e) /\
+    expr_sim_inv cenv cx env es /\ locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (Assign (BaseTarget (NameTarget id)) e) = SOME env' /\
+    stmt_exprs_ok cenv (Assign (BaseTarget (NameTarget id)) e) /\
+    call_evaluation_safe cx
+      (int_calls_stmt (Assign (BaseTarget (NameTarget id)) e)) /\
+    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+    FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
+    0 < type_memory_bytes cenv ty /\
+    (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
+     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    ~(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
+      es res es'
+Proof
+  cheat
+QED
+
 Theorem body_assign_case:
   !cx t e.
     (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ok cx t) /\
@@ -1619,7 +1655,12 @@ Proof
               0 < type_memory_bytes cenv ty` by
         (rpt strip_tac >> gvs[] >>
          metis_tac[assign_local_memory_bytes_pos]) >>
-      gvs[] >> irule body_assign_local_memory >> metis_tac[]) >>
+      Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (gvs[] >> irule body_assign_local_memory >> metis_tac[]) >>
+      gvs[] >> irule body_assign_widened_aggregate_call >> metis_tac[]) >>
   Cases_on `?nsid. t = TopLevelNameTarget nsid /\
                    supported_scalar_target tops nsid`
   >- (gvs[] >> rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>

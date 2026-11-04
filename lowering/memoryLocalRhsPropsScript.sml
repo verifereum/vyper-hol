@@ -5,8 +5,8 @@
  * check.
  *
  * TOP-LEVEL:
- *   lowered_value_type_shape, lowered_value_type_memory_bound — the type
- *                     e is lowered at, and its size below 2 ** 64
+ *   lowered_value_type_memory_bound — the size of the type e is lowered
+ *                     at, below e's own
  *   memory_rhs_destination_bound, memory_rhs_read_destination_footprint —
  *                     e's value fits the local's buffer
  *   memory_rhs_read_lowered_typed, memory_rhs_read_destination_typed,
@@ -29,20 +29,6 @@ Ancestors
   valueTypingMemoryProps valueCopyBytes
 Libs
   monadsyntax
-
-(* Only the bytelike-producing branches change the runtime buffer type. *)
-Theorem lowered_value_type_shape:
-  !cenv e env.
-    well_typed_expr env e ==>
-    lowered_value_type cenv e = expr_type e \/
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type cenv e)
-Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, expr_type_def, is_bytestring_type_def,
-       well_typed_expr_def, type_builtin_result_ok_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def]
-QED
 
 Theorem eval_empty_bytes_read:
   !cx ann es.
@@ -130,50 +116,17 @@ Proof
   drule abi_caller_abi_bound_tuple >> simp[abi_caller_abi_bound_def]
 QED
 
-Theorem lowered_value_type_arg_fits:
-  !cenv e env tops.
-    supported_expr tops e /\ well_typed_expr env e ==>
-    lowered_value_type cenv e = expr_type e \/
-    arg_type_fits (lowered_value_type cenv e) (expr_type e)
-Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, expr_type_def] >> rpt conj_tac
-  >- simp[well_typed_expr_def, well_typed_literal_def, arg_type_fits_def]
-  >- simp[well_typed_expr_def, well_typed_literal_def, arg_type_fits_def,
-          compatible_bound_def]
-  >- (rpt gen_tac >>
-      simp[supported_expr_def, supported_pure_expr_def, supported_effect_expr_def,
-           supported_type_builtin_form_def] >>
-      strip_tac >>
-      Cases_on `args` >> gvs[] >>
-      rename1 `supported_pure_exprs tops (a :: tail)` >> Cases_on `tail` >> gvs[] >>
-      Cases_on `method_id` >> gvs[] >>
-      gvs[well_typed_expr_def, type_builtin_result_ok_def,
-          well_typed_type_builtin_args_def, abi_encode_size_ok_def,
-          abi_encode_method_id_size_def, abi_encode_method_id_bytes_def] >>
-      `abi_size_bound cenv.ce_struct_fields (expr_type a) =
-       vyper_abi_size_bound env.type_defs (expr_type a)` by
-        metis_tac[supported_tuple_abi_size_bound] >>
-      simp[arg_type_fits_def]) >>
-  simp[]
-QED
-
 Theorem lowered_value_type_memory_bound:
   !cenv e env tops.
-    supported_expr tops e /\ well_typed_expr env e ==>
+    supported_expr tops e /\ well_typed_expr env e /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     type_memory_bytes cenv (lowered_value_type cenv e) <=
     type_memory_bytes cenv (expr_type e)
 Proof
-  rpt strip_tac >>
-  `lowered_value_type cenv e = expr_type e \/
-   is_bytestring_type (expr_type e) /\
-   is_bytestring_type (lowered_value_type cenv e)` by
-    metis_tac[lowered_value_type_shape]
-  >- simp[] >>
-  `lowered_value_type cenv e = expr_type e \/
-   arg_type_fits (lowered_value_type cenv e) (expr_type e)` by
-    metis_tac[lowered_value_type_arg_fits]
-  >- simp[] >>
+  rpt gen_tac >> strip_tac >- simp[] >>
   irule arg_type_fits_bytestring_memory_bytes >> simp[]
 QED
 
@@ -202,12 +155,16 @@ Theorem memory_rhs_destination_bound:
     supported_expr tops e /\ well_typed_expr env e /\
     type_widens_to tenv (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
-    0 < type_memory_bytes cenv ty ==>
+    0 < type_memory_bytes cenv ty /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
     type_memory_bytes cenv (lowered_value_type cenv e) <=
       type_memory_bytes cenv ty
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_memory_bytes cenv (lowered_value_type cenv e) <=
    type_memory_bytes cenv (expr_type e)` by
     metis_tac[lowered_value_type_memory_bound] >>
@@ -215,7 +172,7 @@ Proof
     metis_tac[bytestring_memory_bytes_positive,
               arg_type_fits_bytestring_source, type_widens_to_def] >>
   `0 < type_memory_bytes cenv (lowered_value_type cenv e)` by
-    metis_tac[bytestring_memory_bytes_positive, lowered_value_type_shape] >>
+    metis_tac[bytestring_memory_bytes_positive] >>
   `type_memory_bytes cenv (expr_type e) <= type_memory_bytes cenv ty` by
     (Cases_on `expr_type e = ty` >- simp[] >>
      `is_bytestring_type (expr_type e) /\ arg_type_fits (expr_type e) ty` by
@@ -465,7 +422,11 @@ Theorem memory_rhs_read_destination_footprint:
     type_widens_to env.type_defs (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
-    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     value_has_type tyv v /\
     val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
@@ -489,8 +450,7 @@ Proof
   Cases_on `lowered_value_type cenv e = ty`
   >- (gvs[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]) >>
   `is_bytestring_type ty /\ is_bytestring_type (lowered_value_type cenv e)` by
-    metis_tac[lowered_value_type_shape, type_widens_to_def,
-              arg_type_fits_bytestring_source] >>
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_source] >>
   `val_footprint tyv v = val_footprint ltv v` by
     metis_tac[bytestring_val_footprint_eq] >>
   simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
@@ -527,16 +487,20 @@ QED
 Theorem memory_rhs_lowered_runtime_layout:
   !cenv cx env e es.
     expr_body_pre cenv cx env e es /\
-    type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64 ==>
+    type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64 /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     ?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
           type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv
 Proof
-  rpt strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `well_typed_expr env e /\ expr_sim_inv cenv cx env es` by
     fs[expr_body_pre_def] >>
   `?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv` by
-    (drule lowered_value_type_shape >>
-     disch_then (qspec_then `cenv` strip_assume_tac)
+    (qpat_x_assum `lowered_value_type cenv e = expr_type e \/ _`
+       strip_assume_tac
      >- metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
      metis_tac[bytestring_memory_bound_evaluates]) >>
   qexists_tac `ltv` >> simp[] >>

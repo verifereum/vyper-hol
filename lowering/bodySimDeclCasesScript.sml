@@ -243,7 +243,11 @@ Theorem body_annassign_memory:
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
     (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
-     has_length_word typ /\ is_empty_value_expr e) ==>
+     has_length_word typ /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
 Proof
@@ -301,8 +305,7 @@ Resume body_annassign_memory[copy]:
       metis_tac[memory_rhs_read_destination_typed, memory_rhs_read_lowered_typed,
                 type_widens_to_def] >>
     gvs[value_runtime_typed_def]) >>
-  metis_tac[lowered_value_type_shape, type_widens_to_def,
-            arg_type_fits_bytestring_source]
+  metis_tac[type_widens_to_def, arg_type_fits_bytestring_source]
 QED
 
 Resume body_annassign_memory[empty]:
@@ -361,6 +364,37 @@ Proof
   cheat
 QED
 
+(* RESIDUAL (#767): a memory-backed declaration of an internal call whose
+   return type widens to the call's type other than as a bytestring
+   (type_widens_to: a DynArray of a smaller bound, a tuple elementwise). *)
+Theorem body_annassign_widened_aggregate_call:
+  !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
+   es'.
+    (!tenv s'' tyv t.
+       tenv = get_tenv cx /\
+       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+       (INL tyv,t) ==>
+       body_expr_ok cx e) /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AnnAssign id typ e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+    eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
+    ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+    (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+     has_length_word typ /\ is_empty_value_expr e) /\
+    ~(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
+Proof
+  cheat
+QED
+
 Theorem body_annassign_case:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -378,7 +412,12 @@ Proof
     metis_tac[annassign_memory_bytes_pos] >>
   Cases_on `lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
             has_length_word typ /\ is_empty_value_expr e`
-  >- (irule body_annassign_memory >> metis_tac[]) >>
+  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (irule body_annassign_memory >> metis_tac[]) >>
+      irule body_annassign_widened_aggregate_call >> metis_tac[]) >>
   irule body_annassign_other >> metis_tac[]
 QED
 

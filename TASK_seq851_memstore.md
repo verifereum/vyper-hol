@@ -44,7 +44,7 @@ Theorem compile_assign_storage_copy_stmt_frag:
          (Assign (BaseTarget (TopLevelNameTarget (src, id))) e)) es res es'
 ```
 
-`lowering/bodySimStmtCasesScript.sml` (`body_assign_local_memory` restated: its case condition reads `lowered_value_type cenv e = ty` where it read `expr_type e = ty`; the other two are unchanged):
+`lowering/bodySimStmtCasesScript.sml` (`body_assign_local_memory` restated: its case condition reads `lowered_value_type cenv e = ty` where it read `expr_type e = ty`, and it takes the lowered-type shape premise, the last one; the other two are unchanged):
 
 ```sml
 Theorem body_assign_local_memory:
@@ -61,7 +61,11 @@ Theorem body_assign_local_memory:
     FLOOKUP env.var_types id = SOME ty /\ ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
     (lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
-     has_length_word (expr_type e) /\ is_empty_value_expr e) ==>
+     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (NameTarget id)) e))
       es res es'
@@ -95,7 +99,7 @@ Theorem body_assign_case:
 
 ```
 
-`lowering/bodySimDeclCasesScript.sml` (`body_annassign_memory` restated the same way, `lowered_value_type cenv e = typ`; `body_annassign_case` unchanged):
+`lowering/bodySimDeclCasesScript.sml` (`body_annassign_memory` restated the same way, `lowered_value_type cenv e = typ` and the shape premise; `body_annassign_case` unchanged):
 
 ```sml
 Theorem body_annassign_memory:
@@ -115,7 +119,11 @@ Theorem body_annassign_memory:
     eval_stmt cx (AnnAssign id typ e) es = (res, es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
     (lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
-     has_length_word typ /\ is_empty_value_expr e) ==>
+     has_length_word typ /\ is_empty_value_expr e) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e)) es res es'
 
@@ -132,53 +140,23 @@ Theorem body_annassign_case:
 
 Do not modify these statements. Prove them as-is, or produce a counterexample.
 
-`body_assign_other` and `body_annassign_other` keep their (restated) statements and their existing `cheat` proofs: out of scope, do not touch.
+`body_assign_other` and `body_annassign_other` keep their (restated) statements and their existing `cheat` proofs, and so do the new `body_assign_widened_aggregate_call` and `body_annassign_widened_aggregate_call` (the complement of the shape premise, an internal call widened as a DynArray or tuple): out of scope, do not touch. `body_assign_case` and `body_annassign_case` already split on the shape premise.
 
-Weakly frozen: these helpers in `lowering/memoryLocalRhsPropsScript.sml` are false for internal calls as stated (the lowered type of `Call _ (IntCall (NONE,fn)) _ _` is now `cenv.ce_func_return_type fn`, unconstrained without a frame):
+The lowered-type shape premise replaces two helpers that were false for internal calls (`lowered_value_type_shape`, `lowered_value_type_arg_fits`, both deleted, as is stmtSimDeclMem's `lowered_value_type_bytestring`). It is already threaded, and these built: `lowered_value_type_memory_bound`, `memory_rhs_destination_bound` (both take it); `memory_rhs_read_destination_footprint`, `memory_rhs_lowered_runtime_layout`, stmtSimDeclMem's `annassign_widen_footprint` and `compile_annassign_memory_widen_stmt_frag` take it too (frozen, as they now read in the source).
+
+Weakly frozen: this helper in `lowering/memoryLocalRhsPropsScript.sml` fails its build in the internal-call case (goal: `value_runtime_typed env (cenv.ce_func_return_type (nsid_to_string func_id)) v`):
 
 ```sml
-Theorem lowered_value_type_shape:
-  !cenv e env.
-    well_typed_expr env e ==>
-    lowered_value_type cenv e = expr_type e \/
-    is_bytestring_type (expr_type e) /\
-    is_bytestring_type (lowered_value_type cenv e)
-
-Theorem lowered_value_type_arg_fits:
-  !cenv e env tops.
-    supported_expr tops e /\ well_typed_expr env e ==>
-    lowered_value_type cenv e = expr_type e \/
-    arg_type_fits (lowered_value_type cenv e) (expr_type e)
-
-Theorem lowered_value_type_memory_bound:
-  !cenv e env tops.
-    supported_expr tops e /\ well_typed_expr env e ==>
-    type_memory_bytes cenv (lowered_value_type cenv e) <=
-    type_memory_bytes cenv (expr_type e)
-
-Theorem memory_rhs_destination_bound:
-  !cenv e env tops ty tenv.
-    supported_expr tops e /\ well_typed_expr env e /\
-    type_widens_to tenv (expr_type e) ty /\
-    (expr_type e = ty \/ is_bytestring_type ty) /\
-    0 < type_memory_bytes cenv ty ==>
-    0 < type_memory_bytes cenv (lowered_value_type cenv e) /\
-    type_memory_bytes cenv (lowered_value_type cenv e) <=
-      type_memory_bytes cenv ty
-
 Theorem memory_rhs_read_lowered_typed:
   !cenv e env tops cx es v es'.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env (lowered_value_type cenv e) v
-
 ```
 
-You may restate these, and other theorems in `memoryLocalRhsPropsScript.sml` that use them, only by (a) adding premises drawn from `cenv.ce_func_return_type = build_func_return_type tops`, `supported_program tops`, `get_module_code cx NONE = SOME tops`, `expr_sim_inv cenv cx env es`, and (b) for `lowered_value_type_shape`, adding the disjunct `arg_type_fits (lowered_value_type cenv e) (expr_type e)`. Report every restatement in your result. `memory_rhs_destination_bound` and `lowered_value_type_memory_bound` may take `arg_type_fits` over all types (generalize `arg_type_fits_bytestring_memory_bytes`).
+You may restate it, and the theorems in `memoryLocalRhsPropsScript.sml` that use it, only by adding premises drawn from `cenv.ce_func_return_type = build_func_return_type tops`, `supported_program tops`, `get_module_code cx NONE = SOME tops`, `expr_sim_inv cenv cx env es`. Report every restatement in your result.
 
 In `stmtSimAssignStorageCopyScript.sml`, the local lemmas `storage_copy_lowered_type`, `storage_copy_success_compatible` and the AbiEncode helpers (`storage_copy_bytes_type`, `storage_copy_abi_value`, `storage_copy_abi_eval`) become unnecessary under the new premise: delete them, and simplify the local proofs that used them.
-
-In `stmtSimDeclMemScript.sml` (now in scope too), the local lemma `lowered_value_type_bytestring` (`is_bytestring_type (expr_type e) ==> is_bytestring_type (lowered_value_type cenv e)`) is false for an internal call whose callee's return type isn't a bytestring. Its only use is `annassign_widen_footprint` (local), in the case `lowered_value_type cenv e <> vtyp`, with `is_bytestring_type vtyp`, `evaluate_type tenv (lowered_value_type cenv e) = SOME ltv`, `value_has_type tyv v` and `value_has_type ltv v`. Both local lemmas may be restated, removed or replaced. The frozen consumer is `compile_annassign_memory_widen_stmt_frag`, whose statement stays as it is.
 
 ## Completion Criteria
 

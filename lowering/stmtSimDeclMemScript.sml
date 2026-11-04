@@ -95,15 +95,6 @@ Proof
   simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
 QED
 
-Theorem lowered_value_type_bytestring[local]:
-  !cenv e.
-    is_bytestring_type (expr_type e) ==>
-    is_bytestring_type (lowered_value_type cenv e)
-Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, is_bytestring_type_def]
-QED
-
 (* The lowering's buffer for e's value, at e's lowered type, holds the
    value whose layout at the declared type is copied. *)
 Theorem annassign_widen_footprint[local]:
@@ -111,6 +102,10 @@ Theorem annassign_widen_footprint[local]:
     (expr_type e = vtyp \/
      is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
     (lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     evaluate_type tenv vtyp = SOME tyv /\
     evaluate_type tenv (lowered_value_type cenv e) = SOME ltv /\
     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
@@ -122,7 +117,7 @@ Proof
   >- (gvs[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]) >>
   `is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)` by gvs[] >>
   `is_bytestring_type (lowered_value_type cenv e)` by
-    simp[lowered_value_type_bytestring] >>
+    metis_tac[] >>
   simp[] >> irule bytestring_val_footprint_le >> metis_tac[]
 QED
 
@@ -943,6 +938,10 @@ Theorem compile_annassign_memory_widen_stmt_frag:
     (expr_type e = vtyp \/
      is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)) /\
     (lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp) /\
+    (lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e)) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
