@@ -3815,6 +3815,90 @@ Proof
   simp[strict_dominates_def] >> metis_tac[]
 QED
 
+Definition current_wf_inserted_phi_at_def:
+  current_wf_inserted_phi_at A renamed h q v <=>
+    ?new. lookup_block h renamed = SOME new /\
+      q < LENGTH new.bb_instructions /\ q < LENGTH (A h) /\
+      EL q (A h) = [(CurrentInserted v h,v)] /\
+      (EL q new.bb_instructions).inst_opcode = PHI
+End
+
+Theorem current_wf_inserted_annotation_index:
+  q < LENGTH (current_block_annotations old pre) /\
+  EL q (current_block_annotations old pre) = [(CurrentInserted v h,v)] ==>
+  q < LENGTH pre /\ (EL q pre).inst_outputs = [v] /\ old.bb_label = h
+Proof
+  strip_tac >>
+  `q < LENGTH pre` by
+    (spose_not_then assume_tac >>
+     `MEM (CurrentInserted v h) (MAP FST
+       (FLAT (current_original_annotations old.bb_label 0 old.bb_instructions)))` by
+       (simp[MEM_MAP] >> qexists_tac `(CurrentInserted v h,v)` >> simp[] >>
+        simp[MEM_FLAT] >> qexists_tac `[(CurrentInserted v h,v)]` >> simp[] >>
+        `q - LENGTH pre < LENGTH (current_original_annotations old.bb_label 0 old.bb_instructions) /\
+         EL (q - LENGTH pre) (current_original_annotations old.bb_label 0 old.bb_instructions) =
+           [(CurrentInserted v h,v)]` by
+          fs[current_block_annotations_def, current_inserted_annotations_def, EL_APPEND_EQN] >>
+        metis_tac[EL_MEM]) >>
+     drule current_original_annotations_key >> simp[]) >>
+  fs[current_block_annotations_def, current_inserted_annotations_def,
+    EL_APPEND_EQN, EL_MAP] >>
+  qpat_x_assum `MAP _ _ = _` (mp_tac o Q.AP_TERM `MAP SND`) >> simp[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem current_wf_inserted_phi_prefix:
+  current_wf_phi_context s fn renamed s' A H events /\
+  current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old ==>
+  ?pre. A h = current_block_annotations old pre /\ q < LENGTH pre /\
+    (EL q pre).inst_outputs = [v] /\ current_actual_inserted fn v h
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `q < LENGTH (current_block_annotations old pre) /\
+   EL q (current_block_annotations old pre) = [(CurrentInserted v h,v)]` by
+    fs[current_wf_inserted_phi_at_def] >>
+  drule_all current_wf_inserted_annotation_index >> strip_tac >>
+  qexists_tac `pre` >> simp[] >> metis_tac[EL_MEM, MEM]
+QED
+
+Theorem current_wf_inserted_phi_output:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h renamed = SOME new ==>
+  ?out. current_token_name H (CurrentInserted v h) = SOME out /\
+    (EL q new.bb_instructions).inst_outputs = [out]
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by fs[current_wf_phi_context_def] >>
+  `MEM new renamed /\ new.bb_label = h` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  drule_all current_wf_precleanup_coverage >> strip_tac >>
+  `q < LENGTH new.bb_instructions /\ q < LENGTH (A h) /\
+   EL q (A h) = [(CurrentInserted v h,v)]` by
+    fs[current_wf_inserted_phi_at_def] >>
+  `current_wf_output_at A H ev q (CurrentInserted v h)` by
+    (mp_tac current_wf_precleanup_output_sites >>
+     impl_tac >- metis_tac[] >>
+     disch_then (qspecl_then [`ev`, `q`, `0`] mp_tac) >> simp[]) >>
+  `?out. current_token_name H (CurrentInserted v h) = SOME out` by
+    fs[current_wf_output_at_def] >>
+  drule_all current_wf_precleanup_output >> strip_tac >>
+  `bb = new` by metis_tac[optionTheory.SOME_11] >>
+  qpat_x_assum `bb = new` SUBST_ALL_TAC >>
+  qpat_x_assum `new.bb_label = current_event_label ev` kall_tac >>
+  `LENGTH (EL q new.bb_instructions).inst_outputs = 1` by
+    (drule_all current_wf_precleanup_output_alignment >>
+     disch_then (mp_tac o Q.AP_TERM `\xs. EL q xs`) >> simp[EL_MAP]) >>
+  qexists_tac `out` >> simp[] >>
+  Cases_on `(EL q new.bb_instructions).inst_outputs` >> gvs[LENGTH_EQ_NUM]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
