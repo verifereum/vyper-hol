@@ -560,6 +560,107 @@ Proof
       (qspec_then `(q,r)` mp_tac) >> simp[]) >> simp[]
 QED
 
+Theorem current_wf_output_family_disjoint[local]:
+  !xs. ALL_DISTINCT (FLAT (MAP f xs)) ==>
+  !x y v. MEM x xs /\ MEM y xs /\ x <> y /\ MEM v (f x) ==>
+    ~MEM v (f y)
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >> gvs[] >>
+  metis_tac[MEM_FLAT, MEM_MAP]
+QED
+
+Theorem current_wf_keyed_outputs_transport:
+  !ys. ALL_DISTINCT (MAP k xs) /\ ALL_DISTINCT (MAP j ys) /\
+  ALL_DISTINCT (FLAT (MAP f xs)) /\
+  (!y. MEM y ys ==> ?x. MEM x xs /\ k x = j y /\ ALL_DISTINCT (G y) /\
+    (!v. MEM v (G y) ==> MEM v (f x))) ==>
+  ALL_DISTINCT (FLAT (MAP G ys))
+Proof
+  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >>
+  `?x. MEM x xs /\ k x = j h /\ ALL_DISTINCT (G h) /\
+    (!v. MEM v (G h) ==> MEM v (f x))` by metis_tac[] >>
+  simp[] >> rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
+  `?z. MEM z xs /\ k z = j y /\ ALL_DISTINCT (G y) /\
+    (!v. MEM v (G y) ==> MEM v (f z))` by metis_tac[] >>
+  `x <> z` by metis_tac[MEM_MAP] >>
+  metis_tac[current_wf_output_family_disjoint]
+QED
+
+Theorem current_wf_cleanup_inst_outputs[local]:
+  !inst. (simplify_current_phi inst).inst_outputs = inst.inst_outputs \/
+  (simplify_current_phi inst).inst_outputs = []
+Proof
+  `!inst. (simplify_current_phi_raw inst).inst_outputs = inst.inst_outputs \/
+    (simplify_current_phi_raw inst).inst_outputs = []` by
+    (gen_tac >> simp[simplify_current_phi_raw_def] >>
+     Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+     Cases_on `current_phi_output inst.inst_outputs` >> simp[] >>
+     Cases_on `current_phi_values (remove_current_phi_self x inst.inst_operands)` >>
+     simp[] >> Cases_on `x'` >> simp[] >>
+     Cases_on `EVERY (\w. w = h) t` >> simp[]) >>
+  gen_tac >> simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem current_wf_reassign_outputs[local]:
+  !ids insts. MAP (\inst. inst.inst_outputs) (reassign_current_inst_ids ids insts) =
+    MAP (\inst. inst.inst_outputs) insts
+Proof
+  Induct >> Cases_on `insts` >> simp[reassign_current_inst_ids_def]
+QED
+
+Theorem current_wf_cleanup_parts_outputs[local]:
+  !insts phis ordinary.
+  simplify_current_phi_prefix_parts insts = (phis,ordinary) ==>
+  (!v. MEM v (FLAT (MAP (\inst. inst.inst_outputs) (phis ++ ordinary))) ==>
+       MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))) /\
+  (ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) ==>
+   ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) (phis ++ ordinary))))
+Proof
+  Induct >> simp[simplify_current_phi_prefix_parts_def] >> rpt gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[]
+  >- (Cases_on `simplify_current_phi_prefix_parts insts` >> simp[] >>
+      first_x_assum (qspecl_then [`q`, `r`] mp_tac) >> simp[] >> strip_tac >>
+      qspec_then `h` strip_assume_tac current_wf_cleanup_inst_outputs >>
+      Cases_on `(simplify_current_phi h).inst_opcode = PHI` >>
+      simp[] >> strip_tac >> gvs[MAP_APPEND, FLAT_APPEND] >>
+      gvs[ALL_DISTINCT_APPEND] >> metis_tac[MEM_APPEND]) >>
+  strip_tac >> gvs[]
+QED
+
+Theorem current_wf_cleanup_prefix_outputs[local]:
+  !insts. (!v. MEM v (FLAT (MAP (\inst. inst.inst_outputs)
+       (simplify_current_phi_prefix insts))) ==>
+       MEM v (FLAT (MAP (\inst. inst.inst_outputs) insts))) /\
+  (ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts)) ==>
+   ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
+     (simplify_current_phi_prefix insts))))
+Proof
+  gen_tac >> Cases_on `simplify_current_phi_prefix_parts insts` >>
+  drule current_wf_cleanup_parts_outputs >>
+  simp[simplify_current_phi_prefix_def, current_wf_reassign_outputs] >> metis_tac[]
+QED
+
+Theorem current_wf_cleanup_block_output_member:
+  MEM v (FLAT (MAP (\inst. inst.inst_outputs)
+    (simplify_current_phi_block bb).bb_instructions)) ==>
+  MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))
+Proof
+  Cases_on `bb.bb_instructions` >> simp[simplify_current_phi_block_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  qspec_then `h::t` mp_tac current_wf_cleanup_prefix_outputs >> simp[] >> metis_tac[]
+QED
+
+Theorem current_wf_cleanup_block_outputs_distinct:
+  ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions)) ==>
+  ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs)
+    (simplify_current_phi_block bb).bb_instructions))
+Proof
+  Cases_on `bb.bb_instructions` >> simp[simplify_current_phi_block_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >>
+  qspec_then `h::t` mp_tac current_wf_cleanup_prefix_outputs >> simp[] >> metis_tac[]
+QED
+
 Definition current_wf_output_at_def:
   current_wf_output_at A H ev k t <=>
     k < LENGTH (A (current_event_label ev)) /\
