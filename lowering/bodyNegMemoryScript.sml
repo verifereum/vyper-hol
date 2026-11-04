@@ -6,7 +6,7 @@ Ancestors
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSim valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState freshWrites varsExt integer_word
-  arithmeticProps vyperArith vyperTypeSystem vyperTyping
+  arithmeticProps vyperArith vyperTypeSystem vyperTyping exprSimHyps
 
 Theorem body_neg_no_ranges_seq[local]:
   !is s. EVERY (\i. !q. inst_mem_below_frontier i q) is ==>
@@ -336,3 +336,73 @@ val () = List.app (fn th =>
      else raise Fail "Neg source correspondence inherited admission"
   end) [body_neg_signed_interval, body_neg_signed_comparison,
         body_neg_source_value, body_neg_source_abort];
+
+Theorem expr_body_pre_neg:
+  expr_body_pre cenv cx env (Builtin ann Neg [e]) es ==>
+  ann = expr_type e /\ expr_body_pre cenv cx env e es /\
+  is_numeric_type ann /\ ~is_uint_type ann /\
+  0 < type_bits ann /\ type_bits ann <= 256 /\ is_word_type ann
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_body_pre cenv cx env e es` by
+    (irule expr_body_pre_builtin_arg >> simp[] >>
+     qexistsl_tac [`ann`, `[e]`, `Neg`, `es`] >> simp[]) >>
+  `ann = expr_type e /\ is_numeric_type ann /\ ~is_uint_type ann /\
+   well_formed_type env.type_defs ann` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  `0 < type_bits ann /\ type_bits ann <= 256 /\ is_word_type ann` by
+    (qpat_x_assum `ann = expr_type e` kall_tac >>
+     Cases_on `ann` >> gvs[is_numeric_type_def, is_int_type_def, is_uint_type_def] >>
+     rename1 `BaseT b` >> Cases_on `b` >>
+     gvs[is_numeric_type_def, is_int_type_def, is_uint_type_def, type_bits_def,
+         is_word_type_def, well_formed_type_def, evaluate_type_def,
+         expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def]) >>
+  simp[]
+QED
+
+Theorem body_neg_tail_mem:
+  compile_neg x ann sm = (op,sb) /\ local_ptrs_reserved cenv sm /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\
+  is_numeric_type ann /\ ~is_uint_type ann /\ is_word_type ann /\
+  0 < type_bits ann /\ type_bits ann <= 256 /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v1 /\
+  expr_type e = ann /\ sa.cs_next_var <= sm.cs_next_var /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v1 x entry /\
+  alloca_history func entry /\ s0.vs_alloca_next <= entry.vs_alloca_next /\
+  res = unop_result cx ann Neg [ann] v1 es' ==>
+  frag_exec_mem ctx sm sb (\s. s = entry)
+    (\s. ?v. res = INL v /\
+         expr_post ctx func cenv cx (Builtin ann Neg [e]) es
+           sa sb s0 es' v op s /\
+         s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' entry /\
+   eval_operand x entry = SOME (typed_val_to_w256 tv v1)` by
+    gvs[expr_post_def, expr_val_rel_def] >>
+  `~word_gt (typed_val_to_w256 tv v1) (FST (type_bounds ann)) ==>
+   !q. expr_exit (unop_result cx ann Neg [ann] v1 es') (Abort Revert_abort q)` by
+    (strip_tac >> irule body_neg_source_abort >> simp[] >>
+     qexists_tac `tv` >> simp[]) >>
+  drule_all body_neg_frag_mem_at >>
+  disch_then (qspecl_then [`es'`, `entry`, `cx`, `ctx`] mp_tac) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
+  disch_then irule >> simp[] >> rpt strip_tac >>
+  drule_all body_neg_source_value >>
+  disch_then (qspec_then `es'` strip_assume_tac) >>
+  simp[] >> irule expr_post_unop >> simp[] >>
+  conj_tac
+  >- gvs[expr_val_rel_def] >>
+  qexistsl_tac [`sm`, `entry`, `v1`, `x`] >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NEG_TAIL_MEMORY_AUDIT OK\n"
+     else raise Fail "Neg tail inherited admission"
+  end) [expr_body_pre_neg, body_neg_tail_mem];
