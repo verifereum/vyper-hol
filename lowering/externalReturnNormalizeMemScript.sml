@@ -139,7 +139,7 @@ Proof
   simp[mk_inst_def]
 QED
 
-Theorem store_bytestring_mem_ok[local]:
+Theorem store_bytestring_mem_ok:
   compile_store_bytestring src dst sa = ((),sb) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
