@@ -177,7 +177,7 @@ QED
 
 (* A normalization site comes after the source expression's sites.  Its
    recorded row may be reused; no global freshness assumption is needed. *)
-Theorem normalize_alloca_source_separate[local]:
+Theorem normalize_alloca_source_separate:
   stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty sa sb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
