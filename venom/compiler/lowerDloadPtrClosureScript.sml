@@ -83,3 +83,67 @@ Proof
   gvs[pointer_use_step_step_def, AllCaseEqs(), FILTER_EQ_NIL,
       EVERY_MEM, SUBSET_DEF]
 QED
+
+Theorem pointer_use_vars_least:
+  EVERY X xs /\
+  (!i v w. MEM i (fn_insts fn) /\
+    is_pointer_preserving_op i.inst_opcode /\ MEM (Var v) i.inst_operands /\
+    X v /\ MEM w i.inst_outputs ==> X w) ==>
+  EVERY X (pointer_use_vars fn xs)
+Proof
+  strip_tac >> simp[pointer_use_vars_def] >>
+  qabbrev_tac `loopfn = \v:string list + string list.
+    case pointer_use_step_step fn (OUTL v) of
+      NONE => INR (OUTL v) | SOME vs => INL vs` >>
+  mp_tac (DB.fetch "While" "OWHILE_INV_IND"
+    |> INST_TYPE [alpha |-> ``:string list + string list``] |> Q.INST
+    [`P` |-> `\s:string list + string list.
+       case s of INL l => EVERY X l | INR l => EVERY X l`]) >>
+  disch_then (qspecl_then [`ISL`,`loopfn`,`INL xs`] mp_tac) >>
+  simp[] >> impl_tac
+  >- (rpt strip_tac >> rename1 `ISL st` >> Cases_on `st` >> gvs[Abbr `loopfn`] >>
+      Cases_on `pointer_use_step_step fn x` >> simp[] >>
+      gvs[pointer_use_step_step_def, AllCaseEqs(), EVERY_APPEND,
+          EVERY_FILTER, EVERY_MEM, pointer_use_step_member] >> metis_tac[]) >>
+  strip_tac >> Cases_on `OWHILE ISL loopfn (INL xs)` >> simp[] >>
+  Cases_on `x` >> simp[] >> first_x_assum (qspec_then `INR y` mp_tac) >> simp[]
+QED
+
+Theorem pointer_derived_vars_induction:
+  FINITE roots /\ (!v. v IN roots ==> X v) /\
+  (!i v w. MEM i (fn_insts fn) /\
+    is_pointer_preserving_op i.inst_opcode /\ MEM (Var v) i.inst_operands /\
+    X v /\ MEM w i.inst_outputs ==> X w) ==>
+  !w. w IN pointer_derived_vars fn roots ==> X w
+Proof
+  strip_tac >>
+  `EVERY X (pointer_use_vars fn (SET_TO_LIST roots))` by
+    (irule pointer_use_vars_least >>
+     simp[EVERY_MEM, MEM_SET_TO_LIST] >> metis_tac[]) >>
+  gvs[pointer_derived_vars_def, EVERY_MEM]
+QED
+
+Theorem pointer_derived_vars_edge:
+  FINITE roots /\ MEM i (fn_insts fn) /\
+  is_pointer_preserving_op i.inst_opcode /\ MEM (Var v) i.inst_operands /\
+  v IN pointer_derived_vars fn roots /\ MEM w i.inst_outputs ==>
+  w IN pointer_derived_vars fn roots
+Proof
+  rpt strip_tac >>
+  gvs[pointer_derived_vars_def] >>
+  mp_tac (pointer_use_vars_closed |> Q.INST [`xs` |-> `SET_TO_LIST roots`]) >>
+  simp[SUBSET_DEF, pointer_use_step_member] >> metis_tac[]
+QED
+
+Theorem pointer_derived_vars_mono:
+  !R S. FINITE R /\ FINITE S /\ R SUBSET S ==>
+  pointer_derived_vars fn R SUBSET pointer_derived_vars fn S
+Proof
+  qx_gen_tac `roots1` >> qx_gen_tac `roots2` >>
+  strip_tac >> simp[SUBSET_DEF] >>
+  ho_match_mp_tac pointer_derived_vars_induction >> simp[] >> conj_tac
+  >- (mp_tac (pointer_use_vars_contains |>
+        Q.INST [`xs` |-> `SET_TO_LIST roots2`]) >>
+      gvs[pointer_derived_vars_def, SUBSET_DEF, MEM_SET_TO_LIST] >> metis_tac[]) >>
+  metis_tac[pointer_derived_vars_edge]
+QED
