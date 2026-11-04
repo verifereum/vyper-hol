@@ -66,13 +66,10 @@ Definition type_convert_val_def:
   type_convert_val ConvBytestringToBool w ss =
     bool_to_word (load_bytestring_val word_lsr w ss ≠ 0w) ∧
   (* Bytestring→Int: load + shift *)
-  type_convert_val (ConvBytestringToInt is_signed _) w ss =
+  type_convert_val (ConvBytestringToInt is_signed _ _) w ss =
     load_bytestring_val (if is_signed then word_asr else word_lsr) w ss ∧
-  (* Bytestring→Address: load + unsigned shift *)
-  type_convert_val ConvBytestringToAddress w ss =
-    load_bytestring_val word_lsr w ss ∧
   (* Bytestring→Decimal: load + signed shift *)
-  type_convert_val (ConvBytestringToDecimal _ _ _) w ss =
+  type_convert_val (ConvBytestringToDecimal _ _ _ _) w ss =
     load_bytestring_val word_asr w ss ∧
   (* Bytestring→BytesM: load + re-shift to left-align *)
   type_convert_val (ConvBytestringToBytesM _) w ss =
@@ -81,7 +78,7 @@ Definition type_convert_val_def:
      let num_zero_bits = (32w - length) * 8w in
      word_lsl shifted_r (w2n num_zero_bits)) ∧
   (* Bytestring downcast: identity (length check only) *)
-  type_convert_val (ConvBytestringCast _) w ss = w ∧
+  type_convert_val (ConvBytestringCast _ _) w ss = w ∧
   (* Fixed→Bytestring: returns new buffer pointer (depends on alloca state) *)
   type_convert_val (ConvFixedToBytestring _) w ss =
     n2w ss.vs_alloca_next ∧

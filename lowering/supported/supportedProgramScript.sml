@@ -78,7 +78,7 @@ Definition supported_program_def:
 End
 
 (* Exact target-type occurrence (not just a dynamic boolean): needed by the
-   existential in decode_strictness_exempt. Traverse unsupported expressions,
+   existential in unspecified_behaviour_exempt. Traverse unsupported expressions,
    targets, iterators and reasons too. Only FUNCTION BODIES, as PLAN 5.5 says;
    defaults/constants are not bodies. Internal defaults remain excluded until
    their call-site expansion is implemented (#546). *)

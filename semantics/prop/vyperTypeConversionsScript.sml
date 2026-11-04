@@ -169,7 +169,7 @@ Proof
   TRY (drule_all decimal_div_unsigned_bound >> strip_tac) >>
   gvs[value_has_type_def, bounded_decimal_op_def,
       within_int_bound_def, compatible_bound_def] >>
-  gvs[LENGTH_TAKE, listTheory.PAD_RIGHT,
+  gvs[LENGTH_TAKE, LENGTH_DROP, LENGTH_MAP, listTheory.PAD_RIGHT,
       LENGTH_word_to_bytes, word_to_bytes_be_def] >>
   TRY (Cases_on `b` >> gvs[ONE_LT_EXP])
 QED

@@ -96,6 +96,49 @@ Proof
               is_decimal_type_def, is_signed_type_def]
 QED
 
+Theorem lower_value_ceil:
+  !cenv ty ann e sa op sb.
+    lower_value compile_expr cenv ty (Builtin ann Ceil [e]) sa = (op, sb) ==>
+    ?x s1. lower_value compile_expr cenv ty e sa = (x, s1) /\
+           compile_ceil x 10000000000 s1 = (op, sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def] >>
+  simp[compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  simp[lower_value_child_call, vyperASTTheory.expr_size_def,
+       listTheory.list_size_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def,
+              is_decimal_type_def, is_signed_type_def]
+QED
+
+Theorem compile_ceil_stack:
+  !cenv ty ann e sa vv sb.
+    compile_expr cenv ty (Builtin ann Ceil [e]) sa = (vv, sb) ==>
+    ?op. vv = StackValue ann op
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_unary_builtin] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair]
+QED
+
+Theorem straight_fresh_ceil:
+  !x d. straight_fresh (compile_ceil x d)
+Proof
+  rpt gen_tac >> simp[compile_ceil_def, compile_select_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[]), irule straight_fresh_bind >> conj_tac,
+              irule straight_fresh_emit_op >> simp[fresh_write_op_def] >> NO_TAC,
+              gen_tac])
+QED
+
 Theorem lower_value_as_wei_value:
   !cenv ty ann d e k sa op sb.
     expr_type e = BaseT (UintT k) /\
@@ -627,6 +670,46 @@ Proof
   drule_all (SRULE [dimword_def] compile_as_wei_value_int_run) >> simp[]
 QED
 
+(* ===== Ceil arithmetic ===== *)
+
+Theorem int_ceil_via_quot:
+  !x d:int. 0 < d ==>
+    (if x < 0 then x else x + (d - 1)) quot d = (x + (d - 1)) / d
+Proof
+  rpt strip_tac >>
+  `d <> 0` by intLib.ARITH_TAC >>
+  drule integerTheory.INT_DIVISION >>
+  disch_then (qspec_then `x + (d - 1)` strip_assume_tac) >>
+  Cases_on `x < 0` >> simp[] >>
+  irule integerTheory.INT_QUOT_UNIQUE
+  >- (qexists_tac `(x + (d - 1)) % d - (d - 1)` >>
+      simp[integerTheory.INT_ABS] >> intLib.ARITH_TAC) >>
+  qexists_tac `(x + (d - 1)) % d` >>
+  simp[integerTheory.INT_ABS] >> intLib.ARITH_TAC
+QED
+
+Theorem decimal_ceil_word:
+  !i. within_int_bound (Signed 168) i ==>
+    safe_sdiv
+      (if w2i (i2w i : bytes32) < 0 then i2w i else
+         i2w i + n2w (10000000000 - 1))
+      (n2w 10000000000) = i2w ((i + (10000000000 - 1)) / 10000000000)
+Proof
+  rpt strip_tac >>
+  `w2i (i2w i : bytes32) = i /\
+   w2i (i2w (i + 9999999999) : bytes32) = i + 9999999999 /\
+   w2i (i2w 10000000000 : bytes32) = 10000000000` by
+    (rpt conj_tac >> irule w2i_i2w >>
+     gvs[vyperValueTheory.within_int_bound_def,
+         integer_wordTheory.INT_MIN_def, integer_wordTheory.INT_MAX_def,
+         wordsTheory.INT_MIN_def, dimword_def] >> intLib.ARITH_TAC) >>
+  `n2w 10000000000 <> (0w:bytes32)` by simp[n2w_11, dimword_def] >>
+  Cases_on `i < 0` >>
+  simp[safe_sdiv_def, GSYM i2w_pos, word_i2w_add, word_quot] >>
+  qspec_then `i` (qspec_then `10000000000` mp_tac) int_ceil_via_quot >>
+  simp[]
+QED
+
 (* ===== Floor ===== *)
 
 (* Floor by truncation after the negative-input adjustment. *)
@@ -704,6 +787,22 @@ Proof
   drule_all compile_floor_correct >> strip_tac >>
   qexists_tac `ss'` >> simp[] >>
   drule decimal_floor_word >> simp[WORD_LTi, word_0_w2i]
+QED
+
+Theorem compile_ceil_word_frag:
+  !ctx func cenv cx es ann ts i.
+    within_int_bound (Signed 168) i ==>
+    word_builtin_frag ctx func cenv cx
+      (\xs. compile_ceil (EL 0 xs) 10000000000)
+      (builtin_result cx es.accounts ann Ceil ts [DecimalV i]) [DecimalV i] es
+Proof
+  rpt strip_tac >> simp[builtin_result_def, evaluate_builtin_def] >>
+  irule word_builtin_frag_success >>
+  simp[straight_fresh_ceil, word_value_def] >> rpt strip_tac >>
+  gvs[LIST_REL_EL_EQN, val_to_w256_def] >>
+  drule_all compile_ceil_correct >> strip_tac >>
+  qexists_tac `ss'` >> simp[] >>
+  drule decimal_ceil_word >> simp[WORD_LTi, word_0_w2i]
 QED
 
 (* ===== Typed composition and the case lemmas ===== *)
@@ -850,6 +949,47 @@ Proof
   mp_tac compile_floor_word_frag >> simp[] >> disch_then irule >> simp[]
 QED
 
+Theorem compile_ceil_typed_sim:
+  !ctx func cenv cx env ty ann e es.
+    expr_body_pre cenv cx env (Builtin ann Ceil [e]) es /\
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) [e]) ==>
+    expr_sim ctx func cenv cx ty (Builtin ann Ceil [e]) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_type e = BaseT DecimalT /\ ann = BaseT (IntT 256)` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  irule compile_typed_word_builtin_sim >>
+  simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+  qexistsl_tac [`\e. ty`, `(\xs. compile_ceil (EL 0 xs) 10000000000)`, `env`] >>
+  simp[straight_fresh_ceil] >> conj_tac
+  >- (rpt strip_tac >> drule lower_value_ceil >> strip_tac >>
+      qexistsl_tac [`[x]`, `s1`] >>
+      simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+  rpt strip_tac >>
+  gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  mp_tac compile_ceil_word_frag >> simp[] >> disch_then irule >> simp[]
+QED
+
+Theorem ceil_ready_vv_sim:
+  !ctx func cenv cx env ty ann args es.
+    expr_body_pre cenv cx env (Builtin ann Ceil args) es /\
+    (!arg_ty. wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
+    expr_vv_sim ctx func cenv cx ty (Builtin ann Ceil args) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_builtin_app ann Ceil (MAP expr_type args)` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[well_typed_builtin_app_def, MAP_EQ_CONS, LENGTH_EQ_NUM_compute] >>
+  rename1 `expr_type e = BaseT DecimalT` >>
+  `expr_sim ctx func cenv cx ty (Builtin (BaseT (IntT 256)) Ceil [e]) es` by
+    (irule compile_ceil_typed_sim >> metis_tac[]) >>
+  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin (BaseT (IntT 256)) Ceil [e]) sa` >>
+      drule compile_ceil_stack >> metis_tac[]) >>
+  metis_tac[eval_expr_builtin_value]
+QED
+
 Theorem compile_modular_typed_sim:
   !ctx func cenv cx env ty ann bt a b m es.
     (bt = AddMod \/ bt = MulMod) /\
@@ -966,6 +1106,18 @@ Proof
     gvs[expr_body_pre_def, well_typed_expr_def] >>
   gvs[well_typed_builtin_app_def] >>
   gvs[MAP_EQ_CONS, LENGTH_EQ_NUM_compute, word_value_type_def, is_uint_type_def])
+QED
+
+Theorem ceil_operand_types:
+  !cenv cx env ann args es.
+    expr_body_pre cenv cx env (Builtin ann Ceil args) es ==>
+    EVERY (\e. word_value_type (expr_type e)) args
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_typed_builtin_app ann Ceil (MAP expr_type args)` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[well_typed_builtin_app_def, MAP_EQ_CONS,
+      LENGTH_EQ_NUM_compute, word_value_type_def]
 QED
 
 Theorem word_builtin_case:

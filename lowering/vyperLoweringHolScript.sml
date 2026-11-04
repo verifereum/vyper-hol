@@ -9,7 +9,7 @@ Ancestors
   entryChecksProps
   entryStateRel entryLocals
   loweringSlice
-  memSafeRun fragExecMem
+  memSafeRun instMemFrontier fragExecMem allocaFootprint
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites

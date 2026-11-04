@@ -70,8 +70,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-(* exprSimOperators' compile_ifexp_case, whose aggregate ternaries are
-   cheated there (compile_ifexp_aggregate_case) for compile_expr_sim too. *)
+(* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\

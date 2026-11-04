@@ -244,8 +244,9 @@ QED
 
 (* Also #572: << of an integer narrower than 256 bits, which the lowering
    does not truncate, and a shift by a negative amount, where the source
-   raises and the lowering shifts.  Vyper rejects shifts of types other than
-   int256 and uint256; well_typed_binop admits every integer type. *)
+   raises and the lowering shifts.  The checker now rejects both
+   (well_typed_binop's ShL case and shift_amount_ok), but the amount's sign
+   is a fact about the operand expression, which binop_frag does not see. *)
 Theorem binop_frag_shift_572:
   !ctx func cenv cx bop ann t1 t2 bl el tys v1 v2 es0 tenv tv1 tv2.
     (bop = ShL \/ bop = ShR) /\

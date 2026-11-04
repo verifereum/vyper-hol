@@ -2999,6 +2999,207 @@ Proof
   qexistsl [`dfg`, `1`, `h'`, `step_ops`, `ps''`] >> simp[]
 QED
 
+Theorem phi_popmany_singleton[local]:
+  !op ps d.
+    stack_get_depth op ps.ps_stack = SOME d ==>
+    popmany_plan [op] ps =
+      let (sw, p) = do_swap d ps in
+      (sw ++ [SOPop 1], p with ps_stack := stack_pop 1 p.ps_stack)
+Proof
+  rpt strip_tac >>
+  simp[popmany_plan_def, is_contiguous_top_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, popmany_individual_def] >>
+  Cases_on `d = 1` >> simp[] >>
+  Cases_on `d = 0` >> simp[do_swap_def]
+QED
+
+Theorem phi_swap_pop_sim[local]:
+  !d ps sw p lo o2pc prog vs st.
+    do_swap d ps = (sw,p) /\
+    d < LENGTH ps.ps_stack /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    prefix_spill_wf initial_fmp lo sw ps /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp (sw ++ [SOPop 1])) ==>
+    ?st'. asm_steps lo o2pc prog
+             (LENGTH (execute_plan initial_fmp (sw ++ [SOPop 1]))) st = AsmOK st' /\
+          venom_asm_rel lo (p with ps_stack := stack_pop 1 p.ps_stack) vs st' /\
+          st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp (sw ++ [SOPop 1]))
+Proof
+  rpt strip_tac >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  drule_all do_swap_venom_asm_rel_layout >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `0 < LENGTH p.ps_stack` by
+    (drule_all do_swap_stack_permutation >> simp[] >> strip_tac >>
+     Cases_on `p.ps_stack` >> gvs[] >>
+     Cases_on `ps.ps_stack` >> gvs[]) >>
+  qspecl_then [`[SOPop 1]`, `initial_fmp`, `lo`, `o2pc`, `prog`, `p`, `vs`, `st'`]
+    mp_tac simple_prefix_venom_asm_rel >>
+  (impl_tac >-
+    simp[is_simple_stack_op_def, prefix_wf_def, stack_op_wf_def]) >>
+  simp[apply_simple_ops_def, apply_simple_op_def] >> strip_tac >>
+  qexists `st''` >> simp[] >>
+  simp[stack_pop_def] >>
+  irule asm_steps_compose_ok >> qexists `st'` >> simp[]
+QED
+
+Theorem phi_popmany_singleton_sim[local]:
+  !op ps d ops p lo o2pc prog vs st.
+    stack_get_depth op ps.ps_stack = SOME d /\
+    popmany_plan [op] ps = (ops,p) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    prefix_spill_wf initial_fmp lo (FRONT ops) ps /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+          venom_asm_rel lo p vs st' /\
+          st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt strip_tac >>
+  drule phi_popmany_singleton >>
+  simp[LET_THM] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  `d < LENGTH ps.ps_stack` by
+    (drule stack_get_depth_bound >> simp[]) >>
+  gvs[FRONT_APPEND_NOT_NIL] >>
+  drule_all phi_swap_pop_sim >>
+  disch_then (qspec_then `o2pc` mp_tac) >> simp[]
+QED
+
+Theorem phi_poke_fresh_distinct[local]:
+  !stk d op. ALL_DISTINCT stk /\ ~MEM op stk ==>
+    ALL_DISTINCT (stack_poke d op stk)
+Proof
+  rpt strip_tac >>
+  rw[EL_ALL_DISTINCT_EL_EQ, stack_poke_def, EL_LUPDATE] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  metis_tac[ALL_DISTINCT_EL_IMP, MEM_EL]
+QED
+
+Theorem phi_poke_fresh_disjoint[local]:
+  !stk d op s. DISJOINT (set stk) s /\ ~(op IN s) ==>
+    DISJOINT (set (stack_poke d op stk)) s
+Proof
+  rw[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION,
+     stack_poke_def, MEM_EL, EL_LUPDATE] >>
+  metis_tac[]
+QED
+
+Theorem phi_dup_rename_sim[local]:
+  !d ps ds p lo o2pc prog vs st out v tail base.
+    do_dup d ps = (ds,p) /\ d < LENGTH ps.ps_stack /\
+    generated_plan_state_wf base ps /\
+    operand_val vs lo (stack_peek d ps.ps_stack) = SOME v /\
+    stack_peek d ps.ps_stack <> dead_stack_marker /\
+    EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+      case op of Var x => x <> out | _ => T) /\
+    prefix_spill_wf initial_fmp lo ds ps /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp (ds ++ tail)) ==>
+    ?mid. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ds)) st = AsmOK mid /\
+      venom_asm_rel lo (p with ps_stack := stack_poke 0 (Var out) p.ps_stack)
+        (update_var out v vs) mid /\
+      mid.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ds) /\
+      asm_block_at prog mid.as_pc (execute_plan initial_fmp tail)
+Proof
+  rpt strip_tac >>
+  gvs[execute_plan_append, asm_block_at_append] >>
+  `prefix_wf lo (LENGTH ps.ps_stack) ds` by
+    (qspecl_then [`d`, `ps`, `lo`] mp_tac do_dup_wf_len >> simp[]) >>
+  `EVERY is_prefix_op ds` by metis_tac[prefix_wf_every_prefix_op] >>
+  drule_all mixed_prefix_venom_asm_rel >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+   ALL_DISTINCT ps.ps_stack /\
+   DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)` by
+    fs[generated_plan_state_wf_def] >>
+  `ALL_DISTINCT (top_n (d - 15) ps.ps_stack) /\
+   DISJOINT (set (top_n (d - 15) ps.ps_stack)) (FDOM ps.ps_spilled)` by
+    (conj_tac
+     >- simp[top_n_def, ALL_DISTINCT_REVERSE, ALL_DISTINCT_TAKE] >>
+     fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> gen_tac >>
+     simp[top_n_def] >> metis_tac[MEM_TAKE, MEM_REVERSE]) >>
+  qspecl_then [`d`, `ps`, `lo`] mp_tac do_dup_apply_relevant_align_layout >>
+  simp[LET_THM] >> strip_tac >>
+  `venom_asm_rel lo p vs st'` by
+    (irule venom_asm_rel_ps_transfer >>
+     qexists `apply_prefix_ops initial_fmp lo ds ps` >> gvs[]) >>
+  `p.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
+    (drule do_dup_stack_exact >> simp[]) >>
+  `p.ps_spilled = ps.ps_spilled` by
+    (qspecl_then [`d`, `ps`] mp_tac do_dup_layout_wf >> simp[]) >>
+  irule venom_asm_rel_poke_update_var >>
+  simp[stack_peek_def, EVERY_APPEND, EL_APPEND_EQN] >>
+  `MEM (stack_peek d ps.ps_stack) ps.ps_stack` by
+    (simp[stack_peek_def, MEM_EL] >>
+     qexists `LENGTH ps.ps_stack - 1 - d` >> simp[]) >>
+  gvs[EVERY_MEM, stack_peek_def] >> metis_tac[]
+QED
+
+Theorem phi_popmany_singleton_wf_cross_view[local]:
+  !op p d ops q consumer lo.
+    stack_get_depth op p.ps_stack = SOME d /\
+    popmany_plan [op] p = (ops,q) /\
+    spill_alloc_layout_wf p.ps_alloc p.ps_spilled /\
+    ALL_DISTINCT p.ps_stack /\
+    prefix_spill_wf initial_fmp lo (FRONT ops) consumer ==>
+    prefix_spill_wf initial_fmp lo (FRONT ops) p
+Proof
+  rpt strip_tac >>
+  drule phi_popmany_singleton >> simp[LET_THM] >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[FRONT_APPEND_NOT_NIL] >>
+  `d < LENGTH p.ps_stack` by
+    (drule stack_get_depth_bound >> simp[]) >>
+  `prefix_spill_wf initial_fmp lo (FRONT sw) consumer` by
+    (Cases_on `sw = []` >- simp[prefix_spill_wf_def] >>
+     qpat_x_assum `prefix_spill_wf _ _ sw _` mp_tac >>
+     `sw = FRONT sw ++ [LAST sw]` by metis_tac[SNOC_LAST_FRONT, SNOC_APPEND] >>
+     metis_tac[prefix_spill_wf_prefix]) >>
+  irule do_swap_prefix_spill_wf_from_front_cross_view >>
+  conj_tac
+  >- (qexistsl [`d`, `p'`] >>
+      simp[top_n_def, ALL_DISTINCT_REVERSE, ALL_DISTINCT_TAKE]) >>
+  simp[] >> qexists `consumer` >> simp[]
+QED
+
+Theorem phi_poke_cleanup_handoff[local]:
+  !base ps out d lo ops q k.
+    generated_plan_state_wf base ps /\
+    ~MEM (Var out) ps.ps_stack /\ ~(Var out IN FDOM ps.ps_spilled) /\
+    ops <> [] /\
+    popmany_plan [Var out]
+      (ps with ps_stack := stack_poke d (Var out) ps.ps_stack) = (ops,q) /\
+    stack_get_depth (Var out) (stack_poke d (Var out) ps.ps_stack) = SOME k /\
+    prefix_spill_wf initial_fmp lo (FRONT (SOPoke d (Var out) :: ops)) ps ==>
+    let p = ps with ps_stack := stack_poke d (Var out) ps.ps_stack in
+    spill_alloc_layout_wf p.ps_alloc p.ps_spilled /\
+    ALL_DISTINCT p.ps_stack /\
+    DISJOINT (set p.ps_stack) (FDOM p.ps_spilled) /\
+    prefix_spill_wf initial_fmp lo (FRONT ops) p
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  `ALL_DISTINCT (stack_poke d (Var out) ps.ps_stack) /\
+   DISJOINT (set (stack_poke d (Var out) ps.ps_stack)) (FDOM ps.ps_spilled)` by
+    (fs[generated_plan_state_wf_def] >>
+     metis_tac[phi_poke_fresh_distinct, phi_poke_fresh_disjoint]) >>
+  `prefix_spill_wf initial_fmp lo (FRONT ops) ps` by
+    (Cases_on `ops` >>
+     gvs[FRONT_DEF, prefix_spill_wf_def, apply_prefix_op_def,
+         apply_simple_op_def]) >>
+  simp[] >> conj_tac >- fs[generated_plan_state_wf_def] >>
+  irule phi_popmany_singleton_wf_cross_view >>
+  simp[] >> conj_tac
+  >- (qexistsl [`k`, `Var out`, `q`] >> simp[]) >>
+  conj_tac >- fs[generated_plan_state_wf_def] >>
+  qexists `ps` >> simp[]
+QED
+
 (* Comprehensive local non-call per-instruction OK simulation.
    Explicit preconditions and guarantees:
    - excludes INVOKE, whose atomic source semantics require context-wide
@@ -3154,7 +3355,7 @@ Resume gen_inst_ok_sim[phi]:
     metis_tac[]) >>
   gvs[] >>
   (* Unfold generate_phi_plan and case split *)
-  qpat_x_assum `generate_phi_plan _ _ _ = _` mp_tac >>
+  qpat_x_assum `generate_phi_plan _ _ _ _ = _` mp_tac >>
   simp[generate_phi_plan_def, LET_THM] >>
   suspend "phi_cases"
 QED
@@ -3175,161 +3376,114 @@ Resume gen_inst_ok_sim[phi_cases]:
   >- (
     (* SOME dist case: stack has a phi var at depth x *)
     gvs[] >> pairarg_tac >> gvs[] >>
-    (* Case split on whether the phi var is still live *)
+    `x < LENGTH ps.ps_stack` by
+      (fs[stack_get_phi_depth_def] >> drule stack_find_bound >> simp[]) >>
+    `stack_peek x ps.ps_stack <> dead_stack_marker` by
+      (drule stack_get_phi_depth_var_not_marker >> simp[]) >>
     qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
     IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
     >- suspend "phi_live"
-    >- (
-      (* Dead case: poke only, 0 asm steps *)
-      simp[execute_plan_def, exec_stack_op_def] >>
-      Q.EXISTS_TAC `0` >> Q.EXISTS_TAC `as` >>
-      simp[asm_steps_def] >>
-      irule venom_asm_rel_poke_update_var >> simp[] >>
-      (* dist < LENGTH ps.ps_stack from stack_get_phi_depth *)
-      qpat_x_assum `stack_get_phi_depth _ _ = SOME _` mp_tac >>
-      simp[stack_get_phi_depth_def] >>
-      strip_tac >> drule stack_find_bound >> strip_tac >>
-      drule stack_find_el >> strip_tac >>
-      `stack_peek x ps.ps_stack = EL x (REVERSE ps.ps_stack)` by
-        (qspecl_then [`x`, `ps.ps_stack`] mp_tac EL_REVERSE >>
-         simp[stack_peek_def] >>
-         `PRE (LENGTH ps.ps_stack - x) =
-          LENGTH ps.ps_stack - (x + 1)` by decide_tac >>
-         fs[LENGTH_REVERSE] >> decide_tac) >>
-      fs[MEM_FILTER, is_var_operand_def, dead_stack_marker_def] >>
-      Cases_on `EL x (REVERSE ps.ps_stack)` >>
-      gvs[is_var_operand_def]
-    )
+    >- suspend "phi_dead"
   )
 QED
 
+Resume gen_inst_ok_sim[phi_dead]:
+  `venom_asm_rel lo
+     (ps with ps_stack := stack_poke x (Var out) ps.ps_stack)
+     (update_var out v vs) as` by
+    (irule venom_asm_rel_poke_update_var >> simp[]) >>
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+  IF_CASES_TAC >> simp[]
+  >- suspend "phi_dead_pop"
+  >> strip_tac >> gvs[] >>
+  qexistsl [`0`, `as`] >>
+  simp[asm_steps_def, execute_plan_def, exec_stack_op_def]
+QED
+
+Resume gen_inst_ok_sim[phi_dead_pop]:
+  pairarg_tac >> strip_tac >> gvs[] >>
+  `?k. stack_get_depth (Var out)
+      (stack_poke x (Var out) ps.ps_stack) = SOME k` by
+    (Cases_on `stack_get_depth (Var out)
+       (stack_poke x (Var out) ps.ps_stack)` >> simp[] >>
+     fs[stack_get_depth_NONE] >>
+     first_x_assum (qspec_then `x` mp_tac) >>
+     simp[stack_peek_def, stack_poke_def, EL_LUPDATE]) >>
+  `pop_ops <> []` by
+    (qspec_then `Var out` mp_tac phi_popmany_singleton >>
+     disch_then (qspec_then
+       `ps with ps_stack := stack_poke x (Var out) ps.ps_stack` mp_tac) >>
+     simp[LET_THM] >>
+     pairarg_tac >> gvs[] >> strip_tac >> gvs[]) >>
+  `~MEM (Var out) ps.ps_stack /\
+   ~(Var out IN FDOM ps.ps_spilled)` by
+    (gvs[EVERY_MEM] >> conj_tac >> strip_tac >> res_tac >> gvs[]) >>
+  drule_all phi_poke_cleanup_handoff >> simp[LET_THM] >> strip_tac >>
+  `asm_block_at prog as.as_pc (execute_plan initial_fmp pop_ops)` by
+    fs[execute_plan_def, exec_stack_op_def] >>
+  qspecl_then [`Var out`,
+    `ps with ps_stack := stack_poke x (Var out) ps.ps_stack`]
+    mp_tac phi_popmany_singleton_sim >> simp[] >>
+  disch_then drule_all >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexistsl [`LENGTH (execute_plan initial_fmp pop_ops)`, `st'`] >>
+  simp[execute_plan_def, exec_stack_op_def]
+QED
+
 Resume gen_inst_ok_sim[phi_live]:
-  (* derive x < LENGTH ps.ps_stack from stack_get_phi_depth *)
-  qpat_x_assum `stack_get_phi_depth _ _ = SOME _`
-    (fn th => assume_tac th >>
-              mp_tac (REWRITE_RULE [stack_get_phi_depth_def] th)) >>
+  pairarg_tac >> gvs[] >>
+  qpat_x_assum `(if _ then _ else _) = _` mp_tac >>
+  IF_CASES_TAC >> simp[]
+  >- suspend "phi_live_pop"
+  >> strip_tac >> gvs[] >>
+  `prefix_spill_wf initial_fmp lo dup_ops ps` by
+    fs[FRONT_APPEND_NOT_NIL, FRONT_DEF] >>
+  drule_all phi_dup_rename_sim >>
+  disch_then (qspecl_then [`o2pc`] mp_tac) >>
+  strip_tac >> qexistsl [`LENGTH (execute_plan initial_fmp dup_ops)`, `mid`] >>
+  simp[execute_plan_append, execute_plan_def, exec_stack_op_def]
+QED
+
+Resume gen_inst_ok_sim[phi_live_pop]:
+  pairarg_tac >> strip_tac >> gvs[] >>
+  `ps1.ps_stack = ps.ps_stack ++ [stack_peek x ps.ps_stack]` by
+    (drule do_dup_stack_exact >> simp[]) >>
+  `stack_poke 0 (Var out) ps1.ps_stack = ps.ps_stack ++ [Var out]` by
+    simp[stack_poke_def, LUPDATE_APPEND2] >>
+  qpat_x_assum `popmany_plan _ _ = _` mp_tac >>
+  simp[popmany_plan_def, is_contiguous_top_def, stack_get_depth_def,
+       stack_find_def, REVERSE_APPEND, stack_pop_def,
+       sortingTheory.QSORT_DEF, sortingTheory.PARTITION_DEF,
+       sortingTheory.PART_DEF, popmany_individual_def, do_swap_def] >>
+  strip_tac >> gvs[] >>
+  `prefix_spill_wf initial_fmp lo dup_ops ps` by
+    (qpat_x_assum `prefix_spill_wf _ _ _ _` mp_tac >>
+     simp[FRONT_APPEND_NOT_NIL, FRONT_DEF] >>
+     metis_tac[prefix_spill_wf_prefix]) >>
+  `asm_block_at prog as.as_pc
+     (execute_plan initial_fmp (dup_ops ++ [SOPoke 0 (Var out); SOPop 1]))` by
+    fs[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  drule_all phi_dup_rename_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  suspend "phi_live_pop_finish"
+QED
+
+Resume gen_inst_ok_sim[phi_live_pop_finish]:
+  `asm_block_at prog mid.as_pc (execute_plan initial_fmp [SOPop 1])` by
+    gvs[execute_plan_def, exec_stack_op_def] >>
+  qspecl_then [`[SOPop 1]`, `initial_fmp`, `lo`, `o2pc`, `prog`,
+    `ps1 with ps_stack := stack_poke 0 (Var out) ps1.ps_stack`,
+    `update_var out v vs`, `mid`] mp_tac simple_prefix_venom_asm_rel >>
+  (impl_tac >-
+    simp[is_simple_stack_op_def, prefix_wf_def, stack_op_wf_def,
+         stack_poke_def]) >>
   strip_tac >>
-  drule stack_find_bound >> rewrite_tac[LENGTH_REVERSE] >> strip_tac >>
-  (* derive prefix_wf via do_dup_wf_len *)
-  qspecl_then [`x`, `ps`, `lo`] mp_tac do_dup_wf_len >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  simp[LET_THM] >> strip_tac >>
-  (* simplify execute_plan initial_fmp suffix and FRONT *)
-  rewrite_tac[execute_plan_append,
-    EVAL ``execute_plan initial_fmp [SOPoke 0 (Var out)]``, APPEND_NIL] >>
-  rewrite_tac[FRONT_APPEND_NOT_NIL, EVAL ``[SOPoke 0 (Var out)] <> []``] >>
-  rewrite_tac[FRONT_DEF] >>
-  suspend "phi_live_main"
-QED
-
-Resume gen_inst_ok_sim[phi_live_main]:
-  (* Use prefix_sim with prefix=dup_ops, emit=[SOPoke 0 (Var out)] *)
-  qpat_x_assum `prefix_wf lo _ dup_ops`
-    (fn th => assume_tac th >>
-              assume_tac (MATCH_MP prefix_wf_every_prefix_op th)) >>
-  qspecl_then [`lo`, `o2pc`, `prog`, `ps`, `vs`, `as`,
-    `dup_ops`, `[SOPoke 0 (Var out)]`] mp_tac prefix_sim >>
-  (impl_tac >- (ASM_REWRITE_TAC[] >> EVAL_TAC)) >>
-  strip_tac >>
-  suspend "phi_live_align"
-QED
-
-Resume gen_inst_ok_sim[phi_live_align]:
-  Q.EXISTS_TAC `LENGTH (execute_plan initial_fmp dup_ops)` >>
-  Q.EXISTS_TAC `st_mid` >>
-  ASM_REWRITE_TAC[] >>
-  suspend "phi_live_do_dup_align"
-QED
-
-(* Helper: do_dup (shallow) + poke 0 preserves venom_asm_rel *)
-Theorem do_dup_poke_venom_asm_rel[local]:
-  !lo ps vs (as:asm_state) x out v dup_ops ps''.
-    venom_asm_rel lo (apply_prefix_ops initial_fmp lo dup_ops ps) vs as /\
-    do_dup x ps = (dup_ops, ps'') /\
-    x <= 15 /\
-    x < LENGTH ps.ps_stack /\
-    operand_val vs lo (stack_peek x ps.ps_stack) = SOME v /\
-    stack_peek x ps.ps_stack <> dead_stack_marker /\
-    EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
-    (!op. op IN FDOM ps.ps_spilled ==>
-      case op of Var x => x <> out | _ => T)
-    ==>
-    venom_asm_rel lo
-      (ps'' with ps_stack := stack_poke 0 (Var out) ps''.ps_stack)
-      (update_var out v vs) as
-Proof
-  rpt strip_tac >>
-  (* unfold do_dup for shallow case *)
-  qpat_x_assum `do_dup _ _ = _` mp_tac >>
-  simp[do_dup_def] >> strip_tac >> gvs[] >>
-  (* alignment gives apply_prefix_ops initial_fmp = record update *)
-  qspecl_then [`x'`, `ps`, `[SODup (x' + 1)]`,
-    `ps with ps_stack := stack_dup x' ps.ps_stack`]
-    mp_tac do_dup_align >>
-  simp[do_dup_def] >> strip_tac >>
-  (* Rewrite venom_asm_rel to eliminate apply_prefix_ops initial_fmp *)
-  fs[] >>
-  (* apply venom_asm_rel_poke_update_var via forward reasoning *)
-  qspecl_then [`lo`,
-    `ps with ps_stack := stack_dup x' ps.ps_stack`,
-    `vs`, `as`, `out`, `v`, `0`]
-    mp_tac venom_asm_rel_poke_update_var >>
-  (* Collapse nested record update in conclusion *)
-  simp[stack_dup_def, LENGTH_SNOC,
-       stack_peek_def, EL_LENGTH_SNOC, EVERY_SNOC] >>
-  disch_then match_mp_tac >>
-  `LENGTH ps.ps_stack - (x' + 1) = LENGTH ps.ps_stack - 1 - x'`
-    by decide_tac >>
-  pop_assum (fn eq => rewrite_tac[eq]) >>
-  rewrite_tac[GSYM stack_peek_def] >>
-  conj_tac >- ASM_REWRITE_TAC[] >>
-  `MEM (stack_peek x' ps.ps_stack) ps.ps_stack` by (
-    rewrite_tac[stack_peek_def] >> match_mp_tac EL_MEM >>
-    decide_tac) >>
-  qpat_x_assum `EVERY _ ps.ps_stack` mp_tac >>
-  simp[EVERY_MEM]
-QED
-
-Resume gen_inst_ok_sim[phi_live_do_dup_align]:
-  (* PC arithmetic (second conjunct) *)
-  conj_asm1_tac >> TRY decide_tac >>
-  (* Case split x <= 15 *)
-  Cases_on `x <= 15`
-  >- (
-    qspecl_then [`lo`, `ps`, `vs`, `st_mid`, `x`, `out`, `v`,
-      `dup_ops`, `ps''`] mp_tac do_dup_poke_venom_asm_rel >>
-    (impl_tac >- (ASM_REWRITE_TAC[] >>
-      drule stack_get_phi_depth_var_not_marker >> simp[])) >>
-    rewrite_tac[])
-  >- (
-    `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
-     ALL_DISTINCT ps.ps_stack /\
-     DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled)` by
-      fs[generated_plan_state_wf_def] >>
-    `ALL_DISTINCT (top_n (x - 15) ps.ps_stack) /\
-     DISJOINT (set (top_n (x - 15) ps.ps_stack)) (FDOM ps.ps_spilled)` by
-      (conj_tac
-       >- simp[top_n_def, ALL_DISTINCT_REVERSE, ALL_DISTINCT_TAKE] >>
-       fs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >> gen_tac >>
-       simp[top_n_def] >> metis_tac[MEM_TAKE, MEM_REVERSE]) >>
-    qspecl_then [`x`, `ps`, `lo`] mp_tac do_dup_apply_relevant_align_layout >>
-    simp[LET_THM] >> strip_tac >>
-    `venom_asm_rel lo ps'' vs st_mid` by
-      (irule venom_asm_rel_ps_transfer >>
-       qexists `apply_prefix_ops initial_fmp lo dup_ops ps` >> gvs[]) >>
-    `ps''.ps_stack = ps.ps_stack ++ [stack_peek x ps.ps_stack]` by
-      (drule do_dup_stack_exact >> simp[]) >>
-    `ps''.ps_spilled = ps.ps_spilled` by
-      (qspecl_then [`x`, `ps`] mp_tac do_dup_layout_wf >> simp[]) >>
-    irule venom_asm_rel_poke_update_var >>
-    simp[stack_peek_def, EVERY_APPEND, EL_APPEND_EQN] >>
-    conj_tac
-    >- (drule stack_get_phi_depth_var_not_marker >>
-        simp[stack_peek_def]) >>
-    `MEM (stack_peek x ps.ps_stack) ps.ps_stack` by
-      (simp[stack_peek_def, MEM_EL] >>
-       qexists `LENGTH ps.ps_stack - 1 - x` >> simp[]) >>
-    gvs[EVERY_MEM, stack_peek_def] >> metis_tac[])
+  qexistsl [`LENGTH (execute_plan initial_fmp dup_ops) +
+              LENGTH (execute_plan initial_fmp [SOPop 1])`, `st'`] >>
+  conj_tac
+  >- (irule asm_steps_compose_ok >> qexists `mid` >> simp[]) >>
+  gvs[apply_simple_ops_def, apply_simple_op_def, stack_pop_def,
+      execute_plan_append, execute_plan_def, exec_stack_op_def]
 QED
 
 Theorem venom_asm_rel_push_lit_as_fresh_var[local]:

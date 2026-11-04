@@ -256,6 +256,13 @@ Proof
     extend_place_def, lift_option_type_def, evaluate_type_def, get_place_def]
 QED
 
+Theorem encode_hashmap_key_bytes4_left_aligned:
+  encode_hashmap_key (BaseT (BytesT (Fixed 4))) (BytesV [0x01w; 0xffw; 0xc9w; 0xa7w]) =
+    0x01ffc9a7w << 224
+Proof
+  EVAL_TAC
+QED
+
 (* Keep the evaluator and the checked place-order probes kernel-closed. *)
 val () = List.app (fn (_,th) =>
   let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)

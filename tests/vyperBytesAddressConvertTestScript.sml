@@ -26,6 +26,7 @@ Proof
 QED
 
 Theorem bytes_address_conversion_valid:
+  (!k. bd = Dynamic k ==> k <= 32) ==>
   valid_conversion (BaseT (BytesT bd)) (BaseT AddressT)
 Proof
   Cases_on `bd` >> simp[valid_conversion_def]

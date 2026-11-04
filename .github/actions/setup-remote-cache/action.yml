@@ -21,7 +21,7 @@ runs:
         CACHE_URL: ${{ inputs.url }}
       run: |
         if [ -z "$CURL_CONFIG" ]; then
-          echo 'No remote cache login for this run; using snapshot/local cache only'
+          echo 'No remote cache login for this run; using the local cache only'
           exit 0
         fi
         config="$RUNNER_TEMP/holbuild-remote-cache.curl"
@@ -33,7 +33,7 @@ runs:
         status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -K "$config" \
           "$CACHE_URL/ac/$(printf '%064d' 0)" || true)
         if [ "$status" != 404 ] && [ "$status" != 200 ]; then
-          echo "::warning::Remote cache probe returned HTTP $status; using snapshot/local cache only"
+          echo "::warning::Remote cache probe returned HTTP $status; using the local cache only"
           exit 0
         fi
         {
