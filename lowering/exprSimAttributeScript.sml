@@ -37,7 +37,7 @@ Ancestors
   allocLimits
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
-  exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
+  exprSimBuffer exprSimAggregateChildren exprSimAttributeFields targetPlaceSim placeProvenance
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
   accountsRelProps
   valueEncoding vyperAST vyperInterpreter vyperState vyperStorage vyperValue
@@ -105,7 +105,8 @@ Proof
        env_context_consistent_def] >>
   gvs[expr_body_pre_def, well_typed_expr_def, attribute_type_ok_def,
       vyperTypeCallGraphTheory.int_calls_expr_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def, byte_widths_expr_def,
       alloc_limits_expr_def] >>
   Cases_on `expr_type obj` >> gvs[attribute_type_def]
 QED
@@ -375,6 +376,7 @@ Theorem attr_vv_post[local]:
     ALOOKUP fs fld = SOME ftv /\ evaluate_type (get_tenv cx) ann = SOME ftv /\
     (!v. read_result cx tv es1 = (INL v, es1) ==>
          value_has_type (StructTV fs) v) /\
+    select_result cx (StructT sid) tv (AttrSubscript fld) es1 = (INL tv', es1) /\
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
             read_result cx tv' es1 = (INL fv, es1)) ==>
@@ -431,9 +433,51 @@ Proof
       gvs[storage_holds_def])
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
-      metis_tac[]) >>
-  first_assum ACCEPT_TAC
+      metis_tac[])
+  >> asm_rewrite_tac[] >> suspend "provenance"
 QED
+
+Resume attr_vv_post[provenance]:
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_holds _ _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE (srw_ss()) [vv_holds_def]) >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `!x w. not_fresh_at _ _ /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `!aid off sz. _ ==> _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  Cases_on `tv`
+  >- gvs[select_result_def, bind_def, return_def, lift_sum_def,
+         lift_option_type_def, raise_def, AllCaseEqs()]
+  >- (rename1 `select_result cx (StructT sid) (PlaceR bp) _ _ = _` >> Cases_on `bp` >>
+      gvs[select_result_def, extend_place_def, extend_memory_place_def,
+          bind_def, ignore_bind_def, return_def,
+          lift_sum_def, lift_option_type_def, raise_def, AllCaseEqs()] >>
+      Cases_on `bvv` >>
+      gvs[vv_holds_def, vv_place_ptr_rel_def, place_ptr_rel_def, vv_operand_def,
+          vv_loc_def, vv_location_def, mk_ptr_def, AllCaseEqs()]
+      >- (drule_all struct_field_slot_exists >> strip_tac >>
+          gvs[extend_storage_place_def, bind_def, lift_option_type_def,
+              return_def, raise_def, attr_offset_def, slot_loc_def,
+              place_ptr_rel_def] >>
+          drule_all struct_field_offset_slots_eq >>
+          Cases_on `b` >> simp[])
+      >- (drule_all mem_field_offset_layout >> strip_tac >>
+          `mem_step_offset (StructTV fs) (AttrSubscript fld) =
+             SOME (struct_field_offset
+               (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld, ftv)` by
+            simp[mem_step_offset_def] >>
+          drule_all mem_path_offset_snoc >> strip_tac >>
+          goal_assum (drule_at Any) >>
+          simp[attr_offset_def, wordsTheory.word_add_n2w,
+               GSYM wordsTheory.WORD_ADD_ASSOC]) >>
+      simp[attr_offset_def] >>
+      irule immutable_holds_field >> simp[] >> metis_tac[]) >>
+  gvs[select_result_def, extend_place_def, raise_def]
+QED
+
+Finalise attr_vv_post
 
 (* ===== The simulation ===== *)
 
