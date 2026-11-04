@@ -3844,9 +3844,12 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
     Cases_on
       `push_function (env_body.current_src,fn) call_env cx lock_st` >>
     rename1 `_ lock_st = (push_res,push_st)` >>
-    Cases_on `push_res` >>
-    gvs[ignore_bind_apply, bind_apply, push_function_def,
-        return_def, raise_def] >>
+    qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
+    simp[push_function_def, return_def, raise_def] >>
+    disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
+    qpat_x_assum `_ = (res,st')` mp_tac >>
+    simp[ignore_bind_apply, bind_apply, return_def, raise_def] >>
+    strip_tac >>
     `runtime_storage_consistent env_body
        (cx with stk updated_by CONS (env_body.current_src,fn))
        (lock_st with scopes := [call_env])` by
@@ -3867,9 +3870,13 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       asm_x "body_ih" irule >>
       asm_x "actual_ih" kall_tac >> asm_x "default_ih" kall_tac >>
       asm "bind_call_env" assume_tac >>
-      gvs[type_check_def, assert_def, get_scopes_def, set_scopes_def,
-          lift_option_type_def, push_function_def, return_def,
-          protected_storage_creates_preserve_stk, AllCaseEqs()] >>
+      simp[type_check_def, assert_def, get_scopes_def, set_scopes_def] >>
+      simp[lift_option_type_def, push_function_def, return_def,
+           protected_storage_creates_preserve_stk] >>
+      conj_tac >-
+        (qpat_x_assum `type_check (~MEM _ _) _ _ = _` mp_tac >>
+         simp[type_check_def, assert_def, return_def, raise_def] >>
+         metis_tac[]) >>
       rpt (goal_assum (drule_at Any)) >>
       simp[return_def] >> metis_tac[]) >>
     (qpat_assum `_ = (res,st')` (mk_asm "suffix_eq") >>
