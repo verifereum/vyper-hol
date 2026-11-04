@@ -1685,3 +1685,76 @@ Proof
   simp[compiler_label_hoare_context_primitives,
        compiler_label_hoare_typed_primitives, compiler_label_hoare_abi_encode_to_buf]
 QED
+
+(* External Return normalization preserves reservations even for differing layouts. *)
+Theorem compiler_label_hoare_return_external_value[local]:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (comp_bind
+      (if b then comp_bind (compile_alloc_buffer sz) (\a.
+         comp_bind (comp_return a.buf_operand) (\ptr.
+           comp_ignore_bind (compile_store_memory_typed ce ptr ty value sty)
+             (comp_return ptr))) else comp_return value)
+      (\ret_op. compile_external_return (SOME ret_op) prim raw info maxsz nr key transient view))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (Cases_on `b` >> simp[compiler_label_hoare_typed_primitives] >>
+      irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- simp[compiler_label_hoare_alloc_buffer] >>
+      gen_tac >> BETA_TAC >>
+      irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- simp[compiler_label_hoare_typed_primitives] >>
+      gen_tac >> BETA_TAC >> rewrite_tac[comp_ignore_bind_def] >>
+      irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+      >- (irule compiler_label_hoare_preserves_reservation >>
+          metis_tac[compile_store_memory_typed_label_bounds]) >>
+      simp[compiler_label_hoare_typed_primitives]) >>
+  gen_tac >> BETA_TAC >> simp[compiler_label_hoare_external_return]
+QED
+
+Theorem compiler_label_hoare_return_stop[local]:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    ((\(nr,key,transient,view).
+        comp_ignore_bind
+          (if nr then compile_nonreentrant_unlock key transient view else comp_return ())
+          (emit_inst STOP [] [])) nr_info)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  PairCases_on `nr_info` >>
+  simp[contextTheory.compile_nonreentrant_unlock_def, comp_ignore_bind_def] >>
+  rpt IF_CASES_TAC >> simp[compiler_label_hoare_context_primitives,
+                          compiler_label_hoare_typed_primitives] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
+(* Return reservation is independent of the ABI return layout. *)
+Theorem compiler_label_hoare_stmt_return_general:
+  (!e. value = SOME e ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (lower_value compile_expr ce ty e)
+      (\r out. compiler_label_reservation origin pending out)) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (Return value))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `value`
+  >- (simp[compile_stmt_def] >> Cases_on `ce.ce_return_pc`
+      >- simp[compiler_label_hoare_return_stop] >>
+      rename1 `SOME loc` >> Cases_on `loc` >>
+      simp[compiler_label_hoare_context_primitives, compiler_label_hoare_return_stop] >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_context_primitives]) >>
+  rename1 `SOME e` >> simp[] >> strip_tac >>
+  rewrite_tac[compile_stmt_def] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  qx_gen_tac `val_op` >> BETA_TAC >>
+  Cases_on `ce.ce_return_pc`
+  >- simp[compiler_label_hoare_return_external_value] >>
+  rename1 `SOME loc` >> Cases_on `loc` >>
+  simp[compiler_label_hoare_internal_return_from_env,
+       compiler_label_hoare_return_external_value] >>
+  irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_internal_return_from_env,
+       compiler_label_hoare_context_primitives]
+QED
