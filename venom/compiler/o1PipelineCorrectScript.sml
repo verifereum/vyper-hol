@@ -128,7 +128,7 @@ Theorem o1_pipeline_memory_obligations:
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     o1_source_unit_ok unit /\ unit_label_refs_ok unit /\
     unit_entry_no_params unit /\ unit_first_block_no_phi unit /\
-    o1_run_state_ok vs /\
+    unit_fmp_unsealed unit /\ o1_run_state_ok vs /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     raw_unit_memory_ok unit.cu_context vs /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
