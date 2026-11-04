@@ -407,3 +407,229 @@ Resume ld_joint_delegatecall_next[shared]:
 QED
 
 Finalise ld_joint_delegatecall_next
+
+Theorem ld_joint_create_operands[local]:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;offop;szop] /\ rest = []) \/
+   (inst.inst_opcode = CREATE2 /\ ?salt sw.
+      inst.inst_operands = [vop;offop;szop;salt] /\ rest = [salt] /\
+      eval_operand salt s = SOME sw)) /\
+  eval_operand vop s = SOME value /\
+  eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz ==>
+  (!op. MEM op (vop::szop::rest) ==> eval_operand op s = eval_operand op t) /\
+  ?off'. eval_operand offop t = SOME off' /\
+    read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t
+Proof
+  strip_tac >> (
+  `!op. MEM op (vop::szop::rest) ==>
+     op_prov H op = NONE /\ op_taint tn op = {}` by
+    (gen_tac >> disch_tac >>
+     drule ld_joint_external_scalar_clean >> disch_then irule >>
+     gvs[Excl "FILTER", MEM, mem_read_ops_def, mem_write_ops_def] >>
+     rpt strip_tac >> gvs[FILTER, SF boolSimps.COND_elim_ss]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule ld_joint_operand_clean >>
+      `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
+      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc, MEM]) >>
+  drule ld_joint_external_input_slice >> disch_then irule >>
+  gvs[mem_read_ops_def, source_memory_read_ranges_def,
+      memory_range_of_operands_def])
+QED
+
+Theorem ld_exec_create_transport[local]:
+  s.vs_outcomes = t.vs_outcomes /\ s.vs_accounts = t.vs_accounts /\
+  s.vs_transient = t.vs_transient /\ s.vs_logs = t.vs_logs /\
+  s.vs_pending_deletions = t.vs_pending_deletions /\
+  venom_create_request s value off sz salt = rq /\
+  venom_create_request t value off' sz salt = rq /\
+  exec_create inst s value off sz salt = OK s1 ==>
+  ?out w r. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
+    r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_returndata := r.vs_returndata;
+      vs_requests := record_request rq s.vs_requests|> /\
+    exec_create inst t value off' sz salt = OK (update_var out w (t with <|
+      vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_returndata := r.vs_returndata;
+      vs_requests := record_request rq t.vs_requests|>))
+Proof
+  strip_tac >>
+  qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
+  simp[exec_create_def, Excl "consume_create_outcome_eq", AllCaseEqs()] >>
+  strip_tac >> Cases_on `consume_create_outcome rq s` >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  drule_all ld_consume_create_outcome_transport >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
+  qexistsl_tac [`q`,`r`] >>
+  simp[Excl "consume_create_outcome_eq", venom_state_fupdcanon] >>
+  qpat_x_assum `r = _` mp_tac >> simp[venom_state_fupdcanon]
+QED
+
+Theorem ld_joint_create_execute:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+  opaque_use_ok fn /\ active_inst fn inst s /\ ~in_revert_forward fn s /\
+  MEM inst.inst_opcode [CREATE;CREATE2] /\ step_inst fuel C inst s = OK s1 ==>
+  ?out w r rq. inst.inst_outputs = [out] /\ s1 = update_var out w r /\
+    ~computed_precompile rq /\
+    r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_returndata := r.vs_returndata;
+      vs_requests := record_request rq s.vs_requests|> /\
+    step_inst fuel C' inst t = OK (update_var out w (t with <|
+      vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+      vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+      vs_pending_deletions := r.vs_pending_deletions;
+      vs_returndata := r.vs_returndata;
+      vs_requests := record_request rq t.vs_requests|>)) /\
+    request_agree_except D rq rq
+Proof
+  strip_tac >>
+  `?vop offop szop value off sz salt rest.
+     eval_operand vop s = SOME value /\ eval_operand offop s = SOME off /\
+     eval_operand szop s = SOME sz /\
+     ((inst.inst_opcode = CREATE /\ inst.inst_operands = [vop;offop;szop] /\
+       rest = [] /\ salt = NONE) \/
+      (inst.inst_opcode = CREATE2 /\ ?sop sw.
+       inst.inst_operands = [vop;offop;szop;sop] /\ rest = [sop] /\
+       eval_operand sop s = SOME sw /\ salt = SOME sw)) /\
+     exec_create inst s value off sz salt = OK s1` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     gvs[MEM] >> simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs()] >> metis_tac[]) >>
+  `(!op. MEM op (vop::szop::rest) ==> eval_operand op s = eval_operand op t) /\
+   ?off'. eval_operand offop t = SOME off' /\
+    read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t` by
+    (drule ld_joint_create_operands >> disch_then irule >> metis_tac[]) >>
+  `s.vs_accounts = t.vs_accounts /\ s.vs_transient = t.vs_transient` by
+    (drule ld_joint_concrete_shared_inputs >> simp[]) >>
+  `s.vs_outcomes = t.vs_outcomes /\ s.vs_logs = t.vs_logs /\
+   s.vs_pending_deletions = t.vs_pending_deletions` by
+    fs[ld_joint_boundary_def, ld_shared_agree_def] >>
+  `venom_create_request t value off' sz salt =
+   venom_create_request s value off sz salt` by simp[venom_create_request_def] >>
+  drule_at (Pat `exec_create _ _ _ _ _ _ = _`) ld_exec_create_transport >>
+  disch_then (qspecl_then [`t`,`venom_create_request s value off sz salt`,`off'`] mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `co` (qx_choose_then `cw`
+    (qx_choose_then `cr` assume_tac))) >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  qexistsl_tac [`co`,`cw`,`cr`,`venom_create_request s value off sz salt`] >>
+  (simp[] >> conj_tac
+   >- simp[venom_create_request_def, computed_precompile_def] >>
+   conj_tac
+   >- (simp[step_inst_non_invoke] >>
+       asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+       `eval_operand vop t = SOME value /\ eval_operand szop t = SOME sz` by
+         metis_tac[MEM] >>
+       gvs[] >> metis_tac[MEM]) >>
+   simp[request_agree_except_def, accounts_agree_except_def,
+        transient_agree_except_def, storage_agree_except_def, word_agree_except_def])
+QED
+
+Theorem ld_joint_create_next:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  ~in_revert_forward fn s /\ MEM inst.inst_opcode [CREATE;CREATE2] /\
+  step_inst fuel C inst s = OK s1 /\
+  active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  ?t1 u fn'. step_inst fuel C' inst t = OK t1 /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
+    ld_joint_boundary vs C C' lo D stk PG (step_prov PG G inst s1)
+      (step_taint inst s s1 tn) fn inst2
+      (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)
+      n a U B HP (occurrence_step a HP H inst s1) sites X ts
+Proof
+  strip_tac >> drule_all ld_joint_create_execute >>
+  disch_then (qx_choose_then `out` (qx_choose_then `w`
+    (qx_choose_then `r` (qx_choose_then `rq` assume_tac)))) >>
+  rpt (qpat_x_assum `_ /\ _` (CONJUNCTS_THEN assume_tac)) >>
+  qmatch_asmsub_abbrev_tac `step_inst fuel C' inst t = OK target` >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+    fs[ld_joint_boundary_def] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    gvs[MEM, is_terminator_def] >>
+  `occ_frame_reachable vs C stk PG (step_prov PG G inst s1)
+     (step_taint inst s s1 tn) fn inst2
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
+     (occurrence_step a HP H inst s1)` by
+    (drule_all occ_frame_reachable_next >>
+     gvs[MEM, occurrence_sites_step_def]) >>
+  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+     stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule occurrence_annotation_next >>
+     disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
+     gvs[MEM, occurrence_sites_step_def]) >>
+  `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
+    (qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
+     gvs[MEM] >> simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[AllCaseEqs()] >> rpt strip_tac >>
+     gvs[out_taint_def, written_taint_def]) >>
+  `ld_env_agree sites fn (occurrence_step a HP H inst s1)
+     (step_taint inst s s1 tn) s1 target` by suspend "environment" >>
+  `new_site_bytes s s1 = {}` by
+    (simp[new_site_bytes_def, update_var_def] >>
+     qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+     simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
+  `ld_memory_agree sites lo (step_taint inst s s1 tn).t_mem
+      s1.vs_memory target.vs_memory` by suspend "memory" >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn)
+     s1 target` by suspend "shared" >>
+  qexists_tac `target` >> simp[] >>
+  irule ld_joint_external_update_next >>
+  qpat_assum `s1 = _` (fn th => rewrite_tac[GSYM th]) >> simp[] >>
+  conj_tac >- gvs[MEM] >>
+  conj_tac >- simp[Abbr `target`, update_var_def] >>
+  conj_tac
+  >- (qexistsl_tac [`r.vs_accounts`,`s.vs_vars |+ (out,w)`,`r.vs_logs`,
+         `s.vs_memory`,`r.vs_outcomes`,`r.vs_pending_deletions`,
+         `r.vs_returndata`,`record_request rq s.vs_requests`,`r.vs_transient`] >>
+      simp[update_var_def] >>
+      qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+      simp[venom_state_fupdcanon, venom_state_component_equality]) >>
+  conj_tac
+  >- simp[Abbr `target`, update_var_def, venom_state_component_equality] >>
+  qexistsl_tac [`G`,`H`,`tn`] >> simp[]
+QED
+
+Resume ld_joint_create_next[environment]:
+  irule ld_env_external_clean_update >> simp[] >>
+  conj_tac >- gvs[MEM, occurrence_out_def, out_prov_def] >>
+  qexistsl_tac [`t`,`w`] >> simp[Abbr `target`, update_var_def] >>
+  conj_tac
+  >- (qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  metis_tac[ld_joint_environment]
+QED
+
+Resume ld_joint_create_next[memory]:
+  `source_memory_write_ranges inst s = []` by
+    gvs[MEM, source_memory_write_ranges_def] >>
+  simp[step_taint_def, mem_taint_def, step_writes_def,
+       range_bytes_def, update_var_def, Abbr `target`] >>
+  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >> simp[] >>
+  fs[ld_joint_boundary_def, ld_joint_frame_def]
+QED
+
+Resume ld_joint_create_next[shared]:
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by
+    fs[ld_joint_boundary_def] >>
+  simp[ld_shared_agree_def, step_taint_def, imm_taint_def,
+       update_var_def, Abbr `target`, word_agree_except_def] >>
+  qpat_x_assum `r = _` (fn th => once_rewrite_tac[th]) >>
+  fs[ld_shared_agree_def, word_agree_except_def] >>
+  simp[record_request_def, LIST_REL_APPEND]
+QED
+
+Finalise ld_joint_create_next

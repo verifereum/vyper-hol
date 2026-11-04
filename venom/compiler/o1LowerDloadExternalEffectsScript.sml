@@ -68,3 +68,26 @@ Proof
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
   disch_then irule >> simp[] >> metis_tac[]
 QED
+
+(* Exact CREATE requests select the same created address and adopted fields.
+   Each run retains its own locals and appends to its own request history. *)
+Theorem ld_consume_create_outcome_transport:
+  s.vs_outcomes = t.vs_outcomes /\ s.vs_accounts = t.vs_accounts /\
+  s.vs_transient = t.vs_transient /\ s.vs_logs = t.vs_logs /\
+  s.vs_pending_deletions = t.vs_pending_deletions /\
+  consume_create_outcome rq s = (w,r) ==>
+  r = s with <|vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+    vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+    vs_pending_deletions := r.vs_pending_deletions;
+    vs_returndata := r.vs_returndata;
+    vs_requests := record_request rq s.vs_requests|> /\
+  consume_create_outcome rq t = (w,t with <|
+    vs_accounts := r.vs_accounts; vs_transient := r.vs_transient;
+    vs_logs := r.vs_logs; vs_outcomes := r.vs_outcomes;
+    vs_pending_deletions := r.vs_pending_deletions;
+    vs_returndata := r.vs_returndata;
+    vs_requests := record_request rq t.vs_requests|>)
+Proof
+  simp[consume_create_outcome_eq] >> strip_tac >> gvs[] >>
+  simp[venom_state_fupdcanon]
+QED
