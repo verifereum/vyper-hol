@@ -160,17 +160,6 @@ Proof
        contract_transient_def]
 QED
 
-Triviality eval_operands_frame_view:
-  !ops. (!x. MEM (Var x) ops ==> ~retpc_var fn x) ==>
-        eval_operands ops (frame_view fn ra s with vs_memory := m) =
-        eval_operands ops s
-Proof
-  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
-  `eval_operand h (frame_view fn ra s with vs_memory := m) = eval_operand h s`
-    by (irule eval_operand_frame_view >> rw[] >> fs[]) >>
-  simp[]
-QED
-
 Theorem storage_base_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ step_inst_base inst s = OK s' ==>
