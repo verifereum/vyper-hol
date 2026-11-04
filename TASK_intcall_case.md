@@ -123,6 +123,7 @@ Facts about the setting (checked against the definitions, not proofs):
 
 - Project rules in AGENTS.md at the project root: holbuild only, no interactive g/e sessions, `rename1` rather than generated names.
 - Don't change any existing theorem statement or definition. Add new definitions only if unavoidable, and say so in the commit message.
+- Amendment (owner, 2026-11-05): the statements of auxiliary theorems that this task added in the `bodyIntCall*` theories (e.g. `bodyIntCallSource.supported_runtime_callable`) are yours to restate, weaken, replace or delete, and their consumers are yours to repair. This does not cover the frozen `body_intcall_case`, the definitions listed above, or theorems that came from the base branch. For `supported_runtime_callable`: the source type checker rejects an internal `@raw_return` (`function_header_ok` in `semantics/type/vyperTypeContractScript.sml` has `rr ==> vis = External`, as Python's `@raw_return is only allowed on external functions!` does), so take `rr = F` from a typing fact in scope if the frozen statement's hypotheses give one, or else state the lookup result with an existential raw flag.
 - New theories under lowering/ are reached through `Ancestors`; leave `holproject.toml` alone.
 
 ## Available Resources
