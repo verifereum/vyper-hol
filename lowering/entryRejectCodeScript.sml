@@ -181,3 +181,72 @@ Proof
   drule_all runtime_selected_entry_code >> strip_tac >>
   qexistsl_tac [`fl`, `sf`, `sd`, `sc`, `sk`] >> simp[]
 QED
+
+Theorem runtime_initial_extends[local]:
+  compile_generate_runtime sels exts ints fb Linear bc mb db ei
+    (initial_compile_state "__entry") = ((),sz) ==>
+  cs_extends (initial_compile_state "__entry") sz
+Proof
+  strip_tac >> drule compile_runtime_entry_intervals >> strip_tac >>
+  `comp_ignore_bind (new_block fl)
+    (case fb of NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+      | SOME (ce,pay,nr,key,tr,view,stmts,rt) =>
+        compile_fallback_body ce pay nr key tr view stmts rt) sx = ((),se)` by
+    simp[comp_ignore_bind_def, comp_bind_def] >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_selector_dispatch_linear) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_external_fn_bodies) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_runtime_fallback_suffix) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_internal_fn_bodies) >>
+  metis_tac[cs_extends_trans]
+QED
+
+Theorem runtime_first_block[local]:
+  compile_generate_runtime sels exts ints fb Linear bc mb db ei
+    (initial_compile_state "__entry") = ((),sz) ==>
+  ?bb rest. all_blocks sz = bb::rest /\ bb.bb_label = "__entry"
+Proof
+  strip_tac >> drule runtime_initial_extends >> strip_tac >>
+  `MAP (\bb. bb.bb_label) (all_blocks (initial_compile_state "__entry")) =
+    ["__entry"]` by simp[initial_compile_state_def, all_blocks_def] >>
+  drule block_labels_cs_extends >> asm_rewrite_tac[] >> strip_tac >>
+  Cases_on `all_blocks sz` >> gvs[]
+QED
+
+Theorem runtime_packaged_first_block[local]:
+  compile_generate_runtime sels exts ints fb Linear bc mb db ei
+    (initial_compile_state "__entry") = ((),sz) /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  package_internal_blocks (internal_fn_descriptors ints) (all_blocks sz) =
+    SOME (eb,fs) ==>
+  ?bb rest. eb = bb::rest /\ bb.bb_label = "__entry"
+Proof
+  strip_tac >> drule runtime_first_block >> strip_tac >>
+  `!d. MEM d (internal_fn_descriptors ints) ==>
+    ~MEM (FST d) (MAP (\b. b.bb_label) [bb])` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     `internal_label_ok (FST d)` by metis_tac[] >>
+     gvs[internal_label_ok_def]) >>
+  `?tail. eb = [bb] ++ tail` by
+    (irule package_internal_blocks_prefix >> simp[] >>
+     qexistsl_tac [`internal_fn_descriptors ints`, `fs`, `rest`] >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem run_lowering_entry_label:
+  run_lowering sels exts ints fb rp bc mb db ei "__entry" = SOME u /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
+  lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
+  fn_entry_label efn = SOME "__entry"
+Proof
+  strip_tac >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[run_lowering_def] >> strip_tac >> pairarg_tac >>
+  gvs[AllCaseEqs(), lowering_policy_ok_def] >>
+  qpat_assum `extract_context_with_internals _ _ _ = _`
+    (mp_tac o REWRITE_RULE [extract_context_with_internals_def]) >>
+  strip_tac >> gvs[AllCaseEqs()] >> fs[GSYM all_blocks_def] >>
+  drule_all runtime_packaged_first_block >> strip_tac >>
+  drule_all extracted_entry_blocks >>
+  simp[fn_entry_label_def, entry_block_def] >> strip_tac >> simp[]
+QED
