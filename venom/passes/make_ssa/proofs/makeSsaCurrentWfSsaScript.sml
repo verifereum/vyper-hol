@@ -2132,6 +2132,81 @@ Proof
   asm_rewrite_tac[] >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
+(* Retained PHIs precede every generated ordinary instruction, even when
+   their relative order in the input prefix was the opposite. *)
+Theorem current_wf_partition_order:
+  MAP current_inst_no_id xs = MAP current_inst_no_id ((phis ++ ordinary) ++ tail) /\
+  MEM d phis /\ MEM c ordinary ==>
+  ?j k. j < k /\ k < LENGTH xs /\
+    current_inst_no_id (EL j xs) = current_inst_no_id d /\
+    current_inst_no_id (EL k xs) = current_inst_no_id c
+Proof
+  simp[MEM_EL] >> strip_tac >>
+  rename1 `d = EL j phis` >> rename1 `c = EL k ordinary` >>
+  qexistsl [`j`, `LENGTH phis + k`] >>
+  `LENGTH xs = LENGTH phis + LENGTH ordinary + LENGTH tail` by
+    metis_tac[LENGTH_MAP, LENGTH_APPEND] >>
+  simp[] >>
+  `EL j (MAP current_inst_no_id xs) =
+   EL j (MAP current_inst_no_id ((phis ++ ordinary) ++ tail))` by simp[] >>
+  `EL (LENGTH phis + k) (MAP current_inst_no_id xs) =
+   EL (LENGTH phis + k)
+     (MAP current_inst_no_id ((phis ++ ordinary) ++ tail))` by simp[] >>
+  gvs[EL_MAP, EL_APPEND_EQN]
+QED
+
+Theorem current_wf_partition_source_available:
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  MAP current_inst_no_id bb.bb_instructions =
+    MAP current_inst_no_id ((phis ++ ordinary) ++ tail) /\
+  MEM d phis /\ MEM c ordinary /\ MEM v d.inst_outputs ==>
+  ?k. k < LENGTH bb.bb_instructions /\
+    current_inst_no_id (EL k bb.bb_instructions) = current_inst_no_id c /\
+    def_available_at fn bb (SOME (EL k bb.bb_instructions)) v
+Proof
+  strip_tac >> drule_all current_wf_partition_order >> strip_tac >>
+  qexists `k` >> simp[] >>
+  `MEM v (EL j bb.bb_instructions).inst_outputs` by
+    (qpat_x_assum `current_inst_no_id (EL j _) = _`
+      (mp_tac o Q.AP_TERM `\i. i.inst_outputs`) >>
+     simp[current_inst_no_id_def]) >>
+  simp[def_available_at_def] >>
+  qexistsl [`bb`, `EL j bb.bb_instructions`] >>
+  simp[EL_MEM, fn_dominates_def] >> conj_tac
+  >- (rpt strip_tac >> metis_tac[LAST_MEM]) >>
+  qexistsl [`j`, `k`] >> simp[]
+QED
+
+Theorem current_wf_cleanup_same_prefix_source:
+  old.bb_instructions = pre ++ tail /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  bb = simplify_current_phi_block old /\
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  MEM d pre /\ MEM c pre /\
+  (simplify_current_phi d).inst_opcode = PHI /\
+  MEM v (simplify_current_phi d).inst_outputs /\
+  (simplify_current_phi c).inst_opcode <> PHI ==>
+  ?k. k < LENGTH bb.bb_instructions /\
+    current_inst_no_id (EL k bb.bb_instructions) =
+      current_inst_no_id (simplify_current_phi c) /\
+    def_available_at fn bb (SOME (EL k bb.bb_instructions)) v
+Proof
+  strip_tac >>
+  `MAP current_inst_no_id bb.bb_instructions =
+   MAP current_inst_no_id
+     ((FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+       FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) ++ tail)` by
+    metis_tac[current_wf_cleanup_block_no_id] >>
+  `MEM (simplify_current_phi d)
+    (FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre))` by
+    (simp[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+  `MEM (simplify_current_phi c)
+    (FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre))` by
+    (simp[MEM_FILTER, MEM_MAP] >> metis_tac[]) >>
+  drule_all current_wf_partition_source_available >> simp[]
+QED
+
 Theorem current_wf_cfg_paths:
   (!a b. fn_cfg_edge g a b <=> fn_cfg_edge f a b) ==>
   !path. is_fn_path g path <=> is_fn_path f path
