@@ -179,8 +179,17 @@ Proof
       simp[simplify_cfg_fn_invoke_labels_mem] >> strip_tac >>
       gvs[o1_fn_shape_def, fn_invoke_ok_def, fn_insts_def,
           fn_insts_blocks_MEM] >>
-      first_x_assum (qspec_then `inst'` mp_tac) >> simp[] >>
+      qpat_x_assum `!i. (?bb. MEM bb f.fn_blocks /\ _) /\ _ ==> _`
+        (qspec_then `inst'` mp_tac) >> simp[] >>
       (impl_tac >- metis_tac[]) >> simp[])
+  >- (rpt gen_tac >> strip_tac >>
+      `?old. MEM old (fn_insts f) /\ old.inst_opcode = DALLOCA /\
+             MEM x old.inst_outputs` by
+        (mp_tac (Q.INST [`origin` |-> `DALLOCA`] simplify_cfg_seed_source) >>
+         simp[] >> disch_then irule >> metis_tac[]) >>
+      `~gas_var f x /\ ~retpc_var f x` by
+        (gvs[o1_fn_shape_def] >> metis_tac[]) >>
+      metis_tac[simplify_cfg_gas_var, simplify_cfg_retpc_var])
   >- (gvs[fn_identity_metadata_eq_def] >> strip_tac >>
       conj_tac
       >- (irule simplify_cfg_entry_no_return >> gvs[o1_fn_shape_def]) >>
