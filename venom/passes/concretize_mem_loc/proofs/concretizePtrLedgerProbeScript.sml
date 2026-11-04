@@ -1,6 +1,6 @@
 Theory concretizePtrLedgerProbe
 Ancestors
-  concretizePtrBytes concretizePtrPrefixLedger concretizePtrPrefixProbe concretizePtrChronologicalHistory contextCodegenRel
+  concretizePtrPrefixRelation concretizePtrBytes concretizePtrPrefixLedger concretizePtrPrefixProbe concretizePtrChronologicalHistory contextCodegenRel
   regularCallEmitSim venomMemProps codegenRel mem2varBlockSimHelpers concretizeMemLocDefs venomExecSemantics venomState ptrDiscipline venomInst words list finite_map
 Libs wordsLib
 
@@ -595,4 +595,148 @@ Proof
   rpt strip_tac >> gvs[] >>
   qspecl_then [`s`, `i - w2n (n2w s.vs_alloca_next : bytes32)`]
     mp_tac (GEN_ALL ptr_ledger_written_bytes) >> simp[]
+QED
+
+Definition ptr_ledger_probe_registry_def:
+  ptr_ledger_probe_registry = FEMPTY |+ (0:num,
+    <| pla_source := ptr_ledger_probe_source;
+       pla_target := ptr_ledger_probe_target;
+       pla_parent := NONE; pla_call := NONE; pla_target_entry := 0 |>)
+End
+
+Definition ptr_ledger_probe_births_def:
+  ptr_ledger_probe_births s =
+    (FEMPTY : (num # num,num # num) fmap) |+ ((0,10), (s.vs_alloca_next,32))
+End
+
+Theorem ptr_ledger_probe_owned_site:
+  ptr_ledger_owned_site ptr_ledger_probe_registry (ptr_ledger_probe_births s)
+    0 10 s.vs_alloca_next 32 0
+Proof
+  simp[ptr_ledger_owned_site_def, ptr_ledger_probe_registry_def,
+    ptr_ledger_probe_births_def, FLOOKUP_UPDATE, ptr_ledger_probe_target_def]
+QED
+
+Theorem ptr_ledger_probe_birth_actual:
+  FLOOKUP (ptr_ledger_o1 s).po_state.vs_allocas 10 =
+    FLOOKUP (ptr_ledger_probe_births s) (0,10)
+Proof
+  simp[ptr_ledger_probe_births_def, ptr_ledger_s1_def,
+    ptr_probe_allocated_state_def, ptr_probe_entry_state_def,
+    update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_ledger_probe_owner_erasure:
+  ptr_ledger_erases (ptr_ledger_probe_births s)
+    (FEMPTY |+ ("p",(0,10))) (ptr_ledger_o1 s).po_prov
+Proof
+  simp[ptr_ledger_erases_def, ptr_ledger_probe_births_def,
+    ptr_ledger_o1_def, ptr_ledger_next_def, ptr_observe_def,
+    ptr_ledger_source_entry_def, step_prov_def, mk_inst_def,
+    ptr_ledger_s1_def, ptr_probe_allocated_state_def, update_var_def,
+    FLOOKUP_UPDATE] >>
+  simp[set_prov_def, out_prov_def, ptr_probe_entry_state_def,
+    FLOOKUP_UPDATE] >> gen_tac >> Cases_on `v = "p"` >> simp[]
+QED
+
+Theorem ptr_ledger_probe_owner_read_erasure:
+  ptr_ledger_erases (ptr_ledger_probe_births s)
+    (FEMPTY |+ ("p",(0,10))) (ptr_ledger_o3 s).po_prov
+Proof
+  ` (ptr_ledger_o3 s).po_prov = (ptr_ledger_o1 s).po_prov` by
+    simp[ptr_ledger_o3_def, ptr_ledger_o2_def, ptr_ledger_next_def,
+      ptr_observe_def, step_prov_def, mk_inst_def, set_prov_def,
+      fmap_EXT, DRESTRICT_DEF] >>
+  simp[ptr_ledger_probe_owner_erasure]
+QED
+
+Theorem ptr_ledger_probe_owned_read_byte:
+  s.vs_alloca_next < dimword (:256) /\ k < 32 ==>
+  ptr_ledger_owned_byte ptr_ledger_probe_registry (ptr_ledger_probe_births s)
+    0 10 k (w2n (n2w s.vs_alloca_next : bytes32) + k) k
+Proof
+  strip_tac >> simp[ptr_ledger_owned_byte_def] >>
+  qexists_tac `32` >> simp[ptr_ledger_probe_owned_site]
+QED
+
+Theorem ptr_ledger_probe_alignment:
+  ptr_ledger_block_alignment (FEMPTY |+ (Allocation 10,0))
+    (HD ptr_ledger_probe_source.fn_blocks).bb_instructions
+    (HD ptr_ledger_probe_target.fn_blocks).bb_instructions [0;1;3;4]
+Proof
+  EVAL_TAC
+QED
+
+Theorem ptr_ledger_read_var_lookups[local]:
+  lookup_var v (ptr_ledger_s3 s) =
+    (if v = "p" then SOME (n2w s.vs_alloca_next : bytes32)
+     else lookup_var v s) /\
+  lookup_var v (ptr_ledger_t2 s) =
+    (if v = "p" then SOME 0w else lookup_var v s)
+Proof
+  simp[ptr_ledger_s3_def, ptr_ledger_s2_def, ptr_ledger_t2_def,
+    lookup_var_mstore_idx] >>
+  simp[ptr_ledger_s1_def, ptr_ledger_t1_def,
+    ptr_probe_allocated_state_def, ptr_probe_entry_state_def,
+    update_var_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ptr_ledger_read_vars[local]:
+  reloc (s.vs_alloca_next,32) = SOME (0w : bytes32) ==>
+  ptr_prefix_vars reloc (ptr_ledger_o3 s).po_prov
+    (ptr_ledger_o3 s).po_taint.t_var
+    (ptr_ledger_o3 s).po_state (ptr_ledger_q2 s).po_state
+Proof
+  strip_tac >>
+  qspec_then `s` mp_tac (GEN_ALL ptr_ledger_probe_owner_read_erasure) >>
+  simp[ptr_ledger_erases_def, ptr_ledger_probe_births_def, FLOOKUP_UPDATE] >>
+  strip_tac >> pure_rewrite_tac[ptr_prefix_vars_def] >> gen_tac >>
+  pure_rewrite_tac[ptr_ledger_read_var_lookups] >>
+  first_x_assum (qspec_then `v` assume_tac) >>
+  Cases_on `v = "p"`
+  >- (asm_simp_tac bool_ss [ptr_prefix_value_def, WORD_SUB_REFL,
+        WORD_SUB_RZERO, optionTheory.option_CLAUSES, pairTheory.PAIR_EQ,
+        pairTheory.pair_case_thm, optionTheory.option_case_def]) >>
+  Cases_on `lookup_var v s` >>
+  simp[ptr_prefix_value_def, word_agree_except_def]
+QED
+
+Definition ptr_ledger_root_read_ready_def:
+  ptr_ledger_root_read_ready C Ct s R B G rho reloc <=>
+    R = ptr_ledger_probe_registry /\ B = ptr_ledger_probe_births s /\
+    G = (FEMPTY |+ ("p",(0,10))) /\
+    ptr_ledger_erases B G (ptr_ledger_o3 s).po_prov /\
+    ptr_ledger_owned_site R B 0 10 s.vs_alloca_next 32 0 /\
+    ptr_ledger_write_pair C Ct rho (ptr_ledger_o1 s) (ptr_ledger_o2 s)
+      (ptr_ledger_q1 s) (ptr_ledger_q2 s) /\
+    (!i. i IN ptr_ledger_read_demand (ptr_ledger_o3 s) ==>
+      ?k. k < 32 /\ ptr_ledger_owned_byte R B 0 10 k i (rho i)) /\
+    ptr_bytes_agree (ptr_ledger_read_demand (ptr_ledger_o3 s)) rho
+      (ptr_ledger_o3 s).po_state.vs_memory (ptr_ledger_q2 s).po_state.vs_memory /\
+    reloc (s.vs_alloca_next,32) = SOME (0w : bytes32) /\
+    ptr_prefix_vars reloc (ptr_ledger_o3 s).po_prov
+      (ptr_ledger_o3 s).po_taint.t_var
+      (ptr_ledger_o3 s).po_state (ptr_ledger_q2 s).po_state
+End
+
+Theorem ptr_ledger_root_read_ready_exists:
+  s.vs_alloca_next < dimword (:256) ==>
+  ?R B G rho reloc. ptr_ledger_root_read_ready C Ct s R B G rho reloc
+Proof
+  strip_tac >>
+  qexistsl_tac [`ptr_ledger_probe_registry`, `ptr_ledger_probe_births s`,
+    `FEMPTY |+ ("p",(0,10))`,
+    `\i. i - w2n (n2w s.vs_alloca_next : bytes32)`,
+    `\site. if site = (s.vs_alloca_next,32) then SOME (0w : bytes32) else NONE`] >>
+  simp[ptr_ledger_root_read_ready_def, ptr_ledger_probe_owner_read_erasure,
+    ptr_ledger_probe_owned_site, ptr_ledger_probe_write_pair, ptr_ledger_read_vars] >>
+  conj_tac
+  >- (simp[ptr_ledger_source_read_demand, range_bytes_def] >>
+      rpt strip_tac >> qexists_tac `i - s.vs_alloca_next` >>
+      qspecl_then [`s`, `i - s.vs_alloca_next`] mp_tac
+        (GEN_ALL ptr_ledger_probe_owned_read_byte) >> simp[]) >>
+  simp[ptr_bytes_agree_def, ptr_ledger_source_read_demand, range_bytes_def] >>
+  rpt strip_tac >>
+  qspecl_then [`s`, `i - s.vs_alloca_next`] mp_tac
+    (GEN_ALL ptr_ledger_read_bytes) >> simp[]
 QED
