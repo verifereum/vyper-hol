@@ -189,6 +189,18 @@ Proof
   metis_tac[compile_toplevel_storage_word_sim_mem, compile_toplevel_name_vv_sim_mem]
 QED
 
+Theorem body_toplevel_word_mem_case:
+  !cx ann nsid.
+    is_word_type ann ==> body_expr_mem_ok cx (TopLevelName ann nsid)
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env (TopLevelName ann nsid) es` by
+    simp[expr_sim_pre_body, int_calls_expr_def] >>
+  `~cenv.ce_is_ctor` by fs[bodySimTheory.body_inv_def] >>
+  metis_tac[compile_toplevel_word_runtime_sim_mem, compile_toplevel_name_vv_sim_mem]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -196,4 +208,5 @@ val () = List.app (fn th =>
      then print "BODY_TOPLEVEL_FORCED_WORD_MEMORY_AUDIT OK\n"
      else raise Fail "forced toplevel word memory inherited admission"
   end) [compile_toplevel_storage_word_sim_mem,
-        compile_toplevel_word_runtime_sim_mem, body_toplevel_storage_word_mem_case];
+        compile_toplevel_word_runtime_sim_mem, body_toplevel_storage_word_mem_case,
+        body_toplevel_word_mem_case];
