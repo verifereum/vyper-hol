@@ -7,6 +7,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts
+  gasContext gasExemptCert
   list rich_list finite_map fragExec freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
@@ -443,5 +444,44 @@ Proof
   drule evaluate_types_LIST_REL >> strip_tac >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def]
+QED
+
+Theorem return_forced_admissible:
+  gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `eval_stmt cx (Return (SOME e)) (es with gas_obs := gs) = (INR ex, ee)` by
+    (pure_rewrite_tac[eval_return_forced] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[Once bind_def]) >>
+  `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
+  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
+  imp_res_tac (cj 1 eval_expr_no_control) >>
+  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
+QED
+
+Theorem return_forced_exempt:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (Return (SOME e))) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx (Return (SOME e))) (return ()) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind (raise (ReturnException v)) (return ()))` by
+    (simp[ignore_bind_def, FUN_EQ_THM, bind_def, eval_return_forced] >>
+     gen_tac >> Cases_on `eval_expr cx e x` >>
+     rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >>
+     rename1 `read_result cx v est` >>
+     Cases_on `read_result cx v est` >> Cases_on `q` >> simp[raise_def]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
 QED
 
