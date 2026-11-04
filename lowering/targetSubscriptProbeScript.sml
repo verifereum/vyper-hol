@@ -4274,3 +4274,32 @@ Proof
      finite_mapTheory.FLOOKUP_UPDATE] >>
   conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC
 QED
+
+Theorem probe_word_return_store_run:
+  !sI sD sb p r q s w.
+    emit_op ADD [Var p; Lit 0w] sI = (Var q,sD) /\
+    emit_void MSTORE [Var q; Var r] sD = ((),sb) /\
+    lookup_var p s = SOME w /\ lookup_var r s = SOME 0w /\
+    r <> q ==>
+    run_inst_seq (emitted_insts sI sb) s =
+      OK (mstore (w2n w) 0w (update_var q w s))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  `q = "%" ++ toString sI.cs_next_var` by
+    (gvs[emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+         comp_bind_def, comp_return_def, comp_ignore_bind_def]) >>
+  `emitted_insts sI sb = emitted_insts sI sD ++ emitted_insts sD sb` by
+    (irule emitted_insts_append >>
+     gvs[emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
+         comp_bind_def, comp_return_def, comp_ignore_bind_def]) >>
+  `step_inst_base (mk_inst sI.cs_next_id ADD [Var p; Lit 0w] [q]) s =
+     OK (update_var q w s)` by
+    (mp_tac (step_ADD |> Q.SPECL [`Var p`,`Lit 0w`,`w`,`0w`]) >>
+     simp[eval_operand_def, wordsTheory.WORD_ADD_0]) >>
+  `step_inst_base (mk_inst sD.cs_next_id MSTORE [Var q; Var r] [])
+     (update_var q w s) = OK (mstore (w2n w) 0w (update_var q w s))` by
+    (irule step_MSTORE >> simp[eval_operand_def, lookup_var_update_var]) >>
+  gvs[run_inst_seq_def]
+QED
