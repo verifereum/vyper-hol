@@ -602,9 +602,9 @@ Theorem unwrap_ctor_immutable_word_sim:
 Proof
   rpt strip_tac >> irule frag_exec_pointwise >> rw[] >>
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (post_value_type cenv e) (Value v) w es' /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
@@ -617,9 +617,9 @@ Proof
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
   qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
-               `v`, `expr_type e`, `p`, `op`, `s1`, `s`,
+               `v`, `post_value_type cenv e`, `p`, `op`, `s1`, `s`,
                `mload (w2n w) s1`, `ctx`]
-    mp_tac expr_post_of_vv_post_load >>
+    mp_tac expr_post_of_vv_post_load_physical >>
   impl_tac >- (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
   simp[]) >>
   gvs[]
