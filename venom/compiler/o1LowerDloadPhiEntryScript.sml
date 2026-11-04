@@ -2,7 +2,8 @@
 Theory o1LowerDloadPhiEntry
 Ancestors
   o1LowerDloadPhi o1LowerDloadJointEntry o1LowerDloadJointRelation
-  o1LowerDloadEnvironment ptrDiscipline contextCodegenRel
+  o1LowerDloadEnvironment o1LowerDloadOccurrence o1LowerDloadShared
+  ptrDiscipline contextCodegenRel
   venomExecSemantics venomExecProofs venomState venomInst o1PassContract list
 
 Theorem ld_env_enters_block:
@@ -78,4 +79,87 @@ Proof
        (mp_then Any mp_tac ld_branch_noncontrol) >>
      simp[] >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
   gvs[ld_env_agree_def]
+QED
+
+Theorem ld_entry_nonvars[local]:
+  enters_block fn s s1 ==>
+  s1 = s with <|vs_vars := s1.vs_vars; vs_inst_idx := s1.vs_inst_idx|>
+Proof
+  simp[enters_block_def] >> strip_tac >> gvs[] >>
+  drule eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+Theorem ld_joint_branch_entry:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst fuel C inst s = OK s' /\ step_inst fuel' C' inst t = OK t' /\
+  s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
+  ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn next s1 ==>
+  ?fn' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    enters_block fn' t' t1 /\
+    ld_joint_boundary vs C C' lo D stk PG (entry_prov fn s' G)
+      (entry_taint_vars fn s' tn) fn next s1 t1
+      n a U B HP (entry_prov fn s' H) sites X ts
+Proof
+  strip_tac >>
+  `ld_env_agree sites fn H tn s t` by metis_tac[ld_joint_environment] >>
+  drule_all ld_env_branch_transport >> strip_tac >>
+  qhdtm_assum `ld_joint_boundary`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
+  `active_inst fn inst s` by
+    (drule occ_frame_reachable_projection >>
+     simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  `is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
+  `occ_frame_reachable vs C stk PG (entry_prov fn s' G)
+    (entry_taint_vars fn s' tn) fn next s1 n a U B HP (entry_prov fn s' H)` by
+    (irule occ_frame_reachable_block >> metis_tac[]) >>
+  drule_all occurrence_annotation_block >> strip_tac >>
+  qhdtm_assum `ld_joint_frame`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
+  qhdtm_assum `ld_joint_control`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_control_def]) >>
+  `s' = s with <|vs_current_bb := s'.vs_current_bb;
+    vs_prev_bb := s'.vs_prev_bb; vs_inst_idx := s'.vs_inst_idx|>` by
+    (irule ld_branch_noncontrol >> metis_tac[]) >>
+  `t' = t with <|vs_current_bb := t'.vs_current_bb;
+    vs_prev_bb := t'.vs_prev_bb; vs_inst_idx := t'.vs_inst_idx|>` by
+    (irule ld_branch_noncontrol >> metis_tac[]) >>
+  `s'.vs_labels = t'.vs_labels` by
+    (qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+     gvs[ld_joint_local_fields_def]) >>
+  drule_all ld_env_enters_block >> strip_tac >>
+  qexistsl_tac [`fn'`, `t1`] >> simp[] >>
+  `s1 = s' with <|vs_vars := s1.vs_vars; vs_inst_idx := s1.vs_inst_idx|>` by
+    metis_tac[ld_entry_nonvars] >>
+  `t1 = t' with <|vs_vars := t1.vs_vars; vs_inst_idx := t1.vs_inst_idx|>` by
+    metis_tac[ld_entry_nonvars] >>
+  simp[ld_joint_boundary_def] >> rpt conj_tac
+  >- (qexists_tac `u` >> simp[ld_joint_frame_def] >> conj_tac
+      >- gvs[ld_env_agree_def, op_taint_def] >>
+      qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+      gnvs[ld_params_agree_def, ld_joint_local_fields_def, ld_joint_allocas_def] >>
+      metis_tac[])
+  >- (qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+      simp[entry_taint_vars_def] >>
+      Cases_on `lookup_block t'.vs_current_bb fn.fn_blocks` >> simp[])
+  >- (qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+      Cases_on `lookup_block t'.vs_current_bb fn.fn_blocks` >>
+      gnvs[ld_shared_agree_def, entry_taint_vars_def] >> metis_tac[]) >>
+  qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+  qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >> simp[]
 QED
