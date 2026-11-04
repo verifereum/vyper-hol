@@ -2751,6 +2751,80 @@ Proof
   metis_tac[aug_place_context_bare_domain]
 QED
 
+Theorem aug_place_uniform_inv_metadata:
+  env_context_consistent env0 cx /\
+  (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+     h k = cenv.ce_hashmap_info k) /\
+  env_context_consistent env1 cx ==>
+  (expr_sim_inv
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 es <=>
+   expr_sim_inv cenv cx env1 es)
+Proof
+  strip_tac >> irule aug_place_expr_sim_inv_metadata >>
+  conj_tac >> rpt strip_tac >>
+  `IS_SOME (FLOOKUP env0.toplevel_vtypes nsid)` by
+    (Cases_on `nsid` >>
+     metis_tac[aug_place_context_toplevel_domain, aug_place_context_bare_domain]) >>
+  Cases_on `FLOOKUP env0.toplevel_vtypes nsid` >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_uniform_inv_backward:
+  env_context_consistent env0 cx /\
+  (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+     h k = cenv.ce_hashmap_info k) /\
+  expr_sim_inv
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 es ==>
+  expr_sim_inv cenv cx env1 es
+Proof
+  strip_tac >>
+  `env_context_consistent env1 cx` by
+    gvs[expr_sim_inv_def, env_consistent_def] >>
+  metis_tac[aug_place_uniform_inv_metadata]
+QED
+
+Theorem aug_place_alloc_limits_metadata:
+  (!cenv e.
+    alloc_limits_expr
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    alloc_limits_expr cenv e) /\
+  (!cenv t.
+    alloc_limits_target
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) t =
+    alloc_limits_target cenv t) /\
+  (!cenv es.
+    alloc_limits_exprs
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es =
+    alloc_limits_exprs cenv es) /\
+  (!cenv e.
+    alloc_limits_opt
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    alloc_limits_opt cenv e) /\
+  (!cenv es.
+    alloc_limits_named_exprs
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) es =
+    alloc_limits_named_exprs cenv es)
+Proof
+  `!cenv ty. type_memory_bytes
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty =
+     type_memory_bytes cenv ty` by
+    (rpt gen_tac >> irule aug_place_type_memory_bytes_cong >> simp[]) >>
+  ho_match_mp_tac alloc_limits_expr_ind >>
+  simp[alloc_limits_expr_def, type_alloc_ok_def, combinTheory.o_DEF]
+QED
+
+Theorem aug_place_uniform_body_pre_backward:
+  env_context_consistent env0 cx /\
+  (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
+     h k = cenv.ce_hashmap_info k) /\
+  expr_body_pre
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 e es ==>
+  expr_body_pre cenv cx env1 e es
+Proof
+  simp[expr_body_pre_def, aug_place_alloc_limits_metadata] >>
+  strip_tac >> irule aug_place_uniform_inv_backward >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `m` >> simp[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
