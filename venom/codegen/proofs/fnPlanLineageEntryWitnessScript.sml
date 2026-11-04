@@ -1,6 +1,7 @@
 Theory fnPlanLineageEntryWitness
 Ancestors
   venomExecProofs venomWf list relation
+  simplifyCfgPhiRepair removeUnusedSsaProofs
 
 Theorem is_fn_path_first_entry:
   !path lbl.
@@ -35,4 +36,21 @@ Proof
   >- (drule_all is_fn_path_rtc >> gvs[]) >>
   simp[fn_dominates_def] >> disj2_tac >>
   qexists_tac `pre` >> gvs[]
+QED
+
+Theorem def_available_non_dominating_no_kill:
+  ssa_form fn /\ MEM bb fn.fn_blocks /\
+  ~fn_dominates fn bb.bb_label pb.bb_label /\
+  def_available_at fn pb use_pos v ==>
+  EVERY (\inst. ~MEM v inst.inst_outputs) bb.bb_instructions
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  gvs[def_available_at_def] >>
+  `ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP (\i. i.inst_outputs) b.bb_instructions))
+     fn.fn_blocks))` by
+    (gvs[ssa_form_def, venomInstTheory.fn_insts_def, fn_insts_blocks_flat,
+         MAP_FLAT, rich_listTheory.FLAT_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
+  drule distinct_projection_member_eq >>
+  disch_then (qspecl_then [`bb`, `def_bb`, `v`] mp_tac) >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[]
 QED
