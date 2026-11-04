@@ -141,8 +141,9 @@ Case-to-interface map (not yet a formal integration proof):
   def_available_at and W. From an ordinary writer, its post-index is <= r;
   crossing_index or crosses_before_exit can then find the edge. If the writer
   is after a previously selected producer within that same sequential visit,
-  sequential_bounds instead excludes it. Missing integration: extract this
-  first visit and its exit from the writer-started suffix, including re-entry.
+  sequential_bounds instead excludes it. initial_visit now extracts this
+  first visit and its actual exit, including same-label re-entry; application
+  to the writer-started suffix and witness embedding remain unproved.
 - Final partial visit in producer block: SOME availability gives r < consumer
   index using W. NONE needs the well-formed terminator's final position. Use
   final_visit, sequential_bounds and crosses_index. Missing integration:
@@ -157,15 +158,91 @@ Case-to-interface map (not yet a formal integration proof):
   is state-independent. Variable with no definition: wf_ssa's ordinary-use
   availability forbids it for this ISZERO producer; do not assume it is zero.
 
-First producer existence is separate: source_prefix_value_origin and
-iszero_historical_operand establish historical successful evaluation from an
-initially absent x, but their witnesses are prefixes, not adjacent occurrences
-of an arbitrarily supplied original trace. A trace-local value-origin boundary
-(or a first-execution dominance/crossing proof) is still needed before applying
-trace_last_event on that same trace. Stability after the last producer then
-uses the proposed forcing boundary to rule out z writers; W rules out other
-x writers and source_trace_non_writer transports both lookups. Neither first
-existence nor the endpoint forcing integration is certified by W/B/V alone.
+First producer existence is now supplied by ao_source_trace_iszero_origin
+below, on the SAME supplied trace, with an actual successful adjacent edge.
+It requires the head lookup absent and final lookup present; it does not require
+an independently chosen source-prefix history. Last-event selection and the
+subsequent operand stability argument still need formal integration.
+
+O.F ENDPOINT-INTERFACE AUDIT (no forcing/freshness theorem certified):
+
+Static localization still to prove at the interface level:
+From the proposal's hypotheses and the writer edge obtain an operand defining
+instruction di at block db/index d, with z in its outputs, and
+  fn_dominates fn db.bb_label bp.bb_label.
+When db = bp, ordinary writer post-index <= r. For an atomic PHI writer in bp,
+post-index = phi_prefix_length bp.bb_instructions <= r instead.
+From final availability obtain fn_dominates fn bp.bb_label target.bb_label;
+when bp = target obtain r < t.vs_inst_idx for BOTH use_opt cases.
+These implications are not standalone proved boundaries yet. W identifies
+writers once a defining occurrence is supplied, but does not itself extract
+availability witnesses. Unfold wf_ssa/def_dominates_uses only in the future
+static boundary. Match their witnesses using ao_ssa_output_occurrence. For
+SOME, uniqueness of the producer occurrence with output x and of the operand
+definition with output z aligns the existential EL indices. Equality of two
+occurrences of the use instruction likewise uses its producer output when
+needed: the use instruction in this particular endpoint obligation need not
+have outputs, so equal instruction records alone must NOT silently be assumed
+to identify the actual endpoint index. Strict order against an earlier equal
+use occurrence would suffice, but that implication must be checked explicitly.
+For NONE, non_terminator_before_terminator now supplies r < t.vs_inst_idx
+without any outgoing step. lookup_block_MEM/label and wf_function label
+uniqueness must align MEM blocks with lookups before crossing.
+
+Dynamic case matrix, conditional on those static implications:
+Let suffix = b::tail, so trace = [a] ++ suffix and LAST suffix = (h,F,t).
+The successful writer is a->b. All crossings below occur in suffix, hence
+are strictly after that writer even if the crossing starts at b.
+- Ordinary writer: a has phase F; source_step_sequential gives b phase F,
+  unchanged block and index SUC d. W rules out a terminator writer.
+- PHI writer: a has phase T; source_step_entry gives b phase F at the PHI
+  prefix. The whole batch is before b; no individual PHI ordering is used.
+  In either case the suffix head label is db.bb_label.
+- bp = db (including bp = db = target): apply initial_visit to suffix.
+  If it is all F, single_visit_label identifies target and sequential_bounds
+  supplies the same visit geometry; crosses_index uses post-index <= r and
+  r < t.vs_inst_idx. Otherwise initial_visit returns an all-F prefix ending
+  at the actual F-to-T exit. crosses_before_exit yields an edge within that
+  prefix from post-index <= r. Reattach its recorded exit and back suffix.
+  This case takes priority over final/interior cases and covers all self-loops
+  whose initial label is bp, regardless of later returns to that label.
+- bp <> db and bp = target: final_visit on suffix cannot be all F, since
+  single_visit_label would equate its head and last labels. Its last T-to-F
+  entry gives an all-F final fragment starting at the PHI prefix. Match its
+  block with bp and use crosses_index plus r < t.vs_inst_idx. Reattach the
+  original front through its T entry node. This includes any number of
+  same-label loop re-entries: final_visit is phase-based, not label-based.
+- bp <> db and bp <> target: source_trace_path plus dominance_interval
+  forces MEM bp.bb_label (ao_trace_path suffix). interior_execution then
+  supplies the adjacent successful edge with exact suffix decomposition.
+  It requires both endpoint label inequalities, not merely different states.
+- SOME versus NONE changes only the static final bound above, not this
+  exhaustive equality split or crossing argument. selected_edge together
+  with selected_phi_available reduces a selected PHI use to the predecessor's
+  phase-F terminator-pre endpoint and preserves lookup across the outgoing
+  F-to-T step. Do not transport across successor PHIs.
+
+For every row: if suffix = front ++ edge_pre::edge_post::back, choose
+middle = front in the proposal; prefixing a gives the exact original trace.
+Nested initial/final fragment witnesses combine by APPEND_ASSOC. This is
+ordinary list equality, not a projection from a CFG path. No witness may be
+borrowed from a different history.
+
+Remaining mathematical outputs (recommend shallow allocation, no more audits):
+1. Static localization/bounds stated above, with output-free/repeated ordinary
+   consumer records explicitly checked. This is an unresolved implication,
+   not a proof failure or a verified counterexample.
+2. The EXACT writer-forces-producer proposal above, consuming those static
+   facts and the three dynamic rows; no extra reachability assumptions.
+3. Last-producer freshness: on an entry-origin trace with initially absent x
+   and present endpoint x, select the last occurrence given by iszero_origin.
+   W and SSA uniqueness exclude x writers on its suffix. Any z writer on that
+   suffix would, by output 2 on its writer-started subtrace, force a later
+   producer and contradict lastness. non_writer transports the operand and
+   output lookups; the successful ISZERO step gives the endpoint equation.
+   Selected-PHI consumers use the predecessor endpoint reduction, separately.
+These are required integration obligations, NOT consequences certified merely
+by completing this audit. No new definition or admitted theorem is introduced.
 *)
 
 Theorem ao_source_trace_iszero_origin:
