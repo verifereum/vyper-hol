@@ -1,0 +1,183 @@
+# Single-edit coupling interface audit (C3.2.4)
+
+This is a design audit, not a proved semantic simulation theorem. No assertion
+below supplies an assumption to HOL. The combinatorial factorization is proved
+in `dftScheduleEditsScript.sml`; semantic closure remains to be proved.
+
+## Exact consumer contract and directions
+
+* `o1PassContractScript.sml:239-244`: `ctx_sim D C C' s s'` is
+  `!fuel. terminates (run_context fuel C s) ==> ?fuel'.
+  dead_result_rel D (run_context fuel C s) (run_context fuel' C' s')`.
+  Source termination, not target termination, is the antecedent. The witness
+  `s` in the frozen DFT theorem is outside this universal quantifier.
+* `dead_result_rel_def` (same file:119-134) accepts Halt/Halt with observable
+  agreement outside dead bytes, and Abort/Abort provided source Revert implies
+  target Revert. It rejects Error and IntRet pairs. Exact observable Halt
+  agreement and compatible Abort kinds suffice for arbitrary D; DFT should
+  compose these stronger D-independent relations, not use
+  `dead_result_rel_trans`, whose premise is `dead_wf D` (absent here).
+* `gas_variant_def` (254-257) permits changing only `vs_gas_readings`.
+  Neither variables nor the call oracle/context fields may be chosen afresh.
+* `o1_lowered_inv_def` (590-593) is `?eom. ctx_eom_bounded eom C /\
+  mem_inv (lowered_mem_fact eom) C s`. `lowered_mem_fact` uses
+  `w2n s.vs_initial_fmp`, not a newly chosen frame bound.
+* `unitMemInvScript.sml:96-109` characterizes `mem_inv` by a resolvable entry
+  AND a fact at every raw-reachable pre-instruction state. Hence the required
+  observation direction is target to source. Source termination is irrelevant
+  for this part. Entry resolution must be transported separately.
+* `ctx_eom_bounded_def` (o1PassContract:571-574) depends on `fn_eom`.
+  Its transport uses `fn' = dft_fn fn`, not merely execution simulation.
+
+No same-fuel result theorem is required by these consumers. Native fuel errors
+must not be turned into terminal events by erasure. The stronger same-fuel
+finite-block theorem `dft_run_block_gas` is a separate frozen obligation; its
+input reading list can depend on its fixed fuel and does not discharge the
+uniform context witness.
+
+## Existing proved boundaries (and their limits)
+
+`dftOccurrenceReplayScript.sml` exposes:
+
+* `dft_occ_oracle_next w C c`: consult w at the current dynamic address, not
+  at the total GAS counter. Addresses are path ++ [(block visit, inst_id)].
+* `dft_occ_prefix_replay` / `dft_occ_numeric_replay`: finite replay under
+  eventwise compatibility with a numeric oracle. They do not prove
+  compatibility or a cross-context relation.
+* `dft_raw_occ_adequacy`: target raw reachability gives an occurrence prefix
+  under label distinctness, a sparse numeric oracle, and compatibility for
+  all prefix lengths. The observed native state is materialized by dropping
+  the GAS count from the original reading list.
+* `dft_occ_observation_raw`: the converse observation boundary with an explicit
+  finite prefix compatibility premise. There is no equal-counter requirement.
+* `dft_occ_budget_prefix_replay`: erasure only before any zero-budget entry.
+* `dft_occ_native_result`: budgeted first-hit result boundary, modulo Error
+  text, with a specified native fuel. It is not itself the fuel-free terminal
+  decoration theorem; its use must also cite the existing fill/decorates and
+  native/open adequacy facts.
+
+`dftOccurrenceOpenCallScript.sml` proves GAS residual operand/setup agreement,
+receipt framing, push, and conditional return restoration. Its caller cut is
+only a variable-write cut (`dft_cut_pair [(v,g)] [] s t`). It does not represent
+an unmatched arbitrary effectful instruction. In particular it cannot justify
+a general residual-prefix invariant by treating every crossing as a GAS write.
+
+`gas_pair_commute` (separately owned dftBlockSim:1191-1205) assumes BOTH target
+steps return OK. It supplies a gas-variant source for that finite successful
+pair. It has no open/divergent INVOKE or prefix-observation conclusion. Its
+statement may be used; its proof is owned by another run.
+
+The current `dftRunRelScript.sml:2717-2809` already contains a proof of
+`dft_run_block_gas`, using head-bubble and prefix gas-variant interfaces. Do not
+replace its frozen statement. Its theorem-specific build/check status is a
+separate completion check; this audit does not claim a new proof of it.
+
+## Proposed semantic boundary (UNPROVED, for strategist review)
+
+For two well-shaped contexts differing in ONE ID-preserving adjacent inversion
+at one static block (and later for one operand flip), fix an arbitrary address
+oracle `w : (num # num) list -> bytes32` BEFORE any trajectory quantifiers.
+Let L(j), R(k) be the occurrence-oracle iterates from paired context entries,
+started with equal non-gas data. The proposed boundary has two conclusions:
+
+1. For every finite source trajectory reaching a top-level Halt or Abort,
+   there exists a finite target trajectory reaching a compatible terminal
+   result (observable equality for Halt, Revert implication for Abort).
+   Quantifiers: forall w, starts, j, source result; exists k, target result.
+   GAS counters, numbers of small steps, and native fuels need not be equal.
+2. For every finite target trajectory at a pre-instruction observation,
+   either its memory range list is empty, or there exists a source trajectory
+   at the corresponding original-ID instruction with the SAME range list and
+   initial_fmp. Quantifiers: forall w, starts, k, target observation;
+   exists j, source observation. A stronger prestate relation may be useful
+   internally, but is not part of the minimal consumer conclusion.
+
+The range equality here is `inst_mem_ranges instL sL =
+inst_mem_ranges instR sR`. Full memory equality at every observation is not a
+consumer requirement: `lowered_mem_ok` only tests this range list and the
+initial_fmp. Proving universal raw-observation coverage even for zero-range
+instructions would impose unnecessary stopping constraints. An early abort
+can skip independent pure computations; their target memory fact is trivially
+true. Any proposed stronger interface needs a separate validation.
+
+The boundary must hold uniformly for all w, not only the oracle extracted from
+the final target run. Otherwise intermediate-schedule composition would need
+an unjustified fresh GAS witness. Occurrence paths use original instruction
+IDs throughout; block visits and suspended caller paths need preservation.
+Only after finite schedule composition should w be chosen from the complete
+final target trajectory and realized by one finite source reading list.
+
+## Phase and stopping-case table
+
+| Phase | Required transition/observation argument | Missing versus established |
+|---|---|---|
+| Synchronized before edit | Same next instruction except edited callee context; same relevant operands/effects, aligned dynamic path/visit | Cross-context ordinary step and entry preservation missing |
+| One side has executed first swapped instruction | Keep an explicit bounded edit phase; use the appropriate pair diamond, not a general variable-only receipt | Effectful pair phase and observation diamond missing |
+| Both swapped instructions completed OK | Rejoin data state (mod index/gas ghosts), reset phase | Finite same-context commute facts exist; occurrence/cross-context lift missing |
+| GAS/GAS skew | Both consult w by their own IDs; counter values may differ | Existing GAS receipts/replay; phase closure missing |
+| GAS/INVOKE skew | Execute the pending GAS on the required side, align invocation address and args; save caller phase on paired stacks | Local GAS operand/setup/push algebra exists; paired stack invariant missing |
+| Inside callee, possibly forever | Couple callee prefixes with saved caller phase untouched; transfer observations without a return premise | Global recursive-context closure missing |
+| IntRet delivery | Bind outputs and restore saved phase, then complete pending local edit | Conditional local restoration exists; trajectory invariant missing |
+| Halt/Abort inside call | Deliver/propagate terminal result without demanding IntRet; forget dead pending variable receipts as justified by result relation | Terminal classification and propagation missing |
+| First step stops early | Source-termination direction requires compatible target stop; target memory observation coverage needs a distinct no-skipped-memory argument | Successful pair diamonds do not cover this |
+| Structural Error / fuel exhaustion | Exclude via readiness only where justified; otherwise Error need not satisfy ctx_sim's antecedent | Readiness at every intermediate cut and nonexhaustion use missing |
+| Terminator / next block | Terminator remains last, same branch operands, increment visit on both sides | Static endpoint property exists; dynamic phase boundary missing |
+| PHI/pseudo prefix | Preserve entry predecessor and incoming values; edits remain in nonpseudo body | Need explicit entry/phi coupling, not arbitrary instruction swapping |
+| Operand flip | Same ID/opcode, range behavior and step result preserved under the legal flip | Operational normalization exists; occurrence observation lift missing |
+
+## Adversarial checks and concrete missing interfaces
+
+1. **Abort before a moved memory observation.** `abort_compatible` alone
+   is NOT an observation theorem. NoFail memory operations can pair with a
+   stopping instruction. Need a classification proof combining actual
+   `dft_must_order`, effects, readiness, and abort behavior: an allowed
+   crossing cannot hide a target nonempty-range observation behind a source
+   stop. Validate all classes: ASSERT/ASSERT_UNREACHABLE/INVALID have no-output
+   root barriers; RETURNDATACOPY writes MEMORY; INVOKE has callee effects.
+   For example, an apparent RETURNDATACOPY/ILOAD loophole is excluded by
+   `read_effects ILOAD = {Eff_IMMUTABLES; Eff_MEMORY}` and COPY's MEMORY write
+   (venomEffects:59,126). This check is source-grounded, not a proved general
+   classification. The all-opcode lemma is still missing.
+2. **Effectful independence.** A variable-only cut is too small. A finite
+   single-edit phase can retain the actual one-step pre/post states and a
+   diamond certificate. It need not model an arbitrary residual list of
+   noncommuting effects. Memory-range transfer requires operand agreement;
+   exact global state equality at skewed cuts is not justified.
+3. **Cross-context calls.** Same-context finite commute does not simulate a
+   callee whose body is itself rescheduled. Single-edit context closure must
+   be recursive, handling arbitrary re-entry into the edited block, and
+   store a phase per active invocation rather than one global phase.
+4. **Intermediate readiness.** `inv_edit_factor` only supplies order
+   provenance. Each intermediate schedule must retain pseudos/terminator,
+   ID distinctness, wf/SSA availability, legal operands, and the protected
+   ordering needed by semantic lemmas. Do not assume an arbitrary
+   intermediate is literally `dft_fn fn`. A generic ID-schedule well-formedness
+   interface or a preservation theorem is needed before composition.
+5. **Memory consumers.** Prove a boundary transferring `lowered_mem_fact`
+   from equal ranges and initial_fmp, then use raw-reachable coverage and
+   entry preservation. The existing `mem_inv_transport` uses the SAME initial
+   state on both contexts; its statement cannot directly take s != s'.
+   The characterization `mem_inv_raw_reachable` can be used directly, or a
+   different-initial-states transport helper can be proved without changing
+   the existing exported theorem.
+6. **Native result consumer.** Prove the source terminating native result
+   gives a nonexhausting finite source occurrence terminal prefix. Transport
+   it in direction (1), decorate the finite target prefix with sufficient
+   budget, and apply native adequacy. Keep Error-string quotienting separate
+   from Halt/Abort, and do not conclude a fixed native fuel from erasure.
+7. **Composition and one list.** Compose stronger D-independent result and
+   range-observation relations under a fixed w over the finite edit chain.
+   Then prove sparse finite-support realization using occurrence uniqueness.
+   Individual per-fuel block gas witnesses cannot be substituted here.
+
+## Suggested next proof boundaries (not an executor-owned PLAN)
+
+The strategist should first authorize bounded probes/classification for (1)
+and the intermediate well-formedness interface in (4), and decide an explicit
+single-edit phase datatype/invariant with paired saved phases. Then separate:
+ordinary/flip steps and range transport; successful pair diamonds; stopping
+and nonempty-range exclusion; GAS/open-call/return transitions; finite-prefix
+closure and terminal/observation projections; fixed-w finite schedule
+composition; native consumer and finite-list realization. The semantic closure
+leaves are not yet de-risked by this audit. No global simulation has been
+inferred from local receipts or successful finite commutation.
