@@ -1,7 +1,7 @@
 Theory concretizeAnalysisOriginFlow
 Ancestors
   concretizeAnalysisCoverage concretizeAnalysisBaseModel singleWriterScan
-  concretizePtrClosure frameOriginUpdates basePtrDefs venomInst
+  concretizePtrClosure frameOriginUpdates frameOriginHistoryCompletedWrites basePtrDefs venomInst
   pointerClosure pointerConfinedDefs ptrDiscipline relation list pred_set finite_map
 
 Definition bp_flow_def:
@@ -99,17 +99,6 @@ Proof
   qexistsl [`seed`, `sources`] >> simp[] >> metis_tac[]
 QED
 
-Theorem resolve_phi_var_pair:
-  !ops lbl v. resolve_phi lbl ops = SOME (Var v) ==>
-    MEM v (MAP SND (phi_pairs ops))
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  simp[venomExecSemanticsTheory.resolve_phi_def, phi_pairs_def] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-  >- metis_tac[] >>
-  Cases_on `v1` >>
-  gvs[venomExecSemanticsTheory.resolve_phi_def, AllCaseEqs()] >> metis_tac[]
-QED
 
 Theorem origin_local_flow_phis:
   origin_local_flow fn om /\ EVERY (\i. MEM i (fn_insts fn)) insts ==>
@@ -121,6 +110,8 @@ Proof
   gvs[origin_phi_some, origin_op_some] >>
   `bp_flow fn aid v'` by metis_tac[] >>
   drule resolve_phi_var_pair >> strip_tac >>
+  `MEM v' (MAP SND (phi_pairs inst.inst_operands))` by
+    (simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
   irule bp_flow_descriptor >>
   qexistsl [`inst`, `{}`, `v INSERT set (MAP SND (phi_pairs inst.inst_operands))`, `v'`] >>
   gvs[EVERY_MEM, bp_descriptor_def, inst_output_def]
