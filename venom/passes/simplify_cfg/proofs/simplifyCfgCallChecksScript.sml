@@ -1183,6 +1183,98 @@ Proof
   simp[is_terminator_def, subst_label_inst_def, flag_fails_def]
 QED
 
+Theorem bypass_terminator_opcode:
+  (if is_terminator i.inst_opcode then
+     canon_jnz_inst (subst_label_inst old target i) else i).inst_opcode =
+  i.inst_opcode \/
+  ((if is_terminator i.inst_opcode then
+     canon_jnz_inst (subst_label_inst old target i) else i).inst_opcode = JMP /\
+   i.inst_opcode = JNZ)
+Proof
+  Cases_on `is_terminator i.inst_opcode` >> simp[] >>
+  Cases_on `canon_jnz_inst (subst_label_inst old target i) =
+            subst_label_inst old target i`
+  >- gvs[subst_label_inst_def] >>
+  drule canon_jnz_inst_changed >> simp[subst_label_inst_def] >> strip_tac >> simp[]
+QED
+
+Theorem flag_path_bypass_singleton:
+  (!l. revert_path oldbbs (LENGTH oldbbs) l ==>
+       revert_path newbbs (LENGTH newbbs) (if l = old then target else l)) /\
+  flag_path oldbbs vs [i] ==>
+  flag_path newbbs vs
+    [if is_terminator i.inst_opcode then
+       canon_jnz_inst (subst_label_inst old target i) else i]
+Proof
+  simp[flag_path_def] >> strip_tac >>
+  conj_tac
+  >- (mp_tac bypass_terminator_opcode >> strip_tac >> gvs[]) >>
+  irule flag_fails_bypass_terminator >> qexists_tac `oldbbs` >> simp[]
+QED
+
+Theorem bypass_terminator_map_front:
+  bb_well_formed bb ==>
+  MAP (\i. if is_terminator i.inst_opcode then
+         canon_jnz_inst (subst_label_inst old target i) else i) bb.bb_instructions =
+  FRONT bb.bb_instructions ++
+    [if is_terminator (LAST bb.bb_instructions).inst_opcode then
+       canon_jnz_inst (subst_label_inst old target (LAST bb.bb_instructions))
+     else LAST bb.bb_instructions]
+Proof
+  strip_tac >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  `bb.bb_instructions = FRONT bb.bb_instructions ++ [LAST bb.bb_instructions]`
+    by metis_tac[APPEND_FRONT_LAST] >>
+  qpat_x_assum `bb.bb_instructions = _`
+    (fn th => CONV_TAC (LAND_CONV (RAND_CONV (REWR_CONV th)))) >>
+  simp[MAP_APPEND] >>
+  irule LIST_EQ >> simp[EL_MAP] >> rpt strip_tac >>
+  drule_all bb_front_no_terminator >> simp[]
+QED
+
+Theorem flag_path_bypass_terminators:
+  bb_well_formed bb /\
+  (!l. revert_path oldbbs (LENGTH oldbbs) l ==>
+       revert_path newbbs (LENGTH newbbs) (if l = old then target else l)) /\
+  flag_path oldbbs vs bb.bb_instructions ==>
+  flag_path newbbs vs
+    (MAP (\i. if is_terminator i.inst_opcode then
+       canon_jnz_inst (subst_label_inst old target i) else i) bb.bb_instructions)
+Proof
+  strip_tac >> simp[bypass_terminator_map_front] >>
+  `bb.bb_instructions <> []` by gvs[bb_well_formed_def] >>
+  irule flag_path_replace_terminal_selective >>
+  qexistsl_tac [`LAST bb.bb_instructions`, `oldbbs`] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule flag_fails_front_environment >> metis_tac[])
+  >- (rpt strip_tac >> irule flag_path_bypass_singleton >>
+      qexists_tac `oldbbs` >> simp[]) >>
+  gvs[APPEND_FRONT_LAST]
+QED
+
+Theorem calls_flagged_bypass_terminators:
+  bb_well_formed bb /\
+  (!l. revert_path oldbbs (LENGTH oldbbs) l ==>
+       revert_path newbbs (LENGTH newbbs) (if l = old then target else l)) /\
+  calls_flagged oldbbs bb.bb_instructions ==>
+  calls_flagged newbbs
+    (MAP (\i. if is_terminator i.inst_opcode then
+       canon_jnz_inst (subst_label_inst old target i) else i) bb.bb_instructions)
+Proof
+  strip_tac >> simp[bypass_terminator_map_front] >>
+  `bb.bb_instructions <> [] /\ is_terminator (LAST bb.bb_instructions).inst_opcode`
+    by gvs[bb_well_formed_def] >>
+  irule calls_flagged_replace_terminal_selective >> conj_tac
+  >- (mp_tac (Q.INST [`i` |-> `LAST bb.bb_instructions`] bypass_terminator_opcode) >>
+      strip_tac >> simp[calls_flagged_def] >> strip_tac >> gvs[is_terminator_def]) >>
+  qexistsl_tac [`LAST bb.bb_instructions`, `oldbbs`] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> irule flag_fails_front_environment >> metis_tac[])
+  >- (rpt strip_tac >> irule flag_path_bypass_singleton >>
+      qexists_tac `oldbbs` >> simp[]) >>
+  gvs[APPEND_FRONT_LAST]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
