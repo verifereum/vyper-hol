@@ -178,3 +178,296 @@ Proof
   rpt strip_tac >> gvs[comp_bind_def, comp_return_def] >>
   pairarg_tac >> gvs[]
 QED
+
+Theorem emit_if_jnz_zero_path:
+  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id JNZ [op; Label tl; Label el] []] /\
+  fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
+  eval_operand op s = SOME (val_to_w256 (BoolV b)) ==>
+  gas_path ctx func s 0 (OK (jump_to (if b then tl else el) s))
+Proof
+  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id JNZ [op; Label tl; Label el] [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst_base (mk_inst sa.cs_next_id JNZ [op; Label tl; Label el] []) s =
+    OK (jump_to (if b then tl else el) s)` by
+    (simp[mk_inst_def] >> drule step_jnz_behavior >>
+     disch_then (fn th => simp[th]) >> Cases_on `b` >> simp[valueEncodingTheory.val_to_w256_def]) >>
+  `gas_path_edge ctx func s 0 (OK (jump_to (if b then tl else el) s))` by
+    (rewrite_tac[gas_path_edge_def] >> simp[] >> qexists_tac `0:num` >>
+     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
+          is_terminator_def] >> metis_tac[]) >>
+  `~(jump_to (if b then tl else el) s).vs_halted` by simp[jump_to_def] >>
+  metis_tac[gas_path_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem if_optional_jump_extends:
+  (if block_is_terminated sa then sb = sa
+   else emit_inst JMP [Label lbl] [] sa = ((),sb)) ==>
+  cs_extends sa sb /\ sa.cs_next_var = sb.cs_next_var
+Proof
+  Cases_on `block_is_terminated sa` >> simp[] >> strip_tac
+  >- simp[cs_extends_refl] >>
+  drule emit_inst_extends >> strip_tac >>
+  metis_tac[cs_appends_emit_helpers, cs_appends_def]
+QED
+
+Theorem if_branch_compiler_mono:
+  cs_mono (stmts_env cenv lctx ty ss) /\
+  compile_stmts cenv lctx ty ss sa = ((),sb) ==>
+  cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var
+Proof
+  simp[compile_stmts_env, cs_mono_def] >> strip_tac >>
+  Cases_on `stmts_env cenv lctx ty ss sa` >> gvs[] >> metis_tac[]
+QED
+
+Theorem compile_if_code_layout:
+  compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((),sb) /\
+  fn_has_code sa sb func /\
+  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c sx = (op,sy) ==>
+    cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
+  cs_mono (stmts_env cenv lctx ty ss1) /\
+  cs_mono (stmts_env cenv lctx ty ss2) ==>
+  ?op cond pre post tl el xl.
+    lower_value compile_expr cenv (BaseT BoolT) c sa = (op,cond) /\
+    fn_has_code sa cond func /\ cs_extends sa cond /\
+    sa.cs_next_var <= cond.cs_next_var /\
+    pre.cs_current_bb = cond.cs_current_bb /\
+    pre.cs_current_insts = cond.cs_current_insts /\
+    emit_inst JNZ [op; Label tl; Label el] [] pre = ((),post) /\
+    fn_has_code pre post func /\
+    (!b. ?entry last after.
+      compile_stmts cenv lctx ty (if b then ss1 else ss2) entry = ((),last) /\
+      entry.cs_current_bb = (if b then tl else el) /\
+      entry.cs_current_insts = [] /\
+      cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
+      cs_extends entry last /\ cs_extends last sb /\
+      fn_has_code entry last func /\ fn_has_code last after func /\
+      (if block_is_terminated last then after = last
+       else emit_inst JMP [Label xl] [] last = ((),after)) /\
+      (~block_is_terminated last ==>
+        sb.cs_current_bb = xl /\ sb.cs_current_insts = []))
+Proof
+  strip_tac >> drule compile_if_parts_all >> strip_tac >>
+  imp_res_tac new_block_props >>
+  imp_res_tac if_branch_compiler_mono >>
+  imp_res_tac if_optional_jump_extends >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by metis_tac[] >>
+  `cs_extends s4 s5 /\ cs_extends s5 s6 /\ cs_extends s8 s9` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
+  `cs_extends s11 sb` by
+    (Cases_on `block_is_terminated s7 /\ block_is_terminated s10`
+     >- (fs[] >> simp[cs_extends_refl]) >>
+     `?x11. new_block exit_lbl s11 = (x11,sb)` by metis_tac[] >>
+     metis_tac[cs_extends_new_block]) >>
+  `cs_extends sa s4 /\ cs_extends sa s6 /\ cs_extends sa s9 /\
+   cs_extends s7 sb /\ cs_extends s10 sb /\ cs_extends s1 sb /\
+   cs_extends s5 sb /\ cs_extends s8 sb /\
+   cs_extends sa s7 /\ cs_extends sa s10` by metis_tac[cs_extends_trans] >>
+  `sa.cs_next_var <= s6.cs_next_var /\ sa.cs_next_var <= s9.cs_next_var` by
+    (imp_res_tac emit_inst_extends >> fs[] >> decide_tac) >>
+  qexistsl_tac [`cond_op`, `s1`, `s4`, `s5`, `then_lbl`, `else_lbl`, `exit_lbl`] >>
+  simp[] >> conj_tac
+  >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+  conj_tac
+  >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+  gen_tac >> Cases_on `b` >> simp[]
+  >- (qexistsl_tac [`s6`, `s7`, `s8`] >> simp[] >>
+      conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+      conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+      strip_tac >>
+      `?x11. new_block exit_lbl s11 = (x11,sb)` by metis_tac[] >>
+      imp_res_tac new_block_props >> fs[]) >>
+  qexistsl_tac [`s9`, `s10`, `s11`] >> simp[] >>
+  conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+  conj_tac >- (irule fn_has_code_mid >> simp[] >> qexistsl_tac [`sb`, `sa`] >> simp[cs_extends_refl]) >>
+  strip_tac >>
+  `?x11. new_block exit_lbl s11 = (x11,sb)` by metis_tac[] >>
+  imp_res_tac new_block_props >> fs[]
+QED
+
+Theorem if_condition_operand:
+  expr_type c = BaseT BoolT /\
+  expr_post ctx func cenv cx c es sa sb s0 mid (BoolV b) op s ==>
+  eval_operand op s = SOME (val_to_w256 (BoolV b))
+Proof
+  strip_tac >> gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
+       valueEncodingTheory.typed_val_to_w256_def,
+       valueEncodingTheory.val_to_w256_def]
+QED
+
+Theorem if_branch_post_pop:
+  stmt_post ctx func cx lctx cenv cenv' sa sb s0 res ee t /\
+  ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb s0 res
+    (ee with scopes := rest) t
+Proof
+  rewrite_tac[stmt_post_def] >> strip_tac >>
+  qexists_tac `cenv` >> simp[cenv_top_ext_refl] >>
+  irule stmt_state_rel_pop_top_ext >>
+  conj_tac >- (qexists_tac `sc` >> simp[]) >>
+  qexists_tac `cenv''` >> simp[]
+QED
+
+Theorem if_branch_marked_scopes:
+  gas_marked_exec memory (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0) marks res ee r ==>
+  ?sc rest. ee.scopes = sc :: rest /\
+    (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE)
+Proof
+  rewrite_tac[gas_marked_exec_def] >> strip_tac >>
+  first_x_assum (qspec_then `[]` assume_tac) >>
+  drule eval_stmts_preserves_scopes_dom >>
+  simp[preserves_scopes_dom_def] >> strip_tac >>
+  Cases_on `ee.scopes` >> gvs[] >>
+  rpt strip_tac >> drule eval_stmts_new_in_head_not_in_tail >>
+  simp[]
+QED
+
+Theorem if_branch_marked_cleanup:
+  gas_marked_exec memory (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0) marks res ee r /\
+  ~s0.vs_halted /\ ee.scopes = sc :: rest ==>
+  gas_marked_exec memory (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope))
+    (es,s0) marks res (ee with scopes := rest) r
+Proof
+  strip_tac >>
+  `gas_marked_exec memory (ctx,func) (finally (eval_stmts cx ss) pop_scope)
+     (es with scopes := FEMPTY :: es.scopes,s0) marks res
+     (ee with scopes := rest) r` by
+    (irule gas_marked_exec_finally >> qexists_tac `ee` >>
+     simp[pop_scope_def, return_def, evaluation_state_component_equality]) >>
+  `!st. st with scopes updated_by CONS FEMPTY =
+         st with scopes := FEMPTY :: st.scopes` by
+    simp[evaluation_state_component_equality] >>
+  gvs[gas_marked_exec_def] >> gen_tac >>
+  simp[ignore_bind_def, bind_def, push_scope_def, return_def]
+QED
+
+Theorem if_branch_outcome_cleanup:
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0)
+    (stmt_post ctx func cx lctx cenv cenv' sa sb s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+  es.gas_obs = [] /\ ~s0.vs_halted ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj1_tac >> qexists_tac `t` >> simp[] >>
+      irule if_branch_post_pop >> simp[] >> metis_tac[])
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule if_branch_marked_scopes >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee with scopes := rest`, `r`] >>
+      conj_tac
+      >- (irule if_branch_marked_cleanup >> simp[] >> metis_tac[]) >>
+      disj2_tac >> gvs[stmt_exit_def] ) >>
+  rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
+  drule if_branch_cert_scopes >> strip_tac >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee with scopes := rest`, `leaf`, `fin`] >>
+  irule eval_stmt_if_scoped_cert >>
+  simp[if_push_scope_marked] >>
+  `es with <|scopes := FEMPTY :: es.scopes; gas_obs := []|> =
+   es with scopes := FEMPTY :: es.scopes` by
+    simp[evaluation_state_component_equality] >> simp[]
+QED
+
+Theorem if_branch_post_to_exit:
+  stmt_post ctx func cx lctx cenv cenv sa last s0 res ee t /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  ?u. gas_path ctx func t 0 (OK u) /\
+      stmt_post ctx func cx lctx cenv cenv sa sb s0 res ee u
+Proof
+  strip_tac >> Cases_on `res = INL ()`
+  >- (gvs[] >>
+      `~block_is_terminated last` by fs[stmt_post_def] >>
+      `t.vs_current_bb = last.cs_current_bb /\
+       t.vs_inst_idx = LENGTH last.cs_current_insts /\ ~t.vs_halted` by
+        fs[stmt_post_def, stmt_lands_def] >>
+      `gas_path ctx func t 0 (OK (jump_to xl t))` by
+        (irule emit_jump_zero_path >> simp[] >>
+         qexistsl_tac [`last`, `after`] >>
+         fs[] >> drule emit_inst_extends >> simp[]) >>
+      qexists_tac `jump_to xl t` >> simp[] >>
+      qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[stmt_post_def, stmt_lands_def, stmt_state_rel_jump_to,
+           block_is_terminated_def, jump_to_def, lookup_var_def]) >>
+  qexists_tac `t` >>
+  conj_tac >- (fs[stmt_post_def] >> metis_tac[gas_path_rules]) >>
+  gvs[stmt_post_def, stmt_lands_def] >> metis_tac[]
+QED
+
+Theorem if_branch_outcome_to_exit:
+  gas_outcome F (cx_tops cx) (ctx,func) source (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv sa last s0) R /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) source (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb s0) R
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  >- (rename1 `gas_marked_exec _ _ _ _ marks res ee r` >>
+      drule_all if_branch_post_to_exit >> strip_tac >>
+      qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `OK u`] >> simp[] >>
+      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+      strip_tac >> simp[] >>
+      drule_all gas_path_then >> simp[] )
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[]
+QED
+
+Theorem if_branch_outcome:
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_stmts cx ss)
+    (es with scopes := FEMPTY :: es.scopes,s0)
+    (stmt_post ctx func cx lctx cenv cenv' sa last s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+  es.gas_obs = [] /\ ~s0.vs_halted /\
+  (~block_is_terminated last ==>
+    emit_inst JMP [Label xl] [] last = ((),after) /\
+    fn_has_code last after func /\
+    sb.cs_current_bb = xl /\ sb.cs_current_insts = []) ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (ignore_bind push_scope (finally (eval_stmts cx ss) pop_scope)) (es,s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sb s0)
+    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >> irule if_branch_outcome_to_exit >>
+  qexistsl_tac [`after`, `last`, `xl`] >> simp[] >>
+  irule if_branch_outcome_cleanup >> simp[] >> metis_tac[]
+QED
+
+Theorem if_condition_stmt_post:
+  expr_post ctx func cenv cx c es sa cond s0 mid v op t /\
+  sa.cs_next_var <= entry.cs_next_var /\
+  stmt_post ctx func cx lctx cenv cenv entry sb (jump_to label t) res ee u ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb s0 res ee u
+Proof
+  simp[expr_post_def, stmt_post_def, jump_to_def, lookup_var_def] >>
+  strip_tac >> qexists_tac `cenv''` >> simp[] >>
+  rpt strip_tac >>
+  `not_fresh_at entry x` by fs[not_fresh_at_def] >> metis_tac[]
+QED
