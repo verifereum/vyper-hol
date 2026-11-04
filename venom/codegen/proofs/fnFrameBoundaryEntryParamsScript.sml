@@ -3,7 +3,7 @@ Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
-  livenessAnalysisProps cfgAnalysisProps asmSem planExec
+  livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -148,10 +148,6 @@ Proof
   simp[codegen_ready_fn_def] >> rpt conj_tac >>
   EVAL_TAC >> rpt strip_tac >> gvs[] >>
   rpt strip_tac >> gvs[] >> dsimp[]
-  >- (qexistsl [`0`, `2`] >> simp[] >> qx_gen_tac `path` >>
-      Cases_on `path` >> simp[]) >>
-  qexistsl [`1`, `2`] >> simp[] >> qx_gen_tac `path` >>
-  Cases_on `path` >> simp[]
 QED
 
 Theorem entry_ret_probe_opaque_vars:
@@ -1239,4 +1235,44 @@ Theorem entry_params_frame_sim_counterexample:
         entry_wrap_asm.as_memory entry_wrap_plan vp t)
 Proof
   rewrite_tac[entry_wrap_frozen_premises, entry_wrap_no_conclusion]
+QED
+
+(* Local simulations use the incoming assembly memory as a proof-only
+   source baseline; operand evaluation depends only on the variable map. *)
+Theorem entry_context_to_local_memory:
+  context_venom_asm_rel cplan lo ps vs st ==>
+  venom_asm_rel lo ps (vs with vs_memory := st.as_memory) st
+Proof
+  `!op. operand_val (vs with vs_memory := st.as_memory) lo op =
+        operand_val vs lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  simp[context_venom_asm_rel_def, venom_asm_rel_def,
+       plan_stack_rel_def, plan_spill_rel_def, memory_rel_def]
+QED
+
+Theorem entry_local_memory_footprint:
+  venom_asm_rel lo ps (vs with vs_memory := m0) st ==>
+  memory_rel ps.ps_alloc m0 st.as_memory
+Proof
+  simp[venom_asm_rel_def]
+QED
+
+Theorem entry_local_to_context_memory:
+  venom_asm_rel lo ps (vs with vs_memory := m0) st /\
+  context_memory_rel cplan vs.vs_memory m0 /\
+  MEM r cplan.cp_regions /\
+  r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
+  ps.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  context_venom_asm_rel cplan lo ps vs st
+Proof
+  strip_tac >>
+  `!op. operand_val (vs with vs_memory := m0) lo op =
+        operand_val vs lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  `context_memory_rel cplan vs.vs_memory st.as_memory` by
+    (irule context_memory_rel_local_prefix >>
+     qexistsl_tac [`ps.ps_alloc`, `m0`, `r`] >>
+     gvs[venom_asm_rel_def]) >>
+  gvs[context_venom_asm_rel_def, venom_asm_rel_def,
+      plan_stack_rel_def, plan_spill_rel_def, operand_val_def]
 QED
