@@ -3489,3 +3489,13 @@ Proof
   fs[vyperTypeInvariantsTheory.env_immutables_consistent_def] >>
   first_x_assum drule_all >> simp[]
 QED
+
+(* sub_layout is an encoding implication, not a typed structural path.
+   An empty fixed array observes no bytes, even strictly inside a flat root. *)
+Theorem sub_layout_empty_fixed_array:
+  k <= type_memory_size itv ==>
+  sub_layout itv iv k (ArrayTV et (Fixed 0)) (ArrayV (SArrayV []))
+Proof
+  simp[sub_layout_def, valueEncodingTheory.type_memory_size_def,
+       valueEncodingTheory.val_in_memory_def]
+QED
