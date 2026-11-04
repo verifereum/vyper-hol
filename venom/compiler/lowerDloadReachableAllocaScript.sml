@@ -1,0 +1,24 @@
+Theory lowerDloadReachableAlloca
+Ancestors
+  contextRawReachable contextCodegenRel lowerDloadOwnership
+  venomMemProps venomMemDefs venomExecProofs venomExecSemantics
+
+Theorem ld_raw_reachable_alloca_inv:
+  !vs0 ctx fn inst s.
+    raw_reachable vs0 ctx fn inst s ==> (alloca_inv vs0 ==> alloca_inv s)
+Proof
+  ho_match_mp_tac raw_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> drule ld_enters_block_allocation_fields >> strip_tac >>
+      gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+      metis_tac[])
+  >- (rpt strip_tac >> `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
+      gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+      metis_tac[])
+  >- (rpt strip_tac >> `alloca_inv s'` by metis_tac[alloca_inv_step_inst] >>
+      drule ld_enters_block_allocation_fields >> strip_tac >>
+      gvs[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def] >>
+      metis_tac[]) >>
+  rpt strip_tac >> drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[setup_callee_def, AllCaseEqs()] >>
+  irule alloca_inv_empty >> simp[]
+QED
