@@ -349,3 +349,108 @@ Resume compile_selector_checks_ptr_continuation[selector_branch]:
 QED
 
 Finalise compile_selector_checks_ptr_continuation
+
+Theorem compile_selector_dispatch_linear_layout:
+  compile_selector_dispatch_linear selectors fallback st = ((),st') /\
+  fn_has_code st st' fn ==>
+  ?d q r b0 bd br.
+    compile_selector_checks (Var (STRING #"%" (toString (st.cs_next_var + 4))))
+      selectors q = ((),r) /\ fn_has_code q r fn /\
+    q.cs_current_bb = d /\ LENGTH q.cs_current_insts = 2 /\
+    q.cs_next_var = st.cs_next_var + 5 /\
+    lookup_block st.cs_current_bb fn.fn_blocks = SOME b0 /\
+    get_instruction b0 (LENGTH st.cs_current_insts) =
+      SOME (mk_inst st.cs_next_id CALLDATASIZE []
+        [STRING #"%" (toString st.cs_next_var)]) /\
+    get_instruction b0 (SUC (LENGTH st.cs_current_insts)) =
+      SOME (mk_inst (st.cs_next_id + 1) LT
+        [Var (STRING #"%" (toString st.cs_next_var)); Lit 4w]
+        [STRING #"%" (toString (st.cs_next_var + 1))]) /\
+    get_instruction b0 (SUC (SUC (LENGTH st.cs_current_insts))) =
+      SOME (mk_inst (st.cs_next_id + 2) ISZERO
+        [Var (STRING #"%" (toString (st.cs_next_var + 1)))]
+        [STRING #"%" (toString (st.cs_next_var + 2))]) /\
+    get_instruction b0 (SUC (SUC (SUC (LENGTH st.cs_current_insts)))) =
+      SOME (mk_inst (st.cs_next_id + 3) JNZ
+        [Var (STRING #"%" (toString (st.cs_next_var + 2))); Label d; Label fallback] []) /\
+    lookup_block d fn.fn_blocks = SOME bd /\
+    get_instruction bd 0 = SOME (mk_inst (st.cs_next_id + 4) CALLDATALOAD
+      [Lit 0w] [STRING #"%" (toString (st.cs_next_var + 3))]) /\
+    get_instruction bd 1 = SOME (mk_inst (st.cs_next_id + 5) SHR
+      [Lit 224w; Var (STRING #"%" (toString (st.cs_next_var + 3)))]
+      [STRING #"%" (toString (st.cs_next_var + 4))]) /\
+    phi_prefix_length bd.bb_instructions = 0 /\
+    lookup_block r.cs_current_bb fn.fn_blocks = SOME br /\
+    get_instruction br (LENGTH r.cs_current_insts) =
+      SOME (mk_inst r.cs_next_id JMP [Label fallback] []) /\
+    (r.cs_current_insts = [] ==> phi_prefix_length br.bb_instructions = 0)
+Proof
+  simp[compile_selector_dispatch_linear_def, comp_bind_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
+  rename1 `emit_inst JMP _ _ a9 = (_, st')` >>
+  rename1 `compile_selector_checks _ _ a8 = (_, a9)` >>
+  rename1 `emit_op SHR _ a7 = (_, a8)` >>
+  rename1 `emit_op CALLDATALOAD _ a6 = (_, a7)` >>
+  rename1 `new_block dispatch_lbl a5 = (_, a6)` >>
+  rename1 `emit_inst JNZ _ _ a4 = (_, a5)` >>
+  rename1 `fresh_label "dispatch" a3 = (_, a4)` >>
+  rename1 `emit_op ISZERO _ a2 = (_, a3)` >>
+  rename1 `emit_op LT _ a1 = (_, a2)` >>
+  rename1 `emit_op CALLDATASIZE _ st = (_, a1)` >>
+  `cs_extends st a1 /\ cs_extends a1 a2 /\ cs_extends a2 a3 /\
+   cs_extends a3 a4 /\ cs_extends a4 a5 /\ cs_extends a5 a6 /\
+   cs_extends a6 a7 /\ cs_extends a7 a8 /\ cs_extends a8 a9 /\
+   cs_extends a9 st'` by
+    (rpt conj_tac >> metis_tac[cs_appends_def, cs_appends_emit_helpers,
+      cs_appends_prims, compile_selector_checks_appends]) >>
+  `fn_has_code a5 a6 fn /\ fn_has_code a6 a8 fn /\
+   fn_has_code a8 a9 fn /\ fn_has_code a9 st' fn` by
+    (rpt conj_tac >> metis_tac[fn_has_code_mid, fn_has_code_split,
+                             cs_extends_trans]) >>
+  `lookup_block a5.cs_current_bb fn.fn_blocks =
+   SOME <|bb_label := a5.cs_current_bb;
+          bb_instructions := a5.cs_current_insts|>` by
+    metis_tac[fn_has_code_new_block] >>
+  imp_res_tac new_block_props >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  imp_res_tac emit_inst_extends >> imp_res_tac fresh_label_props >>
+  fs[same_blocks_def] >>
+  `?bd. lookup_block dispatch_lbl fn.fn_blocks = SOME bd /\
+     get_instruction bd 0 = SOME (mk_inst (st.cs_next_id + 4) CALLDATALOAD
+       [Lit 0w] [STRING #"%" (toString (st.cs_next_var + 3))]) /\
+     get_instruction bd 1 = SOME (mk_inst (st.cs_next_id + 5) SHR
+       [Lit 224w; Var (STRING #"%" (toString (st.cs_next_var + 3)))]
+       [STRING #"%" (toString (st.cs_next_var + 4))])` by
+    (qspecl_then [`a6`, `a8`, `fn`,
+       `emitted_insts a6 a7 ++ emitted_insts a7 a8`]
+       mp_tac fn_has_code_same_block >>
+     (impl_tac >- fs[]) >> strip_tac >>
+     rename1 `lookup_block a6.cs_current_bb fn.fn_blocks = SOME bd` >>
+     first_assum (qspec_then `0` mp_tac) >>
+     first_x_assum (qspec_then `1` mp_tac) >>
+     simp[] >> rpt strip_tac >> qexists_tac `bd` >> gvs[]) >>
+  `?br. lookup_block a9.cs_current_bb fn.fn_blocks = SOME br /\
+     get_instruction br (LENGTH a9.cs_current_insts) =
+       SOME (mk_inst a9.cs_next_id JMP [Label fallback] [])` by
+    (qspecl_then [`a9`, `st'`, `fn`,
+       `[mk_inst a9.cs_next_id JMP [Label fallback] []]`]
+       mp_tac fn_has_code_same_block >>
+     (impl_tac >- fs[]) >> strip_tac >>
+     first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  qmatch_asmsub_abbrev_tac
+    `lookup_block st.cs_current_bb fn.fn_blocks = SOME blk` >>
+  `phi_prefix_length bd.bb_instructions = 0` by
+    (qpat_x_assum `get_instruction bd 0 = _` mp_tac >>
+     Cases_on `bd.bb_instructions` >>
+     simp[get_instruction_def, phi_prefix_length_def, mk_inst_def] >>
+     strip_tac >> gvs[phi_prefix_length_def, mk_inst_def]) >>
+  `a9.cs_current_insts = [] ==> phi_prefix_length br.bb_instructions = 0` by
+    (strip_tac >> qpat_x_assum `get_instruction br _ = _` mp_tac >>
+     Cases_on `br.bb_instructions` >>
+     simp[get_instruction_def, phi_prefix_length_def, mk_inst_def] >>
+     strip_tac >> gvs[phi_prefix_length_def, mk_inst_def]) >>
+  qexistsl_tac [`a8`, `a9`] >>
+  gvs[Abbr `blk`, get_instruction_def, EL_APPEND_EQN,
+       arithmeticTheory.ADD1]
+QED
