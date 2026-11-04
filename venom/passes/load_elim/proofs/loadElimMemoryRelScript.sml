@@ -1,11 +1,11 @@
 Theory loadElimMemoryRel
 Ancestors
-  venomState stateFrame pred_set list rich_list
+  venomState stateFrame pred_set list rich_list codegenRel regularCallEmitSim
 
 Definition padded_exec_equiv_def:
   padded_exec_equiv vars s1 s2 <=>
     (!v. v NOTIN vars ==> lookup_var v s1 = lookup_var v s2) /\
-    (!i. read_memory i 1 s1 = read_memory i 1 s2) /\
+    (!i. venomState$read_memory i 1 s1 = venomState$read_memory i 1 s2) /\
     execution_frame (s1 with vs_memory := []) =
     execution_frame (s2 with vs_memory := [])
 End
@@ -32,26 +32,26 @@ Proof
 QED
 
 Theorem read_memory_length:
-  !n i s. LENGTH (read_memory i n s) = n
+  !n i s. LENGTH (venomState$read_memory i n s) = n
 Proof
-  simp[read_memory_def, LENGTH_TAKE_EQ]
+  simp[venomStateTheory.read_memory_def, LENGTH_TAKE_EQ]
 QED
 
 Theorem read_memory_byte:
   !n i s j. j < n ==>
-    EL j (read_memory i n s) =
+    EL j (venomState$read_memory i n s) =
     if i + j < LENGTH s.vs_memory then EL (i + j) s.vs_memory else 0w
 Proof
-  rpt strip_tac >> simp[read_memory_def, EL_TAKE, EL_APPEND_EQN,
+  rpt strip_tac >> simp[venomStateTheory.read_memory_def, EL_TAKE, EL_APPEND_EQN,
     LENGTH_DROP, EL_DROP, EL_REPLICATE] >>
   Cases_on `i + j < LENGTH s.vs_memory` >> gvs[]
 QED
 
 Theorem read_memory_range_ext:
-  !s1 s2. (!i. read_memory i 1 s1 = read_memory i 1 s2) ==>
-    !i n. read_memory i n s1 = read_memory i n s2
+  !s1 s2. (!i. venomState$read_memory i 1 s1 = venomState$read_memory i 1 s2) ==>
+    !i n. venomState$read_memory i n s1 = venomState$read_memory i n s2
 Proof
-  rpt strip_tac >> irule LIST_EQ >> simp[read_memory_length] >>
+  rpt strip_tac >> irule listTheory.LIST_EQ >> simp[read_memory_length] >>
   qx_gen_tac `j` >> strip_tac >>
   first_x_assum (qspec_then `i + j` mp_tac) >>
   disch_then (mp_tac o Q.AP_TERM `EL 0`) >>
@@ -63,8 +63,32 @@ Theorem padded_exec_equiv_mload:
     mload i s1 = mload i s2
 Proof
   rpt strip_tac >>
-  `read_memory i 32 s1 = read_memory i 32 s2` by
+  `venomState$read_memory i 32 s1 = venomState$read_memory i 32 s2` by
     (irule read_memory_range_ext >> gvs[padded_exec_equiv_def]) >>
-  gvs[mload_def, read_memory_def]
+  gvs[mload_def, venomStateTheory.read_memory_def]
 QED
 
+
+(* Reuse codegenRel's total read_byte observer rather than introducing an
+   identical padded_byte. Its expanded-write law is already exported by
+   regularCallEmitSimTheory.read_byte_write_memory_with_expansion. *)
+Theorem read_byte_zero_append:
+  read_byte j (m ++ REPLICATE n 0w) = read_byte j m
+Proof
+  simp[read_byte_def, EL_APPEND_EQN, EL_REPLICATE] >>
+  Cases_on `j < LENGTH m` >> simp[]
+QED
+
+Theorem read_memory_read_byte:
+  j < n ==> EL j (venomState$read_memory i n s) = read_byte (i + j) s.vs_memory
+Proof
+  simp[read_memory_byte, read_byte_def]
+QED
+
+Theorem read_memory_read_byte_ext:
+  (!j. read_byte j s1.vs_memory = read_byte j s2.vs_memory) ==>
+  venomState$read_memory i n s1 = venomState$read_memory i n s2
+Proof
+  strip_tac >> irule listTheory.LIST_EQ >> simp[read_memory_length] >>
+  simp[read_memory_read_byte]
+QED
