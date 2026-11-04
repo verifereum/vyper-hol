@@ -48,6 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  bodyAppendStorageFacts bodyExprPreFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
@@ -67,132 +68,12 @@ Ancestors
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   stmtSimAssignTupleTargets
-  memoryLocalRhsProps stmtPoppedKeys exprOpenMain
+  memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
 Libs
   monadsyntax
 
 (* ===== Helpers ===== *)
 
-(* An expression with no internal call in it has no internal calls to
-   make.  Reasons and conditions are pure (supported_pure_no_internal_call). *)
-Theorem no_internal_call_int_calls:
-  (!e. ~supported_expr_exists expr_internal_call_root e ==>
-       int_calls_expr e = []) /\
-  (!t. ~supported_target_exists expr_internal_call_root t ==>
-       int_calls_target t = []) /\
-  (!es. ~supported_exprs_exists expr_internal_call_root es ==>
-        int_calls_exprs es = []) /\
-  (!eo. ~supported_opt_exists expr_internal_call_root eo ==>
-        int_calls_opt eo = []) /\
-  (!kes. ~supported_fields_exists expr_internal_call_root kes ==>
-         int_calls_named_exprs kes = [])
-Proof
-  ho_match_mp_tac int_calls_expr_ind >>
-  rw[int_calls_expr_def, supported_expr_exists_def,
-     expr_internal_call_root_def]
-QED
-
-Theorem supported_pure_int_calls:
-  !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
-Proof
-  metis_tac[supported_pure_no_internal_call, expr_has_internal_call_def,
-            no_internal_call_int_calls]
-QED
-
-(* supported_function_decl finds only the main module's functions. *)
-Theorem supported_function_decl_main[local]:
-  !tops id vis. IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
-Proof
-  Cases >> rpt gen_tac >> PairCases_on `id` >>
-  simp[supported_function_decl_def] >>
-  Cases_on `id0` >> simp[]
-QED
-
-(* An expression with no effect in it has no internal calls to make. *)
-Theorem no_effect_int_calls[local]:
-  (!e. ~supported_expr_exists expr_effect_root e ==> int_calls_expr e = []) /\
-  (!es. ~supported_exprs_exists expr_effect_root es ==>
-        int_calls_exprs es = [])
-Proof
-  `!x. expr_internal_call_root x ==> expr_effect_root x` by
-    (Cases >> simp[expr_internal_call_root_def, expr_effect_root_def]) >>
-  conj_tac >> rpt strip_tac
-  >- (irule (cj 1 no_internal_call_int_calls) >>
-      metis_tac[supported_expr_exists_mono]) >>
-  irule (cj 3 no_internal_call_int_calls) >>
-  metis_tac[supported_expr_exists_mono]
-QED
-
-Theorem supported_pure_forms_int_calls[local]:
-  (!tops e. supported_pure_expr tops e ==> int_calls_expr e = []) /\
-  (!tops es. supported_pure_exprs tops es ==> int_calls_exprs es = []) /\
-  (!tops e. supported_place_expr tops e ==> int_calls_expr e = [])
-Proof
-  metis_tac[no_effect_int_calls, supported_pure_no_effect]
-QED
-
-Theorem supported_effect_main_int_calls[local]:
-  (!tops e. supported_effect_expr tops e ==>
-      EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-      EVERY (\c. FST c = NONE) (int_calls_expr e))
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rw[supported_effect_expr_def, int_calls_expr_def] >>
-  imp_res_tac supported_pure_forms_int_calls >>
-  imp_res_tac supported_function_decl_main >> gvs[]
-QED
-
-(* A supported expression runs no EVM code, and its internal calls are to
-   the main module, as expr_body_pre asks. *)
-Theorem supported_expr_body_calls:
-  !tops e. supported_expr tops e ==>
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e)
-Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- metis_tac[supported_expr_no_evm_run] >>
-  pop_assum mp_tac >> simp[supported_expr_def] >> strip_tac >>
-  imp_res_tac supported_pure_int_calls >>
-  imp_res_tac supported_effect_main_int_calls >> gvs[]
-QED
-
-(* The same for a reason, which may also be a string literal. *)
-Theorem supported_string_reason_body_calls:
-  !tops e. supported_string_reason tops e ==>
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e)
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `?t str. e = Literal t (StringL str)`
-  >- gvs[expr_has_evm_run_def, supported_expr_exists_def,
-         expr_evm_run_root_def, int_calls_expr_def] >>
-  irule supported_expr_body_calls >> qexists_tac `tops` >>
-  simp[supported_expr_def] >>
-  Cases_on `e` >> gvs[supported_string_reason_def] >>
-  rename1 `Literal _ lit` >> Cases_on `lit` >>
-  gvs[supported_string_reason_def]
-QED
-
-(* A statement's expression meets expr_body_pre. *)
-Theorem stmt_expr_body_pre:
-  !cenv cx env e es calls.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
-    call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
-    (int_calls_expr e <> [] ==>
-     ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops) ==>
-    expr_body_pre cenv cx env e es
-Proof
-  rpt gen_tac >> strip_tac >>
-  `byte_widths_expr e /\ alloc_limits_expr cenv e` by
-    (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> metis_tac[]) >>
-  `call_evaluation_safe cx (int_calls_expr e)` by
-    metis_tac[call_evaluation_safe_append_left] >>
-  simp[expr_body_pre_def] >>
-  Cases_on `int_calls_expr e` >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
-QED
 
 (* ===== The compile environment after a statement ===== *)
 
@@ -852,16 +733,17 @@ Proof
   rpt gen_tac >> strip_tac >> irule supported_reason_code >> simp[] >> metis_tac[]
 QED
 
-(* RESIDUAL (#637 append): an append to a storage or transient DynArray,
-   the only target supported_append_target admits.  It waits on the
-   storage statement of #713, which relates the array's slots. *)
+(* An append to a storage or transient DynArray, the only target
+   supported_append_target admits.  The helper adapter relates both writes. *)
 Theorem body_append_storage_other:
   !cx nid e.
     (!s'' p t'. eval_target_place cx (TopLevelNameTarget nid) s'' = (INL p,t') ==>
                 body_expr_ok cx e) ==>
     body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> Cases_on `nid` >>
+  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def] >>
+  irule body_append_storage_fragment >> metis_tac[supported_expr_def]
 QED
 
 (* supported_append_target admits no local, subscript or attribute target
@@ -908,18 +790,6 @@ Proof
   simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> gvs[] >>
   drule_all expr_body_pre_eval_result >> simp[]
-QED
-
-(* A word type takes no wider type (type_widens_to). *)
-Theorem type_widens_to_word:
-  !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
-Proof
-  rw[type_widens_to_def] >>
-  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
-  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
-  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
-  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
-  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
 QED
 
 (* An assignment to a word local: stmtSimAssign's
@@ -972,14 +842,6 @@ QED
 
 (* A storage declaration found by name is a variable declaration of tops
    under that name. *)
-Theorem find_var_decl_storage_mem[local]:
-  !ts id tr typ id_str.
-    find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
-    id_str = id /\ ?vis mut init. MEM (VariableDecl vis mut id typ init) ts
-Proof
-  Induct >> simp[find_var_decl_by_name_def] >> Cases >>
-  rw[find_var_decl_by_name_def] >> metis_tac[]
-QED
 
 Theorem find_var_decl_storage_some[local]:
   !ts vis mut id ty init.
@@ -990,40 +852,6 @@ Proof
   Induct >> simp[] >> Cases >> rw[find_var_decl_by_name_def] >> metis_tac[]
 QED
 
-Theorem supported_variable_decl_mem[local]:
-  !tops src id vis mut ty slot.
-    supported_variable_decl tops (src, id) = SOME (vis, mut, ty, slot) ==>
-    src = NONE /\ MEM (VariableDecl vis mut id ty slot) tops
-Proof
-  Induct >> simp[supported_variable_decl_def] >> Cases >>
-  rw[supported_variable_decl_def] >> metis_tac[]
-QED
-
-Theorem build_hashmap_info_absent[local]:
-  !tops id.
-    ~MEM (NONE, id)
-       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
-    build_hashmap_info tops (NONE, id) = NONE
-Proof
-  Induct >> simp[build_hashmap_info_def] >> Cases >>
-  simp[build_hashmap_info_def, toplevel_vtype_keys_toplevel_def]
-QED
-
-(* With distinct names, cenv's maps at a module variable's key are its
-   declaration's. *)
-Theorem build_maps_variable[local]:
-  !tops vis mut id ty init.
-    ALL_DISTINCT
-      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
-    MEM (VariableDecl vis mut id ty init) tops ==>
-    build_hashmap_info tops (NONE, id) = NONE /\
-    build_var_type_map tops (NONE, id) = SOME ty
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >> Cases_on `h` >>
-  gvs[build_hashmap_info_def, build_var_type_map_def,
-      toplevel_vtype_keys_toplevel_def, ALL_DISTINCT_APPEND] >>
-  metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
-QED
 
 Theorem env_assignable_find_NONE[local]:
   !env cx st src id ty.
