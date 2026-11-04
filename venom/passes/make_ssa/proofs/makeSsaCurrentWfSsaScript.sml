@@ -21,7 +21,7 @@ Ancestors
   makeSsaCurrentAnalysis dominatorProofs dominatorDefs
   makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
-  makeSsaCurrentDemand
+  makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
 Libs
   rich_listTheory
 
@@ -147,6 +147,52 @@ Proof
   drule live_vars_at_cross_block >> simp[] >> disch_then irule >>
   simp[GSYM current_cfg_edge_succs] >>
   qexistsl [`sb`, `l'`] >> simp[] >> metis_tac[lookup_block_MEM]
+QED
+
+Theorem current_wf_single_available_nondefault:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  current_tree_ancestor_path (current_dom_tree fn) l path /\
+  i <= LENGTH bb.bb_instructions /\ current_available fn v l i /\
+  LENGTH (FILTER (\inst. MEM v inst.inst_outputs) (fn_insts fn)) <= 1 ==>
+  current_original_scan v l 0 (TAKE i bb.bb_instructions)
+    (if current_actual_inserted fn v l then CurrentInserted v l
+     else current_inherited_token fn (current_actual_inserted fn) v path)
+    <> CurrentDefault v
+Proof
+  strip_tac >>
+  `MEM l (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `fn_reachable fn l` by
+    (gvs[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  drule_all current_available_definition >> strip_tac >>
+  spose_not_then assume_tac >>
+  gvs[current_wf_original_scan_default] >>
+  Cases_on `current_actual_inserted fn v l` >> gvs[] >>
+  Cases_on `db = bb`
+  >- (gvs[] >> drule_all current_available_local_index >> strip_tac >>
+      `MEM (EL j bb.bb_instructions) (TAKE i bb.bb_instructions)` by
+        (simp[MEM_EL] >> qexists `j` >> simp[EL_TAKE]) >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  `fn_dominates fn db.bb_label l` by
+    metis_tac[current_available_unique_dominates] >>
+  `MEM db.bb_label (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `db.bb_label <> l` by
+    (strip_tac >>
+     `lookup_block l fn.fn_blocks = SOME db` by
+       (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >> gvs[]) >>
+  `strict_dominates (dom_analyze (cfg_analyze fn) fn) db.bb_label l` by
+    (simp[strict_dominates_def] >> metis_tac[current_semantic_dominates]) >>
+  drule_all current_actual_path_chain >> strip_tac >>
+  `MEM db.bb_label path` by
+    (drule_all current_actual_chain_membership >> simp[]) >>
+  gvs[current_inherited_token_def, current_wf_chain_token_default, EVERY_MEM] >>
+  `lookup_block db.bb_label fn.fn_blocks = SOME db` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  qpat_x_assum `!l. MEM l path ==> _` (qspec_then `db.bb_label` mp_tac) >>
+  simp[current_wf_block_token_default, EVERY_MEM] >> metis_tac[]
 QED
 
 Theorem current_wf_path_lrc[local]:
