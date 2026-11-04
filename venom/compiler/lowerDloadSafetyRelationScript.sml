@@ -186,6 +186,16 @@ Proof
   metis_tac[]
 QED
 
+Theorem ld_sync_control:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  s.vs_current_bb = t.vs_current_bb /\
+  s.vs_prev_bb = t.vs_prev_bb
+Proof
+  simp[ld_sync_def, EVERY_MEM] >> rpt strip_tac >>
+  `MEM (HD frames) frames` by (Cases_on `frames` >> gvs[]) >>
+  metis_tac[]
+QED
+
 Theorem ld_sync_ghosts:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
   G = ld_erase A o_f (HD frames).lf_H /\
