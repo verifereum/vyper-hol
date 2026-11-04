@@ -447,3 +447,35 @@ Proof
   simp[dse_inst_reads_alias_def, ma_may_alias_def, ml_undefined_def,
        may_overlap_def]
 QED
+
+Theorem dse_pending_space_read_memory:
+  dse_pending_space AddrSp_Memory P s t /\
+  dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
+  allocas_non_overlapping s /\ dse_region_matches readloc s r m /\
+  (!loc a n. MEM (loc,(a,n)) P ==> ~may_overlap loc readloc) ==>
+  read_memory r m s = read_memory r m t
+Proof
+  strip_tac >> irule dse_pending_memory_read_memory >>
+  qexists_tac `MAP SND P` >>
+  simp[MEM_MAP, PULL_EXISTS] >>
+  reverse conj_tac >- fs[dse_pending_space_def] >>
+  qx_gen_tac `a` >> qx_gen_tac `n` >> qx_gen_tac `entry` >>
+  PairCases_on `entry` >> simp[] >> strip_tac >> gvs[] >>
+  irule dse_pending_at_nonalias >> metis_tac[]
+QED
+
+Theorem dse_pending_at_read_memory:
+  dse_pending_space AddrSp_Memory P s t /\
+  dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\ allocas_non_overlapping s /\
+  dse_region_matches
+    (bp_get_read_location bp (EL idx bb.bb_instructions) AddrSp_Memory)
+    s r m ==>
+  read_memory r m s = read_memory r m t
+Proof
+  strip_tac >> irule dse_pending_space_read_memory >>
+  rpt (goal_assum (drule_at Any)) >>
+  rpt strip_tac >> drule_all dse_pending_at_no_read >>
+  simp[dse_inst_reads_alias_def, ma_may_alias_def] >>
+  metis_tac[memLocPropsTheory.may_overlap_sym]
+QED

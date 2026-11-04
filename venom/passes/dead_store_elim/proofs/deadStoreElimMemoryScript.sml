@@ -250,3 +250,22 @@ Proof
   drule dse_pending_memory_cover >>
   disch_then (qspecl_then [`LENGTH bytes`, `a`] mp_tac) >> simp[]
 QED
+
+Theorem dse_pending_memory_read_memory:
+  dse_pending_memory R s t /\
+  (!a n. MEM (a,n) R ==> regions_disjoint (a,n) (r,m)) ==>
+  read_memory r m s = read_memory r m t
+Proof
+  strip_tac >> irule LIST_EQ >>
+  simp[read_memory_def, LENGTH_TAKE_EQ] >>
+  qx_gen_tac `i` >> strip_tac >>
+  `dse_memory_byte s (r+i) = dse_memory_byte t (r+i)` by
+    (irule dse_pending_memory_disjoint_byte >>
+     qexists_tac `R` >> simp[] >>
+     metis_tac[regions_disjoint_def]) >>
+  Cases_on `r+i < LENGTH s.vs_memory` >>
+  Cases_on `r+i < LENGTH t.vs_memory` >>
+  gvs[read_memory_def, EL_TAKE, EL_APPEND_EQN, EL_DROP,
+      dse_memory_byte_def, EL_REPLICATE,
+      arithmeticTheory.ADD_COMM]
+QED
