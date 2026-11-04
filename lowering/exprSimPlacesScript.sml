@@ -164,7 +164,45 @@ Theorem compile_subscript_map_case:
     place_type cenv obj = MapPT kt vt ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rw[expr_vv_case_def, expr_vv_sim_def] >>
+  (SUBGOAL_THEN
+    ``expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+      expr_map_pre cenv cx env (Subscript ann obj idx) es`` assume_tac
+   >- simp[]) >>
+  drule_all compile_mapping_subscript_frag >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  disch_then (mp_then Any irule fragExecTheory.frag_exec_conseq) >> simp[] >>
+  rpt strip_tac >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_body_pre_map_subscript_base] >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  `vt = Type ann` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, Once well_typed_expr_def, subscript_vtype_def] >>
+     strip_tac >> gvs[AllCaseEqs()] >>
+     metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]) >>
+  gvs[] >>
+  Cases_on `evaluate_type (get_tenv cx) ann`
+  >- gvs[vyperStateTheory.select_result_def, vyperStateTheory.extend_place_def,
+         vyperStateTheory.lift_option_type_def, vyperStateTheory.lift_option_def,
+         vyperStateTheory.bind_def, vyperStateTheory.raise_def,
+         vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  rename1 `evaluate_type (get_tenv cx) ann = SOME leaf_ty` >>
+  drule vyperHashMapStorageTheory.select_result_hashmap_leaf >>
+  disch_then (fn th => gvs[th]) >>
+  `storage_mapping_region cx tr (hashmap_slot base_slot (encode_hashmap_key kt kv))
+     (Type ann)` by
+    (irule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
+     goal_assum (drule_at Any)) >>
+  `contract_storage_well_formed cx es'` by gvs[expr_sim_inv_def] >>
+  simp[vv_post_def, vyperASTTheory.expr_type_def] >>
+  conj_tac
+  >- (irule mapping_leaf_vv_holds >> simp[contextTheory.mk_ptr_def] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  gvs[vv_at_def, contextTheory.mk_ptr_def, slot_loc_def,
+      exprSimWordArgsTheory.wb_frame_def] >>
+  Cases_on `tr` >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 (* The compiler's dispatch type disagrees with the base's type: place_type
