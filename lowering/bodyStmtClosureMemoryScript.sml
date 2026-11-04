@@ -1,5 +1,6 @@
 Theory bodyStmtClosureMemory
 Ancestors
+  stmtSimSeqMem
   bodyMemoryPreds bodyLiteralMemory bodySimStmtCases bodySim
   bodyMemoryDefs stmtMemory stmtControlMemory exprSimHyps
   exprLoweringProps stmtLoweringProps supportedExprTraverse supportedStmtTraverse

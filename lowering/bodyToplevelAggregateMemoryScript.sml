@@ -2,7 +2,7 @@
 Theory bodyToplevelAggregateMemory
 Ancestors
   bodyImmutableUnwrapMemory bodyToplevelWordMemory bodyToplevelMemory
-  bodyMemoryPreds bodyMemoryDefs exprSimHyps exprSimUnwrap exprSim
+  bodyMemoryPreds bodyMemoryDefs exprSimHyps exprSimUnwrap exprSimDefs
   exprLowering exprLoweringProps compileEnv context fragExecMem fragExec
   vyperAST vyperValue vyperInterpreter vyperState loweringSlice exprSimLeaves
   accountsRelProps vyperTypeGlobalLookupSoundness vyperTypeSystem vyperTypeCallGraph

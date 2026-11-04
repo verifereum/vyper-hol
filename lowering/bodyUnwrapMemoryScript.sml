@@ -2,7 +2,7 @@
 Theory bodyUnwrapMemory
 Ancestors
   bodyFieldMemory bodyEnvMemory exprSimUnwrap bodyMemoryDefs exprLoweringProps
-  exprLowering exprSim
+  exprLowering exprSimDefs
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps emitHelper
   compileEnv fragExec valueEncoding valueEncodingProofs vyperValue vyperAST
   venomExecSemantics venomInst venomState words list rich_list context

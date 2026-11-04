@@ -2,7 +2,7 @@
 Theory bodyFlagMemberMemory
 Ancestors
   bodyUnopMemory bodyMemoryDefs bodyMemoryPreds exprSimLeaves exprSimHyps
-  exprSim exprLowering exprLoweringProps fragExecMem compileEnv valueEncoding
+  exprSimDefs exprLowering exprLoweringProps fragExecMem compileEnv valueEncoding
   vyperAST vyperInterpreter vyperState vyperTyping vyperValueOperation
   vyperTypeSystem vyperValue venomState loweringSlice
 

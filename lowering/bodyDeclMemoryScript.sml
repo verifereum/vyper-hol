@@ -3,7 +3,7 @@ Theory bodyDeclMemory
 Ancestors
   bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
-  valueTypingMemoryProps vyperTyping exprSim stmtSim venomState
+  valueTypingMemoryProps vyperTyping exprSimDefs stmtSim venomState
   valueEncoding valueEncodingProofs intCallResult compileEnv exprLoweringProps
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem

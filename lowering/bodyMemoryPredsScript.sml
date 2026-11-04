@@ -1,6 +1,7 @@
 (* Reachability predicates for the additive memory body induction. *)
 Theory bodyMemoryPreds
 Ancestors
+  stmtSimZero stmtSimPass stmtSimSeqMem stmtSimJumpMem
   bodyMemoryDefs bodyExprMemory stmtMemory stmtControlMemory stmtSim
   bodySim bodySimStmtCases exprSimHyps supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph
@@ -18,31 +19,29 @@ End
 
 Definition body_stmt_mem_ok_def:
   body_stmt_mem_ok cx s <=>
-    !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-      eval_stmt cx s es = (res, es') ==>
+      frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv
-        (stmt_env cenv lctx ret_ty s) es res es'
+        (stmt_env cenv lctx ret_ty s) (eval_stmt cx s) es
 End
 
 Definition body_stmts_mem_ok_def:
   body_stmts_mem_ok cx ss <=>
-    !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-      eval_stmts cx ss es = (res, es') ==>
+      frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv
-        (stmts_env cenv lctx ret_ty ss) es res es'
+        (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 End
 
 Definition body_exprs_mem_ok_def:
@@ -112,17 +111,16 @@ QED
 
 Theorem body_stmts_mem_projection:
   (!cx ss. body_stmts_mem_ok cx ss) ==>
-  !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
+  !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    eval_stmts cx ss es = (res, es') ==>
+    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss) es res es'
+      (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
   rw[body_stmts_mem_ok_def] >> metis_tac[]
 QED

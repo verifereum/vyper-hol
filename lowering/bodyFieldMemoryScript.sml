@@ -4,7 +4,7 @@ Ancestors
   exprSimAttributeFields bodyAllocMemory
   valueEncoding compileEnv venomState words list rich_list finite_map
   exprSimAttribute exprSimHash exprSimLiteralBuffer exprOperandVar
-  exprSimBuffer exprSimAggregateChildren exprSim context
+  exprSimBuffer exprSimAggregateChildren exprSimDefs context
   exprLowering exprLoweringProps emitHelper emitHelperProps fragExec fragExecMem instMemFrontier
   allocaHistoryFragment venomInst vyperAST vyperTyping vyperInterpreter
   exprSimHyps vyperTypeSystem vyperTypeInvariants allocLimits

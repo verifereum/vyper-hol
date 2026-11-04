@@ -3,7 +3,7 @@ Ancestors
   bodyMemoryDefs exprSimLeaves exprSimHyps exprSimUnwrap
   exprLowering exprLoweringProps fragExecMem
   vyperAST vyperInterpreter vyperTyping valueEncoding
-  vyperTypeSystem compileEnv context vyperState exprSim
+  vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice
 
 Theorem body_literal_word_compile[local]:

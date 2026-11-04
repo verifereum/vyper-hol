@@ -1,7 +1,8 @@
 (* Memory-safe conditional and direct control statements. *)
 Theory stmtControlMemory
 Ancestors
-  bodyMemoryDefs stmtSimIf stmtSim fragExecMem exprSim exprSimHyps
+  stmtSimJumpMem
+  bodyMemoryDefs stmtSimIf stmtSim fragExecMem exprSimDefs exprSimHyps
   exprLoweringProps stmtLowering compileEnv venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperState list finite_map
   fragExec memSafeRun venomInst emitHelperProps instMemFrontier venomExecProofs
@@ -547,69 +548,6 @@ Theorem if_branch_frag_mem_join[local]:
 Proof
   rpt strip_tac >> Cases_on `block_is_terminated sb` >>
   irule if_branch_frag_mem >> metis_tac[]
-QED
-
-Theorem compile_break_frag_mem:
-  !d ctx func cx RetQ cenv ty ex inc es.
-    stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ cenv
-      (stmt_env cenv (InLoop ex inc) ty Break) es (INR BreakException) es
-Proof
-  rw[stmt_frag_mem_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
-     comp_return_def] >>
-  qpat_x_assum `_ sa = (cenv', sb)` mp_tac >>
-  simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
-       comp_return_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
-  disj1_tac >> qexistsl_tac [`jump_to ex s0`, `cenv`] >>
-  imp_res_tac emit_inst_extends >>
-  `return_buf_frame d cenv sj (jump_to ex s0)` by
-    (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
-     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
-  `!fuel r. run_from fuel ctx func (jump_to ex s0) = r /\
-       (!e. r <> Error e) ==>
-       ?fuel'. run_from fuel' ctx func s0 = r /\
-         (mem_safe_run fuel ctx func (jump_to ex s0) ==>
-          mem_safe_run fuel' ctx func s0)` by
-    (match_mp_tac run_from_jump_end_mem >>
-     qexistsl_tac [`sa`, `sj`, `mk_inst sa.cs_next_id JMP [Label ex] []`] >>
-     simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
-     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
-  simp[jump_to_def, lookup_var_def] >>
-  gvs[allocaHistoryTheory.alloca_history_def]
-QED
-
-Theorem compile_continue_frag_mem:
-  !d ctx func cx RetQ cenv ty ex inc es.
-    stmt_frag_mem d ctx func cx (InLoop ex inc) RetQ cenv
-      (stmt_env cenv (InLoop ex inc) ty Continue) es (INR ContinueException)
-      es
-Proof
-  rw[stmt_frag_mem_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
-     comp_return_def] >>
-  qpat_x_assum `_ sa = (cenv', sb)` mp_tac >>
-  simp[comp_ignore_bind_def, comp_bind_def, compile_stmt_def,
-       comp_return_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
-  disj1_tac >> qexistsl_tac [`jump_to inc s0`, `cenv`] >>
-  imp_res_tac emit_inst_extends >>
-  `return_buf_frame d cenv sj (jump_to inc s0)` by
-    (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
-     qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
-  `!fuel r. run_from fuel ctx func (jump_to inc s0) = r /\
-       (!e. r <> Error e) ==>
-       ?fuel'. run_from fuel' ctx func s0 = r /\
-         (mem_safe_run fuel ctx func (jump_to inc s0) ==>
-          mem_safe_run fuel' ctx func s0)` by
-    (match_mp_tac run_from_jump_end_mem >>
-     qexistsl_tac [`sa`, `sj`, `mk_inst sa.cs_next_id JMP [Label inc] []`] >>
-     simp[mk_inst_def, is_terminator_def, step_jmp_behavior] >>
-     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-  simp[stmt_lands_def, cenv_top_ext_refl, stmt_state_rel_jump_to] >>
-  simp[jump_to_def, lookup_var_def] >>
-  gvs[allocaHistoryTheory.alloca_history_def]
 QED
 
 Theorem compile_if_stmt_frag_mem:

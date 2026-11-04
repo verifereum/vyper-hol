@@ -5,7 +5,7 @@ Ancestors
   exprSimLeaves
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
-  compileEnv fragExec exprSim valueEncoding vyperValue vyperAST venomExecSemantics
+  compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState vyperTyping vyperTypeSystem
 
 Theorem body_calldatasize_prefix_mem_ok[local]:

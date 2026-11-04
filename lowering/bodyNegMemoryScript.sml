@@ -4,7 +4,7 @@ Ancestors
   bodyMemoryDefs exprSimUnop bodyFieldMemory emitHelperProps
   fragExecMem instMemFrontier allocaHistoryFragment
   exprLoweringProps emitHelper venomInst venomState words list rich_list
-  compileEnv fragExec exprSim valueEncoding vyperValue vyperAST venomExecSemantics
+  compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState freshWrites varsExt integer_word
   arithmeticProps vyperArith vyperTypeSystem vyperTyping exprSimHyps
   exprBopLowering bodyUnopMemory exprSimOperators

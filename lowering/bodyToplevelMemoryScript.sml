@@ -1,7 +1,7 @@
 (* Code-free storage/transient value views; forcing is not certified here. *)
 Theory bodyToplevelMemory
 Ancestors
-  bodyMemoryDefs exprSimLeaves exprSimHyps exprSim exprLowering
+  bodyMemoryDefs exprSimLeaves exprSimHyps exprSimDefs exprLowering
   compileEnv fragExecMem venomState loweringSlice valueEncoding
   exprLoweringProps accountsRelProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTyping

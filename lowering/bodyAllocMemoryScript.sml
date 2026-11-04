@@ -4,7 +4,7 @@ Ancestors
   builtinBytesMemory allocaFootprint abiBuiltinAllocation exprLoweringProps exprLowering
   exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
-  bodyMemoryDefs loweringSlice exprSim exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
+  bodyMemoryDefs loweringSlice exprSimDefs exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
   emitHelperProps emitHelper compileEnv context venomInst venomState
   venomExecSemantics venomMemDefs vyperInterpreter vyperState list finite_map words arithmetic
 
