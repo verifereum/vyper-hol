@@ -4295,3 +4295,81 @@ Proof
   strip_tac >> drule expr_no_effect_int_calls >> strip_tac >>
   drule_all vv_holds_code_immutable_callfree_nopop >> simp[]
 QED
+
+Theorem expr_body_pre_subscript_index:
+  !cenv cx env ann obj idx es.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es ==>
+    expr_body_pre cenv cx env idx es
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
+       allocLimitsTheory.alloc_limits_expr_def] >>
+  rpt strip_tac >> simp[] >>
+  drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right >> simp[]
+QED
+
+Theorem type_place_expr_Type_well_typed:
+  !env cx s e ty.
+    env_consistent env cx s /\ type_place_expr env e = SOME (Type ty) /\
+    ty <> NoneT ==> well_typed_expr env e
+Proof
+  rpt gen_tac >> strip_tac >>
+  `well_formed_type env.type_defs ty` by
+    (drule_all vyperTypeEvalSoundnessTheory.type_place_expr_well_formed_vtype_stmt >>
+     simp[vyperTypeSystemTheory.well_formed_vtype_def]) >>
+  drule placeTypingPropsTheory.type_place_expr_annotation >> strip_tac >>
+  Cases_on `e` >>
+  gvs[Once vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()]
+  >- (rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
+      gvs[vyperTypeSystemTheory.well_typed_expr_def,
+          vyperTypeSystemTheory.vtype_annotation_ok_def, vyperASTTheory.expr_type_def,
+          AllCaseEqs()]) >>
+  gvs[vyperTypeSystemTheory.well_typed_expr_def,
+      vyperTypeSystemTheory.vtype_annotation_ok_def, vyperASTTheory.expr_type_def]
+QED
+
+Theorem expr_body_pre_subscript_array_base:
+  !cenv cx env ann obj idx es et bd.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_type obj = ArrayT et bd ==>
+    expr_body_pre cenv cx env obj es
+Proof
+  rpt gen_tac >> strip_tac >>
+  `env_consistent env cx es` by
+    fs[expr_body_pre_def, expr_sim_inv_def] >>
+  `well_typed_expr env obj` by
+    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def] >>
+     rpt strip_tac >> simp[] >>
+     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     Cases_on `vt` >>
+     gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >> strip_tac >> gvs[] >>
+     irule type_place_expr_Type_well_typed >>
+     conj_tac
+     >- (qexists_tac `ArrayT et bd` >> simp[]) >>
+     goal_assum (drule_at Any)) >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+  simp[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
+       allocLimitsTheory.alloc_limits_expr_def] >>
+  rpt strip_tac >> simp[] >>
+  drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left >> simp[]
+QED
+
+Theorem expr_body_pre_subscript_array_index_after:
+  !cenv cx env ann obj idx es et bd tv mid.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_type obj = ArrayT et bd /\
+    eval_expr cx obj es = (INL tv,mid) ==>
+    expr_body_pre cenv cx env idx mid
+Proof
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env idx es` by
+    (drule expr_body_pre_subscript_index >> simp[]) >>
+  `expr_body_pre cenv cx env obj es` by
+    (drule_all expr_body_pre_subscript_array_base >> simp[]) >>
+  irule expr_body_pre_after_eval >> goal_assum (drule_at Any) >> simp[]
+QED

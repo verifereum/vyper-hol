@@ -4602,7 +4602,7 @@ Proof
 QED
 
 
-Theorem type_place_expr_well_formed_vtype_stmt[local]:
+Theorem type_place_expr_well_formed_vtype_stmt:
   !env cx st e vt.
     env_consistent env cx st /\ type_place_expr env e = SOME vt ==>
     well_formed_vtype env.type_defs vt
