@@ -47,7 +47,8 @@
 
 Theory exprSimArrayIndex
 Ancestors
-  arithmeticProps exprLoweringProps emitHelperProps freshWrites
+  arithmeticProps exprLoweringProps emitHelperProps freshWrites exprSimOps
+  emitHelper fragExec
   exprLowering compileEnv venomExecSemantics venomState venomInst
 Libs
   emitTacticsLib
@@ -478,4 +479,264 @@ Proof
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts st mid) ss = Abort _ _` >>
   qspecl_then [`st`, `mid`, `st'`, `ss`] mp_tac abort_propagates >>
   simp[]
+QED
+
+(* The suffix after the length load, independently of the loader. *)
+Theorem array_check_ptr_ok:
+  !a j l sgn dyn ws esz sa p sb ss b i len.
+    comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz) sa = (p,sb) /\
+    eval_operand a ss = SOME b /\ eval_operand j ss = SOME i /\
+    eval_operand l ss = SOME len /\ fresh_vars_wrt sa ss /\
+    idx_in_range sgn i len ==>
+    ?t. run_inst_seq (emitted_insts sa sb) ss = OK t /\
+        eval_operand p t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `comp_ignore_bind _ _ _ = _` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_ok >> strip_tac >>
+  forward_all_evals >>
+  drule_all array_elem_ptr_run >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` collapse_run >>
+  rename1 `eval_operand p t = SOME _` >> qexists_tac `t` >> simp[]
+QED
+
+Theorem array_check_ptr_oob:
+  !a j l sgn dyn ws esz sa p sb ss i len.
+    comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz) sa = (p,sb) /\
+    eval_operand j ss = SOME i /\ eval_operand l ss = SOME len /\
+    fresh_vars_wrt sa ss /\ ~idx_in_range sgn i len ==>
+    ?t. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort t
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `comp_ignore_bind _ _ _ = _` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_oob >> strip_tac >>
+  drule array_elem_ptr_extends >> strip_tac >>
+  drule array_bounds_check_extends >> strip_tac >>
+  qmatch_asmsub_rename_tac `array_elem_ptr a j dyn ws esz mid = _` >>
+  qspecl_then [`sa`, `mid`, `sb`, `ss`] mp_tac abort_propagates >>
+  simp[] >> strip_tac >> rename1 `run_inst_seq _ ss = Abort Revert_abort t` >>
+  qexists_tac `t` >> simp[]
+QED
+
+Theorem array_check_ptr_frag:
+  !ctx func cenv cx es a j l sgn dyn ws esz sa p sb s0 b i len.
+    comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz) sa = (p,sb) /\
+    (!x. a = Var x ==> not_fresh_at sa x) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    (!x. l = Var x ==> not_fresh_at sa x) /\
+    local_ptrs_reserved cenv sa /\ idx_in_range sgn i len ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+        (eval_operand a s = SOME b /\ eval_operand j s = SOME i /\
+         eval_operand l s = SOME len))
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+        eval_operand p s = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x s = SOME w) /\
+        (!aid v. FLOOKUP s0.vs_allocas aid = SOME v ==>
+                 FLOOKUP s.vs_allocas aid = SOME v) /\
+        s.vs_memory = s0.vs_memory) (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac frag_exec_straight_fresh >>
+  qexistsl_tac [`comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz)`, `\a. F`] >>
+  simp[straight_fresh_array_check_ptr] >> conj_tac
+  >- (rpt strip_tac >> simp[eval_operand_drop_fresh]) >>
+  rpt strip_tac >> irule array_check_ptr_ok >>
+  simp[] >> qexistsl_tac [`a`, `j`, `l`, `len`, `sgn`] >> simp[]
+QED
+
+Theorem array_check_ptr_frag_oob:
+  !ctx func cenv cx es a j l sgn dyn ws esz sa p sb s0 i len Q.
+    comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz) sa = (p,sb) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    (!x. l = Var x ==> not_fresh_at sa x) /\ ~idx_in_range sgn i len ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+        (eval_operand j s = SOME i /\ eval_operand l s = SOME len))
+      Q (\r. ?t. r = Abort Revert_abort t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (INST_TYPE [``:'a`` |-> ``:operand``] frag_exec_straight_fresh_abort) >>
+  qexistsl_tac [`comp_ignore_bind (array_bounds_check j l sgn)
+      (array_elem_ptr a j dyn ws esz)`, `p`, `\a. a = Revert_abort`] >>
+  simp[straight_fresh_array_check_ptr] >> conj_tac
+  >- (rpt strip_tac >> simp[eval_operand_drop_fresh]) >>
+  rpt strip_tac >> simp[] >> irule array_check_ptr_oob >>
+  simp[] >> goal_assum (drule_at (Pat `comp_ignore_bind _ _ _ = _`)) >> simp[]
+QED
+
+Theorem compile_storage_array_dynamic_outcome:
+  !ctx func cenv cx es a j cnt ws esz sgn ctor imm sa p sb s0 b i.
+    compile_array_subscript a j T cnt ws esz sgn
+      (compile_ptr_load ctor imm LocStorage) sa = (p,sb) /\
+    (!x. a = Var x ==> not_fresh_at sa x) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    eval_operand a s0 = SOME b /\ eval_operand j s0 = SOME i /\
+    local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. idx_in_range sgn i (sload b s0) /\ stmt_state_rel ctx func cenv cx es s /\
+        eval_operand p s = SOME ((b + n2w ws) + i * n2w esz) /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x s = SOME w) /\
+        (!aid v. FLOOKUP s0.vs_allocas aid = SOME v ==>
+                 FLOOKUP s.vs_allocas aid = SOME v) /\
+        s.vs_memory = s0.vs_memory)
+      (\r. ~idx_in_range sgn i (sload b s0) /\ ?t. r = Abort Revert_abort t)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx sa sb _ _ exit` >>
+  qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_array_subscript_split, contextTheory.compile_ptr_load_def,
+       comp_bind_def] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `emit_op SLOAD [a] sa = (lop,mid)` >>
+  `sa.cs_next_var <= mid.cs_next_var /\
+   (!x. lop = Var x ==> not_fresh_at mid x) /\
+   local_ptrs_reserved cenv mid /\ cs_extends sa mid` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emit_op_def, fresh_var_def, emit_inst_def, fresh_id_def,
+          emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     simp[emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     strip_tac >> gvs[not_fresh_at_def,
+       cs_extends_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  drule_all emit_op_SLOAD_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`] assume_tac) >>
+  qmatch_asmsub_abbrev_tac `frag_exec ctx sa mid pre loadpost _` >>
+  `frag_exec ctx sa mid pre loadpost exit` by
+    (irule frag_exec_pre_exit >> goal_assum (drule_at (Pat `frag_exec _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ exit`
+    (fn th => match_mp_tac (MATCH_MP frag_exec_then th)) >>
+  simp[Abbr `pre`, Abbr `loadpost`] >>
+  reverse conj_tac
+  >- (simp[] >> irule cs_extends_same_block >>
+      drule (REWRITE_RULE [straight_fresh_def] straight_fresh_array_check_ptr) >>
+      simp[rich_listTheory.IS_PREFIX_APPEND]) >>
+  gen_tac >> simp[] >> strip_tac >>
+  `(!x. a = Var x ==> not_fresh_at mid x) /\
+   (!x. j = Var x ==> not_fresh_at mid x)` by
+    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+  `t.vs_labels = s0.vs_labels` by
+    (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_labels``) >> simp[]) >>
+  `eval_operand a t = SOME b /\ eval_operand j t = SOME i` by
+    (Cases_on `a` >> Cases_on `j` >>
+     gvs[eval_operand_def]) >>
+  qmatch_goalsub_abbrev_tac `frag_exec ctx mid sb _ post exit` >>
+  reverse (Cases_on `idx_in_range sgn i (sload b s0)`)
+  >- (drule_all array_check_ptr_frag_oob >>
+      disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`] mp_tac) >>
+      disch_then (qspec_then `t` mp_tac) >>
+      disch_then (qspec_then `post` mp_tac) >>
+      disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+      simp[Abbr `exit`]) >>
+  simp[Abbr `post`] >>
+  drule_all array_check_ptr_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`] mp_tac) >>
+  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (qspec_then `b` mp_tac) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  `t.vs_allocas = s0.vs_allocas /\ t.vs_memory = s0.vs_memory` by
+    (qpat_x_assum `_ with <|vs_vars := _; vs_inst_idx := _|> = _`
+      (mp_tac o AP_TERM ``\s:venom_state. (s.vs_allocas,s.vs_memory)``) >> simp[]) >>
+  simp[] >> gen_tac >> strip_tac >> rpt strip_tac >>
+  qpat_x_assum `!x w. not_fresh_at mid x /\ _ ==> _` irule >>
+  conj_tac >- simp[] >>
+  irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]
+QED
+
+Theorem compile_storage_array_dynamic_frag:
+  !ctx func cenv cx es a j cnt ws esz sgn ctor imm sa p sb s0 b i.
+    compile_array_subscript a j T cnt ws esz sgn
+      (compile_ptr_load ctor imm LocStorage) sa = (p,sb) /\
+    (!x. a = Var x ==> not_fresh_at sa x) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    eval_operand a s0 = SOME b /\ eval_operand j s0 = SOME i /\
+    local_ptrs_reserved cenv sa /\ idx_in_range sgn i (sload b s0) ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+        eval_operand p s = SOME ((b + n2w ws) + i * n2w esz) /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x s = SOME w) /\
+        (!aid v. FLOOKUP s0.vs_allocas aid = SOME v ==>
+                 FLOOKUP s.vs_allocas aid = SOME v) /\
+        s.vs_memory = s0.vs_memory) (\r. F)
+Proof
+  rpt strip_tac >> drule_all compile_storage_array_dynamic_outcome >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`] mp_tac) >> simp[]
+QED
+
+Theorem compile_storage_array_dynamic_frag_oob:
+  !ctx func cenv cx es a j cnt ws esz sgn ctor imm sa p sb s0 b i Q.
+    compile_array_subscript a j T cnt ws esz sgn
+      (compile_ptr_load ctor imm LocStorage) sa = (p,sb) /\
+    (!x. a = Var x ==> not_fresh_at sa x) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    eval_operand a s0 = SOME b /\ eval_operand j s0 = SOME i /\
+    local_ptrs_reserved cenv sa /\ ~idx_in_range sgn i (sload b s0) ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      Q (\r. ?t. r = Abort Revert_abort t)
+Proof
+  rpt strip_tac >> drule_all compile_storage_array_dynamic_outcome >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`] mp_tac) >> simp[] >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >> simp[]
+QED
+
+Theorem compile_array_static_frag:
+  !ctx func cenv cx es a j cnt ws esz sgn loader sa p sb s0 b i.
+    compile_array_subscript a j F cnt ws esz sgn loader sa = (p,sb) /\
+    (!x. a = Var x ==> not_fresh_at sa x) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    eval_operand a s0 = SOME b /\ eval_operand j s0 = SOME i /\
+    local_ptrs_reserved cenv sa /\ idx_in_range sgn i (n2w cnt) ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+        eval_operand p s = SOME (b + i * n2w esz) /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x s = SOME w) /\
+        (!aid v. FLOOKUP s0.vs_allocas aid = SOME v ==>
+                 FLOOKUP s.vs_allocas aid = SOME v) /\
+        s.vs_memory = s0.vs_memory) (\r. F)
+Proof
+  rpt strip_tac >>
+  gvs[compile_array_subscript_split, comp_bind_def, comp_return_def] >>
+  `!x. Lit (n2w cnt) = Var x ==> not_fresh_at sa x` by simp[] >>
+  drule_all array_check_ptr_frag >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es`] mp_tac) >>
+  disch_then (qspec_then `s0` mp_tac) >> disch_then (qspec_then `b` mp_tac) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  simp[eval_operand_def]
+QED
+
+Theorem compile_array_static_frag_oob:
+  !ctx func cenv cx es a j cnt ws esz sgn loader sa p sb s0 i Q.
+    compile_array_subscript a j F cnt ws esz sgn loader sa = (p,sb) /\
+    (!x. j = Var x ==> not_fresh_at sa x) /\
+    eval_operand j s0 = SOME i /\ ~idx_in_range sgn i (n2w cnt) ==>
+    frag_exec ctx sa sb
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      Q (\r. ?t. r = Abort Revert_abort t)
+Proof
+  rpt strip_tac >>
+  gvs[compile_array_subscript_split, comp_bind_def, comp_return_def] >>
+  `!x. Lit (n2w cnt) = Var x ==> not_fresh_at sa x` by simp[] >>
+  drule_all array_check_ptr_frag_oob >>
+  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`] mp_tac) >>
+  disch_then (qspec_then `s0` mp_tac) >> disch_then (qspec_then `Q` mp_tac) >>
+  disch_then (fn th => match_mp_tac (MATCH_MP frag_exec_weaken th)) >>
+  simp[eval_operand_def]
 QED
