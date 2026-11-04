@@ -11,7 +11,8 @@
  *)
 Theory simplifyCfgCallChecks
 Ancestors
-  simplifyCfgDefs unitShapeDefs venomWf venomInst list rich_list
+  simplifyCfgDefs simplifyCfgCollapseShape cfgTransform cfgTransformProps venomExecProps
+  unitShapeDefs venomWf venomInst list rich_list
 
 Theorem revert_path_fuel_mono:
   !n m bbs l. revert_path bbs n l /\ n <= m ==>
@@ -224,6 +225,45 @@ Proof
    (LAST bb.bb_instructions).inst_opcode <> PHI` by
     (gvs[bb_well_formed_def] >> strip_tac >> gvs[is_terminator_def]) >>
   simp[LAST_MAP, EVERY_MAP]
+QED
+
+Theorem reachable_block_successor:
+  ALL_DISTINCT (fn_labels fn) /\ MEM bb fn.fn_blocks /\
+  reachable fn bb.bb_label /\ MEM t (bb_succs bb) ==>
+  reachable fn t
+Proof
+  strip_tac >> irule reachable_step >>
+  qexists_tac `bb.bb_label` >> simp[fn_succ_def] >>
+  qexists_tac `bb` >> simp[] >>
+  irule MEM_lookup_block >> gvs[fn_labels_def]
+QED
+
+Theorem revert_path_remove_unreachable:
+  !n fn l.
+    ALL_DISTINCT (fn_labels fn) /\ reachable fn l /\
+    revert_path fn.fn_blocks n l ==>
+    revert_path (remove_unreachable_blocks fn).fn_blocks n l
+Proof
+  Induct >- simp[revert_path_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `revert_path _ _ _` mp_tac >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> BETA_TAC >>
+  disch_then (qx_choose_then `bb` strip_assume_tac) >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> BETA_TAC >>
+  qexists_tac `bb` >>
+  `MEM bb (remove_unreachable_blocks fn).fn_blocks` by
+    (Cases_on `fn_entry_label fn` >>
+     gvs[remove_unreachable_blocks_def, MEM_FILTER]) >>
+  simp[] >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> gvs[] >>
+  Cases_on `h` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  first_x_assum irule >> simp[] >>
+  irule reachable_block_successor >> simp[] >>
+  qexists_tac `bb` >>
+  Cases_on `bb.bb_instructions` >>
+  gvs[bb_succs_def, get_successors_def, is_terminator_def,
+      venomStateTheory.get_label_def]
 QED
 
 Theorem simplify_cfg_call_checks_ok:
