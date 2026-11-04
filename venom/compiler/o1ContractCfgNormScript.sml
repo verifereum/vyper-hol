@@ -866,6 +866,36 @@ Proof
   gvs[listTheory.EVERY_EL]
 QED
 
+Theorem supply_same_after_assigns_cong:
+  !xs ys. LIST_REL (\a b.
+    a.inst_opcode = b.inst_opcode /\ a.inst_outputs = b.inst_outputs /\
+    (b.inst_opcode = ASSIGN ==> a = b)) xs ys ==>
+    !op1 op2. same_after_assigns xs op1 op2 = same_after_assigns ys op1 op2
+Proof
+  Induct_on `xs` >> Cases_on `ys` >>
+  simp[contextCodegenRelTheory.same_after_assigns_def] >> rpt strip_tac >>
+  `!op. step_back_assign h' op = step_back_assign h op` by
+    (Cases_on `op` >> simp[contextCodegenRelTheory.step_back_assign_def] >>
+     Cases_on `h.inst_opcode = ASSIGN` >> gvs[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+(* CFGNorm's block image keeps every ASSIGN, and the opcode and outputs of
+   every instruction, at the same index. *)
+Theorem supply_block_image_assign_rel:
+  EVERY label_positions_ok bb.bb_instructions ==>
+  LIST_REL (\a b.
+    a.inst_opcode = b.inst_opcode /\ a.inst_outputs = b.inst_outputs /\
+    (b.inst_opcode = ASSIGN ==> a = b))
+    (supply_block_image pred target split repls bb).bb_instructions
+    bb.bb_instructions
+Proof
+  strip_tac >> simp[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
+  drule supply_block_image_index >> strip_tac >> simp[] >>
+  irule supply_block_image_index_unchanged >>
+  gvs[listTheory.EVERY_EL]
+QED
+
 Theorem supply_block_image_get_instruction:
   get_instruction bb k = SOME inst /\ label_positions_ok inst /\
   ~MEM inst.inst_opcode [PHI; JMP; JNZ] ==>
@@ -895,7 +925,22 @@ Proof
         (mp_then Any mp_tac supply_block_image_index) >>
       simp[] >> metis_tac[]) >>
   qexistsl [`inst1`,`inst2`,`p`,`src`,`rds`,`p'`,`rds'`] >>
-  simp[supply_block_image_resolve_assigns]
+  drule_then assume_tac supply_block_image_assign_rel >>
+  `!n m op.
+     resolve_block_assigns
+       (REVERSE (TAKE n (DROP m (supply_block_image pred target split repls bb).bb_instructions))) op =
+     resolve_block_assigns (REVERSE (TAKE n (DROP m bb.bb_instructions))) op` by
+    (rpt gen_tac >> irule supply_resolve_block_assigns_cong >>
+     irule listTheory.LIST_REL_REVERSE >> irule rich_listTheory.LIST_REL_TAKE >>
+     irule rich_listTheory.LIST_REL_DROP >> first_assum MATCH_ACCEPT_TAC) >>
+  `!n op1 op2.
+     same_after_assigns
+       (REVERSE (TAKE n (supply_block_image pred target split repls bb).bb_instructions)) op1 op2 =
+     same_after_assigns (REVERSE (TAKE n bb.bb_instructions)) op1 op2` by
+    (rpt gen_tac >> irule supply_same_after_assigns_cong >>
+     irule listTheory.LIST_REL_REVERSE >> irule rich_listTheory.LIST_REL_TAKE >>
+     first_assum MATCH_ACCEPT_TAC) >>
+  simp[]
 QED
 
 Theorem supply_block_image_revert_forward_at:
