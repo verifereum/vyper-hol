@@ -25,6 +25,8 @@ Ancestors
   stateEquivProps venomExecSemantics execEquivProofs venomWf venomExecProps
   venomInstProps venomInst venomState venomExecProofs prevBbIndep
   finite_map
+Libs
+  stepInstBaseLib
 
 (* ================================================================
    Section 1: Counterexample -- block label collision
@@ -3252,9 +3254,9 @@ Proof
 QED
 
 val subst_label_nonjump_tac =
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label,
-      parse_dret_shape_subst_label] >>
+  stepInstBaseLib.with_opcode_clause (fn c => gvs (c @
+    [subst_label_inst_def, eval_operands_subst_label,
+     eval_operand_subst_label, parse_dret_shape_subst_label])) >>
   BasicProvers.every_case_tac >>
   gvs[eval_operand_subst_label, parse_dret_shape_subst_label];
 
