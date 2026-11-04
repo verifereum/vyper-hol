@@ -163,3 +163,33 @@ Proof
   irule dse_pending_at_allocas_extend >> qexists_tac `s` >>
   simp[dse_pending_at_phi_prefix]
 QED
+
+Theorem dse_local_agrees_undefined_read_ok:
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\
+  bp_get_read_location bp (EL idx bb.bb_instructions) sp = ml_undefined /\
+  step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s1 ==>
+  step_inst fuel ctx (EL idx bb.bb_instructions) t = OK s1 /\
+  dse_local_agrees sp [] s1 s1 /\
+  dse_pending_at cfg' bp' sp fn' bb' idx' [] s1
+Proof
+  strip_tac >> drule_all dse_local_agrees_undefined_read_step >>
+  disch_then (qspecl_then [`fuel`, `ctx`] assume_tac) >>
+  gvs[dse_local_agrees_refl, dse_pending_at_empty]
+QED
+
+Theorem dse_local_agrees_undefined_read_ok_inst_idx:
+  dse_local_agrees sp P s t /\
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  idx < LENGTH bb.bb_instructions /\
+  bp_get_read_location bp (EL idx bb.bb_instructions) sp = ml_undefined /\
+  step_inst fuel ctx (EL idx bb.bb_instructions) s = OK s1 ==>
+  step_inst fuel ctx (EL idx bb.bb_instructions) t = OK s1 /\
+  dse_local_agrees sp [] (s1 with vs_inst_idx := next_idx)
+    (s1 with vs_inst_idx := next_idx) /\
+  dse_pending_at cfg' bp' sp fn' bb' idx' [] s1
+Proof
+  strip_tac >> drule_all dse_local_agrees_undefined_read_ok >>
+  simp[dse_local_agrees_refl, dse_pending_at_empty]
+QED
