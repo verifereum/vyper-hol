@@ -197,3 +197,97 @@ Theorem ld_owned_scalar_left_add_backward:
 Proof
   metis_tac[ld_owned_offset_cases_backward]
 QED
+
+Theorem ld_owned_pure_scalar_backward:
+  MEM i.inst_opcode [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp;
+    ADDMOD; MULMOD; EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT; SHL; SHR; SAR] /\
+  i.inst_outputs = [out] /\ ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!op. MEM op i.inst_operands ==> ld_op_prov AG op = NONE /\ op_taint tn op = {}) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_owned_operand_clean >> simp[] >> metis_tac[]) >>
+  `!op w. MEM op i.inst_operands /\ eval_operand op t = SOME w ==>
+      ld_op_prov AH op = NONE /\ op_taint un op = {}` by
+    (rpt strip_tac >>
+     `ld_owned_value E (ld_op_prov AG op) (ld_op_prov AH op)
+        (op_taint tn op) (op_taint un op) w w` by
+       (irule ld_owned_operand_value >> simp[] >> metis_tac[]) >>
+     gvs[ld_owned_value_def, ld_mask_word_def]) >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+  simp[listTheory.MEM] >> strip_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[SimpLHS] >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def, SimpLHS] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  simp[Once step_inst_non_invoke] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[exec_pure1_def, exec_pure2_def, exec_pure3_def] >>
+  qmatch_goalsub_abbrev_tac `update_var out result s` >>
+  `ld_owned_value E NONE NONE {} {} result result` by
+    simp[ld_owned_value_def, ld_mask_word_def] >>
+  drule_all ld_owned_vars_update >>
+  disch_then (qspec_then `out` mp_tac) >>
+  simp[ld_step_prov_def, ld_out_prov_def, ld_first_prov_def,
+       step_taint_def, out_taint_def] >>
+  simp[shift_taint_def] >>
+  simp[ld_owned_vars_def, op_taint_def]
+QED
+
+Theorem ld_owned_compare_backward:
+  MEM i.inst_opcode [EQ; LT; GT] /\
+  i.inst_operands = [a;b] /\ i.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. a = Var v \/ b = Var v ==> v IN V) /\
+  eval_operand a s = SOME x /\ eval_operand b s = SOME y /\
+  ld_op_prov AG a = SOME(owner,(bs,sz)) /\
+  ld_op_prov AG b = SOME(owner,(bs,sz)) /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  ld_site_entry E owner bs bt sz /\ 0 < sz /\
+  bs <= w2n x /\ w2n x <= bs+sz /\ bs <= w2n y /\ w2n y <= bs+sz /\
+  bs+sz < dimword(:256) /\ bt+sz < dimword(:256) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+  simp[listTheory.MEM] >> strip_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[exec_pure2_def, SimpLHS] >>
+  Cases_on `eval_operand a t` >> Cases_on `eval_operand b t` >> simp[] >>
+  strip_tac >>
+  `ld_owned_value E (SOME(owner,(bs,sz))) (ld_op_prov AH a)
+      {} (op_taint un a) x x'` by metis_tac[ld_owned_operand_value] >>
+  `ld_owned_value E (SOME(owner,(bs,sz))) (ld_op_prov AH b)
+      {} (op_taint un b) y x''` by metis_tac[ld_owned_operand_value] >>
+  `(x <+ y <=> x' <+ x'') /\ (y <+ x <=> x'' <+ x') /\
+    (x = y <=> x' = x'')` by
+      (irule ld_owned_value_compare >> metis_tac[]) >>
+  gvs[wordsTheory.WORD_LO] >>
+  simp[Once step_inst_non_invoke] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  qpat_assum `i.inst_opcode = _` (fn th => pure_rewrite_tac[th]) >>
+  simp[exec_pure2_def] >>
+  simp[arithmeticTheory.GREATER_DEF] >>
+  qmatch_goalsub_abbrev_tac `update_var out result s` >>
+  `ld_owned_value E NONE NONE {} {} result result` by
+    simp[ld_owned_value_def, ld_mask_word_def] >>
+  drule_all ld_owned_vars_update >>
+  disch_then (qspec_then `out` mp_tac) >>
+  simp[ld_step_prov_def, ld_out_prov_def, step_taint_def, out_taint_def,
+       ld_owned_vars_def, op_taint_def]
+QED
