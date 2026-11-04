@@ -18,7 +18,8 @@ Ancestors
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperRuntimeAccounts vyperAccountSupply
+  vyperSupplyBoundary vyperSourceSupplyFields
   supportedProgram compileEnv selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
@@ -46,7 +47,8 @@ Definition source_typing_ok_def:
   source_typing_ok tops am tx <=>
     ?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE, tops)] am tx /\
-          machine_well_typed am /\ call_tx_well_typed tx
+          machine_well_typed am /\ accounts_supply_bounded am.accounts /\
+          call_tx_well_typed tx
 End
 
 Definition source_storage_ok_def:
@@ -61,12 +63,22 @@ Definition call_outcomes_ok_def:
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
                LENGTH outcome.co_returnData < dimword(:256) /\
-               accounts_runtime_well_typed outcome.co_accounts /\
-               contract_storage_well_formed cx
-                 (initial_state (am with <| accounts := outcome.co_accounts;
-                                            tStorage := outcome.co_tStorage |>) []))
+                 accounts_runtime_well_typed outcome.co_accounts /\
+                 accounts_supply_bounded outcome.co_accounts /\
+                 contract_storage_well_formed cx
+                   (initial_state (am with <| accounts := outcome.co_accounts;
+                                              tStorage := outcome.co_tStorage |>) []))
             os
 End
+
+Theorem source_typing_outcomes_supply:
+  source_typing_ok tops am tx /\ call_outcomes_ok am tx os ==>
+  machine_supply am (SOME os)
+Proof
+  rw[source_typing_ok_def, call_outcomes_ok_def, machine_supply_def,
+     supply_safe_outcomes_def, supply_safe_outcome_def, listTheory.EVERY_MEM] >>
+  res_tac
+QED
 
 (* ===== Transaction environment and entry transfer ===== *)
 
@@ -127,6 +139,8 @@ Definition call_state_rel_def:
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
+      (tx.created_in_tx <=>
+        account_empty (lookup_account tx.target (SND (LAST es.contexts)).accounts)) /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
@@ -141,29 +155,25 @@ End
    deployment or call commits its deletions (finalize_pending_deletions),
    and a failed call returns the machine it was given. *)
 Theorem call_external_transaction_pending_deletions:
-  !orc am tx r am' rqs.
+  !orc gobs am tx r am' rqs.
     call_external_transaction orc gobs am tx = (r, am', rqs) /\
     am.pending_deletions = [] ==>
     am'.pending_deletions = []
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
   >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >>
-      Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
-      qmatch_goalsub_abbrev_tac `get_self_code cx` >>
-      Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
-                   NONE => get_self_code cx
-                 | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
-      Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
-      rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
-      Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
-      rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
-      rw[] >> simp[finalize_pending_deletions_metadata])
-  >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
+      simp[Once call_external_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]) >>
+  rename1 `call_external orc gobs (clear_machine_logs am) tx = (INR exn, am', rqs)` >>
+  reverse (Cases_on `exn = HaltException`)
+  >- (drule call_external_error_rollback >> simp[clear_machine_logs_def]) >>
+  gvs[] >> qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
+  simp[Once call_external_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem load_contract_pending_deletions:
-  !orc am tx mods exps am' rqs.
+  !orc gobs am tx mods exps am' rqs.
     load_contract orc gobs am tx mods exps = INL (am', rqs) ==>
     am'.pending_deletions = []
 Proof
@@ -375,6 +385,25 @@ Proof
   simp[log_entry_corresponds_def]
 QED
 
+Theorem log_entry_equiv_raw_event:
+  log_entry_equiv cenv addr (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_equiv_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
+Theorem log_entry_corresponds_raw_event:
+  log_entry_corresponds event_info tenv addr
+    (encode_raw_event_values addr topic_vals bytes) ev <=>
+  ev = <| logger := addr; topics := MAP event_value_to_word topic_vals;
+          data := bytes |>
+Proof
+  simp[log_entry_corresponds_def, encode_raw_event_values_def, encode_raw_event_def,
+       EQ_SYM_EQ]
+QED
+
 (* Vyper logs correspond to EVM events (ordered, same-length).
    event_info maps event name -> SOME (hash, arg_types, indexed_flags)
    for declared events (from EventDecl with indexed flag). *)
@@ -400,6 +429,16 @@ Definition call_result_rel_def:
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           tx_return_bytes tops ret tx v out /\
+          accounts_agree cx am'.accounts
+            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+          transient_agree cx am'.tStorage es'.rollback.tStorage /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs lgs /\
+          LIST_REL (request_agree cx) rqs (call_requests es)
+    | (INR HaltException, am', rqs) =>
+        let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+        ?lgs.
+          frame_outcome es r es' NONE [] lgs /\
           accounts_agree cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\

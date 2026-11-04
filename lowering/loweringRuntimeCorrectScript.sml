@@ -49,6 +49,7 @@ Ancestors
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
+  vyperSourceSupplyFields vyperSourceSupplyDefs vyperSourceTransferSupply
   venomState venomExecSemantics venomWf
 
 val _ = Parse.hide "body";
@@ -102,6 +103,8 @@ Theorem call_external_selected_body:
              (initial_evaluation_context am.sources am.layouts tx NONE)
              F mut (type_env tops) es0 env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rw[source_deployment_rel_def] >>
@@ -160,7 +163,8 @@ Theorem external_body_source_ok:
       (INL (), es0) /\
     eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
       fbody es0 = (res, es') ==>
-    stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)
+    (stmt_res_ok NoLoop res \/ res = INR HaltException) /\
+    (res = INL () ==> ret = NoneT)
 Proof
   cheat
 QED
@@ -375,6 +379,41 @@ Proof
   cheat
 QED
 
+(* ADMITTED (mismatch between the body judgment and S1's result relation):
+   when the body halts, the run from the body's start halts in a state
+   whose accounts, transient storage, logs and requests agree with the
+   source's final machine.  stmt_frag's expr_exit only asks an empty
+   returndata of a halt, while external_call_result_rel asks the state
+   agreement. Extending stmt_res_ok and body_stmts_sim with HaltException
+   is the remaining bridge required to discharge this admission. *)
+Theorem external_body_halt_result:
+  !tops bindings ctx func cenv cx env_t env' ret_ty RetQ fbody es0 es' sa
+   sb cenv' s0 am tx.
+    cx = initial_evaluation_context am.sources am.layouts tx NONE /\
+    body_inv tops ctx cenv cx /\ supported_stmts tops bindings fbody /\
+    expr_sim_inv cenv cx env_t es0 /\ ce_locals_declared cenv env_t /\
+    locals_alloc_ok cenv env_t /\
+    type_stmts env_t ret_ty fbody = SOME env' /\
+    EVERY (stmt_exprs_ok cenv) fbody /\
+    call_evaluation_safe cx (int_calls_stmts fbody) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmts cx fbody es0 = (INR HaltException, es') /\
+    stmts_env cenv NoLoop ret_ty fbody sa = (cenv', sb) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
+    ~block_is_terminated sa /\ stmt_state_rel ctx func cenv cx es0 s0 /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?fuel ss. run_from fuel ctx func s0 = Halt ss /\
+    external_call_result_rel tops ret_ty tx
+      (INR HaltException,
+       finalize_pending_deletions
+         (abstract_machine_from_state am.sources am.exports am.layouts es'),
+       es'.requests) (Halt ss)
+Proof
+  cheat
+QED
+
 (* ===== The fall-through halt (#640) ===== *)
 
 (* external_fallthrough_result_rel with state_rel at any compile env cenv'
@@ -473,7 +512,13 @@ Theorem call_external_body_run[local]:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
-    (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
+    (res = INR HaltException ==>
+     call_external_body am cx F mut tenv es0 env fbody ret =
+       (INR HaltException,
+        abstract_machine_from_state am.sources am.exports am.layouts es',
+        es'.requests)) /\
+    (!e. res = INR e /\ e <> HaltException /\
+         (!v. e <> ReturnException v) ==>
      call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
 Proof
@@ -556,7 +601,7 @@ QED
    asks of the call's failure, given that a RevertData exit reverts. *)
 Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
-    expr_exit (INR e : unit + exception) r /\
+    expr_exit (INR e : unit + exception) r /\ e <> HaltException /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
     external_call_result_rel tops ret tx (INR e, am, rqs) r
 Proof
@@ -598,7 +643,8 @@ Proof
   disch_then (qspec_then `func` assume_tac) >>
   Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx
                           NONE) fbody es0` >> rename1 `_ = (res, es')` >>
-  drule_all external_body_source_ok >> strip_tac >>
+  drule_all external_body_source_ok >>
+  disch_then (CONJUNCTS_THEN assume_tac) >>
   drule_all call_external_selected_body >> strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   `rt = if ret = NoneT then NONE else SOME ret` by
@@ -606,21 +652,41 @@ Proof
   drule guarded_body_code >> strip_tac >>
   drule_all guarded_body_stmts_env >> strip_tac >>
   qmatch_asmsub_abbrev_tac `frame_ret_ok _ _ _ RetQ _ _` >>
+  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
+    (drule_all fn_has_code_split >> simp[]) >>
+  `ret_pc_ok cenv sa s0` by gvs[ret_pc_ok_def] >>
+  drule_all call_external_body_run >>
+  disch_then (qspecl_then [`type_env tops`, `ret`] strip_assume_tac) >>
+  Cases_on `res = INR HaltException`
+  >- (qpat_x_assum `res = INR HaltException` SUBST_ALL_TAC >>
+      `cx = initial_evaluation_context am.sources am.layouts tx NONE` by
+        simp[Abbr`cx`] >>
+      drule_all external_body_halt_result >> strip_tac >>
+      qpat_x_assum `!fuel r. _ ==> ?fuel'. run_context _ _ _ = _`
+        (qspecl_then [`fuel`, `Halt ss`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      simp[source_unit_execution_correct_def] >>
+      qexists_tac `fuel'` >> simp[]) >>
+  `stmt_res_ok NoLoop res` by metis_tac[] >>
+  `machine_supply am (SOME vs.vs_outcomes)` by
+    (irule source_typing_outcomes_supply >> metis_tac[]) >>
+  `source_supply (initial_state am [env] with
+      <|outcomes := SOME vs.vs_outcomes; requests := []|>)` by
+    (irule machine_supply_initial_state >> first_assum ACCEPT_TAC) >>
+  `source_supply es0` by
+    (`source_supply_action (send_call_value mut cx)` by
+       simp[source_supply_action_send_call_value] >>
+     drule_all source_supply_action_result >> simp[]) >>
   `stmt_frag unit.cu_context func cx NoLoop RetQ cenv
      (stmts_env cenv NoLoop ret fbody) es0 res es'` by
     (qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                   `cx`, `env_t`, `env'`, `ret`, `NoLoop`, `RetQ`, `fbody`,
                   `es0`, `res`, `es'`] mp_tac body_stmts_sim >>
      asm_rewrite_tac[]) >>
-  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
-    (drule_all fn_has_code_split >> simp[]) >>
   qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac >- gvs[ret_pc_ok_def] >>
-  drule_all call_external_body_run >>
-  disch_then (qspecl_then [`type_env tops`, `ret`]
-                strip_assume_tac) >>
   simp[source_unit_execution_correct_def] >> strip_tac
   >- ((* the body falls off its end *)
       `res = INL ()` by gvs[stmt_lands_def] >> gvs[] >>
@@ -670,13 +736,14 @@ Proof
         expr_exit_external_result >>
       impl_tac
       >- (conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
           rpt strip_tac >> gvs[] >>
           qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                        `cx`, `env_t`, `env'`, `ret`, `RetQ`, `fbody`, `es0`,
                        `d`, `es'`, `sa`, `sb`, `cenv'`, `s0`, `fuel`, `a`, `t`]
             mp_tac external_body_revert_data_reverts >>
           impl_tac >- gvs[ret_pc_ok_def] >> simp[]) >>
-      simp[]) >>
+      Cases_on `e` >> simp[] >> gvs[]) >>
   (* a return *)
   gvs[Abbr`RetQ`, abstract_machine_from_state_def]
 QED

@@ -12,7 +12,7 @@ Libs
 
 Theorem body_append_expr_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
-  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget nid) e) /\
   call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget nid) e)) ==>
   expr_body_pre cenv cx env e es
@@ -59,7 +59,7 @@ Theorem body_append_storage_fragment:
   (!s p t. eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,t) ==>
              body_expr_ok cx e) /\
   body_inv tops ctx cenv cx /\ supported_storage_dynamic_array tops (src,id) /\
-  supported_expr tops e /\ expr_sim_inv cenv cx env es /\
+  supported_expr tops e /\ expr_sim_inv cenv cx env es /\ source_supply es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' /\
   stmt_exprs_ok cenv (Append (TopLevelNameTarget (src,id)) e) /\
   call_evaluation_safe cx (int_calls_stmt (Append (TopLevelNameTarget (src,id)) e)) /\

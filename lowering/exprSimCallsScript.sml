@@ -15,10 +15,6 @@
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
  * expr_sim_pre's exclusion of them, below, is lifted):
- *   - compile_raw_log_sim and compile_selfdestruct_sim:
- *     compile_call lowers RawLog and SelfDestructTarget to
- *     INVALID, where
- *     the source can succeed.
  *   - compile_raw_call_sim and compile_raw_call_calldata_sim with
  *     is_delegate_call: both sides run the EVM, but differently: the source
  *     (run_delegate_call) dispatches a precompile address to
@@ -36,6 +32,8 @@
  * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
  * and the creates (~expr_has_evm_run e), since the source runs them on the
  * EVM even with the outcome oracle, so those cases hold vacuously.
+ * RawLog, RawRevert and SelfDestructTarget are wired into compile_call.
+ * Their case lemmas remain admitted in this producer layer.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

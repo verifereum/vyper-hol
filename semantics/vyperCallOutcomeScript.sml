@@ -42,7 +42,8 @@ val () = take_call_outcome_def |> SRULE [pairTheory.pair_CASE_def] |> cv_auto_tr
 Definition adopt_call_outcome_def:
   adopt_call_outcome rq outcome st =
     let (accounts, tStorage, logs) =
-      adopt_outcome rq outcome (st.accounts, st.tStorage, st.logs) in
+      adopt_outcome rq outcome
+        (st.accounts, st.tStorage, st.logs) in
     return () (st with <| accounts := accounts; tStorage := tStorage;
                          logs := logs;
                          pending_deletions :=

@@ -12,6 +12,7 @@ Ancestors
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter
   vyperTypeEntryReadiness vyperTypeContractSoundness vyperTypeExternalDefaults
+  vyperSourceSupplyFields
 
 val _ = Parse.hide "body";
 
@@ -73,6 +74,7 @@ QED
 
 
 Theorem eval_external_defaults_typed_cases:
+  source_supply st /\
   checked_call_inputs_ready env.type_defs cx am args dflts vals /\
   well_typed_exprs env (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) /\
   env_consistent env cx (st with scopes := [FEMPTY]) /\

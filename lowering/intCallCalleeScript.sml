@@ -378,7 +378,7 @@ Proof
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_shape[local]:
+Theorem materialize_internal_params_shape:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\

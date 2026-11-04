@@ -70,7 +70,16 @@ Theorem activated_ordinary_success_short_write:
     t.vs_transient = call_probe_outcome.co_tStorage /\
     t.vs_logs = call_probe_outcome.co_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  `call_probe_state.vs_call_ctx.cc_static = F` by
+    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
+  `venom_call_request (call_probe_state with vs_outcomes := [call_probe_outcome])
+     8w 0w 0w 1w F = call_probe_request` by
+    simp[call_probe_request_def, venom_call_request_def, read_memory_def] >>
+  mp_tac consume_ordinary_success_short_write >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >>
+  pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_call_dispatch, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem activated_failed_short_write:
@@ -83,7 +92,17 @@ Theorem activated_failed_short_write:
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  `call_probe_state.vs_call_ctx.cc_static = F` by
+    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
+  `venom_call_request (call_probe_state with vs_outcomes :=
+       [call_probe_outcome with co_success := F])
+     8w 0w 0w 1w F = call_probe_request` by
+    simp[call_probe_request_def, venom_call_request_def, read_memory_def] >>
+  mp_tac consume_failed_short_write >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >>
+  pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_call_dispatch, update_var_def,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem activated_exhausted:
@@ -95,7 +114,14 @@ Theorem activated_exhausted:
     t.vs_transient = call_probe_state.vs_transient /\
     t.vs_logs = call_probe_state.vs_logs
 Proof
-  simp dispatch_defs >> EVAL_TAC
+  `call_probe_state.vs_call_ctx.cc_static = F` by
+    simp[call_probe_state_def, init_venom_state_def, empty_call_context_def] >>
+  mp_tac consume_exhausted >>
+  simp[Excl "consume_call_outcome_eq", LET_THM] >>
+  pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >> strip_tac >>
+  simp[Excl "consume_call_outcome_eq", probe_call_dispatch,
+       GSYM call_probe_request_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem activated_inherited_static:
@@ -278,7 +304,8 @@ Theorem activated_gas_expression_evaluated:
     [Var "missing"; Lit 8w; Lit 0w; Lit 0w; Lit 1w; Lit 1w; Lit 3w])
     call_probe_state = Error "undefined operand"
 Proof
-  simp dispatch_defs
+  simp[probe_call_def, mk_inst_def, step_inst_base_def, eval_operand_def,
+       lookup_var_def, call_probe_state_def, init_venom_state_def]
 QED
 
 Theorem activated_output_arity:

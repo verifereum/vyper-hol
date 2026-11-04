@@ -19,6 +19,8 @@ Ancestors
   vyperTypeInvariants vyperPlaceInvariants vyperTypeEvalSoundness
   vyperTypeExprSoundness vyperTypeSystem vyperTypeCallGraph vyperTypeValues
   vyperTypeCallStackSoundness vyperTypeEnvPreservation vyperTypeStatePreservation
+  vyperEvalSupply vyperSourceSupplyDefs vyperSourceSupplyFields
+  vyperSourcePrimitiveSupply vyperSourceCompoundSupply
 Libs
   pairLib
 
@@ -174,14 +176,14 @@ QED
 Theorem assign_tuple_popped_keys_indexed:
   (!cx g v env ty st res st'.
     well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     assign_tuple_targets cx g v st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!cx gs vs env tys st res st'.
     LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
     assign_tuple_target_list cx gs vs st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes)
@@ -196,14 +198,14 @@ Proof
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
    (!cx g v env ty st res st'.
     well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     assign_tuple_targets cx g v st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
    (!cx gs vs env tys st res st'.
     LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
     assign_tuple_target_list cx gs vs st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
@@ -234,6 +236,8 @@ Proof
   `runtime_consistent env cx s''` by
     (fs[runtime_consistent_def] >>
      drule_all (cj 9 eval_scc_type_sound_mutual) >> simp[]) >>
+  `source_supply s''` by
+    metis_tac[source_supply_action_result, cj 9 eval_source_supply_mutual] >>
   qpat_x_assum `!s t. assign_tuple_targets _ _ _ _ = _ ==> _` drule >>
   disch_then drule_all >> simp[]
 QED
@@ -336,7 +340,7 @@ QED
 Theorem stmt_assign_base_popped_keys_indexed:
   !cx bt e env ret_ty env' st res st'.
     type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) /\
     eval_stmt cx (Assign (BaseTarget bt) e) st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes
@@ -359,7 +363,7 @@ QED
 Theorem stmt_append_popped_keys_indexed:
   !cx bt e env ret_ty env' st res st'.
     type_stmt env ret_ty (Append bt e) = SOME env' /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
     eval_stmt cx (Append bt e) st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes
@@ -383,7 +387,7 @@ QED
 Theorem stmt_augassign_popped_keys_indexed:
   !cx ty bt bop e env ret_ty env' st res st'.
     type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty bt bop e)) /\
     eval_stmt cx (AugAssign ty bt bop e) st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes
@@ -406,7 +410,7 @@ QED
 Theorem stmt_assign_tuple_popped_keys_indexed:
   !cx gs e env ret_ty env' st res st'.
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     eval_stmt cx (Assign (TupleTarget gs) e) st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes
@@ -425,6 +429,8 @@ Proof
     simp[bind_def] >>
   drule_all eval_expr_read_type_sound >> strip_tac >> gvs[] >>
   drule_all (cj 1 (cj 5 eval_scc_type_sound_mutual)) >> strip_tac >> gvs[] >>
+  `source_supply middle` by
+    metis_tac[source_supply_action_result, cj 5 eval_source_supply_mutual] >>
   irule (cj 1 assign_tuple_popped_keys_indexed) >>
   goal_assum (drule_at (Pat `assign_tuple_targets _ _ _ _ = _`)) >>
   simp[runtime_consistent_def] >> metis_tac[]
@@ -451,7 +457,7 @@ Theorem typed_loop_bracket_runtime[local]:
   evaluate_type env.type_defs ty = SOME tyv /\ value_has_type tyv v /\
   id NOTIN FDOM env.var_types /\
   type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-  runtime_consistent env cx st /\ functions_well_typed cx /\
+  runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_stmts body) /\
   push_scope_with_var id tyv v st = (INL (),stp) /\
   finally (try (do eval_stmts cx body; return F od) handle_loop_exception)
@@ -474,13 +480,13 @@ QED
 Theorem eval_statement_loop_popped_keys_mutual[local]:
   (!cx s env ret_ty env' st res st'.
      type_stmt env ret_ty s = SOME env' /\
-     runtime_consistent env cx st /\ functions_well_typed cx /\
+     runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmt s) /\
      eval_stmt cx s st = (res,st') /\
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!cx ss env ret_ty env' st res st'.
      type_stmts env ret_ty ss = SOME env' /\
-     runtime_consistent env cx st /\ functions_well_typed cx /\
+     runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmts ss) /\
      eval_stmts cx ss st = (res,st') /\
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
@@ -489,7 +495,7 @@ Theorem eval_statement_loop_popped_keys_mutual[local]:
     evaluate_type env.type_defs ty = SOME tyv /\ EVERY (value_has_type tyv) vs /\
     id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
-    runtime_consistent env cx st /\ functions_well_typed cx /\
+    runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body) /\
     eval_for cx tyv id body vs st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
@@ -556,6 +562,8 @@ Resume eval_statement_loop_popped_keys_mutual[cons]:
   `runtime_consistent middle_env cx s''` by
     (fs[runtime_consistent_def] >>
      drule_all (cj 1 eval_scc_type_sound_mutual) >> simp[]) >>
+  `source_supply s''` by
+    metis_tac[source_supply_action_result, cj 1 eval_source_supply_mutual] >>
   qpat_x_assum `!s t. eval_stmt _ _ _ = _ ==> _` drule >>
   disch_then drule_all >> simp[]
 QED
@@ -579,6 +587,10 @@ Resume eval_statement_loop_popped_keys_mutual[if]:
      imp_res_tac push_scope_env_consistent >>
      imp_res_tac push_scope_preserves_state_well_typed >>
      metis_tac[push_scope_def, return_def]) >>
+  `source_supply middle` by
+    metis_tac[source_supply_action_result, cj 5 eval_source_supply_mutual] >>
+  `source_supply pushed` by
+    gvs[push_scope_def, return_def] >>
   qpat_x_assum `!s tv t s' t'. _`
     (qspecl_then [`st`,`tv`,`middle`,`middle`,`pushed`] mp_tac) >>
   asm_rewrite_tac[] >> strip_tac >>
@@ -628,6 +640,8 @@ Resume eval_statement_loop_popped_keys_mutual[for]:
   gvs[] >>
   Cases_on `type_stmts (extend_local env id typ F) ret_ty body'` >- fs[] >>
   rename1 `eval_iterator cx it start = (INL vs,middle)` >>
+  `source_supply middle` by
+    metis_tac[source_supply_action_result, cj 3 eval_source_supply_mutual] >>
   qpat_x_assum `!s vs t s' t'. _`
     (qspecl_then [`start`,`vs`,`middle`,`middle`,`middle`] mp_tac) >>
   simp[check_def, assert_def, return_def] >> strip_tac >>
@@ -644,6 +658,8 @@ Resume eval_statement_loop_popped_keys_mutual[loop]:
   strip_tac >> gvs[] >>
   `runtime_consistent (extend_local env id ty F) cx pushed` by
     (irule typed_loop_push_runtime >> metis_tac[]) >>
+  `source_supply pushed` by
+    simp[Abbr `pushed`] >>
   `popped_keys_indexed pushed.scopes` by
     metis_tac[push_scope_with_var_popped_keys_indexed] >>
   qpat_x_assum `!s x t. _` drule >> strip_tac >>
@@ -660,6 +676,18 @@ Resume eval_statement_loop_popped_keys_mutual[loop]:
      qpat_x_assum `!env ret env' st res st'. _` (drule_all_then assume_tac) >>
      irule pop_scope_popped_keys_indexed >>
      goal_assum (drule_at Any) >> simp[]) >>
+  `source_supply after` by
+    (irule (INST_TYPE [alpha |-> ``:bool``] source_supply_action_result) >>
+     qexistsl [`finally
+       (try (do eval_stmts cx body'; return F od) handle_loop_exception)
+       pop_scope`, `bracket_res`, `pushed`] >>
+     simp[ignore_bind_def] >>
+     irule source_supply_action_finally >>
+     simp[cj 4 source_supply_field_updates] >>
+     irule source_supply_action_try >>
+     simp[cj 1 source_supply_handlers] >>
+     irule source_supply_action_bind_simple >>
+     simp[cj 2 eval_source_supply_mutual, source_supply_action_return]) >>
   Cases_on `broke` >- gvs[return_def] >>
   gvs[Abbr `bracket_res`, ignore_bind_def] >>
   qpat_x_assum `!s t env ret ty env_after st res st'. _`
@@ -670,13 +698,13 @@ Finalise eval_statement_loop_popped_keys_mutual
 Theorem eval_statement_loop_popped_keys_indexed:
   (!cx s env ret_ty env' st res st'.
      type_stmt env ret_ty s = SOME env' /\
-     runtime_consistent env cx st /\ functions_well_typed cx /\
+     runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmt s) /\
      eval_stmt cx s st = (res,st') /\
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!cx ss env ret_ty env' st res st'.
      type_stmts env ret_ty ss = SOME env' /\
-     runtime_consistent env cx st /\ functions_well_typed cx /\
+     runtime_consistent env cx st /\ source_supply st /\ functions_well_typed cx /\
      call_evaluation_safe cx (int_calls_stmts ss) /\
      eval_stmts cx ss st = (res,st') /\
      popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes)

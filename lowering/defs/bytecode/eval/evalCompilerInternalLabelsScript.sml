@@ -15,7 +15,7 @@
               p70_int_name_reachable_supported,
               p71_int_name_return_label_supported. *)
 Theory evalCompilerInternalLabels
-Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
+Ancestors compileVyper supportedProgram supportedDecls supportedNames concretizeMemLocDefs codegenReadyCompute alist byte integer_word option list
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -25,6 +25,52 @@ val () = computeLib.upd_compset add_finite_map_compset
 val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../internal-labels/oracle"
+
+(* Check whitelist admission before the more expensive bytecode evaluations.
+   Split its independent obligations to stay within the tactic budget. *)
+Theorem p69_int_name_code_end_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p69_int_name_code_end")
+Proof
+  simp[supported_program_def, supported_declaration_headers_def,
+       supported_function_header_contract, supported_declaration_body_def,
+       supported_function_body_def, supported_declaration_names_def,
+       supported_selectors_distinct_def, classify_functions_def,
+       classify_function_def, build_selectors_def] >> rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem p87_int_name_revert_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p87_int_name_revert")
+Proof
+  simp[supported_program_def, supported_declaration_headers_def,
+       supported_function_header_contract, supported_declaration_body_def,
+       supported_function_body_def, supported_declaration_names_def,
+       supported_selectors_distinct_def, classify_functions_def,
+       classify_function_def, build_selectors_def] >> rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem p70_int_name_reachable_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p70_int_name_reachable")
+Proof
+  simp[supported_program_def, supported_declaration_headers_def,
+       supported_function_header_contract, supported_declaration_body_def,
+       supported_function_body_def, supported_declaration_names_def,
+       supported_selectors_distinct_def, classify_functions_def,
+       classify_function_def, build_selectors_def] >> rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem p71_int_name_return_label_supported:
+  supported_program
+    ^(memoryStoreWitnessLib.program fixture_root "p71_int_name_return_label")
+Proof
+  simp[supported_program_def, supported_declaration_headers_def,
+       supported_function_header_contract, supported_declaration_body_def,
+       supported_function_body_def, supported_declaration_names_def,
+       supported_selectors_distinct_def, classify_functions_def,
+       classify_function_def, build_selectors_def] >> rpt conj_tac >> EVAL_TAC
+QED
 
 (* a05-07: an internal function named code_end is not the codegen data-section
    label: the call returns y + 1 instead of jumping to the end of the
@@ -116,36 +162,4 @@ Theorem p71_int_name_return_label_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "p71_int_name_return_label")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation p71_int_name_return_label))) >> EVAL_TAC
-QED
-
-(* The whitelist no longer excludes internal names that equal codegen
-   labels. *)
-Theorem p69_int_name_code_end_supported:
-  supported_program
-    ^(memoryStoreWitnessLib.program fixture_root "p69_int_name_code_end")
-Proof
-  EVAL_TAC
-QED
-
-Theorem p87_int_name_revert_supported:
-  supported_program
-    ^(memoryStoreWitnessLib.program fixture_root "p87_int_name_revert")
-Proof
-  EVAL_TAC
-QED
-
-(* The whitelist no longer excludes the reachable_ and return_label_
-   prefixes. *)
-Theorem p70_int_name_reachable_supported:
-  supported_program
-    ^(memoryStoreWitnessLib.program fixture_root "p70_int_name_reachable")
-Proof
-  EVAL_TAC
-QED
-
-Theorem p71_int_name_return_label_supported:
-  supported_program
-    ^(memoryStoreWitnessLib.program fixture_root "p71_int_name_return_label")
-Proof
-  EVAL_TAC
 QED

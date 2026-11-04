@@ -1,14 +1,12 @@
 (*
  * Properties of accounts_rel (#665): the state_rel component that relates
  * every address's accounts and transient storage. The running contract's
- * storage and transient storage agree
- * only on their live bytes (#637); everything else is equal.
+ * storage and transient storage agree on their live bytes; both sides may
+ * accumulate pending deletions before outer finalization.
  *
  * TOP-LEVEL:
- *   state_rel_accounts      — state_rel gives the agreement of the
- *                             accounts and transient storage that the
- *                             success case of the external result relation
- *                             asks for
+ *   state_rel_accounts      — state_rel gives agreement of raw accounts and
+ *                             transient storage before outer finalization
  *   accounts_rel_set_storage, accounts_rel_set_transient — a write of the
  *                             running contract's storage or transient
  *                             storage on both sides keeps accounts_rel
@@ -303,9 +301,8 @@ Proof
   simp[call_outcome_component_equality]
 QED
 
-(* Venom adopts an outcome with adopt_outcome on its accounts, transient
-   storage and logs (consume_call_outcome), as the source does; the two
-   outcomes and requests agree as take_outcome_agree gives. *)
+(* Both sides adopt the agreed outcome. Pending lists may grow before
+   outer finalization. *)
 Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
     accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
@@ -316,7 +313,8 @@ Theorem accounts_rel_adopt_call_outcome:
     accounts_agree cx outcome.co_accounts outcome'.co_accounts /\
     transient_agree cx outcome.co_tStorage outcome'.co_tStorage /\
     s'.vs_accounts =
-      FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
+      FST (adopt_outcome rq' outcome'
+             (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
                   (s.vs_accounts, s.vs_transient, logs))) ==>

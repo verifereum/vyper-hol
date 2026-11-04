@@ -109,7 +109,7 @@ QED
 (* A statement's expression meets expr_body_pre. *)
 Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\

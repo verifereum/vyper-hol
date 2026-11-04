@@ -131,14 +131,10 @@ Theorem materialize_internal_params_bound[local]:
     FLOOKUP cenv'.ce_vars n = SOME l ==>
     (?l0. FLOOKUP cenv.ce_vars n = SOME l0) \/ MEM n (MAP FST caps)
 Proof
-  Induct >- simp[materialize_internal_params_def, comp_return_def] >>
-  qx_gen_tac `p` >> PairCases_on `p` >> rename1 `(nm,is_stack,op)::caps` >>
-  rpt gen_tac >> simp[Once materialize_internal_params_def] >>
-  Cases_on `is_stack` >> simp[LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[]
+  rpt strip_tac >> Cases_on `MEM n (MAP FST caps)` >> simp[] >>
+  drule materialize_internal_params_shape >> strip_tac >>
+  `FLOOKUP cenv'.ce_vars n = FLOOKUP cenv.ce_vars n` by metis_tac[] >>
+  qexists_tac `l` >> gvs[]
 QED
 
 Theorem internal_entry_declared:

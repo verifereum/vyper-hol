@@ -21,6 +21,7 @@ Ancestors
   vyperTypeExprSoundness vyperTypeInitialState vyperTypeEntryReadiness
   vyperTypeContract vyperTypeContractSoundness
   vyperTypeSelectedEntry vyperTypeEntryDefaults
+  vyperSourceSupplyFields
 
 val _ = Parse.hide "body";
 
@@ -60,6 +61,9 @@ Definition call_external_body_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st,
+            st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs)
 End
@@ -98,6 +102,8 @@ Theorem call_external_selected_entry_body:
   call_external orc gobs am tx =
     case call_external_body am cx nr mut (type_env_all_modules mods) st2 scope body ret of
       (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+     | (INR HaltException, am', rqs) =>
+         (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
   strip_tac >>
@@ -110,7 +116,7 @@ QED
 Theorem checked_selected_entry_no_static_error:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
-  machine_well_typed am /\ call_tx_well_typed tx /\
+  machine_well_typed am /\ machine_supply am orc /\ call_tx_well_typed tx /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   src = find_function_module am tx.target tx.function_name /\
   cx = initial_evaluation_context am.sources am.layouts tx src /\

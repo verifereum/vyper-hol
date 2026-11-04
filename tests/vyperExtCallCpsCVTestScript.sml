@@ -61,13 +61,14 @@ Definition cpscv_snapshot_def:
     lookup_storage 1w (lookup_account 11w st.accounts).storage = 0w /\
     lookup_storage 1w (vfmExecution$lookup_transient_storage 11w st.tStorage) = slot /\
     st.logs = logs /\ st.scopes = [FEMPTY] /\ st.immutables = [(11w,[])] /\
+    st.pending_deletions = [] /\
     MAP (λrq. (rq.cr_target,rq.cr_value,rq.cr_data,rq.cr_static,
       (lookup_account 11w rq.cr_accounts).balance,
       lookup_storage 1w (vfmExecution$lookup_transient_storage 11w rq.cr_tStorage)))
       st.requests = rq_fields /\
     OPTION_MAP (MAP (λco. (co.co_success,co.co_returnData,
       (lookup_account 11w co.co_accounts).balance,
-      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),co.co_logs)))
+      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),co.co_logs,co.co_toDelete)))
       st.outcomes = remaining
 End
 val () = cv_auto_trans cpscv_snapshot_def;
@@ -102,12 +103,12 @@ End
 val () = cv_auto_trans cpscv_adopted_logs_def;
 
 Definition cpscv_tail_def:
-  cpscv_tail = cpscv_outcome T [99w] 23
+  cpscv_tail = cpscv_outcome T [99w] 23 with co_toDelete := [31w]
 End
 val () = cv_auto_trans cpscv_tail_def;
 
 Definition cpscv_tail_snapshot_def:
-  cpscv_tail_snapshot = SOME [(T,[99w:word8],23:num,8w:256 word,[<|logger := 11w; topics := [1w]; data := [8w]|>])]
+  cpscv_tail_snapshot = SOME [(T,[99w:word8],23:num,8w:256 word,[<|logger := 11w; topics := [1w]; data := [8w]|>],[31w:address])]
 End
 val () = cv_auto_trans cpscv_tail_snapshot_def;
 
@@ -200,8 +201,8 @@ QED
 (* The whole queue is retained when eager operand evaluation fails. *)
 Definition cpscv_head_snapshot_def:
   cpscv_head_snapshot success data balance = SOME
-    [(success,data,balance,8w:256 word,[<|logger := 11w; topics := [1w]; data := [8w]|>]);
-     (T,[99w:word8],23,8w,[<|logger := 11w; topics := [1w]; data := [8w]|>])]
+    [(success,data,balance,8w:256 word,[<|logger := 11w; topics := [1w]; data := [8w]|>],[]:address list);
+     (T,[99w:word8],23,8w,[<|logger := 11w; topics := [1w]; data := [8w]|>],[31w:address])]
 End
 val () = cv_auto_trans cpscv_head_snapshot_def;
 
@@ -364,6 +365,17 @@ val () = cv_auto_trans cpscv_computed_observations_def;
    records no request. *)
 Theorem cpscv_computed_consumes_no_request:
   cpscv_computed_observations
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem cpscv_NONE_concrete_code_failure:
+  cpscv_observe T 9w NoneT NONE NONE
+    (INR (Error (RuntimeError "ExtCall target has no code")))
+    3 4w cpscv_initial_logs cpscv_initial_requests NONE /\
+  cpscv_observe F 9w NoneT NONE NONE
+    (INR (Error (RuntimeError "ExtCall target has no code")))
+    3 4w cpscv_initial_logs cpscv_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED

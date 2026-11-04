@@ -18,7 +18,7 @@ Ancestors
   vyperAST vyperValue vyperTyping vyperState vyperInterpreter vyperContext
   vyperTypeSystem vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeInitialState vyperTypeEvalSoundness vyperTypeExprResult vyperTypeValues
-  vyperTypeBindArguments
+  vyperTypeBindArguments vyperSourceSupplyFields
 
 (* ===== Deployment Constant Readiness ===== *)
 
@@ -156,6 +156,7 @@ End
 
 (* Stateful defaults reuse the sequential expression-list soundness interface. *)
 Theorem eval_external_defaults_success_typed:
+  source_supply st /\
   well_typed_exprs env es /\
   env_consistent env cx (st with scopes := [FEMPTY]) /\
   state_well_typed (st with scopes := [FEMPTY]) /\
@@ -169,6 +170,7 @@ Proof
   gvs[eval_external_defaults_run] >>
   Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >> gvs[] >>
   `accounts_well_typed (st with scopes := [FEMPTY]).accounts` by simp[] >>
+  `source_supply (st with scopes := [FEMPTY])` by simp[] >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >> simp[]
 QED
 
@@ -183,6 +185,7 @@ Proof
 QED
 
 Theorem checked_defaults_ready_values_typed:
+  source_supply st /\
   checked_defaults_ready cx am args dflts vals /\
   well_typed_exprs env
     (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts) /\
@@ -263,6 +266,7 @@ Proof
 QED
 
 Theorem checked_call_inputs_ready_bind_arguments:
+  source_supply st /\
   checked_call_inputs_ready tenv cx am params dflts vals /\
   env.type_defs = tenv /\
   well_typed_exprs env

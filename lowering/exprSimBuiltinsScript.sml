@@ -203,12 +203,33 @@ Theorem compile_ceil_case:
 Proof
   rpt gen_tac >> disch_tac >>
   rewrite_tac[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
-  irule ceil_ready_vv_sim >> qexists_tac `env` >> simp[] >>
-  gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
-  rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[expr_body_pre_builtin_arg]
-  >- metis_tac[int_calls_builtin_arg] >>
-  drule ceil_operand_types >> simp[EVERY_MEM]
+  `!arg_ty. wb_args_ready ctx func cenv cx arg_ty
+     (\s. expr_sim_inv cenv cx env s /\ source_supply s) args` by
+    (gen_tac >> irule wb_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
+     rpt gen_tac >> strip_tac >> rpt conj_tac
+     >- metis_tac[expr_body_pre_builtin_arg]
+     >- metis_tac[int_calls_builtin_arg] >>
+     drule ceil_operand_types >> simp[EVERY_MEM]) >>
+  `well_typed_builtin_app ann Ceil (MAP expr_type args)` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[well_typed_builtin_app_def, MAP_EQ_CONS, LENGTH_EQ_NUM_compute] >>
+  rename1 `expr_type e = BaseT DecimalT` >>
+  `expr_sim ctx func cenv cx ty (Builtin (BaseT (IntT 256)) Ceil [e]) es` by
+    (irule compile_typed_word_builtin_sim >>
+     simp[is_word_type_def, builtin_args_length_ok_def, word_value_type_def] >>
+     qexistsl_tac [`\e. ty`, `(\xs. compile_ceil (EL 0 xs) 10000000000)`, `env`] >>
+     simp[straight_fresh_ceil] >> conj_tac
+     >- (rpt strip_tac >> drule lower_value_ceil >> strip_tac >>
+         qexistsl_tac [`[x]`, `s1`] >>
+         simp[lower_word_args_def, comp_bind_def, comp_return_def]) >>
+     rpt strip_tac >>
+     gvs[LIST_REL_CONS1, vyperValueTheory.evaluate_type_def] >>
+     Cases_on `v` >> gvs[value_has_type_def] >>
+     mp_tac compile_ceil_word_frag >> simp[] >> disch_then irule >> simp[]) >>
+  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- (gen_tac >> Cases_on `compile_expr cenv ty (Builtin (BaseT (IntT 256)) Ceil [e]) sa` >>
+      drule compile_ceil_stack >> metis_tac[]) >>
+  metis_tac[eval_expr_builtin_value]
 QED
 
 Theorem compile_addmod_names_sim:

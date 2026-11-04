@@ -4,7 +4,7 @@
  *   external_call_dead_wf (external_call_dead is in vyperLoweringCorrect),
  *   external_call_result_rel_dead_transport — the source result's dead
  *   bytes, and the source relation's transport up to them.
- * Requests are compared only on success; abort kinds/data are not equated.
+ * Requests are compared on return and halt; abort transport retains revert kind.
  *)
 Theory e2eComposition
 Ancestors
@@ -197,13 +197,27 @@ Proof
   >> metis_tac[transient_agree_dead_trans]
 QED
 
+Theorem requests_agree_dead_trans[local]:
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  LIST_REL (request_agree cx) rs0 rs1 /\
+  LIST_REL (request_agree_except (external_call_dead tx (res, am', rqs))) rs1 rs2 ==>
+  LIST_REL (request_agree cx) rs0 rs2
+Proof
+  qid_spec_tac `rs2` >> qid_spec_tac `rs1` >>
+  Induct_on `rs0` >> Cases_on `rs1` >> Cases_on `rs2` >>
+  simp[] >> metis_tac[request_agree_dead_trans]
+QED
+
 Theorem external_call_result_rel_abort_transport[local]:
   external_call_result_rel tops ret tx src (Abort a ss) /\
   (a = Revert_abort ==> a' = Revert_abort) ==>
   external_call_result_rel tops ret tx src (Abort a' ss')
 Proof
   PairCases_on `src` >> Cases_on `a` >> Cases_on `a'` >>
-  simp[external_call_result_rel_def] >> rpt CASE_TAC >> simp[]
+  namedCases_on `src0` ["value", "ex"] >>
+  simp[external_call_result_rel_def] >> Cases_on `ex` >> simp[] >>
+  rename1 `case err of RuntimeError _ => _ | _ => _` >>
+  Cases_on `err` >> simp[]
 QED
 
 (* The source relation holds of every run that matches one it holds of up
@@ -213,21 +227,26 @@ Theorem external_call_result_rel_dead_transport:
   dead_result_rel (external_call_dead tx src) res res' ==>
   external_call_result_rel tops ret tx src res'
 Proof
-  PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
-  simp[dead_result_rel_def] >> rpt strip_tac >>
-  TRY (drule_all external_call_result_rel_abort_transport >> simp[] >>
-       NO_TAC) >>
-  Cases_on `src0` >> gvs[external_call_result_rel_def, AllCaseEqs()] >>
-  qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
-  `v'.vs_returndata = v.vs_returndata` by
-    (irule LIST_EQ >> gvs[external_call_dead_def]) >>
-  rpt conj_tac
-  >- gvs[]
-  >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
-      metis_tac[accounts_agree_except_process_deletions])
-  >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
-  gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
-  irule request_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]
+  let
+    val observables =
+      qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
+      `v'.vs_returndata = v.vs_returndata` by
+        (irule LIST_EQ >> gvs[external_call_dead_def]) >>
+      gvs[] >> rpt conj_tac
+      >- (irule accounts_agree_dead_trans >> simp[Abbr`cx`] >>
+          metis_tac[accounts_agree_except_process_deletions])
+      >- (irule transient_agree_dead_trans >> simp[Abbr`cx`] >> metis_tac[]) >>
+      drule_at (Pat `LIST_REL (request_agree_except _) _ _`)
+        requests_agree_dead_trans >>
+      simp[Abbr`cx`] >> disch_then drule >> simp[]
+  in
+    PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
+    simp[dead_result_rel_def] >> rpt strip_tac
+    >- (namedCases_on `src0` ["value", "ex"]
+        >- (gvs[external_call_result_rel_def] >> observables) >>
+        Cases_on `ex` >> gvs[external_call_result_rel_def] >> observables) >>
+    drule_all external_call_result_rel_abort_transport >> simp[]
+  end
 QED
 
 Theorem external_call_result_rel_terminal:
@@ -252,7 +271,12 @@ Proof
   PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
   gvs[unit_result_rel_def, external_call_result_rel_def, AllCaseEqs(),
       observable_equiv_def] >>
-  rpt CASE_TAC >> rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >>
+  rename1 `abort_before = Revert_abort ==> abort_after = Revert_abort` >>
+  namedCases_on `src0` ["v", "exc"] >> gvs[] >>
+  namedCases_on `exc` ["err", "s", "", "", "v", ""] >> gvs[]
+  >- (Cases_on `err` >> gvs[] >> Cases_on `abort_before` >> gvs[]) >>
+  Cases_on `abort_before` >> Cases_on `abort_after` >> gvs[]
 QED
 
 (* ===== Frame composition, separated by semantic outcome ===== *)
@@ -299,6 +323,19 @@ Proof
   simp[] >> Cases_on `a` >> gvs[external_call_result_rel_def]
 QED
 
+Theorem external_call_result_rel_frame_halt:
+  call_external (SOME (MAP SND (call_trace es))) [] am tx =
+    (INR HaltException, am', rqs) /\
+  external_call_result_rel tops ret tx
+    (INR HaltException, am', rqs) (Halt ss) /\
+  venom_frame_rel es r es' (Halt ss) ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  simp[external_call_result_rel_def, venom_frame_rel_def,
+       call_result_rel_def, LET_THM] >>
+  rpt strip_tac >> qexists_tac `ss.vs_logs` >> gvs[]
+QED
+
 Theorem external_call_result_rel_frame_runtime:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (Error (RuntimeError m)), am', rqs) /\
@@ -316,10 +353,11 @@ Theorem external_call_result_rel_frame_error:
   venom_frame_rel es r es' res ==>
   call_result_rel tops ret am tx es r es'
 Proof
-  rpt strip_tac >> Cases_on `res` >>
+  rpt strip_tac >> Cases_on `e` >> Cases_on `res` >>
   gvs[external_call_result_rel_def, call_result_rel_def, LET_THM,
       AllCaseEqs()] >>
-  drule venom_frame_rel_abort_failure >> simp[]
+  FIRST [gvs[venom_frame_rel_def] >> NO_TAC,
+         drule venom_frame_rel_abort_failure >> simp[]]
 QED
 
 (* Covers all source constructors; escaped control exceptions have no row.
@@ -343,5 +381,6 @@ Proof
   FIRST [drule_all external_call_result_rel_frame_error >> simp[],
          Cases_on `res` >>
          FIRST [drule_all external_call_result_rel_frame_assertion >> simp[],
+                drule_all external_call_result_rel_frame_halt >> simp[],
                 gvs[external_call_result_rel_def]]]
 QED

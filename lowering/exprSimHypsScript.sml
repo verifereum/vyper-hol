@@ -239,7 +239,8 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
-  vyperExprNoControl loweringSlice exprSimUnwrap exprSafeOperand
+  vyperExprNoControl vyperSourceSupplyDefs vyperEvalSupply
+  loweringSlice exprSimUnwrap exprSafeOperand
   vyperEvalOutcomeSuffix vyperRuntimeAccounts
   vyperStorageLayoutSafety vyperTypeStoragePreservation
   vyperTypeEvalStoragePreservation vyperCallOutcomeStorage
@@ -406,7 +407,7 @@ End
 
 Definition expr_sim_pre_def:
   expr_sim_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e
@@ -419,7 +420,7 @@ End
    (bodyStoragePreservation). *)
 Definition expr_body_pre_def:
   expr_body_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     EVERY (\c. FST c = NONE /\
@@ -747,7 +748,7 @@ QED
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
@@ -758,6 +759,10 @@ Proof
      gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
   qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
   simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+  `source_supply es'` by
+    (qspecl_then [`cx`, `e`, `es`] mp_tac
+       (REWRITE_RULE [source_supply_action_def] (cj 5 eval_source_supply_mutual)) >>
+     simp[]) >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
     (cj 5 eval_scc_type_sound_mutual) >>
@@ -777,7 +782,7 @@ QED
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
@@ -787,7 +792,7 @@ QED
 Theorem expr_body_pre_eval:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   rpt strip_tac >>
@@ -807,7 +812,7 @@ QED
 Theorem expr_sim_pre_eval:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   metis_tac[expr_body_pre_eval, expr_sim_pre_body_pre]
@@ -880,7 +885,7 @@ Theorem expr_body_pre_word_result:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -900,7 +905,7 @@ Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
     expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -939,7 +944,7 @@ QED
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
+    expr_sim_inv cenv cx env es' /\ source_supply es' ==>
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
@@ -981,7 +986,7 @@ QED
 Theorem expr_body_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
+    expr_sim_inv cenv cx env es' /\ source_supply es' ==>
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
@@ -1317,7 +1322,7 @@ QED
 
 Theorem type_builtin_read_annotation_typed:
   !cenv cx env es es' ty ty' tb target args v.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv cenv cx env es /\ source_supply es /\
     well_typed_expr env (TypeBuiltin ty' tb target args) /\
     call_evaluation_safe cx (int_calls_expr (TypeBuiltin ty tb target args)) /\
     (do r <- eval_expr cx (TypeBuiltin ty tb target args);
@@ -1452,6 +1457,7 @@ Proof
       metis_tac[])
   >> (strip_tac >>
       drule expr_body_pre_read_type_sound_pre >> strip_tac >>
+      `source_supply es` by fs[expr_body_pre_def] >>
       drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
       disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
       irule value_runtime_typed_zero_bytestring_empty >>

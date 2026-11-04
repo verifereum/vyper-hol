@@ -9,9 +9,17 @@ Ancestors
   vyperTypeBindArguments vyperContext vyperTyping vyperTypeSystem
   vyperTypeStmtResult vyperTypeEnvExtension
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeCallStackSoundness
-  alist rich_list
+  alist rich_list vyperSourceSupplyDefs vyperSourceSupplyFields vyperEvalSupply
+Libs
+  vyperSourceSupplyLib
 
 val _ = Parse.hide "body";
+
+val defaults_gvs = gvs;
+val defaults_drule_all = drule_all;
+fun gvs ths = vyperSourceSupplyLib.forward >> defaults_gvs ths >>
+  vyperSourceSupplyLib.forward;
+fun drule_all th = vyperSourceSupplyLib.forward >> defaults_drule_all th;
 
 (* Transport readiness using lookup domains and stored type tags, not values. *)
 Theorem immutables_ready_preserved_by_frame:
@@ -79,6 +87,7 @@ Proof
 QED
 
 Theorem eval_external_defaults_type_sound:
+  source_supply st /\
   well_typed_exprs env es /\
   env_consistent env cx (st with scopes := [FEMPTY]) /\
   state_well_typed st /\
@@ -95,6 +104,7 @@ Proof
   Cases_on `eval_exprs cx es (st with scopes := [FEMPTY])` >>
   simp[] >> strip_tac >> gvs[] >>
   `accounts_well_typed (st with scopes := [FEMPTY]).accounts` by simp[] >>
+  `source_supply (st with scopes := [FEMPTY])` by simp[] >>
   drule_all (cj 1 (SPEC_ALL (cj 6 eval_scc_type_sound_mutual))) >>
   strip_tac >>
   Cases_on `q` >> gvs[state_well_typed_def] >>
@@ -249,8 +259,15 @@ Theorem external_call_result_success_cases:
     am_out = abstract_machine_from_state srcs exps layouts st_unlocked /\
     rqs = st_unlocked.requests
 Proof
-  PairCases_on `body_res` >> Cases_on `body_res0` >> gvs[] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >> metis_tac[]
+  PairCases_on `body_res` >> namedCases_on `body_res0` ["ok", "exc"] >> gvs[]
+  >- (Cases_on `unlock body_res1` >> rename1 `unlock body_res1 = (ur,us)` >>
+      namedCases_on `ur` ["unlock_unit", "unlock_exc"] >> gvs[] >>
+      Cases_on `unlock_unit` >> gvs[]) >>
+  Cases_on `exc` >> gvs[] >>
+  Cases_on `unlock body_res1` >> rename1 `unlock body_res1 = (ur,us)` >>
+  namedCases_on `ur` ["u", "err"] >> gvs[] >>
+  Cases_on `evaluate_type tenv ret` >> gvs[] >>
+  BasicProvers.TOP_CASE_TAC >> gvs[]
 QED
 
 Theorem call_external_function_success_phases:
@@ -287,12 +304,34 @@ Proof
   IF_CASES_TAC >> simp[] >>
   Cases_on `if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods else SOME am` >>
   simp[] >> strip_tac >>
-  drule external_call_result_success_cases >> strip_tac >>
-  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` kall_tac >>
-  drule external_entry_success_phases >> simp[] >> strip_tac >>
-  qexistsl [`s1`, `dflt_vs`, `s2`, `env`, `res`, `st_body`, `st_unlocked`] >>
-  simp[]
+  qmatch_asmsub_abbrev_tac `pair_CASE entry` >>
+  PairCases_on `entry` >>
+  namedCases_on `entry0` ["u", "exc"]
+  >- suspend "normal_success"
+  >> Cases_on `exc` >> gvs[] >> suspend "return_success"
 QED
+
+Resume call_external_function_success_phases[normal_success]:
+  gvs[] >>
+  qmatch_asmsub_abbrev_tac `pair_CASE unlocked` >>
+  PairCases_on `unlocked` >> namedCases_on `unlocked0` ["u", "err"] >> gvs[] >>
+  drule external_entry_success_phases >> simp[] >> strip_tac >>
+  qexistsl [`s1`, `dflt_vs`, `s2`, `env`, `INL ()`, `entry1`, `unlocked1`] >>
+  gvs[markerTheory.Abbrev_def]
+QED
+
+Resume call_external_function_success_phases[return_success]:
+  qmatch_asmsub_abbrev_tac `pair_CASE unlocked` >>
+  PairCases_on `unlocked` >> namedCases_on `unlocked0` ["u", "err"] >> gvs[] >>
+  Cases_on `evaluate_type (type_env_all_modules mods) ret` >> gvs[] >>
+  rename1 `safe_cast return_ty return_value` >>
+  Cases_on `safe_cast return_ty return_value` >> gvs[] >>
+  drule external_entry_success_phases >> simp[] >> strip_tac >>
+  qexistsl [`s1`, `dflt_vs`, `s2`, `env`, `INR (ReturnException return_value)`,
+            `entry1`, `unlocked1`] >> simp[]
+QED
+
+Finalise call_external_function_success_phases
 
 Theorem eval_external_defaults_preserves_tv:
   eval_external_defaults cx es st = (res,rt) ==> preserves_tv cx st rt
@@ -305,6 +344,7 @@ Proof
 QED
 
 Theorem checked_explicit_external_current_body_sound:
+  source_supply st /\
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\

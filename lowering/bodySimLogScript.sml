@@ -105,7 +105,7 @@ QED
 (* ===== The arguments ===== *)
 
 (* A supported pure argument meets expr_body_pre wherever expr_sim_inv
-   holds: it makes no internal call and runs no EVM code. *)
+   and source_supply hold: it makes no internal call and runs no EVM code. *)
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
     body_inv tops ctx cenv cx /\ supported_pure_expr tops e /\
@@ -113,7 +113,7 @@ Theorem log_arg_body_pre[local]:
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    expr_sim_inv cenv cx env es ==>
+    expr_sim_inv cenv cx env es /\ source_supply es ==>
     expr_body_pre cenv cx env e es
 Proof
   rpt strip_tac >>
@@ -124,8 +124,8 @@ Proof
 QED
 
 (* The arguments of a supported log are pure, so each meets expr_body_pre
-   wherever expr_sim_inv holds, and its evaluation keeps expr_sim_inv and
-   types its value (expr_body_pre_eval). *)
+   wherever expr_sim_inv and source_supply hold, and its evaluation
+   preserves them and types its value (expr_body_pre_eval). *)
 Theorem body_log_args_ready:
   !tops ctx func cenv cx env args.
     body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
@@ -133,7 +133,7 @@ Theorem body_log_args_ready:
     ~supported_exprs_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
     call_evaluation_safe cx (int_calls_exprs args) ==>
-    log_args_ready ctx func cenv cx (\es. expr_sim_inv cenv cx env es) args
+    log_args_ready ctx func cenv cx (\es. expr_sim_inv cenv cx env es /\ source_supply es) args
 Proof
   Induct_on `args` >> simp[log_args_ready_def] >>
   rpt gen_tac >> strip_tac >>
@@ -185,7 +185,7 @@ Proof
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
       simp[]) >>
-  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
+  qexists_tac `\s. expr_sim_inv cenv cx env s /\ source_supply s` >> simp[] >>
   irule body_log_args_ready >>
   gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>

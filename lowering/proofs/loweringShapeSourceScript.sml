@@ -1,7 +1,7 @@
 (* S2 from the type checker: a checked contract lowers to an O1 source unit
-   once it avoids msg.gas as a value, raw_call and creation. The checker allows these;
+   once it avoids msg.gas as a value, raw_call, selfdestruct and creation. The checker allows these;
    the unit shape rejects msg.gas values and delegate or calldata raw_call,
-   and the body-shape proof has no case for plain raw_call or creation yet.
+   selfdestruct and creation; the body-shape proof has no case for plain raw_call yet.
    TOP-LEVEL: lower_vyper_runtime_unit_source_unit_ok_checked,
    supported_program_raw_shape_free_program,
    supported_names_internal_names_distinct. *)
@@ -13,13 +13,14 @@ Ancestors
 
 (* The shape roots the type checker doesn't exclude: expr_shape_root less its
    builtin arity cases. The unit shape rejects msg.gas as a value, creation,
-   delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
+   selfdestruct, delegate raw_call (DELEGATECALL) and the calldata form (DALLOCA); a plain
    raw_call passes it, but the body-shape proof has no case for it yet. *)
 Definition expr_raw_shape_root_def:
   expr_raw_shape_root e <=>
     (?ty es. e = Builtin ty (Env MsgGas) es) \/
     (?ty flags es d. e = Call ty (RawCallTarget flags) es d) \/
     (?ty flags es d. e = Call ty (RawCallCalldataTarget flags) es d) \/
+    (?ty es d. e = Call ty SelfDestructTarget es d) \/
     (?ty kind salted rof order es d.
        e = Call ty (CreateTarget kind salted rof order) es d)
 End
@@ -46,6 +47,22 @@ Theorem well_typed_type_builtin_args_arity[local]:
 Proof
   Cases_on `tb` >>
   rw[well_typed_type_builtin_args_def, type_builtin_arity_def] >> gvs[]
+QED
+
+Theorem raw_shape_selfdestruct_witness:
+  !env. well_typed_expr env
+    (Call NoneT SelfDestructTarget
+      [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))] NONE) /\
+    supported_expr_exists expr_raw_shape_root
+      (Call NoneT SelfDestructTarget
+        [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))] NONE) /\
+    supported_expr_exists expr_shape_root
+      (Call NoneT SelfDestructTarget
+        [Literal (BaseT AddressT) (BytesL (REPLICATE 20 0w))] NONE)
+Proof
+  simp[well_typed_expr_def, well_typed_literal_def, well_formed_type_def,
+       expr_type_def, supported_expr_exists_def, expr_raw_shape_root_def,
+       expr_shape_root_def, vyperValueTheory.evaluate_type_def]
 QED
 
 Theorem well_typed_expr_raw_shape[local]:

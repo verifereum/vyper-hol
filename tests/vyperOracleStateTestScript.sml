@@ -7,6 +7,7 @@ Ancestors
   vfmState[ignore_grammar] vfmContext[ignore_grammar] vfmExecution[ignore_grammar]
   vyperAST vyperValue vyperValueOperation vyperContext vyperEvmBoundary
   vyperState vyperInterpreter vyperSmallStep extCallOracle
+  vyperOracleInitialStateTest
 Libs
   cv_transLib wordsLib
 
@@ -255,10 +256,22 @@ QED
 
 Theorem oracle_empty_run_ext_call:
   run_ext_call 0w 0w [] (SOME 0) 0 empty_accounts tStorage txParams =
-    SOME (T, [], empty_accounts, tStorage, [])
+    SOME (T, [], empty_accounts, tStorage, [], [])
 Proof
   simp[run_ext_call_def, oracle_empty_call_precheck, oracle_empty_call_run] >>
   EVAL_TAC >> simp[]
+QED
+
+Theorem oracle_state_empty_concrete_call:
+  run_ext_call empty_evaluation_context.txn.target 0w [] (SOME 0) 0
+    empty_accounts empty_transient_storage
+    (vyper_to_tx_params empty_evaluation_context.txn) =
+  SOME (T, [], empty_accounts, empty_transient_storage, [], [])
+Proof
+  CONV_TAC (LAND_CONV cv_eval) >>
+  simp[FUN_EQ_THM, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def, vfmStateTheory.empty_storage_def,
+       vfmContextTheory.empty_transient_storage_def]
 QED
 
 Theorem oracle_zero_send_operands:
@@ -289,7 +302,7 @@ Proof
        oracle_empty_run_ext_call] >>
   simp[lift_option_def, check_def, assert_def, bind_def, ignore_bind_def,
        update_accounts_def, update_transient_def, append_logs_def,
-       return_def, evaluation_state_component_equality]
+       update_pending_deletions_def, return_def, evaluation_state_component_equality]
 QED
 
 Theorem oracle_empty_extcall_inert:
