@@ -1160,3 +1160,45 @@ Proof
     gen_tac >> CONVERT_LEAF) >>
   CONVERT_BIND >> CONVERT_LEAF
 QED
+
+val CALLBACK_LET = ho_match_mp_tac
+  (PURE_REWRITE_RULE [comp_bind_def] label_preserving_bind) >> conj_tac
+  >- CALLBACK_LEAF >> gen_tac;
+val CONVERT_LET = ho_match_mp_tac
+  (PURE_REWRITE_RULE [comp_bind_def] label_preserving_bind) >> conj_tac
+  >- CONVERT_LEAF >> gen_tac;
+
+Theorem label_preserving_acc[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_acc cfn cenv e acc s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Cases_on `acc` >> rewrite_tac[compile_acc_def] >>
+  all_tac >- CALLBACK_LEAF
+  >- (CALLBACK_LET >> CONVERT_LEAF)
+  >- (CALLBACK_LET >> CONVERT_LEAF)
+  >- (CALLBACK_LET >> CONVERT_LEAF)
+  >- (CALLBACK_LET >> CONVERT_LET >> CONVERT_LEAF) >>
+  ho_match_mp_tac (PURE_REWRITE_RULE [comp_bind_def] label_preserving_bind) >>
+  conj_tac >- metis_tac[label_preserving_emit_inst] >>
+  rpt strip_tac >> gvs[] >> metis_tac[label_preserving_return, comp_return_def]
+QED
+
+Theorem label_preserving_store_words[local]:
+  !vals buf off s r t. compile_store_words buf vals off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct
+  >- (rewrite_tac[compile_store_words_def] >> CONVERT_LEAF) >>
+  ntac 3 gen_tac >> rewrite_tac[compile_store_words_def, comp_ignore_bind_def] >>
+  IF_CASES_TAC >> rpt CONVERT_BIND >> metis_tac[]
+QED
+
+Theorem label_preserving_invert[local]:
+  !s r t. compile_invert v ty cenv s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `ty` >> rewrite_tac[compile_invert_def] >>
+  simp_tac pure_ss [LET_THM] >> CONVERT_LEAF
+QED
