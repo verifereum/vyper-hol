@@ -1,6 +1,8 @@
 Theory loadElimCounterexample
 Ancestors
   loadElimDefs venomExecSemantics venomState venomInst loadElimByteHelpers
+  venomWf dfgCorrectnessProof memoryCopyElisionSound cfgTransform
+  basePtrDefs memLocDefs venomMemDefs venomMemProps
 
 Definition ce_bb_def:
   ce_bb = <| bb_label := "entry"; bb_instructions :=
@@ -211,4 +213,165 @@ Proof
        ce_dfg_compute, GSYM ce_mem_ctx_def, ce_mem_round,
        ce_transient_round, ce_storage_round, ce_dload_round,
        ce_calldata_round, ce_clear_nops]
+QED
+
+Theorem ce_structural_wf:
+  wf_function ce_fn /\ fn_inst_wf ce_fn /\ ssa_form ce_fn /\
+  EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars ce_fn) /\
+  ce_s.vs_inst_idx = 0 /\
+  fn_entry_label ce_fn = SOME ce_s.vs_current_bb
+Proof
+  EVAL_TAC
+QED
+
+Theorem ce_dominates_self:
+  fn_dominates ce_fn "entry" "entry"
+Proof
+  simp[fn_dominates_def, fn_reachable_def, ce_fn_def, ce_bb_def,
+       mk_raw_function_def, fn_entry_label_def, entry_block_def,
+       relationTheory.RTC_REFL] >>
+  rpt strip_tac >>
+  Cases_on `path` >> gvs[]
+QED
+
+Theorem ce_wf_ssa:
+  wf_ssa ce_fn
+Proof
+  simp[wf_ssa_def, ce_structural_wf, def_dominates_uses_def] >>
+  simp[ce_fn_def, ce_bb_def, mk_raw_function_def, mk_inst_def,
+       def_available_at_def] >>
+  simp[GSYM ce_fn_def, GSYM ce_bb_def, GSYM mk_inst_def,
+       ce_dominates_self] >>
+  rpt strip_tac >> gvs[mk_inst_def] >>
+  qexists `mk_inst 0 MLOAD [Lit 0w] ["x"]` >>
+  simp[mk_inst_def] >>
+  conj_tac >- (mp_tac ce_dominates_self >>
+              simp[ce_fn_def, ce_bb_def, mk_raw_function_def]) >>
+  qexistsl [`0`, `1`] >> simp[]
+QED
+
+Theorem ce_dfg_sound:
+  !s. dfg_assigns_sound ce_dfg s
+Proof
+  simp[dfg_assigns_sound_def, ce_dfg_def, finite_mapTheory.FLOOKUP_UPDATE,
+       mk_inst_def] >> rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem ce_bp_stable:
+  bp_assigns_stable FEMPTY ce_dfg
+Proof
+  simp[bp_assigns_stable_def, ce_dfg_def, finite_mapTheory.FLOOKUP_UPDATE,
+       mk_inst_def] >> rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
+Theorem ce_bp_sound:
+  !s. bp_ptr_sound FEMPTY s /\ bp_phis_closed FEMPTY ce_fn
+Proof
+  simp[bp_ptr_sound_def, bp_phis_closed_def, bp_get_ptrs_def]
+QED
+
+Theorem ce_bp_bounded:
+  !s. bp_ptrs_bounded FEMPTY ce_fn s
+Proof
+  simp[bp_ptrs_bounded_def, ce_fn_def, ce_bb_def, mk_raw_function_def] >>
+  rpt strip_tac >> gvs[mk_inst_def, mem_write_ops_def, mem_read_ops_def,
+                       bp_segment_from_ops_def]
+QED
+
+Theorem ce_initial_allocas:
+  alloca_inv ce_s /\ allocas_in_word ce_s /\
+  LENGTH ce_s.vs_memory < dimword (:256)
+Proof
+  simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+       allocas_in_word_def, ce_s_def, init_venom_state_def,
+       wordsTheory.dimword_def]
+QED
+
+Theorem ce_step_allocas:
+  !fuel ctx inst s s'.
+    MEM inst ce_bb.bb_instructions /\ step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_allocas = s.vs_allocas
+Proof
+  rpt strip_tac >> irule step_inst_non_alloca_preserves_allocas >>
+  goal_assum (drule_at Any) >>
+  gvs[ce_bb_def, mk_inst_def, is_alloca_op_def]
+QED
+
+Theorem ce_step_preserves:
+  !fuel ctx bb inst s0 s1.
+    MEM bb ce_fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+    inst_wf inst /\
+    dfg_assigns_sound ce_dfg (s0 with vs_inst_idx := 0) /\
+    bp_ptr_sound FEMPTY (s0 with vs_inst_idx := 0) /\
+    allocas_non_overlapping (s0 with vs_inst_idx := 0) /\
+    allocas_in_word (s0 with vs_inst_idx := 0) /\
+    bp_ptrs_bounded FEMPTY ce_fn (s0 with vs_inst_idx := 0) /\
+    step_inst fuel ctx inst s0 = OK s1 ==>
+    dfg_assigns_sound ce_dfg (s1 with vs_inst_idx := 0) /\
+    bp_ptr_sound FEMPTY (s1 with vs_inst_idx := 0) /\
+    allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
+    allocas_in_word (s1 with vs_inst_idx := 0) /\
+    bp_ptrs_bounded FEMPTY ce_fn (s1 with vs_inst_idx := 0)
+Proof
+  simp[ce_dfg_sound, ce_bp_sound, ce_bp_bounded,
+       ce_fn_def, mk_raw_function_def] >>
+  rpt strip_tac >>
+  `s1.vs_allocas = s0.vs_allocas` by
+    (irule ce_step_allocas >> goal_assum (drule_at Any) >> simp[]) >>
+  fs[allocas_non_overlapping_def, allocas_in_word_def] >>
+  metis_tac[]
+QED
+
+Theorem ce_phi_preserves:
+  !bb s0 s_phi.
+    MEM bb ce_fn.fn_blocks /\
+    MEM bb.bb_label ce_cfg.cfg_dfs_pre /\
+    eval_phis s0 bb.bb_instructions = OK s_phi /\
+    dfg_assigns_sound ce_dfg s0 ==>
+    dfg_assigns_sound ce_dfg s_phi
+Proof
+  simp[ce_dfg_sound]
+QED
+
+Theorem ce_antecedent:
+    wf_function ce_fn /\
+    fn_inst_wf ce_fn /\
+    wf_ssa ce_fn /\
+    EVERY (\v. ~isPREFIX "$le_phi_" v) (fn_all_vars ce_fn) /\
+    ce_s.vs_inst_idx = 0 /\
+    fn_entry_label ce_fn = SOME ce_s.vs_current_bb /\
+    dfg_assigns_sound (dfg_build_function ce_fn) ce_s /\
+    bp_ptr_sound (bp_analyze (cfg_analyze ce_fn) ce_fn) ce_s /\
+    alloca_inv ce_s /\
+    allocas_in_word ce_s /\
+    bp_ptrs_bounded (bp_analyze (cfg_analyze ce_fn) ce_fn) ce_fn ce_s /\
+    bp_phis_closed (bp_analyze (cfg_analyze ce_fn) ce_fn) ce_fn /\
+    bp_assigns_stable (bp_analyze (cfg_analyze ce_fn) ce_fn) (dfg_build_function ce_fn) /\
+    (!bb s0 s_phi.
+       MEM bb ce_fn.fn_blocks /\
+       MEM bb.bb_label (cfg_analyze ce_fn).cfg_dfs_pre /\
+       eval_phis s0 bb.bb_instructions = OK s_phi /\
+       dfg_assigns_sound (dfg_build_function ce_fn) s0 ==>
+       dfg_assigns_sound (dfg_build_function ce_fn) s_phi) /\
+    (!fuel' run_ctx bb inst s0 s1.
+       MEM bb ce_fn.fn_blocks /\ MEM inst bb.bb_instructions /\
+       inst_wf inst /\
+       dfg_assigns_sound (dfg_build_function ce_fn) (s0 with vs_inst_idx := 0) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze ce_fn) ce_fn) (s0 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s0 with vs_inst_idx := 0) /\
+       allocas_in_word (s0 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze ce_fn) ce_fn) ce_fn (s0 with vs_inst_idx := 0) /\
+       step_inst fuel' run_ctx inst s0 = OK s1 ==>
+       dfg_assigns_sound (dfg_build_function ce_fn) (s1 with vs_inst_idx := 0) /\
+       bp_ptr_sound (bp_analyze (cfg_analyze ce_fn) ce_fn) (s1 with vs_inst_idx := 0) /\
+       allocas_non_overlapping (s1 with vs_inst_idx := 0) /\
+       allocas_in_word (s1 with vs_inst_idx := 0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze ce_fn) ce_fn) ce_fn (s1 with vs_inst_idx := 0)) /\
+    LENGTH ce_s.vs_memory < dimword (:256)
+Proof
+  rewrite_tac[GSYM ce_cfg_def, ce_bp_compute, ce_dfg_compute] >>
+  simp[ce_structural_wf, ce_wf_ssa, ce_initial_allocas,
+       ce_dfg_sound, ce_bp_sound, ce_bp_stable, ce_bp_bounded] >>
+  mp_tac ce_step_preserves >>
+  simp[ce_dfg_sound, ce_bp_sound, ce_bp_bounded]
 QED
