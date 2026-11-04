@@ -2,7 +2,7 @@
 Theory stmtSimZero
 Ancestors
   stmtSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
-  fragGasPath stmtLowering compileEnv loweringSlice exprLoweringProps
+  fragGasPath fragGasPathMem stmtLowering compileEnv loweringSlice exprLoweringProps
   vyperInterpreter vyperState
 
 Theorem stmt_framed_frag_zero:
@@ -43,6 +43,24 @@ Proof
   irule stmt_post_nil >> simp[]
 QED
 
+Theorem stmt_frag_nil_mem:
+  !d ctx func cx lctx RetQ cenv ty es.
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmts_env cenv lctx ty []) (eval_stmts cx []) es
+Proof
+  rw[stmt_frag_mem_def, stmts_env_def, comp_return_def] >>
+  PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  PURE_REWRITE_TAC[gas_summary_at_def] >>
+  qexistsl_tac [`INL ()`, `es`, `OK s0`] >>
+  conj_tac
+  >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
+          Once evaluate_def, return_def] >>
+  simp[fragExecTheory.exit_result_def] >>
+  `stmt_post ctx func cx lctx cenv cenv sa sa s0 (INL ())
+     (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
+  gvs[stmt_post_def] >> qexists_tac `cenv` >> simp[]
+QED
+
 val () =
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag stmt_frag_nil)
   in
@@ -52,3 +70,12 @@ val () =
     else raise Fail "stmt_frag_nil: admitted proof dependency"
   end;
 
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag stmt_frag_nil_mem)
+  in
+    if null axioms andalso null (Thm.hyp stmt_frag_nil_mem) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "STMT_NIL_MEM_AUDIT stmt_frag_nil_mem OK\n"
+    else raise Fail "stmt_frag_nil_mem: admitted proof dependency"
+  end;
