@@ -367,7 +367,8 @@ Theorem storage_holds_header_widens[local]:
     lookup_storage w
       (if tr then lookup_transient_storage cx.txn.target es.tStorage
        else (lookup_account cx.txn.target es.accounts).storage) = n2w n /\
-    storage_read_live cx tr (get_storage cx es tr) w pvt /\
+    storage_range_agree (get_storage cx es tr)
+      (if tr then contract_transient s else contract_storage s) w pvt /\
     0 < type_slot_size pvt
 Proof
   rpt gen_tac >> simp[storage_holds_def] >> strip_tac >> gvs[] >>
@@ -475,14 +476,11 @@ Proof
         drule_all read_result_memory_header_widens >>
         simp[ptr_load_val_def, mload_def, mem_word_at_def]) >>
   drule_all storage_holds_header_widens >> strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target` by
-    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
-      ptr_load_val_def, sload_def, tload_def, contract_storage_def,
-      contract_transient_def, vyperStorageBackendTheory.get_storage_def,
+  drule_all storage_range_agree_head >>
+  gvs[ptr_load_val_def, sload_def, tload_def,
+      vyperStorageBackendTheory.get_storage_def,
       vfmExecutionTheory.lookup_transient_storage_def,
-      vfmStateTheory.lookup_account_def] >>
-  drule_all storage_agree_read_head >> simp[]
+      vfmStateTheory.lookup_account_def]
 QED
 
 Theorem vv_holds_sized_length_success:
