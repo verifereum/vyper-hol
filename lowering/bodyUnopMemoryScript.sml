@@ -221,7 +221,7 @@ Proof
   irule body_not_bool_tail_mem >> simp[] >> qexists_tac `x` >> simp[]
 QED
 
-Theorem body_expr_vv_sim_mem_stack[local]:
+Theorem body_expr_vv_sim_mem_stack:
   expr_sim_mem ctx func cenv cx ty e es /\
   (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
   (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
