@@ -314,3 +314,35 @@ Proof
     by metis_tac[listTheory.EL_DROP] >>
   metis_tac[listTheory.EL_MEM]
 QED
+
+Theorem compute_merge_map_entry_survives:
+  !func entry.
+    ~MEM entry (MAP FST
+      (compute_merge_map (block_sigs func entry func.fn_blocks) []))
+Proof
+  simp[listTheory.MEM_MAP] >> rpt strip_tac >>
+  PairCases_on `y` >> gvs[] >>
+  drule compute_merge_map_not_entry >> simp[]
+QED
+
+Theorem compute_merge_map_image_survives:
+  !func entry l.
+    ALL_DISTINCT (fn_labels func) /\ MEM l (fn_labels func) ==>
+    let m = compute_merge_map (block_sigs func entry func.fn_blocks) [] in
+    MEM (case ALOOKUP m l of NONE => l | SOME k => k)
+      (MAP (\bb. bb.bb_label)
+        (FILTER (\bb. ~MEM bb.bb_label (MAP FST m)) func.fn_blocks))
+Proof
+  rpt gen_tac >> strip_tac >> simp[] >>
+  Cases_on `ALOOKUP (compute_merge_map
+    (block_sigs func entry func.fn_blocks) []) l`
+  >- (gvs[alistTheory.ALOOKUP_NONE, fn_labels_def,
+           listTheory.MEM_MAP, listTheory.MEM_FILTER] >> metis_tac[]) >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  `ALL_DISTINCT (MAP FST (block_sigs func entry func.fn_blocks))` by
+    (irule block_sigs_all_distinct_FST >> gvs[fn_labels_def]) >>
+  drule_all compute_merge_map_SND_not_FST >> strip_tac >>
+  drule compute_merge_map_keeper_same_sig >> strip_tac >>
+  gvs[listTheory.MEM_MAP, listTheory.MEM_FILTER] >>
+  metis_tac[block_sigs_MEM_blocks]
+QED
