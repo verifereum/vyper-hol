@@ -894,6 +894,13 @@ Proof
   simp[erase_storage_trace_def] >> strip_tac >> simp[]
 QED
 
+Theorem storage_trace_frame_precompile_call_success:
+  storage_trace_frame (precompile_call_success bt)
+Proof
+  rw[storage_trace_frame_def, precompile_call_success_def] >>
+  every_case_tac >> simp[return_def, check_def, raise_def]
+QED
+
 (* Deterministic composition at the frame boundary; recursive guards remain
    assumptions until all preceding successful computations are in context. *)
 val trace_frame_atoms = List.concat (map (CONJUNCTS o SPEC_ALL)
@@ -915,7 +922,8 @@ val trace_frame_atoms = List.concat (map (CONJUNCTS o SPEC_ALL)
    storage_trace_frame_pop_place, storage_trace_frame_raw_call,
    storage_trace_frame_ext_call, storage_trace_frame_send,
    storage_trace_frame_create, storage_trace_frame_conditional_result,
-   storage_trace_frame_check_create_blueprint]);
+   storage_trace_frame_check_create_blueprint,
+   storage_trace_frame_precompile_call_success]);
 
 val TRACE_FRAME_STEP = FIRST [
   CONV_TAC (HO_REWR_CONV pairTheory.FORALL_PROD), gen_tac,
