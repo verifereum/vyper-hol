@@ -619,6 +619,95 @@ Proof
   simp[nested_counterexample_body_calls]
 QED
 
+Theorem nested_counterexample_context_lookups[local]:
+  current_module nested_counterexample_context = NONE /\
+  lookup_var_slot_from_layout nested_counterexample_context F NONE "a" = SOME 0 /\
+  context_function_live nested_counterexample_context (NONE,"shrink")
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_counterexample_sigs_consistent[local]:
+  fn_sigs_consistent nested_counterexample_env.fn_sigs nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.fn_sigs_consistent_def,
+     nested_counterexample_env_def, FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs()] >>
+  qexists_tac `nested_counterexample_program` >>
+  simp[nested_counterexample_module_lookup, nested_counterexample_callable_lookup,
+       nested_counterexample_context_fields]
+QED
+
+Theorem nested_counterexample_sigs_live[local]:
+  fn_sigs_live nested_counterexample_env.fn_sigs nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.fn_sigs_live_def,
+     nested_counterexample_env_def, FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs(), nested_counterexample_context_lookups]
+QED
+
+Theorem nested_counterexample_sigs_complete[local]:
+  fn_sigs_declared_complete nested_counterexample_env.fn_sigs nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.fn_sigs_declared_complete_def,
+     nested_counterexample_module_lookup, nested_counterexample_context_fields] >>
+  gvs[AllCaseEqs(), nested_counterexample_callable_lookup,
+      nested_counterexample_context_fields] >>
+  simp[nested_counterexample_env_def, FLOOKUP_UPDATE]
+QED
+
+Theorem nested_counterexample_toplevel_table[local]:
+  toplevel_vtypes_complete nested_counterexample_env.toplevel_vtypes
+    nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+     nested_counterexample_module_lookup] >>
+  gvs[AllCaseEqs(), nested_counterexample_program_def] >>
+  simp[nested_counterexample_env_def, FLOOKUP_UPDATE]
+QED
+
+Theorem nested_counterexample_bare_complete[local]:
+  bare_globals_complete nested_counterexample_env.bare_globals nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.bare_globals_complete_def,
+     nested_counterexample_module_lookup] >>
+  gvs[AllCaseEqs(), nested_counterexample_program_def]
+QED
+
+Theorem nested_counterexample_flags_lookup[local]:
+  lookup_flag fid nested_counterexample_program = NONE
+Proof
+  simp[nested_counterexample_program_def, lookup_flag_def]
+QED
+
+Theorem nested_counterexample_flags_complete[local]:
+  flag_members_complete nested_counterexample_env.flag_members nested_counterexample_context
+Proof
+  rw[vyperTypeInvariantsTheory.flag_members_complete_def,
+     nested_counterexample_module_lookup] >>
+  gvs[AllCaseEqs(), nested_counterexample_flags_lookup]
+QED
+
+Theorem nested_counterexample_env_context_consistent[local]:
+  env_context_consistent nested_counterexample_env nested_counterexample_context
+Proof
+  simp[vyperTypeInvariantsTheory.env_context_consistent_def,
+       nested_counterexample_sigs_consistent, nested_counterexample_sigs_live,
+       nested_counterexample_sigs_complete, nested_counterexample_toplevel_table,
+       nested_counterexample_bare_complete, nested_counterexample_flags_complete] >>
+  simp[nested_counterexample_env_def, nested_counterexample_type_env,
+       nested_counterexample_context_lookups,
+       vyperTypeInvariantsTheory.bare_global_assignable_complete_def,
+       nested_counterexample_context_fields, FLOOKUP_UPDATE] >>
+  rpt conj_tac
+  >- (rw[] >> gvs[AllCaseEqs()] >> EVAL_TAC)
+  >> rw[] >> gvs[AllCaseEqs()] >>
+  qexists_tac `nested_counterexample_program` >>
+  simp[nested_counterexample_module_lookup, nested_counterexample_type_env,
+       nested_counterexample_context_lookups] >>
+  EVAL_TAC
+QED
+
 Definition nested_pop_suffix_def[local]:
   nested_pop_suffix hdr tr id esz x0 x1 x2 x3 x4 x5 x6 =
     [mk_inst id (if tr then TLOAD else SLOAD) [hdr] [x0];
