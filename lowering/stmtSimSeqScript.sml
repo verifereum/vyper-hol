@@ -18,5 +18,5 @@ Theorem stmt_frag_cons:
       (stmts_env cenv lctx ty (stmt::ss)) (eval_stmts cx (stmt::ss)) es
 Proof
   rpt strip_tac >> irule stmt_frag_cons_env >> simp[] >>
-  rpt strip_tac >> first_x_assum irule >> goal_assum drule >> simp[]
+  rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED

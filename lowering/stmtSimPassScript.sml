@@ -11,7 +11,7 @@ Theorem compile_pass_frag:
 Proof
   rpt gen_tac >>
   `eval_stmt cx Pass = eval_stmts cx []` by
-    simp[FUN_EQ_THM, Once evaluate_def, return_def] >>
+    simp[FUN_EQ_THM, evaluate_def, return_def] >>
   `stmt_env cenv lctx ty Pass = stmts_env cenv lctx ty []` by
     simp[FUN_EQ_THM, stmt_env_def, stmts_env_def, declare_stmt_local_def,
          comp_bind_def, comp_ignore_bind_def, compile_stmt_def, comp_return_def] >>
