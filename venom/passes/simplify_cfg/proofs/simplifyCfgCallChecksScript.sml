@@ -110,6 +110,23 @@ Proof
   metis_tac[revert_path_fuel_mono, arithmeticTheory.LESS_EQ_SUC_REFL]
 QED
 
+Theorem revert_path_fuel_normalize:
+  !bbs n l. revert_path bbs n l ==>
+    revert_path bbs (LENGTH bbs) l
+Proof
+  rpt strip_tac >>
+  qspec_then `\k. revert_path bbs k l` mp_tac arithmeticTheory.WOP >>
+  (impl_tac >- metis_tac[]) >> BETA_TAC >> strip_tac >>
+  drule_all revert_path_minimal_blocks >> strip_tac >>
+  `set xs SUBSET set bbs` by gvs[EVERY_MEM, pred_setTheory.SUBSET_DEF] >>
+  `CARD (set xs) <= CARD (set bbs)` by
+    (irule pred_setTheory.CARD_SUBSET >> simp[]) >>
+  `LENGTH xs <= LENGTH bbs` by
+    metis_tac[ALL_DISTINCT_CARD_LIST_TO_SET, CARD_LIST_TO_SET,
+              arithmeticTheory.LESS_EQ_TRANS] >>
+  metis_tac[revert_path_fuel_mono]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
