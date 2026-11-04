@@ -1841,6 +1841,21 @@ Proof
   first_x_assum (qspecl_then [`cfn`, `cenv`, `r`] mp_tac) >> simp[]
 QED
 
+Theorem compile_abi_encode_args_length:
+  !es cfn cenv sa.
+    LENGTH (FST (compile_abi_encode_args cfn cenv es sa)) = LENGTH es
+Proof
+  Induct >> simp[compile_abi_encode_args_def, comp_return_def,
+                comp_bind_def, LET_THM] >>
+  rpt gen_tac >>
+  Cases_on `cfn cenv (expr_type h) h sa` >> simp[] >>
+  Cases_on `~is_word_type (expr_type h) /\ exprs_can_mutate cenv es` >> simp[] >>
+  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  pairarg_tac >> asm_simp_tac bool_ss [pairTheory.UNCURRY_DEF] >>
+  first_x_assum (qspecl_then [`cfn`, `cenv`, `cs'`] mp_tac) >>
+  asm_simp_tac (srw_ss()) []
+QED
+
 Theorem ci_mono_compile_multi_exprs[local]:
   ∀ cfn cenv es sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
