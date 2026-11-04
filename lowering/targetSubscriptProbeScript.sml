@@ -3315,3 +3315,143 @@ Theorem probe_word_invoke_caller_frame:
 Proof
   simp[update_var_def, lookup_var_def, merge_callee_local_fields]
 QED
+
+Theorem probe_word_agree_donor_header:
+  !st mt.
+    storage_agree (storage_dead probe_word_context F st) st mt ==>
+    lookup_storage 3w mt = lookup_storage 3w st
+Proof
+  rpt strip_tac >> sym_tac >>
+  irule accountsRelPropsTheory.word_to_bytes_EL_eq >> rpt strip_tac >>
+  qpat_x_assum `storage_agree _ _ _` mp_tac >>
+  simp[storage_agree_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`3w`, `b`] mp_tac) >>
+  simp[probe_word_dead_bytes, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_word_pre_machine_header:
+  !cenv env e0 es s.
+    expr_body_pre cenv probe_word_context env e0 es /\
+    storage_agree
+      (storage_dead probe_word_context F (get_storage probe_word_context es F))
+      (get_storage probe_word_context es F) (contract_storage s) ==>
+    (sload 3w s = 0w \/ sload 3w s = 1w)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_pre_shapes >> strip_tac >>
+  drule probe_word_agree_donor_header >> strip_tac >>
+  `w2n (sload 3w s) <= 1` by simp[sload_def] >>
+  `w2n (sload 3w s) = 0 \/ w2n (sload 3w s) = 1` by decide_tac >>
+  metis_tac[wordsTheory.n2w_w2n]
+QED
+
+Theorem probe_word_load_round_call_ctx[local]:
+  !s i b. (probe_word_load_round s i b).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_load_round_def, jump_to_def, probe_word_load_cond_state_def,
+       probe_word_load_state_def, update_var_def, mstore_def]
+QED
+
+Theorem probe_word_loaded_call_ctx[local]:
+  !s b. (probe_word_loaded_state s b).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_loaded_state_def, jump_to_def,
+       probe_word_load_cond_state_def, update_var_def, probe_word_load_round_call_ctx]
+QED
+
+Theorem probe_word_elem_round_call_ctx[local]:
+  !s i src dst. (probe_word_elem_round s i src dst).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_elem_round_def, jump_to_def, probe_word_elem_body_state_def,
+       probe_word_elem_cond_state_def, update_var_def, sstore_def]
+QED
+
+Theorem probe_word_elems_copied_call_ctx[local]:
+  !s src dst. (probe_word_elems_copied_state s src dst).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_elems_copied_state_def, jump_to_def,
+       probe_word_elem_cond_state_def, update_var_def, probe_word_elem_round_call_ctx]
+QED
+
+Theorem probe_word_copy_body_call_ctx[local]:
+  !s i b. (probe_word_copy_body_state s i b).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_copy_body_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_setup_call_ctx[local]:
+  !s i n b. (probe_word_copy_setup_state s i n b).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_copy_setup_state_def, jump_to_def, probe_word_copy_body_call_ctx,
+       probe_word_copy_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_round_call_ctx[local]:
+  !s i n b. (probe_word_copy_round s i n b).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_copy_round_def, jump_to_def, probe_word_elem_exit_state_def,
+       update_var_def, probe_word_elems_copied_call_ctx, probe_word_copy_setup_call_ctx]
+QED
+
+Theorem probe_word_copied_call_ctx[local]:
+  !s n b. (probe_word_copied_state s n b).vs_call_ctx = s.vs_call_ctx
+Proof
+  rpt gen_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, jump_to_def, probe_word_copy_cond_state_def,
+       update_var_def, probe_word_copy_round_call_ctx]
+QED
+
+Theorem probe_word_final_call_ctx:
+  !s. (probe_word_final_state s).vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[probe_word_final_state_def, sstore_def, probe_word_copied_call_ctx,
+       jump_to_def, probe_word_load_exit_state_def, update_var_def,
+       probe_word_loaded_call_ctx, probe_word_entry_state_def]
+QED
+
+Theorem probe_word_merged_storage:
+  !s args cs out.
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) ==>
+    contract_storage (update_var out 0w
+      (merge_callee_state s (probe_word_final_state cs))) =
+      if sload 3w s = 0w then update_storage 0w 0w (contract_storage s)
+      else update_storage 0w (sload 3w s)
+        (update_storage 2w (sload 5w s)
+          (update_storage 1w (sload 4w s) (contract_storage s)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_setup_observations >> strip_tac >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  `contract_storage (update_var out 0w
+      (merge_callee_state s (probe_word_final_state cs))) =
+    contract_storage (probe_word_final_state cs)` by
+    simp[contract_storage_def, update_var_def, probe_word_final_call_ctx] >>
+  simp[probe_word_final_storage, sload_def]
+QED
+
+Theorem probe_word_invoke_storage_summary:
+  !cenv env e0 es s args cs out.
+    expr_body_pre cenv probe_word_context env e0 es /\
+    storage_agree
+      (storage_dead probe_word_context F (get_storage probe_word_context es F))
+      (get_storage probe_word_context es F) (contract_storage s) /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    setup_callee probe_word_function args s = SOME cs ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      storage_agree
+        (storage_dead probe_word_context F (get_storage probe_word_context es' F))
+        (get_storage probe_word_context es' F)
+        (contract_storage (update_var out 0w
+          (merge_callee_state s (probe_word_final_state cs))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_word_agree_donor_header >> strip_tac >>
+  drule_all probe_word_conditional_copy_pre_summary >> strip_tac >>
+  qexists_tac `es'` >> simp[] >>
+  drule_all probe_word_merged_storage >> disch_then (fn th => rewrite_tac[th]) >>
+  gvs[sload_def, wordsTheory.w2n_eq_0]
+QED
