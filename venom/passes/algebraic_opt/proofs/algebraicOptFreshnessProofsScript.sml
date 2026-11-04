@@ -397,3 +397,122 @@ Proof
     (irule ao_wf_instruction_index >> qexistsl [`bb`, `fn`] >> simp[]) >>
   decide_tac
 QED
+
+Theorem ao_source_trace_writer_forces_iszero:
+  !ctx fn trace a b tail bp r prod x z target use_opt h t.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    trace = a::b::tail /\ ao_source_trace ctx fn trace /\
+    LAST trace = (h,F,t) /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\
+    prod.inst_opcode = ISZERO /\ prod.inst_outputs = [x] /\
+    prod.inst_operands = [Var z] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) /\
+    ao_transition_writes fn z a b ==>
+    ?middle q u v rest w.
+      trace = a::(middle ++ (q,F,u)::(q,F,v)::rest) /\
+      u.vs_current_bb = bp.bb_label /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      step_inst q ctx prod u = OK w /\ v = w with vs_inst_idx := SUC r
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `ao_source_step ctx fn a b /\ ao_source_trace ctx fn (b::tail)` by
+    gvs[ao_source_trace_def] >>
+  PairCases_on `a` >>
+  drule_all ao_iszero_writer_location >> strip_tac >> gvs[] >>
+  `fn_dominates fn bp.bb_label target.bb_label /\
+   (bp = target ==> r < t.vs_inst_idx)` by
+    (irule ao_iszero_observation_location >> metis_tac[]) >>
+  `lookup_block bp.bb_label fn.fn_blocks = SOME bp` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `lookup_block db.bb_label fn.fn_blocks = SOME db` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  Cases_on `db = bp` >- suspend "initial" >>
+  Cases_on `target = bp` >- suspend "final" >>
+  suspend "interior"
+QED
+
+Resume ao_source_trace_writer_forces_iszero[initial]:
+  gvs[] >>
+  drule ao_source_trace_initial_visit >> strip_tac
+  >- (`t.vs_current_bb = bp.bb_label` by
+        (qspec_then `tail` (qspecl_then [`ctx`,`fn`,`(q,F,v)`] mp_tac)
+           ao_source_trace_single_visit_label >>
+         (impl_tac >- gvs[]) >> rewrite_tac[EVERY_MEM] >>
+         disch_then (qspec_then `LAST ((q,F,v)::tail)` mp_tac) >>
+         simp[rich_listTheory.LAST_MEM]) >>
+      `target = bp` by gvs[] >>
+      `r < t.vs_inst_idx` by metis_tac[] >>
+      qspec_then `(q,F,v)::tail` (qspecl_then [`ctx`,`fn`] mp_tac)
+        ao_source_trace_crosses_index >>
+      simp[] >> disch_then (qspecl_then [`r`,`prod`] mp_tac) >>
+      simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  `~is_terminator prod.inst_opcode` by simp[is_terminator_def] >>
+  qspec_then `front ++ [(j,F,u)]` (qspecl_then [`ctx`,`fn`] mp_tac)
+    ao_source_trace_crosses_before_exit >>
+  simp[] >>
+  disch_then (qspecl_then [`r`,`prod`,`out`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexistsl [`front'`,`q'`,`u'`,`back' ++ (j,T,out)::back`,`w`] >>
+  simp[] >>
+  qpat_x_assum `front ++ [(j,F,u)] = _` mp_tac >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  disch_then (fn th => rewrite_tac[GSYM th])
+QED
+Resume ao_source_trace_writer_forces_iszero[final]:
+  gvs[] >>
+  `db.bb_label <> bp.bb_label` by (strip_tac >> gvs[]) >>
+  qspec_then `(q,F,v)::tail` (qspecl_then [`ctx`,`fn`] mp_tac)
+    ao_source_trace_final_visit >>
+  simp[] >> strip_tac
+  >- (qspec_then `tail` (qspecl_then [`ctx`,`fn`,`(q,F,v)`] mp_tac)
+        ao_source_trace_single_visit_label >>
+      (impl_tac >- gvs[]) >> rewrite_tac[EVERY_MEM] >>
+      disch_then (qspec_then `LAST ((q,F,v)::tail)` mp_tac) >>
+      simp[rich_listTheory.LAST_MEM] >> strip_tac >> gvs[]) >>
+  `LAST ((j,F,p with vs_inst_idx := phi_prefix_length bb.bb_instructions)::back) =
+    (h,F,t)` by (Cases_on `back` >> gvs[]) >>
+  `p.vs_current_bb = t.vs_current_bb` by
+    (qspec_then `back` (qspecl_then [`ctx`,`fn`,
+        `(j,F,p with vs_inst_idx := phi_prefix_length bb.bb_instructions)`] mp_tac)
+       ao_source_trace_single_visit_label >>
+     (impl_tac >- gvs[]) >> rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `LAST ((j,F,p with vs_inst_idx := phi_prefix_length bb.bb_instructions)::back)` mp_tac) >>
+     simp[rich_listTheory.LAST_MEM] >> metis_tac[]) >>
+  `bb = bp` by
+    (drule venomExecProofsTheory.eval_phis_preserves_current_bb >>
+     strip_tac >> gvs[]) >>
+  qspec_then `(j,F,p with vs_inst_idx := phi_prefix_length bb.bb_instructions)::back`
+    (qspecl_then [`ctx`,`fn`] mp_tac) ao_source_trace_crosses_index >>
+  simp[] >> disch_then (qspecl_then [`r`,`prod`] mp_tac) >>
+  simp[] >> strip_tac >> gvs[] >>
+  `t.vs_current_bb = bb.bb_label` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  qexistsl [`(front ++ [(k,T,s)]) ++ front'`,`q'`,`u`,`back'`,`w`] >>
+  simp[] >> pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  qpat_x_assum `(j,F,_)::back = _` (fn th => rewrite_tac[GSYM th])
+QED
+Resume ao_source_trace_writer_forces_iszero[interior]:
+  `db.bb_label <> bp.bb_label` by (strip_tac >> gvs[]) >>
+  `bp.bb_label <> t.vs_current_bb` by (strip_tac >> gvs[]) >>
+  qspec_then `(q,F,v)::tail` (qspecl_then [`ctx`,`fn`] mp_tac)
+    ao_source_trace_path >> simp[] >> strip_tac >>
+  qspec_then `(q,F,v)::tail` mp_tac ao_trace_path_shape >>
+  simp[] >> strip_tac >>
+  `MEM bp.bb_label (ao_trace_path ((q,F,v)::tail))` by
+    (irule ao_dominance_interval >>
+     simp[] >> qexistsl [`fn`] >>
+     gvs[] >> metis_tac[venomExecPropsTheory.lookup_block_label]) >>
+  qspec_then `(q,F,v)::tail` (qspecl_then [`ctx`,`fn`,`bp`,`r`,`prod`] mp_tac)
+    ao_source_trace_interior_execution >>
+  simp[is_terminator_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+Finalise ao_source_trace_writer_forces_iszero
