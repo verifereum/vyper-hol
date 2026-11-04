@@ -362,6 +362,39 @@ Proof
        lift_option_type_def, lift_sum_def, return_def, extend_memory_place_def]
 QED
 
+Theorem select_result_immutable_success_path:
+  select_result cx ty (PlaceR (ImmutablePlace md name path)) sb s =
+    (INL out,t) ==>
+  out = PlaceR (ImmutablePlace md name (path ++ [sb]))
+Proof
+  simp[select_result_def, extend_place_def, extend_memory_place_def,
+       bind_def, ignore_bind_def, return_def, raise_def,
+       lift_sum_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem select_result_immutable_origin:
+  select_result cx ty pv sb s =
+    (INL (PlaceR (ImmutablePlace md name path')),t) ==>
+  ?path. pv = PlaceR (ImmutablePlace md name path) /\
+         path' = path ++ [sb]
+Proof
+  Cases_on `pv` >>
+  simp[select_result_def, extend_place_def, bind_def, return_def,
+       raise_def, lift_option_type_def, lift_sum_def, AllCaseEqs()]
+  >~ [`extend_place cx (PlaceR p)`]
+  >- (rename1 `extend_place cx (PlaceR p)` >> Cases_on `p` >>
+      simp[extend_place_def, extend_memory_place_def, bind_def,
+           ignore_bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+      simp[])
+  >> rename1 `extend_place cx (HashMapRef tr slot kt vt)` >>
+  Cases_on `sb` >> simp[extend_place_def, raise_def] >>
+  Cases_on `vt` >>
+  simp[extend_place_def, bind_def, return_def, raise_def,
+       lift_option_type_def, AllCaseEqs()]
+QED
+
 Theorem select_result_immutable_error:
   get_immutables cx src s = (INL imms, s) /\
   FLOOKUP imms id = SOME (itv, iv) /\
