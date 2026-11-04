@@ -43,3 +43,12 @@ Proof
   irule stmt_post_nil >> simp[]
 QED
 
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag stmt_frag_nil)
+  in
+    if null axioms andalso null (Thm.hyp stmt_frag_nil) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "STMT_NIL_AUDIT stmt_frag_nil OK\n"
+    else raise Fail "stmt_frag_nil: admitted proof dependency"
+  end;
+
