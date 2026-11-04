@@ -1,4 +1,4 @@
-Theory ifexpTransportInterface
+Theory exprSimLayoutTransport
 Ancestors
   exprSim vyperTypeSystem vyperValue valueEncoding vyperTypeArgFits
   vyperTypeValues context compileEnv valueTypingMemoryProps
