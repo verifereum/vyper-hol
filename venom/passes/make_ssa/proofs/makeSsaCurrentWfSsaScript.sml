@@ -24,7 +24,8 @@ Ancestors
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
-  makeSsaCurrentPlacementCut ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
+  makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
+  ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
 
@@ -3188,6 +3189,65 @@ Proof
   Cases_on `EL i slots` >>
   drule_all current_wf_original_phi_pair_available >> strip_tac >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem current_wf_original_phi_single_site:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  MEM db fn.fn_blocks /\ MEM di db.bb_instructions /\
+  di.inst_opcode = PHI /\ MEM v di.inst_outputs ==>
+  !l. current_changing_site fn (current_actual_inserted fn) v l ==> l = db.bb_label
+Proof
+  strip_tac >>
+  `wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+    all_reachable fn /\ first_block_no_preds fn /\
+    fn_phi_outputs_single_def fn` by fs[current_wf_phi_context_def] >>
+  `LENGTH (FILTER (\inst. MEM v inst.inst_outputs) (fn_insts fn)) <= 1` by
+    metis_tac[fn_phi_outputs_single_def_def] >>
+  `blocks_have_leading_phi fn.fn_blocks` by
+    (`MEM di (collect_phis db.bb_instructions)` by
+       (`bb_well_formed db` by metis_tac[wf_function_def] >>
+        fs[bb_well_formed_def] >> metis_tac[current_phi_in_prefix, MEM_EL]) >>
+     metis_tac[current_phi_operand_has_leading_phi]) >>
+  simp[current_changing_site_def] >> rpt strip_tac
+  >- (irule current_actual_inserted_single_local >> metis_tac[]) >>
+  metis_tac[current_single_def_occurrence]
+QED
+
+Theorem current_wf_original_scan_single:
+  !xs i k t. k < LENGTH xs /\ (EL k xs).inst_outputs = [v] /\
+    (!r. r < LENGTH xs /\ r <> k ==> ~MEM v (EL r xs).inst_outputs) ==>
+    current_original_scan v l i xs t = CurrentOriginal l (i + k) 0
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `k` >> simp[] >> strip_tac
+  >- (`EVERY (\inst. ~MEM v inst.inst_outputs) xs` by
+        (simp[EVERY_EL] >> rpt strip_tac >>
+         first_x_assum (qspec_then `SUC n` mp_tac) >> simp[]) >>
+      simp[current_original_scan_def, current_output_token_def,
+        current_original_scan_absent]) >>
+  `~MEM v h.inst_outputs` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[current_original_scan_def, current_output_token_absent] >>
+  `current_original_scan v l (SUC i) xs t = CurrentOriginal l (SUC i + n) 0` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum (qspec_then `SUC r` mp_tac) >> simp[]) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem current_wf_single_site_chain:
+  !ls t. wf_function fn /\ MEM d (fn_labels fn) /\
+    current_changing_site fn ins v d /\
+    (!l. current_changing_site fn ins v l ==> l = d) ==>
+    current_chain_token fn ins v ls t =
+      if MEM d ls then current_block_token fn ins v d (CurrentDefault v) else t
+Proof
+  Induct >- simp[current_chain_token_def] >> rpt strip_tac >>
+  simp[current_chain_token_def] >>
+  Cases_on `h = d` >> gvs[]
+  >- (Cases_on `MEM d ls` >> simp[] >>
+      metis_tac[current_site_block_constant]) >>
+  `~current_changing_site fn ins v h` by metis_tac[] >>
+  simp[current_non_site_block_token]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
