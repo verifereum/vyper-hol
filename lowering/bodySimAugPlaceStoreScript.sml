@@ -2,6 +2,7 @@ Theory bodySimAugPlaceStore
 Ancestors
   bodySimAugPlaceLoad stmtSimAssignAttr valueEncodingProps valueEncodingProofs
   valueEncoding targetPlaceSim vyperValue vyperTyping vyperState vyperValueOperation alist arithmetic list sorting relation
+  stmtSimDeclStore vyperPlaceStatePreservation
 Libs
   wordsLib
 
@@ -309,16 +310,6 @@ Proof
   Cases_on `k = h0` >> Cases_on `k < h0` >> simp[val_wf_def]
 QED
 
-Theorem aug_place_field_lookup:
-  !fs fld k tv. mem_field_offset fs fld = SOME (k,tv) ==>
-    ALOOKUP fs fld = SOME tv
-Proof
-  Induct >> simp[mem_field_offset_def] >> gen_tac >> PairCases_on `h` >>
-  rpt gen_tac >> simp[mem_field_offset_def] >>
-  IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >> PairCases_on `z` >> gvs[] >>
-  metis_tac[]
-QED
-
 Theorem aug_place_step_wf:
   !tv sb k ctv a a' child.
     mem_step_offset tv sb = SOME (k,ctv) /\
@@ -341,7 +332,7 @@ Proof
       irule aug_place_kvs_wf_insert >> simp[]) >>
   Cases_on `tv` >> gvs[mem_step_offset_def] >> Cases_on `a` >>
   gvs[value_has_type_def, assign_subscripts_def, val_wf_def, AllCaseEqs()] >>
-  drule aug_place_field_lookup >> strip_tac >>
+  drule aug_place_field_type >> strip_tac >>
   irule fields_val_wf_update >> metis_tac[]
 QED
 
@@ -360,4 +351,121 @@ Proof
   rpt strip_tac
   >- (irule aug_place_step_wf >> metis_tac[]) >>
   irule aug_place_step_memory >> metis_tac[]
+QED
+
+Theorem aug_place_assign_cons:
+  !tv a sb path etv v a'.
+    subscript_type tv sb = SOME etv /\
+    assign_subscripts tv a (sb::path) (Replace v) = INL a' ==>
+    ?old child.
+      evaluate_subscripts tv a [sb] = INL old /\
+      assign_subscripts etv old path (Replace v) = INL child /\
+      assign_subscripts tv a [sb] (Replace child) = INL a'
+Proof
+  rpt gen_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+      simp[subscript_type_def, assign_subscripts_def] >>
+      Cases_on `a` >> simp[assign_subscripts_def] >>
+      Cases_on `tv` >>
+      simp[subscript_type_def, assign_subscripts_def, evaluate_subscripts_def,
+           AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `a` >> Cases_on `tv` >>
+  simp[subscript_type_def, assign_subscripts_def, evaluate_subscripts_def,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_fields_wf_project:
+  !fs vals fld ctv v.
+    struct_has_type fs vals /\ fields_val_wf vals fs /\
+    ALOOKUP fs fld = SOME ctv /\ ALOOKUP vals fld = SOME v ==>
+    val_wf ctv v
+Proof
+  Induct >> gen_tac >> Cases_on `vals` >> simp[value_has_type_def] >>
+  PairCases_on `h` >> PairCases_on `h'` >>
+  simp[value_has_type_def, val_wf_def] >> rpt gen_tac >>
+  Cases_on `h0 = fld` >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_elems_wf_project:
+  !vs tv i. elems_val_wf vs tv /\ i < LENGTH vs ==>
+    val_wf tv (EL i vs)
+Proof
+  Induct >> simp[val_wf_def] >> rpt gen_tac >> Cases_on `i` >>
+  simp[val_wf_def]
+QED
+
+Theorem aug_place_tuple_wf_project:
+  !tvs vs i. tuple_val_wf vs tvs /\ i < LENGTH vs /\ i < LENGTH tvs ==>
+    val_wf (EL i tvs) (EL i vs)
+Proof
+  Induct >> gen_tac >> Cases_on `vs` >> simp[val_wf_def] >>
+  Cases_on `i` >> simp[val_wf_def]
+QED
+
+Theorem aug_place_step_wf_project:
+  !tv a sb k ctv old.
+    mem_step_offset tv sb = SOME (k,ctv) /\ value_has_type tv a /\
+    val_wf tv a /\ evaluate_subscripts tv a [sb] = INL old ==>
+    val_wf ctv old
+Proof
+  rpt gen_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+      Cases_on `tv` >> simp[mem_step_offset_def] >>
+      Cases_on `a` >> simp[value_has_type_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      simp[value_has_type_def, val_wf_def, evaluate_subscripts_def,
+           array_index_def, oEL_THM, subscript_type_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[]
+      >- (irule aug_place_tuple_wf_project >> simp[]) 
+      >- (Cases_on `b` >> gvs[mem_step_offset_def] >>
+          irule aug_place_elems_wf_project >> simp[]) >>
+      gvs[mem_step_offset_def]
+      >- simp[cj 1 val_wf_default_value_proof] >>
+      gvs[aug_place_kvs_wf_all] >> metis_tac[ALOOKUP_MEM]) >>
+  Cases_on `tv` >> simp[mem_step_offset_def] >>
+  Cases_on `a` >> simp[value_has_type_def, val_wf_def,
+    evaluate_subscripts_def, AllCaseEqs()] >> rpt strip_tac >>
+  drule aug_place_field_type >> strip_tac >>
+  irule aug_place_fields_wf_project >> metis_tac[]
+QED
+
+Theorem aug_place_path_mstore:
+  !path tv k ptv a old a' v base s etv.
+    mem_path_offset tv path = SOME (k,ptv) /\
+    well_formed_type_value tv /\ value_has_type tv a /\ val_wf tv a /\
+    val_in_memory tv a base s.vs_memory /\
+    evaluate_subscripts tv a path = INL old /\
+    assign_subscripts tv a path (Replace v) = INL a' /\
+    store_lays_out etv ptv v ==>
+    val_wf tv a' /\
+    val_in_memory tv a' base (mstore (base+k) (typed_val_to_w256 etv v) s).vs_memory
+Proof
+  Induct
+  >- simp[mem_path_offset_def, assign_subscripts_def, store_lays_out_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[mem_path_offset_def, AllCaseEqs()] >> PairCases_on `z` >> gvs[] >>
+  drule aug_place_step_type >> strip_tac >>
+  drule_all aug_place_assign_cons >> strip_tac >>
+  rename1 `assign_subscripts etv' child_old path (Replace v) = INL child_new` >>
+  `well_formed_type_value etv'` by metis_tac[subscript_type_well_formed] >>
+  `subscripts_type tv [h] = SOME etv'` by simp[subscripts_type_def] >>
+  `value_has_type etv' child_old` by metis_tac[evaluate_subscripts_type] >>
+  `val_wf etv' child_old` by metis_tac[aug_place_step_wf_project] >>
+  `val_in_memory etv' child_old (base'+k') s.vs_memory` by
+    metis_tac[aug_place_step_project] >>
+  drule evaluate_subscripts_cons_typed >>
+  disch_then (qspecl_then [`path`,`a`] mp_tac) >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `evaluate_subscripts etv' child_old path = INL old` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  conj_tac >- (irule aug_place_step_wf >> metis_tac[]) >>
+  irule aug_place_step_memory >>
+  qexistsl_tac [`a`, `child_new`, `etv'`, `k'`, `s.vs_memory`, `child_old`, `h`] >>
+  qpat_x_assum `evaluate_subscripts _ _ _ = evaluate_subscripts _ _ _` kall_tac >>
+  qpat_x_assum `INL old = _` kall_tac >>
+  reverse conj_tac >- (pure_rewrite_tac[ADD_ASSOC] >> simp[]) >>
+  `z0 + type_memory_size ptv <= type_memory_size etv'` by
+    metis_tac[mem_path_offset_sound] >>
+  gvs[store_lays_out_def] >> rpt strip_tac >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
