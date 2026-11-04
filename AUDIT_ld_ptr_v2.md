@@ -388,3 +388,41 @@ preserves the PHI-prefix ordering property, NOT equality of prefixes. Neither
 may be substituted for the still-missing common-prefix correspondence origin.
 This checkpoint proves definedness/success transport only, not dload_vars_match,
 provenance/taint coupling, saved suffix layouts or whole enters_block transport.
+
+## Exact supply PHI computation (C1.12.3.6)
+
+Checked in lowerDloadPtrPhiTheory:
+- `lower_dload_insts_supply_phi_exact`: from
+  `lower_dload_insts_supply q xs = (ys,q')`, gives the conjunction
+  `phi_prefix_length ys = phi_prefix_length xs`,
+  `TAKE (phi_prefix_length ys) ys = TAKE (phi_prefix_length xs) xs`, and
+  `!s. eval_phis s ys = eval_phis s xs`.
+- `lower_dload_block_supply_phi_exact`: the same three equalities for
+  `bb'.bb_instructions` and `bb.bb_instructions`, given the actual
+  `lower_dload_block_supply q bb = (bb',q')` witness.
+- `lower_dload_block_supply_phi_definedness`: given that block witness,
+  equal predecessors and labels in s,t, coverage of all Var operands of
+  bb's instructions by V, equal lookup definedness on V, and successful
+  target `eval_phis t bb'.bb_instructions = OK t'`, obtains successful
+  source `eval_phis s bb.bb_instructions = OK s'` with equal definedness
+  on V in s',t'. Values need not agree.
+
+The list proof reuses existing inst-supply nonempty, special and control
+lemmas rather than duplicating expansion shape facts. PHIs remain singleton
+expansions; the first non-PHI expansion head remains non-PHI, so both
+computations stop there, including on malformed DLOAD fallbacks.
+
+Premise origins for subsequent consumers:
+- Entry AND later block: common-prefix equality and same-state eval_phis
+  equality now follow from the actual block-supply witness, not ordering.
+- Both: obtaining that witness from the selected transformed function/block
+  remains an integration obligation. These theorems do not supply lookup
+  correspondence or equality of block labels.
+- Entry: original variable definedness starts from identical initial vars;
+  predecessor/label equality still requires paired setup reasoning.
+- Later block: original-variable definedness and equal predecessor/labels
+  must be maintained by the relational invariant; no new origin proved here.
+- V operand coverage is a syntactic choice (all original variables); opaque
+  original variables must not be removed from definedness coverage.
+- No provenance/value/memory relation, saved suffix layout, call/return,
+  or full enters_block transport is established by these equalities.

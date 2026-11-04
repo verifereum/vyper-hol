@@ -1,7 +1,7 @@
 Theory lowerDloadPtrPhi
 Ancestors
   venomExecSemantics venomState venomInst execEquivParamBase
-  list pred_set finite_map
+  list pred_set finite_map lowerDloadDefs o1ContractLowerDload
 
 Theorem eval_operand_definedness:
   s.vs_labels = t.vs_labels /\
@@ -67,4 +67,52 @@ Proof
       simp[Once eval_phis_def] >> gvs[] >>
       rpt strip_tac >> irule update_var_definedness >> qexists `V` >> simp[]) >>
   gvs[Once eval_phis_def] >> qexists `s` >> simp[Once eval_phis_def]
+QED
+
+Theorem lower_dload_insts_supply_phi_exact:
+  !xs q ys q'. lower_dload_insts_supply q xs = (ys,q') ==>
+    phi_prefix_length ys = phi_prefix_length xs /\
+    TAKE (phi_prefix_length ys) ys = TAKE (phi_prefix_length xs) xs /\
+    (!s. eval_phis s ys = eval_phis s xs)
+Proof
+  Induct_on `xs` >- simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (`lower_dload_inst_supply q h = ([h],q)` by
+        (irule lower_dload_inst_supply_special >> simp[]) >>
+      gvs[] >> first_x_assum drule >> strip_tac >> gvs[] >>
+      simp[phi_prefix_length_def, eval_phis_def]) >>
+  `out <> []` by metis_tac[lower_dload_inst_supply_nonempty] >>
+  Cases_on `out` >- gvs[] >>
+  `h'.inst_opcode <> PHI` by
+    (strip_tac >> drule lower_dload_inst_supply_control >>
+     simp[] >> metis_tac[]) >>
+  gvs[phi_prefix_length_def, eval_phis_def]
+QED
+
+Theorem lower_dload_block_supply_phi_exact:
+  lower_dload_block_supply q bb = (bb',q') ==>
+    phi_prefix_length bb'.bb_instructions = phi_prefix_length bb.bb_instructions /\
+    TAKE (phi_prefix_length bb'.bb_instructions) bb'.bb_instructions =
+      TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions /\
+    (!s. eval_phis s bb'.bb_instructions = eval_phis s bb.bb_instructions)
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule lower_dload_insts_supply_phi_exact >> simp[]
+QED
+
+Theorem lower_dload_block_supply_phi_definedness:
+  lower_dload_block_supply q bb = (bb',q') /\
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
+  (!i v. MEM i bb.bb_instructions /\ MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  eval_phis t bb'.bb_instructions = OK t' ==>
+  ?s'. eval_phis s bb.bb_instructions = OK s' /\
+       (!v. v IN V ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE))
+Proof
+  strip_tac >> drule lower_dload_block_supply_phi_exact >> strip_tac >>
+  gvs[] >> irule eval_phis_definedness >>
+  conj_tac >- (rpt strip_tac >> first_x_assum irule >> qexists `i` >> simp[]) >>
+  qexists `t` >> simp[]
 QED
