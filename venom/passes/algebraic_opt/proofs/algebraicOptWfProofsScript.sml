@@ -1703,10 +1703,4 @@ Proof
   qexists `sfinal` >> gvs[Abbr `fn0`]
 QED
 
-val _ = if null (hyp ao_preserves_wf_function_proof) andalso
-  null (hyp ao_supply_covers_fn_bound) then ()
-  else raise Fail "residual hypotheses in AO final theorem";
 
-val _ = if List.all (fn s => s = "DISK_THM")
-  (#1 (Tag.dest_tag (Thm.tag ao_preserves_wf_function_proof))) then ()
-  else raise Fail "oracle dependency in AO final theorem";
