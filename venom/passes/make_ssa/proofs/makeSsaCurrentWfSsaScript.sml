@@ -1373,6 +1373,7 @@ Theorem current_wf_precleanup_names:
     add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
       (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
         (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+    current_history_valid (FLAT (MAP block_ir_vars ins)) H /\
     EVERY (current_event_names H (FLAT (MAP block_ir_vars ins))) events /\
     EVERY (current_event_valid A (FLAT (MAP block_ir_vars ins))) events /\
     EVERY (current_event_trace A H) events
@@ -1397,7 +1398,7 @@ Proof
   drule_all current_provenance_initial_tree_names >> strip_tac >>
   drule_all current_wf_provenance_valid_events >> strip_tac >>
   drule (cj 1 current_tree_trace_events) >> strip_tac >>
-  simp[]
+  fs[current_allocation_consistent_def]
 QED
 
 Theorem current_wf_precleanup_event:
@@ -2695,6 +2696,28 @@ Proof
   fs[EVERY_MEM] >> metis_tac[current_event_names_accessors]
 QED
 
+Theorem current_wf_precleanup_slot_shape:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\
+  defs = compute_defs (MAP THE (FILTER IS_SOME
+    (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))) /\
+  add_phi_nodes_supply s (current_frontier_map fn) (current_pred_map fn)
+    (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) fn.fn_blocks defs = (ins,si) /\
+  lookup_block h ins = SOME old /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_operands = current_phi_slots slots ==>
+  ?new pairs. lookup_block h renamed = SOME new /\
+    LENGTH new.bb_instructions = LENGTH old.bb_instructions /\
+    k < LENGTH new.bb_instructions /\ (EL k new.bb_instructions).inst_opcode = PHI /\
+    (EL k new.bb_instructions).inst_operands = current_phi_slots pairs /\
+    MAP FST pairs = MAP FST slots
+Proof
+  simp[current_wf_precleanup_certificate_def] >> rpt strip_tac >> gvs[] >>
+  irule current_wf_tree_phi_slot_shape >>
+  metis_tac[current_actual_succs_distinct]
+QED
+
 Definition current_wf_phi_context_def:
   current_wf_phi_context s fn renamed s' A H events <=>
     current_wf_precleanup_certificate s fn renamed s' A H events /\
@@ -2904,6 +2927,57 @@ Proof
   drule_all current_wf_precleanup_output >> strip_tac >>
   qexists_tac `n` >> simp[current_wf_token_owner_def] >>
   gvs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem current_wf_original_phi_shape:
+  current_wf_phi_context s fn renamed s' A H events /\
+  current_wf_original_phi_at fn A renamed h k q slots /\
+  lookup_block h renamed = SOME new ==>
+  ?pairs. (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+    MAP FST pairs = MAP FST slots
+Proof
+  rewrite_tac[current_wf_phi_context_def, current_wf_original_phi_at_def] >>
+  strip_tac >> gvs[] >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `LENGTH pre = LENGTH pre'` by
+    (`current_block_annotations old pre = current_block_annotations old pre'` by
+       metis_tac[] >>
+     pop_assum (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[current_block_annotations_def, current_inserted_annotations_def]) >>
+  `LENGTH pre' + k < LENGTH (old with bb_instructions := pre' ++ old.bb_instructions).bb_instructions /\
+    (EL (LENGTH pre' + k) (old with bb_instructions := pre' ++ old.bb_instructions).bb_instructions).inst_opcode = PHI /\
+    (EL (LENGTH pre' + k) (old with bb_instructions := pre' ++ old.bb_instructions).bb_instructions).inst_operands = current_phi_slots (phi_pairs (EL k old.bb_instructions).inst_operands)` by
+    simp[EL_APPEND_EQN] >>
+  drule_all current_wf_precleanup_slot_shape >> strip_tac >>
+  rpt (qpat_x_assum `_.inst_operands = current_phi_slots (phi_pairs _)` kall_tac) >>
+  gvs[arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
+
+Theorem current_wf_original_phi_pair:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  current_wf_original_phi_at fn A renamed h k q slots /\
+  lookup_block h renamed = SOME new /\
+  (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+  MAP FST pairs = MAP FST slots /\ i < LENGTH slots /\ EL i slots = (p,v) ==>
+  ?ev n. MEM ev events /\ current_event_label ev = p /\
+    current_wf_token_owner fn (current_event_exit_env ev v) v /\
+    (!w. current_event_exit_env ev v <> CurrentDefault w) /\
+    current_token_name H (current_event_exit_env ev v) = SOME n /\
+    EL i pairs = (p,n)
+Proof
+  strip_tac >>
+  qpat_assum `current_wf_original_phi_at _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_original_phi_at_def] >> strip_tac >>
+  drule_all current_wf_original_phi_slot >> strip_tac >>
+  `q' = q` by metis_tac[current_wf_original_phi_index_unique] >>
+  `i < LENGTH pairs` by metis_tac[LENGTH_MAP] >>
+  `EL (2 * i) (current_phi_slots pairs) = Label (FST (EL i pairs)) /\
+    EL (2 * i + 1) (current_phi_slots pairs) = Var (SND (EL i pairs))` by
+    metis_tac[current_phi_slots_index] >>
+  rpt (qpat_x_assum `_.inst_operands = current_phi_slots slots` kall_tac) >>
+  qexistsl_tac [`ev`, `n`] >> gvs[] >>
+  Cases_on `EL i pairs` >> gvs[]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
