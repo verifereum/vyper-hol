@@ -434,7 +434,6 @@ Theorem canon_inst_structure[local]:
     canon_inst vm1 inst1 = (vm1', ci) /\
     canon_inst vm2 inst2 = (vm2', ci) ==>
     inst1.inst_opcode = inst2.inst_opcode /\
-    inst1.inst_id = inst2.inst_id /\
     LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
     LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs /\
     (!i l. i < LENGTH inst1.inst_operands /\
@@ -828,7 +827,7 @@ Theorem var_corr_after_step_output[local]:
     inst1.inst_opcode <> PHI /\ inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET /\
     is_output_opcode inst1.inst_opcode /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     sim_pre inst1 inst2 s1 s2 /\
     ALL_DISTINCT inst1.inst_outputs /\ ALL_DISTINCT inst2.inst_outputs /\
     (!v. (?idx. ALOOKUP vm1 v = SOME idx) ==> ~MEM v inst1.inst_outputs) /\
@@ -915,7 +914,7 @@ Theorem sim_inv_after_step_output[local]:
     inst1.inst_opcode <> PHI /\
     inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     is_output_opcode inst1.inst_opcode /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
@@ -932,7 +931,6 @@ Proof
   rpt strip_tac
   (* derive structural/wf facts *)
   \\ `inst1.inst_opcode = inst2.inst_opcode /\
-      inst1.inst_id = inst2.inst_id /\
       LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
       LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs`
        by metis_tac[canon_inst_structure]
@@ -1022,7 +1020,7 @@ Theorem sim_inv_after_step_no_output[local]:
     inst1.inst_opcode <> PHI /\
     inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     inst1.inst_outputs = [] /\
     (!v. MEM (Var v) inst1.inst_operands ==>
          ?idx. ALOOKUP vm1 v = SOME idx) /\
@@ -1032,7 +1030,6 @@ Theorem sim_inv_after_step_no_output[local]:
 Proof
   rpt strip_tac
   \\ `inst1.inst_opcode = inst2.inst_opcode /\
-      inst1.inst_id = inst2.inst_id /\
       LENGTH inst1.inst_operands = LENGTH inst2.inst_operands /\
       LENGTH inst1.inst_outputs = LENGTH inst2.inst_outputs`
        by metis_tac[canon_inst_structure]
@@ -1095,7 +1092,7 @@ Theorem sim_inv_after_step[local]:
     inst1.inst_opcode <> PHI /\
     inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     (is_output_opcode inst1.inst_opcode \/ inst1.inst_outputs = []) /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
@@ -1184,6 +1181,7 @@ Theorem block_ctx_step_sim[local]:
     (EL idx bb2.bb_instructions).inst_opcode <> INVOKE /\
     (EL idx bb1.bb_instructions).inst_opcode <> PARAM /\
     (EL idx bb2.bb_instructions).inst_opcode <> PARAM /\
+    (EL idx bb1.bb_instructions).inst_opcode <> ALLOCA /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb1.bb_instructions)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb2.bb_instructions)) /\
     (!j v. j < idx /\ j < LENGTH bb1.bb_instructions /\
@@ -1236,9 +1234,6 @@ Proof
                                assume_tac th1 >> assume_tac th2))
             end) >>
             rpt (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac)
-  \\ `(EL idx bb1.bb_instructions).inst_id =
-      (EL idx bb2.bb_instructions).inst_id`
-       by (imp_res_tac canon_inst_same_id)
   \\ irule step_inst_base_sim
   \\ rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -1461,6 +1456,7 @@ Theorem non_term_step_invariant[local]:
     (EL idx bb2.bb_instructions).inst_opcode <> INVOKE /\
     (EL idx bb1.bb_instructions).inst_opcode <> PARAM /\
     (EL idx bb2.bb_instructions).inst_opcode <> PARAM /\
+    (EL idx bb1.bb_instructions).inst_opcode <> ALLOCA /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb1.bb_instructions)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb2.bb_instructions)) /\
     (is_output_opcode (EL idx bb1.bb_instructions).inst_opcode \/
@@ -1494,14 +1490,13 @@ Theorem non_term_step_invariant[local]:
              MEM v (EL j bb2.bb_instructions).inst_outputs)
 Proof
   rpt gen_tac >> strip_tac >> (
-  (* Derive opcode/id equality *)
+  (* Derive opcode equality *)
   (let val thm = REWRITE_RULE [GSYM AND_IMP_INTRO] (SPEC_ALL canon_inst_same_fields)
    in qpat_assum `canon_inst vm1 _ = _`
         (fn th1 => qpat_assum `canon_inst vm2 _ = _`
           (fn th2 =>
             let val fields = MATCH_MP (MATCH_MP thm th1) th2
-            in assume_tac (CONJUNCT1 fields) >>
-               assume_tac (CONJUNCT2 fields) >>
+            in assume_tac fields >>
                assume_tac th1 >> assume_tac th2
             end))
    end) >>
@@ -1655,6 +1650,7 @@ Theorem run_block_sim[local]:
     EVERY (\i. i.inst_opcode <> INVOKE) bb2.bb_instructions /\
     EVERY (\i. i.inst_opcode <> PARAM) bb1.bb_instructions /\
     EVERY (\i. i.inst_opcode <> PARAM) bb2.bb_instructions /\
+    EVERY (\i. i.inst_opcode <> ALLOCA) bb1.bb_instructions /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb1.bb_instructions)) /\
     ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) bb2.bb_instructions)) /\
     EVERY (\i. is_output_opcode i.inst_opcode \/ i.inst_outputs = [])
@@ -1704,10 +1700,9 @@ Proof
             val cis = List.filter (can (match_term
                ``canon_inst vm (EL n bb.bb_instructions) = x``)) asms
             val ci1 = hd cis val ci2 = hd (tl cis)
-            (* Derive opcode/id equality *)
+            (* Derive opcode equality *)
             val result = MATCH_MP (MATCH_MP csf (ASSUME ci1)) (ASSUME ci2)
-            val opc_eq = CONJUNCT1 result
-            val id_eq = CONJUNCT2 result
+            val opc_eq = result
             (* Derive INVOKE exclusions from EVERY + idx < LENGTH *)
             val ev_invs = List.filter (can (match_term
                ``EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions``)) asms
@@ -1720,7 +1715,7 @@ Proof
                  handle _ => NONE) idx_lts) ev_invs)
             val rws = map (fn th => MATCH_MP sni th) neqs
             val is_term_eq = AP_TERM ``is_terminator`` opc_eq
-        in (assume_tac opc_eq >> assume_tac id_eq >>
+        in (assume_tac opc_eq >>
             REWRITE_TAC rws >>
             assume_tac is_term_eq >>
             (* Also add the GSYM so ASM_REWRITE_TAC can go both directions *)
@@ -1805,6 +1800,11 @@ Theorem halting_sig_equiv[local]:
 Proof
   rpt strip_tac >>
   gvs[block_signature_def, AllCaseEqs()] >>
+  `EVERY (\i. i.inst_opcode <> ALLOCA) bb1.bb_instructions`
+    by (qpat_x_assum `EVERY (\inst. ~is_alloca_op _) bb1.bb_instructions`
+          mp_tac >>
+        match_mp_tac listTheory.EVERY_MONOTONIC >>
+        simp[is_alloca_op_def] >> rpt strip_tac >> gvs[is_alloca_op_def]) >>
   irule run_block_sim >> simp[] >>
   conj_tac >- metis_tac[canon_insts_same_length] >>
   qexists_tac `[]` >> qexists_tac `[]` >>

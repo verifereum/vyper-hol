@@ -1034,22 +1034,14 @@ fun prove_ext_call bridge_thm cr opc =
 (* LOG: dispatched to pre-proved log_step_sim theorem *)
 fun prove_log cr opc = log_step_sim;
 
-(* ALLOCA and OFFSET: need Lit/Label preservation.
-   Strategy: resolve inst1 operands via CASE_TAC, derive inst2 operands
-   from sim_pre extraction lemmas to avoid cross-product blowup. *)
+(* ALLOCA: excluded by the caller (tail merge never merges ALLOCA blocks,
+   since exec_alloca keys vs_allocas by inst_id), so the case is vacuous. *)
 fun prove_alloca cr opc =
   let val goal = ``!inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id ==>
+    inst1.inst_opcode <> ALLOCA ==>
     step_sim inst1 inst2 s1 s2``
-  in prove(goal,
-  rpt gen_tac >> strip_tac >>
-  `sim_pre inst1 inst2 s1 s2` by first_assum ACCEPT_TAC >>
-  fs[sim_pre_def] >>
-  imp_res_tac cr >> simp[step_sim_def, exec_alloca_def] >>
-  spec_evals >> decompose_ops >>
-  rpt (CASE_TAC >> gvs[]) >>
-  gvs inline_close_defs)
+  in prove(goal, rpt gen_tac >> strip_tac >> fs[])
   end;
 
 (* OFFSET now uses exec_pure2, handled by category dispatch *)
@@ -1118,7 +1110,7 @@ val all_opcode_thms = map timed_prove_opcode target_opcodes;
 Theorem step_inst_base_sim:
   !inst1 inst2 s1 s2.
     sim_pre inst1 inst2 s1 s2 /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ~is_terminator inst1.inst_opcode /\
     inst1.inst_opcode <> PHI /\ inst1.inst_opcode <> PARAM /\
     inst1.inst_opcode <> RET ==>
@@ -1316,7 +1308,7 @@ fun output_thm_for_cat "exec_pure1" = SOME exec_pure1_output
 fun prove_output_cat out_thm cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1341,7 +1333,7 @@ fun prove_output_cat out_thm cr opc =
 fun prove_output_inline cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1396,7 +1388,7 @@ val output_target_opcodes =
 fun prove_output_ext_call bridge_thm cr opc =
   prove(``!inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\ inst1.inst_opcode = ^opc /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     step_inst_base inst1 s1 = OK s1' /\
@@ -1474,7 +1466,7 @@ End
 Theorem step_inst_base_output_match:
   !inst1 inst2 s1 s2 s1' s2'.
     sim_pre inst1 inst2 s1 s2 /\
-    inst1.inst_id = inst2.inst_id /\
+    inst1.inst_opcode <> ALLOCA /\
     ALL_DISTINCT inst1.inst_outputs /\
     ALL_DISTINCT inst2.inst_outputs /\
     ~is_terminator inst1.inst_opcode /\
