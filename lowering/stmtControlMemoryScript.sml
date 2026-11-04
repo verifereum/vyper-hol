@@ -1,7 +1,7 @@
 (* Memory-safe conditional and direct control statements. *)
 Theory stmtControlMemory
 Ancestors
-  stmtSimJumpMem
+  stmtSimJumpMem stmtRaiseMemory
   bodyMemoryDefs stmtSimIf stmtSimDefs fragExecMem exprSimDefs exprSimHyps
   exprLoweringProps stmtLowering compileEnv venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperState list finite_map
@@ -685,32 +685,6 @@ Proof
   fs[Abbr `se`, Abbr `si`] >>
   (impl_tac >- (Cases_on `b` >> gvs[] >> metis_tac[exit_result_not_error])) >>
   strip_tac >> qexists_tac `fuel'` >> Cases_on `b` >> gvs[]
-QED
-
-Theorem compile_raise_frag_mem:
-  !d ctx func cx lctx RetQ cenv ty rk es res es'.
-    (rk = RaiseBare \/ rk = RaiseUnreachable) /\
-    eval_stmt cx (Raise rk) es = (res, es') ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Raise rk))
-      es res es'
-Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  qmatch_goalsub_abbrev_tac `emit_inst opc ops [] sa` >>
-  Cases_on `emit_inst opc ops [] sa` >> rename1 `_ = (u, sm)` >>
-  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  drule emit_abort_exit_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `s0`, `RetQ`, `es'`, `res`] mp_tac) >>
-  (impl_tac
-   >- (fs[markerTheory.Abbrev_def] >>
-       qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-       simp[Once evaluate_def, raise_def] >> strip_tac >>
-       gvs[expr_exit_def, control_abort_frontier] >>
-       metis_tac[step_revert_zero_mem, step_invalid_mem])) >>
-  metis_tac[]
 QED
 
 Theorem compile_assert_frag_mem:
