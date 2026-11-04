@@ -269,6 +269,61 @@ Proof
   metis_tac[]
 QED
 
+(* Equality of the non-byte primitive representations at a common type. *)
+Theorem typed_val_to_w256_word_11:
+  !tv v1 v2.
+    word_value v1 /\ value_has_type tv v1 /\ value_has_type tv v2 /\
+    (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
+         m <= 256) ==>
+    (typed_val_to_w256 tv v1 = typed_val_to_w256 tv v2 <=> v1 = v2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tv` >> gvs[value_has_type_def]
+  >- (rename1 `BaseTV bt` >> Cases_on `bt` >>
+      Cases_on `v1` >> Cases_on `v2` >>
+      gvs[value_has_type_def, word_value_def, typed_val_to_w256_def,
+          val_to_w256_def]
+      >- (`?a. i = &a` by metis_tac[NUM_POSINT_EXISTS] >>
+      `?b. i' = &b` by metis_tac[NUM_POSINT_EXISTS] >>
+      gvs[i2w_pos, n2w_11, dimword_def] >>
+      `a < 2 ** 256 /\ b < 2 ** 256` by
+        (conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+         qexists_tac `2 ** n` >> simp[]) >>
+      gvs[arithmeticTheory.LESS_MOD])
+      >- (`w2i (i2w i : bytes32) = i /\ w2i (i2w i' : bytes32) = i'` by
+            (conj_tac >> irule w2i_i2w_within_signed >>
+             qexists_tac `n` >> simp[]) >> word_eq_tac)
+      >- (Cases_on `b` >> Cases_on `b'` >> simp[]) >>
+      `w2i (i2w i : bytes32) = i /\ w2i (i2w i' : bytes32) = i'` by
+        (conj_tac >> irule w2i_i2w_within_signed >>
+         qexists_tac `168` >> simp[]) >> word_eq_tac) >>
+  fs[word_value_def] >> gvs[] >> Cases_on `v2` >>
+  gvs[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  `k < 2 ** 256 /\ n' < 2 ** 256` by
+    (conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
+     qexists_tac `2 ** n` >> simp[]) >>
+  gvs[dimword_def, arithmeticTheory.LESS_MOD]
+QED
+
+Theorem typed_val_to_w256_prim_11:
+  !ty tenv tv v1 v2.
+    is_prim_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    well_formed_type_value tv /\
+    value_has_type tv v1 /\ value_has_type tv v2 ==>
+    (typed_val_to_w256 tv v1 = typed_val_to_w256 tv v2 <=> v1 = v2)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ty` >>
+  gvs[vyperTypeSystemTheory.is_prim_word_type_def,
+      evaluate_type_def, AllCaseEqs()] >>
+  (Cases_on `word_value v1`
+   >- (irule typed_val_to_w256_word_11 >>
+       gvs[well_formed_type_value_def]) >>
+   Cases_on `v1` >> gvs[word_value_def, value_has_type_def] >>
+   Cases_on `v2` >> gvs[value_has_type_def] >>
+   irule typed_val_to_w256_bytes_11 >> simp[value_has_type_def])
+QED
+
 (* binop_frag_words for == and != on two address or two bytesN values of
    one type, held in their typed words: compile_compare's EQ on the words
    is the source's comparison of the bytes. *)

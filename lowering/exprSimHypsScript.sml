@@ -1343,3 +1343,106 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   Cases_on `expr_int_literal e2` >> gvs[]
 QED
+
+(* Literal membership must include defaults omitted by sparse enumeration. *)
+Theorem enumerate_static_array_membership:
+  !vs k.
+    (MEM v (MAP SND (enumerate_static_array d k vs)) <=>
+       MEM v vs /\ v <> d) /\
+    LENGTH (enumerate_static_array d k vs) <= LENGTH vs /\
+    (LENGTH (enumerate_static_array d k vs) < LENGTH vs <=> MEM d vs)
+Proof
+  Induct_on `vs` >- simp[enumerate_static_array_def] >>
+  rpt gen_tac >> simp[enumerate_static_array_def] >>
+  Cases_on `h = d` >> gvs[] >>
+  first_x_assum (qspec_then `SUC k` strip_assume_tac) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem evaluate_membership_literal_array:
+  !bd vs tv negate v.
+  compatible_bound bd (LENGTH vs) ==>
+  evaluate_membership (ArrayTV tv bd) negate v
+    (ArrayV (make_array_value tv bd vs)) =
+  INL (BoolV (if negate then ~MEM v vs else MEM v vs))
+Proof
+  Cases_on `bd` >>
+  simp[compatible_bound_def, make_array_value_def,
+       vyperValueOperationTheory.evaluate_membership_array,
+       vyperValueOperationTheory.evaluate_in_array_def,
+       enumerate_static_array_membership] >>
+  metis_tac[]
+QED
+
+Theorem expr_body_pre_literal_membership:
+  !cenv cx env ann bop e1 a t bd elems es.
+    expr_body_pre cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t bd) elems]) es /\
+    (bop = In \/ bop = NotIn) ==>
+    ?et. t = SOME et /\ a = ArrayT et bd /\
+      ann = BaseT BoolT /\ expr_type e1 = et /\ is_prim_word_type et /\
+      compatible_bound bd (LENGTH elems) /\
+      EVERY (\e. expr_type e = et) elems
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def,
+       well_typed_builtin_app_def] >>
+  rpt strip_tac >> Cases_on `t` >>
+  gvs[well_typed_builtin_app_def, well_typed_binop_def, expr_type_def,
+      EVERY_MAP, EVERY_MEM]
+QED
+
+Theorem aggregate_eval_make_array:
+  compatible_bound bnd (LENGTH args) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  eval_exprs cx args es = (rr,es') ==>
+  eval_expr cx (Builtin ann (MakeArray (SOME et) bnd) args) es =
+    ((case rr of INL vs => INL (Value (ArrayV (make_array_value tv bnd vs)))
+      | INR exc => INR exc),es')
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def, type_check_def,
+    assert_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `rr` >>
+  simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
+    return_def, raise_def, bind_def]
+QED
+
+Theorem eval_expr_literal_membership:
+  !bop bd elems cx et tv e1 es.
+  (bop = In \/ bop = NotIn) /\ compatible_bound bd (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) ==>
+  eval_expr cx (Builtin (BaseT BoolT) (Bop bop)
+    [e1; Builtin (ArrayT et bd) (MakeArray (SOME et) bd) elems]) es =
+  (do r <- eval_expr cx e1;
+      v <- read_result cx r;
+      vs <- eval_exprs cx elems;
+      return (Value (BoolV (if bop = NotIn then ~MEM v vs else MEM v vs)))
+   od) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       return_def, bind_def, expr_type_def,
+       lift_option_type_def, lift_option_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e1 es` >>
+  rename1 `eval_expr cx e1 es = (r1, s1)` >>
+  Cases_on `r1` >> simp[] >>
+  Cases_on `read_result cx x s1` >>
+  rename1 `read_result cx x s1 = (r2, s2)` >>
+  Cases_on `r2` >> simp[] >>
+  rename1 `read_result cx x s1 = (INL needle, s2)` >>
+  Cases_on `eval_exprs cx elems s2` >>
+  rename1 `eval_exprs cx elems s2 = (rr, s3)` >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` kall_tac >>
+  drule_all aggregate_eval_make_array >>
+  disch_then (qspec_then `ArrayT et bd` assume_tac) >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `rr` >> gvs[] >>
+  drule eval_exprs_length >> strip_tac >>
+  `compatible_bound bd (LENGTH x')` by metis_tac[] >>
+  simp[read_result_def, Once evaluate_def, return_def, bind_def,
+       evaluate_membership_literal_array, lift_sum_def]
+QED
