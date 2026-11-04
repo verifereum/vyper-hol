@@ -130,3 +130,108 @@ val () = List.app (fn th =>
      then print "BODY_NEG_PRESERVATION_MEMORY_AUDIT OK\n"
      else raise Fail "Neg preservation inherited admission"
   end) [body_neg_history, body_neg_state_post];
+
+Theorem body_neg_result:
+  compile_neg x ty sm = (dst,sn) ==>
+  dst = Var ("%" ++ toString (sm.cs_next_var + 1))
+Proof
+  strip_tac >>
+  gvs[compile_neg_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+      comp_return_def, fresh_var_def, fresh_id_def, emit_def]
+QED
+
+Theorem body_neg_old_operand[local]:
+  (!z. x = Var z ==> not_fresh_at sm z) ==>
+  eval_operand x (update_var ("%" ++ toString sm.cs_next_var) v s) =
+  eval_operand x s
+Proof
+  Cases_on `x` >> simp[eval_operand_def, lookup_var_update_var] >>
+  rpt strip_tac >> gvs[not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem body_neg_run:
+  compile_neg x ty sm = (dst,sn) /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME w ==>
+  (word_gt w (FST (type_bounds ty)) ==>
+    ?t. run_inst_seq (emitted_insts sm sn) s = OK t /\
+        eval_operand dst t = SOME (0w - w)) /\
+  (~word_gt w (FST (type_bounds ty)) ==>
+    run_inst_seq (emitted_insts sm sn) s =
+      Abort Revert_abort (revert_state (set_returndata []
+        (update_var ("%" ++ toString sm.cs_next_var) 0w s))))
+Proof
+  strip_tac >> drule body_neg_emitted >> strip_tac >>
+  drule body_neg_result >> strip_tac >>
+  `!v. eval_operand x (update_var ("%" ++ toString sm.cs_next_var) v s) = SOME w`
+    by (gen_tac >> drule body_neg_old_operand >> simp[]) >>
+  `step_inst_base
+     (mk_inst sm.cs_next_id SGT [x; Lit (FST (type_bounds ty))]
+       ["%" ++ toString sm.cs_next_var]) s =
+    OK (update_var ("%" ++ toString sm.cs_next_var)
+      (bool_to_word (word_gt w (FST (type_bounds ty)))) s)` by
+    (irule step_SGT >> simp[eval_operand_lit]) >>
+  `!v. step_inst_base
+    (mk_inst (sm.cs_next_id + 2) SUB [Lit 0w; x]
+      ["%" ++ toString (sm.cs_next_var + 1)])
+    (update_var ("%" ++ toString sm.cs_next_var) v s) =
+    OK (update_var ("%" ++ toString (sm.cs_next_var + 1)) (0w - w)
+      (update_var ("%" ++ toString sm.cs_next_var) v s))` by
+    (gen_tac >> irule step_SUB >> simp[eval_operand_lit]) >>
+  gvs[] >> simp[run_inst_seq_def] >>
+  conj_tac >> strip_tac >>
+  simp[bool_to_word_def, run_inst_seq_def, step_ASSERT_ok, step_ASSERT_revert,
+       step_SUB, eval_operand_lit, eval_operand_def, lookup_var_update_var]
+QED
+
+Theorem body_neg_frag_mem_at:
+  compile_neg x ty sm = (dst,sn) /\ local_ptrs_reserved cenv sm /\
+  fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
+  (!z. x = Var z ==> not_fresh_at sm z) /\
+  (~word_gt w (FST (type_bounds ty)) ==> !q. R (Abort Revert_abort q)) ==>
+  frag_exec_mem ctx sm sn
+    (\s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
+         eval_operand x s = SOME w /\ alloca_history func s)
+    (\s. word_gt w (FST (type_bounds ty)) /\
+         stmt_state_rel ctx func cenv cx es s /\
+         eval_operand dst s = SOME (0w - w) /\
+         (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
+                lookup_var z s = SOME v) /\
+         s.vs_memory = entry.vs_memory /\ s.vs_allocas = entry.vs_allocas /\
+         s.vs_alloca_next = entry.vs_alloca_next /\ alloca_history func s) R
+Proof
+  strip_tac >> drule body_neg_shape >> strip_tac >>
+  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
+    eval_operand x s = SOME w /\ alloca_history func s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+  `frag_exec_mem ctx sm sn P
+    (\s. word_gt w (FST (type_bounds ty)) /\
+         stmt_state_rel ctx func cenv cx es s /\
+         eval_operand dst s = SOME (0w - w) /\
+         (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
+                lookup_var z s = SOME v) /\
+         s.vs_memory = entry.vs_memory /\ s.vs_allocas = entry.vs_allocas /\
+         s.vs_alloca_next = entry.vs_alloca_next /\ alloca_history func s) R`
+    suffices_by (simp[frag_exec_mem_def, Abbr `P`] >> metis_tac[]) >>
+  irule frag_exec_mem_run_inst_seq >> simp[IS_PREFIX_APPEND3] >>
+  reverse conj_tac >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+  gen_tac >> strip_tac >> gvs[Abbr `P`] >>
+  conj_tac >- metis_tac[body_neg_prefix_mem_ok] >>
+  drule_all body_neg_run >> strip_tac >>
+  Cases_on `word_gt w (FST (type_bounds ty))`
+  >- (gvs[] >> drule_all body_neg_state_post >> strip_tac >>
+      `alloca_inv entry` by gvs[stmt_state_rel_def] >>
+      drule_all body_neg_history >> strip_tac >>
+      gvs[stmt_state_rel_inst_idx, lookup_var_def, eval_operand_def]) >>
+  gvs[] >> disj2_tac >> metis_tac[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NEG_EXECUTION_MEMORY_AUDIT OK\n"
+     else raise Fail "Neg execution inherited admission"
+  end) [body_neg_result, body_neg_run, body_neg_frag_mem_at];
