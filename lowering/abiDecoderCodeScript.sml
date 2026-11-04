@@ -2,6 +2,7 @@
 Theory abiDecoderCode
 Ancestors
   abiEncoder abiDecoderContract compileEnv emitHelper context venomInst
+  compilerOccurrences list
 
 Definition abi_decoder_code_member_def:
   abi_decoder_code_member i st <=>
@@ -23,6 +24,22 @@ Definition abi_decoder_code_def:
       (st.cs_next_id <= i.inst_id /\ i.inst_id < st'.cs_next_id /\
        abi_decoder_alloc_shape i)
 End
+
+Theorem abi_decoder_chrono_member:
+  MEM i (compiler_chrono st) <=> abi_decoder_code_member i st
+Proof
+  simp[compiler_chrono_def, abi_decoder_code_member_def, MEM_FLAT,
+       MEM_MAP, MEM_REVERSE] >> metis_tac[]
+QED
+
+Theorem abi_decoder_occurrences_code:
+  compiler_emits abi_decoder_alloc_shape first last ==>
+  abi_decoder_code first last
+Proof
+  rw[compiler_emits_def, abi_decoder_code_def] >>
+  gvs[GSYM abi_decoder_chrono_member, MEM_APPEND, EVERY_MEM] >>
+  metis_tac[]
+QED
 
 Theorem abi_decoder_code_refl:
   abi_decoder_code st st
@@ -111,35 +128,103 @@ Proof
   simp[abi_decoder_code_emit_op, abi_decoder_code_return]
 QED
 
-(* One-level monadic composition, shared by the syntax-only proofs below. *)
-val code_simps = [abi_decoder_code_emit_op, abi_decoder_code_emit_void,
-  abi_decoder_code_emit_inst, abi_decoder_code_return,
-  abi_decoder_code_fresh_label, abi_decoder_code_new_block,
-  abi_decoder_code_alloc_buffer];
-val code_db = fn t => rpt gen_tac >> ho_match_mp_tac abi_decoder_code_bind >>
+(* Occurrence certificates: independent of inherited instruction syntax. *)
+Theorem abi_decoder_emits_emit_op:
+  (opc <> ALLOCA \/ ops = [Lit 32w]) ==>
+  compiler_emits abi_decoder_alloc_shape st (SND (emit_op opc ops st))
+Proof
+  strip_tac >> irule compiler_emits_emit_op >>
+  simp[abi_decoder_alloc_shape_def, mk_inst_def]
+QED
+
+Theorem abi_decoder_emits_emit_void:
+  opc <> ALLOCA ==>
+  compiler_emits abi_decoder_alloc_shape st (SND (emit_void opc ops st))
+Proof
+  strip_tac >> irule compiler_emits_emit_void >>
+  simp[abi_decoder_alloc_shape_def, mk_inst_def]
+QED
+
+Theorem abi_decoder_emits_emit_inst:
+  opc <> ALLOCA ==>
+  compiler_emits abi_decoder_alloc_shape st (SND (emit_inst opc ops outs st))
+Proof
+  strip_tac >> irule compiler_emits_emit_inst >>
+  simp[abi_decoder_alloc_shape_def, mk_inst_def]
+QED
+
+Theorem abi_decoder_emits_alloc_buffer:
+  compiler_emits abi_decoder_alloc_shape st (SND (compile_alloc_buffer 32 st))
+Proof
+  simp[compile_alloc_buffer_def] >> irule compiler_emits_bind >>
+  simp[abi_decoder_emits_emit_op, compiler_emits_return]
+QED
+
+val code_simps = [abi_decoder_emits_emit_op, abi_decoder_emits_emit_void,
+  abi_decoder_emits_emit_inst, compiler_emits_return,
+  compiler_emits_fresh_label, compiler_emits_new_block,
+  abi_decoder_emits_alloc_buffer];
+val code_db = fn t => rpt gen_tac >> ho_match_mp_tac compiler_emits_bind >>
   conj_tac >- simp (t::code_simps) >> rpt strip_tac;
-val code_dib = fn t => ho_match_mp_tac abi_decoder_code_ignore_bind >>
+val code_dib = fn t => ho_match_mp_tac compiler_emits_ignore_bind >>
   conj_tac >- simp (t::code_simps) >> rpt strip_tac;
+
+Theorem abi_decoder_emits_clamp:
+  !c v st. compiler_emits abi_decoder_alloc_shape st
+    (SND (compile_abi_clamp_basetype v c st))
+Proof
+  Cases >> simp[compile_abi_clamp_basetype_def,
+      compile_abi_int_clamp_def, compile_abi_bytes_clamp_def,
+      compiler_emits_return] >> rpt gen_tac >>
+  TRY (IF_CASES_TAC >> simp_tac pure_ss [LET_THM]) >>
+  ntac 2 (code_db abi_decoder_emits_emit_op) >>
+  simp[abi_decoder_emits_emit_void]
+QED
 
 Theorem abi_decoder_code_clamp:
   !c v st. abi_decoder_code st (SND (compile_abi_clamp_basetype v c st))
 Proof
-  Cases >> simp[compile_abi_clamp_basetype_def,
-      compile_abi_int_clamp_def, compile_abi_bytes_clamp_def,
-      abi_decoder_code_return] >> rpt gen_tac >>
-  TRY (IF_CASES_TAC >> simp_tac pure_ss [LET_THM]) >>
-  ntac 2 (code_db abi_decoder_code_emit_op) >>
-  simp[abi_decoder_code_emit_void]
+  metis_tac[abi_decoder_emits_clamp, abi_decoder_occurrences_code]
 QED
 
+Theorem abi_decoder_emits_static:
+  opc <> ALLOCA /\
+  (!v st. compiler_emits abi_decoder_alloc_shape st (SND (clamp v st))) ==>
+  !st. compiler_emits abi_decoder_alloc_shape st
+    (SND (compile_abi_decode_static src dst opc clamp st))
+Proof
+  strip_tac >> rewrite_tac[compile_abi_decode_static_def] >>
+  code_db abi_decoder_emits_emit_op >> code_dib compiler_emits_refl >>
+  simp[abi_decoder_emits_emit_void]
+QED
+
+(* Retain the pre-existing interface for consumers with only a weak clamp. *)
 Theorem abi_decoder_code_static:
   opc <> ALLOCA /\
   (!v st. abi_decoder_code st (SND (clamp v st))) ==>
   !st. abi_decoder_code st (SND (compile_abi_decode_static src dst opc clamp st))
 Proof
-  strip_tac >> rewrite_tac[compile_abi_decode_static_def] >>
-  code_db abi_decoder_code_emit_op >> code_dib abi_decoder_code_refl >>
-  simp[abi_decoder_code_emit_void]
+  strip_tac >> rewrite_tac[compile_abi_decode_static_def] >> rpt gen_tac >>
+  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
+  >- simp[abi_decoder_code_emit_op] >> rpt strip_tac >>
+  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  >- simp[] >> simp[abi_decoder_code_emit_void]
+QED
+
+Theorem abi_decoder_emits_getelemptr:
+  opc <> ALLOCA ==>
+  !st. compiler_emits abi_decoder_alloc_shape st
+    (SND (compile_getelemptr_abi src dyn off opc hi st))
+Proof
+  strip_tac >> rewrite_tac[compile_getelemptr_abi_def] >>
+  code_db abi_decoder_emits_emit_op >> Cases_on `dyn` >>
+  simp[compiler_emits_return] >>
+  ntac 2 (code_db abi_decoder_emits_emit_op) >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_emits_return] >>
+      ntac 2 (code_db abi_decoder_emits_emit_op) >>
+      simp[abi_decoder_emits_emit_void]) >>
+  simp[compiler_emits_return]
 QED
 
 Theorem abi_decoder_code_getelemptr:
@@ -147,15 +232,23 @@ Theorem abi_decoder_code_getelemptr:
   !st. abi_decoder_code st
     (SND (compile_getelemptr_abi src dyn off opc hi st))
 Proof
-  strip_tac >> rewrite_tac[compile_getelemptr_abi_def] >>
-  code_db abi_decoder_code_emit_op >> Cases_on `dyn` >>
-  simp[abi_decoder_code_return] >>
-  ntac 2 (code_db abi_decoder_code_emit_op) >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[abi_decoder_code_return] >>
-      ntac 2 (code_db abi_decoder_code_emit_op) >>
-      simp[abi_decoder_code_emit_void]) >>
-  simp[abi_decoder_code_return]
+  metis_tac[abi_decoder_emits_getelemptr, abi_decoder_occurrences_code]
+QED
+
+Theorem abi_decoder_emits_dyn_elem_ptr:
+  opc <> ALLOCA ==>
+  !st. compiler_emits abi_decoder_alloc_shape st
+    (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st))
+Proof
+  strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
+  ntac 2 (code_db abi_decoder_emits_emit_op) >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_emits_return] >>
+      ntac 2 (code_db abi_decoder_emits_emit_op) >>
+      code_dib abi_decoder_emits_emit_void >>
+      ntac 3 (code_db abi_decoder_emits_emit_op) >>
+      simp[abi_decoder_emits_emit_void]) >>
+  simp[compiler_emits_return]
 QED
 
 Theorem abi_decoder_code_dyn_elem_ptr:
@@ -163,29 +256,18 @@ Theorem abi_decoder_code_dyn_elem_ptr:
   !st. abi_decoder_code st
     (SND (compile_abi_decode_dyn_elem_ptr opc src data hi sz st))
 Proof
-  strip_tac >> rewrite_tac[compile_abi_decode_dyn_elem_ptr_def] >>
-  ntac 2 (code_db abi_decoder_code_emit_op) >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[abi_decoder_code_return] >>
-      ntac 2 (code_db abi_decoder_code_emit_op) >>
-      code_dib abi_decoder_code_emit_void >>
-      ntac 3 (code_db abi_decoder_code_emit_op) >>
-      simp[abi_decoder_code_emit_void]) >>
-  simp[abi_decoder_code_return]
+  metis_tac[abi_decoder_emits_dyn_elem_ptr, abi_decoder_occurrences_code]
 QED
 
-(* A non-ALLOCA load opcode is essential: the dispatcher deliberately accepts
-   an opcode parameter, and an arbitrary ALLOCA would allocate a loaded value.
-   In particular all three abi_decode_source_opcode alternatives satisfy this. *)
-Theorem abi_decoder_code_mutual:
+Theorem abi_decoder_emits_mutual:
   (!dst src opc hi info. opc <> ALLOCA ==>
-     !st. abi_decoder_code st
+     !st. compiler_emits abi_decoder_alloc_shape st
        (SND (compile_abi_decode_to_buf dst src opc hi info st))) /\
   (!dst src opc hi elems ao vo. opc <> ALLOCA ==>
-     !st. abi_decoder_code st
+     !st. compiler_emits abi_decoder_alloc_shape st
        (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st))) /\
   (!dst src opc hi ei asz msz ip cnt. opc <> ALLOCA ==>
-     !st. abi_decoder_code st
+     !st. compiler_emits abi_decoder_alloc_shape st
        (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
@@ -199,75 +281,88 @@ Proof
   >> suspend "loop"
 QED
 
-Resume abi_decoder_code_mutual[word]:
+Resume abi_decoder_emits_mutual[word]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  irule abi_decoder_code_static >> simp[abi_decoder_code_clamp]
+  irule abi_decoder_emits_static >> simp[abi_decoder_emits_clamp]
 QED
-Resume abi_decoder_code_mutual[bytes]:
+Resume abi_decoder_emits_mutual[bytes]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  ntac 3 (code_db abi_decoder_code_emit_op) >>
-  code_dib abi_decoder_code_emit_void >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[abi_decoder_code_return] >>
-      ntac 4 (code_db abi_decoder_code_emit_op) >>
-      simp[abi_decoder_code_emit_void]) >>
-  rpt strip_tac >> Cases_on `opc` >> simp[abi_decoder_code_emit_void]
+  ntac 3 (code_db abi_decoder_emits_emit_op) >>
+  code_dib abi_decoder_emits_emit_void >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_emits_return] >>
+      ntac 4 (code_db abi_decoder_emits_emit_op) >>
+      simp[abi_decoder_emits_emit_void]) >>
+  rpt strip_tac >> Cases_on `opc` >> simp[abi_decoder_emits_emit_void]
 QED
-Resume abi_decoder_code_mutual[array]:
+Resume abi_decoder_emits_mutual[array]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  ntac 3 (code_db abi_decoder_code_emit_op) >>
-  code_dib abi_decoder_code_emit_void >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[abi_decoder_code_return] >>
-      ntac 5 (code_db abi_decoder_code_emit_op) >>
-      simp[abi_decoder_code_emit_void]) >>
-  rpt strip_tac >> code_db abi_decoder_code_emit_op >>
-  code_dib abi_decoder_code_emit_void >>
+  ntac 3 (code_db abi_decoder_emits_emit_op) >>
+  code_dib abi_decoder_emits_emit_void >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_emits_return] >>
+      ntac 5 (code_db abi_decoder_emits_emit_op) >>
+      simp[abi_decoder_emits_emit_void]) >>
+  rpt strip_tac >> code_db abi_decoder_emits_emit_op >>
+  code_dib abi_decoder_emits_emit_void >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC >> gvs[]
-  >- (ntac 3 (code_db abi_decoder_code_emit_op) >>
-      Cases_on `opc` >> simp[abi_decoder_code_emit_void]) >>
-  code_db abi_decoder_code_alloc_buffer >> code_dib abi_decoder_code_emit_void >>
+  >- (ntac 3 (code_db abi_decoder_emits_emit_op) >>
+      Cases_on `opc` >> simp[abi_decoder_emits_emit_void]) >>
+  code_db abi_decoder_emits_alloc_buffer >> code_dib abi_decoder_emits_emit_void >>
   first_x_assum irule >> simp[]
 QED
-Resume abi_decoder_code_mutual[complex]:
+Resume abi_decoder_emits_mutual[complex]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >> IF_CASES_TAC
   >- (first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
       simp[]) >>
-  ntac 3 (code_db abi_decoder_code_emit_op) >> code_dib abi_decoder_code_emit_void >>
+  ntac 3 (code_db abi_decoder_emits_emit_op) >> code_dib abi_decoder_emits_emit_void >>
   first_x_assum (qspec_then `FOLDR (\(_,abi_sz,_) acc. abi_sz + acc) 0 elems` mp_tac) >>
   simp[]
 QED
-Resume abi_decoder_code_mutual[nil]:
-  rewrite_tac[Once compile_abi_decode_to_buf_def] >>
-  simp[abi_decoder_code_return]
+Resume abi_decoder_emits_mutual[nil]:
+  rewrite_tac[Once compile_abi_decode_to_buf_def] >> simp[compiler_emits_return]
 QED
-Resume abi_decoder_code_mutual[cons]:
+Resume abi_decoder_emits_mutual[cons]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  code_db abi_decoder_code_getelemptr >> code_db abi_decoder_code_emit_op >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  code_db abi_decoder_emits_getelemptr >> code_db abi_decoder_emits_emit_op >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
   >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
   rpt strip_tac >> first_x_assum (irule o SRULE[]) >> simp[]
 QED
-Resume abi_decoder_code_mutual[loop]:
+Resume abi_decoder_emits_mutual[loop]:
   rewrite_tac[Once compile_abi_decode_to_buf_def] >>
   simp_tac pure_ss [LET_THM] >> BETA_TAC >>
-  ntac 3 (code_db abi_decoder_code_fresh_label) >>
-  code_dib abi_decoder_code_emit_inst >> code_dib abi_decoder_code_new_block >>
-  ntac 4 (code_db abi_decoder_code_emit_op) >>
-  code_dib abi_decoder_code_emit_inst >> code_dib abi_decoder_code_new_block >>
-  ntac 4 (code_db abi_decoder_code_emit_op) >>
-  ho_match_mp_tac abi_decoder_code_bind >> conj_tac
-  >- (IF_CASES_TAC >> simp[abi_decoder_code_dyn_elem_ptr, abi_decoder_code_return]) >>
-  rpt strip_tac >> ntac 3 (code_db abi_decoder_code_emit_op) >>
-  ho_match_mp_tac abi_decoder_code_ignore_bind >> conj_tac
+  ntac 3 (code_db compiler_emits_fresh_label) >>
+  code_dib abi_decoder_emits_emit_inst >> code_dib compiler_emits_new_block >>
+  ntac 4 (code_db abi_decoder_emits_emit_op) >>
+  code_dib abi_decoder_emits_emit_inst >> code_dib compiler_emits_new_block >>
+  ntac 4 (code_db abi_decoder_emits_emit_op) >>
+  ho_match_mp_tac compiler_emits_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp[abi_decoder_emits_dyn_elem_ptr, compiler_emits_return]) >>
+  rpt strip_tac >> ntac 3 (code_db abi_decoder_emits_emit_op) >>
+  ho_match_mp_tac compiler_emits_ignore_bind >> conj_tac
   >- (first_x_assum (irule o SRULE[]) >> simp[]) >>
-  rpt strip_tac >> code_db abi_decoder_code_emit_op >>
-  code_dib abi_decoder_code_emit_void >> code_dib abi_decoder_code_emit_inst >>
-  code_dib abi_decoder_code_new_block >> simp[abi_decoder_code_return]
+  rpt strip_tac >> code_db abi_decoder_emits_emit_op >>
+  code_dib abi_decoder_emits_emit_void >> code_dib abi_decoder_emits_emit_inst >>
+  code_dib compiler_emits_new_block >> simp[compiler_emits_return]
 QED
-Finalise abi_decoder_code_mutual
+Finalise abi_decoder_emits_mutual
+
+Theorem abi_decoder_code_mutual:
+  (!dst src opc hi info. opc <> ALLOCA ==>
+     !st. abi_decoder_code st
+       (SND (compile_abi_decode_to_buf dst src opc hi info st))) /\
+  (!dst src opc hi elems ao vo. opc <> ALLOCA ==>
+     !st. abi_decoder_code st
+       (SND (compile_abi_decode_complex_elems dst src opc hi elems ao vo st))) /\
+  (!dst src opc hi ei asz msz ip cnt. opc <> ALLOCA ==>
+     !st. abi_decoder_code st
+       (SND (compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st)))
+Proof
+  metis_tac[abi_decoder_emits_mutual, abi_decoder_occurrences_code]
+QED
 
 Definition abi_decoder_code_ids_below_def:
   abi_decoder_code_ids_below st <=>
@@ -358,4 +453,31 @@ Theorem abi_decoder_code_sequential_intervals:
   middle.cs_next_id <= last.cs_next_id
 Proof
   simp[abi_decoder_code_def] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem abi_decoder_to_buf_emits:
+  compile_abi_decode_to_buf dst src opc hi info st = ((),st') /\
+  abi_decode_source_opcode opc ==>
+  compiler_emits abi_decoder_alloc_shape st st'
+Proof
+  strip_tac >> `opc <> ALLOCA` by gvs[abi_decode_source_opcode_def] >>
+  metis_tac[cj 1 abi_decoder_emits_mutual, pairTheory.SND]
+QED
+
+Theorem abi_decoder_complex_elems_emits:
+  compile_abi_decode_complex_elems dst src opc hi elems ao vo st = ((),st') /\
+  abi_decode_source_opcode opc ==>
+  compiler_emits abi_decoder_alloc_shape st st'
+Proof
+  strip_tac >> `opc <> ALLOCA` by gvs[abi_decode_source_opcode_def] >>
+  metis_tac[cj 2 abi_decoder_emits_mutual, pairTheory.SND]
+QED
+
+Theorem abi_decoder_dyn_loop_emits:
+  compile_abi_decode_dyn_loop dst src opc hi ei asz msz ip cnt st = ((),st') /\
+  abi_decode_source_opcode opc ==>
+  compiler_emits abi_decoder_alloc_shape st st'
+Proof
+  strip_tac >> `opc <> ALLOCA` by gvs[abi_decode_source_opcode_def] >>
+  metis_tac[cj 3 abi_decoder_emits_mutual, pairTheory.SND]
 QED
