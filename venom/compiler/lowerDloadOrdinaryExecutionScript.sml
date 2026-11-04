@@ -2,7 +2,7 @@ Theory lowerDloadOrdinaryExecution
 Ancestors
   lowerDloadPairedBoundary lowerDloadOwnership ptrDiscipline
   venomExecSemantics venomState lowerDloadClassify lowerDloadControlPosition
-  lowerDloadDefs o1ContractLowerDload
+  lowerDloadDefs o1ContractLowerDload lowerDloadOperand finite_map
 
 Theorem ld_owned_assign_backward:
   i.inst_opcode = ASSIGN /\ i.inst_operands = [op] /\ i.inst_outputs = [out] /\
@@ -111,4 +111,89 @@ Proof
   drule ld_lowered_phis_annotations >>
   disch_then (qspecl_then [`t.vs_prev_bb`, `AH`, `un`] strip_assume_tac) >>
   drule_all ld_owned_phis_backward >> gvs[]
+QED
+
+Theorem ld_owned_offset_cases_backward:
+  i.inst_operands = [a;b] /\ i.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. a = Var v \/ b = Var v ==> v IN V) /\
+  op_taint tn a = {} /\ op_taint tn b = {} /\
+  (((i.inst_opcode = ADD \/ i.inst_opcode = SUB) /\ ld_op_prov AG b = NONE) \/
+   (i.inst_opcode = ADD /\ ld_op_prov AG a = NONE)) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  rpt strip_tac >>
+  `eval_operand a s = NONE <=> eval_operand a t = NONE` by
+    (irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
+  `eval_operand b s = NONE <=> eval_operand b t = NONE` by
+    (irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  simp[Once step_inst_base_def, SimpLHS] >>
+  simp[exec_pure2_def, SimpLHS] >>
+  Cases_on `eval_operand a t` >> Cases_on `eval_operand b t` >> simp[] >>
+  strip_tac >> Cases_on `eval_operand a s` >> Cases_on `eval_operand b s` >> gvs[] >>
+  `ld_owned_value E (ld_op_prov AG a) (ld_op_prov AH a)
+      {} (op_taint un a) x'' x` by metis_tac[ld_owned_operand_value] >>
+  `ld_owned_value E (ld_op_prov AG b) (ld_op_prov AH b)
+      {} (op_taint un b) x''' x'` by metis_tac[ld_owned_operand_value] >>
+  simp[Once step_inst_non_invoke] >>
+  simp[Once step_inst_base_def] >>
+  simp[exec_pure2_def] >>
+  `!ps pt Mt u v. ld_owned_value E ps pt {} Mt u v ==> Mt = {}` by
+    (qx_gen_tac `ps` >> Cases_on `ps`
+     >- simp[ld_owned_value_def, ld_mask_word_def] >>
+     rename1 `ld_owned_value E (SOME site)` >>
+     PairCases_on `site` >> simp[ld_owned_value_def] >> metis_tac[]) >>
+  `op_taint un a = {} /\ op_taint un b = {}` by metis_tac[] >>
+  `!pt u v. ld_owned_value E NONE pt {} {} u v ==> pt = NONE /\ u = v` by
+    (simp[ld_owned_value_def] >> metis_tac[ld_mask_word_clean]) >>
+  qmatch_goalsub_abbrev_tac `update_var out sx s` >>
+  qmatch_goalsub_abbrev_tac `update_var out tx t` >>
+  `ld_owned_value E (ld_first_prov AG [a;b]) (ld_first_prov AH [a;b])
+      {} {} sx tx` by
+    (`ld_op_prov AG a = NONE ==> ld_op_prov AH a = NONE /\ x'' = x` by
+       metis_tac[] >>
+     `ld_op_prov AG b = NONE ==> ld_op_prov AH b = NONE /\ x''' = x'` by
+       metis_tac[] >>
+     Cases_on `ld_op_prov AG a` >> Cases_on `ld_op_prov AH a` >>
+     Cases_on `ld_op_prov AG b` >> Cases_on `ld_op_prov AH b` >>
+     gvs[ld_first_prov_def, Abbr `sx`, Abbr `tx`] >>
+     metis_tac[ld_owned_value_offset_add, ld_owned_value_offset_sub,
+               wordsTheory.WORD_ADD_COMM]) >>
+  drule_all ld_owned_vars_update >>
+  disch_then (qspec_then `out` mp_tac) >>
+  simp[ld_step_prov_def, ld_out_prov_def, step_taint_def, out_taint_def,
+       ld_owned_vars_def, op_taint_def, Abbr `sx`, Abbr `tx`]
+QED
+
+Theorem ld_owned_offset_backward:
+  (i.inst_opcode = ADD \/ i.inst_opcode = SUB) /\
+  i.inst_operands = [a;b] /\ i.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. a = Var v \/ b = Var v ==> v IN V) /\
+  ld_op_prov AG b = NONE /\ op_taint tn a = {} /\ op_taint tn b = {} /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  metis_tac[ld_owned_offset_cases_backward]
+QED
+
+Theorem ld_owned_scalar_left_add_backward:
+  i.inst_opcode = ADD /\
+  i.inst_operands = [a;b] /\ i.inst_outputs = [out] /\
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. a = Var v \/ b = Var v ==> v IN V) /\
+  ld_op_prov AG a = NONE /\ op_taint tn a = {} /\ op_taint tn b = {} /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  metis_tac[ld_owned_offset_cases_backward]
 QED
