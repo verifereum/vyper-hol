@@ -317,8 +317,8 @@ Proof
 QED
 
 Theorem ao_singleton_projection[local]:
-  LENGTH xs = 1 ==>
-  (MAP f xs = [a] <=> EVERY (\x. f x = a) xs)
+  LENGTH (xs:instruction list) = 1 ==>
+  (MAP (f:instruction -> num) xs = [a] <=> EVERY (\x. f x = a) xs)
 Proof
   Cases_on `xs` >> simp[] >> metis_tac[]
 QED
@@ -696,6 +696,78 @@ Proof
   simp[ao_compute_fn_iszero_targets_def, ao_compute_iszero_targets_def] >>
   irule ao_compute_iszero_fold_label_free >> simp[fn_insts_def] >>
   irule ao_offset_blocks_iszero_inputs >> gvs[fn_insts_def]
+QED
+
+Theorem ao_alloc_fresh_ids:
+  ao_alloc_fresh s = (fr, s') ==>
+  FST (fr "not") = s.irs_next_inst /\
+  FST (fr "xor") = s.irs_next_inst /\
+  FST (fr "iz") = SUC s.irs_next_inst /\
+  s'.irs_next_inst = s.irs_next_inst + 2
+Proof
+  simp[ao_alloc_fresh_def, irSupplyTheory.fresh_inst_id_def,
+       irSupplyTheory.fresh_ir_var_def] >>
+  rpt CASE_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem ao_transform_inst_fresh_ids:
+  inst_wf inst /\ inst.inst_id < s.irs_next_inst /\
+  ao_alloc_fresh s = (fr, s') ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)) /\
+  EVERY (\id. id < s'.irs_next_inst)
+    (MAP (\i. i.inst_id) (ao_transform_inst dfg ra lbl idx targets fr inst)) /\
+  (!id. MEM id (MAP (\i. i.inst_id)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)) ==>
+    id = inst.inst_id \/ s.irs_next_inst <= id)
+Proof
+  strip_tac >> drule ao_alloc_fresh_ids >> strip_tac >>
+  mp_tac ao_transform_inst_ids >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem ao_transform_insts_supply_frontier:
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs, s') ==>
+  s'.irs_next_inst = s.irs_next_inst + 2 * LENGTH insts
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) insts` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule ao_alloc_fresh_ids >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ao_transform_inst_supply_id_origin:
+  inst_wf inst /\ ao_alloc_fresh s = (fr,s') /\
+  MEM id (MAP (\i. i.inst_id)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)) ==>
+  id = inst.inst_id \/ s.irs_next_inst <= id
+Proof
+  strip_tac >> drule ao_alloc_fresh_ids >> strip_tac >>
+  mp_tac ao_transform_inst_ids >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem ao_transform_insts_supply_id_origin:
+  EVERY inst_wf insts /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs, s') ==>
+  !id. MEM id (MAP (\i. i.inst_id) outs) ==>
+    MEM id (MAP (\i. i.inst_id) insts) \/ s.irs_next_inst <= id
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) insts` >>
+  gvs[] >> gen_tac >> strip_tac
+  >- metis_tac[ao_transform_inst_supply_id_origin] >>
+  first_x_assum drule >> disch_then (qspec_then `id` mp_tac) >>
+  simp[] >> strip_tac >- simp[] >>
+  drule ao_alloc_fresh_ids >> strip_tac >> gvs[] >>
+  disj2_tac >> decide_tac
 QED
 
 Theorem ao_preserves_wf_function_proof:
