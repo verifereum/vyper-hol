@@ -1612,3 +1612,21 @@ Proof
   simp[bind_def, return_def, raise_def, option_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
+
+
+Theorem expr_body_pre_foreign_immutable_frame:
+  expr_body_pre cenv cx env e s /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\ md <> NONE ==>
+    (case ALOOKUP t.immutables addr of
+       NONE => FEMPTY | SOME imms => get_source_immutables md imms) =
+    (case ALOOKUP s.immutables addr of
+       NONE => FEMPTY | SOME imms => get_source_immutables md imms)
+Proof
+  rpt strip_tac >> rewrite_tac[GSYM foreign_immutable_frame_def] >>
+  irule (cj 5 eval_foreign_immutable_frame_mutual) >>
+  conj_tac >- simp[] >>
+  qexistsl [`cx`, `e`, `res`] >> simp[] >>
+  irule foreign_frame_expr_entry >>
+  gvs[expr_body_pre_def, foreign_frame_callee_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
