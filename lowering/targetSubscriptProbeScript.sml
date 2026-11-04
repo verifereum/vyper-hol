@@ -2073,8 +2073,8 @@ Proof
        mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
        mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
-       mk_inst_def, eval_operands_def, eval_operand_def, lookup_var_update_var] >>
+  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def] >>
+  simp[eval_operands_def, eval_operand_def, lookup_var_update_var] >>
   simp[run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
        mk_inst_def, probe_word_copy_body_state_def]
 QED
@@ -5355,3 +5355,156 @@ val () = List.app (fn (name,th) =>
   [("probe_deep_pre_shapes",probe_deep_pre_shapes),
    ("probe_deep_copy_symbolic_success",probe_deep_copy_symbolic_success),
    ("probe_deep_source_call_boundary",probe_deep_source_call_boundary)];
+
+Theorem probe_deep_dead_bytes:
+  !st j b. b < 32 ==>
+    (storage_dead probe_deep_context F st j b <=>
+     (lookup_storage 0w st = 0w /\ (j = 1 \/ j = 2 \/ j = 3)) \/
+     (lookup_storage 1w st = 0w /\ (j = 2 \/ j = 3)) \/
+     (lookup_storage 2w st = 0w /\ j = 3) \/
+     (lookup_storage 4w st = 0w /\ (j = 5 \/ j = 6 \/ j = 7)) \/
+     (lookup_storage 5w st = 0w /\ (j = 6 \/ j = 7)) \/
+     (lookup_storage 6w st = 0w /\ j = 7))
+Proof
+  rpt strip_tac >>
+  simp[storage_dead_def, probe_deep_declared_region,
+       type_slot_size_def, vyperStorageFrameTheory.ranges_disjoint_def,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  dsimp[EXISTS_OR_THM, DISJ_IMP_THM, FORALL_AND_THM] >>
+  simp[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  simp[dead_bytes_def, type_slot_size_def] >>
+  simp[GSYM arithmeticTheory.NOT_ZERO_LT_ZERO, wordsTheory.w2n_eq_0] >>
+  `(1 <= j /\ j < 4) <=> (j = 1 \/ j = 2 \/ j = 3)` by decide_tac >>
+  `(2 <= j /\ j < 4) <=> (j = 2 \/ j = 3)` by decide_tac >>
+  `(3 <= j /\ j < 4) <=> j = 3` by decide_tac >>
+  `(5 <= j /\ j < 8) <=> (j = 5 \/ j = 6 \/ j = 7)` by (POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
+  `(6 <= j /\ j < 8) <=> (j = 6 \/ j = 7)` by
+    (POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
+  `(7 <= j /\ j < 8) <=> j = 7` by
+    (POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
+  pure_asm_rewrite_tac[] >> tautLib.TAUT_TAC
+QED
+
+Theorem probe_deep_copy_footprint_agree:
+  !st mt mt'.
+    w2n (lookup_storage 4w st) <= 1 /\
+    (w2n (lookup_storage 4w st) = 1 ==> w2n (lookup_storage 5w st) <= 1) /\
+    (w2n (lookup_storage 4w st) = 1 /\ w2n (lookup_storage 5w st) = 1 ==>
+      w2n (lookup_storage 6w st) <= 1) /\
+    storage_agree (storage_dead probe_deep_context F st) st mt /\
+    lookup_storage 0w mt' = lookup_storage 4w mt /\
+    (w2n (lookup_storage 4w st) = 1 ==>
+      lookup_storage 1w mt' = lookup_storage 5w mt) /\
+    (w2n (lookup_storage 4w st) = 1 /\ w2n (lookup_storage 5w st) = 1 ==>
+      lookup_storage 2w mt' = lookup_storage 6w mt) /\
+    (w2n (lookup_storage 4w st) = 1 /\ w2n (lookup_storage 5w st) = 1 /\
+     w2n (lookup_storage 6w st) = 1 ==>
+      lookup_storage 3w mt' = lookup_storage 7w mt) /\
+    (!a. a <> 0w /\ a <> 1w /\ a <> 2w /\ a <> 3w ==>
+      lookup_storage a mt' = lookup_storage a mt) ==>
+    storage_agree (storage_dead probe_deep_context F
+      (if w2n (lookup_storage 4w st) = 0 then update_storage 0w 0w st
+       else if w2n (lookup_storage 5w st) = 0 then
+         update_storage 1w 0w (update_storage 0w 1w st)
+       else if w2n (lookup_storage 6w st) = 0 then
+         update_storage 2w 0w (update_storage 1w 1w (update_storage 0w 1w st))
+       else update_storage 3w (lookup_storage 7w st)
+         (update_storage 2w 1w (update_storage 1w 1w (update_storage 0w 1w st)))))
+      (if w2n (lookup_storage 4w st) = 0 then update_storage 0w 0w st
+       else if w2n (lookup_storage 5w st) = 0 then
+         update_storage 1w 0w (update_storage 0w 1w st)
+       else if w2n (lookup_storage 6w st) = 0 then
+         update_storage 2w 0w (update_storage 1w 1w (update_storage 0w 1w st))
+       else update_storage 3w (lookup_storage 7w st)
+         (update_storage 2w 1w (update_storage 1w 1w (update_storage 0w 1w st)))) mt'
+Proof
+  rpt gen_tac >>
+  qmatch_goalsub_abbrev_tac `n <= 1` >>
+  qabbrev_tac `m = w2n (lookup_storage 5w st)` >>
+  qabbrev_tac `k = w2n (lookup_storage 6w st)` >>
+  strip_tac >>
+  `lookup_storage 4w st = n2w n` by simp[Abbr `n`] >>
+  `lookup_storage 5w st = n2w m` by simp[Abbr `m`] >>
+  `lookup_storage 6w st = n2w k` by simp[Abbr `k`] >>
+  qpat_x_assum `Abbrev (n = _)` kall_tac >>
+  qpat_x_assum `Abbrev (m = _)` kall_tac >>
+  qpat_x_assum `Abbrev (k = _)` kall_tac >>
+  `n = 0 \/ (n = 1 /\ m = 0) \/
+   (n = 1 /\ m = 1 /\ k = 0) \/ (n = 1 /\ m = 1 /\ k = 1)` by decide_tac >>
+  gvs[] >>
+  simp[storage_agree_def] >> rpt strip_tac >>
+  qpat_x_assum `storage_agree _ _ _` mp_tac >>
+  simp[storage_agree_def] >> strip_tac >>
+  rename1 `lookup_storage addr mt'` >>
+  first_assum (qspecl_then [`addr`,`b`] mp_tac) >>
+  first_assum (qspecl_then [`4w`,`b`] mp_tac) >>
+  first_assum (qspecl_then [`5w`,`b`] mp_tac) >>
+  first_assum (qspecl_then [`6w`,`b`] mp_tac) >>
+  first_x_assum (qspecl_then [`7w`,`b`] mp_tac) >>
+  simp[probe_deep_dead_bytes, dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``] >> rpt strip_tac >>
+  gvs[probe_deep_dead_bytes] >>
+  gvs[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM] >>
+  Cases_on `addr = 0w` >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  Cases_on `addr = 1w` >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  Cases_on `addr = 2w` >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  Cases_on `addr = 3w` >>
+  gvs[dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``] >>
+  `w2n addr <> 1` by (strip_tac >>
+    `addr = 1w` by metis_tac[wordsTheory.n2w_w2n] >> gvs[]) >>
+  `w2n addr <> 2` by (strip_tac >>
+    `addr = 2w` by metis_tac[wordsTheory.n2w_w2n] >> gvs[]) >>
+  `w2n addr <> 3` by (strip_tac >>
+    `addr = 3w` by metis_tac[wordsTheory.n2w_w2n] >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem probe_deep_copy_pre_summary:
+  !cenv env e es mt mt'.
+    expr_body_pre cenv probe_deep_context env e es /\
+    storage_agree
+      (storage_dead probe_deep_context F (get_storage probe_deep_context es F))
+      (get_storage probe_deep_context es F) mt /\
+    lookup_storage 0w mt' = lookup_storage 4w mt /\
+    (w2n (lookup_storage 4w (get_storage probe_deep_context es F)) = 1 ==>
+      lookup_storage 1w mt' = lookup_storage 5w mt) /\
+    (w2n (lookup_storage 4w (get_storage probe_deep_context es F)) = 1 /\
+     w2n (lookup_storage 5w (get_storage probe_deep_context es F)) = 1 ==>
+      lookup_storage 2w mt' = lookup_storage 6w mt) /\
+    (w2n (lookup_storage 4w (get_storage probe_deep_context es F)) = 1 /\
+     w2n (lookup_storage 5w (get_storage probe_deep_context es F)) = 1 /\
+     w2n (lookup_storage 6w (get_storage probe_deep_context es F)) = 1 ==>
+      lookup_storage 3w mt' = lookup_storage 7w mt) /\
+    (!a. a <> 0w /\ a <> 1w /\ a <> 2w /\ a <> 3w ==>
+      lookup_storage a mt' = lookup_storage a mt) ==>
+    ?es'. eval_expr probe_deep_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      storage_agree
+        (storage_dead probe_deep_context F (get_storage probe_deep_context es' F))
+        (get_storage probe_deep_context es' F) mt'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule probe_deep_pre_shapes >> simp[LET_THM] >> strip_tac >>
+  drule probe_deep_source_call_boundary >> simp[LET_THM] >> strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` kall_tac >>
+  qpat_x_assum `expr_body_pre _ _ _ _ _` kall_tac >>
+  pure_rewrite_tac[get_storage_after_set, GSYM wordsTheory.w2n_eq_0] >>
+  qmatch_asmsub_abbrev_tac `storage_agree (storage_dead _ _ st) st mt` >>
+  irule probe_deep_copy_footprint_agree >>
+  simp[] >>
+  metis_tac[wordsTheory.n2w_w2n]
+QED
+
+val () = List.app (fn (name,th) =>
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn oracle => oracle = "DISK_THM") oracles
+     then print ("DEEP_STORAGE_AUDIT " ^ name ^ " OK\n")
+     else raise Fail (name ^ ": admitted proof dependency") end)
+  [("probe_deep_dead_bytes",probe_deep_dead_bytes),
+   ("probe_deep_copy_footprint_agree",probe_deep_copy_footprint_agree),
+   ("probe_deep_copy_pre_summary",probe_deep_copy_pre_summary)];
