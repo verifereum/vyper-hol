@@ -144,23 +144,6 @@ Proof
     `"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >> simp[]
 QED
 
-Theorem typed_bytes_array_prefix_cont[local]:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX code bb.bb_instructions /\
-  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
-  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK q /\
-  ~s.vs_halted /\ s.vs_inst_idx = 0 ==>
-  mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH code)
-Proof
-  strip_tac >>
-  irule (SRULE [emitted_insts_def, fn_has_code_def, emitted_blocks_def]
-    (Q.INST [`sa` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
-        cs_current_insts := []|>`,
-      `sb` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
-        cs_current_insts := code|>`] (SPEC_ALL typed_bytes_child_seq_cont))) >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem typed_bytes_array_loop_body_prefix[local]:
   compile_copy_sarray_typed ce dst (BaseT (BytesT (Dynamic 33)))
     src (BaseT (BytesT (Dynamic 1))) ncount sa = ((),sb) /\
@@ -194,7 +177,7 @@ Proof
      simp[not_fresh_at_def, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`] >>
      metis_tac[DECIDE ``n < n+k+1``]) >>
   drule_all typed_sa_pointer_run >>
-  disch_then (qspec_then `sa.cs_next_id+5` mp_tac) >>
+  disch_then (qspecl_then [`64`, `sa.cs_next_id+5`, `96`] mp_tac) >>
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `run_inst_seq code s = OK q` >>
   `mem_cont_sim ctx fn s (q with vs_inst_idx := 4)` by
@@ -205,7 +188,7 @@ Proof
      drule typed_bytes_array_loop_blocks >> simp_tac bool_ss [LET_THM] >> strip_tac >>
      `LENGTH code = 4` by simp[Abbr `code`] >>
      qpat_x_assum `LENGTH code = 4` (fn th => once_rewrite_tac [GSYM th]) >>
-     irule typed_bytes_array_prefix_cont >> simp[] >> conj_tac
+     irule typed_array_prefix_cont >> simp[] >> conj_tac
      >- simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
      qexists_tac `HD sb.cs_blocks` >>
      fs[Abbr `code`, Abbr `ctr`, Abbr `so`, Abbr `dso`, Abbr `sp`, Abbr `dp`]) >>

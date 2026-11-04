@@ -105,14 +105,14 @@ Theorem typed_sa_pointer_run:
   eval_operand dst s = SOME (n2w dest_base) /\
   eval_operand (Var ctr) s = SOME (n2w i) ==>
   let code =
-    [mk_inst id MUL [Var ctr; Lit 64w] [so];
-     mk_inst (id+1) MUL [Var ctr; Lit 96w] [dso];
+    [mk_inst id MUL [Var ctr; Lit (n2w src_stride)] [so];
+     mk_inst (id+1) MUL [Var ctr; Lit (n2w dst_stride)] [dso];
      mk_inst (id+2) ADD [src; Var so] [sp];
      mk_inst (id+3) ADD [dst; Var dso] [dp]]
   in run_inst_seq_mem_ok code s /\
      ?q. run_inst_seq code s = OK q /\
-       eval_operand (Var sp) q = SOME (n2w (source_base + 64*i)) /\
-       eval_operand (Var dp) q = SOME (n2w (dest_base + 96*i)) /\
+       eval_operand (Var sp) q = SOME (n2w (source_base + src_stride*i)) /\
+       eval_operand (Var dp) q = SOME (n2w (dest_base + dst_stride*i)) /\
        (q with vs_vars := s.vs_vars) = s /\
        (!x. ~MEM x [so; dso; sp; dp] ==> lookup_var x q = lookup_var x s)
 Proof
@@ -120,9 +120,10 @@ Proof
   conj_tac
   >- (irule run_inst_seq_mem_ok_every >>
       simp[mk_inst_def, below_frontier_no_ranges]) >>
-  qexists_tac `update_var dp (n2w (dest_base + 96*i))
-    (update_var sp (n2w (source_base + 64*i))
-      (update_var dso (n2w (96*i)) (update_var so (n2w (64*i)) s)))` >>
+  qexists_tac `update_var dp (n2w (dest_base + dst_stride*i))
+    (update_var sp (n2w (source_base + src_stride*i))
+      (update_var dso (n2w (dst_stride*i))
+        (update_var so (n2w (src_stride*i)) s)))` >>
   Cases_on `src` >> Cases_on `dst` >>
   gvs[ALL_DISTINCT, eval_operand_def] >>
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
@@ -239,4 +240,22 @@ Proof
   simp[IS_PREFIX_APPEND] >>
   qexists_tac `DROP 9 (HD sb.cs_blocks).bb_instructions` >>
   simp[TAKE_DROP]
+QED
+
+(* Straight-line prefixes shared by concrete and child-parametric loops. *)
+Theorem typed_array_prefix_cont:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code bb.bb_instructions /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK q /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 ==>
+  mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH code)
+Proof
+  strip_tac >>
+  irule (SRULE [emitted_insts_def, fn_has_code_def, emitted_blocks_def]
+    (Q.INST [`sa` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
+        cs_current_insts := []|>`,
+      `sb` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
+        cs_current_insts := code|>`] (SPEC_ALL typed_bytes_child_seq_cont))) >>
+  simp[] >> metis_tac[]
 QED
