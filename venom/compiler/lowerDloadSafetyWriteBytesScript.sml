@@ -47,7 +47,7 @@ Theorem ld_memory_write_slot:
   LENGTH xs = n /\ LENGTH ys = n /\
   (!j. j < n /\ j NOTIN M ==> EL j xs = EL j ys) /\
   (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
-  (!a u v z. FLOOKUP A a = SOME (u,v,z) /\ a <> k ==>
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) /\ a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
   tn'.t_mem = (tn.t_mem DIFF {b+delta+j | j < n}) UNION
                          {b+delta+j | j < n /\ j IN M} ==>
@@ -55,7 +55,8 @@ Theorem ld_memory_write_slot:
     (write_memory_with_expansion (b+delta) xs s)
     (write_memory_with_expansion (c+delta) ys t)
 Proof
-  strip_tac >>
+  strip_tac >> Cases_on `n = 0`
+  >- (gvs[ld_memory_def, read_byte_write_memory_with_expansion] >> metis_tac[]) >>
   `lo <= b /\ lo <= c` by metis_tac[] >>
   irule ld_memory_transport >>
   qexistsl_tac [`{b+delta+j | j < n}`, `s`, `t`, `tn`] >>
@@ -75,6 +76,7 @@ Proof
           simp[]) >>
       `~(?h. j = delta+h /\ h < LENGTH xs)` by
         (strip_tac >> decide_tac) >> simp[])) >>
+  `0 < z /\ 0 < sz` by decide_tac >>
   `((u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v))` by metis_tac[] >>
   `~(b+delta <= u+j /\ u+j < b+delta+n) /\
    ~(c+delta <= v+j /\ v+j < c+delta+n)` by decide_tac >>
