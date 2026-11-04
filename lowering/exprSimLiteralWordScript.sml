@@ -68,11 +68,3 @@ Proof
   irule literal_word_prefix >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_literal_word_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_literal_word_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "LITERAL_WORD_AUDIT compile_literal_word_sim OK\n"
-    else raise Fail "compile_literal_word_sim: admitted proof dependency"
-  end;

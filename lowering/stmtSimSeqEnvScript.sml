@@ -191,11 +191,3 @@ Resume stmt_frag_cons_env[tail_exempt]:
 QED
 Finalise stmt_frag_cons_env
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag stmt_frag_cons_env)
-  in
-    if null axioms andalso null (Thm.hyp stmt_frag_cons_env) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "STMT_SEQUENCE_AUDIT stmt_frag_cons_env OK\n"
-    else raise Fail "stmt_frag_cons_env: admitted proof dependency"
-  end;

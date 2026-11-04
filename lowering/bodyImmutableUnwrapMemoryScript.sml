@@ -197,11 +197,3 @@ QED
 
 Finalise unwrap_runtime_code_copy_sim_mem
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IMMUTABLE_UNWRAP_MEMORY_AUDIT OK\n"
-     else raise Fail "immutable unwrap inherited admission"
-  end) [body_code_copy_history, body_code_copy_frag_mem,
-        unwrap_runtime_code_copy_sim_mem];

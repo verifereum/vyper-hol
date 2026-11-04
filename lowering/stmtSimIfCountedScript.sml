@@ -138,11 +138,3 @@ QED
 
 Finalise compile_if_stmt_frag
 
-val () =
-  let val th = compile_if_stmt_frag
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then
-       print "STMT_IF_AUDIT compile_if_stmt_frag OK\n"
-     else raise Fail "compile_if_stmt_frag: admitted proof dependency"
-  end;

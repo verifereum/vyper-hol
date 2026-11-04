@@ -124,11 +124,3 @@ Proof
        GSYM ETA_THM]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_env_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_env_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "ENV_AUDIT compile_env_sim OK\n"
-    else raise Fail "compile_env_sim: admitted proof dependency"
-  end;

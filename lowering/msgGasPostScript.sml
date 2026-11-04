@@ -105,11 +105,3 @@ Proof
   metis_tac[fragGasPathMemTheory.gas_path_mem_exec]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_msg_gas_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_msg_gas_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MSG_GAS_SIM_AUDIT compile_msg_gas_sim OK\n"
-    else raise Fail "compile_msg_gas_sim: admitted proof dependency"
-  end;

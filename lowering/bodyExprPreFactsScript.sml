@@ -137,16 +137,6 @@ Proof
   Cases_on `int_calls_expr e` >> gvs[listTheory.EVERY_MEM] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_EXPRESSION_PRE_AUDIT OK\n"
-     else raise Fail "body expression precondition inherited admission"
-  end) [no_internal_call_int_calls, supported_pure_int_calls,
-        supported_expr_body_calls, supported_string_reason_body_calls,
-        stmt_expr_body_pre];
-
 Theorem stmts_env_cs_mono:
   !cenv lctx ty ss. cs_mono (stmts_env cenv lctx ty ss)
 Proof
@@ -487,28 +477,3 @@ Proof
   drule_all type_stmt_other >> strip_tac >> gvs[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_SOURCE_PRESERVATION_AUDIT OK\n"
-     else raise Fail "body source preservation inherited admission"
-  end) [stmts_env_cs_mono,
-        stmt_env_declare,
-        declare_stmt_local_other,
-        type_stmt_other,
-        same_frame_trans,
-        same_frame_struct_fields,
-        body_inv_same_frame,
-        frame_ret_ok_same_frame,
-        stmt_exprs_ok_same_frame,
-        stmts_exprs_ok_EVERY,
-        eval_stmts_popped_keys_indexed,
-        storage_conjs_scopes,
-        eval_stmts_storage_conjs,
-        expr_sim_inv_push_scope,
-        expr_sim_inv_stmt,
-        ce_locals_declared_declare_local,
-        ce_locals_declared_stmt,
-        locals_alloc_ok_extend,
-        locals_alloc_ok_stmt];

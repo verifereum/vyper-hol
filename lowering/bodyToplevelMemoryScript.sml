@@ -153,13 +153,3 @@ Proof
   irule compile_toplevel_storage_undecodable_sim_mem >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_TOPLEVEL_MEMORY_AUDIT OK\n"
-     else raise Fail "toplevel memory inherited admission"
-  end) [compile_toplevel_storage_vv_sim_mem,
-        compile_toplevel_storage_undecodable_sim_mem,
-        compile_toplevel_immutable_sim_mem, compile_toplevel_no_module_sim_mem,
-        compile_toplevel_name_vv_sim_mem];

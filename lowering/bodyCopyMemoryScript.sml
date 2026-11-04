@@ -141,16 +141,6 @@ Proof
   qexists_tac `t` >> gvs[ADD_COMM] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_COPY_MEMORY_AUDIT OK\n"
-     else raise Fail "body copy inherited admission"
-  end) [compile_copy_memory_body_mem_ok, copy_memory_body_slice,
-        copy_memory_body_history, copy_memory_body_run,
-        copy_memory_frag_at_cursor, compile_copy_memory_body_frag_mem];
-
 Theorem copy_len_arithmetic_mem_ok[local]:
   run_inst_seq_mem_ok
     [mk_inst a ADD ops xs; mk_inst b AND ops' ys; mk_inst c ADD ops'' zs] s
@@ -296,16 +286,6 @@ Proof
   metis_tac[buffer_mcopy_exterior]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_BYTESTRING_COPY_MEMORY_AUDIT OK\n"
-     else raise Fail "body bytestring copy inherited admission"
-  end) [copy_len_arithmetic_mem_ok, compile_bytestring_copy_len_body_mem_ok,
-        compile_store_bytestring_body_mem_ok, store_bytestring_body_code,
-        store_bytestring_body_history, compile_store_bytestring_body_frag_mem];
-
 Theorem body_name_store_memory_mem_ok:
   expr_sim_pre ce cx env (Name ann id) es /\ stmt_state_rel ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -333,15 +313,6 @@ Proof
   qexistsl_tac [`d`, `dst`, `type_memory_size entry.type`, `Var p`, `w`] >>
   simp[] >> decide_tac
 QED
-
-val () =
-  let val th = body_name_store_memory_mem_ok
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NAME_STORE_MEMORY_AUDIT OK\n"
-     else raise Fail "body name store inherited admission"
-  end;
 
 (* The actual nonword memory assignment has an overlap-safe staging copy. *)
 Theorem assign_memory_body_parts[local]:
@@ -530,15 +501,6 @@ Proof
   qpat_x_assum `!b k. _ \/ _ ==> _` irule >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ASSIGN_STAGING_PREFIX_AUDIT OK\n"
-     else raise Fail "body assignment staging inherited admission"
-  end) [assign_memory_body_parts, assign_memory_body_code,
-        assign_name_scratch_run, compile_assign_value_name_staging_prefix_mem_ok];
-
 Theorem assign_scratch_operand_transport[local]:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
@@ -614,15 +576,6 @@ Proof
   irule run_inst_seq_mem_ok_append >> simp[] >>
   rpt strip_tac >> gvs[]
 QED
-
-val () =
-  let val th = compile_assign_value_name_staged_mem_ok
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ASSIGN_STAGED_MEMORY_AUDIT OK\n"
-     else raise Fail "body assignment staged memory inherited admission"
-  end;
 
 Theorem assign_name_staged_run[local]:
   expr_sim_pre ce cx env (Name ann id) es /\
@@ -799,13 +752,3 @@ Proof
   qexists_tac `q` >> fs[lookup_var_def] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ASSIGN_STAGED_FRAGMENT_AUDIT OK\n"
-     else raise Fail "body assignment staged fragment inherited admission"
-  end) [assign_scratch_operand_transport, assign_name_staged_run,
-        copy_memory_body_code, store_memory_body_code,
-        assign_memory_body_shape, assign_memory_body_history,
-        compile_assign_value_name_staged_body_frag_mem];

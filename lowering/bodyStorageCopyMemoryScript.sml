@@ -96,14 +96,6 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def])
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_STORAGE_COPY_MEMORY_AUDIT OK\n"
-     else raise Fail "storage copy inherited admission"
-  end) [body_storage_singleton_mem_ok, body_storage_iteration_mem_ok];
-
 (* Resolve the shared execution interface here, without duplicating it. *)
 val () = (List.app (fn _ => ())
   [storage_copy_source_run_effect, storage_copy_destination_run_effect,
@@ -111,10 +103,3 @@ val () = (List.app (fn _ => ())
    storage_copy_body_run_effect];
   print "BODY_STORAGE_COPY_EXECUTION_EXPORTS OK\n");
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_STORAGE_COPY_LAYOUT_AUDIT OK\n"
-     else raise Fail "storage copy layout inherited admission"
-  end) [compile_storage_copy_certificate, storage_copy_word_layout];

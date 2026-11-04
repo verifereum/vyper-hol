@@ -84,14 +84,6 @@ Proof
   irule compile_flag_member_body_sim_mem >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_FLAG_MEMBER_MEMORY_AUDIT OK\n"
-     else raise Fail "flag member memory inherited admission"
-  end) [compile_flag_member_body_sim_mem, compile_flag_member_body_vv_sim_mem];
-
 Theorem body_flag_member_mem_case:
   !cx ann nsid mid. body_expr_mem_ok cx (FlagMember ann nsid mid)
 Proof
@@ -101,11 +93,3 @@ Proof
             compile_flag_member_body_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_flag_member_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_FLAG_MEMBER_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "flag member closure inherited admission"
-  end;

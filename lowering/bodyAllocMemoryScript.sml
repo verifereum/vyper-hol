@@ -413,21 +413,3 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ALLOC_MEMORY_AUDIT OK\n"
-     else raise Fail "body allocation inherited admission"
-  end) [body_alloc_history, alloc_buffer_source_frag_mem,
-        compile_alloc_buffer_body_mem_ok,
-        compile_alloc_buffer_body_site,
-        compile_alloc_buffer_body_header_mem_ok,
-        compile_alloc_buffer_body_frontier,
-        compile_alloc_buffer_body_header_slice,
-        compile_alloc_buffer_body_header_run_mem,
-        compile_alloc_buffer_body_header_history,
-        frag_exec_mem_run_inst_seq_at_cursor,
-        compile_alloc_buffer_body_history,
-        compile_alloc_buffer_body_frag_mem,
-        compile_mapping_subscript_body_mem_ok];

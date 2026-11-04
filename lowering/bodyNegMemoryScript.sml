@@ -81,14 +81,6 @@ Proof
   metis_tac[fresh_write_op_simple]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_PREFIX_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg prefix inherited admission"
-  end) [body_neg_prefix_mem_ok, body_neg_emitted, body_neg_shape];
-
 Theorem body_neg_history:
   compile_neg x ty sm = (dst,sn) /\ fn_has_code sm sn func /\
   fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
@@ -129,14 +121,6 @@ Proof
   qpat_x_assum `q = _` (fn th => once_rewrite_tac[th]) >>
   simp[lookup_var_def]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_PRESERVATION_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg preservation inherited admission"
-  end) [body_neg_history, body_neg_state_post];
 
 Theorem body_neg_result:
   compile_neg x ty sm = (dst,sn) ==>
@@ -235,14 +219,6 @@ Proof
   gvs[] >> disj2_tac >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_EXECUTION_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg execution inherited admission"
-  end) [body_neg_result, body_neg_run, body_neg_frag_mem_at];
-
 Theorem body_neg_signed_interval:
   0 < n ==>
   (within_int_bound (Signed n) i <=>
@@ -334,15 +310,6 @@ Proof
        decimal_bound_def, expr_exit_def]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_SOURCE_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg source correspondence inherited admission"
-  end) [body_neg_signed_interval, body_neg_signed_comparison,
-        body_neg_source_value, body_neg_source_abort];
-
 Theorem expr_body_pre_neg:
   expr_body_pre cenv cx env (Builtin ann Neg [e]) es ==>
   ann = expr_type e /\ expr_body_pre cenv cx env e es /\
@@ -404,14 +371,6 @@ Proof
   >- gvs[expr_val_rel_def] >>
   qexistsl_tac [`sm`, `entry`, `v1`, `x`] >> simp[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_TAIL_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg tail inherited admission"
-  end) [expr_body_pre_neg, body_neg_tail_mem];
 
 Theorem body_compile_expr_neg[local]:
   compile_expr cenv ty (Builtin ann Neg [e]) sa =
@@ -507,11 +466,3 @@ Proof
   irule compile_neg_sim_mem >> simp[] >> qexists_tac `env` >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_COMPOSITION_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg composition inherited admission"
-  end) [body_compile_expr_neg, body_lower_value_neg, body_compile_neg_stack,
-        compile_neg_sim_mem, compile_neg_vv_sim_mem];

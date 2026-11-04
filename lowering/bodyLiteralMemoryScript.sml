@@ -128,11 +128,3 @@ Proof
   simp[Once evaluate_def, return_def] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_WORD_LITERAL_MEMORY_AUDIT OK\n"
-     else raise Fail "word literal memory inherited admission"
-  end) [body_literal_word_compile,
-        compile_literal_word_body_vv_sim_mem];

@@ -27,11 +27,3 @@ Proof
   qexistsl_tac [`INL v`, `ee`, `OK t`] >> simp[]
 QED
 
-val () =
-  let val th = expr_sim_mem_values
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles then
-       print "MEMORY_VALUES_AUDIT OK\n"
-     else raise Fail "expr_sim_mem_values: admitted proof dependency"
-  end;

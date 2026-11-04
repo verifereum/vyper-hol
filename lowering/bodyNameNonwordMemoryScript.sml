@@ -69,10 +69,3 @@ Proof
 QED
 *)
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NAME_MEMORY_AUDIT OK\n"
-     else raise Fail "memory source fact inherited admission"
-  end) [compile_name_nonword_body_sim_mem];

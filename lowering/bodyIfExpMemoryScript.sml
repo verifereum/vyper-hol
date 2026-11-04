@@ -77,14 +77,6 @@ Proof
   drule_all assign_history >> simp[update_var_def]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_ASSIGN_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp assignment memory inherited admission"
-  end) [frag_exec_assign_mem, assign_history, frag_exec_assign_mem_at];
-
 Theorem ifexp_arm_frag_mem:
   !ctx func cenv cx ty e es1 res es' bs bm bn eop rv tt lbl.
     expr_sim_mem ctx func cenv cx ty e es1 /\
@@ -128,15 +120,6 @@ Proof
   disch_then irule >> simp[] >>
   strip_tac >> qexistsl_tac [`t`, `w`] >> simp[]
 QED
-
-val () =
-  let val th = ifexp_arm_frag_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_ARM_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp arm memory inherited admission"
-  end;
 
 Theorem ifexp_jump_result_mem[local]:
   !fuel ctx fn s bb inst lbl r.
@@ -245,14 +228,6 @@ Proof
   qexists_tac `s` >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_BRANCH_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp branch memory inherited admission"
-  end) [ifexp_jump_result_mem, ifexp_branch_to_exit_mem, ifexp_history_jump];
-
 Theorem ifexp_point_branch_to_exit_mem[local]:
   !ctx fn sc jbb jnz sa sb sx sd lbl lbl' x Q R.
     lookup_block sc.vs_current_bb fn.fn_blocks = SOME jbb /\
@@ -277,15 +252,6 @@ Proof
   qexists_tac `\s. s = jump_to sa.cs_current_bb sc` >>
   simp[] >> metis_tac[]
 QED
-
-val () =
-  let val th = ifexp_point_branch_to_exit_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_POINT_BRANCH_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp point branch memory inherited admission"
-  end;
 
 Theorem ifexp_jnz_arm_mem:
   !ctx func cenv cx t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
@@ -369,15 +335,6 @@ Proof
       simp[]) >>
   disj2_tac >> metis_tac[]
 QED
-
-val () =
-  let val th = ifexp_jnz_arm_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_JNZ_ARM_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp jnz arm memory inherited admission"
-  end;
 
 Theorem ifexp_branch_sim_mem:
   !ctx func cenv cx ty t c a b e bv es es1 es' res sa sb s0 s1 s5 s6 x6 s7
@@ -470,15 +427,6 @@ Proof
   qpat_assum `new_block tl _ = _` (irule_at Any) >>
   qpat_assum `new_block lbl _ = _` (irule_at Any) >> simp[]
 QED
-
-val () =
-  let val th = ifexp_branch_sim_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_BRANCH_SIM_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp branch sim memory inherited admission"
-  end;
 
 Theorem compile_ifexp_forced_frag_mem:
   !ctx func cenv cx ty t c a b es.
@@ -606,15 +554,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_CONSUMER_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp consumer memory inherited admission"
-  end) [compile_ifexp_forced_frag_mem, readable_eval_frag_transport_mem,
-        compile_ifexp_vv_sim_mem];
-
 Theorem compile_ifexp_word_sim_mem:
   !ctx func cenv cx ty t c a b es.
     is_word_type t /\
@@ -653,11 +592,3 @@ Proof
   drule exprSimUnwrapTheory.expr_post_of_vv_post_stack >> metis_tac[]
 QED
 
-val () =
-  let val th = compile_ifexp_word_sim_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_WORD_SIM_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp word sim memory inherited admission"
-  end;

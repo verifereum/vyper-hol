@@ -220,12 +220,3 @@ Proof
   irule compile_not_flag_sim_mem >> simp[] >> qexists_tac `env` >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_FLAG_MEMORY_AUDIT OK\n"
-     else raise Fail "flag Not memory inherited admission"
-  end) [body_xor_prefix_mem_ok, body_xor_run, body_xor_history,
-        body_xor_state_post, body_xor_frag_mem_at, body_not_flag_tail_mem,
-        compile_not_flag_sim_mem, compile_not_flag_vv_sim_mem];

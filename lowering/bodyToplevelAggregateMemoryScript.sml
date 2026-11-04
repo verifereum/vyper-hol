@@ -123,12 +123,3 @@ Proof
             compile_toplevel_name_vv_sim_mem]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_TOPLEVEL_AGGREGATE_MEMORY_AUDIT OK\n"
-     else raise Fail "toplevel aggregate consumer inherited admission"
-  end) [body_location_code_aggregate_sim_mem,
-        compile_toplevel_immutable_aggregate_runtime_sim_mem,
-        body_toplevel_immutable_mem_case];

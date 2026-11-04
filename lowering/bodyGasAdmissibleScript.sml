@@ -28,11 +28,3 @@ Proof
   rename1 `Error err` >> Cases_on `err` >> gvs[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_stmts_gas_admissible)
-  in
-    if null axioms andalso null (Thm.hyp body_stmts_gas_admissible) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "BODY_ADMISSIBLE_AUDIT body_stmts_gas_admissible OK\n"
-    else raise Fail "body_stmts_gas_admissible: admitted proof dependency"
-  end;

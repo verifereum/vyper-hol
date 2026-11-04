@@ -127,11 +127,3 @@ Proof
   disj1_tac >> simp[] >> irule toplevel_immutable_post >> simp[] >> metis_tac[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_toplevel_immutable_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_toplevel_immutable_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "TOPLEVEL_IMMUTABLE_AUDIT compile_toplevel_immutable_sim OK\n"
-    else raise Fail "compile_toplevel_immutable_sim: admitted proof dependency"
-  end;

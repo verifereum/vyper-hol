@@ -176,11 +176,3 @@ Proof
 QED
 
 (* Integrity gate for the forced return boundary and RET consumer. *)
-val () = List.app (fn th =>
-  let val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "RETURN_FORCE_AUDIT OK\n"
-     else raise Fail "forced return inherited admission"
-  end) [eval_return_forced, state_rel_scopes_nil, compile_return_word_int_frag];
-

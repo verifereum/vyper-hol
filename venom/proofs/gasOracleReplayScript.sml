@@ -455,14 +455,13 @@ QED
 Theorem gas_exec_create:
   gas_replay_at 0 (\u. exec_create inst u value off sz salt) s
 Proof
-  simp[gas_replay_at_def, exec_create_def, gas_extract_result] >>
-  gen_tac >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s v 0 0 res` >>
-  Cases_on `extract_venom_result s v 0 0 res` >> simp[lift_result_def] >>
-  PairCases_on `x` >> simp[] >>
-  namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
-  Cases_on `outs` >> simp[lift_result_def] >>
-  metis_tac[gas_extract_result_readings]
+  Cases_on `inst.inst_outputs` >>
+  simp[gas_replay_at_def, exec_create_def, lift_result_def] >>
+  Cases_on `t` >> simp[gas_replay_at_def, exec_create_def, lift_result_def] >>
+  Cases_on `w2n sz > 2 * max_code_size` >>
+  simp[gas_replay_at_def, exec_create_def, lift_result_def,
+       venom_create_request_def, read_memory_def, update_var_def,
+       halt_state_def, set_returndata_def]
 QED
 
 Theorem gas_state_observers[simp]:

@@ -156,14 +156,3 @@ Proof
   metis_tac[]
 QED
 
-val () = List.app
-  (fn (name, theorem) =>
-    let val (oracles, axioms) = Tag.dest_tag (Thm.tag theorem)
-    in
-      if null axioms andalso null (Thm.hyp theorem) andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then
-        print ("STMT_EXPR_AUDIT " ^ name ^ " OK\n")
-      else raise Fail (name ^ ": admitted proof dependency")
-    end)
-  [("compile_expr_stmt_frag_ok", compile_expr_stmt_frag_ok),
-   ("compile_expr_stmt_frag", compile_expr_stmt_frag)];

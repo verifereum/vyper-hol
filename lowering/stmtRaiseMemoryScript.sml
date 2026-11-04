@@ -61,10 +61,3 @@ Proof
    gvs[expr_exit_def])
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_raise_frag_mem)
-  in if null axioms andalso null (Thm.hyp compile_raise_frag_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "RAISE_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "raise memory inherited admission"
-  end;

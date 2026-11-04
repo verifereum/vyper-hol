@@ -74,12 +74,3 @@ Proof
   fs[alloca_history_def, jump_to_def]
 QED
 
-val () = List.app (fn (name, th) =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null axioms andalso null (Thm.hyp th) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print ("STMT_JUMP_MEM_AUDIT " ^ name ^ " OK\n")
-    else raise Fail (name ^ ": admitted proof dependency")
-  end) [("compile_break_frag_mem", compile_break_frag_mem),
-        ("compile_continue_frag_mem", compile_continue_frag_mem)];

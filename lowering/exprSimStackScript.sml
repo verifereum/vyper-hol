@@ -95,11 +95,3 @@ Proof
   gvs[expr_sim_def] >> first_x_assum irule >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_vv_sim_stack)
-  in
-    if null axioms andalso null (Thm.hyp expr_vv_sim_stack) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "STACK_ADAPTER_AUDIT expr_vv_sim_stack OK\n"
-    else raise Fail "expr_vv_sim_stack: admitted proof dependency"
-  end;

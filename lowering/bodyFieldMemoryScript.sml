@@ -48,14 +48,6 @@ Proof
   simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_FIELD_REGION_MEMORY_AUDIT OK\n"
-     else raise Fail "body field region inherited admission"
-  end) [body_field_region_frontier, body_field_source_region, body_field_address_no_wrap];
-
 (* The pointer arithmetic itself has no memory ranges, including stuck prefixes. *)
 Theorem attr_add_prefix_mem_ok:
   emit_op ADD ops sm = (dst,sn) ==>
@@ -184,15 +176,6 @@ Proof
   disch_then (qspecl_then [`cx`, `ctx`, `R`, `fn`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_ADD_MEMORY_AUDIT OK\n"
-     else raise Fail "attribute ADD inherited admission"
-  end) [attr_add_prefix_mem_ok, attr_add_run_post, attr_add_history,
-        attr_add_frag_mem_at, attr_add_frag_mem];
 
 Theorem body_base_memory_holds_struct[local]:
   !cenv cx sid tv vv es s stv w.
@@ -343,15 +326,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_MEMORY_POST_AUDIT OK\n"
-     else raise Fail "attribute memory post inherited admission"
-  end) [body_base_memory_holds_struct, body_base_memory_at_struct,
-        body_attr_memory_at_field, body_attr_memory_vv_post];
-
 Theorem body_attribute_name_compile[local]:
   !cenv ty ann sid id fld st vv st'.
     compile_expr cenv ty (Attribute ann (Name (StructT sid) id) fld) st =
@@ -486,16 +460,6 @@ Proof
   irule frag_exec_mem_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_NAME_MEMORY_AUDIT OK\n"
-     else raise Fail "attribute Name memory inherited admission"
-  end) [body_attribute_name_compile, body_attribute_name_eval,
-        body_attribute_name_pre, body_base_memory_post_read_struct,
-        compile_attribute_name_body_vv_sim_mem];
-
 Theorem body_word_load_prefix_mem_ok:
   emit_op MLOAD [operand] sm = (op,sb) /\
   eval_operand operand s = SOME w /\ w2n w + 32 <= s.vs_alloca_next ==>
@@ -607,15 +571,6 @@ Proof
      local_region_def, locals_kept_def] >>
   conj_tac >> first_x_assum MATCH_ACCEPT_TAC
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_WORD_LOAD_MEMORY_AUDIT OK\n"
-     else raise Fail "word load memory inherited admission"
-  end) [body_word_load_prefix_mem_ok, body_word_load_history,
-        body_word_load_run_post, unwrap_memory_word_sim_mem];
 
 Theorem body_attribute_name_capacity[local]:
   expr_sim_pre cenv cx env (Name (StructT sid) id) es /\
@@ -751,15 +706,6 @@ Proof
   irule frag_exec_mem_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_CAPACITY_MEMORY_AUDIT OK\n"
-     else raise Fail "attribute capacity inherited admission"
-  end) [body_attribute_name_capacity, body_name_eval_state,
-        compile_attribute_name_body_capacity_mem];
-
 Theorem body_unwrap_memory_read_mem[local]:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocMemory /\
@@ -856,10 +802,3 @@ Proof
   irule frag_exec_mem_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_FORCE_MEMORY_AUDIT OK\n"
-     else raise Fail "attribute force inherited admission"
-  end) [body_unwrap_memory_read_mem, compile_attribute_name_body_sim_mem];

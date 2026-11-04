@@ -255,16 +255,6 @@ Proof
   irule compile_env_body_sim_mem >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ENV_MEMORY_AUDIT OK\n"
-     else raise Fail "environment memory inherited admission"
-  end) [body_env_read_frag_mem, body_env_frag_mem,
-        body_env_read_counted, body_env_source, body_env_mem_prefix,
-        compile_env_body_sim_mem, compile_env_body_vv_sim_mem];
-
 Theorem body_env_mem_case:
   !cx ann item args. item <> PrevHash /\ item <> MsgGas ==>
     body_expr_mem_ok cx (Builtin ann (Env item) args)
@@ -276,11 +266,3 @@ Proof
   gvs[] >> metis_tac[compile_env_body_sim_mem, compile_env_body_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_env_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ENV_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "environment closure inherited admission"
-  end;

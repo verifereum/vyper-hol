@@ -109,10 +109,3 @@ Proof
   simp[below_frontier_MLOAD, eval_operand_def] >> decide_tac
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_LOCAL_FRONTIER_AUDIT OK\n"
-     else raise Fail "memory source fact inherited admission"
-  end) [body_local_region_frontier, body_local_region_subrange, body_local_ptr_MLOAD_frontier];

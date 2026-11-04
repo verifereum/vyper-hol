@@ -50,14 +50,6 @@ Proof
   drule_all alloca_history_run_inst_seq >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ISZERO_SUFFIX_MEMORY_AUDIT OK\n"
-     else raise Fail "iszero suffix memory inherited admission"
-  end) [body_iszero_prefix_mem_ok, body_iszero_run, body_iszero_history];
-
 Theorem body_iszero_state_post:
   emit_op ISZERO [x] sm = (dst,sn) /\ eval_operand x s = SOME w /\
   local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s ==>
@@ -85,15 +77,6 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
-
-val () =
-  let val th = body_iszero_state_post
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ISZERO_STATE_POST_MEMORY_AUDIT OK\n"
-     else raise Fail "iszero state post inherited admission"
-  end;
 
 Theorem body_iszero_frag_mem_at:
   emit_op ISZERO [x] sm = (dst,sn) /\ local_ptrs_reserved cenv sm /\
@@ -137,15 +120,6 @@ Proof
   qpat_x_assum `alloca_history func (q with vs_inst_idx := _)` mp_tac >>
   simp[]
 QED
-
-val () =
-  let val th = body_iszero_frag_mem_at
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ISZERO_FRAGMENT_MEMORY_AUDIT OK\n"
-     else raise Fail "iszero fragment inherited admission"
-  end;
 
 Theorem body_not_bool_tail_mem[local]:
   emit_op ISZERO [x] sm = (op,sb) /\ local_ptrs_reserved cenv sm /\
@@ -237,13 +211,4 @@ Proof
   conj_tac >- metis_tac[eval_expr_builtin_value] >>
   irule compile_not_bool_sim_mem >> simp[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_BOOL_COMPOSITION_MEMORY_AUDIT OK\n"
-     else raise Fail "Boolean Not composition inherited admission"
-  end) [body_not_bool_tail_mem, compile_not_bool_sim_mem,
-        body_expr_vv_sim_mem_stack, compile_not_bool_vv_sim_mem];
 

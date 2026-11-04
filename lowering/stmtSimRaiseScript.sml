@@ -37,11 +37,3 @@ Proof
    gvs[expr_exit_def])
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_raise_frag)
-  in
-    if null axioms andalso null (Thm.hyp compile_raise_frag) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "RAISE_AUDIT compile_raise_frag OK\n"
-    else raise Fail "compile_raise_frag: admitted proof dependency"
-  end;

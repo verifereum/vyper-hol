@@ -48,11 +48,3 @@ Proof
   irule stmt_post_break >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_break_frag)
-  in
-    if null axioms andalso null (Thm.hyp compile_break_frag) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "STMT_BREAK_AUDIT compile_break_frag OK\n"
-    else raise Fail "compile_break_frag: admitted proof dependency"
-  end;

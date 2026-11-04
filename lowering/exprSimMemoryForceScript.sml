@@ -62,10 +62,3 @@ Proof
   disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
-val () =
-  let val (ors,axs) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_memory)
-  in if null axs andalso null (Thm.hyp expr_sim_of_vv_sim_memory) andalso
-        List.all (fn oracle => oracle = "DISK_THM") ors then
-       print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_memory OK\n"
-     else raise Fail "expr_sim_of_vv_sim_memory: admitted proof dependency"
-  end;

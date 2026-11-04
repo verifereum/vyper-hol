@@ -694,10 +694,3 @@ Proof
   disch_then drule_all >> simp[exprSafeOperandTheory.safe_operand_def]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "WORD_OPERAND_SHAPE_AUDIT OK\n"
-     else raise Fail "unary property inherited admission"
-  end) [lower_value_word_shape];

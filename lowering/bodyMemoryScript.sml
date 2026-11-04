@@ -1,7 +1,8 @@
 (* Body memory safety at the actual frame entry and continuing landings. *)
 Theory bodyMemory
 Ancestors
-  bodyMemoryDefs stmtMemory stmtControlMemory fragLoopMemory
+  bodyMemoryDefs stmtMemory stmtSimJumpMem stmtRaiseMemory stmtIfMemory
+  stmtAssertMemory fragLoopMemory
   allocaHistoryFragment builtinBytesMemory concatMemory
   bodySimMain bodySimStmtCases bodySimDeclCases
   bodySim exprSimHyps stmtLoweringProps exprLoweringProps supportedProgram

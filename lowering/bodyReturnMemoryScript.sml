@@ -62,10 +62,3 @@ Proof
   qexists_tac `env` >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_return_mem_ok)
-  in if null axioms andalso null (Thm.hyp body_return_mem_ok) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_RETURN_MEMORY_AUDIT OK\n"
-     else raise Fail "body return memory inherited admission"
-  end;

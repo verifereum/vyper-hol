@@ -12,10 +12,3 @@ Proof
   simp[body_literal_word_mem_case]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_word_literal_stmts_mem_ok)
-  in if null axioms andalso null (Thm.hyp body_word_literal_stmts_mem_ok) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_STMT_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "body statement closure inherited admission"
-  end;

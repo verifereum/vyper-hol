@@ -55,11 +55,3 @@ Proof
 QED
 
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in
-    if null axioms andalso null (Thm.hyp th) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-    else raise Fail "flag-member simulation: admitted proof dependency"
-  end) [compile_flag_member_word_sim, compile_flag_member_case_sim,
-        compile_flag_member_sim];

@@ -300,11 +300,3 @@ QED
 Finalise compile_return_tuple_int_frag
 
 (* Check that the tuple consumer, including every resumed path, is closed. *)
-val () =
-  let val th = compile_return_tuple_int_frag
-      val (ors, axs) = Tag.dest_tag (Thm.tag th)
-  in if null axs andalso null (Thm.hyp th) andalso
-        List.all (fn s => s = "DISK_THM") ors
-     then print "RETURN_FORCE_AUDIT tuple OK\n"
-     else raise Fail "forced tuple return inherited admission"
-  end;

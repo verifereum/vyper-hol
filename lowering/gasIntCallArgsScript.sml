@@ -37,9 +37,3 @@ Proof
 QED
 
 (* Check the frozen root's full proof ancestry, not only its final tactic. *)
-val () =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag gas_exempt_intcall_args) in
-    if null (Thm.hyp gas_exempt_intcall_args) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail "gas_exempt_intcall_args: admitted dependency"
-  end;

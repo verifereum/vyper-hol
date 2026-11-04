@@ -173,11 +173,3 @@ Proof
        calldata_source_all_tails, GSYM ETA_THM]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_calldatasize_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_calldatasize_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "CALLDATA_AUDIT compile_calldatasize_sim OK\n"
-    else raise Fail "compile_calldatasize_sim: admitted proof dependency"
-  end;

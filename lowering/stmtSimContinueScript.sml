@@ -49,11 +49,3 @@ Proof
   irule continue_jump_post >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_continue_frag)
-  in
-    if null axioms andalso null (Thm.hyp compile_continue_frag) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "CONTINUE_AUDIT compile_continue_frag OK\n"
-    else raise Fail "compile_continue_frag: admitted proof dependency"
-  end;

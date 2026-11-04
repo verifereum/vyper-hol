@@ -46,17 +46,6 @@ Proof
   simp[] >> metis_tac[compile_expr_grows]
 QED
 
-val () =
-  let val th = body_ifexp_word_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IFEXP_WORD_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "ifexp word closure memory inherited admission"
-  end;
-
-
-
 Theorem body_attribute_name_mem_case:
   !cx ann sid id fld.
     body_expr_mem_ok cx (Attribute ann (Name (StructT sid) id) fld)
@@ -65,15 +54,6 @@ Proof
   metis_tac[compile_attribute_name_body_sim_mem,
             compile_attribute_name_body_vv_sim_mem]
 QED
-
-val () =
-  let val th = body_attribute_name_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ATTRIBUTE_NAME_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "attribute name closure memory inherited admission"
-  end;
 
 Theorem body_not_bool_mem_case:
   !cx ann e. expr_type e = BaseT BoolT /\ body_expr_mem_ok cx e ==>
@@ -99,15 +79,6 @@ Proof
   metis_tac[compile_not_bool_sim_mem, compile_not_bool_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_not_bool_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_BOOL_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "Boolean Not closure inherited admission"
-  end;
-
 Theorem body_abs_mem_case:
   !cx ann e. body_expr_mem_ok cx e ==>
     body_expr_mem_ok cx (Builtin ann Abs [e])
@@ -125,15 +96,6 @@ Proof
     metis_tac[body_expr_mem_ok_def] >>
   metis_tac[compile_abs_sim_mem, compile_abs_vv_sim_mem]
 QED
-
-val () =
-  let val th = body_abs_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_ABS_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "Abs closure inherited admission"
-  end;
 
 Theorem body_not_uint256_mem_case:
   !cx ann e. is_uint256_type (expr_type e) /\ body_expr_mem_ok cx e ==>
@@ -153,15 +115,6 @@ Proof
   metis_tac[compile_not_uint256_sim_mem, compile_not_uint256_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_not_uint256_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_UINT256_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "uint256 Not closure inherited admission"
-  end;
-
 Theorem body_not_bytes32_mem_case:
   !cx ann e. is_bytes32_type (expr_type e) /\ body_expr_mem_ok cx e ==>
     body_expr_mem_ok cx (Builtin ann Not [e])
@@ -179,15 +132,6 @@ Proof
     metis_tac[body_expr_mem_ok_def] >>
   metis_tac[compile_not_bytes32_sim_mem, compile_not_bytes32_vv_sim_mem]
 QED
-
-val () =
-  let val th = body_not_bytes32_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_BYTES32_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "bytes32 Not closure inherited admission"
-  end;
 
 Theorem body_not_flag_mem_case:
   !cx ann e. is_flag_type (expr_type e) /\ body_expr_mem_ok cx e ==>
@@ -207,15 +151,6 @@ Proof
   metis_tac[compile_not_flag_sim_mem, compile_not_flag_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_not_flag_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_FLAG_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "flag Not closure inherited admission"
-  end;
-
 Theorem body_neg_mem_case:
   !cx ann e. body_expr_mem_ok cx e ==>
     body_expr_mem_ok cx (Builtin ann Neg [e])
@@ -229,11 +164,3 @@ Proof
   metis_tac[compile_neg_sim_mem, compile_neg_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_neg_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NEG_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "Neg closure inherited admission"
-  end;

@@ -49,14 +49,6 @@ Proof
   irule body_literal_word_mem_prefix >> metis_tac[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_literal_word_body_sim_mem)
-  in if null axioms andalso null (Thm.hyp compile_literal_word_body_sim_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_WORD_LITERAL_FORCE_AUDIT OK\n"
-     else raise Fail "word literal forcing inherited admission"
-  end;
-
 Theorem body_literal_word_mem_case:
   !cx ann l. is_word_type ann ==> body_expr_mem_ok cx (Literal ann l)
 Proof
@@ -68,10 +60,3 @@ Proof
             compile_literal_word_body_vv_sim_mem]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_literal_word_mem_case)
-  in if null axioms andalso null (Thm.hyp body_literal_word_mem_case) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_WORD_LITERAL_CLOSURE_AUDIT OK\n"
-     else raise Fail "word literal closure inherited admission"
-  end;

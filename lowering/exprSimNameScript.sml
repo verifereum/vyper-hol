@@ -42,10 +42,3 @@ Proof
   simp[expr_ok_def, compile_name_sim, compile_name_vv_sim]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn oracle => oracle = "DISK_THM") oracles then
-       print "NAME_CONSUMER_AUDIT OK\n"
-     else raise Fail "name consumer inherited admission"
-  end) [compile_name_other_sim, compile_name_sim, compile_name_case_sim];

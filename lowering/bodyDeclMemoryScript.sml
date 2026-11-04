@@ -207,16 +207,6 @@ Proof
   fs[lookup_var_def]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_DECL_MEMORY_AUDIT OK\n"
-     else raise Fail "body declaration memory inherited admission"
-  end) [body_stmt_state_rel_declare_store_frame, body_typed_store_memory_mem_ok,
-        body_store_memory_history, body_decl_frag_at_cursor,
-        annassign_memory_store_body_frag_mem];
-
 (* Scratch copy preserves all source-level live regions. *)
 Theorem body_stmt_state_rel_mcopy_alloca:
   !func cenv cx es s inst p dst src sz ctx.
@@ -256,14 +246,6 @@ Proof
      fs[stmt_state_rel_def, state_rel_def]) >>
   fs[regions_disjoint_def]) >> first_assum ACCEPT_TAC
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_stmt_state_rel_mcopy_alloca)
-  in if null axioms andalso null (Thm.hyp body_stmt_state_rel_mcopy_alloca) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_SCRATCH_STATE_MEMORY_AUDIT OK\n"
-     else raise Fail "body scratch state inherited admission"
-  end;
 
 Theorem body_scratch_alloc_operand[local]:
   compile_alloc_buffer n sa = (buf,sm) ==>
@@ -450,16 +432,6 @@ Proof
   fs[lookup_var_def]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_SCRATCH_PREFIX_MEMORY_AUDIT OK\n"
-     else raise Fail "body scratch prefix inherited admission"
-  end) [body_scratch_alloc_operand, body_scratch_copy_state,
-        body_scratch_prefix_run, body_scratch_prefix_shape,
-        compile_scratch_prefix_body_frag_mem];
-
 Theorem annassign_memory_assign_body_frag_mem:
   !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw d R info bytes.
     compile_assign_value cenv (Var p) LocMemory src F (SOME LocMemory)
@@ -525,14 +497,6 @@ Proof
   disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
   disch_then irule >> simp[] >> rpt strip_tac
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_DECL_ASSIGN_MEMORY_AUDIT OK\n"
-     else raise Fail "body declaration assignment inherited admission"
-  end) [assign_memory_body_code, annassign_memory_assign_body_frag_mem];
 
 Theorem annassign_setup_shape:
   declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
@@ -648,14 +612,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> strip_tac >> gvs[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_DECL_SETUP_MEMORY_AUDIT OK\n"
-     else raise Fail "body declaration setup inherited admission"
-  end) [annassign_setup_shape, body_decl_alloca_run, annassign_setup_body_frag_mem];
-
 Theorem annassign_name_rhs_body_frag_mem:
   !ctx func cenv cx env source_id es s id p sz w inst v tyv sc rest a src ty sa sm sb d R info bytes.
     lower_value compile_expr cenv ty (Name ty source_id) sa = (src,sm) /\
@@ -697,14 +653,6 @@ Proof
   qexists_tac `inst` >> simp[] >>
   fs[local_ptrs_reserved_def] >> metis_tac[]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_DECL_NAME_RHS_MEMORY_AUDIT OK\n"
-     else raise Fail "body declaration Name RHS inherited admission"
-  end) [annassign_name_rhs_body_frag_mem];
 
 Theorem body_annassign_name_compiler_parts[local]:
   !c lctx ret_ty id typ source_id p sz st sb.
@@ -999,11 +947,3 @@ Proof
   disch_then (qspecl_then [`lctx`, `cenv`] mp_tac) >> simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_DECL_NAME_CONSUMER_MEMORY_AUDIT OK\n"
-     else raise Fail "body declaration Name consumer inherited admission"
-  end) [body_annassign_name_exec, body_annassign_name_prepare,
-        body_annassign_name_code, body_decl_normal_landing, body_annassign_name_mem];

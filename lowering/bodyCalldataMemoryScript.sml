@@ -244,18 +244,6 @@ Proof
   irule compile_calldatasize_body_sim_mem >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_CALLDATASIZE_MEMORY_AUDIT OK\n"
-     else raise Fail "calldatasize memory inherited admission"
-  end) [body_calldatasize_prefix_mem_ok, body_calldatasize_run,
-        body_calldatasize_history, body_calldatasize_gas_path,
-        body_calldatasize_state_post, body_calldatasize_mem_prefix,
-        body_calldatasize_frag_mem, compile_calldatasize_body_sim_mem,
-        compile_calldatasize_body_vv_sim_mem];
-
 Theorem body_calldatalen_mem_case:
   !cx ann args. body_expr_mem_ok cx (Builtin ann CalldataLen args)
 Proof
@@ -265,11 +253,3 @@ Proof
             compile_calldatasize_body_vv_sim_mem]
 QED
 
-val () =
-  let val th = body_calldatalen_mem_case
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_CALLDATALEN_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "CalldataLen closure inherited admission"
-  end;

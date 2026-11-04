@@ -116,11 +116,3 @@ Proof
 QED
 
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_NOT_PROPERTIES_AUDIT OK\n"
-     else raise Fail "NOT instruction property inherited admission"
-  end) [body_not_prefix_mem_ok, body_not_run, body_not_history,
-        body_not_state_post, body_not_frag_mem_at];

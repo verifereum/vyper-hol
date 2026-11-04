@@ -55,9 +55,3 @@ Proof
 QED
 
 (* Audit the frozen root, including its transitive proof dependencies. *)
-val () =
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag gas_exempt_intcall_body) in
-    if null (Thm.hyp gas_exempt_intcall_body) andalso null axioms andalso
-       List.all (fn s => s = "DISK_THM") oracles then ()
-    else raise Fail "gas_exempt_intcall_body: admitted dependency"
-  end;

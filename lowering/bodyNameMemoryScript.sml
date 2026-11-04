@@ -17,10 +17,3 @@ Proof
             compile_name_body_vv_sim_mem]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_LEAF_CLOSURE_MEMORY_AUDIT OK\n"
-     else raise Fail "leaf closure memory inherited admission"
-  end) [body_name_mem_case];

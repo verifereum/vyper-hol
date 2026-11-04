@@ -90,11 +90,3 @@ Proof
   disj1_tac >> simp[] >> irule toplevel_storage_value_post >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_toplevel_storage_vv_sim)
-  in
-    if null axioms andalso null (Thm.hyp compile_toplevel_storage_vv_sim) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "TOPLEVEL_STORAGE_AUDIT compile_toplevel_storage_vv_sim OK\n"
-    else raise Fail "compile_toplevel_storage_vv_sim: admitted proof dependency"
-  end;

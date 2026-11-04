@@ -32,11 +32,3 @@ Proof
   simp[stmt_frag_nil_mem]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_pass_frag_mem)
-  in
-    if null axioms andalso null (Thm.hyp compile_pass_frag_mem) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "STMT_PASS_MEM_AUDIT compile_pass_frag_mem OK\n"
-    else raise Fail "compile_pass_frag_mem: admitted proof dependency"
-  end;

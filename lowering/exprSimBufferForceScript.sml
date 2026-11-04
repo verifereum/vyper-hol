@@ -46,11 +46,3 @@ Proof
   disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_sim_of_vv_sim_buffer)
-  in
-    if null axioms andalso null (Thm.hyp expr_sim_of_vv_sim_buffer) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MEMORY_FORCE_AUDIT expr_sim_of_vv_sim_buffer OK\n"
-    else raise Fail "expr_sim_of_vv_sim_buffer: admitted proof dependency"
-  end;

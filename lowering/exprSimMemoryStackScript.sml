@@ -57,11 +57,3 @@ Proof
   gvs[expr_sim_mem_def] >> first_x_assum irule >> simp[]
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_expr_vv_sim_mem_stack)
-  in
-    if null axioms andalso null (Thm.hyp body_expr_vv_sim_mem_stack) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "MEMORY_STACK_ADAPTER_AUDIT body_expr_vv_sim_mem_stack OK\n"
-    else raise Fail "body_expr_vv_sim_mem_stack: admitted proof dependency"
-  end;

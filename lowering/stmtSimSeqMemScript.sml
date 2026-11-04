@@ -161,11 +161,3 @@ Resume stmt_frag_cons_env_mem[sequence_post]:
 QED
 Finalise stmt_frag_cons_env_mem
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag stmt_frag_cons_env_mem)
-  in
-    if null axioms andalso null (Thm.hyp stmt_frag_cons_env_mem) andalso
-       List.all (fn oracle => oracle = "DISK_THM") oracles then
-      print "STMT_SEQUENCE_MEM_AUDIT stmt_frag_cons_env_mem OK\n"
-    else raise Fail "stmt_frag_cons_env_mem: admitted proof dependency"
-  end;

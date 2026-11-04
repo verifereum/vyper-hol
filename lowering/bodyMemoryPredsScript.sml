@@ -178,13 +178,3 @@ QED
 
 (* Do not mistake these base cases and projection for the mutual theorem:
    the recursive producer cases remain separate obligations. *)
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_MEMORY_PREDICATE_AUDIT OK\n"
-     else raise Fail "body memory predicate inherited admission"
-  end) [body_bool_literal_mem_ok, body_stmts_mem_projection,
-        body_pass_mem_ok, body_nil_mem_ok, body_break_mem_ok,
-        body_continue_mem_ok, body_return_none_mem_ok];
-

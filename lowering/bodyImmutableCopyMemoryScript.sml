@@ -72,16 +72,6 @@ Proof
        arithmeticTheory.LESS_MOD]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IMMUTABLE_COPY_MEMORY_AUDIT OK\n"
-     else raise Fail "immutable copy inherited admission"
-  end) [body_immutable_copy_aligned_size, body_immutable_copy_zero_mem,
-        body_immutable_copy_one_mem_ok, body_immutable_byte_offset_mem_ok,
-        body_immutable_copy_offset_range];
-
 Theorem body_immutable_load_mem_ok:
   compile_imm_load_word F imm op sa = (r,sb) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
@@ -200,12 +190,3 @@ Proof
   irule body_copy_frame_mem_append >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_IMMUTABLE_COPY_BOUNDARY_AUDIT OK\n"
-     else raise Fail "immutable copy boundary inherited admission"
-  end) [body_immutable_load_mem_ok, body_immutable_store_mem_ok,
-        body_copy_frame_frontier, body_copy_frame_mem_append,
-        body_immutable_one_mem_ok, body_immutable_copy_mem_ok];

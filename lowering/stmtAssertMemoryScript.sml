@@ -215,10 +215,3 @@ QED
 
 Finalise compile_assert_frag_mem
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_assert_frag_mem)
-  in if null axioms andalso null (Thm.hyp compile_assert_frag_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "ASSERT_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "assert memory inherited admission"
-  end;

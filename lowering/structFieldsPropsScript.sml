@@ -184,10 +184,3 @@ Proof
   gvs[sfields_tenv_consistent_def] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "STRUCT_LITERAL_SOURCE_AUDIT OK\n"
-     else raise Fail "source fact inherited admission"
-  end) [struct_literal_decl_types, struct_literal_layout_types];

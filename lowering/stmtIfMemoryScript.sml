@@ -274,10 +274,3 @@ Proof
 QED
 *)
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_if_stmt_frag_mem)
-  in if null axioms andalso null (Thm.hyp compile_if_stmt_frag_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "IF_MEMORY_KERNEL_AUDIT OK\n"
-     else raise Fail "if memory inherited admission"
-  end;

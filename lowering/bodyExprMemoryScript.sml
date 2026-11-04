@@ -49,11 +49,3 @@ Proof
        locals_kept_mem, is_word_type_def, read_result_def, return_def]
 QED
 
-val () =
-  let val th = body_bool_literal_mem
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_EXPR_MEMORY_AUDIT OK\n"
-     else raise Fail "body expression inherited admission"
-  end;

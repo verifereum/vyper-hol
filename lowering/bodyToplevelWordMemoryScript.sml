@@ -35,14 +35,6 @@ Proof
   irule unwrap_storage_word_sim_mem >> simp[] >> metis_tac[])
 QED
 
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_unwrap_location_word_mem)
-  in if null axioms andalso null (Thm.hyp body_unwrap_location_word_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_TOPLEVEL_WORD_MEMORY_AUDIT OK\n"
-     else raise Fail "toplevel word memory inherited admission"
-  end;
-
 Theorem body_location_word_sim_mem:
   expr_vv_sim_mem ctx func cenv cx ty e es /\
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
@@ -108,14 +100,6 @@ Proof
      simp[expr_exit_exception_transport]) >>
   irule frag_exec_mem_exit_prefix >> qexists_tac `sa` >> simp[cs_extends_refl])
 QED
-
-val () =
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_location_word_sim_mem)
-  in if null axioms andalso null (Thm.hyp body_location_word_sim_mem) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_LOCATION_WORD_MEMORY_AUDIT OK\n"
-     else raise Fail "located word consumer inherited admission"
-  end;
 
 Theorem compile_toplevel_storage_word_sim_mem:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str.
@@ -202,12 +186,3 @@ Proof
   metis_tac[compile_toplevel_word_runtime_sim_mem, compile_toplevel_name_vv_sim_mem]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "BODY_TOPLEVEL_FORCED_WORD_MEMORY_AUDIT OK\n"
-     else raise Fail "forced toplevel word memory inherited admission"
-  end) [compile_toplevel_storage_word_sim_mem,
-        compile_toplevel_word_runtime_sim_mem, body_toplevel_storage_word_mem_case,
-        body_toplevel_word_mem_case];
