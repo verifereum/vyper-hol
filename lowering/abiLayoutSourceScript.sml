@@ -1,7 +1,7 @@
 (* Source-only successful type evaluation transport, below compiler layout. *)
 Theory abiLayoutSource
 Ancestors
-  vyperValue vyperABI finite_map list pair
+  vyperValue vyperABI contractABI finite_map list pair
 
 Theorem vyper_to_abi_type_submap:
   (!env ty tv.
@@ -62,4 +62,34 @@ Proof
   >> rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
   simp[vyper_is_dynamic_def, vyper_abi_size_bound_def] >>
   metis_tac[]
+QED
+
+(* Public source projections, shared by encoding plans and decoder headers. *)
+Theorem vyper_to_abi_type_dynamic:
+  (!tenv ty tv.
+     evaluate_type tenv ty = SOME tv ==>
+     is_dynamic (vyper_to_abi_type tenv ty) = vyper_is_dynamic tenv ty) /\
+  (!tenv ts acc tvs.
+     evaluate_types tenv ts acc = SOME tvs ==>
+     any_dynamic (vyper_to_abi_types tenv ts) = vyper_any_dynamic tenv ts)
+Proof
+  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, vyper_is_dynamic_def, AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> TRY (Cases_on `bd`) >> gvs[vyper_is_dynamic_def]
+QED
+
+Theorem vyper_to_abi_static_length:
+  (!tenv ty tv.
+     evaluate_type tenv ty = SOME tv /\ ~vyper_is_dynamic tenv ty ==>
+     static_length (vyper_to_abi_type tenv ty) = vyper_abi_size_bound tenv ty) /\
+  (!tenv ts acc tvs.
+     evaluate_types tenv ts acc = SOME tvs /\ ~vyper_any_dynamic tenv ts ==>
+     static_length (Tuple (vyper_to_abi_types tenv ts)) =
+     vyper_abi_size_bound_list tenv ts)
+Proof
+  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[evaluate_type_def, vyper_is_dynamic_def, vyper_abi_size_bound_def,
+       AllCaseEqs(), PULL_EXISTS] >>
+  rpt strip_tac >> TRY (Cases_on `bd`) >>
+  gvs[vyper_is_dynamic_def, vyper_abi_size_bound_def, static_length_Tuple_SUM]
 QED
