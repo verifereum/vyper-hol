@@ -8722,6 +8722,54 @@ Definition all_blocks_run_rel_def:
       run_block_compare bb bb'
 End
 
+Triviality dft_block_exec_block_run_insts_pseudo_suffix_lift[local]:
+  !bb order p q fuel ctx s suffix.
+    pseudos_prefix bb /\ p <= q /\
+    p = phi_prefix_length bb.bb_instructions /\
+    q = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions) /\
+    suffix = DROP p (TAKE q bb.bb_instructions) /\
+    ~(?v. run_insts fuel ctx suffix s = OK v) ==>
+    lift_result (\_ _. T) (execution_equiv {}) revert_equiv
+      (run_insts fuel ctx suffix s)
+      (exec_block fuel ctx (dft_block order bb) (s with vs_inst_idx := p))
+Proof
+  rpt strip_tac >>
+  `pseudos_prefix (dft_block order bb)` by simp[dft_block_pseudos_prefix] >>
+  `q = LENGTH (FILTER (\i. is_pseudo i.inst_opcode)
+      (dft_block order bb).bb_instructions)` by simp[dft_block_phis] >>
+  `DROP p (TAKE q (dft_block order bb).bb_instructions) = suffix` by
+    (qpat_x_assum `suffix = _` (fn th => rewrite_tac[th]) >>
+     irule dft_block_same_pseudo_suffix >> simp[]) >>
+  qspecl_then [`dft_block order bb`, `p`, `q`, `fuel`, `ctx`, `s`]
+    mp_tac exec_block_run_insts_pseudo_suffix_lift >>
+  simp[] >>
+  impl_tac >- (
+    qpat_x_assum `p = phi_prefix_length bb.bb_instructions`
+      (fn th => rewrite_tac[GSYM th]) >>
+    qpat_x_assum `q = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) (dft_block order bb).bb_instructions)`
+      (fn th => rewrite_tac[GSYM th]) >>
+    qpat_x_assum `DROP p (TAKE q (dft_block order bb).bb_instructions) = suffix`
+      (fn th => rewrite_tac[th]) >>
+    qpat_x_assum `q = LENGTH (FILTER (\i. is_pseudo i.inst_opcode) bb.bb_instructions)`
+      (fn th => rewrite_tac[GSYM th]) >>
+    qpat_x_assum `suffix = DROP p (TAKE q bb.bb_instructions)`
+      (fn th => rewrite_tac[GSYM th]) >>
+    simp[] >> metis_tac[]) >>
+  qpat_x_assum `DROP p (TAKE q (dft_block order bb).bb_instructions) = suffix`
+    (fn th => rewrite_tac[th]) >>
+  simp[]
+QED
+
+Triviality initial_all_blocks_run_rel[local]:
+  !fn. wf_function fn ==> all_blocks_run_rel fn fn.fn_blocks
+Proof
+  rw[all_blocks_run_rel_def, run_block_compare_def] >>
+  `bb = bb'` by (irule wf_fn_same_label_eq >> metis_tac[]) >>
+  gvs[] >> disj2_tac >>
+  irule (SRULE [] lift_result_refl_proof) >>
+  simp[state_equiv_refl, execution_equiv_refl, revert_equiv_def]
+QED
+
 Triviality np_defs_gives_earlier_index[local]:
   !l x y v jx iy.
     EL jx l = x /\ jx < LENGTH l /\
