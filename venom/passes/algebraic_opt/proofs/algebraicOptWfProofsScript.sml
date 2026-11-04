@@ -1,6 +1,7 @@
 Theory algebraicOptWfProofs
 Ancestors
   algebraicOptDefs passSharedDefs venomInst venomWf venomFnScheduleRunner unitShapeDefs
+  dfgAnalysisProps
 
 Theorem ao_handle_offset_inst_structure:
   (ao_handle_offset_inst inst).inst_id = inst.inst_id /\
@@ -1123,6 +1124,81 @@ val _ = List.app (fn th =>
    ao_bb_cons_well_formed, ao_bb_prefix_well_formed,
    ao_transform_insts_supply_nonphi, ao_transform_insts_supply_well_formed,
    ao_transform_block_supply_well_formed, ao_transform_blocks_supply_well_formed];
+
+Theorem ao_flip_comparison_comparator:
+  is_comparator opc ==> is_comparator (flip_comparison_opcode opc)
+Proof
+  Cases_on `opc` >> simp[is_comparator_def, flip_comparison_opcode_def]
+QED
+
+Theorem ao_cmp_flip_scan_provenance:
+  EVERY (\i. MEM i (fn_insts fn)) insts /\
+  ao_cmp_flip_scan (dfg_build_function fn) insts = (flips,removes,inserts) ==>
+  EVERY (\(id,opc,w,op).
+    is_comparator opc /\
+    ?i. MEM i (fn_insts fn) /\ i.inst_id = id /\ is_comparator i.inst_opcode) flips /\
+  EVERY (\id. ?i. MEM i (fn_insts fn) /\ i.inst_id = id /\
+                  i.inst_opcode = ISZERO) removes /\
+  EVERY (\(id,v,c). ?i. MEM i (fn_insts fn) /\ i.inst_id = id /\
+                        i.inst_opcode = ASSERT) inserts
+Proof
+  map_every qid_spec_tac [`inserts`, `removes`, `flips`] >>
+  Induct_on `insts`
+  >- simp[ao_cmp_flip_scan_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_cmp_flip_scan (dfg_build_function fn) insts` >>
+  PairCases_on `r` >>
+  gvs[] >>
+  gvs[Once ao_cmp_flip_scan_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  `MEM (HD (dfg_get_uses (dfg_build_function fn) out_var)) (fn_insts fn)` by
+    (irule (cj 1 dfg_build_function_uses_sound) >>
+     qexists `out_var` >>
+     Cases_on `dfg_get_uses (dfg_build_function fn) out_var` >> gvs[]) >>
+  simp[ao_flip_comparison_comparator] >> metis_tac[]
+QED
+
+Theorem ao_fn_inst_id_injective:
+  fn_inst_ids_distinct fn /\ MEM x (fn_insts fn) /\ MEM y (fn_insts fn) /\
+  x.inst_id = y.inst_id ==> x = y
+Proof
+  simp[fn_inst_ids_distinct_def, fn_insts_def] >> strip_tac >>
+  `!bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
+    FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)` by
+    (Induct >> simp[fn_insts_blocks_def]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
+  gvs[listTheory.MEM_EL] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
+  `n < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) /\
+   n' < LENGTH (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[] >>
+  `EL n (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks)) =
+   EL n' (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by simp[listTheory.EL_MAP] >>
+  `n = n'` by metis_tac[listTheory.ALL_DISTINCT_EL_IMP] >> gvs[]
+QED
+
+Theorem ao_cmp_flip_scan_lookup_safety:
+  fn_inst_ids_distinct fn /\
+  ao_cmp_flip_scan (dfg_build_function fn) (fn_insts fn) = (flips,removes,inserts) ==>
+  (!i opc w op. MEM i (fn_insts fn) /\
+     ALOOKUP flips i.inst_id = SOME (opc,w,op) ==>
+     is_comparator i.inst_opcode /\ is_comparator opc) /\
+  (!i. MEM i (fn_insts fn) /\ MEM i.inst_id removes ==> i.inst_opcode = ISZERO) /\
+  (!i v c. MEM i (fn_insts fn) /\
+     ALOOKUP inserts i.inst_id = SOME (v,c) ==> i.inst_opcode = ASSERT)
+Proof
+  strip_tac >>
+  `EVERY (\i. MEM i (fn_insts fn)) (fn_insts fn)` by simp[listTheory.EVERY_MEM] >>
+  drule_all ao_cmp_flip_scan_provenance >>
+  simp[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >> strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  imp_res_tac alistTheory.ALOOKUP_MEM >>
+  metis_tac[ao_fn_inst_id_injective]
+QED
+
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO scan")
+  [ao_flip_comparison_comparator, ao_cmp_flip_scan_provenance,
+   ao_fn_inst_id_injective, ao_cmp_flip_scan_lookup_safety];
 
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
