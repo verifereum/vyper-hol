@@ -118,7 +118,7 @@ Theorem call_state_rel_block_number_bound:
   es.txParams.blockNumber < dimword (:256)
 Proof
   rw[call_state_rel_def, tx_block_fields_rel_def, tx_env_ok_def] >>
-  irule lt_dimword_256 >> qexists_tac `255` >> simp[]
+  irule lt_dimword_256 >> qexists_tac `256` >> simp[]
 QED
 
 Theorem entry_venom_state_source_environment:

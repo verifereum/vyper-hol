@@ -66,7 +66,7 @@ QED
 
 Theorem block_environment_bounds:
   tx_block_fields_rel tx tp ==>
-  tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
+  tx.block_number <> 0 /\ tx.block_number < 2 ** 256 /\
   MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
   LENGTH tx.block_hashes <= 256 /\
   tp.prevRandao = n2w tx.prev_randao /\ tp.prevHashes = tx.block_hashes
@@ -76,7 +76,7 @@ QED
 
 Theorem no_genesis_or_unbounded_hash_environment:
   ~tx_env_ok (tx with block_number := 0) /\
-  ~tx_env_ok (tx with block_number := 2 ** 255) /\
+  ~tx_env_ok (tx with block_number := 2 ** 256) /\
   (LENGTH hashes > 256 ==> ~tx_env_ok (tx with block_hashes := hashes)) /\
   (MIN 256 tx.block_number > LENGTH hashes ==>
     ~tx_env_ok (tx with block_hashes := hashes))

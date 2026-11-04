@@ -71,7 +71,7 @@ End
 
 Definition tx_env_ok_def:
   tx_env_ok tx <=>
-    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
+    tx.block_number <> 0 /\ tx.block_number < 2 ** 256 /\
     MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
     LENGTH tx.block_hashes <= 256
 End
