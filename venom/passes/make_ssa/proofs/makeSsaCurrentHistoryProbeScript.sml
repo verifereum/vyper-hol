@@ -2,7 +2,7 @@
 Theory makeSsaCurrentHistoryProbe
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentSimDefs makeSsaCurrentReinsertionSlots venomWf cfgWf
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract venomExecSemantics
 
 Definition history_probe_bb_def:
   history_probe_bb l xs = <|bb_label := l; bb_instructions := xs|>
@@ -422,4 +422,392 @@ Theorem history_probe_def_local[local]:
 Proof
   rw[def_on_all_paths_def] >> disj2_tac >> qexists `i` >> simp[] >>
   qexists `j` >> simp[]
+QED
+
+Theorem history_probe_entry_defs[local]:
+  MEM (fn,v) [(history_probe_diamond,"a");(history_probe_diamond,"b");
+    (history_probe_backedges,"a");(history_probe_backedges,"b");
+    (history_probe_backedges,"x");(history_probe_nested,"a");
+    (history_probe_nested,"b");(history_probe_nested,"x");
+    (history_probe_irreducible,"a");(history_probe_irreducible,"b");
+    (history_probe_irreducible,"x");(current_probe_loop,"a")] /\
+  bb.bb_label <> "E" ==> def_on_all_paths fn bb cut v
+Proof
+  strip_tac >> irule history_probe_def_entry >>
+  qexistsl [`current_probe_inst (if v = "a" then 0 else if v = "b" then 1 else 2)
+    ASSIGN [Lit (if v = "a" then 1w else if v = "b" then 2w else 3w)] [v]`,
+    `HD fn.fn_blocks`, `"E"`] >>
+  gvs[] >>
+  simp[history_probe_diamond_def, history_probe_backedges_def,
+    history_probe_nested_def, history_probe_irreducible_def, current_probe_loop_def,
+    history_probe_bb_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def,
+    current_probe_inst_def]
+QED
+
+Theorem history_probe_defs_reach_uses:
+  !fn. MEM fn [history_probe_diamond; history_probe_backedges;
+      history_probe_nested; history_probe_irreducible; current_probe_loop] ==>
+    fn_defs_reach_uses fn
+Proof
+  gen_tac >> pure_rewrite_tac[listTheory.MEM] >> strip_tac >> gvs[]
+  >- suspend "diamond_defs"
+  >- suspend "backedges_defs"
+  >- suspend "nested_defs"
+  >- suspend "irreducible_defs"
+  >> suspend "control_defs"
+QED
+
+Resume history_probe_defs_reach_uses[backedges_defs]:
+  rw[fn_defs_reach_uses_def, history_probe_backedges_def, history_probe_bb_def,
+    venomInstTheory.mk_raw_function_def] >>
+  gvs[current_probe_inst_def, venomInstTheory.phi_pairs_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[GSYM (SRULE [history_probe_bb_def, current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def] history_probe_backedges_def)]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "v"`]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `1` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "z"`]
+  >- (irule history_probe_def_local >> qexists `1` >> simp[] >>
+      qexists `2` >> simp[]) >>
+  irule history_probe_entry_defs >> simp[]
+QED
+
+Resume history_probe_defs_reach_uses[nested_defs]:
+  rw[fn_defs_reach_uses_def, history_probe_nested_def, history_probe_bb_def,
+    venomInstTheory.mk_raw_function_def] >>
+  gvs[current_probe_inst_def, venomInstTheory.phi_pairs_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[GSYM (SRULE [history_probe_bb_def, current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def] history_probe_nested_def)]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "v"`]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `1` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "w"`]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `1` >> simp[]) >>
+  irule history_probe_entry_defs >> simp[]
+QED
+
+Resume history_probe_defs_reach_uses[irreducible_defs]:
+  rw[fn_defs_reach_uses_def, history_probe_irreducible_def, history_probe_bb_def,
+    venomInstTheory.mk_raw_function_def] >>
+  gvs[current_probe_inst_def, venomInstTheory.phi_pairs_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[GSYM (SRULE [history_probe_bb_def, current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def] history_probe_irreducible_def)]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `3` >> simp[])
+  >- (irule history_probe_def_local >> qexists `0` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "v"`]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `1` >> simp[]) >>
+  irule history_probe_entry_defs >> simp[]
+QED
+
+Resume history_probe_defs_reach_uses[control_defs]:
+  rw[fn_defs_reach_uses_def, current_probe_loop_def,
+    venomInstTheory.mk_raw_function_def] >>
+  gvs[current_probe_inst_def, venomInstTheory.phi_pairs_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[GSYM (SRULE [current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def] current_probe_loop_def)]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[])
+  >- (irule history_probe_def_local >> qexists `1` >> simp[]) >>
+  irule history_probe_def_local >> qexists `0` >> simp[] >>
+  qexists `2` >> simp[]
+QED
+
+Theorem history_probe_diamond_x[local]:
+  bb.bb_label = "H" ==> def_on_all_paths history_probe_diamond bb cut "x"
+Proof
+  strip_tac >>
+  `fn_entry_label history_probe_diamond = SOME "E"` by EVAL_TAC >>
+  rw[def_on_all_paths_def] >> disj1_tac >>
+  Cases_on `path` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  gvs[Once is_fn_path_def, history_probe_edges] >>
+  Cases_on `t'` >> gvs[] >>
+  qexists `1`
+  >- (qexistsl [`EL 1 history_probe_diamond.fn_blocks`,
+        `current_probe_inst 3 ASSIGN [Lit 3w] ["x"]`] >>
+      simp[history_probe_diamond_def, history_probe_bb_def, current_probe_inst_def,
+        venomInstTheory.mk_raw_function_def]) >>
+  qexistsl [`EL 2 history_probe_diamond.fn_blocks`,
+    `current_probe_inst 5 ASSIGN [Lit 4w] ["x"]`] >>
+  simp[history_probe_diamond_def, history_probe_bb_def, current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Resume history_probe_defs_reach_uses[diamond_defs]:
+  rw[fn_defs_reach_uses_def, history_probe_diamond_def, history_probe_bb_def,
+    venomInstTheory.mk_raw_function_def] >>
+  gvs[current_probe_inst_def, venomInstTheory.phi_pairs_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[GSYM (SRULE [history_probe_bb_def, current_probe_inst_def,
+    venomInstTheory.mk_raw_function_def] history_probe_diamond_def)]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `2` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "x"`]
+  >- (irule history_probe_diamond_x >> simp[])
+  >~ [`def_on_all_paths _ _ _ "v"`]
+  >- (irule history_probe_def_local >> qexists `0` >> simp[] >>
+      qexists `1` >> simp[])
+  >~ [`def_on_all_paths _ _ _ "z"`]
+  >- (irule history_probe_def_local >> qexists `1` >> simp[] >>
+      qexists `2` >> simp[]) >>
+  irule history_probe_entry_defs >> simp[]
+QED
+
+Finalise history_probe_defs_reach_uses
+
+Theorem history_probe_admissible:
+  !fn. MEM fn [history_probe_diamond; history_probe_backedges;
+      history_probe_nested; history_probe_irreducible; current_probe_loop] ==>
+    fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
+    fn_phis_cover_preds fn /\ fn_phi_outputs_single_def fn /\
+    fn_phis_non_degenerate fn /\ all_reachable fn /\ fn_inst_wf fn /\
+    wf_function fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
+    ir_supply_covers_fn history_probe_supply fn /\
+    ir_supply_inst_ok history_probe_supply
+Proof
+  metis_tac[history_probe_static_premises, history_probe_all_reachable,
+    history_probe_defs_reach_uses]
+QED
+
+(* A bounded prefix of actual source/target block executions, not a runtime
+   invariant or a same-fuel bisimulation claim. *)
+Definition history_probe_walk_def:
+  (history_probe_walk 0 ctx fn s = SOME s) /\
+  (history_probe_walk (SUC n) ctx fn s =
+    case lookup_block s.vs_current_bb fn.fn_blocks of
+      NONE => NONE
+    | SOME bb =>
+        case run_block 1 ctx bb s of
+          OK s' => history_probe_walk n ctx fn s'
+        | _ => NONE)
+End
+
+Definition history_probe_observe_def:
+  history_probe_observe n ctx fn =
+    OPTION_MAP (\s. (s.vs_current_bb, s.vs_prev_bb,
+      MAP (FLOOKUP s.vs_vars) ["v";"z";"w"]))
+      (history_probe_walk n ctx fn (init_venom_state "E"))
+End
+
+Definition history_probe_revisits_def:
+  history_probe_revisits ctx fn n =
+    let target = FST (make_ssa_current_fn history_probe_supply fn) in
+      (history_probe_observe (n - 1) ctx fn,
+       history_probe_observe n ctx fn,
+       history_probe_observe (n - 1) ctx target,
+       history_probe_observe n ctx target)
+End
+
+
+Definition history_probe_diamond_target_def:
+  history_probe_diamond_target =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 2 JNZ [Var "a"; Label "L"; Label "R"] []];
+   history_probe_bb "L"
+    [current_probe_inst 3 ASSIGN [Lit 3w] ["formal_var_2"];
+     current_probe_inst 4 JMP [Label "H"] []];
+   history_probe_bb "R"
+    [current_probe_inst 5 ASSIGN [Lit 4w] ["formal_var_1"];
+     current_probe_inst 6 JMP [Label "H"] []];
+   history_probe_bb "H"
+    [current_probe_inst 101 PHI [Label "L"; Var "formal_var_2";
+        Label "R"; Var "formal_var_1"; Label "H"; Var "x"] ["x"];
+     current_probe_inst 100 PHI [Label "L"; Var "a"; Label "R"; Var "b";
+        Label "H"; Var "a"] ["formal_var_0"];
+     current_probe_inst 7 ASSIGN [Var "formal_var_0"] ["v"];
+     current_probe_inst 8 ADD [Var "x"; Var "formal_var_0"] ["z"];
+     current_probe_inst 9 JNZ [Var "z"; Label "H"; Label "X"] []];
+   history_probe_bb "X" [current_probe_inst 10 STOP [] []]]
+End
+
+Theorem history_probe_diamond_target_blocks:
+  (FST (make_ssa_current_fn history_probe_supply history_probe_diamond)).fn_blocks =
+    history_probe_diamond_target
+Proof
+  EVAL_TAC
+QED
+
+Theorem history_probe_dimindex[local,simp]:
+  dimindex (:256) = 256
+Proof
+  CONV_TAC fcpLib.INDEX_CONV
+QED
+
+Definition history_probe_diamond_s1_def:
+  history_probe_diamond_s1 = (init_venom_state "E") with
+    <|vs_vars := FEMPTY |++ [("a",1w);("b",2w)];
+      vs_current_bb := "L"; vs_prev_bb := SOME "E"; vs_inst_idx := 0|>
+End
+
+Theorem history_probe_diamond_entry_step:
+  run_block 1 ctx (HD history_probe_diamond.fn_blocks)
+    (init_venom_state "E") = OK history_probe_diamond_s1
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Definition history_probe_diamond_s2_def:
+  history_probe_diamond_s2 = history_probe_diamond_s1 with
+    <|vs_vars := FEMPTY |++ [("a",1w);("b",2w);("x",3w)];
+      vs_current_bb := "H"; vs_prev_bb := SOME "L"|>
+End
+Definition history_probe_diamond_s3_def:
+  history_probe_diamond_s3 = history_probe_diamond_s2 with
+    <|vs_vars := FEMPTY |++ [("a",1w);("b",2w);("x",3w);("v",1w);("z",4w)];
+      vs_prev_bb := SOME "H"|>
+End
+Definition history_probe_diamond_t2_def:
+  history_probe_diamond_t2 = history_probe_diamond_s1 with
+    <|vs_vars := FEMPTY |++ [("a",1w);("b",2w);("formal_var_2",3w)];
+      vs_current_bb := "H"; vs_prev_bb := SOME "L"|>
+End
+Definition history_probe_diamond_t3_def:
+  history_probe_diamond_t3 = history_probe_diamond_t2 with
+    <|vs_vars := FEMPTY |++ [("a",1w);("b",2w);("formal_var_2",3w);
+        ("x",3w);("formal_var_0",1w);("v",1w);("z",4w)];
+      vs_prev_bb := SOME "H"|>
+End
+
+Theorem history_probe_diamond_source_L:
+  run_block 1 ctx (EL 1 history_probe_diamond.fn_blocks)
+    history_probe_diamond_s1 = OK history_probe_diamond_s2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_source_H:
+  run_block 1 ctx (EL 3 history_probe_diamond.fn_blocks)
+    history_probe_diamond_s2 = OK history_probe_diamond_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_source_revisit:
+  run_block 1 ctx (EL 3 history_probe_diamond.fn_blocks)
+    history_probe_diamond_s3 = OK history_probe_diamond_s3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_target_E:
+  run_block 1 ctx (HD history_probe_diamond_target)
+    (init_venom_state "E") = OK history_probe_diamond_s1
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_target_L:
+  run_block 1 ctx (EL 1 history_probe_diamond_target)
+    history_probe_diamond_s1 = OK history_probe_diamond_t2
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_target_H:
+  run_block 1 ctx (EL 3 history_probe_diamond_target)
+    history_probe_diamond_t2 = OK history_probe_diamond_t3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+Theorem history_probe_diamond_target_revisit:
+  run_block 1 ctx (EL 3 history_probe_diamond_target)
+    history_probe_diamond_t3 = OK history_probe_diamond_t3
+Proof
+  EVAL_TAC >> simp[wordsTheory.word_add_n2w, wordsTheory.dimword_def,
+    history_probe_dimindex, finite_mapTheory.FLOOKUP_EXT,
+    FUN_EQ_THM, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gen_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Theorem history_probe_diamond_source_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_diamond.fn_blocks =
+    SOME (HD history_probe_diamond.fn_blocks) /\
+  lookup_block history_probe_diamond_s1.vs_current_bb history_probe_diamond.fn_blocks =
+    SOME (EL 1 history_probe_diamond.fn_blocks) /\
+  lookup_block history_probe_diamond_s2.vs_current_bb history_probe_diamond.fn_blocks =
+    SOME (EL 3 history_probe_diamond.fn_blocks) /\
+  lookup_block history_probe_diamond_s3.vs_current_bb history_probe_diamond.fn_blocks =
+    SOME (EL 3 history_probe_diamond.fn_blocks)
+Proof
+  EVAL_TAC
+QED
+Theorem history_probe_diamond_target_lookups:
+  lookup_block (init_venom_state "E").vs_current_bb history_probe_diamond_target =
+    SOME (HD history_probe_diamond_target) /\
+  lookup_block history_probe_diamond_s1.vs_current_bb history_probe_diamond_target =
+    SOME (EL 1 history_probe_diamond_target) /\
+  lookup_block history_probe_diamond_t2.vs_current_bb history_probe_diamond_target =
+    SOME (EL 3 history_probe_diamond_target) /\
+  lookup_block history_probe_diamond_t3.vs_current_bb history_probe_diamond_target =
+    SOME (EL 3 history_probe_diamond_target)
+Proof
+  EVAL_TAC
+QED
+
+Theorem history_probe_walk_positive[local]:
+  0 < n ==>
+  history_probe_walk n ctx fn s =
+    case lookup_block s.vs_current_bb fn.fn_blocks of
+      NONE => NONE
+    | SOME bb =>
+        case run_block 1 ctx bb s of
+          OK s' => history_probe_walk (n - 1) ctx fn s'
+        | _ => NONE
+Proof
+  Cases_on `n` >> simp[history_probe_walk_def]
+QED
+
+Theorem history_probe_diamond_walks:
+  (history_probe_walk 3 ctx history_probe_diamond (init_venom_state "E") =
+    SOME history_probe_diamond_s3) /\
+  (history_probe_walk 4 ctx history_probe_diamond (init_venom_state "E") =
+    SOME history_probe_diamond_s3) /\
+  (history_probe_walk 3 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_diamond))
+      (init_venom_state "E") = SOME history_probe_diamond_t3) /\
+  (history_probe_walk 4 ctx
+      (FST (make_ssa_current_fn history_probe_supply history_probe_diamond))
+      (init_venom_state "E") = SOME history_probe_diamond_t3)
+Proof
+  simp[history_probe_walk_positive, history_probe_walk_def,
+    history_probe_diamond_target_blocks,
+    history_probe_diamond_source_lookups, history_probe_diamond_target_lookups,
+    history_probe_diamond_entry_step, history_probe_diamond_source_L,
+    history_probe_diamond_source_H, history_probe_diamond_source_revisit,
+    history_probe_diamond_target_E, history_probe_diamond_target_L,
+    history_probe_diamond_target_H, history_probe_diamond_target_revisit]
+QED
+
+Theorem history_probe_diamond_revisit_agreement:
+  (\(s0,s1,t0,t1). IS_SOME s0 /\ IS_SOME s1 /\ s0 = t0 /\ s1 = t1)
+    (history_probe_revisits ctx history_probe_diamond 4)
+Proof
+  simp[history_probe_revisits_def, history_probe_observe_def,
+    history_probe_diamond_walks] >> EVAL_TAC
 QED
