@@ -1043,14 +1043,29 @@ Definition storage_dead_def:
       dead_bytes st (w2n slot) tv j b
 End
 
+(* An inactive byte is hidden only when every other observed root frames it. *)
+Definition storage_dead_on_def:
+  storage_dead_on ((regions,locks) : (bool # bytes32 # type_value) list # num list)
+                  tr st j b <=>
+    (tr ==> ~MEM j locks) /\
+    ?slot tv.
+      MEM (tr,slot,tv) regions /\
+      w2n slot + type_slot_size tv <= dimword(:256) /\
+      (!slot' tv'. MEM (tr,slot',tv') regions /\
+          (slot',tv') <> (slot,tv) ==>
+        ranges_disjoint (w2n slot) (type_slot_size tv)
+                        (w2n slot') (type_slot_size tv')) /\
+      dead_bytes st (w2n slot) tv j b
+End
+
 (* A read of a value of type tv at slot w on backend tr sees no dead byte of
    st but those tv itself leaves dead at w, and the value's slots fit the
    slot space when any byte is dead.  A read of a declared region has it
    (storage_dead), and so does a part of a value that has it. *)
 Definition storage_read_live_def:
-  storage_read_live cx tr st (w:bytes32) tv ⇔
+  storage_read_live H cx tr st (w:bytes32) tv ⇔
     ∀j b.
-      storage_dead cx tr st j b ⇒
+      storage_dead_on H tr st j b ⇒
       w2n w + type_slot_size tv ≤ dimword (:256) ∧
       (w2n w ≤ j ∧ j < w2n w + type_slot_size tv ⇒
        dead_bytes st (w2n w) tv j b)
@@ -1069,20 +1084,20 @@ End
    running contract's, whose accounts are equal but for their storage, which
    agrees up to the bytes dead in a1's. *)
 Definition accounts_agree_def:
-  accounts_agree cx (a1:evm_accounts) (a2:evm_accounts) ⇔
+  accounts_agree H cx (a1:evm_accounts) (a2:evm_accounts) ⇔
     (∀addr. addr ≠ cx.txn.target ⇒ a1 addr = a2 addr) ∧
     (a1 cx.txn.target with storage := (a2 cx.txn.target).storage) =
       a2 cx.txn.target ∧
-    storage_agree (storage_dead cx F (a1 cx.txn.target).storage)
+    storage_agree (storage_dead_on H F (a1 cx.txn.target).storage)
       (a1 cx.txn.target).storage (a2 cx.txn.target).storage
 End
 
 (* Transient storage t1 (source) and t2 (Venom): equal at every address but
    the running contract's, which agrees up to the bytes dead in t1's. *)
 Definition transient_agree_def:
-  transient_agree cx (t1:transient_storage) (t2:transient_storage) ⇔
+  transient_agree H cx (t1:transient_storage) (t2:transient_storage) ⇔
     (∀addr. addr ≠ cx.txn.target ⇒ t1 addr = t2 addr) ∧
-    storage_agree (storage_dead cx T (t1 cx.txn.target))
+    storage_agree (storage_dead_on H T (t1 cx.txn.target))
       (t1 cx.txn.target) (t2 cx.txn.target)
 End
 
@@ -1090,18 +1105,18 @@ End
    for the snapshots of the accounts and transient storage, which agree as
    above. *)
 Definition request_agree_def:
-  request_agree cx (r1:call_request) (r2:call_request) ⇔
+  request_agree H cx (r1:call_request) (r2:call_request) ⇔
     r1 with <| cr_accounts := r2.cr_accounts;
                cr_tStorage := r2.cr_tStorage |> = r2 ∧
-    accounts_agree cx r1.cr_accounts r2.cr_accounts ∧
-    transient_agree cx r1.cr_tStorage r2.cr_tStorage
+    accounts_agree H cx r1.cr_accounts r2.cr_accounts ∧
+    transient_agree H cx r1.cr_tStorage r2.cr_tStorage
 End
 
 (* The running contract's storage, Vyper accounts against Venom state. *)
 Definition storage_rel_def:
-  storage_rel cx (addr:address) (vs:evaluation_state) ss =
+  storage_rel H cx (addr:address) (vs:evaluation_state) ss =
     let st = (lookup_account addr vs.accounts).storage in
-    storage_agree (storage_dead cx F st) st (contract_storage ss)
+    storage_agree (storage_dead_on H F st) st (contract_storage ss)
 End
 
 (* The running contract's transient storage.
@@ -1109,8 +1124,8 @@ End
    Venom: ss.vs_transient (same type).
    Mirrors EIP-1153: per-address, per-transaction. *)
 Definition transient_rel_def:
-  transient_rel cx (addr:address) (vs:evaluation_state) ss ⇔
-    storage_agree (storage_dead cx T (vs.tStorage addr))
+  transient_rel H cx (addr:address) (vs:evaluation_state) ss ⇔
+    storage_agree (storage_dead_on H T (vs.tStorage addr))
       (vs.tStorage addr) (contract_transient ss)
 End
 
@@ -1121,9 +1136,9 @@ End
    them equal again. Pending deletion queues are related separately by
    state_rel and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
-  accounts_rel cx (vs:evaluation_state) ss ⇔
-    accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+  accounts_rel H cx (vs:evaluation_state) ss ⇔
+    accounts_agree H cx vs.accounts ss.vs_accounts ∧
+    transient_agree H cx vs.tStorage ss.vs_transient
 End
 
 (* ===== Immutables Relation ===== *)
@@ -1366,19 +1381,19 @@ End
    - pending_deletions: equality with vs_pending_deletions, including effects
      accumulated from adopted external-call outcomes. *)
 Definition state_rel_def:
-  state_rel func cenv cx (vs:evaluation_state) ss =
+  state_rel H func cenv cx (vs:evaluation_state) ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
-     storage_rel cx cx.txn.target vs ss ∧
+     storage_rel H cx cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
-     transient_rel cx cx.txn.target vs ss ∧
+     transient_rel H cx cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
-     accounts_rel cx vs ss ∧
+     accounts_rel H cx vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
+     LIST_REL (request_agree H cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
 End
 
@@ -1420,26 +1435,26 @@ End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel func cenv cx vs' ss') ∧
+  (result_rel H func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel H func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel func cenv cx vs' ss' ∧
+  (result_rel H func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel H func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel func cenv cx vs' ss') ∧
+  (result_rel H func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel H func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel H func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel H func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel H func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ _ = F)
+  (result_rel H _ _ _ _ _ _ = F)
 End
 
 (* ===== Type Classification ===== *)
