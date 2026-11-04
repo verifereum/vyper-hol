@@ -8,7 +8,7 @@ Ancestors
 
 Theorem ld_write_value_nonpointer:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8] /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE] /\
   inst.inst_operands = [a;Var v] ==> v NOTIN fn_pv P fn
 Proof
   strip_tac >>
@@ -40,7 +40,7 @@ QED
 Theorem ld_write_operand_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\ MEM op inst.inst_operands /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y ==>
   (op_prov f.lf_H op = NONE ==> word_agree_except (op_taint tn op) x y) /\
@@ -82,7 +82,7 @@ QED
 Theorem ld_write_scalar_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\ MEM op inst.inst_operands /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y /\
   op_prov f.lf_H op = NONE ==>
@@ -94,7 +94,7 @@ QED
 Theorem ld_write_address_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\ MEM op inst.inst_operands /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y /\
   op_taint tn op = {} ==>
@@ -140,7 +140,7 @@ QED
 Theorem ld_write2_operands:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   MEM inst (fn_insts f.lf_fn) /\ inst_wf inst /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8] /\
+  MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE] /\
   step_inst_base inst f.lf_tgt = OK ts ==>
   ?a v dst dst' x y. inst.inst_operands = [a;v] /\
     inst.inst_outputs = [] /\
@@ -172,7 +172,7 @@ Proof
 QED
 
 Theorem ld_write2_taint:
-  taint_ok fn tn inst s /\ MEM inst.inst_opcode [MSTORE;MSTORE8] /\
+  taint_ok fn tn inst s /\ MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE] /\
   inst.inst_operands = [a;v] ==>
   op_taint tn a = {} /\ (inst.inst_opcode = MSTORE8 ==> op_taint tn v = {})
 Proof
@@ -243,7 +243,7 @@ Proof
 QED
 
 Resume ld_sync_memory_write_effect[mstore]:
-  `MEM inst.inst_opcode [MSTORE;MSTORE8]` by simp[] >>
+  `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
   drule_all ld_write2_operands >> strip_tac >>
   `op_prov f.lf_H v = NONE` by
     (Cases_on `v` >> simp[op_prov_def] >>
@@ -275,7 +275,7 @@ Resume ld_sync_memory_write_effect[mstore]:
   qexists_tac `ss` >> simp[]
 QED
 Resume ld_sync_memory_write_effect[mstore8]:
-  `MEM inst.inst_opcode [MSTORE;MSTORE8]` by simp[] >>
+  `MEM inst.inst_opcode [MSTORE;MSTORE8;ISTORE]` by simp[] >>
   drule_all ld_write2_operands >> strip_tac >>
   `op_taint tn a = {} /\ op_taint tn v = {}` by metis_tac[ld_write2_taint] >>
   `op_prov f.lf_H v = NONE` by
