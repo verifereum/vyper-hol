@@ -1,7 +1,7 @@
 (* Positions in the actual supply-threaded instruction expansion. *)
 Theory lowerDloadConfiguredOrigins
 Ancestors
-  o1ContractLowerDload o1PassContract lowerDloadDefs
+  o1ContractLowerDload o1PassContract o1PassLift fmpStepBridge lowerDloadDefs
   venomPassDispatcher irSupply venomExecSemantics contextCodegenRel
   venomInst venomWf venomFnScheduleRunner venomExecProofs passSharedDefs list rich_list arithmetic
 
@@ -618,4 +618,31 @@ Proof
   rename1 `lower_dload_insts_supply u0 (TAKE s.vs_inst_idx bb.bb_instructions) = (pre,u2)` >>
   drule_all lower_dload_insts_supply_revert_at >> strip_tac >>
   qexistsl_tac [`u0`,`is`,`u1`,`pre`,`u2`] >> simp[] >> metis_tac[]
+QED
+
+(* Named lookup keeps the configured observation and its actual supply. *)
+Theorem lower_dload_stage_supply_lookup:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  lookup_function name C.ctx_functions = SOME f ==>
+  ?g observed u out v.
+    lookup_function name C'.ctx_functions = SOME g /\
+    fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed u f out /\
+    out.fpo_function = g /\ lower_dload_function_supply u f = (g,v) /\
+    ir_supply_covers_fn u f /\ ir_supply_covers_unit u observed /\
+    ir_supply_extends u out.fpo_supply /\
+    observed.cu_context.ctx_entry = C.ctx_entry /\
+    observed.cu_context.ctx_global_reserved = C.ctx_global_reserved /\
+    ctx_fn_names observed.cu_context = ctx_fn_names C /\ view C' f observed
+Proof
+  rw[ctx_pass_stage_def] >>
+  drule list_rel_lookup_function >>
+  impl_tac
+  >- (rpt strip_tac >> gvs[fn_pass_step_def]) >>
+  disch_then (qspec_then `name` mp_tac) >> simp[] >> strip_tac >>
+  gvs[optionTheory.OPTREL_def] >>
+  qexistsl_tac [`observed`,`s`,`out`] >> simp[] >>
+  qpat_x_assum `LIST_REL _ _ _` kall_tac >>
+  gvs[fn_pass_step_def, AllCaseEqs()] >>
+  drule venomFnScheduleRunnerPropsTheory.lookup_unique_function_member >>
+  strip_tac >> metis_tac[ir_supply_covers_unit_member]
 QED
