@@ -1,7 +1,7 @@
 (* Counted actual-source simulation for bare and unreachable raise. *)
 Theory stmtSimRaise
 Ancestors
-  stmtSimDefs stmtSimProps loweringPosts gasOutcome gasSummary gasContext fragGasMode
+  stmtSimDefs stmtSimProps exprSimDefs loweringPosts gasOutcome gasSummary gasContext fragGasMode
   gasCount fragGasPath stmtLowering compileEnv emitHelper emitHelperProps loweringSlice
   exprLoweringProps vyperInterpreter vyperState venomInst venomState
   venomExecSemantics venomExecProofs fragExec list finite_map

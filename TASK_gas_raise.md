@@ -50,4 +50,4 @@ Independent statement audit answered PROVABLE for this exact root under current 
 
 ## Notes
 
-The parser owner is checking shared prerequisites and the restated root; if stopped before the root, it has not yet been parsed. The independent exact statement audit is complete. All source/target executable definitions, gas judgments, strict postconditions and error gates are frozen. No proof strategy is prescribed.
+The shared prerequisites built. The restated root parsed in the owner build, then its retained old proof failed at the expected statement-wrapper mismatch. The independent exact statement audit is complete. All source/target executable definitions, gas judgments, strict postconditions and error gates are frozen. No proof strategy is prescribed.
