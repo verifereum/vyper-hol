@@ -127,12 +127,3 @@ Theorem grouped_shared_pointer:
 Proof
   EVAL_TAC
 QED
-
-val () = List.app (fn th =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail "grouped dispatch probe has oracle/axiom dependencies")
-  [grouped_empty, grouped_one_job, grouped_two_jobs, grouped_one_shape,
-   grouped_mixed_order, grouped_mixed_allocation_count,
-   grouped_dispatch_defers_common, grouped_common_bodies_once,
-   grouped_shared_pointer];

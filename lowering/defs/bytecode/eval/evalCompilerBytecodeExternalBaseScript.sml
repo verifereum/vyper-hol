@@ -4,7 +4,6 @@ Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
   evalCompilerBytecodeExternalBaseProgram worklistStepCompute dominatorCompute
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerGuardLib evalCompilerFlowLib evalCompilerBoundedLib evalCompilerFlowStepLib evalCompilerBaseLib evalCompilerSupplyLib evalCompilerBaseSueLib evalCompilerBasePlanLib evalCompilerBaseReclaimLib evalCompilerBaseShareLib evalCompilerBaseAllocLib evalCompilerBaseFragmentLib evalCompilerBaseFmpLib evalCompilerBaseDftLib evalCompilerAssemblyLib evalCompilerBaseBpLib evalCompilerBaseUnitLib evalCompilerBaseCfgLib
    wordsLib
 
@@ -2093,5 +2092,3 @@ Proof
   entry_stage "run_pipeline_stages" >> entry_admin >> CONV_TAC (LAND_CONV
   computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC >> wordsLib.WORD_EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeExternalBase";

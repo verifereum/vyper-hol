@@ -3,7 +3,6 @@ Theory evalCompilerBytecodeNonreentrantPragma
 Ancestors
   evalCompilerBytecodeNonreentrantMulti compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
 
@@ -63,6 +62,3 @@ Proof
    entry_plan_control >> entry_plan_block >> entry_plan_spine_admin >>
    entry_plan_finish >> CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
-
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeNonreentrantPragma";

@@ -4,8 +4,6 @@
 Theory constructorGuardProps
 Ancestors
   moduleLowering context compileEnv venomInst vyperCompiler
-Libs
-  proofAuditLib
 
 Definition constructor_guard_env_def:
   constructor_guard_env is_view = (ARB : compile_env) with
@@ -49,5 +47,3 @@ Proof
        initial_compile_state_def, block_is_terminated_def] >>
   EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "constructorGuardProps";

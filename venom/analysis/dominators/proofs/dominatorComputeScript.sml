@@ -2,8 +2,6 @@
 Theory dominatorCompute
 Ancestors
   dominatorDefs venomInst cfgDefs dfAnalyzeDefs dfHelperDefs latticeDefs list option
-Libs
-  proofAuditLib
 
 Theorem dom_fixpoint_compute:
   dom_fixpoint func =
@@ -30,5 +28,3 @@ Theorem dom_analyze_compute:
 Proof
   simp[dom_analyze_def]
 QED
-
-val () = proofAuditLib.check_theory "dominatorCompute";

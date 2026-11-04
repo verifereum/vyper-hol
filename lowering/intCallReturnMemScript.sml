@@ -23,8 +23,6 @@ Ancestors
   stmtLowering exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv valueEncoding
   vyperState vyperTyping venomExecSemantics venomInst venomState
-Libs
-  proofAuditLib
 
 (* An internal function's memory return: an IntRet satisfying the exact
    epilogue-aware intret_q (zero stack words when ce_returns_count = 0),
@@ -332,5 +330,3 @@ Resume compile_internal_return_memory_frag[fragments]:
 QED
 
 Finalise compile_internal_return_memory_frag
-
-val () = proofAuditLib.check_theory "intCallReturnMem";

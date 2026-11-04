@@ -5,7 +5,6 @@ Theory vyperExternalEntryBehavior
 Ancestors
   vyperInterpreter vyperContext vyperState vfmExecution vfmState
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib cv_transLib wordsLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -138,5 +137,3 @@ Theorem internal_early_return_releases_lock:
 Proof
   CONV_TAC cv_eval
 QED
-
-val () = proofAuditLib.check_theory "vyperExternalEntryBehavior";

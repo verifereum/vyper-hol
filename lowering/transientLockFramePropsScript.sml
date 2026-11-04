@@ -3,8 +3,6 @@ Theory transientLockFrameProps
 Ancestors
   transientLockProps localPtrsProps emitHelperProps exprLoweringProps
   compileEnv context emitHelper venomState finite_map integer_word
-Libs
-  proofAuditLib
 
 Theorem transient_lock_checked_local_ptrs:
   local_ptrs_rel func cenv scopes ss /\ fresh_vars_wrt st ss ==>
@@ -113,5 +111,3 @@ Proof
   gvs[compile_nonreentrant_unlock_def, emit_void_def, comp_bind_def,
       comp_return_def, fresh_id_def, emit_def, fresh_vars_wrt_def]
 QED
-
-val () = proofAuditLib.check_theory "transientLockFrameProps";

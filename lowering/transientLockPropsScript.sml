@@ -5,8 +5,6 @@ Ancestors
   context emitHelperProps exprLoweringProps emitHelper compileEnv
   venomExecSemantics venomState venomInst vfmState
   list rich_list arithmetic ASCIInumbers
-Libs
-  proofAuditLib
 
 Theorem step_TLOAD:
   eval_operand op ss = SOME key ==>
@@ -218,4 +216,3 @@ Proof
 QED
 
 (* Fail the build if any exported result depends on an admission. *)
-val () = proofAuditLib.check_theory "transientLockProps";

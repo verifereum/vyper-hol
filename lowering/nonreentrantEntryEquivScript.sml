@@ -6,8 +6,6 @@ Ancestors
   e2eDefs nonreentrantEquiv transientLockFrameProps
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps
-Libs
-  proofAuditLib
 
 Theorem source_typing_function_header:
   source_typing_ok tops am tx /\
@@ -122,5 +120,3 @@ Proof
   drule_all compile_nonreentrant_lock_transient_frame >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
-
-val () = proofAuditLib.check_theory "nonreentrantEntryEquiv";

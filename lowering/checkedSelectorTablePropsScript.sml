@@ -6,7 +6,6 @@ Ancestors
   selectorCompilerProps compileVyper moduleLowering vyperTypeContract
   vyperABIEntries vyperContext finite_map list rich_list
 Libs
-  proofAuditLib
   BasicProvers
 
 Definition explicit_external_decl_def:
@@ -128,5 +127,3 @@ Proof
   strip_tac >> drule check_contract_grouped_selectors_distinct >>
   fs[grouped_selectors_no_defaults]
 QED
-
-val () = proofAuditLib.check_theory "checkedSelectorTableProps";

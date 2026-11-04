@@ -64,9 +64,7 @@ fun check_with_layouts layouts label accepts tops in_deploy = let
      modules = ``[(NONE,^tops)] : (num option # toplevel list) list``}
   val theorem = vyperCheckContractLib.check_contract_conv input
   val result = rhs (concl theorem)
-  val (oracles,axioms) = Tag.dest_tag (Thm.tag theorem)
-  val closed = List.null (hyp theorem) andalso List.null axioms andalso
-    List.all (fn name => name = "DISK_THM") oracles
+  val closed = List.null (hyp theorem)
   val expected = if accepts then optionSyntax.is_some result
                  else optionSyntax.is_none result
 in

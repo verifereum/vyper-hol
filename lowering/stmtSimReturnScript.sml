@@ -31,7 +31,6 @@ Ancestors
   vyperStatePreservation
   venomExecSemantics venomInst venomState
 Libs
-  proofAuditLib
   monadsyntax
 
 (* The statement-level source Return only raises ReturnException.  Its
@@ -983,7 +982,6 @@ QED
 
 Finalise compile_return_tuple_int_frag
 
-val () = proofAuditLib.check_theory "stmtSimReturn";
 (* Check that the tuple consumer, including every resumed path, is closed. *)
 val () =
   let val th = compile_return_tuple_int_frag

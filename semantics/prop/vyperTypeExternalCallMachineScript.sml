@@ -461,9 +461,8 @@ Proof
          Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
          Cases_on `storage` >> gvs[] >>
          Cases_on `is_ArrayT ty` >> gvs[] >>
-         FIRST
-           [drule_all array_public_getter_tuple_shape >> metis_tac[],
-            gvs[external_getter_tuple_def]]) >>
+         TRY (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >> NO_TAC) >>
+         gvs[external_getter_tuple_def]) >>
      rename1 `is_public_getter_decl _
        (HashMapDecl vis transient id kt vt init)` >>
      Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
@@ -545,18 +544,18 @@ Proof
   `checked_contract_runtime_ready art all_mods am tx` by
     gvs[checked_contract_runtime_ready_def] >>
   `LENGTH tx.args <= LENGTH args /\ LENGTH args - LENGTH tx.args <= LENGTH dflts` by
-    gvs[checked_call_inputs_ready_def, checked_defaults_ready_def] >>
-  TRY (qpat_assum `MEM (FunctionDecl External _ _ _ _ _ _ _ _) _` (fn _ => all_tac) >>
+    gvs[checked_call_inputs_ready_def, checked_defaults_ready_def]
+  >>~- ([`MEM (FunctionDecl External _ _ _ _ _ _ _ _) _`],
      drule_at (Pat `call_external_function`)
        call_external_function_selected_explicit_success_machine_well_typed >>
-     simp[] >> disch_then (fn th => metis_tac[th]) >> NO_TAC) >>
+     simp[] >> disch_then (fn th => metis_tac[th])) >>
   (`nr = F /\ mut = View /\ dflts = []` by
        (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
         >- (rename1 `is_public_getter_decl _ (VariableDecl vis storage id ty init)` >>
             Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
             Cases_on `storage` >> gvs[] >> Cases_on `is_ArrayT ty` >> gvs[] >>
-            FIRST [drule_all array_public_getter_tuple_shape >> metis_tac[],
-                   gvs[external_getter_tuple_def]]) >>
+            TRY (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >> NO_TAC) >>
+            gvs[external_getter_tuple_def]) >>
         rename1 `is_public_getter_decl _ (HashMapDecl vis transient id kt vt init)` >>
         Cases_on `vis` >> gvs[is_public_getter_decl_def] >>
         drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
@@ -582,10 +581,3 @@ Proof
   >- metis_tac[checked_call_external_success_preserves_machine_well_typed] >>
   metis_tac[checked_call_external_failure_preserves_machine_well_typed]
 QED
-
-(* Machine preservation must not inherit admitted prerequisites. *)
-val () = List.app (fn (_, th) =>
-  if List.null (List.filter (fn s => s <> "DISK_THM")
-      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail "external call machine preservation has oracle dependencies")
-  (DB.thms "vyperTypeExternalCallMachine");

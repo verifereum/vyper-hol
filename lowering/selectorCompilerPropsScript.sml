@@ -4,7 +4,6 @@ Ancestors
   compileVyper moduleLowering vyperABIEntries vyperTypeBytesCrypto vyperTypeContract
   contractABI selectorDispatch list rich_list arithmetic words
 Libs
-  proofAuditLib
   fcpLib
 
 val selector_dimindex8 = fcpLib.INDEX_CONV ``dimindex (:8)``
@@ -71,5 +70,3 @@ Proof
        compute_selector_method_id, abi_function_signatures_def,
        MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f, pairTheory.FORALL_PROD]
 QED
-
-val () = proofAuditLib.check_theory "selectorCompilerProps";

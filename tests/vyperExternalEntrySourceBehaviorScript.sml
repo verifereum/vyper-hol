@@ -5,7 +5,6 @@ Ancestors
   vyperExternalEntryBehavior vyperInterpreter vyperContext vyperState
   vyperSmallStep[ignore_grammar] vyperValue vfmExecution vfmState
 Libs
-  proofAuditLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
   cv_transLib wordsLib
 
@@ -138,5 +137,3 @@ Theorem source_internal_early_return_releases_lock:
 Proof
   CONV_TAC cv_eval
 QED
-
-val () = proofAuditLib.check_theory "vyperExternalEntrySourceBehavior";

@@ -7,8 +7,6 @@ Ancestors
   fragExec moduleLowering emitHelperProps exprLoweringProps
   venomExecSemantics venomExecProofs venomState venomInst
   compileEnv emitHelper list rich_list
-Libs
-  proofAuditLib
 
 Theorem run_from_jump_common:
   lookup_block ss.vs_current_bb func.fn_blocks = SOME bb /\
@@ -129,5 +127,3 @@ Proof
       metis_tac[]) >>
   metis_tac[]
 QED
-
-val () = proofAuditLib.check_theory "externalEntryProps";

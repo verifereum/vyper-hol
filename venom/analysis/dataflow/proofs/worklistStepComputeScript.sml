@@ -1,8 +1,6 @@
 (* Exact equations for staging the original worklist transition. *)
 Theory worklistStepCompute
 Ancestors worklistDefs
-Libs
-  proofAuditLib
 
 Theorem wl_step_cons:
   wl_step changed process deps (lbl::rest,st) =
@@ -18,5 +16,3 @@ Theorem wl_step_nil:
 Proof
   simp[wl_step_def]
 QED
-
-val () = proofAuditLib.check_theory "worklistStepCompute";

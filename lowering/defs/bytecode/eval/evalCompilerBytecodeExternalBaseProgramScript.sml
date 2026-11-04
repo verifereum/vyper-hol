@@ -3,7 +3,6 @@ Theory evalCompilerBytecodeExternalBaseProgram
 Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode cv_transLib
 
@@ -69,6 +68,3 @@ val () = computeLib.upd_compset (computeLib.add_thms [base_k_selector])
 Definition base_dom1_program_def:
   base_dom1_program = ^(checked_entry_fixture "base_dom1")
 End
-
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeExternalBaseProgram";

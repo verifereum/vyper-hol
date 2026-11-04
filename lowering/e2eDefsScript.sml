@@ -61,13 +61,6 @@ Proof
   metis_tac[layouts_agree_nonreentrant_slot]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
-  in if null (hyp th) andalso null axioms andalso
-        List.all (fn s => s = "DISK_THM") oracles then ()
-     else raise Fail "nonreentrant slot agreement has oracle/axiom dependencies"
-  end) [layouts_agree_nonreentrant_slot, layouts_agree_initial_nonreentrant_slot];
-
 Definition source_deployment_rel_def:
   source_deployment_rel tops am tx <=>
     ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\

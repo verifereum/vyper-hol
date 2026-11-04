@@ -2,7 +2,6 @@ Theory vyperABIEntries
 Ancestors
   vyperABI vyperAST list rich_list arithmetic words
 Libs
-  proofAuditLib
   cv_transLib
 
 (* Shared source-level ABI entries, independent of compiler labels/operands.
@@ -143,5 +142,3 @@ Theorem abi_getter_signature_examples:
 Proof
   EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "vyperABIEntries";

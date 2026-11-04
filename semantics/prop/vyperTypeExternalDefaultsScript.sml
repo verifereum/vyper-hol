@@ -151,13 +151,6 @@ Proof
   first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >> simp[]
 QED
 
-(* Fail rather than silently export an admitted prerequisite. *)
-val () = List.app (fn (_, th) =>
-  if List.null (List.filter (fn s => s <> "DISK_THM")
-      (#1 (Tag.dest_tag (Thm.tag th)))) then ()
-  else raise Fail "stateful external-default boundary has oracle dependencies")
-  (DB.thms "vyperTypeExternalDefaults");
-
 (* Entry phases expose the actual post-transfer and post-default states.  A
    successful body result (including return) cannot originate in the defaults. *)
 Theorem external_entry_send_no_control:

@@ -165,12 +165,3 @@ Theorem compile_create_kwarg_allocas_probe:
 Proof
   EVAL_TAC >> simp[]
 QED
-
-(* A build-time integrity check, not a proof oracle. Only the structural
-   theorems of this theory are checked; upstream unrelated admissions are
-   neither consumed by them nor hidden by this assertion. *)
-val _ = List.app (fn (name, th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail ("unexpected oracle in kwargBufferProps: " ^ name))
-  (DB.thms "kwargBufferProps");

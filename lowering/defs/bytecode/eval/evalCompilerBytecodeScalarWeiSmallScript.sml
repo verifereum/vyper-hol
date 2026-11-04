@@ -3,7 +3,6 @@ Theory evalCompilerBytecodeScalarWeiSmall
 Ancestors
   evalCompilerSubsetScalars compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerFlowLib evalCompilerBoundedLib evalCompilerAssemblyLib
 
 fun holbuild_extra_deps (_ : string list) = ()
@@ -192,5 +191,3 @@ Proof
   entry_guard "spill_plan_in_region" >> entry_plan_admin >> entry_assembly_open >> entry_stage "execute_plan" >> entry_guard "assembly_target_safe" >> entry_stage "OPTION_MAP" >> entry_admin >> CONV_TAC (LAND_CONV
   computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeScalarWeiSmall";

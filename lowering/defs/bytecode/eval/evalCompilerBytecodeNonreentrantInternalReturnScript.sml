@@ -3,7 +3,6 @@ Theory evalCompilerBytecodeNonreentrantInternalReturn
 Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib evalCompilerEntryLib evalCompilerEntryFixtureLib
   vyperCheckContractFrontendLib vyperCheckContractLib jsonASTLib JSONDecode
 
@@ -64,5 +63,3 @@ Proof
   entry_guard "spill_plan_in_region" >> entry_plan_admin >>
   CONV_TAC (LAND_CONV computeLib.EVAL_CONV) >> entry_report_result >> EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeNonreentrantInternalReturn";

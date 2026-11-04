@@ -488,12 +488,12 @@ Proof
     (drule_all checked_constructor_no_control_escape >> simp[]) >>
   qmatch_asmsub_abbrev_tac `ignore_bind (send_call_value mut cx)
     (ignore_bind (set_scopes [scope]) (ignore_bind lock_action (eval_stmts cx body)))` >>
-  gs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()] >>
-  FIRST_PROVE
-    [metis_tac[vyperTypeEvalSoundnessTheory.stmts_no_control_escape_eval_stmts_no_loop_control],
-     drule send_call_value_no_control_c53 >> rw[no_control_exc_def] >> gvs[],
-     qunabbrev_tac `lock_action` >> drule call_lock_action_no_control_c53 >>
-       rw[no_control_exc_def] >> gvs[]]
+  gs[bind_def, ignore_bind_def, set_scopes_def, return_def, AllCaseEqs()]
+  >>~- ([`send_call_value _ _ _ = (INR _,_)`],
+     drule send_call_value_no_control_c53 >> rw[no_control_exc_def] >> gvs[]) >>
+  TRY (qunabbrev_tac `lock_action` >> drule call_lock_action_no_control_c53 >>
+       rw[no_control_exc_def] >> gvs[] >> NO_TAC) >>
+  metis_tac[vyperTypeEvalSoundnessTheory.stmts_no_control_escape_eval_stmts_no_loop_control]
 QED
 
 Theorem triple_identity[local]:

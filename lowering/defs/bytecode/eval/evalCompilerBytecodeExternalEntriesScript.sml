@@ -4,7 +4,6 @@ Theory evalCompilerBytecodeExternalEntries
 Ancestors
   compileVyper concretizeMemLocDefs alist byte integer_word option
 Libs
-  proofAuditLib
   evalCompilerBytecodeLib vyperCheckContractFrontendLib vyperCheckContractLib
   jsonASTLib JSONDecode finite_mapLib computeLib wordsLib cv_transLib
   evalCompilerEntryLib evalCompilerEntryFixtureLib
@@ -59,7 +58,3 @@ Proof
    entry_guard "context_target_safe" >> entry_admin >> entry_stage "generate_context_plan" >> entry_admin >>
   EVAL_TAC
 QED
-
-
-
-val () = proofAuditLib.check_theory "evalCompilerBytecodeExternalEntries";

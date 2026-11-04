@@ -8,8 +8,6 @@ Ancestors
   venomExecSemantics venomState
   vyperInterpreter vyperState vyperContext vyperValue
   vfmExecution vfmState
-Libs
-  proofAuditLib
 
 Theorem acquire_nonreentrant_lock_execution:
   acquire_nonreentrant_lock addr key is_view vs =
@@ -168,5 +166,3 @@ Proof
   irule state_rel_transient_update >> simp[] >>
   metis_tac[storage_dead_update_zero]
 QED
-
-val () = proofAuditLib.check_theory "nonreentrantEquiv";

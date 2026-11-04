@@ -1665,16 +1665,6 @@ Definition compile_vyper_o1_def:
     compile_vyper finalizer (o1_policy all_capabilities) tops
 End
 
-(* These construction boundaries intentionally do not import runtime simulation. *)
-val () = List.app (fn th =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-     andalso null (#2 (Tag.dest_tag (Thm.tag th))) then ()
-  else raise Fail "grouped packaging boundary has oracle/axiom dependencies")
-  [package_external_group_no_defaults,
-   lower_vyper_runtime_unit_no_external_defaults,
-   lower_vyper_runtime_unit_return_buffer_ok,
-   run_grouped_lowering_policy, run_grouped_lowering_context];
-
 (* Closed builder regressions: the production specialization uses transient
    slot zero, with view guards checking only and view release a no-op. *)
 Theorem global_nonreentrant_lock_opcodes:

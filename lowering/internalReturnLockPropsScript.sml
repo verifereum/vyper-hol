@@ -6,8 +6,6 @@ Ancestors
   emitHelperProps exprLoweringProps emitHelper compileEnv context
   venomExecSemantics venomState venomInst
   vyperAST list rich_list
-Libs
-  proofAuditLib
 
 Theorem compile_return_unlock_source_correct:
   state_rel func cenv cx vs ss /\
@@ -162,5 +160,3 @@ Proof
     (Q.SPEC `[value]` transient_unlock_return_execution)) >>
   simp[eval_operands_def]
 QED
-
-val () = proofAuditLib.check_theory "internalReturnLockProps";

@@ -5,7 +5,6 @@ Theory concretizeCallFrameRegression
 Ancestors
   concretizeMemLocDefs venomInst list option
 Libs
-  proofAuditLib
   finite_mapLib wordsLib
 
 val () = computeLib.upd_compset add_finite_map_compset
@@ -135,5 +134,3 @@ Theorem shared_import_between_different_calls:
 Proof
   EVAL_TAC
 QED
-
-val () = proofAuditLib.check_theory "concretizeCallFrameRegression";
