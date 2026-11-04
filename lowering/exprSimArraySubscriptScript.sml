@@ -2402,3 +2402,80 @@ QED
    The nonempty-internal-call route and task-level endpoint composition
    remain gated; the C1.4.12 proposed root-only implication is NOT proved.
 *)
+
+(* The proposed origin proof cannot extract module-variable correspondence
+   from the body precondition: that precondition ignores this table. *)
+Theorem expr_body_pre_global_module_vars_frame:
+  expr_body_pre (cenv with ce_module_vars := vars) cx env
+    (TopLevelName ann nsid) es <=>
+  expr_body_pre cenv cx env (TopLevelName ann nsid) es
+Proof
+  simp[expr_body_pre_def, expr_sim_inv_def,
+       allocLimitsTheory.alloc_limits_expr_def,
+       placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
+QED
+
+Theorem expr_body_pre_global_module_frame:
+  expr_body_pre (cenv with ce_module := md) cx env
+    (TopLevelName ann nsid) es <=>
+  expr_body_pre cenv cx env (TopLevelName ann nsid) es
+Proof
+  simp[expr_body_pre_def, expr_sim_inv_def,
+       allocLimitsTheory.alloc_limits_expr_def,
+       placeTypingPropsTheory.place_map_tables_agree_on_defined_def]
+QED
+
+Theorem eval_global_no_decl_immutable:
+  find_var_decl_by_name name ts = NONE /\
+  get_module_code cx md = SOME ts /\
+  eval_expr cx (TopLevelName ann (md,name)) es = (INL tv,em) ==>
+  tv = PlaceR (ImmutablePlace md name []) /\ em = es
+Proof
+  rpt strip_tac >>
+  gvs[Once evaluate_def, lookup_global_def,
+      get_immutables_def, get_address_immutables_def,
+      bind_def, return_def, lift_option_type_def, lift_option_def,
+      raise_def, vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
+QED
+
+(* Conditional separation: the body precondition permits a compiler table
+   override even when the successful source name denotes storage. This
+   does not assert existence of a full frozen-theorem counterexample. *)
+Theorem body_pre_global_code_storage_separation[local]:
+  expr_body_pre cenv cx env (TopLevelName ann (md,name)) es /\
+  eval_expr cx (TopLevelName ann (md,name)) es =
+    (INL (PlaceR (StoragePlace tr slot tvt)), em) ==>
+  !off ty st.
+    expr_body_pre
+      (cenv with ce_module_vars := FEMPTY |+ ((md,name), ImmutableLoc off))
+      cx env (TopLevelName ann (md,name)) es /\
+    compile_expr
+      (cenv with ce_module_vars := FEMPTY |+ ((md,name), ImmutableLoc off))
+      ty (TopLevelName ann (md,name)) st =
+      (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode),st) /\
+    PlaceR (StoragePlace tr slot tvt) <> PlaceR (ImmutablePlace md name [])
+Proof
+  rpt strip_tac >> simp[expr_body_pre_global_module_vars_frame] >>
+  simp[compile_immutable_root_shape, finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
+QED
+
+(* C1.4.14 origin check: the proposed expr_body_pre-only implication has
+   NOT been proved. The missing implication is
+     expr_body_pre cenv cx env (TopLevelName ann (md,name)) es /\
+     FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off)
+       ==> ?ts. get_module_code cx md = SOME ts /\
+                find_var_decl_by_name name ts = NONE.
+   expr_sim_inv relates local types, flags, struct fields and hashmap
+   dispatch; it has no ce_module_vars/source-declaration correspondence.
+   The two checked precondition frame lemmas show that this table and
+   ce_module can be changed freely for TopLevelName. The checked conditional
+   separation shows that whenever the source successfully denotes storage,
+   the same precondition permits replacing the compiler entry by ImmutableLoc.
+   It does not assert that a complete state satisfying that antecedent was
+   constructed, nor that the frozen task's operand simulation premise holds.
+   eval_global_no_decl_immutable checks the source constructor boundary once
+   actual module-code and no-storage-declaration facts have been established.
+   md = cenv.ce_module is likewise NOT derived (ce_module is unconstrained).
+   A later provenance argument must use more than expr_body_pre; in
+   particular the frozen operand simulation premise has not been used here.
+*)
