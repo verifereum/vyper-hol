@@ -435,31 +435,6 @@ Proof
   gvs[]
 QED
 
-Triviality eval_operands_IS_SOME_EVERY:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
-QED
-
-(* A LOG that evaluated its offset, size and topics evaluated all of its
-   non-literal operands. *)
-Triviality log_operands_defined:
-  !l1 h h' s off sz topics.
-    eval_operand (HD (REVERSE (l1 ++ [h; h']))) s = SOME off /\
-    eval_operand (EL 1 (REVERSE (l1 ++ [h; h']))) s = SOME sz /\
-    eval_operands (DROP 2 (REVERSE (l1 ++ [h; h']))) s = SOME topics ==>
-    IS_SOME (eval_operands (l1 ++ [h; h']) s)
-Proof
-  rpt gen_tac >>
-  `REVERSE (l1 ++ [h; h']) = h' :: h :: REVERSE l1` by simp[REVERSE_APPEND] >>
-  simp[] >> strip_tac >>
-  `IS_SOME (eval_operands (REVERSE l1) s)` by simp[] >>
-  fs[eval_operands_IS_SOME_EVERY, EVERY_REVERSE, EVERY_APPEND]
-QED
-
 Theorem step_inst_base_renamed_sim:
   !sigma inst1 inst2 s1 s2 s1'.
     ssa_sim sigma s1 s2 /\
@@ -601,7 +576,7 @@ Proof
      operands, so its operand list evaluates *)
   gvs[eval_operands_def] >>
   (* LOG: only its guard remains *)
-  drule_all log_operands_defined >> simp[optionTheory.IS_SOME_EXISTS] >>
+  drule_all venomExecProofsTheory.log_operands_defined >> simp[optionTheory.IS_SOME_EXISTS] >>
   strip_tac >> gvs[eval_operand_def]
 QED
 

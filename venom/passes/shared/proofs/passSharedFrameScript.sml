@@ -510,6 +510,19 @@ Proof
   strip_tac >> gvs[is_terminator_def]
 QED
 
+(* A LOG that steps to OK ran outside a static frame: its operands all
+   evaluate, so a static frame would have aborted. *)
+Theorem log_ok_not_static:
+  !inst s v. inst.inst_opcode = LOG /\ step_inst_base inst s = OK v ==>
+             ~s.vs_call_ctx.cc_static
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all venomExecProofsTheory.log_operands_defined >> strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS, eval_operands_def, eval_operand_def]
+QED
+
 (* A state write aborts only through the static-frame guard. *)
 Theorem step_inst_base_static_write_abort:
   !inst s a s'.

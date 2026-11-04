@@ -2607,48 +2607,6 @@ Proof
   simp[]
 QED
 
-Triviality eval_operands_IS_SOME_EVERY:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
-QED
-
-(* LOG reads its offset, size and topics off the reversed operand list, so
-   when they all evaluate, the whole list does. *)
-Triviality log_operands_defined:
-  !rest s off sz topics n.
-    LENGTH rest = n + 2 /\
-    eval_operand (HD (REVERSE rest)) s = SOME off /\
-    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
-    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
-    IS_SOME (eval_operands rest s)
-Proof
-  rpt strip_tac >>
-  `2 <= LENGTH (REVERSE rest)` by simp[] >>
-  `?a b t. REVERSE rest = a::b::t` by
-    (Cases_on `REVERSE rest` >> fs[] >> Cases_on `t` >> fs[]) >>
-  `rest = REVERSE (a::b::t)` by metis_tac[REVERSE_REVERSE] >>
-  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
-  `IS_SOME (eval_operands t s)` by simp[] >>
-  fs[eval_operands_IS_SOME_EVERY]
-QED
-
-(* A LOG that steps to OK ran outside a static frame: its operands all
-   evaluate, so a static frame would have aborted. *)
-Triviality log_ok_not_static:
-  !inst s v. inst.inst_opcode = LOG /\ step_inst_base inst s = OK v ==>
-             ~s.vs_call_ctx.cc_static
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  drule_all log_operands_defined >> strip_tac >>
-  gvs[optionTheory.IS_SOME_EXISTS, eval_operands_def, eval_operand_def]
-QED
-
 Theorem remap_preserved_mem_ops[local]:
   !fn roots remap inst s1 s2 v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\

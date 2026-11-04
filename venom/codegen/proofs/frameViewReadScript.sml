@@ -79,35 +79,6 @@ Proof
        frame_view_def]
 QED
 
-Triviality eval_operands_IS_SOME_EVERY:
-  !ops s. IS_SOME (eval_operands ops s) <=>
-          EVERY (\op. IS_SOME (eval_operand op s)) ops
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
-  first_x_assum (qspec_then `s` mp_tac) >>
-  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
-QED
-
-(* LOG reads its offset, size and topics off the reversed operand list, so
-   when they all evaluate, the whole list does. *)
-Triviality log_operands_defined:
-  !rest s off sz topics.
-    eval_operand (HD (REVERSE rest)) s = SOME off /\
-    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
-    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics /\
-    2 <= LENGTH rest ==>
-    IS_SOME (eval_operands rest s)
-Proof
-  rpt strip_tac >>
-  `2 <= LENGTH (REVERSE rest)` by simp[] >>
-  `?a b t. REVERSE rest = a::b::t` by
-    (Cases_on `REVERSE rest` >> fs[] >> Cases_on `t` >> fs[]) >>
-  `rest = REVERSE (a::b::t)` by metis_tac[REVERSE_REVERSE] >>
-  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
-  `IS_SOME (eval_operands t s)` by simp[] >>
-  fs[eval_operands_IS_SOME_EVERY]
-QED
-
 Theorem log_base_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = LOG /\ step_inst_base inst s = OK s' /\
@@ -148,7 +119,7 @@ Proof
   (* the static-frame guard's undefined-operand case is impossible here *)
   TRY (qpat_x_assum `eval_operands (Lit tc::rest) s = NONE` mp_tac >>
        qspecl_then [`rest`, `s`, `off`, `sz`, `topics`] mp_tac
-         log_operands_defined >>
+         venomExecProofsTheory.log_operands_defined >>
        simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
        simp[eval_operands_def, eval_operand_def] >> NO_TAC) >>
   simp[frame_view_def]
