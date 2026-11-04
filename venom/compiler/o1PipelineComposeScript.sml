@@ -65,6 +65,12 @@ Proof
   simp[raw_mem_ok_def]
 QED
 
+Theorem dload_offset_ok_ctx_free:
+  dload_offset_ok ctx fn inst s ==> dload_offset_ok ctx' fn inst s
+Proof
+  simp[lowerDloadDefsTheory.dload_offset_ok_def]
+QED
+
 Theorem o1_fn_passes_steps:
   o1_step_contracts_from rp 0 o1_fn_passes
 Proof
@@ -274,6 +280,10 @@ Proof
   `mem_inv raw_mem_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
     (mp_tac (Q.INST [`M` |-> `raw_mem_ok`] o1_prune_sim) >>
      impl_tac >- (fs[] >> metis_tac[raw_mem_ok_ctx_free]) >>
+     strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
+  `mem_inv dload_offset_ok (prune_unit_fcg_unreachable unit fcg).cu_context vs` by
+    (mp_tac (Q.INST [`M` |-> `dload_offset_ok`] o1_prune_sim) >>
+     impl_tac >- (fs[] >> metis_tac[dload_offset_ok_ctx_free]) >>
      strip_tac >> pop_assum irule >> fs[o1_src_inv_def]) >>
   qpat_x_assum `fcg = _` kall_tac >>
   fs[o1_src_inv_def] >> rpt conj_tac
