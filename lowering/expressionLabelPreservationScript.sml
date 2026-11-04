@@ -1570,3 +1570,204 @@ Proof
   simp_tac pure_ss [compile_call_def, LET_THM] >>
   CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]
 QED
+
+Theorem label_preserving_lower_abi_encode[local]:
+  !s r t. lower_abi_encode ensure mid src info maxlen s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `mid` >> rewrite_tac[builtinAbiTheory.lower_abi_encode_def,
+    comp_ignore_bind_def] >> simp_tac (srw_ss()) [LET_THM] >>
+  ntac 3 LABEL_BIND
+  >- (LABEL_BIND >>
+      ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- metis_tac[cj 2 label_preserving_abi_encode_mutual] >>
+      gen_tac >> LABEL_BIND >> LABEL_LEAF) >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (LABEL_BIND >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[cj 2 label_preserving_abi_encode_mutual] >>
+  gen_tac >> ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (LABEL_BIND >> LABEL_LEAF) >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_lower_abi_decode[local]:
+  !s r t. lower_abi_decode src info amin amax outsz s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinAbiTheory.lower_abi_decode_def, comp_ignore_bind_def] >>
+  ntac 2 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF) >>
+  gen_tac >> ntac 3 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (rpt gen_tac >> Cases_on `r` >> metis_tac[label_preserving_abi_decode]) >>
+  gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_zero_words[local]:
+  !n s r t. compile_zero_words baseop n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct >> rewrite_tac[builtinSimpleTheory.compile_zero_words_def,
+    comp_ignore_bind_def]
+  >- metis_tac[label_preserving_return] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[] >> gen_tac >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_empty_complex[local]:
+  !s r t. compile_builtin_empty_complex sz bytes s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinSimpleTheory.compile_builtin_empty_complex_def,
+    comp_ignore_bind_def] >> ntac 2 LABEL_BIND >>
+  IF_CASES_TAC
+  >- (LABEL_BIND >> LABEL_LEAF) >>
+  simp_tac pure_ss [LET_THM] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_zero_words] >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_slice_bounds[local]:
+  !s r t. compile_assert_slice_bounds start len src_len s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_assert_slice_bounds_def] >>
+  ntac 5 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_bytestring_src[local]:
+  !s r t. compile_bytestring_src srcop s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_bytestring_src_def] >>
+  ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_extract32_load[local]:
+  !s r t. compile_extract32_load len srcop start s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[builtinBytesTheory.compile_extract32_load_def,
+    comp_ignore_bind_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_slice_bounds] >>
+  gen_tac >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_clamp_basetype[local]:
+  !s r t. compile_clamp_basetype v ty s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `ty` >> simp_tac (srw_ss()) [compile_clamp_basetype_def]
+  >- (Cases_on `b` >> simp_tac (srw_ss()) [compile_clamp_basetype_def]
+      >~ [`compile_clamp_basetype v (BaseT (BytesT bnd))`]
+      >- (Cases_on `bnd` >>
+          simp_tac (srw_ss()) [compile_clamp_basetype_def, comp_ignore_bind_def] >>
+          rpt IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF) >>
+      rewrite_tac[comp_ignore_bind_def] >> rpt IF_CASES_TAC >>
+      rpt LABEL_BIND >>
+      metis_tac[label_preserving_return, label_preserving_clamp_and_return]) >>
+  metis_tac[label_preserving_return]
+QED
+
+Theorem label_preserving_type_builtin_body[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv vv_ty ty tb ret_ty args s r t.
+    compile_type_builtin_dispatch_body cfn cenv vv_ty ty tb ret_ty args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `tb` >>
+  simp_tac (srw_ss()) [compile_type_builtin_dispatch_body_def, LET_THM]
+  >- suspend "empty"
+  >- (Cases_on `type_bounds ret_ty` >> simp_tac (srw_ss()) [] >>
+      strip_tac >> gvs[] >> simp[cs_extends_refl, added_labels_def, GSYM MAP_DROP])
+  >- (Cases_on `type_bounds ret_ty` >> simp_tac (srw_ss()) [] >>
+      strip_tac >> gvs[] >> simp[cs_extends_refl, added_labels_def, GSYM MAP_DROP])
+  >- (strip_tac >> gvs[] >> simp[cs_extends_refl, added_labels_def, GSYM MAP_DROP])
+  >- suspend "convert"
+  >- suspend "extract32"
+  >- suspend "decode" >> suspend "encode"
+QED
+
+Resume label_preserving_type_builtin_body[empty]:
+  IF_CASES_TAC
+  >- (strip_tac >> gvs[] >> simp[cs_extends_refl, added_labels_def, GSYM MAP_DROP]) >>
+  simp_tac pure_ss [LET_THM] >> CALL_PAIR label_preserving_empty_complex >>
+  strip_tac >> gvs[]
+QED
+
+Resume label_preserving_type_builtin_body[decode]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_unwrap_value >>
+  qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_ptr_val_def] >>
+  qpat_x_assum `(_,_) = lower_abi_decode _ _ _ _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_lower_abi_decode >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_type_builtin_body[extract32]:
+  CALL_VALUE >> CALL_PAIR label_preserving_bytestring_src >>
+  CALL_VALUE >> CALL_PAIR label_preserving_extract32_load >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vv_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_clamp_basetype _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_clamp_basetype >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_type_builtin_body[convert]:
+  CALL_VALUE >> IF_CASES_TAC
+  >- (strip_tac >> gvs[]) >> IF_CASES_TAC
+  >- suspend "convert_widen" >>
+  Cases_on `ret_ty` >> simp_tac (srw_ss()) [] >>
+  qmatch_goalsub_abbrev_tac `as_stack_val vv_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_type_convert _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_type_convert >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_type_builtin_body[convert_widen]:
+  qmatch_goalsub_abbrev_tac `as_stack_val vv_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_bytestring_widen_copy _ _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_bytestring_widen_copy >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+val ENCODE_FINISH =
+  qmatch_goalsub_abbrev_tac `as_ptr_val vv_ty LocMemory action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_ptr_val_def] >>
+  qpat_x_assum `(_,_) = lower_abi_encode _ _ _ _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_lower_abi_encode >> strip_tac >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans];
+
+Resume label_preserving_type_builtin_body[encode]:
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- suspend "encode_word" >> suspend "encode_complex") >>
+  CALL_PAIR label_preserving_multi_exprs >>
+  CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_store_abi_tuple >>
+  ENCODE_FINISH
+QED
+
+Resume label_preserving_type_builtin_body[encode_word]:
+  CALL_VALUE >> CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_emit_void >> ENCODE_FINISH
+QED
+
+Resume label_preserving_type_builtin_body[encode_complex]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_unwrap_value >> ENCODE_FINISH
+QED
+
+
+Finalise label_preserving_type_builtin_body
