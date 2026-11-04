@@ -1600,17 +1600,15 @@ Proof
   `eval_operand (Var (STRING #"%" (toString sm.cs_next_var))) sg = SOME g` by
     simp[Abbr `sg`, eval_operand_def, lookup_var_def, update_var_def,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-  `step_inst_base ci sg =
-   exec_ext_call ci sg (n2w s.vs_call_ctx.cc_gas:bytes32) target 0w wi insz wo outsz T` by
-    (qunabbrev_tac `ci` >>
-     irule computed_suffix_staticcall_dispatch >> simp[eval_operand_def]) >>
-  `step_inst_base ci sg = OK sc` by simp[] >>
+  `step_inst_base ci sg = OK sc` by
+    (gvs[Abbr `ci`, mk_inst_def] >>
+     simp[step_inst_base_def, eval_operand_def] >> first_assum ACCEPT_TAC) >>
   `step_inst_base (mk_inst (sm.cs_next_id+2) ASSERT
      [Var (STRING #"%" (toString (sm.cs_next_var+1)))] []) sc = OK sc` by
-    (irule emitHelperPropsTheory.step_ASSERT_ok >> qexists_tac `1w` >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def] >>
      simp[Abbr `sc`, eval_operand_def, lookup_var_def, update_var_def,
           finite_mapTheory.FLOOKUP_UPDATE]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def, exec_read0_def] >>
+  simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def] >>
   gvs[mk_inst_def] >>
   simp[run_inst_seq_def, Abbr `sc`, Abbr `sg`]
