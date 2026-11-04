@@ -160,3 +160,74 @@ Resume body_results_success_deferred_list[tail]:
 QED
 
 Finalise body_results_success_deferred_list
+
+Theorem body_results_exception_deferred_list:
+  !args sa sb start vvs exc es'.
+  body_inv tops ctx cenv cx /\ body_results_ok cx args /\
+  expr_sim_inv cenv cx env es /\
+  EVERY (supported_pure_expr tops) args /\
+  EVERY (\e. expr_body_pre cenv cx env e es) args /\
+  eval_expr_results cx args es = (INR exc,es') /\
+  compile_multi_vvs compile_expr cenv args sa = (vvs,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. F) (expr_exit (INR exc : eval_result + exception))
+Proof
+  Induct_on `args`
+  >- simp[Once evaluate_def, return_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_multi_vvs _ _ _ _ = _` mp_tac >>
+  simp[Once compile_multi_vvs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `compile_expr cenv (expr_type h) h sa = (vv,sm)` >>
+  rename1 `compile_multi_vvs compile_expr cenv args sm = (rest,sb)` >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (qspecl_then [`compile_expr`, `cenv`, `args`, `sm`] mp_tac
+       ci_mono_compile_multi_vvs >> simp[compile_expr_ci_mono] >>
+     strip_tac >> fs[ci_mono_def] >>
+     metis_tac[cj 1 compile_expr_grows]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  `expr_vv_sim ctx func cenv cx (expr_type h) h es` by
+    metis_tac[body_results_head_vv_sim] >>
+  qpat_x_assum `eval_expr_results _ (_::_) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> strip_tac >> gvs[]
+  >- suspend "success_head" >>
+  suspend "exception_head"
+QED
+
+Resume body_results_exception_deferred_list[success_head]:
+  rename1 `eval_expr cx h es = (INL raw,esh)` >>
+  `esh = es` by metis_tac[supported_pure_eval_expr_state] >> gvs[] >>
+  `body_results_ok cx args` by metis_tac[body_results_success_tail] >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[compile_expr_local_ptrs_reserved] >>
+  `expr_vv_res_ok (INL raw)` by metis_tac[aggregate_child_res_ok] >>
+  `frag_exec ctx sa sm
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx h es sa sm start es raw vv)
+     (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
+  `frag_exec ctx sa sm
+     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+     (vv_post ctx func cenv cx h es sa sm start es raw vv)
+     (expr_exit (INR exc : eval_result + exception))` by
+    (irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ (\r. F)` kall_tac >>
+  drule frag_exec_then >> disch_then irule >> simp[] >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`sm`, `sb`, `t`, `rest`] mp_tac) >>
+  simp[] >> disch_tac >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >>
+  gvs[vv_post_def]
+QED
+
+Resume body_results_exception_deferred_list[exception_head]:
+  `expr_vv_res_ok (INR exc : eval_result + exception)` by
+    metis_tac[aggregate_child_res_ok] >>
+  irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
+  irule expr_vv_sim_exception_frag >> metis_tac[]
+QED
+
+Finalise body_results_exception_deferred_list
