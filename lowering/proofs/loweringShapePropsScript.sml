@@ -14645,3 +14645,57 @@ Proof
        simp[lower_value_labels, emit_op_labels, emit_inst_labels]) >>
   simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
+
+Theorem compile_multi_vvs_labels:
+  !cfn cenv es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_multi_vvs cfn cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_multi_vvs cfn cenv es s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_multi_vvs_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_multi_vvs_def] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_make_tuple_labels:
+  !cfn cenv es buf off s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_make_tuple cfn cenv es buf off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_make_tuple cfn cenv es buf off s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_make_tuple_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >>
+  once_rewrite_tac[compile_make_tuple_def] >> simp[LET_THM] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, unwrap_value_labels, compile_store_memory_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_subscript_labels:
+  !cfn cenv ret_ty ty base_e idx_e s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_subscript cfn cenv ret_ty ty base_e idx_e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_subscript cfn cenv ret_ty ty base_e idx_e s)))
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[compile_subscript_def] >>
+  irule comp_bind_labels >> reverse conj_tac >- simp[] >>
+  rpt gen_tac >> BETA_TAC >> simp[LET_THM] >>
+  Cases_on `place_type cenv base_e`
+  >- (simp[] >>
+      rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+           simp[comp_return_labels, lower_value_labels, compile_mapping_subscript_labels]) >>
+      IF_CASES_TAC >> simp[compile_keccak256_key_labels, comp_return_labels]) >>
+  rename1 `place_type cenv base_e = ValPT bt` >> Cases_on `bt` >> simp[LET_THM] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, lower_value_labels, compile_tuple_subscript_labels,
+            compile_array_subscript_labels, compile_ptr_load_labels])
+QED
