@@ -225,7 +225,7 @@ Proof
   goal_assum drule >> simp[] >> metis_tac[dft_setup_callee_dom]
 QED
 
-Theorem dft_occ_terminator_exit[local]:
+Theorem dft_occ_terminator_exit:
   get_instruction bb s.vs_inst_idx = SOME inst /\
   is_terminator inst.inst_opcode /\
   c.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
@@ -247,7 +247,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem dft_terminator_vars[local]:
+Theorem dft_terminator_vars:
   step_inst_base inst s = OK t /\ is_terminator inst.inst_opcode ==>
   t.vs_vars = s.vs_vars
 Proof
