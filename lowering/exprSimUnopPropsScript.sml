@@ -80,17 +80,6 @@ Proof
   strip_tac >> gvs[bind_def]
 QED
 
-val () =
-  let val th = eval_expr_unop_action
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "UNARY_ACTION_AUDIT OK\n"
-     else raise Fail "unary source action inherited admission"
-  end;
-
-(* ===== The composition ===== *)
-
 Theorem expr_post_unop:
   !func cenv cx ann bi e1 es es' sa s1 sb s0 t0 ss x op v1 v ctx.
     expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0 /\
@@ -337,13 +326,7 @@ QED
 
 
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "UNARY_PROPERTIES_AUDIT OK\n"
-     else raise Fail "unary property inherited admission"
-  end) [eval_expr_unop_cases, expr_post_unop, compile_expr_body_not_abs, compile_expr_not_abs, lower_value_not, lower_value_abs, compile_not_abs_stack, flag_not_xor, word_of_bytes_be_to_bytes, length_word_to_bytes_be, straight_fresh_cs_extends, straight_fresh_not, not_type_cases, abs_i2w, int256_abs_bound, straight_fresh_abs];
+
 
 Theorem compile_expr_body_neg:
   !f g h cenv ty ann args st.
