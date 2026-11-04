@@ -160,3 +160,12 @@ Proof
   Cases_on `block_is_terminated s` >>
   simp[comp_return_def, bound_labels_emit_inst]
 QED
+
+Theorem pair_let_snd_preserves:
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND p))) /\
+  (!x t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g (x,t)))))) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (g p))))
+Proof
+  Cases_on `p` >> simp[]
+QED

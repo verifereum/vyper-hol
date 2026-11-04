@@ -759,3 +759,18 @@ Proof
   Cases_on `ty` >> simp[compile_invert_def, bound_labels_emit_op]
 QED
 
+
+Theorem bound_labels_acc:
+  (!t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+      (SND (cfn ce (BaseT AddressT) e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_acc cfn ce e acc s))))
+Proof
+  strip_tac >> Cases_on `acc` >> simp[compile_acc_def, bound_labels_lower_value] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_lower_value, bound_labels_emit_op,
+    bound_labels_emit_inst]), irule pair_let_snd_preserves,
+    conj_tac, gen_tac, strip_tac])
+QED
