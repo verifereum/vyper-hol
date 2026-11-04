@@ -364,6 +364,59 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem membership_bind_safe[local]:
+  ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
+   (!v s r t. safe_operand s op /\ k v s = (r,t) ==> safe_operand t r)) ==>
+  !s r t. safe_operand s op /\ comp_bind m k s = (r,t) ==>
+    safe_operand t r
+Proof
+  rpt strip_tac >> gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  irule safe_operand_mono >> goal_assum (drule_at Any) >>
+  metis_tac[]
+QED
+
+Theorem membership_ignore_bind_safe[local]:
+  ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
+   (!s r t. safe_operand s op /\ k s = (r,t) ==> safe_operand t r)) ==>
+  !s r t. safe_operand s op /\ comp_ignore_bind m k s = (r,t) ==>
+    safe_operand t r
+Proof
+  rpt strip_tac >> gvs[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  first_x_assum irule >> goal_assum (drule_at Any) >>
+  irule safe_operand_mono >> goal_assum (drule_at Any) >>
+  metis_tac[]
+QED
+
+Theorem membership_fresh_bind_safe[local]:
+  (!z s r t. safe_operand s (Var z) /\ k z s = (r,t) ==>
+    safe_operand t r) ==>
+  !s r t. comp_bind fresh_var k s = (r,t) ==> safe_operand t r
+Proof
+  rpt strip_tac >> gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  metis_tac[fresh_var_safe_operand]
+QED
+
+Theorem membership_bind_counter_mono[local]:
+  ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
+   (!v s r t. k v s = (r,t) ==> s.cs_next_var <= t.cs_next_var)) ==>
+  !s r t. comp_bind m k s = (r,t) ==> s.cs_next_var <= t.cs_next_var
+Proof
+  rpt strip_tac >> gvs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem membership_ignore_bind_counter_mono[local]:
+  ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
+   (!s r t. k s = (r,t) ==> s.cs_next_var <= t.cs_next_var)) ==>
+  !s r t. comp_ignore_bind m k s = (r,t) ==>
+    s.cs_next_var <= t.cs_next_var
+Proof
+  rpt strip_tac >> gvs[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
 Theorem compile_array_membership_loop_safe_operand:
   (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
   compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
