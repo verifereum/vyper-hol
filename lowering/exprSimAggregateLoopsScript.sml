@@ -94,6 +94,33 @@ Proof
   drule eval_expr_immutable_metadata_frame >> simp[]
 QED
 
+(* An element is stored from its lowered type. That type differs from the
+   element's own only for bytestrings, whose store ignores the source type,
+   and for an internal call returning a wider layout, which the caller rules
+   out. *)
+Theorem aggregate_elem_lowered_type[local]:
+  !ce e env.
+    well_typed_expr env e /\
+    (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) ==>
+    lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def, is_bytestring_type_def,
+       vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.type_builtin_result_ok_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  rpt strip_tac >> gvs[is_bytestring_type_def]
+QED
+
+Theorem aggregate_store_lowered_elem[local]:
+  !ce e src dst.
+    lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e) ==>
+    compile_store_memory ce src dst (expr_type e) (lowered_value_type ce e) =
+    compile_store_memory ce src dst (expr_type e) (expr_type e)
+Proof
+  rpt strip_tac >> simp[contextTheory.compile_store_memory_def] >> gvs[]
+QED
+
 Theorem aggregate_make_tuple_sim:
   !args ce cx env off sa out sb es res es' tvs func inst x b asz s0 ctx nocalls.
   compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
@@ -103,6 +130,8 @@ Theorem aggregate_make_tuple_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
+  (~nocalls ==> !e. MEM e args ==>
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -161,7 +190,7 @@ Resume aggregate_make_tuple_sim[cons]:
   rename1 `compile_expr ce (expr_type h) h sa = (vv,sm)` >>
   rename1 `emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn)` >>
   rename1 `unwrap_value ce vv sn = (op,su)` >>
-  rename1 `compile_store_memory ce op dst (expr_type h) (expr_type h) su = ((),ss)` >>
+  rename1 `compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = ((),ss)` >>
   `ci_mono sa sm` by metis_tac[compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sm sn` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
   `ci_mono sn su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
@@ -175,6 +204,14 @@ Resume aggregate_make_tuple_sim[cons]:
     metis_tac[listTheory.MEM] >>
   `expr_vv_sim ctx func ce cx (expr_type h) h es` by
     (gvs[exprs_case_def, expr_vv_case_def] >> metis_tac[]) >>
+  `lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+    (irule aggregate_elem_lowered_type >> qexists_tac `env` >>
+     fs[expr_body_pre_def] >> Cases_on `nocalls` >> gvs[] >>
+     metis_tac[listTheory.MEM]) >>
+  `compile_store_memory ce op dst (expr_type h) (expr_type h) su = ((),ss)` by
+    metis_tac[aggregate_store_lowered_elem] >>
+  qpat_x_assum `compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = _`
+    kall_tac >>
   drule aggregate_eval_exprs_cons >> strip_tac
   >- suspend "child_error"
   >- suspend "materialise_error" >>
@@ -520,6 +557,8 @@ Theorem aggregate_struct_fields_sim:
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx (MAP SND fields) /\
+  (~nocalls ==> !e. MEM e (MAP SND fields) ==>
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -596,6 +635,8 @@ Theorem aggregate_make_array_elems_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
+  (~nocalls ==> !e. MEM e args ==>
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -666,6 +707,8 @@ Theorem aggregate_make_array_start_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
+  (~nocalls ==> !e. MEM e args ==>
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
@@ -740,6 +783,8 @@ Theorem aggregate_make_array_sim:
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
   exprs_case nocalls ctx func ce cx args /\
+  (~nocalls ==> !e. MEM e args ==>
+     int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\

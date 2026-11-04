@@ -104,15 +104,54 @@ Proof
   cheat
 QED
 
+(* An aggregate literal with an element whose value the lowering lays out
+   differently from the element's type: an internal call whose callee's
+   return type the call's type widens.  As for body_ifexp_widened_call_arm,
+   describing that value at its lowered type is the internal-call
+   simulation's work (body_intcall_case). *)
+Theorem body_struct_lit_widened_call_elem:
+  !cx v7 src_id_opt id kes.
+    (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (StructLit v7 (src_id_opt,id) kes) es /\
+      (?e. MEM e (MAP SND kes) /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es /\
+      expr_vv_sim ctx func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
+Proof
+  cheat
+QED
+
+Theorem body_make_array_widened_call_elem:
+  !cx ty t n es.
+    (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
+     body_exprs_ok cx es) ==>
+    !tops ctx func cenv env ty' st.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (Builtin ty (MakeArray t n) es) st /\
+      (?e. MEM e es /\ int_calls_expr e <> [] /\
+           lowered_value_type cenv e <> expr_type e) ==>
+      expr_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
+      expr_vv_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
+Proof
+  cheat
+QED
+
 (* exprSimAggregates' compile_struct_lit_case. *)
 Theorem body_structlit_case:
   !cx v7 src_id_opt id kes.
     (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
     body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
 Proof
-  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
-  strip_tac >> irule compile_struct_lit_case >>
-  metis_tac[body_exprs_ok_case]
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  Cases_on `!e. MEM e (MAP SND kes) ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_struct_lit_case >> conj_tac
+      >- metis_tac[body_exprs_ok_case] >>
+      metis_tac[]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_struct_lit_widened_call_elem]
 QED
 
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
@@ -181,7 +220,13 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  irule compile_make_array_case >> metis_tac[body_exprs_ok_case]
+  Cases_on `!e. MEM e es ==>
+              int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e`
+  >- (irule compile_make_array_case >> conj_tac
+      >- metis_tac[body_exprs_ok_case] >>
+      metis_tac[]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_make_array_widened_call_elem]
 QED
 
 (* ecadd and ecmul: exprSimECArith's compile_ecadd_call_case and
