@@ -448,3 +448,10 @@ Theorem vv_post_initial_gas:
 Proof
   simp[vv_post_def, locals_kept_def]
 QED
+
+Theorem eval_expr_literal_value:
+  !cx ann l es tv es'.
+    eval_expr cx (Literal ann l) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  simp[Once evaluate_def, return_def]
+QED

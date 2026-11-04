@@ -986,19 +986,8 @@ Proof
 QED
 
 
-Theorem as_stack_val_stack:
-  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
-Proof
-  Cases_on `p` >> simp[as_stack_val_def]
-QED
 
 
-Theorem eval_expr_literal_value:
-  !cx ann l es tv es'.
-    eval_expr cx (Literal ann l) es = (INL tv, es') ==> ?v. tv = Value v
-Proof
-  simp[Once evaluate_def, return_def]
-QED
 
 (* ===== The judgments of the shared case lemmas ===== *)
 

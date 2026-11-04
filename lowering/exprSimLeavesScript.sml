@@ -62,7 +62,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list finite_map
-   exprSimHyps exprSimUnwrap exprLowering exprLoweringProps
+  exprSimBufferForce exprLowering exprLoweringProps
   compileEnv accountsRelProps loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeEnv vyperTyping vyperTypeGlobalLookupSoundness

@@ -4551,3 +4551,9 @@ val () = List.app
       else raise Fail ("expression lowering proof is not closed: " ^ name)
     end)
   (DB.thms "exprLoweringProps");
+
+Theorem as_stack_val_stack:
+  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
+Proof
+  Cases_on `p` >> simp[as_stack_val_def]
+QED
