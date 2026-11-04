@@ -372,3 +372,43 @@ Proof
   simp[ld_charge_def, CARD_INSERT] >>
   Cases_on `d IN f.lf_E` >> simp[]
 QED
+
+Theorem ld_charge_drop_cons:
+  ld_charge (DROP j (f::frames)) =
+  if j = 0 then CARD f.lf_E + ld_charge frames
+  else ld_charge (DROP (j-1) frames)
+Proof
+  Cases_on `j` >> simp[ld_charge_def]
+QED
+
+Theorem ld_charge_empty_push:
+  f.lf_E = {} ==> ld_charge (f::frames) = ld_charge frames
+Proof
+  simp[ld_charge_def]
+QED
+
+Theorem ld_charge_drop_scratch:
+  ld_maps A f ==>
+  ld_charge (DROP j ((f with <|lf_tgt := t'; lf_E := d INSERT f.lf_E|>)::frames)) =
+  ld_charge (DROP j (f::frames)) +
+    (if j = 0 /\ d NOTIN f.lf_E then 1 else 0)
+Proof
+  strip_tac >> Cases_on `j` >> simp[] >>
+  drule ld_charge_scratch >>
+  disch_then (qspecl_then [`t'`, `frames`, `d`] mp_tac) >>
+  Cases_on `d IN f.lf_E` >> simp[]
+QED
+
+Theorem ld_sites_insert_head:
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas |+ (ai,(b,n)) /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas |+ (ai,(c,n)) ==>
+  ld_sites (g::frames) source SUBSET
+    ld_sites (f::frames) source UNION {(0,ai,if source then b else c,n)}
+Proof
+  strip_tac >>
+  simp[SUBSET_DEF, ld_sites_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `j` >> gvs[FLOOKUP_UPDATE, AllCaseEqs()] >>
+  Cases_on `source` >> gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
