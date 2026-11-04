@@ -1,6 +1,7 @@
 (* Readiness-parametric composition of argument evaluation and Log emission. *)
 Theory stmtSimLogCompose
 Ancestors
+  loweringPosts
   stmtSimLogArgsRun stmtSimLogArgsGrowth stmtSimLogSuffix stmtSimLogSource stmtSim exprSim exprSimWordArgs
   stmtSimLogSuffixActual stmtSimLogSuffixFrame stmtSimLogSuffixCode stmtSimLogArgs freshWrites
   compileEnv stmtLowering fragExec loweringSlice exprLoweringProps emitHelperProps

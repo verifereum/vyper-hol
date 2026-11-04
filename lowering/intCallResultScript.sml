@@ -24,6 +24,7 @@
 
 Theory intCallResult
 Ancestors
+  loweringPosts
   list rich_list arithmetic
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv
   freshWrites valueEncoding valueEncodingProps entryDecodeProps immutableMemoryFrame

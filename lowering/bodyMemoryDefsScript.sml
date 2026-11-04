@@ -3,21 +3,11 @@
    carried separately from the callee's allocation sites. *)
 Theory bodyMemoryDefs
 Ancestors
+  loweringPosts
   bodySim stmtSim exprSim exprSimHyps fragExecMem memSafeRun allocaHistory compileEnv
   exprLowering exprLoweringProps context venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph list finite_map words
 
-(* The size in ce_return_buf describes a pointer slot.  Capacity below is
-   the actual caller allocation, supplied by the declared return layout. *)
-Definition return_buf_frame_def:
-  (return_buf_frame NONE (cenv : compile_env) sa s <=>
-    cenv.ce_return_buf = NONE) /\
-  (return_buf_frame (SOME (bw : bytes32, capacity)) cenv sa s <=>
-    ?x slot_size.
-      cenv.ce_return_buf = SOME (PtrVar (Var x) slot_size) /\
-      lookup_var x s = SOME bw /\ not_fresh_at sa x /\
-      w2n bw + capacity <= s.vs_alloca_next)
-End
 
 Theorem return_buf_frame_frame:
   !d cenv cenv' sa sb s s'.

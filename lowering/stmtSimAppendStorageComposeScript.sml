@@ -1,6 +1,7 @@
 (* Source and code partitions for primitive storage Append composition. *)
 Theory stmtSimAppendStorageCompose
 Ancestors
+  loweringPosts
   appendStorageRel stmtSimAppendStorage stmtSimAssignStorage stmtSim fragExec
   varsExt freshWrites stateFrame venomState finite_map exprSim
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState

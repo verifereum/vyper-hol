@@ -1,6 +1,7 @@
 (* Proof interfaces for the fixed-array loop; no executable compiler here. *)
 Theory stmtSimForArrayLoop
 Ancestors
+  loweringPosts
   stmtSimForArrayParts stmtSimForArray stmtSim stmtLowering compileEnv
   fragExec loweringSlice localPtrsProps exprLoweringProps emitHelper
   venomInst venomState venomExecSemantics vyperState valueEncoding

@@ -34,6 +34,7 @@
 
 Theory exprSimPopNested
 Ancestors
+  loweringPosts
   list fragExec exprSim exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
