@@ -3660,6 +3660,80 @@ Resume aug_place_expr_body_metadata[powmod]:
 QED
 Finalise aug_place_expr_body_metadata
 
+Theorem aug_place_compile_expr_metadata:
+  !e cenv h m ty st.
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  (supportedExprs$supported_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_place_expr tops e) ==>
+  compile_expr (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e st =
+  compile_expr cenv ty e st
+Proof
+  measureInduct_on `expr_size e` >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  once_rewrite_tac[exprLoweringTheory.compile_expr_raw_def] >>
+  irule aug_place_expr_body_metadata >> simp[] >> qexists_tac `tops` >>
+  conj_tac >- suspend "expr_callback" >>
+  conj_tac >- suspend "builtin_callback" >>
+  conj_tac >- suspend "type_callback" >> simp[]
+QED
+
+Resume aug_place_compile_expr_metadata[expr_callback]:
+  rpt strip_tac >> simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def] >>
+  gen_tac >> IF_CASES_TAC >> simp[] >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` (mp_tac o Q.SPEC `x`) >>
+  simp[]
+QED
+
+Resume aug_place_compile_expr_metadata[builtin_callback]:
+  rpt strip_tac >>
+  simp[FUN_EQ_THM, exprCallBoundsTheory.builtin_child_callback_def] >>
+  gen_tac >> IF_CASES_TAC >> simp[] >>
+  once_rewrite_tac[exprLoweringTheory.compile_expr_raw_def] >>
+  irule (SRULE [] aug_place_builtin_metadata) >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  rpt strip_tac >>
+  simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def] >>
+  `expr_size e' < list_size expr_size args` by
+    metis_tac[exprCallBoundsTheory.expr_list_member_bound] >>
+  simp[] >> gen_tac >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` (mp_tac o Q.SPEC `e'`) >>
+  simp[] >> disch_then irule >>
+  gvs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM,
+      supportedExprsTheory.supported_expr_def] >> metis_tac[]
+QED
+
+Resume aug_place_compile_expr_metadata[type_callback]:
+  rpt strip_tac >>
+  simp[FUN_EQ_THM, exprCallBoundsTheory.type_child_callback_def] >>
+  gen_tac >> IF_CASES_TAC >> simp[] >>
+  once_rewrite_tac[exprLoweringTheory.compile_expr_raw_def] >> simp[] >>
+  irule (SRULE [] aug_place_type_builtin_metadata) >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  rpt strip_tac >>
+  simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def] >>
+  `expr_size e' < list_size expr_size args` by
+    metis_tac[exprCallBoundsTheory.expr_list_member_bound] >>
+  simp[] >> gen_tac >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` (mp_tac o Q.SPEC `e'`) >>
+  simp[] >> disch_then irule >>
+  gvs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM,
+      supportedExprsTheory.supported_expr_def] >> metis_tac[]
+QED
+
+Finalise aug_place_compile_expr_metadata
+
+Theorem aug_place_compile_supported_expr_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  supportedExprs$supported_expr tops e ==>
+  compile_expr (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+  compile_expr cenv ty e
+Proof
+  strip_tac >> simp[FUN_EQ_THM] >> gen_tac >>
+  irule (SRULE [] aug_place_compile_expr_metadata) >> metis_tac[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
