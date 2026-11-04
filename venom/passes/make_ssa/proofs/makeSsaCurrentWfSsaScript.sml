@@ -25,6 +25,7 @@ Ancestors
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
+  makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
   ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
@@ -3346,6 +3347,55 @@ Proof
   `current_block_token fn (current_actual_inserted fn) v h (CurrentDefault v) =
      CurrentOriginal h k 0` by metis_tac[current_wf_original_phi_block_token] >>
   simp[]
+QED
+
+Theorem current_wf_original_phi_inserted_frontier:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  MEM old fn.fn_blocks /\ MEM inst old.bb_instructions /\
+  inst.inst_opcode = PHI /\ MEM v inst.inst_outputs /\
+  current_actual_inserted fn v old.bb_label ==>
+  current_frontier_edge (current_frontier_map fn) old.bb_label old.bb_label
+Proof
+  strip_tac >>
+  `wf_function fn /\ all_reachable fn /\ fn_phi_outputs_single_def fn` by
+    fs[current_wf_phi_context_def] >>
+  `LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1` by
+    metis_tac[fn_phi_outputs_single_def_def] >>
+  `!l. current_changing_site fn (current_actual_inserted fn) v l ==>
+     l = old.bb_label` by metis_tac[current_wf_original_phi_single_site] >>
+  qpat_x_assum `current_actual_inserted fn v old.bb_label` mp_tac >>
+  rewrite_tac[current_actual_inserted_def] >> strip_tac >>
+  `!d. MEM d roots ==> d = old.bb_label` by
+    metis_tac[current_compute_defs_single_support] >>
+  `!d. current_pruned_reach (current_frontier_map fn)
+     (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+        (liveness_analyze fn) fn) v roots d ==> d = old.bb_label` by
+    (rpt strip_tac >>
+     `current_actual_inserted fn v d` by metis_tac[current_actual_inserted_def] >>
+     metis_tac[current_changing_site_def]) >>
+  qpat_x_assum `current_pruned_reach _ _ _ _ old.bb_label` mp_tac >>
+  once_rewrite_tac[current_pruned_reach_cases] >> metis_tac[]
+QED
+
+Theorem current_wf_original_phi_inserted_return:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  MEM old fn.fn_blocks /\ MEM inst old.bb_instructions /\
+  inst.inst_opcode = PHI /\ MEM v inst.inst_outputs /\
+  current_actual_inserted fn v old.bb_label ==>
+  ?p. fn_cfg_edge fn p old.bb_label /\
+      dominates (dom_analyze (cfg_analyze fn) fn) old.bb_label p
+Proof
+  strip_tac >>
+  drule_all current_wf_original_phi_inserted_frontier >>
+  rewrite_tac[current_frontier_edge_def] >> strip_tac >>
+  `wf_function fn /\ all_reachable fn /\ first_block_no_preds fn` by
+    fs[current_wf_phi_context_def] >>
+  `MEM old.bb_label (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  drule_all current_frontier_elim >>
+  simp[current_cfg_edge_preds] >> metis_tac[]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
