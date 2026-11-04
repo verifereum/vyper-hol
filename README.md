@@ -122,7 +122,7 @@ The project is built with [`holbuild`](https://github.com/charles-cooper/holbuil
 
 CI pins `holbuild-ref: v0.12.1` in `.github/actions/setup-holbuild-project/action.yml`, shared by its build and test jobs. Update that input to upgrade CI; `minimum_version` in `holproject.toml` is the compatibility floor.
 
-For a local build, install `holbuild` v0.12.1 or newer (`minimum_version` in `holproject.toml`) and run:
+For a local build, install `holbuild` v0.12.0 or newer (`minimum_version` in `holproject.toml`) and run:
 
 ```bash
 holbuild buildhol

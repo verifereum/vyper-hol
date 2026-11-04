@@ -142,9 +142,13 @@ val scalar_convert_bytes32_to_decimal_context_plan_step1 =
         (^scalar_convert_bytes32_to_decimal_unit).cu_context``
 val scalar_convert_bytes32_to_decimal_context_plan_step2 =
   EVAL (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step1))
-val scalar_convert_bytes32_to_decimal_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2))
+(* The concrete plan rule can already discharge the context's planner call. *)
+val scalar_convert_bytes32_to_decimal_context_plan_step3 =
+  case total (find_term
+    (can (match_term ``generate_fn_plan f spill labels``)))
+    (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2)) of
+    NONE => REFL (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2))
+  | SOME scalar_convert_bytes32_to_decimal_actual_plan_call => let
 val scalar_convert_bytes32_to_decimal_actual_plan_args =
   #2 (strip_comb scalar_convert_bytes32_to_decimal_actual_plan_call)
 val scalar_convert_bytes32_to_decimal_actual_fn =
@@ -185,10 +189,11 @@ val scalar_convert_bytes32_to_decimal_actual_generate_fn_plan =
   TRANS scalar_convert_bytes32_to_decimal_actual_generate_step1
     (TRANS scalar_convert_bytes32_to_decimal_actual_generate_step2
       scalar_convert_bytes32_to_decimal_actual_generate_step3)
-val scalar_convert_bytes32_to_decimal_context_plan_step3 =
+in
   PURE_REWRITE_CONV
     [scalar_convert_bytes32_to_decimal_actual_generate_fn_plan]
     (rhs (concl scalar_convert_bytes32_to_decimal_context_plan_step2))
+end
 val scalar_convert_bytes32_to_decimal_context_plan_eval = save_thm
   ("scalar_convert_bytes32_to_decimal_context_plan_eval",
    TRANS scalar_convert_bytes32_to_decimal_context_plan_step1
@@ -289,7 +294,22 @@ Proof
        scalar_convert_bytes32_to_decimal_runtime_pipeline_def,
        scalar_convert_bytes32_to_decimal_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
+  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
+  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
+  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              runtime_unit` >> simp[] >>
+  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
+  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
+  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
+  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              deploy_unit` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  CASE_TAC >> simp[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

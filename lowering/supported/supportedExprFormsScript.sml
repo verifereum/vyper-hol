@@ -1,11 +1,11 @@
 (* PLAN 5.6 expression side conditions. Typing is a separate hypothesis.
-   TOP-LEVEL: supported_binop, supported_conversion, supported_builtin_form,
+   TOP-LEVEL: supported_binop, valid_conversion, supported_builtin_form,
    supported_type_builtin_form, supported_storage_scalar/array/dynamic_array,
    supported_subscript_base, supported_storage_fields/field_read,
    supported_external_return_type. No expression recursion or evaluator. *)
 Theory supportedExprForms
 Ancestors
-  supportedTypes supportedDecls vyperAST list integer
+  supportedTypes supportedDecls vyperAST vyperTypeSystem list integer
   compileVyper exprLowering compileEnv
 
 Definition supported_unsigned_type_def:
@@ -18,11 +18,6 @@ Definition supported_signed_type_def:
   supported_signed_type _ = F
 End
 
-Definition supported_fixed_bytes_type_def:
-  supported_fixed_bytes_type (BaseT (BytesT (Fixed n))) =
-    (1 <= n /\ n <= 32 /\ n <> 20) /\
-  supported_fixed_bytes_type _ = F
-End
 
 Definition supported_numeric_type_def:
   supported_numeric_type ty <=>
@@ -74,35 +69,6 @@ Definition supported_binop_def:
     | NotIn => F
 End
 
-Definition supported_short_bytes_type_def:
-  supported_short_bytes_type (BaseT (BytesT (Dynamic n))) = (n <= 32) /\
-  supported_short_bytes_type _ = F
-End
-
-(* Exact directed conversion list, not valid_conversion (which is wider).
-   Widths and bytes20 exclusions are inherited from the word classes. *)
-Definition supported_conversion_def:
-  supported_conversion src dst <=>
-    ((supported_integer_type src \/ src = BaseT BoolT) /\
-      supported_integer_type dst) \/
-    ((supported_integer_type src \/ supported_fixed_bytes_type src) /\
-      dst = BaseT BoolT) \/
-    (supported_short_bytes_type src /\
-      (dst = BaseT BoolT \/ supported_unsigned_type dst)) \/
-    (src = BaseT AddressT /\ supported_unsigned_type dst) \/
-    (supported_integer_type src /\ dst = BaseT AddressT) \/
-    (supported_fixed_bytes_type src /\ supported_unsigned_type dst) \/
-    (src = BaseT (BytesT (Fixed 32)) /\ supported_signed_type dst) \/
-    (supported_fixed_bytes_type src /\
-      (dst = BaseT AddressT \/ dst = BaseT DecimalT \/
-       supported_fixed_bytes_type dst)) \/
-    (supported_integer_type src /\ dst = BaseT (BytesT (Fixed 32))) \/
-    (supported_unsigned_type src /\ dst = BaseT DecimalT) \/
-    (supported_signed_type src /\
-      (case src of BaseT (IntT n) => n <= 134 | _ => F) /\
-      dst = BaseT DecimalT) \/
-    (src = BaseT DecimalT /\ supported_integer_type dst)
-End
 
 Definition supported_literal_elements_def:
   supported_literal_elements tops ty es <=>
@@ -164,7 +130,7 @@ Definition supported_type_builtin_form_def:
     | (MaxValue, []) => ty = target /\ supported_numeric_type ty
     | (MinValue, []) => ty = target /\ supported_numeric_type ty
     | (Epsilon, []) => ty = target /\ ty = BaseT DecimalT
-    | (Convert, [a]) => ty = target /\ supported_conversion (expr_type a) ty
+    | (Convert, [a]) => ty = target /\ valid_conversion (expr_type a) ty
     | (AbiEncode F (SOME mid), [a]) => LENGTH mid = 4 /\
         (case target of TupleT [t] => supported_tuple_type t | _ => F)
     | (AbiDecode F, [a]) => ty = target /\ supported_tuple_type ty /\

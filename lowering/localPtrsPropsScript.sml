@@ -14,8 +14,10 @@
  *                                   and allocations and the bytes of every
  *                                   live region
  *   local_ptrs_rel_update_var     — assigning a non-pointer variable
- *   local_ptrs_rel_fresh_not_local_ptr — a fresh compiler variable is not a
+ *   local_ptrs_rel_fresh_not_scope_ptr — a fresh compiler variable is not a
  *                                   live local's pointer
+ *   local_ptrs_rel_fresh_not_local_ptr — nor, while the immutable base is
+ *                                   bound, the base
  *   local_ptrs_rel_mstore         — an MSTORE outside the live regions
  *   local_ptrs_rel_exec_alloca    — an ALLOCA, fresh or re-executed
  *   local_ptrs_rel_exec_alloca_fresh — a fresh ALLOCA gives a region
@@ -44,6 +46,18 @@ Ancestors
   venomMemDefs
   vyperState valueEncoding valueEncodingProps compileEnv
   venomState venomExecSemantics venomInst venomWf
+
+(* Updating a name outside the live scopes preserves pointer exclusion. *)
+Theorem not_local_ptr_name_update:
+  (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+  bc.ce_imm_alloca = cenv.ce_imm_alloca /\
+  lookup_scopes id scs = NONE /\
+  not_local_ptr cenv (FEMPTY::scs) p ==>
+  not_local_ptr bc (FEMPTY::scs) p
+Proof
+  simp[not_local_ptr_def, lookup_scopes_def] >> rpt strip_tac >>
+  `name <> id` by (strip_tac >> gvs[]) >> metis_tac[]
+QED
 
 (* An MSTORE outside a value's footprint keeps it. *)
 Theorem mstore_keeps_val_in_memory:
@@ -177,12 +191,18 @@ QED
 
 Theorem local_ptrs_rel_update_var:
   ∀func cenv scopes ss x v.
-    local_ptrs_rel func cenv scopes ss ∧ not_local_ptr cenv scopes x ⇒
+    local_ptrs_rel func cenv scopes ss ∧ not_scope_ptr cenv scopes x ⇒
     local_ptrs_rel func cenv scopes (update_var x v ss)
 Proof
   rpt strip_tac >> irule local_ptrs_rel_frame >> qexists_tac `ss` >>
   simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rw[] >> fs[not_local_ptr_def] >> res_tac >> fs[]
+  rw[] >> fs[not_scope_ptr_def] >> res_tac >> fs[]
+QED
+
+Theorem not_local_ptr_scope:
+  ∀cenv scopes x. not_local_ptr cenv scopes x ⇒ not_scope_ptr cenv scopes x
+Proof
+  rw[not_local_ptr_def, not_scope_ptr_def]
 QED
 
 Theorem local_ptrs_rel_inst_idx:
@@ -194,17 +214,31 @@ Proof
 QED
 
 (* A variable the compiler has not handed out yet is unbound in Venom, so it
-   is no live local's pointer. *)
-Theorem local_ptrs_rel_fresh_not_local_ptr:
+   is no live local's pointer, and not the immutable base, which is bound. *)
+Theorem local_ptrs_rel_fresh_not_scope_ptr:
   ∀func cenv scopes st ss n.
     local_ptrs_rel func cenv scopes ss ∧ fresh_vars_wrt st ss ∧
     n ≥ st.cs_next_var ⇒
-    not_local_ptr cenv scopes (STRING #"%" (toString n))
+    not_scope_ptr cenv scopes (STRING #"%" (toString n))
 Proof
-  rw[not_local_ptr_def] >> strip_tac >>
+  rw[not_scope_ptr_def] >> strip_tac >>
   fs[local_ptrs_rel_def, fresh_vars_wrt_def] >>
   first_x_assum drule_all >> strip_tac >>
   first_x_assum drule >> fs[lookup_var_def, FLOOKUP_DEF]
+QED
+
+Theorem local_ptrs_rel_fresh_not_local_ptr:
+  ∀func cenv scopes st ss n.
+    local_ptrs_rel func cenv scopes ss ∧ immutable_base_zero cenv ss ∧
+    fresh_vars_wrt st ss ∧ n ≥ st.cs_next_var ⇒
+    not_local_ptr cenv scopes (STRING #"%" (toString n))
+Proof
+  rpt strip_tac >>
+  drule_all local_ptrs_rel_fresh_not_scope_ptr >>
+  rw[not_local_ptr_def, not_scope_ptr_def] >> strip_tac >>
+  gvs[immutable_base_zero_def, eval_operand_def, lookup_var_def,
+      fresh_vars_wrt_def] >>
+  qpat_x_assum `!n. _ ==> _` drule >> gvs[FLOOKUP_DEF]
 QED
 
 Theorem local_ptrs_rel_mstore:
@@ -232,7 +266,7 @@ QED
 Theorem local_ptrs_rel_exec_alloca:
   ∀func cenv scopes ss ss' inst x asz.
     exec_alloca inst ss asz = OK ss' ∧ inst.inst_outputs = [x] ∧
-    local_ptrs_rel func cenv scopes ss ∧ not_local_ptr cenv scopes x ⇒
+    local_ptrs_rel func cenv scopes ss ∧ not_scope_ptr cenv scopes x ⇒
     local_ptrs_rel func cenv scopes ss'
 Proof
   rpt strip_tac >>
@@ -253,7 +287,7 @@ Theorem local_ptrs_rel_exec_alloca_fresh:
     exec_alloca inst ss asz = OK ss' ∧ inst.inst_outputs = [x] ∧
     FLOOKUP ss.vs_allocas inst.inst_id = NONE ∧
     ss.vs_alloca_next < dimword (:256) ∧
-    local_ptrs_rel func cenv scopes ss ∧ not_local_ptr cenv scopes x ⇒
+    local_ptrs_rel func cenv scopes ss ∧ not_scope_ptr cenv scopes x ⇒
     local_ptrs_rel func cenv scopes ss' ∧
     ∃w. lookup_var x ss' = SOME w ∧ w2n w = ss.vs_alloca_next ∧
         FLOOKUP ss'.vs_allocas inst.inst_id = SOME (w2n w, w2n asz) ∧
@@ -272,7 +306,7 @@ Proof
   rw[local_region_def, regions_disjoint_def] >>
   fs[lookup_var_def, FLOOKUP_UPDATE] >>
   `p ≠ x` by
-    (strip_tac >> fs[not_local_ptr_def] >> res_tac >> fs[]) >>
+    (strip_tac >> fs[not_scope_ptr_def] >> res_tac >> fs[]) >>
   fs[] >>
   qpat_x_assum `local_ptrs_rel _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
@@ -447,7 +481,13 @@ Proof
   rewrite_tac[local_ptrs_rel_def] >> conj_tac
   >- (rpt strip_tac >>
       Cases_on `name' = name`
-      >- (gvs[] >> qexists_tac `w` >> simp[]) >>
+      >- (qpat_x_assum `name' = name` SUBST_ALL_TAC >>
+          qpat_x_assum `FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p') sz')`
+            mp_tac >>
+          qpat_x_assum `lookup_scopes name scopes' = SOME entry'` mp_tac >>
+          simp[] >> rpt strip_tac >>
+          ntac 3 (pop_assum SUBST_ALL_TAC) >>
+          qexists_tac `w` >> simp[]) >>
       `lookup_scopes name' scopes = SOME entry'` by
         (qpat_x_assum `∀n. P n ⇒ lookup_scopes n scopes' = lookup_scopes n scopes`
            (qspec_then `name'` mp_tac) >> simp[]) >>

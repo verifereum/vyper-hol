@@ -24,6 +24,7 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
+  exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
@@ -76,9 +77,16 @@ QED
 Theorem unwrap_value_materialise_sim:
   !ctx func cenv cx e es sa sm sb s0 es' tv v vv op R.
     unwrap_value cenv vv sm = (op,sb) /\
-    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+    sa.cs_next_var <= sm.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\
-    read_result cx tv es' = (INL v,es') ==>
+    read_result cx tv es' = (INL v,es') /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
       (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
       (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
@@ -122,11 +130,13 @@ QED
 
 Theorem vv_holds_vars_frame:
   vv_holds cenv cx ty tv vv es s /\ t.vs_memory = s.vs_memory /\
+  contract_storage t = contract_storage s /\
+  contract_transient t = contract_transient s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s ==>
   vv_holds cenv cx ty tv vv es t
 Proof
   Cases_on `vv` >>
-  simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >>
+  simp[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
   metis_tac[]
 QED
 
@@ -168,6 +178,10 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with vs_vars := _ = s`
       (mp_tac o AP_TERM ``\z. (z.vs_memory,z.vs_allocas)``) >> simp[]) >>
+  `contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
+    (qpat_x_assum `t with vs_vars := _ = s` (SUBST1_TAC o SYM) >>
+     simp[contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds cenv cx (expr_type e) tv vv es' t` by
@@ -302,7 +316,13 @@ Theorem unwrap_value_rebased_sim:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r ==>
+  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           ~is_word_type (expr_type e) ==>
+           type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
+           type_memory_size tvt < 2 ** 64) ==>
   frag_exec ctx sm su (\s. s = r)
     (\s. expr_post ctx func ce cx e es'
       (sa with cs_next_var := sm.cs_next_var) su r es' v op s) R
@@ -315,6 +335,9 @@ Proof
         (sa with cs_next_var := sm.cs_next_var) su r es' v op s`, `R`] >>
   simp[] >> conj_tac
   >- (drule vv_post_rebase >> simp[]) >>
+  `local_ptrs_reserved ce (sa with cs_next_var := sm.cs_next_var)` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sm` >> simp[]) >>
   irule unwrap_value_materialise_sim >> simp[]
 QED
 
@@ -528,6 +551,9 @@ Theorem aggregate_unwrap_store_slice_sim:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
+  (~is_word_type (expr_type e) ==> type_memory_size tv < 2 ** 64) /\
+  fn_has_code sm su func /\ fn_inst_ids_distinct func /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   stmt_state_rel ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
@@ -559,6 +585,7 @@ Proof
         su r es' v op s`, `su`] >> simp[] >>
   conj_tac
   >- (irule unwrap_value_rebased_sim >> simp[] >>
+      conj_tac >- (strip_tac >> fs[]) >>
       qexistsl_tac [`es`, `s0`, `tvv`, `vv`] >> simp[]) >>
   drule_all aggregate_store_rebased_slice_sim >>
   disch_then (qspecl_then [`sa`, `R`] mp_tac) >>

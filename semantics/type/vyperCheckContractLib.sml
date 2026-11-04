@@ -24,6 +24,7 @@ val checker_defs =
    check_function_body_in_mode_def,
    check_function_body_def,
    check_toplevel_decl_def,
+   function_header_ok_def,
    function_mutability_ok_def,
    call_mutability_ok_def,
    builtin_mutability_def,
@@ -87,6 +88,16 @@ val checker_defs =
    flag_member_keys_toplevel_def,
    error_sig_keys_toplevel_def,
    type_def_keys_toplevel_def,
+    external_name_keys_toplevel_def,
+    vyperABIEntriesTheory.abi_external_method_ids_def,
+    vyperABIEntriesTheory.abi_external_signatures_def,
+    vyperABIEntriesTheory.abi_decl_signatures_def,
+    vyperABIEntriesTheory.abi_function_signatures_def,
+    vyperABIEntriesTheory.abi_entries_def,
+    vyperABIEntriesTheory.abi_getter_args_def,
+    vyperABIEntriesTheory.abi_array_getter_args_def,
+   event_keys_toplevel_def,
+   event_indexable_type_def,
    contract_call_graph_acyclic_def,
    rank_lt_def,
    edges_respect_rank_def,
@@ -126,6 +137,7 @@ val checker_defs =
    extract32_result_base_ok_def,
    assignable_type_def,
    valid_conversion_def,
+   event_arg_compatible_def,
    hashmap_key_type_def,
    defaults_env_def,
    extend_local_def,
@@ -135,6 +147,13 @@ val checker_defs =
    atarget_accepts_def,
    well_typed_iterator_def,
    well_typed_custom_error_def,
+   place_access_def,
+   place_contains_def,
+   expr_place_def,
+   expr_writes_ok_def,
+   atarget_writes_ok_def,
+   stmt_writes_ok_def,
+   iterator_unmodified_def,
    type_stmt_def,
    stmt_no_fallthrough_def,
    stmt_no_control_escape_def,
@@ -152,6 +171,10 @@ val checker_defs =
    well_typed_literal_def,
    well_typed_binop_def,
    well_typed_builtin_app_def,
+   int_literal_value_def,
+   nonneg_int_literal_def,
+   shift_amount_ok_def,
+   builtin_operands_ok_def,
    is_int_type_def,
    bound_at_most_def,
    vtype_annotation_ok_def,
@@ -176,6 +199,7 @@ val checker_defs =
    create_arg_types_ok_compute,
    optionTheory.option_case_lazily,
    optionTheory.IS_SOME_DEF,
+   optionTheory.IS_NONE_DEF,
    optionTheory.THE_DEF,
    pairTheory.FST,
    pairTheory.SND,
@@ -253,7 +277,8 @@ val checker_datatypes =
    ``:vyperAST$env_item``, ``:vyperAST$account_item``,
    ``:vyperAST$denomination``, ``:vyperAST$builtin``,
    ``:vyperAST$create_kind``, ``:vyperAST$call_target``,
-   ``:vyperAST$type_builtin``, ``:vyperAST$assignment_target``,
+   ``:vyperAST$type_builtin``, ``:vyperAST$base_assignment_target``,
+   ``:vyperAST$assignment_target``,
    ``:vyperAST$iterator``, ``:vyperAST$assert_reason``,
    ``:vyperAST$raise_reason``, ``:vyperAST$function_visibility``,
    ``:vyperAST$custom_error``,
@@ -291,6 +316,11 @@ fun build_checker_base () =
   |> stringLib.add_string_compset
   |> computeLib.extend_compset [computeLib.Tys checker_datatypes]
   |> computeLib.add_thms checker_defs
+   (* Selector hashing uses the shared ABI definition and a checked CV
+      evaluation, so checker results remain kernel theorems. *)
+   |> computeLib.add_conv
+        (prim_mk_const {Thy = "vyperABIEntries", Name = "abi_method_id"},
+         3, cv_transLib.cv_eval)
 
 fun inst_apply function argument = let
   val (domain_ty, _) = dom_rng (type_of function)

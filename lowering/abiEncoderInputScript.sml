@@ -98,9 +98,10 @@ Proof
   qpat_x_assum `abi_encoder_input _ _ _ _ _ _`
     (strip_assume_tac o ONCE_REWRITE_RULE [abi_encoder_input_cases]) >>
   gvs[] >> ONCE_REWRITE_TAC [abi_encoder_input_cases] >> asm_simp_tac (srw_ss()) [LET_THM] >>
-  gvs[AC ADD_COMM ADD_ASSOC, MULT_COMM] >>
-  FIRST [decide_tac,
-    rename1 `abi_encoder_tuple_type at ats` >> qexists_tac `ats` >> gvs[] >> decide_tac]
+  gvs[AC ADD_COMM ADD_ASSOC, MULT_COMM]
+  >~ [`abi_encoder_tuple_type at ats`]
+  >- (qexists_tac `ats` >> gvs[] >> decide_tac) >>
+  decide_tac
 QED
 
 (* ===== Layout ===== *)

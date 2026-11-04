@@ -482,13 +482,17 @@ Definition hashmap_slot_def:
 End
 val () = cv_trans hashmap_slot_def;
 
-(* Encode a Vyper value as a 32-byte hashmap key, given the key type. *)
+(* Encode a Vyper value as a 32-byte hashmap key, given the key type.  A
+   word-sized key is its word: a bytesN key left-aligned, as bytesN values
+   sit in a word.  Only a dynamic bytes or string key is hashed first. *)
 Definition encode_hashmap_key_def:
    encode_hashmap_key _ (IntV i) = i2w i ∧
    encode_hashmap_key _ (FlagV n) = n2w n ∧
    encode_hashmap_key (BaseT AddressT) (BytesV bs) =
      word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧
-   encode_hashmap_key (BaseT (BytesT _)) (BytesV bs) =
+   encode_hashmap_key (BaseT (BytesT (Fixed _))) (BytesV bs) =
+     word_of_bytes_be (PAD_RIGHT 0w 32 bs) ∧
+   encode_hashmap_key (BaseT (BytesT (Dynamic _))) (BytesV bs) =
      word_of_bytes_be (Keccak_256_w64 bs) ∧
    encode_hashmap_key (BaseT (StringT _)) (StringV s) =
      (let bs = MAP n2w_o_ORD s in

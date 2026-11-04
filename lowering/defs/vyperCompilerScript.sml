@@ -23,6 +23,7 @@ Ancestors
   venomInst
   venomCompilerTypes
   venomWf
+  fcgDefs
 
 (* ===== Compile State Initialization ===== *)
 
@@ -272,13 +273,21 @@ Definition unit_alloca_budget_def:
       SUM (MAP alloca_size (FILTER (\i. i.inst_opcode = ALLOCA) insts))
 End
 
+(* The last two conjuncts are what the memory-safety bridge
+   (mem_safe_raw_unit_memory_ok, alloca_frontier_inv_entry) asks of the
+   unit: every function's labels distinct and an entry block, and the
+   reachable call graph acyclic.  Like the inst-id and budget checks, they
+   are decided on the unit rather than proved of the lowering. *)
 Definition lowering_context_ok_def:
   lowering_context_ok ctx <=>
     ALL_DISTINCT (ctx_fn_names ctx) /\
     wf_invoke_targets_check ctx /\
     ctx_inst_ids_distinct ctx /\
     forced_alloc_inputs_check ctx /\
-    unit_alloca_budget ctx < dimword (:256)
+    unit_alloca_budget ctx < dimword (:256) /\
+    EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
+      ctx.ctx_functions /\
+    reachable_fcg_acyclic ctx (fcg_analyze ctx)
 End
 (* ===== Policy Boundary ===== *)
 
@@ -317,6 +326,15 @@ QED
 Theorem lowering_context_ok_alloca_budget:
   !ctx. lowering_context_ok ctx ==>
         unit_alloca_budget ctx < dimword (:256)
+Proof
+  simp[lowering_context_ok_def]
+QED
+
+Theorem lowering_context_ok_bridge:
+  !ctx. lowering_context_ok ctx ==>
+        EVERY (\fn. ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn)
+          ctx.ctx_functions /\
+        reachable_fcg_acyclic ctx (fcg_analyze ctx)
 Proof
   simp[lowering_context_ok_def]
 QED
@@ -589,6 +607,28 @@ Proof
   simp[run_lowering_def] >> rpt strip_tac >>
   pairarg_tac >> gvs[AllCaseEqs()] >>
   metis_tac[lowering_context_ok_static_integrity]
+QED
+
+Theorem run_lowering_context_ok:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label = SOME unit ==>
+  lowering_context_ok unit.cu_context
+Proof
+  simp[run_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >> gvs[AllCaseEqs()]
+QED
+
+(* The entry is the first function, named by the entry label. *)
+Theorem run_lowering_entry:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label = SOME unit ==>
+  unit.cu_context.ctx_entry = SOME entry_label /\
+  ?fn. lookup_function entry_label unit.cu_context.ctx_functions = SOME fn
+Proof
+  simp[run_lowering_def] >> rpt strip_tac >>
+  pairarg_tac >>
+  gvs[AllCaseEqs(), extract_context_with_internals_def, mk_venom_context_def,
+      lookup_function_def, mk_raw_function_def, listTheory.FIND_thm]
 QED
 
 Theorem run_deploy_lowering_static_integrity:

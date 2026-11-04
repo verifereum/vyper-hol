@@ -12,11 +12,15 @@
  *   compile_annassign_memory_widen_stmt_frag — a memory-backed local's
  *                                              declaration, for every
  *                                              outcome of its right-hand
- *                                              side, lowered at the declared
+ *                                              side (a value or a place
+ *                                              read by read_result),
+ *                                              lowered at the declared
  *                                              type or both bytestrings
  *   compile_annassign_memory_stmt_frag — the same, where the right-hand
  *                                        side is lowered at the declared
  *                                        type
+ *   memory_length_word_layout — a zero length word lays out the default
+ *                               value of a type with a length word
  *)
 
 Theory stmtSimDeclMem
@@ -25,7 +29,7 @@ Ancestors
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes intCallResult exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  context compileEnv valueEncoding valueTypingMemoryProps
+  context compileEnv valueEncoding valueTypingMemoryProps exprSimBufferStore
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   venomExecSemantics venomExecProofs venomInst venomState
 Libs
@@ -76,29 +80,6 @@ Proof
           compile_bytestring_copy_len_def]
 QED
 
-(* A value of both a bytestring type and another fits the other's size. *)
-Theorem bytestring_val_footprint_le[local]:
-  !tenv t1 t2 tv1 tv2 v.
-    is_bytestring_type t1 /\ is_bytestring_type t2 /\
-    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
-    value_has_type tv1 v /\ value_has_type tv2 v ==>
-    val_footprint tv1 v <= type_memory_size tv2
-Proof
-  rpt strip_tac >>
-  `val_footprint tv1 v = val_footprint tv2 v` by
-    metis_tac[bytestring_val_footprint_eq] >>
-  simp[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]
-QED
-
-Theorem lowered_value_type_bytestring[local]:
-  !cenv e.
-    is_bytestring_type (expr_type e) ==>
-    is_bytestring_type (lowered_value_type cenv e)
-Proof
-  ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, is_bytestring_type_def]
-QED
-
 (* The lowering's buffer for e's value, at e's lowered type, holds the
    value whose layout at the declared type is copied. *)
 Theorem annassign_widen_footprint[local]:
@@ -117,8 +98,8 @@ Proof
   >- (gvs[] >> irule val_footprint_le >> simp[value_has_type_memory_wf]) >>
   `is_bytestring_type vtyp /\ is_bytestring_type (expr_type e)` by gvs[] >>
   `is_bytestring_type (lowered_value_type cenv e)` by
-    simp[lowered_value_type_bytestring] >>
-  simp[] >> irule bytestring_val_footprint_le >> metis_tac[]
+    simp[exprSimHypsTheory.lowered_value_type_bytestring] >>
+  simp[] >> irule valueCopyBytesTheory.bytestring_val_footprint_le >> metis_tac[]
 QED
 
 Theorem compile_assign_memory_widen_appends:
@@ -277,46 +258,6 @@ Proof
   simp[]
 QED
 
-(* Copying into an allocated but non-live buffer preserves all live locals,
-   even if this instruction's allocation is being reused at runtime. *)
-Theorem stmt_state_rel_mcopy_alloca[local]:
-  !func cenv cx es s inst p dst src sz ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-    not_local_ptr cenv es.scopes p /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, sz) ==>
-    stmt_state_rel ctx func cenv cx es (mcopy dst src sz s)
-Proof
-  rpt strip_tac >>
-  `(mcopy dst src sz s with <|vs_vars := s.vs_vars;
-                             vs_memory := s.vs_memory|>) = s` by
-    simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
-  `!q. lookup_var q (mcopy dst src sz s) = lookup_var q s` by
-    simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mcopy dst src sz s)` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
-     conj_tac
-     >- simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
-             arithmeticTheory.MAX_DEF] >>
-     conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
-     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
-     rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
-     qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
-     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
-     disch_then drule_all >> strip_tac >>
-     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-  irule result_state_memory_frame >> reverse conj_tac
-  >- (qexists_tac `s` >> simp[] >>
-  rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
-  `regions_disjoint dst sz b sz'` by
-    (irule local_ptrs_rel_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
-  fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
-QED
 
 Theorem mcopy_alloca_framed_frag[local]:
   !ctx func cenv cx es sa sb s inst p dw sw src sz tv v.
@@ -336,17 +277,9 @@ Theorem mcopy_alloca_framed_frag[local]:
            t.vs_allocas = s.vs_allocas) (\r. F)
 Proof
   rpt strip_tac >>
-  `eval_operand (Var p) s = SOME dw` by simp[eval_operand_def] >>
-  drule_all emit_mcopy_run >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
-     qexistsl_tac [`inst`, `p`] >> simp[]) >>
-  `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
-    (irule mcopy_val_in_memory >> simp[]) >>
-  irule frag_exec_run_inst_seq >>
-  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-  simp[stmt_state_rel_inst_idx] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  `sz <= sz` by simp[] >>
+  drule_all exprSimBufferStoreTheory.mcopy_alloca_framed_frag >> strip_tac >>
+  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem alloc_copy_memory_owned_run:
@@ -765,7 +698,27 @@ Proof
   metis_tac[]
 QED
 
-Theorem annassign_memory_success_run[local]:
+(* A type with a length word has a default value laid out by a zero word,
+   in at least one word. *)
+Theorem memory_length_word_layout:
+  !tenv ty tv off mem.
+    has_length_word ty /\ evaluate_type tenv ty = SOME tv /\
+    mem_word_at off mem = 0w ==>
+    val_in_memory tv (default_value tv) off mem /\
+    val_wf tv (default_value tv) /\ 32 <= type_memory_size tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  `is_bytestring_type ty \/ ?et n. ty = ArrayT et (Dynamic n)` by
+    (Cases_on `ty` >> gvs[has_length_word_def] >>
+     rename1 `ArrayT _ bd` >> Cases_on `bd` >> gvs[has_length_word_def])
+  >- (drule_all bytestring_type_value >> strip_tac >>
+      gvs[default_value_def, val_in_memory_def, val_wf_def,
+          type_memory_size_def, mem_bytes_at_def]) >>
+  gvs[evaluate_type_def, AllCaseEqs(), default_value_def,
+      val_in_memory_def, val_wf_def, type_memory_size_def]
+QED
+
+Theorem annassign_memory_read_success_run:
   !ctx func cenv cx id vtyp e es es' etv tyv sty sa sb sf op p sz s0 w inst loc info bytes.
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (),es') /\
     ~is_word_type vtyp /\
@@ -774,9 +727,8 @@ Theorem annassign_memory_success_run[local]:
     (sty = vtyp \/ is_bytestring_type vtyp) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-    (!tv es1. eval_expr cx e es = (INL tv,es1) ==>
-       ?v. tv = Value v /\ value_has_type tyv v /\
-           val_footprint tyv v <= type_memory_bytes cenv sty) /\
+    (!v es1. (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v,es1) ==>
+       value_has_type tyv v /\ val_footprint tyv v <= type_memory_bytes cenv sty) /\
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     expr_sim ctx func cenv cx (expr_type e) e es /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\ cs_extends sa sb /\
@@ -801,22 +753,23 @@ Theorem annassign_memory_success_run[local]:
                  ?fuel'. run_from fuel' ctx func s0 = r
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule eval_stmt_annassign_value >> strip_tac >>
-  qpat_x_assum `!tv es1. _ ==> _` drule >> strip_tac >>
-  qpat_x_assum `sty = _ \/ _` mp_tac >>
-  qpat_x_assum `expr_type e = _ \/ _` mp_tac >>
-  gvs[read_result_def, return_def] >>
-  disch_then assume_tac >> disch_then assume_tac >>
+  drule eval_stmt_annassign_read_value >> strip_tac >>
+  rename1 `(do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1)` >>
+  `value_has_type tyv v /\ val_footprint tyv v <= type_memory_bytes cenv sty` by
+    metis_tac[] >>
   `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def, bind_def, read_result_def, return_def] >>
+  impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   `lookup_scopes id es1.scopes = NONE` by gvs[] >>
   drule_all annassign_memory_store_post_run >>
   disch_then (qspecl_then [`T`] mp_tac) >> strip_tac >>
-  qexists_tac `t` >> simp[] >> metis_tac[]
+  qexists_tac `t` >> gvs[] >>
+  qpat_x_assum `!fuel. _ ==> ?fuel'. run_from fuel' ctx func s0 = _` mp_tac >>
+  qpat_x_assum `!fuel. (!e. run_from fuel ctx func t <> Error e) ==> _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
 QED
 
 Theorem emit_void_nonterminator_open:
@@ -881,7 +834,7 @@ QED
 
 (* x: T = e for a type T that is not a word type, where e is not the
    empty-value form the lowering stores as a zero length word, and e's
-   values have type T.  Either e has type T and is lowered at T, or T is a
+   values (read through read_result when e is a place) have type T.  Either e has type T and is lowered at T, or T is a
    bytestring type and so is e's type: then e's value is widened to T's
    bound (or e is a literal, lowered at its own length), which keeps its
    layout.  The local's buffer is type_memory_bytes of T, the size
@@ -925,8 +878,8 @@ Theorem compile_annassign_memory_widen_stmt_frag:
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
     type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
     0 < type_memory_size ltv /\ type_memory_size ltv < dimword (:256) /\
-    (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
-              ?v. tv = Value v /\ value_has_type tyv v /\ value_has_type ltv v) /\
+    (!v es1. (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1) ==>
+              value_has_type tyv v /\ value_has_type ltv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
        expr_sim ctx func c cx (expr_type e) e es /\
        !sa sb op. lower_value compile_expr c (expr_type e) e sa = (op, sb) ==>
@@ -956,8 +909,9 @@ Proof
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   Cases_on `res`
   >- suspend "success" >>
-  `(do raw <- eval_expr cx e; read_result cx raw od) es = (INR y,es') /\
-   expr_res_ok (INR y : value + exception)` by
+  rename1 `eval_stmt cx (AnnAssign id vtyp e) es = (INR ex, es')` >>
+  `(do raw <- eval_expr cx e; read_result cx raw od) es = (INR ex,es') /\
+   expr_res_ok (INR ex : value + exception)` by
     (drule eval_annassign_word_error >> simp[] >>
      disch_then (qspec_then `lctx` mp_tac) >> simp[] >> metis_tac[]) >>
   drule_all expr_sim_error_run >> strip_tac >>
@@ -966,7 +920,8 @@ Proof
 QED
 
 Resume compile_annassign_memory_widen_stmt_frag[success]:
-  Cases_on `x` >>
+  rename1 `eval_stmt cx (AnnAssign id vtyp e) es = (INL unit, es')` >>
+  Cases_on `unit` >>
   qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
   `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
    FLOOKUP salloc.vs_allocas ai.inst_id =
@@ -978,17 +933,16 @@ Resume compile_annassign_memory_widen_stmt_frag[success]:
    type_memory_bytes c vtyp = type_memory_size tyv /\
    0 < type_memory_bytes c (lowered_value_type cenv e) /\
    type_memory_bytes c (lowered_value_type cenv e) < dimword (:256)` by simp[] >>
-  `!tv es1. eval_expr cx e es = (INL tv,es1) ==>
-     ?v. tv = Value v /\ value_has_type tyv v /\
-         val_footprint tyv v <= type_memory_bytes c (lowered_value_type cenv e)` by
+  `!v es1. (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v,es1) ==>
+     value_has_type tyv v /\
+     val_footprint tyv v <= type_memory_bytes c (lowered_value_type cenv e)` by
     (rpt strip_tac >>
-     qpat_x_assum `!tv es1. _ ==> ?v. _ /\ _ /\ value_has_type ltv v` drule >>
+     qpat_x_assum `!v es1. _ ==> _ /\ value_has_type ltv v` drule >>
      strip_tac >> simp[] >>
      `val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)`
        suffices_by simp[] >>
      irule annassign_widen_footprint >> metis_tac[]) >>
-  drule_all annassign_memory_success_run >> strip_tac >>
-  `!tv es1. eval_expr cx e es = (INL tv,es1) ==> ?v. tv = Value v` by metis_tac[] >>
+  drule_all annassign_memory_read_success_run >> strip_tac >>
   drule_all annassign_word_top_ext >> strip_tac >>
   `!x. not_fresh_at sa x ==> x <> p /\ not_fresh_at sA x` by
     (`sA.cs_next_var = st.cs_next_var` by
@@ -1034,6 +988,7 @@ Theorem compile_annassign_memory_stmt_frag:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
-  rpt strip_tac >> irule compile_annassign_memory_widen_stmt_frag >> gvs[] >>
-  metis_tac[]
+  rpt strip_tac >> irule compile_annassign_memory_widen_stmt_frag >>
+  gvs[] >> rw[bind_def] >> gvs[AllCaseEqs()] >> res_tac >>
+  gvs[read_result_def, return_def]
 QED

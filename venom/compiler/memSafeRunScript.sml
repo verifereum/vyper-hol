@@ -3,7 +3,9 @@
  *
  * mem_safe_run fuel ctx fn s says that every instruction the run of fn from
  * s executes, in callee frames too, reads and writes memory only below the
- * allocation frontier of the state it runs in (inst_mem_below_frontier).
+ * allocation frontier of the state it runs in (inst_mem_below_frontier),
+ * and reads the data section only from offsets within it
+ * (inst_dload_in_section).
  * The check follows the runner's own recursion (step_inst, exec_block,
  * run_blocks), so it sees exactly the instructions the run executes, in
  * the states it executes them in.
@@ -27,7 +29,14 @@
  *                           every fuel
  *   mem_safe_point_closed, mem_safe_point_entry, mem_safe_point_mem
  *                         — mem_safe_point is a reachability invariant
+ *   revert_forward_at_opcode — the exemption covers only RETURNDATACOPY
+ *                           and REVERT
  *   mem_safe_raw_unit_memory_ok — the bridge to raw_unit_memory_ok
+ *   inst_dload_in_section — the run also checks that every DLOAD and
+ *                           DLOADBYTES offset is within the data section
+ *   mem_safe_point_dload  — so it holds at every mem_safe_point
+ *   step_inst_ok_code_data, code_data_closed, code_data_entry
+ *                         — the code and the data section never change
  *)
 
 Theory memSafeRun
@@ -37,6 +46,39 @@ Ancestors
 
 (* ===== Definitions ===== *)
 
+(* A DLOAD or DLOADBYTES reads the data section from an offset at most its
+   length.  Only the start is bounded: a read may run past the end, which
+   zero-fills.  LowerDload turns the offset into a CODECOPY offset past the
+   code before the data section, which must not wrap (dload_offset_ok). *)
+Definition inst_dload_in_section_def:
+  inst_dload_in_section inst s <=>
+    !op off.
+      ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [op]) \/
+       (inst.inst_opcode = DLOADBYTES /\
+        ?dst n. inst.inst_operands = [dst; op; n])) /\
+      eval_operand op s = SOME off ==>
+      w2n off <= LENGTH s.vs_data_section
+End
+
+Theorem inst_dload_in_section_inst_idx[simp]:
+  !inst s n.
+    inst_dload_in_section inst (s with vs_inst_idx := n) <=>
+    inst_dload_in_section inst s
+Proof
+  rpt gen_tac >>
+  `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
+    (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+  simp[inst_dload_in_section_def]
+QED
+
+Theorem inst_dload_in_section_other[simp]:
+  !inst s.
+    inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES ==>
+    inst_dload_in_section inst s
+Proof
+  rw[inst_dload_in_section_def]
+QED
+
 (* The memory check along the runner: mem_safe_step checks an instruction
    and, for INVOKE, the callee's run; mem_safe_block every instruction
    exec_block runs; mem_safe_blocks every block run_blocks enters.  Where
@@ -44,7 +86,7 @@ Ancestors
    too. *)
 Definition mem_safe_defs:
   (mem_safe_step fuel ctx inst s <=>
-    inst_mem_below_frontier inst s /\
+    inst_mem_below_frontier inst s /\ inst_dload_in_section inst s /\
     if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
         NONE => T
@@ -64,7 +106,7 @@ Definition mem_safe_defs:
     case get_instruction bb s.vs_inst_idx of
       NONE => T
     | SOME inst =>
-        mem_safe_step fuel ctx inst s /\
+        (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
         case step_inst fuel ctx inst s of
           OK s' =>
             if is_terminator inst.inst_opcode then T
@@ -129,7 +171,8 @@ End
 Theorem mem_safe_step_non_invoke:
   !fuel ctx inst s.
     inst.inst_opcode <> INVOKE ==>
-    (mem_safe_step fuel ctx inst s <=> inst_mem_below_frontier inst s)
+    (mem_safe_step fuel ctx inst s <=>
+     inst_mem_below_frontier inst s /\ inst_dload_in_section inst s)
 Proof
   rw[Once mem_safe_step_def]
 QED
@@ -152,7 +195,7 @@ Theorem mem_safe_block_step:
     get_instruction bb s.vs_inst_idx = SOME inst /\
     step_inst fuel ctx inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     (mem_safe_block fuel ctx bb s <=>
-     mem_safe_step fuel ctx inst s /\
+     (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
      mem_safe_block fuel ctx bb (s' with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rw[Once mem_safe_block_def]
@@ -165,7 +208,7 @@ Theorem mem_safe_run_step:
     get_instruction bb s.vs_inst_idx = SOME inst /\
     step_inst fuel ctx inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     (mem_safe_run fuel ctx fn s <=>
-     mem_safe_step fuel ctx inst s /\
+     (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
      mem_safe_run fuel ctx fn (s' with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >>
@@ -183,7 +226,7 @@ Theorem mem_safe_run_head:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME inst /\
     mem_safe_run fuel ctx fn s ==>
-    mem_safe_step fuel ctx inst s
+    revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s
 Proof
   rw[mem_safe_run_def] >> pop_assum mp_tac >>
   simp[Once mem_safe_block_def]
@@ -241,7 +284,7 @@ Proof
       ONCE_REWRITE_TAC[mem_safe_block_def] >>
       Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
       rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
-      strip_tac >> conj_tac >- metis_tac[] >>
+      disch_then (CONJUNCTS_THEN ASSUME_TAC) >> conj_tac >- metis_tac[] >>
       Cases_on `step_inst n ctx inst s` >> simp[] >>
       rename1 `step_inst n ctx inst s = OK s1` >>
       `step_inst m ctx inst s = OK s1` by
@@ -309,7 +352,7 @@ Proof
       ONCE_REWRITE_TAC[mem_safe_block_def, exec_block_def] >>
       Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
       rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
-      strip_tac >>
+      disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
       `!e. step_inst n ctx inst s <> Error e` by
         (rpt strip_tac >> gvs[]) >>
       `step_inst m ctx inst s = step_inst n ctx inst s` by
@@ -384,13 +427,26 @@ Proof
   simp[get_instruction_def] >> irule MEM_lookup_block >> simp[]
 QED
 
+(* Only the two forwarding instructions are exempt. *)
+Theorem revert_forward_at_opcode:
+  !bb i inst.
+    get_instruction bb i = SOME inst /\ revert_forward_at bb i ==>
+    inst.inst_opcode = RETURNDATACOPY \/ inst.inst_opcode = REVERT
+Proof
+  rw[revert_forward_at_def, revert_forward_pair_def] >> gvs[]
+QED
+
 Theorem mem_safe_point_mem:
   !ctx fn inst s.
-    mem_safe_point ctx fn inst s ==> inst_mem_below_frontier inst s
+    mem_safe_point ctx fn inst s ==> inst_mem_ok_in_fn fn inst s
 Proof
   rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
-  `mem_safe_step 0 ctx inst s` by metis_tac[mem_safe_run_head] >>
-  pop_assum mp_tac >> simp[Once mem_safe_step_def]
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac >> simp[inst_mem_ok_in_fn_def]
+  >~ [`mem_safe_step 0 ctx inst s`]
+  >- (pop_assum mp_tac >> simp[Once mem_safe_step_def]) >>
+  metis_tac[]
 QED
 
 (* Entering a block on a run that is safe at every fuel. *)
@@ -462,8 +518,12 @@ Proof
   `ALL_DISTINCT (fn_labels callee)` by
     (drule lookup_function_MEM >> fs[EVERY_MEM]) >>
   drule_all active_inst_lookup >> strip_tac >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME ivk` >>
+  `~revert_forward_at bb s.vs_inst_idx` by
+    (strip_tac >> drule_all revert_forward_at_opcode >> simp[]) >>
+  `!fuel. mem_safe_step fuel ctx ivk s` by metis_tac[mem_safe_run_head] >>
   `!fuel. mem_safe_blocks fuel ctx callee cs` by
-    metis_tac[mem_safe_run_head, mem_safe_step_invoke] >>
+    metis_tac[mem_safe_step_invoke] >>
   metis_tac[mem_safe_point_entry]
 QED
 
@@ -511,3 +571,66 @@ Proof
       drule lookup_function_MEM >> fs[EVERY_MEM]) >>
   metis_tac[mem_safe_point_mem]
 QED
+
+(* ===== DLOAD offsets ===== *)
+
+Theorem mem_safe_point_dload:
+  !ctx fn inst s.
+    mem_safe_point ctx fn inst s ==> inst_dload_in_section inst s
+Proof
+  rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac
+  >- (drule_all revert_forward_at_opcode >> rw[] >> simp[]) >>
+  pop_assum mp_tac >> simp[Once mem_safe_step_def]
+QED
+
+(* A step that continues the run leaves the code and the data section
+   alone; an INVOKE keeps the caller's. *)
+Theorem step_inst_ok_code_data:
+  !fuel ctx inst s s'.
+    step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_code = s.vs_code /\ s'.vs_data_section = s.vs_data_section
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (`inst.inst_opcode <> INVOKE` by
+        (strip_tac >> gvs[is_terminator_def]) >>
+      `step_inst_base inst s = OK s'` by gvs[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` kall_tac >>
+      Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      qpat_assum `inst.inst_opcode = _` (fn eq =>
+        PURE_ONCE_REWRITE_TAC
+          [tryfind (fn th => MATCH_MP th eq)
+             (CONJUNCTS step_inst_base_opcode_eqs)]) >>
+      simp[AllCaseEqs(), jump_to_def] >> rpt strip_tac >> gvs[] >>
+      rpt (pairarg_tac >> gvs[])) >>
+  metis_tac[step_preserves_code, step_preserves_data_section]
+QED
+
+(* The code and the data section of the entry state, at every state of
+   the run. *)
+Theorem code_data_closed:
+  !ctx code data.
+    reachability_closed
+      (\c f i s. s.vs_code = code /\ s.vs_data_section = data) ctx
+Proof
+  rw[reachability_closed_def, fn_entry_inv_def, enters_block_def] >>
+  imp_res_tac step_inst_ok_code_data >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  gvs[setup_callee_def, AllCaseEqs()] >>
+  qpat_x_assum `s_phi = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
+QED
+
+Theorem code_data_entry:
+  !ctx fn s.
+    fn_entry_inv (\c f i t. t.vs_code = s.vs_code /\
+                            t.vs_data_section = s.vs_data_section) ctx fn s
+Proof
+  rw[fn_entry_inv_def, enters_block_def] >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  qpat_x_assum `s_phi = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
+QED
+

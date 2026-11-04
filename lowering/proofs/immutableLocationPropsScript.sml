@@ -23,8 +23,10 @@ Theorem immutable_module_vars_origin:
 Proof
   Induct >> simp[add_module_var_locations_def] >> rpt gen_tac >>
   Cases_on `h` >> simp[add_module_var_locations_def] >>
-  rpt CASE_TAC >> simp[] >> strip_tac >>
-  first_x_assum drule >> simp[FLOOKUP_UPDATE] >> rw[]
+  strip_tac >> first_x_assum drule >>
+  simp[] >> Cases_on `o'` >> simp[]
+  >- (Cases_on `v0` >> simp[FLOOKUP_UPDATE] >> rw[]) >>
+  Cases_on `b` >> simp[FLOOKUP_UPDATE] >> rw[]
 QED
 
 Theorem immutable_locations_cons:
@@ -90,6 +92,50 @@ Proof
    gvs[nsid_to_string_def] >>
    qmatch_goalsub_rename_tac `VariableDecl decl_vis Immutable _ decl_ty decl_slot` >>
    qexistsl [`pre`,`post`,`decl_vis`,`decl_ty`,`decl_slot`] >> simp[])
+QED
+
+Theorem immutable_locations_keep:
+  !tops off vars key loc.
+  FLOOKUP vars key = SOME (ImmutableLoc loc) ==>
+  ?loc'. FLOOKUP (add_immutable_locations sft tops off vars) key =
+           SOME (ImmutableLoc loc')
+Proof
+  Induct >- simp[add_immutable_locations_def] >>
+  rpt gen_tac >> simp[immutable_locations_cons] >> strip_tac >>
+  first_x_assum irule >> Cases_on `h` >> simp[] >>
+  CASE_TAC >> simp[FLOOKUP_UPDATE] >> rw[]
+QED
+
+(* Every declared immutable gets a location, duplicates included. *)
+Theorem immutable_locations_declared:
+  !tops off vars vis name ty slot.
+  MEM (VariableDecl vis Immutable name ty slot) tops ==>
+  ?loc. FLOOKUP (add_immutable_locations sft tops off vars) (NONE,name) =
+          SOME (ImmutableLoc loc)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> simp[immutable_locations_cons] >>
+  strip_tac >> gvs[] >- (irule immutable_locations_keep >> simp[FLOOKUP_UPDATE]) >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem build_compile_env_module_vars:
+  !tops vis mut name args ret body locks.
+  (build_compile_env tops vis mut name args ret body locks).ce_module = NONE /\
+  (build_compile_env tops vis mut name args ret body locks).ce_module_vars =
+    add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+      tops 0 (add_module_var_locations tops FEMPTY)
+Proof
+  rpt gen_tac >> simp[build_compile_env_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem immutable_build_compile_env_declared:
+  !tops vis mut fname args ret body locks dvis name ty slot.
+  MEM (VariableDecl dvis Immutable name ty slot) tops ==>
+  ?off. FLOOKUP (build_compile_env tops vis mut fname args ret body locks)
+          .ce_module_vars (NONE,name) = SOME (ImmutableLoc off)
+Proof
+  rpt strip_tac >> simp[build_compile_env_module_vars] >>
+  irule immutable_locations_declared >> metis_tac[]
 QED
 
 Theorem immutable_function_runtime_relation:

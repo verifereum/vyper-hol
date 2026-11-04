@@ -28,7 +28,8 @@
  * Helpers:
  *   stmt_state_rel_exec_alloca, stmt_state_rel_declare_word,
  *   eval_name_word, lower_value_name_word, step_name_word,
- *   eval_stmt_if_success, eval_stmt_annassign_value, compile_if_parts,
+ *   eval_stmt_if_success, eval_stmt_annassign_value,
+ *   eval_stmt_annassign_read_value, compile_if_parts,
  *   compile_if_taken_branch, if_branch_to_exit, compile_annassign_word_parts,
  *   bounded_int_op_add_overflow, word_value_in_memory, word_value_wf
  *)
@@ -241,26 +242,59 @@ Theorem immutable_admissible_val_wf:
      kvs_val_wf kvs tv n) /\
   (!vs tvs. immutable_tuple_admissible tvs vs ==> tuple_val_wf vs tvs)
 Proof
-  ho_match_mp_tac val_wf_ind >> rpt conj_tac >> rpt gen_tac >>
-  TRY (qmatch_goalsub_rename_tac
-         `immutable_value_admissible tv _ ==> val_wf tv _` >> Cases_on `tv`) >>
-  TRY (qmatch_goalsub_rename_tac `BaseTV bt` >> Cases_on `bt`) >>
-  TRY (qmatch_goalsub_rename_tac `BytesT bound` >> Cases_on `bound`) >>
-  TRY (qmatch_goalsub_rename_tac `ArrayTV _ bound` >> Cases_on `bound`) >>
-  TRY (qmatch_goalsub_rename_tac `immutable_fields_admissible tvs _` >>
-       Cases_on `tvs` >>
-       TRY (qmatch_goalsub_rename_tac
-              `immutable_fields_admissible (field::_) _` >>
-            PairCases_on `field`)) >>
-  TRY (qmatch_goalsub_rename_tac `immutable_tuple_admissible tvs _` >>
-       Cases_on `tvs`) >>
-  simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  TRY (first_x_assum irule >> simp[] >> NO_TAC) >>
-  FIRST [BasicProvers.TOP_CASE_TAC >> gvs[immutable_value_admissible_def],
-         fs[ETA_THM] >> NO_TAC,
-         metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
-                   arithmeticTheory.LESS_EQ_TRANS]]
+  ho_match_mp_tac val_wf_ind >> rpt conj_tac
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def])
+  >- (Cases >> simp[immutable_value_admissible_def, val_wf_def,
+                     type_memory_size_def])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def] >>
+      rename1 `BytesT bound` >> Cases_on `bound` >>
+      simp[type_memory_size_def] >> rpt strip_tac >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `BaseTV bt` >> Cases_on `bt` >>
+      simp[immutable_value_admissible_def, val_wf_def, type_memory_size_def] >>
+      rpt strip_tac >>
+      metis_tac[immutableEncodingProofsTheory.immutable_capacity_roundup,
+                arithmeticTheory.LESS_EQ_TRANS])
+  >- simp[val_wf_def]
+  >- (Cases >> simp[immutable_value_admissible_def, val_wf_def])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `val_wf (ArrayTV elem_tv bound) _` >>
+      Cases_on `bound` >>
+      simp[immutable_value_admissible_def, val_wf_def, ETA_THM] >>
+      metis_tac[])
+  >- (Cases >> simp[immutable_value_admissible_def] >>
+      rename1 `val_wf (ArrayTV elem_tv bound) _` >>
+      Cases_on `bound` >>
+      simp[immutable_value_admissible_def, val_wf_def, ETA_THM] >>
+      metis_tac[])
+  >- (Cases >> simp[immutable_value_admissible_def, val_wf_def] >>
+      rename1 `case array_bound of Fixed _ => _ | Dynamic _ => _` >>
+      Cases_on `array_bound` >> simp[])
+  >- simp[val_wf_def]
+  >- (rpt gen_tac >> Cases_on `tvs`
+      >- simp[immutable_value_admissible_def]
+      >> rename1 `fields_val_wf _ (tv_entry::_)` >>
+      PairCases_on `tv_entry` >>
+      simp[immutable_value_admissible_def, val_wf_def] >> metis_tac[])
+  >- simp[val_wf_def]
+  >- (simp[val_wf_def] >> metis_tac[])
+  >- simp[val_wf_def]
+  >- (simp[val_wf_def] >> metis_tac[])
+  >- simp[val_wf_def]
+  >- (rpt gen_tac >> Cases_on `tvs` >>
+      simp[immutable_value_admissible_def, val_wf_def] >> metis_tac[])
 QED
 
 (* Transport the semantic immutable relation by capacity-sized memory
@@ -373,6 +407,25 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem eval_stmt_annassign_read_value:
+  !cx id typ e es es'.
+    eval_stmt cx (AnnAssign id typ e) es = (INL (), es') ==>
+    ?tyv v es1 sc rest.
+      evaluate_type (get_tenv cx) typ = SOME tyv /\
+      (do tv <- eval_expr cx e; read_result cx tv od) es = (INL v, es1) /\
+      lookup_scopes id es1.scopes = NONE /\ es1.scopes = sc :: rest /\
+      es' = es1 with scopes :=
+        (sc |+ (id, <| assignable := T; type := tyv; value := v; popped := [] |>))
+        :: rest
+Proof
+  rpt strip_tac >> drule eval_stmt_annassign_value >> strip_tac >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME runtime_ty` >>
+  rename1 `read_result cx result after_eval = (INL value, after_read)` >>
+  rename1 `after_read.scopes = frame :: tail` >>
+  qexistsl_tac [`runtime_ty`, `value`, `after_read`, `frame`, `tail`] >>
+  simp[bind_def]
+QED
+
 Theorem local_region_exec_alloca[local]:
   !cenv scopes inst p s n t id b sz.
     inst.inst_outputs = [p] /\ not_local_ptr cenv scopes p /\
@@ -418,6 +471,9 @@ Proof
          qspecl_then [`func`, `s`, `inst`, `n`, `ctx`] mp_tac alloca_room_fresh >>
          fs[FLOOKUP_DEF]) >>
      qexists_tac `s` >> simp[update_var_def]) >>
+  `fmp_room ctx func s1` by
+    (irule fmp_room_exec_alloca >>
+     qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx es s1` by
     (irule immutable_alloca_sep_exec_alloca >>
      qexistsl_tac [`inst`, `n`, `s`] >> fs[stmt_state_rel_def] >>
@@ -426,7 +482,8 @@ Proof
   `local_ptrs_rel func cenv es.scopes s1` by
     (qspecl_then [`func`, `cenv`, `es.scopes`, `s`, `s1`, `inst`, `p`, `n`]
        mp_tac local_ptrs_rel_exec_alloca >>
-     impl_tac >- fs[stmt_state_rel_def, state_rel_def] >> simp[]) >>
+     impl_tac >- (fs[stmt_state_rel_def, state_rel_def] >>
+                  metis_tac[not_local_ptr_scope]) >> simp[]) >>
   `alloca_inv s1` by metis_tac[alloca_inv_exec_alloca, stmt_state_rel_def] >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s1` by
     (irule immutable_relation_same_bytes >> qexists_tac `s` >>
@@ -446,6 +503,12 @@ Proof
                  base + sz < dimword (:256)` by
     (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
      rpt strip_tac >> res_tac >> DECIDE_TAC) >>
+  `immutable_base_zero cenv s1` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+     simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM,
+          lookup_var_def] >>
+     rw[] >> fs[stmt_state_rel_def, not_local_ptr_def, FLOOKUP_UPDATE]) >>
   Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
   >- (qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
       simp[exec_alloca_def, LET_THM] >> strip_tac >> gvs[] >>
@@ -525,13 +588,14 @@ Proof
   qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
   qabbrev_tac `scs' = (sc |+ (id, entry)) :: rest` >>
   `s'.vs_vars = s.vs_vars /\ s'.vs_allocas = s.vs_allocas /\
-   s'.vs_alloca_next = s.vs_alloca_next /\
+   s'.vs_alloca_next = s.vs_alloca_next /\ s'.vs_fmp = s.vs_fmp /\
    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
    s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_tx_ctx = s.vs_tx_ctx /\
    s'.vs_block_ctx = s.vs_block_ctx /\ s'.vs_logs = s.vs_logs /\
    s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
+   s'.vs_pending_deletions = s.vs_pending_deletions /\
    s'.vs_immutables = s.vs_immutables /\
-   s'.vs_data_section = s.vs_data_section` by
+   s'.vs_data_section = s.vs_data_section /\ s'.vs_labels = s.vs_labels` by
     simp[Abbr `s'`, mstore_def, LET_THM] >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -579,10 +643,15 @@ Proof
   `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
+  `fmp_room ctx func s'` by
+    (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `immutable_alloca_sep func cenv cx (es with scopes := scs') s'` by
     (irule immutable_alloca_sep_declare_local >>
      qexistsl_tac [`entry`, `es`, `id`, `inst`, `p`, `s`, `sz`, `w`] >>
      simp[] >> fs[stmt_state_rel_def, lookup_var_def]) >>
+  `immutable_base_zero cenv s'` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def, lookup_var_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

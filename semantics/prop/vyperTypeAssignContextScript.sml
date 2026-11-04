@@ -32,5 +32,5 @@ Theorem well_typed_expr_Pop_dynamic_target_assignable:
     ?n. type_place_target env tgt = SOME (Type (ArrayT ty (Dynamic n))) /\
         assignable_type env.type_defs (ArrayT ty (Dynamic n))
 Proof
-  simp[Once well_typed_expr_def]
+  simp[Once well_typed_expr_def] >> metis_tac[]
 QED

@@ -9,7 +9,7 @@ Ancestors
   entryChecksProps
   entryStateRel entryLocals
   loweringSlice
-  memSafeRun fragExecMem
+  memSafeRun instMemFrontier fragExecMem allocaFootprint
   varsExt exprSim
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
@@ -17,25 +17,32 @@ Ancestors
   stmtSimReason stmtSimReasonExpr stmtSimReasonStorage stmtSimForRange
   stmtSimDeclMem stmtSimDeclEmpty exprSimStorageCopy stmtSimAssignStore stmtSimAugAssign
   stmtSimAssign stmtSimAssignMem stmtSimAssignTuple stmtSimAssignTupleMem
-  stmtSimAssignStorage stmtSimStoreCopy stmtSimAssignAttr
+  stmtSimAssignStorage stmtSimStoreCopy storageCopyLive stmtSimAssignStorageCopy
+  stmtSimAssignAttr
   stmtSimAssignAttrStorage stmtSimAugAssignAttr
   valueEncodingProofs
   localPtrsProps
   immutableStagingBridge
   immutableCodeLayout
+  e2eDeployFrame
+  deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs
   loweringShapeProps
+  ctorShapeProps
   intCallStep extCallOracleStep intCallLookup intCallCallee intCallArgs intCallResult intCallReturnMem intCallFrame intCallReturn valueCopy
   structFieldsProps
   (* compiler + correctness *)
   vyperCompiler
   allocaBudgetChecks
   vyperLoweringCorrect
+  rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
+  loweringMemCorrect
   configuredE2ECorrectness
   evalCompilerInternalImmutables
   evalAssignmentOrder
   (* focused internal-frame allocation, cleanup and whitelist regressions *)
   calleeMemoryWitness
   cleanupPromiseWitness
+  joinSpillWitness
   internalFrameWhitelistDiagnostic

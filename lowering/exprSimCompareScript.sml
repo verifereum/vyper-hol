@@ -90,6 +90,37 @@ Proof
   irule w2i_i2w_within_signed >> qexists_tac `w` >> simp[]
 QED
 
+Theorem typed_int_operand_shape[local]:
+  value_has_type tv (IntV n) /\ value_has_type tv v ==> ?m. v = IntV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_decimal_operand_shape[local]:
+  value_has_type tv (DecimalV n) /\ value_has_type tv v ==> ?m. v = DecimalV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_flag_operand_shape[local]:
+  value_has_type tv (FlagV n) /\ value_has_type tv v ==> ?m. v = FlagV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
+Theorem typed_bool_operand_shape[local]:
+  value_has_type tv (BoolV n) /\ value_has_type tv v ==> ?m. v = BoolV m
+Proof
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
+QED
+
 (* The source result of a comparison of two word values of one type is
    eval_compare on their words. *)
 Theorem bop_result_compare:
@@ -108,17 +139,19 @@ Proof
   (* one kind of v1 at a time, so that each unfolding of evaluate_binop
      covers a quarter of the value pairs *)
   >>~- ([`value_has_type _ (IntV _)`],
-        Cases_on `v2` >>
+        drule_all typed_int_operand_shape >>
+        disch_then (qx_choose_then `j` SUBST_ALL_TAC) >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         qspecl_then [`ty`, `tv`, `n`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-        qspecl_then [`ty`, `tv`, `i`] mp_tac int_word_cmp >>
+        qspecl_then [`ty`, `tv`, `j`] mp_tac int_word_cmp >>
         (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
         Cases_on `is_uint256 ty` >> fs[eval_compare_def, val_to_w256_def] >>
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
-        Cases_on `v2` >>
+        drule_all typed_decimal_operand_shape >>
+        disch_then (qx_choose_then `i` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -128,7 +161,8 @@ Proof
            simp[]) >>
         fs[eval_compare_def, val_to_w256_def] >> word_cmp_tac)
   >>~- ([`value_has_type _ (FlagV _)`],
-        Cases_on `v2` >>
+        drule_all typed_flag_operand_shape >>
+        disch_then (qx_choose_then `n` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -140,7 +174,8 @@ Proof
         fs[eval_compare_def, val_to_w256_def, n2w_11, dimword_def,
            arithmeticTheory.LESS_MOD]) >>
   (* booleans *)
-  Cases_on `v2` >>
+  drule_all typed_bool_operand_shape >>
+  disch_then (qx_choose_then `b2` strip_assume_tac) >> gvs[] >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def, binop_negate_def] >>
   rw[eval_compare_def, val_to_w256_def]
@@ -310,6 +345,25 @@ Proof
   rw[compile_binop_def, compile_select_def] >> straight_fresh_tac
 QED
 
+(* Keep source selection separate from the typed word comparison bridge. *)
+Theorem bop_result_minmax_select[local]:
+  (mm = Min \/ mm = Max) /\
+  expr_res_ok (bop_result cx ann mm tys v1 v2 es) /\ word_value v1 ==>
+  ?b. bop_result cx ann (if mm = Min then Lt else Gt) tys v1 v2 es =
+        INL (BoolV b) /\
+      bop_result cx ann mm tys v1 v2 es = INL (if b then v1 else v2) /\
+      word_value (if b then v1 else v2)
+Proof
+  strip_tac >> gvs[] >>
+  fs[word_value_def] >> gvs[] >>
+  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+      expr_res_ok_def] >>
+  Cases_on `v2` >>
+  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  rpt IF_CASES_TAC >> gvs[word_value_def] >>
+  `n = i` by ARITH_TAC >> simp[]
+QED
+
 (* The source result of Min or Max is the operand eval_compare picks. *)
 Theorem bop_result_minmax:
   !cx ann mm ty tv v1 v2 es.
@@ -326,14 +380,12 @@ Theorem bop_result_minmax:
           then val_to_w256 v1 else val_to_w256 v2
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_at (Pos (el 2)) bop_result_minmax_select >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qspecl_then [`cx`, `ann`, `if mm = Min then Lt else Gt`, `ty`, `tv`, `v1`,
                `v2`, `es`] mp_tac bop_result_compare >>
-  fs[word_value_def] >> gvs[] >> Cases_on `v2` >>
-  gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
-      expr_res_ok_def] >>
-  (impl_tac >- asm_rewrite_tac[]) >>
-  disch_then (fn th => rewrite_tac [GSYM th]) >> rw[word_value_def] >>
-  `n = i` by ARITH_TAC >> simp[]
+  (impl_tac >- (asm_rewrite_tac[] >> simp[expr_res_ok_def])) >>
+  strip_tac >> gvs[] >> IF_CASES_TAC >> simp[]
 QED
 
 (* The run of the lowered Min or Max from a state with the fresh variables

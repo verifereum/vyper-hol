@@ -262,10 +262,8 @@ Definition insert_split_supply_def:
       subst_label_terminator target_bb.bb_label split_label pred_bb in
     let func1 = func with fn_blocks :=
       replace_block pred_bb.bb_label pred_bb' func.fn_blocks in
-    (* A self-loop edge: the target is the rewritten predecessor. *)
     let target_bb' = update_phis_for_split
-      pred_bb.bb_label split_label var_repls
-      (if pred_bb.bb_label = target_bb.bb_label then pred_bb' else target_bb) in
+      pred_bb.bb_label split_label var_repls target_bb in
     let func2 = func1 with fn_blocks :=
       replace_block target_bb.bb_label target_bb' func1.fn_blocks in
       (func2 with fn_blocks := func2.fn_blocks ++ [split_bb],s1)

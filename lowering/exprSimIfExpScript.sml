@@ -508,6 +508,15 @@ QED
 
 (* compile_expr_ifexp with what the two arms of compile_ifexp_vv_sim need
    of its states, from the compile-state shape of the operands' lowering. *)
+Theorem ifexp_new_block_fields[local]:
+  !lbl sa old sb.
+    new_block lbl sa = (old, sb) ==>
+    sb.cs_current_bb = lbl /\ sb.cs_current_insts = [] /\
+    sb.cs_next_var = sa.cs_next_var /\ sb.cs_next_id = sa.cs_next_id
+Proof
+  metis_tac[new_block_props]
+QED
+
 Theorem compile_expr_ifexp_states:
   !cenv ty t c a b st vv st'.
     compile_expr cenv ty (IfExp t c a b) st = (vv, st') /\
@@ -583,13 +592,7 @@ Proof
    s7.cs_current_insts = [] /\ s11.cs_current_insts = [] /\
    st'.cs_current_insts = [] /\ s7.cs_current_bb = tl /\
    s11.cs_current_bb = el /\ st'.cs_current_bb = xl` by
-    (rpt (qpat_x_assum `new_block _ _ = _` mp_tac) >>
-     rpt (qpat_x_assum `cs_extends _ _` kall_tac) >>
-     qpat_x_assum `compile_expr _ _ _ _ = _` kall_tac >>
-     qpat_x_assum `!e sa sb op. _` kall_tac >>
-     rpt (qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac) >>
-     rpt (qpat_x_assum `emit_inst _ _ _ _ = _` kall_tac) >>
-     simp[new_block_def] >> rpt strip_tac >> gvs[]) >>
+    (imp_res_tac ifexp_new_block_fields >> simp[]) >>
   `cs_extends s1 s5 /\ cs_extends s7 s11 /\ cs_extends s11 st'` by
     metis_tac[cs_extends_trans] >>
   `cs_extends s1 st'` by metis_tac[cs_extends_trans] >>

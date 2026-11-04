@@ -177,10 +177,12 @@ End
 
 Definition bare_global_assignable_complete_def:
   bare_global_assignable_complete bare_global_assignable cx <=>
-    !src ts vis id ty init.
-      get_module_code cx src = SOME ts /\
-      MEM (VariableDecl vis Immutable id ty init) ts ==>
-      FLOOKUP bare_global_assignable (src,id) = SOME ty
+    (cx.in_deploy ==>
+     !src ts vis id ty init.
+       get_module_code cx src = SOME ts /\
+       MEM (VariableDecl vis Immutable id ty init) ts ==>
+       FLOOKUP bare_global_assignable (src,id) = SOME ty) /\
+    (~cx.in_deploy ==> bare_global_assignable = FEMPTY)
 End
 
 Definition flag_members_complete_def:
@@ -310,6 +312,19 @@ Proof
        env_immutables_consistent_def, env_consistent_def]
 QED
 
+(* Call outcomes are outside the typing/scopes/immutable invariants. *)
+Theorem outcomes_type_invariants[simp]:
+  (state_well_typed (st with outcomes := os) <=> state_well_typed st) /\
+  (env_scopes_consistent env cx (st with outcomes := os) <=>
+   env_scopes_consistent env cx st) /\
+  (env_immutables_consistent env cx (st with outcomes := os) <=>
+   env_immutables_consistent env cx st) /\
+  (env_consistent env cx (st with outcomes := os) <=> env_consistent env cx st)
+Proof
+  simp[state_well_typed_def, env_scopes_consistent_def,
+       env_immutables_consistent_def, env_consistent_def]
+QED
+
 Theorem env_consistent_bare_global_find_NONE:
   env_consistent env cx st /\
   FLOOKUP env.bare_globals (src,id) = SOME ty ==>
@@ -382,11 +397,11 @@ Definition functions_well_typed_def:
           well_typed_exprs (defaults_env env_body) dflts /\
           (!id typ. MEM (id,typ) args ==>
              FLOOKUP env_body.var_types id = SOME typ /\
-             FLOOKUP env_body.var_assignable id = SOME T) /\
+             IS_SOME (FLOOKUP env_body.var_assignable id)) /\
           (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
              ?id. MEM (id,ty) args /\ n = id) /\
           (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-             ?id typ. MEM (id,typ) args /\ n = id /\ b = T) /\
+             ?id typ. MEM (id,typ) args /\ n = id) /\
           MAP expr_type dflts = MAP SND (DROP (LENGTH args - LENGTH dflts) args)
 End
 

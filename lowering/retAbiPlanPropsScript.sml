@@ -15,9 +15,10 @@
  *   update_cenv_ret_abi_plan -- the plan and size of a return type
  *   build_compile_env_ret_abi_plan -- the same at package_external_fn's env
  *   supported_return_type_assignable -- a supported, well-formed return type
- *     other than NoneT is assignable, as the two above assume
+ *     other than NoneT and an empty struct is assignable, as the two above
+ *     assume
  * Helpers:
- *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
+ *   vyper_to_abi_type_submap (abiTypeBoundProps) -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
  *   abi_props_vyper -- compile-side ABI sizes and flags are the source's
  *   abi_elem_props -- the same for a type in a smaller env than the map's
@@ -32,45 +33,12 @@
 
 Theory retAbiPlanProps
 Ancestors
-  compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
+  abiTypeBoundProps compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin
 
 (* ===== Source side ===== *)
-
-(* Evaluation and the ABI type are stable under a larger type env: a type
-   that evaluates names only structs its env has. *)
-Theorem vyper_to_abi_type_submap:
-  (!env ty tv.
-     evaluate_type env ty = SOME tv ==>
-     !tenv. env SUBMAP tenv ==>
-            evaluate_type tenv ty = SOME tv /\
-            vyper_to_abi_type env ty = vyper_to_abi_type tenv ty) /\
-  (!env ts acc tvs.
-     evaluate_types env ts acc = SOME tvs ==>
-     !tenv. env SUBMAP tenv ==>
-            evaluate_types tenv ts acc = SOME tvs /\
-            vyper_to_abi_types env ts = vyper_to_abi_types tenv ts)
-Proof
-  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt strip_tac >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      `FLOOKUP tenv nsid = SOME (StructArgs args)`
-        by fs[SUBMAP_FLOOKUP_EQN] >>
-      `env \\ nsid SUBMAP tenv \\ nsid`
-        by fs[SUBMAP_FLOOKUP_EQN, DOMSUB_FLOOKUP_THM] >>
-      first_x_assum drule >> simp[])
-  >~ [`FlagT nsid`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      fs[SUBMAP_FLOOKUP_EQN])
-  >~ [`ArrayT t bd`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum drule >> Cases_on `bd` >> simp[])
-  >> rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-  first_x_assum drule >> simp[]
-QED
 
 (* vyperTypeABI has these two as local lemmas. *)
 Theorem vyper_to_abi_type_dynamic[local]:
@@ -576,14 +544,17 @@ Proof
 QED
 
 (* A supported return type other than NoneT is assignable where it is well
-   formed, as the source checker requires of a function's return type
-   (check_toplevel_decl).  supported_return_type alone does not give it: it
-   bounds neither a bytestring's nor a dynamic array's length, so it admits
-   Bytes[2 ** 256], which does not evaluate. *)
+   formed (as check_toplevel_decl requires of a function's return type) and
+   is not a struct with no fields.  supported_return_type alone does not give
+   it: it bounds neither a bytestring's nor a dynamic array's length, so it
+   admits Bytes[2 ** 256], which does not evaluate; and it admits a struct
+   with no fields, which assignable_type rejects and which neither
+   supported_value_type nor the source checker excludes. *)
 Theorem supported_return_type_assignable:
   !tops ret.
     supported_return_type tops ret /\ ret <> NoneT /\
-    well_formed_type (type_env tops) ret ==>
+    well_formed_type (type_env tops) ret /\
+    (!id. ret = StructT id ==> supported_struct_fields tops id <> SOME []) ==>
     assignable_type (type_env tops) ret
 Proof
   rw[supported_return_type_def, supported_value_type_def]
@@ -592,7 +563,7 @@ Proof
   >~ [`TupleT ts`]
   >- (simp[assignable_type_def] >>
       gvs[well_formed_type_def, evaluate_type_def, AllCaseEqs(),
-          evaluate_types_OPT_MMAP] >>
+          evaluate_types_OPT_MMAP, NULL_EQ] >>
       `EVERY IS_SOME (MAP (evaluate_type (type_env tops)) ts)` by
         (simp[GSYM IS_SOME_OPT_MMAP] >>
          Cases_on `OPT_MMAP (evaluate_type (type_env tops)) ts` >> gvs[]) >>

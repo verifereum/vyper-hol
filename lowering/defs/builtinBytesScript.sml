@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   compile_concat     — concat(a, b, ...) bytes/strings
  *   compile_slice      — slice(b, start, length) → substring
- *   compile_extract32  — extract32(b, start) → bytes32
+ *   compile_extract32_load  — extract32(b, start) after b and start
  *   compile_slice_calldata  — slice(msg.data, start, length)
  *   compile_slice_code      — slice(self.code, start, length)
  *   compile_slice_extcode   — slice(addr.code, start, length)
@@ -63,15 +63,6 @@ Definition compile_slice_data_def:
     od
 End
 
-(* Slice of a bytestring already in memory whose start and length were lowered
-   before its length was read (the bytesM scratch-buffer path). *)
-Definition compile_slice_memory_def:
-  compile_slice_memory src_ptr start_op length_op out_size =
-    do (src_len, src_data) <- compile_bytestring_src src_ptr;
-       compile_slice_data src_len src_data start_op length_op out_size
-    od
-End
-
 (* Adhoc slices (bytes.py _lower_adhoc_slice): the output buffer is allocated
    before the size opcode and the bounds check. *)
 
@@ -122,72 +113,14 @@ Definition compile_slice_extcode_def:
 End
 
 (* ===== extract32 ===== *)
-(* Mirrors Python: bytes.py lower_extract32
-   Load 32 bytes from bytearray at given offset.
-   Bounds check: start + 32 <= length *)
-Definition compile_extract32_def:
-  compile_extract32 src_ptr start_op =
-    do src_len <- emit_op MLOAD [src_ptr];
-       src_data <- emit_op ADD [src_ptr; Lit 32w];
-       (* Bounds check: start + 32 <= length *)
-       end_op <- emit_op ADD [start_op; Lit 32w];
-       oob <- emit_op GT [end_op; src_len];
-       ok <- emit_op ISZERO [oob];
-       emit_void ASSERT [ok];
-       (* Load 32 bytes *)
+(* Mirrors Python: bytes.py lower_extract32 once start is lowered (the source's
+   length and data pointer come from compile_bytestring_src, read before
+   start): assert start + 32 <= length, then load 32 bytes.  The caller clamps
+   the result with compile_clamp_basetype. *)
+Definition compile_extract32_load_def:
+  compile_extract32_load src_len src_data start_op =
+    do compile_assert_slice_bounds start_op (Lit 32w) src_len;
        load_ptr <- emit_op ADD [src_data; start_op];
        emit_op MLOAD [load_ptr]
     od
-End
-
-(* Clamp extract32 result based on output type.
-   - Signed int < 256 bits: signextend check
-   - Unsigned int < 256 bits: GT bounds check
-   - Address: GT (2^160 - 1) check
-   - bytes32/bytesM: no clamping needed
-   Mirrors Python: bytes.py _clamp_extract32_result *)
-Datatype:
-  extract32_clamp =
-    Extract32NoClamp
-  | Extract32SignedClamp num     (* bits *)
-  | Extract32UnsignedClamp num   (* bits *)
-  | Extract32AddressClamp
-End
-
-Definition compile_clamp_extract32_def:
-  compile_clamp_extract32 (val_op:operand) Extract32NoClamp =
-    return val_op ∧
-  compile_clamp_extract32 val_op (Extract32SignedClamp bits) =
-    (let bytes_m1 = bits DIV 8 - 1 in
-     do canonical <- emit_op SIGNEXTEND
-          [Lit (n2w bytes_m1); val_op];
-        eq_op <- emit_op EQ [val_op; canonical];
-        emit_void ASSERT [eq_op];
-        return val_op
-     od) ∧
-  compile_clamp_extract32 val_op (Extract32UnsignedClamp bits) =
-    (let mask = (2 ** bits) - 1 in
-     do too_big <- emit_op GT [val_op; Lit (n2w mask)];
-        ok <- emit_op ISZERO [too_big];
-        emit_void ASSERT [ok];
-        return val_op
-     od) ∧
-  compile_clamp_extract32 val_op Extract32AddressClamp =
-    (let mask160 = (2 ** 160) - 1 in
-     do too_big <- emit_op GT [val_op; Lit (n2w mask160)];
-        ok <- emit_op ISZERO [too_big];
-        emit_void ASSERT [ok];
-        return val_op
-     od)
-End
-
-(* Determine what clamping extract32 needs based on output type.
-   Mirrors Python: bytes.py _clamp_extract32_result dispatch logic. *)
-Definition mk_extract32_clamp_def:
-  mk_extract32_clamp (BaseT (IntT n)) =
-    (if n < 256 then Extract32SignedClamp n else Extract32NoClamp) ∧
-  mk_extract32_clamp (BaseT (UintT n)) =
-    (if n < 256 then Extract32UnsignedClamp n else Extract32NoClamp) ∧
-  mk_extract32_clamp (BaseT AddressT) = Extract32AddressClamp ∧
-  mk_extract32_clamp _ = Extract32NoClamp
 End
