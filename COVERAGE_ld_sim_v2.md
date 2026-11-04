@@ -282,3 +282,151 @@ assembly. Resources and Next contain no cheat or deliberate failure tactic.
 Validation: holbuild Resources, Next and Sim passed together
 (tool_output:TO_ld_sim_v2-20261104T173029Z_m5475_t001). This does not certify
 completion of the frozen theorem, which remains open.
+
+## C1.4.1.17.1 exceptional-execution interface audit (2026-11-04)
+
+This section supersedes the *exceptional* missing-consumer descriptions above;
+normal supplied DLOAD/DLOADBYTES successors and the other completed normal
+families remain completed. This is an interface diagnostic, NOT new checked
+preservation. Current Sim build passed (TO_ld_sim_v2-20261104T173029Z_m5511_t001).
+
+### Exact ordinary Abort inventory
+
+Current dispatcher lines have shifted; references in this section are current.
+A direct scan of venomExecSemantics:508–1145 gives the following exhaustive
+ordinary Abort producers. REVERT and INVALID are terminators, delegated to
+C1.4.3; propagated INVOKE aborts belong to C1.4.2, not this inventory.
+
+| Ordinary producer | Source premise / target decision | Existing facts and residual consumer |
+|---|---|---|
+| ASSERT / ASSERT_UNREACHABLE (800–824) | one defined condition, zero; tags Revert_abort / ExHalt_abort respectively | `JointIdentity.ld_joint_assert_abort` already constructs matching target Abort. No new proof needed. |
+| RETURNDATACOPY (898–912) | three defined operands [dst;src;len], and w2n src + w2n len exceeds returndata length | Boundary has equal returndata. Taint forbids tainted operand values here even on forwarding paths; fn_ptr_ok makes src/len non-pointers. `ld_joint_operand_clean` can give equal src/len after active/non-retpc premises. `ld_joint_operand_defined` supplies dst availability even when access geometry is exempt. Missing actual Abort consumer (normal in-bounds copy is already proved). |
+| CREATE / CREATE2 (1107–1125, exec_create:509–529) | correct operand list and single output, all operands defined; w2n sz > 2 * max_code_size | `exec_create_abort_iff` gives exact inversion. Size is clean scalar; target offset need only be defined, not range-related, and no initcode equality or oracle request equality is needed in this branch. CREATE2 salt also must be defined. Existing normal CREATE transport assumes OK and cannot discharge this branch. Missing actual Abort consumer. |
+
+For all these rows `dead_result_rel D (Abort a s1) (Abort b t1)` asks
+ONLY `(a = Revert_abort ==> b = Revert_abort)` (ptrDiscipline:823–837).
+It compares no state fields, returndata payload, logs, memory, or requests on
+Abort. Nevertheless the target must actually Abort: Error is not related.
+Matching identical tags is a sufficient and simple local interface.
+
+### Exemptions are different, and their overlap is limited
+
+* `contextCodegenRel:310–342`: revert_forward_pair bb i j has COPY at i,
+  REVERT at j, ASSIGN only strictly between, and resolve_block_assigns
+  constraints linking endpoints and a resolved zero source offset.
+  `in_revert_forward` holds only at endpoints, NOT intermediate ASSIGNs.
+* `ptrDiscipline:516–522`: about_to_revert holds at every REVERT, or at a
+  RETURNDATACOPY immediately followed by an active REVERT. It has no operand
+  resolution constraints. Hence neither predicate can replace the other.
+* access_ok exempts memory ranges at in_revert_forward endpoints. taint_ok
+  exempts memory-read taint at about_to_revert, but its operand-taint clause
+  remains in force. A forwarding copy with intervening ASSIGNs is access-exempt
+  but not about_to_revert. COPY reads returndata, not payload memory; this
+  mismatch does not itself require equality of discarded memory.
+* Standalone REVERT also needs no payload equality. Without forwarding,
+  access_ok still constrains its source range; that is unnecessary for its
+  Abort observation but may be needed by other invariants.
+
+### Availability and supplied-control interfaces actually available
+
+`ld_env_agree` includes equal definedness on fn_ir_vars even for opaque RETPC
+variables; its value clause deliberately excludes those variables.
+`ld_env_operand_defined` / `ld_env_operands_defined` require label equality
+and operand membership, not non-retpc or taint facts. JointRelation exposes
+`ld_joint_operand_defined` at the full boundary. Therefore first-copy operand
+availability is already obtainable without any exempt-range transport.
+
+`JointAssign.ld_supply_insts_append` composes supply over lists, and
+`ld_supply_insts_index` identifies an unchanged instruction after an expanded
+prefix. `ld_joint_control_unchanged_next` transports a current source/target
+control boundary through a non-DLOAD instruction to a source next instruction.
+`lower_dload_inst_supply_special` leaves every COPY/ASSIGN/REVERT unchanged,
+including supply. Thus the entire suffix is syntactically unchanged AFTER the
+possibly expanded prefix; it is not at the same numerical source/target index.
+There is not yet an exported whole-suffix alignment theorem in this interface.
+It follows structurally from append + identity supply, but remains to prove.
+
+Availability-only transport suffices AFTER a successful copy: ASSIGN changes
+only one variable, propagating definedness without comparing values; REVERT
+needs two defined operands and always aborts Revert. Labels must agree and the
+same suffix instructions must be fetched. At the copy itself availability is
+NOT enough: if source succeeds and eventually reverts, target OOB would abort
+ExHalt, which fails the one-way Revert-tag condition. Equal scalar src/len and
+equal returndata length must therefore be retained at that first step.
+
+### Proposed minimal HOL consumers (proposals, not registered theorems)
+
+Use J, A, Q and P exactly as the textual schemas at the top of this ledger.
+No new predicate definition is proposed. First an ordinary terminal interface:
+
+```sml
+J /\ Q /\ P /\ A /\
+MEM inst.inst_opcode [RETURNDATACOPY; CREATE; CREATE2] /\
+step_inst fuel C inst s = Abort reason s1 ==>
+?t1. step_inst fuel C' inst t = Abort reason t1
+```
+
+No `~in_revert_forward` premise is needed: none of the branch guards reads
+memory. The smallest missing prerequisites are a clean-scalar guard operand
+projection valid at forwarding endpoints, and dispatcher inversion/assembly
+using definedness for the other operands. Do not reuse the existing local
+CREATE operand lemma: it demands non-forwarding and payload slice equality,
+which are irrelevant to oversized-initcode abort.
+
+A reusable post-copy suffix consumer can avoid the joint relation entirely:
+
+```sml
+s.vs_inst_idx = t.vs_inst_idx /\ s.vs_labels = t.vs_labels /\
+(!v. v IN V ==> (IS_SOME (FLOOKUP s.vs_vars v) <=>
+     IS_SOME (FLOOKUP t.vs_vars v))) /\
+s.vs_inst_idx <= j /\ get_instruction bb j = SOME ri /\
+ri.inst_opcode = REVERT /\
+(!k ii v. s.vs_inst_idx <= k /\ k <= j /\
+          get_instruction bb k = SOME ii /\ MEM (Var v) ii.inst_operands ==>
+          v IN V) /\
+(!k ii. s.vs_inst_idx <= k /\ k < j /\
+        get_instruction bb k = SOME ii ==> ii.inst_opcode = ASSIGN) /\
+exec_block fuel C bb s = Abort Revert_abort s1 ==>
+?t1. exec_block fuel C' bb t = Abort Revert_abort t1
+```
+
+The restriction to V is essential: whole-environment availability is NOT
+directly derivable from J, which tracks only fn_ir_vars and permits target
+scratch variables. Choose V as the set of fn_ir_vars at integration; suffix
+operand membership follows from bb belonging to fn. Paired single-variable
+update preserves restricted agreement whether or not its output is in V.
+This restricted-availability update/transport is a missing kernel, not an
+extra whole-environment assumption to add at the final use site. Source Abort rules out malformed or
+undefined source ASSIGN/REVERT and also ensures each required instruction is
+present. No opaque variable numeric equality is needed.
+
+Finally the integration consumer should hide source/target index shifting:
+
+```sml
+J /\ Q /\ P /\ A /\ inst.inst_opcode = RETURNDATACOPY /\
+in_revert_forward fn s /\
+lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+exec_block fuel C bb s = Abort reason s1 ==>
+?fn' bb' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  exec_block fuel C' bb' t = Abort reason t1
+```
+
+At an active COPY, the in_revert_forward endpoint must be the first endpoint
+(opcode disjointness excludes being REVERT). Resolve constraints identify the
+suffix but need not prove payload equality. Split OOB immediately; otherwise
+perform target COPY with equal guard operands, drop memory agreement, and
+apply restricted-availability suffix transport after alignment. Exact-tag
+transport is stronger than dead_result_rel and seems sufficient without any
+new definition. It remains unproved and must be planned before execution.
+
+### Missing interfaces / non-gaps summary
+
+Missing: ordinary OOB/oversized CREATE Abort consumer; restricted availability
+update and ASSIGN*–REVERT execution kernel; unchanged supplied suffix alignment;
+first-copy-to-suffix integration constructing actual target exec_block Abort.
+Not missing: assertion Abort, normal COPY/CREATE successors, supplied DLOAD
+segments. Not evidence of target Abort: stepWriteFootprintForward's
+`assign_suffix_no_normal` and `revert_forward_pair_no_normal`, whose disjunction
+reasoning explicitly permits Error. Run/terminator/call lifting is outside this
+diagnostic. No HOL source, existing definition, or theorem statement changed.
