@@ -661,3 +661,375 @@ QED
    remains open; this local experiment does not establish cleanup, persistent
    spills, JMP reset, DFS splicing, or the frozen lineage theorem.
 *)
+
+(* Equal cells may contain the output; unequal Original cells may not.
+   This is query shielding, not a temporal invariant producer. *)
+Theorem phi_cell_output_predicate:
+  !ret cell.
+    (!slot p q. cell = PhiOriginal slot p q ==>
+      p = q \/ (p <> ret /\ q <> ret)) ==>
+    (phi_cell_value T cell = ret <=> phi_cell_value F cell = ret)
+Proof
+  rpt gen_tac >> Cases_on `cell` >> simp[phi_cell_value_def] >> metis_tac[]
+QED
+
+Theorem phi_origin_output_suffix_shield:
+  !ret cells p q.
+    EVERY (\cell. !slot a b. cell = PhiOriginal slot a b ==>
+      a = b \/ (a <> ret /\ b <> ret)) cells /\
+    MEM ret (MAP (phi_cell_value T) cells) ==>
+    ?d. d < LENGTH cells /\
+      stack_get_depth ret (p ++ MAP (phi_cell_value T) cells) = SOME d /\
+      stack_get_depth ret (q ++ MAP (phi_cell_value F) cells) = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stack_get_depth ret (MAP (phi_cell_value T) cells) =
+   stack_get_depth ret (MAP (phi_cell_value F) cells)` by
+    (rewrite_tac[stack_get_depth_def] >>
+     irule slot_realization_reverse_search >>
+     gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     irule phi_cell_output_predicate >> metis_tac[]) >>
+  `IS_SOME (stack_get_depth ret (MAP (phi_cell_value T) cells))` by
+    simp[stack_get_depth_is_some] >>
+  Cases_on `stack_get_depth ret (MAP (phi_cell_value T) cells)` >> gvs[] >>
+  `stack_get_depth ret (MAP (phi_cell_value T) cells) = SOME x` by metis_tac[] >>
+  qexists_tac `x` >>
+  drule stack_get_depth_props >> strip_tac >>
+  metis_tac[fnPlanLineageSuffixTheory.stack_get_depth_suffix_hit, LENGTH_MAP]
+QED
+
+Theorem phi_origin_write_every:
+  !P cells keep d ret.
+    EVERY P cells /\ P (PhiCommon ret) /\ d < LENGTH cells ==>
+    EVERY P (phi_origin_write keep d ret cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `EVERY P (stack_dup d cells)` by
+    (`MEM (EL (LENGTH cells - (d + 1)) cells) cells` by
+       (irule listTheory.EL_MEM >> decide_tac) >>
+     gvs[stack_dup_def, stack_peek_def, listTheory.EVERY_SNOC,
+         listTheory.EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `keep` >> simp[phi_origin_write_def, stack_poke_def] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_LUPDATE] >>
+  metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem phi_origin_pop_every:
+  !P cells d. EVERY P cells /\ d < LENGTH cells ==>
+    EVERY P (phi_origin_pop d cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (EL (LENGTH cells - (d + 1)) cells) cells /\
+   MEM (EL (LENGTH cells - 1) cells) cells` by
+    (conj_tac >> irule listTheory.EL_MEM >> decide_tac) >>
+  `EVERY P (stack_swap d cells)` by
+    (gvs[stack_swap_def, listTheory.EVERY_MEM, listTheory.MEM_LUPDATE,
+         listTheory.EL_LUPDATE] >> metis_tac[listTheory.EL_MEM]) >>
+  gvs[phi_origin_pop_def, stack_pop_def, listTheory.EVERY_MEM] >>
+  metis_tac[rich_listTheory.MEM_TAKE]
+QED
+
+Theorem phi_origin_write_output_shield:
+  !ret cells keep d p q.
+    EVERY (\cell. !slot a b. cell = PhiOriginal slot a b ==>
+      a = b \/ (a <> ret /\ b <> ret)) cells /\ d < LENGTH cells ==>
+    ?e. e < LENGTH (phi_origin_write keep d ret cells) /\
+      stack_get_depth ret
+        (p ++ MAP (phi_cell_value T) (phi_origin_write keep d ret cells)) = SOME e /\
+      stack_get_depth ret
+        (q ++ MAP (phi_cell_value F) (phi_origin_write keep d ret cells)) = SOME e
+Proof
+  rpt gen_tac >> strip_tac >> irule phi_origin_output_suffix_shield >>
+  conj_tac
+  >- (irule phi_origin_write_every >> simp[] >>
+      goal_assum (drule_at Any)) >>
+  `MEM (PhiCommon ret) (phi_origin_write keep d ret cells)` suffices_by
+    metis_tac[listTheory.MEM_MAP, phi_cell_value_def] >>
+  Cases_on `keep` >>
+  simp[phi_origin_write_def, stack_poke_def, stack_dup_def, listTheory.MEM_LUPDATE] >>
+  decide_tac
+QED
+
+(* A persistent, static cell certificate: unequal originals retain two
+   representatives of one class. Equal live-through originals are unrestricted. *)
+Definition phi_origin_classes_def:
+  phi_origin_classes class_of cells <=>
+    EVERY (\cell. !slot a b. cell = PhiOriginal slot a b ==>
+      a = b \/ (class_of a = SOME slot /\ class_of b = SOME slot)) cells
+End
+
+Theorem phi_origin_classes_edits:
+  !class_of cells keep d ret e.
+    phi_origin_classes class_of cells /\ d < LENGTH cells /\
+    e < LENGTH (phi_origin_write keep d ret cells) ==>
+    phi_origin_classes class_of (phi_origin_write keep d ret cells) /\
+    phi_origin_classes class_of
+      (phi_origin_pop e (phi_origin_write keep d ret cells))
+Proof
+  rpt gen_tac >> simp[phi_origin_classes_def] >> strip_tac >>
+  conj_asm1_tac
+  >- (irule phi_origin_write_every >> simp[] >> goal_assum (drule_at Any)) >>
+  irule phi_origin_pop_every >> simp[]
+QED
+
+Theorem phi_origin_classes_output_safe:
+  !class_of cells ret.
+    phi_origin_classes class_of cells /\ class_of ret = NONE ==>
+    EVERY (\cell. !slot a b. cell = PhiOriginal slot a b ==>
+      a = b \/ (a <> ret /\ b <> ret)) cells
+Proof
+  simp[phi_origin_classes_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!cell. MEM cell cells ==> _` drule >>
+  disch_then (qspecl_then [`slot`, `a`, `b`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem phi_origin_classes_incoming_predicates:
+  !class_of cells alternatives k.
+    phi_origin_classes class_of cells /\
+    (!op. MEM op alternatives <=> class_of op = SOME k) ==>
+    EVERY (\cell. MEM (phi_cell_value T cell) alternatives <=>
+                  MEM (phi_cell_value F cell) alternatives) cells
+Proof
+  simp[phi_origin_classes_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
+  Cases_on `cell` >> gvs[phi_cell_value_def] >> metis_tac[]
+QED
+
+Theorem phi_origin_classes_incoming_shield:
+  !class_of cells alternatives k d p q.
+    phi_origin_classes class_of cells /\
+    (!op. MEM op alternatives <=> class_of op = SOME k) /\
+    stack_get_phi_depth alternatives (MAP (phi_cell_value T) cells) = SOME d ==>
+    stack_get_phi_depth alternatives (p ++ MAP (phi_cell_value T) cells) = SOME d /\
+    stack_get_phi_depth alternatives (q ++ MAP (phi_cell_value F) cells) = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  `stack_get_phi_depth alternatives (MAP (phi_cell_value T) cells) =
+   stack_get_phi_depth alternatives (MAP (phi_cell_value F) cells)` by
+    (rewrite_tac[stack_get_phi_depth_def] >>
+     irule slot_realization_reverse_search >> BETA_TAC >>
+     irule phi_origin_classes_incoming_predicates >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[fnPlanLineageSuffixTheory.stack_get_phi_depth_suffix_hit]
+QED
+
+Theorem phi_origin_alias_free_stage:
+  !class_of inst next halting p q cells d keep.
+    phi_origin_classes class_of cells /\
+    class_of (Var (HD inst.inst_outputs)) = NONE /\
+    phi_origin_incoming inst p q cells d /\
+    phi_origin_selected next p q cells d keep ==>
+    ?cells'. phi_origin_stage inst next halting p q cells cells' /\
+             phi_origin_classes class_of cells'
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH cells` by gvs[phi_origin_incoming_def] >>
+  `EVERY (\cell. !slot a b. cell = PhiOriginal slot a b ==>
+      a = b \/ (a <> Var (HD inst.inst_outputs) /\
+                b <> Var (HD inst.inst_outputs))) cells` by
+    (irule phi_origin_classes_output_safe >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all phi_origin_write_output_shield >>
+  disch_then (qspecl_then [`keep`, `p`, `q`] strip_assume_tac) >>
+  drule_all phi_origin_classes_edits >> strip_tac >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`
+  >- (qexists_tac `phi_origin_pop e (phi_origin_write keep d
+        (Var (HD inst.inst_outputs)) cells)` >> simp[phi_origin_stage_def] >>
+      qexistsl_tac [`d`, `keep`] >> simp[] >> metis_tac[]) >>
+  qexists_tac `phi_origin_write keep d (Var (HD inst.inst_outputs)) cells` >>
+  simp[phi_origin_stage_def] >> qexistsl_tac [`d`, `keep`] >> simp[]
+QED
+
+Theorem phi_origin_classes_selected_cell:
+  !class_of cells cell k next.
+    phi_origin_classes class_of cells /\ MEM cell cells /\
+    class_of (phi_cell_value T cell) = SOME k /\
+    (!op. class_of op = SOME k ==> ~MEM (operand_to_string op) next) ==>
+    (MEM (operand_to_string (phi_cell_value T cell)) next <=>
+     MEM (operand_to_string (phi_cell_value F cell)) next)
+Proof
+  simp[phi_origin_classes_def, listTheory.EVERY_MEM] >> rpt strip_tac >>
+  Cases_on `cell` >> gvs[phi_cell_value_def] >> metis_tac[]
+QED
+
+Theorem stack_poke_preserves_other_member:
+  !cells x d y.
+    MEM x cells /\ x <> stack_peek d cells ==>
+    MEM x (stack_poke d y cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?j. j < LENGTH cells /\ EL j cells = x` by metis_tac[listTheory.MEM_EL] >>
+  `j <> LENGTH cells - (d + 1)` by
+    (strip_tac >> gvs[stack_peek_def]) >>
+  `EL j (stack_poke d y cells) = x` by
+    simp[stack_poke_def, listTheory.EL_LUPDATE] >>
+  metis_tac[listTheory.EL_MEM, listTheory.LENGTH_LUPDATE, stack_poke_def]
+QED
+
+Theorem phi_origin_write_preserves_other_member:
+  !cells x d ret keep.
+    MEM x cells /\ x <> stack_peek d cells ==>
+    MEM x (phi_origin_write keep d ret cells)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `keep`
+  >- (simp[phi_origin_write_def, stack_poke_def, stack_dup_def,
+           listTheory.MEM_LUPDATE] >>
+      `?j. j < LENGTH cells /\ EL j cells = x` by metis_tac[listTheory.MEM_EL] >>
+      disj2_tac >> qexists_tac `j` >> simp[listTheory.EL_SNOC]) >>
+  simp[phi_origin_write_def, stack_poke_preserves_other_member]
+QED
+
+Theorem phi_origin_pop_preserves_other_member:
+  !cells x d.
+    d < LENGTH cells /\ MEM x cells /\ x <> stack_peek d cells ==>
+    MEM x (phi_origin_pop d cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?j. j < LENGTH cells /\ EL j cells = x` by metis_tac[listTheory.MEM_EL] >>
+  `j <> LENGTH cells - (d + 1)` by
+    (strip_tac >> gvs[stack_peek_def]) >>
+  Cases_on `j = LENGTH cells - 1`
+  >- (`0 < d` by decide_tac >>
+      `LENGTH cells - (d + 1) < LENGTH cells - 1` by decide_tac >>
+      `EL (LENGTH cells - (d + 1)) (phi_origin_pop d cells) = x` by
+        (simp[phi_origin_pop_def, stack_pop_def, stack_swap_def,
+             listTheory.EL_TAKE, listTheory.EL_LUPDATE] >> metis_tac[]) >>
+      `LENGTH (phi_origin_pop d cells) = LENGTH cells - 1` by
+        simp[phi_origin_pop_def, stack_pop_def, stack_swap_def] >>
+      metis_tac[listTheory.EL_MEM]) >>
+  `j < LENGTH cells - 1` by decide_tac >>
+  `EL j (phi_origin_pop d cells) = x` by
+    simp[phi_origin_pop_def, stack_pop_def, stack_swap_def,
+         listTheory.EL_TAKE, listTheory.EL_LUPDATE] >>
+  `LENGTH (phi_origin_pop d cells) = LENGTH cells - 1` by
+    simp[phi_origin_pop_def, stack_pop_def, stack_swap_def] >>
+  metis_tac[listTheory.EL_MEM]
+QED
+
+Theorem stack_peek_suffix_map:
+  !d prefix f cells. d < LENGTH cells ==>
+    stack_peek d (prefix ++ MAP f cells) = f (stack_peek d cells)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `LENGTH prefix + LENGTH cells - (d + 1) =
+   LENGTH prefix + (LENGTH cells - (d + 1))` by decide_tac >>
+  `LENGTH cells - (d + 1) < LENGTH cells` by decide_tac >>
+  pure_rewrite_tac[stack_peek_def, listTheory.LENGTH_APPEND, listTheory.LENGTH_MAP] >>
+  qpat_x_assum `_ = LENGTH prefix + _`
+    (fn th => pure_once_rewrite_tac[th]) >>
+  simp[listTheory.EL_APPEND_EQN, listTheory.EL_MAP]
+QED
+
+Theorem phi_origin_classes_selected:
+  !class_of cells d k next p q.
+    phi_origin_classes class_of cells /\ d < LENGTH cells /\
+    class_of (phi_cell_value T (stack_peek d cells)) = SOME k /\
+    (!op. class_of op = SOME k ==> ~MEM (operand_to_string op) next) ==>
+    phi_origin_selected next p q cells d F
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM (stack_peek d cells) cells` by
+    (simp[stack_peek_def] >> irule listTheory.EL_MEM >> decide_tac) >>
+  drule_all phi_origin_classes_selected_cell >> strip_tac >>
+  simp[phi_origin_selected_def, stack_peek_suffix_map] >> metis_tac[]
+QED
+
+Theorem phi_origin_future_member_survives:
+  !class_of cells x d ret keep k j e p.
+    MEM x cells /\ class_of (phi_cell_value T x) = SOME j /\
+    class_of (phi_cell_value T (stack_peek d cells)) = SOME k /\ j <> k /\
+    class_of ret = NONE /\
+    e < LENGTH (phi_origin_write keep d ret cells) /\
+    stack_get_depth ret
+      (p ++ MAP (phi_cell_value T) (phi_origin_write keep d ret cells)) = SOME e ==>
+    MEM x (phi_origin_write keep d ret cells) /\
+    MEM x (phi_origin_pop e (phi_origin_write keep d ret cells))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `x <> stack_peek d cells` by (strip_tac >> gvs[]) >>
+  `MEM x (phi_origin_write keep d ret cells)` by
+    metis_tac[phi_origin_write_preserves_other_member] >>
+  drule stack_get_depth_props >> strip_tac >>
+  `phi_cell_value T (stack_peek e (phi_origin_write keep d ret cells)) = ret` by
+    metis_tac[stack_peek_suffix_map] >>
+  `x <> stack_peek e (phi_origin_write keep d ret cells)` by
+    metis_tac[optionTheory.NOT_NONE_SOME] >>
+  simp[] >> irule phi_origin_pop_preserves_other_member >> simp[]
+QED
+
+Theorem phi_origin_classes_incoming_covered:
+  !class_of cells alternatives k cell p q.
+    phi_origin_classes class_of cells /\
+    (!op. MEM op alternatives <=> class_of op = SOME k) /\
+    MEM cell cells /\ class_of (phi_cell_value T cell) = SOME k ==>
+    ?d. d < LENGTH cells /\
+      stack_get_phi_depth alternatives (p ++ MAP (phi_cell_value T) cells) = SOME d /\
+      stack_get_phi_depth alternatives (q ++ MAP (phi_cell_value F) cells) = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM T (MAP (\c. MEM (phi_cell_value T c) alternatives) cells)` by
+    (simp[listTheory.MEM_MAP] >> qexists_tac `cell` >> simp[]) >>
+  `IS_SOME (stack_get_depth T
+     (MAP (\c. MEM (phi_cell_value T c) alternatives) cells))` by
+    simp[stack_get_depth_is_some] >>
+  `stack_get_depth T (MAP (\c. MEM (phi_cell_value T c) alternatives) cells) =
+   stack_get_phi_depth alternatives (MAP (phi_cell_value T) cells)` by
+    (rewrite_tac[stack_get_depth_def, stack_get_phi_depth_def] >>
+     irule slot_realization_reverse_search >> simp[]) >>
+  Cases_on `stack_get_depth T
+    (MAP (\c. MEM (phi_cell_value T c) alternatives) cells)` >> gvs[] >>
+  `stack_get_depth T
+    (MAP (\c. MEM (phi_cell_value T c) alternatives) cells) = SOME x` by
+      (simp[] >> metis_tac[]) >>
+  drule stack_get_depth_props >> strip_tac >>
+  qexists_tac `x` >> conj_tac >- gvs[] >>
+  irule phi_origin_classes_incoming_shield >>
+  conj_tac >- metis_tac[] >> qexistsl_tac [`class_of`, `k`] >> simp[]
+QED
+
+(* Alias-free symbolic validation ledger (supersedes the open local
+   output-ordering question recorded above; NOT global schedule production).
+
+   Proposed induction certificate:
+   - one fixed operand-to-incoming-class map class_of; each unequal Original
+     retains two representatives of its indexed class, while equal originals
+     and Common cells are unrestricted (phi_origin_classes);
+   - for every unprocessed PHI class, a cell in the physical suffix whose
+     left realization is in that class; alternatives are exactly the class;
+   - all PHI output operands map to NONE; current incoming class is dead in
+     the current next-live set. Residuals p,q are completely unrestricted.
+   This does not mention future searches, operation equality or stage guards.
+
+   Checked symbolic interfaces, with no bound on physical stack depth:
+   - classes_incoming_covered derives a bounded common first hit from class
+     exactness and ONE representative, using slot_realization_reverse_search;
+   - classes_selected derives keep=F from class death at a selected cell;
+     equal live-through cells are allowed, not silently assumed fresh;
+   - write_output_shield supplies a common bounded ret hit after either write
+     branch. Unequal Original cells cannot intercept ret; earlier equal cells
+     may intercept it identically. Arbitrary residuals cannot intercept it;
+   - alias_free_stage witnesses the actual write and optional retirement and
+     preserves the static class certificate, composing the existing stage;
+   - future_member_survives protects each different-class representative
+     through overwrite and retirement. No Original is discarded on death.
+     These are membership/safety interfaces, not physical-order deletion rules.
+
+   Still unproved producers/assembly (no theorem below assumes them proved):
+   1. Instantiate class_of from the actual PHI operand map, with exactness for
+      FILTER is_var_operand inst_operands, including repeated operands. Use
+      the accepted map-fold boundaries, not a second map implementation.
+   2. Realize both transfer entries in one origin suffix with this certificate
+      and class coverage. Activation is established separately, but must be
+      connected to the *physical* transfer-generated entry slots.
+   3. Derive output class_of=NONE using the accepted global
+      reachable_phi_prefix_no_output_use_alias, and derive current class death
+      using analyzed_phi_incoming_dead_after. The abstract class premises in
+      the lemmas above do NOT discharge these analyzed producer obligations.
+   4. Assemble current search's selected-cell class fact and the native
+      analyzed schedule; preserve coverage for every remaining class using
+      future_member_survives, then induct. Predicate safety alone is not
+      coverage and is not a universal schedule producer.
+   5. Final physical suffix, live-through layout, cleanup/window bounds,
+      persistent spill maps, allocation history, join reset and DFS/lineage
+      lifting remain independent global obligations. Observation-frame and
+      stage projections do not prove spill-map equality.
+*)
