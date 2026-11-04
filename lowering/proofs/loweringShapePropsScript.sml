@@ -15607,3 +15607,71 @@ Proof
            irule new_block_action_labels >> simp[]) >> rpt gen_tac) >>
   IF_CASES_TAC >> simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
+
+val expr_label_case_lift_thms =
+  let val tys = [``:'a list``, ``:expr``]
+      fun constant ty = Prim_rec.prove_case_const_thm
+        {case_def = TypeBase.case_def_of ty,
+         nchotomy = TypeBase.nchotomy_of ty}
+  in map TypeBase.case_rand_of tys @ map constant tys end;
+
+Theorem compile_expr_builtin_labels[local]:
+  (!ce rt t bi es s. cs_extends s (SND (g ce rt t bi es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (g ce rt t bi es s)))) ==>
+  cs_extends st (SND (compile_expr_body f g h cenv ty (Builtin ann bi args) st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_expr_body f g h cenv ty (Builtin ann bi args) st)))
+Proof
+  disch_tac >> Cases_on `bi` >>
+  simp([compile_expr_body_def, LET_THM, compile_addmod_names_labels,
+        compile_mulmod_names_labels, compile_powmod256_names_labels] @
+       expr_label_case_lift_thms)
+QED
+
+Theorem compile_expr_body_labels:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) /\
+  (!ce rt t bi es s. cs_extends s (SND (g ce rt t bi es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (g ce rt t bi es s)))) /\
+  (!ce vt t tb rt es s. cs_extends s (SND (h ce vt t tb rt es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (h ce vt t tb rt es s)))) ==>
+  cs_extends st (SND (compile_expr_body f g h cenv ty e st)) /\
+  EVERY (isPREFIX "@") (added_labels st (SND (compile_expr_body f g h cenv ty e st)))
+Proof
+  strip_tac >> Cases_on `e` >>
+  simp[compile_expr_ifexp_labels, compile_expr_structlit_labels,
+       compile_expr_toplevelname_labels, compile_expr_pop_labels, compile_expr_builtin_labels] >>
+  simp[compile_expr_body_def, LET_THM, compile_literal_vv_labels,
+       compile_name_vv_labels, compile_subscript_labels, compile_attribute_labels,
+       compile_call_labels, cs_extends_refl] >>
+  all_tac >>~- ([`added_labels st st`],
+    simp[added_labels_def, DROP_LENGTH_TOO_LONG])
+QED
+
+Theorem compile_expr_labels:
+  (!cenv ty e st.
+    cs_extends st (SND (compile_expr cenv ty e st)) /\
+    EVERY (isPREFIX "@") (added_labels st (SND (compile_expr cenv ty e st)))) /\
+  (!cenv ret_ty ty bi args st.
+    cs_extends st (SND (compile_builtin_dispatch cenv ret_ty ty bi args st)) /\
+    EVERY (isPREFIX "@") (added_labels st
+      (SND (compile_builtin_dispatch cenv ret_ty ty bi args st)))) /\
+  (!cenv vv_ty ty tb ret_ty args st.
+    cs_extends st (SND (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st)) /\
+    EVERY (isPREFIX "@") (added_labels st
+      (SND (compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st))))
+Proof
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[compile_expr_raw_def] >> simp[] >>
+  all_tac >>~- ([`compile_expr_body _ _ _ _ _ _ _`],
+    irule compile_expr_body_labels >> rpt conj_tac
+    >- (irule expr_child_callback_labels >> simp[]) 
+    >- (irule builtin_child_callback_labels >> simp[]) >>
+    irule type_child_callback_labels >> simp[]) >>
+  all_tac >>~- ([`compile_builtin_dispatch_body _ _ _ _ _ _ _`],
+    irule compile_builtin_dispatch_body_labels >>
+    irule expr_child_callback_labels >> simp[]) >>
+  irule compile_type_builtin_dispatch_body_labels >>
+  irule expr_child_callback_labels >> simp[]
+QED
