@@ -1,6 +1,6 @@
 Theory typedNormalizeDynarray
 Ancestors
-  typedNormalizeFrame typedNormalizeLoop allocaFootprint instMemFrontier
+  typedNormalizeFrame typedNormalizeLoop typedBytesArrayMem memContinuation allocaFootprint instMemFrontier
   fragExec fragExecMem emitHelperProps exprLoweringProps venomExecSemantics venomExecProofs venomState venomInst
   context compileEnv emitHelper valueEncoding valueEncodingProps words arithmetic list rich_list
 
@@ -134,7 +134,7 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE, word_mul_n2w, w2n_n2w]
 QED
 
-Theorem typed_dynarray_equal_shape:
+Theorem typed_dynarray_equal_shape[local]:
   compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) ==>
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   sb.cs_next_var = sa.cs_next_var + 6 /\
@@ -174,7 +174,7 @@ QED
 
 
 (* Compose at the semantic boundary; do not expand nine opcodes together. *)
-Theorem typed_dynarray_equal_sequence_run:
+Theorem typed_dynarray_equal_sequence_run[local]:
   prefix =
     [mk_inst id MLOAD [src] [len];
      mk_inst (id+1) GT [Var len; Lit (n2w cap)] [long];
@@ -226,4 +226,84 @@ Proof
     (qpat_assum `run_inst_seq prefix s = OK q` (mp_tac o MATCH_MP run_inst_seq_append) >>
      disch_then (qspec_then `suffix` mp_tac) >> simp[]) >>
   simp[]
+QED
+
+Theorem typed_dynarray_equal_compiler_run:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  mload (w2n p) s = n2w l /\ l <= cap /\ cap < dimword(:256) /\
+  l * type_memory_bytes ce ty < dimword(:256) /\
+  w2n p + 32 <= s.vs_alloca_next /\ w2n d + 32 <= s.vs_alloca_next /\
+  w2n (p+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+  w2n (d+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
+    u.vs_memory =
+      (mcopy (w2n (d+32w)) (w2n (p+32w)) (l * type_memory_bytes ce ty)
+        (mstore (w2n d) (n2w l) s)).vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule typed_dynarray_equal_shape >> strip_tac >>
+  qabbrev_tac `len = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `long = "%" ++ toString (sa.cs_next_var+1)` >>
+  qabbrev_tac `ok = "%" ++ toString (sa.cs_next_var+2)` >>
+  qabbrev_tac `sp = "%" ++ toString (sa.cs_next_var+3)` >>
+  qabbrev_tac `dp = "%" ++ toString (sa.cs_next_var+4)` >>
+  qabbrev_tac `sz = "%" ++ toString (sa.cs_next_var+5)` >>
+  `ALL_DISTINCT [len;long;ok;sp;dp;sz] /\
+   (!x. src = Var x \/ dst = Var x ==> ~MEM x [len;long;ok;sp;dp;sz])` by
+    (simp[Abbr `len`, Abbr `long`, Abbr `ok`, Abbr `sp`, Abbr `dp`, Abbr `sz`,
+          ASCIInumbersTheory.toString_inj] >>
+     rpt strip_tac >>
+     qpat_x_assum `!x. src = Var x \/ dst = Var x ==> _` (qspec_then `x` mp_tac) >>
+     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
+  `TAKE 7 (emitted_insts sa sb) =
+    [mk_inst sa.cs_next_id MLOAD [src] [len];
+     mk_inst (sa.cs_next_id+1) GT [Var len;Lit (n2w cap)] [long];
+     mk_inst (sa.cs_next_id+2) ISZERO [Var long] [ok];
+     mk_inst (sa.cs_next_id+3) ASSERT [Var ok] [];
+     mk_inst (sa.cs_next_id+4) MSTORE [dst;Var len] [];
+     mk_inst (sa.cs_next_id+5) ADD [src;Lit 32w] [sp];
+     mk_inst (sa.cs_next_id+6) ADD [dst;Lit 32w] [dp]]` by simp[] >>
+  `DROP 7 (emitted_insts sa sb) =
+    [mk_inst (sa.cs_next_id+7) MUL [Var len;Lit (n2w (type_memory_bytes ce ty))] [sz];
+     mk_inst (sa.cs_next_id+8) MCOPY [Var dp;Var sp;Var sz] []]` by simp[] >>
+  drule_all typed_dynarray_equal_sequence_run >>
+  pure_rewrite_tac[TAKE_DROP] >> strip_tac >> simp[] >>
+  simp[mcopy_def, update_var_def, lookup_var_def, write_memory_with_expansion_def] >>
+  gvs[venom_state_component_equality] >> rpt strip_tac >>
+  `~MEM x [len;long;ok;sp;dp;sz]` by
+    gvs[Abbr `len`, Abbr `long`, Abbr `ok`, Abbr `sp`, Abbr `dp`, Abbr `sz`,
+        not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  qpat_x_assum `!x. _ ==> lookup_var x q = lookup_var x s`
+    (qspec_then `x` mp_tac) >> simp[lookup_var_def]
+QED
+
+Theorem typed_dynarray_equal_cont:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  mload (w2n p) s = n2w l /\ l <= cap /\ cap < dimword(:256) /\
+  l * type_memory_bytes ce ty < dimword(:256) /\
+  w2n p + 32 <= s.vs_alloca_next /\ w2n d + 32 <= s.vs_alloca_next /\
+  w2n (p+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+  w2n (d+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. mem_cont_sim ctx fn s (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    u.vs_memory =
+      (mcopy (w2n (d+32w)) (w2n (p+32w)) (l * type_memory_bytes ce ty)
+        (mstore (w2n d) (n2w l) s)).vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule_all typed_dynarray_equal_compiler_run >> strip_tac >>
+  drule typed_dynarray_equal_shape >> strip_tac >>
+  qexists_tac `u` >> reverse conj_tac >- simp[] >>
+  irule typed_bytes_child_seq_cont >> simp[] >>
+  qexists_tac `sa` >> simp[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
 QED
