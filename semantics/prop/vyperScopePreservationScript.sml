@@ -363,10 +363,21 @@ Theorem append_place_scopes_dom:
 Proof
   Cases_on `p`
   >- metis_tac[append_storage_place_scopes_immutables] >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-           get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
-  metis_tac[place_type_value_state, read_place_state, write_place_scopes_dom]
+  simp[append_place_def, bind_def] >>
+  qmatch_goalsub_abbrev_tac `place_type_value cx place st` >>
+  Cases_on `place_type_value cx place st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value cx place st = (result,st)` >>
+  Cases_on `result` >> simp[] >>
+  Cases_on `read_place cx place st` >>
+  drule read_place_state >> strip_tac >> gvs[] >>
+  rename1 `read_place cx place st = (result,st)` >>
+  Cases_on `result` >> simp[] >>
+  rename1 `read_place cx place st = (INL old,st)` >>
+  rename1 `place_type_value cx place st = (INL tv,st)` >>
+  Cases_on `append_element tv old v` >>
+  simp[lift_sum_def, bind_def, return_def, raise_def] >>
+  metis_tac[write_place_scopes_dom]
 QED
 
 Theorem pop_place_scopes_dom:
