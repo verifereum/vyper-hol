@@ -102,9 +102,11 @@ Theorem body_ifexp_case:
     body_expr_ok cx (IfExp v5 e1 e2 e3)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  irule compile_ifexp_case >> rpt conj_tac
-  >- (strip_tac >> metis_tac[body_expr_ok_case]) >>
-  metis_tac[body_expr_ok_case]
+  Cases_on `!e. (e = e2 \/ e = e3) ==>
+    int_calls_expr e = [] \/ same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+  >- (irule compile_ifexp_case >> simp[] >> metis_tac[body_expr_ok_case]) >>
+  rw[expr_sim_case_def, expr_vv_case_def] >>
+  metis_tac[body_ifexp_widened_call_arm]
 QED
 
 (* An aggregate literal with an element whose value the lowering lays out
