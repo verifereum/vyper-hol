@@ -134,9 +134,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s g a ao as_ ro rs ab s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
+     exec_create inst s v off sz salt <> Halt s')
 Proof
   simp_tac exec_call_result_head_ss []
 QED
@@ -206,7 +204,7 @@ Theorem exec_create_update_var[local]:
     | IntRet vs s' => IntRet vs (update_var x w s')
 Proof
   rw[exec_create_def, update_var_def, venom_create_request_def,
-     read_memory_def] >>
+     read_memory_def, halt_state_def, set_returndata_def] >>
   BasicProvers.EVERY_CASE_TAC >> gvs[finite_mapTheory.FUPDATE_COMMUTES]
 QED
 
