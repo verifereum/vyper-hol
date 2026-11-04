@@ -30,6 +30,8 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
  *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
+ *     every use is written on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
@@ -906,6 +908,18 @@ Theorem lower_vyper_runtime_unit_source_unit_ok:
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
+QED
+
+(* S2b, planned admission: every variable a use in the lowering's code
+   reads is written on every path to the use.  SimplifyCFG's pre-walk
+   needs it. *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    immutable_free_program tops
+    ==> unit_defs_reach_uses unit
+Proof
+  cheat
 QED
 
 (* The runtime unit reserves no global memory. *)
