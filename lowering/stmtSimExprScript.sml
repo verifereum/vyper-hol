@@ -56,6 +56,25 @@ Proof
   gvs[no_control_exc_def, stmt_res_ok_def, expr_vv_res_ok_def]
 QED
 
+Theorem expr_stmt_exempt[local]:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_expr cx e) (return ())) (es,s0)
+    marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (Expr e)) (return ())) (es,s0)
+    marks (err,ee) (leaf,fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx (Expr e)) (return ()) =
+   bind (eval_expr cx e)
+     (\tv. ignore_bind (type_check (~is_HashMapRef tv) "Expr HashMapRef")
+                       (return ()))` by
+    (simp[Once evaluate_def, ignore_bind_def, FUN_EQ_THM, bind_def] >>
+     gen_tac >> Cases_on `eval_expr cx e x` >> Cases_on `q` >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_result >> simp[]
+QED
+
 Theorem compile_expr_stmt_frag_ok:
   !ctx func cx lctx RetQ cenv ty e es.
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
