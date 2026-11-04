@@ -25,6 +25,7 @@
 
 Theory stmtSimReasonCode
 Ancestors
+  exprSimUnwrapProps
   stmtSimDefs
   exprSimDefs
   loweringPosts

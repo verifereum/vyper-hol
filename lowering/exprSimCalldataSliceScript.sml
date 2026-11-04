@@ -21,6 +21,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimUnwrapProps
   exprSimProps
   exprSimHypsDefs
   exprSimDefs
@@ -1001,7 +1002,7 @@ Proof
           disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
           irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
           irule frag_exec_conseq >> goal_assum (drule_at Any) >>
-          simp[exprSimUnwrapTheory.expr_exit_exception_transport]) >>
+          simp[exprSimUnwrapPropsTheory.expr_exit_exception_transport]) >>
       gvs[eval_exprs_nil]) >>
   drule eval_exprs_cons_cases >> strip_tac
   >- gvs[] >>

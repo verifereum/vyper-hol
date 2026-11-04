@@ -22,6 +22,7 @@
 
 Theory stmtSimReasonExpr
 Ancestors
+  exprSimUnwrapProps
   stmtSimProps
   stmtSimDefs
   exprSimDefs

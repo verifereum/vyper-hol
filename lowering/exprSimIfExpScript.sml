@@ -21,6 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
+  exprSimUnwrapProps
   exprSimProps
   exprSimDefs
   loweringPosts
