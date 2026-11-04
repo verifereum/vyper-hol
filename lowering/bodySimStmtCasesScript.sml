@@ -6697,6 +6697,118 @@ QED
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
+Theorem aug_place_extend_name_memory[local]:
+  extend_place cx (PlaceR (MemoryPlace id path)) sb s = (INL out,st) ==>
+  out = PlaceR (MemoryPlace id (path ++ [sb]))
+Proof
+  simp[extend_place_def, extend_memory_place_def, bind_def,
+       ignore_bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem aug_place_name_root_base[local]:
+  !t id cx s out st.
+    target_root t = NameTarget id /\
+    eval_base_place cx t s = (INL out,st) ==>
+    ?path. out = PlaceR (MemoryPlace id path)
+Proof
+  `(!e:expr. T) /\ (!t. !id cx s out st.
+    target_root t = NameTarget id /\
+    eval_base_place cx t s = (INL out,st) ==>
+    ?path. out = PlaceR (MemoryPlace id path))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_root_def] >> rpt conj_tac >> rpt gen_tac
+  >- (simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      metis_tac[])
+  >> rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  gvs[] >> metis_tac[aug_place_extend_name_memory]
+QED
+
+Theorem aug_place_name_root_memory:
+  target_root t = NameTarget id /\
+  eval_target_place cx t es = (INL p,st) ==>
+  ?path. p = MemoryPlace id path
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all aug_place_name_root_base >> strip_tac >>
+  gvs[get_place_def, return_def]
+QED
+
+Theorem aug_place_extend_immutable_origin[local]:
+  !pv sb cx s mid id path st.
+    extend_place cx pv sb s = (INL (PlaceR (ImmutablePlace mid id path)),st) ==>
+    ?old. pv = PlaceR (ImmutablePlace mid id old)
+Proof
+  Cases
+  >- simp[extend_place_def, raise_def]
+  >- (Cases_on `p` >>
+      simp[extend_place_def, bind_def, ignore_bind_def,
+           extend_memory_place_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+      simp[])
+  >> Cases_on `sb` >>
+  simp[extend_place_def, bind_def, ignore_bind_def,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[value_type_CASE_rator, bind_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem aug_place_global_immutable_origin[local]:
+  lookup_global cx src name s = (INL (PlaceR (ImmutablePlace mid id path)),st) ==>
+  ?ts. get_module_code cx src = SOME ts /\
+       find_var_decl_by_name name ts = NONE
+Proof
+  simp[lookup_global_def, bind_def, lift_option_type_def,
+       vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+       var_decl_info_CASE_rator,
+       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[bind_def, lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      return_def, raise_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem aug_place_base_immutable_origin[local]:
+  !t cx s mid id path st.
+    eval_base_place cx t s = (INL (PlaceR (ImmutablePlace mid id path)),st) ==>
+    immutable_root cx t
+Proof
+  `(!e:expr. T) /\ (!t. !cx s mid id path st.
+    eval_base_place cx t s = (INL (PlaceR (ImmutablePlace mid id path)),st) ==>
+    immutable_root cx t)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[] >> rpt conj_tac >> rpt gen_tac
+  >- simp[Once evaluate_def, bind_def, get_scopes_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def, AllCaseEqs()]
+  >- (PairCases_on `p` >> simp[Once evaluate_def] >> strip_tac >>
+      drule aug_place_global_immutable_origin >>
+      simp[immutable_root_def, target_root_def])
+  >> rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  drule aug_place_extend_immutable_origin >> strip_tac >> gvs[] >>
+  simp[immutable_root_def, target_root_def] >>
+  first_x_assum drule >> simp[immutable_root_def]
+QED
+
+Theorem aug_place_supported_success_kind:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings t = SOME pt /\
+  eval_target_place cx t es = (INL p,st) ==>
+  ((?id path. p = MemoryPlace id path) \/
+   (?tr slot tv. p = StoragePlace tr slot tv))
+Proof
+  rpt strip_tac >> Cases_on `p` >> simp[] >>
+  `~immutable_root cx t` by metis_tac[aug_place_supported_root_not_immutable] >>
+  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  metis_tac[aug_place_base_immutable_origin]
+QED
+
 Theorem body_augassign_place_pure:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
