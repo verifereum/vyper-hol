@@ -785,3 +785,23 @@ val _ = List.app (fn (n,th) =>
   end)
   [("compile_expr_operand_frame", compile_expr_operand_frame),
    ("vv_holds_operand_defined", vv_holds_operand_defined)];
+
+Theorem compile_expr_operand_frame_no_label:
+  compile_expr ce ty e lo = (vv,hi) /\ local_ptrs_reserved ce lo /\
+  operand_frame ce es s hi es2 s2 /\
+  ~is_label_operand (vv_operand vv) /\
+  eval_operand (vv_operand vv) s = SOME w ==>
+  eval_operand (vv_operand vv) s2 = SOME w
+Proof
+  strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at hi x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  Cases_on `vv_operand vv` >>
+  gvs[eval_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+  fs[operand_frame_def] >> metis_tac[]
+QED
+
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag compile_expr_operand_frame_no_label) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "Non-label operand frame dependency" else ()
+end;
