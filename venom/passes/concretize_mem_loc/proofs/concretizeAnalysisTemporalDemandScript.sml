@@ -321,7 +321,7 @@ Proof
   drule_all concretize_protected_cached_byte_no_kill >> simp[]
 QED
 
-Theorem trace_config_at[local]:
+Theorem trace_config_at:
   joint_trace vs0 C q0 es qs q /\ k <= LENGTH es ==>
   joint_config_reachable vs0 C (EL k (q0::qs))
 Proof
@@ -411,6 +411,61 @@ Proof
   metis_tac[joint_origin_history_projection, frame_history_active]
 QED
 
+Theorem activation_location_functional:
+  activation_location q d fn p /\ activation_location q d fn p' ==> p = p'
+Proof
+  Cases_on `q` >> rw[activation_location_def] >> gvs[]
+QED
+
+Theorem concretize_cached_generator_liveat:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
+  ptr_discipline lo C vs0 /\ wf_function fn /\ all_reachable fn /\
+  o1_walk_view rpolicy 2 C' fn observed /\
+  bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
+  sizes = (\a. if context_alloca_size fn
+    (imported_mems_used observed.cu_context fn) a = 0 then NONE
+    else SOME (context_alloca_size fn (imported_mems_used observed.cu_context fn) a)) /\
+  (!nm. OL alloc_to (mems nm)) /\ OL alloc_to pallocas /\
+  ml_iterate_fuel (concretize_memloc_fuel fn) bp mems sizes pallocas
+    (cfg_analyze fn) fn FEMPTY FEMPTY = (la,us) /\
+  joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
+  activation_cache (EL n (q0::qs)) d fn aid (b,sz) /\
+  activation_location (EL n (q0::qs)) d fn p /\
+  activation_location (EL j (q0::qs)) d fn (s.vs_current_bb,s.vs_inst_idx) /\
+  active_inst fn inst s /\ ml_read_gen (Allocation aid) bp mems inst /\
+  b <= byte /\ byte < b + sz /\
+  (!k. n <= k /\ k <= j ==> d <= activation_depth (EL k (q0::qs))) /\
+  (!k. n <= k /\ k <= j ==> activation_nonrevert (EL k (q0::qs)) d) /\
+  (!k. n <= k /\ k < j ==> byte NOTIN joint_writes (EL k (q0::qs)) (EL k es)) /\
+  activation_guard (EL j (q0::qs)) d
+    (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst) ==>
+  MEM (Allocation aid) (ml_lookup la p)
+Proof
+  strip_tac >>
+  `!k. n < k /\ k <= j ==> activation_guard (EL k (q0::qs)) d
+     (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst)` by
+    (rpt strip_tac >> irule concretize_cached_interval_guard >>
+     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `activation_guard _ _ _`)) >> simp[] >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  `!i. i.inst_opcode = PHI ==> ~ptr_ml_can_kill (Allocation aid) bp sizes i` by
+    metis_tac[kill_has_variable_write] >>
+  `ml_indexed_path fn (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst)
+      p (s.vs_current_bb,s.vs_inst_idx)` by
+    (`?p'. activation_location (EL j (q0::qs)) d fn p' /\
+        ml_indexed_path fn (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst) p p'` by
+       (irule joint_activation_location_interval >> simp[] >>
+        conj_tac >- (qexists_tac `n` >> gvs[]) >> metis_tac[]) >>
+     metis_tac[activation_location_functional]) >>
+  fs[active_inst_def] >> irule ml_production_liveat_future_generator >>
+  goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`bb`,`s.vs_inst_idx`] >> gvs[]
+QED
+
 Theorem concretize_cached_read_liveat:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -457,29 +512,24 @@ Proof
     gvs[activation_guard_def] >>
   `activation_cache (EL n (q0::qs)) d fn aid (b,sz)` by
     gvs[activation_cache_def] >>
-  `!k. n < k /\ k <= j ==> activation_guard (EL k (q0::qs)) d
-     (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst)` by
-    (rpt strip_tac >> irule concretize_cached_interval_guard >>
-     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `activation_guard _ _ _`)) >> simp[] >>
-     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
   `active_inst fn inst0 s0` by
     (irule reachable_active >>
      `joint_config_reachable vs0 C (EL n (q0::qs))` by
        (irule trace_config_at >> metis_tac[LESS_EQ_TRANS]) >> metis_tac[]) >>
   `activation_location (EL n (q0::qs)) d fn (s0.vs_current_bb,s0.vs_inst_idx)` by
     gvs[activation_location_def] >>
-  `!i. i.inst_opcode = PHI ==> ~ptr_ml_can_kill (Allocation aid) bp sizes i` by
-    metis_tac[kill_has_variable_write] >>
-  `ml_indexed_path fn (\inst. ~ptr_ml_can_kill (Allocation aid) bp sizes inst)
-    (s0.vs_current_bb,s0.vs_inst_idx) (s.vs_current_bb,s.vs_inst_idx)` by
-    (irule joint_activation_current_path >> metis_tac[]) >>
   `active_inst fn inst s` by
     metis_tac[joint_origin_history_projection, frame_history_active] >>
-  fs[active_inst_def] >>
-  irule ml_production_liveat_future_generator >>
+  `activation_location (EL j (q0::qs)) d fn (s.vs_current_bb,s.vs_inst_idx)` by
+    gvs[activation_location_def] >>
+  irule concretize_cached_generator_liveat >>
+  goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `ml_iterate_fuel _ _ _ _ _ _ _ _ _ = _`)) >>
-  qexistsl_tac [`bb'`,`s.vs_inst_idx`] >> gvs[ml_read_gen_def]
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `active_inst fn inst s`)) >>
+  qexists_tac `byte` >> gvs[ml_read_gen_def] >>
+  qexistsl_tac [`j`,`lo`,`names`,`observed`] >> gvs[]
 QED
 
 Theorem concretize_untainted_local_read_liveat:
