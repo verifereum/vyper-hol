@@ -188,7 +188,7 @@ Proof
         gvs[target_pre_def, target_indices_pre_def] >>
       Cases_on `eval_expr cx e es1` >> rename1 `(r2, es2)` >>
       `expr_sim_inv cenv cx env es2` by
-        metis_tac[exprSimHypsTheory.expr_body_pre_eval_result] >>
+        metis_tac[exprSimSourceTheory.expr_body_pre_eval_result] >>
       reverse (Cases_on `r2`) >> simp[] >- (strip_tac >> gvs[]) >>
       rename1 `eval_expr cx e es1 = (INL tv, es2)` >>
       Cases_on `read_result cx tv es2` >> rename1 `(r3, es3)` >>

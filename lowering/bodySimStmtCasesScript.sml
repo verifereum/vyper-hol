@@ -437,7 +437,7 @@ Theorem expr_body_pre_eval_result:
     expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_sim_inv cenv cx env es'
 Proof
-  metis_tac[exprSimHypsTheory.expr_body_pre_eval_result]
+  metis_tac[exprSimSourceTheory.expr_body_pre_eval_result]
 QED
 
 Theorem expr_body_pre_eval:
