@@ -262,3 +262,56 @@ Proof
   rpt gen_tac >> simp[eval_one_phi_def, AllCaseEqs()] >>
   rpt strip_tac >> simp[]
 QED
+
+Theorem ao_source_prefix_value_origin:
+  !ctx fn s0 n k phase s x w.
+    ao_source_prefix ctx fn s0 n k phase s /\
+    lookup_var x s0 = NONE /\ lookup_var x s = SOME w ==>
+    (?j u bb i t.
+      ao_source_prefix ctx fn s0 n j F u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME i /\
+      MEM x i.inst_outputs /\ step_inst j ctx i u = OK t /\
+      lookup_var x t = SOME w) \/
+    (?j u bb p i.
+      ao_source_prefix ctx fn s0 n (SUC j) T u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      eval_phis u bb.bb_instructions = OK p /\
+      MEM i bb.bb_instructions /\ i.inst_opcode = PHI /\
+      eval_one_phi u i = SOME (x,w))
+Proof
+  `!ctx fn s0 n k phase s.
+    ao_source_prefix ctx fn s0 n k phase s ==>
+    !x w. lookup_var x s0 = NONE /\ lookup_var x s = SOME w ==>
+    (?j u bb i t.
+      ao_source_prefix ctx fn s0 n j F u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME i /\
+      MEM x i.inst_outputs /\ step_inst j ctx i u = OK t /\
+      lookup_var x t = SOME w) \/
+    (?j u bb p i.
+      ao_source_prefix ctx fn s0 n (SUC j) T u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      eval_phis u bb.bb_instructions = OK p /\
+      MEM i bb.bb_instructions /\ i.inst_opcode = PHI /\
+      eval_one_phi u i = SOME (x,w))` suffices_by
+    (disch_tac >> rpt gen_tac >> strip_tac >>
+     first_x_assum drule >> disch_then irule >> simp[]) >>
+  ho_match_mp_tac ao_source_prefix_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[])
+  >- (rpt strip_tac >>
+      `lookup_var x p = SOME w` by gvs[lookup_var_def] >>
+      drule_all ao_eval_phis_value_origin >> strip_tac
+      >- (first_x_assum irule >> simp[]) >>
+      disj2_tac >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >>
+      `lookup_var x t = SOME w` by gvs[lookup_var_def] >>
+      Cases_on `MEM x inst.inst_outputs`
+      >- (disj1_tac >> qexistsl [`k`, `s`, `bb`, `inst`, `t`] >> simp[]) >>
+      drule_all step_preserves_non_output_vars >> strip_tac >>
+      first_x_assum irule >> gvs[]) >>
+  rpt strip_tac >> drule_all step_terminator_preserves_vars >>
+  disch_then (qspec_then `x` mp_tac) >> strip_tac >>
+  first_x_assum irule >> gvs[]
+QED
