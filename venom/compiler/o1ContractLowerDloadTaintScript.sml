@@ -240,6 +240,21 @@ Proof
   simp_tac std_ss [pred_setTheory.GSPECIFICATION] >> decide_tac
 QED
 
+(* Word operands denote natural site-relative ranges when they do not wrap. *)
+Theorem translated_word_range_member:
+  b + off < dimword (:256) /\ b' + off < dimword (:256) /\
+  len < dimword (:256) ==>
+  ((b + k IN {i:num | w2n (n2w (b + off):bytes32) <= i /\
+                     i < w2n (n2w (b + off):bytes32) +
+                         w2n (n2w len:bytes32)}) <=>
+   (b' + k IN {i:num | w2n (n2w (b' + off):bytes32) <= i /\
+                      i < w2n (n2w (b' + off):bytes32) +
+                          w2n (n2w len:bytes32)}))
+Proof
+  strip_tac >> simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+                    translated_range_member]
+QED
+
 Theorem data_copy_taint_related:
   si.inst_opcode = DLOADBYTES /\ ti.inst_opcode = CODECOPY /\
   si.inst_operands = [sd; ss; sn] /\ ti.inst_operands = [td; ts; tnop] /\
