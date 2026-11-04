@@ -23,6 +23,7 @@ Ancestors
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
+  makeSsaCurrentPlacementCut
 Libs
   rich_listTheory
 
@@ -932,6 +933,67 @@ Theorem current_wf_event_entry_origin:
 Proof
   strip_tac >> fs[current_event_path_def] >> qexists_tac `path` >> simp[] >>
   metis_tac[current_wf_path_annotation_origin]
+QED
+
+Theorem current_wf_prefix_annotation_lookup[local]:
+  !(olds : basic_block list) (news : basic_block list) annsss l old.
+  LENGTH olds = LENGTH news /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,news)) annsss /\
+  LIST_REL (\old new. ?pre.
+    new = old with bb_instructions := pre ++ old.bb_instructions /\ P old pre)
+    olds news /\ lookup_block l olds = SOME old ==>
+  ?pre. P old pre /\
+    lookup_block l news = SOME (old with bb_instructions := pre ++ old.bb_instructions) /\
+    current_annotation_map news annsss l = current_block_annotations old pre
+Proof
+  Induct_on `olds` >> Cases_on `news` >> Cases_on `annsss` >>
+  simp[lookup_block_def, FIND_thm, current_annotation_map_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `current_block_provenance _ _ _ _` mp_tac >>
+  simp[current_block_provenance_def] >> strip_tac >>
+  gvs[basic_block_component_equality] >>
+  IF_CASES_TAC >> gvs[]
+  >- (qexists_tac `pre` >> simp[]) >>
+  qpat_x_assum `!news annsss l old. _`
+    (assume_tac o SRULE [lookup_block_def, current_annotation_map_def]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem current_wf_certificate_actual_prefix:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old ==>
+  ?pre. A (current_event_label ev) = current_block_annotations old pre /\
+    EVERY (\inst. inst.inst_opcode = PHI) pre /\
+    (!v. current_actual_inserted fn v (current_event_label ev) <=>
+      ?inst. MEM inst pre /\ MEM v inst.inst_outputs) /\
+    current_edge_shape (old with bb_instructions := pre ++ old.bb_instructions)
+      (current_event_input_block ev) /\ current_event_trace A H ev
+Proof
+  simp[current_structural_certificate_def] >> rpt strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  drule current_actual_insertion_prefix >> strip_tac >>
+  drule_all (Q.INST [`P` |-> `\old pre.
+    EVERY (\i. ?id v. i = build_phi_inst_supply id v
+      (case ALOOKUP (current_pred_map fn) old.bb_label of
+        SOME ps => ps | NONE => [])) pre /\
+    (!v. current_actual_inserted fn v old.bb_label <=>
+      ?i. MEM i pre /\ MEM v i.inst_outputs)`]
+    current_wf_prefix_annotation_lookup) >> strip_tac >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[cj 1 current_trace_event_labels_distinct] >>
+  `old.bb_label = current_event_label ev` by metis_tac[lookup_block_label] >>
+  qexists_tac `pre` >> simp[] >> conj_tac
+  >- (gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+      simp[build_phi_inst_supply_def] >> strip_tac >> gvs[]) >>
+  conj_tac
+  >- metis_tac[cj 1 current_trace_event_input_shape] >>
+  metis_tac[cj 1 current_tree_trace_events, EVERY_MEM]
 QED
 
 Theorem current_wf_nondefault_cut_output:
