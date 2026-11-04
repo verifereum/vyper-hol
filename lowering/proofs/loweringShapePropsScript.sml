@@ -15359,3 +15359,48 @@ Proof
        simp[unwrap_value_labels]) >>
   irule as_ptr_val_labels >> simp[lower_abi_decode_labels]
 QED
+
+Theorem type_builtin_constants_labels[local]:
+  !tb. (tb = Empty \/ tb = MaxValue \/ tb = MinValue \/ tb = Epsilon) ==>
+  cs_extends st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args st)))
+Proof
+  Cases >> simp[] >> once_rewrite_tac[compile_type_builtin_dispatch_body_def] >>
+  simp[LET_THM] >> rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_builtin_empty_complex_labels]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG] >>
+  pairarg_tac >> simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem type_builtin_extract32_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty Extract32 ret_ty args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty Extract32 ret_ty args st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_type_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule lower_value_labels >> simp[]) >>
+  rpt gen_tac >> ho_match_mp_tac application_labels >> conj_tac
+  >- simp[compile_bytestring_src_labels] >>
+  map_every qx_gen_tac [`x`, `s`] >> PairCases_on `x` >> simp[] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, compile_extract32_load_labels]) >>
+  irule as_stack_val_labels >> simp[compile_clamp_basetype_labels]
+QED
+
+Theorem compile_type_builtin_dispatch_body_labels:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_type_builtin_dispatch_body f cenv vv_ty ty tb ret_ty args st)))
+Proof
+  disch_tac >> Cases_on `tb` >>
+  simp[type_builtin_convert_labels, type_builtin_constants_labels,
+       type_builtin_extract32_labels, type_builtin_abi_encode_labels,
+       type_builtin_abi_decode_labels]
+QED
