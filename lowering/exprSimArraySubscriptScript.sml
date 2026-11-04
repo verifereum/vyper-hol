@@ -3823,3 +3823,48 @@ Proof
   irule immutable_holds_root >>
   goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem flat_runtime_type_array_path:
+  ((?b. rt = BaseTV b) \/
+   (?b cap. rt = ArrayTV (BaseTV b) cap) \/
+   (?ts. rt = TupleTV ts /\ EVERY (\t. ?b. t = BaseTV b) ts) \/
+   (?fs. rt = StructTV fs /\ EVERY (\kv. ?b. SND kv = BaseTV b) fs)) /\
+  subscripts_type rt path = SOME (ArrayTV et bd) ==>
+  path = []
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `path` >> simp[] >>
+  rename1 `subscripts_type rt (sb::rest)` >>
+  `!child. subscript_type rt sb = SOME child ==> ?b. child = BaseTV b` by
+    (rpt strip_tac >> gvs[] >>
+     Cases_on `sb` >> gvs[subscript_type_def]
+     >~ [`subscript_type _ (ValueSubscript v) = _`]
+     >- (Cases_on `v` >> gvs[subscript_type_def, AllCaseEqs(), listTheory.EVERY_EL]) >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+     gvs[listTheory.EVERY_MEM] >>
+     first_x_assum drule >> simp[]) >>
+  drule_all subscripts_type_flat_not_array >> simp[] >>
+  qexistsl [`rest`, `et`, `bd`] >> gvs[]
+QED
+
+Theorem flat_immutable_runtime_array_path:
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+             NONE => FEMPTY | SOME imms => get_source_immutables md imms)
+    nm = SOME (rt,v) /\
+  ((?b. rt = BaseTV b) \/
+   (?b cap. rt = ArrayTV (BaseTV b) cap) \/
+   (?ts. rt = TupleTV ts /\ EVERY (\t. ?b. t = BaseTV b) ts) \/
+   (?fs. rt = StructTV fs /\ EVERY (\kv. ?b. SND kv = BaseTV b) fs)) /\
+  runtime_place_typed cx es (ImmutablePlace md nm path) (ArrayTV et bd) ==>
+  path = []
+Proof
+  rpt gen_tac >> disch_tac >>
+  `subscripts_type rt path = SOME (ArrayTV et bd)` by
+    (Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+     gvs[vyperTypeInvariantsTheory.runtime_place_typed_def,
+         place_type_value_def, get_immutables_def, get_address_immutables_def,
+         bind_def, return_def, raise_def, lift_option_type_def,
+         lift_option_def, vyperMiscTheory.option_CASE_rator] >>
+     gvs[AllCaseEqs(), return_def, raise_def]) >>
+  irule flat_runtime_type_array_path >> goal_assum (drule_at Any) >>
+  gvs[]
+QED
