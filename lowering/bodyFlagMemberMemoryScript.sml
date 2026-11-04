@@ -1,7 +1,8 @@
 (* FlagMember is an actual code-free constant producer. *)
 Theory bodyFlagMemberMemory
 Ancestors
-  bodyUnopMemory bodyMemoryDefs bodyMemoryPreds exprSimLeaves exprSimHyps
+  exprSimSource exprSimMemoryValues fragGasPathMem fragGasSeqMem gasCount gasContext
+  exprSimMemoryStack bodyMemoryDefs bodyMemoryPreds exprSimProps exprSimHypsDefs
   exprSimDefs exprLowering exprLoweringProps fragExecMem compileEnv valueEncoding
   vyperAST vyperInterpreter vyperState vyperTyping vyperValueOperation
   vyperTypeSystem vyperValue venomState loweringSlice
