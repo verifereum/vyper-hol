@@ -108,3 +108,54 @@ Proof
   strip_tac >> drule current_joint_name_agree >>
   simp[current_ordinary_demand_def, current_name_agree_def]
 QED
+
+Definition current_origin_absent_def:
+  current_origin_absent origin M <=> !n. ALOOKUP M n <> SOME origin
+End
+
+Theorem current_origin_realizes_extensional:
+  current_origin_realizes V M st /\
+  (!n origin. ALOOKUP M n = SOME origin ==> valuation origin = V origin) ==>
+  current_origin_realizes valuation M st
+Proof
+  simp[current_origin_realizes_def] >> rpt strip_tac >>
+  Cases_on `ALOOKUP M n` >> simp[] >> metis_tac[]
+QED
+
+Theorem current_origin_realizes_fresh_extension:
+  current_origin_realizes V M st /\ current_origin_absent origin M ==>
+  current_origin_realizes ((origin =+ SOME value) V) M st
+Proof
+  strip_tac >> irule current_origin_realizes_extensional >>
+  qexists_tac `V` >> simp[] >>
+  gvs[current_origin_absent_def] >> rpt strip_tac >>
+  `origin' <> origin` by metis_tac[] >> simp[combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem current_origin_realizes_fresh_write:
+  current_origin_realizes V M st /\ current_origin_absent origin M ==>
+  current_origin_realizes ((origin =+ SOME value) V)
+    ((dst,origin)::M) (update_var dst value st)
+Proof
+  strip_tac >> irule current_origin_realizes_write >> simp[] >>
+  irule current_origin_realizes_fresh_extension >> simp[]
+QED
+
+Theorem current_origin_realizes_paired_fresh_write:
+  current_origin_realizes V M st /\ current_origin_realizes V N st' /\
+  current_origin_absent origin M /\ current_origin_absent origin N ==>
+  current_origin_realizes ((origin =+ SOME value) V)
+    ((dst,origin)::M) (update_var dst value st) /\
+  current_origin_realizes ((origin =+ SOME value) V)
+    ((dst',origin)::N) (update_var dst' value st')
+Proof
+  strip_tac >> conj_tac >> irule current_origin_realizes_fresh_write >> simp[]
+QED
+
+Theorem current_origin_absent_cons:
+  current_origin_absent fresh M /\ fresh <> origin ==>
+  current_origin_absent fresh ((dst,origin)::M)
+Proof
+  simp[current_origin_absent_def] >> rpt strip_tac >>
+  Cases_on `dst = n` >> gvs[]
+QED
