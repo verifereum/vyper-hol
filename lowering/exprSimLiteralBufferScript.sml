@@ -118,48 +118,6 @@ Proof
   intLib.ARITH_TAC
 QED
 
-Theorem literal_mstore_state_rel:
-  !func cenv cx es s a (w:bytes32) inst b sz ctx.
-    stmt_state_rel ctx func cenv cx es s /\ b <= a /\ a + 32 <= b + sz /\
-    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
-    FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
-    (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
-       b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel ctx func cenv cx es (mstore a w s)
-Proof
-  rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
-  rewrite_tac[Once exprLoweringPropsTheory.stmt_state_rel_def] >> strip_tac >>
-  `local_ptrs_rel func cenv es.scopes (mstore a w s)` by
-    (irule localPtrsPropsTheory.local_ptrs_rel_mstore >>
-     reverse conj_tac >- gvs[state_rel_def] >>
-     rpt strip_tac >>
-     qpat_x_assum `!name lb lsz. local_region _ _ _ _ _ _ ==> _` drule >>
-     decide_tac) >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
-     (mstore a w s)` by
-    (irule immutables_rel_mstore_alloca >> conj_tac
-     >- (qexistsl_tac [`b`, `func`, `inst`, `sz`] >> simp[]) >>
-     gvs[state_rel_def]) >>
-  rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.state_rel_frame >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`es`, `s`] >> simp[] >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule localPtrsPropsTheory.alloca_inv_fields >>
-      qexists_tac `s` >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.alloca_room_fields >>
-      qexists_tac `s` >> simp[mstore_def]) >>
-  conj_tac
-  >- (irule exprLoweringPropsTheory.immutable_alloca_sep_fields >>
-      qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
-      rpt strip_tac >> qexists_tac `id` >>
-      fs[local_region_def, lookup_var_def]) >>
-  simp[mstore_def] >> metis_tac[]
-QED
-
 Theorem literal_emit_mstore_run:
   !sa sb pop value s addr w.
     emit_void MSTORE [pop; value] sa = ((), sb) /\
@@ -646,7 +604,7 @@ Proof
      qexistsl_tac [`buf.buf_operand`, `Lit (n2w (LENGTH bs))`] >>
      simp[eval_operand_def]) >>
   `stmt_state_rel ctx func cenv cx es (mstore (w2n w) (n2w (LENGTH bs)) t)` by
-    (irule literal_mstore_state_rel >> simp[] >> qexistsl_tac
+    (irule loweringSliceTheory.literal_mstore_state_rel >> simp[] >> qexistsl_tac
       [`w2n w`, `mk_inst sa.cs_next_id ALLOCA
         [Lit (n2w (32 + 32 * word_size (LENGTH bs)))]
         [STRING #"%" (toString sa.cs_next_var)]`,

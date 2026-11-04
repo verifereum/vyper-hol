@@ -345,7 +345,7 @@ Proof
     (irule literal_emit_mstore_run >>
      qexistsl_tac [`buf.buf_operand`, `val_op`] >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated)` by
-    (irule literal_mstore_state_rel >> simp[] >>
+    (irule loweringSliceTheory.literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
        `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
           [STRING #"%" (toString sa.cs_next_var)]`, `32`] >>

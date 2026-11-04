@@ -4303,3 +4303,56 @@ Proof
     (irule step_MSTORE >> simp[eval_operand_def, lookup_var_update_var]) >>
   gvs[run_inst_seq_def]
 QED
+
+Theorem probe_word_return_store_post:
+  !ctx func cenv cx es sa sb s p q w aid inst.
+    stmt_state_rel ctx func cenv cx es s /\
+    not_local_ptr cenv es.scopes q /\
+    (!x. not_fresh_at sa x ==> x <> q) /\ p <> q /\
+    lookup_var p s = SOME w /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n w,32) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = aid /\
+    (!a off sz. FLOOKUP s.vs_allocas a = SOME (off,sz) /\
+       a < sa.cs_next_id ==> regions_disjoint (w2n w) 32 off sz) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       w2n w + 32 <= b \/ b + sz <= w2n w) ==>
+    stmt_state_rel ctx func cenv cx es
+      (mstore (w2n w) 0w (update_var q w s)) /\
+    vv_holds cenv cx (BaseT (UintT 256)) (Value (IntV 0))
+      (LocatedValue (BaseT (UintT 256))
+        (base_ptr <|buf_operand := Var p; buf_size := 32|>)) es
+      (mstore (w2n w) 0w (update_var q w s)) /\
+    vv_at cenv cx (BaseT (UintT 256)) sa sb es (Value (IntV 0))
+      (LocatedValue (BaseT (UintT 256))
+        (base_ptr <|buf_operand := Var p; buf_size := 32|>))
+      (mstore (w2n w) 0w (update_var q w s)) /\
+    wb_frame cenv es sa s (mstore (w2n w) 0w (update_var q w s))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!n b sz. local_region cenv es.scopes (update_var q w s) n b sz ==>
+     w2n w + 32 <= b \/ b + sz <= w2n w` by
+    (gvs[local_region_def, not_local_ptr_def, lookup_var_update_var] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (irule loweringSliceTheory.literal_mstore_state_rel >>
+      conj_tac >- (qexistsl_tac [`w2n w`, `inst`, `32`] >>
+        gvs[update_var_def] >> first_assum ACCEPT_TAC) >>
+      irule stmt_state_rel_update_var >> simp[]) >>
+  conj_tac
+  >- (irule probe_word_return_buffer_holds >> simp[lookup_var_update_var]) >>
+  conj_tac
+  >- (irule probe_word_return_buffer_at >> qexists_tac `aid` >>
+      gvs[local_region_def, lookup_var_def, mstore_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+      first_assum ACCEPT_TAC) >>
+  `wb_frame cenv es sa s (mstore (w2n w) 0w s)` by
+    (irule wb_frame_mstore >> gvs[regions_disjoint_def] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sa`, `mstore (w2n w) 0w s`] >>
+  simp[mstore_def, update_var_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED

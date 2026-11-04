@@ -115,11 +115,11 @@ Theorem mapping_hash_stores_state_rel:
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx es (mstore a slot s)` by
-    (irule exprSimLiteralBufferTheory.literal_mstore_state_rel >>
+    (irule loweringSliceTheory.literal_mstore_state_rel >>
      reverse conj_tac >- first_assum ACCEPT_TAC >>
      qexistsl_tac [`a`, `inst`, `64`] >> simp[] >>
      rpt strip_tac >> first_x_assum drule >> simp[regions_disjoint_def]) >>
-  irule exprSimLiteralBufferTheory.literal_mstore_state_rel >>
+  irule loweringSliceTheory.literal_mstore_state_rel >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`a`, `inst`, `64`] >> simp[mstore_def] >>
   rpt strip_tac >>

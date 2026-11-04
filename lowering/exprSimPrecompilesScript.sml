@@ -1356,7 +1356,7 @@ Proof
   `eval_operand (Lit 0w) s3 = SOME 0w` by simp[eval_operand_def] >>
   drule_all literal_emit_mstore_run >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es (mstore (w2n wo) 0w s3)` by
-    (irule literal_mstore_state_rel >> simp[] >>
+    (irule loweringSliceTheory.literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n wo`,
        `mk_inst sb.cs_next_id ALLOCA [Lit 32w]
          [STRING #"%" (toString sb.cs_next_var)]`, `32`] >> simp[mk_inst_def] >>
