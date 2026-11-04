@@ -143,7 +143,7 @@ Theorem compile_literal_memory_sim:
     expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
     expr_sim ctx func cenv cx ty (Literal ann l) es
 Proof
-  rpt strip_tac >> irule exprSimUnwrapTheory.expr_sim_of_vv_sim_buffer >>
+  rpt strip_tac >> irule exprSimBufferForceTheory.expr_sim_of_vv_sim_buffer >>
   `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
     (gvs[expr_sim_pre_def, well_typed_expr_def] >> Cases_on `l` >> gvs[] >>
      Cases_on `ann` >> gvs[well_typed_literal_def] >>
