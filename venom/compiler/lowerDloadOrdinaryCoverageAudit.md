@@ -657,3 +657,164 @@ frozen theorem has not been changed. The target does not yet import the helper
 coverage assembly. No counterexample has been verified. Remaining full coverage
 and terminal integration require the next strategist-owned phase, not more
 ownership algebra or redundant opcode-union wrappers.
+
+## Operational block successor diagnostic (C1.11.5.78)
+
+Status: **statement proposals only**, not exported HOL theorems. No control
+simulation is certified by this section. Baselines: RootCoverage builds
+(TO_ld_mem-20261104T190123Z_m5280_t001); actual PHI theory is
+`lowerDloadSafetyPhiEffects`, which builds
+(TO_ld_mem-20261104T190123Z_m5288_t001).
+
+### Actual rule and finite dispatch audit
+
+`frame_reachable_block` (ptrDiscipline:476-482) requires reachable source inst,
+source activity, is_terminator, source step OK, source nonhalting poststate,
+source enters_block, and activity in the entered source state. It keeps stk/PG,
+sets G to `entry_prov fn ss G`, and tn to `entry_taint_vars fn ss tn`.
+There is NO ordinary step_prov/step_taint update and NO SUC-index continuation.
+`enters_block` (contextCodegenRel:248-253) looks up the destination, evaluates
+parallel PHIs from the original snapshot, then overwrites the index with
+`phi_prefix_length bb.bb_instructions`.
+
+For successful nonhalting OK terminators, only JMP/JNZ/DJMP remain. Dispatch
+(venomExecSemantics:638-666,739-801,1046ff) gives: JMP jumps to its syntactic
+label; JNZ evaluates one word and tests nonzero; DJMP evaluates one word, uses
+w2n as an index, checks the extracted label list and its bound. RET/RETFMP/DRET
+return IntRet or Error, STOP/RETURN/SINK/SELFDESTRUCT return Halt (or Error),
+REVERT returns Abort/Error, INVALID returns Abort. DRET is additionally excluded
+by o1_fn_shape.no_dret; its exclusion is not needed for this dispatch split.
+Do not exclude PHIs globally: o1_fn_shape requires first_block_no_phi only.
+
+### Exact proposed operational consumer
+
+The following is a HOL term proposal (free variables implicitly universal),
+not source code to admit or a new invariant definition. Its antecedent uses a
+synchronized original boundary; a reachability induction must first reduce a
+terminator's singleton prefix to that boundary. `o1_src_inv D C vs0` is an
+existing frozen premise supplying source taint safety; no source successful-run
+hypothesis or scalar equality assumption is added.
+
+```sml
+ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_src_inv D C vs0 /\
+EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+(!j k. j < k /\ k < LENGTH (f::fs) ==>
+  list_precedes (EL j (f::fs)).lf_fn.fn_name
+                (EL k (f::fs)).lf_fn.fn_name names) /\
+EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+  j IN P f.lf_fn.fn_name) (f::fs) /\
+is_terminator inst.inst_opcode /\
+step_inst fuel C' inst t = OK ts /\ ~ts.vs_halted /\
+enters_block (ld_image f) ts t1 /\ active_inst (ld_image f) ti t1 ==>
+?stk' PG' G' tn' fn1 inst1 s1 t0 A' frames N' X p h.
+  ld_sync lo P C vs0 stk' PG' G' tn' fn1 inst1 s1 t0 A' frames N' /\
+  ld_global lo A' frames /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
+  (!j k. j < k /\ k < LENGTH frames ==>
+    list_precedes (EL j frames).lf_fn.fn_name
+                  (EL k frames).lf_fn.fn_name names) /\
+  ld_image f = ld_image (HD frames) /\
+  ld_envelope (HD frames).lf_supply fn1 s1 s1.vs_inst_idx X p /\
+  ld_prefix C' (ld_image f) X p h t0 t1 /\ ti = EL h X /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) frames
+```
+
+Intended witnesses are stk'=stk, PG'=PG, A'=A, N'=N, fn1=fn,
+G'=entry_prov fn ss G, tn'=entry_taint_vars fn ss tn, and t0=t1.
+Only the head frame changes; h=0 at the next envelope (not index zero).
+This is exactly the RootCoverage existential body with successor target t1,
+not ld_pair plus a separately quantified ownership witness.
+
+### Proposed schematic block-entry transport boundary
+
+This second proposal factors parallel entry effects from reachability and
+location packaging. Poststates ss/ts are schematic terminator results: the
+boundary must NOT unfold step_inst or demand equal vars/parameters. Selected
+PHI provenance is polymorphic `phis_prov` applied to H; there is no inverse
+lookup of erased allocation pairs. It introduces no new definitions.
+
+```sml
+f.lf_fn = fn /\ f.lf_src = ss /\ f.lf_tgt = ts /\
+f.lf_tv = tn.t_var /\
+ld_vars P A f /\ ld_memory lo A tn ss ts /\ ld_nonghost tn ss ts /\
+ss.vs_prev_bb = ts.vs_prev_bb /\ ss.vs_current_bb = ts.vs_current_bb /\
+ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+(!a. a IN FRANGE f.lf_H ==> a IN FDOM A) /\
+enters_block (ld_image f) ts t1 ==>
+?s1 H'. enters_block fn ss s1 /\
+  ld_vars P A (f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
+    lf_tv := (entry_taint_vars fn ss tn).t_var|>) /\
+  ld_memory lo A (entry_taint_vars fn ss tn) s1 t1 /\
+  ld_nonghost (entry_taint_vars fn ss tn) s1 t1 /\
+  entry_prov fn ss (ld_erase A o_f f.lf_H) = ld_erase A o_f H' /\
+  (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+  s1 = ss with <|vs_vars := s1.vs_vars; vs_inst_idx := s1.vs_inst_idx|> /\
+  t1 = ts with <|vs_vars := t1.vs_vars; vs_inst_idx := t1.vs_inst_idx|>
+```
+
+The update equalities expose all unchanged non-variable/non-index fields
+without requiring consumers to repeat PHI implementation unfolding. This helper
+intentionally does not claim source activity or envelope alignment; those are
+positional facts about the generated blocks and must be supplied separately.
+
+### Premise-by-premise proof map / remaining gaps
+
+1. Source function/member/active/ptr witness come from ld_sync_source and
+   ld_sync's EVERY clauses. Shape gives distinct block labels, fn_shape_ok and
+   instruction wellformedness via existing sync/shape projections. Labels and
+   halted equality are ld_nonghost projections, not additional ambient premises.
+2. Source terminator success/destination is NOT checked yet. For JMP the same
+   syntactic label suffices. For JNZ/DJMP the tested/selected word must agree:
+   ld_ptr_use_scalar excludes pointer variables (no pointer preserving op or
+   memory ranges), taint_ok excludes tainted inputs, and opaque_use_ok excludes
+   retpc use. Apply ld_vars_numeric_operands_equal (Values:236-245), or its
+   operand boundary, using source taint from o1_src_inv/ptr_discipline and actual
+   frame_reachable. Target OK supplies shape and definedness. No equality of
+   arbitrary pointer words is available or needed. Both results are jump_to
+   the same label: matching prev/current bb, unchanged vars/allocas/frontiers,
+   memory and other metadata. Fuel and context are irrelevant for these base
+   instructions, but the step_inst dispatch fact still needs a checked boundary.
+3. Entry lookup must pair the destination blocks using indexed correspondence
+   lower_dload_function_supply_block_at (ConfiguredOrigins:70ff) and distinct
+   labels, NOT inverse active_inst membership. Existing
+   lower_dload_insts_supply_phi_prefix (o1ContractLowerDload:437-442) establishes
+   PHI-prefix ordering ONLY; it does not assert equality of prefix length or
+   eval_phis. Need a checked leading-PHI identity/evaluation transport fact for
+   supplied instruction lists. PHIs are singleton unchanged expansions; first
+   non-PHI expands to non-PHIs. This makes the two PHI batches identical.
+4. ld_phis_effect (PhiEffects:53-81) then supplies source eval_phis, new ld_vars,
+   memory, nonghost and erasure commutation. It needs EVERY member in source
+   fn_insts, equal labels/prev_bb and tn.t_var=lf_tv; all derive from the paired
+   block and pre-entry frame. Use the pre-PHI snapshot throughout, never feed
+   an updated variable into a later PHI. ld_phis_only_vars gives the schematic
+   update equalities. FRANGE H' subset FDOM A still needs a finite-map induction
+   through set_prov/phi_prov, selecting only old H entries (no new identities).
+   ld_phis_effect does NOT export that range fact.
+5. Apply frame_reachable_block only after source entry AND source activity are
+   proved. Activity requires the entered source prefix index be in bounds:
+   target activity at its PHI-prefix index plus generated-block correspondence
+   and nonempty expansions imply a non-PHI source instruction exists there.
+   RootCoverage's index-zero origin is inapplicable when PHIs exist. Need the
+   envelope at j=phi_prefix_length source instructions and generated offset
+   p=phi_prefix_length target instructions. Because leading PHIs are unchanged,
+   p=j at this entry; neither need be zero. The next instruction can be DLOAD,
+   so recover X (possibly four instructions), not a singleton assumption.
+6. Form the replacement head with source s1, target t1, H', new t_var. Q, fn,
+   supply, serial and E stay unchanged. Allocations/frontiers/params unchanged
+   by jump+entry keep maps, slots, intervals, charge and saved-stack equations.
+   ld_global numerical clauses are unchanged and its H range clause uses item
+   4. Saved frames use CURRENT memory taint; entry changes only t_var, so their
+   existing memory premises do not require a new saved-memory invariant.
+7. Configured supply and name order are unchanged. ld_ownership_replace retains
+   positional permission on this SAME replacement head::fs. With the new sync,
+   global, image and target activity, ld_owned_pair_zero packages h=0 and the
+   full correlated existential. Do not first forget to ld_pair.
+
+Implementation is deliberately deferred for strategist review of these missing
+interfaces. Control (this consumer), original allocation, generated prefixes,
+INVOKE/return and failing/terminal/current-instruction safety remain unfinished;
+.74's remaining-case ledger remains authoritative subject to the later checked
+ISTORE reconciliation. No theorem statement/definition was changed and the
+frozen contract's cheat remains unresolved.
