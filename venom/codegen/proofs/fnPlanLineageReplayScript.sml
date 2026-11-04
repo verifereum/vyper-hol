@@ -38,3 +38,17 @@ Theorem cleanup_elision_safe_without_height[simp]:
 Proof
   simp[cleanup_elision_safe_def, cleanup_height_safe_def]
 QED
+
+(* The PHI rename-only boundary does not demand distinct incoming operands. *)
+Theorem generate_phi_plan_rename_only:
+  !inst next halting ps d.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack =
+      SOME d /\
+    ~MEM (operand_to_string (stack_peek d ps.ps_stack)) next /\
+    (halting \/ MEM (HD inst.inst_outputs) next) ==>
+    generate_phi_plan inst next halting ps =
+      ([SOPoke d (Var (HD inst.inst_outputs))],
+       ps with ps_stack := stack_poke d (Var (HD inst.inst_outputs)) ps.ps_stack)
+Proof
+  rpt strip_tac >> simp[generate_phi_plan_def]
+QED
