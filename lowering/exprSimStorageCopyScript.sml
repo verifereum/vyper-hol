@@ -852,7 +852,7 @@ Proof
       eval_operand_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_word_layout[local]:
+Theorem storage_copy_word_layout:
   !opc src dst sa u sb.
     do v <- emit_op opc [src]; emit_void MSTORE [dst; v] od sa = (u,sb) ==>
     same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\

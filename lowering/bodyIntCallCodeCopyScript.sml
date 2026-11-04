@@ -625,3 +625,155 @@ Proof
   goal_assum (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   qexists_tac `type_memory_size tv` >> simp[]
 QED
+
+(* The literal-offset helper used by the unrolled immutable copy.  This
+   boundary does not require fresh_vars_wrt: replay may overwrite temporaries. *)
+Theorem compile_lit_byte_offset_run:
+  !src off sa op sb s a.
+    compile_lit_byte_offset src off sa = (op,sb) /\
+    eval_operand src s = SOME a ==>
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand op t = SOME (a+n2w off) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t with vs_vars := s.vs_vars = s
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `off = 0`
+  >- (gvs[compile_lit_byte_offset_def, comp_return_def,
+          emitted_insts_def, run_inst_seq_def, wordsTheory.WORD_ADD_0]) >>
+  Cases_on `src` >>
+  gvs[compile_lit_byte_offset_def, comp_return_def, eval_operand_def]
+  >- (qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def]) >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (a+n2w off) s` >>
+  qmatch_asmsub_abbrev_tac `emit_op ADD operands` >>
+  `step_inst_base (mk_inst sa.cs_next_id ADD operands
+      [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var)) (a+n2w off) s)` by
+    (simp[Abbr `operands`] >> irule step_ADD >> simp[eval_operand_def]) >>
+  simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem compile_lit_byte_offset_layout:
+  !src off sa op sb.
+    compile_lit_byte_offset src off sa = (op,sb) ==>
+    same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    ((!x. src = Var x ==> not_fresh_at sa x) ==>
+     (!x. op = Var x ==> not_fresh_at sb x))
+Proof
+  rpt gen_tac >> Cases_on `off = 0`
+  >- simp[compile_lit_byte_offset_def, comp_return_def, same_blocks_def] >>
+  Cases_on `src` >>
+  simp[compile_lit_byte_offset_def, comp_return_def, same_blocks_def] >>
+  rw[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+     fresh_var_def, fresh_id_def, emit_def, same_blocks_def,
+     not_fresh_at_def, fresh_var_distinct] >> gvs[]
+QED
+
+Theorem compile_lit_byte_offset_frag:
+  !ctx src off sa op sb sbase a R.
+    compile_lit_byte_offset src off sa = (op,sb) /\
+    eval_operand src sbase = SOME a ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. eval_operand op s = SOME (a+n2w off) /\
+        (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+        s with <|vs_vars := sbase.vs_vars;
+          vs_prev_bb := sbase.vs_prev_bb; vs_current_bb := sbase.vs_current_bb;
+          vs_inst_idx := sbase.vs_inst_idx|> = sbase) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_lit_byte_offset_run >> strip_tac >>
+  Cases_on `off = 0`
+  >- (gvs[compile_lit_byte_offset_def, comp_return_def] >>
+      irule frag_exec_refl >> simp[wordsTheory.WORD_ADD_0]) >>
+  Cases_on `src` >> gvs[compile_lit_byte_offset_def, comp_return_def]
+  >- (irule frag_exec_refl >> gvs[eval_operand_def]) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  gvs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  gvs[GSYM mk_inst_def, eval_operand_def, lookup_var_def,
+      venom_state_component_equality]
+QED
+
+Theorem compile_runtime_imm_load_run:
+  !imm src sa op sb s a.
+    compile_imm_load_word F imm src sa = (op,sb) /\
+    eval_operand src s = SOME a ==>
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      eval_operand op t = SOME (mem_word_at (w2n a) s.vs_data_section) /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+      t with vs_vars := s.vs_vars = s
+Proof
+  rpt gen_tac >> simp[compile_imm_load_word_def] >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var))
+    (mem_word_at (w2n a) s.vs_data_section) s` >>
+  drule code_copy_load_exact >>
+  disch_then (qspecl_then [`sa.cs_next_id`,
+    `STRING #"%" (toString sa.cs_next_var)`] assume_tac) >>
+  simp[run_inst_seq_def, eval_operand_def, lookup_var_update_var] >>
+  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       not_fresh_at_def] >> metis_tac[]
+QED
+
+Theorem compile_runtime_imm_load_frag:
+  !ctx imm src sa op sb sbase a R.
+    compile_imm_load_word F imm src sa = (op,sb) /\
+    eval_operand src sbase = SOME a ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. eval_operand op s = SOME (mem_word_at (w2n a) sbase.vs_data_section) /\
+        (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+        s with <|vs_vars := sbase.vs_vars;
+          vs_prev_bb := sbase.vs_prev_bb; vs_current_bb := sbase.vs_current_bb;
+          vs_inst_idx := sbase.vs_inst_idx|> = sbase) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all compile_runtime_imm_load_run >> strip_tac >>
+  gvs[compile_imm_load_word_def] >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  irule frag_exec_run_inst_seq >>
+  gvs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  gvs[GSYM mk_inst_def, eval_operand_def, lookup_var_def,
+      venom_state_component_equality]
+QED
+
+Theorem compile_storage_singleton_content_frag:
+  !ctx opc src dst sa u sb sbase a b R.
+    (opc = SLOAD \/ opc = TLOAD) /\
+    do value <- emit_op opc [src]; emit_void MSTORE [dst; value] od sa = (u,sb) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME b ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. mem_bytes_at (w2n b) 32 s.vs_memory =
+          word_to_bytes (if opc = SLOAD then sload a sbase else tload a sbase) T /\
+        (!off len. off+len <= w2n b \/ w2n b+32 <= off ==>
+          mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory) /\
+        (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+        s with <|vs_memory := sbase.vs_memory; vs_vars := sbase.vs_vars;
+          vs_prev_bb := sbase.vs_prev_bb; vs_current_bb := sbase.vs_current_bb;
+          vs_inst_idx := sbase.vs_inst_idx|> = sbase) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule storage_copy_word_layout >> strip_tac >>
+  `!x. dst = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
+  qspecl_then [`opc`, `src`, `dst`] mp_tac copy_slot_content_frame >>
+  disch_then drule_all >>
+  disch_then (qspec_then `sa.cs_next_id` strip_assume_tac) >>
+  `mem_bytes_at (w2n b) 32 t.vs_memory =
+    word_to_bytes (if opc = SLOAD then sload a sbase else tload a sbase) T` by
+    (qpat_x_assum `mem_word_at _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[mem_word_at_def, GSYM mem_bytes_at_def] >> sym_tac >>
+     irule venomMemProofsTheory.word_bytes_roundtrip_proof >>
+     simp[dividesTheory.divides_def]) >>
+  irule frag_exec_run_inst_seq >>
+  gvs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  gvs[GSYM mk_inst_def, eval_operand_def, lookup_var_def,
+      venom_state_component_equality] >> metis_tac[]
+QED
