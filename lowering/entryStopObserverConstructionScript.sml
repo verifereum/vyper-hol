@@ -1,7 +1,7 @@
 (* STOP insertion retains the unexecuted suffix and its allocation inventory. *)
 Theory entryStopObserverConstruction
 Ancestors
-  allocaFrontierBound allocaBudgetProps fcgDefs vyperCompiler abiEncoderObserver fragExec venomExecProps venomExecSemantics venomInst list rich_list
+  compileEnv allocaFrontierBound allocaBudgetProps fcgDefs vyperCompiler abiEncoderObserver fragExec venomExecProps venomExecSemantics venomInst list rich_list
   arithmetic
 
 Definition entry_stop_block_def:
@@ -206,4 +206,97 @@ Proof
   once_asm_rewrite_tac[] >>
   simp[entry_stop_block_def, MAP_APPEND, ALL_DISTINCT_APPEND, mk_inst_def] >>
   metis_tac[]
+QED
+
+Theorem entry_stop_blocks_absent[local]:
+  !bbs. ~MEM lbl (MAP (\bb. bb.bb_label) bbs) ==>
+  MAP (\bb. if bb.bb_label = lbl then entry_stop_block k iid bb else bb) bbs = bbs
+Proof
+  Induct >> simp[] >> rpt strip_tac >> simp[]
+QED
+
+Theorem entry_stop_block_id_member[local]:
+  MEM id (MAP (\i. i.inst_id) (entry_stop_block k iid bb).bb_instructions) ==>
+  id = iid \/ MEM id (MAP (\i. i.inst_id) bb.bb_instructions)
+Proof
+  `MAP (\i. i.inst_id) bb.bb_instructions =
+   MAP (\i. i.inst_id) (TAKE k bb.bb_instructions) ++
+   MAP (\i. i.inst_id) (DROP k bb.bb_instructions)` by
+    metis_tac[TAKE_DROP, MAP_APPEND] >>
+  simp[entry_stop_block_def, MAP_APPEND, mk_inst_def] >>
+  metis_tac[MEM_APPEND]
+QED
+
+Theorem entry_stop_blocks_id_member[local]:
+  !bbs. MEM id (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+    (MAP (\bb. if bb.bb_label = lbl then entry_stop_block k iid bb else bb) bbs))) ==>
+  id = iid \/ MEM id (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs))
+Proof
+  Induct >> simp[] >> gen_tac >> Cases_on `h.bb_label = lbl` >>
+  simp[] >> metis_tac[entry_stop_block_id_member]
+QED
+
+Theorem entry_stop_blocks_ids:
+  !bbs. ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)) /\
+  ~MEM iid (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)) ==>
+  ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+    (MAP (\bb. if bb.bb_label = lbl then entry_stop_block k iid bb else bb) bbs)))
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  simp[ALL_DISTINCT_APPEND] >> strip_tac >>
+  Cases_on `h.bb_label = lbl`
+  >- (gvs[] >> drule entry_stop_blocks_absent >> strip_tac >>
+      simp[ALL_DISTINCT_APPEND, entry_stop_block_ids] >>
+      metis_tac[entry_stop_block_id_member]) >>
+  simp[ALL_DISTINCT_APPEND] >>
+  metis_tac[entry_stop_blocks_id_member]
+QED
+
+Theorem entry_stop_insts_flat[local]:
+  !bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)
+Proof
+  Induct >> simp[fn_insts_blocks_def]
+QED
+
+Theorem entry_stop_function_ids:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn)) /\
+  ~MEM iid (MAP (\i. i.inst_id) (fn_insts fn)) ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id)
+    (fn_insts (entry_stop_function lbl k iid fn)))
+Proof
+  simp[fn_insts_def, entry_stop_insts_flat, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF,
+       entry_stop_function_def] >>
+  MATCH_ACCEPT_TAC (SRULE [MAP_MAP_o, combinTheory.o_DEF] entry_stop_blocks_ids)
+QED
+
+Theorem entry_stop_emitted_labels:
+  compile_state_ok final ==>
+  !bb. MEM bb (emitted_blocks st final) ==> bb.bb_label <> final.cs_current_bb
+Proof
+  simp[compile_state_ok_def, emitted_blocks_def, MEM_MAP] >>
+  rpt strip_tac >> drule MEM_TAKE >> strip_tac >> metis_tac[]
+QED
+
+Theorem entry_stop_has_code_ok:
+  fn_has_code st final fn /\ compile_state_ok final ==>
+  fn_has_code st final
+    (entry_stop_function final.cs_current_bb (LENGTH final.cs_current_insts) iid fn)
+Proof
+  strip_tac >> irule entry_stop_has_code >>
+  metis_tac[entry_stop_emitted_labels]
+QED
+
+Theorem entry_stop_function_zero_phi:
+  final.cs_current_insts = [] /\
+  lookup_block final.cs_current_bb
+    (entry_stop_function final.cs_current_bb (LENGTH final.cs_current_insts) iid fn).fn_blocks
+    = SOME bb ==>
+  phi_prefix_length bb.bb_instructions = 0
+Proof
+  simp[entry_stop_function_def, entry_stop_lookup_block] >>
+  Cases_on `lookup_block final.cs_current_bb fn.fn_blocks` >> simp[] >>
+  `x.bb_label = final.cs_current_bb` by metis_tac[lookup_block_label] >>
+  simp[] >> strip_tac >> gvs[entry_stop_block_zero_phi]
 QED
