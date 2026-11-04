@@ -344,3 +344,320 @@ Proof
   qpat_x_assum `abi_footprint_disjoint _ _ _` mp_tac >>
   simp_tac (srw_ss()) [abi_footprint_disjoint_def] >> decide_tac
 QED
+
+(* Prefix arithmetic shared by the concrete tuple and nominal-layout folds. *)
+Theorem normalize_prefix_step[local]:
+  i < LENGTH xs ==>
+  SUM (MAP f (TAKE (SUC i) xs)) =
+    SUM (MAP f (TAKE i xs)) + f (EL i xs)
+Proof
+  strip_tac >> simp[rich_listTheory.TAKE_SUC_BY_TAKE,
+    rich_listTheory.SNOC_APPEND, listTheory.MAP_APPEND, listTheory.SUM_APPEND]
+QED
+
+Theorem normalize_prefix_mono[local]:
+  !xs j k. j <= k ==> SUM (MAP f (TAKE j xs)) <= SUM (MAP f (TAKE k xs))
+Proof
+  Induct_on `xs` >- simp[] >> rpt gen_tac >>
+  Cases_on `j` >- simp[] >> Cases_on `k` >> simp[]
+QED
+
+Theorem normalize_fields_suffix_code[local]:
+  compile_with_byte_offset dst doff sa = (dp,sc) /\
+  compile_with_byte_offset src soff sc = (sp,sd) /\
+  compile_store_memory_typed ce dp dt sp st sd = ((),se) /\
+  compile_typed_copy_fields ce dst src dts sts
+    (doff + type_memory_bytes ce dt) (soff + type_memory_bytes ce st) se = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  fn_has_code sa se fn /\ fn_has_code se sb fn
+Proof
+  strip_tac >>
+  `cs_extends sd se` by
+    metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
+  `cs_extends se sb` by
+    metis_tac[cj 2 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
+  imp_res_tac normalize_byte_offset_straight >>
+  `cs_extends sa se` by metis_tac[cs_extends_trans] >>
+  metis_tac[fragExecTheory.fn_has_code_split]
+QED
+
+Theorem normalize_tuple_fields_run[local]:
+  LENGTH DT = N /\ LENGTH ST = N /\
+  (!i. d i = b + d0 + SUM (MAP (type_memory_bytes ce) (TAKE i DT))) /\
+  (!i. h i = a + s0 + SUM (MAP (type_memory_bytes ce) (TAKE i ST))) /\
+  abi_footprint_disjoint (h 0) (h N - h 0) [(d 0,d N - d 0)] /\
+  d N <= s.vs_alloca_next /\ h N <= s.vs_alloca_next /\
+  d N < dimword (:256) /\ h N < dimword (:256) /\
+  (!i m m'. i < N /\
+    mem_bytes_at (h i) (h (SUC i) - h i) m' =
+      mem_bytes_at (h i) (h (SUC i) - h i) m /\ Src i m ==> Src i m') /\
+  (!i m m'. i < N /\
+    mem_bytes_at (d i) (d (SUC i) - d i) m' =
+      mem_bytes_at (d i) (d (SUC i) - d i) m /\ Dst i m ==> Dst i m') /\
+  (!i. i < N ==> Src i s.vs_memory) /\
+  (!i sd se dp sp u.
+    i < N /\
+    compile_store_memory_typed ce dp (EL i DT) sp (EL i ST) sd = ((),se) /\
+    eval_operand dp u = SOME (n2w (d i)) /\
+    eval_operand sp u = SOME (n2w (h i)) /\
+    (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
+    fn_has_code sd se fn /\ ~u.vs_halted /\
+    u.vs_current_bb = sd.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
+    Src i u.vs_memory ==>
+    ?v. mem_cont_sim ctx fn u v /\ Dst i v.vs_memory /\
+      ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
+      v.vs_inst_idx = LENGTH se.cs_current_insts /\
+      abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
+      (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      sd.cs_next_var <= se.cs_next_var /\
+      (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
+        vs_prev_bb := u.vs_prev_bb|>) = u) /\
+  compile_typed_copy_fields ce dst src DT ST d0 s0 sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
+  (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
+  ?t. mem_cont_sim ctx fn s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!i. i < N ==> Dst i t.vs_memory) /\
+    abi_decode_footprint_frame [(d 0,d N - d 0)] s t /\
+    mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
+      mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s
+Proof
+  strip_tac >>
+  qabbrev_tac `Inv = \dt st doff soff sc u.
+    ?i. i <= N /\ dt = DROP i DT /\ st = DROP i ST /\
+      doff = d0 + SUM (MAP (type_memory_bytes ce) (TAKE i DT)) /\
+      soff = s0 + SUM (MAP (type_memory_bytes ce) (TAKE i ST)) /\
+      ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sc.cs_current_insts /\ fn_has_code sc sb fn /\
+      compile_typed_copy_fields ce dst src dt st doff soff sc = ((),sb) /\
+      eval_operand dst u = SOME (n2w b) /\ eval_operand src u = SOME (n2w a) /\
+      (!x. dst = Var x \/ src = Var x ==> not_fresh_at sc x) /\
+      sa.cs_next_var <= sc.cs_next_var /\
+      (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+      (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+        vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+        vs_prev_bb := s.vs_prev_bb|>) = s /\
+      abi_decode_footprint_frame [(d 0,d i - d 0)] s u /\
+      mem_bytes_at (h 0) (h N - h 0) u.vs_memory =
+        mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
+      (!j. j < i ==> Dst j u.vs_memory) /\
+      (!j. j < N ==> Src j u.vs_memory)` >>
+  `Inv DT ST d0 s0 sa s` by
+    (simp[Abbr `Inv`] >> qexists_tac `0` >>
+     simp[abi_decode_footprint_frame_def, venom_state_component_equality] >>
+     asm_rewrite_tac[]) >>
+  qsuff_tac `?t. mem_cont_sim ctx fn s t /\
+    Inv [] [] (d0 + SUM (MAP (type_memory_bytes ce) DT))
+      (s0 + SUM (MAP (type_memory_bytes ce) ST)) sb t`
+  >- (strip_tac >> qexists_tac `t` >>
+      qpat_x_assum `Inv DT ST _ _ _ _` kall_tac >>
+      qpat_x_assum `!i sd se dp sp u. _` kall_tac >>
+      qpat_x_assum `!i. d i = _` kall_tac >>
+      qpat_x_assum `!i. h i = _` kall_tac >>
+      qpat_x_assum `Inv [] [] _ _ sb t` mp_tac >>
+      simp[Abbr `Inv`, listTheory.DROP_EQ_NIL] >> strip_tac >>
+      `i = N` by decide_tac >>
+      qpat_x_assum `i = N` SUBST_ALL_TAC >> asm_rewrite_tac[]) >>
+  irule normalize_fields_sequence >>
+  conj_tac >- simp[] >> qexistsl_tac [`dst`, `sa`, `src`] >>
+  simp[] >> rpt gen_tac >> strip_tac >> suspend "tuple_step"
+QED
+
+Resume normalize_tuple_fields_run[tuple_step]:
+  qpat_x_assum `Inv DT ST _ _ _ _` kall_tac >>
+  qpat_x_assum `Inv (_::_) (_::_) _ _ _ _` mp_tac >>
+  simp[Abbr `Inv`, NoAsms] >> strip_tac >>
+  drule normalize_fields_cons_states >>
+  disch_then (qx_choose_then `dp1` (qx_choose_then `sc1`
+    (qx_choose_then `sp1` (qx_choose_then `sd1`
+      (qx_choose_then `se1` strip_assume_tac))))) >>
+  `dp1 = dp /\ sc1 = sc /\ sp1 = sp /\ sd1 = sd /\ se1 = se` by
+    metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `dp1 = dp` SUBST_ALL_TAC >>
+  qpat_x_assum `sc1 = sc` SUBST_ALL_TAC >>
+  qpat_x_assum `sp1 = sp` SUBST_ALL_TAC >>
+  qpat_x_assum `sd1 = sd` SUBST_ALL_TAC >>
+  qpat_x_assum `se1 = se` SUBST_ALL_TAC >>
+  drule_all normalize_fields_suffix_code >> strip_tac >>
+  `i < N` by
+    (qpat_assum `dt::dts = DROP i DT` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[listTheory.LENGTH_DROP] >> decide_tac) >>
+  `dt = EL i DT /\ st = EL i ST` by
+    (conj_tac
+     >- (qpat_assum `dt::dts = DROP i DT` (mp_tac o Q.AP_TERM `HD`) >>
+         simp[listTheory.HD_DROP]) >>
+     qpat_assum `st::sts = DROP i ST` (mp_tac o Q.AP_TERM `HD`) >>
+     simp[listTheory.HD_DROP]) >>
+  `dts = DROP (SUC i) DT /\ sts = DROP (SUC i) ST` by
+    (conj_tac
+     >- (qpat_assum `dt::dts = DROP i DT` (mp_tac o Q.AP_TERM `DROP 1`) >>
+         simp[rich_listTheory.DROP_DROP, arithmeticTheory.ADD1]) >>
+     qpat_assum `st::sts = DROP i ST` (mp_tac o Q.AP_TERM `DROP 1`) >>
+     simp[rich_listTheory.DROP_DROP, arithmeticTheory.ADD1]) >>
+  suspend "tuple_execute"
+QED
+
+Resume normalize_tuple_fields_run[tuple_execute]:
+  `!j k. j <= k /\ k <= N ==> d j <= d k /\ h j <= h k` by
+    (simp[] >> metis_tac[normalize_prefix_mono]) >>
+  `d (SUC i) = d i + type_memory_bytes ce dt /\
+   h (SUC i) = h i + type_memory_bytes ce st` by
+    (conj_tac
+     >- (qpat_assum `!i. d i = _` (fn th => pure_rewrite_tac[th]) >>
+         qpat_assum `dt = EL i DT` (fn th => pure_rewrite_tac[th]) >>
+         pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >> ntac 2 AP_TERM_TAC >>
+         irule normalize_prefix_step >> simp[]) >>
+     qpat_assum `!i. h i = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `st = EL i ST` (fn th => pure_rewrite_tac[th]) >>
+     pure_rewrite_tac[GSYM arithmeticTheory.ADD_ASSOC] >> ntac 2 AP_TERM_TAC >>
+     irule normalize_prefix_step >> simp[]) >>
+  `s'.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_assum `s' with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
+       vs_current_bb := _; vs_inst_idx := _|> = s` mp_tac >>
+     simp_tac (srw_ss()) [venom_state_component_equality]) >>
+  qsuff_tac `?v. mem_cont_sim ctx fn s' v /\ Dst i v.vs_memory /\
+    ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
+    v.vs_inst_idx = LENGTH se.cs_current_insts /\
+    abi_decode_footprint_frame [(d i,type_memory_bytes ce dt)] s' v /\
+    (!x. not_fresh_at sa' x ==> lookup_var x v = lookup_var x s') /\
+    sa'.cs_next_var <= se.cs_next_var /\
+    (v with <|vs_vars := s'.vs_vars; vs_memory := s'.vs_memory;
+      vs_current_bb := s'.vs_current_bb; vs_inst_idx := s'.vs_inst_idx;
+      vs_prev_bb := s'.vs_prev_bb|>) = s'`
+  >- suspend "tuple_preserve" >>
+  suspend "tuple_adapter"
+QED
+
+Resume normalize_tuple_fields_run[tuple_adapter]:
+  irule normalize_field_child_cont >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_with_byte_offset _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_with_byte_offset _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand _ _ = _`)) >>
+  qexists_tac `Src i` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (first_x_assum irule >> first_assum ACCEPT_TAC) >>
+  suspend "tuple_child"
+QED
+
+Resume normalize_tuple_fields_run[tuple_child]:
+  `n2w b + n2w doff = (n2w (d i):256 word) /\
+   n2w a + n2w soff = (n2w (h i):256 word)` by
+    (pure_rewrite_tac[wordsTheory.word_add_n2w] >> conj_tac
+     >- (qpat_assum `!i. d i = _` (fn th => pure_rewrite_tac[th]) >>
+         qpat_assum `doff = _` (fn th => pure_rewrite_tac[th]) >>
+         simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]) >>
+     qpat_assum `!i. h i = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `soff = _` (fn th => pure_rewrite_tac[th]) >>
+     simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]) >>
+  rpt strip_tac >>
+  `d (SUC i) <= d N /\ h (SUC i) <= h N` by
+    (qpat_x_assum `!j k. _` (qspecl_then [`SUC i`,`N`] mp_tac) >>
+     impl_tac >- decide_tac >> strip_tac >> asm_rewrite_tac[]) >>
+  `d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next` by
+    (conj_tac >> decide_tac) >>
+  qpat_x_assum `!i sd se dp sp u. _` (qspec_then `i` mp_tac) >>
+  qpat_assum `dt = EL i DT` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `st = EL i ST` (fn th => pure_rewrite_tac[GSYM th]) >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (qspec_then `u` mp_tac) >>
+  impl_tac >- (rpt conj_tac >> asm_rewrite_tac[]) >>
+  strip_tac >> qexists_tac `v` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Resume normalize_tuple_fields_run[tuple_preserve]:
+  strip_tac >> qexists_tac `v` >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!i sd se dp sp u. _` kall_tac >>
+  `d (SUC i) - d i = type_memory_bytes ce dt` by decide_tac >>
+  `abi_decode_footprint_frame [(d i,d (SUC i) - d i)] s' v` by
+    (qpat_assum `d (SUC i) - d i = _` (fn th => pure_rewrite_tac[th]) >>
+     first_assum ACCEPT_TAC) >>
+  `(!j. j < N ==> Src j v.vs_memory) /\
+   (!j. j < SUC i ==> Dst j v.vs_memory) /\
+   abi_decode_footprint_frame [(d 0,d (SUC i) - d 0)] s v /\
+   mem_bytes_at (h 0) (h N - h 0) v.vs_memory =
+     mem_bytes_at (h 0) (h N - h 0) s'.vs_memory` by
+    (irule normalize_fields_prefix_frame >>
+     goal_assum (drule_at (Pat `abi_decode_footprint_frame _ s' v`)) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexists_tac `SUC i` >>
+  conj_tac >- decide_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "tuple_prefix_offsets"
+QED
+
+Resume normalize_tuple_fields_run[tuple_prefix_offsets]:
+  `i < LENGTH DT /\ i < LENGTH ST` by decide_tac >>
+  conj_tac
+  >- (qpat_assum `doff = _` (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `dt = EL i DT` (fn th => pure_rewrite_tac[th]) >>
+      simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
+      AP_TERM_TAC >> sym_tac >> irule normalize_prefix_step >>
+      first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_assum `soff = _` (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `st = EL i ST` (fn th => pure_rewrite_tac[th]) >>
+      simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
+      AP_TERM_TAC >> sym_tac >> irule normalize_prefix_step >>
+      first_assum ACCEPT_TAC) >>
+  ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
+  suspend "tuple_runtime"
+QED
+
+Resume normalize_tuple_fields_run[tuple_runtime]:
+  `!x. not_fresh_at sa x ==> not_fresh_at sa' x` by
+    (simp_tac (srw_ss()) [not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `n` mp_tac) >> impl_tac >- decide_tac >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s` by
+    (rpt strip_tac >> metis_tac[]) >>
+  `eval_operand dst v = SOME (n2w b) /\ eval_operand src v = SOME (n2w a)` by
+    (qpat_assum `eval_operand dst s' = _` mp_tac >>
+     qpat_assum `eval_operand src s' = _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sa' x ==> lookup_var x v = _` mp_tac >>
+     qpat_assum `!x. dst = Var x \/ src = Var x ==> not_fresh_at sa' x` mp_tac >>
+     qpat_assum `v with <|vs_vars := _; vs_memory := _; vs_current_bb := _;
+       vs_inst_idx := _; vs_prev_bb := _|> = s'` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     Cases_on `dst` >> Cases_on `src` >>
+     gvs[eval_operand_def, venom_state_component_equality]) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sa' x` by metis_tac[] >>
+      qpat_x_assum `not_fresh_at sa' x` mp_tac >>
+      simp_tac (srw_ss()) [not_fresh_at_def] >> rpt strip_tac >>
+      first_x_assum (qspec_then `n` mp_tac) >>
+      impl_tac >- decide_tac >> simp[]) >>
+  conj_tac >- decide_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qpat_assum `v with <|vs_vars := _; vs_memory := _; vs_current_bb := _;
+        vs_inst_idx := _; vs_prev_bb := _|> = s'` mp_tac >>
+      qpat_assum `s' with <|vs_memory := _; vs_vars := _; vs_prev_bb := _;
+        vs_current_bb := _; vs_inst_idx := _|> = s` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      simp_tac (srw_ss()) [venom_state_component_equality]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise normalize_tuple_fields_run
