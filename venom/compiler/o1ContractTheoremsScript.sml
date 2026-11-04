@@ -23,7 +23,8 @@ Theory o1ContractTheorems
 Ancestors
   o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
   o1ContractCfgNorm
-  venomPassSchedule venomCompilerTypes o1ContractSimplifyCfg
+  venomPassSchedule venomCompilerTypes o1ContractLowerDloadStage
+  o1ContractSimplifyCfg
 
 (* ===== The pre-walk runs ===== *)
 
@@ -46,12 +47,8 @@ Proof
   cheat
 QED
 
-Theorem o1_contract_lower_dload:
-  o1_step_contract_at 1 rpolicy (CFP_Simple VP_LowerDload) /\
-  o1_run_contract rpolicy D 1
-Proof
-  cheat
-QED
+Theorem o1_contract_lower_dload =
+  o1ContractLowerDloadStageTheory.o1_contract_lower_dload
 
 (* ConcretizeMemLoc reads callee layouts (the walk view): the raw
    invariant becomes the static one. *)

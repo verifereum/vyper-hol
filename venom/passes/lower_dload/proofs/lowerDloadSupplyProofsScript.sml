@@ -84,8 +84,6 @@ Proof
 QED
 Theorem lower_dload_inst_supply_shaped_dload:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   MEM inst.inst_id s.irs_used_inst_ids /\
   inst.inst_opcode = DLOAD /\
   inst.inst_operands = [ptr] /\
@@ -140,8 +138,6 @@ QED
 
 Theorem lower_dload_inst_supply_shaped_dloadbytes:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   MEM inst.inst_id s.irs_used_inst_ids /\
   inst.inst_opcode = DLOADBYTES /\
   inst.inst_operands = [dst_op;src_op;size_op] /\
@@ -175,8 +171,6 @@ QED
 
 Theorem lower_dload_inst_supply_passthrough:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   MEM inst.inst_id s.irs_used_inst_ids /\
   lower_dload_inst_supply s inst = ([inst],s) ==>
   ld_inst_supply_ok s inst [inst] s
@@ -186,8 +180,6 @@ QED
 
 Theorem lower_dload_inst_supply_contract:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   MEM inst.inst_id s.irs_used_inst_ids /\
   lower_dload_inst_supply s inst = (outs,s') ==>
   ld_inst_supply_ok s inst outs s'
@@ -218,8 +210,6 @@ QED
 
 Theorem lower_dload_insts_supply_contract:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
   EVERY (\i. MEM i.inst_id s.irs_used_inst_ids) insts /\
   lower_dload_insts_supply s insts = (outs,s') ==>
@@ -239,9 +229,7 @@ Proof
     metis_tac[lower_dload_inst_supply_contract] >>
   `ld_supply_extends s s1` by
     gvs[ld_inst_supply_ok_def] >>
-  `ir_supply_inst_ok s1 /\
-   ALL_DISTINCT s1.irs_used_inst_ids /\
-   ALL_DISTINCT s1.irs_used_vars` by
+  `ir_supply_inst_ok s1` by
     gvs[ld_supply_extends_def] >>
   `EVERY (\i. MEM i.inst_id s1.irs_used_inst_ids) insts` by
     gvs[listTheory.EVERY_MEM, ld_supply_extends_def] >>
@@ -277,8 +265,6 @@ QED
 
 Theorem ld_ids_supply_ok_append:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   ALL_DISTINCT (old1 ++ old2) /\
   EVERY (\id. MEM id s.irs_used_inst_ids) (old1 ++ old2) /\
   ld_ids_supply_ok s old1 new1 s1 /\
@@ -312,8 +298,6 @@ QED
 
 Theorem lower_dload_block_supply_contract:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   ALL_DISTINCT (block_ir_inst_ids bb) /\
   EVERY (\id. MEM id s.irs_used_inst_ids) (block_ir_inst_ids bb) /\
   lower_dload_block_supply s bb = (bb',s') ==>
@@ -331,8 +315,6 @@ QED
 
 Theorem lower_dload_blocks_supply_contract:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   ALL_DISTINCT (FLAT (MAP block_ir_inst_ids bbs)) /\
   EVERY (\id. MEM id s.irs_used_inst_ids)
     (FLAT (MAP block_ir_inst_ids bbs)) /\
@@ -354,9 +336,7 @@ Proof
   `ld_ids_supply_ok s (block_ir_inst_ids h) (block_ir_inst_ids bb1) s1` by
     metis_tac[lower_dload_block_supply_contract] >>
   `ld_supply_extends s s1` by gvs[ld_ids_supply_ok_def] >>
-  `ir_supply_inst_ok s1 /\
-   ALL_DISTINCT s1.irs_used_inst_ids /\
-   ALL_DISTINCT s1.irs_used_vars` by
+  `ir_supply_inst_ok s1` by
     gvs[ld_supply_extends_def] >>
   `EVERY (\id. MEM id s1.irs_used_inst_ids)
      (FLAT (MAP block_ir_inst_ids bbs))` by
@@ -372,8 +352,6 @@ QED
 
 Theorem lower_dload_function_supply_contract:
   ir_supply_inst_ok s /\
-  ALL_DISTINCT s.irs_used_inst_ids /\
-  ALL_DISTINCT s.irs_used_vars /\
   ALL_DISTINCT (fn_ir_inst_ids fn) /\
   EVERY (\id. MEM id s.irs_used_inst_ids) (fn_ir_inst_ids fn) /\
   lower_dload_function_supply s fn = (fn',s') ==>
