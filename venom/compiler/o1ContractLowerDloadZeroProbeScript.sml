@@ -180,3 +180,57 @@ Proof
   simp[zero_probe_fn_pass_step, zero_probe_unit_def, zero_probe_ctx_def,
        venomInstTheory.mk_venom_context_def]
 QED
+
+(* The six active points on the sole source path.  The unsafe block is
+   deliberately absent; closure below, not a terminating-run test, justifies it. *)
+Definition zero_probe_S_def:
+  zero_probe_S k =
+    let s0 = zero_probe_initial in
+    let s1 = (update_var "p" 0w s0) with
+      <| vs_allocas := FEMPTY |+ (0,(0,0)); vs_inst_idx := 1 |> in
+    let s2 = (update_var "d" 0w s1) with vs_inst_idx := 2 in
+    let s3 = (update_var "q" 0w s2) with
+      <| vs_allocas := s2.vs_allocas |+ (2,(0,0)); vs_inst_idx := 3 |> in
+    let s4 = (update_var "eq" 1w s3) with vs_inst_idx := 4 in
+    let s5 = s4 with <| vs_prev_bb := SOME "main";
+                        vs_current_bb := "safe"; vs_inst_idx := 0 |> in
+    EL k [s0;s1;s2;s3;s4;s5]
+End
+
+Definition zero_probe_I_def:
+  zero_probe_I k =
+    if k < 5 then EL k (HD zero_probe_branch_fn.fn_blocks).bb_instructions
+    else HD (EL 1 zero_probe_branch_fn.fn_blocks).bb_instructions
+End
+
+Theorem zero_probe_index_cases[local]:
+  (k:num) < 6 ==> k = 0 \/ k = 1 \/ k = 2 \/ k = 3 \/ k = 4 \/ k = 5
+Proof
+  decide_tac
+QED
+
+Theorem zero_probe_active:
+  k < 6 ==> active_inst zero_probe_branch_fn (zero_probe_I k) (zero_probe_S k)
+Proof
+  strip_tac >> rewrite_tac[contextCodegenRelTheory.active_inst_def] >>
+  qexists_tac `if k < 5 then HD zero_probe_branch_fn.fn_blocks
+               else EL 1 zero_probe_branch_fn.fn_blocks` >>
+  drule zero_probe_index_cases >> strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem zero_probe_no_invoke:
+  k < 6 ==> (zero_probe_I k).inst_opcode <> INVOKE
+Proof
+  strip_tac >> drule zero_probe_index_cases >> strip_tac >> gvs[] >> EVAL_TAC
+QED
+
+Theorem zero_probe_step:
+  k < 6 ==>
+  step_inst fuel zero_probe_ctx (zero_probe_I k) (zero_probe_S k) =
+    if k < 4 then OK ((zero_probe_S (SUC k)) with vs_inst_idx := k)
+    else if k = 4 then OK (zero_probe_S 5)
+    else Halt ((zero_probe_S 5) with vs_halted := T)
+Proof
+  strip_tac >> drule zero_probe_index_cases >> strip_tac >> gvs[] >>
+  EVAL_TAC >> simp[bool_to_word_def]
+QED
