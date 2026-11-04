@@ -368,6 +368,29 @@ Proof
        combinTheory.APPLY_UPDATE_THM]
 QED
 
+Theorem nested_captured_fixed_extension_probe[local]:
+  !cx es tr.
+    extend_place cx
+      (PlaceR (StoragePlace tr 2w
+        (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Fixed 1))))
+      (ValueSubscript (IntV 0)) es =
+    (INL (PlaceR (StoragePlace tr 2w
+      (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)))), es)
+Proof
+  rpt gen_tac >>
+  simp[extend_place_def, extend_storage_place_def, resolve_array_element_def,
+       bind_def, ignore_bind_def, return_def, check_def, assert_def,
+       vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem nested_captured_fixed_no_load_probe[local]:
+  !base idx loader loader' sa.
+    compile_array_subscript base idx F 1 1 2 F loader sa =
+    compile_array_subscript base idx F 1 1 2 F loader' sa
+Proof
+  simp[compile_array_subscript_def]
+QED
+
 (* A storage or transient root.  compile_get_target_ptr hands out the
    array's header slot with location storage (transient), and the source's
    pop_place pops the StoragePlace there, so the run is
