@@ -83,7 +83,33 @@ Theorem compile_subscript_map_map_case:
               expr_sim_case nocalls ctx func cenv cx idx) ==>
     expr_map_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rw[expr_map_case_def] >>
+  `expr_map_pre cenv cx env obj es` by
+    metis_tac[expr_map_pre_subscript_base] >>
+  `place_map_tables_agree_on_defined cenv env /\
+   ?kt vt. type_place_expr env obj = SOME (HashMapT kt vt)` by
+    gvs[expr_map_pre_def, expr_sim_inv_def] >>
+  drule_all place_type_checked_place_on_defined >>
+  simp[value_type_place_def] >> strip_tac >>
+  rw[expr_map_sim_def] >>
+  (SUBGOAL_THEN
+    ``expr_body_pre cenv cx env (Subscript ann obj idx) es \/
+      expr_map_pre cenv cx env (Subscript ann obj idx) es`` assume_tac
+   >- simp[]) >>
+  drule_all compile_mapping_subscript_frag >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  disch_then (mp_then Any irule fragExecTheory.frag_exec_conseq) >> simp[] >>
+  rpt strip_tac >>
+  `?kt' vt'. vt = HashMapT kt' vt'` by
+    (qpat_x_assum `expr_map_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+     simp[expr_map_pre_def, Once well_typed_expr_def, subscript_vtype_def] >>
+     strip_tac >> gvs[AllCaseEqs()]) >>
+  gvs[vyperHashMapStorageTheory.select_result_hashmap_nested] >>
+  gvs[contextTheory.mk_ptr_def, exprSimWordArgsTheory.wb_frame_def] >>
+  conj_tac
+  >- (irule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
+      goal_assum (drule_at Any)) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem expr_sim_below_mono[local]:
