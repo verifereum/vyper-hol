@@ -1,0 +1,139 @@
+# Key/read operational interface audit (C1.K.2.a)
+
+This is a proposed statement package, NOT proved HOL claims. K1 is checked in
+loadElimKeyReadTheory. No frozen statement or pass definition changes are proposed.
+
+## Existing interfaces actually inspected
+
+* `loadElimNormalizeHelpers.le_chain_valid_eval`:
+  `le_chain_valid dfg visited op s ==> eval_operand (normalize_operand dfg visited op) s = eval_operand op s`.
+  P5 must establish this premise on reached rebuilt DFGs; K can parameterize by
+  evaluation equality and must not depend on P5.
+* `memAliasProps.bp_segment_from_ops_runtime_region`:
+  `bp_ptr_sound bp s /\ bp_segment_from_ops bp ops = ml /\ ml_is_fixed ml /\
+   IS_SOME (eval_operand ops.iao_ofst s) ==>
+   ?addr. eval_operand ops.iao_ofst s = SOME (n2w addr) /\
+          memloc_runtime_region ml s = SOME (addr, THE ml.ml_size)`.
+  IMPORTANT: does not establish `addr < dimword(:256)`. The word equality alone
+  cannot identify addr with w2n of the operand. Do not erase this missing bound.
+* `memAliasProps.ma_may_alias_sound`:
+  `wf_alias_sets sets /\ ~ma_may_alias sets loc1 loc2 /\
+   allocas_non_overlapping s /\ memloc_within_alloca loc1 s /\
+   memloc_within_alloca loc2 s /\
+   memloc_runtime_region loc1 s = SOME r1 /\
+   memloc_runtime_region loc2 s = SOME r2 ==> regions_disjoint r1 r2`.
+  The no-alloca corollary additionally requires both alloca fields NONE and
+  both offsets and sizes defined; it does not require alloca-state premises.
+* `mem2varBlockSimHelpers.mload_mstore_disjoint`:
+  `off_r + 32 <= off_w \/ off_w + 32 <= off_r ==>
+   mload off_r (mstore off_w val_w s) = mload off_r s`.
+* `deadStoreElimProofs.sload_sstore_disjoint`, `tload_tstore_disjoint`:
+  `key1 <> key2 ==> sload key2 (sstore key1 val s) = sload key2 s`,
+  respectively tload/tstore. Can import, not duplicate.
+* `venomInstProps.step_preserves_call_ctx`, `step_preserves_data_section`:
+  `step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+   t.vs_call_ctx = s.vs_call_ctx` (respectively data_section).
+  These include INVOKE/external calls; unlike passShared's aggregate theorem,
+  they do not exclude calls. Terminator OK cases need a separate wrapper.
+* `passSharedProps.step_inst_preserves_all` requires successful step, nonterm,
+  nonalloca, non-ext-call, not INVOKE. It preserves control/context/data/labels;
+  no MEMORY write implies equal memory; no TRANSIENT write implies equal
+  transient; no BALANCE AND no STORAGE write implies equal accounts.
+  Storage-read preservation needs current-account/context agreement too;
+  no STORAGE effect alone is not the aggregate accounts theorem's premise.
+
+Some similar memoryCopyElisionSound facts (`runtime_region_in_word`,
+`ce_memloc_runtime_w2n`, `memloc_runtime_region_allocas_eq` in its Proofs theory)
+are LOCAL and cannot be imported. Their copy-specific hypotheses cannot be
+silently generalized. Existing `read_at_offset` only covers M/S/T and defaults
+other opcodes to ARB; K1's partial five-space read is intentionally different.
+
+## Coverage of the actual transfer branches
+
+| configuration | read key | configured store | other writer | no writer |
+|---|---|---|---|---|
+| memory MLOAD | fixed BP or normalized HD | MSTORE, 32 bytes | MEMORY effect clears all | retained |
+| storage SLOAD | fixed BP or normalized HD | SSTORE, 1 slot | STORAGE effect clears all | retained |
+| transient TLOAD | fixed BP or normalized HD | TSTORE, 1 slot | TRANSIENT effect clears all | retained |
+| calldata CALLDATALOAD | fixed BP or normalized HD | none | no barrier | retained |
+| data DLOAD | normalized HD only | none | no barrier | retained |
+
+Load branch has priority. Well-shaped loads insert `[Var out]`; malformed loads
+retain input. Well-shaped stores invalidate then insert RAW `[val_op]`;
+malformed configured stores clear all. Nonnormalized stored operands need P
+currentness, not a K normalization assumption. Other writers (MSTORE8, copies,
+DLOAD's memory side effect, calls and INVOKE) go through barrier for writable
+spaces; K need not prove retained-memory facts for a branch that clears all.
+DLOAD reads data but also writes memory; do not classify it as globally pure.
+
+## Proposed exact statements for review/decomposition
+
+Use `norm : operand -> operand` as a parameter, and explicit op/space pairs.
+All statements universally quantify free variables; none contain a HOL let.
+Names here are descriptive outputs, not new component IDs.
+
+1. **Fixed BP word region bridge (missing shared boundary).**
+   `bp_ptr_sound bp s /\ allocas_in_word s /\
+    bp_segment_from_ops bp ops = ml /\ ml_is_fixed ml /\
+    ops.iao_max_size = SOME (Lit (n2w (addr_space_word_scale space))) /\
+    eval_operand ops.iao_ofst s = SOME w /\ memloc_within_alloca ml s ==>
+    memloc_runtime_region ml s = SOME (w2n w, addr_space_word_scale space)`.
+   Validate this exact interface before consuming it: bounds and width are the
+   two missing conclusions of the exported segment theorem. `allocas_in_word`
+   bounds allocation end; within-alloca bounds offset plus access width.
+
+2. **Read computed-key address.** For each table load/space pair:
+   `inst.inst_opcode = loadop /\ inst.inst_operands = [addr] /\
+    eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
+    bp_ptr_sound bp s /\ allocas_in_word s /\
+    memloc_within_alloca (bp_get_read_location bp inst space) s ==>
+    le_key_address space (load_get_read_key bp space norm inst) s = SOME (w2n w)`.
+   Fixed branch uses (1) plus BP location/shape equations; fallback uses K1.
+   Data ignores BP premises; remove unused premises in that specialization.
+   Write counterpart uses the three store/space pairs, `[addr;val_op]`, and
+   bp_get_write_location. Then K1 gives key read = actual read-address function.
+   Successful step + inst_wf supplies operand/output shape and evaluation;
+   bridge to step result/output value is a separate semantic theorem.
+
+3. **Alias location compatibility for arbitrary retained keys (missing).**
+   `bp_ptr_sound bp s /\
+    le_key_address space k s = SOME a /\
+    load_key_to_memloc bp space k <> ml_undefined ==>
+    memloc_runtime_region (load_key_to_memloc bp space k) s =
+      SOME (a,addr_space_word_scale space)`.
+   This proposed implication is NOT yet validated. LK_Loc follows K1; LK_Op
+   may have known operand evaluation but unknown BP offset, so nonundefined
+   alone need not imply a resolved region. Audit/review must decide stronger
+   meaningful premises or use a less restrictive alias boundary. Do not assert
+   it as an axiom or hide this gap in a giant transfer proof.
+
+4. **Retained read through configured stores, at explicit regions.**
+   `wf_alias_sets aliases /\ ~ma_may_alias aliases readloc writeloc /\
+    allocas_non_overlapping s /\ memloc_within_alloca readloc s /\
+    memloc_within_alloca writeloc s /\
+    memloc_runtime_region readloc s = SOME (a,addr_space_word_scale space) /\
+    memloc_runtime_region writeloc s = SOME (b,addr_space_word_scale space) ==>
+    le_read_address space a (store b value s) = le_read_address space a s`.
+   Specialize to M/S/T with mstore/sstore/tstore and matching space; derive
+   disjointness via ma_may_alias_sound then existing disjoint read lemmas.
+   Word bounds on a,b required for S/T conversion injectivity; supply explicitly
+   (`a,b < dimword(:256)`), not inferred from region disjointness.
+   Lift to key reads via K1 transport ONLY after separately establishing
+   address preservation at t. P owns operand/key epochs; K owns content facts.
+
+5. **Read-only contents preservation.** For Calldata and Data:
+   `step_inst fuel ctx inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+    le_read_address space a t = le_read_address space a s`.
+   Existing field theorems above suffice, including calls. Key resolution
+   preservation remains separate. OK terminators and PHI batches need wrappers,
+   not unfolding callees or assuming arbitrary keys stable.
+
+## Remaining premise sourcing issues (not discharged)
+
+`bp_ptrs_bounded` quantifies only mem_read_ops/mem_write_ops of instructions in
+fn. It does NOT directly quantify arbitrary retained normalized operands or
+all space-specific locations. Prove origin/shape compatibility before claiming
+within-alloca for those keys. Stored LK_Op values, normalized address variables,
+and PHI updates require existing P3/P5 epoch reasoning. Alias set wf must come
+from the actual alias analysis. No further solver population/support theorem
+can supply any of these semantic premises.
