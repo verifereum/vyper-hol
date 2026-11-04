@@ -290,11 +290,19 @@ Proof
          DROP_LENGTH_APPEND] >>
   gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
-  simp[exprLoweringPropsTheory.run_inst_seq_def,
-       venomExecSemanticsTheory.step_inst_base_def,
+  simp[exprLoweringPropsTheory.run_inst_seq_def, venomInstTheory.mk_inst_def] >>
+  (* One instruction per step: CALLVALUE, ISZERO, ASSERT. *)
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
        venomExecSemanticsTheory.exec_read0_def,
-       venomExecSemanticsTheory.exec_pure1_def,
-       venomInstTheory.mk_inst_def, eval_operand_def,
+       venomExecSemanticsTheory.exec_pure1_def, eval_operand_def,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read0_def,
+       venomExecSemanticsTheory.exec_pure1_def, eval_operand_def,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read0_def,
+       venomExecSemanticsTheory.exec_pure1_def, eval_operand_def,
        lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   Cases_on `s0.vs_call_ctx.cc_callvalue = 0w` >>
   simp[venomExecSemanticsTheory.bool_to_word_def] >>

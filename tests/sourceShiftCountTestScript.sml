@@ -19,6 +19,12 @@ Definition source_shift_test_def:
       (BaseT (IntT 256)) (SX_Binary op (SX_Name "x") rhs)
 End
 
+(* EVAL reduces is_uint_type (BaseT (UintT 8)) to the eta-contracted
+   existential `$? ($= 8)`, which it leaves alone. *)
+val exists_num_eq = prove(``!n:num. $? ($= n)``,
+  gen_tac >> CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  qexists_tac `n` >> REFL_TAC);
+
 Theorem source_shift_unsigned_narrow_runtime:
   source_shift_test env (BaseT (UintT 8)) SCB_LShift (SX_Name "n") =
     SC_Value (Builtin (BaseT (IntT 256)) (Bop ShL)
@@ -29,7 +35,7 @@ Theorem source_shift_unsigned_narrow_runtime:
       [Name (BaseT (IntT 256)) "x";Builtin (BaseT (UintT 8)) (Bop Add)
         [Literal (BaseT (UintT 8)) (IntL 1);Name (BaseT (UintT 8)) "n"]])
 Proof
-  EVAL_TAC
+  EVAL_TAC >> simp[] >> EVAL_TAC >> REWRITE_TAC[exists_num_eq]
 QED
 
 Theorem source_shift_constant_count_coercion:
