@@ -1,7 +1,7 @@
 Theory typedNormalizeDynarrayLoop
 Ancestors
   typedNormalizeDynarray typedNormalizeLoop typedBytesArrayMem typedArrayBoundControlMem typedArrayLoopLayoutMem typedArrayLoopControlMem
-  context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec memContinuation
+  context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec memContinuation typedNormalizeContinuation
   venomInst venomState venomExecSemantics venomExecProps venomMemProps valueEncoding valueEncodingProps words arithmetic list rich_list
 
 (* The recursive child is opaque; its returned counters determine the backedge. *)
@@ -528,7 +528,12 @@ Theorem typed_dynarray_compiler_iteration:
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+11))) dt
       (Var ("%" ++ toString (sa.cs_next_var+10))) st sc = ((),ec) /\
-    fn_has_code sc ec fn ==>
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
     !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
       u.vs_inst_idx = LENGTH sc.cs_current_insts /\
       eval_operand (Var ("%" ++ toString (sa.cs_next_var+10))) u =
@@ -567,8 +572,6 @@ Theorem typed_dynarray_compiler_iteration:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_dynarray_child_states >> strip_tac >>
-  qpat_x_assum `!sc ec. _` (qspecl_then [`sc`, `ec`] mp_tac) >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then assume_tac >>
   `sb.cs_blocks =
     <|bb_label := ec.cs_current_bb; bb_instructions := ec.cs_current_insts ++
       typed_sa_backedge_insts ec.cs_next_id ("%" ++ toString (sa.cs_next_var+5))
@@ -579,6 +582,17 @@ Proof
     drule_all (SIMP_RULE (pure_ss ++ numSimps.REDUCE_ss) [offsets]
       (Q.INST [`i` |-> `sa.cs_next_id+12`] typed_dynarray_child_block_code))) >> strip_tac >>
   rename1 `lookup_block sc.cs_current_bb fn.fn_blocks = SOME body_bb` >>
+  `phi_prefix_length sc.cs_current_insts = 0` by
+    simp[phi_prefix_length_def, mk_inst_def] >>
+  `not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+   not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11))` by
+    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
+  `?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+    phi_prefix_length entry.bb_instructions = 0` by
+    (drule_all normalize_typed_backedge_entry >> simp[]) >>
+  qpat_x_assum `!sc ec. _` (qspecl_then [`sc`, `ec`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >> goal_assum (drule_at Any) >> simp[])) >>
+  disch_then assume_tac >>
   `backedge.bb_label = ec.cs_current_bb` by metis_tac[lookup_block_label] >>
   qpat_assum `sm.cs_next_var = _` (fn th => rewrite_tac[GSYM th]) >>
   irule typed_dynarray_header_iteration >>
@@ -594,7 +608,10 @@ Proof
       (k+5)+4=k+9 /\ (k+5)+5=k+10 /\ (k+5)+6=k+11 /\ (k+5)+7=k+12 /\
       (k+9)+1=k+10 /\ (k+9)+2=k+11 /\
       (k+12)+1=k+13 /\ (k+12)+2=k+14 /\ (k+12)+3=k+15``] >>
-  conj_tac >- (rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `Var _ = Var x` mp_tac >>
+    simp[not_fresh_at_def] >> disch_then (SUBST1_TAC o SYM) >>
+    simp[ASCIInumbersTheory.toString_inj]) >>
   gvs[basic_block_component_equality]
 QED
 
@@ -712,7 +729,12 @@ Theorem typed_dynarray_suffix_cont:
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+11))) dt
       (Var ("%" ++ toString (sa.cs_next_var+10))) st sc = ((),ec) /\
-    fn_has_code sc ec fn ==>
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
     !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
       u.vs_inst_idx = LENGTH sc.cs_current_insts /\
       eval_operand (Var ("%" ++ toString (sa.cs_next_var+10))) u =
@@ -915,7 +937,12 @@ Theorem typed_dynarray_compiler_cont:
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+11))) dt
       (Var ("%" ++ toString (sa.cs_next_var+10))) st sc = ((),ec) /\
-    fn_has_code sc ec fn ==>
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+10)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+11)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
     !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
       u.vs_inst_idx = LENGTH sc.cs_current_insts /\
       eval_operand (Var ("%" ++ toString (sa.cs_next_var+10))) u =

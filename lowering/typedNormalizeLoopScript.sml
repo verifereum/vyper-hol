@@ -1,6 +1,6 @@
 Theory typedNormalizeLoop
 Ancestors
-  typedNormalizeFrame typedArrayLoopControlMem typedArrayLoopLayoutMem memContinuation
+  typedNormalizeFrame typedNormalizeContinuation typedArrayLoopControlMem typedArrayLoopLayoutMem memContinuation
   context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec
   venomInst venomState venomExecSemantics valueEncoding valueEncodingProps
   words arithmetic list rich_list
@@ -911,7 +911,12 @@ Theorem typed_sarray_compiler_iteration:
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+6))) dt
       (Var ("%" ++ toString (sa.cs_next_var+5))) st sc = ((),ec) /\
-    fn_has_code sc ec fn ==>
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+5)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+6)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
     !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
       u.vs_inst_idx = LENGTH sc.cs_current_insts /\
       eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) u =
@@ -949,8 +954,21 @@ Theorem typed_sarray_compiler_iteration:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all typed_sarray_child_decompose >> strip_tac >>
+  `phi_prefix_length sc.cs_current_insts = 0` by
+    simp[phi_prefix_length_def, mk_inst_def] >>
+  `not_fresh_at sc ("%" ++ toString (sa.cs_next_var+5)) /\
+   not_fresh_at sc ("%" ++ toString (sa.cs_next_var+6))` by
+    (simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >> decide_tac) >>
+  `?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+    phi_prefix_length entry.bb_instructions = 0` by
+    (drule_all normalize_typed_prefix_zero >> strip_tac >>
+     goal_assum (drule_at Any) >>
+     Cases_on `ec.cs_current_insts` >>
+     fs[phi_prefix_length_def, typed_sa_backedge_insts_def, mk_inst_def] >>
+     Cases_on `h.inst_opcode = PHI` >> fs[phi_prefix_length_def]) >>
   qpat_x_assum `!sc ec. _` (qspecl_then [`sc`, `ec`] mp_tac) >>
-  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >> disch_then assume_tac >>
+  (impl_tac >- (asm_rewrite_tac[] >> goal_assum (drule_at Any) >> simp[])) >>
+  disch_then assume_tac >>
   `!k:num. (k+5)+1 = k+6 /\ (k+5)+2 = k+7 /\ (k+5)+3 = k+8` by decide_tac >>
   qpat_x_assum `!k:num. _` (fn offsets =>
     mp_tac (SIMP_RULE (pure_ss ++ numSimps.REDUCE_ss) [offsets]
@@ -966,7 +984,7 @@ Proof
                       (fresh_label_output "typed_sa_exit" (sa.cs_next_label+2))|>`]
         typed_sarray_header_iteration))) >>
   (impl_tac >- (asm_rewrite_tac[] >>
-    simp[typed_sa_header_insts_def, phi_prefix_length_def, mk_inst_def])) >>
+    gvs[typed_sa_header_insts_def, phi_prefix_length_def, mk_inst_def])) >>
   disch_then ACCEPT_TAC
 QED
 
@@ -995,7 +1013,12 @@ Theorem typed_sarray_compiler_cont:
   (!sc ec. compile_store_memory_typed ce
       (Var ("%" ++ toString (sa.cs_next_var+6))) dt
       (Var ("%" ++ toString (sa.cs_next_var+5))) st sc = ((),ec) /\
-    fn_has_code sc ec fn ==>
+    fn_has_code sc ec fn /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+5)) /\
+    not_fresh_at sc ("%" ++ toString (sa.cs_next_var+6)) /\
+    phi_prefix_length sc.cs_current_insts = 0 /\
+    (?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+      phi_prefix_length entry.bb_instructions = 0) ==>
     !j u. j < n /\ ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
       u.vs_inst_idx = LENGTH sc.cs_current_insts /\
       eval_operand (Var ("%" ++ toString (sa.cs_next_var+5))) u =

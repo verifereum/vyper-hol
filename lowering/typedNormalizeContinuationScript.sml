@@ -299,3 +299,61 @@ Proof
   strip_tac >> drule_all normalize_typed_prefix_zero >> strip_tac >>
   drule_all normalize_field_offset_entry >> simp[]
 QED
+
+(* A real terminal certificate transports backwards across a PHI-safe suffix,
+   including the zero-code case.  Finalized entry blocks are covered by the
+   compiler's PHI invariant, not by code containment alone. *)
+Theorem normalize_phi_suffix_entry[local]:
+  cs_extends sa sb /\ abi_decoder_phi sa sb /\
+  phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn /\
+  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0) ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >>
+  `abi_decoder_phi_safe sa.cs_blocks sa` by
+    (simp[abi_decoder_phi_safe_def] >> qexists_tac `[]` >> simp[]) >>
+  `abi_decoder_phi_safe sa.cs_blocks sb` by
+    metis_tac[abi_decoder_phi_def] >>
+  qpat_x_assum `cs_extends sa sb` mp_tac >>
+  simp_tac bool_ss [cs_extends_def] >> strip_tac >>
+  Cases_on `new = []` >- gvs[] >>
+  `EVERY (\bb. phi_prefix_length bb.bb_instructions = 0) new` by
+    gvs[abi_decoder_phi_safe_def] >>
+  `MEM (LAST new) new` by metis_tac[rich_listTheory.MEM_LAST_NOT_NIL] >>
+  `phi_prefix_length (LAST new).bb_instructions = 0` by
+    (qpat_x_assum `EVERY _ new` mp_tac >>
+     simp[ listTheory.EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `emitted_blocks sa sb = new` by
+    simp[emitted_blocks_def, rich_listTheory.TAKE_LENGTH_APPEND] >>
+  gvs[fn_has_code_def] >> metis_tac[]
+QED
+
+Theorem normalize_fields_suffix_entry:
+  compile_typed_copy_fields ce dst src dts sts doff soff sa = (x,sb) /\
+  phi_prefix_length sa.cs_current_insts = 0 /\ fn_has_code sa sb fn /\
+  (?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0) ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> irule normalize_phi_suffix_entry >>
+  simp[] >> qexists_tac `sb` >> simp[] >> reverse conj_tac
+  >- metis_tac[cj 2 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND] >>
+  mp_tac (cj 2 normalize_phi_typed_family) >>
+  disch_then (qspecl_then [`ce`,`dst`,`src`,`dts`,`sts`,`doff`,`soff`,`sa`] mp_tac) >>
+  simp[]
+QED
+
+Theorem normalize_offset_prefix_zero:
+  compile_with_byte_offset op off sa = (out,sb) /\
+  phi_prefix_length sa.cs_current_insts = 0 ==>
+  phi_prefix_length sb.cs_current_insts = 0
+Proof
+  strip_tac >>
+  mp_tac (cj 3 normalize_phi_copy) >>
+  disch_then (qspecl_then [`op`,`off`,`sa`] mp_tac) >> simp[] >>
+  strip_tac >> irule abi_decoder_phi_safe_head >>
+  metis_tac[abi_decoder_phi_def]
+QED

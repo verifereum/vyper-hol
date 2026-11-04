@@ -5,11 +5,10 @@ Ancestors
   typedNormalizeContinuation typedNormalizeFields typedNormalizeFrame
   compileEnv emitHelper venomInst list arithmetic
 
-(* The array callbacks quantify arbitrary sc. Their compiler equation alone
-   does not imply freshness of the two operand names: at the following legal
-   word compiler input the first result overwrites the destination operand.
-   Actual array child states have stronger counter/prefix facts, but these
-   facts are not guards of the exported callback premises. *)
+(* The compiler equation alone does not imply operand freshness: at this
+   legal word compiler input the first result overwrites the destination.
+   The repaired array callbacks exclude this input by explicitly guarding
+   operand freshness, the child prefix and the actual exit certificate. *)
 Theorem normalize_callback_alias_code[local]:
   is_word_type dt /\ sc.cs_next_var = k /\
   compile_store_memory_typed ce (Var ("%" ++ toString k)) dt src st sc = ((),ec) ==>
@@ -81,28 +80,27 @@ QED
    invalid/fallback: eliminate through evaluated supported type and acyclic
      metadata, or use already validated layout identity, never assume them safe.
 
-   Unresolved interface gaps (not missing loop execution):
-   A. Both array callbacks quantify arbitrary sc/ec but guard only child
-      compile equation and fn_has_code. Neither implies operand freshness or
-      sc prefix zero. The checked alias-code probe above exhibits why compiler
-      inputs cannot be arbitrary. Actual typed_dynarray_child_states supplies
-      sc.next_var=sa.next_var+12 and a non-PHI four-op prefix; these facts are
-      OUTSIDE the exported callback antecedent. Static has the same mismatch.
-   B. The arbitrary ec in either callback has no real suffix/no-PHI certificate.
-      normalize_typed_backedge_entry needs the actual backedge block equation
-      and sc prefix zero, not merely fn_has_code sc ec fn. These are known for
-      the actual child but not supplied for all sc/ec in the callback.
-   C. Field callbacks DO carry operand freshness, but not sc prefix zero or a
-      real continuation certificate for ec. normalize_typed_field_offset_entry
-      handles a nonzero next offset; zero offset requires an enclosing suffix
-      certificate propagated from later fields/outer return. Empty code does
-      not establish block membership. normalize_external_return_entry supplies
-      the terminal certificate only for an empty return-entry prefix.
+   Structural interface audit after callback repair:
+   A. Static and dynamic compiler callbacks still quantify arbitrary sc/ec,
+      but now guard both operand names not_fresh_at sc and sc prefix zero.
+      These match the candidate IH's structural entry premises exactly.
+      Actual child layout supplies the guards when the callback is used.
+   B. Both array callbacks now require a real lookup_block certificate at ec,
+      with phi_prefix_length zero. Actual backedge blocks supply it; code
+      containment alone is never used to infer PHI freedom or membership.
+   C. Tuple and nominal-field callbacks carry the same entry/exit guards.
+      normalize_tuple_fields_run maintains compiler-prefix zero in its Inv.
+      normalize_fields_suffix_entry transports the enclosing real terminal
+      certificate backwards across the remaining field suffix using cs_extends
+      plus the checked PHI-safe compiler family. This includes empty tails
+      and zero offsets; it never infers membership from an empty fragment.
+      Nominal structs reduce to this same traversal using checked lookup and
+      stored-size agreement, so need no separate structural suffix theorem.
    D. Reassembly/typing obligations remain: dense and sparse array traversal,
       semantic destination representations after widening, padded-size bounds,
       tuple and struct metadata coherence. Existing projection and widening
       lemmas supply paths, not a checked full recursive contract.
-   Therefore no application of the candidate IH to the exported ALL-sc callback
-   is justified. Replanning should expose actual child sc/ec/certificates to
-   callbacks (and field suffix certificates), not strengthen the frozen task.
+   The repaired callbacks expose the candidate IH's structural premises;
+   semantic IH instantiation/reassembly is still a separate obligation.
+   This audit is not recursive normalization or a proof of the frozen task.
 *)
