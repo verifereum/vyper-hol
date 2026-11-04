@@ -580,3 +580,87 @@ Proof
   `r < t.vs_inst_idx` by decide_tac >>
   drule_all ao_source_trace_crosses_index >> simp[]
 QED
+
+Theorem ao_trace_label_exit[local]:
+  !trace lbl.
+    MEM lbl (MAP (\a. (SND (SND a)).vs_current_bb) trace) /\
+    lbl <> (SND (SND (LAST trace))).vs_current_bb ==>
+    ?front a b back. trace = front ++ a::b::back /\
+      (SND (SND a)).vs_current_bb = lbl /\
+      (SND (SND b)).vs_current_bb <> lbl
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `trace`
+  >- simp[] >>
+  strip_tac >>
+  Cases_on `(SND (SND h)).vs_current_bb = lbl /\
+            (SND (SND h')).vs_current_bb <> lbl`
+  >- (qexistsl [`[]`,`h`,`h'`,`t`] >> simp[]) >>
+  first_x_assum (qspec_then `lbl` mp_tac) >>
+  (impl_tac >- (gvs[] >> metis_tac[])) >> strip_tac >>
+  qexistsl [`h::front`,`a`,`b`,`back`] >> simp[]
+QED
+
+Theorem ao_source_trace_interior_execution:
+  !trace ctx fn bb r inst.
+    trace <> [] /\ ao_source_trace ctx fn trace /\ wf_function fn /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    get_instruction bb r = SOME inst /\
+    phi_prefix_length bb.bb_instructions <= r /\
+    ~is_terminator inst.inst_opcode /\ MEM bb.bb_label (ao_trace_path trace) /\
+    bb.bb_label <> (SND (SND (HD trace))).vs_current_bb /\
+    bb.bb_label <> (SND (SND (LAST trace))).vs_current_bb ==>
+    ?front q u v back w.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = bb.bb_label /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      step_inst q ctx inst u = OK w /\ v = w with vs_inst_idx := SUC r
+Proof
+  rpt strip_tac >>
+  `MEM bb.bb_label (MAP (\a. (SND (SND a)).vs_current_bb) trace)` by
+    (drule ao_trace_path_shape >> strip_tac >>
+     fs[MEM_MAP] >> metis_tac[]) >>
+  drule_all ao_trace_label_exit >> strip_tac >>
+  `ao_source_trace ctx fn (front ++ [a]) /\ ao_source_step ctx fn a b` by
+    metis_tac[ao_source_trace_transition_split] >>
+  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
+  `b1` by
+    (Cases_on `b1` >> gvs[] >> drule ao_source_step_stutter >> simp[]) >>
+  `~a1` by
+    (Cases_on `a1` >> gvs[] >> metis_tac[ao_source_step_no_entry_entry]) >> gvs[] >>
+  qspec_then `front ++ [(a0,F,a2)]` (qspecl_then [`ctx`,`fn`] mp_tac)
+    ao_source_trace_final_visit >>
+  simp[] >> strip_tac
+  >- (Cases_on `front` >> gvs[] >>
+      drule ao_source_trace_single_visit_label >>
+      simp[] >> rewrite_tac[EVERY_MEM] >>
+      disch_then (qspec_then `(a0,F,a2)` mp_tac) >>
+      simp[]) >>
+  qmatch_asmsub_abbrev_tac `ao_source_trace ctx fn ((j,F,start)::back')` >>
+  `LAST ((j,F,start)::back') = (a0,F,a2)` by
+    (qpat_x_assum `front ++ [_] = _` mp_tac >>
+     rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+     disch_then (mp_tac o AP_TERM ``LAST : (num # bool # venom_state) list -> num # bool # venom_state``) >> simp[LAST_APPEND_CONS]) >>
+  `start.vs_current_bb = bb.bb_label` by
+    (drule_all ao_source_trace_single_visit_label >>
+     rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `LAST ((j,F,start)::back')` mp_tac) >>
+     simp[LAST_MEM]) >>
+  `start.vs_current_bb = s.vs_current_bb` by
+    (drule ao_source_step_stutter >> simp[]) >>
+  `bb' = bb` by gvs[] >>
+  `b0 = a0` by (drule ao_source_step_exit >> simp[]) >>
+  `start.vs_inst_idx <= r` by simp[Abbr `start`] >>
+  qspec_then `(j,F,start)::back'` (qspecl_then [`ctx`,`fn`] mp_tac)
+    ao_source_trace_crosses_before_exit >>
+  simp[] >>
+  disch_then (qspecl_then [`r`,`inst`,`b2`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  qexistsl [`front' ++ [(k,T,s)] ++ front''`,`q`,`u`,
+             `back'' ++ (a0,T,b2)::back`,`w`] >>
+  simp[] >>
+  `front ++ [(a0,F,a2)] =
+    (front' ++ [(k,T,s)]) ++ ((j,F,start)::back')` by
+    gvs[APPEND_ASSOC] >>
+  qpat_x_assum `front ++ [_] = (front' ++ _) ++ _` mp_tac >>
+  gvs[APPEND_ASSOC]
+QED
