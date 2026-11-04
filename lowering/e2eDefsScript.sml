@@ -1,6 +1,7 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_ok, tx_env_ok, tx_block_fields_rel,
+ * source_storage_ok, call_outcomes_ok, tx_block_fields_rel,
+ * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
@@ -56,26 +57,20 @@ Definition source_storage_ok_def:
 End
 
 Definition call_outcomes_ok_def:
-  call_outcomes_ok (tops : toplevel list) am tx os <=>
+  call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
                LENGTH outcome.co_returnData < dimword(:256) /\
-               (outcome.co_success ==>
-                 accounts_runtime_well_typed outcome.co_accounts /\
-                 contract_storage_well_formed cx
-                   (initial_state (am with <| accounts := outcome.co_accounts;
-                                              tStorage := outcome.co_tStorage |>) [])))
+               accounts_runtime_well_typed outcome.co_accounts /\
+               contract_storage_well_formed cx
+                 (initial_state (am with <| accounts := outcome.co_accounts;
+                                            tStorage := outcome.co_tStorage |>) []))
             os
 End
 
 (* ===== Transaction environment and entry transfer ===== *)
 
-Definition tx_env_ok_def:
-  tx_env_ok tx <=>
-    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
-    MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
-    LENGTH tx.block_hashes <= 256
-End
+(* tx_env_ok is compileEnv's, part of call_ctx_rel. *)
 
 Definition tx_block_fields_rel_def:
   tx_block_fields_rel tx txp <=>
@@ -131,6 +126,7 @@ Definition call_state_rel_def:
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
+      es.rollback.toDelete = am.pending_deletions /\
       es.rollback.tStorage = am.tStorage /\ am.logs = [] /\
       am.pending_deletions = [] /\
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
@@ -152,8 +148,17 @@ Theorem call_external_transaction_pending_deletions:
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
   >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-      rw[] >> simp[])
+      simp[call_external_def] >>
+      Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
+      qmatch_goalsub_abbrev_tac `get_self_code cx` >>
+      Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
+                   NONE => get_self_code cx
+                 | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
+      Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
+      rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
+      Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
+      rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
+      rw[] >> simp[finalize_pending_deletions_metadata])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
 QED
 
@@ -395,11 +400,12 @@ Definition call_result_rel_def:
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           tx_return_bytes tops ret tx v out /\
-          accounts_agree cx am'.accounts es'.rollback.accounts /\
+          accounts_agree cx am'.accounts
+            (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")

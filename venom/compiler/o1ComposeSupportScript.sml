@@ -97,6 +97,92 @@ Proof
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
+(* ===== The label and PHI facts the source shape implies ===== *)
+
+Theorem bb_well_formed_terminator_last[local]:
+  bb_well_formed bb /\ MEM inst bb.bb_instructions /\
+  is_terminator inst.inst_opcode ==>
+  inst = LAST bb.bb_instructions
+Proof
+  rw[bb_well_formed_def, MEM_EL] >>
+  `n = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+  simp[LAST_EL]
+QED
+
+(* Outside INVOKE and PHI, a label operand is a jump target, LowerDload's
+   "code_end" or the deploy code's "runtime_begin". *)
+Theorem label_positions_ok_label[local]:
+  label_positions_ok inst /\ MEM (Label l) inst.inst_operands /\
+  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> PHI ==>
+  is_terminator inst.inst_opcode \/ l = "code_end" \/ l = "runtime_begin"
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = CODECOPY`
+  >- (qpat_x_assum `label_positions_ok _` mp_tac >>
+      simp[label_positions_ok_def, CasePreds ["list", "operand"]] >>
+      strip_tac >> gvs[EVERY_MEM] >> res_tac >>
+      fs[stackPlanTypesTheory.is_label_operand_def]) >>
+  qpat_x_assum `label_positions_ok _` mp_tac >>
+  simp[label_positions_ok_def] >>
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  rpt strip_tac
+  >~ [`inst.inst_opcode = ADD`]
+  >- (BasicProvers.every_case_tac >> gvs[EVERY_MEM] >> res_tac >>
+      fs[stackPlanTypesTheory.is_label_operand_def]) >>
+  gvs[EVERY_MEM] >> res_tac >>
+  fs[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem source_fn_label_refs_ok[local]:
+  wf_function fn /\ EVERY inst_shape_ok (fn_insts fn) /\
+  EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn) ==>
+  fn_label_refs_ok fn
+Proof
+  rw[fn_label_refs_ok_def, EVERY_MEM] >>
+  `label_positions_ok inst /\ inst.inst_opcode <> PHI` by
+    (res_tac >> fs[inst_shape_ok_def, raw_opcode_ok_def]) >>
+  drule_all label_positions_ok_label >> strip_tac
+  >~ [`l = "code_end"`] >- gvs[reserved_label_def]
+  >~ [`l = "runtime_begin"`] >- gvs[reserved_label_def] >>
+  disj1_tac >>
+  gvs[fn_insts_def, fn_insts_blocks_MEM, wf_function_def,
+      fn_succs_closed_def] >>
+  first_x_assum irule >> qexists_tac `bb` >> simp[] >>
+  `inst = LAST bb.bb_instructions` by
+    metis_tac[bb_well_formed_terminator_last] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  simp[bb_succs_def, get_successors_def, MEM_MAP, MEM_FILTER,
+       PULL_EXISTS] >>
+  qexists_tac `Label l` >> simp[venomStateTheory.get_label_def]
+QED
+
+(* unit_wf gives every block a terminator at its end and closes jumps
+   over the function's blocks; with o1_source_unit_ok's label positions
+   and no PHI, label operands are local and no first block has a PHI. *)
+Theorem o1_source_unit_label_refs_no_phi:
+  unit_wf u /\ o1_source_unit_ok u ==>
+  unit_label_refs_ok u /\ unit_first_block_no_phi u
+Proof
+  strip_tac >>
+  `!fn. MEM fn u.cu_context.ctx_functions ==>
+        wf_function fn /\ fn_shape_ok fn /\
+        EVERY (\inst. raw_opcode_ok inst.inst_opcode) (fn_insts fn)` by
+    (rpt strip_tac >>
+     gvs[unit_wf_def, venom_wf_def, o1_source_unit_ok_def, unit_shape_ok_def,
+         EVERY_MEM] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[unit_label_refs_ok_def, EVERY_MEM] >> rpt strip_tac >>
+      irule source_fn_label_refs_ok >> gvs[fn_shape_ok_def] >> metis_tac[]) >>
+  simp[unit_first_block_no_phi_def, EVERY_MEM, first_block_no_phi_def] >>
+  rpt strip_tac >> rename1 `MEM f u.cu_context.ctx_functions` >>
+  first_x_assum drule >>
+  rw[wf_function_def, fn_has_entry_def, fn_insts_def, EVERY_MEM,
+     raw_opcode_ok_def] >>
+  Cases_on `f.fn_blocks` >> gvs[fn_insts_blocks_def] >>
+  disj2_tac >> disj2_tac >> disj1_tac >>
+  simp[EXISTS_MEM] >> qexists_tac `inst` >> simp[]
+QED
+
 Theorem entry_shape_from_members:
   entry_fn_first C /\ EVERY (o1_fn_shape C) C.ctx_functions ==>
   entry_fn_no_ret (HD C.ctx_functions) /\

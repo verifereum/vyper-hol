@@ -2764,7 +2764,8 @@ Proof
    s1.vs_return_pc_token = s2.vs_return_pc_token /\
    s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
-  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests /\
+   s1.vs_pending_deletions = s2.vs_pending_deletions` by
     fs[concretize_rel_def, LET_THM] >>
   (* Step 5: case split on opcode — SSTORE, TSTORE, STOP, SINK,
      INVALID, SELFDESTRUCT, RET remain (RETURN/REVERT eliminated by
@@ -3822,17 +3823,10 @@ Triviality concretize_rel_mem_update:
     concretize_rel amap fn livesets init
       (s1 with vs_memory := m1') (s2 with vs_memory := m2')
 Proof
-  rpt strip_tac >>
   simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  qpat_x_assum `concretize_rel _ _ _ _ _ _` mp_tac >>
-  simp[concretize_rel_def, LET_THM, lookup_var_def,
-       allocas_non_overlapping_def] >>
-  rpt strip_tac >>
-  fs[concretize_rel_def, LET_THM, lookup_var_def, allocas_non_overlapping_def,
-     in_alloca_region_def, in_concrete_region_def, mem_byte_at_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt (disch_then strip_assume_tac) >>
-  res_tac >> fs[]
+       allocas_non_overlapping_def, concretize_frame_def,
+       in_alloca_region_def] >>
+  metis_tac[]
 QED
 
 (* mstore is write_memory_with_expansion with word_to_bytes *)
@@ -3874,14 +3868,6 @@ Proof
   fs[mem_write_tail_non_pv_def, LET_THM] >>
   first_x_assum (qspecl_then [`bb`, `inst`, `v`] mp_tac) >>
   simp[memLocDefsTheory.mem_write_ops_def]
-QED
-
-Triviality mstore8_as_wmwe:
-  !off val s.
-    mstore8 off val s = write_memory_with_expansion off [w2w val : word8] s
-Proof
-  rpt strip_tac >>
-  simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
 QED
 
 (* Helper: MSTORE8 value operand is non-pv *)
@@ -4798,7 +4784,7 @@ Proof
   gvs[lift_result_def] >>
   `?val. eval_operand op_val s2 = SOME val` by metis_tac[] >>
   gvs[lift_result_def] >>
-  simp[mstore8_as_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   ONCE_REWRITE_TAC[wmwe_as_mem_update] >>
   irule concretize_rel_mem_update >> rpt conj_tac
   >- (

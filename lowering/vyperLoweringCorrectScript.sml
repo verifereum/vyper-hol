@@ -28,13 +28,14 @@
  *     whose return may release a transient nonreentrant lock
  *   (S1, lower_vyper_runtime_unit_correct, is in loweringRuntimeCorrect)
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
- *   lower_vyper_runtime_unit_o1_shape_extras -- S2b (planned admission,
- *     Milestone 5): the non-INVOKE label operands are local, the entry
- *     function has no PARAM, no first block has a PHI
+ *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
+ *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
+ *     every use is written on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
  *
  * TASK056: obsolete NONE-mode relation retained as inactive source provenance.
- * STATUS: S2 is proved; S2b is a statement.
+ * STATUS: S2 and S2b are proved.
  * Before major proof repair, check lowering definitions against the chosen
  * upstream compiler target; see docs/compiler-definition-parity.md.
  *)
@@ -59,6 +60,7 @@ Ancestors
   unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
+  supportedNames
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -125,14 +127,12 @@ Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     compileEnv$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
-    vs.vs_prev_hashes = tx.block_hashes /\
-    (!n. vs.vs_block_ctx.bc_blockhash n =
-         let idx = tx.block_number - n - 1 in
-         if n < tx.block_number /\ tx.block_number - 256 <= n /\
-            idx < LENGTH tx.block_hashes
-         then EL idx tx.block_hashes else 0w)
+    vs.vs_prev_hashes = tx.block_hashes
 End
 
+(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
+   is stated here too so the transaction premises read in one place, not as
+   a separate assumption. *)
 Definition initial_venom_state_rel_def:
   initial_venom_state_rel tops am tx vs <=>
     value_transfer_ok tx am.accounts /\
@@ -143,6 +143,7 @@ Definition initial_venom_state_rel_def:
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
     vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
     vs.vs_returndata = [] /\ vs.vs_requests = [] /\
+    vs.vs_pending_deletions = am.pending_deletions /\
     immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
 End
 
@@ -182,7 +183,8 @@ Definition external_call_result_rel_def:
     case (res, vres) of
       (INL v, Halt ss) =>
         tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree cx am'.accounts ss.vs_accounts /\
+        accounts_agree cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
         transient_agree cx am'.tStorage ss.vs_transient /\
         logs_correspond (compiled_event_info tops) (type_env tops)
           tx.target am'.logs ss.vs_logs /\
@@ -894,30 +896,25 @@ QED
    lower_vyper_runtime_unit_source_unit_ok_checked. The type checker supplies
    builtin arities and distinct internal names; raw_shape_free_program
    excludes msg.gas values and raw_call (wider than the unit shape needs:
-   a plain raw_call passes it, but the body-shape proof lacks that case).
-   Raw O1 shape excludes DLOAD; the immutable-free hypothesis restricts this
-   theorem's source domain, not the runtime immutable compiler. *)
+   a plain raw_call passes it, but the body-shape proof lacks that case). *)
 Theorem lower_vyper_runtime_unit_source_unit_ok:
   !tops rpolicy unit layouts addr art.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     check_contract F layouts addr [(NONE, tops)] = SOME art /\
-    raw_shape_free_program tops /\ immutable_free_program tops
+    raw_shape_free_program tops
     ==> o1_source_unit_ok unit
 Proof
   ACCEPT_TAC lower_vyper_runtime_unit_source_unit_ok_checked
 QED
 
-(* S2b: planned admission, Milestone 5. The lowering's PHI-free code
-   refers to labels only in jumps to blocks of the same function, in
-   reserved labels, and in INVOKE targets; its entry function reads
-   calldata, never a PARAM; having no PHI at all, no first block has
-   one; and it leaves every FMP convention unset (mk_raw_function). *)
-Theorem lower_vyper_runtime_unit_o1_shape_extras:
+(* S2b, planned admission: every variable a use in the lowering's code
+   reads is written on every path to the use.  SimplifyCFG's pre-walk
+   needs it. *)
+Theorem lower_vyper_runtime_unit_defs_reach_uses:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
-    ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
-        unit_first_block_no_phi unit /\ unit_fmp_unsealed unit
+    ==> unit_defs_reach_uses unit
 Proof
   cheat
 QED
@@ -963,6 +960,60 @@ Proof
   rpt gen_tac >> simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
   strip_tac >> metis_tac[]
+QED
+
+(* run_lowering builds every function with mk_raw_function, which leaves
+   fn_fmp_signature unset. *)
+Theorem run_lowering_fmp_unsealed:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME u ==>
+  unit_fmp_unsealed u
+Proof
+  simp[run_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def, unit_fmp_unsealed_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
+
+(* S2b. The entry function reads calldata, never a PARAM: the S2 shape
+   proof gives that of the unit's first function, which run_lowering's
+   distinct function names make the only one named by the entry.  No
+   function has its FMP convention set (run_lowering_fmp_unsealed).  The
+   label and PHI facts S4 also needs follow from unit_wf and
+   o1_source_unit_ok (o1_source_unit_label_refs_no_phi). *)
+Theorem lower_vyper_runtime_unit_o1_shape_extras:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops
+    ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  reverse conj_tac >- metis_tac[run_lowering_fmp_unsealed] >>
+  drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
+  impl_tac
+  >- metis_tac[supported_program_runtime_bodies_shape_ok,
+               supported_names_internal_names_distinct,
+               supported_program_names, supported_declaration_names_unique] >>
+  strip_tac >>
+  `entry_fn_first unit.cu_context` by
+    fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
+  `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
+    (drule run_lowering_context_ok >>
+     simp[lowering_context_ok_def, ctx_fn_names_def]) >>
+  qpat_x_assum `entry_fn_first _`
+    (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
+  rename1 `_ = efn :: rest` >>
+  qpat_x_assum `_.ctx_functions = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
+              rewrite_tac [unit_entry_no_params_def, entry_fn_no_params_def, th]) >>
+  qx_gen_tac `g` >> simp_tac std_ss [listTheory.MEM] >> rpt strip_tac
+  >- fs[] >>
+  `MEM g.fn_name (MAP (\f. f.fn_name) rest)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  gs[]
 QED
 
 (* The dead bytes of a source call's result: those storage_dead gives in
