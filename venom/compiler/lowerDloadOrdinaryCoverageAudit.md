@@ -1,4 +1,4 @@
-# Ordinary coverage checkpoint (reconciled through C1.11.5.51)
+# Ordinary coverage checkpoint (reconciled through C1.11.5.64)
 
 This is an interface audit, not a theorem or a claim that the frozen contract is proved.
 Source snapshot: 765ee6583 (ambient grouped-write coverage). No semantic definitions or
@@ -410,3 +410,92 @@ are handled here. Non-revert, sync/global and source ambient certificates remain
 explicit premises. Full target-prefix coverage and the frozen memory theorem
 remain outstanding. Build of the new helper and task target passed together
 (TO_ld_mem-20261104T033958Z_m4262_t001); the latter is not cheat-elimination evidence.
+
+## Reconciliation after grouped arithmetic and reads (.64)
+
+Baseline: 6177a2709. The initial table is a historical local-effect inventory;
+this section supersedes its assembly statuses. Exhaustive constructor universe
+rechecked against venomInstScript.sml:23-69. No frozen theorem completion is claimed.
+
+### Checked consumers (do not reprove)
+
+* Arithmetic: ld_sync_arithmetic_effect / ld_sync_arithmetic_coverage in
+  lowerDloadSafetyArithmeticCoverage. Exactly the scalar/ADD/SUB/shift union;
+  excludes unsigned comparisons. Sync/global, context shape, pointer discipline,
+  pointer witness and target OK suffice for effects; coverage also needs target
+  active successor, nonterminator/nonexpansion exclusions, supply and stack order.
+* Observational reads: ld_sync_observational_read_effect / coverage in
+  lowerDloadSafetyReadCoverage. Exactly environment read0, keyed environment,
+  account introspection, SLOAD/TLOAD union. Same consumer premises as arithmetic.
+* MSTORE/MSTORE8/MCOPY: ld_sync_memory_write_coverage_ambient in WriteCoverage;
+  headroom mem_inv and non-forward premises remain explicit. Empty copy is covered.
+* CALL/STATICCALL: current source exports ld_sync_oracle_call_coverage in
+  OracleCallCoverage:9, using generic OrdinaryCoverage. This supersedes the older
+  .58 names/implementation description above; no duplicate advance consumer is
+  presently required. Headroom and non-forward premises remain explicit.
+
+These are successor-location certificates, not current-instruction raw safety
+or arbitrary target-prefix coverage. OrdinaryCoverage:ld_sync_ordinary_coverage
+is the sole common unchanged-instruction adapter, accepting an existential source
+success, H', updated vars/memory/nonghost, erasure/range, unchanged allocation and
+control projections. Its target-next premise supplies the source next location.
+
+### Residual interface table
+
+| Family | Exact existing producer and unsupplied boundary | Missing output |
+|---|---|---|
+| ASSIGN | ld_assign_effect (AssignSteps:78); needs labels, membership, vars/memory/nonghost; selected H'=set_prov H outputs (first_prov H operands) | synchronized effect + ordinary coverage; range via existing first_prov selected-range boundary (currently local in ArithmeticCoverage) |
+| LT/GT/EQ | ld_comparison_effect (ComparisonEffects:172); access_ok, global, FDOM A=ld_slots A frames and target endpoint bound in addition to ordinary vars/shape/ptr/taint | synchronized effect + ordinary coverage; no non-forward premise needed |
+| MLOAD/ILOAD | ld_mload_effect (MloadEffects:89), ld_iload_effect (IloadEffects:66); access_ok, non-forward, endpoint bound; ILOAD additionally fn_ptr_ok | grouped synchronized effect + ordinary coverage |
+| PARAM | ld_param_effect (ParamEffects:103); selected Q positions must belong to P fn_name; not a consequence of ld_vars alone | derive selected-position premise or preserve it at call setup, then sync/coverage; H' uses selected q, not always NONE |
+| RETPC_PARAM | ld_retpc_param_effect (RetpcEffects:39); membership/vars/memory/nonghost; output opaque | sync/ordinary coverage, NONE provenance |
+| PHI batch | ld_phis_effect (PhiEffects:53); EVERY member, shared predecessor/labels, successful target eval_phis; snapshot semantics | block entry/envelope synchronization; not ordinary sequential coverage (PHI base is Error) |
+| SSTORE/TSTORE | ld_storage_write_effect (StorageWriteEffects:75); operands=[a;v], outputs=[], equal key evaluations, masked value agreement | operand/shape assembly then synchronized effect and ordinary coverage; H unchanged |
+| CALLDATACOPY/CODECOPY/EXTCODECOPY | no complete producer; classify destination, equal scalar length/source offset, equal calldata/code/account bytes | semantic effect, sync and coverage |
+| RETURNDATACOPY | no ordinary producer; in-bounds read and destination classification; forwarding branch loses paired memory | ordinary effect/coverage OR explicit terminal suffix witness |
+| ISTORE | no complete producer; scalar offset plus masked word, memory and immutable taint bookkeeping | effect, sync and coverage |
+| SHA3/LOG | no complete producer; untainted/classified source bytes for hash; log history omitted but operands/access still needed | effects, sync and coverage |
+| INITIAL_FMP/BUMP | no complete producer; not excluded by fmp_free_ctx; BUMP two outputs | effects, sync and coverage |
+| NOP/ASSERT/ASSERT_UNREACHABLE | no complete producer; identity on successful branch with ghost normalization; assertions need equal scalar untainted guard | effects/successor coverage plus Abort classification |
+| DELEGATECALL/CREATE/CREATE2 | not covered by OracleCallCoverage; external empty-mask observation boundaries exist, not complete opcode producers | concrete EVM effect producers, sync and coverage |
+| ALLOCA | maps/interval/charge infrastructure in Relation and ScratchSafety, not full assembled step | allocation-aware transition, selected output/map insertion, successor |
+| DLOAD/DLOADBYTES | conditional expansion prefix raw safety in ScratchSafety/ConfiguredOrigins | expansion phase transport and completion, E/A updates, next location |
+| JMP/JNZ/DJMP | no control producers; equal scalar selectors, successful destination and PHI batch | jump/block reachability and envelope reconstruction |
+| RET/INVOKE | no general recursive call transport; RET uses IntRet not OK, final opaque token not compared | push/pop (.7), reachable source return witness and target-run induction (.8) |
+| STOP/SINK/RETURN/REVERT/SELFDESTRUCT/INVALID | terminal, no ordinary OK successor | active raw safety and terminal classification; forward suffix where applicable |
+| excluded FMP/DALLOCA family | historical exclusions in table above unchanged | transport source exclusion to transformed origin, not new effects |
+
+### Proposed next grouped consumer interfaces (not theorems yet)
+
+1. ASSIGN and RETPC_PARAM: same sync/global/shape/discipline + target OK interface
+   as arithmetic, union [ASSIGN;RETPC_PARAM], existential H' (first_prov versus
+   NONE). Reuse first_prov range helper by making the unique task-created helper
+   public if authorized, rather than copying it. Apply OrdinaryCoverage once.
+2. Classified reads/comparisons: union [MLOAD;ILOAD;LT;GT;EQ], arithmetic ambient
+   premises plus mem_inv dload_headroom_ok C vs0 and non-forward. Extract access
+   from sync/source discipline, slots from sync, bounds from ambient headroom.
+   Export existential H'=set_prov H outputs NONE and common effect conclusion,
+   followed by ordinary coverage. Non-forward is unnecessary for comparisons
+   alone, so do not silently narrow its independent producer.
+3. Storage writes: same arithmetic ambient interface for [SSTORE;TSTORE]; derive
+   source shape outputs=[], source/target scalar key and masked value using
+   WriteAssembly observation boundaries. Keep H'=H and feed ordinary adapter.
+4. PARAM remains distinct until selected-position ownership is validated. PHI,
+   allocation, expansion and jumps are structurally distinct, not extra cases
+   to force into unchanged singleton coverage.
+
+### Prefix ownership and remaining safety gap
+
+PLAN C1.11.7 owns conditional push/pop: fresh serial and selected Q at entry;
+return restricts A, restores caller frontier, and uses current callee memory and
+taint. It must not assume a terminating source run. C1.11.8 owns recursion-matching
+target-run induction producing a source frame_reachable IntRet witness, then
+raw_reachable entry/next/block/callee rule coverage under exactly frozen
+antecedents, existentially hiding lo/P/Sigma/ghosts. These are still unproved.
+
+The final relation assertion must distinguish ld_pair from explicit target-only
+forward suffix; ld_forward_prefix_raw is checked but does not establish the
+witness for every relevant reachable state. Current raw safety is required even
+when the active instruction subsequently Error/Abort/Halt. Neither checked
+arithmetic/reads nor CALL/STATICCALL successor consumers prove that obligation.
+No counterexample to the frozen statement has been established by this audit.
