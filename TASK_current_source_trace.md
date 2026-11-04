@@ -1,7 +1,7 @@
 # TASK: Port storage-observation proofs to the current live entry pipeline
 
 ## Meta
-Status: prepared; owner definition-audit gate pending before launch
+Status: approved for proof repair; independent statement and executable audits complete
 Created: 2026-11-04
 Location: project root
 Candidate anchor: 90e3e8f12, based on 92bea34aa
@@ -96,7 +96,8 @@ Theorem call_external_function_success_log_extends:
 
 The current-base definitions and statements have been independently inspected:
 the eleven-family trace-frame and unchanged physical soundness statements were
-judged PROVABLE, with no kernel validation on this base yet. The complete batch
+judged PROVABLE; the executable definition audit also approved this exact port.
+There is no kernel validation on this base yet. The complete batch
 has not parsed because ancestors require this same ghost-field migration.
 Keep the existing proofs; do not replace them with temporary admissions.
 
