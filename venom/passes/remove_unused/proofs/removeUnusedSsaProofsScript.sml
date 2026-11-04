@@ -336,7 +336,7 @@ Proof
   qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
 QED
 
-Theorem phi_well_formed_var_pair[local]:
+Theorem phi_well_formed_var_pair:
   !ops v.
     phi_well_formed ops /\ MEM (Var v) ops ==>
     ?lbl. MEM (lbl,v) (phi_pairs ops)

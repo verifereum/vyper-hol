@@ -233,3 +233,113 @@ Proof
   simp[] >> disch_then irule >> simp[] >>
   qexists_tac `LENGTH bb.bb_instructions` >> simp[]
 QED
+
+Theorem analyzed_phi_output_dominance_live_out_to_post_phis:
+  !fn d bb j v p pb.
+    codegen_ready_fn fn /\ lookup_block d fn.fn_blocks = SOME bb /\
+    j < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM v (EL j (collect_phis bb.bb_instructions)).inst_outputs /\
+    fn_dominates fn d p /\ lookup_block p fn.fn_blocks = SOME pb /\
+    MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pb.bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze fn) d
+      (LENGTH (collect_phis bb.bb_instructions)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `wf_function fn /\ ssa_form fn /\ phi_operands_ready fn` by
+    gvs[codegen_ready_fn_def] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks` by
+    (gvs[phi_operands_ready_def] >>
+     gvs[listTheory.EVERY_MEM, combinTheory.o_DEF] >>
+     Cases_on `collect_phis bb.bb_instructions` >> gvs[] >>
+     qpat_x_assum `!b. MEM b fn.fn_blocks ==> NULL _`
+       (qspec_then `bb` mp_tac) >> simp[]) >>
+  drule_all dominates_analyzed_path_no_revisit >> strip_tac >>
+  `MEM d (cfg_analyze fn).cfg_dfs_pre` by gvs[] >>
+  `MEM v (live_vars_at (liveness_analyze fn) d (LENGTH bb.bb_instructions))` by
+    (irule analyzed_live_backward_no_kill_path >> simp[] >>
+     qexistsl_tac [`pb`, `tail`] >> simp[] >>
+     reverse conj_tac >- (gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+     simp[listTheory.EVERY_MEM] >> qx_gen_tac `lbl` >> strip_tac >>
+     qx_gen_tac `bb'` >> strip_tac >>
+     conj_tac >- metis_tac[venomExecPropsTheory.lookup_block_MEM, listTheory.EVERY_MEM] >>
+     `lbl <> d` by metis_tac[] >>
+     `EVERY (\inst. ~MEM v (inst_defs inst)) bb'.bb_instructions` by
+       (irule ssa_phi_prefix_other_block_no_defs >> simp[] >>
+        goal_assum (drule_at Any) >>
+        qexistsl_tac [`bb`, `fn`, `j`] >> simp[]) >>
+     gvs[listTheory.EVERY_MEM]) >>
+  irule analyzed_live_out_to_post_phis >> simp[] >>
+  metis_tac[ssa_phi_prefix_tail_no_defs]
+QED
+
+Theorem reachable_phi_prefix_no_output_use_alias:
+  !fn entry lbl bb out_phi in_phi v.
+    codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+    fn_reachable fn lbl /\ lbl <> entry /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    MEM out_phi (collect_phis bb.bb_instructions) /\
+    MEM v out_phi.inst_outputs /\
+    MEM in_phi (collect_phis bb.bb_instructions) ==>
+    ~MEM v (inst_uses in_phi)
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\ phi_operands_ready fn` by
+    gvs[codegen_ready_fn_def] >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecPropsTheory.lookup_block_MEM,
+              venomExecPropsTheory.lookup_block_label] >>
+  `MEM in_phi bb.bb_instructions /\ in_phi.inst_opcode = PHI` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  `venomWf$phi_edge_uses_wf fn bb in_phi` by
+    (gvs[venomWfTheory.def_dominates_uses_def] >> metis_tac[]) >>
+  `?pred. MEM (pred,v) (phi_pairs in_phi.inst_operands)` by
+    (irule phi_well_formed_var_pair >>
+     gvs[venomWfTheory.phi_edge_uses_wf_def, venomInstTheory.inst_uses_def,
+         passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `?j. j < LENGTH (collect_phis bb.bb_instructions) /\
+    EL j (collect_phis bb.bb_instructions) = out_phi` by
+    metis_tac[listTheory.MEM_EL] >>
+  `?i. i < LENGTH (collect_phis bb.bb_instructions) /\
+    EL i (collect_phis bb.bb_instructions) = in_phi` by
+    metis_tac[listTheory.MEM_EL] >>
+  `ALL_DISTINCT (MAP FST (phi_pairs in_phi.inst_operands)) /\
+   ?pb. MEM pb fn.fn_blocks /\ pb.bb_label = pred /\
+     fn_cfg_edge fn pred lbl /\ def_available_at fn pb NONE v` by
+    (gvs[venomWfTheory.phi_edge_uses_wf_def] >> metis_tac[]) >>
+  `lookup_block pred fn.fn_blocks = SOME pb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]) >>
+  `fn_dominates fn lbl pred` by
+    (`fn_dominates fn lbl pb.bb_label` suffices_by simp[] >>
+     irule ssa_phi_prefix_available_dominates >>
+     goal_assum (drule_at Any) >> simp[] >> qexists_tac `j` >> simp[] >>
+     qexists_tac `v` >> simp[]) >>
+  `FIND (\(l,w). l = pred) (phi_pairs in_phi.inst_operands) = SOME (pred,v)` by
+    (qspec_then `FST : string # string -> string`
+      (qspecl_then [`phi_pairs in_phi.inst_operands`, `(pred,v)`] mp_tac)
+      fnPlanLineagePhiMapsTheory.distinct_key_FIND_member >> simp[] >>
+     simp[pairTheory.LAMBDA_PROD]) >>
+  `cfg_reachable_of (cfg_analyze fn) pred` by
+    (gvs[venomWfTheory.fn_dominates_def] >>
+     metis_tac[fn_reachable_cfg_analyze]) >>
+  `MEM lbl (cfg_succs_of (cfg_analyze fn) pred)` by
+    metis_tac[fn_cfg_edge_cfg_analyze] >>
+  `MEM v (live_vars_at (liveness_analyze fn) pred (LENGTH pb.bb_instructions))` by
+    (irule reachable_phi_incoming_live_out >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`bb`, `i`, `lbl`] >> simp[]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl
+     (LENGTH (collect_phis bb.bb_instructions)))` by
+    (irule analyzed_phi_output_dominance_live_out_to_post_phis >>
+     goal_assum (drule_at Any) >> simp[] >>
+     conj_tac >- (qexists_tac `j` >> simp[]) >>
+     qexistsl_tac [`pred`, `pb`] >> simp[]) >>
+  gvs[phi_operands_ready_def, phi_block_ready_def, listTheory.EVERY_MEM,
+      combinTheory.o_DEF]
+  >- (qpat_x_assum `!b. MEM b fn.fn_blocks ==> NULL _`
+        (qspec_then `bb` mp_tac) >> simp[listTheory.NULL_EQ] >>
+      metis_tac[listTheory.MEM]) >>
+  qpat_x_assum `!e. MEM e fn.fn_blocks ==> _`
+    (qspec_then `bb` mp_tac) >> simp[] >> metis_tac[]
+QED

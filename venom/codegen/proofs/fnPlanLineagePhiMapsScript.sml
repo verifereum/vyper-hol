@@ -225,3 +225,13 @@ Proof
   qspecl_then [`phis`, `0`, `FEMPTY`, `v`, `i`] mp_tac phi_operand_fold_exact >>
   simp[build_phi_maps_split] >> metis_tac[]
 QED
+
+Theorem distinct_key_FIND_member:
+  !key xs x. ALL_DISTINCT (MAP key xs) /\ MEM x xs ==>
+    FIND (\y. key y = key x) xs = SOME x
+Proof
+  gen_tac >> Induct >> simp[listTheory.FIND_thm] >>
+  rpt gen_tac >> strip_tac >> Cases_on `x = h` >> gvs[] >>
+  `key h <> key x` by metis_tac[listTheory.MEM_MAP] >>
+  simp[listTheory.FIND_thm]
+QED
