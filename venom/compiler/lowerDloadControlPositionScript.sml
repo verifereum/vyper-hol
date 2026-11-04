@@ -1,6 +1,6 @@
 Theory lowerDloadControlPosition
 Ancestors
-  o1ContractLowerDload lowerDloadDefs venomExecSemantics list rich_list
+  o1ContractLowerDload lowerDloadDefs venomExecSemantics contextCodegenRel venomInst list rich_list
 
 (* Position inversion is lower_dload_insts_supply_position in the ancestor.
    Retain its offset witness rather than duplicating that theorem. *)
@@ -65,4 +65,103 @@ Proof
       disch_then (qspec_then `s` assume_tac) >> simp[eval_phis_def]) >>
   drule_all lower_dload_inst_supply_nonphi_head >> strip_tac >>
   Cases_on `q` >> gvs[eval_phis_def]
+QED
+
+Theorem lower_dload_blocks_supply_lookup:
+  !bs a bs' b lbl bb'.
+    lower_dload_blocks_supply a bs = (bs',b) /\
+    lookup_block lbl bs' = SOME bb' ==>
+    ?bb a1 a2. lookup_block lbl bs = SOME bb /\
+                 lower_dload_block_supply a1 bb = (bb',a2)
+Proof
+  Induct >- simp[lower_dload_blocks_supply_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  Cases_on `lower_dload_block_supply a h` >>
+  Cases_on `lower_dload_blocks_supply r bs` >>
+  simp[lower_dload_blocks_supply_def] >> strip_tac >> gvs[] >>
+  `q.bb_label = h.bb_label` by
+    gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
+  Cases_on `h.bb_label = lbl`
+  >- (gvs[lookup_block_def, FIND_thm] >> metis_tac[]) >>
+  gvs[lookup_block_def, FIND_thm] >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_lookup_forward:
+  !bs a bs' b lbl bb.
+    lower_dload_blocks_supply a bs = (bs',b) /\
+    lookup_block lbl bs = SOME bb ==>
+    ?bb' a1 a2. lookup_block lbl bs' = SOME bb' /\
+                 lower_dload_block_supply a1 bb = (bb',a2)
+Proof
+  Induct >- simp[lower_dload_blocks_supply_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >>
+  Cases_on `lower_dload_block_supply a h` >>
+  Cases_on `lower_dload_blocks_supply r bs` >>
+  simp[lower_dload_blocks_supply_def] >> strip_tac >> gvs[] >>
+  `q.bb_label = h.bb_label` by
+    gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
+  Cases_on `h.bb_label = lbl`
+  >- (gvs[lookup_block_def, FIND_thm] >> metis_tac[]) >>
+  gvs[lookup_block_def, FIND_thm] >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_block_supply_phis:
+  lower_dload_block_supply a bb = (bb',b) ==>
+  eval_phis s bb'.bb_instructions = eval_phis s bb.bb_instructions /\
+  phi_prefix_length bb'.bb_instructions = phi_prefix_length bb.bb_instructions
+Proof
+  simp[lower_dload_block_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  metis_tac[lower_dload_insts_supply_phi_length, lower_dload_insts_supply_eval_phis]
+QED
+
+Theorem lower_dload_function_supply_enters_block:
+  lower_dload_function_supply a fn = (fn',b) ==>
+  (enters_block fn' s u <=> enters_block fn s u)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[enters_block_def] >> eq_tac >> strip_tac
+  >- (drule_all lower_dload_blocks_supply_lookup >> strip_tac >>
+      drule lower_dload_block_supply_phis >>
+      disch_then (qspec_then `s` strip_assume_tac) >> metis_tac[]) >>
+  drule_all lower_dload_blocks_supply_lookup_forward >> strip_tac >>
+  drule lower_dload_block_supply_phis >>
+  disch_then (qspec_then `s` strip_assume_tac) >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_block_origin:
+  !bs a bs' b bb'.
+    lower_dload_blocks_supply a bs = (bs',b) /\ MEM bb' bs' ==>
+    ?bb a1 a2. MEM bb bs /\ lower_dload_block_supply a1 bb = (bb',a2)
+Proof
+  Induct >- simp[lower_dload_blocks_supply_def] >>
+  simp[Once lower_dload_blocks_supply_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_active_origin:
+  lower_dload_function_supply a fn = (fn',b) /\ active_inst fn' j t ==>
+  ?bb bb' a0 a1 a2 pre i post p c tail.
+    MEM bb fn.fn_blocks /\ MEM bb' fn'.fn_blocks /\
+    bb.bb_label = t.vs_current_bb /\
+    lower_dload_block_supply a0 bb = (bb',a2) /\
+    bb.bb_instructions = pre ++ i::post /\
+    lower_dload_insts_supply a0 pre = (p,a1) /\
+    (?a_mid. lower_dload_inst_supply a1 i = (c,a_mid) /\
+      lower_dload_insts_supply a_mid post = (tail,a2)) /\
+    bb'.bb_instructions = p ++ c ++ tail /\
+    LENGTH p <= t.vs_inst_idx /\
+    t.vs_inst_idx < LENGTH p + LENGTH c /\
+    j = EL (t.vs_inst_idx - LENGTH p) c
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), active_inst_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all lower_dload_blocks_supply_block_origin >> strip_tac >>
+  `bb.bb_label = bb'.bb_label /\
+   lower_dload_insts_supply a1 bb'.bb_instructions = (bb.bb_instructions,a2)` by
+    gvs[lower_dload_block_supply_def, AllCaseEqs()] >>
+  drule_all lower_dload_insts_supply_position >> strip_tac >>
+  qexistsl_tac [`bb'`,`bb`,`a1`,`qi`,`a2`,`pre`,`i`,`post`,`before`,`code`,`after`] >>
+  simp[] >> metis_tac[]
 QED
