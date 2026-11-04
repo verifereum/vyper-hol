@@ -3,6 +3,7 @@ Ancestors
   contextCodegenRel venomExecSemantics ptrDiscipline venomState
   list rich_list pred_set finite_map lowerDloadDefs irSupply
   o1PassContract lowerDloadSupplyProofs venomWf o1ContractLowerDload
+  venomInst arithmetic
 
 (* Interval membership is deliberately distinct from revert_forward_at:
    the latter marks only the two endpoints. *)
@@ -294,4 +295,64 @@ Proof
   Cases_on `op` >> simp[resolve_block_assigns_def,
     resolve_block_assigns_nonvar] >>
   Cases_on `MEM s' x.inst_outputs` >> simp[]
+QED
+
+Theorem lower_dload_insts_supply_unchanged:
+  !xs s. EVERY (\q. ~MEM q.inst_opcode [DLOAD; DLOADBYTES]) xs ==>
+    lower_dload_insts_supply s xs = (xs,s)
+Proof
+  Induct >> simp[lower_dload_insts_supply_def] >> rpt strip_tac >>
+  simp[lower_dload_inst_supply_def]
+QED
+
+Theorem lower_dload_insts_supply_prefix:
+  lower_dload_insts_supply s xs = (ys,t) /\ n <= LENGTH xs ==>
+  ?ps u qs. lower_dload_insts_supply s (TAKE n xs) = (ps,u) /\
+    lower_dload_insts_supply u (DROP n xs) = (qs,t) /\ ys = ps ++ qs
+Proof
+  strip_tac >>
+  `xs = TAKE n xs ++ DROP n xs` by simp[] >>
+  metis_tac[lower_dload_insts_supply_append]
+QED
+
+Theorem lower_dload_insts_supply_at_unchanged:
+  !n xs s ys t q.
+  lower_dload_insts_supply s xs = (ys,t) /\ n < LENGTH xs /\
+  EL n xs = q /\ ~MEM q.inst_opcode [DLOAD; DLOADBYTES] ==>
+  ?ps u qs. lower_dload_insts_supply s (TAKE n xs) = (ps,u) /\
+    lower_dload_insts_supply u (DROP (SUC n) xs) = (qs,t) /\
+    ys = ps ++ q::qs
+Proof
+  Induct
+  >- (Cases >> simp[lower_dload_insts_supply_def] >>
+      rpt gen_tac >> strip_tac >>
+      `lower_dload_inst_supply s h = ([h],s)` by
+        (irule lower_dload_inst_supply_special >> simp[]) >>
+      gvs[AllCaseEqs()] >> metis_tac[]) >>
+  Cases >> simp[lower_dload_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`out ++ ps`, `u`, `qs`] >>
+  simp[lower_dload_insts_supply_def] >> metis_tac[APPEND_ASSOC]
+QED
+
+Theorem revert_forward_pair_middle_assigns:
+  revert_forward_pair bb i j ==>
+  EVERY (\q. q.inst_opcode = ASSIGN)
+    (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))
+Proof
+  strip_tac >> gvs[revert_forward_pair_def] >>
+  `j < LENGTH bb.bb_instructions` by
+    (gvs[get_instruction_def, AllCaseEqs()]) >>
+  `j - SUC i <= LENGTH (DROP (SUC i) bb.bb_instructions)` by
+    (simp[LENGTH_DROP] >> decide_tac) >>
+  simp[EVERY_EL] >> rpt strip_tac >>
+  `i < SUC i + n /\ SUC i + n < j /\
+   SUC i + n < LENGTH bb.bb_instructions` by
+    (gvs[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
+  `get_instruction bb (SUC i + n) =
+    SOME (EL (SUC i + n) bb.bb_instructions)` by
+    simp[get_instruction_def] >>
+  `(EL (SUC i + n) bb.bb_instructions).inst_opcode = ASSIGN` by metis_tac[] >>
+  gvs[EL_TAKE, EL_DROP, ADD_COMM]
 QED
