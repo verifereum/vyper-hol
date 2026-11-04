@@ -100,3 +100,37 @@ Proof
                 `if inst.inst_opcode = CALL then 5 else 4`] >>
   simp[EL] >> fs[] >> gvs[])
 QED
+
+Theorem ld_oracle_call_scalar_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\
+  MEM inst (fn_insts f.lf_fn) /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
+  ((inst.inst_opcode = CALL /\
+    inst.inst_operands = [g;a;v;ao;az;ro;rz] /\ MEM i [0;1;2;4;6]) \/
+   (inst.inst_opcode = STATICCALL /\
+    inst.inst_operands = [g;a;ao;az;ro;rz] /\ MEM i [0;1;3;5])) ==>
+  eval_operand (EL i inst.inst_operands) f.lf_src =
+  eval_operand (EL i inst.inst_operands) f.lf_tgt
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `MEM (EL i inst.inst_operands) inst.inst_operands` by
+    (simp[MEM_EL] >> qexists_tac `i` >> simp[] >>
+     first_x_assum strip_assume_tac >> fs[] >> gvs[]) >>
+  `!x. EL i inst.inst_operands = Var x ==> x NOTIN fn_pv P f.lf_fn` by
+    (metis_tac[ld_oracle_call_scalar_index]) >>
+  `op_prov f.lf_H (EL i inst.inst_operands) = NONE` by
+    (irule ld_vars_nonpointer_provenance >> metis_tac[]) >>
+  irule ld_vars_operand_equal >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  gen_tac >> disch_tac >> conj_tac
+  >- (irule ld_inst_input_ir >> metis_tac[]) >> conj_tac
+  >- (irule ld_numeric_operand_nonopaque >> simp[] >>
+      qexists_tac `inst` >> simp[] >>
+      qpat_x_assum `_ \/ _` strip_assume_tac >> fs[] >> metis_tac[]) >>
+  `op_taint tn (EL i inst.inst_operands) = {}` by
+    (irule ld_numeric_operand_untainted >> simp[] >>
+     qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[] >>
+     qpat_x_assum `_ \/ _` strip_assume_tac >> fs[] >> metis_tac[]) >>
+  gvs[op_taint_def]
+QED
