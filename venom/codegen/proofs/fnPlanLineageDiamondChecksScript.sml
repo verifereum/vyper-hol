@@ -377,11 +377,16 @@ Proof
   simp[diamond_A_result_def, diamond_A_success]
 QED
 
+Definition diamond_candidate_J_def:
+  diamond_candidate_J = (SND diamond_B_result) with <|
+    ps_stack := diamond_A_after.ps_stack; ps_spilled := diamond_A_after.ps_spilled |>
+End
+
 Theorem diamond_J_no_cleanup_replay:
   !h promised after.
     generate_block_plan diamond_live diamond_dfg diamond_cfg diamond_fn
       (EL 3 diamond_fn.fn_blocks)
-      (diamond_A_after with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
+      (diamond_candidate_J with <|ps_cleanup_height := h; ps_cleanup_promised := promised|>) =
       SOME (FST diamond_J_result,after) ==> F
 Proof
   rpt gen_tac >> CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
