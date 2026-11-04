@@ -965,6 +965,7 @@ QED
 Theorem convert_buffer_expr_post:
   !ctx func cenv cx e es es' sa sb s0 tt v tv op p sz.
     ~is_word_type (expr_type e) /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) tt.vs_memory /\
     stmt_state_rel ctx func cenv cx es' tt /\ eval_operand op tt = SOME p /\
@@ -991,6 +992,7 @@ Theorem convert_widen_copy_owned:
     stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p /\ ~is_word_type (expr_type e) /\
+    post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n p) s.vs_memory /\
     val_footprint tv v <= k ==>
@@ -1106,10 +1108,10 @@ Proof
   rpt gen_tac >> strip_tac >>
   `local_ptrs_rel func cenv es1.scopes s` by
     gvs[expr_post_def, exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
-  `expr_val_at cenv cx (expr_type e) sa sb es1 v op tt` by
+  `expr_val_at cenv cx (post_value_type cenv e) sa sb es1 v op tt` by
     (irule convert_readonly_val_at >> goal_assum (drule_at Any) >>
      gvs[expr_post_def] >> metis_tac[]) >>
-  `expr_val_rel cx (expr_type e) v op tt` by
+  `expr_val_rel cx (post_value_type cenv e) v op tt` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   gvs[expr_post_def] >> conj_tac
   >- (rpt strip_tac >>
@@ -1260,6 +1262,7 @@ Proof
      type_memory_bytes cenv (expr_type e)` by decide_tac >>
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
   `val_footprint tv2 v' <= type_memory_bytes cenv (lowered_value_type cenv e1)` by simp[] >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
   drule_all convert_widen_copy_owned >>
   disch_then (mp_then Any irule frag_exec_weaken) >> simp[] >>
   qx_gen_tac `tt` >> strip_tac >>
@@ -1287,6 +1290,8 @@ Theorem convert_dynamic_cont[local]:
       (expr_exit (convert_result cx (expr_type e1) (expr_type e) v))
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>
   drule convert_cast_grows >> strip_tac >>
