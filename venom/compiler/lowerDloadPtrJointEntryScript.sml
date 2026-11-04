@@ -2,6 +2,9 @@
 Theory lowerDloadPtrJointEntry
 Ancestors
   lowerDloadPtrPhi lowerDloadPtrRel o1ContractLowerDload
+  lowerDloadPtrStatic o1PassLift o1PassContract venomPassSchedule
+  lowerDloadPtrEntry lowerDloadPtrAggregate ptrDiscipline venomWf
+  unitTransformDefs irSupply
   contextCodegenRel venomExecSemantics venomExecProofs venomInst lowerDloadDefs list rich_list
 
 Theorem dload_insts_entry_control[local]:
@@ -109,4 +112,113 @@ Proof
   >- (Cases_on `emitted` >> gvs[]) >> conj_tac
   >- (qexists_tac `EL bi f.fn_blocks` >> simp[EL_MEM]) >>
   qexists_tac `bb` >> Cases_on `emitted` >> gvs[]
+QED
+
+Theorem dload_stage_lookup_back:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  lookup_function name C'.ctx_functions = SOME g ==>
+  ?f q q'. lookup_function name C.ctx_functions = SOME f /\
+    ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q')
+Proof
+  strip_tac >>
+  `LIST_REL (\f g. ?q q'. ir_supply_covers_fn q f /\
+       lower_dload_function_supply q f = (g,q')) C.ctx_functions C'.ctx_functions` by
+    (qpat_x_assum `ctx_pass_stage _ _ _ _ _` mp_tac >>
+     simp[ctx_pass_stage_def, LIST_REL_EL_EQN] >> strip_tac >>
+     rpt strip_tac >> `n < LENGTH C.ctx_functions` by simp[] >>
+     first_x_assum drule >> strip_tac >>
+     drule fn_pass_step_input_covers_fn >> strip_tac >>
+     gvs[fn_pass_step_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule list_rel_lookup_function >>
+  impl_tac >- (rpt strip_tac >> gvs[lower_dload_function_supply_def, AllCaseEqs()]) >>
+  disch_then (qspec_then `name` mp_tac) >> simp[optionTheory.OPTREL_def] >>
+  Cases_on `lookup_function name C.ctx_functions` >> simp[] >> metis_tac[]
+QED
+
+Theorem dload_no_phi_entry:
+  first_block_no_phi f /\ fn_entry_label f = SOME lbl ==>
+  (enters_block f
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t <=>
+   t = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+Proof
+  Cases_on `f.fn_blocks` >> simp[fn_entry_label_def, entry_block_def] >> strip_tac >> gvs[] >>
+  `phi_prefix_length h.bb_instructions = 0 /\
+   (!s. eval_phis s h.bb_instructions = OK s)` by
+    (qpat_x_assum `first_block_no_phi f` mp_tac >>
+     simp[first_block_no_phi_def] >>
+     Cases_on `h.bb_instructions` >>
+     simp[phi_prefix_length_def, eval_phis_def]) >>
+  simp[enters_block_def, lookup_block_def, FIND_thm] >> metis_tac[]
+QED
+
+Theorem dload_actual_joint_entry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
+  fn_entry_label g = SOME lbl /\
+  enters_block g
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t /\
+  active_inst g j t ==>
+  ?f q q' i emitted s k.
+    C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME f /\
+    fn_entry_label f = SOME lbl /\
+    enters_block f
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s /\
+    frame_reachable vs C [] [] FEMPTY entry_taint f i s /\
+    ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
+    dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
+    k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
+    dload_boundary_core lo
+      [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+      {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
+    (!v. lookup_var v s = lookup_var v t) /\
+    s.vs_allocas = FEMPTY /\ t.vs_allocas = FEMPTY /\
+    ({} = FDOM t.vs_allocas DIFF {id | ?ci. MEM ci (fn_insts f) /\ ci.inst_id = id})
+Proof
+  strip_tac >> drule_all dload_stage_lookup_back >> strip_tac >>
+  `MEM f C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `wf_function f /\ first_block_no_phi f` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]) >>
+  `fn_entry_label f = SOME lbl` by
+    (drule lower_dload_function_supply_labels >>
+     gvs[fn_entry_label_def, entry_block_def, fn_labels_def] >>
+     Cases_on `f.fn_blocks` >> Cases_on `g.fn_blocks` >> gvs[]) >>
+  `f.fn_blocks <> []` by
+    (Cases_on `f.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
+  `first_block_no_phi g` by
+    (drule_all lower_dload_function_supply_first_no_phi >> simp[]) >>
+  `t = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>` by
+    metis_tac[dload_no_phi_entry] >>
+  `enters_block f t t` by metis_tac[dload_no_phi_entry] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks)` by
+    (drule lower_dload_function_supply_labels >> gvs[wf_function_def, fn_labels_def]) >>
+  `enters_block g t t` by metis_tac[] >>
+  `?i emitted. dload_control_match q f g t t i emitted 0 /\ j = HD emitted` by
+    (irule dload_enters_block_control_match >> simp[] >>
+     qexistsl [`t`,`t`] >> metis_tac[]) >>
+  `C.ctx_entry = SOME name` by
+    (qpat_x_assum `ctx_pass_stage _ _ _ _ _` mp_tac >> simp[ctx_pass_stage_def]) >>
+  `active_inst f i t` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
+     simp[dload_control_match_def] >> metis_tac[]) >>
+  `frame_reachable vs C [] [] FEMPTY entry_taint f i t` by
+    (irule frame_reachable_entry >> metis_tac[]) >>
+  `mem_inv dload_headroom_ok C vs` by gvs[o1_src_inv_def] >>
+  `vs.vs_alloca_next < dimword (:256)` by
+    (irule dload_active_entry_frontier_bound >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `o1_run_state_ok t` by
+    (qpat_x_assum `o1_run_state_ok vs` mp_tac >>
+     simp[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]) >>
+  `lo <= t.vs_alloca_next` by
+    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >> simp[ptr_discipline_def]) >>
+  `t.vs_alloca_next < dimword (:256)` by simp[] >>
+  `t.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `?k. k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f` by
+    metis_tac[MEM_EL] >>
+  qexistsl [`f`,`q`,`q'`,`i`,`emitted`,`t`,`k`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  irule dload_boundary_initial >> metis_tac[]
 QED
