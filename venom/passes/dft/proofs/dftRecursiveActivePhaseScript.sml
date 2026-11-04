@@ -32,6 +32,25 @@ Definition dft_recursive_crossing_ready_def:
     inst_wf x /\ inst_wf call
 End
 
+Theorem dft_recursive_crossing_partner_success:
+  dft_recursive_crossing_ready f b q pre x call post s ==>
+  ?t. step_inst_base x s = OK t
+Proof
+  strip_tac >>
+  `?done. pre = FILTER (\i. is_pseudo i.inst_opcode) b.bb_instructions ++ done` by
+    (irule dft_original_crossing_cut >> fs[dft_recursive_crossing_ready_def] >>
+     metis_tac[]) >>
+  irule dft_invoke_partner_success >>
+  fs[dft_recursive_crossing_ready_def] >>
+  reverse conj_tac >- (qexists `call` >> simp[]) >>
+  rpt strip_tac >> irule dft_original_cut_eval_operand >>
+  goal_assum (drule_at (Pat `dft_original_cut _ _ _ _`)) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`done`, `FILTER (\i. is_pseudo i.inst_opcode) b.bb_instructions`,
+               `call::post`] >>
+  simp[APPEND_ASSOC]
+QED
+
 Theorem dft_recursive_partner_updates:
   dft_recursive_crossing_ready f b q pre x call post s /\
   step_inst_base x s = OK t ==>
