@@ -976,24 +976,47 @@ Proof
     metis_tac[add_phi_nodes_supply_labels] >>
   `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
   drule current_actual_insertion_prefix >> strip_tac >>
-  drule_all (Q.INST [`P` |-> `\old pre.
+  drule_all (BETA_RULE (Q.INST [`P` |-> `\old pre.
     EVERY (\i. ?id v. i = build_phi_inst_supply id v
       (case ALOOKUP (current_pred_map fn) old.bb_label of
         SOME ps => ps | NONE => [])) pre /\
     (!v. current_actual_inserted fn v old.bb_label <=>
       ?i. MEM i pre /\ MEM v i.inst_outputs)`]
-    current_wf_prefix_annotation_lookup) >> strip_tac >>
+    current_wf_prefix_annotation_lookup)) >> strip_tac >>
   `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
     metis_tac[current_actual_tree_labels_distinct] >>
   `ALL_DISTINCT (MAP current_event_label events)` by
     metis_tac[cj 1 current_trace_event_labels_distinct] >>
   `old.bb_label = current_event_label ev` by metis_tac[lookup_block_label] >>
+  drule (cj 1 current_tree_trace_events) >>
+  simp[EVERY_MEM] >> strip_tac >>
+  drule_all (cj 1 current_trace_event_input_shape) >> strip_tac >>
   qexists_tac `pre` >> simp[] >> conj_tac
-  >- (gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+  >- (gvs[EVERY_MEM] >> rpt strip_tac >>
+      qpat_x_assum `!i. MEM i pre ==> ?id v. _` drule >>
       simp[build_phi_inst_supply_def] >> strip_tac >> gvs[]) >>
-  conj_tac
-  >- metis_tac[cj 1 current_trace_event_input_shape] >>
-  metis_tac[cj 1 current_tree_trace_events, EVERY_MEM]
+  metis_tac[]
+QED
+
+Theorem current_wf_certificate_static_entry:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events ==>
+  ?path. current_tree_ancestor_path (current_dom_tree fn) (current_event_label ev) path /\
+    (!v. current_event_entry_env ev v =
+      current_inherited_token fn (current_actual_inserted fn) v path)
+Proof
+  simp[current_structural_certificate_def] >> rpt strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  `!old. MEM old fn.fn_blocks ==> lookup_block old.bb_label fn.fn_blocks = SOME old` by
+    (rpt strip_tac >> irule MEM_lookup_block >>
+     gvs[wf_function_def, fn_labels_def]) >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==>
+    IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  gvs[] >> drule_all current_provenance_tree_static_env >> metis_tac[]
 QED
 
 Theorem current_wf_nondefault_cut_output:
@@ -1138,6 +1161,63 @@ Proof
     (liveness_analyze fn) fn) l = SOME vs /\ MEM v vs` by
     metis_tac[current_selected_live_iff] >>
   metis_tac[current_wf_selected_live_nondefault]
+QED
+
+Theorem current_wf_demanded_source_cut_nondefault:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old /\
+  A (current_event_label ev) = current_block_annotations old pre /\
+  (!v. current_actual_inserted fn v (current_event_label ev) <=>
+    ?inst. MEM inst pre /\ MEM v inst.inst_outputs) /\
+  LENGTH (collect_phis old.bb_instructions) <= i /\
+  i <= LENGTH old.bb_instructions /\
+  current_demand fn v (current_event_label ev) i /\
+  current_source_cut A ev (LENGTH pre + i) rs E ==>
+  E v <> CurrentDefault v
+Proof
+  strip_tac >>
+  `old.bb_label = current_event_label ev` by metis_tac[lookup_block_label] >>
+  drule_all current_wf_certificate_static_entry >> strip_tac >>
+  drule_all current_wf_demanded_cut_nondefault >> strip_tac >>
+  `current_event_label ev = old.bb_label` by simp[] >>
+  `A old.bb_label = current_block_annotations old pre` by metis_tac[] >>
+  drule_all current_wf_source_cut_original_scan >>
+  disch_then (qspec_then `v` mp_tac) >>
+  qpat_x_assum `current_event_label ev = old.bb_label` kall_tac >>
+  qpat_x_assum `!v. current_actual_inserted fn v _ <=> _`
+    (fn th => rewrite_tac[GSYM th]) >>
+  asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Theorem current_wf_demanded_source_cut_output:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  (!dev k j. MEM dev events /\ k < LENGTH (A (current_event_label dev)) /\
+    j < LENGTH (EL k (A (current_event_label dev))) ==>
+    current_wf_output_at A H dev k
+      (FST (EL j (EL k (A (current_event_label dev)))))) /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old /\
+  A (current_event_label ev) = current_block_annotations old pre /\
+  (!v. current_actual_inserted fn v (current_event_label ev) <=>
+    ?inst. MEM inst pre /\ MEM v inst.inst_outputs) /\
+  LENGTH (collect_phis old.bb_instructions) <= i /\
+  i <= LENGTH old.bb_instructions /\
+  current_demand fn v (current_event_label ev) i /\
+  current_source_cut A ev (LENGTH pre + i) rs E ==>
+  ?dev k. MEM dev events /\ current_wf_output_at A H dev k (E v) /\
+    ((dev = ev /\ k < LENGTH pre + i) \/
+     (current_event_label dev <> current_event_label ev /\
+      fn_dominates fn (current_event_label dev) (current_event_label ev)))
+Proof
+  strip_tac >>
+  `E v <> CurrentDefault v` by
+    (irule current_wf_demanded_source_cut_nondefault >> metis_tac[]) >>
+  irule current_wf_nondefault_cut_output >> metis_tac[]
 QED
 
 Theorem current_wf_entry_undemanded:
