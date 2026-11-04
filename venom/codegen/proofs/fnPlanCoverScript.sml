@@ -277,6 +277,21 @@ Resume traversal_visited_closed[succ_step]:
 QED
 Finalise traversal_visited_closed
 
+Theorem entry_traversal_reachable:
+  codegen_ready_fn fn /\ fn_entry_label fn = SOME entry /\
+  generate_fn_plan_aux liveness dfg (cfg_analyze fn) fn [entry] [] ps0 =
+    SOME (ops, final, ps_end) /\ fn_reachable fn lbl ==>
+  MEM lbl final
+Proof
+  rpt strip_tac >>
+  drule (cj 1 traversal_visited_closed) >> simp[] >> strip_tac >>
+  `!a b. RTC (fn_cfg_edge fn) a b ==> MEM a final ==> MEM b final` by
+    (ho_match_mp_tac relationTheory.RTC_INDUCT >>
+     rpt strip_tac >> drule_all ready_fn_cfg_edge >> strip_tac >>
+     metis_tac[]) >>
+  gvs[fn_reachable_def] >> metis_tac[]
+QED
+
 (* Used at each jump of the block induction (JMP, both JNZ targets): the
    target is fn_reachable (the current block is, and the jump is a CFG
    edge), so it has a DFS state, its plan succeeds, and the plan is a
