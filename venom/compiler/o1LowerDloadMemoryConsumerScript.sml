@@ -2,7 +2,7 @@
 Theory o1LowerDloadMemoryConsumer
 Ancestors
   o1LowerDloadRelocationKernel regularCallEmitSim venomExecSemantics ptrDiscipline
-  venomMemProps venomState list rich_list codegenRel finite_map words byte
+  venomMemProps venomState list rich_list codegenRel finite_map words byte pred_set
 
 Theorem ld_mload_mapped_bytes:
   (!k. k < 32 ==>
@@ -168,4 +168,37 @@ Proof
   conj_tac >>
   simp[step_inst_non_invoke, step_inst_base_def, exec_read1_def,
        mload_mstore_same]
+QED
+
+Theorem ld_mem_taint_mstore:
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [p;vop] /\
+  eval_operand p s = SOME (n2w a) /\ eval_operand vop s = SOME v /\
+  a < dimword (:256) ==>
+  mem_taint tn inst s (mstore a v s) =
+    ((tn.t_mem DIFF {i | a <= i /\ i < a+32}) UNION
+     {a+k | k IN op_taint tn vop})
+Proof
+  strip_tac >>
+  simp[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, written_taint_def,
+       new_site_bytes_def, mstore_def, range_bytes_def] >>
+  simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem ld_memory_agree_mstore_taint:
+  ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+  FLOOKUP sites owner = SOME (b,c,z) /\ j+32 <= z /\ lo <= b /\ lo <= c /\
+  (!id b' c' z'. FLOOKUP sites id = SOME (b',c',z') ==>
+     (b' = b /\ c' = c) \/
+     ((b'+z' <= b \/ b+z <= b') /\ (c'+z' <= c \/ c+z <= c'))) /\
+  word_agree_except (op_taint tn vop) v w /\
+  inst.inst_opcode = MSTORE /\ inst.inst_operands = [p;vop] /\
+  eval_operand p s = SOME (n2w (b+j)) /\ eval_operand vop s = SOME v /\
+  b+j < dimword (:256) ==>
+  ld_memory_agree sites lo (mem_taint tn inst s (mstore (b+j) v s))
+    (mstore (b+j) v s).vs_memory (mstore (c+j) w t).vs_memory
+Proof
+  strip_tac >> drule_all ld_mem_taint_mstore >>
+  disch_then (qspec_then `tn` SUBST1_TAC) >> irule ld_memory_agree_mstore_masked >>
+  metis_tac[]
 QED
