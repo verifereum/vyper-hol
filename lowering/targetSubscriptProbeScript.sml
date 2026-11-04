@@ -4305,7 +4305,7 @@ Proof
 QED
 
 Theorem probe_word_return_store_post:
-  !ctx func cenv cx es sa sb s p q w aid inst.
+  !ctx func cenv cx es sa sb s p q w aid inst k.
     stmt_state_rel ctx func cenv cx es s /\
     not_local_ptr cenv es.scopes q /\
     (!x. not_fresh_at sa x ==> x <> q) /\ p <> q /\
@@ -4319,29 +4319,32 @@ Theorem probe_word_return_store_post:
     (!n b sz. local_region cenv es.scopes s n b sz ==>
        w2n w + 32 <= b \/ b + sz <= w2n w) ==>
     stmt_state_rel ctx func cenv cx es
-      (mstore (w2n w) 0w (update_var q w s)) /\
+      (mstore (w2n w) 0w (update_var q w (s with vs_inst_idx := k))) /\
     vv_holds cenv cx (BaseT (UintT 256)) (Value (IntV 0))
       (LocatedValue (BaseT (UintT 256))
         (base_ptr <|buf_operand := Var p; buf_size := 32|>)) es
-      (mstore (w2n w) 0w (update_var q w s)) /\
+      (mstore (w2n w) 0w (update_var q w (s with vs_inst_idx := k))) /\
     vv_at cenv cx (BaseT (UintT 256)) sa sb es (Value (IntV 0))
       (LocatedValue (BaseT (UintT 256))
         (base_ptr <|buf_operand := Var p; buf_size := 32|>))
-      (mstore (w2n w) 0w (update_var q w s)) /\
-    wb_frame cenv es sa s (mstore (w2n w) 0w (update_var q w s))
+      (mstore (w2n w) 0w (update_var q w (s with vs_inst_idx := k))) /\
+    wb_frame cenv es sa s
+      (mstore (w2n w) 0w (update_var q w (s with vs_inst_idx := k)))
 Proof
   rpt gen_tac >> strip_tac >>
-  `!n b sz. local_region cenv es.scopes (update_var q w s) n b sz ==>
+  `!n b sz. local_region cenv es.scopes
+       (update_var q w (s with vs_inst_idx := k)) n b sz ==>
      w2n w + 32 <= b \/ b + sz <= w2n w` by
-    (gvs[local_region_def, not_local_ptr_def, lookup_var_update_var] >>
-     metis_tac[]) >>
+    (gvs[local_region_def, not_local_ptr_def, lookup_var_def,
+         update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   conj_tac
   >- (irule loweringSliceTheory.literal_mstore_state_rel >>
       conj_tac >- (qexistsl_tac [`w2n w`, `inst`, `32`] >>
         gvs[update_var_def] >> first_assum ACCEPT_TAC) >>
-      irule stmt_state_rel_update_var >> simp[]) >>
+      irule stmt_state_rel_update_var >> simp[stmt_state_rel_inst_idx]) >>
   conj_tac
-  >- (irule probe_word_return_buffer_holds >> simp[lookup_var_update_var]) >>
+  >- (irule probe_word_return_buffer_holds >>
+      gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
   conj_tac
   >- (irule probe_word_return_buffer_at >> qexists_tac `aid` >>
       gvs[local_region_def, lookup_var_def, mstore_def, update_var_def,
@@ -4355,4 +4358,64 @@ Proof
   simp[mstore_def, update_var_def, lookup_var_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem probe_word_return_store_frame:
+  !ctx func cenv cx es0 es sa sI sD sb s0 s p r q w aid inst.
+    emit_op ADD [Var p; Lit 0w] sI = (Var q,sD) /\
+    emit_void MSTORE [Var q; Var r] sD = ((),sb) /\
+    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es0 s0 /\
+    local_ptrs_reserved cenv sa /\ es.scopes = es0.scopes /\
+    wb_frame cenv es0 sa s0 s /\
+    not_local_ptr cenv es.scopes q /\
+    (!x. not_fresh_at sa x ==> x <> q) /\ p <> q /\ r <> q /\
+    lookup_var p s = SOME w /\ lookup_var r s = SOME 0w /\
+    FLOOKUP s.vs_allocas aid = SOME (w2n w,32) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id = aid /\
+    (!a off sz. FLOOKUP s.vs_allocas a = SOME (off,sz) /\
+       a < sa.cs_next_id ==> regions_disjoint (w2n w) 32 off sz) /\
+    (!n b sz. local_region cenv es.scopes s n b sz ==>
+       w2n w + 32 <= b \/ b + sz <= w2n w) ==>
+    frag_exec ctx sI sb (\t. t = s)
+      (\t. stmt_state_rel ctx func cenv cx es t /\
+        vv_holds cenv cx (BaseT (UintT 256)) (Value (IntV 0))
+          (LocatedValue (BaseT (UintT 256))
+            (base_ptr <|buf_operand := Var p; buf_size := 32|>)) es t /\
+        vv_at cenv cx (BaseT (UintT 256)) sa sb es (Value (IntV 0))
+          (LocatedValue (BaseT (UintT 256))
+            (base_ptr <|buf_operand := Var p; buf_size := 32|>)) t /\
+        wb_frame cenv es sa s t /\ wb_frame cenv es0 sa s0 t)
+      (\res. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_word_return_store_post >>
+  disch_then (qspec_then `LENGTH sb.cs_current_insts` strip_assume_tac) >>
+  drule_all probe_word_return_store_run >> disch_then assume_tac >>
+  `wb_frame cenv es0 sa s0
+     (mstore (w2n w) 0w (update_var q w
+        (s with vs_inst_idx := LENGTH sb.cs_current_insts)))` by
+    (irule wb_frame_trans >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qexistsl_tac [`es`, `sa`, `s`] >> simp[]) >>
+     qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+  irule frag_exec_run_inst_seq >>
+  conj_tac
+  >- (`(mstore (w2n w) 0w (update_var q w s) with
+          vs_inst_idx := LENGTH sb.cs_current_insts) =
+        mstore (w2n w) 0w (update_var q w
+          (s with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+        simp[mstore_def, update_var_def] >> simp[]) >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  qpat_x_assum `emit_void _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
+       emit_def, comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def,
+       rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.IS_PREFIX_APPEND,
+       mk_inst_def, is_terminator_def] >>
+  pure_once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, is_terminator_def]
 QED
