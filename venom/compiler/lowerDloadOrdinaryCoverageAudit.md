@@ -382,3 +382,31 @@ should validate these selector/empty-mask/update boundaries before attempting th
 grouped effect or any exhaustive target-prefix theorem. Integrity check:
 `holbuild(targets=[lowerDloadSafetyWriteCoverageTheory])` passed (TO_m3618),
 with no edits to executable proof source during this diagnostic.
+
+## Checked CALL/STATICCALL live-successor boundary (C1.11.5.58)
+
+`lowerDloadOracleCallCoverageTheory` now exports
+`ld_sync_oracle_call_advance` and `ld_sync_oracle_call_coverage_ambient`.
+The former consumes the unique `ld_sync_oracle_call_effect` supplier from
+`lowerDloadOracleCallAssemblyTheory`, `ld_envelope_singleton_next`, and
+`ld_sync_ordinary_advance`. It retains the effect's existential selected map H'
+and uses `step_prov PG G inst ss` (not the old G) at the successor. No equality
+between H' and the internal output-deletion witness is asserted: allocation
+identity erasure need not be injective. `ld_sync_current_bb` is a small sync
+projection; consumers do not unfold sync.
+
+The ambient consumer derives source shape and distinct labels from
+`ld_sync_fn_shape`/`o1_fn_shape_components`, uses
+`ld_sync_ordinary_envelope`, then reconstructs `ld_pair` with `ld_pair_zero`.
+Configured supply and function stack order are preserved independently of H'.
+Both conclusions require a successful target step AND an active target next
+instruction; source next-active is derived from that target location, never
+from source success alone.
+
+This supersedes the unproved-consumer wording above only for CALL/STATICCALL.
+DELEGATECALL, CREATE and CREATE2 are not covered by this certificate. Neither
+terminal successors nor failing current calls nor revert-forward alternatives
+are handled here. Non-revert, sync/global and source ambient certificates remain
+explicit premises. Full target-prefix coverage and the frozen memory theorem
+remain outstanding. Build of the new helper and task target passed together
+(TO_ld_mem-20261104T033958Z_m4262_t001); the latter is not cheat-elimination evidence.
