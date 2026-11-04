@@ -68,7 +68,7 @@ QED
 
 Theorem transient_lock_run[local]:
   compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-  fresh_vars_wrt st s0 /\ ~s0.vs_call_ctx.cc_static ==>
+  fresh_vars_wrt st s0 /\ (~is_view ==> ~s0.vs_call_ctx.cc_static) ==>
   (?t. run_inst_seq (emitted_insts st st') s0 = OK t /\
        tload (n2w nkey) s0 <> 1w /\
        vars_pc_only (if is_view then s0 else tstore (n2w nkey) 1w s0) t /\
@@ -122,12 +122,12 @@ Proof
 QED
 
 (* Transient locks leave the memory and allocation frame intact. A view
-   checks the same lock but never acquires it. Outside a static frame, the
-   TSTORE that acquires the lock succeeds. *)
+   checks the same lock but never acquires it, so only a non-view lock
+   needs a non-static frame for its TSTORE. *)
 Theorem compile_nonreentrant_lock_frag_mem:
   !ctx nkey is_view st st' s0.
     compile_nonreentrant_lock nkey T is_view st = ((), st') /\
-    fresh_vars_wrt st s0 /\ ~s0.vs_call_ctx.cc_static ==>
+    fresh_vars_wrt st s0 /\ (~is_view ==> ~s0.vs_call_ctx.cc_static) ==>
     frag_exec_mem ctx st st' (\s. s = s0)
       (\t. tload (n2w nkey) s0 <> 1w /\
            vars_pc_only (if is_view then s0
