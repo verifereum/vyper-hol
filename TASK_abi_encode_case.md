@@ -82,3 +82,24 @@ Argon approved this exact internal migration after checking the frozen dispatche
 Owner explicitly authorizes a replacement PLAN for C1.2 covering the structural trace and each of the three semantic consumers as separate proof/audit obligations. Prove the argument evaluation/snapshot relation needed by the frozen full endpoint independently; the premise migration does not establish that relation. Check downstream consumers (including abiScratchBuiltinProducer's theory import) before delivery. No other statement or executable-definition change is authorized by this clarification.
 
 The diagnostic `abiEncodeTupleTraceProbe` confirms only a stale helper falsehood. It is not a counterexample to the full target. Remove this diagnostic theory from the final deliverable after its evidence has served the migration; retain the actual alias regression. The frozen full target and its assumptions remain unchanged.
+
+## Authorized protected-label helper repair (2026-11-04)
+
+The owner has checked the source and saved full-premise counterexample in
+`abiProtectedLabelProbeScript.sml` at `3b42b428b`. It refutes only
+`abi_args_success_not_label`: an immutable-base label can remain a valid operand,
+and the helper lacks the typing conditions of the full expression boundary.
+It does not refute `compile_abi_encode_case`.
+
+Replace this false internal helper with a sound proved interface and migrate its
+consumer in `abi_args_compile_sim_live`. Repair any associated internal
+label-preservation helpers as needed. This explicitly overrides the earlier
+helper-statement preservation restriction for this repair. Internal helper
+premises may be corrected only when their actual callers discharge them; no new
+assumption may reach the frozen expression theorem or its value/frame guarantees.
+Executable definitions and source semantics remain frozen. Search all consumers,
+prove the replacement and build every changed theory. Remove diagnostic probe
+theories from the final deliverable after recording their evidence.
+
+Reconcile the blocked C1.9 plan against this owner clarification, then resume
+proof work. No further permission request is needed for this scoped repair.
