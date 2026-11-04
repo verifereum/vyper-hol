@@ -16,6 +16,7 @@ Ancestors
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
   makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
+  makeSsaCurrentCleanupShape sorting
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
 Libs
   rich_listTheory
@@ -397,6 +398,128 @@ Proof
   >- simp[] >>
   disj2_tac >> qexists_tac `v` >> simp[] >>
   irule current_wf_phi_constant_source >> metis_tac[]
+QED
+
+Theorem current_wf_no_id_split[local]:
+  !pre tail ys.
+    MAP current_inst_no_id ys = MAP current_inst_no_id (pre ++ tail) ==>
+    ?pre' tail'. ys = pre' ++ tail' /\ LENGTH pre' = LENGTH pre /\
+      MAP current_inst_no_id pre' = MAP current_inst_no_id pre /\
+      LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail'
+Proof
+  Induct >- (rpt strip_tac >> qexistsl_tac [`[]`, `ys`] >>
+    simp[] >> fs[LIST_REL_EL_EQN] >>
+    metis_tac[LENGTH_MAP, EL_MAP]) >>
+  rpt gen_tac >> Cases_on `ys` >> simp[] >> strip_tac >>
+  first_x_assum (qspecl_then [`tail`, `t`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`h'::pre'`, `tail'`] >> simp[]
+QED
+
+Theorem current_wf_partition_outputs[local]:
+  !xs. PERM
+    (FLAT (MAP (\i. i.inst_outputs)
+      (FILTER (\i. i.inst_opcode = PHI) xs ++
+       FILTER (\i. i.inst_opcode <> PHI) xs)))
+    (FLAT (MAP (\i. i.inst_outputs) xs))
+Proof
+  Induct >> simp[] >> gen_tac >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[MAP_APPEND, FLAT_APPEND]
+  >- (pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[PERM_APPEND_IFF]) >>
+  qmatch_goalsub_abbrev_tac `PERM (a ++ h.inst_outputs ++ b) _` >>
+  irule PERM_TRANS >> qexists_tac `h.inst_outputs ++ (a ++ b)` >>
+  conj_tac
+  >- (simp[APPEND_ASSOC, PERM_APPEND_IFF, PERM_APPEND]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >> simp[PERM_APPEND_IFF] >>
+  fs[Abbr `a`, Abbr `b`]
+QED
+
+Theorem current_wf_cleanup_no_id[local]:
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) ==>
+  MAP current_inst_no_id (simplify_current_phi_prefix (pre ++ tail)) =
+  MAP current_inst_no_id
+    ((FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+      FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) ++ tail)
+Proof
+  disch_tac >>
+  qspecl_then [`pre`, `tail`] mp_tac
+    makeSsaCurrentCleanupShapeTheory.current_cleanup_partition >>
+  impl_tac >- fs[] >> strip_tac >>
+  simp[simplify_current_phi_prefix_def] >>
+  pure_rewrite_tac[GSYM MAP_APPEND] >>
+  irule makeSsaCurrentCleanupShapeTheory.current_reassign_no_id >>
+  qspec_then `MAP simplify_current_phi pre` mp_tac
+    makeSsaCurrentCleanupShapeTheory.current_cleanup_partition_length >>
+  simp[]
+QED
+
+Theorem current_wf_cleanup_block_no_id[local]:
+  bb.bb_instructions = pre ++ tail /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) ==>
+  MAP current_inst_no_id (simplify_current_phi_block bb).bb_instructions =
+  MAP current_inst_no_id
+    ((FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+      FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) ++ tail)
+Proof
+  disch_tac >>
+  mp_tac (Q.INST [`pre` |-> `pre`, `tail` |-> `tail`] current_wf_cleanup_no_id) >>
+  (impl_tac >- fs[]) >> disch_tac >>
+  Cases_on `pre`
+  >- (Cases_on `tail` >> gvs[simplify_current_phi_block_def]) >>
+  gvs[simplify_current_phi_block_def]
+QED
+
+Theorem current_wf_no_id_outputs[local]:
+  !xs ys. MAP current_inst_no_id xs = MAP current_inst_no_id ys ==>
+    MAP (\i. i.inst_outputs) xs = MAP (\i. i.inst_outputs) ys
+Proof
+  Induct >> Cases_on `ys` >> simp[] >> rpt strip_tac >>
+  gvs[current_inst_no_id_def] >>
+  qpat_x_assum `_ with inst_id := 0 = _` (mp_tac o Q.AP_TERM `\i. i.inst_outputs`) >>
+  simp[]
+QED
+
+Theorem current_wf_cleanup_block_split:
+  bb.bb_instructions = pre ++ tail /\
+  EVERY (\i. i.inst_opcode = PHI) pre /\
+  (tail = [] \/ (HD tail).inst_opcode <> PHI) /\
+  (!i. MEM i pre ==> (simplify_current_phi i).inst_outputs = i.inst_outputs) ==>
+  ?pre' tail'.
+    (simplify_current_phi_block bb).bb_instructions = pre' ++ tail' /\
+    LENGTH pre' = LENGTH pre /\
+    LIST_REL (\x y. current_inst_no_id x = current_inst_no_id y) tail tail' /\
+    PERM (FLAT (MAP (\i. i.inst_outputs) pre'))
+         (FLAT (MAP (\i. i.inst_outputs) pre)) /\
+    (!i'. MEM i' pre' ==> ?i. MEM i pre /\
+       current_inst_no_id i' = current_inst_no_id (simplify_current_phi i))
+Proof
+  disch_tac >>
+  `MAP current_inst_no_id (simplify_current_phi_block bb).bb_instructions =
+   MAP current_inst_no_id
+     ((FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre) ++
+       FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) ++ tail)` by
+    metis_tac[current_wf_cleanup_block_no_id] >>
+  drule current_wf_no_id_split >> strip_tac >>
+  qexistsl_tac [`pre'`, `tail'`] >> simp[] >>
+  `LENGTH (FILTER (\i. i.inst_opcode = PHI) (MAP simplify_current_phi pre)) +
+   LENGTH (FILTER (\i. i.inst_opcode <> PHI) (MAP simplify_current_phi pre)) =
+   LENGTH pre` by
+    (qspec_then `MAP simplify_current_phi pre` mp_tac
+      makeSsaCurrentCleanupShapeTheory.current_cleanup_partition_length >> simp[]) >>
+  simp[] >> conj_tac
+  >- (drule current_wf_no_id_outputs >> disch_tac >>
+      `MAP (\i. i.inst_outputs) (MAP simplify_current_phi pre) =
+       MAP (\i. i.inst_outputs) pre` by
+        (simp[MAP_MAP_o, combinTheory.o_DEF, MAP_EQ_f] >> metis_tac[]) >>
+      qspec_then `MAP simplify_current_phi pre` mp_tac current_wf_partition_outputs >>
+      fs[]) >>
+  rpt strip_tac >>
+  `MEM (current_inst_no_id i') (MAP current_inst_no_id pre')` by
+    (simp[MEM_MAP] >> qexists_tac `i'` >> simp[]) >>
+  qpat_x_assum `MEM (current_inst_no_id i') _` mp_tac >>
+  asm_rewrite_tac[] >> simp[MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
