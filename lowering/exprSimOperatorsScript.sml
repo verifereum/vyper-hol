@@ -728,7 +728,8 @@ Theorem expr_sim_pre_ifexp:
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
-     byte_widths_expr_def, alloc_limits_expr_def] >> gvs[]
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     byte_widths_expr_def, alloc_limits_expr_def] >> gvs[] >> metis_tac[]
 QED
 
 (* A conditional retains a place only for a memory aggregate. *)
