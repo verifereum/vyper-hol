@@ -12,7 +12,7 @@ Ancestors
   loweringPosts
   tupleTypedLoad tupleStageProps stmtSimAssignTuple tupleLocalStoreProps
   tupleLocalStoreRun stmtSimReturn stmtSimDeclMem valueCopyBytes
-  stmtSim  exprOperandVar exprLoweringProps stmtLowering compileEnv
+    exprOperandVar exprLoweringProps stmtLowering compileEnv
   exprLowering emitHelperProps fragExec loweringSlice freshWrites
   list rich_list finite_map valueEncoding vyperTyping vyperValue
   vyperInterpreter vyperState venomState venomInst

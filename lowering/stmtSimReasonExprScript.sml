@@ -28,7 +28,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps  exprSimUnwrap loweringSlice
-  stmtSim stmtSimIf stmtSimReason
+   stmtSimIf stmtSimReason
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv
   vyperInterpreter vyperState vyperValue vyperExprNoControl

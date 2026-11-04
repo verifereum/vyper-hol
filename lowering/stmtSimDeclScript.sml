@@ -28,7 +28,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl

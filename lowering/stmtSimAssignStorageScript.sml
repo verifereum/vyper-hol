@@ -40,7 +40,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec  exprSimLeaves stmtSim stmtSimDecl stmtSimDeclMem
+  fragExec  exprSimLeaves  stmtSimDecl stmtSimDeclMem
   stmtSimAssign stmtSimAssignMem accountsRelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProofs

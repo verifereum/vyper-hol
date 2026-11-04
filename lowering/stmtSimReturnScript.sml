@@ -28,7 +28,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts
-  list rich_list finite_map fragExec  exprSimLeaves stmtSim freshWrites
+  list rich_list finite_map fragExec  exprSimLeaves  freshWrites
   vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs

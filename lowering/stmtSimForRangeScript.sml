@@ -30,7 +30,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts
-  stmtSim stmtSimForParts stmtSimForLoop exprWordOperand
+   stmtSimForParts stmtSimForLoop exprWordOperand
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom

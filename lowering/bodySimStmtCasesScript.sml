@@ -48,6 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  stmtSimBreak stmtSimContinue
   stmtSimExpr
   stmtSimSeqEnv
   stmtSimPass
@@ -57,7 +58,7 @@ Ancestors
   stmtSimDefs
   loweringPosts
   vyperStorageLayoutSafety vyperLookupStorage
-  list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps stmtSim
+  list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph

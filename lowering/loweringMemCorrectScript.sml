@@ -33,7 +33,7 @@ Ancestors
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem stmtSim bodySim bodySimMain moduleLowering stmtLowering
+  entryHaltMem  bodySim bodySimMain moduleLowering stmtLowering
   vyperTypeSystem vyperState
 
 val _ = Parse.hide "body";

@@ -31,7 +31,7 @@ Ancestors
   allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps  exprSimHyps exprSimOps exprSimBinopFrag
-  exprSimOperators exprSimLeaves loweringSlice stmtSim stmtSimDecl
+  exprSimOperators exprSimLeaves loweringSlice  stmtSimDecl
   stmtSimDeclStore stmtSimAssignStore
   exprLowering exprBopLowering stmtLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv valueEncoding

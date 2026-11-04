@@ -22,7 +22,7 @@ Ancestors
   stmtSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimAssignMem stmtSimAssignTuple
   stmtSimReturn exprOperandVar freshWrites tupleAssignMemory valueCopyBytes
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps

@@ -48,7 +48,7 @@ Ancestors
   stmtSimDefs
   exprSimDefs
   loweringPosts
-  list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
+  list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect
   vyperTypeSelectedEntrySoundness vyperTypeSystem

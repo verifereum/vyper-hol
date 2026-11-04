@@ -40,7 +40,7 @@ Ancestors
   fragExec freshWrites loweringSlice  exprSimHyps exprSimOps
   exprSimBinopFrag exprSimOperators exprSimLeaves exprSimAttributeFields
   exprSimUnwrap
-  stmtSim stmtSimDeclMem stmtSimAssign stmtSimAssignStorage stmtSimAugAssign
+   stmtSimDeclMem stmtSimAssign stmtSimAssignStorage stmtSimAugAssign
   stmtSimAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignAttr
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding accountsRelProps

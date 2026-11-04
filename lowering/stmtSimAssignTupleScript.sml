@@ -32,7 +32,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps
-  fragExec localPtrsProps  loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding

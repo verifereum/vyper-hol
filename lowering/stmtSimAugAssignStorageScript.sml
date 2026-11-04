@@ -41,7 +41,7 @@ Ancestors
   loweringPosts
   allocLimits list finite_map
   fragExec  exprSimHyps exprSimOps exprSimOperators exprSimLeaves
-  stmtSim stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
+   stmtSimAssign stmtSimAssignMem stmtSimAssignStorage
   stmtSimAugAssign
   exprLowering exprBopLowering exprLoweringProps stmtLowering compileEnv
   vyperInterpreter vyperState vyperValue vyperTypeSystem vyperTyping

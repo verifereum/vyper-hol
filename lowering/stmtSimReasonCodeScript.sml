@@ -30,7 +30,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map
   fragExec varsExt freshWrites  exprSimUnwrap exprSimCopy exprSimStorageCopy
-  exprOperandVar stmtSim stmtSimIf stmtSimReason stmtSimReasonExpr
+  exprOperandVar  stmtSimIf stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage exprReasonOperand immutableCopyExecution
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps

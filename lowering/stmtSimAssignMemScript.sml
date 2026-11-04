@@ -30,7 +30,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps

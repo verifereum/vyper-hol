@@ -17,7 +17,6 @@
 Theory stmtSimForParts
 Ancestors
   stmtSimProps
-  stmtSim
   list rich_list finite_map pred_set
   fragExec localPtrsProps  loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
