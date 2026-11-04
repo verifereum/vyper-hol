@@ -264,6 +264,10 @@ Resume compile_make_array_vv_case[tuple]:
     eval_operand_def, val_in_memory_def] >>
   qexistsl [`b`,`sm`,`type_memory_size_list tvs`,`t`] >>
   simp[wordsTheory.dimword_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!aid p n. FLOOKUP t.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
