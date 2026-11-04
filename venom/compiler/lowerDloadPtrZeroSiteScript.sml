@@ -208,3 +208,242 @@ Proof
        venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def,
        venomInstTheory.mk_inst_def] >> EVAL_TAC
 QED
+
+Theorem zs_entry_facts:
+  lookup_function "main" [zs_fn] = SOME zs_fn /\
+  fn_entry_label zs_fn = SOME "main" /\
+  (!s. enters_block zs_fn
+    (zs_vs with <|vs_prev_bb := NONE; vs_current_bb := "main";
+                 vs_inst_idx := 0|>) s <=> s = zs_vs)
+Proof
+  EVAL_TAC >> simp[venomExecSemanticsTheory.eval_phis_def,
+    venomExecSemanticsTheory.phi_prefix_length_def]
+QED
+
+Theorem zs_trace_stop:
+  !fuel s'. step_inst fuel zs_ctx (EL 4 (fn_insts zs_fn))
+    (SND (SND (zs_trace 4))) <> OK s'
+Proof
+  gen_tac >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       zs_fn_def, venomInstTheory.mk_raw_function_def,
+       venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def,
+       venomInstTheory.mk_inst_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem zs_frame_trace:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    vs0 = zs_vs ==> ctx = zs_ctx ==>
+    ?n. n < 5 /\ stk = [] /\ PG = [] /\ fn = zs_fn /\
+        inst = EL n (fn_insts zs_fn) /\ (G,tn,s) = zs_trace n
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      gvs[zs_ctx_def, venomInstTheory.mk_venom_context_def, zs_entry_facts] >>
+      qexists_tac `0` >> simp[zs_trace_def] >>
+      mp_tac (Q.SPECL [`0`, `inst`] zs_trace_active) >>
+      simp[zs_trace_def])
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      `n < 4` by (drule zs_trace_opcode >> gvs[] >> decide_tac) >>
+      drule zs_trace_step >> disch_then (qspec_then `fuel` mp_tac) >>
+      simp[] >> strip_tac >>
+      qpat_x_assum `(G,tn,s) = _` (assume_tac o SYM) >> fs[] >>
+      `n < 5` by decide_tac >>
+      `s.vs_inst_idx = n` by (drule zs_trace_index >> simp[]) >>
+      fs[] >> qexists_tac `SUC n` >>
+      conj_tac >- decide_tac >>
+      `step_inst 0 zs_ctx (EL n (fn_insts zs_fn)) s = OK s'` by
+        metis_tac[venomExecSemanticsTheory.step_inst_non_invoke] >>
+      `zs_trace (SUC n) =
+        (step_prov [] G (EL n (fn_insts zs_fn)) s',
+         step_taint (EL n (fn_insts zs_fn)) s s' tn,
+         s' with vs_inst_idx := SUC n)` by simp[Once zs_trace_def] >>
+      reverse conj_tac >- simp[] >>
+      `SUC n < 5` by decide_tac >>
+      drule zs_trace_active >> disch_then (qspec_then `inst'` mp_tac) >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      drule zs_trace_opcode >> simp[] >> strip_tac >> gvs[] >>
+      qpat_x_assum `(G,tn,s) = _` (assume_tac o SYM) >>
+      qspec_then `fuel` mp_tac zs_trace_stop >> simp[] >> strip_tac >> gvs[])
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      drule zs_trace_opcode >> gvs[])
+  >> rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[]
+QED
+
+Theorem zs_trace_safe:
+  !n. n < 5 ==>
+    access_ok 0 (FST (zs_trace n)) zs_fn (EL n (fn_insts zs_fn))
+      (SND (SND (zs_trace n))) /\
+    taint_ok zs_fn (FST (SND (zs_trace n))) (EL n (fn_insts zs_fn))
+      (SND (SND (zs_trace n))) /\
+    allocas_from 0 (SND (SND (zs_trace n)))
+Proof
+  gen_tac >> disch_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
+  gvs[] >> EVAL_TAC >> simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[] >> Cases_on `op = Var "p"` >> gvs[] >>
+  Cases_on `op = Var "q"` >> gvs[]
+QED
+
+Theorem zs_ptr_discipline:
+  ptr_discipline 0 zs_ctx zs_vs
+Proof
+  simp[ptr_discipline_def] >> qexists_tac `(\nm. {})` >>
+  conj_tac
+  >- simp[zs_ctx_def, venomInstTheory.mk_venom_context_def, zs_fn_ptr_ok] >>
+  rpt gen_tac >> strip_tac >> drule zs_frame_trace >> simp[] >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `(G,tn,s) = _` (assume_tac o SYM) >>
+  drule zs_trace_safe >> simp[zs_static_premises]
+QED
+
+Theorem zs_raw_frame:
+  !vs0 ctx fn inst s.
+    raw_reachable vs0 ctx fn inst s ==>
+    vs0 = zs_vs ==> ctx = zs_ctx ==>
+    ?G tn. frame_reachable zs_vs zs_ctx [] [] G tn fn inst s
+Proof
+  ho_match_mp_tac contextRawReachableTheory.raw_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      metis_tac[frame_reachable_entry])
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      drule zs_frame_trace >> simp[] >> strip_tac >> gvs[] >>
+      drule zs_trace_opcode >> strip_tac >>
+      metis_tac[frame_reachable_next])
+  >- (rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+      metis_tac[frame_reachable_block])
+  >> rpt gen_tac >> strip_tac >> rpt strip_tac >> gvs[] >>
+  drule zs_frame_trace >> simp[] >> strip_tac >> gvs[] >>
+  drule zs_trace_opcode >> gvs[]
+QED
+
+Theorem zs_trace_mem:
+  !n. n < 5 ==>
+    raw_mem_ok zs_ctx zs_fn (EL n (fn_insts zs_fn)) (SND (SND (zs_trace n))) /\
+    dload_offset_ok zs_ctx zs_fn (EL n (fn_insts zs_fn)) (SND (SND (zs_trace n))) /\
+    dload_headroom_ok zs_ctx zs_fn (EL n (fn_insts zs_fn)) (SND (SND (zs_trace n)))
+Proof
+  gen_tac >> disch_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
+  gvs[] >> EVAL_TAC >>
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  simp[wordsTheory.dimword_def, venomStateTheory.eval_operand_def]
+QED
+
+Theorem zs_mem_invs:
+  mem_inv raw_mem_ok zs_ctx zs_vs /\
+  mem_inv dload_offset_ok zs_ctx zs_vs /\
+  mem_inv dload_headroom_ok zs_ctx zs_vs
+Proof
+  simp[unitMemInvTheory.mem_inv_raw_reachable] >>
+  `?name fn lbl. zs_ctx.ctx_entry = SOME name /\
+     lookup_function name zs_ctx.ctx_functions = SOME fn /\
+     fn_entry_label fn = SOME lbl` by
+    (qexistsl_tac [`"main"`, `zs_fn`, `"main"`] >>
+     simp[zs_ctx_def, venomInstTheory.mk_venom_context_def, zs_entry_facts]) >>
+  simp[] >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  drule zs_raw_frame >> simp[] >> strip_tac >>
+  drule zs_frame_trace >> simp[] >> strip_tac >> gvs[] >>
+  qpat_x_assum `(G,tn,s) = _` (assume_tac o SYM) >>
+  drule zs_trace_mem >> simp[]
+QED
+
+Theorem zs_src_inv:
+  o1_src_inv
+    <|d_stor := (\a st. UNIV); d_trans := (\a st. UNIV);
+      d_imm := (\im. UNIV); d_ret := (\r. UNIV)|> zs_ctx zs_vs
+Proof
+  simp[o1_src_inv_def, zs_static_premises, zs_mem_invs,
+       all_dead_taint_within] >>
+  qexists_tac `0` >> simp[zs_static_premises, zs_ptr_discipline]
+QED
+
+Definition zt_trace_def:
+  (zt_trace 0 = (FEMPTY, entry_taint, zs_vs)) /\
+  (zt_trace (SUC n) =
+    let (G,tn,s) = zt_trace n in
+    let inst = EL n (fn_insts zs_out.fpo_function) in
+    let s' = case step_inst 0 zs_target inst s of OK t => t | _ => s in
+    (step_prov [] G inst s', step_taint inst s s' tn,
+     s' with vs_inst_idx := SUC n))
+End
+
+Theorem zt_entry_facts:
+  zs_target.ctx_entry = SOME "main" /\
+  lookup_function "main" zs_target.ctx_functions = SOME zs_out.fpo_function /\
+  fn_entry_label zs_out.fpo_function = SOME "main" /\
+  enters_block zs_out.fpo_function
+    (zs_vs with <|vs_prev_bb := NONE; vs_current_bb := "main";
+                 vs_inst_idx := 0|>) zs_vs /\
+  active_inst zs_out.fpo_function (EL 0 (fn_insts zs_out.fpo_function)) zs_vs
+Proof
+  EVAL_TAC >> simp[venomExecSemanticsTheory.eval_phis_def,
+    venomExecSemanticsTheory.phi_prefix_length_def]
+QED
+
+Theorem zt_step_facts:
+  !n. n < 6 ==>
+    let (G,tn,s) = zt_trace n in
+    let inst = EL n (fn_insts zs_out.fpo_function) in
+    ?s'. s.vs_inst_idx = n /\ active_inst zs_out.fpo_function inst s /\
+         ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+         step_inst 0 zs_target inst s = OK s' /\
+         active_inst zs_out.fpo_function
+           (EL (SUC n) (fn_insts zs_out.fpo_function))
+           (s' with vs_inst_idx := SUC n)
+Proof
+  gen_tac >> disch_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4 \/ n = 5` by decide_tac >>
+  gvs[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem zt_reachable:
+  !n. n <= 6 ==>
+    frame_reachable zs_vs zs_target [] [] (FST (zt_trace n))
+      (FST (SND (zt_trace n))) zs_out.fpo_function
+      (EL n (fn_insts zs_out.fpo_function)) (SND (SND (zt_trace n)))
+Proof
+  Induct
+  >- (simp[zt_trace_def] >>
+      mp_tac zt_entry_facts >> simp[] >>
+      metis_tac[frame_reachable_entry]) >>
+  strip_tac >> `n < 6` by decide_tac >>
+  `n <= 6` by decide_tac >> first_x_assum drule >> strip_tac >>
+  drule zt_step_facts >>
+  Cases_on `zt_trace n` >> Cases_on `r` >> fs[] >> strip_tac >>
+  simp[zt_trace_def] >> metis_tac[frame_reachable_next]
+QED
+
+Theorem zt_bad_eq:
+  ~access_ok 0 (FST (zt_trace 6)) zs_out.fpo_function
+    (EL 6 (fn_insts zs_out.fpo_function)) (SND (SND (zt_trace 6)))
+Proof
+  EVAL_TAC >>
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.dimword_def]
+QED
+
+Theorem zt_not_ptr_discipline:
+  ~ptr_discipline 0 zs_target zs_vs
+Proof
+  simp[ptr_discipline_def] >> rpt strip_tac >>
+  mp_tac (Q.SPEC `6` zt_reachable) >> simp[] >> strip_tac >>
+  disj2_tac >> goal_assum (drule_at Any) >> simp[zt_bad_eq]
+QED
+
+Theorem lower_dload_stage_ptr_counterexample:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload)
+    (\C fn observed. T) zs_ctx zs_target /\
+  dead_wf <|d_stor := (\a st. UNIV); d_trans := (\a st. UNIV);
+            d_imm := (\im. UNIV); d_ret := (\r. UNIV)|> /\
+  o1_ctx_shape zs_ctx /\ o1_run_state_ok zs_vs /\
+  o1_src_inv <|d_stor := (\a st. UNIV); d_trans := (\a st. UNIV);
+               d_imm := (\im. UNIV); d_ret := (\r. UNIV)|> zs_ctx zs_vs /\
+  callee_first ["main"] zs_ctx.ctx_functions /\
+  fixed_region_reserved 0 zs_ctx /\ ptr_discipline 0 zs_ctx zs_vs /\
+  ~ptr_discipline 0 zs_target zs_vs
+Proof
+  simp[zs_stage, all_dead_wf, zs_shape, zs_state_ok, zs_src_inv,
+       zs_static_premises, zs_ptr_discipline, zt_not_ptr_discipline]
+QED
