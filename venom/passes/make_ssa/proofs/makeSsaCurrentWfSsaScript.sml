@@ -3737,6 +3737,45 @@ Proof
   drule_all current_wf_outputs_first_owner >> gvs[]
 QED
 
+Theorem current_wf_exceptional_inserted_spelling:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ MEM db fn.fn_blocks /\
+  MEM di db.bb_instructions /\ di.inst_opcode = PHI /\ MEM v di.inst_outputs /\
+  current_actual_inserted fn v db.bb_label ==>
+  current_token_name H (CurrentInserted v db.bb_label) = SOME v
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn /\
+   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  `lookup_block db.bb_label fn.fn_blocks = SOME db` by
+    (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `?bb. MEM bb renamed /\ bb.bb_label = db.bb_label` by
+    (`MEM db.bb_label (MAP (\bb. bb.bb_label) renamed)` by
+       (drule current_wf_precleanup_labels >> disch_then SUBST1_TAC >>
+        simp[MEM_MAP] >> metis_tac[]) >>
+     fs[MEM_MAP] >> metis_tac[]) >>
+  `?ev. MEM ev events /\ current_event_label ev = db.bb_label` by
+    metis_tac[current_wf_precleanup_coverage] >>
+  drule_all current_wf_precleanup_names >> strip_tac >>
+  drule_all current_wf_precleanup_event_history >> strip_tac >>
+  `current_event_valid A (FLAT (MAP block_ir_vars ins')) ev /\
+   current_event_trace A H ev /\ current_wf_event_history_provenance A ev` by
+    fs[EVERY_MEM] >>
+  `ALL_DISTINCT (MAP FST (FLAT (A db.bb_label)))` by
+    (PairCases_on `ev` >> fs[current_event_valid_def, current_event_label_def,
+      current_annotations_ok_def] >> metis_tac[]) >>
+  `?inst. MEM inst pre /\ MEM v inst.inst_outputs` by metis_tac[] >>
+  `ALL_DISTINCT (MAP FST (FLAT (current_block_annotations db pre)))` by
+    metis_tac[] >>
+  drule_all current_wf_inserted_annotation_first >> strip_tac >>
+  irule current_wf_event_first_owner >> goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  metis_tac[current_wf_original_phi_annotation_locality]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
