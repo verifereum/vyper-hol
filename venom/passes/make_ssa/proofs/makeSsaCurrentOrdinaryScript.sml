@@ -2,7 +2,7 @@ Theory makeSsaCurrentOrdinary
 Ancestors
   makeSsaCurrentSimDefs makeSsaCurrentDefs venomExecSemantics venomState
   stateFrame venomInst venomWf list rich_list venomCallOracleProps
-  venomCallOracleDefs pair
+  venomCallOracleDefs pair dretShapeDefs
 
 Theorem current_rename_operands_map:
   !ops. rename_current_operands rs ops =
@@ -1095,4 +1095,75 @@ Proof
   >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
       simp[execution_frame_def, venom_state_component_equality]) >>
   qexistsl_tac [`st`,`st'`] >> simp[]
+QED
+
+Theorem current_pack_dret_fields:
+  !pairs cursor st ptrs final t.
+  pack_dret_dynamic cursor pairs st = (ptrs,final,t) ==>
+  t.vs_vars = st.vs_vars /\ t.vs_current_bb = st.vs_current_bb /\
+  t.vs_prev_bb = st.vs_prev_bb
+Proof
+  Induct >> simp[pack_dret_dynamic_def] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[pack_dret_dynamic_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >>
+  simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem current_mcopy_frame:
+  execution_frame (mcopy dst src sz st) = mcopy dst src sz (execution_frame st)
+Proof
+  simp[mcopy_def, write_memory_with_expansion_def, execution_frame_def]
+QED
+
+Theorem current_pack_dret_frame:
+  !pairs cursor st st' ptrs final t ptrs' final' t'.
+  execution_frame st = execution_frame st' /\
+  pack_dret_dynamic cursor pairs st = (ptrs,final,t) /\
+  pack_dret_dynamic cursor pairs st' = (ptrs',final',t') ==>
+  ptrs = ptrs' /\ final = final' /\ execution_frame t = execution_frame t'
+Proof
+  Induct >> simp[pack_dret_dynamic_def] >> rpt gen_tac >>
+  PairCases_on `h` >> simp[pack_dret_dynamic_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `execution_frame (mcopy (w2n cursor) (w2n h0) (w2n h1) st) =
+   execution_frame (mcopy (w2n cursor) (w2n h0) (w2n h1) st')` by simp[current_mcopy_frame] >>
+  qpat_x_assum `execution_frame st = _` kall_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >> simp[]
+QED
+
+Theorem current_parse_dret_shape:
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands ==>
+  parse_dret_shape inst' = parse_dret_shape inst
+Proof
+  strip_tac >> Cases_on `inst.inst_operands` >>
+  simp[parse_dret_shape_def, rename_current_operands_def] >>
+  Cases_on `h` >> simp[parse_dret_shape_def, rename_current_operands_def]
+QED
+
+Theorem current_dret_agree:
+  inst.inst_opcode = DRET /\ inst'.inst_opcode = DRET /\
+  inst.inst_outputs = [] /\ inst'.inst_outputs = [] /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule current_parse_dret_shape >> strip_tac >>
+  drule_all current_eval_operands_agree >> strip_tac >>
+  `st.vs_call_entry_fmp = st'.vs_call_entry_fmp` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  asm_simp_tac (srw_ss()) [step_inst_base_DRET] >>
+  Cases_on `parse_dret_shape inst` >- simp[current_result_agree_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `eval_operands inst.inst_operands st`
+  >- simp[current_result_agree_def] >> simp[] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))`
+  >- simp[current_result_agree_def] >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  drule_all current_pack_dret_frame >> strip_tac >>
+  simp[current_result_agree_def] >>
+  qpat_x_assum `execution_frame _ = execution_frame _` mp_tac >>
+  simp[execution_frame_def, venom_state_component_equality]
 QED
