@@ -1,8 +1,9 @@
 (* Actual CALLDATASIZE execution, prefix safety and body memory closure. *)
 Theory bodyCalldataMemory
 Ancestors
-  bodyUnopMemory bodyMemoryDefs bodyMemoryPreds exprSimCalldata exprSimHyps
-  exprSimLeaves
+  exprSimSource exprSimMemoryValues fragGasPathMem fragGasSeqMem gasCount gasContext
+  exprSimMemoryStack bodyMemoryDefs bodyMemoryPreds exprSimCalldata exprSimHypsDefs
+  exprSimProps
   fragExecMem instMemFrontier allocaHistoryFragment emitHelperProps
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSimDefs valueEncoding vyperValue vyperAST venomExecSemantics
