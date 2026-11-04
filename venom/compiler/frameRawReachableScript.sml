@@ -243,3 +243,107 @@ Proof
   rpt strip_tac >> irule active_inst_block_lookup >> simp[] >>
   drule_all o1_ctx_shape_function_wf >> simp[wf_function_def]
 QED
+
+Definition frame_stack_prefix_def:
+  (frame_stack_prefix vs ctx [] fn s <=> T) /\
+  (frame_stack_prefix vs ctx (f::stk) fn s <=>
+    ?nm ops args cs.
+      MEM fn ctx.ctx_functions /\ MEM f.cf_fn ctx.ctx_functions /\
+      raw_reachable vs ctx f.cf_fn f.cf_inst f.cf_state /\
+      active_inst f.cf_fn f.cf_inst f.cf_state /\
+      f.cf_inst.inst_opcode = INVOKE /\
+      decode_invoke f.cf_inst = SOME (nm,ops) /\
+      lookup_function nm ctx.ctx_functions = SOME fn /\
+      eval_operands ops f.cf_state = SOME args /\
+      setup_callee fn args f.cf_state = SOME cs /\
+      frame_prefix ctx fn cs s /\
+      frame_stack_prefix vs ctx stk f.cf_fn f.cf_state)
+End
+
+Theorem frame_stack_prefix_next:
+  o1_ctx_shape ctx /\ MEM fn ctx.ctx_functions /\
+  frame_stack_prefix vs ctx stk fn s /\ active_inst fn inst s /\
+  ~is_terminator inst.inst_opcode /\ step_inst k ctx inst s = OK t ==>
+  frame_stack_prefix vs ctx stk fn (t with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  drule_all o1_ctx_shape_active_lookup >> strip_tac >>
+  drule_all venomInstProofsTheory.step_preserves_control_flow >> strip_tac >>
+  Cases_on `stk` >> fs[frame_stack_prefix_def] >>
+  irule frame_prefix_next >> simp[] >>
+  qexists_tac `k` >> simp[]
+QED
+
+Theorem frame_stack_prefix_block:
+  o1_ctx_shape ctx /\ MEM fn ctx.ctx_functions /\
+  frame_stack_prefix vs ctx stk fn s /\ active_inst fn inst s /\
+  is_terminator inst.inst_opcode /\ step_inst k ctx inst s = OK t /\
+  ~t.vs_halted /\ enters_block fn t s1 ==>
+  frame_stack_prefix vs ctx stk fn s1
+Proof
+  rpt strip_tac >>
+  drule_all o1_ctx_shape_active_lookup >> strip_tac >>
+  Cases_on `stk` >> fs[frame_stack_prefix_def] >>
+  irule frame_prefix_block >> simp[] >> metis_tac[]
+QED
+
+Theorem frame_stack_prefix_pop:
+  o1_ctx_shape ctx /\ frame_stack_prefix vs ctx (f::stk) fn s /\
+  active_inst fn rinst s /\ step_inst k ctx rinst s = IntRet ret se /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state se)) = SOME sr /\
+  active_inst f.cf_fn inst' (sr with vs_inst_idx := SUC f.cf_state.vs_inst_idx) ==>
+  MEM f.cf_fn ctx.ctx_functions /\
+  raw_reachable vs ctx f.cf_fn inst'
+    (sr with vs_inst_idx := SUC f.cf_state.vs_inst_idx) /\
+  frame_stack_prefix vs ctx stk f.cf_fn
+    (sr with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >> fs[frame_stack_prefix_def] >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        get_instruction bb s.vs_inst_idx = SOME rinst` by
+    (irule o1_ctx_shape_active_lookup >> metis_tac[]) >>
+  `?h. run_blocks h ctx fn cs = IntRet ret se` by
+    (irule frame_prefix_return >> metis_tac[]) >>
+  `step_inst h ctx f.cf_inst f.cf_state = OK sr` by
+    simp[Once step_inst_def] >>
+  conj_tac
+  >- (irule raw_reachable_completed_invoke >> metis_tac[]) >>
+  irule frame_stack_prefix_next >> simp[] >>
+  qexistsl [`f.cf_inst`,`h`] >> simp[is_terminator_def]
+QED
+
+Theorem frame_reachable_raw_certificate:
+  !vs ctx stk PG G tn fn inst s.
+  frame_reachable vs ctx stk PG G tn fn inst s ==>
+  o1_ctx_shape ctx ==>
+  MEM fn ctx.ctx_functions /\ raw_reachable vs ctx fn inst s /\
+  frame_stack_prefix vs ctx stk fn s
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      simp[frame_stack_prefix_def] >> conj_tac
+      >- metis_tac[lookup_function_MEM] >>
+      irule raw_reachable_entry >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+      conj_tac >- (irule raw_reachable_next >> metis_tac[]) >>
+      irule frame_stack_prefix_next >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+      conj_tac >- (irule raw_reachable_block >> metis_tac[]) >>
+      irule frame_stack_prefix_block >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+      drule lookup_function_MEM >> strip_tac >>
+      simp[] >> conj_tac
+      >- (irule raw_reachable_callee >> metis_tac[]) >>
+      simp[frame_stack_prefix_def] >>
+      irule frame_prefix_entry >> simp[])
+  >> rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+  irule frame_stack_prefix_pop >> metis_tac[]
+QED
+
+Theorem frame_reachable_raw:
+  o1_ctx_shape ctx /\ frame_reachable vs ctx stk PG G tn fn inst s ==>
+  raw_reachable vs ctx fn inst s
+Proof
+  metis_tac[frame_reachable_raw_certificate]
+QED
