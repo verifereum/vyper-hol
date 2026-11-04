@@ -23,6 +23,7 @@ Ancestors
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
   allocLimitsProps supportedProgramProps exprSimHyps
   immutableLocationProps immutableSectionRel immutableRelation option pair e2eDefs
+  vyperLoweringCorrect
 Libs
   monadsyntax supportedEvalLib
 
@@ -518,6 +519,11 @@ QED
 Theorem immutable_semantic_readiness_probe[local]:
   ?am tx.
     tx.target = 0w /\ tx.function_name = "foo" /\ tx.args = [] /\ tx.value = 0 /\
+    tx_env_ok tx /\ am.logs = [] /\ am.pending_deletions = [] /\
+    account_immutables am tx.target =
+      [(NONE,FEMPTY |+ ("large",
+        (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
+         ArrayV (SArrayV []))))] /\
     source_typing_ok
       [VariableDecl Private Immutable "large"
          (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
@@ -534,8 +540,10 @@ Proof
         immutables := [(0w,[(NONE,FEMPTY |+ ("large",
           (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
            ArrayV (SArrayV []))))])]|>`,
-    `empty_call_txn with <|target := 0w; function_name := "foo"|>`] >>
-  simp[source_typing_ok_def, source_deployment_rel_def,
+    `empty_call_txn with <|target := 0w; function_name := "foo";
+                          block_number := 1; block_hashes := [0w]|>`] >>
+  simp[source_typing_ok_def, source_deployment_rel_def, tx_env_ok_def,
+       account_immutables_def,
        vyperInterpreterTheory.initial_machine_state_def,
        vyperContextTheory.empty_call_txn_def,
        vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
@@ -596,4 +604,80 @@ Proof
   simp[vyperValueTheory.evaluate_type_def,
        valueEncodingTheory.type_memory_size_def,
        vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def]
+QED
+
+Theorem immutable_section_existence_probe[local]:
+  ?section. immutables_section_rel
+    [VariableDecl Private Immutable "large"
+       (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+     FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]]
+    [(NONE,FEMPTY |+ ("large",
+      (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
+       ArrayV (SArrayV []))))] section
+Proof
+  irule_at Any canonical_immutables_section_rel >>
+  simp[immutableSectionTheory.immutables_initialized_def,
+       immutableSectionTheory.immutables_initialized_with_def] >>
+  simp[vyperStateTheory.get_source_immutables_def,
+       immutableEncodingTheory.immutable_value_admissible_def,
+       valueEncodingTheory.type_memory_size_def,
+       compileVyperTheory.type_mem_bytes_def, FLOOKUP_UPDATE]
+QED
+
+Theorem immutable_initial_state_existence_probe[local]:
+  tx_env_ok tx /\ tx.value = 0 /\ am.logs = [] /\
+  am.pending_deletions = [] /\
+  (?section. immutables_section_rel tops
+     (account_immutables am tx.target) section) ==>
+  ?vs. initial_venom_state_rel tops am tx vs /\ vs.vs_outcomes = []
+Proof
+  strip_tac >>
+  qexists `ARB with <|
+    vs_accounts := am.accounts; vs_transient := am.tStorage; vs_logs := [];
+    vs_vars := FEMPTY; vs_halted := F; vs_memory := [];
+    vs_allocas := FEMPTY; vs_alloca_next := 0; vs_returndata := [];
+    vs_requests := []; vs_outcomes := []; vs_data_section := section;
+    vs_prev_hashes := tx.block_hashes;
+    vs_call_ctx := (ARB with <|cc_caller := tx.sender; cc_address := tx.target;
+      cc_callvalue := n2w tx.value; cc_calldata := tx.calldata; cc_static := F|>);
+    vs_tx_ctx := (ARB with <|tc_origin := tx.origin; tc_gasprice := n2w tx.gas_price;
+      tc_chainid := n2w tx.chain_id; tc_blobhashes := tx.blob_hashes|>);
+    vs_block_ctx := <|bc_coinbase := tx.coinbase; bc_timestamp := n2w tx.time_stamp;
+      bc_number := n2w tx.block_number; bc_prevrandao := n2w tx.prev_randao;
+      bc_gaslimit := n2w tx.gas_limit; bc_basefee := n2w tx.base_fee;
+      bc_blobbasefee := n2w tx.blob_base_fee;
+      bc_blockhash := (\n. if n < tx.block_number /\ tx.block_number - 256 <= n /\
+        tx.block_number - n - 1 < LENGTH tx.block_hashes
+        then EL (tx.block_number - n - 1) tx.block_hashes else 0w)|> |>` >>
+  simp[initial_venom_state_rel_def, venom_env_rel_def, call_ctx_rel_def,
+       value_transfer_ok_def, accounts_after_transfer_def]
+QED
+
+Theorem immutable_joint_initial_probe[local]:
+  ?am tx vs.
+    tx.target = 0w /\ tx.function_name = "foo" /\ tx.args = [] /\ tx.value = 0 /\
+    source_typing_ok
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx /\
+    source_deployment_rel
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx /\
+    initial_venom_state_rel
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx vs /\
+    vs.vs_outcomes = []
+Proof
+  mp_tac immutable_semantic_readiness_probe >> strip_tac >>
+  mp_tac immutable_section_existence_probe >> strip_tac >>
+  `?vs. initial_venom_state_rel
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx vs /\
+      vs.vs_outcomes = []` by
+    (irule immutable_initial_state_existence_probe >> gvs[] >>
+     goal_assum (drule_at Any)) >>
+  metis_tac[]
 QED
