@@ -15404,3 +15404,56 @@ Proof
        type_builtin_extract32_labels, type_builtin_abi_encode_labels,
        type_builtin_abi_decode_labels]
 QED
+
+Theorem builtin_membership_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND
+    (case e of
+       Builtin ann (MakeArray et bnd) elems =>
+         (let (ops, st') = compile_multi_exprs f cenv elems st in
+          if is_in then as_stack_val ret_ty (compile_list_membership_in needle ops st')
+          else as_stack_val ret_ty (compile_list_membership_notin needle ops st'))
+     | _ =>
+         (let (vv, st') = f cenv rhs_ty e st in
+          as_stack_val ret_ty
+            (compile_var_array_membership cenv needle vv rhs_ty is_in st')))) /\
+  EVERY (isPREFIX "@") (added_labels st (SND
+    (case e of
+       Builtin ann (MakeArray et bnd) elems =>
+         (let (ops, st') = compile_multi_exprs f cenv elems st in
+          if is_in then as_stack_val ret_ty (compile_list_membership_in needle ops st')
+          else as_stack_val ret_ty (compile_list_membership_notin needle ops st'))
+     | _ =>
+         (let (vv, st') = f cenv rhs_ty e st in
+          as_stack_val ret_ty
+            (compile_var_array_membership cenv needle vv rhs_ty is_in st')))))
+Proof
+  disch_tac >> Cases_on `e` >> simp[LET_THM] >>
+  TRY (rename1 `Builtin ann tag elems` >> Cases_on `tag` >> simp[LET_THM]) >>
+  (ho_match_mp_tac pair_case_labels >> conj_tac
+   >- simp[compile_multi_exprs_labels] >>
+   rpt gen_tac >> rpt IF_CASES_TAC >> irule as_stack_val_labels >>
+   simp[compile_list_membership_in_labels, compile_list_membership_notin_labels,
+        compile_var_array_membership_labels])
+QED
+
+Theorem builtin_bop_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Bop op) args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Bop op) args st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  IF_CASES_TAC
+  >- (ho_match_mp_tac pair_case_labels >> conj_tac
+      >- (irule lower_value_labels >> simp[]) >>
+      rpt gen_tac >> irule (SRULE [LET_THM] builtin_membership_labels) >> simp[]) >>
+  IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, compile_bytestring_hash_labels, emit_op_labels]) >>
+  rpt IF_CASES_TAC >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >> simp[emit_op_labels]) >>
+  irule as_stack_val_labels >> simp[compile_binop_labels, emit_op_labels]
+QED
