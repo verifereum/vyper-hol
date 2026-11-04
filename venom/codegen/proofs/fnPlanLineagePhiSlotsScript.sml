@@ -1,6 +1,6 @@
 Theory fnPlanLineagePhiSlots
 Ancestors
-  livenessDefs finite_map stackModel list rich_list
+  livenessDefs finite_map stackModel list rich_list stackPlanGen
 
 (* The trace depends on PHI operand classes, not the selected edge. *)
 Definition phi_slot_step_def:
@@ -105,3 +105,107 @@ Theorem input_vars_from_slot_length:
 Proof
   rpt strip_tac >> drule_all input_vars_from_slot_factor >> simp[]
 QED
+
+(* Local interface audit: repeats within one PHI do not create extra slots.
+   These are map tests, not a reachable-state or temporal preservation proof. *)
+Definition phi_slot_audit_phis_def:
+  phi_slot_audit_phis =
+    [mk_inst 0 PHI [Label "L"; Var "a"; Label "R"; Var "a"] ["x"];
+     mk_inst 1 PHI [Label "L"; Var "b"; Label "R"; Var "c"] ["y"]]
+End
+
+Theorem phi_slot_audit_maps[local]:
+  FST (build_phi_maps "L" phi_slot_audit_phis) =
+    FST (build_phi_maps "R" phi_slot_audit_phis) /\
+  phi_slot_trace (FST (build_phi_maps "L" phi_slot_audit_phis))
+    ["a"; "b"; "c"; "pass"; "a"] = [INR 0; INR 1; INL "pass"] /\
+  MAP (\i. FLOOKUP (SND (build_phi_maps "L" phi_slot_audit_phis)) i) [0;1] =
+    [SOME "a"; SOME "b"] /\
+  MAP (\i. FLOOKUP (SND (build_phi_maps "R" phi_slot_audit_phis)) i) [0;1] =
+    [SOME "a"; SOME "c"] /\
+  input_vars_from "L" phi_slot_audit_phis ["a";"b";"c";"pass";"a"] =
+    ["a";"b";"pass"] /\
+  input_vars_from "R" phi_slot_audit_phis ["a";"b";"c";"pass";"a"] =
+    ["a";"c";"pass"] /\
+  phi_uses_disjoint phi_slot_audit_phis
+Proof
+  EVAL_TAC
+QED
+
+Theorem phi_slot_audit_search[local]:
+  MAP (\v. MEM v ["b";"c"])
+    (input_vars_from "L" phi_slot_audit_phis ["a";"b";"c";"pass";"a"]) =
+    [F;T;F] /\
+  MAP (\v. MEM v ["b";"c"])
+    (input_vars_from "R" phi_slot_audit_phis ["a";"b";"c";"pass";"a"]) =
+    [F;T;F] /\
+  stack_find (\v. MEM v ["b";"c"]) (REVERSE
+    (input_vars_from "L" phi_slot_audit_phis ["a";"b";"c";"pass";"a"])) = SOME 1 /\
+  stack_find (\v. MEM v ["b";"c"]) (REVERSE
+    (input_vars_from "R" phi_slot_audit_phis ["a";"b";"c";"pass";"a"])) = SOME 1
+Proof
+  EVAL_TAC
+QED
+
+(* Producer audit (C3.2.2.6). The signatures below are proposed obligations,
+   NOT theorems proved by the bounded tests above.
+
+   (a) !p q phis. FST (build_phi_maps p phis) =
+                     FST (build_phi_maps q phis).
+   No WF premise is needed: the first component's update ignores the second
+   accumulator and source label. Proof should use a generic FOLDL projection,
+   once, not unfold build_phi_maps at every consumer.
+
+   (b) An edge-indexed map boundary should expose, for i < LENGTH phis:
+       FLOOKUP (SND (build_phi_maps p phis)) i =
+         OPTION_MAP SND (FIND (\lv. FST lv = p)
+                            (phi_pairs (EL i phis).inst_operands)).
+   In addition the first map must have the range bound
+       FLOOKUP (FST (build_phi_maps p phis)) v = SOME i ==>
+       i < LENGTH phis.
+   Totality then follows from named predecessor coverage. Its existing
+   producer is venomWf.phi_edge_uses_wf_def (lines 593-607), obtained via
+   def_dominates_uses_def for every collected PHI. collect_phis_mem in
+   livenessTransferProofs supplies membership and opcode. Connecting actual
+   cfg_preds_of to fn_cfg_edge still needs the analyzed CFG boundary.
+   livenessTransferProofs.build_phi_maps_matching_mem and
+   livenessLocalProofs.lv_phi_op_map_char are LOCAL inversion lemmas, not
+   exported index/totality interfaces; neither proves the proposed boundary.
+
+   (c) Let om = FST (build_phi_maps p phis), mm = SND (...).
+   Under EVERY (\phi. phi_well_formed phi.inst_operands) phis,
+   phi_uses_disjoint phis, edge coverage, i < LENGTH phis, and
+   MEM s (phi_slot_trace om live), the needed statement is
+       MEM (Var (phi_slot_realize mm s))
+           (FILTER is_var_operand (EL i phis).inst_operands) <=> s = INR i.
+   Restricting s to emitted slots is essential: an arbitrary INL incoming
+   name would falsify this equivalence. Well-formed operand pairs identify
+   inst_uses with pair values; disjointness prevents map overwrite by a
+   different PHI. Same-PHI repeated operands are allowed and tested above.
+   phi_operands_ready_def / phi_block_ready_def supply disjointness whenever
+   the function has any PHIs. They do not themselves assert this search fact.
+
+   (d) A sufficient entry-slot producer is
+       (?v. MEM v (live_vars_at (liveness_analyze fn) lbl 0) /\
+            FLOOKUP om v = SOME i) ==>
+       MEM (INR i) (phi_slot_trace om
+                       (live_vars_at (liveness_analyze fn) lbl 0)).
+   This is a generic trace emission fact, independent of matching. Establishing
+   its antecedent for EACH reachable PHI is still a separate obligation.
+   live_vars_at_uses and live_vars_at_propagate in livenessAnalysisProps give
+   uses at their instruction and backward propagation only if not killed.
+   Thus propagation through earlier PHIs needs an incoming witness not among
+   their outputs. Neither phi_uses_disjoint nor phi_block_ready states that
+   no-output-alias fact. A blanket ban would be too strong for loop-carried
+   names: the frozen task allows incoming names that equal PHI outputs.
+   The available global producer candidate is def_available_at together with
+   SSA uniqueness and a first-entry path; this audit has NOT proved it.
+
+   Even (a)-(d) only cover entry searches. Earlier PHIs rename slots and may
+   delete dead outputs; proving that their new output cannot shadow a later
+   PHI's incoming set requires a temporal alias/liveness argument. Readiness
+   excludes incoming names live AFTER the whole prefix, not all intermediate
+   alias patterns. No global freshness assumption or reachable counterexample
+   is inferred here. Persistent spills, cleanup windows and allocator framing
+   remain outside this local map audit.
+*)
