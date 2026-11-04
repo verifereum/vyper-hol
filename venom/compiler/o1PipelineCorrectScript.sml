@@ -136,6 +136,7 @@ Theorem o1_pipeline_memory_obligations:
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\
     ptr_discipline lo unit.cu_context vs /\
+    mem_inv dload_offset_ok unit.cu_context vs /\
     vs.vs_initial_fmp = n2w cp.cp_initial_fmp
     ==>
     ?Inv. codegen_memory_obligations Inv out.po_unit.cu_context cp /\
