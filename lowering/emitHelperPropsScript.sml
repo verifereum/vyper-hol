@@ -1444,9 +1444,11 @@ Theorem step_SSTORE:
     eval_operand op1 ss = SOME v1 ∧
     eval_operand op2 ss = SOME v2 ⇒
     step_inst_base (mk_inst id SSTORE [op1; op2] []) ss =
-      OK (sstore v1 v2 ss)
+      if ss.vs_call_ctx.cc_static then
+        Abort ExHalt_abort (halt_state (set_returndata [] ss))
+      else OK (sstore v1 v2 ss)
 Proof
-  rw[step_inst_base_def, exec_write2_def]
+  rw[step_inst_base_def, exec_write2_def, eval_operands_def]
 QED
 
 Theorem step_ASSERT_ok:
