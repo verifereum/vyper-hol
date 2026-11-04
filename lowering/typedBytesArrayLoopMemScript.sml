@@ -2,8 +2,8 @@
 Theory typedBytesArrayLoopMem
 Ancestors
   typedArrayLoopLayoutMem typedBytesArrayMem typedArrayLoopControlMem
-  memContinuation exprSimAggregateEncoding valueEncoding valueEncodingProps
-  venomState venomExecSemantics compileEnv exprLoweringProps
+  memContinuation fragExec fragExecMem exprSimAggregateEncoding valueEncoding valueEncodingProps
+  venomState venomInst venomExecSemantics compileEnv exprLoweringProps emitHelperProps
   vyperValue vyperTyping words arithmetic list rich_list vfmConstants
 
 Definition typed_bytes_array_prefix_def:
@@ -143,3 +143,21 @@ Proof
   qexistsl_tac [`fresh_label_output "typed_sa_body" (sa.cs_next_label+1)`,
     `"%" ++ toString sa.cs_next_var`, `sa.cs_next_id+2`] >> simp[]
 QED
+
+Theorem typed_bytes_array_prefix_cont[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX code bb.bb_instructions /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+  run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK q /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 ==>
+  mem_cont_sim ctx fn s (q with vs_inst_idx := LENGTH code)
+Proof
+  strip_tac >>
+  irule (SRULE [emitted_insts_def, fn_has_code_def, emitted_blocks_def]
+    (Q.INST [`sa` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
+        cs_current_insts := []|>`,
+      `sb` |-> `ARB with <|cs_blocks := []; cs_current_bb := s.vs_current_bb;
+        cs_current_insts := code|>`] (SPEC_ALL typed_bytes_child_seq_cont))) >>
+  simp[] >> metis_tac[]
+QED
+

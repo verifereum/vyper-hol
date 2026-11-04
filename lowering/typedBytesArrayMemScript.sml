@@ -58,7 +58,7 @@ Proof
   gvs[]
 QED
 
-Theorem typed_bytes_child_seq_cont[local]:
+Theorem typed_bytes_child_seq_cont:
   sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
   isPREFIX sa.cs_current_insts sb.cs_current_insts /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
