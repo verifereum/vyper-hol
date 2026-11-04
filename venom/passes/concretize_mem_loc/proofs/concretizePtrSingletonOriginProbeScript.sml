@@ -728,3 +728,79 @@ Proof
   once_rewrite_tac[WhileTheory.OWHILE_THM] >> simp[] >>
   once_rewrite_tac[WhileTheory.OWHILE_THM] >> simp[listTheory.SET_TO_LIST_INV]
 QED
+
+Definition sop_P_def:
+  sop_P nm = if nm = "leaf" then {0:num} else {}
+End
+
+Theorem sop_roots:
+  ptr_roots sop_P sop_callee = {"p"; "b"} /\
+  ptr_roots sop_P sop_caller = {"a"} /\
+  alloca_roots sop_callee = {"b"} /\ alloca_roots sop_caller = {"a"}
+Proof
+  simp[ptrDisciplineTheory.ptr_roots_def, pointerConfinedDefsTheory.alloca_roots_def,
+    sop_P_def, sop_callee_def, sop_caller_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.fn_insts_def, venomInstTheory.mk_inst_def,
+    venomInstTheory.inst_output_def, pred_setTheory.EXTENSION,
+    LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  EVAL_TAC >> simp[LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  metis_tac[]
+QED
+
+Theorem sop_ptr_classification:
+  fn_pv sop_P sop_callee = {"p"; "b"} /\
+  fn_pv sop_P sop_caller = {"a"} /\
+  pointer_derived_vars sop_callee (alloca_roots sop_callee) = {"b"} /\
+  pointer_derived_vars sop_caller (alloca_roots sop_caller) = {"a"} /\
+  pointer_derived_vars sop_callee
+    (ptr_roots sop_P sop_callee DIFF alloca_roots sop_callee) = {"p"} /\
+  pointer_derived_vars sop_caller
+    (ptr_roots sop_P sop_caller DIFF alloca_roots sop_caller) = {}
+Proof
+  simp[ptrDisciplineTheory.fn_pv_def, sop_roots, sop_no_derived,
+    pred_setTheory.INSERT_DIFF, pred_setTheory.EMPTY_DIFF]
+QED
+
+Theorem sop_ptr_checks:
+  fn_ptr_ok sop_P sop_caller /\ fn_ptr_ok sop_P sop_callee
+Proof
+  simp[ptrDisciplineTheory.fn_ptr_ok_def, sop_ptr_classification,
+    pointerConfinedDefsTheory.affine_pointer_ops_def,
+    pointerConfinedDefsTheory.phi_pv_all_var_def, sop_roots, sop_no_derived] >>
+  simp[sop_caller_def, sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.fn_insts_def, venomInstTheory.fn_insts_blocks_def,
+    venomInstTheory.mk_inst_def, DISJ_IMP_THM, FORALL_AND_THM,
+    ptrDisciplineTheory.ptr_use_ok_def,
+    pointerConfinedDefsTheory.is_pointer_preserving_op_def,
+    memLocDefsTheory.mem_write_ops_def, memLocDefsTheory.mem_read_ops_def,
+    venomExecSemanticsTheory.decode_invoke_def, sop_P_def] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >> gvs[]
+QED
+
+Definition sop_leaf_out_def:
+  sop_leaf_out = THE (concretize_function_fuel_in_context
+    (concretize_memloc_fuel sop_callee) sop_ctx [] sop_callee)
+End
+Definition sop_ctx1_def:
+  sop_ctx1 = mk_venom_context [sop_leaf_out; sop_caller] (SOME "main")
+End
+
+Theorem sop_leaf_metadata:
+  sop_leaf_out.fn_mems_used = [(Allocation 101,0,32)] /\
+  sop_leaf_out.fn_eom = SOME 32 /\
+  imported_mems_used sop_ctx1 sop_caller = [(Allocation 101,0,32)]
+Proof
+  EVAL_TAC
+QED
+
+Definition sop_caller_lives_def:
+  sop_caller_lives = context_mem_livesets (concretize_memloc_fuel sop_caller)
+    sop_ctx1 sop_caller (sop_bp sop_caller) (cfg_analyze sop_caller)
+End
+
+Theorem sop_caller_lives_probe:
+  IS_SOME (FLOOKUP sop_caller_lives (Allocation 1)) /\
+  IS_SOME (FLOOKUP sop_caller_lives (Allocation 101))
+Proof
+  EVAL_TAC
+QED
