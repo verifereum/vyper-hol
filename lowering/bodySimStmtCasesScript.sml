@@ -5405,6 +5405,164 @@ Proof
 
 QED
 
+Theorem aug_place_storage_load_pointwise:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,sb) /\
+  eval_operand dst s0 = SOME slot /\
+  (if tr then tload slot s0 else sload slot s0) = typed_val_to_w256 tv v /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v /\
+  local_ptrs_reserved cenv sa /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand dst s = SOME slot /\
+         eval_operand cur s = SOME (val_to_w256 v) /\
+         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                lookup_var x s = SOME u) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         s.vs_memory = s0.vs_memory) R
+Proof
+  strip_tac >>
+  `(if tr then tload slot s0 else sload slot s0) = val_to_w256 v` by
+    metis_tac[typed_val_to_w256_word_value] >>
+  `frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand cur s = SOME (val_to_w256 v) /\
+         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                lookup_var x s = SOME u) /\
+         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                  FLOOKUP s.vs_allocas aid = SOME b) /\
+         s.vs_memory = s0.vs_memory) R` by
+    (irule loweringSliceTheory.emit_op_frag >>
+     reverse conj_tac >- simp[] >>
+     qexistsl_tac [`[dst]`, `if tr then TLOAD else SLOAD`] >> simp[] >>
+     conj_tac >- (Cases_on `tr` >> simp[venomInstTheory.is_terminator_def]) >>
+     conj_tac >- (Cases_on `tr` >> simp[]) >> strip_tac >>
+     gen_tac >> Cases_on `tr` >>
+     gvs[venomExecSemanticsTheory.step_inst_base_def,
+         venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]) >>
+  first_x_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
+  rpt strip_tac >> Cases_on `dst` >>
+  gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
+QED
+
+Theorem aug_place_storage_bop_pointwise:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,s1) /\
+  eval_operand dst s0 = SOME slot /\
+  (if tr then tload slot s0 else sload slot s0) = typed_val_to_w256 tv v1 /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v1 /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
+  cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+  (!z. cur = Var z ==> not_fresh_at s1 z) /\ (!l. cur <> Label l) /\
+  lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
+  compile_binop bop cur rhs ty NONE el s2 = (res_op,s3) /\
+  cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
+  (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l) /\
+  fn_has_code sa s3 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ expr_sim ctx func cenv cx ty e es /\
+  (do result <- eval_expr cx e; read_result cx result od) es = (r1,es1) /\
+  expr_res_ok r1 /\
+  (!v2. r1 = INL v2 ==>
+    word_value v2 /\ is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+    expr_res_ok (bop_result cx ty bop [ty;expr_type e] v1 v2 es1) /\
+    binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] v1 v2 es1) ==>
+  frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. ?v2 v. r1 = INL v2 /\
+      bop_result cx ty bop [ty;expr_type e] v1 v2 es1 = INL v /\
+      word_value v /\ stmt_state_rel ctx func cenv cx es1 s /\
+      eval_operand res_op s = SOME (val_to_w256 v) /\
+      eval_operand dst s = SOME slot /\
+      (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+             lookup_var x s = SOME u) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP s.vs_allocas aid = SOME b))
+    (expr_exit (case r1 of
+      INL v2 => bop_result cx ty bop [ty;expr_type e] v1 v2 es1
+    | INR ex => INR ex))
+Proof
+  rpt strip_tac >>
+  `!R. frag_exec ctx sa s1
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+           eval_operand dst s = SOME slot /\
+           eval_operand cur s = SOME (val_to_w256 v1) /\
+           (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                  lookup_var x s = SOME u) /\
+           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                    FLOOKUP s.vs_allocas aid = SOME b)) R` by
+    (gen_tac >> drule_all aug_place_storage_load_pointwise >>
+     disch_then (qspecl_then [`func`, `es`, `ctx`, `R`] mp_tac) >>
+     disch_then (mp_then Any irule frag_exec_weaken) >> simp[]) >>
+  `!z. dst = Var z ==> not_fresh_at s1 z` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  drule_all stmtSimAugAssignAttrTheory.augassign_load_bop_frag >> simp[]
+QED
+
+Theorem aug_place_storage_continue_pointwise:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur_op,s1) /\
+  eval_operand dst s0 = SOME slot /\
+  (if tr then tload slot s0 else sload slot s0) = typed_val_to_w256 tv cur /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\ word_value cur /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
+  cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+  (!z. cur_op = Var z ==> not_fresh_at s1 z) /\ (!l. cur_op <> Label l) /\
+  lower_value compile_expr cenv ty e s1 = (rhs_op,s2) /\
+  compile_binop bop cur_op rhs_op ty NONE el s2 = (res_op,s3) /\
+  cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
+  (!z. rhs_op = Var z ==> not_fresh_at s2 z) /\ (!l. rhs_op <> Label l) /\
+  fn_has_code sa s3 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ expr_sim ctx func cenv cx ty e st /\
+  (do result <- eval_expr cx e; read_result cx result od) st = (r1,st1) /\
+  expr_res_ok r1 /\
+  (!rhs. r1 = INL rhs ==>
+    word_value rhs /\ is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+    expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st1) /\
+    binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs st1) /\
+  cs_extends sa s3 /\ cs_extends s3 sf /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;res_op] s3 = ((),sf) /\
+  (!u st0. storage_dead cx tr (update_storage slot u st0) = storage_dead cx tr st0) /\
+  (!rhs v. r1 = INL rhs /\
+    bop_result cx ty bop [ty;expr_type e] cur rhs st1 = INL v ==>
+    encode_value tv v = SOME [(0,val_to_w256 v)]) /\
+  (case r1 of INR ex => res = INR ex /\ es' = st1
+   | INL rhs => case bop_result cx ty bop [ty;expr_type e] cur rhs st1 of
+       INR ex => res = INR ex /\ es' = st1
+     | INL v => write_place cx (StoragePlace tr slot tv) v st1 = (res,es')) ==>
+  frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
+    (\s. res = INL () /\ stmt_state_rel ctx func cenv cx es' s /\
+      (!x a. not_fresh_at sa x /\ lookup_var x s0 = SOME a ==>
+             lookup_var x s = SOME a) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP s.vs_allocas aid = SOME b))
+    (expr_exit (case r1 of
+      INL rhs => bop_result cx ty bop [ty;expr_type e] cur rhs st1
+    | INR ex => INR ex))
+Proof
+  strip_tac >>
+  `!rhs v. r1 = INL rhs /\
+     bop_result cx ty bop [ty;expr_type e] cur rhs st1 = INL v ==>
+     write_storage_slot cx tr slot tv v st1 = (res,es')` by
+    (rpt strip_tac >> gvs[write_place_def]) >>
+  drule_all aug_place_storage_bop_pointwise >> strip_tac >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _`
+    (mp_then Any irule fragExecTheory.frag_exec_then) >>
+  simp[] >> rpt strip_tac >>
+  `write_storage_slot cx tr slot tv v st1 = (res,es')` by metis_tac[] >>
+  `encode_value tv v = SOME [(0,val_to_w256 v)]` by metis_tac[] >>
+  `frag_exec ctx s3 sf (\s. s = t /\ stmt_state_rel ctx func cenv cx st1 s)
+    (\s. res = INL () /\ stmt_state_rel ctx func cenv cx es' s /\
+         (!x. lookup_var x s = lookup_var x t) /\
+         s.vs_allocas = t.vs_allocas /\ s.vs_memory = t.vs_memory)
+    (expr_exit (case r1 of
+      INL rhs => bop_result cx ty bop [ty;expr_type e] cur rhs st1
+    | INR ex => INR ex))` by
+    (drule_all aug_place_storage_store_frag >> simp[]) >>
+  first_x_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
