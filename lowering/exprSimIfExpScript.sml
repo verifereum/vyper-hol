@@ -700,8 +700,14 @@ Theorem compile_ifexp_vv_sim:
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
-         lowered_value_type cenv e = expr_type e \/ is_bytestring_type (expr_type e) \/
+         lowered_value_type cenv e = expr_type e \/
+         is_bytestring_type (expr_type e) /\
+         is_bytestring_type (lowered_value_type cenv e) /\
+         arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
+       type_memory_bytes cenv t = type_memory_size tvt /\
+       type_memory_size tvt < 2 ** 64) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
@@ -712,7 +718,12 @@ Theorem compile_ifexp_vv_sim:
     expr_sim ctx func cenv cx (BaseT BoolT) c es /\
     (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
        expr_sim ctx func cenv cx ty a es1 /\
-       expr_sim ctx func cenv cx ty b es1) ==>
+       expr_sim ctx func cenv cx ty b es1 /\
+       expr_vv_sim ctx func cenv cx ty a es1 /\
+       expr_vv_sim ctx func cenv cx ty b es1 /\
+       !e v es2. (e = a \/ e = b) /\
+         (do r <- eval_expr cx e; read_result cx r od) es1 = (INL v, es2) ==>
+         ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
     !sa sb vv res es' s0.
       compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
       eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
