@@ -25,7 +25,7 @@ Proof
   simp[dload_equal_environment_def, venom_state_component_equality]
 QED
 
-Theorem dload_boundary_core_var_index_update[local]:
+Theorem dload_boundary_core_var_index_update:
   dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
   dload_vars_match fs V G' H'
     (tn with t_var := tv) (un with t_var := uv)
@@ -106,4 +106,22 @@ Proof
     `phi_prefix_length b.bb_instructions`] assume_tac) >>
   qexistsl [`b`,`sp with vs_inst_idx := phi_prefix_length b.bb_instructions`] >>
   gvs[lookup_var_def]
+QED
+
+Theorem dload_boundary_core_index_update:
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core lo fs V Ws PG PH G H tn un
+    (s with vs_inst_idx := si) (t with vs_inst_idx := ti) cs ds
+Proof
+  strip_tac >>
+  `dload_vars_match fs V G H
+    (tn with t_var := tn.t_var) (un with t_var := un.t_var)
+    (s with <|vs_vars := s.vs_vars; vs_inst_idx := si|>)
+    (t with <|vs_vars := t.vs_vars; vs_inst_idx := ti|>)` by
+    (drule dload_boundary_vars >> simp[dload_vars_match_def, lookup_var_def]) >>
+  `s with <|vs_vars := s.vs_vars; vs_inst_idx := si|> = s with vs_inst_idx := si` by
+    simp[venom_state_component_equality] >>
+  `t with <|vs_vars := t.vs_vars; vs_inst_idx := ti|> = t with vs_inst_idx := ti` by
+    simp[venom_state_component_equality] >>
+  drule_all dload_boundary_core_var_index_update >> simp[]
 QED
