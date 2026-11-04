@@ -39,12 +39,14 @@ Proof
   simp[] >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem dse_mcopy_write_location:
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] ==>
+Theorem dse_copy_write_location:
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] ==>
   bp_get_write_location bp inst AddrSp_Memory =
     bp_segment_from_ops bp
       <|iao_ofst := op_dst; iao_size := SOME szop; iao_max_size := SOME szop|>
 Proof
+  simp[] >> strip_tac >>
   simp[bp_get_write_location_def, is_raw_fmp_opcode_def,
        write_effects_def, mem_write_ops_def]
 QED
@@ -64,27 +66,31 @@ Proof
   simp[bp_access_ops_def, mem_read_ops_def]
 QED
 
-Theorem dse_mcopy_write_region:
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] /\
+Theorem dse_copy_write_region:
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s ==>
   dse_region_matches (bp_get_write_location bp inst AddrSp_Memory)
     s (w2n a) (w2n n)
 Proof
-  strip_tac >> drule_all dse_mcopy_write_location >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all dse_copy_write_location >>
   disch_then (qspec_then `bp` SUBST1_TAC) >>
   irule bp_segment_region_matches >> simp[] >>
   qexistsl_tac [`inst`, `AddrSp_Memory`] >>
-  simp[bp_access_ops_def, mem_write_ops_def]
+  fs[bp_access_ops_def, mem_write_ops_def]
 QED
 
-Theorem dse_mcopy_write_size:
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] /\
+Theorem dse_copy_write_size:
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] /\
   eval_operand szop s = SOME n /\
   (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME k ==>
   k = w2n n
 Proof
-  strip_tac >> drule_all dse_mcopy_write_location >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all dse_copy_write_location >>
   disch_then (qspec_then `bp` assume_tac) >> gvs[] >>
   drule bp_segment_size_eval >> simp[] >> metis_tac[]
 QED
@@ -106,9 +112,10 @@ Proof
   fs[dse_local_agrees_def, dse_pending_space_def, dse_equiv_def, read_memory_def]
 QED
 
-Theorem dse_mcopy_clobber_covered:
+Theorem dse_copy_clobber_covered:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   MEM (loc,(b,m)) P /\ dse_inst_clobbers bp AddrSp_Memory loc inst ==>
@@ -118,15 +125,16 @@ Proof
   `?k. (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME k` by
     (fs[dse_inst_clobbers_def, completely_contains_def] >>
      Cases_on `(bp_get_write_location bp inst AddrSp_Memory).ml_size` >> fs[]) >>
-  drule_all dse_mcopy_write_region >> strip_tac >>
-  drule_all dse_mcopy_write_size >> strip_tac >> gvs[] >>
+  drule_all dse_copy_write_region >> strip_tac >>
+  drule_all dse_copy_write_size >> strip_tac >> gvs[] >>
   drule_all dse_pending_at_clobber_covered >> simp[]
 QED
 
-Theorem dse_mcopy_pending_memory_step:
+Theorem dse_copy_pending_memory_step:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
   EL idx bb.bb_instructions = inst /\
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   LENGTH bytes = w2n n ==>
@@ -137,7 +145,7 @@ Proof
   strip_tac >> irule dse_pending_at_allocas_extend >>
   qexists_tac `s` >> simp[write_memory_with_expansion_def] >>
   irule (SRULE [] dse_pending_at_overwrite_step) >> simp[] >>
-  rpt strip_tac >> drule_all dse_mcopy_clobber_covered >> simp[]
+  rpt strip_tac >> drule_all dse_copy_clobber_covered >> simp[]
 QED
 
 Theorem dse_local_agrees_mcopy_memory_step:
@@ -183,14 +191,15 @@ Proof
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion _ bytes _` >>
   `w2n n = LENGTH bytes` by simp[Abbr `bytes`, read_memory_def, LENGTH_TAKE_EQ] >>
   pop_assum SUBST1_TAC >>
-  irule dse_mcopy_pending_memory_step >>
+  irule dse_copy_pending_memory_step >>
   simp[read_memory_def, LENGTH_TAKE_EQ] >> metis_tac[]
 QED
 
-Theorem dse_mcopy_pending_insert_step:
+Theorem dse_copy_pending_insert_step:
   dse_pending_at cfg bp AddrSp_Memory fn bb idx P s /\
   EL idx bb.bb_instructions = inst /\
-  inst.inst_opcode = MCOPY /\ inst.inst_operands = [op_dst; src; szop] /\
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  inst.inst_operands = [op_dst; src; szop] /\
   eval_operand op_dst s = SOME a /\ eval_operand szop s = SOME n /\
   bp_ptr_sound bp s /\ bp_accesses_in_own_alloca bp inst s /\
   LENGTH bytes = w2n n /\
@@ -209,13 +218,13 @@ Proof
   `?k. (bp_get_write_location bp inst AddrSp_Memory).ml_size = SOME k` by
     (fs[ml_is_fixed_def] >>
      Cases_on `(bp_get_write_location bp inst AddrSp_Memory).ml_size` >> fs[]) >>
-  drule_all dse_mcopy_write_size >> strip_tac >>
-  drule_all dse_mcopy_write_region >> strip_tac >>
+  drule_all dse_copy_write_size >> strip_tac >>
+  drule_all dse_copy_write_region >> strip_tac >>
   `dse_pending_at cfg bp AddrSp_Memory fn bb (SUC idx)
     (FILTER (\(loc,(b,m)). ~(w2n a <= b /\ b+m <= w2n a+LENGTH bytes)) P) s` by
     (pure_rewrite_tac [DE_MORGAN_THM] >>
      irule (SRULE [] dse_pending_at_overwrite_step) >> simp[] >>
-     rpt strip_tac >> drule_all dse_mcopy_clobber_covered >> simp[]) >>
+     rpt strip_tac >> drule_all dse_copy_clobber_covered >> simp[]) >>
   gvs[arithmeticTheory.ADD_COMM] >>
   spose_not_then assume_tac >> `w2n n = 0` by decide_tac >> fs[]
 QED
@@ -252,19 +261,21 @@ Proof
       irule dse_local_agrees_inst_idx >>
       irule dse_local_agrees_memory_insert_cover >> simp[]) >>
   qpat_x_assum `s1 = _` SUBST1_TAC >>
-  irule dse_mcopy_pending_insert_step >> simp[] >> metis_tac[]
+  irule dse_copy_pending_insert_step >> simp[] >> metis_tac[]
 QED
 
-Theorem dse_mcopy_other_write_location:
-  inst.inst_opcode = MCOPY /\ sp <> AddrSp_Memory ==>
+Theorem dse_copy_other_write_location:
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  sp <> AddrSp_Memory ==>
   bp_get_write_location bp inst sp = ml_empty
 Proof
   strip_tac >> Cases_on `sp` >>
   fs[bp_get_write_location_def, is_raw_fmp_opcode_def, write_effects_def]
 QED
 
-Theorem dse_mcopy_other_pending_step:
-  inst.inst_opcode = MCOPY /\ sp <> AddrSp_Memory /\
+Theorem dse_copy_other_pending_step:
+  inst.inst_opcode IN {MCOPY; CALLDATACOPY; CODECOPY; DLOADBYTES} /\
+  sp <> AddrSp_Memory /\
   dse_pending_at cfg bp sp fn bb idx P s /\
   EL idx bb.bb_instructions = inst ==>
   dse_pending_at cfg bp sp fn bb (SUC idx) P
@@ -274,7 +285,7 @@ Proof
   qexists_tac `s` >> simp[write_memory_with_expansion_def] >>
   irule dse_pending_at_step >> simp[] >> rpt strip_tac >>
   drule_all dse_pending_at_member >> strip_tac >>
-  drule_all dse_mcopy_other_write_location >>
+  drule_all dse_copy_other_write_location >>
   disch_then (qspec_then `bp` assume_tac) >>
   fs[dse_inst_clobbers_def, ml_empty_def, completely_contains_def]
 QED
@@ -313,7 +324,7 @@ Proof
       irule dse_local_agrees_inst_idx >>
       irule dse_local_agrees_other_memory_write >> simp[]) >>
   qpat_x_assum `s1 = _` SUBST1_TAC >>
-  irule dse_mcopy_other_pending_step >> fs[]
+  irule dse_copy_other_pending_step >> fs[]
 QED
 
 Theorem dse_local_agrees_mcopy_step:
