@@ -621,19 +621,14 @@ QED
 
    Checked: entry_ret_family_wrapped_contracts supplies the three source
    contracts at n = SUC(dimword(:256)); get_params and has_retpc are exact
-   for arbitrary n.  The small_plan_* EVAL facts check that all-live RET
-   inputs produce no prefix code at n=1.  They do NOT prove that formula
-   for arbitrary n.
+   for arbitrary n.  The small_plan_* EVAL facts check the n=1 branch.
+   Checked subsequently: entry_ret_family_all_live proves membership for
+   every ordinary name and retpc at n+1.  entry_ret_family_prepare_params
+   proves the arbitrary-n empty-code formula from an empty symbolic stack;
+   entry_ret_family_prepare_cleanup simplifies the initialized state.
+   entry_ret_family_first_non_param checks RET is the first non-param.
 
-   Missing planner interface: prove every ordinary name and "retpc" is in
-   live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n+1).
-   Then prepare_params_plan_def 530-557, parameter_stack_fold and
-   popmany_plan_def's empty clause should give param_ops=[] and ps1 equal
-   to ps0 with its stack extended by the parameter outputs.  The first
-   non-param is RET, so optimistic_swap_plan_def 108-123 takes its initial
-   next_is_terminator branch.  This arbitrary-n formula is UNPROVED.
-
-   Conditional on that formula: init_cleanup_plan_state leaves the spill
+   Checked planner projections: init_cleanup_plan_state leaves the spill
    allocator and spilled map unchanged.  At spill_base=0 one may choose a
    context region with base=end=0 and matching function name; the frozen
    statement does not require a valid/well-formed context plan.  SOSpill
@@ -699,4 +694,76 @@ Proof
        entry_probe_params_def, EL_APPEND_EQN, inst_uses_def, mk_inst_def,
        passSharedDefsTheory.MEM_operand_vars_eq_Var, MEM_MAP] >>
   gvs[MEM_MAP]
+QED
+
+Theorem entry_ret_family_first_non_param[local]:
+  FIND (\inst. ~is_param_opcode inst.inst_opcode)
+    (HD (entry_ret_family n).fn_blocks).bb_instructions =
+  SOME (mk_inst (SUC n) RET
+    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])
+Proof
+  `!xs ys. EVERY (\inst. is_param_opcode inst.inst_opcode) xs ==>
+    FIND (\inst. ~is_param_opcode inst.inst_opcode) (xs ++ ys) =
+    FIND (\inst. ~is_param_opcode inst.inst_opcode) ys` by
+    (Induct >> simp[FIND_thm] >> rpt strip_tac >> gvs[FIND_thm]) >>
+  simp[entry_ret_family_def, entry_probe_params_def, EVERY_GENLIST,
+       mk_inst_def, is_param_opcode_def, FIND_thm]
+QED
+
+Theorem entry_ret_family_prepare_params:
+  !n ps. ps.ps_stack = [] ==>
+    prepare_params_plan (liveness_analyze (entry_ret_family n))
+      (entry_ret_family n) ps =
+    ([], FOLDL (\s inst. s with ps_stack :=
+        stack_push (Var (HD inst.inst_outputs)) s.ps_stack)
+      ps (entry_probe_params n ++
+        [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]))
+Proof
+  rpt strip_tac >>
+  `FILTER (\v. ~MEM (operand_to_string v)
+      (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n+1)))
+    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) = []` by
+    (simp[FILTER_EQ_NIL, EVERY_MEM, MEM_MAP, operand_to_string_def] >>
+     rpt strip_tac >> gvs[] >> irule entry_ret_family_all_live >> simp[MEM_MAP, operand_to_string_def] >>
+     metis_tac[]) >>
+  simp[prepare_params_plan_def, entry_ret_family_get_params,
+       entry_ret_family_first_non_param, parameter_stack_fold,
+       stackPlanOpsTheory.popmany_plan_def, optimistic_swap_plan_def,
+       entry_probe_params_def, MAP_MAP_o, combinTheory.o_DEF,
+       mk_inst_def, is_terminator_def] >>
+  `(HD (entry_ret_family n).fn_blocks).bb_label = "entry"` by
+    simp[entry_ret_family_def] >>
+  gvs[MAP_GENLIST, combinTheory.o_DEF, stackPlanOpsTheory.popmany_plan_def]
+QED
+
+Theorem entry_ret_family_prepare_cleanup:
+  prepare_params_plan (liveness_analyze (entry_ret_family n))
+    (entry_ret_family n) (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+  ([], (init_cleanup_plan_state ch growth spill_base lbl_ctr) with ps_stack :=
+    MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"])
+Proof
+  qspec_then `n` mp_tac entry_ret_family_prepare_params >>
+  disch_then (qspec_then `init_cleanup_plan_state ch growth spill_base lbl_ctr` mp_tac) >>
+  simp[init_cleanup_plan_state_def, init_plan_state_def, parameter_stack_fold,
+       entry_probe_params_def, MAP_GENLIST, mk_inst_def, combinTheory.o_DEF]
+QED
+
+Theorem entry_ret_family_prepare_alloc:
+  ps.ps_stack = [] /\
+  prepare_params_plan (liveness_analyze (entry_ret_family n))
+    (entry_ret_family n) ps = (ops, ps') ==>
+  ps'.ps_alloc = ps.ps_alloc
+Proof
+  strip_tac >> drule entry_ret_family_prepare_params >>
+  simp[parameter_stack_fold] >> strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_family_prepare_spilled:
+  ps.ps_stack = [] /\
+  prepare_params_plan (liveness_analyze (entry_ret_family n))
+    (entry_ret_family n) ps = (ops, ps') ==>
+  ps'.ps_spilled = ps.ps_spilled
+Proof
+  strip_tac >> drule entry_ret_family_prepare_params >>
+  simp[parameter_stack_fold] >> strip_tac >> gvs[]
 QED
