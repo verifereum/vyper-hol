@@ -3429,6 +3429,237 @@ Proof
   end
 QED
 
+Theorem aug_place_compile_expr_body_builtin_generic:
+  bi <> AddMod /\ bi <> MulMod /\ bi <> PowMod256 ==>
+  compile_expr_body f b d cenv ty (Builtin rty bi args) st =
+  b cenv rty ty bi args st
+Proof
+  strip_tac >> namedCases_on `args` ["", "aa t1"]
+  >- simp[exprLoweringTheory.compile_expr_body_def, expr_type_def] >>
+  Cases_on `aa`
+  >~ [`Name aty aid`] >-
+    (namedCases_on `t1` ["", "bb t2"]
+     >- simp[exprLoweringTheory.compile_expr_body_def, expr_type_def] >>
+     Cases_on `bb`
+     >~ [`b cenv rty ty bi (Name aty aid::Name bty bid::t2) st`] >-
+       (namedCases_on `t2` ["", "cc t3"]
+        >- (simp[exprLoweringTheory.compile_expr_body_def, expr_type_def] >>
+            gvs[AllCaseEqs()] >> csimp[] >> metis_tac[vyperASTTheory.builtin_nchotomy]) >>
+        Cases_on `cc`
+        >~ [`b cenv rty ty bi (Name aty aid::Name bty bid::Name cty cid::t3) st`] >-
+          (Cases_on `t3` >>
+           simp[exprLoweringTheory.compile_expr_body_def, expr_type_def] >>
+           gvs[AllCaseEqs()] >> csimp[] >> metis_tac[vyperASTTheory.builtin_nchotomy]) >>
+        simp[exprLoweringTheory.compile_expr_body_def, expr_type_def] >>
+        gvs[AllCaseEqs()] >> csimp[] >> metis_tac[vyperASTTheory.builtin_nchotomy]) >>
+     simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+
+Theorem aug_place_expr_body_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  (supportedExprs$supported_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_place_expr tops e) /\
+  (!x ty. (supportedExprs$supported_expr tops x \/ supported_place_expr tops x \/
+           supported_effect_place_expr tops x) ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty x = g cenv ty x) /\
+  (!rt ty bi args. supported_builtin_form tops rt bi args /\ supported_pure_exprs tops args ==>
+    b (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty bi args =
+    b' cenv rt ty bi args) /\
+  (!rt ty tb target args.
+    supported_type_builtin_form tops rt tb target args /\ supported_pure_exprs tops args ==>
+    d (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty tb target args =
+    d' cenv rt ty tb target args) ==>
+  compile_expr_body f b d
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e st =
+  compile_expr_body g b' d' cenv ty e st
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> Cases_on `e`
+  >~ [`Name nty id`] >-
+    simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+         SRULE [] aug_place_name_metadata]
+  >~ [`Literal lty lit`] >-
+    simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+  >~ [`TopLevelName tty id`] >-
+    simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+  >~ [`FlagMember fty id mem`] >-
+    simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+  >~ [`Attribute aty be fld`] >- suspend "attribute"
+  >~ [`Subscript aty be ix`] >- suspend "subscript"
+  >~ [`IfExp ity cond yes no`] >- suspend "ifexp"
+  >~ [`StructLit sty id fields`] >- suspend "structlit"
+  >~ [`Call cty target args dr`] >- suspend "call"
+  >~ [`Pop pty target`] >- suspend "pop"
+  >~ [`TypeBuiltin rty tb target args`] >- suspend "typebuiltin"
+  >~ [`Builtin rty bi args`] >- suspend "builtin"
+QED
+
+Resume aug_place_expr_body_metadata[attribute]:
+  `!ety. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety be =
+         g cenv ety be` by
+    (gvs[supportedExprsTheory.supported_expr_def,
+         supportedExprsTheory.supported_pure_expr_def,
+         supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]) >>
+  drule aug_place_attribute_metadata >> strip_tac >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+
+Resume aug_place_expr_body_metadata[subscript]:
+  `compile_subscript f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+      aty ty be ix = compile_subscript g cenv aty ty be ix` by
+    (irule aug_place_subscript_metadata >>
+     gvs[supportedExprsTheory.supported_expr_def,
+         supportedExprsTheory.supported_pure_expr_def,
+         supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+
+Resume aug_place_expr_body_metadata[ifexp]:
+  `!x ety. (x = cond \/ x = yes \/ x = no) ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety x =
+    g cenv ety x` by
+    (gvs[supportedExprsTheory.supported_expr_def,
+         supportedExprsTheory.supported_pure_expr_def,
+         supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]) >>
+  `!x ety. (x = cond \/ x = yes \/ x = no) ==>
+    lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety x =
+    lower_value g cenv ety x` by
+    (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[structlit]:
+  `!name x ety. MEM (name,x) fields ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety x =
+    g cenv ety x` by
+    (gvs[supportedExprsTheory.supported_expr_def,
+         supportedExprsTheory.supported_pure_expr_def,
+         supportedExprsTheory.supported_effect_expr_def,
+         supportedExprsTheory.supported_pure_fields_every, EVERY_MEM] >>
+     metis_tac[pairTheory.SND]) >>
+  `!buf off. compile_struct_lit f
+      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+      (StructT id) fields buf off = compile_struct_lit g cenv (StructT id) fields buf off` by
+    (rpt gen_tac >> irule aug_place_struct_lit_metadata >> gvs[] >> metis_tac[]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[call]:
+  `supported_effect_expr tops (Call cty target args dr)` by
+    gvs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_expr_def,
+        supportedExprsTheory.supported_effect_expr_def] >>
+  `dr = NONE /\ supported_pure_exprs tops args` by
+    (Cases_on `dr` >> Cases_on `target` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def, AllCaseEqs(),
+         supportedExprsTheory.supported_pure_expr_def]
+     >~ [`ExtCall static skip sig opts`] >-
+       (PairCases_on `sig` >> gvs[supportedExprsTheory.supported_effect_expr_def]) >>
+     rename1 `Send gas` >> Cases_on `gas` >> Cases_on `cty` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def] >>
+     Cases_on `args` >> gvs[supportedExprsTheory.supported_effect_expr_def] >>
+     rename1 `a::rest` >> Cases_on `rest` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def] >>
+     rename1 `a::v::tail` >> Cases_on `tail` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def,
+         supportedExprsTheory.supported_pure_expr_def] >>
+     rename1 `a::v::gas_e::last` >> Cases_on `last` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def,
+         supportedExprsTheory.supported_pure_expr_def]) >>
+  `compile_call f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+      cty ty target args dr = compile_call g cenv cty ty target args dr` by
+    (irule aug_place_call_metadata >> gvs[] >>
+     gvs[supportedExprsTheory.supported_pure_exprs_every, EVERY_MEM] >>
+     metis_tac[supportedExprsTheory.supported_expr_def]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[pop]:
+  Cases_on `target` >>
+  gvs[supportedExprsTheory.supported_expr_def,
+      supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def] >>
+  `compile_get_target_ptr f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+     (TopLevelNameTarget p) = compile_get_target_ptr g cenv (TopLevelNameTarget p)` by
+    (irule aug_place_pop_ptr_metadata >> metis_tac[]) >>
+  gvs[] >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+       SRULE [] aug_place_elem_size_metadata]
+QED
+Resume aug_place_expr_body_metadata[typebuiltin]:
+  `supported_type_builtin_form tops rty tb target args /\ supported_pure_exprs tops args` by
+    gvs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_expr_def,
+        supportedExprsTheory.supported_effect_expr_def] >>
+  `d (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rty ty tb target args =
+   d' cenv rty ty tb target args` by metis_tac[] >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[builtin]:
+  `supported_builtin_form tops rty bi args /\ supported_pure_exprs tops args` by
+    gvs[supportedExprsTheory.supported_expr_def,
+        supportedExprsTheory.supported_pure_expr_def,
+        supportedExprsTheory.supported_effect_expr_def] >>
+  `b (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rty ty bi args =
+   b' cenv rty ty bi args` by metis_tac[] >>
+  qpat_x_assum `supported_expr tops _ \/ _` kall_tac >>
+  qpat_x_assum `!x ty. (supported_expr tops x \/ _) ==> _` kall_tac >>
+  qpat_x_assum `!rt ty bi args. supported_builtin_form tops rt bi args /\ _ ==> _` kall_tac >>
+  qpat_x_assum `!rt ty tb target args. supported_type_builtin_form tops rt tb target args /\ _ ==> _` kall_tac >>
+  qpat_x_assum `supported_pure_exprs tops args` kall_tac >>
+  Cases_on `bi`
+  >~ [`AddMod`] >- suspend "addmod"
+  >~ [`MulMod`] >- suspend "mulmod"
+  >~ [`PowMod256`] >- suspend "powmod" >>
+  gvs[] >> simp[aug_place_compile_expr_body_builtin_generic]
+QED
+Resume aug_place_expr_body_metadata[addmod]:
+  namedCases_on `args` ["", "aa t1"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  namedCases_on `t1` ["", "bb t2"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  namedCases_on `t2` ["", "cc t3"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `t3` >> gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `aa`
+  >~ [`Name aty aid`] >-
+    (Cases_on `bb` >~ [`Builtin rty AddMod [Name aty aid; Name bty bid; cc]`] >-
+      (Cases_on `cc` >>
+       simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+            SRULE [] aug_place_addmod_names_metadata]) >>
+     simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[mulmod]:
+  namedCases_on `args` ["", "aa t1"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  namedCases_on `t1` ["", "bb t2"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  namedCases_on `t2` ["", "cc t3"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `t3` >> gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `aa`
+  >~ [`Name aty aid`] >-
+    (Cases_on `bb` >~ [`Builtin rty MulMod [Name aty aid; Name bty bid; cc]`] >-
+      (Cases_on `cc` >>
+       simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+            SRULE [] aug_place_mulmod_names_metadata]) >>
+     simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Resume aug_place_expr_body_metadata[powmod]:
+  namedCases_on `args` ["", "aa t1"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  namedCases_on `t1` ["", "bb t2"] >>
+  gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `t2` >> gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+  Cases_on `aa`
+  >~ [`Name aty aid`] >-
+    (Cases_on `bb` >>
+     simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+          SRULE [] aug_place_powmod_names_metadata]) >>
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+QED
+Finalise aug_place_expr_body_metadata
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
