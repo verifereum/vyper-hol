@@ -116,3 +116,103 @@ Proof
    conj_tac >- gvs[ld_nonghost_def, mstore_def] >>
    simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mstore_def])
 QED
+
+Theorem ld_mstore8_as_write[local]:
+  mstore8 off x s = write_memory_with_expansion off [(w2w x : word8)] s
+Proof
+  simp[mstore8_def, write_memory_with_expansion_def]
+QED
+
+Theorem ld_mstore8_step[local]:
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [a;v] /\
+  eval_operand a s = SOME dst /\ eval_operand v s = SOME x ==>
+  step_inst_base inst s = OK (mstore8 (w2n dst) x s)
+Proof
+  strip_tac >> pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >>
+  simp[exec_write2_def, eval_operands_def]
+QED
+
+Theorem ld_mstore8_taint[local]:
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [a;v] /\
+  inst.inst_outputs = [] /\ eval_operand a s = SOME dst /\
+  eval_operand v s = SOME x ==>
+  step_taint inst s (mstore8 (w2n dst) x s) tn =
+    tn with t_mem := tn.t_mem DIFF {w2n dst}
+Proof
+  strip_tac >>
+  simp[step_taint_def, mem_taint_def, written_taint_def, step_writes_def,
+       new_site_bytes_def, source_memory_write_ranges_def, range_bytes_def,
+       mstore8_def, set_var_taint_def, store_taint_def,
+       adopt_reset_def, imm_taint_def, taint_component_equality,
+       FLOOKUP_DEF, DRESTRICT_UNIV, fixed_source_write_range_def] >>
+  gvs[EXTENSION] >> qx_gen_tac `i` >>
+  `w2n dst <= i /\ i < w2n dst+1 <=> i = w2n dst` by decide_tac >>
+  metis_tac[]
+QED
+
+Theorem ld_mstore8_effect:
+  ld_vars P A f /\ tn.t_var = f.lf_tv /\
+  inst.inst_opcode = MSTORE8 /\ inst.inst_operands = [a;v] /\
+  inst.inst_outputs = [] /\
+  eval_operand a f.lf_src = SOME dst /\
+  eval_operand a f.lf_tgt = SOME dst' /\
+  eval_operand v f.lf_src = SOME x /\
+  eval_operand v f.lf_tgt = SOME y /\
+  (w2w x : word8) = w2w y /\
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames /\
+  ((w2n dst+1 <= lo /\ dst'=dst) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     w2n dst=b+delta /\ w2n dst'=c+delta /\ delta+1 <= sz)) /\
+  step_inst_base inst f.lf_tgt = OK ts /\
+  ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt ==>
+  ?ss. step_inst_base inst f.lf_src = OK ss /\
+    ld_vars P A (f with <| lf_src := ss; lf_tgt := ts;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var |> ) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q)
+      (ld_erase A o_f f.lf_H) inst ss = ld_erase A o_f f.lf_H /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\
+    ss.vs_params = f.lf_src.vs_params /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\
+    ss.vs_prev_bb = f.lf_src.vs_prev_bb /\
+    ss.vs_inst_idx = f.lf_src.vs_inst_idx /\
+    ss.vs_labels = f.lf_src.vs_labels /\
+    ss.vs_return_pc_token = f.lf_src.vs_return_pc_token /\
+    ts.vs_allocas = f.lf_tgt.vs_allocas /\
+    ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ts.vs_params = f.lf_tgt.vs_params /\
+    ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
+    ts.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+    ts.vs_inst_idx = f.lf_tgt.vs_inst_idx /\
+    ts.vs_labels = f.lf_tgt.vs_labels /\
+    ts.vs_return_pc_token = f.lf_tgt.vs_return_pc_token
+Proof
+  strip_tac >>
+  `step_inst_base inst f.lf_src = OK (mstore8 (w2n dst) x f.lf_src)` by
+    (irule ld_mstore8_step >> simp[]) >>
+  `step_inst_base inst f.lf_tgt = OK (mstore8 (w2n dst') y f.lf_tgt)` by
+    (irule ld_mstore8_step >> simp[]) >>
+  `step_taint inst f.lf_src (mstore8 (w2n dst) x f.lf_src) tn =
+     tn with t_mem := tn.t_mem DIFF {w2n dst}` by
+    (irule ld_mstore8_taint >> simp[]) >>
+  qexists_tac `mstore8 (w2n dst) x f.lf_src` >> gvs[] >>
+  (conj_tac >- gvs[ld_vars_def, mstore8_def] >>
+   conj_tac >- (
+     rewrite_tac[ld_mstore8_as_write] >>
+     FIRST [
+       (qpat_assum `w2n dst + 1 <= lo` kall_tac >> irule ld_memory_write_low),
+       irule ld_memory_write_slot] >>
+     conj_tac >- metis_tac[ld_alloc_bounds] >>
+     FIRST [
+       (qpat_assum `w2n dst + 1 <= lo` kall_tac >>
+        qexistsl_tac [`{}`, `1`, `tn`]),
+       qexistsl_tac [`{}`, `k`, `1`, `sz`, `tn`]] >>
+     simp[EXTENSION] >> rpt strip_tac >>
+     `0 < sz` by decide_tac >> metis_tac[ld_alloc_separate]) >>
+   conj_tac >- gvs[ld_nonghost_def, mstore8_def] >>
+   simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mstore8_def])
+QED
