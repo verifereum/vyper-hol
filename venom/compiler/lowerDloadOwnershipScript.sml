@@ -157,3 +157,237 @@ QED
    The nonallocation boundary above is stronger than the requested static
    source interface: DALLOCA changes FMP, not the static allocation fields.
 *)
+
+(* Annotated static provenance. The owner is selected, never recovered by
+   comparing numeric sites. PHIs always read the unchanged input map. *)
+Definition ld_erase_def:
+  ld_erase (AG:('a, (num # num) # (num # num)) fmap) = SND o_f AG
+End
+
+Definition ld_op_prov_def:
+  ld_op_prov (AG:(string, (num # num) # (num # num)) fmap) op =
+    case op of Var u => FLOOKUP AG u | _ => NONE
+End
+
+Definition ld_first_prov_def:
+  ld_first_prov AG [] = NONE /\
+  ld_first_prov AG (op::ops) =
+    case ld_op_prov AG op of
+      SOME site => SOME site
+    | NONE => ld_first_prov AG ops
+End
+
+Definition ld_set_prov_def:
+  ld_set_prov (AG:(string, (num # num) # (num # num)) fmap) outs p =
+    case (outs,p) of
+      ([out], SOME site) => AG |+ (out,site)
+    | _ => DRESTRICT AG (COMPL (set outs))
+End
+
+Definition ld_out_prov_def:
+  ld_out_prov AP AG (L:(num, (num # num) # (num # num)) fmap) inst =
+    if inst.inst_opcode = ALLOCA then FLOOKUP L inst.inst_id
+    else if inst.inst_opcode = PARAM then
+      (case inst.inst_operands of
+         [Lit idx] => if w2n idx < LENGTH AP then EL (w2n idx) AP else NONE
+       | _ => NONE)
+    else if inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN
+    then ld_first_prov AG inst.inst_operands
+    else NONE
+End
+
+Definition ld_step_prov_def:
+  ld_step_prov AP AG L inst =
+    ld_set_prov AG inst.inst_outputs (ld_out_prov AP AG L inst)
+End
+
+Definition ld_phi_prov_def:
+  ld_phi_prov prev AG inst =
+    case prev of
+      NONE => NONE
+    | SOME lbl =>
+        case resolve_phi lbl inst.inst_operands of
+          SOME op => ld_op_prov AG op
+        | NONE => NONE
+End
+
+Definition ld_phis_prov_def:
+  ld_phis_prov prev AG [] = AG /\
+  ld_phis_prov prev AG (inst::rest) =
+    if inst.inst_opcode <> PHI then AG
+    else ld_set_prov (ld_phis_prov prev AG rest) inst.inst_outputs
+                     (ld_phi_prov prev AG inst)
+End
+
+Definition ld_entry_prov_def:
+  ld_entry_prov fn s AG =
+    case lookup_block s.vs_current_bb fn.fn_blocks of
+      SOME bb => ld_phis_prov s.vs_prev_bb AG bb.bb_instructions
+    | NONE => AG
+End
+
+Theorem ld_erase_lookup[simp]:
+  FLOOKUP (ld_erase AG) x = OPTION_MAP SND (FLOOKUP AG x)
+Proof
+  Cases_on `FLOOKUP AG x` >> simp[ld_erase_def, FLOOKUP_o_f]
+QED
+
+Theorem ld_erase_op_prov:
+  OPTION_MAP SND (ld_op_prov AG op) = op_prov (ld_erase AG) op
+Proof
+  Cases_on `op` >> simp[ld_op_prov_def, op_prov_def]
+QED
+
+Theorem ld_erase_first_prov:
+  !ops. OPTION_MAP SND (ld_first_prov AG ops) =
+        first_prov (ld_erase AG) ops
+Proof
+  Induct >> simp[ld_first_prov_def, first_prov_def,
+                 GSYM ld_erase_op_prov] >>
+  Cases_on `ld_op_prov AG h` >> simp[]
+QED
+
+Theorem ld_erase_restrict:
+  ld_erase (DRESTRICT AG keys) = DRESTRICT (ld_erase AG) keys
+Proof
+  simp[fmap_eq_flookup, FUN_EQ_THM, FLOOKUP_DRESTRICT] >>
+  gen_tac >> Cases_on `x IN keys` >> simp[]
+QED
+
+Theorem ld_erase_update:
+  ld_erase (AG |+ (x,site)) = ld_erase AG |+ (x,SND site)
+Proof
+  simp[ld_erase_def, o_f_FUPDATE]
+QED
+
+Theorem ld_erase_set_prov:
+  ld_erase (ld_set_prov AG outs p) =
+  set_prov (ld_erase AG) outs (OPTION_MAP SND p)
+Proof
+  simp[ld_set_prov_def, set_prov_def] >>
+  Cases_on `outs` >- simp[ld_erase_restrict] >>
+  Cases_on `t` >> Cases_on `p` >>
+  simp[ld_erase_update, ld_erase_restrict]
+QED
+
+Theorem ld_erase_out_prov:
+  i.inst_opcode <> DALLOCA /\ ld_erase L = s.vs_allocas ==>
+  OPTION_MAP SND (ld_out_prov AP AG L i) =
+  out_prov (MAP (OPTION_MAP SND) AP) (ld_erase AG) i s
+Proof
+  strip_tac >> Cases_on `i.inst_opcode = ALLOCA`
+  >- (simp[ld_out_prov_def, out_prov_def] >>
+      qpat_x_assum `ld_erase L = _` (fn th => rewrite_tac[GSYM th]) >>
+      simp[]) >>
+  Cases_on `i.inst_opcode = PARAM`
+  >- (simp[ld_out_prov_def, out_prov_def] >>
+      Cases_on `i.inst_operands` >- simp[] >>
+      Cases_on `t` >> simp[] >> Cases_on `h` >> simp[] >>
+      rename1 `Lit idx` >> Cases_on `w2n idx < LENGTH AP` >> simp[EL_MAP]) >>
+  simp[ld_out_prov_def, out_prov_def, ld_erase_first_prov] >>
+  Cases_on `i.inst_opcode = ADD \/ i.inst_opcode = SUB \/
+            i.inst_opcode = ASSIGN` >> simp[ld_erase_first_prov]
+QED
+
+Theorem ld_erase_step_prov:
+  i.inst_opcode <> DALLOCA /\ ld_erase L = s.vs_allocas ==>
+  ld_erase (ld_step_prov AP AG L i) =
+  step_prov (MAP (OPTION_MAP SND) AP) (ld_erase AG) i s
+Proof
+  strip_tac >> drule_all ld_erase_out_prov >>
+  simp[ld_step_prov_def, step_prov_def, ld_erase_set_prov]
+QED
+
+Theorem ld_erase_phi_prov:
+  OPTION_MAP SND (ld_phi_prov prev AG i) =
+  phi_prov prev (ld_erase AG) i
+Proof
+  Cases_on `prev` >> simp[ld_phi_prov_def, phi_prov_def] >>
+  Cases_on `resolve_phi x i.inst_operands` >> simp[ld_erase_op_prov]
+QED
+
+Theorem ld_erase_phis_prov:
+  !is. ld_erase (ld_phis_prov prev AG is) =
+       phis_prov prev (ld_erase AG) is
+Proof
+  Induct >> simp[ld_phis_prov_def, phis_prov_def,
+                 ld_erase_set_prov, ld_erase_phi_prov] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[ld_erase_set_prov,
+                                        ld_erase_phi_prov]
+QED
+
+Theorem ld_erase_entry_prov:
+  ld_erase (ld_entry_prov fn s AG) = entry_prov fn s (ld_erase AG)
+Proof
+  simp[ld_entry_prov_def, entry_prov_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  simp[ld_erase_phis_prov]
+QED
+
+Theorem ld_op_prov_selected:
+  ld_op_prov AG op = SOME site ==> ?v. FLOOKUP AG v = SOME site
+Proof
+  Cases_on `op` >> simp[ld_op_prov_def] >> metis_tac[]
+QED
+
+Theorem ld_phi_prov_selected:
+  ld_phi_prov prev AG i = SOME site ==> ?v. FLOOKUP AG v = SOME site
+Proof
+  Cases_on `prev` >> simp[ld_phi_prov_def] >>
+  Cases_on `resolve_phi x i.inst_operands` >> simp[] >>
+  metis_tac[ld_op_prov_selected]
+QED
+
+Theorem ld_set_prov_selected:
+  FLOOKUP (ld_set_prov AG outs p) v = SOME site ==>
+  FLOOKUP AG v = SOME site \/ p = SOME site
+Proof
+  Cases_on `outs` >- simp[ld_set_prov_def, FLOOKUP_DRESTRICT] >>
+  Cases_on `t` >> Cases_on `p` >>
+  simp[ld_set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_phis_prov_selected:
+  !is v site. FLOOKUP (ld_phis_prov prev AG is) v = SOME site ==>
+    ?u. FLOOKUP AG u = SOME site
+Proof
+  Induct >- (simp[ld_phis_prov_def] >> metis_tac[]) >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[ld_phis_prov_def] >> strip_tac >>
+      drule ld_set_prov_selected >> strip_tac
+      >- metis_tac[] >>
+      metis_tac[ld_phi_prov_selected]) >>
+  simp[ld_phis_prov_def] >> metis_tac[]
+QED
+
+Theorem ld_entry_prov_selected:
+  FLOOKUP (ld_entry_prov fn s AG) v = SOME site ==>
+  ?u. FLOOKUP AG u = SOME site
+Proof
+  simp[ld_entry_prov_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  simp[] >> metis_tac[ld_phis_prov_selected]
+QED
+
+Theorem ld_param_prov_selected:
+  i.inst_opcode = PARAM /\ i.inst_operands = [Lit idx] ==>
+  ld_out_prov AP AG L i =
+    if w2n idx < LENGTH AP then EL (w2n idx) AP else NONE
+Proof
+  simp[ld_out_prov_def]
+QED
+
+(* A swap is the adversarial parallel-PHI test: the second source must
+   not see the first output update. Distinct output names select the two
+   old sites even when their source names are each other's destinations. *)
+Theorem ld_two_phis_parallel:
+  i.inst_opcode = PHI /\ j.inst_opcode = PHI /\
+  i.inst_outputs = [x] /\ j.inst_outputs = [y] /\ x <> y /\
+  ld_phi_prov prev AG i = SOME a /\ ld_phi_prov prev AG j = SOME b ==>
+  FLOOKUP (ld_phis_prov prev AG [i;j]) x = SOME a /\
+  FLOOKUP (ld_phis_prov prev AG [i;j]) y = SOME b
+Proof
+  simp[ld_phis_prov_def, ld_set_prov_def, FLOOKUP_UPDATE]
+QED
