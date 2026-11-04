@@ -3376,10 +3376,17 @@ Theorem view_lock_prefix_execution:
           (INR (Error (RuntimeError msg)),
            st with storage_trace := st.storage_trace ++ observations)
 Proof
-  strip_tac >> Cases_on `cx.nonreentrant_slot` >> Cases_on `nr` >>
-  gvs[lock_if_nr_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rw[acquire_nonreentrant_lock_def, get_transient_storage_def,
-     bind_def, ignore_bind_def, return_def, raise_def]
+  strip_tac >> reverse (Cases_on `nr`)
+  >- (qexists_tac `[]` >>
+      simp[lock_if_nr_def, ignore_bind_def, vyperStateTheory.bind_def,
+           vyperStateTheory.return_def]) >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
+  rename1 `cx.nonreentrant_slot = SOME slot` >>
+  qexists_tac `[StorageLock slot]` >>
+  simp[lock_if_nr_def, acquire_nonreentrant_lock_def,
+       record_storage_event_def, get_transient_storage_def,
+       bind_def, ignore_bind_def, vyperStateTheory.return_def] >>
+  IF_CASES_TAC >> simp[vyperStateTheory.raise_def, vyperStateTheory.return_def]
 QED
 
 Theorem call_external_function_view_success_without_lock:
