@@ -1,5 +1,6 @@
 Theory stmtSimLogArgsRun
 Ancestors
+  loweringPosts
   stmtSimLogArgs stmtSimLogArgsGrowth exprReasonOperand exprOperandVar
   exprSimWordArgs supportedTypes exprSim exprSimOps
   loweringSlice exprLoweringProps freshWrites fragExec emitHelperProps varsExt compileEnv

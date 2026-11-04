@@ -1,5 +1,6 @@
 Theory exprSimIfExpCompat
 Ancestors
+  loweringPosts
   list rich_list finite_map marker exprSimHyps exprSafeOperand
   exprLowering compileEnv context vyperAST vyperValue
 Libs

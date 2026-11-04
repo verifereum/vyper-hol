@@ -16,6 +16,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set
   fragExec exprSim exprSimLeaves exprSimOps stmtSim stmtSimAssign stmtSimAssignMem
   stmtSimAssignStorage exprSimHash exprOperandVar stmtSimDecl vyperExprNoControl

@@ -17,6 +17,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  loweringPosts
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   localPtrsProps compileEnv valueEncoding valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState

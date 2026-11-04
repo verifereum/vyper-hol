@@ -1,6 +1,7 @@
 (* Captured argument ownership across the first actual-site Log allocation. *)
 Theory stmtSimLogSourceAllocate
 Ancestors
+  loweringPosts
   stmtSimLogAllocate stmtSimLogDataFrame stmtSimLogDataRun stmtSimLogArgs
   abiBuiltinAllocation abiDecoderReentry exprSimWordArgs exprSim
   exprLoweringProps compileEnv venomState venomMemDefs valueTypingMemoryProps

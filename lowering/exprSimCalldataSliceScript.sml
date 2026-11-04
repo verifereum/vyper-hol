@@ -21,6 +21,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  loweringPosts
   exprSimAlloc
   allocLimits
   list fragExec loweringSlice builtinBytes exprSim exprSimHyps exprBopLowering

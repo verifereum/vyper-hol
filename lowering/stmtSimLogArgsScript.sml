@@ -1,6 +1,7 @@
 (* Frame interfaces for typed log arguments. *)
 Theory stmtSimLogArgs
 Ancestors
+  loweringPosts
   exprSim exprSimOps exprSimOperands compileEnv venomState stmtLowering
   exprSimWordArgs
 

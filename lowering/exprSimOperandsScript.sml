@@ -40,6 +40,7 @@
 
 Theory exprSimOperands
 Ancestors
+  loweringPosts
   finite_map
   exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps
   valueEncodingProofs venomState venomInst

@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  loweringPosts
   exprSimAlloc
   allocLimits
   list exprSim exprSimHyps exprSimConvert exprLowering compileEnv

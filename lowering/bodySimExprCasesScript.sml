@@ -24,7 +24,7 @@
 Theory bodySimExprCases
 Ancestors
   list bodySim exprSim exprSimHyps exprSimOperators exprSimAttribute
-  exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
+  exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph
 
 (* With no internal call in it, an expression simulates by
@@ -360,18 +360,36 @@ Proof
   irule compile_bop_args_case >> gvs[]
 QED
 
-(* GAP (#636 operands with internal calls): pop on a nested target whose
-   subscript key makes an internal call.  Blocked on the target/place
-   judgment that exprSimPlaces' compile_pop_nested_sim needs, here for
-   indices that make internal calls: the induction hypotheses give only
-   body_base_target_ok of the target. *)
+(* RESIDUAL (target metadata): the target's fragment judgment in the body,
+   where an index may make an internal call.  target_case_all gives
+   target_sim from body_base_target_ok's index judgments and target_pre,
+   whose target_env_ok asks for every module's storage and mapping
+   declarations to be in the compile environment's tables, which body_inv
+   gives for the main module only (exprSimPopNested's
+   pop_nested_expr_target_frag has the same gap). *)
+Theorem body_pop_nested_target_frag:
+  !cx bt tops ctx func cenv env ann es.
+    body_base_target_ok cx bt /\ body_inv tops ctx cenv cx /\
+    expr_body_pre cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
+    pop_target_frag ctx func cenv cx env bt es
+Proof
+  cheat
+QED
+
+(* pop on a nested target: exprSimPopNested's pop_nested_sim, by the
+   target's root, with the target's fragment judgment from
+   body_pop_nested_target_frag. *)
 Theorem body_pop_nested_case:
   !cx v10 bt.
     (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
     body_base_target_ok cx bt ==>
     body_expr_ok cx (Pop v10 bt)
 Proof
-  rpt strip_tac >> irule body_expr_ok_intro >> cheat
+  rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
+  `expr_vv_case F ctx func cenv cx (Pop v10 bt)` by
+    (rw[expr_vv_case_def] >> irule pop_nested_sim >> qexists_tac `env` >> simp[] >>
+     strip_tac >> irule body_pop_nested_target_frag >> metis_tac[]) >>
+  simp[expr_sim_case_of_vv]
 QED
 
 (* pop on a local: exprSimPlaces' compile_pop_name_case; on a module

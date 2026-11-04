@@ -34,6 +34,7 @@
 
 Theory exprSimConvert
 Ancestors
+  loweringPosts
   allocLimits exprSimUnop
   arithmetic list integer words integer_word
   fragExec varsExt exprSim freshWrites exprSimOps exprSimArith

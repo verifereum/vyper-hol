@@ -21,6 +21,7 @@
 
 Theory memoryLocalRhsProps
 Ancestors
+  loweringPosts
   compileEnv exprLowering stmtLowering vyperTypeSystem exprSimAggregates
   vyperAST vyperInterpreter vyperValue vyperState exprSim
   exprSimAggregateSource vyperValueOperation abiCallerAbiBound supportedTypes

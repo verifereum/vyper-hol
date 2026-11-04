@@ -50,6 +50,7 @@
 
 Theory exprSimTuple
 Ancestors
+  loweringPosts
   list rich_list finite_map pair
   fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimAggregateLayout exprSimAttributeFields exprSimAttribute

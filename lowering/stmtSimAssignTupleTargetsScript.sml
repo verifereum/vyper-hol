@@ -1,6 +1,7 @@
 (* General tuple assignment simulation. *)
 Theory stmtSimAssignTupleTargets
 Ancestors
+  loweringPosts
   tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
   tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple stmtSim
   exprSim exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites

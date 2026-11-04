@@ -234,6 +234,7 @@
 
 Theory exprSimHyps
 Ancestors
+  loweringPosts
   list finite_map abiTypeBoundProps
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph

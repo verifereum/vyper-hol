@@ -14,6 +14,7 @@
  *)
 Theory exprSimUint2Str
 Ancestors
+  loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
   exprSimHyps allocLimits vyperTypeSystem compileEnv
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words

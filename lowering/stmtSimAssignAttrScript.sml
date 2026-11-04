@@ -33,6 +33,7 @@
 
 Theory stmtSimAssignAttr
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set alist
   fragExec localPtrsProps exprSim exprSimHyps exprSimUnwrap exprSimBuffer
   exprSimAggregateChildren exprSimAttributeFields freshWrites
