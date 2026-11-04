@@ -770,6 +770,360 @@ Proof
   disj2_tac >> decide_tac
 QED
 
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO boundary")
+  [ao_singleton_projection, ao_peephole_inst_ids, ao_transform_inst_ids,
+   ao_alloc_fresh_ids, ao_transform_inst_fresh_ids,
+   ao_transform_insts_supply_frontier, ao_transform_inst_supply_id_origin,
+   ao_transform_insts_supply_id_origin];
+
+Theorem ao_transform_insts_supply_bound:
+  EVERY inst_wf insts /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) insts /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs, s') ==>
+  EVERY (\i. i.inst_id < s'.irs_next_inst) outs
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) insts` >>
+  gvs[] >>
+  drule ao_alloc_fresh_ids >> strip_tac >>
+  `EVERY (\i. i.inst_id < r.irs_next_inst) insts` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `EVERY (\i. i.inst_id < r''.irs_next_inst) q'` by metis_tac[] >>
+  `EVERY (\i. i.inst_id < r.irs_next_inst)
+    (ao_transform_inst dfg ra lbl idx targets q h)` by
+    (mp_tac (Q.INST [`inst` |-> `h`, `fr` |-> `q`, `s'` |-> `r`]
+       ao_transform_inst_fresh_ids) >> simp[listTheory.EVERY_MAP]) >>
+  drule ao_transform_insts_supply_frontier >> strip_tac >>
+  gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!i. MEM i (ao_transform_inst _ _ _ _ _ _ _) ==> _`
+    drule >> simp[]
+QED
+
+Theorem ao_transform_insts_supply_distinct:
+  EVERY inst_wf insts /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) insts) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) insts /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs, s') ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) outs)
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) insts` >>
+  gvs[] >> drule ao_alloc_fresh_ids >> strip_tac >>
+  `EVERY (\i. i.inst_id < r.irs_next_inst) insts` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) q')` by metis_tac[] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id)
+     (ao_transform_inst dfg ra lbl idx targets q h)) /\
+   EVERY (\id. id < r.irs_next_inst)
+     (MAP (\i. i.inst_id) (ao_transform_inst dfg ra lbl idx targets q h))`
+    by (mp_tac (Q.INST [`inst` |-> `h`, `fr` |-> `q`, `s'` |-> `r`]
+      ao_transform_inst_fresh_ids) >> simp[]) >>
+  simp[listTheory.ALL_DISTINCT_APPEND] >>
+  gen_tac >> strip_tac >> strip_tac >>
+  `MEM e (MAP (\i. i.inst_id) insts) \/ r.irs_next_inst <= e`
+    by metis_tac[ao_transform_insts_supply_id_origin] >>
+  `e = h.inst_id \/ s.irs_next_inst <= e`
+    by metis_tac[ao_transform_inst_supply_id_origin] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+  metis_tac[arithmeticTheory.NOT_LESS, arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem ao_transform_blocks_supply_frontier:
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  s'.irs_next_inst = s.irs_next_inst + 2 * LENGTH (fn_insts_blocks bbs)
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >>
+  simp[ao_transform_block_supply_def] >>
+  Cases_on `ao_transform_insts_supply dfg ra h.bb_label targets s 0 h.bb_instructions` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets r bbs` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule ao_transform_insts_supply_frontier >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ao_transform_blocks_supply_id_origin:
+  EVERY inst_wf (fn_insts_blocks bbs) /\
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  !id. MEM id (MAP (\i. i.inst_id) (fn_insts_blocks bbs')) ==>
+    MEM id (MAP (\i. i.inst_id) (fn_insts_blocks bbs)) \/ s.irs_next_inst <= id
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  simp[fn_insts_blocks_def] >> rpt strip_tac
+  >- metis_tac[ao_transform_insts_supply_id_origin] >>
+  first_x_assum drule >> disch_then (qspec_then `id` mp_tac) >>
+  simp[] >> strip_tac >- simp[] >>
+  drule ao_transform_insts_supply_frontier >> strip_tac >> gvs[] >>
+  disj2_tac >> decide_tac
+QED
+
+Theorem ao_transform_blocks_supply_bound:
+  EVERY inst_wf (fn_insts_blocks bbs) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts_blocks bbs) /\
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  EVERY (\i. i.inst_id < s'.irs_next_inst) (fn_insts_blocks bbs')
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  drule ao_transform_insts_supply_frontier >> strip_tac >>
+  `EVERY (\i. i.inst_id < s1.irs_next_inst) (fn_insts_blocks bbs)` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `EVERY (\i. i.inst_id < s'.irs_next_inst) (fn_insts_blocks bbs'')`
+    by metis_tac[] >>
+  `EVERY (\i. i.inst_id < s1.irs_next_inst) insts`
+    by metis_tac[ao_transform_insts_supply_bound] >>
+  drule ao_transform_blocks_supply_frontier >> strip_tac >>
+  gvs[fn_insts_blocks_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem ao_transform_blocks_supply_distinct:
+  EVERY inst_wf (fn_insts_blocks bbs) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks bbs)) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts_blocks bbs) /\
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks bbs'))
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def,
+    listTheory.ALL_DISTINCT_APPEND] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  drule ao_transform_insts_supply_frontier >> strip_tac >>
+  `EVERY (\i. i.inst_id < s1.irs_next_inst) (fn_insts_blocks bbs)` by
+    (gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks bbs''))`
+    by metis_tac[] >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) insts)`
+    by metis_tac[ao_transform_insts_supply_distinct] >>
+  `EVERY (\i. i.inst_id < s1.irs_next_inst) insts`
+    by metis_tac[ao_transform_insts_supply_bound] >>
+  simp[fn_insts_blocks_def, listTheory.ALL_DISTINCT_APPEND] >>
+  gen_tac >> strip_tac >> strip_tac >>
+  `MEM e (MAP (\i. i.inst_id) (fn_insts_blocks bbs)) \/ s1.irs_next_inst <= e`
+    by metis_tac[ao_transform_blocks_supply_id_origin] >>
+  `MEM e (MAP (\i. i.inst_id) h.bb_instructions) \/ s.irs_next_inst <= e`
+    by metis_tac[ao_transform_insts_supply_id_origin] >>
+  gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+  metis_tac[arithmeticTheory.NOT_LESS, arithmeticTheory.LESS_TRANS]
+QED
+
+Theorem ao_transform_insts_supply_last:
+  EVERY inst_wf insts /\ insts <> [] /\
+  is_terminator (LAST insts).inst_opcode /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs, s') ==>
+  outs <> [] /\ LAST outs = ao_resolve_iszero_inst targets (LAST insts)
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `insts = []`
+  >- (gvs[ao_transform_insts_supply_def] >>
+      `ao_transform_inst dfg ra lbl idx targets q h =
+        [ao_resolve_iszero_inst targets h]`
+        by (irule ao_transform_inst_terminator >> simp[]) >> gvs[]) >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets r (SUC idx) insts` >>
+  gvs[listTheory.LAST_DEF] >>
+  `q' <> [] /\ LAST q' = ao_resolve_iszero_inst targets (LAST insts)`
+    by metis_tac[] >>
+  Cases_on `q'` >> gvs[listTheory.LAST_APPEND_CONS]
+QED
+
+Theorem ao_transform_block_supply_label:
+  ao_transform_block_supply dfg ra targets s bb = (bb', s') ==>
+  bb'.bb_label = bb.bb_label
+Proof
+  simp[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ao_transform_block_supply_successors:
+  EVERY inst_wf bb.bb_instructions /\ bb_well_formed bb /\
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  ao_transform_block_supply dfg ra targets s bb = (bb', s') ==>
+  bb_succs bb' = bb_succs bb
+Proof
+  simp[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  rpt strip_tac >> gvs[bb_well_formed_def] >>
+  drule_all ao_transform_insts_supply_last >> strip_tac >>
+  simp[bb_succs_def] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  Cases_on `insts` >> gvs[ao_resolve_iszero_inst_successors]
+QED
+
+Theorem ao_transform_blocks_supply_labels:
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  MAP (\bb. bb.bb_label) bbs' = MAP (\bb. bb.bb_label) bbs
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def] >>
+  rpt gen_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets r bbs` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule ao_transform_block_supply_label >> strip_tac >> simp[] >>
+  first_x_assum irule >> simp[] >> goal_assum drule
+QED
+
+Theorem ao_transform_blocks_supply_successors:
+  EVERY inst_wf (fn_insts_blocks bbs) /\ EVERY bb_well_formed bbs /\
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs', s') ==>
+  MAP bb_succs bbs' = MAP bb_succs bbs
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets r bbs` >>
+  gvs[] >>
+  `bb_succs q = bb_succs h` by metis_tac[ao_transform_block_supply_successors] >>
+  simp[] >> first_x_assum irule >> simp[] >> goal_assum drule
+QED
+
+Theorem ao_bb_cons_well_formed:
+  tail <> [] ==>
+  (bb_well_formed (bb with bb_instructions := h::tail) <=>
+   bb_well_formed (bb with bb_instructions := tail) /\
+   ~is_terminator h.inst_opcode /\
+   (h.inst_opcode = PHI \/ EVERY (\i. i.inst_opcode <> PHI) tail))
+Proof
+  strip_tac >> simp[bb_well_formed_def, listTheory.LAST_DEF] >>
+  eq_tac
+  >- (strip_tac >> rpt conj_tac
+      >- simp[]
+      >- (rpt strip_tac >>
+          qpat_x_assum `!i. _ ==> i = _`
+            (qspec_then `SUC i` mp_tac) >> simp[])
+      >- (rpt strip_tac >>
+          first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[])
+      >- (strip_tac >>
+          qpat_x_assum `!i. _ ==> i = _` (qspec_then `0` mp_tac) >>
+          Cases_on `tail` >> gvs[]) >>
+      Cases_on `h.inst_opcode = PHI` >> simp[listTheory.EVERY_EL] >>
+      rpt strip_tac >>
+      qpat_x_assum `!i j. _` (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  strip_tac >>
+  (simp[] >> conj_tac
+   >- (gen_tac >> Cases_on `i` >> simp[] >> rpt strip_tac >> gvs[] >>
+       qpat_x_assum `!i. _ ==> i = _` (qspec_then `n` mp_tac) >>
+       Cases_on `tail` >> gvs[]) >>
+   rpt gen_tac >> Cases_on `i` >> Cases_on `j` >> simp[] >>
+   rpt strip_tac >> gvs[listTheory.EVERY_EL] >> metis_tac[])
+QED
+
+Theorem ao_bb_prefix_well_formed:
+  bb_well_formed (bb with bb_instructions := tail) /\
+  EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+  (EVERY (\i. i.inst_opcode = PHI) pre \/
+   EVERY (\i. i.inst_opcode <> PHI) (pre ++ tail)) ==>
+  bb_well_formed (bb with bb_instructions := pre ++ tail)
+Proof
+  Induct_on `pre` >> simp[] >> rpt strip_tac >>
+  `tail <> []` by gvs[bb_well_formed_def] >>
+  `bb_well_formed (bb with bb_instructions := pre ++ tail)`
+    by (first_x_assum irule >> simp[]) >>
+  `pre ++ tail <> []` by simp[] >>
+  simp[ao_bb_cons_well_formed] >> gvs[]
+QED
+
+Theorem ao_transform_insts_supply_nonphi:
+  EVERY inst_wf insts /\ EVERY (\i. i.inst_opcode <> PHI) insts /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+  EVERY (\i. i.inst_opcode <> PHI) outs
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts` >> simp[ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[pairTheory.pair_case_eq] >>
+  simp[] >> conj_tac
+  >- (irule ao_transform_inst_nonphi >> simp[]) >>
+  first_x_assum irule >> simp[] >> goal_assum drule
+QED
+
+Theorem ao_transform_insts_supply_well_formed:
+  EVERY inst_wf insts /\ bb_well_formed (bb with bb_instructions := insts) /\
+  ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+  bb_well_formed (bb with bb_instructions := outs)
+Proof
+  map_every qid_spec_tac [`s'`, `outs`, `idx`, `s`] >>
+  Induct_on `insts`
+  >- simp[bb_well_formed_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >>
+  Cases_on `insts = []`
+  >- (gvs[ao_transform_insts_supply_def, bb_well_formed_def] >>
+      `ao_transform_inst dfg ra lbl idx targets q h =
+        [ao_resolve_iszero_inst targets h]`
+        by (irule ao_transform_inst_terminator >> simp[]) >>
+      gvs[bb_well_formed_def, ao_resolve_iszero_inst_structure]) >>
+  gvs[ao_bb_cons_well_formed, ao_transform_insts_supply_def,
+      pairTheory.pair_case_eq] >>
+  (`bb_well_formed (bb with bb_instructions := outs')` by metis_tac[] >>
+   irule ao_bb_prefix_well_formed >> simp[] >>
+   conj_tac
+   >- (irule ao_transform_inst_nonterminator >> simp[]) >>
+   Cases_on `h.inst_opcode = PHI` >>
+   gvs[ao_transform_inst_phi, ao_resolve_iszero_inst_structure] >>
+   metis_tac[ao_transform_inst_nonphi, ao_transform_insts_supply_nonphi])
+QED
+
+Theorem ao_transform_block_supply_well_formed:
+  EVERY inst_wf bb.bb_instructions /\ bb_well_formed bb /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  bb_well_formed bb'
+Proof
+  simp[ao_transform_block_supply_def, pairTheory.pair_case_eq] >>
+  rpt strip_tac >> gvs[] >>
+  irule ao_transform_insts_supply_well_formed >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ao_transform_blocks_supply_well_formed:
+  EVERY inst_wf (fn_insts_blocks bbs) /\ EVERY bb_well_formed bbs /\
+  ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+  EVERY bb_well_formed bbs'
+Proof
+  map_every qid_spec_tac [`s'`, `bbs'`, `s`] >>
+  Induct_on `bbs` >> simp[ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets r bbs` >>
+  gvs[] >> conj_tac
+  >- metis_tac[ao_transform_block_supply_well_formed] >>
+  first_x_assum irule >> simp[] >> goal_assum drule
+QED
+
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO lifting")
+  [ao_transform_insts_supply_bound, ao_transform_insts_supply_distinct,
+   ao_transform_blocks_supply_frontier, ao_transform_blocks_supply_id_origin,
+   ao_transform_blocks_supply_bound, ao_transform_blocks_supply_distinct,
+   ao_transform_insts_supply_last, ao_transform_block_supply_label,
+   ao_transform_block_supply_successors, ao_transform_blocks_supply_labels,
+   ao_transform_blocks_supply_successors,
+   ao_bb_cons_well_formed, ao_bb_prefix_well_formed,
+   ao_transform_insts_supply_nonphi, ao_transform_insts_supply_well_formed,
+   ao_transform_block_supply_well_formed, ao_transform_blocks_supply_well_formed];
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
