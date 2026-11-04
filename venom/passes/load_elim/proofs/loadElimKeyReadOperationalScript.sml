@@ -2,7 +2,7 @@ Theory loadElimKeyReadOperational
 Ancestors
   loadElimKeyRead memAliasProps mem2varBlockSimHelpers deadStoreElimProofs
   venomMemDefs venomEffects words venomInstProps
-  basePtrDefs memLocDefs venomState memoryCopyElisionSound
+  basePtrDefs memLocDefs venomState memoryCopyElisionSound loadElimDefs venomInst
 
 Theorem le_memory_read_nonalias_store:
   wf_alias_sets aliases /\ ~ma_may_alias aliases readloc writeloc /\
@@ -96,4 +96,96 @@ Proof
   rename1 `FLOOKUP s.vs_allocas aid = SOME region` >>
   PairCases_on `region` >>
   first_x_assum drule >> simp[] >> decide_tac
+QED
+
+Theorem le_configured_read_location:
+  MEM (inst.inst_opcode,space)
+    [(MLOAD,AddrSp_Memory); (SLOAD,AddrSp_Storage);
+     (TLOAD,AddrSp_Transient); (CALLDATALOAD,AddrSp_Calldata)] /\
+  inst.inst_operands = [addr] ==>
+  bp_get_read_location bp inst space =
+    bp_segment_from_ops bp
+      <|iao_ofst := addr;
+        iao_size := SOME (Lit (n2w (addr_space_word_scale space)));
+        iao_max_size := SOME (Lit (n2w (addr_space_word_scale space)))|>
+Proof
+  simp[] >> strip_tac >>
+  gvs[bp_get_read_location_def, mem_read_ops_def,
+      addr_space_word_scale_def, read_effects_def, is_raw_fmp_opcode_def]
+QED
+
+(* Shared location-or-normalized-operand choice for both read and write keys. *)
+Theorem le_segment_key_address[local]:
+  bp_segment_from_ops bp
+    <|iao_ofst := addr;
+      iao_size := SOME (Lit (n2w (addr_space_word_scale space)));
+      iao_max_size := SOME (Lit (n2w (addr_space_word_scale space)))|> = ml /\
+  eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
+  bp_ptr_sound bp s /\ allocas_in_word s /\ memloc_within_alloca ml s ==>
+  le_key_address space
+    (if use_loc then if ml_is_fixed ml then LK_Loc ml else LK_Op (norm addr)
+     else LK_Op (norm addr)) s = SOME (w2n w)
+Proof
+  strip_tac >> reverse (Cases_on `use_loc`) >- simp[] >>
+  reverse (Cases_on `ml_is_fixed ml`) >- simp[] >>
+  `memloc_runtime_region ml s = SOME (w2n w,addr_space_word_scale space)` by
+    (irule le_fixed_segment_runtime_word >> simp[] >>
+     qexistsl [`bp`, `<|iao_ofst := addr;
+       iao_size := SOME (Lit (n2w (addr_space_word_scale space)));
+       iao_max_size := SOME (Lit (n2w (addr_space_word_scale space)))|>`] >>
+     simp[]) >>
+  simp[le_key_address_def, w2n_lt]
+QED
+
+Theorem le_configured_read_key_address:
+  MEM (inst.inst_opcode,space)
+    [(MLOAD,AddrSp_Memory); (SLOAD,AddrSp_Storage);
+     (TLOAD,AddrSp_Transient); (CALLDATALOAD,AddrSp_Calldata)] /\
+  inst.inst_operands = [addr] /\
+  eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
+  bp_ptr_sound bp s /\ allocas_in_word s /\
+  memloc_within_alloca (bp_get_read_location bp inst space) s ==>
+  le_key_address space (load_get_read_key bp space norm inst) s = SOME (w2n w)
+Proof
+  strip_tac >> drule_all le_configured_read_location >> strip_tac >>
+  simp[load_get_read_key_def] >>
+  irule le_segment_key_address >> gvs[] >> qexists `bp` >> simp[]
+QED
+
+Theorem le_dload_key_address:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [addr] /\
+  eval_operand (norm addr) s = SOME w ==>
+  le_key_address AddrSp_Data (load_get_read_key bp AddrSp_Data norm inst) s =
+    SOME (w2n w)
+Proof
+  simp[load_get_read_key_def, use_memloc_for_read_def]
+QED
+
+Theorem le_configured_write_location:
+  MEM (inst.inst_opcode,space)
+    [(MSTORE,AddrSp_Memory); (SSTORE,AddrSp_Storage); (TSTORE,AddrSp_Transient)] /\
+  inst.inst_operands = [addr;value] ==>
+  bp_get_write_location bp inst space =
+    bp_segment_from_ops bp
+      <|iao_ofst := addr;
+        iao_size := SOME (Lit (n2w (addr_space_word_scale space)));
+        iao_max_size := SOME (Lit (n2w (addr_space_word_scale space)))|>
+Proof
+  simp[] >> strip_tac >>
+  gvs[bp_get_write_location_def, mem_write_ops_def,
+      addr_space_word_scale_def, write_effects_def, is_raw_fmp_opcode_def]
+QED
+
+Theorem le_configured_write_key_address:
+  MEM (inst.inst_opcode,space)
+    [(MSTORE,AddrSp_Memory); (SSTORE,AddrSp_Storage); (TSTORE,AddrSp_Transient)] /\
+  inst.inst_operands = [addr;value] /\
+  eval_operand addr s = SOME w /\ eval_operand (norm addr) s = SOME w /\
+  bp_ptr_sound bp s /\ allocas_in_word s /\
+  memloc_within_alloca (bp_get_write_location bp inst space) s ==>
+  le_key_address space (load_get_write_key bp space norm inst) s = SOME (w2n w)
+Proof
+  strip_tac >> drule_all le_configured_write_location >> strip_tac >>
+  simp[load_get_write_key_def] >>
+  irule le_segment_key_address >> gvs[] >> qexists `bp` >> simp[]
 QED
