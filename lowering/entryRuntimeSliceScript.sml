@@ -1,7 +1,7 @@
 (* Selected external compilation slices, before runtime embedding. *)
 Theory entryRuntimeSlice
 Ancestors
-  moduleLowering compileEnv list
+  moduleLowering compileEnv list supportedDecls vyperInterpreter compileVyper
 
 Theorem compile_external_fn_bodies_append[local]:
   !xs ys st.
@@ -38,4 +38,40 @@ Proof
   qexistsl [`l1`, `l2`] >>
   Cases_on `compile_external_fn_bodies l1 start` >> gvs[] >>
   metis_tac[]
+QED
+
+(* Unlike existential classification membership, retain the source lookup's
+   exact raw-return metadata even when declarations share a name. *)
+Theorem supported_external_lookup_classified:
+  !tops ambient name mut nr args dflts ret fbody.
+    EVERY (supported_declaration_header ambient) tops /\
+    name <> "__default__" /\
+    lookup_function NONE name External tops =
+      SOME (mut, nr, args, dflts, ret, fbody) ==>
+    MEM (mut, nr, lookup_raw_return_or_F (NONE : num option) name External tops,
+         name, args, dflts, ret, fbody) (FST (classify_functions tops))
+Proof
+  Induct_on `tops` >- simp[lookup_function_def] >>
+  rpt gen_tac >>
+  `?exts ints fb ctor. FOLDR classify_function ([],[],NONE,NONE) tops =
+      (exts,ints,fb,ctor)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
+  Cases_on `h`
+  >- (Cases_on `f` >>
+      simp[EVERY_DEF, lookup_function_def, lookup_raw_return_or_F_def,
+           lookup_raw_return_def, classify_functions_def, classify_function_def] >>
+      rpt strip_tac >> Cases_on `s = name` >>
+      Cases_on `s = "__default__"` >>
+      gvs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[])
+  >- (Cases_on `v` >>
+      simp[EVERY_DEF, supported_public_variables_rejected,
+           lookup_function_def, lookup_raw_return_or_F_def,
+           lookup_raw_return_def, classify_functions_def, classify_function_def] >>
+      fs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[])
+  >- (simp[EVERY_DEF, supported_hashmap_header_contract] >> strip_tac >>
+      gvs[lookup_function_def, lookup_raw_return_or_F_def,
+          lookup_raw_return_def, classify_functions_def, classify_function_def] >>
+      metis_tac[])
+  >> simp[EVERY_DEF, lookup_function_def, lookup_raw_return_or_F_def,
+          lookup_raw_return_def, classify_functions_def, classify_function_def] >>
+     fs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[]
 QED
