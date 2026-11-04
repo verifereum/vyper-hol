@@ -430,3 +430,21 @@ segments. Not evidence of target Abort: stepWriteFootprintForward's
 `assign_suffix_no_normal` and `revert_forward_pair_no_normal`, whose disjunction
 reasoning explicitly permits Error. Run/terminator/call lifting is outside this
 diagnostic. No HOL source, existing definition, or theorem statement changed.
+
+### C1.4.1.17.5 integrated exceptional forwarding consumer
+
+`o1LowerDloadForwardAbort.ld_joint_forward_abort` now constructs an actual
+same-fuel target `exec_block` Abort with the identical reason from J, Q, P, A,
+active RETURNDATACOPY, source `in_revert_forward`, block lookup and a source
+block Abort. It returns the target function/block lookups as well as execution.
+No non-forwarding assumption, target range safety, memory equality after COPY,
+or equal numerical instruction indices is used. The generic
+`ld_available_forward_abort` synchronizes the COPY guard and uses the aligned
+restricted-availability suffix on success. `ld_joint_control_forward_fetch`
+provides the relative-index alignment through the REVERT endpoint.
+
+The exceptional ordinary guards are separately covered by
+`o1LowerDloadExceptional.ld_joint_ordinary_abort` (COPY OOB and oversized
+CREATE/CREATE2), alongside the existing ASSERT consumer. ForwardAbort is
+imported by Sim. These results cover this exceptional family only: standalone
+terminators, INVOKE, full run lifting and the frozen stage theorem remain open.

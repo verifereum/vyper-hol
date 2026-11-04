@@ -3,7 +3,9 @@ Theory o1LowerDloadForwardAbort
 Ancestors
   o1LowerDloadJointAssign o1LowerDloadAvailableSuffix o1ContractLowerDload
   lowerDloadDefs contextCodegenRel venomExecSemantics venomExecProps
-  o1LowerDloadJointRelation venomInst list
+  o1LowerDloadJointRelation o1LowerDloadExceptional o1LowerDloadJointScalar
+  o1LowerDloadJointRangeCopy o1PassContract unitShapeDefs venomWf
+  o1LowerDloadOccurrence o1LowerDloadEnvironment venomInst list
 
 Theorem ld_supply_insts_unchanged_segment:
   !segment u.
@@ -133,4 +135,130 @@ Proof
      simp[NoAsms]) >>
   disch_then (qspecl_then [`expanded`, `EL k fn'.fn_blocks`] mp_tac) >>
   fs[arithmeticTheory.ADD_COMM] >> metis_tac[]
+QED
+
+(* The COPY discards the memory relation; only the finite suffix is aligned. *)
+Theorem ld_available_forward_abort:
+  s.vs_labels = t.vs_labels /\
+  (!v. v IN V ==> (IS_SOME (FLOOKUP s.vs_vars v) <=>
+                   IS_SOME (FLOOKUP t.vs_vars v))) /\
+  revert_forward_pair bb s.vs_inst_idx j /\
+  (!k. k <= j - s.vs_inst_idx ==>
+    get_instruction bb (s.vs_inst_idx+k) =
+    get_instruction bb' (t.vs_inst_idx+k)) /\
+  (!k ii v. k <= j - s.vs_inst_idx /\
+    get_instruction bb (s.vs_inst_idx+k) = SOME ii /\
+    MEM (Var v) ii.inst_operands ==> v IN V) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = RETURNDATACOPY /\
+  inst.inst_operands = [dst;src;sz] /\
+  eval_operand src s = eval_operand src t /\
+  eval_operand sz s = eval_operand sz t /\
+  s.vs_returndata = t.vs_returndata /\
+  exec_block fuel C bb s = Abort reason s1 ==>
+  ?t1. exec_block fuel C' bb' t = Abort reason t1
+Proof
+  strip_tac >>
+  `get_instruction bb' t.vs_inst_idx = SOME inst` by
+    (qpat_x_assum `!k. k <= _ ==> _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `IS_SOME (eval_operand dst s) <=> IS_SOME (eval_operand dst t)` by
+    (irule ld_available_operand >> simp[] >> qexists_tac `V` >> simp[] >>
+     rpt strip_tac >>
+     qpat_x_assum `!k ii v. _` (qspec_then `0` mp_tac) >>
+     simp[] >> metis_tac[MEM]) >>
+  qpat_x_assum `exec_block fuel C bb s = _` mp_tac >>
+  simp[Once exec_block_def, step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[AllCaseEqs(), is_terminator_def] >> strip_tac >>
+  (Cases_on `eval_operand dst t` >- gvs[] >>
+   rename1 `eval_operand dst t = SOME target_dest` >>
+   pure_once_rewrite_tac[exec_block_def] >> pure_asm_rewrite_tac[] >>
+   simp[step_inst_non_invoke] >>
+   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+   simp[is_terminator_def] >>
+   qpat_x_assum `write_memory_with_expansion _ _ s = s''` (SUBST_ALL_TAC o SYM) >>
+   drule_at (Pat `exec_block _ _ _ _ = _`) ld_available_suffix_abort >>
+   disch_then irule >>
+   simp[venomStateTheory.write_memory_with_expansion_def,
+        venomStateTheory.write_memory_def] >>
+   qpat_x_assum `revert_forward_pair _ _ _`
+     (strip_assume_tac o REWRITE_RULE [revert_forward_pair_def]) >>
+   qexistsl_tac [`V`, `j - SUC s.vs_inst_idx`, `inst2`] >>
+   simp[] >>
+   (conj_tac
+    >- (rpt strip_tac >>
+        `SUC k <= j - s.vs_inst_idx` by decide_tac >>
+        qpat_x_assum `!k ii v. _` (qspec_then `SUC k` mp_tac) >>
+        simp[NoAsms, arithmeticTheory.ADD_CLAUSES] >>
+        fs[arithmeticTheory.ADD_CLAUSES] >> metis_tac[]) >>
+    conj_tac
+    >- (rpt strip_tac >>
+        `s.vs_inst_idx < k + SUC s.vs_inst_idx /\
+         k + SUC s.vs_inst_idx < j` by decide_tac >> metis_tac[]) >>
+    rpt strip_tac >>
+    `SUC k <= j - s.vs_inst_idx` by decide_tac >>
+    qpat_x_assum `!k. k <= _ ==> _` (qspec_then `SUC k` mp_tac) >>
+    simp[arithmeticTheory.ADD_CLAUSES]))
+QED
+
+Theorem ld_joint_forward_abort:
+  ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
+    n a U B HP H sites X ts /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs /\ opaque_use_ok fn /\ active_inst fn inst s /\
+  inst.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  exec_block fuel C bb s = Abort reason s1 ==>
+  ?fn' bb' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    exec_block fuel C' bb' t = Abort reason t1
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> strip_tac >>
+     drule occ_frame_reachable_annotation >> simp[]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
+  `get_instruction bb s.vs_inst_idx = SOME inst` by
+    (qpat_assum `active_inst _ _ _` mp_tac >>
+     simp[NoAsms, active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'` by
+       (irule MEM_lookup_block >> simp[]) >>
+     gvs[get_instruction_def]) >>
+  `?j. revert_forward_pair bb s.vs_inst_idx j` by
+    (qpat_x_assum `in_revert_forward _ _`
+       (strip_assume_tac o REWRITE_RULE [in_revert_forward_def, revert_forward_at_def]) >>
+     gvs[] >- metis_tac[] >>
+     qpat_x_assum `revert_forward_pair _ _ _`
+       (strip_assume_tac o REWRITE_RULE [revert_forward_pair_def]) >> gvs[]) >>
+  `?dst src sz. inst.inst_operands = [dst;src;sz]` by
+    metis_tac[revert_forward_pair_def, optionTheory.SOME_11] >>
+  `eval_operand src s = eval_operand src t` by
+    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+  `eval_operand sz s = eval_operand sz t` by
+    (drule ld_joint_copy_scalar_operand >> disch_then irule >> simp[]) >>
+  qhdtm_assum `ld_joint_boundary`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
+  qhdtm_assum `ld_joint_frame`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    (qhdtm_assum `ld_joint_control`
+       (strip_assume_tac o REWRITE_RULE [ld_joint_control_def]) >>
+     drule lower_dload_function_supply_labels >> simp[fn_labels_def]) >>
+  drule_all ld_joint_control_forward_fetch >> strip_tac >>
+  qexistsl_tac [`fn'`,`bb'`] >> simp[] >>
+  irule ld_available_forward_abort >>
+  qexistsl_tac [`C`, `{v | MEM v (fn_ir_vars fn)}`, `bb`, `dst`, `inst`,
+                 `j`, `s`, `s1`, `src`, `sz`] >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule ld_env_lookup_defined >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule ld_active_operand_ir_var >>
+      qexistsl_tac [`ii`, `s with vs_inst_idx := s.vs_inst_idx + k`] >>
+      simp[] >> simp[active_inst_def] >>
+      `MEM bb fn.fn_blocks /\ bb.bb_label = s.vs_current_bb` by
+        metis_tac[lookup_block_MEM, lookup_block_label] >>
+      qexists_tac `bb` >> gvs[get_instruction_def, AllCaseEqs()]) >>
+  fs[ld_joint_local_fields_def]
 QED
