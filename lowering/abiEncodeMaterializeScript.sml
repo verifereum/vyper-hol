@@ -29,10 +29,12 @@ QED
 
 (* Transport the incoming captured value over allocation, before unwrap.
    The allocation may extend the map; it does not change existing bytes. *)
-Theorem materialize_vv_post_alloc_frame:
+Theorem materialize_vv_post_alloc_storage_frame:
   vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   stmt_state_rel ctx func cenv cx es' t /\
   t.vs_memory = s.vs_memory /\
+  contract_storage t = contract_storage s /\
+  contract_transient t = contract_transient s /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
      FLOOKUP t.vs_allocas aid = SOME entry) /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
@@ -206,7 +208,7 @@ Proof
   drule_all alloc_buffer_source_frag >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   `vv_post ctx func ce cx e es sa mid s0 es' tv vv u` by
-    (irule materialize_vv_post_alloc_frame >> simp[] >>
+    (irule materialize_vv_post_alloc_storage_frame >> simp[] >>
      qexistsl [`r`, `sm`] >> simp[]) >>
   qexistsl [`u`, `w'`] >> simp[] >> metis_tac[]
 QED
