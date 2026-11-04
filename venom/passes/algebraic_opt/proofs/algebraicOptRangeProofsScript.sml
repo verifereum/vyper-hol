@@ -1,6 +1,6 @@
 Theory algebraicOptRangeProofs
 Ancestors
-  rangeAnalysisDefs algebraicOptDefs venomExecSemantics unitShapeDefs
+  rangeAnalysisDefs rangeAnalysisProofs algebraicOptDefs venomExecSemantics unitShapeDefs
 
 (* Coincident JNZ targets select the true-edge refinement.  This is a
    computation boundary only, not a reachable-state soundness assertion. *)
@@ -585,4 +585,28 @@ Theorem ao_range_backedge_initial_sound:
 Proof
   simp[ao_range_backedge_initial_cache,rangeEvalDefsTheory.in_range_state_def,
        finite_mapTheory.FLOOKUP_EMPTY]
+QED
+
+Theorem ao_range_join_sound[local]:
+  !a b s. range_sound a s /\ range_sound b s ==>
+    range_sound (range_join_opt a b) s
+Proof
+  Cases >> Cases >> simp[range_join_opt_def,range_sound_bottom] >>
+  metis_tac[range_join_opt_some_sound_left,range_join_opt_some_sound_right,
+            range_join_opt_def]
+QED
+
+Theorem ao_range_fold_join_sound:
+  !xs acc s. range_sound acc s /\ EVERY (\x. range_sound x s) xs ==>
+    range_sound (FOLDL range_join_opt acc xs) s
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> irule ao_range_join_sound >> simp[]
+QED
+
+Theorem ao_range_widen_sound:
+  !old new s. range_sound new s ==> range_sound (range_widen_opt old new) s
+Proof
+  Cases >> Cases >> simp[range_widen_opt_def,range_sound_bottom,range_sound_fempty] >>
+  rpt strip_tac >> IF_CASES_TAC >> gvs[range_sound_fempty]
 QED
