@@ -916,8 +916,6 @@ Proof
         gvs[local_region_def, lookup_var_def] >>
       qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> regions_disjoint _ _ _ _`
         drule >> simp[regions_disjoint_def] >> decide_tac) >>
-  conj_tac
-  >- (rpt strip_tac >> gvs[lookup_var_def]) >>
   rpt strip_tac >> first_x_assum irule >> metis_tac[]
 QED
 
