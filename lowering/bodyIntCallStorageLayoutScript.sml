@@ -2,7 +2,7 @@
 Theory bodyIntCallStorageLayout
 Ancestors
   compileEnv vyperEncodeDecode vyperLookupStorage words accountsRelProps
-  vyperStorage byte list venomMemProps
+  vyperStorage byte list venomMemProps valueEncoding valueEncodingProps valueTypingMemoryProps abiDecoderString abiDecoderFixedMemory
 
 (* Selected reads inherit agreement at their live bytes, including when
    slot arithmetic is modular. A globally dead byte forces this particular
@@ -514,4 +514,143 @@ Theorem slots_in_range_storage_read_live:
 Proof
   rpt strip_tac >> irule slots_in_range_storage_live_agree >>
   metis_tac[storage_read_live_window]
+QED
+
+(* Canonicality is conditional on type well-formedness. *)
+Theorem decoded_scalar_in_memory:
+  !st off tv v b mem.
+    well_formed_type_value tv /\
+    word_slot_canonical (read_slot st off) tv /\
+    decode_base_from_slot (read_slot st off) tv = v /\
+    mem_word_at b mem = read_slot st off ==>
+    val_in_memory tv v b mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  `encode_base_to_slot v tv = SOME (read_slot st off)` by
+    gvs[word_slot_canonical_def] >>
+  Cases_on `v` >> Cases_on `tv` >>
+  gvs[encode_base_to_slot_def, val_in_memory_def, val_to_w256_def,
+      typed_val_to_w256_def, AllCaseEqs()] >>
+  rename1 `encode_base_to_slot _ (BaseTV bt) = SOME _` >>
+  Cases_on `bt` >>
+  gvs[encode_base_to_slot_def, decode_base_from_slot_def,
+      typed_val_to_w256_def, bool_to_slot_def, AllCaseEqs()] >>
+  rename1 `BaseTV (BytesT bd)` >> Cases_on `bd` >>
+  gvs[encode_base_to_slot_def, decode_base_from_slot_def,
+      vyperTypingTheory.well_formed_type_value_def] >>
+  simp[valueEncodingProofsTheory.word_of_bytes_be_pad_right]
+QED
+
+Theorem mem_bytes_at_word_prefix:
+  !b len mem. len <= 32 ==>
+    mem_bytes_at b len mem = TAKE len (word_to_bytes_be (mem_word_at b mem))
+Proof
+  rpt strip_tac >>
+  rewrite_tac[word_to_bytes_be_def, GSYM valueEncodingProofsTheory.mem_bytes_at_word] >>
+  irule LIST_EQ >> simp[LENGTH_mem_bytes_at, LENGTH_TAKE_EQ] >>
+  rpt strip_tac >> simp[EL_TAKE, valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
+
+(* Exact copied words determine any prefix of the payload window. *)
+Theorem copied_slots_bytes:
+  !n st off b mem len.
+    len <= 32*n /\
+    (!j. j < n ==> mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    mem_bytes_at b len mem = slots_to_bytes len (read_slots st off n)
+Proof
+  Induct >- simp[slots_to_bytes_def, mem_bytes_at_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `len`
+  >- simp[mem_bytes_at_def, slots_to_bytes_def] >>
+  `mem_word_at b mem = read_slot st off` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  rename1 `SUC len <= 32 * SUC n` >>
+  Cases_on `SUC len <= 32`
+  >- (simp[read_slots_def, slots_to_bytes_def, arithmeticTheory.MIN_DEF,
+           mem_bytes_at_word_prefix, GSYM read_slot_def]) >>
+  `mem_bytes_at b (SUC len) mem =
+   mem_bytes_at b 32 mem ++ mem_bytes_at (b+32) (SUC len-32) mem` by
+    (qspecl_then [`b`, `32`, `SUC len-32`, `mem`] mp_tac
+       valueEncodingProofsTheory.mem_bytes_at_split_padded >> simp[]) >>
+  simp[read_slots_def, slots_to_bytes_def, arithmeticTheory.MIN_DEF,
+       GSYM read_slot_def] >>
+  simp[valueEncodingProofsTheory.mem_bytes_at_word, word_to_bytes_be_def,
+       LENGTH_word_to_bytes, dimindex_256, TAKE_LENGTH_TOO_LONG] >>
+  first_x_assum irule >> conj_tac
+  >- (rpt strip_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >>
+      `b + 32 * SUC j = b+32+32*j` by decide_tac >>
+      `off + SUC j = off+1+j` by decide_tac >> simp[]) >>
+  decide_tac
+QED
+
+Theorem decoded_dynamic_bytes_memory:
+  !st off max bs b mem.
+    decode_dyn_bytes st off max = SOME bs /\
+    (!j. j < 1 + word_size max ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    mem_word_at b mem = n2w (LENGTH bs) /\
+    mem_bytes_at (b+32) (LENGTH bs) mem = bs
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[decode_dyn_bytes_def, AllCaseEqs()] >>
+  qmatch_goalsub_abbrev_tac `slots_to_bytes len (read_slots st (off+1) (word_size len))` >>
+  `word_size len <= word_size max` by
+    (simp[vfmConstantsTheory.word_size_def] >>
+     irule arithmeticTheory.DIV_LE_MONOTONE >> simp[Abbr `len`]) >>
+  `mem_bytes_at (b+32) len mem =
+   slots_to_bytes len (read_slots st (off+1) (word_size len))` by
+    (irule copied_slots_bytes >> conj_tac
+     >- (rpt strip_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >>
+         `b+32*SUC j = b+32+32*j` by decide_tac >>
+         `SUC j+off = off+1+j` by decide_tac >> simp[]) >>
+     simp[word_size_capacity]) >>
+  `LENGTH (slots_to_bytes len (read_slots st (off+1) (word_size len))) = len` by
+    metis_tac[LENGTH_mem_bytes_at] >>
+  simp[] >> first_x_assum (qspec_then `0` mp_tac) >>
+  simp[Abbr `len`, read_slot_def]
+QED
+
+Theorem decoded_base_in_memory:
+  !st off bt v b mem.
+    well_formed_type_value (BaseTV bt) /\
+    slots_in_range st off (BaseTV bt) /\
+    decode_value st off (BaseTV bt) = SOME v /\
+    (!j. j < type_slot_size (BaseTV bt) ==>
+      mem_word_at (b+32*j) mem = read_slot st (off+j)) ==>
+    val_in_memory (BaseTV bt) v b mem
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `bt` >>
+  gvs[decode_value_def, slots_in_range_def, AllCaseEqs()]
+  >~ [`decode_dyn_bytes _ _ _ = SOME _`]
+  >- (gvs[vyperValueTheory.type_slot_size_def] >>
+      drule decoded_dynamic_bytes_memory >>
+      disch_then (qspecl_then [`b`, `mem`] mp_tac) >>
+      simp[] >> strip_tac >>
+      simp[val_in_memory_def, abi_decoder_string_bytes_roundtrip])
+  >~ [`BaseTV (BytesT _)`]
+  >- (rename1 `BaseTV (BytesT bd)` >> Cases_on `bd` >>
+      gvs[decode_value_def, slots_in_range_def, AllCaseEqs()]
+      >~ [`decode_dyn_bytes`]
+      >- (gvs[vyperValueTheory.type_slot_size_def] >>
+          drule decoded_dynamic_bytes_memory >>
+          disch_then (qspecl_then [`b`, `mem`] mp_tac) >>
+          simp[val_in_memory_def]) >>
+      irule decoded_scalar_in_memory >> simp[] >>
+      goal_assum (drule_at Any) >>
+      gvs[vyperValueTheory.type_slot_size_def]) >>
+  irule decoded_scalar_in_memory >> simp[] >>
+  goal_assum (drule_at Any) >>
+  gvs[vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem copied_slot_subwindow:
+  !st off b mem n k m.
+    (!j. j < n ==> mem_word_at (b+32*j) mem = read_slot st (off+j)) /\
+    k+m <= n ==>
+    !j. j < m ==>
+      mem_word_at (b+32*k+32*j) mem = read_slot st (off+k+j)
+Proof
+  rpt strip_tac >> first_x_assum (qspec_then `k+j` mp_tac) >>
+  `k+j < n` by decide_tac >>
+  `b+32*(k+j) = b+32*k+32*j` by decide_tac >>
+  `off+(k+j) = off+k+j` by decide_tac >> simp[]
 QED
