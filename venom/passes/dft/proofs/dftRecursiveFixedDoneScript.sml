@@ -19,7 +19,7 @@ Proof
   qexists `certs` >> simp[dft_fixed_control_def] >> metis_tac[]
 QED
 
-Theorem dft_fixed_done_inversion[local]:
+Theorem dft_fixed_done_inversion:
   dft_fixed_phase q pre x call post c d /\
   c.dft_occ_core = DftOpen (DftDone res) ls n ==>
   ?certs rs nR.
@@ -45,7 +45,7 @@ Proof
       dft_open_return_def, dft_erase_def, dft_occ_update_def]
 QED
 
-Theorem dft_fixed_done_terminal[local]:
+Theorem dft_fixed_done_terminal:
   dft_fixed_phase q pre x call post c d /\
   c.dft_occ_core = DftOpen (DftDone res) ls n /\
   (ls = [] \/ (!ret cs. res <> IntRet ret cs)) /\
@@ -79,7 +79,7 @@ Proof
   Cases_on `rs` >> simp[dft_occ_update_def]
 QED
 
-Theorem dft_fixed_done_cleared[local]:
+Theorem dft_fixed_done_cleared:
   dft_fixed_phase q pre x call post c d /\
   c.dft_occ_core = DftOpen (DftDone res) ls n /\
   (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftDone out) [] nL /\
@@ -102,7 +102,7 @@ Proof
   irule dft_fixed_done_intro >> simp[] >> qexists `[]` >> simp[]
 QED
 
-Theorem dft_fixed_plain_done[local]:
+Theorem dft_fixed_plain_done:
   dft_fixed_phase q pre x call post c d /\
   c.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (fl::ls) n /\
   dft_fixed_stack q pre x call post (NONE::certs) (fl::ls) (fr::rs) /\

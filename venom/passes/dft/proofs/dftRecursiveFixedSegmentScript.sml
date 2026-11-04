@@ -237,3 +237,120 @@ Proof
   `!j:num. j < 2 <=> j = 0 \/ j = 1` by decide_tac >>
   simp[] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem dft_fixed_pending_done_segment[local]:
+  dft_fixed_phase q pre x call post c d /\
+  c.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (fl::ls) n /\
+  dft_fixed_stack q pre x call post (SOME z::certs) (fl::ls) (fr::rs) /\
+  d.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (fr::rs) nR /\
+  c.dft_occ_saved = (path,visit)::saved /\ d.dft_occ_saved = (path,visit)::saved /\
+  LENGTH saved = LENGTH certs /\
+  dft_original_context Corig C /\ dft_original_context Dorig D ==>
+  ?k. (k = 1 \/ k = 2) /\
+    dft_fixed_phase q pre x call post
+      (dft_occ_oracle_next w C c) (FUNPOW (dft_occ_oracle_next w D) k d) /\
+    dft_fixed_segment_account q pre x call post w C D 1 k c d
+Proof
+  strip_tac >>
+  `dft_original_ready c /\ dft_original_ready d` by fs[dft_fixed_phase_def] >>
+  qpat_x_assum `dft_fixed_stack _ _ _ _ _ (SOME _::_) _ _` mp_tac >>
+  rewrite_tac[dft_fixed_stack_cons] >> strip_tac >>
+  `dft_fixed_certificate q pre x call post z` by fs[dft_fixed_coordinate_def] >>
+  `z.dft_cert_forward` by fs[dft_fixed_certificate_def] >>
+  gvs[dft_provenanced_frame_def, dft_certificate_saved_def, LET_THM] >>
+  Cases_on `dft_restore z.dft_cert_call.inst_outputs ret cs z.dft_cert_start`
+  >- (qexists `1` >> simp[FUNPOW_1] >> conj_tac
+      >- (irule dft_fixed_done_cleared >>
+          `dft_restore z.dft_cert_call.inst_outputs ret cs
+            (z.dft_cert_result with vs_inst_idx := SUC z.dft_cert_start.vs_inst_idx) = NONE` by
+            metis_tac[dftOccurrenceReturnTheory.dft_restore_pair_failure] >>
+          metis_tac[dft_suspend_pop_failure]) >>
+      metis_tac[dft_fixed_segment_done_one_account]) >>
+  `?a. dft_restore z.dft_cert_call.inst_outputs ret cs
+      (z.dft_cert_result with vs_inst_idx := SUC z.dft_cert_start.vs_inst_idx) = SOME a` by
+    (Cases_on `dft_restore z.dft_cert_call.inst_outputs ret cs
+      (z.dft_cert_result with vs_inst_idx := SUC z.dft_cert_start.vs_inst_idx)` >>
+     metis_tac[dftOccurrenceReturnTheory.dft_restore_pair_failure,
+               optionTheory.NOT_NONE_SOME]) >>
+  rename1 `dft_restore _ _ _ z.dft_cert_start = SOME restored` >>
+  qexists `2` >> simp[] >> conj_tac
+  >- (irule dft_fixed_done_reentry >> simp[] >>
+      conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+      qexistsl_tac [`a`, `restored`, `certs`, `z`] >> simp[]) >>
+  irule dft_fixed_pending_return_account >> simp[] >>
+  qexistsl [`restored`, `z`] >> simp[] >>
+  fs[dft_fixed_stack_def] >> metis_tac[dft_provenanced_frames_fill]
+QED
+
+Theorem dft_fixed_done_segment:
+  dft_fixed_phase q pre x call post c d /\
+  c.dft_occ_core = DftOpen (DftDone res) ls n /\
+  dft_original_context Corig C /\ dft_original_context Dorig D ==>
+  ?k. (k = 1 \/ k = 2) /\
+    dft_fixed_phase q pre x call post
+      (dft_occ_oracle_next w C c) (FUNPOW (dft_occ_oracle_next w D) k d) /\
+    dft_fixed_segment_account q pre x call post w C D 1 k c d
+Proof
+  strip_tac >>
+  drule_all dft_fixed_done_inversion >> strip_tac >>
+  Cases_on `ls = [] \/ (!ret cs. res <> IntRet ret cs)`
+  >- (qexists `1` >> simp[FUNPOW_1] >>
+      conj_tac >- metis_tac[dft_fixed_done_terminal] >>
+      metis_tac[dft_fixed_segment_done_one_account]) >>
+  gvs[] >>
+  Cases_on `ls` >- gvs[] >>
+  Cases_on `certs`
+  >- gvs[dft_fixed_stack_def, dft_provenanced_frames_def] >>
+  Cases_on `rs`
+  >- gvs[dft_fixed_stack_def, dft_provenanced_frames_def] >>
+  Cases_on `c.dft_occ_saved` >- gvs[] >>
+  rename1 `c.dft_occ_saved = pv::saved` >> PairCases_on `pv` >>
+  gvs[] >>
+  rename1 `dft_fixed_stack q pre x call post (annotation::rest) _ _` >>
+  `LENGTH saved = LENGTH rest` by
+    (qpat_x_assum `(_,_)::saved = _` (assume_tac o GSYM) >> fs[]) >>
+  Cases_on `annotation`
+  >- (qexists `1` >> simp[FUNPOW_1] >>
+      conj_tac >- (irule dft_fixed_plain_done >> metis_tac[]) >>
+      metis_tac[dft_fixed_segment_done_one_account]) >>
+  irule dft_fixed_pending_done_segment >> metis_tac[]
+QED
+
+Theorem dft_fixed_segment_next:
+  dft_fixed_phase q pre x call post c d /\
+  q.bb_instructions = pre ++ [x;call] ++ post /\
+  ~is_pseudo x.inst_opcode /\ ~is_terminator x.inst_opcode /\
+  x.inst_opcode <> GAS /\ x.inst_opcode <> ALLOCA /\ call.inst_opcode = INVOKE /\
+  dft_original_context Corig C /\
+  dft_original_context Dorig (dft_gas_edit_ctx q pre x call post C) /\
+  (!fn s ls n. c.dft_occ_core = DftOpen (DftAt fn 0 q s) ls n /\
+    s.vs_inst_idx = LENGTH pre ==>
+    ?f b. dft_recursive_crossing_ready f b q pre x call post s) ==>
+  ?a b. (a = 1 \/ a = 2) /\ (b = 1 \/ b = 2) /\
+    dft_fixed_phase q pre x call post
+      (FUNPOW (dft_occ_oracle_next w C) a c)
+      (FUNPOW (dft_occ_oracle_next w (dft_gas_edit_ctx q pre x call post C)) b d) /\
+    dft_fixed_segment_account q pre x call post w C
+      (dft_gas_edit_ctx q pre x call post C) a b c d
+Proof
+  strip_tac >>
+  `x.inst_opcode <> PHI /\ call.inst_opcode <> PHI` by
+    (conj_tac >- (strip_tac >> fs[venomInstTheory.is_pseudo_def]) >> simp[]) >>
+  qpat_assum `dft_fixed_phase _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_fixed_phase_def]) >>
+  qpat_x_assum `dft_fixed_control _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [dft_fixed_control_def]) >> gvs[]
+  >- (qexistsl [`1`, `1`] >> simp[] >>
+      conj_tac >- (irule dft_fixed_enter_next >> simp[] >> metis_tac[]) >>
+      metis_tac[dft_fixed_segment_enter_account])
+  >- (Cases_on `bb = q /\ s.vs_inst_idx = LENGTH pre`
+      >- (gvs[] >>
+          qexistsl [`2`, `1`] >> simp[] >>
+          conj_tac >- (irule dft_fixed_crossing_next >> simp[] >> metis_tac[]) >>
+          irule dft_fixed_crossing_account >> simp[] >> metis_tac[]) >>
+      qexistsl [`1`, `1`] >> simp[] >>
+      conj_tac >- (irule dft_fixed_at_next >> simp[] >> metis_tac[]) >>
+      irule dft_fixed_segment_at_account >> simp[] >> metis_tac[]) >>
+  qexists `1` >> simp[] >>
+  irule dft_fixed_done_segment >> metis_tac[]
+QED
