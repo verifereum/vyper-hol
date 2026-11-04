@@ -1,7 +1,8 @@
 Theory makeSsaCurrentOrdinary
 Ancestors
   makeSsaCurrentSimDefs makeSsaCurrentDefs venomExecSemantics venomState
-  stateFrame venomInst venomWf list rich_list
+  stateFrame venomInst venomWf list rich_list venomCallOracleProps
+  venomCallOracleDefs pair
 
 Theorem current_rename_operands_map:
   !ops. rename_current_operands rs ops =
@@ -621,4 +622,200 @@ Proof
     >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
         simp[execution_frame_def, venom_state_component_equality]) >>
     qexistsl_tac [`st`,`st'`] >> simp[])
+QED
+
+Theorem current_result_bind_outputs_agree:
+  current_outputs_compatible rs outs rt outs' demand /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (current_before_outputs outs demand) st st' /\
+  bind_outputs outs vals st = SOME t /\ bind_outputs outs' vals st' = SOME t' ==>
+  current_result_agree rt demand (OK t) (OK t')
+Proof
+  strip_tac >>
+  `current_name_agree rt demand t t'`
+    by metis_tac[current_bind_outputs_agree] >>
+  `execution_frame t = execution_frame st /\ state_frame t = state_frame st`
+    by metis_tac[current_bind_outputs_frame] >>
+  `execution_frame t' = execution_frame st' /\ state_frame t' = state_frame st'`
+    by metis_tac[current_bind_outputs_frame] >>
+  gvs[current_result_agree_def] >>
+  gvs[state_frame_def, venom_state_component_equality]
+QED
+
+Theorem current_bump_agree:
+  inst.inst_opcode = BUMP /\ inst'.inst_opcode = BUMP /\
+  LENGTH inst.inst_operands = 2 /\ LENGTH inst.inst_outputs = 2 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  drule current_outputs_compatible_length >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;b]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  simp[step_inst_base_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st`
+  >- simp[current_result_agree_def] >> simp[] >>
+  irule current_result_bind_outputs_agree >>
+  goal_assum $ drule_at Any >>
+  qexistsl_tac [`inst'.inst_outputs`,`[x;word_add x x']`] >>
+  simp[bind_outputs_def]
+QED
+
+Theorem current_terminal_agree:
+  (inst.inst_opcode = STOP \/ inst.inst_opcode = SINK \/ inst.inst_opcode = INVALID) /\
+  inst'.inst_opcode = inst.inst_opcode /\ execution_frame st = execution_frame st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> gvs[] >> asm_rewrite_tac[step_inst_base_def] >>
+  simp[current_result_agree_def] >>
+  qpat_x_assum `execution_frame _ = _` mp_tac >>
+  simp[execution_frame_def, halt_state_def, set_returndata_def,
+       venom_state_component_equality]
+QED
+
+Theorem current_assert_agree:
+  (inst.inst_opcode = ASSERT \/ inst.inst_opcode = ASSERT_UNREACHABLE) /\
+  inst'.inst_opcode = inst.inst_opcode /\ LENGTH inst.inst_operands = 1 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs demand st st' ==>
+  current_result_agree rs demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `eval_operand a st` >> simp[current_result_agree_def] >>
+  Cases_on `x = 0w` >> simp[current_result_agree_def] >>
+  qpat_x_assum `execution_frame _ = _` mp_tac >>
+  simp[execution_frame_def, halt_state_def, revert_state_def, set_returndata_def,
+       venom_state_component_equality]
+QED
+
+Theorem current_return_agree:
+  (inst.inst_opcode = RETURN \/ inst.inst_opcode = REVERT) /\
+  inst'.inst_opcode = inst.inst_opcode /\ LENGTH inst.inst_operands = 2 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map] >>
+  rename1 `inst.inst_operands = [a;b]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  qpat_x_assum `eval_operand b st = _` (assume_tac o SYM) >>
+  `st.vs_memory = st'.vs_memory` by
+    (qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_memory``) >>
+     simp[execution_frame_def]) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `eval_operand a st` >> simp[current_result_agree_def] >>
+  Cases_on `eval_operand b st` >> simp[current_result_agree_def] >>
+  qpat_x_assum `execution_frame _ = _` mp_tac >>
+  simp[execution_frame_def, halt_state_def, revert_state_def, set_returndata_def,
+       venom_state_component_equality]
+QED
+
+Theorem current_param_agree:
+  (inst.inst_opcode = PARAM \/ inst.inst_opcode = FMP_PARAM \/ inst.inst_opcode = RETPC_PARAM) /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst.inst_operands = [Lit idx] /\
+  LENGTH inst.inst_outputs = 1 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >>
+  `st.vs_params = st'.vs_params /\ st.vs_return_pc_token = st'.vs_return_pc_token` by
+    (conj_tac >> qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. (s.vs_params,s.vs_return_pc_token)``) >>
+     simp[execution_frame_def]) >>
+  drule current_outputs_compatible_length >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, rename_current_operands_def,
+      current_outputs_singleton_compatible] >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `w2n idx < LENGTH st'.vs_params` >> simp[current_result_agree_def, update_var_def] >>
+  rewrite_tac[GSYM update_var_def] >> irule current_write_agree >> qexists_tac `rs` >>
+  gvs[current_before_outputs_def]
+QED
+
+Theorem current_dalloca_agree:
+  inst.inst_opcode = DALLOCA /\ inst'.inst_opcode = DALLOCA /\
+  LENGTH inst.inst_operands = 1 /\ LENGTH inst.inst_outputs = 1 /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> drule_all current_rename_operands_pointwise >> strip_tac >>
+  drule current_outputs_compatible_length >> strip_tac >>
+  gvs[LENGTH_EQ_NUM_compute, LIST_REL_def, current_rename_operands_map,
+      current_outputs_singleton_compatible] >>
+  rename1 `inst.inst_operands = [a]` >>
+  qpat_x_assum `eval_operand a st = _` (assume_tac o SYM) >>
+  `st.vs_fmp = st'.vs_fmp` by
+    (qpat_x_assum `execution_frame _ = _`
+      (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >> simp[execution_frame_def]) >>
+  asm_rewrite_tac[step_inst_base_def] >>
+  Cases_on `eval_operand a st`
+  >- simp[current_result_agree_def] >>
+  simp[] >> irule current_result_write_agree >> simp[] >>
+  conj_tac
+  >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+      simp[execution_frame_def, venom_state_component_equality]) >>
+  qexists_tac `rs` >>
+  gvs[current_before_outputs_def, current_name_agree_def, lookup_var_def]
+QED
+
+Theorem current_exec_ext_call_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand
+    (exec_ext_call inst st gas addr value ao az ro rz static)
+    (exec_ext_call inst' st' gas addr value ao az ro rz static)
+Proof
+  strip_tac >>
+  `venom_call_request st addr value ao az static =
+   venom_call_request st' addr value ao az static`
+    by metis_tac[venom_call_request_frame] >>
+  qabbrev_tac `rq = venom_call_request st addr value ao az static` >>
+  `FST (consume_call_outcome rq (w2n ro) (w2n rz) st) =
+   FST (consume_call_outcome rq (w2n ro) (w2n rz) st')`
+    by metis_tac[consume_call_outcome_frame, PAIR_EQ] >>
+  `execution_frame (SND (consume_call_outcome rq (w2n ro) (w2n rz) st)) =
+   execution_frame (SND (consume_call_outcome rq (w2n ro) (w2n rz) st'))`
+    by metis_tac[consume_call_outcome_frame_transport] >>
+  simp[Abbr `rq`, exec_ext_call_def, Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+  pairarg_tac >> gvs[Excl "consume_call_outcome_eq"] >>
+  irule current_single_output_agree >>
+  simp[Excl "consume_call_outcome_eq"] >>
+  rpt conj_tac
+  >- (qpat_x_assum `consume_call_outcome _ _ _ st = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >> gvs[]) 
+  >- (qpat_x_assum `consume_call_outcome _ _ _ st' = _` mp_tac >>
+      simp[consume_call_outcome_eq] >> strip_tac >> gvs[]) >>
+  qexists_tac `rs` >>
+  gvs[consume_call_outcome_eq, current_name_agree_def, lookup_var_def]
 QED
