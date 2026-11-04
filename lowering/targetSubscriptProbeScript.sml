@@ -5811,3 +5811,87 @@ Proof
        targetPlaceSimTheory.target_root_def, probe_deep_module_code] >>
   EVAL_TAC
 QED
+
+(* Audit only the copy prefix, stopping before the return block. *)
+Definition probe_deep_empty_donor_machine_def:
+  probe_deep_empty_donor_machine =
+    (init_venom_state "entry") with
+      vs_accounts := probe_deep_empty_donor_state.accounts
+End
+
+Theorem probe_deep_empty_donor_copy_prefix:
+  ?s. run_blocks 40 ctx probe_deep_function probe_deep_empty_donor_machine =
+        run_blocks 28 ctx probe_deep_function s /\
+      s.vs_current_bb = "@dyn_exit_5" /\
+      lookup_var "%10" s = SOME 0w /\
+      lookup_storage 2w (s.vs_accounts 0w).storage = 1w
+Proof
+  probe_deep_block_tac `39` >>
+  probe_deep_block_tac `38` >>
+  probe_deep_block_tac `37` >>
+  probe_deep_block_tac `36` >>
+  probe_deep_block_tac `35` >>
+  probe_deep_block_tac `34` >>
+  probe_deep_block_tac `33` >>
+  probe_deep_block_tac `32` >>
+  probe_deep_block_tac `31` >>
+  probe_deep_block_tac `30` >>
+  probe_deep_block_tac `29` >>
+  probe_deep_block_tac `28` >>
+  qmatch_goalsub_abbrev_tac `run_blocks 28 ctx fn vs` >>
+  qexists_tac `vs` >>
+  simp[Abbr `vs`, Abbr `fn`] >> EVAL_TAC
+QED
+
+Theorem probe_deep_copy_exit_instructions:
+  (THE (lookup_block "@dyn_exit_5" probe_deep_function.fn_blocks)).bb_instructions =
+    [mk_inst 42 SSTORE [Lit 0w; Var "%10"] [];
+     mk_inst 43 RET [Lit 0w; Var "%0"] []]
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_deep_empty_donor_copy_store:
+  lookup_var "%10" s = SOME 0w ==>
+  ?t. step_inst_base
+        (HD (THE (lookup_block "@dyn_exit_5"
+           probe_deep_function.fn_blocks)).bb_instructions) s = OK t /\
+      lookup_storage 2w (t.vs_accounts 0w).storage =
+        lookup_storage 2w (s.vs_accounts 0w).storage
+Proof
+  strip_tac >>
+  qexists_tac `sstore 0w 0w s` >>
+  conj_tac
+  >- (simp[probe_deep_copy_exit_instructions] >>
+      irule step_SSTORE >> simp[eval_operand_def]) >>
+  simp[sstore_def, lookup_account_def, APPLY_UPDATE_THM] >>
+  Cases_on `s.vs_call_ctx.cc_address = 0w` >>
+  simp[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM]
+QED
+
+Theorem probe_deep_empty_donor_header_comparison:
+  ?s t.
+    run_blocks 40 ctx probe_deep_function probe_deep_empty_donor_machine =
+      run_blocks 28 ctx probe_deep_function s /\
+    s.vs_current_bb = "@dyn_exit_5" /\
+    step_inst_base
+      (HD (THE (lookup_block "@dyn_exit_5"
+         probe_deep_function.fn_blocks)).bb_instructions) s = OK t /\
+    lookup_storage 2w (t.vs_accounts 0w).storage = 1w /\
+    lookup_storage 2w (t.vs_accounts 0w).storage =
+      lookup_storage 2w (get_storage probe_deep_context
+        (set_storage probe_deep_context probe_deep_empty_donor_state F
+          (update_storage 0w 0w
+            (get_storage probe_deep_context probe_deep_empty_donor_state F))) F)
+Proof
+  strip_assume_tac probe_deep_empty_donor_copy_prefix >>
+  drule probe_deep_empty_donor_copy_store >> strip_tac >>
+  qexistsl_tac [`s`, `t`] >>
+  simp[probe_deep_inner_root_shrink_capacity]
+QED
+
+(* The empty-donor branch reaches @dyn_exit_5 without writing slot 2.
+   Its only remaining store is the root-header SSTORE, followed by RET;
+   the checked store preserves slot 2 = 1, exactly as on the source side.
+   This audit stops before return/call execution and does not establish
+   universal base simulation or a general dead-header preservation fact. *)
