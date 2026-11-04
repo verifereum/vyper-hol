@@ -1026,3 +1026,36 @@ Proof
   >- metis_tac[] >>
   metis_tac[stackPlanTypesTheory.is_label_operand_def]
 QED
+
+Theorem normalize_operand_not_dead_marker:
+  !dfg visited op.
+    (!x inst. FLOOKUP dfg.dfg_defs x = SOME inst ==>
+      ~MEM dead_stack_marker inst.inst_operands) /\
+    op <> dead_stack_marker ==>
+    normalize_operand dfg visited op <> dead_stack_marker
+Proof
+  recInduct normalize_operand_ind >>
+  rw[Once normalize_operand_def, dead_stack_marker_def] >>
+  simp[Once normalize_operand_def] >>
+  gvs[AllCaseEqs()] >>
+  Cases_on `MEM v visited` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >>
+  gvs[] >> metis_tac[MEM]
+QED
+
+Theorem codegen_normalize_operand_not_dead_marker:
+  !fn visited op.
+    codegen_ready_fn fn /\ op <> dead_stack_marker ==>
+    normalize_operand (dfg_build_function fn) visited op <> dead_stack_marker
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule normalize_operand_not_dead_marker >> simp[] >>
+  rpt strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    metis_tac[dfg_build_function_correct, dfg_get_def_def] >>
+  `!bbs. fn_insts_blocks bbs = FLAT (MAP (\bb. bb.bb_instructions) bbs)`
+    by (Induct >> simp[fn_insts_blocks_def]) >>
+  gvs[codegen_ready_fn_def, fn_insts_def, MEM_FLAT, MEM_MAP,
+      EVERY_MEM, codegen_ready_inst_def] >>
+  metis_tac[]
+QED
