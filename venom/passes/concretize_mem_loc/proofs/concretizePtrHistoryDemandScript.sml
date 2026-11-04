@@ -14,7 +14,7 @@ Proof
   Cases_on `y1 <= LENGTH s'.vs_returndata` >> gvs[arithmeticTheory.MIN_DEF]
 QED
 
-Theorem ptr_step_mem_no_write[local]:
+Theorem ptr_step_mem_no_write:
   (x IN tn.t_mem \/ x IN new_site_bytes s s') /\
   x NOTIN range_bytes (source_memory_write_ranges inst s) ==>
   x IN (step_taint inst s s' tn).t_mem
@@ -31,7 +31,7 @@ Proof
   ho_match_mp_tac frame_history_ind >> simp[] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem ptr_history_split_snoc[local]:
+Theorem ptr_history_split_snoc:
   h ++ [p] = pre ++ [a] ++ tail /\ tail <> [] ==>
   h = pre ++ [a] ++ FRONT tail /\ LAST tail = p
 Proof
@@ -41,14 +41,14 @@ Proof
   once_asm_rewrite_tac[] >> simp[APPEND_ASSOC, FRONT_APPEND]
 QED
 
-Theorem ptr_every_front[local]:
+Theorem ptr_every_front:
   EVERY P xs ==> EVERY P (FRONT xs)
 Proof
   Cases_on `xs = []` >> simp[] >>
   metis_tac[APPEND_FRONT_LAST, EVERY_APPEND]
 QED
 
-Theorem ptr_every_last[local]:
+Theorem ptr_every_last:
   xs <> [] /\ EVERY P xs ==> P (LAST xs)
 Proof
   metis_tac[APPEND_FRONT_LAST, EVERY_APPEND, listTheory.EVERY_DEF]
