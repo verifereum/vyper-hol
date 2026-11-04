@@ -1,6 +1,6 @@
 Theory concretizeAnalysisDemandBoundary
 Ancestors
-  finiteByteDemand concretizeAnalysisSafeKill concretizeAnalysisFutureDemandProbe
+  finiteByteDemand frameJointDemand concretizeAnalysisSafeKill concretizeAnalysisFutureDemandProbe
   o1PassContract ptrDiscipline frameOriginHistory basePtrDefs
   venomExecSemantics venomInst venomWf concretizeMemLocDefs
   pred_set finite_map list arithmetic
@@ -49,4 +49,16 @@ Proof
     (qpat_x_assum `!k. n <= k /\ k < j ==> _`
        (qspec_then `n` mp_tac) >> simp[]) >>
   drule_all concretize_protected_cached_byte_no_kill >> simp[]
+QED
+
+Theorem joint_demand_mcopy_reads_before_writes:
+  joint_byte_demand
+    (JointConfig stk PG G tn fn demand_mcopy s oms om hs h)
+    [SOME (OriginOrdinary fuel post)] [] 0 0 64 /\
+  64 IN joint_writes
+    (JointConfig stk PG G tn fn demand_mcopy s oms om hs h)
+    (SOME (OriginOrdinary fuel post))
+Proof
+  simp[joint_byte_demand_def, finite_byte_demand_endpoint,
+       joint_reads_def, joint_writes_def, demand_mcopy_overwritten_read]
 QED
