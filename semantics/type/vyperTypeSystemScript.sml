@@ -479,6 +479,11 @@ End
 
 (* ===== Type builtin/conversion checks ===== *)
 
+(* Bytes[N]/String[N] targets accept only Bytes/String sources
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
+   conversion takes a source that is a subtype of its target: same-class
+   bytestrings must narrow, bytesM must change width
+   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -486,10 +491,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
-  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = (k < n) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
@@ -514,12 +518,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
   valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
   valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (StringT k)) = (k < n) /\
   valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
   valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\

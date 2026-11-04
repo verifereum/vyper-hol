@@ -3507,8 +3507,7 @@ Proof
   >~ [`compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi in_n)`]
   >- suspend "bs_decimal"
   >~ [`compile_type_convert v (ConvBytestringToBytesM out_m)`]
-  >- suspend "bs_bytes" >>
-  suspend "fixed_bs"
+  >- suspend "bs_bytes"
 QED
 
 Resume compile_type_convert_shape[int_int]:
@@ -3613,24 +3612,6 @@ QED
 Resume compile_type_convert_shape[bs_bytes]:
   simp[compile_type_convert_def] >> shape_convert_load_word_tac >>
   shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac
-QED
-
-Resume compile_type_convert_shape[fixed_bs]:
-  simp[compile_type_convert_def] >> match_mp_tac shape_step_bind >>
-  qexists_tac `\buf st. P st /\ plain_operand st buf.buf_operand` >> conj_tac
-  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
-  qx_gen_tac `buf` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
-  `shape_stable G` by
-    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
-     mp_tac (Q.SPEC `[buf.buf_operand]:operand list` shape_stable_plain_operands) >> simp[]) >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `G`] >> shape_opcode_tac) >>
-  gen_tac >> simp[] >>
-  shape_scalar_emit_bind_tac `G` `data_ptr` (simp[Abbr `G`]) >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
-  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `G`, Abbr `P`]
 QED
 
 Finalise compile_type_convert_shape[local]

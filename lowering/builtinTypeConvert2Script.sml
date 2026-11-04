@@ -369,57 +369,6 @@ Proof
   simp[lookup_var_update_var, update_var_def, SF SFY_ss]
 QED
 
-(* ConvFixedToBytestring — needs ALLOCA + MSTORE, separate proof *)
-Theorem compile_type_convert_19:
-  ∀ v a w ss st op st'.
-    compile_type_convert v (ConvFixedToBytestring a) st = (op, st') ∧
-    eval_operand v ss = SOME w ∧
-    fresh_vars_wrt st ss
-    ⇒
-    ∃ ss' result.
-      (run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-       eval_operand op ss' = SOME result) ∨
-      run_inst_seq (emitted_insts st st') ss = Abort Revert_abort ss'
-Proof
-  rpt strip_tac >>
-  fs[compile_type_convert_def, load_bytestring_as_word_def,
-     contextTheory.compile_alloc_buffer_def] >>
-  gvs compile_defs >>
-  emitted_insts_tac >>
-  qspecl_then [`st.cs_next_id`, `64w`,
-    `STRING #"%" (toString st.cs_next_var)`, `ss`]
-    strip_assume_tac step_ALLOCA >>
-  rename1 `step_inst_base _ ss = OK ss1` >>
-  drule run_inst_seq_cons_ok >>
-  disch_then (fn th => rewrite_tac[th]) >>
-  pop_assum mp_tac >>
-  pop_assum (qspecl_then [`v`, `w`] mp_tac) >>
-  (impl_tac >- peel_alloca_impl_tac) >>
-  rpt strip_tac >>
-  (* Original whole-chain simplifier exceeded the 10s tactic bound:
-  simp[run_inst_seq_def, step_inst_base_def,
-       exec_pure2_def, exec_pure1_def, exec_read1_def,
-       exec_write2_def, mk_inst_def,
-       eval_operand_lit, eval_operand_update_var_if] >>
-  *)
-  weak_spec_step_tac >> weak_spec_step_tac >> weak_spec_step_tac >>
-  simp[Once run_inst_seq_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       TRY (metis_tac[eval_operand_update_not_none,
-                       eval_operand_mstore_not_none,
-                       optionTheory.NOT_NONE_SOME])) >>
-  (* Original finish (preserved):
-  gvs[eval_operand_update_var_if, eval_operand_mstore,
-      ASCIInumbersTheory.toString_11] >>
-  metis_tac[eval_operand_mstore, eval_operand_update_var_if,
-            ASCIInumbersTheory.toString_11,
-            arithmeticTheory.ADD1, numTheory.NOT_SUC]
-  *)
-  gvs[eval_operand_def, lookup_var_update_var, lookup_var_mstore,
-      fresh_var_name_eq, SF SFY_ss] >>
-  simp[EXISTS_OR_THM, lookup_var_update_var, fresh_var_name_eq]
-QED
-
 Theorem compile_type_convert_20:
   ∀ v w ss st op st'.
     compile_type_convert v ConvIdentity st = (op, st') ∧

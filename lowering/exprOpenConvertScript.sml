@@ -25,25 +25,13 @@ Proof
       mk_inst_def, is_terminator_def]
 QED
 
-Theorem compile_convert_fixed_to_bytestring_open:
-  !v m sa r sb.
-    compile_type_convert v (ConvFixedToBytestring m) sa = (r,sb) ==>
-    ~block_is_terminated sb
-Proof
-  rpt gen_tac >>
-  simp[compile_type_convert_def, compile_int_clamp_def, LET_THM, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  ntac 4 (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  drule emit_void_terminated >> simp[is_terminator_def]
-QED
-
 Theorem compile_type_convert_open:
   !v cv sa r sb.
     ~block_is_terminated sa /\ compile_type_convert v cv sa = (r,sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> Cases_on `cv`
-  >~ [`ConvIntToInt`] >- metis_tac[compile_convert_int_open]
-  >~ [`ConvFixedToBytestring`] >- metis_tac[compile_convert_fixed_to_bytestring_open] >>
+  >~ [`ConvIntToInt`] >- metis_tac[compile_convert_int_open] >>
   simp[compile_type_convert_def, compile_int_clamp_def, LET_THM, load_bytestring_as_word_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
