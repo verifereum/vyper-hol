@@ -50,7 +50,7 @@ val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
 val LABEL_IGNORE = ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
   >- (rpt strip_tac >> metis_tac label_simps);
 
-Theorem label_preserving_emit_op[local]:
+Theorem label_preserving_emit_op:
   !s r t. emit_op opc ops s = (r,t) ==>
   cs_extends s t /\ EVERY LP (added_labels s t)
 Proof
@@ -58,7 +58,7 @@ Proof
   rpt strip_tac >> metis_tac label_simps
 QED
 
-Theorem label_preserving_emit_void[local]:
+Theorem label_preserving_emit_void:
   !s r t. emit_void opc ops s = (r,t) ==>
   cs_extends s t /\ EVERY LP (added_labels s t)
 Proof
