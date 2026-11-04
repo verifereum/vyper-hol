@@ -8,7 +8,8 @@
 
 Theory tailMergeWf
 Ancestors
-  tailMergeMap tailMergeHelpers tailMergeDefs cfgTransform venomInst venomWf
+  tailMergeMap tailMergeHelpers tailMergeDefs cfgTransformProps cfgTransform
+  venomInst venomWf
 
 (* Outputs of the kept, substituted blocks: distinct, and among the
    original outputs *)
@@ -36,15 +37,6 @@ Proof
   rw[tail_merge_fn_def] >> Cases_on `fn_entry_label func` >> simp[] >>
   rw[] >> gvs[ssa_form_def, fn_insts_def, subst_block_labels_fn_def] >>
   metis_tac[outputs_filter_subst]
-QED
-
-Theorem bb_well_formed_subst_block_labels[local]:
-  !m bb. bb_well_formed bb ==>
-    bb_well_formed (subst_block_labels_block m bb)
-Proof
-  rw[bb_well_formed_def, subst_block_labels_block_def,
-     listTheory.LAST_MAP] >>
-  gvs[listTheory.EL_MAP] >> metis_tac[arithmeticTheory.LESS_TRANS]
 QED
 
 Theorem operand_labels_subst[local]:
@@ -89,12 +81,6 @@ Proof
   disch_then SUBST1_TAC >> simp[get_successors_subst_block_labels]
 QED
 
-Theorem subst_block_labels_inst_inst_id[local,simp]:
-  !m i. (subst_block_labels_inst m i).inst_id = i.inst_id
-Proof
-  rw[subst_block_labels_inst_def, subst_label_map_inst_def]
-QED
-
 Theorem labels_filter_subst[local]:
   !bbs m removed.
     MAP (\bb. bb.bb_label)
@@ -127,7 +113,7 @@ Proof
   gen_tac >> gen_tac >> Induct >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[listTheory.ALL_DISTINCT_APPEND] >>
   IF_CASES_TAC >>
-  gvs[subst_block_labels_block_def, listTheory.MAP_MAP_o,
+  gvs[subst_block_labels_block_def, subst_block_labels_inst_shape, listTheory.MAP_MAP_o,
       combinTheory.o_DEF, listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]
 QED
 
