@@ -220,6 +220,10 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv s1` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def] >> Cases_on `tr` >>
+     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
   irule stmt_state_rel_allocas_frame >> simp[] >>
   qexistsl [`es`, `s`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]

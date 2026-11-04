@@ -81,6 +81,19 @@ Proof
   disch_then (qspecl_then [`ss`,`x`,`y`] mp_tac) >> simp[] >> metis_tac[]
 QED
 
+Theorem inst_extends_load_bytestring_as_word:
+  !v opc st r k st'. load_bytestring_as_word v opc st = ((r,k),st') ==>
+    inst_extends st st'
+Proof
+  rpt gen_tac >> Cases_on `opc = SAR` >> (
+  simp_tac pure_ss [load_bytestring_as_word_def] >>
+  asm_rewrite_tac[] >>
+  simp_tac pure_ss [comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  imp_res_tac inst_extends_emit_op >>
+  metis_tac[inst_extends_trans])
+QED
+
 Theorem load_bytestring_as_word_exec:
   !v opc st r k st' ss w.
     load_bytestring_as_word v opc st = ((r,k),st') /\
@@ -91,11 +104,18 @@ Theorem load_bytestring_as_word_exec:
       fresh_vars_wrt st' ss' /\
       (!p u. eval_operand p ss = SOME u ==> eval_operand p ss' = SOME u)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac
+  >- suspend "shr"
+  >> suspend "sar"
+QED
+
+Resume load_bytestring_as_word_exec[shr]:
   qpat_x_assum `load_bytestring_as_word _ _ _ = _` mp_tac >>
-  simp_tac pure_ss [load_bytestring_as_word_def, comp_bind_def, comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[] >>
+  simp_tac pure_ss [load_bytestring_as_word_def] >>
+  simp_tac (srw_ss()) [] >>
+  simp_tac pure_ss [comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[comp_return_def]) >>
+  strip_tac >> gvs[comp_return_def] >>
   rename1 `emit_op MLOAD [v] st = (len,st1)` >>
   rename1 `emit_op ADD [v; Lit 32w] st1 = (dp,st2)` >>
   rename1 `emit_op MLOAD [dp] st2 = (data,st3)` >>
@@ -147,6 +167,91 @@ Proof
   rpt strip_tac >> rpt (first_assum irule)
 QED
 
+Resume load_bytestring_as_word_exec[sar]:
+  qpat_x_assum `load_bytestring_as_word _ _ _ = _` mp_tac >>
+  simp_tac pure_ss [load_bytestring_as_word_def] >>
+  simp_tac (srw_ss()) [] >>
+  simp_tac pure_ss [comp_bind_def, comp_return_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >>
+  rename1 `emit_op MLOAD [v] st = (len,st1)` >>
+  rename1 `emit_op ADD [v; Lit 32w] st1 = (dp,st2)` >>
+  rename1 `emit_op MLOAD [dp] st2 = (raw,st3)` >>
+  rename1 `emit_op ISZERO [len] st3 = (empty,stE)` >>
+  rename1 `emit_op ISZERO [empty] stE = (nonempty,stN)` >>
+  rename1 `emit_op MUL [raw; nonempty] stN = (data,stD)` >>
+  rename1 `emit_op SUB [Lit 32w; len] stD = (sub,st4)` >>
+  rename1 `emit_op MUL [sub; Lit 8w] st4 = (k,st5)` >>
+  rev_drule emit_conversion_load_exec >>
+  disch_then (qspec_then `ss` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ss1` strip_assume_tac) >>
+  qpat_assum `emit_op ADD _ _ = _` (mp_then Any mp_tac emit_conversion_arith_exec) >>
+  disch_then (qspec_then `ss1` mp_tac) >>
+  (impl_tac >- metis_tac[eval_operand_lit]) >>
+  disch_then (qx_choose_then `ss2` strip_assume_tac) >>
+  qpat_assum `emit_op MLOAD [dp] _ = _` (mp_then Any mp_tac emit_conversion_load_exec) >>
+  disch_then (qspec_then `ss2` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ss3` strip_assume_tac) >>
+  rename1 `eval_operand len ss1 = SOME lval` >>
+  qpat_assum `emit_op ISZERO [len] _ = _` (mp_then Any mp_tac emit_op_ISZERO_correct) >>
+  disch_then (qspecl_then [`lval`, `ss3`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ssE` strip_assume_tac) >>
+  qpat_assum `emit_op ISZERO [empty] _ = _` (mp_then Any mp_tac emit_op_ISZERO_correct) >>
+  disch_then (qspecl_then [`bool_to_word (lval = 0w)`, `ssE`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ssN` strip_assume_tac) >>
+  qpat_assum `emit_op MUL [raw; nonempty] _ = _` (mp_then Any mp_tac emit_conversion_arith_exec) >>
+  disch_then (qspec_then `ssN` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ssD` strip_assume_tac) >>
+  qpat_assum `emit_op SUB _ _ = _` (mp_then Any mp_tac emit_conversion_arith_exec) >>
+  disch_then (qspec_then `ssD` mp_tac) >>
+  (impl_tac >- metis_tac[eval_operand_lit]) >>
+  disch_then (qx_choose_then `ss4` strip_assume_tac) >>
+  qpat_assum `emit_op MUL [sub; Lit 8w] _ = _` (mp_then Any mp_tac emit_conversion_arith_exec) >>
+  disch_then (qspec_then `ss4` mp_tac) >>
+  (impl_tac >- metis_tac[eval_operand_lit]) >>
+  disch_then (qx_choose_then `ss5` strip_assume_tac) >>
+  qpat_assum `emit_op _ [k; data] _ = _` (mp_then Any mp_tac emit_conversion_shift_weak) >>
+  disch_then (qspec_then `ss5` mp_tac) >>
+  (impl_tac >- metis_tac[]) >>
+  disch_then (qx_choose_then `ss6` strip_assume_tac) >>
+  rename1 `emit_op _ [k; data] st5 = (r,st6)` >>
+  imp_res_tac inst_extends_emit_op >>
+  `inst_extends st st2` by metis_tac[inst_extends_trans] >>
+  `inst_extends st st3` by metis_tac[inst_extends_trans] >>
+  `inst_extends st stE` by metis_tac[inst_extends_trans] >>
+  `inst_extends st stN` by metis_tac[inst_extends_trans] >>
+  `inst_extends st stD` by metis_tac[inst_extends_trans] >>
+  `inst_extends st st4` by metis_tac[inst_extends_trans] >>
+  `inst_extends st st5` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st st2) ss = OK ss2` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss1`,`st1`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st3) ss = OK ss3` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss2`,`st2`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st stE) ss = OK ssE` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss3`,`st3`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st stN) ss = OK ssN` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ssE`,`stE`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st stD) ss = OK ssD` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ssN`,`stN`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st4) ss = OK ss4` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ssD`,`stD`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st5) ss = OK ss5` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss4`,`st4`] >> simp[]) >>
+  `run_inst_seq (emitted_insts st st6) ss = OK ss6` by
+    (irule run_inst_seq_compose_ok >> qexistsl [`ss5`,`st5`] >> simp[]) >>
+  qexists_tac `ss6` >> simp[SF SFY_ss] >>
+  rename1 `eval_operand k ss5 = SOME kval` >> qexists_tac `kval` >>
+  (conj_tac >- (first_assum irule >> simp[])) >>
+  rpt strip_tac >> rpt (first_assum irule)
+QED
+
+Finalise load_bytestring_as_word_exec
+
 Theorem inst_extends_compile_int_clamp:
   !s b v st op st'. compile_int_clamp s b v st = (op,st') ==>
     inst_extends st st'
@@ -161,13 +266,4 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND]
 QED
 
-Theorem inst_extends_load_bytestring_as_word:
-  !v opc st r k st'. load_bytestring_as_word v opc st = ((r,k),st') ==>
-    inst_extends st st'
-Proof
-  rpt gen_tac >>
-  simp_tac pure_ss [load_bytestring_as_word_def, comp_bind_def, comp_return_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-  imp_res_tac inst_extends_emit_op >>
-  metis_tac[inst_extends_trans]
-QED
+

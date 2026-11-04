@@ -770,7 +770,16 @@ Theorem convert_readonly_state_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `tt = _` (fn th => once_rewrite_tac[th]) >>
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (`not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      `lookup_var p s = SOME 0w` by
+        fs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def,
+           eval_operand_def, lookup_var_def] >>
+      qpat_x_assum `!z w. _ ==> lookup_var _ _ = _`
+        (qspecl_then [`p`, `0w`] mp_tac) >>
+      simp[lookup_var_def]) >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   `not_fresh_at sa p` by
