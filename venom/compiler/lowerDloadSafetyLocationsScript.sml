@@ -4,7 +4,7 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadConfiguredOrigins lowerDloadDefs
   venomExecSemantics venomWf venomInst contextCodegenRel o1ContractLowerDload list rich_list arithmetic
 
-Theorem ld_block_label_unique[local]:
+Theorem ld_block_label_unique:
   ALL_DISTINCT (MAP (\b. b.bb_label) bs) /\
   MEM x bs /\ MEM y bs /\ x.bb_label = y.bb_label ==> x = y
 Proof

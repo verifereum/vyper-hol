@@ -5,6 +5,7 @@ Ancestors
   ptrDiscipline contextCodegenRel lowerDloadSafetyPhiEffects lowerDloadSafetyUpdates
   lowerDloadConfiguredOrigins venomInst venomExecProofs unitShapeDefs pair pred_set
   o1PassContract unitTransformDefs finite_map list venomExecSemantics lowerDloadDefs
+  o1ContractLowerDload lowerDloadSafetyLocations
 
 Theorem ld_entry_phis:
   s.vs_prev_bb = NONE /\ eval_phis s insts = OK s' ==>
@@ -141,4 +142,74 @@ Proof
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
   qpat_x_assum `s_phi = _ with vs_vars := _`
     (fn th => once_rewrite_tac[th]) >> simp[]
+QED
+
+(* Leading PHIs are singleton expansions and consume no fresh supply. *)
+Theorem ld_phi_prefix_supply[local]:
+  !u. lower_dload_insts_supply u (TAKE (phi_prefix_length ins) ins) =
+        (TAKE (phi_prefix_length ins) ins,u) /\
+      phi_prefix_length ins <= LENGTH ins
+Proof
+  Induct_on `ins` >- simp[phi_prefix_length_def, lower_dload_insts_supply_def] >>
+  gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_prefix_length_def, lower_dload_insts_supply_def,
+       lower_dload_inst_supply_def]
+QED
+
+Theorem ld_entry_active_envelope:
+  lower_dload_function_supply u fn = (fn',v) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  ss.vs_current_bb = ts.vs_current_bb /\
+  enters_block fn ss s1 /\ enters_block fn' ts t1 /\
+  active_inst fn' ti t1 ==>
+  ?inst X. active_inst fn inst s1 /\
+    ld_envelope u fn s1 s1.vs_inst_idx X t1.vs_inst_idx /\
+    X <> [] /\ ti = HD X
+Proof
+  strip_tac >>
+  `enters_block fn ts t1` by
+    (irule lower_dload_function_supply_enters_block_origin >> metis_tac[]) >>
+  `LENGTH fn'.fn_blocks = LENGTH fn.fn_blocks` by
+    (drule lower_dload_function_supply_labels >>
+     simp[fn_labels_def] >> metis_tac[LENGTH_MAP]) >>
+  qpat_x_assum `active_inst _ _ _` mp_tac >>
+  simp[active_inst_def, MEM_EL] >> strip_tac >>
+  rename1 `bb = EL bi fn'.fn_blocks` >>
+  `bi < LENGTH fn.fn_blocks` by metis_tac[] >>
+  drule_all lower_dload_function_supply_block_at >> strip_tac >> gvs[] >>
+  qpat_x_assum `enters_block fn' _ _` kall_tac >>
+  gvs[enters_block_def] >>
+  `s_phi = ss with vs_vars := s_phi.vs_vars` by metis_tac[ld_phis_only_vars] >>
+  `s_phi' = ts with vs_vars := s_phi'.vs_vars` by metis_tac[ld_phis_only_vars] >>
+  `s_phi.vs_current_bb = ts.vs_current_bb /\
+   s_phi'.vs_current_bb = ts.vs_current_bb` by
+    (qpat_x_assum `s_phi = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >>
+     qpat_x_assum `s_phi' = _ with vs_vars := _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  drule lookup_block_MEM >> strip_tac >>
+  drule lookup_block_label >> strip_tac >>
+  `MEM (EL (LENGTH pre) fn.fn_blocks) fn.fn_blocks` by
+    (simp[MEM_EL] >> qexists_tac `LENGTH pre` >> simp[]) >>
+  `bb = EL (LENGTH pre) fn.fn_blocks` by
+    (irule ld_block_label_unique >> metis_tac[]) >>
+  gvs[] >>
+  qmatch_goalsub_abbrev_tac `phi_prefix_length ins` >>
+  qabbrev_tac `j = phi_prefix_length ins` >>
+  `lower_dload_insts_supply u0 (TAKE j ins) = (TAKE j ins,u0) /\
+   j <= LENGTH ins` by metis_tac[ld_phi_prefix_supply] >>
+  `j < LENGTH ins` by
+    (spose_not_then assume_tac >>
+     `j = LENGTH ins` by decide_tac >> gvs[TAKE_LENGTH_TOO_LONG]) >>
+  drule_all lower_dload_insts_supply_at >> strip_tac >>
+  gvs[] >>
+  `X <> []` by metis_tac[lower_dload_inst_supply_nonempty] >>
+  qexistsl_tac [`EL j ins`,`X`] >>
+  conj_tac
+  >- (qexists_tac `EL (LENGTH pre) fn.fn_blocks` >>
+      simp[Abbr `ins`] >> qexists_tac `LENGTH pre` >> simp[]) >>
+  conj_tac
+  >- (simp[ld_envelope_def] >>
+      qexists_tac `LENGTH pre` >>
+      fs[Abbr `ins`]) >>
+  simp[] >>
+  Cases_on `X` >> gvs[rich_listTheory.EL_APPEND, LENGTH_TAKE]
 QED
