@@ -8118,14 +8118,16 @@ Theorem gen_block_plan_decompose:
     EVERY (\inst. ~is_param_opcode inst.inst_opcode) bb.bb_instructions /\
     bb.bb_instructions <> [] /\
     generate_block_plan liveness dfg cfg fn bb ps = SOME (block_ops, ps') ==>
-    ?clean_ops ps2 inst_ops.
+    ?clean_ops ps2 inst_ops ps3.
       ((LENGTH (cfg_preds_of cfg bb.bb_label) = 1 /\
         clean_stack_plan liveness cfg fn bb ps = (clean_ops, ps2)) \/
        (LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
         clean_ops = [] /\ ps2 = ps)) /\
       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) 0 (LENGTH bb.bb_instructions) 0
-        bb.bb_instructions ps2 = SOME (inst_ops, ps') /\
+        bb.bb_instructions ps2 = SOME (inst_ops, ps3) /\
+      ps' = observe_stack_height (LENGTH ps.ps_stack)
+              (clean_ops ++ inst_ops) ps3 /\
       block_ops = [SOLabel bb.bb_label] ++ clean_ops ++ inst_ops
 Proof
   rpt strip_tac >>

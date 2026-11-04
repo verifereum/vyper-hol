@@ -1102,7 +1102,7 @@ Proof
   imp_res_tac prepare_params_plan_next_offset >>
   imp_res_tac clean_stack_plan_next_offset >>
   imp_res_tac generate_block_insts_plan_next_offset >>
-  decide_tac
+  gvs[]
 QED
 
 (* Combined for convenience *)

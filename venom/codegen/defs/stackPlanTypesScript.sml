@@ -206,6 +206,20 @@ Definition observe_stack_height_def:
       MAX ps.ps_peak (MAX (ops_peak_height h ops) (LENGTH ps.ps_stack))
 End
 
+Theorem observe_stack_height_fields[simp]:
+  (observe_stack_height h ops ps).ps_stack = ps.ps_stack /\
+  (observe_stack_height h ops ps).ps_spilled = ps.ps_spilled /\
+  (observe_stack_height h ops ps).ps_alloc = ps.ps_alloc /\
+  (observe_stack_height h ops ps).ps_label_counter = ps.ps_label_counter /\
+  (observe_stack_height h ops ps).ps_cleanup_height = ps.ps_cleanup_height /\
+  (observe_stack_height h ops ps).ps_cleanup_growth = ps.ps_cleanup_growth /\
+  (observe_stack_height h ops ps).ps_cleanup_promised =
+    ps.ps_cleanup_promised /\
+  (observe_stack_height h ops ps).ps_calls = ps.ps_calls
+Proof
+  simp[observe_stack_height_def]
+QED
+
 (* =========================================================================
    Operand Helpers
    ========================================================================= *)

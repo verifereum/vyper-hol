@@ -790,8 +790,7 @@ Definition generate_block_insts_plan_def:
     case generate_inst_plan liveness dfg cfg fn inst
            next_live is_halting next_is_term bb_label ps of
       NONE => NONE
-    | SOME (step_ops, ps0) =>
-        let ps' = observe_stack_height (LENGTH ps.ps_stack) step_ops ps0 in
+    | SOME (step_ops, ps') =>
         case generate_block_insts_plan liveness dfg cfg fn bb_label
                is_halting n_params block_len (i + 1) rest ps' of
           NONE => NONE
@@ -805,15 +804,10 @@ Definition generate_block_plan_def:
       if bb = HD fn.fn_blocks
       then prepare_params_plan liveness fn ps
       else ([] : stack_op list, ps) in
-    let (clean_ops, ps1') =
+    let (clean_ops, ps2) =
       if LENGTH (cfg_preds_of cfg bb.bb_label) = 1
       then clean_stack_plan liveness cfg fn bb ps1
       else ([], ps1) in
-    (* the entry block starts with its params on the stack *)
-    let entry_height = LENGTH ps.ps_stack +
-      (if bb = HD fn.fn_blocks then LENGTH (get_params bb.bb_instructions)
-       else 0) in
-    let ps2 = observe_stack_height entry_height (param_ops ++ clean_ops) ps1' in
     let insts = non_param_insts bb in
     let is_halting = bb_is_halting bb in
     let n_params = LENGTH (get_params bb.bb_instructions) in
@@ -823,7 +817,13 @@ Definition generate_block_plan_def:
     case result of
       NONE => NONE
     | SOME (inst_ops, ps3) =>
-        SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops, ps3)
+        (* the entry block starts with its params on the stack *)
+        let entry_height = LENGTH ps.ps_stack +
+          (if bb = HD fn.fn_blocks then LENGTH (get_params bb.bb_instructions)
+           else 0) in
+        SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops,
+              observe_stack_height entry_height
+                (param_ops ++ clean_ops ++ inst_ops) ps3)
 End
 
 (* =========================================================================

@@ -527,6 +527,21 @@ Proof
   simp[venom_asm_rel_def]
 QED
 
+(* Stack-height bookkeeping is ghost metadata too. *)
+Theorem venom_asm_rel_observe[simp]:
+  venom_asm_rel lo (observe_stack_height h ops ps) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def, observe_stack_height_def]
+QED
+
+Theorem venom_asm_rel_calls[simp]:
+  venom_asm_rel lo (ps with ps_calls := calls) vs ast =
+  venom_asm_rel lo ps vs ast
+Proof
+  simp[venom_asm_rel_def]
+QED
+
 Theorem venom_asm_rel_stack_cleanup_promised[simp]:
   venom_asm_rel lo
     (ps with <| ps_stack := stk; ps_cleanup_promised := promised |>) vs ast =
