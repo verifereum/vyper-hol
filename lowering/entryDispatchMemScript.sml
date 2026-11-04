@@ -217,3 +217,47 @@ Proof
        vars_pc_only_inst_idx, vars_pc_only_update_var, vars_pc_only_refl] >>
   simp[jump_to_def]
 QED
+
+Theorem selector_checks_entry_no_phi[local]:
+  !mid sel lbl rest st st' fn.
+  compile_selector_checks mid ((sel,lbl)::rest) st = ((),st') /\
+  fn_has_code st st' fn /\ st.cs_current_insts = [] ==>
+  ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+       (!t. eval_phis t bb.bb_instructions = OK t) /\
+       phi_prefix_length bb.bb_instructions = 0
+Proof
+  rpt gen_tac >>
+  simp[Once compile_selector_checks_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> fs[]) >> strip_tac >>
+  rename1 `new_block next s6 = (_, s7)` >>
+  rename1 `emit_inst JMP _ _ s5 = (_, s6)` >>
+  rename1 `new_block yes s4 = (_, s5)` >>
+  rename1 `emit_inst JNZ _ _ s3 = (_, s4)` >>
+  rename1 `fresh_label "next" s2 = (_, s3)` >>
+  rename1 `fresh_label "match" s1 = (_, s2)` >>
+  rename1 `emit_op EQ _ st = (_, s1)` >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  `fn_has_code st s7 fn` by
+    (irule fn_has_code_mid >> conj_tac
+     >- metis_tac[cs_extends_trans] >>
+     qexistsl_tac [`st'`, `st`] >> simp[cs_extends_refl]) >>
+  drule_all selector_clause_code >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem selector_checks_entry_safe[local]:
+  compile_selector_checks mid ((sel,lbl)::rest) st = ((),st') /\
+  fn_has_code st st' fn /\ st.cs_current_insts = [] /\
+  ss.vs_current_bb = st.cs_current_bb /\ ss.vs_inst_idx = 0 /\
+  (!n. mem_safe_run n ctx fn ss) ==>
+  !n. mem_safe_blocks n ctx fn ss
+Proof
+  strip_tac >> drule_all selector_checks_entry_no_phi >> strip_tac >>
+  irule mem_safe_blocks_no_phi >> reverse conj_tac
+  >- (goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `ss.vs_inst_idx = 0` (fn th =>
+    simp[GSYM th, venom_state_component_equality])
+QED
