@@ -81,95 +81,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem body_alloc_history[local]:
-  compile_alloc_buffer sz sa = (buf,sb) /\ fn_has_code sa sb func /\
-  fn_inst_ids_distinct func /\ alloca_history func s /\ alloca_inv s /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts)
-Proof
-  rpt strip_tac >> drule abi_builtin_alloc_buffer_shape >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-      DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
-    s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
-    (gvs[same_blocks_def, fn_has_code_def, IS_PREFIX_APPEND] >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
-     simp[mk_inst_def, is_terminator_def]) >>
-  drule_all alloca_history_run_inst_seq >> simp[]
-QED
-
-Theorem alloc_buffer_source_frag_mem[local]:
-  !ctx func cenv cx es sm mid buf sz s src a R.
-    compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
-    eval_operand src s = SOME a /\
-    (!x. src = Var x ==> not_fresh_at sm x) /\ alloca_history func s ==>
-    ?u w. frag_exec_mem ctx sm mid (\z. z = s)
-            (\z. z = u /\ alloca_history func z) R /\
-      eval_operand src u = SOME a /\
-      stmt_state_rel ctx func cenv cx es u /\
-      eval_operand buf.buf_operand u = SOME w /\
-      FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
-      w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
-      sm.cs_next_id < mid.cs_next_id /\
-      (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
-      (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
-         FLOOKUP u.vs_allocas aid = SOME entry) /\
-      (!aid b len. aid < sm.cs_next_id /\
-         FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
-         regions_disjoint (w2n w) sz b len) /\
-      (!name b len. local_region cenv es.scopes u name b len ==>
-         regions_disjoint (w2n w) sz b len) /\
-      (?p. buf.buf_operand = Var p /\ not_fresh_at mid p) /\
-      s.vs_alloca_next <= u.vs_alloca_next
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all buffer_alloc_code >> strip_tac >>
-  drule_all literal_alloc_buffer_run >> strip_tac >>
-  `t.vs_labels = s.vs_labels` by metis_tac[hash_alloc_buffer_labels] >>
-  `eval_operand src t = SOME a` by
-    (Cases_on `src` >> gvs[eval_operand_def]) >>
-  `s.vs_alloca_next <= t.vs_alloca_next` by
-    (drule abi_builtin_alloc_buffer_shape >> strip_tac >>
-     drule emitted_insts_emit_op >> strip_tac >>
-     qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
-     simp[run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-          exec_alloca_def, eval_operand_def] >>
-     Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >>
-     simp[update_var_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
-  qexistsl [`t with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
-  simp[] >> reverse conj_tac
-  >- (Cases_on `src` >>
-      gvs[stmt_state_rel_inst_idx, eval_operand_def, lookup_var_def,
-          local_region_def] >> metis_tac[]) >>
-  drule abi_builtin_alloc_buffer_shape >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  `frag_exec_mem ctx sm mid
-    (\z. z = s /\ ~z.vs_halted /\ z.vs_current_bb = sm.cs_current_bb /\
-         z.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\z. z = (t with vs_inst_idx := LENGTH mid.cs_current_insts) /\
-         alloca_history func z) R` by
-    (irule frag_exec_mem_run_inst_seq >>
-     fs[same_blocks_def] >>
-     simp[mk_inst_def, is_terminator_def, IS_PREFIX_APPEND] >>
-     rpt strip_tac
-     >- (simp[run_inst_seq_mem_ok_last] >>
-         irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-     `alloca_inv s` by fs[stmt_state_rel_def] >>
-     `alloca_history func (t with vs_inst_idx := LENGTH mid.cs_current_insts)` by
-       (irule body_alloc_history >> goal_assum (drule_at Any) >>
-        simp[] >> metis_tac[]) >>
-     gvs[]) >>
-  fs[frag_exec_mem_def] >> rpt gen_tac >> strip_tac >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem unwrap_runtime_code_copy_sim_mem:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -293,5 +204,4 @@ val () = List.app (fn th =>
      then print "BODY_IMMUTABLE_UNWRAP_MEMORY_AUDIT OK\n"
      else raise Fail "immutable unwrap inherited admission"
   end) [body_code_copy_history, body_code_copy_frag_mem,
-        body_alloc_history, alloc_buffer_source_frag_mem,
         unwrap_runtime_code_copy_sim_mem];
