@@ -728,6 +728,67 @@ Proof
 QED
 
 (* Validity, concrete names and local projections share this single history. *)
+Theorem current_wf_certificate_labels:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb ==>
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks) /\
+  ALL_DISTINCT (MAP current_event_label events) /\
+  (!b. MEM b fn'.fn_blocks ==>
+    ?ev. MEM ev events /\ current_event_label ev = b.bb_label)
+Proof
+  strip_tac >>
+  qpat_x_assum `current_structural_certificate _ _ _ _ _ _ _` mp_tac >>
+  simp[current_structural_certificate_def] >> strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+    metis_tac[add_phi_nodes_supply_labels] >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==>
+    IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  `MAP current_event_label events = dom_tree_labels (current_dom_tree fn)` by
+    metis_tac[cj 1 current_tree_trace_event_labels] >>
+  `MAP (\b. b.bb_label) renamed = MAP (\b. b.bb_label) ins` by
+    metis_tac[cj 1 current_tree_trace_labels] >>
+  gvs[] >> conj_tac
+  >- fs[wf_function_def, fn_labels_def] >> conj_tac
+  >- metis_tac[current_actual_tree_labels_distinct] >>
+  rpt strip_tac >>
+  `MEM b.bb_label (MAP (\b. b.bb_label)
+    (simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed))` by
+    metis_tac[MEM_MAP] >>
+  `MEM b.bb_label (fn_labels fn)` by
+    (fs[fn_labels_def] >> metis_tac[]) >>
+  `MEM b.bb_label (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_label_member] >>
+  metis_tac[MEM_MAP]
+QED
+
+Theorem current_wf_certificate_block_outputs:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM b fn'.fn_blocks /\ MEM ev events /\ current_event_label ev = b.bb_label /\
+  ALL_DISTINCT (FLAT (MAP instruction_inst_outputs
+    (current_event_renamed_block ev).bb_instructions)) ==>
+  ALL_DISTINCT (FLAT (MAP instruction_inst_outputs b.bb_instructions)) /\
+  (!v. MEM v (FLAT (MAP instruction_inst_outputs b.bb_instructions)) ==>
+    MEM v (FLAT (MAP instruction_inst_outputs
+      (current_event_renamed_block ev).bb_instructions)))
+Proof
+  strip_tac >>
+  `?before after. events = before ++ ev::after` by metis_tac[MEM_SPLIT] >>
+  drule_all current_structural_certificate_final_event >> strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    metis_tac[current_wf_certificate_labels] >>
+  `lookup_block b.bb_label fn'.fn_blocks = SOME b` by
+    metis_tac[MEM_lookup_block] >>
+  Cases_on `blocks_have_leading_phi fn.fn_blocks` >> gvs[]
+  >- (conj_tac
+      >- (irule (SRULE [SF ETA_ss] current_wf_cleanup_block_outputs_distinct) >>
+          simp[current_replay_edges_outputs]) >>
+      rpt strip_tac >> drule (SRULE [SF ETA_ss] current_wf_cleanup_block_output_member) >>
+      simp[current_replay_edges_outputs]) >>
+  simp[current_replay_edges_outputs]
+QED
+
 Theorem current_wf_named_structural_certificate:
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
