@@ -28,6 +28,104 @@ Ancestors
 Libs
   rich_listTheory
 
+(* Ownership refers to the immutable original output occurrence, never to
+   the supply-generated spelling of a renamed variable. *)
+Definition current_wf_token_owner_def:
+  (current_wf_token_owner fn (CurrentDefault w) v <=> v = w) /\
+  (current_wf_token_owner fn (CurrentInserted w l) v <=> v = w) /\
+  (current_wf_token_owner fn (CurrentOriginal l i j) v <=>
+    ?bb. lookup_block l fn.fn_blocks = SOME bb /\
+      i < LENGTH bb.bb_instructions /\
+      j < LENGTH (EL i bb.bb_instructions).inst_outputs /\
+      EL j (EL i bb.bb_instructions).inst_outputs = v)
+End
+
+Theorem current_wf_token_owner_functional:
+  current_wf_token_owner fn t v /\ current_wf_token_owner fn t w ==> v = w
+Proof
+  Cases_on `t` >> simp[current_wf_token_owner_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem current_wf_output_token_owners:
+  !xs j t. current_wf_token_owner fn t v /\
+    (!k. k < LENGTH xs /\ EL k xs = v ==>
+      current_wf_token_owner fn (CurrentOriginal l i (j + k)) v) ==>
+    current_wf_token_owner fn (current_output_token v l i j xs t) v
+Proof
+  Induct >> simp[current_output_token_def] >> rpt strip_tac >>
+  qpat_x_assum `!j t. _` irule >> reverse conj_tac
+  >- (Cases_on `h = v` >> simp[] >>
+      qpat_x_assum `!k. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!k. _` (qspec_then `SUC k` mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem current_wf_original_scan_owners:
+  !insts i t. current_wf_token_owner fn t v /\
+    (!k j. k < LENGTH insts /\ j < LENGTH (EL k insts).inst_outputs ==>
+      current_wf_token_owner fn (CurrentOriginal l (i + k) j)
+        (EL j (EL k insts).inst_outputs)) ==>
+    current_wf_token_owner fn (current_original_scan v l i insts t) v
+Proof
+  Induct >> simp[current_original_scan_def] >> rpt strip_tac >>
+  qpat_x_assum `!i t. _` irule >> reverse conj_tac
+  >- (irule current_wf_output_token_owners >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!k j. _` (qspecl_then [`0`, `k`] mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!k j. _` (qspecl_then [`SUC k`, `j`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem current_wf_original_scan_owner:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  n <= LENGTH bb.bb_instructions /\ current_wf_token_owner fn t v ==>
+  current_wf_token_owner fn
+    (current_original_scan v l 0 (TAKE n bb.bb_instructions) t) v
+Proof
+  strip_tac >> irule current_wf_original_scan_owners >> simp[] >>
+  rpt strip_tac >> simp[current_wf_token_owner_def] >> gvs[EL_TAKE]
+QED
+
+Theorem current_wf_block_token_owner:
+  current_wf_token_owner fn t v ==>
+  current_wf_token_owner fn (current_block_token fn inserted v l t) v
+Proof
+  strip_tac >> simp[current_block_token_def] >>
+  Cases_on `lookup_block l fn.fn_blocks` >> simp[] >>
+  irule current_wf_original_scan_owners >> reverse conj_tac
+  >- (Cases_on `inserted v l` >> simp[current_wf_token_owner_def]) >>
+  rpt strip_tac >> simp[current_wf_token_owner_def]
+QED
+
+Theorem current_wf_chain_token_owner:
+  !path t. current_wf_token_owner fn t v ==>
+    current_wf_token_owner fn (current_chain_token fn inserted v path t) v
+Proof
+  Induct >> simp[current_chain_token_def] >> rpt strip_tac >>
+  first_x_assum irule >> irule current_wf_block_token_owner >> simp[]
+QED
+
+Theorem current_wf_inherited_token_owner:
+  current_wf_token_owner fn (current_inherited_token fn inserted v path) v
+Proof
+  simp[current_inherited_token_def] >>
+  irule current_wf_chain_token_owner >> simp[current_wf_token_owner_def]
+QED
+
+Theorem current_wf_owned_names_distinct:
+  current_history_valid V H /\
+  current_wf_token_owner fn t v /\ current_wf_token_owner fn u w /\ v <> w /\
+  (!x. t <> CurrentDefault x) /\ (!x. u <> CurrentDefault x) /\
+  current_token_name H t = SOME n /\ current_token_name H u = SOME m ==>
+  n <> m
+Proof
+  strip_tac >> strip_tac >> gvs[] >>
+  `t = u` by metis_tac[current_allocated_name_injective] >>
+  metis_tac[current_wf_token_owner_functional]
+QED
+
 Theorem current_wf_source_cut_env:
   current_source_cut A ev n rs E ==>
   E = FOLDL (\env (t,v). (v =+ t) env) (current_event_entry_env ev)
@@ -84,6 +182,24 @@ Proof
   strip_tac >> drule current_wf_source_cut_env >>
   disch_then SUBST1_TAC >> asm_rewrite_tac[] >>
   sym_tac >> irule current_wf_block_annotation_prefix_scan >> simp[]
+QED
+
+Theorem current_wf_source_cut_owner:
+  lookup_block (current_event_label ev) fn.fn_blocks = SOME old /\
+  A (current_event_label ev) = current_block_annotations old pre /\
+  i <= LENGTH old.bb_instructions /\
+  current_source_cut A ev (LENGTH pre + i) rs E /\
+  current_wf_token_owner fn (current_event_entry_env ev v) v ==>
+  current_wf_token_owner fn (E v) v
+Proof
+  strip_tac >>
+  `current_event_label ev = old.bb_label` by metis_tac[lookup_block_label] >>
+  `A old.bb_label = current_block_annotations old pre` by metis_tac[] >>
+  drule_all current_wf_source_cut_original_scan >>
+  disch_then (qspec_then `v` (SUBST1_TAC o SYM)) >>
+  irule current_wf_original_scan_owner >>
+  Cases_on `?inst. MEM inst pre /\ MEM v inst.inst_outputs` >>
+  simp[current_wf_token_owner_def] >> metis_tac[]
 QED
 
 Theorem current_wf_output_token_default[local]:
@@ -2365,6 +2481,27 @@ Proof
   PairCases_on `ev` >>
   simp[current_event_trace_def, current_event_input_block_def,
     current_event_exit_rs_def, current_event_exit_env_def, current_source_cut_end]
+QED
+
+Theorem current_wf_precleanup_exit_owner:
+  current_wf_precleanup_certificate s fn renamed s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM ev events /\ lookup_block (current_event_label ev) fn.fn_blocks = SOME old ==>
+  current_wf_token_owner fn (current_event_exit_env ev v) v
+Proof
+  strip_tac >> drule current_wf_precleanup_structural >> strip_tac >>
+  drule_all current_wf_certificate_actual_prefix >> strip_tac >>
+  drule_all current_wf_certificate_static_entry >> strip_tac >>
+  `current_wf_token_owner fn (current_event_entry_env ev v) v` by
+    metis_tac[current_wf_inherited_token_owner] >>
+  `LENGTH (current_event_input_block ev).bb_instructions =
+    LENGTH pre + LENGTH old.bb_instructions` by
+    (qpat_x_assum `current_edge_shape _ (current_event_input_block ev)` mp_tac >>
+     simp[current_edge_shape_def, LIST_REL_EL_EQN]) >>
+  `current_source_cut A ev (LENGTH pre + LENGTH old.bb_instructions)
+    (current_event_exit_rs ev) (current_event_exit_env ev)` by
+    metis_tac[current_wf_event_exit_cut] >>
+  irule current_wf_source_cut_owner >> metis_tac[arithmeticTheory.LESS_EQ_REFL]
 QED
 
 Theorem current_wf_precleanup_exit_available:
