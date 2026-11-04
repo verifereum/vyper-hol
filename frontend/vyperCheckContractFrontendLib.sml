@@ -3,6 +3,7 @@ structure vyperCheckContractFrontendLib :> vyperCheckContractFrontendLib = struc
 open HolKernel boolLib
 open jsonToVyperTheory
 open jsonConstEvalTheory
+open sourceModuleDefsTheory
 
  type frontend_input =
   {in_deploy : bool,
@@ -189,7 +190,8 @@ fun check_contract_file {in_deploy, address, path} =
 fun check_constant_contract_file {address, path} = let
   val declarations = JSONDecode.decodeFile jsonConstASTLib.annotated_ast path
   val translation = eval_closed "constant module translation"
-    (mk_comb (``translate_constant_module``, declarations))
+    (mk_comb (prim_mk_const {Thy="jsonConstEval",Name="translate_constant_module"},
+      declarations))
   val modules = optionSyntax.dest_some translation
     handle HOL_ERR _ => raise Fail
       "vyperCheckContractFrontendLib: constant module translation rejected"
@@ -199,6 +201,114 @@ in
   vyperCheckContractLib.check_contract
     {in_deploy = false, address = address, modules = modules,
      layouts = listSyntax.mk_list ([entry], type_of entry)}
+end
+
+(* ===== Opt-in source route ===== *)
+
+type source_input =
+  {fuel:term, trust:term, keys:term, program:term, layouts:term, address:term}
+type source_checked_result = sourceModuleFrontendLib.checked
+
+fun check_source_contract_result
+    {fuel, trust, keys, program, layouts, address} : source_checked_result = let
+  val () = app (fn (label,tm) => require_closed label tm)
+    [("source fuel",fuel),("source trust",trust),("source keys",keys),
+     ("original source program",program),("source layouts",layouts),("address",address)]
+in
+  sourceModuleFrontendLib.check_simple
+    {fuel=fuel,trust=trust,keys=keys,program=program}
+    {layouts=layouts,address=address}
+end
+
+fun check_loaded_source_contract_result {fuel,trust,source,layouts,address} = let
+  val () = app (fn (label,tm) => require_closed label tm)
+    [("source fuel",fuel),("source trust",trust),("source layouts",layouts),("address",address),
+     ("original source program",#program (source:sourceModuleLoaderLib.loaded)),
+     ("source keys",#keys source)]
+in sourceModuleFrontendLib.check_loaded {fuel=fuel,trust=trust,source=source}
+  {layouts=layouts,address=address} end
+
+(* Rebuilds the strict constant fragment as original source syntax; the
+   source route then evaluates it. No arithmetic or typing happens here. *)
+fun source_node thy name args =
+  list_mk_comb (prim_mk_const {Thy=thy,Name=name},args)
+fun sx name args = source_node "sourceSyntax" name args
+fun sca name args = source_node "sourceConstAnnotation" name args
+fun source_list name entries = listSyntax.mk_list
+  (entries,mk_thy_type {Thy="sourceSyntax",Tyop=name,Args=[]})
+fun strict_expression tm =
+  case strip_comb tm of
+    (ctor,[value,_]) =>
+      if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_Int"}) then
+        sx "SX_Literal" [source_node "sourceConstAST" "SCL_Int" [value]]
+      else raise Fail "strict source adapter: unexpected expression"
+  | (ctor,[first,second,third,_]) =>
+      if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_Name"}) then
+        sx "SX_Name" [first]
+      else if same_const ctor (prim_mk_const {Thy="jsonAST",Name="JE_BinOp"}) then let
+        val suffix = String.extract (#Name (dest_thy_const second),5,NONE)
+        val source_op = if suffix = "Mult" then "Mul" else suffix
+      in sx "SX_Binary"
+        [source_node "sourceConstAST" ("SCB_" ^ source_op) [],
+         strict_expression first,strict_expression third] end
+      else raise Fail "strict source adapter: unexpected expression"
+  | _ => raise Fail "strict source adapter: unexpected expression"
+fun strict_annotation tm =
+  case strip_comb tm of
+    (ctor,[first,second]) =>
+      if same_const ctor (prim_mk_const {Thy="jsonConstAST",Name="CA_Integer"}) then
+        sca "SCA_Name" [listSyntax.mk_list
+          ([stringSyntax.fromMLstring
+            ((if aconv second boolSyntax.T then "int" else "uint") ^
+             Arbnum.toString (numSyntax.dest_numeral first))],stringSyntax.string_ty)]
+      else sca "SCA_StaticArray" [strict_annotation first,
+        source_node "sourceSyntax" "source_constant_candidate" [strict_expression second]]
+  | _ => raise Fail "strict source adapter: unexpected annotation"
+fun strict_declaration tm =
+  case strip_comb tm of
+    (_, [name,ann,value]) => sx "SD_Variable"
+      [name,sca "SCA_Qualified"
+        [source_node "sourceConstAnnotation" "SCQ_Constant" [],strict_annotation ann],
+       optionSyntax.mk_some (strict_expression value)]
+  | (_, [name,args,ret,body]) => let
+      val (params,_) = listSyntax.dest_list args
+      fun argument pair = let val (id,ann) = pairSyntax.dest_pair pair
+        in sx "SourceArg" [id,optionSyntax.mk_some (strict_annotation ann)] end
+    in sx "SD_Function" [name,
+      source_list "source_expr" (List.map (fn s => sx "SX_Name"
+        [stringSyntax.fromMLstring s]) ["external","pure"]),
+      source_list "source_arg" (List.map argument params),source_list "source_expr" [],
+      optionSyntax.mk_some (strict_annotation ret),
+      source_list "source_stmt" [sx "SS_Return" [optionSyntax.mk_some (strict_expression body)]]]
+    end
+  | _ => raise Fail "strict source adapter: unexpected declaration"
+
+fun prepare_constant_source_file {address,path} : source_input = let
+  val declarations = JSONDecode.decodeFile jsonConstASTLib.annotated_ast path
+  val (decls,_) = listSyntax.dest_list declarations
+  val program = sx "SourceProgram"
+    [sx "SourceModule" [source_list "source_decl" (List.map strict_declaration decls)],
+     source_list "source_module" []]
+  val trust = Parse.Term [QUOTE
+    "<| smt_ids := [([\"main\"],NONE)]; smt_nominals := []; smt_type_defs := FEMPTY; smt_slots := [] |> : source_module_trust"]
+  val layout = ``([] : storage_layout, [] : storage_layout)``
+  val entry = pairSyntax.mk_pair (address,layout)
+in
+  {fuel=``80:num``,trust=trust,keys=``[["main"]]``,program=program,
+   layouts=listSyntax.mk_list ([entry],type_of entry),address=address}
+end
+
+structure Source = struct
+  val check_contract_result = check_source_contract_result
+  fun check_contract input = #checking (check_contract_result input)
+  val check_loaded_contract_result = check_loaded_source_contract_result
+  fun check_contract_file_result {fuel,trust,layouts,address,path} =
+    check_loaded_contract_result
+      {fuel=fuel,trust=trust,layouts=layouts,address=address,
+       source=sourceModuleLoaderLib.load_file path}
+  fun check_contract_file input = #checking (check_contract_file_result input)
+  val prepare_constant_file = prepare_constant_source_file
+  fun check_constant_contract_file input = check_contract (prepare_constant_file input)
 end
 
 end
