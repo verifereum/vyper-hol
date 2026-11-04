@@ -1138,3 +1138,79 @@ Proof
   qexistsl_tac [`s9`, `s10`, `s11`] >> simp[] >>
   metis_tac[cs_extends_refl]
 QED
+
+Theorem compile_if_layout_mem:
+  !cenv lctx ty c ss1 ss2 sa sb func.
+    compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((), sb) /\
+    cs_mono (stmts_env cenv lctx ty ss1) /\
+    cs_mono (stmts_env cenv lctx ty ss2) /\ fn_has_code sa sb func ==>
+    ?op s1 s4 s5 s6 s7 s8 s9 s10 s11 lt lf le x5 x8.
+      lower_value compile_expr cenv (BaseT BoolT) c sa = (op, s1) /\
+      s4.cs_current_bb = s1.cs_current_bb /\
+      s4.cs_current_insts = s1.cs_current_insts /\
+      emit_inst JNZ [op; Label lt; Label lf] [] s4 = ((), s5) /\
+      new_block lt s5 = (x5, s6) /\
+      compile_stmts cenv lctx ty ss1 s6 = ((), s7) /\
+      (if block_is_terminated s7 then s8 = s7
+       else emit_inst JMP [Label le] [] s7 = ((), s8)) /\
+      new_block lf s8 = (x8, s9) /\
+      compile_stmts cenv lctx ty ss2 s9 = ((), s10) /\
+      (if block_is_terminated s10 then s11 = s10
+       else emit_inst JMP [Label le] [] s10 = ((), s11)) /\
+      (~block_is_terminated s7 \/ ~block_is_terminated s10 ==>
+       ?x11. new_block le s11 = (x11, sb)) /\
+      (block_is_terminated s7 /\ block_is_terminated s10 ==> sb = s11) /\
+      fn_has_code sa s1 func /\ fn_has_code s6 s7 func /\
+      fn_has_code s9 s10 func /\ fn_has_code s7 s9 func /\
+      fn_has_code s10 sb func /\
+      lookup_block s5.cs_current_bb func.fn_blocks =
+        SOME <| bb_label := s5.cs_current_bb;
+                bb_instructions := s5.cs_current_insts |> /\
+      cs_extends sa s6 /\ cs_extends sa s9 /\
+      sa.cs_next_var <= s6.cs_next_var /\
+      s6.cs_next_var <= sb.cs_next_var /\
+      sa.cs_next_var <= s9.cs_next_var /\
+      s9.cs_next_var <= sb.cs_next_var
+Proof
+  rpt strip_tac >> drule compile_if_parts_all >> strip_tac >>
+  imp_res_tac new_block_props >> imp_res_tac emit_inst_extends >>
+  `stmts_env cenv lctx ty ss1 s6 = (FST (stmts_env cenv lctx ty ss1 s6), s7) /\
+   stmts_env cenv lctx ty ss2 s9 = (FST (stmts_env cenv lctx ty ss2 s9), s10)` by
+    (fs[compile_stmts_env] >>
+     Cases_on `stmts_env cenv lctx ty ss1 s6` >>
+     Cases_on `stmts_env cenv lctx ty ss2 s9` >> gvs[]) >>
+  `cs_extends s6 s7 /\ s6.cs_next_var <= s7.cs_next_var /\
+   cs_extends s9 s10 /\ s9.cs_next_var <= s10.cs_next_var` by
+    (fs[cs_mono_def] >> metis_tac[]) >>
+  `!sx sy. (if block_is_terminated sx then sy = sx
+            else emit_inst JMP [Label exit_lbl] [] sx = ((), sy)) ==>
+           cs_extends sx sy /\ sx.cs_next_var = sy.cs_next_var` by
+    (rw[] >> imp_res_tac emit_inst_extends >>
+     metis_tac[cs_extends_refl, cs_appends_emit_helpers, cs_appends_def]) >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by
+    (drule (cj 2 compile_expr_grows) >> simp[]) >>
+  `cs_extends s7 s8 /\ s7.cs_next_var = s8.cs_next_var /\
+   cs_extends s10 s11 /\ s10.cs_next_var = s11.cs_next_var` by metis_tac[] >>
+  `cs_extends s4 s5 /\ cs_extends s5 s6 /\ cs_extends s8 s9` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def, cs_extends_new_block] >>
+  `cs_extends s11 sb /\ s11.cs_next_var = sb.cs_next_var` by
+    (Cases_on `block_is_terminated s7 /\ block_is_terminated s10`
+     >- (fs[] >> simp[cs_extends_refl]) >>
+     `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
+     metis_tac[cs_extends_new_block, new_block_props]) >>
+  `cs_extends sa s4 /\ cs_extends sa s6 /\ cs_extends s6 s9 /\
+   cs_extends s7 s9 /\ cs_extends s9 sb /\ cs_extends s10 sb /\
+   cs_extends s7 sb /\ cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func /\ fn_has_code s5 s6 func /\
+   fn_has_code s6 s7 func /\ fn_has_code s9 s10 func /\
+   fn_has_code s7 s9 func /\ fn_has_code s10 sb func` by
+    metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_refl,
+              cs_extends_trans] >>
+  `lookup_block s5.cs_current_bb func.fn_blocks =
+     SOME <| bb_label := s5.cs_current_bb;
+             bb_instructions := s5.cs_current_insts |>` by
+    metis_tac[fn_has_code_new_block] >>
+  qexistsl_tac [`cond_op`, `s1`, `s4`, `s5`, `s6`, `s7`, `s8`, `s9`,
+                `s10`, `s11`, `then_lbl`, `else_lbl`, `exit_lbl`, `x5`, `x8`] >>
+  simp[] >> metis_tac[cs_extends_trans]
+QED

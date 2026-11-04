@@ -5,7 +5,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps loweringSlice
+  fragExec fragExecMem localPtrsProps loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
@@ -410,4 +410,49 @@ Proof
      Cases_on `b` >> gvs[] >> metis_tac[]) >>
   `~(jump_to (if b then lt else lf) s).vs_halted` by simp[jump_to_def] >>
   metis_tac[gas_path_mem_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem run_from_jump_end_mem:
+  !ctx func sa sb ss inst lbl.
+    sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ [inst] /\
+    fn_has_code sa sb func /\
+    ss.vs_current_bb = sa.cs_current_bb /\
+    ss.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst_base inst ss = OK (jump_to lbl ss) /\ ~ss.vs_halted /\
+    inst_mem_below_frontier inst ss ==>
+    !fuel r. run_from fuel ctx func (jump_to lbl ss) = r /\
+      (!e. r <> Error e) ==>
+      ?fuel'. run_from fuel' ctx func ss = r /\
+        (mem_safe_run fuel ctx func (jump_to lbl ss) ==>
+         mem_safe_run fuel' ctx func ss)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) = SOME inst` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt strip_tac >> qexists_tac `SUC fuel` >>
+  irule mem_safe_run_jump_result >> simp[] >>
+  qexists_tac `0` >>
+  gvs[step_inst_non_invoke, mem_safe_step_non_invoke]
+QED
+
+Theorem emit_abort_exit_mem:
+  !ctx func opc ops st st' s0 RetQ es' res.
+    emit_inst opc ops [] st = ((), st') /\ fn_has_code st st' func /\
+    s0.vs_current_bb = st.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s0.vs_halted /\
+    opc <> INVOKE /\ inst_mem_below_frontier (mk_inst st.cs_next_id opc ops []) s0 /\
+    (?a s'. step_inst_base (mk_inst st.cs_next_id opc ops []) s0 =
+              Abort a s' /\ expr_exit res (Abort a s')) ==>
+    ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
+             stmt_exit RetQ es' res r /\ mem_safe_run fuel ctx func s0
+Proof
+  rpt strip_tac >> drule emit_inst_extends >> strip_tac >>
+  `frag_exec_mem ctx st st' (\s. s = s0) (\s. F) (stmt_exit RetQ es' res)` by
+    (irule frag_exec_mem_step_abort >> fs[] >> qexists_tac `0` >>
+     fs[step_inst_non_invoke, mk_inst_def, stmt_exit_def,
+        mem_safe_step_non_invoke]) >>
+  qpat_x_assum `frag_exec_mem _ _ _ _ _ _` mp_tac >> simp[frag_exec_mem_def]
 QED
