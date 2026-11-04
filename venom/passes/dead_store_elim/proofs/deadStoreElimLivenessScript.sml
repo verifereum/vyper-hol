@@ -163,8 +163,6 @@ Proof
   simp[EL_TAKE, LENGTH_TAKE, phi_prefix_length_le]
 QED
 
-(* Pending execution-to-CFG boundary: existing exec_block_current_bb_in_succs
-   assumes EVERY inst_wf, which wf_function does not entail.
 Theorem dse_exec_block_successor:
   wf_function fn /\ MEM bb fn.fn_blocks /\
   s.vs_inst_idx <= LENGTH bb.bb_instructions /\
@@ -178,7 +176,11 @@ Proof
     (rewrite_tac[cfg_analyze_succs] >>
      irule cfg_succs_of_build_succs >>
      fs[wf_function_def, fn_labels_def]) >>
-  simp[] >> irule exec_block_current_bb_in_succs >>
-  qexistsl_tac [`ctx`, `fuel`, `s`] >> simp[]
+  `!i. i < LENGTH bb.bb_instructions - 1 ==>
+       ~is_terminator (EL i bb.bb_instructions).inst_opcode` by
+    (rpt strip_tac >>
+     `i < LENGTH bb.bb_instructions` by decide_tac >>
+     `i = PRE (LENGTH bb.bb_instructions)` by metis_tac[] >>
+     decide_tac) >>
+  drule_all exec_block_current_bb_in_succs >> simp[]
 QED
-*)
