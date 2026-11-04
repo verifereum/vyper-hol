@@ -61,7 +61,7 @@ Proof
   Cases_on `v` >> simp[lookup_function_def]
 QED
 
-Theorem supported_internal_return_type[local]:
+Theorem supported_internal_return_type:
   !tops id mut nr rr args dflts ret body cenv.
     supported_program tops /\
     supported_function_decl tops id Internal =
@@ -77,7 +77,7 @@ Proof
   qexistsl_tac [`args`, `dflts`, `mut`, `nr`, `rr`, `body'`, `Internal`] >> simp[]
 QED
 
-Theorem supported_internal_signature_return[local]:
+Theorem supported_internal_signature_return:
   !tops id mut nr rr args dflts ret body cenv cx env es sig.
     supported_program tops /\
     supported_function_decl tops id Internal =
@@ -100,6 +100,18 @@ Proof
   first_x_assum drule >> strip_tac >>
   gvs[lookup_callable_function_def] >>
   metis_tac[]
+QED
+
+Theorem supported_internal_return_admissible:
+  !tops id mut nr rr args dflts ret body.
+    supported_program tops /\
+    supported_function_decl tops id Internal =
+      SOME (mut,nr,rr,args,dflts,ret,body) ==>
+    supported_return_type tops ret
+Proof
+  rpt strip_tac >> drule supported_internal_function_lookup >> strip_tac >>
+  drule_all supported_program_declaration >>
+  simp[supported_function_header_contract, supported_function_return_def]
 QED
 
 Theorem eval_empty_bytes_read:
