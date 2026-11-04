@@ -371,3 +371,24 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
   imp_res_tac get_place_state >> gvs[] >> metis_tac[aug_place_base_inv]
 QED
+
+Theorem aug_place_rhs_scopes:
+  supported_expr tops e /\
+  (do tv <- eval_expr cx e; read_result cx tv od) st = (r,st1) ==>
+  st1.scopes = st.scopes
+Proof
+  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  metis_tac[aug_place_supported_expr_scopes]
+QED
+
+Theorem aug_place_rhs_memory_entry:
+  supported_expr tops e /\
+  (do tv <- eval_expr cx e; read_result cx tv od) st = (r,st1) /\
+  lookup_scopes id st.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL old ==>
+  lookup_scopes id st1.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL old
+Proof
+  rpt strip_tac >> drule_all aug_place_rhs_scopes >> simp[]
+QED
