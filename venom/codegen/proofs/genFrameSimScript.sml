@@ -106,7 +106,7 @@ QED
 
 (* The context relation on a frame's own stack, read as the local relation
    with the assembly memory standing in for the Venom memory. *)
-Theorem context_venom_asm_rel_local[local]:
+Theorem context_venom_asm_rel_local:
   !cp lo ps v st.
     context_venom_asm_rel cp lo ps v st ==>
     venom_asm_rel lo ps (v with vs_memory := st.as_memory) st
@@ -1013,7 +1013,7 @@ Proof
   drule_all context_writes_local >> simp[source_memory_writes_disjoint_def]
 QED
 
-Theorem frame_local_result[local]:
+Theorem frame_local_result:
   !ctx cp lo fn ra rest mem0 ps vs ast ps' vs' out r m'.
   fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
   MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\

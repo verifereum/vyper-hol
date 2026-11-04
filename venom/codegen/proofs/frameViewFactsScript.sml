@@ -98,6 +98,13 @@ Proof
   simp[frame_view_def]
 QED
 
+Theorem frame_view_gas_readings:
+  frame_view fn ra (vs with vs_gas_readings := readings) =
+  (frame_view fn ra vs) with vs_gas_readings := readings
+Proof
+  simp[frame_view_def]
+QED
+
 Theorem eval_operand_frame_view:
   (!x. op = Var x ==> ~retpc_var fn x) ==>
   eval_operand op (frame_view fn ra s with vs_memory := m) =

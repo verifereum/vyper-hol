@@ -3,7 +3,7 @@
 
 Theory gasFrameSim
 Ancestors
-  genFrameSim
+  genFrameSim frameViewFacts
   frameRel asmFrame genBlockSim regularPostfixSim reorderSim mixedPrefixSim prefixSim
   stackOpAsmSim stackOpSim instSimHelpers blockSimHelpers planWf
   codegenRel contextCodegenRel planExec asmSem stackPlanGen stackPlanTypes
@@ -19,71 +19,6 @@ Proof
   simp[inst_wf_def, ef_read0_def] >>
   Cases_on `inst.inst_outputs` >> simp[] >>
   Cases_on `t` >> simp[]
-QED
-
-Theorem gas_distinct_outputs_unique[local]:
-  !xs i j x.
-    ALL_DISTINCT (FLAT (MAP (\i:instruction. i.inst_outputs) xs)) /\
-    MEM i xs /\ MEM j xs /\
-    MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j
-Proof
-  Induct >> simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >>
-  metis_tac[]
-QED
-
-Theorem gas_output_non_retpc[local]:
-  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = GAS /\ MEM out inst.inst_outputs ==>
-  ~retpc_var fn out
-Proof
-  simp[retpc_var_def] >> rpt strip_tac >>
-  fs[codegen_ready_fn_def, ssa_form_def] >>
-  qpat_x_assum `copy_phi_var _ _ _` mp_tac >>
-  simp[Once copy_phi_var_cases] >> rpt strip_tac >>
-  CCONTR_TAC >> gvs[] >>
-  `inst = inst'` by metis_tac[gas_distinct_outputs_unique] >> gvs[]
-QED
-
-Theorem gas_frame_view_update[local]:
-  ~retpc_var fn out ==>
-  frame_view fn ra (update_var out value vs) =
-  update_var out value (frame_view fn ra vs)
-Proof
-  strip_tac >> simp[frame_view_def, update_var_def] >>
-  `(FMAP_MAP2 (\(x,v). if retpc_var fn x then ra else v)
-      (vs.vs_vars |+ (out,value))) =
-    (FMAP_MAP2 (\(x,v). if retpc_var fn x then ra else v)
-      vs.vs_vars) |+ (out,value)` suffices_by simp[] >>
-  simp[fmap_eq_flookup, FLOOKUP_FMAP_MAP2, FLOOKUP_UPDATE] >>
-  gen_tac >> Cases_on `out = x` >> gvs[]
-QED
-
-Theorem gas_frame_view_readings[local]:
-  frame_view fn ra (vs with vs_gas_readings := readings) =
-  (frame_view fn ra vs) with vs_gas_readings := readings
-Proof
-  simp[frame_view_def]
-QED
-
-Theorem gas_step_frame_view[local]:
-  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = GAS /\ inst.inst_outputs = [out] /\
-  step_inst fuel ctx inst vs = OK vs' ==>
-  step_inst fuel ctx inst (frame_view fn ra vs) =
-  OK (frame_view fn ra vs')
-Proof
-  strip_tac >>
-  `~retpc_var fn out` by
-    (irule gas_output_non_retpc >> simp[] >> metis_tac[MEM]) >>
-  gvs[Once step_inst_def, step_inst_base_def] >>
-  Cases_on `vs.vs_gas_readings` >>
-  gvs[exec_gas_def] >>
-  simp[Once step_inst_def, step_inst_base_def, exec_gas_def,
-       gas_frame_view_update, gas_frame_view_readings,
-       GSYM frame_view_def] >>
-  ` (frame_view fn ra vs).vs_gas_readings = vs.vs_gas_readings` by
-    simp[frame_view_def] >>
-  simp[exec_gas_def, gas_frame_view_update, gas_frame_view_readings]
 QED
 
 Theorem gas_step_result[local]:
@@ -415,55 +350,6 @@ Resume gas_plan_local_sim[pop]:
 QED
 Finalise gas_plan_local_sim
 
-Theorem gas_plan_rels_memory[local]:
-  (plan_stack_rel lo (v with vs_memory := m) stk astk <=>
-   plan_stack_rel lo v stk astk) /\
-  (plan_spill_rel lo (v with vs_memory := m) sp am <=>
-   plan_spill_rel lo v sp am)
-Proof
-  `!op. operand_val (v with vs_memory := m) lo op = operand_val v lo op` by
-    (Cases >> simp[operand_val_def]) >>
-  simp[plan_stack_rel_def, plan_spill_rel_def]
-QED
-
-Theorem gas_context_local[local]:
-  !cp lo ps v st.
-  context_venom_asm_rel (cp:context_plan) lo ps v st ==>
-  venom_asm_rel lo ps (v with vs_memory := st.as_memory) st
-Proof
-  simp[context_venom_asm_rel_def, venom_asm_rel_def, gas_plan_rels_memory,
-       memory_rel_refl]
-QED
-
-Theorem gas_local_context[local]:
-  !cp lo ps v st m.
-  venom_asm_rel lo ps (v with vs_memory := m) st /\
-  context_memory_rel (cp:context_plan) v.vs_memory st.as_memory ==>
-  context_venom_asm_rel (cp:context_plan) lo ps v st
-Proof
-  simp[context_venom_asm_rel_def, venom_asm_rel_def, gas_plan_rels_memory]
-QED
-
-Theorem gas_memory_outside[local]:
-  memory_rel alloc m m' /\
-  r.sr_spill_base <= alloc.sa_spill_base /\
-  alloc.sa_next_offset <= r.sr_spill_end /\
-  ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-  read_byte b m = read_byte b m'
-Proof
-  rw[memory_rel_def] >> first_x_assum irule >> decide_tac
-QED
-
-Theorem gas_closure_own[local]:
-  !ctx cp fn r b.
-  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
-  r.sr_spill_base <= b /\ b < r.sr_spill_end ==>
-  closure_spill_byte ctx cp fn.fn_name b
-Proof
-  rw[closure_spill_byte_def, fcg_path_def] >>
-  qexists_tac `r` >> simp[relationTheory.RTC_REFL]
-QED
-
 Theorem gas_frame_lift[local]:
   !ctx cp lo fn ra rest mem0 ps vs ast r ps' vs' o2pc prog n count.
   fn_frame_inv ctx cp lo fn ra rest mem0 ps vs ast /\
@@ -484,8 +370,8 @@ Theorem gas_frame_lift[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `MEM r cplan.cp_regions` >>
-  qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[fn_frame_inv_def] >> strip_tac >>
+  `?top. ast.as_stack = top ++ rest` by fs[fn_frame_inv_def] >>
+  pop_assum strip_assume_tac >>
   first_x_assum drule >> strip_tac >>
   `asm_steps lo o2pc prog n ast =
     AsmOK (st' with as_stack := st'.as_stack ++ rest)` by
@@ -493,29 +379,12 @@ Proof
        simp[asm_state_component_equality] >>
      drule asm_steps_frame >> disch_then (qspec_then `rest` mp_tac) >>
      asm_rewrite_tac[]) >>
-  `memory_rel ps'.ps_alloc ast.as_memory st'.as_memory` by
-    fs[venom_asm_rel_def] >>
-  `!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
-    read_byte b ast.as_memory = read_byte b st'.as_memory` by
-    metis_tac[gas_memory_outside] >>
-  `context_venom_asm_rel cplan lo ps' (frame_view fn ra vs') st'` by
-    (irule gas_local_context >> conj_tac
-     >- (simp[frame_view_def, context_memory_rel_def] >> rpt strip_tac >>
-         `read_byte i vs.vs_memory = read_byte i ast.as_memory` by
-           (qpat_x_assum `context_venom_asm_rel _ _ _ _ _` mp_tac >>
-            simp[context_venom_asm_rel_def, context_memory_rel_def,
-                 frame_view_def]) >>
-         `read_byte i ast.as_memory = read_byte i st'.as_memory` by
-           (first_x_assum irule >> metis_tac[context_spill_byte_of_region]) >>
-         simp[]) >>
-     qexists_tac `ast.as_memory` >> simp[]) >>
   qexists_tac `st' with as_stack := st'.as_stack ++ rest` >>
-  simp[fn_frame_inv_def] >> rpt conj_tac
-  >- (rpt strip_tac >>
-      `read_byte b ast.as_memory = read_byte b mem0` by metis_tac[] >>
-      `read_byte b ast.as_memory = read_byte b st'.as_memory` by
-        (first_x_assum irule >> metis_tac[gas_closure_own]) >> metis_tac[]) >>
-  qexists_tac `r` >> simp[]
+  simp[] >>
+  irule (Q.SPECL [`ctx`, `cplan`, `lo`, `fn`, `ra`, `rest`, `mem0`,
+                  `ps`, `vs`, `ast`, `ps'`, `vs'`, `st'`, `r`,
+                  `ast.as_memory`] frame_local_result) >>
+  simp[] >> fs[fn_frame_inv_def]
 QED
 
 Theorem gas_inst_frame_sim:
@@ -531,7 +400,7 @@ Theorem gas_inst_frame_sim:
     source_memory_reads_disjoint cp inst vs /\
     context_source_memory_writes_disjoint cp inst vs /\
     (* Return-PC variables are only copied (unit_shape_ok's fn_shape_ok). *)
-    opaque_use_ok fn /\ retpc_shape_ok fn /\
+    opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
     (* The invariant's region clause for the output planner state. *)
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
@@ -580,7 +449,10 @@ Theorem gas_inst_frame_sim:
     (* DFG alias soundness: planner-equivalent operands denote the same
        runtime word under the current value state and label environment.
        This is an explicit pipeline obligation for alias-only reorder steps. *)
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
              operand_val (frame_view fn ra vs) lo op =
              operand_val (frame_view fn ra vs) lo at) /\
     EVERY (\op. op <> dead_stack_marker /\
@@ -614,8 +486,7 @@ Theorem gas_inst_frame_sim:
       next_liveness is_halting next_is_term bb_label ps =
       SOME (ops, ps') /\
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
-    !vs'. step_inst fuel ctx inst vs = OK vs' /\
-          context_spill_step_safe cp vs vs' ==>
+    !vs'. step_inst fuel ctx inst vs = OK vs' ==>
       ?n as'.
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
@@ -624,7 +495,6 @@ Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   rename1 `MEM r cplan.cp_regions` >>
   drule_all gas_source_shape >> strip_tac >>
-  drule_all gas_step_frame_view >> strip_tac >>
   drule_all gas_step_result >> strip_tac >>
   `vs'.vs_halted = vs.vs_halted /\
    vs'.vs_initial_fmp = vs.vs_initial_fmp /\
@@ -638,14 +508,15 @@ Proof
   `context_venom_asm_rel cplan lo ps (frame_view fn ra vs)
      (as with as_stack := top)` by
     (fs[fn_frame_inv_def] >> gvs[]) >>
-  drule gas_context_local >> strip_tac >>
+  drule context_venom_asm_rel_local >> strip_tac >>
   `~retpc_var fn out` by
-    (irule gas_output_non_retpc >> simp[] >> metis_tac[MEM]) >>
+    (irule noncopy_output_not_retpc >>
+     fs[codegen_ready_fn_def] >> qexists_tac `inst` >> simp[]) >>
   `frame_view fn ra vs' with vs_memory := as.as_memory =
     update_var out (HD ((frame_view fn ra vs with vs_memory := as.as_memory).vs_gas_readings ++ [0w]))
       ((frame_view fn ra vs with vs_memory := as.as_memory)
         with vs_gas_readings := TL (frame_view fn ra vs with vs_memory := as.as_memory).vs_gas_readings)` by
-    (simp[gas_frame_view_update, gas_frame_view_readings] >>
+    (simp[frame_view_update_var, frame_view_gas_readings] >>
      simp[frame_view_def, update_var_def]) >>
   `EVERY (\op. case op of Var x => x <> out | _ => T) ps.ps_stack /\
    (!op. op IN FDOM ps.ps_spilled ==>
@@ -656,3 +527,12 @@ Proof
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexists_tac `st'` >> gvs[]
 QED
+
+val () =
+  let val th = gas_inst_frame_sim
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then
+       print "GAS_FRAME_SIM_AUDIT OK\n"
+     else raise Fail "gas_inst_frame_sim: admitted proof dependency"
+  end;
