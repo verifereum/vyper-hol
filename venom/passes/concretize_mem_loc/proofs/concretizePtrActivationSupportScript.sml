@@ -78,3 +78,85 @@ Proof
   strip_tac >> drule bind_outputs_allocation_frame >>
   simp[merge_callee_state_allocas]
 QED
+
+Theorem ptr_frame_table_support_invariant:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions ==>
+    MEM fn ctx.ctx_functions /\
+    (!site. ptr_site_supported
+      (pointer_derived_vars fn (ptr_frame_site_roots fn s.vs_allocas PG site)) G site) /\
+    EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ !site. ptr_site_supported
+      (pointer_derived_vars f.cf_fn
+        (ptr_frame_site_roots f.cf_fn f.cf_state.vs_allocas f.cf_params site))
+      f.cf_prov site) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
+          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[MEM_EL]) >>
+      simp[] >> gen_tac >> irule ptr_frame_current_table_step >>
+      fs[EVERY_MEM] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+      `~is_alloca_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+        (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def, is_alloca_op_def]) >>
+      `s'.vs_allocas = s.vs_allocas` by
+        metis_tac[step_inst_non_alloca_preserves_allocas] >>
+      simp[] >> gen_tac >> irule ptr_frame_current_table_entry >> simp[])
+  >- (rpt gen_tac >> strip_tac >> strip_tac >>
+      qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+      simp[ptr_site_supported_def] >> metis_tac[lookup_function_MEM])
+  >> rpt gen_tac >> strip_tac >> strip_tac >>
+  qpat_x_assum `EVERY _ _ ==> _` mp_tac >> simp[] >> strip_tac >>
+  `s'.vs_allocas = f.cf_state.vs_allocas` by metis_tac[ptr_return_allocas] >>
+  simp[] >> metis_tac[ptr_site_support_restrict]
+
+QED
+
+Theorem ptr_frame_current_table_support:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions ==>
+  !site. ptr_site_supported
+    (pointer_derived_vars fn (ptr_frame_site_roots fn s.vs_allocas PG site)) G site
+Proof metis_tac[ptr_frame_table_support_invariant]
+QED
+
+Theorem ptr_frame_saved_table_support:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  n < LENGTH stk ==>
+  !site. ptr_site_supported
+    (pointer_derived_vars (EL n stk).cf_fn
+      (ptr_frame_site_roots (EL n stk).cf_fn (EL n stk).cf_state.vs_allocas
+        (EL n stk).cf_params site)) (EL n stk).cf_prov site
+Proof
+  strip_tac >> drule ptr_frame_table_support_invariant >> simp[EVERY_EL] >>
+  metis_tac[]
+QED
+
+Theorem ptr_frame_production_singleton_write_site:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
+  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  wf_function fn /\ all_reachable fn /\ ssa_form fn /\
+  ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) /\
+  MEM inst (fn_insts fn) /\ mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+  bp_get_ptrs (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) v =
+    [Ptr (Allocation aid) off] /\ FLOOKUP G v = SOME site ==>
+  FLOOKUP s.vs_allocas aid = SOME site
+Proof
+  strip_tac >>
+  `MEM fn ctx.ctx_functions /\ ptr_params_ok P fn PG` by
+    metis_tac[concretizePtrParamSupportTheory.ptr_frame_current_static] >>
+  `ptr_site_supported
+    (pointer_derived_vars fn (ptr_frame_site_roots fn s.vs_allocas PG site)) G site` by
+    metis_tac[ptr_frame_current_table_support] >>
+  irule ptr_param_supported_production_singleton_write_site >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
