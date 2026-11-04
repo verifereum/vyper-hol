@@ -587,3 +587,101 @@ Proof
   goal_assum (drule_at Any) >>
   irule compiler_block_tail_runtime_internal_function >> metis_tac[]
 QED
+
+Theorem internal_label_not_compiler:
+  internal_label_ok label ==> ~compiler_label label
+Proof
+  strip_tac >> strip_tac >> drule compiler_label_prefix >> strip_tac >>
+  gvs[internal_label_ok_def, isPREFIX]
+QED
+
+(* The inductive boundary only excludes the pending descriptor names from
+   the prefix; an already packaged segment is a valid prefix for the rest. *)
+Theorem package_internal_blocks_label_segments:
+  !descs segs prefix.
+    LIST_REL (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+               EVERY compiler_label (MAP (\bb. bb.bb_label) (TL seg))) descs segs /\
+    ALL_DISTINCT (MAP FST descs) /\
+    EVERY (\d. ~compiler_label (FST d) /\
+               ~MEM (FST d) (MAP (\bb. bb.bb_label) prefix)) descs ==>
+    package_internal_blocks descs (prefix ++ FLAT segs) =
+      SOME (prefix, MAP2 (\d seg. mk_internal_function (FST d) seg
+                        (FST (SND d)) (SND (SND d))) descs segs)
+Proof
+  Induct >- simp[package_internal_blocks_def] >>
+  PairCases >> rw[LIST_REL_CONS1] >>
+  rename1 `seg <> []` >>
+  rename1 `LIST_REL _ descs ys` >>
+  `?bb tl. seg = bb::tl` by (Cases_on `seg` >> gvs[]) >> gvs[] >>
+  `split_blocks_at bb.bb_label (prefix ++ bb::(tl ++ FLAT ys)) =
+     SOME (prefix, bb::(tl ++ FLAT ys))` by
+    (irule split_blocks_at_append_delimiter >> gs[]) >>
+  gs[package_internal_blocks_def] >>
+  first_x_assum (qspecl_then [`ys`, `bb::tl`] mp_tac) >> impl_tac
+  >- (gvs[EVERY_MEM, MEM_MAP, pairTheory.FORALL_PROD,
+           pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem package_internal_blocks_internal_label_segments:
+  LIST_REL (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+             EVERY compiler_label (MAP (\bb. bb.bb_label) (TL seg))) descs segs /\
+  ALL_DISTINCT (MAP FST descs) /\
+  EVERY (\d. internal_label_ok (FST d)) descs /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) prefix ==>
+  package_internal_blocks descs (prefix ++ FLAT segs) =
+    SOME (prefix, MAP2 (\d seg. mk_internal_function (FST d) seg
+                      (FST (SND d)) (SND (SND d))) descs segs)
+Proof
+  strip_tac >> irule package_internal_blocks_label_segments >> simp[] >>
+  gvs[EVERY_MEM, MEM_MAP] >> metis_tac[internal_label_not_compiler]
+QED
+
+Theorem run_lowering_label_partition_lookup:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info "__entry" =
+    SOME unit /\
+  compile_generate_runtime selectors external_fns internal_fns fallback_fn
+    Linear bucket_count fn_metadata_bytes dense_buckets entry_info
+    (initial_compile_state "__entry") = ((),final) /\
+  all_blocks final = prefix ++ FLAT segs /\
+  LIST_REL (\d seg. seg <> [] /\ (HD seg).bb_label = FST d /\
+             EVERY compiler_label (MAP (\bb. bb.bb_label) (TL seg)))
+    (internal_fn_descriptors internal_fns) segs /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
+  EVERY (\bb. ~internal_label_ok bb.bb_label) prefix ==>
+  !i. i < LENGTH segs ==>
+    lookup_function (FST (EL i (internal_fn_descriptors internal_fns)))
+      unit.cu_context.ctx_functions =
+    SOME (mk_internal_function
+      (FST (EL i (internal_fn_descriptors internal_fns))) (EL i segs)
+      (FST (SND (EL i (internal_fn_descriptors internal_fns))))
+      (SND (SND (EL i (internal_fn_descriptors internal_fns)))))
+Proof
+  strip_tac >>
+  `package_internal_blocks (internal_fn_descriptors internal_fns)
+     (prefix ++ FLAT segs) =
+   SOME (prefix, MAP2 (\d seg. mk_internal_function (FST d) seg
+                   (FST (SND d)) (SND (SND d)))
+                   (internal_fn_descriptors internal_fns) segs)` by
+    (irule package_internal_blocks_internal_label_segments >> simp[]) >>
+  `lowering_policy_ok rpolicy` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     rw[run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
+  drule LIST_REL_LENGTH >> strip_tac >> rpt strip_tac >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `all_blocks final = _`
+    (assume_tac o REWRITE_RULE [loweringShapeDefsTheory.all_blocks_def]) >>
+  gs[run_lowering_def, extract_context_with_internals_def] >>
+  strip_tac >> gvs[lowering_context_ok_def, ctx_fn_names_def,
+                  mk_venom_context_def] >>
+  qmatch_goalsub_abbrev_tac `lookup_function _ fns = SOME f` >>
+  `MEM f fns` by
+    (simp[Abbr `fns`, Abbr `f`, MEM_EL] >> disj2_tac >>
+     qexists_tac `i` >> simp[EL_MAP2]) >>
+  `ALL_DISTINCT (MAP (\f. f.fn_name) fns)` by simp[Abbr `fns`] >>
+  drule_all lookup_function_distinct_mem >>
+  simp[Abbr `f`, mk_internal_function_metadata]
+QED
