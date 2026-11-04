@@ -544,3 +544,37 @@ Resume aug_place_memory_write_state_rel[lift_local_store]:
 QED
 
 Finalise aug_place_memory_write_state_rel
+
+Theorem aug_place_memory_store_frag:
+  emit_void MSTORE [dst;res_op] st = ((),sf) /\
+  eval_operand dst u = SOME w /\
+  eval_operand res_op u = SOME (typed_val_to_w256 etv v) /\
+  stmt_state_rel ctx func cenv cx es u /\
+  place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type ty) /\
+  expr_sim_inv cenv cx env es /\ lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL old /\
+  store_lays_out etv ptv v /\ evaluate_type (get_tenv cx) ty = SOME ptv /\
+  write_place cx (MemoryPlace id path) v es = (INL (),es') ==>
+  frag_exec ctx st sf (\s. s = u)
+    (\s. stmt_state_rel ctx func cenv cx es' s /\
+         (!x. lookup_var x s = lookup_var x u) /\
+         s.vs_allocas = u.vs_allocas) R
+Proof
+  rpt strip_tac >>
+  `stmt_state_rel ctx func cenv cx es'
+     (mstore (w2n w) (typed_val_to_w256 etv v) u)` by
+    (irule aug_place_memory_write_state_rel >> metis_tac[]) >>
+  imp_res_tac emitHelperPropsTheory.emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts st sf)` by
+    simp[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def] >>
+  irule fragExecTheory.frag_exec_run_inst_seq >>
+  fs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> disj1_tac >> gvs[] >>
+  `step_inst_base (mk_inst st.cs_next_id MSTORE [dst;res_op] []) u =
+     OK (mstore (w2n w) (typed_val_to_w256 etv v) u)` by
+    (irule emitHelperPropsTheory.step_MSTORE >> simp[]) >>
+  gvs[run_inst_seq_def, stmt_state_rel_inst_idx,
+      mstore_def, lookup_var_def, LET_THM]
+QED

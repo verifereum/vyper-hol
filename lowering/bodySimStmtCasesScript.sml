@@ -67,7 +67,7 @@ Ancestors
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain targetPlaceSim targetPlaceSimCases
-  bodySimAugPlaceLoad bodySimAugPlaceLive
+  bodySimAugPlaceLoad bodySimAugPlaceLive bodySimAugPlaceStore
 Libs
   monadsyntax
 
