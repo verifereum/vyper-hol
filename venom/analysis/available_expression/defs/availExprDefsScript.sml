@@ -191,7 +191,10 @@ Definition avail_transfer_inst_def:
     if is_pseudo inst.inst_opcode ∨
        inst.inst_opcode = ASSIGN ∨
        is_terminator inst.inst_opcode then ae
-    else if LENGTH inst.inst_outputs > 1 then ae
+    else if LENGTH inst.inst_outputs > 1 then
+      (* No expression for multi-output instructions, but their writes
+         still invalidate available expressions (Python does the same) *)
+      avail_remove_effect ae (write_effects inst.inst_opcode)
     else
       let expr = mk_expr dfg inst in
       let we = write_effects inst.inst_opcode in
