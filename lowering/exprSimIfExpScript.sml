@@ -698,6 +698,10 @@ QED
 Theorem compile_ifexp_vv_sim:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (~is_word_type t ==>
+     !e. (e = a \/ e = b) ==>
+         int_calls_expr e = [] \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\

@@ -902,6 +902,10 @@ QED
 Theorem compile_ifexp_aggregate_case:
   !nocalls ctx func cenv cx t c a b.
     ~is_word_type t /\
+    (~nocalls ==>
+     !e. (e = a \/ e = b) ==>
+         int_calls_expr e = [] \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
@@ -941,6 +945,10 @@ QED
    for the rest. *)
 Theorem compile_ifexp_case:
   !nocalls ctx func cenv cx t c a b.
+    (~nocalls ==>
+     !e. (e = a \/ e = b) ==>
+         int_calls_expr e = [] \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>

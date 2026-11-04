@@ -70,6 +70,29 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
+(* A ternary with an arm whose value the lowering lays out differently from
+   its source type: an internal call whose callee's return type the call's
+   type widens (supported_pure_expr keeps calls out of supported ternaries,
+   but body_expr_ok ranges over every expression).  The arm's simulation
+   would have to describe its value at the lowered type, which expr_sim
+   does not do yet; that is the internal-call simulation's work, as for
+   body_intcall_case. *)
+Theorem body_ifexp_widened_call_arm:
+  !cx v5 e1 e2 e3.
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e3) /\
+    body_expr_ok cx e1 ==>
+    !tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\
+      expr_body_pre cenv cx env (IfExp v5 e1 e2 e3) es /\
+      (?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
+           ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) ==>
+      expr_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
+      expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
+Proof
+  cheat
+QED
+
 (* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
