@@ -774,3 +774,41 @@ Proof
     bound_labels_emit_inst]), irule pair_let_snd_preserves,
     conj_tac, gen_tac, strip_tac])
 QED
+
+Theorem bound_labels_get_target_ptr:
+  !target. (!ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) ==>
+  !s. (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_get_target_ptr cfn ce target s))))
+Proof
+  measureInduct_on `base_assignment_target_size target` >>
+  Cases_on `target` >> rpt strip_tac >>
+  simp[Once compile_get_target_ptr_def]
+  >- (rpt CASE_TAC >> simp[comp_return_def])
+  >- (rpt CASE_TAC >> simp[comp_return_def]) >>
+  irule bound_labels_bind >> reverse conj_tac
+  >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  simp[] >> rpt strip_tac >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_lower_value,
+    bound_labels_keccak256_key, bound_labels_mapping_subscript,
+    bound_labels_array_subscript, bound_labels_ptr_load,
+    bound_labels_emit_op, comp_return_def]),
+    irule bound_labels_bind, conj_tac, gen_tac, strip_tac,
+    CASE_TAC, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_lower_value_with_loc:
+  (!t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (lower_value_with_loc cfn ce ty e s))))
+Proof
+  strip_tac >> simp[lower_value_with_loc_def] >>
+  irule bound_labels_bind >> simp[] >> rpt strip_tac >>
+  irule bound_labels_bind >> simp[comp_return_def, bound_labels_unwrap_value]
+QED
+
