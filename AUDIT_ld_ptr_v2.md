@@ -688,3 +688,20 @@ the runtime domain budget still requires the joint invariant to identify
 scratch domains and actual supply-related live frames, and retain saved
 control/definedness and suffix layouts. No frozen-contract completion follows
 from these independent bounds alone.
+
+## C1.12.19: actual block-entry control inversion
+
+`dload_enters_block_control_match` in lowerDloadPtrJointEntry proves the actual
+phase-zero control witness from a supplied function transform, successful
+source and target block entry, equal predecessor/current labels, and target
+activity. It additionally requires distinct target block labels. This is
+needed because `active_inst` is existential over *any* member block with the
+current label, whereas `enters_block` uses first-match lookup: without label
+uniqueness, target activity may refer to a different duplicate-label block.
+This hypothesis is a shape fact available from the task's well-formed source
+and preservation of block labels, not an assumed control witness. No label
+uniqueness is used to invent the supply: `dload_blocks_entry_supply` recovers
+the actual prefix supply by first-match lookup induction; `dload_insts_entry_control`
+recovers the PHI prefix's unchanged supply and first non-PHI expansion.
+Semantic entry assembly (C1.12.20) still must produce successful source entry,
+source reachability, headroom, and the actual relational initial core.
