@@ -1,6 +1,6 @@
 Theory fnPlanPlaceDfsBlock
 Ancestors
-  fnPlanLineage stackPlanGen venomExecProps stackOpSim codegen
+  fnPlanLineage stackPlanGen venomExecProps stackOpSim codegen asmToBytecodeProofs codegenEncodingWf
   list rich_list arithmetic
 
 Theorem generate_context_regions_length:
@@ -181,4 +181,43 @@ Proof
       execute_plan fmp (FLAT (MAP (\r. r.sr_plan) l2)) ++
       execute_plan fmp revert_postamble ++ data_segment_asm unit.cu_data_segment ++
       [AsmDataHeader "code_end"]`] >> simp[APPEND_ASSOC]
+QED
+
+Theorem distinct_flat_map_index:
+  !xs i j x.
+    ALL_DISTINCT (FLAT (MAP f xs)) /\ i < LENGTH xs /\ j < LENGTH xs /\
+    MEM x (f (EL i xs)) /\ MEM x (f (EL j xs)) ==> i = j
+Proof
+  Induct_on `xs` >- simp[] >>
+  Cases_on `i` >> Cases_on `j` >>
+  simp[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem asm_symbols_ok_label_index:
+  !prog k l.
+    asm_symbols_ok prog /\ k < LENGTH prog /\ EL k prog = AsmLabel l ==>
+    ?off. FLOOKUP (SND (compute_label_offsets prog)) l = SOME off /\
+          off < dimword (:256) /\
+          FLOOKUP (build_offset_to_pc prog) off = SOME k
+Proof
+  rpt strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP asm_defined_symbols prog))` by
+    metis_tac[asm_symbols_ok_distinct] >>
+  `!j. k < j /\ j < LENGTH prog ==>
+       EL j prog <> AsmLabel l /\
+       (!l'. EL j prog = AsmDataHeader l' ==> l' <> l)` by
+    (rpt strip_tac >>
+     `MEM l (asm_defined_symbols (EL k prog))` by simp[asm_defined_symbols_def] >>
+     `MEM l (asm_defined_symbols (EL j prog))` by gvs[asm_defined_symbols_def] >>
+     `k = j` by metis_tac[distinct_flat_map_index] >> decide_tac) >>
+  `FLOOKUP (SND (compute_label_offsets prog)) l =
+     SOME (asm_pc_to_offset prog k)` by
+    (irule label_offset_consistent_proof >> metis_tac[]) >>
+  qexists_tac `asm_pc_to_offset prog k` >> simp[] >>
+  conj_tac
+  >- (drule (cj 2 compute_label_offsets_bound) >> strip_tac >>
+      gvs[asm_symbols_ok_def, wordsTheory.dimword_def, fcpLib.INDEX_CONV ``dimindex(:256)``] >> decide_tac)
+  >> irule offset_to_pc_inverse_proof >> simp[symbolResolveTheory.asm_inst_size_def]
 QED
