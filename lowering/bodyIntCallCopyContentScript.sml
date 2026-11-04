@@ -2,7 +2,7 @@
 Theory bodyIntCallCopyContent
 Ancestors
   bodyIntCallCopyProbe exprSimStorageCopy valueEncodingProps exprLoweringProps
-  emitHelperProps venomExecSemantics venomState venomInst
+  emitHelperProps fragExec venomExecSemantics venomState venomInst
 
 Theorem copy_load_exact:
   !opc src a id out s.
@@ -272,3 +272,97 @@ Proof
   irule arithmeticTheory.LESS_MOD >>
   once_rewrite_tac[arithmeticTheory.MULT_COMM] >> first_assum ACCEPT_TAC
 QED
+
+(* Header transport is polymorphic in the semantic invariant. *)
+Theorem copy_counter_header_frag:
+  !ctx sa sb cv tv limit k P R.
+    same_blocks sa sb /\ isPREFIX sa.cs_current_insts sb.cs_current_insts /\
+    emitted_insts sa sb =
+      [mk_inst sa.cs_next_id EQ [Var cv; Lit limit] [tv]] /\
+    cv <> tv /\
+    (!s w. P s ==> P (update_var tv w s)) /\
+    (!s i. P s ==> P (s with vs_inst_idx := i)) ==>
+    frag_exec ctx sa sb
+      (\s. eval_operand (Var cv) s = SOME k /\ P s)
+      (\s. eval_operand (Var cv) s = SOME k /\ P s /\
+        eval_operand (Var tv) s = SOME (bool_to_word (k = limit))) R
+Proof
+  rpt gen_tac >> strip_tac >> irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def] >> simp[mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id EQ [Var cv; Lit limit] [tv]) s =
+    OK (update_var tv (bool_to_word (k = limit)) s)` by
+    (irule step_EQ >> simp[eval_operand_def]) >>
+  disj1_tac >> qexists_tac `update_var tv (bool_to_word (k = limit)) s` >>
+  gvs[GSYM mk_inst_def, run_inst_seq_def] >>
+  conj_tac
+  >- gvs[eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem copy_counter_test:
+  !k n. k <= n /\ n < dimword (:256) ==>
+    ((n2w k:bytes32) = n2w n <=> k = n)
+Proof
+  rpt strip_tac >> `k < dimword (:256)` by decide_tac >>
+  asm_simp_tac bool_ss [wordsTheory.n2w_11, arithmeticTheory.LESS_MOD]
+QED
+
+val _ = Parse.hide "I";
+
+Theorem copy_counted_loop:
+  !ctx st0 st1 sth stj st2 stb ste st3 stx hdr body exit cv tv n
+    x0 x1 x2 x3 x4 x5 P R.
+    emit_inst JMP [Label hdr] [] st0 = (x0,st1) /\
+    new_block hdr st1 = (x1,sth) /\
+    emit_inst JNZ [Var tv; Label exit; Label body] [] stj = (x2,st2) /\
+    new_block body st2 = (x3,stb) /\
+    emit_inst JMP [Label hdr] [] ste = (x4,st3) /\
+    new_block exit st3 = (x5,stx) /\
+    cs_extends sth stj /\ cs_extends stb ste /\
+    same_blocks sth stj /\ isPREFIX sth.cs_current_insts stj.cs_current_insts /\
+    emitted_insts sth stj =
+      [mk_inst sth.cs_next_id EQ [Var cv; Lit (n2w n)] [tv]] /\
+    cv <> tv /\ n < dimword (:256) /\
+    (!k s w. P k s ==> P k (update_var tv w s)) /\
+    (!k s i. P k s ==> P k (s with vs_inst_idx := i)) /\
+    (!k s l. P k s ==> P k (jump_to l s)) /\
+    (!k. k < n ==> frag_exec ctx stb ste
+      (\s. eval_operand (Var cv) s = SOME (n2w k) /\ P k s)
+      (\s. eval_operand (Var cv) s = SOME (n2w (k+1)) /\ P (k+1) s) R) ==>
+    frag_exec ctx st0 stx
+      (\s. eval_operand (Var cv) s = SOME 0w /\ P 0 s)
+      (\s. eval_operand (Var cv) s = SOME (n2w n) /\ P n s /\
+        eval_operand (Var tv) s = SOME 1w) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule (SRULE [bool_to_word_def] (Q.INST
+    [`I` |-> `\k s. eval_operand (Var cv) s = SOME (n2w k) /\ P k s`,
+     `J` |-> `\k s. eval_operand (Var cv) s = SOME (n2w k) /\ P k s /\
+         eval_operand (Var tv) s = SOME (bool_to_word (k = n))`,
+     `N` |-> `n`] (SPEC_ALL frag_exec_loop))) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  Cases_on `x0` >> Cases_on `x2` >> Cases_on `x4` >>
+  goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
+  rpt (goal_assum (drule_at (Pat `new_block _ _ = _`))) >>
+  rpt (goal_assum (drule_at Any)) >>
+  conj_tac
+  >- (rpt strip_tac >> qexists_tac `bool_to_word (k = n)` >>
+      simp[bool_to_word_def] >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >> irule frag_exec_conseq >>
+      first_x_assum (qspec_then `k` mp_tac) >> simp[arithmeticTheory.ADD1] >>
+      disch_then (irule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  `((n2w k:bytes32) = n2w n) = (k = n)` by
+    (irule copy_counter_test >> simp[]) >>
+  irule frag_exec_conseq >> irule_at Any copy_counter_header_frag >>
+  goal_assum (drule_at (Pat `emitted_insts _ _ = _`)) >>
+  qexistsl_tac [`n2w k:bytes32`, `R`, `P k`] >> simp[]
+QED
+
+val _ = Parse.reveal "I";
