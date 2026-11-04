@@ -4991,6 +4991,62 @@ Proof
   conj_tac >- decide_tac >> qexistsl_tac [`n`, `leaf`] >> gvs[]
 QED
 
+Theorem aug_place_subregion_path_mask:
+  !tv path off leaf. storage_subregion tv path off leaf ==>
+  !bs k u st.
+    bs + type_slot_size tv <= dimword (:256) /\
+    bs+off <= w2n k /\ w2n k < bs+off+type_slot_size leaf /\
+    (!j byte. dead_bytes (update_storage k u st) (bs+off) leaf j byte <=>
+              dead_bytes st (bs+off) leaf j byte) ==>
+    !j byte. dead_bytes (update_storage k u st) bs tv j byte <=>
+             dead_bytes st bs tv j byte
+Proof
+  ho_match_mp_tac vyperStoragePlaceRegionTheory.storage_subregion_ind >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> gvs[] >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac
+  >- (`Num i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      `!j byte. dead_bytes (update_storage k u st)
+          (bs + Num i * type_slot_size tv) tv j byte <=>
+          dead_bytes st (bs + Num i * type_slot_size tv) tv j byte` by
+        (first_x_assum irule >> conj_tac
+         >- gvs[vyperValueTheory.type_slot_size_def] >>
+         qexists_tac `rest` >> gvs[]) >>
+      irule aug_place_dead_bytes_array_fixed_update >>
+      reverse conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+      qexists_tac `Num i` >> gvs[])
+  >- (`Num i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      `!j byte. dead_bytes (update_storage k u st)
+          (bs + 1 + Num i * type_slot_size tv) tv j byte <=>
+          dead_bytes st (bs + 1 + Num i * type_slot_size tv) tv j byte` by
+        (first_x_assum irule >> conj_tac
+         >- gvs[vyperValueTheory.type_slot_size_def] >>
+         qexists_tac `rest` >> gvs[]) >>
+      irule aug_place_dead_bytes_array_dynamic_update >>
+      reverse conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+      qexists_tac `Num i` >> gvs[])
+  >- (drule vyperStoragePlaceRegionTheory.struct_field_slot_end_bound >> strip_tac >>
+      `!j byte. dead_bytes (update_storage k u st) (bs+delta) elem j byte <=>
+                dead_bytes st (bs+delta) elem j byte` by
+        (first_x_assum irule >> conj_tac >- decide_tac >>
+         qexists_tac `rest` >> gvs[]) >>
+      simp[dead_bytes_def] >> irule aug_place_dead_bytes_field_update >>
+      conj_tac >- gvs[vyperValueTheory.type_slot_size_def] >>
+      qexistsl_tac [`elem`, `id`, `delta`] >> gvs[]) >>
+  drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >> strip_tac >>
+  `!j byte. dead_bytes (update_storage k u st)
+       (bs + tuple_prefix_slot_size (Num i) types) elem j byte <=>
+       dead_bytes st (bs + tuple_prefix_slot_size (Num i) types) elem j byte` by
+    (first_x_assum irule >> conj_tac >- decide_tac >>
+     qexists_tac `rest` >> gvs[]) >>
+  irule aug_place_dead_bytes_tuple_update >>
+  conj_tac >- simp[] >> qexistsl_tac [`Num i`, `elem`] >> gvs[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
