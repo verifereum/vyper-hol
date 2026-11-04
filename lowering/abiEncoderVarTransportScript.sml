@@ -102,7 +102,9 @@ Proof
   Cases_on `inst.inst_opcode` >>
   gvs[abi_encoder_ignored_inputs_def, abi_decoder_reentry_opcode_def] >>
   qpat_x_assum `step_inst_base inst s = OK u` mp_tac >>
-  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  MAP_FIRST (fn th =>
+    drule th >> disch_then (fn eq => pure_once_rewrite_tac [eq]))
+    (CONJUNCTS step_inst_base_opcode_eqs) >>
   rpt strip_tac
   >>~- ([`exec_pure1 f inst s = OK u`],
         drule abi_decoder_pure1_inputs >> simp[])
