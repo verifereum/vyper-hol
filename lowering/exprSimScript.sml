@@ -1047,3 +1047,26 @@ Proof
   fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
      val_to_w256_address, val_to_w256_def, integer_wordTheory.i2w_def]
 QED
+
+(* Checked layout probe for the frozen tuple-subscript boundary. *)
+Theorem seq1012_tuple_offsets_probe[local]:
+  SUM (TAKE 1 (MAP type_memory_size
+    [BaseTV (BytesT (Dynamic 32)); BaseTV (UintT 256)])) = 64 /\
+  SUM (TAKE 1 (MAP type_memory_size
+    [BaseTV (BytesT (Dynamic 64)); BaseTV (UintT 256)])) = 96
+Proof
+  EVAL_TAC
+QED
+
+Theorem seq1012_tuple_post_type_probe[local]:
+  !cenv fid args drv.
+    cenv.ce_func_return_type (nsid_to_string fid) =
+      TupleT [BaseT (BytesT (Dynamic 32)); BaseT (UintT 256)] ==>
+    post_value_type cenv
+      (Call (TupleT [BaseT (BytesT (Dynamic 64)); BaseT (UintT 256)])
+        (IntCall fid) args drv) =
+      TupleT [BaseT (BytesT (Dynamic 32)); BaseT (UintT 256)]
+Proof
+  simp[post_value_type_def, is_word_type_def, is_bytestring_type_def,
+       lowered_value_type_def]
+QED
