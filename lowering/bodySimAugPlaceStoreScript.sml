@@ -233,3 +233,131 @@ Proof
   qexistsl_tac [`k`, `mem`] >> gvs[AC ADD_ASSOC ADD_COMM] >> metis_tac[]
 QED
 
+Theorem aug_place_update_list:
+  !vs i child. i < LENGTH vs ==>
+    TAKE i vs ++ [child] ++ DROP (SUC i) vs = LUPDATE child i vs
+Proof
+  Induct >> simp[] >> Cases_on `i` >> simp[LUPDATE_def]
+QED
+
+Theorem aug_place_step_memory:
+  !tv sb k ctv a old a' child base mem mem'.
+    mem_step_offset tv sb = SOME (k,ctv) /\
+    value_has_type tv a /\ val_wf tv a /\ val_in_memory tv a base mem /\
+    evaluate_subscripts tv a [sb] = INL old /\
+    assign_subscripts tv a [sb] (Replace child) = INL a' /\
+    val_in_memory ctv child (base+k) mem' /\
+    (!q n. q+n <= base+k \/ base+k+type_memory_size ctv <= q ==>
+      mem_bytes_at q n mem' = mem_bytes_at q n mem) ==>
+    val_in_memory tv a' base mem'
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+      gvs[mem_step_offset_def] >> Cases_on `tv` >>
+      gvs[mem_step_offset_def] >>
+      Cases_on `a` >> gvs[assign_subscripts_def] >>
+      rename1 `ArrayV av` >> Cases_on `av` >>
+      gvs[assign_subscripts_def, array_set_index_def, value_has_type_def, AllCaseEqs()] >>
+      rename1 `ArrayTV ety bd` >> Cases_on `bd` >>
+      gvs[val_wf_def, mem_step_offset_def]
+      >- (gvs[aug_place_update_list, val_in_memory_def] >> conj_tac
+          >- (`mem_bytes_at base' 32 mem' = mem_bytes_at base' 32 mem`
+                by (first_x_assum irule >> simp[]) >>
+              gvs[mem_word_at_def, mem_bytes_at_def, ADD1]) >>
+          irule aug_place_elems_rebuild >>
+          conj_tac >- simp[] >> conj_tac >- simp[] >>
+          reverse conj_tac
+          >- (pure_rewrite_tac[ADD_ASSOC] >>
+              once_rewrite_tac[ADD_COMM] >>
+              metis_tac[ADD_ASSOC, ADD_COMM]) >>
+          qexists_tac `mem` >> simp[] >> rpt strip_tac >>
+          first_x_assum irule >>
+          pure_rewrite_tac[LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES] >>
+          rule_assum_tac (PURE_REWRITE_RULE
+            [LEFT_ADD_DISTRIB, RIGHT_ADD_DISTRIB, MULT_CLAUSES]) >> decide_tac) >>
+      irule aug_place_sparse_memory >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[val_wf_def] >>
+      conj_tac >- simp[] >> qexists_tac `mem` >> simp[] >> rpt strip_tac >>
+      first_x_assum irule >> decide_tac) >>
+  Cases_on `tv` >> gvs[mem_step_offset_def] >>
+  Cases_on `a` >>
+  gvs[value_has_type_def, assign_subscripts_def, val_wf_def,
+      val_in_memory_def, AllCaseEqs()] >>
+  irule aug_place_fields_rebuild >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qexistsl_tac [`ctv`, `k`, `mem`] >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem aug_place_elems_wf_update:
+  !vs i tv child. elems_val_wf vs tv /\ val_wf tv child ==>
+    elems_val_wf (LUPDATE child i vs) tv
+Proof
+  Induct >> simp[val_wf_def] >> Cases_on `i` >>
+  simp[LUPDATE_def, val_wf_def]
+QED
+
+Theorem aug_place_kvs_wf_insert:
+  !al k child tv bound.
+    kvs_val_wf al tv bound /\ k < bound /\ val_wf tv child ==>
+    kvs_val_wf (insert_sarray k child al) tv bound
+Proof
+  Induct >> simp[insert_sarray_def, val_wf_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  gvs[val_wf_def] >> simp[Once insert_sarray_def] >>
+  Cases_on `k = h0` >> Cases_on `k < h0` >> simp[val_wf_def]
+QED
+
+Theorem aug_place_field_lookup:
+  !fs fld k tv. mem_field_offset fs fld = SOME (k,tv) ==>
+    ALOOKUP fs fld = SOME tv
+Proof
+  Induct >> simp[mem_field_offset_def] >> gen_tac >> PairCases_on `h` >>
+  rpt gen_tac >> simp[mem_field_offset_def] >>
+  IF_CASES_TAC >> gvs[AllCaseEqs()] >> strip_tac >> PairCases_on `z` >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem aug_place_step_wf:
+  !tv sb k ctv a a' child.
+    mem_step_offset tv sb = SOME (k,ctv) /\
+    value_has_type tv a /\ val_wf tv a /\
+    assign_subscripts tv a [sb] (Replace child) = INL a' /\
+    val_wf ctv child ==> val_wf tv a'
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sb`
+  >- (rename1 `ValueSubscript sv` >> Cases_on `sv` >>
+      gvs[mem_step_offset_def] >> Cases_on `tv` >>
+      gvs[mem_step_offset_def] >> Cases_on `a` >>
+      gvs[assign_subscripts_def] >> rename1 `ArrayV av` >>
+      Cases_on `av` >>
+      gvs[assign_subscripts_def, array_set_index_def, value_has_type_def,
+          AllCaseEqs()] >> rename1 `ArrayTV ety bd` >> Cases_on `bd` >>
+      gvs[val_wf_def, mem_step_offset_def]
+      >- simp[aug_place_update_list, val_wf_def, aug_place_elems_wf_update] >>
+      IF_CASES_TAC
+      >- (gvs[aug_place_kvs_wf_all, ADELKEY_def, MEM_FILTER] >> metis_tac[]) >>
+      irule aug_place_kvs_wf_insert >> simp[]) >>
+  Cases_on `tv` >> gvs[mem_step_offset_def] >> Cases_on `a` >>
+  gvs[value_has_type_def, assign_subscripts_def, val_wf_def, AllCaseEqs()] >>
+  drule aug_place_field_lookup >> strip_tac >>
+  irule fields_val_wf_update >> metis_tac[]
+QED
+
+Theorem aug_place_step_rebuild:
+  !tv sb k ctv a old a' child base mem mem'.
+    mem_step_offset tv sb = SOME (k,ctv) /\
+    value_has_type tv a /\ val_wf tv a /\ val_in_memory tv a base mem /\
+    evaluate_subscripts tv a [sb] = INL old /\
+    assign_subscripts tv a [sb] (Replace child) = INL a' /\
+    value_has_type ctv child /\ val_wf ctv child /\
+    val_in_memory ctv child (base+k) mem' /\
+    (!q n. q+n <= base+k \/ base+k+type_memory_size ctv <= q ==>
+      mem_bytes_at q n mem' = mem_bytes_at q n mem) ==>
+    val_wf tv a' /\ val_in_memory tv a' base mem'
+Proof
+  rpt strip_tac
+  >- (irule aug_place_step_wf >> metis_tac[]) >>
+  irule aug_place_step_memory >> metis_tac[]
+QED
