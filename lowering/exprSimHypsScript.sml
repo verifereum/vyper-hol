@@ -1398,9 +1398,23 @@ Proof
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
+Theorem expr_body_pre_read_value_typed[local]:
+  !cenv cx env e es v es'.
+    expr_body_pre cenv cx env e es /\
+    (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
+    value_runtime_typed env (expr_type e) v
+Proof
+  rpt strip_tac >>
+  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+  disch_then (qspec_then `env` mp_tac) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def]
+QED
+
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
+    (!a f args d. e = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e = expr_type e) /\
     (lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
      lowered_value_type cenv e = BaseT (StringT 0)) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
@@ -1432,13 +1446,14 @@ Proof
       irule type_builtin_read_annotation_typed >>
       gvs[expr_body_pre_def] >> goal_assum drule >> simp[] >>
       metis_tac[])
-  >> (strip_tac >>
-      drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-      disch_then (qspec_then `env` mp_tac) >>
-      gvs[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
-      irule value_runtime_typed_zero_bytestring_empty >>
-      qexists_tac `env` >>
-      gvs[lowered_value_type_def, expr_type_def] >> metis_tac[])
+  >~ [`Call _ (IntCall _) _ _`]
+  >- (strip_tac >> drule_all expr_body_pre_read_value_typed >> strip_tac >>
+      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
+      gvs[lowered_value_type_def, expr_type_def])
+  >> (strip_tac >> drule_all expr_body_pre_read_value_typed >> strip_tac >>
+      irule value_runtime_typed_zero_bytestring_empty >> qexists_tac `env` >>
+      qpat_x_assum `lowered_value_type _ _ = _` mp_tac >>
+      simp[lowered_value_type_def] >> strip_tac >> gvs[])
 QED
 
 (* Operand syntax contracts transported through successful evaluation. *)

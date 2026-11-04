@@ -926,7 +926,7 @@ Proof
   `expr_read_res_ok cx es' res` by
     metis_tac[expr_body_pre_ifexp_word_readable] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `t`, `c`, `a`, `b`, `es`]
-    mp_tac compile_ifexp_vv_sim >>
+    mp_tac compile_ifexp_word_vv_sim >>
   impl_tac
   >- (simp[] >> rpt conj_tac
       >- (rpt gen_tac >> strip_tac >>
@@ -958,6 +958,10 @@ QED
 Theorem compile_ifexp_aggregate_case:
   !nocalls ctx func cenv cx t c a b.
     ~is_word_type t /\
+    (~nocalls ==>
+     !e. (e = a \/ e = b) ==>
+         int_calls_expr e = [] \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
@@ -978,16 +982,34 @@ Proof
     mp_tac compile_ifexp_vv_sim >>
   impl_tac
   >- (simp[] >> rpt conj_tac
+      >- (rpt gen_tac >> disch_tac >> irule ifexp_body_pre_lowered_type_compatible >>
+          conj_tac >- (Cases_on `nocalls` >> metis_tac[]) >>
+          qexistsl_tac [`cx`, `env`, `es`] >>
+          `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+          metis_tac[])
+      >- (rpt gen_tac >> disch_tac >>
+          qspecl_then [`cenv`, `cx`, `env`, `IfExp t c a b`]
+            mp_tac expr_body_pre_copy_ok >>
+          simp[vyperASTTheory.expr_type_def] >>
+          disch_then (qspec_then `es` mp_tac) >> simp[])
       >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
       >- metis_tac[cj 2 exprLoweringPropsTheory.compile_expr_grows]
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
       rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
       drule eval_expr_read_INL >> strip_tac >>
       `expr_sim_case nocalls ctx func cenv cx a /\
-       expr_sim_case nocalls ctx func cenv cx b` by
+       expr_vv_case nocalls ctx func cenv cx a /\
+       expr_sim_case nocalls ctx func cenv cx b /\
+       expr_vv_case nocalls ctx func cenv cx b` by
         (qpat_x_assum `(?s tv s'. _) ==> _` mp_tac >>
          impl_tac >- metis_tac[] >> simp[]) >>
-      conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
+      conj_tac >- (irule expr_sim_case_apply >> metis_tac[]) >>
+      conj_tac >- (irule expr_sim_case_apply >> metis_tac[]) >>
+      conj_tac >- (fs[expr_vv_case_def] >> metis_tac[]) >>
+      conj_tac >- (fs[expr_vv_case_def] >> metis_tac[]) >>
+      rpt gen_tac >> disch_tac >>
+      `expr_type e = t` by metis_tac[] >>
+      metis_tac[ifexp_body_pre_read_typed]) >>
   disch_then irule >> simp[]
 QED
 
@@ -997,6 +1019,10 @@ QED
    for the rest. *)
 Theorem compile_ifexp_case:
   !nocalls ctx func cenv cx t c a b.
+    (~nocalls ==>
+     !e. (e = a \/ e = b) ==>
+         int_calls_expr e = [] \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     expr_sim_case nocalls ctx func cenv cx c /\
     expr_vv_case nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>

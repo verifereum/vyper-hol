@@ -5968,8 +5968,8 @@ Resume compile_stage_intcall_args_shape[buffer]:
           >- (shape_under_tac compile_store_bytestring_shape_framed `BufFrame` >>
               simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
           gen_tac >> irule shape_step_return >> simp[]) >>
-      shape_under_tac shape_step_emit_void_plain `BufFrame` >>
-      simp[Abbr `BufFrame`, Abbr `ValFrame`] >> shape_opcode_tac) >>
+      shape_under_tac compile_store_memory_shape_framed `BufFrame` >>
+      simp[Abbr `BufFrame`, Abbr `ValFrame`]) >>
   gen_tac >> simp[] >>
   qabbrev_tac `HeadFrame = \st. R st /\ plain_operand st buf_alloc.buf_operand` >>
   `shape_stable HeadFrame` by
@@ -5989,6 +5989,39 @@ Theorem compile_materialize_vv_shape[local]:
     (compile_materialize_vv cenv ty vv) (\v st. R st /\ plain_operand st v)
 Proof
   strip_tac >> simp[compile_materialize_vv_def] >>
+  qabbrev_tac `VVFrame = \st. R st /\ value_shape_ok st vv` >>
+  `shape_stable VVFrame` by
+    (simp[Abbr `VVFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[value_shape_ok_stable]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\b st. VVFrame st /\ plain_operand st b.buf_operand` >> conj_tac
+  >- (shape_under_tac compile_alloc_buffer_shape_framed `VVFrame`) >>
+  qx_gen_tac `tmp` >> simp[] >>
+  qabbrev_tac `BufFrame = \st. R st /\ plain_operand st tmp.buf_operand` >>
+  `shape_stable BufFrame` by
+    (simp[Abbr `BufFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[tmp.buf_operand]` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\v st. BufFrame st /\ plain_operand st v` >> conj_tac
+  >- (irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`, `\st. BufFrame st /\ value_shape_ok st vv`,
+                    `\v st. BufFrame st /\ plain_operand st v`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[Abbr `BufFrame`, Abbr `VVFrame`] >>
+      conj_tac >- simp[] >> shape_unwrap_value_tac `BufFrame`) >>
+  qx_gen_tac `src` >> simp[] >>
+  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. BufFrame st` >> conj_tac
+  >- (shape_under_tac compile_store_memory_shape_framed `BufFrame` >> simp[Abbr `BufFrame`]) >>
+  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `BufFrame`]
+QED
+
+(* An IfExp arm is either unwrapped as is or copied into a buffer laid out at
+   the result type; either way a plain operand. *)
+Theorem compile_ifexp_arm_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ value_shape_ok st vv)
+    (compile_ifexp_arm cenv res_ty arm_ty vv) (\v st. R st /\ plain_operand st v)
+Proof
+  strip_tac >> simp[compile_ifexp_arm_def] >> IF_CASES_TAC
+  >- (pop_assum kall_tac >> shape_unwrap_value_tac `R`) >>
   qabbrev_tac `VVFrame = \st. R st /\ value_shape_ok st vv` >>
   `shape_stable VVFrame` by
     (simp[Abbr `VVFrame`] >> ho_match_mp_tac shape_stable_conj >> simp[value_shape_ok_stable]) >>
@@ -6808,6 +6841,28 @@ fun shape_raw_label_tac frame name sfx =
   >- (shape_under_tac shape_step_fresh_label_sfx frame >> qexists_tac `compiler_label` >> simp[]) >>
   qx_gen_tac name >> simp[] >> ho_match_mp_tac shape_step_pure_pre >> strip_tac;
 
+Theorem callback_shape_framed[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_expr_exists expr_shape_root e /\ shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ cenv_shape_ok st cenv)
+    (cfn cenv ty e) (\v st. R st /\ value_shape_ok st v)
+Proof
+  strip_tac >> ho_match_mp_tac shape_step_frame >> simp[]
+QED
+
+(* One IfExp arm: the callback's value, then its copy at the result type. *)
+val ifexp_arm_tac =
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ value_shape_ok st v` >> reverse conj_tac
+  >- (shape_under_tac callback_shape_framed `ResultFrame` >>
+      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  gen_tac >> simp[] >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac compile_ifexp_arm_shape `ResultFrame`);
+
 Theorem compile_ifexp_shape:
   (!ce t child. ~supported_expr_exists expr_shape_root child ==>
      shape_step internal compiler_label (\st. cenv_shape_ok st ce)
@@ -6852,10 +6907,7 @@ QED
 Resume compile_ifexp_shape[branches]:
   shape_raw_effect_tac `ResultFrame`
     (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
-  irule shape_step_uncurry >>
-  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
-  >- (shape_under_tac lower_value_callback_shape `ResultFrame` >>
-      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  ifexp_arm_tac >>
   qx_gen_tac `then_op` >> simp[] >>
   qabbrev_tac `ThenFrame = \st. ResultFrame st /\ plain_operand st then_op` >>
   `shape_stable ThenFrame` by
@@ -6870,10 +6922,7 @@ Resume compile_ifexp_shape[branches]:
      shape_opcode_tac >> simp[jump_label_ok_def]) >>
   shape_raw_effect_tac `ResultFrame`
     (ho_match_mp_tac shape_step_new_block >> simp[SF ETA_ss]) >>
-  irule shape_step_uncurry >>
-  qexists_tac `\v st. ResultFrame st /\ plain_operand st v` >> reverse conj_tac
-  >- (shape_under_tac lower_value_callback_shape `ResultFrame` >>
-      simp[Abbr `ResultFrame`, Abbr `CondFrame`]) >>
+  ifexp_arm_tac >>
   qx_gen_tac `else_op` >> simp[] >>
   qabbrev_tac `ElseFrame = \st. ResultFrame st /\ plain_operand st else_op` >>
   `shape_stable ElseFrame` by

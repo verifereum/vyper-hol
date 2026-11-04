@@ -26,6 +26,7 @@ Theorem assign_tuple_locals_memory_code_parts:
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa =
       (c, sf) /\
     expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (!i. i < LENGTH ids /\ i < LENGTH tys ==>
       ?p sz vt. FLOOKUP cenv.ce_vars (EL i ids) = SOME (PtrVar (Var p) sz) /\
@@ -66,6 +67,7 @@ Theorem assign_tuple_locals_memory_success_run:
     eval_stmt cx (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e)
       es = (INL (), es') /\
     ids <> [] /\ expr_type e = TupleT tys /\
+    lowered_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     (EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy) /\
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
@@ -135,6 +137,7 @@ Resume assign_tuple_locals_memory_success_run[source]:
      metis_tac[is_bytestring_word_type]) >>
   `(EXISTS (\t. ~is_word_type t) tys ==> cenv.ce_target CapMcopy)` by
     metis_tac[] >>
+  `lowered_value_type cenv e = expr_type e` by fs[] >>
   drule_all assign_tuple_locals_memory_code_parts >> strip_tac >>
   suspend "code"
 QED
