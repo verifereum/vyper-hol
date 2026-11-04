@@ -237,3 +237,22 @@ Proof
   conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules]
   end
 QED
+
+Theorem gas_exempt_cert_function_cleanup:
+  !memory tops ctx func a es s0 marks err ee leaf finish saved k.
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (a : evaluation_state -> unit evaluation_result) (return ()))
+    (es,s0) marks (err,ee) (leaf,finish) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (bind (finally (try (ignore_bind a (return NoneV)) handle_function)
+       (set_scopes saved)) k)
+    (es,s0) marks (err,ee with scopes := saved) (leaf,finish)
+Proof
+  rpt strip_tac >> irule gas_exempt_cert_error_value >>
+  rewrite_tac[ignore_bind_finally_unit, ignore_bind_try_unit,
+    ignore_bind_return_twice] >>
+  irule gas_exempt_cert_cleanup >> qexists_tac `ee` >>
+  conj_tac >- simp[set_scopes_def, vyperStateTheory.return_def] >>
+  irule gas_exempt_cert_handler >> qexists_tac `ee` >>
+  simp[handle_function_def, ignore_bind_def, bind_def, raise_def]
+QED

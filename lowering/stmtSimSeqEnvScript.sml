@@ -66,13 +66,6 @@ Proof
   metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem stmt_seq_bind_assoc[local]:
-  bind (bind a k) b = bind a (\v. bind (k v) b)
-Proof
-  rw[FUN_EQ_THM, ignore_bind_def, bind_def] >>
-  rename1 `a st` >> Cases_on `a st` >> rename1 `a st = (res, ee)` >>
-  Cases_on `res` >> simp[]
-QED
 
 Theorem stmt_frag_cons_env:
   !ctx func cx lctx RetQ cenv ty stmt ss es.
@@ -164,7 +157,7 @@ Resume stmt_frag_cons_env[exempt]:
   rename1 `gas_exempt_cert _ _ _ _ _ _ (err, ee) (leaf, target)` >>
   qexists_tac `left` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `target`] >>
-  simp[Once evaluate_def, ignore_bind_def, stmt_seq_bind_assoc] >>
+  simp[Once evaluate_def, ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule (cj 3 gas_exempt_cert_rules) >> simp[ignore_bind_def]
 QED
 Resume stmt_frag_cons_env[tail_normal]:
@@ -191,7 +184,7 @@ Resume stmt_frag_cons_env[tail_exempt]:
   rename1 `gas_exempt_cert _ _ _ _ _ _ (err, ee) (leaf, target)` >>
   qexists_tac `left ++ right` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `target`] >>
-  simp[Once evaluate_def, ignore_bind_def, stmt_seq_bind_assoc] >>
+  simp[Once evaluate_def, ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule (cj 2 gas_exempt_cert_rules) >>
   qexistsl_tac [`es_end`, `t`, `()`] >>
   simp[GSYM ignore_bind_def]

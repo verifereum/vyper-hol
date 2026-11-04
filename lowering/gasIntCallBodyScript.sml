@@ -34,5 +34,30 @@ Theorem gas_exempt_intcall_body:
       (es, s0) (left ++ right)
       (err, ee with scopes := mid.scopes) (leaf, finish)
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all eval_expr_intcall_body_normalize >>
+  disch_then (qspecl_then [`ty`,`drv`] SUBST1_TAC) >>
+  once_rewrite_tac[ignore_bind_def] >>
+  once_rewrite_tac[vyperStateTheory.bind_assoc] >> BETA_TAC >>
+  irule gas_exempt_cert_bind_values >>
+  goal_assum (drule_at Any) >>
+  simp[] >>
+  once_rewrite_tac[vyperStateTheory.bind_assoc] >> BETA_TAC >>
+  irule gas_exempt_cert_get_scopes >>
+  simp[lift_option_type_def, vyperStateTheory.bind_return] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  drule gas_exempt_cert_bind_unit >> simp[] >>
+  disch_then irule >> BETA_TAC >>
+  rewrite_tac[GSYM ignore_bind_def] >>
+  irule gas_exempt_cert_function_cleanup >>
+  irule gas_exempt_cert_invoke >> goal_assum (drule_at Any) >>
+  gvs[evaluation_state_component_equality]
 QED
+
+(* Audit the frozen root, including its transitive proof dependencies. *)
+val () =
+  let val (oracles,axioms) = Tag.dest_tag (Thm.tag gas_exempt_intcall_body) in
+    if null (Thm.hyp gas_exempt_intcall_body) andalso null axioms andalso
+       List.all (fn s => s = "DISK_THM") oracles then ()
+    else raise Fail "gas_exempt_intcall_body: admitted dependency"
+  end;

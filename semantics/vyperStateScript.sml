@@ -1382,3 +1382,46 @@ Proof
   rpt gen_tac >> simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[return_def] >> first_x_assum drule >> simp[]
 QED
+
+Theorem ignore_bind_try_unit:
+  ignore_bind (try a h) (return ()) =
+  try (ignore_bind a (return ())) (\e. ignore_bind (h e) (return ()))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[try_def, ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem ignore_bind_finally_unit:
+  ignore_bind (finally a cleanup) (return ()) =
+  finally (ignore_bind a (return ())) cleanup
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[finally_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `cleanup st` >> rename1 `_ = (res,st2)` >> Cases_on `res` >>
+  simp[raise_def]
+QED
+
+Theorem ignore_bind_return_twice:
+  ignore_bind (ignore_bind a (return v)) (return w) =
+  ignore_bind a (return w)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem bind_assoc:
+  bind (bind a b) c = bind a (\x. bind (b x) c)
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `a x` >> rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[bind_def]
+QED
+
+Theorem bind_return:
+  bind (return v) k = k v
+Proof
+  simp[FUN_EQ_THM, bind_def, return_def]
+QED

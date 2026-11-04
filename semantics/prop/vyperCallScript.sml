@@ -317,3 +317,38 @@ Proof
   drule read_results_state >> strip_tac >> gvs[] >>
   Cases_on `q` >> simp[]
 QED
+
+Theorem eval_expr_intcall_body_normalize:
+  ~MEM (src,fn) cx.stk /\ get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (mut,F,params,[],ret,body) /\ LENGTH args = LENGTH params ==>
+  eval_expr cx (Call ty (IntCall (src,fn)) args drv) =
+  (do vs <- vyperState$bind (eval_expr_results cx args) (read_results cx);
+      prev <- get_scopes;
+      env <- lift_option_type (bind_arguments (get_tenv cx) params vs)
+        "IntCall bind_arguments";
+      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
+      set_scopes [env];
+      rv <- finally
+        (try (do eval_stmts (cx with stk updated_by CONS (src,fn)) body;
+                 return NoneV od) handle_function) (set_scopes prev);
+      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
+      return (Value crv) od)
+Proof
+  strip_tac >> drule_all eval_expr_intcall_args_factor >>
+  disch_then (qspecl_then [`ty`,`drv`] SUBST1_TAC) >>
+  rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `st` >>
+  simp[bind_def, ignore_bind_def, get_scopes_def, return_def,
+    lock_if_nr_def, unlock_if_nr_def] >>
+  Cases_on `eval_expr_results cx args st` >>
+  rename1 `_ = (res,st1)` >> Cases_on `res` >> simp[] >>
+  rename1 `read_results cx results st1` >>
+  Cases_on `read_results cx results st1` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  rename1 `_ = (res,st1)` >> Cases_on `res` >>
+  `vyperState$bind (set_scopes st1.scopes) (\x. return ()) =
+   set_scopes st1.scopes` by
+    simp[FUN_EQ_THM, bind_def, set_scopes_def, return_def] >>
+  simp[push_function_def, pop_function_def, bind_def, ignore_bind_def,
+    set_scopes_def, return_def, FUN_EQ_THM]
+QED
