@@ -2002,6 +2002,42 @@ QED
 
 Finalise raw_call_finish_frag
 
+Theorem raw_call_finish_frame[local]:
+  wb_frame cenv es st0 s0 t /\
+  (!a w. eval_operand a t = SOME w ==> eval_operand a u = SOME w) /\
+  (if 0 < cap then
+     raw_call_finish_view u = raw_call_finish_view (mstore (w2n addr) len t)
+   else raw_call_finish_view u = raw_call_finish_view t) /\
+  (0 < cap ==>
+    (!aid b sz. aid < st0.cs_next_id /\
+      FLOOKUP t.vs_allocas aid = SOME (b,sz) ==>
+      regions_disjoint (w2n addr) 32 b sz) /\
+    (!name b sz. local_region cenv es.scopes s0 name b sz ==>
+      regions_disjoint (w2n addr) 32 b sz)) ==>
+  wb_frame cenv es st0 s0 u
+Proof
+  strip_tac >>
+  `u.vs_allocas = t.vs_allocas /\
+   (!b sz. (0 < cap ==> regions_disjoint (w2n addr) 32 b sz) ==>
+     mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz t.vs_memory)` by
+    (Cases_on `0 < cap` >> fs[] >>
+     qpat_x_assum `raw_call_finish_view _ = _` mp_tac >>
+     simp[raw_call_finish_view_def, venom_state_component_equality] >>
+     strip_tac >> simp[] >> rpt strip_tac >>
+     irule mstore_region_frame >> qexistsl_tac [`w2n addr`,`32`] >> simp[]) >>
+  fs[wb_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `lookup_var x t = SOME w` by metis_tac[] >>
+      qpat_x_assum `!a w. _ ==> _` (qspecl_then [`Var x`,`w`] mp_tac) >>
+      simp[eval_operand_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      metis_tac[]) >>
+  irule locals_kept_regions_tail >> qexists_tac `t` >> simp[] >>
+  metis_tac[]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
