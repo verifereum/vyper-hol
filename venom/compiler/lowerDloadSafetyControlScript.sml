@@ -45,3 +45,20 @@ Proof
   asm_rewrite_tac[opcode_case_def] >> simp[] >>
   metis_tac[]
 QED
+
+(* Jump dispatch leaves the data and allocation effect interface intact. *)
+Theorem ld_jump_effect:
+  f.lf_src = s /\ f.lf_tgt = t /\ f.lf_tv = tn.t_var /\
+  ld_vars P A f /\ ld_memory lo A tn s t /\ ld_nonghost tn s t /\
+  s.vs_prev_bb = t.vs_prev_bb /\ s.vs_current_bb = t.vs_current_bb ==>
+  ld_vars P A (f with <|lf_src := jump_to lbl s; lf_tgt := jump_to lbl t|>) /\
+  ld_memory lo A tn (jump_to lbl s) (jump_to lbl t) /\
+  ld_nonghost tn (jump_to lbl s) (jump_to lbl t) /\
+  (jump_to lbl s).vs_prev_bb = (jump_to lbl t).vs_prev_bb /\
+  (jump_to lbl s).vs_current_bb = (jump_to lbl t).vs_current_bb
+Proof
+  strip_tac >> gvs[] >>
+  gvs[jump_to_def, ld_vars_def, lowerDloadSafetyKernelTheory.ld_memory_def,
+     lowerDloadSafetyKernelTheory.ld_nonghost_def] >>
+  first_assum MATCH_ACCEPT_TAC
+QED
