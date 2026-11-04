@@ -160,3 +160,14 @@ Proof
   rpt strip_tac >> drule bp_segment_size_literal >>
   strip_tac >> gvs[eval_operand_def]
 QED
+
+Theorem dse_region_matches_allocas_extend:
+  dse_region_matches loc s a n /\
+  (!aid p. FLOOKUP s.vs_allocas aid = SOME p ==>
+           FLOOKUP t.vs_allocas aid = SOME p) ==>
+  dse_region_matches loc t a n
+Proof
+  Cases_on `loc.ml_alloca` >> simp[dse_region_matches_def] >>
+  rpt strip_tac >> rename1 `SOME alloc` >> Cases_on `alloc` >>
+  gvs[] >> metis_tac[]
+QED

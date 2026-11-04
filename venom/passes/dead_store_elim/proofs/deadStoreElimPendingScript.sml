@@ -417,3 +417,18 @@ Proof
   simp[dse_pending_at_def, key_ok_def, EVERY_MEM, MEM_FILTER] >>
   metis_tac[]
 QED
+
+Theorem dse_pending_at_allocas_extend:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  (!aid p. FLOOKUP s.vs_allocas aid = SOME p ==>
+           FLOOKUP t.vs_allocas aid = SOME p) ==>
+  dse_pending_at cfg bp sp fn bb idx P t
+Proof
+  rewrite_tac[dse_pending_at_def] >> strip_tac >>
+  reverse conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  simp[EVERY_MEM] >> qx_gen_tac `entry` >> strip_tac >>
+  PairCases_on `entry` >> gvs[] >>
+  qpat_x_assum `EVERY _ P` mp_tac >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  irule dse_region_matches_allocas_extend >> metis_tac[]
+QED
