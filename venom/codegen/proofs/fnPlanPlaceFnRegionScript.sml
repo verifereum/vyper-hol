@@ -1,7 +1,7 @@
 Theory fnPlanPlaceFnRegion
 Ancestors
   stackPlanGen callLayoutDefs venomInst stackPlanTypes list rich_list arithmetic asmToBytecodeProofs codegen asmSem
-  codegenRel words symbolResolve
+  codegenRel words symbolResolve stackOpSim
 
 Theorem generate_block_plan_leading_label:
   generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps') ==>
@@ -123,4 +123,26 @@ Proof
      simp[EL_APPEND_EQN, asm_inst_size_def]) >>
   simp[asm_block_at_def, EL_APPEND_EQN] >>
   rpt strip_tac >> Cases_on `j` >> simp[EL_APPEND_EQN]
+QED
+
+Theorem codegen_region_slice:
+  generate_context_plan unit.cu_context = SOME cp /\
+  codegen_assembly rpolicy unit = SOME prog /\
+  i < LENGTH cp.cp_regions /\ EL i cp.cp_regions = r ==>
+  asm_symbols_ok prog /\
+  ?pre post. prog = pre ++ execute_plan cp.cp_initial_fmp r.sr_plan ++ post
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `cp.cp_regions = TAKE i cp.cp_regions ++ [EL i cp.cp_regions] ++ DROP (SUC i) cp.cp_regions`
+    by metis_tac[TAKE_DROP_SUC] >>
+  qexistsl_tac
+    [`execute_plan cp.cp_initial_fmp (FLAT (MAP (\r. r.sr_plan) (TAKE i cp.cp_regions)))`,
+     `execute_plan cp.cp_initial_fmp
+       (FLAT (MAP (\r. r.sr_plan) (DROP (SUC i) cp.cp_regions)) ++ revert_postamble) ++
+       data_segment_asm unit.cu_data_segment ++ [AsmDataHeader "code_end"]`] >>
+  simp[context_plan_ops_def] >>
+  pop_assum (fn th => CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV th)))) >>
+  simp[execute_plan_append]
 QED
