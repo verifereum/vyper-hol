@@ -1,0 +1,290 @@
+(*
+ * Function-boundary steps of the frame-aware simulation: RET, INVOKE and
+ * the entry block's parameter prefix, against frameRel$fn_frame_inv and
+ * the boundary relations of venomToAsmProps.
+ *
+ * This theory imports venomToAsmProps for fn_has_retpc, shared_state_rel,
+ * fn_entry_state_rel and fn_return_state_rel.  To use these lemmas in the
+ * proofs of gen_fn_frame_simulation and gen_fn_simulation, those four
+ * definitions have to move (unchanged) to frameRel, and venomToAsmProps
+ * then imports this theory.
+ *
+ * TOP-LEVEL (all CHEATED):
+ *   gen_ret_frame_sim     — RET: jump to the return address
+ *   gen_invoke_frame_sim  — INVOKE, given the callee's gen_fn_simulation
+ *   entry_params_frame_sim — the entry block's parameter prefix turns
+ *                            fn_entry_state_rel into fn_frame_inv
+ *)
+
+Theory fnFrameBoundary
+Ancestors
+  venomToAsmProps genFrameSim frameRel contextCodegenRel codegenRel
+  unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
+  venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
+
+(* ===== RET ===== *)
+
+(* Used for RET in the block induction: gen_fn_frame_simulation's IntRet
+   clause, whose conclusion this is.  RET's code reorders its operands to
+   the top, the return-PC variable last, and JUMPs.  ps'.ps_stack = [] is
+   the planner obligation that the frame's planner stack holds only RET's
+   operands (all else is dead and popped; dead_stack_marker cells exist
+   only on must-halt paths, which never reach RET), so what is left after
+   the jump is the return values above rest.  The RET is in a reachable
+   block (reachable_fn), where retpc_shape_ok makes its last operand a
+   return-PC variable.
+
+   Why it should hold: the last operand reads ra in the frame view, and
+   fn has a RETPC_PARAM (retpc_var needs one; canonical_param_prefix puts
+   it among the entry parameters), so fn_has_retpc and the JUMP lands at
+   pc_ret; the other operands are ordinary (opaque_use_ok) and are the
+   return values; the step changes no Venom state, so the memory, closure
+   and shared fields carry over from fn_frame_inv. *)
+Theorem gen_ret_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
+   is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    inst.inst_opcode = RET /\
+    MEM inst (fn_insts (reachable_fn fn)) /\
+    codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+    inst_wf inst /\
+    generated_plan_state_wf base ps /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+    (!off. MEM (SORestore off) ops ==> off < dimword(:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret) /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    ps'.ps_stack = [] /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    !ret vs'. step_inst fuel ctx inst vs = IntRet ret vs' ==>
+      ?n as'.
+        asm_steps lo o2pc prog n as = AsmOK as' /\
+        as'.as_pc = pc_ret /\
+        as'.as_stack = REVERSE ret.iret_values ++ rest /\
+        context_memory_rel cp vs'.vs_memory as'.as_memory /\
+        (!b. context_spill_byte cp b /\
+             ~closure_spill_byte ctx cp fn.fn_name b ==>
+             read_byte b as'.as_memory = read_byte b mem0) /\
+        shared_state_rel vs' as'
+Proof
+  cheat
+QED
+
+(* ===== INVOKE ===== *)
+
+(* Used for INVOKE in the block induction (all three of
+   gen_fn_frame_simulation's clauses and the OK continuation).  The
+   callee runs with the step's fuel, which is below the block
+   induction's, so the hypothesis is gen_fn_simulation for every function
+   at that fuel: the mutual induction hypothesis.  It is stated here
+   without the context-level premises gen_fn_simulation shares with this
+   lemma.  The callee premises are what the hypothesis needs about the
+   callee that fn's own premises don't give:
+     - no GAS and no dead_stack_marker operand (gen_fn_frame_simulation
+       assumes these only of fn; for the callee they must come from a
+       context-wide form of those premises);
+     - fn_has_retpc or no parameters: the code pushes the return label
+       above the arguments, which fn_entry_state_rel matches only then.
+   Callee placement is fnPlanPlace$fn_region_placed (the entry label is
+   the function name, fn_shape_ok).  The remaining premises are
+   gen_inst_frame_sim's.
+
+   Why it should hold: the code pushes the arguments (as an ordinary
+   instruction's inputs), the return label and the callee label, and
+   jumps, so the callee starts in fn_entry_state_rel with ra the return
+   label's offset and rest the caller's remaining stack; fn_entry_inv for
+   the callee state is reachability_closed's INVOKE clause.  On IntRet the
+   hypothesis lands at the return label with the return values on top;
+   the caller's spill region is outside the callee's call-graph closure
+   (fn is reachable and the reachable call graph is acyclic), so its
+   spills survive, and bytes outside fn's closure are outside the
+   callee's; the outputs are bound as the planner pushes them.  Halt and
+   Abort pass through. *)
+Theorem gen_invoke_frame_sim:
+  !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
+   next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
+   rest mem0 nm arg_ops.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit /\
+    codegen_context_obligations Inv ctx cp /\
+    reachability_closed Inv ctx /\
+    MEM fn ctx.ctx_functions /\
+    MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+    Inv ctx fn inst vs /\ active_inst fn inst vs /\
+    inst.inst_opcode = INVOKE /\
+    inst.inst_operands = Label nm :: arg_ops /\
+    (!callee. lookup_function nm ctx.ctx_functions = SOME callee ==>
+       EVERY (\cbb. EVERY (\ci. ci.inst_opcode <> GAS) cbb.bb_instructions)
+         callee.fn_blocks /\
+       EVERY (\cbb. EVERY (\ci. EVERY (\op. op <> dead_stack_marker)
+         ci.inst_operands) cbb.bb_instructions) callee.fn_blocks /\
+       (fn_has_retpc callee \/
+        get_params (HD callee.fn_blocks).bb_instructions = [])) /\
+    (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
+       ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
+                FLOOKUP o2pc off = SOME pc /\
+                asm_block_at prog pc
+                  (execute_plan cp.cp_initial_fmp (EL j cp.cp_regions).sr_plan)) /\
+    (* The callee's function-level simulation at this fuel. *)
+    (!j callee rj cvs cas cra crest cpc.
+       j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
+       EL j cp.cp_regions = rj /\
+       MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
+       EVERY (\cbb. EVERY (\ci. ci.inst_opcode <> GAS) cbb.bb_instructions)
+         callee.fn_blocks /\
+       EVERY (\cbb. EVERY (\ci. EVERY (\op. op <> dead_stack_marker)
+         ci.inst_operands) cbb.bb_instructions) callee.fn_blocks /\
+       (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
+       fn_entry_inv Inv ctx callee cvs /\
+       asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
+       fn_entry_state_rel cp callee cvs cas cra crest /\
+       (fn_has_retpc callee ==> FLOOKUP o2pc (w2n cra) = SOME cpc) ==>
+       (!vs'. run_blocks fuel ctx callee cvs = Halt vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmHalt as' /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!a vs'. run_blocks fuel ctx callee cvs = Abort a vs' ==>
+          ?n as'. ((a = Revert_abort /\
+                    asm_steps lo o2pc prog n cas = AsmRevert as') \/
+                   (a = ExHalt_abort /\
+                    asm_steps lo o2pc prog n cas = AsmFault as')) /\
+                  venom_asm_terminal_rel vs' as') /\
+       (!ret vs'. run_blocks fuel ctx callee cvs = IntRet ret vs' ==>
+          ?n as'. asm_steps lo o2pc prog n cas = AsmOK as' /\
+                  as'.as_pc = cpc /\
+                  as'.as_stack = REVERSE ret.iret_values ++ crest /\
+                  fn_return_state_rel ctx cp callee vs' cas as')) /\
+    opaque_use_ok fn /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    generated_plan_state_wf base ps /\
+    codegen_ready_fn fn /\
+    MEM inst (fn_insts fn) /\
+    inst_wf inst /\
+    LENGTH (compute_operands inst) <= 16 /\
+    LENGTH (compute_operands inst) <=
+      LENGTH (SND (emit_input_plan inst.inst_opcode
+        (compute_operands inst) next_liveness ps)).ps_stack /\
+    (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+      (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+      IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (!lbl i. i < LENGTH (execute_plan cp.cp_initial_fmp ops) /\
+             EL i (execute_plan cp.cp_initial_fmp ops) = AsmLabel lbl ==>
+             ?off. FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+                   FLOOKUP o2pc off = SOME (as.as_pc + i)) /\
+    (!op. MEM op (compute_operands inst) ==>
+          eval_operand op (frame_view fn ra vs) =
+          operand_val (frame_view fn ra vs) lo op) /\
+    (!op at. MEM op (compute_operands inst) /\
+             (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/
+              MEM at (compute_operands inst)) /\
+             operand_equiv dfg op at ==>
+             operand_val (frame_view fn ra vs) lo op =
+             operand_val (frame_view fn ra vs) lo at) /\
+    EVERY (\op. op <> dead_stack_marker /\
+      !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
+      (compute_operands inst) /\
+    EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+                      inst.inst_outputs) ps.ps_stack /\
+    (!op. op IN FDOM ps.ps_spilled ==>
+          EVERY (\out. case op of Var x => x <> out | _ => T)
+                inst.inst_outputs) /\
+    prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+    (!off. MEM (SORestore off) ops ==> off < dimword (:256)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 ps vs as /\
+    generate_inst_plan liveness dfg cfg fn inst
+      next_liveness is_halting next_is_term bb_label ps =
+      SOME (ops, ps') /\
+    asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp ops) ==>
+    (!vs'. step_inst fuel ctx inst vs = OK vs' ==>
+       ?n as'.
+         asm_steps lo o2pc prog n as = AsmOK as' /\
+         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
+         as'.as_pc = as.as_pc + LENGTH (execute_plan cp.cp_initial_fmp ops)) /\
+    (!vs'. step_inst fuel ctx inst vs = Halt vs' ==>
+       ?n as'. asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. step_inst fuel ctx inst vs = Abort a vs' ==>
+       ?n as'. ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as')
+Proof
+  cheat
+QED
+
+(* ===== Entry parameters ===== *)
+
+(* Used to derive gen_fn_simulation from gen_fn_frame_simulation: the
+   entry block's label and parameter code (prepare_params_plan, from the
+   function planner's initial state, which is the entry block's DFS
+   state) take fn_entry_state_rel to fn_frame_inv, with mem0 the entry
+   memory.  Venom runs the PARAM / FMP_PARAM / RETPC_PARAM prefix one
+   instruction at a time; the first conjunct about exec_block says the
+   block's run from index 0 is its run from vs_p, past the prefix.  The
+   rest of the entry block then runs as any block body does.  The region
+   premise is fn_frame_inv's region clause for ps1, as in genFrameSim.
+
+   Why it should hold: canonical_param_prefix orders the PARAM indices and
+   puts RETPC_PARAM last, and fn_entry_state_rel stacks ra above
+   REVERSE vs_params, so pushing the outputs in order (bottom-first plan
+   stack) matches the assembly stack, the RETPC_PARAM output reading ra
+   in the frame view; the label step is a JUMPDEST; popmany_plan and
+   optimistic_swap_plan only drop dead outputs and swap; the spill map is
+   empty; shared_state_rel and context_memory_rel give the rest of
+   context_venom_asm_rel. *)
+Theorem entry_params_frame_sim:
+  !fuel ctx cp lo o2pc prog liveness fn ch growth spill_base lbl_ctr ps0
+   param_ops ps1 r vs as ra rest.
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    liveness = liveness_analyze fn /\
+    codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    prepare_params_plan liveness fn ps0 = (param_ops, ps1) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    fn_entry_state_rel cp fn vs as ra rest /\
+    asm_block_at prog as.as_pc
+      (execute_plan cp.cp_initial_fmp
+         (SOLabel (HD fn.fn_blocks).bb_label :: param_ops))
+    ==>
+    ?n as' vs_p.
+      asm_steps lo o2pc prog n as = AsmOK as' /\
+      as'.as_pc = as.as_pc +
+        LENGTH (execute_plan cp.cp_initial_fmp
+                  (SOLabel (HD fn.fn_blocks).bb_label :: param_ops)) /\
+      exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+        exec_block fuel ctx (HD fn.fn_blocks) vs_p /\
+      vs_p.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+      fn_frame_inv ctx cp lo fn ra rest as.as_memory ps1 vs_p as'
+Proof
+  cheat
+QED

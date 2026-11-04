@@ -1,0 +1,138 @@
+(*
+ * Placement of planned code in the assembled program, for the block
+ * induction behind venomToAsmProps$gen_fn_frame_simulation.
+ *
+ * codegen_assembly lays out the context plan as the regions' plans in
+ * order, then the revert postamble, then the data segment.  A block's
+ * code starts with AsmLabel of its label, so with symbols unique in prog
+ * the label's offset in compute_label_offsets is that AsmLabel's, and
+ * build_offset_to_pc maps the offset back to its index.
+ *
+ * Label uniqueness is a premise: codegen_assembly does not check it, and
+ * nothing in unit_shape_ok or ctx_wf makes block labels distinct across
+ * functions or from the data segment's section names.  Python's assembler
+ * panics on a duplicate symbol (resolve_symbols, "duplicate label"), over
+ * labels and data headers together, which is what the premise states.
+ *
+ * TOP-LEVEL (all CHEATED):
+ *   dfs_block_code_placed   — a planned block's code sits at its label
+ *   fn_region_placed        — a function's whole plan sits at its entry label
+ *   revert_postamble_placed — the shared revert postamble sits at "revert"
+ *)
+
+Theory fnPlanPlace
+Ancestors
+  fnPlanLineage codegen asmSem symbolResolve planExec stackPlanGen
+  stackPlanTypes
+
+(* Used at each jump of the block induction: the successor's code
+   (planned from its DFS state, fnPlanCover) is at the PC its label
+   resolves to, which gives gen_fn_frame_simulation's asm_block_at premise
+   at the successor and gen_jmp_frame_sim's / gen_jnz_frame_sim's
+   FLOOKUP lo / FLOOKUP o2pc premises.  The last conjunct is
+   gen_inst_frame_sim's premise that labels defined in an instruction's
+   own code (INVOKE return labels, ASSERT_UNREACHABLE's) resolve to their
+   own positions; an instruction's code is a slice of its block's.
+
+   Why it should hold: region i's plan is r.sr_plan (the premise fixes it
+   whatever lbl_ctr is), and a DFS state's block plan is a slice of it, so
+   execute_plan_append places block_ops at the sum of the earlier regions'
+   and blocks' asm lengths.  The first asm instruction is AsmLabel lbl;
+   with every AsmLabel/AsmDataHeader name distinct it is the only binding
+   of lbl in compute_label_offsets.  AsmLabel has size 1, so no later
+   instruction shares its offset and build_offset_to_pc maps it to its
+   index.  off < dimword (:256) from asm_encoding_wf (symbol_size bytes,
+   codegenEncodingWf$codegen_assembly_asm_encoding_wf). *)
+Theorem dfs_block_code_placed:
+  !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth lbl_ctr
+   ps_end lbl bb ps_dfs block_ops ps_dfs_after.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
+                                    AsmLabel l => [l]
+                                  | AsmDataHeader l => [l]
+                                  | _ => []) prog)) /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
+    generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+      r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr) lbl ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after)
+    ==>
+    ?off pc.
+      FLOOKUP lo lbl = SOME off /\ off < dimword (:256) /\
+      FLOOKUP o2pc off = SOME pc /\
+      asm_block_at prog pc (execute_plan cp.cp_initial_fmp block_ops) /\
+      (!l j. j < LENGTH (execute_plan cp.cp_initial_fmp block_ops) /\
+             EL j (execute_plan cp.cp_initial_fmp block_ops) = AsmLabel l ==>
+             ?off'. FLOOKUP lo l = SOME off' /\ off' < dimword (:256) /\
+                    FLOOKUP o2pc off' = SOME (pc + j))
+Proof
+  cheat
+QED
+
+(* Used for INVOKE (gen_invoke_frame_sim's callee-placement premise: the
+   call jumps to the callee's entry label, where gen_fn_simulation wants
+   the callee's whole plan) and for gen_fn_simulation's own asm_block_at
+   premise.
+
+   Why it should hold: generate_context_plan = SOME makes every function's
+   plan SOME, so canonical_param_prefix holds and fn has blocks; the DFS
+   starts at the entry block, so r.sr_plan begins with
+   SOLabel (HD fn.fn_blocks).bb_label; the rest is dfs_block_code_placed's
+   argument for the region's start. *)
+Theorem fn_region_placed:
+  !rpolicy unit cp prog ctx lo o2pc i fn r.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
+                                    AsmLabel l => [l]
+                                  | AsmDataHeader l => [l]
+                                  | _ => []) prog)) /\
+    i < LENGTH ctx.ctx_functions /\
+    EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r
+    ==>
+    ?off pc.
+      FLOOKUP lo (HD fn.fn_blocks).bb_label = SOME off /\
+      off < dimword (:256) /\
+      FLOOKUP o2pc off = SOME pc /\
+      asm_block_at prog pc (execute_plan cp.cp_initial_fmp r.sr_plan)
+Proof
+  cheat
+QED
+
+(* Used by the ASSERT case of the abort step (gen_inst_abort_frame_sim's
+   premise, as genBlockSim$gen_inst_abort_sim's) and by gen_inst_frame_sim's
+   IS_SOME (FLOOKUP lo "revert") premise.
+
+   Why it should hold: context_plan_ops ends with revert_postamble, which
+   starts with SOLabel "revert", the only "revert" symbol under the
+   distinctness premise. *)
+Theorem revert_postamble_placed:
+  !rpolicy unit cp prog ctx lo o2pc.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
+    generate_context_plan ctx = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
+                                    AsmLabel l => [l]
+                                  | AsmDataHeader l => [l]
+                                  | _ => []) prog))
+    ==>
+    ?off pc.
+      FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
+      FLOOKUP o2pc off = SOME pc /\
+      asm_block_at prog pc (execute_plan cp.cp_initial_fmp revert_postamble)
+Proof
+  cheat
+QED
