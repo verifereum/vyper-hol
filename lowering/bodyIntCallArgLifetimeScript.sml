@@ -474,3 +474,42 @@ Theorem compile_multi_vvs_pair:
 Proof
   simp[compile_multi_vvs_def, comp_bind_def, comp_return_def]
 QED
+
+Theorem local_region_pointer_frame:
+  (!name p size.
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) size) ==>
+     lookup_var p s = lookup_var p s0) ==>
+  (local_region cenv scopes s name b sz <=>
+   local_region cenv scopes s0 name b sz)
+Proof
+  strip_tac >> simp[local_region_def] >> metis_tac[]
+QED
+
+Theorem vv_at_frame:
+  vv_at cenv cx ty ca cb es raw held s0 /\
+  cb.cs_next_id <= cc.cs_next_id /\
+  (!aid region. FLOOKUP s0.vs_allocas aid = SOME region ==>
+     FLOOKUP s.vs_allocas aid = SOME region) /\
+  (!name p size.
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) size) ==>
+     lookup_var p s = lookup_var p s0) /\
+  (!w. eval_operand (vv_operand held) s0 = SOME w ==>
+     eval_operand (vv_operand held) s = SOME w) ==>
+  vv_at cenv cx ty ca cc es raw held s
+Proof
+  strip_tac >>
+  `!name b sz. local_region cenv es.scopes s name b sz <=>
+               local_region cenv es.scopes s0 name b sz` by
+    metis_tac[local_region_pointer_frame] >>
+  Cases_on `held` >>
+  gvs[vv_at_def, expr_val_at_def, vv_operand_def] >>
+  rpt strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists_tac `w` >> simp[]
+  >>~- ([`FLOOKUP s0.vs_allocas aid = SOME (b,sz)`],
+    disj1_tac >> qexistsl_tac [`aid`, `b`, `sz`] >>
+    `aid < cc.cs_next_id` by decide_tac >> asm_rewrite_tac[] >>
+    metis_tac[]) >>
+  disj2_tac >> disj1_tac >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
