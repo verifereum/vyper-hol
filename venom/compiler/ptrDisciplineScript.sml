@@ -515,8 +515,9 @@ End
 (* Each nonempty access ending above lo, and each nonempty access through
    a pointer, lies inside the site its address operand points into, unless it is part of a revert forwarding, which
    copies the callee's revert data to a zero-size site and reverts with
-   it.  Two compared pointers point into the same site, or just past its
-   end. *)
+   it.  Two compared pointers point into the same nonempty site, or just
+   past its end: nonempty sites are disjoint, so (b,sz) names one site,
+   while two zero-size sites can share it. *)
 Definition access_ok_def:
   access_ok lo G fn inst s <=>
     (~in_revert_forward fn s ==>
@@ -540,6 +541,7 @@ Definition access_ok_def:
        inst.inst_operands = [Var u; Var w] /\
        (u IN FDOM G \/ w IN FDOM G) ==>
        ?b sz x y. FLOOKUP G u = SOME (b,sz) /\ FLOOKUP G w = SOME (b,sz) /\
+                  0 < sz /\
                   eval_operand (Var u) s = SOME x /\
                   eval_operand (Var w) s = SOME y /\
                   b <= w2n x /\ w2n x <= b + sz /\
