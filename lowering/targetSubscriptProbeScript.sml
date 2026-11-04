@@ -3074,3 +3074,173 @@ Proof
   simp[probe_word_final_memory_footprint,
        valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint]
 QED
+
+(* Only mutable runtime fields propagated by INVOKE, excluding accounts and
+   memory, which have separate (non-identity) footprints above. *)
+Theorem probe_word_entry_runtime_frame[local]:
+  !s.
+    (probe_word_entry_state s).vs_transient = s.vs_transient /\
+    (probe_word_entry_state s).vs_returndata = s.vs_returndata /\
+    (probe_word_entry_state s).vs_logs = s.vs_logs /\
+    (probe_word_entry_state s).vs_outcomes = s.vs_outcomes /\
+    (probe_word_entry_state s).vs_requests = s.vs_requests /\
+    (probe_word_entry_state s).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_entry_state s).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_entry_state_def, update_var_def]
+QED
+
+Theorem probe_word_load_runtime_frame[local]:
+  !s i b.
+    (probe_word_load_state s i b).vs_transient = s.vs_transient /\
+    (probe_word_load_state s i b).vs_returndata = s.vs_returndata /\
+    (probe_word_load_state s i b).vs_logs = s.vs_logs /\
+    (probe_word_load_state s i b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_load_state s i b).vs_requests = s.vs_requests /\
+    (probe_word_load_state s i b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_load_state s i b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_load_state_def, update_var_def, mstore_def]
+QED
+
+Theorem probe_word_load_round_runtime_frame[local]:
+  !s i b.
+    (probe_word_load_round s i b).vs_transient = s.vs_transient /\
+    (probe_word_load_round s i b).vs_returndata = s.vs_returndata /\
+    (probe_word_load_round s i b).vs_logs = s.vs_logs /\
+    (probe_word_load_round s i b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_load_round s i b).vs_requests = s.vs_requests /\
+    (probe_word_load_round s i b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_load_round s i b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_load_round_def, jump_to_def, probe_word_load_runtime_frame,
+       probe_word_load_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_loaded_runtime_frame[local]:
+  !s b.
+    (probe_word_loaded_state s b).vs_transient = s.vs_transient /\
+    (probe_word_loaded_state s b).vs_returndata = s.vs_returndata /\
+    (probe_word_loaded_state s b).vs_logs = s.vs_logs /\
+    (probe_word_loaded_state s b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_loaded_state s b).vs_requests = s.vs_requests /\
+    (probe_word_loaded_state s b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_loaded_state s b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_loaded_state_def, jump_to_def,
+       probe_word_load_cond_state_def, update_var_def,
+       probe_word_load_round_runtime_frame]
+QED
+
+Theorem probe_word_elem_body_runtime_frame[local]:
+  !s i src dst.
+    (probe_word_elem_body_state s i src dst).vs_transient = s.vs_transient /\
+    (probe_word_elem_body_state s i src dst).vs_returndata = s.vs_returndata /\
+    (probe_word_elem_body_state s i src dst).vs_logs = s.vs_logs /\
+    (probe_word_elem_body_state s i src dst).vs_outcomes = s.vs_outcomes /\
+    (probe_word_elem_body_state s i src dst).vs_requests = s.vs_requests /\
+    (probe_word_elem_body_state s i src dst).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_elem_body_state s i src dst).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_elem_body_state_def, update_var_def, sstore_def]
+QED
+
+Theorem probe_word_elem_round_runtime_frame[local]:
+  !s i src dst.
+    (probe_word_elem_round s i src dst).vs_transient = s.vs_transient /\
+    (probe_word_elem_round s i src dst).vs_returndata = s.vs_returndata /\
+    (probe_word_elem_round s i src dst).vs_logs = s.vs_logs /\
+    (probe_word_elem_round s i src dst).vs_outcomes = s.vs_outcomes /\
+    (probe_word_elem_round s i src dst).vs_requests = s.vs_requests /\
+    (probe_word_elem_round s i src dst).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_elem_round s i src dst).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_elem_round_def, jump_to_def, probe_word_elem_body_runtime_frame,
+       probe_word_elem_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_elems_copied_runtime_frame[local]:
+  !s src dst.
+    (probe_word_elems_copied_state s src dst).vs_transient = s.vs_transient /\
+    (probe_word_elems_copied_state s src dst).vs_returndata = s.vs_returndata /\
+    (probe_word_elems_copied_state s src dst).vs_logs = s.vs_logs /\
+    (probe_word_elems_copied_state s src dst).vs_outcomes = s.vs_outcomes /\
+    (probe_word_elems_copied_state s src dst).vs_requests = s.vs_requests /\
+    (probe_word_elems_copied_state s src dst).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_elems_copied_state s src dst).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_elems_copied_state_def, jump_to_def,
+       probe_word_elem_cond_state_def, update_var_def, probe_word_elem_round_runtime_frame]
+QED
+
+Theorem probe_word_copy_body_runtime_frame[local]:
+  !s i b.
+    (probe_word_copy_body_state s i b).vs_transient = s.vs_transient /\
+    (probe_word_copy_body_state s i b).vs_returndata = s.vs_returndata /\
+    (probe_word_copy_body_state s i b).vs_logs = s.vs_logs /\
+    (probe_word_copy_body_state s i b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_copy_body_state s i b).vs_requests = s.vs_requests /\
+    (probe_word_copy_body_state s i b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_copy_body_state s i b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_copy_body_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_setup_runtime_frame[local]:
+  !s i n b.
+    (probe_word_copy_setup_state s i n b).vs_transient = s.vs_transient /\
+    (probe_word_copy_setup_state s i n b).vs_returndata = s.vs_returndata /\
+    (probe_word_copy_setup_state s i n b).vs_logs = s.vs_logs /\
+    (probe_word_copy_setup_state s i n b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_copy_setup_state s i n b).vs_requests = s.vs_requests /\
+    (probe_word_copy_setup_state s i n b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_copy_setup_state s i n b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_copy_setup_state_def, jump_to_def, probe_word_copy_body_runtime_frame,
+       probe_word_copy_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_round_runtime_frame[local]:
+  !s i n b.
+    (probe_word_copy_round s i n b).vs_transient = s.vs_transient /\
+    (probe_word_copy_round s i n b).vs_returndata = s.vs_returndata /\
+    (probe_word_copy_round s i n b).vs_logs = s.vs_logs /\
+    (probe_word_copy_round s i n b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_copy_round s i n b).vs_requests = s.vs_requests /\
+    (probe_word_copy_round s i n b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_copy_round s i n b).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_copy_round_def, jump_to_def, probe_word_elem_exit_state_def,
+       update_var_def, probe_word_elems_copied_runtime_frame,
+       probe_word_copy_setup_runtime_frame]
+QED
+
+Theorem probe_word_copied_runtime_frame[local]:
+  !s n b.
+    (probe_word_copied_state s n b).vs_transient = s.vs_transient /\
+    (probe_word_copied_state s n b).vs_returndata = s.vs_returndata /\
+    (probe_word_copied_state s n b).vs_logs = s.vs_logs /\
+    (probe_word_copied_state s n b).vs_outcomes = s.vs_outcomes /\
+    (probe_word_copied_state s n b).vs_requests = s.vs_requests /\
+    (probe_word_copied_state s n b).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_copied_state s n b).vs_immutables = s.vs_immutables
+Proof
+  rpt gen_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, jump_to_def, probe_word_copy_cond_state_def,
+       update_var_def, probe_word_copy_round_runtime_frame]
+QED
+
+Theorem probe_word_final_runtime_frame:
+  !s.
+    (probe_word_final_state s).vs_transient = s.vs_transient /\
+    (probe_word_final_state s).vs_returndata = s.vs_returndata /\
+    (probe_word_final_state s).vs_logs = s.vs_logs /\
+    (probe_word_final_state s).vs_outcomes = s.vs_outcomes /\
+    (probe_word_final_state s).vs_requests = s.vs_requests /\
+    (probe_word_final_state s).vs_pending_deletions = s.vs_pending_deletions /\
+    (probe_word_final_state s).vs_immutables = s.vs_immutables
+Proof
+  simp[probe_word_final_state_def, sstore_def, probe_word_copied_runtime_frame,
+       jump_to_def, probe_word_load_exit_state_def, update_var_def,
+       probe_word_loaded_runtime_frame, probe_word_entry_runtime_frame]
+QED
