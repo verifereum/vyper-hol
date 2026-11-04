@@ -15265,3 +15265,31 @@ Proof
        compile_builtin_calldatasize_labels, compile_as_wei_value_decimal_labels,
        compile_as_wei_value_int_labels]
 QED
+
+Theorem builtin_concat_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Concat n) args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty (Concat n) args st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_alloc_buffer_labels, emit_op_labels, compile_concat_labels,
+            emit_void_labels]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem builtin_makearray_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty (MakeArray et bnd) args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty (MakeArray et bnd) args st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  Cases_on `et` >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_alloc_buffer_labels]) >>
+  irule as_ptr_val_labels >> simp[compile_make_array_labels, compile_make_tuple_labels]
+QED
