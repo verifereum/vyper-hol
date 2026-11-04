@@ -136,16 +136,21 @@ Proof
              qspecl_then [`Lit (n2w nkey)`, `Lit 0w`, `n2w nkey`, `0w`,
                           `st.cs_next_id`, `s`] mp_tac step_TSTORE >>
              gvs[eval_operand_def]) >>
-          irule mem_safe_run_abort_step >>
-          qexistsl [`bb`, `mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []`,
-                    `ExHalt_abort`, `halt_state (set_returndata [] s)`] >>
+          irule (Q.SPECL [`fuel`, `ctx`, `fn`, `s`, `bb`,
+            `mk_inst st.cs_next_id TSTORE [Lit (n2w nkey); Lit 0w] []`,
+            `ExHalt_abort`, `halt_state (set_returndata [] s)`]
+            mem_safe_run_abort_step) >>
           gvs[mem_safe_step_non_invoke, mk_inst_def] >>
-          irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+          qexistsl [`nkey`, `st`] >> gvs[] >>
+          irule below_frontier_no_ranges >> simp[]) >>
       qabbrev_tac `u = tstore (n2w nkey) 0w s with
                          vs_inst_idx := s.vs_inst_idx + 1` >>
       `step_inst fuel ctx (mk_inst st.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []) s = OK (tstore (n2w nkey) 0w s)` by
-        (simp[step_inst_non_invoke] >> irule step_TSTORE >> simp[eval_operand_def]) >>
+        (simp[step_inst_non_invoke] >>
+         qspecl_then [`Lit (n2w nkey)`, `Lit 0w`, `n2w nkey`, `0w`,
+                      `st.cs_next_id`, `s`] mp_tac step_TSTORE >>
+         gvs[eval_operand_def]) >>
       `inst_mem_below_frontier (mk_inst st.cs_next_id TSTORE
           [Lit (n2w nkey); Lit 0w] []) s` by
         (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
