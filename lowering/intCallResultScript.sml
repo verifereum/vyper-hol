@@ -53,9 +53,10 @@ Proof
      gvs[not_fresh_at_def, update_var_def]) >>
   gvs[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
-  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1, run_inst_seq_def,
-       step_inst_base_def, exec_pure2_def, exec_write2_def, eval_operand_def,
-       bind_outputs_def, lookup_var_update_var] >>
+  simp[emitted_insts_def, same_blocks_def, DROP_APPEND1] >>
+  simp[run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomInstTheory.mk_inst_def, exec_pure2_def, exec_write2_def,
+       eval_operand_def, bind_outputs_def, lookup_var_update_var] >>
   simp[mstore_def, update_var_def] >>
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED

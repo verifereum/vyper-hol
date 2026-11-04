@@ -367,8 +367,9 @@ Theorem abi_decoder_bulk_shape:
     (emitted_insts st st')
 Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >> Cases_on `hi = Lit 0w` >>
-  gvs[compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
-      comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+  gvs[compile_abi_decode_to_buf_def] >>
+  gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      emit_op_def, emit_void_def, fresh_var_def,
       fresh_id_def, emit_def, emitted_insts_def, IS_PREFIX_APPEND] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
   gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
