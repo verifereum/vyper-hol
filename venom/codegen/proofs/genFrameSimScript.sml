@@ -1118,7 +1118,7 @@ Theorem frame_view_safe_step[local]:
   step_inst fuel ctx inst vs = OK vs' /\
   inst.inst_opcode <> INVOKE /\ ~is_param_opcode inst.inst_opcode /\
   ~is_terminator inst.inst_opcode /\
-  codegen_ready_fn fn /\ opaque_use_ok fn /\ retpc_shape_ok fn /\
+  codegen_ready_fn fn /\ opaque_use_ok fn /\
   MEM inst (fn_insts fn) /\
   source_memory_reads_disjoint cp inst vs /\
   context_source_memory_writes_disjoint cp inst vs /\
@@ -1219,7 +1219,7 @@ Theorem gen_inst_frame_sim:
     source_memory_reads_disjoint cp inst vs /\
     context_source_memory_writes_disjoint cp inst vs /\
     (* Return-PC variables are only copied (unit_shape_ok's fn_shape_ok). *)
-    opaque_use_ok fn /\ retpc_shape_ok fn /\
+    opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
     (* The invariant's region clause for the output planner state. *)
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
