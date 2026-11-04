@@ -962,15 +962,15 @@ Theorem eval_send_log_extends:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, log_extends_refl] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, log_extends_refl] >>
-  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac frame_call_value_state >>
+  gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem case_expr_send_logs[local]:
@@ -1308,9 +1308,11 @@ Theorem intcall_post_defaults_log_extends[local]:
       x <- if nr then
              case cx.nonreentrant_slot of
                NONE => raise (Error (TypeError "nonreentrant slot missing"))
-             | SOME slot =>
+             | SOME slot => do
                  acquire_nonreentrant_lock cx.txn.target slot
-                   (mut = View \/ mut = Pure)
+                   ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                 if (mut = View \/ mut = Pure) then return () else check_not_static cx
+               od
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
       rv <- finally
@@ -1344,6 +1346,8 @@ Proof
     (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
      rpt strip_tac >>
      imp_res_tac lock_cond_log_extends >>
+     imp_res_tac (PURE_REWRITE_RULE [vyperStateTheory.ignore_bind_def]
+                    lock_cond_log_extends) >>
      gvs[log_extends_refl]) >>
   `log_extends (s'⁴' with scopes := [env]) s'⁵'` by
     (qpat_x_assum `finally _ _ _ = _` mp_tac >>
@@ -1366,9 +1370,11 @@ Theorem intcall_post_defaults_guarded_log_extends[local]:
       x <- if nr then
              case cx.nonreentrant_slot of
                NONE => raise (Error (TypeError "nonreentrant slot missing"))
-             | SOME slot =>
+             | SOME slot => do
                  acquire_nonreentrant_lock cx.txn.target slot
-                   (mut = View \/ mut = Pure)
+                   ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                 if (mut = View \/ mut = Pure) then return () else check_not_static cx
+               od
            else return ();
       cxf <- push_function (src_id_opt,fn) env cx;
       rv <- finally
@@ -1406,6 +1412,8 @@ Theorem intcall_post_defaults_guarded_log_extends[local]:
   log_extends sg2 st'
 Proof
   rpt strip_tac >>
+  qpat_x_assum `!env sg3 rtv sg4 sg5 cxf sg6. _`
+    (assume_tac o PURE_REWRITE_RULE [vyperStateTheory.ignore_bind_def]) >>
   qpat_x_assum `(do _ od) _ = _` mp_tac >>
   simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.return_def, AllCaseEqs()] >>
@@ -1416,6 +1424,8 @@ Proof
     (qpat_x_assum `(if nr then _ else _) _ = _` mp_tac >>
      rpt strip_tac >>
      imp_res_tac lock_cond_log_extends >>
+     imp_res_tac (PURE_REWRITE_RULE [vyperStateTheory.ignore_bind_def]
+                    lock_cond_log_extends) >>
      gvs[log_extends_refl]) >>
   `log_extends s'⁴' s'⁵'` by
     (irule log_extends_eq_logs >>
@@ -1626,6 +1636,13 @@ Proof
        rich_listTheory.IS_PREFIX_REFL]
 QED
 
+Theorem log_monad_frame_call_value[local]:
+  log_monad (frame_call_value cx value_opt)
+Proof
+  simp[log_monad_def] >> rpt strip_tac >>
+  drule frame_call_value_state >> simp[log_extends_refl]
+QED
+
 (* Index primitive leaves once; never traverse their continuations or the
    large guarded IHs just to recognise a primitive computation. *)
 val EXTCALL_LOG_MONAD_LEAF_TAC =
@@ -1635,7 +1652,8 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
+      (log_monad_take :: log_monad_frame_call_value ::
+       CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
   end;
@@ -1751,15 +1769,15 @@ Theorem eval_raw_call_log_extends:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,
        vyperCallOutcomeTheory.take_call_outcome_def,
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac frame_call_value_state >>
+  gvs[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
 Theorem case_expr_raw_call_logs[local]:
@@ -2182,7 +2200,9 @@ Proof
           qmatch_goalsub_abbrev_tac `lock after_defaults` >>
           `!s0 res s1. lock s0 = (res,s1) ==> log_extends s0 s1` by
             (simp[Abbr `lock`] >> rpt strip_tac >>
-             imp_res_tac lock_cond_log_extends) >>
+             imp_res_tac lock_cond_log_extends >>
+             imp_res_tac (PURE_REWRITE_RULE [vyperStateTheory.ignore_bind_def]
+                            lock_cond_log_extends)) >>
           BasicProvers.TOP_CASE_TAC >>
           qmatch_asmsub_rename_tac `lock after_defaults = (lock_res,after_lock)` >>
           `log_extends after_defaults after_lock` by
@@ -2201,6 +2221,8 @@ Proof
               LENGTH es + LENGTH (FST (SND (SND (SND callable)))) -
                 LENGTH (FST (SND (SND callable)))` by decide_tac >>
              pop_assum (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th])) >>
+             RULE_ASSUM_TAC (fn th => if is_forall (concl th) then th
+                                      else REWRITE_RULE [ignore_bind_def] th) >>
              PRED_ASSUM is_guarded_eval_stmts_ih
                (drule_all o REWRITE_RULE [ignore_bind_def, GSYM CONJ_ASSOC]) >> simp[]) >>
           PRED_ASSUM is_guarded_eval_stmts_ih kall_tac >>
@@ -2401,14 +2423,20 @@ Theorem entry_lock_action_logs[local]:
   (if nr then
      case cx.nonreentrant_slot of
        NONE => raise (Error (TypeError "nonreentrant slot missing"))
-     | SOME slot =>
-         acquire_nonreentrant_lock cx.txn.target slot is_view
+     | SOME slot => do
+         acquire_nonreentrant_lock cx.txn.target slot
+           (is_view \/ cx.txn.is_static);
+         if is_view then return () else check_not_static cx
+       od
    else return ()) st = (res,st') ==>
   st'.logs = st.logs
 Proof
   Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
-  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def] >>
-  metis_tac[acquire_nonreentrant_lock_logs]
+  simp[vyperStateTheory.return_def, vyperStateTheory.raise_def,
+       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.check_def, vyperStateTheory.assert_def,
+       COND_RATOR, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_logs >> gvs[]
 QED
 
 Theorem exit_unlock_action_logs[local]:
@@ -2468,9 +2496,11 @@ Proof
                if nr then
                  case cx.nonreentrant_slot of
                    NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                 | SOME slot =>
+                 | SOME slot => do
                      acquire_nonreentrant_lock cx.txn.target slot
-                       (mut = View \/ mut = Pure)
+                       ((mut = View \/ mut = Pure) \/ cx.txn.is_static);
+                     if (mut = View \/ mut = Pure) then return () else check_not_static cx
+                   od
                else return ();
                send_call_value mut cx;
                eval_stmts cx body
