@@ -15293,3 +15293,22 @@ Proof
        simp[compile_alloc_buffer_labels]) >>
   irule as_ptr_val_labels >> simp[compile_make_array_labels, compile_make_tuple_labels]
 QED
+
+Theorem builtin_hash_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  !bi. (bi = Keccak256 \/ bi = Sha256) ==>
+  cs_extends st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st)))
+Proof
+  disch_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
+  once_rewrite_tac[compile_builtin_dispatch_body_def] >> simp[LET_THM] >>
+  rpt IF_CASES_TAC >> rpt BasicProvers.TOP_CASE_TAC >>
+  (ho_match_mp_tac pair_case_labels >> conj_tac
+   >- (irule lower_value_labels >> simp[]) >>
+   rpt gen_tac >> irule as_stack_val_labels >>
+   simp[compile_keccak256_bytes_labels, compile_keccak256_bytesm_labels,
+        compile_keccak256_word_labels, compile_sha256_bytes_labels,
+        compile_sha256_bytesm_labels, compile_sha256_word_labels])
+QED
