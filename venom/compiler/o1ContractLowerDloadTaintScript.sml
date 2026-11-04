@@ -266,6 +266,59 @@ Proof
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
+(* A successful scratch copy clears the following load independently of
+   earlier allocation visits and the incoming taint. *)
+Theorem codecopy_mload_cleared:
+  ci.inst_opcode = CODECOPY /\ ci.inst_operands = [Var a; src; Lit 32w] /\
+  li.inst_opcode = MLOAD /\ li.inst_operands = [Var a] /\
+  step_inst k C ci s = OK s' ==>
+  out_taint (step_taint ci s s' tn) li s' = {}
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once venomExecSemanticsTheory.step_inst_def] >>
+  simp[venomExecSemanticsTheory.step_inst_base_def] >>
+  simp[venomStateTheory.eval_operand_def, AllCaseEqs()] >> strip_tac >>
+  simp[out_taint_def, step_taint_def,
+       venomStateTheory.eval_operand_def,
+       venomStateTheory.write_memory_with_expansion_def] >>
+  `lookup_var a s' = SOME dst` by
+    (fs[venomStateTheory.lookup_var_def] >>
+     qpat_x_assum `write_memory_with_expansion _ _ _ = _` (mp_tac o SYM) >>
+     simp[venomStateTheory.write_memory_with_expansion_def,
+          venomStateTheory.lookup_var_def]) >>
+  simp[] >> irule codecopy_word_taint >>
+  simp[venomStateTheory.eval_operand_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_supply_scratch_cleared:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
+  inst.inst_outputs = [out] /\
+  lower_dload_inst_supply supply inst = ([ai;bi;ci;li],supply') /\
+  step_inst k C ci t2 = OK t3 ==>
+  out_taint (step_taint ci t2 t3 tn) li t3 = {}
+Proof
+  strip_tac >>
+  gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+  irule codecopy_mload_cleared >> simp[] >> metis_tac[]
+QED
+
+Theorem lower_dload_supply_external_taint:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
+  inst.inst_outputs = [out] /\
+  lower_dload_inst_supply supply inst = ([ai;bi;ci;li],supply') ==>
+  let tn1 = step_taint ai t0 t1 tn0;
+      tn2 = step_taint bi t1 t2 tn1;
+      tn3 = step_taint ci t2 t3 tn2;
+      tn4 = step_taint li t3 t4 tn3
+  in tn4.t_stor = tn0.t_stor /\ tn4.t_trans = tn0.t_trans /\
+     tn4.t_imm = tn0.t_imm
+Proof
+  strip_tac >>
+  gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
+  simp[step_taint_nonmemory]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
