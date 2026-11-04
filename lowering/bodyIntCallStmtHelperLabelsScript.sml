@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallSupportedExprLabels bodyIntCallMaterialLabels
   stmtLowering moduleLowering supportedStmts supportedStmtTraverse compileEnv supportedExprs list supportedTargets
   bodyIntCallLabelFrame bodyIntCallLabelReservations bodyIntCallContextLabels
-  emitHelper bodyIntCallExprLabels bodyIntCallExprBodyLabels exprLowering
+  emitHelper bodyIntCallExprLabels bodyIntCallExprBodySoundLabels exprLowering
   bodyIntCallAbiLabels
 
 Theorem declare_local_return_pc:

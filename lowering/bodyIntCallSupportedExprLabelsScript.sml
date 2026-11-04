@@ -1,7 +1,7 @@
 (* Structural compiler contracts on the supported expression closure. *)
 Theory bodyIntCallSupportedExprLabels
 Ancestors
-  bodyIntCallExprBodyLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprClosure
+  bodyIntCallExprBodySoundLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprClosure
   bodyIntCallBuiltinLabels bodyIntCallExprLabels
   exprLowering supportedExprs supportedExprTraverse exprCallBounds
 

@@ -4,7 +4,7 @@ Ancestors
   intCallLookup intCallCallee fragExec loweringShapeProps list
   moduleLowering compileEnv stmtSim vyperCompiler venomInst bodyIntCallLabels
   bodyIntCallLabelFrame bodyIntCallContextLabels bodyIntCallMaterialLabels
-  bodyIntCallBuiltinLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprBodyLabels
+  bodyIntCallBuiltinLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprBodySoundLabels
   bodyIntCallSupportedExprLabels bodyIntCallStmtHelperLabels bodyIntCallStmtControlLabels
   bodyIntCallSupportedStmtLabels bodyIntCallFunctionLabels bodyIntCallPrefix
   bodyIntCallPrefixLabels abiDecoderAppend emitHelperProps pred_set loweringShapeDefs

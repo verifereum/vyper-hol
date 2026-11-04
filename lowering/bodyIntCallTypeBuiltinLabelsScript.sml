@@ -105,6 +105,29 @@ Proof
   disch_then drule >> simp[]
 QED
 
+Theorem compiler_block_tail_int_clamp:
+  compiler_block_tail (compile_int_clamp is_signed out_b v)
+Proof
+  Cases_on `is_signed` >>
+  simp[compile_int_clamp_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+    >- simp[compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_int_clamp:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_int_clamp is_signed out_b v)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `is_signed` >>
+  simp[compile_int_clamp_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+    >- simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives] >>
+    gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
+QED
+
 Theorem compiler_block_tail_type_convert:
   compiler_block_tail (compile_type_convert v cv)
 Proof
@@ -112,10 +135,20 @@ Proof
     compiler_block_tail_primitives, compiler_label_hoare_context_primitives,
     compiler_label_hoare_typed_primitives, load_bytestring_as_word_def,
     compiler_block_tail_alloc_buffer, compiler_label_hoare_storage_primitives] >>
-  rpt (FIRST [ho_match_mp_tac compiler_block_tail_bind >> conj_tac,
-              ho_match_mp_tac compiler_block_tail_cond >> conj_tac,
-              gen_tac, pairarg_tac >> gvs[]] >>
-       simp[compiler_block_tail_primitives, compiler_block_tail_alloc_buffer])
+  rpt IF_CASES_TAC >> simp[comp_bind_assoc] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  simp[compiler_block_tail_int_clamp, compiler_block_tail_primitives,
+       compiler_block_tail_alloc_buffer] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_int_clamp, compiler_block_tail_primitives,
+       compiler_block_tail_alloc_buffer] >>
+  pairarg_tac >> gvs[] >> rpt IF_CASES_TAC >> simp[] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_int_clamp, compiler_block_tail_primitives]
 QED
 
 Theorem compiler_label_hoare_type_convert:
@@ -127,11 +160,43 @@ Proof
     compiler_block_tail_primitives, compiler_label_hoare_context_primitives,
     compiler_label_hoare_typed_primitives, load_bytestring_as_word_def,
     compiler_block_tail_alloc_buffer, compiler_label_hoare_storage_primitives] >>
-  rpt (FIRST [ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac,
-              IF_CASES_TAC,
-              gen_tac, pairarg_tac >> gvs[]] >>
-       simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives,
-            compiler_label_hoare_storage_primitives])
+  rpt IF_CASES_TAC >> simp[comp_bind_assoc] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  rpt IF_CASES_TAC >>
+  simp[compiler_label_hoare_int_clamp, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives, compiler_label_hoare_storage_primitives] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_int_clamp, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives, compiler_label_hoare_storage_primitives] >>
+  pairarg_tac >> gvs[] >> rpt IF_CASES_TAC >> simp[] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac >>
+       rpt gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_int_clamp, compiler_label_hoare_context_primitives,
+       compiler_label_hoare_typed_primitives, compiler_label_hoare_storage_primitives]
+QED
+
+Theorem compiler_block_tail_bytestring_widen_copy:
+  compiler_block_tail (compile_bytestring_widen_copy dst_size v src_size)
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_block_tail_bind >> conj_tac
+    >- simp[compiler_block_tail_alloc_buffer, compiler_block_tail_copy_memory,
+            compiler_block_tail_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_block_tail_primitives]
+QED
+
+Theorem compiler_label_hoare_bytestring_widen_copy:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_bytestring_widen_copy dst_size v src_size)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_ignore_bind_def] >>
+  rpt (ho_match_mp_tac compiler_label_hoare_preserving_bind >> conj_tac
+    >- simp[compiler_label_hoare_storage_primitives, compiler_label_hoare_typed_primitives] >>
+    gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives]
 QED
 
 Theorem compiler_block_tail_convert_dispatch:
@@ -145,7 +210,12 @@ Proof
   >- (CONV_TAC (DEPTH_CONV ETA_CONV) >>
       irule compiler_block_tail_lower_value >> simp[]) >>
   gen_tac >> BETA_TAC >> Cases_on `rt` >> simp[] >>
-  irule compiler_block_tail_as_stack_val >> simp[compiler_block_tail_type_convert]
+  (qmatch_goalsub_abbrev_tac `if shortcut then _ else _` >>
+   Cases_on `shortcut` >- simp[compiler_block_tail_def] >> simp[] >>
+   qmatch_goalsub_abbrev_tac `if widen then _ else _` >>
+   Cases_on `widen` >> simp[] >>
+   irule compiler_block_tail_as_stack_val >>
+   simp[compiler_block_tail_type_convert, compiler_block_tail_bytestring_widen_copy])
 QED
 
 Theorem compiler_label_hoare_convert_dispatch:
@@ -161,7 +231,12 @@ Proof
   >- (CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
       irule compiler_label_hoare_lower_value >> simp[]) >>
   gen_tac >> BETA_TAC >> Cases_on `rt` >> simp[] >>
-  irule compiler_label_hoare_as_stack_val >> simp[compiler_label_hoare_type_convert]
+  (qmatch_goalsub_abbrev_tac `if shortcut then _ else _` >>
+   Cases_on `shortcut` >- simp[compiler_label_hoare_def] >> simp[] >>
+   qmatch_goalsub_abbrev_tac `if widen then _ else _` >>
+   Cases_on `widen` >> simp[] >>
+   irule compiler_label_hoare_as_stack_val >>
+   simp[compiler_label_hoare_type_convert, compiler_label_hoare_bytestring_widen_copy])
 QED
 
 Theorem compiler_block_tail_as_ptr_val:
