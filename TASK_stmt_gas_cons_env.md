@@ -58,4 +58,4 @@ The exact statement was independently audited PROVABLE. All definitions and othe
 
 ## Notes
 
-The exact statement and actual definitions were independently audited PROVABLE before launching. Its uniform-gas continuation is approved and does not introduce a new stage or top-level premise. The exact root is awaiting its parser build; the new statement definition theory already built. Do not replace the retained proof by an admission.
+The exact statement and actual definitions were independently audited PROVABLE before launching. Its uniform-gas continuation is approved and does not introduce a new stage or top-level premise. The exact root parsed in the owner build, and the pure compiler/frame support theory built. The retained old proof fails at its early strip_tac because unfolding stmt_frag now exposes stmt_framed_frag. Do not replace the retained proof by an admission.
