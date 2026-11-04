@@ -233,3 +233,16 @@ payload and handles padding and successful returndata bounds. Zero-length
 writes use the empty-write byte relation and impose no address geometry.
 RETURNDATACOPY's out-of-bounds Abort and Revert forwarding are not covered by
 this normal-success theorem and remain separate obligations.
+
+## Normal range-read successors (C1.4.1.13.3)
+
+`o1LowerDloadJointRangeReadTheory` supplies `ld_joint_iload_step` and
+`ld_joint_sha3_step`, and their single shared next-boundary consumer
+`ld_joint_range_read_next` (opcode membership `[ILOAD; SHA3]`). ILOAD
+transports masked words; SHA3 transports an equal scalar size and a clean
+read slice before hashing. The generic `ld_memory_agree_clean_slice`
+includes zero-length and padded reads. Both families require explicit
+normal-path (`~in_revert_forward`) hypotheses; this is not Revert-suffix
+coverage. The scalar SHA3 length proof excludes pointer provenance by the
+source pointer-use discipline, including address/length operand aliasing.
+No whole-run or final `ctx_sim` claim follows from these local successors.
