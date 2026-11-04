@@ -72,7 +72,9 @@ Theory lowerDloadOwnership
 Ancestors
   lowerDloadLifetime lowerDloadReachability o1PassContract
   ctxLookupAgreeHelpers unitMemInv contextCodegenRelProps list
-  o1PassLift ptrDiscipline
+  o1PassLift ptrDiscipline venomMemProps venomExecProofs
+  venomExecSemantics venomState finite_map contextCodegenRel
+  calleeTransport venomInstProofs1
 
 Theorem ld_source_frame_raw_bound:
   o1_src_inv D C vs /\ o1_ctx_shape C /\
@@ -100,3 +102,58 @@ Proof
      metis_tac[]) >>
   drule_all EVERY_active_inst >> simp[]
 QED
+
+(* Natural endpoint geometry: no word no-wrap premise is needed. *)
+Theorem ld_exec_alloca_static_endpoints:
+  exec_alloca i s w = OK s' /\
+  (!id b n. FLOOKUP s.vs_allocas id = SOME (b,n) ==>
+     b+n <= s.vs_alloca_next) ==>
+  (!id b n. FLOOKUP s'.vs_allocas id = SOME (b,n) ==>
+     b+n <= s'.vs_alloca_next)
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[FLOOKUP_UPDATE, AllCaseEqs()] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ld_step_nonallocation_fields:
+  step_inst fuel C i s = OK s' /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> ALLOCA ==>
+  s'.vs_allocas = s.vs_allocas /\
+  s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >>
+  `step_inst_base i s = OK s'` by gvs[step_inst_non_invoke] >>
+  metis_tac[venomMemPropsTheory.step_inst_base_preserves_allocas,
+            step_inst_base_preserves_alloca_next]
+QED
+
+Theorem ld_enters_block_allocation_fields:
+  enters_block fn s s' ==>
+  s'.vs_allocas = s.vs_allocas /\
+  s'.vs_alloca_next = s.vs_alloca_next
+Proof
+  rw[enters_block_def] >>
+  drule eval_phis_preserves_alloca_fields >> simp[]
+QED
+
+Theorem ld_bind_outputs_allocas:
+  bind_outputs outs vals s = SOME s' ==> s'.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >> irule bind_outputs_preserves >>
+  simp[update_var_def] >> metis_tac[]
+QED
+
+(* Remaining projection interfaces are already exported; do not duplicate:
+   - venomMemProps.exec_alloca_alloca_next_mono: natural monotonicity.
+   - o1ContractLowerDloadTaint.exec_alloca_fresh_projections and
+     exec_alloca_repeated_projections: fresh/repeated exact effects.
+   - o1ContractLowerDloadTaint.setup_callee_allocas: empty child map.
+   - calleeTransport.setup_callee_shared_fields: inherited frontier.
+   - calleeTransport.merge_callee_local_fields: restored caller map/frontier.
+   - venomExecSemantics.adopt_return_fmp_allocas: map/frontier unchanged.
+   - calleeTransport.bind_outputs_shared_fields: frontier unchanged;
+     ld_bind_outputs_allocas above supplies the missing map projection.
+   The nonallocation boundary above is stronger than the requested static
+   source interface: DALLOCA changes FMP, not the static allocation fields.
+*)
