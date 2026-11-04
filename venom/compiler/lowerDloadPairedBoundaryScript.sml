@@ -1,7 +1,7 @@
 Theory lowerDloadPairedBoundary
 Ancestors
   lowerDloadOperand lowerDloadLifetime lowerDloadOwnership lowerDloadRelocation
-  ptrDiscipline venomState finite_map pred_set list words
+  ptrDiscipline venomState venomExecSemantics finite_map pred_set list words
 
 Definition ld_owned_selection_def:
   ld_owned_selection E ps pt <=>
@@ -83,4 +83,18 @@ Theorem ld_owned_empty_aliases:
       {} {} (0w:bytes32) 32w
 Proof
   simp[ld_owned_value_def, ld_site_entry_def, FLOOKUP_UPDATE, ld_ptr_rel_def]
+QED
+
+(* Returning keeps the current callee memory, including writes through inherited
+   pointers. Only the live-owner domain is restricted. *)
+Theorem ld_owned_return_memory:
+  ld_byte_rel (ld_site_bytes E live) Ts Tt
+    (\a. read_memory a 1 u) (\b. read_memory b 1 v) /\
+  survivors SUBSET live ==>
+  ld_byte_rel (ld_site_bytes (DRESTRICT E survivors) survivors) Ts Tt
+    (\a. read_memory a 1 (merge_callee_state s u))
+    (\b. read_memory b 1 (merge_callee_state t v))
+Proof
+  simp[read_memory_def, merge_callee_state_def] >>
+  metis_tac[ld_site_bytes_pop, read_memory_def]
 QED
