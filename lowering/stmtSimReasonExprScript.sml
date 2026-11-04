@@ -105,7 +105,7 @@ QED
    captured place.  compile_expr's judgment remains at the raw boundary;
    its successful postcondition supplies the encoder's defined operand.
    A failed read is still covered by the statement's revert exit. *)
-Theorem reason_expr_revert_frag_general:
+Theorem reason_expr_revert_frag_post:
   !ctx func cenv cx r es res1 es1 sa vv sm sb s0 R P.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
     cs_extends sm sb /\
@@ -114,7 +114,7 @@ Theorem reason_expr_revert_frag_general:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\
-    (!tv s. vv_holds cenv cx (expr_type r) tv vv es1 s ==> P s) /\
+    (!tv s. vv_holds cenv cx (post_value_type cenv r) tv vv es1 s ==> P s) /\
     frag_exec ctx sm sb P (\s. F) R ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
       (\s. F) R
@@ -130,6 +130,29 @@ Proof
   irule frag_exec_conseq >>
   qpat_x_assum `frag_exec ctx sa sm _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[vv_post_def]
+QED
+
+Theorem reason_expr_revert_frag_general:
+  !ctx func cenv cx r es res1 es1 sa vv sm sb s0 R P.
+    post_value_type cenv r = expr_type r /\
+    compile_expr cenv (expr_type r) r sa = (vv, sm) /\
+    cs_extends sm sb /\
+    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    (!rr. expr_exit res1 rr ==> R rr) /\
+    (!tv s. vv_holds cenv cx (expr_type r) tv vv es1 s ==> P s) /\
+    frag_exec ctx sm sb P (\s. F) R ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. F) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule reason_expr_revert_frag_post >> simp[] >>
+  goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+  qexists `P` >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  qexists `tv` >> simp[]
 QED
 
 (* The reason's fragment, then the encoder and its REVERT: an exit, the
