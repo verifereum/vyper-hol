@@ -115,3 +115,23 @@ Proof
        comp_ignore_bind_def, FUN_EQ_THM] >>
   gen_tac >> pairarg_tac >> simp[]
 QED
+
+Theorem bytestring_copy_len_mem_ok[local]:
+  compile_bytestring_copy_len src sa = (op,sb) /\
+  eval_operand src s = SOME p /\ w2n p + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_bytestring_copy_len _ _ = _` mp_tac >>
+  simp[compile_bytestring_copy_len_def, emit_op_def, emit_inst_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >> strip_tac >>
+  gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
+  simp[Once run_inst_seq_mem_ok_cons, below_frontier_MLOAD] >>
+  Cases_on `step_inst_base
+    (mk_inst sa.cs_next_id MLOAD [src]
+      [STRING #"%" (toString sa.cs_next_var)]) s` >>
+  simp[] >> irule run_inst_seq_mem_ok_every >>
+  simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >>
+  simp[mk_inst_def]
+QED
