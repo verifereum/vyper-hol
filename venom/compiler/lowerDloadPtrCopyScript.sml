@@ -49,7 +49,7 @@ Proof
   simp[] >> disch_then drule_all >> simp[]
 QED
 
-Theorem external_copy_scalar_clean[local]:
+Theorem external_copy_scalar_clean:
   MEM i.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY] /\
   i.inst_operands = [dst;off;sz] /\
   MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
@@ -74,7 +74,7 @@ Proof
   gvs[taint_ok_def] >> metis_tac[]
 QED
 
-Theorem external_copy_ghosts[local]:
+Theorem external_copy_ghosts:
   MEM i.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY] /\
   i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
   eval_operand dst s = SOME x /\ eval_operand off s = SOME a /\

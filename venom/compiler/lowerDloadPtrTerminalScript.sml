@@ -1,8 +1,10 @@
 Theory lowerDloadPtrTerminal
 Ancestors
   lowerDloadPtrForward lowerDloadPtrJointClosureProbe lowerDloadPtrJointNext
-  lowerDloadPtrRel o1ContractLowerDload
-  lowerDloadDefs venomInst list rich_list
+  lowerDloadPtrRel o1ContractLowerDload lowerDloadPtrCopy frameRawReachable
+  lowerDloadDefs venomInst list rich_list unitShapeDefs lowerDloadPtrStatic
+  lowerDloadPtrAggregate lowerDloadPtrPhi lowerDloadPtrCall venomState ptrDiscipline
+  venomExecSemantics o1PassContract venomWf contextCodegenRel
 
 (* Reverse prefix origin is independent of resolver equalities and freshness.
    Even malformed DLOAD branches cannot begin with ASSIGN or REVERT. *)
@@ -146,4 +148,157 @@ Proof
   `k < LENGTH outs /\ k + s.vs_inst_idx <
     LENGTH (EL bi f.fn_blocks).bb_instructions` by decide_tac >>
   metis_tac[EL_TAKE, EL_DROP, arithmeticTheory.ADD_COMM]
+QED
+
+(* Actual original operand membership also rules out opaque return PCs. *)
+Theorem dload_copy_operand_origin:
+  opaque_use_ok f /\ MEM i (fn_insts f) /\
+  i.inst_opcode = RETURNDATACOPY /\ MEM (Var v) i.inst_operands ==>
+  v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}
+Proof
+  strip_tac >> simp[] >> conj_tac
+  >- metis_tac[fn_ir_vars_operand] >>
+  strip_tac >> drule_all opaque_use_ok_retpc_use >>
+  simp[retpc_use_ok_def]
+QED
+
+Theorem dload_copy_boundary_scalar_origin:
+  i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
+  MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
+  FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
+  dload_boundary_core lo fs
+    (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
+    PG PH G H tn un s t cs ds /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) ==>
+  eval_operand off s = eval_operand off t /\
+  eval_operand sz s = eval_operand sz t /\
+  (eval_operand dst s = NONE <=> eval_operand dst t = NONE) /\
+  LENGTH s.vs_returndata = LENGTH t.vs_returndata
+Proof
+  strip_tac >>
+  `s.vs_labels = t.vs_labels /\ s.vs_returndata = t.vs_returndata` by
+    (drule dload_boundary_environment >>
+     simp[dload_equal_environment_def, venom_state_component_equality]) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+     v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
+    (rpt strip_tac >> irule dload_copy_operand_origin >> metis_tac[]) >>
+  `!op. MEM op i.inst_operands ==>
+    (eval_operand op s = NONE <=> eval_operand op t = NONE)` by
+    (rpt strip_tac >> irule eval_operand_definedness >> simp[] >>
+     metis_tac[fn_ir_vars_operand]) >>
+  `op_prov G off = NONE /\ op_prov G sz = NONE /\
+   op_taint tn dst = {} /\ op_taint tn off = {} /\ op_taint tn sz = {}` by
+    (irule external_copy_scalar_clean >> simp[] >> metis_tac[]) >>
+  `dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+     G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  simp[] >>
+  `eval_operand dst s = NONE <=> eval_operand dst t = NONE` by metis_tac[MEM] >>
+  simp[] >> conj_tac >> irule scalar_operand_equal >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[MEM]
+QED
+
+Theorem dload_copy_boundary_terminal_fields:
+  i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
+  i.inst_outputs = [] /\
+  MEM i (fn_insts f) /\ fn_ptr_ok P f /\ opaque_use_ok f /\
+  FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
+  dload_boundary_core lo fs
+    (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
+    PG PH G H tn un s t cs ds /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel C i s = OK s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next /\
+    s'.vs_labels = t'.vs_labels /\
+    (!v. v IN set (fn_ir_vars f) ==>
+      (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
+    (!v. op_taint (step_taint i s s' tn) (Var v) = op_taint tn (Var v)) /\
+    (!v. op_taint (step_taint i t t' un) (Var v) = op_taint un (Var v)) /\
+    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+      (step_prov PG G i s') (step_prov PH H i t')
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  drule_all dload_copy_boundary_scalar_origin >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ t = _` mp_tac >>
+  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  `eval_operand dst s <> NONE` by metis_tac[optionTheory.NOT_SOME_NONE] >>
+  Cases_on `eval_operand dst s` >- gvs[] >>
+  rename1 `eval_operand dst s = SOME d` >>
+  rename1 `eval_operand off s = SOME a` >>
+  rename1 `eval_operand sz s = SOME z` >>
+  qexists `write_memory_with_expansion (w2n d)
+    (TAKE (w2n z) (DROP (w2n a) s.vs_returndata)) s` >>
+  `s.vs_labels = t.vs_labels /\
+   dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+     G H tn un s t` by
+    (conj_tac
+     >- (drule dload_boundary_environment >>
+         simp[dload_equal_environment_def, venom_state_component_equality]) >>
+     irule dload_boundary_vars >> goal_assum (drule_at Any)) >>
+  `!bs. step_prov PG G i (write_memory_with_expansion (w2n d) bs s) = G /\
+    step_taint i s (write_memory_with_expansion (w2n d) bs s) tn =
+      tn with t_mem := tn.t_mem DIFF {j | w2n d <= j /\ j < w2n d + w2n z}` by
+    (gen_tac >> irule external_copy_ghosts >> simp[] >> metis_tac[]) >>
+  `!bs. step_prov PH H i (write_memory_with_expansion (w2n destOffset) bs t) = H /\
+    step_taint i t (write_memory_with_expansion (w2n destOffset) bs t) un =
+      un with t_mem := un.t_mem DIFF {j | w2n destOffset <= j /\ j < w2n destOffset + w2n z}` by
+    (gen_tac >> irule external_copy_ghosts >> simp[] >> metis_tac[]) >>
+  simp[write_memory_with_expansion_def, lookup_var_def,
+       dload_vars_match_def, op_taint_def] >>
+  gvs[dload_vars_match_def, op_taint_def, lookup_var_def]
+QED
+
+(* All scalar/shape/success premises above now come from the actual source
+   contract and phase-zero control, rather than a new terminal assumption. *)
+Theorem dload_actual_copy_terminal_fields:
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  frame_reachable vs C cs PG G tn f i s /\
+  dload_control_match q f g s t i [i] 0 /\
+  i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
+  FDOM G SUBSET fn_pv P f /\
+  dload_boundary_core lo fs
+    (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
+    PG PH G H tn un s t cs ds /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel C i s = OK s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next /\
+    s'.vs_labels = t'.vs_labels /\
+    (!v. v IN set (fn_ir_vars f) ==>
+      (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
+    (!v. op_taint (step_taint i s s' tn) (Var v) = op_taint tn (Var v)) /\
+    (!v. op_taint (step_taint i t t' un) (Var v) = op_taint un (Var v)) /\
+    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+      (step_prov PG G i s') (step_prov PH H i t')
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `MEM f C.ctx_functions` by
+    (drule frame_reachable_raw_certificate >> simp[] >> strip_tac >> simp[]) >>
+  `MEM i (fn_insts f)` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
+     simp[dload_control_match_def, active_inst_def, fn_insts_def,
+          fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `fn_ptr_ok P f` by metis_tac[EVERY_MEM] >>
+  `fn_inst_wf f /\ opaque_use_ok f` by
+    (qpat_x_assum `o1_ctx_shape C` mp_tac >>
+     simp[o1_ctx_shape_def, EVERY_MEM] >> strip_tac >>
+     first_x_assum drule >> simp[o1_fn_shape_def, fn_shape_ok_def]) >>
+  `inst_wf i` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  `i.inst_outputs = []` by gvs[inst_wf_def] >>
+  `taint_ok f tn i s` by
+    (qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
+     simp[ptr_discipline_def] >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  irule dload_copy_boundary_terminal_fields >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED

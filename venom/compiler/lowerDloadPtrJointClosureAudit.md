@@ -439,3 +439,43 @@ They do NOT establish successful source copy execution, source reachability
 advancement, retained terminal ghost relations, or immediate REVERT access
 transport. Those remain the separate C1.12.69/C1.12.70 integration obligations.
 Section 7's semantic scalar/label origins are not solved by this structural work.
+
+## 9. Actual copy scalar/success origins (C1.12.69)
+
+The Terminal theory now checks the scalar and execution part of the section 7
+ledger. No retpc freshness assumption, scalar-equality premise, or source-copy
+success premise is introduced into the actual consumer.
+
+* `dload_copy_operand_origin` uses `opaque_use_ok_retpc_use`: RETURNDATACOPY
+  is neither ASSIGN/PHI nor RET/RETFMP/DRET, so none of its Var operands is a
+  retpc variable. `fn_ir_vars_operand` supplies membership in U f.
+* `dload_copy_boundary_scalar_origin` consumes normal boundary, Defs(U f),
+  Support's current FDOM clause, fn_ptr_ok, opaque_use_ok and source taint_ok.
+  It derives off/size equality, destination definedness equivalence, and equal
+  returndata length. Pointer values at the destination are not compared.
+* `dload_copy_boundary_terminal_fields` reflects the successful target copy,
+  returns source success, both allocation/frontier equalities, equal labels,
+  Defs(U f), unchanged Var taints on each side, and post-step
+  dload_vars_match on V f. It intentionally does not preserve memory_match,
+  shared_store or equal_environment. It reuses the existing copy ghost helper.
+* `dload_actual_copy_terminal_fields` obtains function membership through
+  frame_reachable_raw_certificate; instruction membership from phase-zero
+  control; fn_ptr_ok from the source static witness; opaque_use_ok and the
+  copy's empty outputs from o1_ctx_shape; source taint_ok from ptr_discipline.
+  Its remaining premises are the actual normal boundary, Defs, current Support,
+  source reachability, source static witness and singleton control plus the
+  actual target OK step. Cover is unnecessary for this semantic consumer.
+
+The two previously local `external_copy_scalar_clean` and
+`external_copy_ghosts` facts in this task's Copy theory are now public; their
+statements/proofs are unchanged. This avoids duplicating their implementations.
+
+Exact residual for terminal integration: the copy preserves each side's Var
+ taints independently and preserves matching on V f. It does NOT establish
+matching on excluded opaque retpc variables in U f. The earlier proposed pair
+formula demanded all-U taint equality, while normal boundary only supplies V
+matching. Thus C1.12.70 must either justify that extra origin from the actual
+normal invariant or use source shape to restrict suffix taint transport to V
+(non-retpc outputs cannot copy retpc inputs). No all-U matching is claimed by
+this checkpoint. Structural suffix alignment, source reachability advancement,
+terminal safety and complete joint closure remain unproved.
