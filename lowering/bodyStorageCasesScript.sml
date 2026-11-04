@@ -611,6 +611,25 @@ Proof
       rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `st` >> simp[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (simp[] >>
+      qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` kall_tac >>
+      Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (args_res,args_st)` >>
+      `contract_storage_well_formed cx args_st` by metis_tac[] >>
+      Cases_on `args_res` >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def]
+      >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+          Cases_on `LENGTH vs = 2` >>
+          gvs[bind_def, return_def, raise_def] >>
+          Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+          gvs[lift_option_type_def, bind_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[] >>
+          qmatch_asmsub_abbrev_tac `lift_sum membership_result` >>
+          Cases_on `membership_result` >>
+          gvs[lift_sum_def, return_def, raise_def] >>
+          rpt strip_tac >> gvs[]) >>
+      rpt strip_tac >> gvs[]) >>
   gvs[] >> Cases_on `eval_exprs cx es st` >>
   rename1 `eval_exprs cx es st = (args_res,args_st)` >>
   `contract_storage_well_formed cx args_st` by metis_tac[] >>

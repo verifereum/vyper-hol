@@ -39,7 +39,7 @@ Proof
     (Cases_on `op` >> gvs[supported_binop_def]) >>
   qpat_x_assum `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
-  >- (rpt (pairarg_tac >> simp[]) >> IF_CASES_TAC >>
+  >- (simp[pairTheory.UNCURRY] >> IF_CASES_TAC >>
       simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
       drule emit_op_nonterminator_open >> simp[is_terminator_def]) >>
   rpt (pairarg_tac >> simp[]) >>
