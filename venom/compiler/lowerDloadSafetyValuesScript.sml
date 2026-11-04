@@ -135,3 +135,47 @@ Proof
   drule_all ld_global_separate >> decide_tac
 QED
 
+
+Theorem ld_translate_cancel[local]:
+  ((u:bytes32) + v) + w - u = w + v
+Proof
+  wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem ld_wordrel_site_value:
+  ld_wordrel A (SOME a) x y /\ FLOOKUP A a = SOME (b,c,n) /\
+  b <= w2n x /\ w2n x <= b+n /\ c+n < dimword (:256) ==>
+  w2n y = c + (w2n x - b)
+Proof
+  pure_rewrite_tac[ld_wordrel_SOME] >> strip_tac >>
+  `y = x + n2w c - n2w b` by
+    metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  `x = n2w b + n2w (w2n x - b)` by
+    (simp[word_add_n2w, GSYM n2w_w2n] >> AP_TERM_TAC >> decide_tac) >>
+  `x + n2w c - n2w b = n2w (c + (w2n x - b))` by
+    (qpat_x_assum `x = n2w b + _` (fn th =>
+       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     pure_rewrite_tac[ld_translate_cancel, word_add_n2w] >> REFL_TAC) >>
+  `c + (w2n x - b) < dimword (:256)` by decide_tac >>
+  qpat_x_assum `y = x + n2w c - n2w b`
+    (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `x + n2w c - n2w b = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  simp[LESS_MOD]
+QED
+
+Theorem ld_wordrel_site_comparisons:
+  ld_wordrel A (SOME a) x1 y1 /\ ld_wordrel A (SOME a) x2 y2 /\
+  FLOOKUP A a = SOME (b,c,n) /\
+  b <= w2n x1 /\ w2n x1 <= b+n /\
+  b <= w2n x2 /\ w2n x2 <= b+n /\ c+n < dimword (:256) ==>
+  ((y1 = y2) <=> (x1 = x2)) /\
+  ((w2n y1 < w2n y2) <=> (w2n x1 < w2n x2)) /\
+  ((w2n y2 < w2n y1) <=> (w2n x2 < w2n x1))
+Proof
+  strip_tac >>
+  `w2n y1 = c + (w2n x1 - b)` by metis_tac[ld_wordrel_site_value] >>
+  `w2n y2 = c + (w2n x2 - b)` by metis_tac[ld_wordrel_site_value] >>
+  once_rewrite_tac[GSYM w2n_11] >>
+  asm_rewrite_tac[] >> decide_tac
+QED
