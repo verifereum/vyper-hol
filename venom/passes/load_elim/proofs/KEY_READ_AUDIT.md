@@ -137,3 +137,82 @@ within-alloca for those keys. Stored LK_Op values, normalized address variables,
 and PHI updates require existing P3/P5 epoch reasoning. Alias set wf must come
 from the actual alias analysis. No further solver population/support theorem
 can supply any of these semantic premises.
+
+## Follow-up validation (C1.K.2.b.3)
+
+### Fixed segment bridge: branch-level validation, not a proof certificate
+
+The proposed statement (1) has no identified false branch. Scales are always 1
+or 32, so `w2n (n2w (addr_space_word_scale space):bytes32)` is that scale.
+`bp_segment_from_ops` uses iao_max_size (not iao_size), which (1) specifies.
+Literal offsets are already w2n and have no alloca. A fixed Var segment requires
+`bp_ptr_from_op` to return a singleton pointer with SOME offset. `bp_ptr_sound`
+then supplies that same pointer's ptr_matches_var. Missing allocations are
+excluded by ptr_matches_var's existential FLOOKUP, not by within-alloca (which
+is vacuous if allocation is absent). At known offset, within-alloca gives
+`off + scale <= sz`, and allocas_in_word gives `base + sz < dimword(:256)`.
+Thus base+off is representable, and the n2w equality can be inverted. Label
+segments are undefined and cannot satisfy ml_is_fixed. This suggests a direct
+constructor proof for (1) without additional history premises.
+
+All fixed load-location branches reduce to this segment form: MLOAD uses
+mem_read_ops; SLOAD/TLOAD use explicit size Lit 1w; CALLDATALOAD size Lit 32w.
+DLOAD keys never use locations (though BP has an independent data location).
+MSTORE uses mem_write_ops; SSTORE/TSTORE use explicit word_scale literals.
+The fallback norm-evaluation premise remains explicitly P-owned.
+
+### Retained alias compatibility: an unresolved distinct-allocation branch
+
+Negative ma_may_alias under wf_alias_sets entails negative may_overlap (both
+tracked: completeness; otherwise direct fallback). This DOES NOT force fixed
+offsets: may_overlap tests distinct allocated identities BEFORE unknown offsets.
+A checked EVAL probe `le_unknown_offset_nonalias_probe` in
+loadElimKeyInterfaceProbesTheory establishes simultaneously:
+
+* wf_alias_sets FEMPTY;
+* unknown-offset, size32, Allocation1 location is not ml_undefined;
+* it does not alias a fixed size32 Allocation2 location;
+* its runtime region is NONE (for any state).
+
+This rejects proposed statement (3) even with an added negative alias premise
+as a route to resolving all retained locations. It is not a pass counterexample.
+Do not strengthen K1's resolver or assume this unknown location is fixed.
+
+Exact unresolved branch for integration: LK_Op (Var v),
+`bp_ptr_from_op bp (Var v) = SOME (Ptr (Allocation aid) NONE)`,
+write location has a different nonempty allocation. Existing bp_ptr_sound gives
+only `lookup_var v s = SOME (n2w (base + delta))` for an existential delta with
+NO delta bound (ptr_matches_var NONE branch). memloc_within_alloca returns T
+when offset is NONE, so it does not supply delta+width <= sz. bp_ptrs_bounded
+also only quantifies mem_read_ops/mem_write_ops in fn, not arbitrary operands;
+those tables do not include the S/T load/store special BP locations. Therefore
+the checked fixed-region/nonalias theorem cannot simply be applied here.
+
+A semantically sufficient but UNSOURCED premise for this branch would be
+`?base sz delta. FLOOKUP s.vs_allocas aid = SOME (base,sz) /\
+ eval_operand (Var v) s = SOME (n2w (base+delta)) /\
+ delta + addr_space_word_scale space <= sz`.
+Together with allocas_in_word and disjoint allocations this gives an actual
+bounded subregion. This premise is NOT part of the frozen contract and must
+not be silently added. Integration must either prove it for actual reached
+key origins/analyses, or use a checked execution probe to investigate a genuine
+pass violation. The diagnostic alone proves neither conclusion.
+
+For the remaining alias branches: empty regions have no writes/reads; mismatch
+of allocated-vs-absolute forces may_overlap; same allocation/absolute unknown
+offset forces may_overlap; equal-allocation fixed offsets use numeric region
+proofs. Unknown-offset locations against a different allocation are the key
+remaining hole; a strict-region-only interface does not cover them.
+
+### Minimal read-only wrappers
+
+`venomExecProofs.eval_phis_only_updates_vs_vars` is exported with exact statement
+`eval_phis st insts = OK t ==> t = st with vs_vars := t.vs_vars`.
+This directly yields calldata/data contents preservation after PHIs, but NOT
+operand/key-address preservation. Successful terminators can be handled by a
+field wrapper restricted to `is_terminator inst.inst_opcode` and `step_inst ...
+= OK t`; JMP/JNZ/DJMP use jump_to, other terminators do not produce OK. The
+existing local `mmBlockSimProofs.step_inst_ok_preserves_call_ctx` demonstrates
+this split but is not importable. Minimal requested outputs are equal call_ctx
+and data_section for successful terminators; combine with nonterminator field
+theorems and K1 reads, rather than unfolding run_blocks or INVOKE.
