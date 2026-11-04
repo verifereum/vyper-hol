@@ -529,15 +529,14 @@ Proof
   metis_tac[ao_source_step_rules]
 QED
 
-Theorem ao_source_trace_last_producer_operand:
-  !ctx fn trace bp r prod x z target use_opt h t value.
+Theorem ao_source_trace_last_producer_operands:
+  !ctx fn trace bp r prod x target use_opt h t value.
     wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
     ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
     lookup_var x (SND (SND (HD trace))) = NONE /\
     lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
     get_instruction bp r = SOME prod /\ prod.inst_opcode <> PHI /\
     ~is_terminator prod.inst_opcode /\ MEM x prod.inst_outputs /\
-    MEM (Var z) prod.inst_operands /\ def_available_at fn bp (SOME prod) z /\
     phi_prefix_length bp.bb_instructions <= r /\
     lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
     def_available_at fn target use_opt x /\
@@ -552,16 +551,37 @@ Theorem ao_source_trace_last_producer_operand:
       ao_source_step ctx fn (q,F,u) (q,F,v) /\
       step_inst q ctx prod u = OK w /\ v = w with vs_inst_idx := SUC r /\
       lookup_var x t = lookup_var x v /\
-      eval_operand (Var z) t = eval_operand (Var z) u
+      (!op. MEM op prod.inst_operands ==> eval_operand op t = eval_operand op u)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all ao_source_trace_last_output >>
   disch_then (qx_choose_then `front` (qx_choose_then `a0`
     (qx_choose_then `a2` (qx_choose_then `v` (qx_choose_then `back`
       (qx_choose_then `t'` strip_assume_tac)))))) >>
-  gvs[] >> suspend "stable"
+  gvs[] >> qexistsl [`front`,`a0`,`a2`,`back`,`t'`] >> simp[] >>
+  rpt strip_tac >> Cases_on `op`
+  >~ [`eval_operand (Lit c) t = _`]
+  >- simp[venomStateTheory.eval_operand_def]
+  >~ [`eval_operand (Label label) t = _`]
+  >- (`MEM (a0,F,a2)
+        (front ++ (a0,F,a2)::(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back)`
+        by simp[] >>
+      `MEM (h,F,t)
+        (front ++ (a0,F,a2)::(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back)`
+        by (qspec_then `(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back`
+              mp_tac rich_listTheory.LAST_MEM >> simp[MEM_APPEND] >>
+            metis_tac[]) >>
+      `t.vs_labels = a2.vs_labels` by metis_tac[ao_source_trace_labels] >>
+      simp[venomStateTheory.eval_operand_def]) >>
+  rename1 `MEM (Var z) prod.inst_operands` >>
+  `MEM prod bp.bb_instructions` by
+    (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+  `def_available_at fn bp (SOME prod) z` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >>
+     first_x_assum drule_all >> simp[]) >>
+  suspend "stable"
 QED
-Resume ao_source_trace_last_producer_operand[stable]:
+Resume ao_source_trace_last_producer_operands[stable]:
   `lookup_block bp.bb_label fn.fn_blocks = SOME bp` by
     (irule venomExecPropsTheory.MEM_lookup_block >>
      gvs[wf_function_def, fn_labels_def]) >>
@@ -595,7 +615,7 @@ Resume ao_source_trace_last_producer_operand[stable]:
      simp[ao_trace_avoids_def]) >>
   suspend "transport"
 QED
-Resume ao_source_trace_last_producer_operand[transport]:
+Resume ao_source_trace_last_producer_operands[transport]:
   `~MEM z prod.inst_outputs` by metis_tac[ao_ssa_producer_operand_not_output] >>
   `lookup_var z t' = lookup_var z a2` by
     (drule venomInstPropsTheory.step_preserves_non_output_vars >>
@@ -603,10 +623,39 @@ Resume ao_source_trace_last_producer_operand[transport]:
   `lookup_var z (t' with vs_inst_idx := SUC a2.vs_inst_idx) = lookup_var z t` by
     (qspec_then `(a0,F,t' with vs_inst_idx := SUC a2.vs_inst_idx)::back`
        (qspecl_then [`ctx`,`fn`,`z`] mp_tac) ao_source_trace_non_writer >> simp[]) >>
-  qexistsl [`front`,`a0`,`a2`,`back`,`t'`] >>
   gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]
 QED
-Finalise ao_source_trace_last_producer_operand
+Finalise ao_source_trace_last_producer_operands
+
+Theorem ao_source_trace_last_producer_operand:
+  !ctx fn trace bp r prod x z target use_opt h t value.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode <> PHI /\
+    ~is_terminator prod.inst_opcode /\ MEM x prod.inst_outputs /\
+    MEM (Var z) prod.inst_operands /\ def_available_at fn bp (SOME prod) z /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) ==>
+    ?front q u v back w.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = bp.bb_label /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      step_inst q ctx prod u = OK w /\ v = w with vs_inst_idx := SUC r /\
+      lookup_var x t = lookup_var x v /\
+      eval_operand (Var z) t = eval_operand (Var z) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_source_trace_last_producer_operands >> strip_tac >>
+  qexistsl [`front`,`q`,`u`,`v`,`back`,`w`] >> simp[]
+QED
 
 
 Theorem ao_source_trace_last_iszero:
