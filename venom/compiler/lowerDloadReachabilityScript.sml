@@ -4,7 +4,8 @@
  *)
 Theory lowerDloadReachability
 Ancestors
-  contextRawReachable venomExecSemantics
+  contextRawReachable venomExecSemantics o1PassLift o1PassContract
+  venomWf venomInst list
 
 Theorem completed_callee_invoke_ok:
   callinst.inst_opcode = INVOKE /\
@@ -39,4 +40,15 @@ Proof
   strip_tac >> drule_all completed_callee_invoke_ok >> strip_tac >>
   irule raw_reachable_next >> goal_assum drule >> simp[] >>
   metis_tac[]
+QED
+
+(* The stage shape supplies the uniqueness required when relating
+ * active_inst's member block to lookup_block's selected block. *)
+Theorem o1_ctx_shape_distinct_block_labels:
+  o1_ctx_shape C ==>
+  EVERY (\fn. ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks))
+    C.ctx_functions
+Proof
+  simp[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+       fn_labels_def, EVERY_MEM] >> metis_tac[]
 QED
