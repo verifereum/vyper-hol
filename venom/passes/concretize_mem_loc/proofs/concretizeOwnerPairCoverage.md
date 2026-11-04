@@ -134,3 +134,42 @@ B's liveset at the common location (not Used alone), and an actual call
 selection boundary must discharge c for dA<dB when q0 is a root entry.
 No claim that these tasks exhaust target-taint converse lifting or
 external effects is made here. All accepted numeric helpers remain intact.
+
+## Checked boundary update (E0192 and write-owner checkpoint)
+
+The gaps above record the audit-time state, not the current helper inventory.
+The following checked results supersede its call-selection and write-membership
+gaps; the proposed numeric consumer itself is still unproved.
+
+* `joint_activation_cache_open_call` in frameOpenCallScript.sml selects an
+  actual NONE call c<n at depth d for an endpoint saved cache, with exact
+  owner/cache and strict depth survival on (c,n]. It requires
+  activation_depth q0<=d; arbitrary traces beginning inside a call remain
+  excluded. This closes the explicit call-origin gap in the dA<dB row
+  for root traces, without changing the original no-write interval.
+* `concretize_write_owner_liveset` in
+  concretizeAnalysisWriteLivesetScript.sml:10 exports the actual-write
+  membership requested above. Under the same stage/static premises as
+  concretize_untainted_local_read_past_write_liveset, an actual reachable,
+  nonreverting write of byte>=lo, a containing activation_cache, and its
+  activation_location give Allocation aid membership at that location
+  in the owner's observed context_mem_livesets. The write is expressed by
+  joint_transition/joint_writes, so it is not restricted to ordinary
+  store edges. No untaintedness or future read of the writer is required.
+* For current owners, store marking inserts write-base locations
+  unconditionally, independently of LiveAt. Existing ptr_mark_stores_covers_write
+  provides the fold theorem; concretizeAnalysisStoreMark adds only indexed
+  instruction and mem_write_ops/BP adapters. Thus the old suggestion that
+  local stores need a LiveAt certificate was unnecessary.
+* For suspended owners, joint_incoming_production_argument already follows
+  nested Incoming origins to a saved Local INVOKE argument and supplies both
+  production LiveAt and Used at that call. Simultaneous byte-cache uniqueness
+  identifies this owner with the supplied cache; no new ancestry invariant
+  is needed. The write-owner proof consumes that interface directly.
+
+Remaining work: assemble the same-depth and ancestor-writer numeric rows
+using these memberships and the existing demanded-owner/import interfaces,
+while selecting one common actual call and retaining activation identity.
+This update does not establish exhaustive numeric separation, same-instance
+relocation injectivity, fixed-region/external-effect cases, or converse
+output-taint lifting. It changes neither frozen stage statement.
