@@ -165,3 +165,109 @@ Proof
   gvs[locals_kept_def] >> first_x_assum irule >>
   qexistsl [`b`, `name`, `sz`] >> simp[]
 QED
+
+Theorem abi_args_local_window_kept:
+  expr_sim_inv ce cx env es /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_region ce es.scopes s0 name b sz /\
+  b <= off /\ off + len <= b + sz ==>
+  mem_bytes_at off len s1.vs_memory = mem_bytes_at off len s0.vs_memory
+Proof
+  strip_tac >> drule_all abi_args_local_region_kept >>
+  disch_then (mp_tac o GSYM) >>
+  disch_then (strip_assume_tac o MATCH_MP valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
+  simp[]
+QED
+
+Theorem abi_args_operand_kept:
+  wb_frame ce es st s0 s1 /\
+  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  eval_operand op s0 = SOME w ==>
+  eval_operand op s1 = SOME w
+Proof
+  strip_tac >> irule exprSimOpsTheory.eval_operand_frame >>
+  simp[] >> qexistsl [`st`, `s0`] >> gvs[wb_frame_def]
+QED
+
+Theorem abi_args_location_kept:
+  stmt_state_rel ctx func ce cx es s0 /\
+  MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
+  wb_frame ce es st s0 s1 /\
+  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  expr_val_at ce cx ty sa sb es v op s0 ==>
+  expr_val_at ce cx ty sa sb es' v op s1
+Proof
+  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[abi_args_operand_kept] >>
+  simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
+      conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >> qexists `n` >>
+      irule exprSimOpsTheory.local_region_frame >>
+      conj_tac
+      >- (qexists `func` >>
+          gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
+      qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
+  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
+      irule exprSimOpsTheory.local_region_frame_fwd >>
+      qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
+  >> simp[]
+QED
+
+Theorem abi_args_value_kept:
+  expr_sim_inv ce cx env es /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  sb.cs_next_id <= st.cs_next_id /\
+  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
+  expr_val_rel cx ty v op s1
+Proof
+  strip_tac >> Cases_on `is_word_type ty`
+  >- (qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+      simp[expr_val_rel_def] >> rpt strip_tac >>
+      qexists `w` >> simp[] >> irule abi_args_operand_kept >> metis_tac[]) >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  simp[expr_val_rel_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by
+    (irule abi_args_operand_kept >> metis_tac[]) >>
+  rewrite_tac[expr_val_rel_def] >> qexists `w` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >> irule val_in_memory_footprint_agree >>
+  simp[] >> qexists `s0.vs_memory` >> simp[]
+  >- (`mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+        (gvs[wb_frame_def] >> first_x_assum irule >>
+         conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+         qexists `aid` >> simp[]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      simp[])
+  >- (sym_tac >> irule abi_args_local_window_kept >> metis_tac[])
+  >> simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+Theorem abi_args_captured_value_kept:
+  wb_frame ce es st s0 s1 /\
+  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  expr_val_rel cx ty v op s0 /\ val_wf tv v /\
+  eval_operand op s0 = SOME w /\
+  FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < st.cs_next_id /\
+  b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+  (!n lb lsz. local_region ce es.scopes s0 n lb lsz ==>
+              b + sz <= lb \/ lb + lsz <= b) ==>
+  expr_val_rel cx ty v op s1
+Proof
+  strip_tac >> irule expr_val_rel_footprint_agree >>
+  simp[] >> qexistsl [`s0`, `w`] >> simp[] >> reverse conj_tac
+  >- (irule abi_args_operand_kept >> metis_tac[]) >>
+  `mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory` by
+    (gvs[wb_frame_def] >> first_x_assum irule >>
+     conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+     qexists `aid` >> simp[]) >>
+  drule valueEncodingProofsTheory.mem_bytes_at_agree_window >> simp[]
+QED
