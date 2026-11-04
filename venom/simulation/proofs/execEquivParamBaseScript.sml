@@ -765,3 +765,15 @@ Proof
   PairCases_on `x` >> fs[] >>
   Cases_on `eval_phis s1 insts` >> fs[]
 QED
+
+(* A static frame's write aborts on both sides alike *)
+Theorem vsr_static_abort:
+  !R_ok R_term a s1 s2.
+    valid_state_rel R_ok R_term /\ R_ok s1 s2 ==>
+    lift_result R_ok R_term R_term
+      (Abort a (halt_state (set_returndata [] s1)))
+      (Abort a (halt_state (set_returndata [] s2)))
+Proof
+  rpt strip_tac >> simp[lift_result_def, halt_state_def, set_returndata_def] >>
+  vsr_terminal_tac ()
+QED

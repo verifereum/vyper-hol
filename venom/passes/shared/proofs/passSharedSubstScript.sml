@@ -789,6 +789,12 @@ Proof
     `eval_operands (MAP (subst_op_map subs) (DROP 2 (REVERSE rest))) s =
      eval_operands (DROP 2 (REVERSE rest)) s` by
       (irule eval_operands_map_thm >> metis_tac[]) >>
+    `eval_operands (Lit tc::MAP (subst_op_map subs) rest) s =
+     eval_operands (Lit tc::rest) s` by
+      (`Lit tc::MAP (subst_op_map subs) rest =
+        MAP (subst_op_map subs) (Lit tc::rest)` by simp[subst_op_map_def] >>
+       pop_assum SUBST1_TAC >>
+       irule eval_operands_map_thm >> metis_tac[]) >>
     operand_shape_tac)
   >- ((* JNZ *)
     simp[step_inst_non_invoke] >>
@@ -1196,6 +1202,10 @@ Proof
         simp[] >>
         qpat_x_assum `!j. j < LENGTH t ==> _`
           (qspec_then `i + 2` mp_tac) >> simp[]) >>
+      `eval_operands (Lit tc::t) st = eval_operands (Lit tc::rest) st` by (
+        irule eval_operands_positional >> rw[] >>
+        qpat_x_assum `!j. _ ==> eval_operand (EL j (Lit tc::t)) st = _`
+          (qspec_then `i` mp_tac) >> simp[]) >>
       qpat_x_assum `inst.inst_opcode = LOG` rewrite_step_inst_base_opcode >>
       operand_shape_tac)
   >- ( (* JMP: [Label lbl] *)
