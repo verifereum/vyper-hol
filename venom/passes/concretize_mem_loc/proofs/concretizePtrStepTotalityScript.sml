@@ -5,7 +5,7 @@ Ancestors
   pointerConfinedDefs venomWf venomExecSemantics venomState venomInst
   basePtrProofs finite_map pred_set list
 
-Theorem local_output_origin[local]:
+Theorem local_output_origin:
   ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM out inst.inst_outputs /\
   out IN pointer_derived_vars fn (alloca_roots fn) ==>
   inst.inst_opcode = ALLOCA \/
