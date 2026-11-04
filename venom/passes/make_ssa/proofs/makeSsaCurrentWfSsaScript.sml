@@ -26,7 +26,7 @@ Ancestors
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
-  makeSsaCurrentInduct makeSsaDefs
+  makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive
   ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
@@ -3972,6 +3972,65 @@ Proof
     (ntac 2 (qpat_x_assum `ps = _` kall_tac) >> simp[EL_MAP]) >>
   drule_all current_wf_precleanup_named_slot >> strip_tac >>
   qexistsl_tac [`ev`, `n`] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem current_wf_inserted_pred_demand:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_actual_inserted fn v h /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) /\
+  fn_cfg_edge fn p h /\ lookup_block p fn.fn_blocks = SOME pred ==>
+  current_demand fn v p (LENGTH pred.bb_instructions)
+Proof
+  strip_tac >>
+  `wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+   fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn` by
+    fs[current_wf_phi_context_def] >>
+  `?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+     (liveness_analyze fn) fn) h = SOME vs /\ MEM v vs` by
+    (fs[current_actual_inserted_def] >> drule current_pruned_reach_live >>
+     simp[current_placement_live_def]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) h
+     (LENGTH (collect_phis old.bb_instructions)))` by
+    metis_tac[current_selected_live_iff] >>
+  `!phi. MEM phi (collect_phis old.bb_instructions) ==>
+     ~MEM v (MAP SND (phi_pairs phi.inst_operands))` by
+    (rpt strip_tac >>
+     `MEM old fn.fn_blocks /\ old.bb_label = h` by
+       metis_tac[lookup_block_MEM, lookup_block_label] >>
+     `blocks_have_leading_phi fn.fn_blocks` by
+       metis_tac[current_phi_operand_has_leading_phi] >>
+     `LENGTH (FILTER (\inst. MEM v inst.inst_outputs) (fn_insts fn)) <= 1` by
+       metis_tac[current_phi_operand_single_bound] >>
+     `fn_reachable fn h` by metis_tac[all_reachable_def] >>
+     `ALOOKUP (select_current_live_in T (liveness_analyze fn) fn) h = SOME vs` by
+       (qpat_x_assum `ALOOKUP _ h = SOME vs` mp_tac >> simp[]) >>
+     drule_all current_selected_live_single_definition >> strip_tac >>
+     `h = db.bb_label` by metis_tac[current_actual_inserted_single_local] >>
+     `lookup_block h fn.fn_blocks = SOME db` by
+       (qpat_x_assum `h = db.bb_label` SUBST_ALL_TAC >>
+        irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     `db = old` by metis_tac[optionTheory.SOME_11] >>
+     `?j. j < LENGTH (collect_phis old.bb_instructions) /\
+          MEM v (EL j old.bb_instructions).inst_outputs` by metis_tac[] >>
+     `j < LENGTH old.bb_instructions` by
+       metis_tac[current_collect_phis_length, arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+     `(EL j old.bb_instructions).inst_opcode = PHI` by
+       metis_tac[current_wf_nonphi_after_collect, arithmeticTheory.NOT_LESS] >>
+     metis_tac[EL_MEM]) >>
+  `!k. k < LENGTH (collect_phis old.bb_instructions) ==>
+     ~MEM v (inst_defs (EL k old.bb_instructions))` by
+    (rpt strip_tac >>
+     `k < LENGTH old.bb_instructions` by
+       metis_tac[current_collect_phis_length, arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+     `(EL k old.bb_instructions).inst_opcode = PHI` by
+       metis_tac[current_wf_nonphi_after_collect, arithmeticTheory.NOT_LESS] >>
+     fs[inst_defs_def] >> metis_tac[EL_MEM]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) p (LENGTH pred.bb_instructions))` by
+    (irule current_live_cut_to_pred_exit >> goal_assum (drule_at Any) >>
+     simp[] >> qexistsl_tac [`h`, `old`] >> simp[]) >>
+  irule current_live_post_phi_demand >>
+  goal_assum (drule_at Any) >> simp[current_collect_phis_length]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
