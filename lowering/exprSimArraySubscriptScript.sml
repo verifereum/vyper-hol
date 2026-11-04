@@ -2473,6 +2473,34 @@ QED
 
 (* Unlike expr_body_pre alone, the environment relations of state_rel rule
    out a successful storage lookup compiled as an immutable pointer. *)
+Theorem related_global_code_result_origin:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off) /\
+  eval_expr cx (TopLevelName ann (md,name)) s = (INL res,t) ==>
+  res = PlaceR (ImmutablePlace md name []) /\ t = s
+Proof
+  rpt strip_tac >>
+  gvs[Once evaluate_def, lookup_global_def,
+      bind_def, return_def, lift_option_type_def, raise_def,
+      get_immutables_def, get_address_immutables_def, lift_option_def,
+      vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
+      var_decl_info_CASE_rator, AllCaseEqs()]
+  >~ [`StorageVarDecl`]
+  >- (drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >>
+      Cases_on `tr` >> simp[]) >>
+  rename1 `HashMapVarDecl tr kt vt` >> Cases_on `tr` >>
+  gvs[storage_vars_rel_def, transient_vars_rel_def]
+  >~ [`lookup_var_slot_from_layout cx T md id`]
+  >- (qpat_x_assum `!src ts name d id slot_num. _ /\ _ /\ var_decl_transient d /\ _ ==> _`
+        (drule_then mp_tac) >> simp[var_decl_transient_def] >>
+        goal_assum (drule_at Any) >>
+        goal_assum (drule_at Any) >> simp[var_decl_transient_def]) >>
+  qpat_x_assum `!src ts name d id slot_num. _ /\ _ /\ ~var_decl_transient d /\ _ ==> _`
+    (drule_then mp_tac) >> simp[var_decl_transient_def] >>
+        goal_assum (drule_at Any) >>
+        goal_assum (drule_at Any) >> simp[var_decl_transient_def]
+QED
+
 Theorem related_global_code_place_origin:
   !cenv cx ann md name off s p t.
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
@@ -2480,14 +2508,204 @@ Theorem related_global_code_place_origin:
     eval_expr cx (TopLevelName ann (md,name)) s = (INL (PlaceR p),t) ==>
     p = ImmutablePlace md name [] /\ t = s
 Proof
+  rpt strip_tac >> drule_all related_global_code_result_origin >> simp[]
+QED
+
+Theorem select_result_value_or_immutable:
+  ((?v. pv = Value v) \/
+   (?md name path. pv = PlaceR (ImmutablePlace md name path))) /\
+  select_result cx ty pv sb s = (INL res,t) ==>
+  (?v. res = Value v) \/
+  (?md name path. res = PlaceR (ImmutablePlace md name path))
+Proof
+  strip_tac
+  >- (gvs[select_result_def, bind_def, return_def, raise_def,
+          lift_sum_def, AllCaseEqs()]) >>
+  gvs[] >> drule select_result_immutable_success_path >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_attribute_code_origin:
+  vv_location (FST (compile_attribute cfn cenv rt ty obj fld sc)) = SOME LocCode ==>
+  vv_location (FST (cfn cenv ty obj sc)) = SOME LocCode
+Proof
+  Cases_on `cfn cenv ty obj sc` >>
+  rename1 `cfn cenv ty obj sc = (vv,sm)` >>
+  simp[exprLoweringTheory.compile_attribute_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >>
+  Cases_on `vv_location vv` >>
+  simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def]
+QED
+
+Theorem compile_subscript_code_origin:
+  vv_location (FST (compile_subscript cfn cenv rt ty obj idx sc)) = SOME LocCode ==>
+  vv_location (FST (cfn cenv ty obj sc)) = SOME LocCode
+Proof
+  Cases_on `cfn cenv ty obj sc` >>
+  rename1 `cfn cenv ty obj sc = (vv,sm)` >>
+  Cases_on `place_type cenv obj`
+  >~ [`ValPT bt`]
+  >- (Cases_on `bt` >> Cases_on `vv_location vv` >>
+      simp[exprLoweringTheory.compile_subscript_def,
+           comp_bind_def, comp_return_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      gvs[contextTheory.vv_location_def, contextTheory.mk_ptr_def]) >>
+  Cases_on `vv_location vv` >>
+  simp[exprLoweringTheory.compile_subscript_def,
+       comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[comp_bind_def, comp_return_def,
+      contextTheory.vv_location_def, contextTheory.mk_ptr_def]
+QED
+
+Theorem compile_expr_code_result_origin:
+  !e cenv cx ty sc s res t.
+    storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+    ~expr_has_pop e /\
+    vv_location (FST (compile_expr cenv ty e sc)) = SOME LocCode /\
+    eval_expr cx e s = (INL res,t) ==>
+    (?v. res = Value v) \/
+    (?md name path. res = PlaceR (ImmutablePlace md name path))
+Proof
+  ho_match_mp_tac (vyperASTTheory.expr_induction |> Q.SPEC `P` |>
+    Q.SPEC `\x. T` |> SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[expr_has_pop_def, supported_expr_exists_def, expr_pop_root_def] >>
+  all_tac >~ [`eval_expr _ (Name _ _) _ = _`] >- suspend "Name" >~
+  [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
+  [`eval_expr _ (FlagMember _ _ _) _ = _`] >- suspend "Flag" >~
+  [`eval_expr _ (IfExp _ _ _ _) _ = _`] >- suspend "If" >~
+  [`eval_expr _ (Literal _ _) _ = _`] >-
+    (rpt strip_tac >> drule eval_expr_literal_value >> metis_tac[]) >~
+  [`eval_expr _ (StructLit _ _ _) _ = _`] >- suspend "Struct" >~
+  [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "Subscript" >~
+  [`eval_expr _ (Attribute _ _ _) _ = _`] >- suspend "Attribute" >~
+  [`eval_expr _ (Builtin _ _ _) _ = _`] >-
+    (rpt strip_tac >> drule eval_expr_builtin_value >> metis_tac[]) >~
+  [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "TypeBuiltin" >>
+  suspend "Call"
+QED
+
+Resume compile_expr_code_result_origin[Name]:
+  rename1 `Name ann nm` >>
+  Cases_on `FLOOKUP cenv.ce_vars nm` >>
+  simp[Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_name_vv_def, comp_return_def,
+       comp_bind_def, comp_ignore_bind_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[contextTheory.vv_location_def] >>
+  rename1 `FLOOKUP cenv.ce_vars nm = SOME vl` >> Cases_on `vl` >>
+  simp[comp_return_def, comp_bind_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[contextTheory.vv_location_def]
+QED
+
+Resume compile_expr_code_result_origin[If]:
+  simp[exprSimIfExpTheory.compile_expr_ifexp_not_code]
+QED
+
+Resume compile_expr_code_result_origin[Struct]:
   rpt strip_tac >>
-  gvs[Once evaluate_def, lookup_global_def,
-      bind_def, return_def, lift_option_type_def, raise_def,
-      get_immutables_def, get_address_immutables_def, lift_option_def,
-      vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
-      var_decl_info_CASE_rator, AllCaseEqs()] >>
-  drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >>
-  Cases_on `tr` >> simp[]
+  rename1 `eval_expr cx (StructLit ann nsid fields) st = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]
+QED
+
+Resume compile_expr_code_result_origin[TypeBuiltin]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+
+Resume compile_expr_code_result_origin[Flag]:
+  rpt strip_tac >>
+  rename1 `eval_expr cx (FlagMember ann nsid fld) st = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, lookup_flag_mem_def,
+      bind_def, return_def, raise_def, lift_sum_def, lift_option_type_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
+QED
+
+Resume compile_expr_code_result_origin[Global]:
+  rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
+  Cases_on `FLOOKUP cenv.ce_module_vars (nsid0,nsid1)` >>
+  simp[Once exprLoweringTheory.compile_expr_def,
+       contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[contextTheory.vv_location_def] >>
+  rename1 `FLOOKUP cenv.ce_module_vars _ = SOME vl` >> Cases_on `vl` >>
+  simp[contextTheory.vv_location_def, contextTheory.mk_ptr_def] >>
+  rpt (pairarg_tac >> gvs[]) >> simp[contextTheory.vv_location_def] >>
+  rpt strip_tac >> drule_all related_global_code_result_origin >>
+  strip_tac >> gvs[]
+QED
+Resume compile_expr_code_result_origin[Attribute]:
+  rpt strip_tac >>
+  qpat_x_assum `vv_location _ = SOME LocCode` mp_tac >>
+  simp[Once exprLoweringTheory.compile_expr_def] >>
+  strip_tac >> drule_then assume_tac compile_attribute_code_origin >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >>
+  irule select_result_value_or_immutable >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume compile_expr_code_result_origin[Subscript]:
+  rpt strip_tac >>
+  qpat_x_assum `vv_location _ = SOME LocCode` mp_tac >>
+  simp[Once exprLoweringTheory.compile_expr_def] >>
+  strip_tac >> drule_then assume_tac compile_subscript_code_origin >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  first_x_assum drule_all >> strip_tac >>
+  irule select_result_value_or_immutable >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume compile_expr_code_result_origin[Call]:
+  rpt strip_tac >>
+  rename1 `eval_expr cx (Call ann target args kws) st = _` >>
+  Cases_on `target` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`]
+  >- suspend "IntCall"
+  >~ [`eval_ext_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_ext_call_value >> metis_tac[])
+  >~ [`eval_send _ _ _ _ = _`]
+  >- suspend "Send"
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> metis_tac[])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> metis_tac[]) >>
+  suspend "Create"
+QED
+Resume compile_expr_code_result_origin[IntCall]:
+  rename1 `eval_expr cx (Call ann (IntCall nsid) args kws) st = _` >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+QED
+
+Resume compile_expr_code_result_origin[Send]:
+  rename1 `eval_send cx has_gas vs mid = _` >>
+  Cases_on `vs` >- gvs[eval_send_def, raise_def] >>
+  rename1 `eval_send cx has_gas (to_v::rest) mid = _` >>
+  Cases_on `rest` >>
+  gvs[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+
+Resume compile_expr_code_result_origin[Create]:
+  qmatch_asmsub_rename_tac `eval_create cx kind _ _ _ _ _` >>
+  Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
+  drule eval_create_value >> metis_tac[]
+QED
+Finalise compile_expr_code_result_origin
+
+Theorem compile_expr_code_place_origin:
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop e /\
+  vv_location (FST (compile_expr cenv ty e sc)) = SOME LocCode /\
+  eval_expr cx e s = (INL (PlaceR p),t) ==>
+  ?md name path. p = ImmutablePlace md name path
+Proof
+  rpt strip_tac >> drule_all compile_expr_code_result_origin >> simp[]
 QED
 
 (* Conditional separation: the body precondition permits a compiler table
