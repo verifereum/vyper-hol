@@ -18,7 +18,9 @@ Theorem selected_prefix_prepared_sim:
   plan_slots_bounded spillbase ps /\ residual_budget_wf spillbase [] ps /\
   EVERY (\op. op <> dead_stack_marker /\
     !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
-  (!op at. operand_equiv dfg op at ==>
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
     operand_val vs lo op = operand_val vs lo at) /\
   EVERY (\s. case s of SOSpill off => off < dimword(:256)
     | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
@@ -53,6 +55,14 @@ Proof
     (drule PERM_EVERY >> disch_then (qspec_then
       `\op. op <> dead_stack_marker /\ ~operand_equiv dfg op dead_stack_marker`
       mp_tac) >> simp[]) >>
+  `!op at. MEM op selected /\
+    (MEM at prepared.ps_stack \/ at IN FDOM prepared.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_alias_transport >>
+     disch_then (qspecl_then [`selected`, `dfg`, `vs`, `lo`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
   drule_all reorder_plan_venom_asm_rel_numeric >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   rename1 `venom_asm_rel lo arranged vs endpoint` >>

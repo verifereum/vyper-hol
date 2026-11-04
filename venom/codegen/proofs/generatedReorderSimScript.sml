@@ -279,7 +279,9 @@ Theorem reorder_one_venom_asm_rel_numeric:
   idx < LENGTH pending /\ MEM op pending /\
   LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
   reorder_one dfg pending idx op ps = (ops,ps') /\
-  (!op1 at. operand_equiv dfg op1 at ==>
+  (!op1 at. MEM op1 pending /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg op1 at ==>
     operand_val vs lo op1 = operand_val vs lo at) /\
   EVERY (\s. case s of SOSpill off => off < dimword(:256)
     | SORestore off => off < dimword(:256) | _ => T) ops /\
@@ -339,6 +341,20 @@ Resume reorder_one_venom_asm_rel_numeric[after_reduce]:
   rename1 `venom_asm_rel lo ps2 vs mid` >>
   `asm_block_at prog mid.as_pc (execute_plan initial_fmp suffix)` by
     (fs[execute_plan_append] >> metis_tac[ADD_ASSOC, ADD_COMM]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (qpat_x_assum `(case stack_get_unfixed_depth _ _ _ ps.ps_stack of _ => _ | _ => _) = _` mp_tac >>
+     Cases_on `stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+       (LENGTH pending) ps.ps_stack` >> simp[] >>
+     Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
+     rpt strip_tac >> gvs[] >> metis_tac[do_restore_inventory_subset]) >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+        MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     metis_tac[reduce_depth_plan_inventory_subset]) >>
+  `!at. (MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled) /\
+        operand_equiv dfg op at ==>
+        operand_val vs lo op = operand_val vs lo at` by metis_tac[] >>
   `?final. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp suffix)) mid = AsmOK final /\
            venom_asm_rel lo ps' vs final /\
            final.as_pc = mid.as_pc + LENGTH (execute_plan initial_fmp suffix)` by
@@ -386,6 +402,8 @@ Resume reorder_one_venom_asm_rel_numeric[alias_suffix]:
   irule venom_asm_rel_sem_stack_transport >>
   goal_assum (drule_at Any) >> simp[] >>
   irule plan_stack_sem_eq_exchange >>
+  `MEM (stack_peek (LENGTH pending - (idx + 1)) ps2.ps_stack)
+     ps2.ps_stack` by (irule stack_peek_mem >> decide_tac) >>
   simp[] >> metis_tac[]
 QED
 
@@ -399,7 +417,9 @@ Theorem plan_steps_reorder_venom_asm_rel_numeric:
     residual_budget_wf spill_base pending ps /\ pending_inventory_wf pending ps /\
     LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
     plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps) items ps = (ops,ps') /\
-    (!op1 at. operand_equiv dfg op1 at ==> operand_val vs lo op1 = operand_val vs lo at) /\
+    (!op1 at. MEM op1 pending /\
+      (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+      operand_equiv dfg op1 at ==> operand_val vs lo op1 = operand_val vs lo at) /\
     EVERY (\s. case s of SOSpill off => off < dimword(:256)
       | SORestore off => off < dimword(:256) | _ => T) ops /\
     venom_asm_rel lo ps vs st /\
@@ -429,6 +449,14 @@ Proof
   `LENGTH pending <= LENGTH ps1.ps_stack` by
     (drule_all reorder_one_residual_budget_wf >> simp[]) >>
   `asm_block_at prog mid.as_pc (execute_plan initial_fmp rest_ops)` by metis_tac[ADD_COMM] >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule_at (Pat `reorder_one _ _ _ _ _ = _`)
+       reorder_one_inventory_subset >> simp[]) >>
+  `!op1 at. MEM op1 pending /\
+        (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+        operand_equiv dfg op1 at ==>
+        operand_val vs lo op1 = operand_val vs lo at` by metis_tac[] >>
   first_x_assum (qspec_then `ps1` mp_tac) >> disch_then drule_all >> strip_tac >>
   rename1 `venom_asm_rel lo ps' vs final` >>
   `asm_steps lo o2pc prog
@@ -447,7 +475,9 @@ Theorem reorder_plan_venom_asm_rel_numeric:
     EVERY (\s. case s of SOSpill off => off < dimword(:256)
       | SORestore off => off < dimword(:256) | _ => T) ops /\
     reorder_plan dfg target_ops ps = (ops,ps') /\
-    (!op1 at. operand_equiv dfg op1 at ==>
+    (!op1 at. MEM op1 target_ops /\
+              (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+              operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) /\
     venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
@@ -480,7 +510,9 @@ Theorem reorder_one_venom_asm_rel_residual:
     idx < LENGTH pending /\ MEM op pending /\
     LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
     reorder_one dfg pending idx op ps = (ops,ps') /\
-    (!op1 at. operand_equiv dfg op1 at ==>
+    (!op1 at. MEM op1 pending /\
+              (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+              operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) /\
     prefix_spill_wf initial_fmp lo ops ps /\
     venom_asm_rel lo ps vs st /\
@@ -522,7 +554,9 @@ Theorem reorder_plan_venom_asm_rel_residual:
     reorder_steps_spill_ready initial_fmp dfg target_ops lo
       (MAPi (\i op. (i,op)) target_ops) ps /\
     reorder_plan dfg target_ops ps = (ops,ps') /\
-    (!op1 at. operand_equiv dfg op1 at ==>
+    (!op1 at. MEM op1 target_ops /\
+              (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+              operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) /\
     venom_asm_rel lo ps vs st /\
     asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
@@ -547,7 +581,9 @@ Theorem reorder_plan_exact_two_venom_asm_rel:
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) [h;h'] /\
     reorder_plan dfg [h;h'] ps = (ops,ps') /\
-    (!op1 at. operand_equiv dfg op1 at ==>
+    (!op1 at. MEM op1 [h;h'] /\
+              (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+              operand_equiv dfg op1 at ==>
               operand_val vs lo op1 = operand_val vs lo at) /\
     prefix_spill_wf initial_fmp lo ops ps /\
     venom_asm_rel lo ps vs st /\
@@ -578,7 +614,7 @@ Proof
      (execute_plan initial_fmp step_ops)` by
     (qpat_x_assum `asm_block_at prog st.as_pc
        (execute_plan initial_fmp (ops' ++ step_ops))` mp_tac >>
-     simp[execute_plan_append, asm_block_at_append]) >>
+     rewrite_tac[execute_plan_append, asm_block_at_append]) >>
   `residual_budget_wf base' [h;h'] ps /\
    pending_inventory_wf [h;h'] ps /\
    2 <= LENGTH ps.ps_stack` by
@@ -593,11 +629,21 @@ Proof
     (qspecl_then [`dfg`, `[h;h']`, `0`, `h`, `ps`, `ops'`, `ps''`,
                   `base'`, `lo`, `o2pc`, `prog`, `vs`, `st`]
        mp_tac reorder_one_venom_asm_rel_residual >>
-     simp[exact_two_planner_ready_def]) >>
+     simp[exact_two_planner_ready_def] >> disch_then irule >>
+     metis_tac[]) >>
   `asm_block_at prog st1.as_pc (execute_plan initial_fmp step_ops)` by
     metis_tac[] >>
   `2 <= LENGTH ps''.ps_stack` by
     fs[exact_two_planner_ready_def] >>
+  `!at. MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (qpat_assum `reorder_one dfg [h;h'] 0 h ps = _`
+       (mp_then Any mp_tac reorder_one_inventory_subset) >> simp[]) >>
+  `!op1 at. MEM op1 [h;h'] /\
+        (MEM at ps''.ps_stack \/ at IN FDOM ps''.ps_spilled) /\
+        operand_equiv dfg op1 at ==>
+        operand_val vs lo op1 = operand_val vs lo at` by
+    (simp[] >> metis_tac[]) >>
   `?st2.
       asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp step_ops)) st1 =
         AsmOK st2 /\
@@ -607,7 +653,8 @@ Proof
       pending_inventory_wf [h;h'] ps'` by
     (qspecl_then [`dfg`, `[h;h']`, `1`, `h'`, `ps''`, `step_ops`, `ps'`,
                   `base'`, `lo`, `o2pc`, `prog`, `vs`, `st1`]
-       mp_tac reorder_one_venom_asm_rel_residual >> simp[]) >>
+       mp_tac reorder_one_venom_asm_rel_residual >> simp[] >>
+     disch_then irule >> fs[]) >>
   qexists_tac `st2` >>
   ASM_REWRITE_TAC[execute_plan_append, LENGTH_APPEND, asm_steps_add] >>
   simp[]
