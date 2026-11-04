@@ -709,3 +709,30 @@ Proof
     [mk_inst 0 JMP [Label "tail"] []] |>` >>
   gvs[listTheory.MEM,venomInstTheory.mk_inst_def]
 QED
+
+Definition ao_range_outputs_def:
+  ao_range_outputs fn = {v | ?inst. MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs}
+End
+
+Theorem ao_range_operand_output:
+  wf_ssa fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode <> PHI /\
+  MEM (Var v) inst.inst_operands ==> v IN ao_range_outputs fn
+Proof
+  simp[venomWfTheory.wf_ssa_def,venomInstTheory.fn_insts_def,
+       unitShapeDefsTheory.MEM_fn_insts_blocks_iff,listTheory.MEM_FLAT,listTheory.MEM_MAP,ao_range_outputs_def] >>
+  rpt strip_tac >> gvs[] >>
+  fs[venomWfTheory.def_dominates_uses_def] >>
+  res_tac >> fs[venomWfTheory.def_available_at_def] >>
+  metis_tac[]
+QED
+
+Theorem ao_range_supported_initial_sound:
+  FDOM rs SUBSET ao_range_outputs fn /\
+  (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+    lookup_var x s = NONE) ==> in_range_state rs s.vs_vars
+Proof
+  rw[rangeEvalDefsTheory.in_range_state_def] >>
+  `v IN FDOM rs` by metis_tac[finite_mapTheory.FLOOKUP_DEF,optionTheory.NOT_SOME_NONE] >>
+  fs[pred_setTheory.SUBSET_DEF,ao_range_outputs_def,venomStateTheory.lookup_var_def] >>
+  metis_tac[optionTheory.NOT_SOME_NONE]
+QED
