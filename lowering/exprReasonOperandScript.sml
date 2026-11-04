@@ -12,6 +12,7 @@
  * TOP-LEVEL:
  *   reason_code_vv             — the reason's value is a pointer into code
  *   compile_expr_string_reason
+ *   lower_compile_expr_not_label — lower_value's operand is no label
  *
  * Helper:
  *   reason_result_shape, reason_uniform_shape — the kind of value
@@ -1201,4 +1202,26 @@ Proof
   gvs[] >>
   metis_tac[reason_result_shape_memory, reason_result_shape_storage,
             reason_result_shape_code]
+QED
+
+(* With every typed local held through a variable pointer, the operand
+   lower_value hands out for a well-typed expression is no label: a literal,
+   a variable, or a pointer that compile_expr_reason_uniform gives one of
+   those two.  The Log arguments' suffix frames need it. *)
+Theorem lower_compile_expr_not_label:
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
+  !l. op <> Label l
+Proof
+  simp[lower_value_def, comp_bind_def] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> rename1 `compile_expr cenv ty e sa = (vv,sm)` >>
+  irule unwrap_value_not_label >>
+  goal_assum (drule_at Any) >>
+  drule_all compile_expr_reason_uniform >>
+  disch_then (qspec_then `ty` mp_tac) >>
+  simp[reason_uniform_shape_def] >> strip_tac >>
+  first_x_assum drule >>
+  Cases_on `vv` >> simp[reason_result_shape_def, vv_operand_def]
 QED

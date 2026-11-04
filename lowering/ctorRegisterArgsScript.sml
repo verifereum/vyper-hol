@@ -651,8 +651,6 @@ Proof
   qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  conj_tac
-  >- (irule alloca_inv_fields >> qexists `raw` >> simp[]) >>
   simp[abi_decode_sim_def] >> metis_tac[]
 QED
 

@@ -131,6 +131,11 @@ Proof
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var v) sz) ==>
     abi_decoder_operand_live prepared.cs_next_var (Var v)` by
     (rpt strip_tac >> drule_all log_reserved_operand_live >> simp[]) >>
+  `!x. ce.ce_imm_alloca = SOME (Var x) ==>
+     abi_decoder_operand_live prepared.cs_next_var (Var x)` by
+    (qpat_x_assum `local_ptrs_reserved ce prepared` mp_tac >>
+     simp[local_ptrs_reserved_def, abi_decoder_operand_live_def,
+          abi_decoder_older_vars_def, not_fresh_at_def] >> metis_tac[]) >>
   `!name lo sz. local_region ce es.scopes initial name lo sz ==>
     abi_footprint_disjoint lo sz [(db,outcap)]` by
     (rpt strip_tac >> drule_all log_buffer_local_footprint >> simp[]) >>
