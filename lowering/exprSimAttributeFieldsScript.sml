@@ -50,7 +50,7 @@ Proof
        arithmeticTheory.LEFT_ADD_DISTRIB]
 QED
 
-Theorem slot_count_of_memory_size[local]:
+Theorem slot_count_of_memory_size:
   !tv. (type_memory_size tv + 31) DIV 32 = type_slot_size tv
 Proof
   rw[type_memory_size_slots] >>
