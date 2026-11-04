@@ -231,7 +231,7 @@
 
 Theory exprSimHyps
 Ancestors
-  gasContext supportedProgram
+  gasContext
   list finite_map
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -322,6 +322,22 @@ Definition expr_sim_inv_def:
              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
                   off + type_memory_size tv < dimword (:256))
 End
+
+Theorem expr_sim_inv_gas_obs[simp]:
+  expr_sim_inv cenv cx env (es with gas_obs := gs) <=>
+  expr_sim_inv cenv cx env es
+Proof
+  `oracle_storage_ok cx (es with gas_obs := gs) <=>
+   oracle_storage_ok cx es` by
+    (irule oracle_storage_ok_outcomes >> simp[]) >>
+  `contract_storage_well_formed cx (es with gas_obs := gs) <=>
+   contract_storage_well_formed cx es` by
+    (eq_tac >> strip_tac >>
+     irule contract_storage_well_formed_storage_frame >>
+     goal_assum (drule_at Any) >> Cases >>
+     simp[vyperStorageBackendTheory.get_storage_def]) >>
+  simp[expr_sim_inv_def]
+QED
 
 (* The types whose values are word_values (loweringSlice): integers,
    decimals, booleans and flags.  address and bytesN values are BytesV. *)
@@ -422,6 +438,20 @@ Definition expr_body_pre_def:
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
               is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 End
+
+Theorem expr_sim_pre_gas_obs[simp]:
+  expr_sim_pre cenv cx env e (es with gas_obs := gs) <=>
+  expr_sim_pre cenv cx env e es
+Proof
+  simp[expr_sim_pre_def]
+QED
+
+Theorem expr_body_pre_gas_obs[simp]:
+  expr_body_pre cenv cx env e (es with gas_obs := gs) <=>
+  expr_body_pre cenv cx env e es
+Proof
+  simp[expr_body_pre_def]
+QED
 
 Theorem expr_sim_pre_body:
   !cenv cx env e es.
@@ -853,6 +883,22 @@ Theorem expr_sim_pre_vv_res_ok:
     expr_vv_res_ok res
 Proof
   metis_tac[expr_body_pre_vv_res_ok, expr_sim_pre_body_pre]
+QED
+
+Theorem expr_body_pre_gas_admissible:
+  expr_body_pre cenv cx env e es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]
+QED
+
+Theorem expr_body_pre_vv_gas_admissible:
+  expr_body_pre cenv cx env e es ==>
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  metis_tac[expr_body_pre_gas_obs, expr_body_pre_vv_res_ok]
 QED
 
 Theorem word_value_type_typed:
