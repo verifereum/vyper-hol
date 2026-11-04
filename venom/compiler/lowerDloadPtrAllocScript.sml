@@ -1,7 +1,7 @@
 Theory lowerDloadPtrAlloc
 Ancestors
   lowerDloadPtrAggregate lowerDloadPtrRel lowerDloadPtrBoundary
-  lowerDloadPtrCall ptrDiscipline venomExecSemantics venomState
+  lowerDloadPtrCall lowerDloadDefs ptrDiscipline venomExecSemantics venomState
   list pred_set finite_map words arithmetic
 
 Theorem dload_table_stack_cons:
@@ -352,4 +352,54 @@ Theorem dload_saved_layout_pop:
 Proof
   strip_tac >> gvs[] >> gen_tac >>
   first_x_assum (qspec_then `SUC k` mp_tac) >> simp[]
+QED
+
+Theorem dload_distinct_index_sum_bound:
+  ALL_DISTINCT ks /\ EVERY (\k. k < LENGTH (xs:num list)) ks ==>
+  SUM (MAP (\k. EL k xs) ks) <= SUM xs
+Proof
+  strip_tac >>
+  `!js. ALL_DISTINCT js ==>
+    SUM (MAP (\k. EL k xs) js) = SIGMA (\k. EL k xs) (set js)` by
+    (Induct >> simp[SUM_IMAGE_EMPTY, SUM_IMAGE_INSERT]) >>
+  first_x_assum drule >> disch_then SUBST1_TAC >>
+  `SIGMA (\k. EL k xs) (count (LENGTH xs)) = SUM xs` by
+    (simp[rich_listTheory.SUM_IMAGE_count_SUM_GENLIST] >>
+     AP_TERM_TAC >> irule GENLIST_EL >> simp[]) >>
+  pop_assum (SUBST1_TAC o SYM) >>
+  irule SUM_IMAGE_SUBSET_LE >> simp[SUBSET_DEF] >>
+  fs[EVERY_MEM]
+QED
+
+Theorem dload_live_scratch_count_bound:
+  ALL_DISTINCT ks /\ LENGTH fs = LENGTH ks /\
+  (!k. k < LENGTH ks ==>
+    EL k ks < LENGTH C.ctx_functions /\
+    CARD (EL k fs).dr_scratch <=
+      LENGTH (FILTER (\inst. inst.inst_opcode = DLOAD)
+        (fn_insts (EL (EL k ks) C.ctx_functions)))) ==>
+  SUM (MAP (\f. CARD f.dr_scratch) fs) <= ctx_dload_count C
+Proof
+  strip_tac >>
+  qabbrev_tac `weights = MAP
+    (\fn. LENGTH (FILTER (\inst. inst.inst_opcode = DLOAD) (fn_insts fn)))
+    C.ctx_functions` >>
+  `EVERY (\k. k < LENGTH weights) ks` by
+    (simp[EVERY_EL, Abbr `weights`] >> metis_tac[]) >>
+  `SUM (MAP (\f. CARD f.dr_scratch) fs) <=
+    SUM (MAP (\k. EL k weights) ks)` by
+    (rewrite_tac[GSYM GENLIST_EL_MAP,
+       GSYM rich_listTheory.SUM_IMAGE_count_SUM_GENLIST] >>
+     asm_rewrite_tac[] >> irule SUM_IMAGE_MONO_LESS_EQ >> simp[] >>
+     rpt strip_tac >> fs[Abbr `weights`, EL_MAP] >> metis_tac[]) >>
+  drule_all dload_distinct_index_sum_bound >>
+  simp[Abbr `weights`, ctx_dload_count_def] >> decide_tac
+QED
+
+Theorem dload_budget_headroom:
+  tf = sf + 32 * budget /\ budget <= ctx_dload_count C /\
+  sf + 32 * ctx_dload_count C < dimword (:256) ==>
+  tf < dimword (:256)
+Proof
+  decide_tac
 QED
