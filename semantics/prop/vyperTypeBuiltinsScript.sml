@@ -2449,6 +2449,7 @@ Theorem well_typed_builtin_app_no_type_error:
 Proof
   strip_tac >>
   Cases_on `blt` >>
+  fs[] >>
   gvs[well_typed_builtin_app_def, LET_THM,
       LENGTH_EQ_NUM_compute,
       Excl "is_int_type_def", Excl "is_numeric_type_def", Excl "is_bool_type_def",

@@ -3446,61 +3446,6 @@ Proof
     strip_tac >> `A = -&X` by intLib.ARITH_TAC >> fs[]
 QED
 
-val div256_tac =
-  fs monad_unfold >> rpt (pairarg_tac >> fs[]) >>
-    ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ _ _ = _` >>
-    ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
-    ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
-    ostep emit_op_AND_correct `emit_op AND _ _ = _` >>
-    ostep emit_op_ISZERO_correct `emit_op ISZERO [bad] _ = _` >>
-    forward_all_evals >>
-    `¬(a = 0x8000000000000000000000000000000000000000000000000000000000000000w ∧ ¬b = 0w)` by
-      (strip_tac >>
-       qpat_x_assum `¬b = 0w` (assume_tac o AP_TERM ``word_1comp : bytes32 -> bytes32``) >>
-       fs[wordsTheory.WORD_NOT_NOT] >>
-       gvs[w2i_int_min_w_256, w2i_not0_256, w2i_neg1_256]) >>
-    `bool_to_word (bool_to_word (a = 0x8000000000000000000000000000000000000000000000000000000000000000w) && bool_to_word (¬b = 0w) = 0w) ≠ 0w` by
-      (Cases_on `a = 0x8000000000000000000000000000000000000000000000000000000000000000w` >> fs[]) >>
-    imp_res_tac emit_void_extends >>
-    rpt (qpat_x_assum `emitted_insts _ _ = _ ++ _` kall_tac) >>
-    rename1 `emit_void ASSERT [ok] s_ok = _` >>
-    rename1 `eval_operand ok m_ok = SOME _` >>
-    qspecl_then [`ok`, `s_ok`, `st'`,
-       `bool_to_word (bool_to_word (a = 0x8000000000000000000000000000000000000000000000000000000000000000w) && bool_to_word (¬b = 0w) = 0w)`,
-       `m_ok`, `st`, `ss`] mp_tac assert_chain_ok >>
-    impl_tac
-    >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-        TRY compose_eval_pres >> TRY solve_same_blocks >> fs[]) >>
-    strip_tac >> qpat_x_assum `res = op` (SUBST_ALL_TAC o SYM) >>
-    first_assum (irule_at Any) >> fs[];
-
-val sdiv_ok_tac =
-  drule_all zero_check_passes >> strip_tac >>
-    rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
-    gvs monad_unfold >> pairarg_tac >> gvs[] >>
-    rename1 `emit_op SDIV _ _ = (res, s_div)` >>
-    `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
-    drule_all emit_op_SDIV_correct >> strip_tac >>
-    rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
-    qpat_x_assum `emit_op SDIV _ _ = _`
-      (strip_assume_tac o MATCH_MP emit_op_extends) >>
-    drule_all run_inst_seq_chain >> strip_tac >>
-    qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` mp_tac >>
-    asm_rewrite_tac[] >> strip_tac >>
-    `w2i b ≠ 0` by fs[integer_wordTheory.w2i_eq_0] >>
-    `w2i (safe_sdiv a b) = w2i a quot w2i b` by
-      (simp[safe_sdiv_def, integer_wordTheory.word_quot] >>
-       irule integer_wordTheory.w2i_i2w >>
-       qspecl_then [`ty`, `w2i a quot w2i b`] mp_tac in_type_range_signed_256 >>
-       impl_tac >- (simp[] >> irule sdiv_in_type_range >> simp[]) >> simp[]) >>
-    Cases_on `type_bits ty = 256` >> fs[]
-    >- div256_tac >>
-    `type_bits ty < 256` by decide_tac >> fs[] >>
-    `in_type_range ty (math_val ty (safe_sdiv a b))` by
-       (simp[math_val_def] >> irule sdiv_in_type_range >> simp[]) >>
-    qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
-                 `safe_sdiv a b`] mp_tac clamp_and_return_ok >>
-    simp[];
 
 (* compile_safe_div_ok: a division by a non-zero word, but for the signed
    minimum by -1, runs through and gives the word quotient.  The success
@@ -3524,10 +3469,79 @@ Proof
     gvs (compile_safe_div_def :: monad_unfold) >>
     pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
     Cases_on `is_signed_type ty` >> gvs[]
-    >- sdiv_ok_tac >>
+    >- suspend "signed" >>
     drule_all zero_check_passes >> strip_tac >>
     chain_last emit_op_Div_correct
 QED
+
+Resume compile_safe_div_ok[signed]:
+  drule_all zero_check_passes >> strip_tac >>
+    rename1 `run_inst_seq (emitted_insts st _) ss = OK m1` >>
+    gvs monad_unfold >> pairarg_tac >> gvs[] >>
+    rename1 `emit_op SDIV _ _ = (res, s_div)` >>
+    `eval_operand x m1 = SOME a ∧ eval_operand y m1 = SOME b` by metis_tac[] >>
+    drule_all emit_op_SDIV_correct >> strip_tac >>
+    rename1 `eval_operand res m2 = SOME (safe_sdiv a b)` >>
+    qpat_x_assum `emit_op SDIV _ _ = _`
+      (strip_assume_tac o MATCH_MP emit_op_extends) >>
+    drule_all run_inst_seq_chain >> strip_tac >>
+    qpat_x_assum `run_inst_seq _ _ = run_inst_seq _ _` mp_tac >>
+    asm_rewrite_tac[] >> strip_tac >>
+    `w2i b ≠ 0` by fs[integer_wordTheory.w2i_eq_0] >>
+    `w2i (safe_sdiv a b) = w2i a quot w2i b` by
+      (simp[safe_sdiv_def, integer_wordTheory.word_quot] >>
+       irule integer_wordTheory.w2i_i2w >>
+       qspecl_then [`ty`, `w2i a quot w2i b`] mp_tac in_type_range_signed_256 >>
+       impl_tac >- (simp[] >> irule sdiv_in_type_range >> simp[]) >> simp[]) >>
+    Cases_on `type_bits ty = 256` >> fs[]
+    >- suspend "signed_256" >>
+    `type_bits ty < 256` by decide_tac >> fs[] >>
+    `in_type_range ty (math_val ty (safe_sdiv a b))` by
+       (simp[math_val_def] >> irule sdiv_in_type_range >> simp[]) >>
+    qspecl_then [`res`, `ty`, `s_div`, `op`, `st'`, `st`, `ss`, `m2`,
+                 `safe_sdiv a b`] mp_tac clamp_and_return_ok >>
+    simp[]
+QED
+
+Resume compile_safe_div_ok[signed_256]:
+  fs monad_unfold >> rpt (pairarg_tac >> fs[]) >>
+  ostep (elim_lit 2 emit_op_EQ_correct) `emit_op EQ _ _ = _` >>
+  ostep emit_op_NOT_correct `emit_op NOT _ _ = _` >>
+  ostep emit_op_ISZERO_correct `emit_op ISZERO [ny] _ = _` >>
+  ostep emit_op_AND_correct `emit_op AND _ _ = _` >>
+  ostep emit_op_ISZERO_correct `emit_op ISZERO [bad] _ = _` >>
+  forward_all_evals >>
+  `¬(a = 0x8000000000000000000000000000000000000000000000000000000000000000w ∧ ¬b = 0w)` by
+    (strip_tac >>
+     qpat_x_assum `¬b = 0w` (assume_tac o AP_TERM ``word_1comp : bytes32 -> bytes32``) >>
+     fs[wordsTheory.WORD_NOT_NOT] >>
+     gvs[w2i_int_min_w_256, w2i_not0_256, w2i_neg1_256]) >>
+  `bool_to_word (bool_to_word (a = 0x8000000000000000000000000000000000000000000000000000000000000000w) && bool_to_word (¬b = 0w) = 0w) ≠ 0w` by
+    (Cases_on `a = 0x8000000000000000000000000000000000000000000000000000000000000000w` >> fs[]) >>
+  imp_res_tac emit_void_extends >>
+  rpt (qpat_x_assum `emitted_insts _ _ = _ ++ _` kall_tac) >>
+  rename1 `emit_void ASSERT [ok] s_ok = _` >>
+  rename1 `eval_operand ok m_ok = SOME _` >>
+  qspecl_then [`ok`, `s_ok`, `st'`,
+     `bool_to_word (bool_to_word (a = 0x8000000000000000000000000000000000000000000000000000000000000000w) && bool_to_word (¬b = 0w) = 0w)`,
+     `m_ok`, `st`, `ss`] mp_tac assert_chain_ok >>
+  (impl_tac >- suspend "signed_256_assert_premises") >>
+  strip_tac >> qpat_x_assum `res = op` (SUBST_ALL_TAC o SYM) >>
+  first_assum (irule_at Any) >> fs[]
+QED
+
+Resume compile_safe_div_ok[signed_256_assert_premises]:
+  conj_tac >- fs[] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  conj_tac >- compose_eval_pres >>
+  solve_same_blocks
+QED
+
+Finalise compile_safe_div_ok
 
 (* The signed minimum divided by -1 reverts: by the int256 check, or by the
    clamp of a narrower type. *)

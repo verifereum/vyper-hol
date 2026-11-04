@@ -1115,6 +1115,10 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
+        (case it of
+           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+         | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
+         | Array _ => T) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
