@@ -1,6 +1,6 @@
 Theory algebraicOptTraceProofs
 Ancestors
-  algebraicOptReachabilityProofs venomState venomExecSemantics list rich_list pair
+  algebraicOptReachabilityProofs venomState venomInst venomWf venomExecSemantics list rich_list pair
 
 (* A single real transition, not the reflexive initial prefix. PHIs are atomic. *)
 Inductive ao_source_step:
@@ -280,4 +280,167 @@ Proof
   Cases_on `i` >- simp[] >>
   first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
   simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem ao_source_step_entry:
+  !ctx fn k s j t. ao_source_step ctx fn (k,T,s) (j,F,t) ==>
+    k = SUC j /\ t.vs_current_bb = s.vs_current_bb /\
+    ?bb p. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      eval_phis s bb.bb_instructions = OK p /\
+      t = p with vs_inst_idx := phi_prefix_length bb.bb_instructions
+Proof
+  rpt gen_tac >> simp[Once ao_source_step_cases] >> rpt strip_tac >>
+  gvs[] >> drule venomExecProofsTheory.eval_phis_preserves_current_bb >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ao_source_step_no_entry_entry:
+  !ctx fn k s j t. ~ao_source_step ctx fn (k,T,s) (j,T,t)
+Proof
+  simp[Once ao_source_step_cases]
+QED
+
+Theorem ao_source_step_exit:
+  !ctx fn k s j t. ao_source_step ctx fn (k,F,s) (j,T,t) ==>
+    j = k /\ t.vs_prev_bb = SOME s.vs_current_bb /\
+    (!x. lookup_var x s = lookup_var x t) /\
+    ?bb inst. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      is_terminator inst.inst_opcode /\ step_inst k ctx inst s = OK t /\
+      ~t.vs_halted
+Proof
+  rpt gen_tac >> simp[Once ao_source_step_cases] >> rpt strip_tac >> gvs[] >>
+  drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by
+    (strip_tac >> gvs[is_terminator_def]) >>
+  `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
+  drule_all venomExecPropsTheory.step_inst_base_term_prev_bb >>
+  strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_source_step_exit_cfg:
+  !ctx fn k s j t.
+    wf_function fn /\ fn_inst_wf fn /\
+    ao_source_step ctx fn (k,F,s) (j,T,t) ==>
+    fn_cfg_edge fn s.vs_current_bb t.vs_current_bb
+Proof
+  rpt strip_tac >> drule ao_source_step_exit >> strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `bb.bb_label = s.vs_current_bb` by
+    metis_tac[venomExecPropsTheory.lookup_block_label] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    inst = EL s.vs_inst_idx bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `s.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
+    metis_tac[bb_well_formed_def] >>
+  `inst_wf inst` by metis_tac[fn_inst_wf_def, MEM_EL] >>
+  `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+  `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
+  drule_all venomExecProofsTheory.step_inst_base_term_succs >> strip_tac >>
+  simp[fn_cfg_edge_def] >> qexists `bb` >> simp[] >>
+  gvs[bb_well_formed_def, bb_succs_def, LAST_EL, MEM_nub, MEM_REVERSE] >>
+  Cases_on `bb.bb_instructions` >- fs[] >>
+  qpat_x_assum `MEM t.vs_current_bb (get_successors _)` mp_tac >>
+  simp[MEM_nub, MEM_REVERSE]
+QED
+
+(* Retain real visit edges, including equal-label self-loops. *)
+Definition ao_trace_path_def:
+  ao_trace_path ([]:(num # bool # venom_state) list) = [] /\
+  ao_trace_path [a] = [(SND (SND a)).vs_current_bb] /\
+  ao_trace_path (a::b::rest) =
+    if FST (SND b) then
+      (SND (SND a)).vs_current_bb :: ao_trace_path (b::rest)
+    else ao_trace_path (b::rest)
+End
+
+Theorem ao_trace_path_shape:
+  !trace. trace <> [] ==>
+    ao_trace_path trace <> [] /\
+    LAST (ao_trace_path trace) = (SND (SND (LAST trace))).vs_current_bb /\
+    (!lbl. MEM lbl (ao_trace_path trace) ==>
+      ?a. MEM a trace /\ lbl = (SND (SND a)).vs_current_bb)
+Proof
+  Induct >- simp[] >> gen_tac >> Cases_on `trace`
+  >- simp[ao_trace_path_def] >>
+  simp[ao_trace_path_def] >> Cases_on `FST (SND h')` >>
+  simp[] >> rpt strip_tac >> metis_tac[MEM, LAST_DEF, NOT_CONS_NIL]
+QED
+
+Theorem ao_source_step_stutter:
+  !ctx fn a b. ao_source_step ctx fn a b /\ ~FST (SND b) ==>
+    (SND (SND a)).vs_current_bb = (SND (SND b)).vs_current_bb
+Proof
+  rpt gen_tac >> PairCases_on `a` >> PairCases_on `b` >>
+  Cases_on `a1` >> Cases_on `b1` >> simp[] >> strip_tac
+  >- (drule ao_source_step_entry >> simp[]) >>
+  drule ao_source_step_sequential >> simp[]
+QED
+
+Theorem ao_source_trace_path:
+  !trace ctx fn.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    wf_function fn /\ fn_inst_wf fn ==>
+    is_fn_path fn (ao_trace_path trace) /\
+    HD (ao_trace_path trace) = (SND (SND (HD trace))).vs_current_bb
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `trace`
+  >- simp[ao_trace_path_def, is_fn_path_def] >>
+  simp[ao_source_trace_def] >> strip_tac >>
+  rule_assum_tac (REWRITE_RULE [NOT_CONS_NIL]) >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `FST (SND h')`
+  >- (PairCases_on `h` >> PairCases_on `h'` >> gvs[] >>
+      Cases_on `h1`
+      >- metis_tac[ao_source_step_no_entry_entry] >>
+      drule_all ao_source_step_exit_cfg >> strip_tac >>
+      simp[ao_trace_path_def] >>
+      qmatch_goalsub_abbrev_tac `is_fn_path fn (_::path)` >>
+      `path <> []` by metis_tac[ao_trace_path_shape, NOT_CONS_NIL] >>
+      Cases_on `path` >> gvs[is_fn_path_def]) >>
+  drule_all ao_source_step_stutter >> strip_tac >>
+  simp[ao_trace_path_def]
+QED
+
+Theorem ao_source_trace_last_step:
+  !trace ctx fn.
+    2 <= LENGTH trace /\ ao_source_trace ctx fn trace ==>
+    ?front a b. trace = front ++ [a;b] /\ LAST trace = b /\
+      ao_source_trace ctx fn (front ++ [a]) /\ ao_source_step ctx fn a b
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `trace`
+  >- simp[] >>
+  Cases_on `t`
+  >- (simp[ao_source_trace_def] >> strip_tac >>
+      qexistsl [`[]`,`h`,`h'`] >> simp[ao_source_trace_def]) >>
+  strip_tac >>
+  first_x_assum (qspecl_then [`ctx`,`fn`] mp_tac) >>
+  (impl_tac >- gvs[ao_source_trace_def]) >> strip_tac >>
+  qexistsl [`h::front`,`a`,`b`] >> simp[] >>
+  `ao_source_trace ctx fn ((h::front) ++ [a;b])` by metis_tac[APPEND] >>
+  qpat_x_assum `ao_source_trace ctx fn ((_::_) ++ _)` mp_tac >>
+  once_rewrite_tac[ao_source_trace_transition_split] >> simp[]
+QED
+
+Theorem ao_source_trace_selected_edge:
+  !trace ctx fn.
+    2 <= LENGTH trace /\ ao_source_trace ctx fn trace /\
+    FST (SND (LAST trace)) ==>
+    ?front a b. trace = front ++ [a;b] /\ LAST trace = b /\
+      ~FST (SND a) /\ FST (SND b) /\
+      ao_source_trace ctx fn (front ++ [a]) /\ ao_source_step ctx fn a b /\
+      (SND (SND b)).vs_prev_bb = SOME (SND (SND a)).vs_current_bb /\
+      (!x. lookup_var x (SND (SND a)) = lookup_var x (SND (SND b))) /\
+      LAST (ao_trace_path (front ++ [a])) = (SND (SND a)).vs_current_bb
+Proof
+  rpt strip_tac >> drule_all ao_source_trace_last_step >> strip_tac >>
+  qexistsl [`front`,`a`,`b`] >> simp[] >>
+  `LAST (ao_trace_path (front ++ [a])) = (SND (SND a)).vs_current_bb` by
+    (mp_tac (Q.SPEC `front ++ [a]` ao_trace_path_shape) >>
+     simp[LAST_APPEND_CONS]) >>
+  PairCases_on `a` >> PairCases_on `b` >> gvs[] >>
+  Cases_on `a1` >- metis_tac[ao_source_step_no_entry_entry] >>
+  drule ao_source_step_exit >> simp[]
 QED
