@@ -3016,7 +3016,9 @@ Proof
   simp[LET_THM] >> strip_tac >>
   `venom_asm_rel lo p vs st'` by
     (irule venom_asm_rel_ps_transfer >>
-     qexists `apply_prefix_ops initial_fmp lo ds ps` >> gvs[]) >>
+     qexists `apply_prefix_ops initial_fmp lo ds ps` >> gvs[] >>
+     mp_tac (Q.SPECL [`d`, `ps`] do_dup_stack) >>
+     asm_simp_tac std_ss []) >>
   `p.ps_stack = ps.ps_stack ++ [stack_peek d ps.ps_stack]` by
     (drule do_dup_stack_exact >> simp[]) >>
   `p.ps_spilled = ps.ps_spilled` by
