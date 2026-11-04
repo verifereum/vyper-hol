@@ -9,7 +9,7 @@ Libs
   monadsyntax
 
 
-Theorem continue_jump_post[local]:
+Theorem continue_jump_post:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted ==>
   stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sb s
     (INR ContinueException) (es with gas_obs := []) (jump_to inc s)
