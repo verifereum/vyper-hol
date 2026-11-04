@@ -42,7 +42,7 @@
 
 Theory deadStoreElimProofs
 Ancestors
-  deadStoreElimSafety deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
+  deadStoreElimStructure deadStoreElimSafety deadStoreElimEquiv deadStoreElimFrame deadStoreElimDefs passSimulationProps basePtrProps passSharedProps While
   venomMemProps venomMemProofs memAliasDefs passSharedField cfgAnalysisProps
   stateEquiv stateEquivProps venomState venomInst venomInstProps
   passSimulationDefs passSharedDefs execEquivParamDefs
@@ -63,32 +63,7 @@ val _ = augment_srw_ss [deadStoreElimFrameLib.frame_ss];
 
 (* H1 is shared by deadStoreElimSafety. *)
 
-(* H2: block_map_transform preserves label *)
-Triviality block_map_transform_label:
-  !f bb. (block_map_transform f bb).bb_label = bb.bb_label
-Proof
-  simp[block_map_transform_def]
-QED
-
-(* H3: lookup_block in dse_single_pass *)
-Triviality lookup_block_dse_single_pass:
-  !lbl fn dead_ids space.
-    lookup_block lbl (dse_single_pass dead_ids space fn).fn_blocks =
-    OPTION_MAP (block_map_transform (dse_inst dead_ids space))
-      (lookup_block lbl fn.fn_blocks)
-Proof
-  simp[dse_single_pass_def, function_map_transform_def] >>
-  rpt gen_tac >> irule lookup_block_map >> simp[block_map_transform_label]
-QED
-
-(* H4: memory_def_opcode is not a terminator *)
-Triviality memory_def_opcode_not_terminator:
-  !space op. is_memory_def_opcode space op ==> ~is_terminator op
-Proof
-  Cases_on `space` >> simp[is_memory_def_opcode_def] >>
-  strip_tac >> Cases_on `op` >>
-  gvs[is_terminator_def] >> EVAL_TAC
-QED
+(* Structural helpers H2--H4 live in deadStoreElimStructure. *)
 
 (* Add effect definitions to computeLib for EVAL capability *)
 val _ = computeLib.add_funs
@@ -253,16 +228,7 @@ Proof
             write_effects_sound_log, write_effects_sound_immutables]
 QED
 
-(* H5: dse_inst preserves is_terminator *)
-Triviality dse_inst_is_terminator:
-  !dead_ids space inst.
-    is_terminator (dse_inst dead_ids space inst).inst_opcode =
-    is_terminator inst.inst_opcode
-Proof
-  rw[dse_inst_def] >>
-  simp[mk_nop_inst_def, is_terminator_def] >>
-  metis_tac[memory_def_opcode_not_terminator]
-QED
+(* H5, terminator preservation, lives in deadStoreElimStructure. *)
 
 (* H6: NOP semantics *)
 Triviality step_inst_base_nop:
