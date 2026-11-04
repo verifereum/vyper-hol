@@ -57,3 +57,76 @@ The proof should use `dft_original_label_iter`, active-source projection, runtim
 ## Still outside this audit
 
 Derivation of a suitable original context and root for every composed edit, GAS-partner transport, terminal/native adequacy, finite uniform reading-list realization, and the frozen compiler theorem remain unproved. The ordinary-partner orbit observation/event results are conditional on exactly the audited premise; they are not yet a native simulation.
+
+## C3.6.6 consumer ledger (source audit, not proof)
+
+The proposed boundary above is now checked as `dft_original_recursive_orbit_ready`, and `dft_original_fixed_orbit_ready` is its checked wrapper (`dftRecursiveOrbitReadinessScript.sml:7-55`). The following ledger concerns **using** that wrapper, not changing it.
+
+| Wrapper premise | Source or remaining obligation |
+| --- | --- |
+| `dft_original_context Corig C` | Required chain invariant. Definition is ScheduleRuntime:20-24; it records original SSA/wf/pseudo-prefix and block correspondence, NOT current SSA. Initial reflexivity still needs original block schedule initialization; the frozen LIST_REL premises alone are not this theorem. |
+| `dft_original_label_ready C L c` | Checked label_root (OriginalRuntime:347-354), followed by label_iter (364-369) for cuts of the same context. Changing context requires a new paired root/phase construction; iteration in C does not initialize an edited orbit. |
+| decomposition `q = pre ++ [x;call] ++ post` at instruction-list level | Supplied by an adjacent `inv_edit` witness (ScheduleEdits:6-10,36-44). Identifying its q with the concrete context block remains chain bookkeeping. |
+| `~dft_must_order x call` | inv_edit_provenance requires ALL_DISTINCT destination and original-to-destination order preservation. It does not follow from mere PERM. |
+| call INVOKE; partner neither pseudo, terminator, INVOKE, ALLOCA nor GAS | Ordinary/INVOKE edit-class classification obligation. This wrapper intentionally does not cover GAS partners or swaps with no INVOKE. Opcode exclusions must be derived from schedule facts/shape or sent to their own edit-class transport theorem. |
+| expanded label-bound predicate | Exactly ctx_labels_bound_def (RunRel:83-90); original task supplies it in C. Transport to intermediate contexts is unproved, but instruction-membership preservation suffices. |
+| `dft_fixed_phase ... c d` | Paired initialization/transport obligation. Neither original_label_root nor the static schedule certificates construct d. This remains separate from static readiness. |
+| original context for edited C | Checked original_context_edit (ScheduleRuntime:316-328), provided its universal original-edge premise is established. Corig may then also serve as Dorig; unrelated original contexts are unnecessary. |
+
+### Exact candidate interfaces for subsequent authorization (ALL UNPROVED HERE)
+
+These candidates state missing boundaries, not extra assumptions on the frozen theorem.
+
+1. Static membership and labels. The decomposition premise is essential: edit_block overwrites every block structurally equal to q, rather than swapping an arbitrary list in place.
+
+```sml
+Theorem dft_gas_edit_fn_insts_mem:
+  q.bb_instructions = pre ++ [x;y] ++ post ==>
+  (MEM i (fn_insts (dft_gas_edit_fn q pre x y post fn)) <=>
+   MEM i (fn_insts fn))
+
+Theorem dft_gas_edit_ctx_labels_bound:
+  q.bb_instructions = pre ++ [x;y] ++ post /\ ctx_labels_bound C L ==>
+  ctx_labels_bound (dft_gas_edit_ctx q pre x y post C) L
+```
+
+Definitions are OccurrenceGasEdit:6-19: block conditional, MAP over blocks, MAP over functions. Prove the membership boundary by block cases and fn_insts membership; then unfold ctx_labels_bound once and pull back function membership through MAP. No opcode or SSA assumptions are needed for this static fact.
+
+2. Entry root, independent of native adequacy.
+
+```sml
+Theorem dft_original_label_entry_root:
+  dft_original_function f fn /\ MEM fn C.ctx_functions /\
+  fn_entry_label fn = SOME s.vs_current_bb /\ s.vs_labels = L ==>
+  dft_original_label_ready C L
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))
+```
+
+Source justification: fn_reachable_def (venomWf:543-546) is an existential entry plus RTC. original_function_entry transports the entry label to f; RTC reflexivity supplies entry reachability. original_root_dom (OriginalCutLifecycle:55-61) supplies strict_dom_vars_defined for **any** s at the entry, with no requirement on initial variables. Then apply original_label_root. Thus there is no missing semantic assumption for this candidate.
+
+For actual run_context initialization, the required s is the input state with vs_prev_bb := NONE, vs_current_bb := lbl, vs_inst_idx := 0. run_context/run_function (ExecSemantics:1884-1907) perform exactly these resets and preserve labels. This observation is NOT an erasure/adequacy theorem. NONE entry/function/block cases return errors and need separate native terminal handling; they cannot be treated as initialized DftEnter roots.
+
+3. Local original-context preservation, stated with a specific original list and a **universal** provenance obligation because the context edit acts on all structurally equal blocks:
+
+```sml
+Theorem dft_original_context_inv_edit:
+  dft_original_context Corig C /\
+  q.bb_instructions = pre ++ [x;y] ++ post /\
+  inv_edit orig dest q.bb_instructions (pre ++ [y;x] ++ post) /\
+  ALL_DISTINCT dest /\ schedule_edges orig dft_must_order dest /\
+  ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+  ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
+  (!f b. MEM f Corig.ctx_functions /\ MEM b f.fn_blocks /\
+    dft_original_block f b q ==>
+    b.bb_instructions = orig /\
+    schedule_edges orig dft_must_order q.bb_instructions) ==>
+  dft_original_context Corig (dft_gas_edit_ctx q pre x y post C)
+```
+
+inv_edit_schedule_edges (ScheduleEdits:161-169) and original_context_edit prove the intended route. This candidate is deliberately conditional: the universal original-list equality is NOT supplied by the frozen contract and must not be smuggled into it. A chain construction must either establish it for each affected original block (including duplicates across functions), establish the needed edges separately for every such block, or use a more localized edit representation in a separately authorized design. The existing context edit has no function/label selector.
+
+### Chain construction audit
+
+`inv_edit_factor` (ScheduleEdits:136-141) gives an RTC for distinct original lists and PERM destinations. `inv_edit_rtc_schedule_edges` (172-184) preserves original-edge order at all its prefixes; `inv_edit_rtc_perm` and `inv_edit_rtc_distinct` preserve membership/distinctness. These are list-level interfaces, not a context-level edit enumeration. A DFT consumer must connect the exact original/final lists (including fixed pseudos and terminator), prove their distinctness and final schedule_edges, classify every crossing, and lift each edit to the intended context. Equality-based replacement of repeated structurally equal blocks is the concrete outstanding bookkeeping issue; do not infer it from a single selected block's edge certificate.
+
+No additional hypothesis on the frozen task is justified by this audit. What remains is deriving the above static/root certificates from the existing function relations and shape, constructing related occurrence roots, handling other edit classes, then native adequacy and finite uniform realization. In particular, the entry-root candidate would discharge readiness initialization only, not `dft_fixed_phase`, result compatibility, or all-fuel simulation.
