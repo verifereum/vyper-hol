@@ -579,7 +579,8 @@ Resume evaluate_read_only[intcall_after_lock]:
   impl_tac
   >- (conj_tac >- (
         qpat_x_assum `push_function _ _ cx _ = _` mp_tac >>
-        simp[push_function_def, return_def] >> strip_tac >> gvs[] >>
+        simp[push_function_def, return_def] >> strip_tac >>
+        qpat_x_assum `cx with stk updated_by _ = _` (fn th => REWRITE_TAC [GSYM th]) >>
         qpat_x_assum `read_only_context mods cx` mp_tac >> simp[read_only_context_def]) >>
       simp[]) >>
   strip_tac >> ntac 3 (qpat_x_assum `!s. _` kall_tac) >>

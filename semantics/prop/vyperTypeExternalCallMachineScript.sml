@@ -74,7 +74,7 @@ Proof
   `body_st.scopes = [scope] /\ body_st.immutables = am.immutables /\
    state_well_typed body_st` by
     (irule call_lock_send_prefix_body_state_ready_c53 >> simp[] >>
-     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> simp[bind_def, ignore_bind_def]) >>
+     qexistsl [`cx`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >> gvs[bind_def, ignore_bind_def]) >>
   `lock_st.accounts =
      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>).accounts` by
     metis_tac[call_lock_action_preserves_accounts_c53] >>
@@ -255,7 +255,7 @@ Proof
   `scope_well_typed scope` by
     metis_tac[bind_arguments_scope_well_typed_from_success] >>
   qpat_x_assum `do _; _; _ od _ = _` mp_tac >>
-  simp[bind_def, ignore_bind_def] >>
+  simp[bind_def, ignore_bind_def] >> PURE_REWRITE_TAC [GSYM ignore_bind_def] >>
   Cases_on `(if nr then
                case cx.nonreentrant_slot of
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))

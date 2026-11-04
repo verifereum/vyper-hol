@@ -480,9 +480,10 @@ Proof
          case (initial_evaluation_context sources layouts tx NONE).nonreentrant_slot of
            NONE => raise (Error (TypeError "nonreentrant slot missing"))
          | SOME slot => do
-             acquire_nonreentrant_lock (initial_evaluation_context sources layouts tx NONE).txn.target slot
+             acquire_nonreentrant_lock tx.target slot
              ((mut = View \/ mut = Pure) \/ (initial_evaluation_context sources layouts tx NONE).txn.is_static);
-             if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context sources layouts tx NONE)
+             if (mut = View \/ mut = Pure) then return ()
+             else check_not_static (initial_evaluation_context sources layouts tx NONE with in_deploy := T)
              od
        else return ()) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>) = (INL (),lock_st) /\
       send_call_value mut
@@ -493,11 +494,12 @@ Proof
         body body_st = (res,st_body)` by
     (irule constructor_call_prefix_body_result_cases >>
      conj_tac
-     >- (rpt strip_tac >> irule call_lock_action_no_control_c53 >>
-         qexistsl
-           [`initial_evaluation_context sources layouts tx NONE`,
-            `mut = View \/ mut = Pure`,`nr`,
-           `initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>`,`st'`] >> first_assum ACCEPT_TAC) >>
+     >- (rpt strip_tac >>
+         Cases_on `nr` >> gvs[return_def, raise_def, no_control_exc_def] >>
+         Cases_on `(initial_evaluation_context sources layouts tx NONE).nonreentrant_slot` >>
+         gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), raise_def,
+             return_def, no_control_exc_def] >>
+         drule acquire_nonreentrant_lock_no_control >> simp[no_control_exc_def]) >>
      metis_tac[]) >>
   irule checked_constructor_prefix_run_preserves_machine_well_typed >>
   qexistsl [`am`,`args`,`body`,`body_st`,`st_body`,
