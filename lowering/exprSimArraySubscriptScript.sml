@@ -3536,3 +3536,151 @@ Proof
   simp[sub_layout_def, valueEncodingTheory.type_memory_size_def,
        valueEncodingTheory.val_in_memory_def]
 QED
+
+(* An empty fragment can be observed without changing the function indexing
+   the simulation relation. The observer immediately returns its whole state. *)
+Theorem frag_exec_empty_post:
+  frag_exec ctx sc sc (\s. s = s0 /\ P s) Q (\r. F) /\
+  fn_has_code sc sc fn /\ P s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sc.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  Q s0
+Proof
+  rpt strip_tac >>
+  `fn_has_code sc sc (fragment_return_observer fn sc)` by
+    (irule fragment_return_observer_has_code >>
+     simp[emitted_blocks_def]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspec_then `fragment_return_observer fn sc` mp_tac) >>
+  simp[] >> strip_tac >>
+  imp_res_tac fragment_return_observer_at_end >>
+  qpat_x_assum `!fuel. _` (qspec_then `0` mp_tac) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `run_from _ _ _ s0 = _` mp_tac >>
+  simp[run_from_def, fragment_return_observer_def, lookup_block_def,
+       listTheory.FIND_thm, Once exec_block_def, get_instruction_def,
+       listTheory.EL_APPEND_EQN, step_inst_non_invoke, mk_inst_def,
+       Once step_inst_base_def, eval_operands_def, eval_operand_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem expr_vv_case_empty_code_necessary:
+  expr_vv_case F ctx func cenv cx e /\
+  expr_body_pre cenv cx env e es /\
+  compile_expr cenv ty e sc =
+    (LocatedValue (expr_type e) (mk_ptr (Lit w) LocCode), sc) /\
+  eval_expr cx e es = (INL tv,es) /\
+  expr_vv_res_ok (INL tv) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sc.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  immutable_holds cenv cx (expr_type e) tv w es
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `expr_vv_case _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_case_def] >>
+  disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >>
+  simp[expr_vv_sim_def] >>
+  disch_then drule_all >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  simp[] >> strip_tac >>
+  `expr_exit (INL tv) = (\r. F)` by simp[FUN_EQ_THM] >>
+  gvs[] >> drule_all frag_exec_empty_post >>
+  simp[vv_post_def, vv_holds_def, eval_operand_def, contextTheory.mk_ptr_def]
+QED
+
+Theorem expr_vv_case_global_code_necessary:
+  expr_vv_case F ctx func cenv cx (TopLevelName ann (md,name)) /\
+  expr_body_pre cenv cx env (TopLevelName ann (md,name)) es /\
+  FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc off) /\
+  eval_expr cx (TopLevelName ann (md,name)) es =
+    (INL (PlaceR (ImmutablePlace md name [])),es) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sc.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  immutable_holds cenv cx ann (PlaceR (ImmutablePlace md name [])) (n2w off) es
+Proof
+  rpt strip_tac >>
+  irule (expr_vv_case_empty_code_necessary |>
+    Q.INST [`e` |-> `TopLevelName ann (md,name)`] |>
+    SRULE [vyperASTTheory.expr_type_def]) >>
+  simp[expr_vv_res_ok_def] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexistsl [`ctx`, `env`, `func`, `md`, `name`, `NoneT`] >>
+  simp[Once exprLoweringTheory.compile_expr_def, vyperASTTheory.expr_type_def,
+       contextTheory.mk_ptr_def, expr_vv_res_ok_def]
+QED
+
+(* Nonempty uint256 singleton layouts distinguish unequal encoded words. *)
+Theorem sub_layout_singleton_uint256_separation:
+  val_to_w256 (IntV x) <> val_to_w256 (IntV y) ==>
+  ~sub_layout (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+       (ArrayV (SArrayV [(0,IntV y)])) k
+       (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+       (ArrayV (SArrayV [(0,IntV x)]))
+Proof
+  rpt strip_tac >>
+  gvs[sub_layout_def, valueEncodingTheory.type_memory_size_def] >>
+  `k = 0` by decide_tac >> gvs[] >>
+  qpat_x_assum `!b mem. _` (qspecl_then
+    [`0`, `(mstore 0 (val_to_w256 (IntV y)) ARB).vs_memory`] mp_tac) >>
+  simp[valueEncodingPropsTheory.val_in_memory_sarray,
+       valueEncodingTheory.val_in_memory_def,
+       valueEncodingPropsTheory.mstore_mem_word_at_same,
+       alistTheory.ALOOKUP_def]
+QED
+
+Theorem immutable_holds_singleton_uint256_separation:
+  val_to_w256 (IntV x) <> val_to_w256 (IntV y) /\
+  (!nm off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) ==>
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
+      nm = SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+                 ArrayV (SArrayV [(0,IntV y)]))) /\
+  read_result cx tv es = (INL (ArrayV (SArrayV [(0,IntV x)])),es) ==>
+  ~immutable_holds cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 1)) tv w es
+Proof
+  rpt strip_tac >>
+  gvs[immutable_holds_def, vyperValueTheory.evaluate_type_def] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule_all sub_layout_singleton_uint256_separation >>
+  disch_then (qspec_then `k` mp_tac) >> simp[]
+QED
+
+(* Conditional full-contract separation. Applicability of the source/target
+   fixture is explicit: no satisfiability of expr_body_pre or stmt_state_rel
+   is asserted here. In particular this is not a counterexample to the task. *)
+Theorem expr_vv_case_global_singleton_uint256_separation:
+  md <> cenv.ce_module /\
+  expr_body_pre cenv cx env
+    (TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 1)) (md,name)) es /\
+  FLOOKUP cenv.ce_module_vars (md,name) = SOME (ImmutableLoc 0) /\
+  eval_expr cx (TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 1)) (md,name)) es =
+    (INL (PlaceR (ImmutablePlace md name [])),es) /\
+  read_result cx (PlaceR (ImmutablePlace md name [])) es =
+    (INL (ArrayV (SArrayV [(0,IntV x)])),es) /\
+  val_to_w256 (IntV x) <> val_to_w256 (IntV y) /\
+  (!nm off.
+    FLOOKUP cenv.ce_module_vars (cenv.ce_module,nm) = SOME (ImmutableLoc off) ==>
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+               NONE => FEMPTY | SOME imms => get_source_immutables cenv.ce_module imms)
+      nm = SOME (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+                 ArrayV (SArrayV [(0,IntV y)]))) /\
+  fn_has_code sc sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sc /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sc.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  ~expr_vv_case F ctx func cenv cx
+    (TopLevelName (ArrayT (BaseT (UintT 256)) (Fixed 1)) (md,name))
+Proof
+  rpt strip_tac >>
+  drule_all expr_vv_case_global_code_necessary >> strip_tac >>
+  drule_all immutable_holds_singleton_uint256_separation >> simp[] >>
+  qexists `0w` >> simp[]
+QED
