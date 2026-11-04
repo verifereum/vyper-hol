@@ -604,6 +604,8 @@ Definition o1_inv_def:
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
     else if k = 5 \/ k = 6 then o1_ssa_inv
+    else if k = 8 then
+      (\C vs. o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions)
     else o1_lowered_inv
 End
 
