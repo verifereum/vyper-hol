@@ -5681,6 +5681,81 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
+Theorem aug_place_dead_tuple_selected:
+  !tvs i tv st bs j b.
+    oEL i tvs = SOME tv /\
+    bs + tuple_prefix_slot_size i tvs <= j /\
+    j < bs + tuple_prefix_slot_size i tvs + type_slot_size tv /\
+    dead_bytes_list st bs tvs j b ==>
+    dead_bytes st (bs + tuple_prefix_slot_size i tvs) tv j b
+Proof
+  Induct_on `tvs` >- simp[listTheory.oEL_def] >>
+  rpt gen_tac >> Cases_on `i` >>
+  simp[listTheory.oEL_def, tuple_prefix_slot_size_def] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac
+  >- (drule (cj 2 accountsRelPropsTheory.dead_bytes_range) >> simp[])
+  >- (drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> simp[]) >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`st`, `bs + type_slot_size h`, `j`, `b`] mp_tac) >>
+  simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> asm_rewrite_tac []
+QED
+
+Theorem aug_place_storage_read_live_tuple:
+  storage_read_live cx tr st w (TupleTV tvs) /\ oEL i tvs = SOME tv ==>
+  storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size i tvs)) tv
+Proof
+  strip_tac >>
+  drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >> strip_tac >>
+  Cases_on `type_slot_size tv = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w (tuple_prefix_slot_size i tvs)` mp_tac wordsTheory.w2n_lt >>
+      decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
+   w2n w + tuple_prefix_slot_size i tvs` by
+    (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
+  simp[] >> strip_tac >>
+  `dead_bytes_list st (w2n w) tvs j b` by
+    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+     simp[Once dead_bytes_def]) >>
+  irule aug_place_dead_tuple_selected >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem aug_place_storage_extend_live_all:
+  storage_read_live cx tr (get_storage cx st tr) slot tv /\
+  extend_storage_place cx tr slot tv sb st = (INL p,st') ==>
+  ?child leaf. p = StoragePlace tr child leaf /\
+    storage_read_live cx tr (get_storage cx st' tr) child leaf
+Proof
+  strip_tac >>
+  drule vyperStoragePlaceProvenanceTheory.extend_storage_place_subregion >>
+  strip_tac >> gvs[] >>
+  Cases_on `sb` >> Cases_on `tv` >>
+  gvs[extend_storage_place_def, raise_def] >>
+  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
+       gvs[extend_storage_place_def, raise_def])
+  >~ [`TupleTV tvs`]
+  >- (gvs[extend_storage_place_def, bind_def, ignore_bind_def,
+          check_def, assert_def, lift_option_type_def, return_def,
+          vyperMiscTheory.option_CASE_rator, raise_def, AllCaseEqs(),
+          Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+      gvs[Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+      irule aug_place_storage_read_live_tuple >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  irule aug_place_storage_extend_live >>
+  goal_assum (drule_at Any) >> simp[]
+  >- (qexists_tac `ValueSubscript (IntV i)` >>
+      asm_rewrite_tac [extend_storage_place_def]) >>
+  qexists_tac `AttrSubscript s` >> asm_rewrite_tac [extend_storage_place_def]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
