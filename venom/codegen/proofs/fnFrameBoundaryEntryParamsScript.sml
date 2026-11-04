@@ -591,3 +591,81 @@ Proof
   simp[step_inst_base_def, mk_inst_def, w2n_n2w, EL_GENLIST,
        param_index_wrap_discriminator]
 QED
+
+Theorem entry_ret_family_small_plan_ops:
+  FST (prepare_params_plan (liveness_analyze (entry_ret_family 1))
+    (entry_ret_family 1) (init_cleanup_plan_state NONE [] 0 0)) = []
+Proof
+  EVAL_TAC
+QED
+
+Theorem entry_ret_family_small_plan_stack:
+  (SND (prepare_params_plan (liveness_analyze (entry_ret_family 1))
+    (entry_ret_family 1) (init_cleanup_plan_state NONE [] 0 0))).ps_stack =
+    [Var ""; Var "retpc"]
+Proof
+  EVAL_TAC
+QED
+
+(* RET exposes the whole final source state as well as its return values.
+   Thus an equal successful RET result cannot hide different variable maps. *)
+Theorem entry_ret_probe_result_state:
+  step_inst_base (mk_inst id RET ops []) s = IntRet vals t ==> t = s
+Proof
+  simp[step_inst_base_def, mk_inst_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Exact-premise audit ledger (C1.2.3.7).
+
+   Checked: entry_ret_family_wrapped_contracts supplies the three source
+   contracts at n = SUC(dimword(:256)); get_params and has_retpc are exact
+   for arbitrary n.  The small_plan_* EVAL facts check that all-live RET
+   inputs produce no prefix code at n=1.  They do NOT prove that formula
+   for arbitrary n.
+
+   Missing planner interface: prove every ordinary name and "retpc" is in
+   live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n+1).
+   Then prepare_params_plan_def 530-557, parameter_stack_fold and
+   popmany_plan_def's empty clause should give param_ops=[] and ps1 equal
+   to ps0 with its stack extended by the parameter outputs.  The first
+   non-param is RET, so optimistic_swap_plan_def 108-123 takes its initial
+   next_is_terminator branch.  This arbitrary-n formula is UNPROVED.
+
+   Conditional on that formula: init_cleanup_plan_state leaves the spill
+   allocator and spilled map unchanged.  At spill_base=0 one may choose a
+   context region with base=end=0 and matching function name; the frozen
+   statement does not require a valid/well-formed context plan.  SOSpill
+   bounds are then vacuous.  These choices still need explicit checked
+   context_memory_rel/shared_state_rel instances, not just totality.
+
+   Entry relation: frameRelScript 107-118 constrains the source parameter
+   length to n and assembly stack to ra::REVERSE params++rest.  It imposes
+   no stack-height cap.  For param_ops=[] choose prog=[AsmLabel "entry"]
+   and pc=0; lo/o2pc are definitionally the required maps and asm_block_at
+   holds.  Existing blockSimHelpers$asm_step_label (163-168) handles the
+   single label, without inspecting stack length.  asmSemScript 927-966
+   and its asm_push_val/dup/swap rules do not impose a 1024 cap; these are
+   assembly semantics, not EVM resource semantics.  No forced assembly
+   failure has been identified for this no-op prefix.
+
+   Existential state: fn_frame_inv only fixes selected shared state and
+   frame-view values; by itself it does not identify vs_p with the canonical
+   prefix state.  However RET returns IntRet values s with its WHOLE input
+   state unchanged (checked entry_ret_probe_result_state).  exec_block's
+   RET branch at venomExecSemanticsScript 1691-1704 returns that state;
+   block fuel is not decremented for PARAM/RET.  A successful source-prefix
+   run followed by RET thus exposes its final vars and instruction index.
+   At the required final index, equal exec_block results should force
+   vs_p equal to that final source state.  The arbitrary-n execution and
+   this inversion are UNPROVED; they must include successful eval_operands
+   (no undefined values), not assume that an Error result is informative.
+
+   Minimal remaining path: symbolic all-live/planner equation; successful
+   source PARAM-prefix+RET result (with wrapped source lookups); RET-result
+   inversion at the required index; plan_stack_rel discrepancy at the Dth
+   ordinary output.  frame_view_vars_lookup and the checked opaque-variable
+   classification leave this ordinary output unchanged.  Finally construct
+   every other frozen premise and rule out every assembly step-count with
+   the required PC.  No theorem-level counterexample is asserted here.
+*)
