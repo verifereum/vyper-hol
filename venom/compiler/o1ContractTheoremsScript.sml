@@ -29,7 +29,7 @@ Ancestors
 Theorem o1_contract_simplify_cfg_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
   (!view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-            o1_src_inv o1_src_inv)
+            (o1_src_inv D) (o1_src_inv D))
 Proof
   cheat
 QED
