@@ -1,139 +1,255 @@
 Theory makeSsaCurrentDemand
 Ancestors
-  makeSsaCurrentDefs venomWf livenessLocalProofs livenessTransferProofs
-  livenessDefs cfgDefs venomInst list alist
+  makeSsaCurrentDemandBoundary makeSsaCurrentAnalysis venomWf cfgDefs livenessDefs
+  livenessBlockProofs
+Libs
+  listTheory arithmeticTheory venomInstTheory
 
-Definition current_phi_operand_def:
-  current_phi_operand fn v <=>
-    ?bb inst pred. MEM bb fn.fn_blocks /\
-      MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
-      MEM (pred,v) (phi_pairs inst.inst_operands)
+(* Real demands end at ordinary reads or the operand selected on an edge.
+   PHI reads at raw local slots are deliberately kept out of this relation. *)
+Inductive current_demand:
+[ordinary:]
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode <> PHI /\
+  MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+  current_demand fn v l i
+[edge:]
+  lookup_block l fn.fn_blocks = SOME bb /\
+  MEM succ (bb_succs bb) /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM phi (collect_phis sb.bb_instructions) /\
+  MEM (l,v) (phi_pairs phi.inst_operands) ==>
+  current_demand fn v l (LENGTH bb.bb_instructions)
+[skip:]
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  ~MEM v (inst_defs (EL i bb.bb_instructions)) /\
+  current_demand fn v l (SUC i) ==>
+  current_demand fn v l i
+[cross:]
+  lookup_block l fn.fn_blocks = SOME bb /\
+  MEM succ (bb_succs bb) /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  current_demand fn v succ 0 ==>
+  current_demand fn v l (LENGTH bb.bb_instructions)
 End
 
-Definition current_phi_cut_def:
-  current_phi_cut bb = LENGTH (collect_phis bb.bb_instructions)
+Definition current_pending_def:
+  current_pending fn v l i <=>
+  ?bb k. lookup_block l fn.fn_blocks = SOME bb /\
+    i <= k /\ k < LENGTH bb.bb_instructions /\
+    (EL k bb.bb_instructions).inst_opcode = PHI /\
+    MEM v (inst_uses (EL k bb.bb_instructions)) /\
+    !j. i <= j /\ j < k ==> ~MEM v (inst_defs (EL j bb.bb_instructions))
 End
 
-Theorem current_phi_operand_single_def:
-  fn_phi_operands_single_def fn /\ current_phi_operand fn v ==>
-  LENGTH (FILTER (\i. MEM v i.inst_outputs) (fn_insts fn)) <= 1
+Definition current_demand_state_def:
+  current_demand_state fn st <=>
+  !l bb i v. lookup_block l fn.fn_blocks = SOME bb /\
+    i <= LENGTH bb.bb_instructions /\ MEM v (df_at [] st l i) ==>
+    current_demand fn v l i \/ current_pending fn v l i
+End
+
+Theorem current_pending_no_phi_tail:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  (!k. i <= k /\ k < LENGTH bb.bb_instructions ==>
+       (EL k bb.bb_instructions).inst_opcode <> PHI) ==>
+  ~current_pending fn v l i
 Proof
-  simp[fn_phi_operands_single_def_def, current_phi_operand_def] >>
-  metis_tac[]
+  simp[current_pending_def] >> metis_tac[optionTheory.SOME_11]
 QED
 
-Theorem current_non_phi_operand:
-  ~current_phi_operand fn v /\ MEM bb fn.fn_blocks ==>
-  !inst. MEM inst (collect_phis bb.bb_instructions) ==>
-    ~MEM v (MAP SND (phi_pairs inst.inst_operands))
+Theorem current_pending_exit:
+  lookup_block l fn.fn_blocks = SOME bb ==>
+  ~current_pending fn v l (LENGTH bb.bb_instructions)
 Proof
-  simp[current_phi_operand_def, MEM_MAP] >> rpt strip_tac >>
-  drule collect_phis_mem >> strip_tac >>
-  PairCases_on `y` >> gvs[] >> metis_tac[]
+  strip_tac >> irule current_pending_no_phi_tail >> simp[]
 QED
 
-Theorem current_selected_live_in_false:
-  wf_function fn /\ MEM bb fn.fn_blocks ==>
-  ALOOKUP (select_current_live_in F (liveness_recompute fn) fn) bb.bb_label =
-    SOME (live_vars_at (liveness_recompute fn) bb.bb_label 0)
+Theorem current_demand_state_init:
+  current_demand_state fn (init_df_state [] labels)
 Proof
-  strip_tac >> simp[select_current_live_in_def] >>
-  `MEM bb.bb_label (fn_labels fn)` by (simp[fn_labels_def, MEM_MAP] >> metis_tac[]) >>
-  simp[ALOOKUP_current_query_map, liveness_recompute_boundary_entry]
+  simp[current_demand_state_def, dfAnalyzeDefsTheory.init_df_state_def,
+       dfAnalyzeDefsTheory.df_at_def]
 QED
 
-Theorem current_live_in_after_phis_lookup:
-  ALL_DISTINCT (MAP (\b. b.bb_label) bbs) /\ MEM bb bbs ==>
-  ALOOKUP (current_live_in_after_phis live bbs) bb.bb_label =
-    SOME (if bb.bb_instructions = [] then []
-          else live_vars_at live bb.bb_label (current_phi_cut bb))
+Theorem current_pending_step:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  ~MEM v (inst_defs (EL i bb.bb_instructions)) /\
+  current_pending fn v l (SUC i) ==>
+  current_pending fn v l i
 Proof
-  Induct_on `bbs` >> simp[current_live_in_after_phis_def] >>
-  rpt strip_tac >> gvs[]
-  >- (Cases_on `bb.bb_instructions` >>
-      simp[current_phi_cut_def, collect_phis_def] >>
-      Cases_on `h.inst_opcode = PHI` >> simp[collect_phis_def]) >>
-  `bb.bb_label <> h.bb_label` by
-    (gvs[MEM_MAP] >> metis_tac[]) >>
-  simp[]
+  simp[current_pending_def] >> rpt strip_tac >>
+  gvs[] >> qexists_tac `k` >> simp[] >> rpt strip_tac >>
+  Cases_on `j = i` >> gvs[] >> first_x_assum irule >> simp[]
 QED
 
-Theorem current_selected_live_in_true:
-  wf_function fn /\ MEM bb fn.fn_blocks ==>
-  ALOOKUP (select_current_live_in T (liveness_recompute fn) fn) bb.bb_label =
-    SOME (if bb.bb_instructions = [] then [] else
-      live_vars_at (liveness_recompute fn) bb.bb_label (current_phi_cut bb))
+Theorem current_demand_or_pending_step:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  ~MEM v (inst_defs (EL i bb.bb_instructions)) /\
+  (current_demand fn v l (SUC i) \/ current_pending fn v l (SUC i)) ==>
+  current_demand fn v l i \/ current_pending fn v l i
 Proof
-  strip_tac >> simp[select_current_live_in_def] >>
-  irule current_live_in_after_phis_lookup >> gvs[wf_function_def, fn_labels_def]
+  metis_tac[current_demand_rules, current_pending_step]
 QED
 
-Theorem current_demand_cross_block:
-  wf_function fn /\
-  MEM p (cfg_analyze fn).cfg_dfs_pre /\
-  MEM q (cfg_analyze fn).cfg_dfs_pre /\
-  MEM q (cfg_succs_of (cfg_analyze fn) p) /\
-  lookup_block p fn.fn_blocks = SOME pb /\
-  lookup_block q fn.fn_blocks = SOME qb /\
-  ~current_phi_operand fn v /\
-  MEM v (live_vars_at (liveness_recompute fn) q 0) ==>
-  MEM v (live_vars_at (liveness_recompute fn) p (LENGTH pb.bb_instructions))
+Theorem current_demand_or_pending_use:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+  current_demand fn v l i \/ current_pending fn v l i
+Proof
+  strip_tac >> Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI`
+  >- (disj2_tac >> simp[current_pending_def] >> qexists_tac `i` >> simp[]) >>
+  disj1_tac >> metis_tac[current_demand_rules]
+QED
+
+Theorem current_demand_or_pending_transfer:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\
+  (!v. MEM v live ==> current_demand fn v l (SUC i) \/ current_pending fn v l (SUC i)) ==>
+  !v. MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions) live) ==>
+    current_demand fn v l i \/ current_pending fn v l i
+Proof
+  simp[liveness_transfer_def, livenessTransferProofsTheory.live_update_mem] >>
+  metis_tac[current_demand_or_pending_use, current_demand_or_pending_step]
+QED
+
+Theorem backward_position_invariant[local]:
+  !n P. P n /\ (!i. i < n /\ P (SUC i) ==> P i) ==>
+    !i. i <= n ==> P i
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  `P n` by (first_x_assum irule >> simp[]) >>
+  `!i. i <= n ==> P i` by
+    (qpat_x_assum `!P. P n /\ _ ==> _` (qspec_then `P` mp_tac) >>
+     impl_tac >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >> simp[]) >>
+  qpat_x_assum `!P. P n /\ _ ==> _` kall_tac >> rpt strip_tac >>
+  Cases_on `i = SUC n` >- metis_tac[] >>
+  qpat_x_assum `!i. i <= n ==> _` irule >> decide_tac
+QED
+
+Theorem current_demand_block_slots:
+  lookup_block l fn.fn_blocks = SOME bb /\
+  (!v. MEM v (liveness_out fn.fn_blocks cfg l st) ==>
+       current_demand fn v l (LENGTH bb.bb_instructions)) ==>
+  !i. i <= LENGTH bb.bb_instructions ==>
+    !v. MEM v (df_at [] (liveness_block fn.fn_blocks cfg l st) l i) ==>
+      current_demand fn v l i \/ current_pending fn v l i
+Proof
+  strip_tac >> ho_match_mp_tac backward_position_invariant >> conj_tac
+  >- (`bb.bb_instructions = liveness_instrs fn.fn_blocks l` by simp[liveness_instrs_def] >>
+      asm_rewrite_tac[liveness_block_exit] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `i < LENGTH (liveness_instrs fn.fn_blocks l)` by simp[liveness_instrs_def] >>
+  drule liveness_block_transfer >> simp[liveness_instrs_def] >>
+  disch_then (fn th => fs[th]) >>
+  irule current_demand_or_pending_transfer >>
+  qexistsl_tac [`bb`, `df_at [] (liveness_block fn.fn_blocks cfg l st) l (SUC i)`] >> simp[]
+QED
+
+Theorem current_wf_phi_operand_vars:
+  !ops. phi_well_formed ops ==>
+    operand_vars ops = MAP SND (phi_pairs ops)
+Proof
+  ho_match_mp_tac phi_pairs_ind >>
+  simp[phi_well_formed_def, phi_pairs_def, operand_vars_def, operand_var_def]
+QED
+
+Theorem current_phi_in_prefix:
+  !insts k. k < LENGTH insts /\
+    (!i j. i < j /\ j < LENGTH insts /\ (EL j insts).inst_opcode = PHI ==>
+       (EL i insts).inst_opcode = PHI) /\
+    (EL k insts).inst_opcode = PHI ==>
+    MEM (EL k insts) (collect_phis insts)
+Proof
+  Induct >- simp[] >> gen_tac >> Cases
+  >- simp[collect_phis_def] >>
+  simp[collect_phis_def] >> rpt strip_tac >>
+  `h.inst_opcode = PHI` by
+    (first_x_assum (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  simp[] >> disj2_tac >> first_x_assum irule >> simp[] >>
+  rpt strip_tac >> first_x_assum (qspecl_then [`SUC i`, `SUC j`] mp_tac) >> simp[]
+QED
+
+Theorem current_pending_phi_operand:
+  wf_function fn /\ fn_inst_wf fn /\
+  lookup_block l fn.fn_blocks = SOME bb /\ current_pending fn v l i ==>
+  ?phi. MEM phi (collect_phis bb.bb_instructions) /\
+        MEM v (MAP SND (phi_pairs phi.inst_operands))
+Proof
+  simp[current_pending_def] >> rpt strip_tac >> gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `MEM (EL k bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    (irule current_phi_in_prefix >> gvs[bb_well_formed_def] >> metis_tac[]) >>
+  `inst_wf (EL k bb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, MEM_EL] >>
+  `phi_well_formed (EL k bb.bb_instructions).inst_operands` by
+    gvs[inst_wf_def] >>
+  qexists_tac `EL k bb.bb_instructions` >> simp[] >>
+  drule current_wf_phi_operand_vars >>
+  gvs[inst_uses_def] >> metis_tac[]
+QED
+
+Theorem current_demand_edge_transfer:
+  wf_function fn /\ fn_inst_wf fn /\ current_demand_state fn st /\
+  lookup_block l fn.fn_blocks = SOME bb /\ MEM succ (bb_succs bb) /\
+  lookup_block succ fn.fn_blocks = SOME sb /\
+  MEM v (liveness_edge_transfer fn.fn_blocks succ l (df_at [] st succ 0)) ==>
+  current_demand fn v l (LENGTH bb.bb_instructions)
+Proof
+  strip_tac >> drule_all current_liveness_edge_origin >> strip_tac
+  >- metis_tac[current_demand_rules] >>
+  `current_demand fn v succ 0 \/ current_pending fn v succ 0` by
+    (fs[current_demand_state_def] >> metis_tac[ZERO_LESS_EQ])
+  >- metis_tac[current_demand_rules] >>
+  drule_all current_pending_phi_operand >> metis_tac[]
+QED
+
+Theorem current_demand_cfg_successor:
+  wf_function fn /\ lookup_block l fn.fn_blocks = SOME bb /\
+  MEM succ (cfg_succs_of (cfg_analyze fn) l) ==>
+  MEM succ (bb_succs bb) /\ ?sb. lookup_block succ fn.fn_blocks = SOME sb
 Proof
   strip_tac >>
-  `MEM qb fn.fn_blocks` by metis_tac[lookup_block_mem] >>
-  `!inst. MEM inst (collect_phis qb.bb_instructions) ==>
-     ~MEM v (MAP SND (phi_pairs inst.inst_operands))` by
-    metis_tac[current_non_phi_operand] >>
-  drule liveness_recompute_cross_block >> simp[] >> metis_tac[]
+  `fn_cfg_edge fn l succ` by metis_tac[current_cfg_edge_succs] >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[wf_function_def, fn_labels_def] >>
+  `MEM succ (bb_succs bb)` by
+    (fs[fn_cfg_edge_def] >>
+     drule_all venomExecPropsTheory.MEM_lookup_block >> gvs[]) >>
+  simp[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `MEM succ (fn_labels fn)` by metis_tac[wf_function_def, fn_succs_closed_def] >>
+  gvs[fn_labels_def, MEM_MAP] >>
+  metis_tac[venomExecPropsTheory.MEM_lookup_block]
 QED
 
-Theorem current_demand_at_phi_cut:
-  wf_function fn /\
-  MEM bb.bb_label (cfg_analyze fn).cfg_dfs_pre /\
-  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
-  current_phi_cut bb <= j /\ j <= LENGTH bb.bb_instructions /\
-  MEM v (live_vars_at (liveness_recompute fn) bb.bb_label j) /\
-  (!k. current_phi_cut bb <= k /\ k < j ==>
-    ~MEM v (inst_defs (EL k bb.bb_instructions))) ==>
-  MEM v (live_vars_at (liveness_recompute fn) bb.bb_label (current_phi_cut bb))
+Theorem current_demand_out:
+  wf_function fn /\ fn_inst_wf fn /\ current_demand_state fn st /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  MEM v (liveness_out fn.fn_blocks (cfg_analyze fn) l st) ==>
+  current_demand fn v l (LENGTH bb.bb_instructions)
 Proof
-  strip_tac >> drule liveness_recompute_propagate_range >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem current_demand_path:
-  wf_function fn /\ path <> [] /\
-  EVERY (\l. MEM l (cfg_analyze fn).cfg_dfs_pre /\
-    ?bb. lookup_block l fn.fn_blocks = SOME bb) path /\
-  (!k. SUC k < LENGTH path ==>
-    MEM (EL (SUC k) path) (cfg_succs_of (cfg_analyze fn) (EL k path))) /\
-  (!k bb inst. SUC k < LENGTH path /\
-    lookup_block (EL k path) fn.fn_blocks = SOME bb /\
-    MEM inst bb.bb_instructions ==> ~MEM v (inst_defs inst)) /\
-  ~current_phi_operand fn v /\
-  MEM v (live_vars_at (liveness_recompute fn) (LAST path) 0) ==>
-  MEM v (live_vars_at (liveness_recompute fn) (HD path) 0)
-Proof
-  Induct_on `path` >- simp[] >>
-  qx_gen_tac `h` >> namedCases_on `path` ["", "q rest"] >- simp[] >>
-  simp[] >> strip_tac >>
-  `MEM v (live_vars_at (liveness_recompute fn) q 0)` by
-    (qpat_x_assum `_ ==> MEM _ _` mp_tac >>
-     (impl_tac >-
-       (simp[] >> conj_tac
-        >- (rpt strip_tac >> qpat_x_assum `!k. _ ==> MEM _ _`
-              (qspec_then `SUC k` mp_tac) >> simp[]) >>
-        rpt strip_tac >> qpat_x_assum `!k bb inst. _`
-          (qspec_then `SUC k` mp_tac) >> simp[] >> metis_tac[])) >>
-     simp[]) >>
-  `MEM q (cfg_succs_of (cfg_analyze fn) h)` by
-    (qpat_x_assum `!k. _ ==> MEM _ _` (qspec_then `0` mp_tac) >> simp[]) >>
-  `MEM v (live_vars_at (liveness_recompute fn) h (LENGTH bb.bb_instructions))` by
-    (irule current_demand_cross_block >> metis_tac[]) >>
-  drule liveness_recompute_propagate_range >> simp[] >>
-  disch_then irule >> simp[] >>
-  qexists_tac `LENGTH bb.bb_instructions` >> simp[] >>
+  simp[liveness_out_def, livenessTransferProofsTheory.mem_foldl_list_union, MEM_MAP] >>
   rpt strip_tac >>
-  qpat_x_assum `!k bb inst. _` (qspecl_then [`0`, `bb`, `EL k bb.bb_instructions`] mp_tac) >>
-  simp[EL_MEM]
+  drule_all current_demand_cfg_successor >> strip_tac >>
+  irule current_demand_edge_transfer >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem current_demand_state_block:
+  wf_function fn /\ fn_inst_wf fn /\ current_demand_state fn st ==>
+  current_demand_state fn (liveness_block fn.fn_blocks (cfg_analyze fn) h st)
+Proof
+  strip_tac >> simp[current_demand_state_def] >> rpt strip_tac >>
+  Cases_on `l = h`
+  >- (gvs[] >> irule current_demand_block_slots >>
+      goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[current_demand_out]) >>
+  fs[liveness_block_other_inst, current_demand_state_def] >> metis_tac[]
 QED
