@@ -3,7 +3,7 @@ Theory o1LowerDloadPhiEntry
 Ancestors
   o1LowerDloadPhi o1LowerDloadJointEntry o1LowerDloadJointRelation
   o1LowerDloadEnvironment ptrDiscipline contextCodegenRel
-  venomExecSemantics venomExecProofs venomInst o1PassContract list
+  venomExecSemantics venomExecProofs venomState venomInst o1PassContract list
 
 Theorem ld_env_enters_block:
   ir_supply_covers_fn u fn /\
@@ -46,4 +46,36 @@ Proof
   conj_tac
   >- gvs[entry_prov_def, entry_taint_vars_def, ld_env_agree_def, Abbr `r`] >>
   gvs[ld_joint_control_def, Abbr `r`] >> metis_tac[]
+QED
+
+Theorem ld_branch_noncontrol:
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst fuel C inst s = OK s' ==>
+  s' = s with <|vs_current_bb := s'.vs_current_bb;
+                vs_prev_bb := s'.vs_prev_bb; vs_inst_idx := s'.vs_inst_idx|>
+Proof
+  strip_tac >> gvs[] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+  simp[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_env_branch_transport:
+  ld_env_agree sites fn H tn s t /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst fuel C inst s = OK s' /\
+  step_inst fuel' C' inst t = OK t' ==>
+  ld_env_agree sites fn H tn s' t'
+Proof
+  strip_tac >>
+  `s'.vs_vars = s.vs_vars` by
+    (qpat_assum `step_inst fuel C inst s = OK s'`
+       (mp_then Any mp_tac ld_branch_noncontrol) >>
+     simp[] >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  `t'.vs_vars = t.vs_vars` by
+    (qpat_assum `step_inst fuel' C' inst t = OK t'`
+       (mp_then Any mp_tac ld_branch_noncontrol) >>
+     simp[] >> disch_then (fn th => once_rewrite_tac[th]) >> simp[]) >>
+  gvs[ld_env_agree_def]
 QED
