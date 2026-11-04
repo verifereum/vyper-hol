@@ -37,7 +37,8 @@ val _ = Parse.hide "body";
      revert_on_failure = F continue after failures.
    - Static calls: in oracle mode ExtCall with is_static has value NONE, so
      the request is static and adopt_call_outcome leaves the state alone;
-     raw_call always runs run_raw_call.  Without an oracle, a static call
+     a static raw_call takes its outcome the same way (only a delegate
+     raw_call, never static, runs run_raw_call).  Without an oracle, a static call
      runs verifereum's run_call in a static context:
      vfmStaticCallsTheory.run_static_preserves covers run (run_call is a
      restriction of run), and precompiles touch only the call context.

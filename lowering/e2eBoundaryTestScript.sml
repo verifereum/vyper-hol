@@ -124,8 +124,10 @@ QED
 
 Theorem outcome_guard_success_only:
   call_outcomes_ok tops am tx [] /\
-  call_outcomes_ok tops am tx [co with co_success := F] /\
+  (call_outcomes_ok tops am tx [co with co_success := F] <=>
+    LENGTH co.co_returnData < dimword(:256)) /\
   (call_outcomes_ok tops am tx [co with co_success := T] <=>
+    LENGTH co.co_returnData < dimword(:256) /\
     accounts_runtime_well_typed co.co_accounts /\
     contract_storage_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)

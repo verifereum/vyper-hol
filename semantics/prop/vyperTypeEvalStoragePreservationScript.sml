@@ -1605,33 +1605,45 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Pop]:
 QED
 
 
+Theorem run_raw_call_storage_frame[local]:
+  protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  run_raw_call cx flags callee calldata amount gas st.accounts st.tStorage =
+    SOME result /\
+  st'.accounts = FST (SND (SND result)) /\
+  st'.tStorage = FST (SND (SND (SND result))) ==>
+  contract_storage_well_formed cx st'
+Proof
+  PairCases_on `result` >> rpt strip_tac >> gvs[] >>
+  drule_all protected_storage_calls_preserve_run_raw_call >> strip_tac >>
+  irule contract_storage_well_formed_accounts_transient_frame >>
+  first_x_assum (irule_at Any) >> gvs[]
+QED
+
+(* oracle_storage_ok covers the outcome a call or staticcall takes from the
+   oracle, as for extcall (eval_ext_call_effects_storage_preserved). *)
 Theorem eval_raw_call_preserves_contract_storage:
   protected_storage_calls_preserve cx /\ contract_storage_well_formed cx st /\
+  oracle_storage_ok cx st /\
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  reverse (Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)`) >>
   simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, get_accounts_def, get_transient_storage_def]
-  >- (strip_tac >> gvs[]) >>
-  fs[] >>
-  (Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def]
-  >- (strip_tac >> gvs[]) >>
-  PairCases_on `x` >> simp[] >>
-  `contract_storage_well_formed cx (st with <|accounts := x2; tStorage := x3|>)` by
-    (drule_all protected_storage_calls_preserve_run_raw_call >> simp[]) >>
-  `contract_storage_well_formed cx
-     ((st with <|accounts := x2; tStorage := x3|>) with logs := st.logs ++ x4)` by
-    metis_tac[contract_storage_well_formed_logs] >>
-  Cases_on `x0` >> Cases_on `flags.rcf_revert_on_failure` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  strip_tac >> gvs[])
+       assert_def, lift_option_def, get_accounts_def,
+       get_transient_storage_def, update_accounts_def, update_transient_def,
+       append_logs_def, return_def, raise_def, COND_RATOR,
+       vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
+       vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def] >>~-
+  ([`run_raw_call _ _ _ _ _ _ _ _ = SOME _`],
+   irule run_raw_call_storage_frame >> simp[] >> metis_tac[]) >>~-
+  ([`adopt_call_outcome _ _ _ = (INR _,_)`],
+   imp_res_tac vyperCallOutcomeTheory.adopt_call_outcome_frame >> gvs[]) >>~-
+  ([`adopt_call_outcome _ _ _ = (INL (),_)`],
+   drule_all take_adopt_call_outcome_storage_suffix >> simp[]) >>
+  drule_all take_call_outcome_storage_suffix >> simp[]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallTarget]:
@@ -1667,6 +1679,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallTarget]:
       impl_tac >- simp[] >> strip_tac >> gvs[] >>
       Cases_on `raw_call_value flags.rcf_kws (DROP 2 vs)` >>
       simp[bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+      ORACLE_STORAGE_TAC >>
       drule_all eval_raw_call_preserves_contract_storage >> simp[]),
       rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
@@ -1698,6 +1711,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallCalldataTar
       impl_tac >- (Cases_on `es` >> gvs[]) >> strip_tac >>
       Cases_on `raw_call_value flags.rcf_kws (DROP 1 vs)` >>
       gvs[bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+      ORACLE_STORAGE_TAC >>
       drule_all eval_raw_call_preserves_contract_storage >> simp[]),
       rpt strip_tac >> gvs[]])) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
