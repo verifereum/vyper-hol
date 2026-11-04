@@ -370,3 +370,33 @@ Proof
   drule_all sw_rounds_edge >> strip_tac >>
   drule sw_rounds_stable >> strip_tac >> gvs[]
 QED
+
+(* A membership-fixed admissible scan is locally stationary at every writer. *)
+Theorem sw_fixed_writer_member:
+  sw_consistent ds /\ sw_admissible ds X /\
+  (!v. t IN sw_scan ds X v <=> t IN X v) /\ MEM d ds ==>
+  (t IN sw_rhs d X <=> t IN X (sw_out d))
+Proof
+  strip_tac >>
+  `sw_rhs d X SUBSET sw_scan ds X (sw_out d)` by
+    (irule sw_scan_covers_rhs >> simp[] >> qexists `ds` >> simp[EVERY_MEM]) >>
+  fs[sw_admissible_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem sw_fixed_stream_member:
+  !stream X.
+  sw_consistent ds /\ sw_admissible ds X /\
+  (!v. t IN sw_scan ds X v <=> t IN X v) /\
+  EVERY (\d. MEM d ds) stream ==>
+  !v. t IN sw_scan stream X v <=> t IN X v
+Proof
+  Induct >> simp[sw_scan_def] >> rpt strip_tac >>
+  `!v. t IN sw_update h X v <=> t IN X v` by
+    (gen_tac >> simp[sw_update_def] >>
+     metis_tac[sw_fixed_writer_member]) >>
+  `!v. t IN sw_scan stream (sw_update h X) v <=> t IN sw_scan stream X v` by
+    (irule sw_scan_member_cong >> simp[]) >>
+  `!v. t IN sw_scan stream X v <=> t IN X v` by
+    (first_x_assum irule >> simp[]) >>
+  metis_tac[]
+QED
