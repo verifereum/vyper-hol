@@ -211,3 +211,104 @@ QED
    opaque lower residuals, or persistent spills. Ancestor strategy review is
    required before promoting this experiment to a preservation invariant.
 *)
+
+(* Three-edge collision: the middle incoming class has TWO local outputs.
+   This is a local producer probe, not a ready-function counterexample. *)
+Definition temporal_collision_phis_def:
+  temporal_collision_phis =
+    [mk_inst 0 PHI [Label "entry";Var "a0";Label "left";Var "b0";Label "right";Var "c0"] ["x0"];
+     mk_inst 1 PHI [Label "entry";Var "a1";Label "left";Var "x2";Label "right";Var "x0"] ["x1"];
+     mk_inst 2 PHI [Label "entry";Var "a2";Label "left";Var "b2";Label "right";Var "c2"] ["x2"]]
+End
+
+Theorem temporal_collision_readiness:
+  phi_uses_disjoint temporal_collision_phis /\
+  ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) temporal_collision_phis)) /\
+  EVERY (\inst. inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+    EVERY (\v. ~MEM v ([]:string list)) (inst_uses inst)) temporal_collision_phis /\
+  EVERY (\edge. EVERY (\inst. MEM edge (MAP FST (phi_pairs inst.inst_operands)))
+    temporal_collision_phis) ["entry";"left";"right"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_collision_entry:
+  (temporal_entry "left" temporal_collision_phis []).ps_stack =
+    [Var "b2";Var "x2";Var "b0"] /\
+  (temporal_entry "right" temporal_collision_phis []).ps_stack =
+    [Var "c2";Var "x0";Var "c0"]
+Proof
+  EVAL_TAC
+QED
+
+Definition temporal_collision_state_def:
+  (temporal_collision_state edge 0 = temporal_entry edge temporal_collision_phis []) /\
+  (temporal_collision_state edge (SUC n) =
+    SND (generate_phi_plan (EL n temporal_collision_phis)
+      (temporal_live (DROP (SUC n) temporal_collision_phis) []) F
+      (temporal_collision_state edge n)))
+End
+
+Theorem temporal_collision_first_two_states:
+  temporal_collision_state "left" 1 =
+    (init_plan_state 0) with ps_stack := [Var "b2";Var "x2";Var "x0"] /\
+  temporal_collision_state "right" 1 =
+    (init_plan_state 0) with ps_stack := [Var "c2";Var "x0";Var "x0"] /\
+  temporal_collision_state "left" 2 =
+    (init_plan_state 0) with ps_stack := [Var "b2";Var "x2"] /\
+  temporal_collision_state "right" 2 =
+    (init_plan_state 0) with ps_stack := [Var "c2";Var "x0"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_collision_left_observations:
+  MAP (\(ops,obs,alloc). (ops,obs))
+    (temporal_trace temporal_collision_phis []
+      (temporal_entry "left" temporal_collision_phis [])) =
+    [([SOPoke 0 (Var "x0")], SOME 0,F,SOME 0);
+     ([SOPoke 0 (Var "x1"); SOPop 1], SOME 0,F,SOME 0);
+     ([SOPoke 1 (Var "x2"); SOPop 1], SOME 1,F,SOME 0)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_collision_right_observations:
+  MAP (\(ops,obs,alloc). (ops,obs))
+    (temporal_trace temporal_collision_phis []
+      (temporal_entry "right" temporal_collision_phis [])) =
+    [([SOPoke 0 (Var "x0")], SOME 0,F,SOME 0);
+     ([SOPoke 0 (Var "x1"); SOPop 1], SOME 0,F,SOME 0);
+     ([SOPoke 1 (Var "x2"); SOSwap 1; SOPop 1], SOME 1,F,SOME 1)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_collision_final_states:
+  temporal_collision_state "left" 3 =
+    (init_plan_state 0) with ps_stack := [Var "x2"] /\
+  temporal_collision_state "right" 3 =
+    (init_plan_state 0) with ps_stack := [Var "x0"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem temporal_collision_replay_fails:
+  temporal_trace temporal_collision_phis []
+    (temporal_entry "left" temporal_collision_phis []) <>
+  temporal_trace temporal_collision_phis []
+    (temporal_entry "right" temporal_collision_phis [])
+Proof
+  EVAL_TAC
+QED
+
+(* The predicted collision is checked.  All entry stacks above are generated
+   by temporal_live/input_vars_from, and all intermediate states are complete
+   generate_phi_plan results, not manually selected stacks.  PHI1 consumes
+   common x0 rather than its original class-1 cell.  The retained old x2 on
+   the left intercepts PHI2's pop at depth 0; on the right the newly written
+   x2 is popped at depth 1.  Disjoint classes, coverage, distinct outputs and
+   terminal absence therefore do NOT suffice for universal local replay.
+   This is not a frozen-theorem counterexample: no whole-function CFG, SSA,
+   analyzed liveness, planner success or lineage reachability is asserted.
+   Stop the local universal-producer argument for strategist review. *)
