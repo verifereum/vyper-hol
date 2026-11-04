@@ -223,3 +223,37 @@ Proof
   drule run_blocks_terminates_mono >>
   disch_then (qspec_then `MAX k (SUC n)` mp_tac) >> simp[]
 QED
+
+Theorem ld_frame_suffix_complete:
+  !C fn s0 i s. frame_reach C fn s0 i s ==>
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) ==>
+  !n ret t.
+  (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb s = IntRet ret t \/
+     ?u. exec_block n C bb s = OK u /\ ~u.vs_halted /\
+         run_blocks n C fn u = IntRet ret t)) ==>
+  ?m. run_blocks m C fn s0 = IntRet ret t
+Proof
+  ho_match_mp_tac frame_reach_strongind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> disch_tac >> rpt gen_tac >> disch_tac
+  >- metis_tac[ld_suffix_entry]
+  >- (drule frame_reach_active >> strip_tac >>
+      qpat_x_assum `?bb. _` mp_tac >> simp[] >> disch_tac >>
+      drule_all ld_suffix_next >> strip_tac >>
+      first_x_assum irule >> simp[] >> metis_tac[])
+  >> drule frame_reach_active >> strip_tac >>
+  drule_all ld_suffix_block >> strip_tac >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_frame_return_complete:
+  frame_reach C fn s0 i s /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  step_inst k C i s = IntRet ret t ==>
+  ?m. run_blocks m C fn s0 = IntRet ret t
+Proof
+  strip_tac >> drule frame_reach_active >> strip_tac >>
+  drule_all ld_suffix_return >> strip_tac >>
+  drule ld_frame_suffix_complete >> simp[] >>
+  disch_then irule >> metis_tac[]
+QED
