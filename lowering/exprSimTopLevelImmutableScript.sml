@@ -117,46 +117,21 @@ Theorem compile_toplevel_immutable_sim:
     expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
-  `env_consistent env cx es /\ state_well_typed es /\
-   well_typed_expr env (TopLevelName ann (src,id))` by
-    fs[expr_sim_pre_def, expr_sim_inv_def] >>
-  drule_all toplevel_find_NONE_bare_global >> strip_tac >>
-  `src = cenv.ce_module /\
-   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-         !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
-              off + type_memory_size tv < dimword (:256)` by
-    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
-  simp[get_immutables_def, get_address_immutables_def, lift_option_type_def,
-       bind_def, return_def, raise_def] >>
-  Cases_on `ALOOKUP es.immutables cx.txn.target` >>
-  simp[return_def, raise_def]
-  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
-  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
-  Cases_on `FLOOKUP (get_source_immutables cenv.ce_module imms) id` >>
-  simp[return_def, raise_def]
-  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
-  rename1 `FLOOKUP _ id = SOME tvv` >> PairCases_on `tvv` >>
-  strip_tac >> gvs[] >>
-  `evaluate_type (get_tenv cx) ann = SOME tvv0` by
-    (fs[env_consistent_def, env_immutables_consistent_def] >>
-     first_x_assum irule >> simp[] >> metis_tac[]) >>
-  `value_has_type tvv0 tvv1` by
-    (fs[state_well_typed_def, EVERY_MEM] >>
-     drule alistTheory.ALOOKUP_MEM >> strip_tac >> first_x_assum drule >>
-     simp[imms_well_typed_def] >>
-     qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
-     simp[get_source_immutables_def] >> CASE_TAC >> simp[] >>
-     metis_tac[]) >>
-  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-  simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
-  strip_tac >> gvs[] >>
-  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
-       contextTheory.mk_ptr_def, eval_operand_def,
-       vyperASTTheory.expr_type_def] >>
-  qexistsl [`id`, `off`, `tvv0`, `tvv1`, `0`] >>
-  simp[sub_layout_def, read_result_def, read_place_def, get_immutables_def,
-       get_address_immutables_def, lift_option_type_def, bind_def,
-       return_def, evaluate_subscripts_def, lift_sum_def]
+  drule_all toplevel_immutable_lookup >> strip_tac >>
+  drule compile_toplevel_immutable_ptr >>
+  disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL (PlaceR (ImmutablePlace cenv.ce_module id []))`, `es`, `OK s0`] >>
+  conj_tac >- (irule toplevel_immutable_marked_exec >> simp[] >> metis_tac[]) >>
+  disj1_tac >> simp[] >> irule toplevel_immutable_post >> simp[] >> metis_tac[]
 QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_toplevel_immutable_sim)
+  in
+    if null axioms andalso null (Thm.hyp compile_toplevel_immutable_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "TOPLEVEL_IMMUTABLE_AUDIT compile_toplevel_immutable_sim OK\n"
+    else raise Fail "compile_toplevel_immutable_sim: admitted proof dependency"
+  end;
