@@ -22,7 +22,7 @@
 Theory o1ContractTheorems
 Ancestors
   o1PassContract o1DretDesugarContract unitMemInv venomPassSchedule
-  venomCompilerTypes o1ContractSimplifyCfg
+  venomCompilerTypes o1ContractSimplifyCfg o1ContractSue
 
 (* ===== The pre-walk runs ===== *)
 
@@ -80,12 +80,8 @@ QED
 Theorem o1_contract_simplify_cfg =
   o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg
 
-Theorem o1_contract_sue:
-  o1_step_contract_at 6 rpolicy (CFP_Simple VP_SingleUseExpansion) /\
-  o1_run_contract rpolicy D 6
-Proof
-  cheat
-QED
+Theorem o1_contract_sue =
+  o1ContractSueTheory.o1_contract_sue
 
 (* DFT reorders GAS reads: forall-out exists-in over the oracle. *)
 Theorem o1_contract_dft:
