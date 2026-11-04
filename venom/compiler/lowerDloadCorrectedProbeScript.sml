@@ -628,3 +628,52 @@ Proof
     simp[Abbr `t`, Abbr `s`, corrected_call_changes_accounts] >>
   simp[Once step_taint_def, adopt_reset_def, Abbr `inst`, mk_inst_def]
 QED
+
+(* Constant dead masks for the corrected candidate: every byte of key 0. *)
+val _ = temp_overload_on ("corrected_D",
+  ``<|d_stor := (\a st. {(key,k) | key = (0w:bytes32) /\ k < 32});
+      d_trans := (\a st. {}); d_imm := (\im. {}); d_ret := (\ret. {})|>``);
+
+Theorem corrected_dead_wf:
+  dead_wf corrected_D
+Proof
+  simp[dead_wf_def]
+QED
+
+Theorem corrected_source_structure:
+  reserved_intervals_wf corrected_context.ctx_global_reserved /\
+  EVERY (\fn. fn.fn_eom = NONE) corrected_context.ctx_functions /\
+  ~ctx_has_dalloca corrected_context /\
+  fixed_region_reserved 0 corrected_context /\
+  fmp_free_ctx corrected_context
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- simp[fixed_region_reserved_def] >>
+  EVAL_TAC
+QED
+
+Theorem corrected_call_storage_contained:
+  corrected_ct5.t_stor SUBSET
+    corrected_D.d_stor corrected_c5.vs_call_ctx.cc_address
+      (corrected_c5.vs_accounts corrected_c5.vs_call_ctx.cc_address).storage
+Proof
+  simp[corrected_pre_call_storage_taint]
+QED
+
+Theorem corrected_call_access:
+  !lo G fn s. access_ok lo G fn corrected_call_inst s
+Proof
+  simp[access_ok_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, memory_range_of_operands_def,
+       mk_inst_def, eval_operand_def]
+QED
+
+Theorem corrected_call_taint_ok:
+  !fn tn s. taint_ok fn tn corrected_call_inst s
+Proof
+  simp[taint_ok_def, source_memory_read_ranges_def,
+       memory_range_of_operands_def, mk_inst_def, eval_operand_def,
+       op_taint_def] >> rpt gen_tac >> Cases_on `op` >> simp[]
+QED
