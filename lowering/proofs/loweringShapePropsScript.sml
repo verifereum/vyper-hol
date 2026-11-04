@@ -13607,3 +13607,17 @@ Proof
        simp[comp_return_labels, clamp_and_return_labels,
             emit_void_labels, emit_op_labels])
 QED
+
+Theorem compile_type_convert_labels:
+  !v conv s P. cs_extends s (SND (compile_type_convert v conv s)) /\
+    EVERY P (added_labels s (SND (compile_type_convert v conv s)))
+Proof
+  rpt gen_tac >> Cases_on `conv` >>
+  simp[compile_type_convert_def, LET_THM, comp_return_labels, emit_op_labels] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac,
+              irule uncurry_labels, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, compile_alloc_buffer_labels, load_bytestring_as_word_labels,
+            comp_return_labels, emit_void_labels, emit_op_labels])
+QED
