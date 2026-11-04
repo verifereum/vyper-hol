@@ -225,3 +225,56 @@ Theorem avail_get_expression_available:
             MEM src insts
 Proof ACCEPT_TAC availExprProofsTheory.avail_get_expression_available
 QED
+
+(* Source membership interfaces for historical provenance proofs. *)
+Theorem avail_add_source_member:
+  !ae e0 inst e i.
+    (?xs. FLOOKUP (avail_add ae e0 inst) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) \/ (e = e0 /\ i = inst)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_add_source_member
+QED
+
+Theorem avail_remove_effect_source_member:
+  !ae eff e i.
+    (?xs. FLOOKUP (avail_remove_effect ae eff) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) /\
+    DISJOINT (root_effects e) eff
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_remove_effect_source_member
+QED
+
+Theorem avail_meet_two_source_member:
+  !a b e i.
+    (?xs. FLOOKUP (avail_meet_two a b) e = SOME xs /\ MEM i xs) <=>
+    (?xs. FLOOKUP a e = SOME xs /\ MEM i xs) /\
+    (?xs. FLOOKUP b e = SOME xs /\ MEM i xs)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_meet_two_source_member
+QED
+
+Theorem avail_transfer_inst_source_member:
+  !d inst ae e i.
+    (?xs. FLOOKUP (avail_transfer_inst d inst ae) e = SOME xs /\ MEM i xs) <=>
+    if is_pseudo inst.inst_opcode \/ inst.inst_opcode = ASSIGN \/
+       is_terminator inst.inst_opcode then
+      (?xs. FLOOKUP ae e = SOME xs /\ MEM i xs)
+    else
+      ((?xs. FLOOKUP ae e = SOME xs /\ MEM i xs) /\
+       DISJOINT (root_effects e) (write_effects inst.inst_opcode)) \/
+      (LENGTH inst.inst_outputs <= 1 /\
+       ~is_nonidempotent inst.inst_opcode /\
+       ~has_conflicting_effects inst.inst_opcode /\
+       e = mk_expr d inst /\ i = inst)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_transfer_inst_source_member
+QED
+
+Theorem avail_transfer_inst_source_inversion:
+  !d inst ae e i xs.
+    FLOOKUP (avail_transfer_inst d inst ae) e = SOME xs /\ MEM i xs ==>
+    (?ys. FLOOKUP ae e = SOME ys /\ MEM i ys) \/
+    (i = inst /\ e = mk_expr d inst)
+Proof
+  ACCEPT_TAC availExprProofsTheory.avail_transfer_inst_source_inversion
+QED
