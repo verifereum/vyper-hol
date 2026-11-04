@@ -1304,8 +1304,336 @@ Proof
   asm_rewrite_tac[step_inst_base_def] >> simp[] >>
   qpat_x_assum `inst'.inst_operands = _` kall_tac >>
   rpt (qpat_x_assum `eval_operand _ st' = _` kall_tac) >>
+  BasicProvers.TOP_CASE_TAC >>
+  pure_asm_rewrite_tac[optionTheory.option_case_def, current_result_error_agree] >>
   rpt (BasicProvers.TOP_CASE_TAC >> pure_asm_rewrite_tac[optionTheory.option_case_def, current_result_error_agree]) >>
   FIRST [irule current_exec_ext_call_agree, irule current_exec_delegatecall_agree] >>
   metis_tac[]
 QED
 
+
+(* Select a single semantic boundary for the concrete opcode. *)
+val current_base_dispatch : tactic =
+  (fn g as (asms,_) =>
+    let
+      val eq = valOf (List.find (fn t => is_eq t andalso
+        is_const (rhs t) andalso type_of (rhs t) = ``:opcode``) asms)
+      val opc = fst (dest_const (rhs eq))
+      val pure2 = ["ADD","SUB","MUL","Div","Mod","SDIV","SMOD","Exp",
+                   "EQ","LT","GT","SLT","SGT","AND","OR","XOR",
+                   "SHL","SHR","SAR","SIGNEXTEND","BYTE","OFFSET"]
+      fun pure th = simp[step_inst_base_opcode_eqs] >> irule th >>
+        simp[] >> conj_tac >- gvs[inst_wf_def] >> qexists_tac `rs` >> simp[]
+      val no_outputs = `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+        gvs[current_outputs_compatible_def, current_before_outputs_def]
+      fun direct th = irule th >> simp[] >> rpt conj_tac >>
+        (fn g => (if is_exists (snd g) then
+           qexists_tac `rs` >> simp[] >> gvs[inst_wf_def]
+         else gvs[inst_wf_def, current_rename_operands_map]) g)
+      val tac =
+        if mem opc pure2 then pure current_exec_pure2_agree
+        else if mem opc ["ADDMOD","MULMOD"] then pure current_exec_pure3_agree
+        else if mem opc ["ISZERO","NOT"] then
+          simp[step_inst_base_opcode_eqs] >> irule current_exec_pure1_agree >>
+          simp[] >> qexists_tac `rs` >> simp[]
+        else if mem opc ["MLOAD","SLOAD","TLOAD","DLOAD","ILOAD","BLOCKHASH","BLOBHASH","BALANCE","CALLDATALOAD","EXTCODESIZE","EXTCODEHASH"] then
+          simp[step_inst_base_opcode_eqs] >> irule current_exec_read1_agree >>
+          simp[] >> conj_tac
+          >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+              simp[execution_frame_def, venom_state_component_equality,
+                   mload_def, sload_def, tload_def,
+                   contract_storage_def, contract_transient_def]) >>
+          conj_tac >- gvs[inst_wf_def] >> qexists_tac `rs` >> simp[]
+        else if mem opc ["ADDRESS","CALLER","CALLVALUE","GAS","ORIGIN","GASPRICE","CHAINID","COINBASE","TIMESTAMP","NUMBER","PREVRANDAO","GASLIMIT","BASEFEE","BLOBBASEFEE","SELFBALANCE","CALLDATASIZE","RETURNDATASIZE","MEMTOP","CODESIZE"] then
+          simp[step_inst_base_opcode_eqs] >> irule current_exec_read0_agree >>
+          simp[] >> conj_tac
+          >- (qpat_x_assum `execution_frame _ = _` mp_tac >>
+              simp[execution_frame_def, venom_state_component_equality]) >>
+          qexists_tac `rs` >> simp[]
+        else if mem opc ["MSTORE","MSTORE8","SSTORE","TSTORE"] then
+          no_outputs >> simp[step_inst_base_opcode_eqs] >>
+          irule current_exec_write2_agree >> simp[] >> conj_tac
+          >- (rpt gen_tac >>
+              irule (cj (if opc = "MSTORE" then 1 else if opc = "MSTORE8" then 2
+                         else if opc = "SSTORE" then 3 else 4) current_store_effects_agree) >> simp[]) >>
+          gvs[inst_wf_def]
+        else if opc = "NOP" then irule current_wf_nop_agree >> metis_tac[]
+        else if mem opc ["DLOADBYTES","MCOPY","CODECOPY","CALLDATACOPY","RETURNDATACOPY"] then
+          `inst.inst_outputs = []` by gvs[inst_wf_def] >>
+          gvs[current_outputs_compatible_def, current_before_outputs_def] >>
+          irule current_copy3_agree >> simp[] >> gvs[inst_wf_def]
+        else if mem opc ["ASSERT","ASSERT_UNREACHABLE"] then
+          no_outputs >> irule current_assert_agree >> simp[] >> gvs[inst_wf_def]
+        else if mem opc ["RETURN","REVERT"] then direct current_return_agree
+        else if mem opc ["STOP","SINK","INVALID"] then
+          irule current_terminal_agree >> simp[]
+        else if mem opc ["RET","RETFMP"] then direct current_ret_agree
+        else if opc = "ASSIGN" then direct current_assign_agree
+        else if opc = "DALLOCA" then direct current_dalloca_agree
+        else if opc = "BUMP" then direct current_bump_agree
+        else if mem opc ["GETFMP","INITIAL_FMP"] then direct current_special_read0_agree
+        else if mem opc ["CREATE","CREATE2"] then direct current_create_agree
+        else if mem opc ["CALL","STATICCALL","DELEGATECALL"] then direct current_external_call_agree
+        else if opc = "SHA3" then direct current_sha3_agree
+        else if opc = "DRET" then no_outputs >> direct current_dret_agree
+        else if opc = "EXTCODECOPY" then
+          no_outputs >> irule current_extcodecopy_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "ISTORE" then
+          no_outputs >> irule current_istore_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "SETFMP" then
+          no_outputs >> irule current_setfmp_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "LOG" then no_outputs >>
+          irule current_log_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "SELFDESTRUCT" then direct current_selfdestruct_agree
+        else if mem opc ["PARAM","FMP_PARAM","RETPC_PARAM"] then
+          irule current_param_agree >> simp[] >>
+          conj_tac >- gvs[inst_wf_def] >>
+          conj_tac >- gvs[inst_wf_def] >> qexists_tac `rs` >> simp[]
+        else if opc = "ALLOCA" then
+          fs[inst_wf_def] >>
+          simp[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+          irule current_exec_alloca_agree >> simp[] >> qexists_tac `rs` >> simp[]
+        else if opc = "DJMP" then no_outputs >>
+          irule current_djmp_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "JNZ" then no_outputs >>
+          irule current_jnz_agree >> simp[] >> gvs[inst_wf_def]
+        else if opc = "JMP" then no_outputs >>
+          fs[inst_wf_def] >>
+          simp[step_inst_base_opcode_eqs, current_rename_operands_map] >>
+          irule current_jump_agree >> simp[]
+        else if opc = "PHI" then gvs[]
+        else if opc = "INVOKE" then simp[step_inst_base_opcode_eqs]
+        else FAIL_TAC ("unrouted " ^ opc)
+    in tac g end);
+
+Theorem current_base_family130[local]:
+  MEM inst.inst_opcode [Exp;Div;DELEGATECALL;CREATE;CALLVALUE;CALLER;CALLDATASIZE;
+    CALLDATALOAD;CALLDATACOPY;BLOCKHASH;ASSIGN;ASSERT_UNREACHABLE;ASSERT;AND;ALLOCA;ADDMOD;ADD] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family131[local]:
+  MEM inst.inst_opcode [DRET;DLOADBYTES;DJMP;DALLOCA;CREATE2;CHAINID;CALL;BYTE;BUMP;BASEFEE;BALANCE;ADDRESS] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family132[local]:
+  MEM inst.inst_opcode [EXTCODESIZE;EXTCODEHASH;EXTCODECOPY;EQ;DLOAD;COINBASE;CODESIZE;CODECOPY;BLOBHASH;BLOBBASEFEE] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family140[local]:
+  MEM inst.inst_opcode [JNZ;JMP;ISZERO;ISTORE;INVOKE;GETFMP;GAS;FMP_PARAM] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family141[local]:
+  MEM inst.inst_opcode [INVALID;INITIAL_FMP;ILOAD;GT;GASPRICE;GASLIMIT] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family150[local]:
+  MEM inst.inst_opcode [ORIGIN;OFFSET;NUMBER;NOT;NOP;Mod;MULMOD;MUL;MSTORE;MEMTOP;LOG] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family151[local]:
+  MEM inst.inst_opcode [MSTORE8;OR] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family152[local]:
+  MEM inst.inst_opcode [MLOAD;MCOPY;LT] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family160[local]:
+  MEM inst.inst_opcode [TSTORE;TIMESTAMP;SUB;SSTORE;SLT;SHR;SHL;SGT;SETFMP;SELFDESTRUCT;SAR;REVERT;RETURN;RETFMP;RET;PHI] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family161[local]:
+  MEM inst.inst_opcode [STOP;STATICCALL;SMOD;SINK;SIGNEXTEND;SHA3;SDIV;PREVRANDAO] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family162[local]:
+  MEM inst.inst_opcode [TLOAD;SLOAD;SELFBALANCE;RETURNDATASIZE;RETURNDATACOPY;RETPC_PARAM;PARAM] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_base_family170[local]:
+  MEM inst.inst_opcode [XOR] /\
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> qpat_x_assum `MEM _ _` (strip_assume_tac o REWRITE_RULE [MEM]) >>
+  current_base_dispatch
+QED
+
+Theorem current_step_inst_base_agree:
+  inst_wf inst /\ inst.inst_opcode <> PHI /\
+  inst'.inst_opcode = inst.inst_opcode /\ inst'.inst_id = inst.inst_id /\
+  inst'.inst_operands = rename_current_operands rs inst.inst_operands /\
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (operand_vars inst.inst_operands) st st' /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand (step_inst_base inst st) (step_inst_base inst' st')
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode` >> fs[] >>
+  (fn g as (asms,_) =>
+    let
+      val eq = valOf (List.find (fn t => is_eq t andalso
+        is_const (rhs t) andalso type_of (rhs t) = ``:opcode``) asms)
+      val opc = fst (dest_const (rhs eq))
+      val families = [
+        (["Exp","Div","DELEGATECALL","CREATE","CALLVALUE","CALLER","CALLDATASIZE",
+          "CALLDATALOAD","CALLDATACOPY","BLOCKHASH","ASSIGN","ASSERT_UNREACHABLE",
+          "ASSERT","AND","ALLOCA","ADDMOD","ADD"], current_base_family130),
+        (["DRET","DLOADBYTES","DJMP","DALLOCA","CREATE2","CHAINID","CALL","BYTE",
+          "BUMP","BASEFEE","BALANCE","ADDRESS"], current_base_family131),
+        (["EXTCODESIZE","EXTCODEHASH","EXTCODECOPY","EQ","DLOAD","COINBASE",
+          "CODESIZE","CODECOPY","BLOBHASH","BLOBBASEFEE"], current_base_family132),
+        (["JNZ","JMP","ISZERO","ISTORE","INVOKE","GETFMP","GAS","FMP_PARAM"],current_base_family140),
+        (["INVALID","INITIAL_FMP","ILOAD","GT","GASPRICE","GASLIMIT"],current_base_family141),
+        (["ORIGIN","OFFSET","NUMBER","NOT","NOP","Mod","MULMOD","MUL","MSTORE","MEMTOP","LOG"],current_base_family150),
+        (["MSTORE8","OR"],current_base_family151),
+        (["MLOAD","MCOPY","LT"],current_base_family152),
+        (["TSTORE","TIMESTAMP","SUB","SSTORE","SLT","SHR","SHL","SGT","SETFMP",
+          "SELFDESTRUCT","SAR","REVERT","RETURN","RETFMP","RET","PHI"],current_base_family160),
+        (["STOP","STATICCALL","SMOD","SINK","SIGNEXTEND","SHA3","SDIV","PREVRANDAO"],current_base_family161),
+        (["TLOAD","SLOAD","SELFBALANCE","RETURNDATASIZE","RETURNDATACOPY","RETPC_PARAM","PARAM"],current_base_family162),
+        (["XOR"],current_base_family170)]
+      val th = snd (valOf (List.find (fn (ops,_) => mem opc ops) families))
+    in (irule th >> simp[] >> qexists_tac `rs` >> simp[]) g end)
+QED
