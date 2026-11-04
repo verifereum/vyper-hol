@@ -1111,7 +1111,7 @@ QED
 (* All simple stack ops trivially satisfy prefix_spill_wf:
    spill_op_wf only has non-trivial conditions for SOSpill/SORestore,
    which are excluded by is_simple_stack_op. *)
-Theorem simple_prefix_spill_wf[local]:
+Theorem simple_prefix_spill_wf:
   !ops lo ps. EVERY is_simple_stack_op ops ==> prefix_spill_wf initial_fmp lo ops ps
 Proof
   Induct >> simp[prefix_spill_wf_def] >> rpt strip_tac >>
