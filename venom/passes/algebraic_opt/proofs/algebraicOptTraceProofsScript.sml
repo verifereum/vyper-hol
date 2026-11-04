@@ -157,3 +157,38 @@ Proof
   rpt strip_tac >> simp[ao_source_trace_def] >>
   metis_tac[ao_source_step_rules]
 QED
+
+(* Avoidance and latest events refer to edges, including their post-node. *)
+Definition ao_trace_avoids_def:
+  ao_trace_avoids R [] = T /\
+  ao_trace_avoids R [a] = T /\
+  ao_trace_avoids R (a::b::rest) =
+    (~R a b /\ ao_trace_avoids R (b::rest))
+End
+
+Theorem ao_trace_avoids_split:
+  !front R a back.
+    ao_trace_avoids R (front ++ a::back) <=>
+    ao_trace_avoids R (front ++ [a]) /\ ao_trace_avoids R (a::back)
+Proof
+  Induct >> simp[ao_trace_avoids_def] >>
+  rpt gen_tac >> Cases_on `front`
+  >- simp[ao_trace_avoids_def] >>
+  rule_assum_tac (REWRITE_RULE [APPEND]) >>
+  simp[NoAsms, ao_trace_avoids_def] >> metis_tac[]
+QED
+
+Theorem ao_trace_last_event:
+  !trace R.
+    ao_trace_avoids R trace \/
+    ?front a b back. trace = front ++ a::b::back /\
+      R a b /\ ao_trace_avoids R (b::back)
+Proof
+  Induct >- simp[ao_trace_avoids_def] >>
+  rpt gen_tac >> Cases_on `trace`
+  >- simp[ao_trace_avoids_def] >>
+  first_x_assum (qspec_then `R` strip_assume_tac)
+  >- (Cases_on `R h h'` >> simp[ao_trace_avoids_def] >>
+      qexistsl [`[]`,`h`,`h'`,`t`] >> simp[]) >>
+  disj2_tac >> qexistsl [`h::front`,`a`,`b`,`back`] >> simp[]
+QED
