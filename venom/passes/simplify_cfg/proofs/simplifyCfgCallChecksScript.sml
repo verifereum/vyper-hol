@@ -737,6 +737,40 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem flag_path_replace_terminal_selective:
+  !xs oldbbs newbbs j ys.
+  (!i vs. MEM i xs /\ flag_fails oldbbs vs i ==> flag_fails newbbs vs i) /\
+  (!vs. flag_path oldbbs vs [j] ==> flag_path newbbs vs ys) ==>
+  !vs. flag_path oldbbs vs (xs ++ [j]) ==> flag_path newbbs vs (xs ++ ys)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  gen_tac >> pure_rewrite_tac[APPEND, flag_path_def] >>
+  qmatch_goalsub_abbrev_tac `flag_path oldbbs nextvs (xs ++ [j])` >>
+  qpat_x_assum `Abbrev _` kall_tac >>
+  `!i ws. MEM i xs /\ flag_fails oldbbs ws i ==> flag_fails newbbs ws i` by
+    (rpt strip_tac >> qpat_x_assum `!i ws. MEM i (h::xs) /\ _ ==> _` irule >> simp[]) >>
+  qpat_x_assum `!oldbbs newbbs j ys. _` (qspecl_then [`oldbbs`, `newbbs`, `j`, `ys`] mp_tac) >>
+  asm_rewrite_tac[] >> disch_then (qspec_then `nextvs` assume_tac) >>
+  `flag_fails oldbbs vs h ==> flag_fails newbbs vs h` by
+    (strip_tac >> qpat_x_assum `!i ws. MEM i (h::xs) /\ _ ==> _` irule >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem calls_flagged_replace_terminal_selective:
+  !xs oldbbs newbbs j ys.
+  (!i vs. MEM i xs /\ flag_fails oldbbs vs i ==> flag_fails newbbs vs i) /\
+  (!vs. flag_path oldbbs vs [j] ==> flag_path newbbs vs ys) /\
+  calls_flagged oldbbs (xs ++ [j]) /\ calls_flagged newbbs ys ==>
+  calls_flagged newbbs (xs ++ ys)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> simp[calls_flagged_def] >> strip_tac >>
+  conj_tac
+  >- (strip_tac >> Cases_on `h.inst_outputs` >> gvs[] >>
+      Cases_on `t` >> gvs[] >>
+      irule flag_path_replace_terminal_selective >> metis_tac[MEM]) >>
+  first_x_assum irule >> metis_tac[MEM]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
