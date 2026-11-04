@@ -21,6 +21,7 @@
 
 Theory exprSimCalldataSlice
 Ancestors
+  exprSimSource
   exprSimUnwrapProps
   exprSimProps
   exprSimHypsDefs
