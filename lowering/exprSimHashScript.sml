@@ -1407,7 +1407,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
      regions_disjoint (w2n addr) 64 b sz` by
     (rpt strip_tac >>
      `local_region cenv es.scopes allocated n b sz` by
-       (irule exprSimOpsTheory.local_region_frame >> conj_tac
+       (irule exprSimPropsTheory.local_region_frame >> conj_tac
         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
         qexistsl [`sm`, `es.scopes`, `t`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _`
@@ -1968,7 +1968,7 @@ Proof
       rpt strip_tac >> rename1 `local_region _ _ _ nm lb lsz` >>
       qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` irule >>
       qexists_tac `nm` >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl [`s0`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>

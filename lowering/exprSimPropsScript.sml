@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext
   valueEncoding valueEncodingProofs vyperTypeSystem
   venomExecSemantics venomInst venomState
-  vyperLookupStorage vyperStorageBackend
+  vyperLookupStorage vyperStorageBackend vyperEvalPreservesScopes
 
 Definition val_store_size_def:
   val_store_size tv v =
@@ -402,4 +402,42 @@ Proof
   qexistsl [`ts`, `ls`, `i`] >> simp[] >>
   simp[Once evaluate_def, lookup_flag_mem_def, bind_def,
        read_result_def, return_def]
+QED
+
+(* Pointer variables and scope domains determine live local regions. *)
+Theorem local_region_frame:
+  !func cenv scopes0 s0 sa scopes t n b sz.
+    local_ptrs_rel func cenv scopes0 s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes t n b sz ==>
+    local_region cenv scopes0 s0 n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes0 <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  Cases_on `lookup_scopes n scopes0` >> fs[] >>
+  rename1 `lookup_scopes n scopes0 = SOME e0` >>
+  `?w0. lookup_var p s0 = SOME w0` by
+    (fs[local_ptrs_rel_def] >>
+     qpat_x_assum `!name entry p sz. _` drule_all >> metis_tac[]) >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `lookup_var p t = SOME w0` by metis_tac[] >> gvs[]
+QED
+
+(* The converse needs only preservation of pointers already present. *)
+Theorem local_region_frame_fwd:
+  !cenv scopes0 sa scopes s0 t n b sz.
+    local_ptrs_reserved cenv sa /\ MAP FDOM scopes0 = MAP FDOM scopes /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    local_region cenv scopes0 s0 n b sz ==>
+    local_region cenv scopes t n b sz
+Proof
+  rw[local_region_def] >>
+  `lookup_scopes n scopes <> NONE` by
+    metis_tac[lookup_scopes_none_map_fdom, optionTheory.NOT_SOME_NONE] >>
+  `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  Cases_on `lookup_scopes n scopes` >> gvs[]
 QED

@@ -146,6 +146,6 @@ Proof
   qpat_x_assum `(?aid. _) \/ _` strip_assume_tac
   >- (disj1_tac >> metis_tac[]) >>
   disj2_tac >> qexists `name` >>
-  irule exprSimOpsTheory.local_region_frame_fwd >>
+  irule exprSimPropsTheory.local_region_frame_fwd >>
   goal_assum (drule_at Any) >> metis_tac[]
 QED

@@ -49,6 +49,20 @@ Definition locals_kept_def:
       mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
 End
 
+Definition wb_frame_def:
+  wb_frame cenv es sa s0 s <=>
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s
+End
+
 Definition expr_val_at_def:
   expr_val_at cenv cx t sa sb es v op s <=>
     !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>

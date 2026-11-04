@@ -767,7 +767,7 @@ Proof
   reverse conj_tac
   >- (rpt strip_tac >>
       `local_region cenv es.scopes t nm lb len` by
-        (irule exprSimOpsTheory.local_region_frame >> conj_tac
+        (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
          qexistsl [`sa`, `es.scopes`, `u`] >> simp[] >>
          rpt strip_tac >>
@@ -778,7 +778,7 @@ Proof
   irule locals_kept_regions >> rpt strip_tac >>
   rename1 `local_region cenv es.scopes s nm b sz` >>
   `local_region cenv es.scopes t nm b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[]) >>
   `b + sz <= w2n w \/ w2n w + 32 + n <= b` by
     (qpat_x_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>

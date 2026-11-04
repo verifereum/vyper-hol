@@ -219,19 +219,6 @@ Proof
 QED
 
 (* ===== Composable expression frames ===== *)
-Definition wb_frame_def:
-  wb_frame cenv es sa s0 s <=>
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x s = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) /\
-    (!aid off sz.
-       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
-       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-                  off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
-End
 
 Theorem wb_frame_refl:
   !cenv es sa s. wb_frame cenv es sa s s

@@ -21,10 +21,11 @@ Ancestors
   loweringPosts
   exprSimAlloc
   allocLimits
-  list finite_map exprSimWordArgs loweringHalt exprLoweringProps
-   exprSimOps exprSimHyps exprLowering compileEnv loweringSlice
+  list finite_map exprLoweringProps
+  exprLowering compileEnv loweringSlice
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperValueOperation valueEncoding fragExec venomState
+  context emitHelper emitHelperProps freshWrites immutableMemoryFrame localPtrsProps valueEncodingProofs valueEncodingProps venomInst venomMemProps vyperValue
 
 (* Bytes and string literals not of a word type: a buffer of their own.
    compile_bytelike_literal allocates 32 + 32 * word_size (LENGTH bytes)
@@ -620,7 +621,7 @@ Resume literal_bytelike_run[finish]:
      regions_disjoint (w2n w) (32 + 32 * word_size (LENGTH bs)) b len` by
     (rpt strip_tac >>
      `local_region cenv es.scopes t name b len` by
-       (irule exprSimOpsTheory.local_region_frame >> conj_tac
+       (irule exprSimPropsTheory.local_region_frame >> conj_tac
         >- (qexists_tac `func` >>
             gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
         qexistsl [`sa`, `es.scopes`, `final`] >> simp[] >> metis_tac[]) >>
@@ -641,7 +642,7 @@ Resume literal_bytelike_run[finish]:
   (* the locals' regions: the buffer's ALLOCA leaves their pointers *)
   map_every qx_gen_tac [`nm`, `lb`, `llen`] >> strip_tac >>
   `local_region cenv es.scopes t nm lb llen` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   metis_tac[]
 QED
