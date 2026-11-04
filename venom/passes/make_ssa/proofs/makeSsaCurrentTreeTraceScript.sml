@@ -9,8 +9,8 @@ Ancestors
    stacks and environment of their parent. These boundaries do not equate
    the sibling's final stacks with those of the parent. *)
 Theorem current_env_realizes_restore:
-  current_env_realizes H E (ctrs,stacks) V ==>
-  current_env_realizes (H ++ tail) E (ctrs',stacks) V
+  current_env_realizes H E ((ctrs : (string # num) list),stacks) V ==>
+  current_env_realizes (H ++ tail) E ((ctrs' : (string # num) list),stacks) V
 Proof
   simp[current_env_realizes_def, latest_current_name_def] >>
   rpt strip_tac >> first_x_assum drule >>
@@ -18,8 +18,9 @@ Proof
 QED
 
 Theorem current_allocation_consistent_restore:
-  current_allocation_consistent V H' s' (ctrs',stacks') /\
-  ssa_stacks_covered s stacks /\ ssa_supply_extends s s' ==>
+  current_allocation_consistent V H' s'
+    (ctrs',(stacks' : (string # string list) list)) /\
+  ssa_stacks_covered s (stacks : (string # string list) list) /\ ssa_supply_extends s s' ==>
   current_allocation_consistent V H' s' (ctrs',stacks)
 Proof
   simp[current_allocation_consistent_def, current_counter_def] >>
@@ -27,8 +28,9 @@ Proof
 QED
 
 Theorem current_sibling_restore:
-  current_env_realizes H E (ctrs,stacks) V /\
-  current_allocation_consistent V (H ++ tail) s' (ctrs',stacks') /\
+  current_env_realizes H E ((ctrs : (string # num) list),stacks) V /\
+  current_allocation_consistent V (H ++ tail) s'
+    (ctrs',(stacks' : (string # string list) list)) /\
   ssa_stacks_covered s stacks /\ ssa_supply_extends s s' ==>
   current_env_realizes (H ++ tail) E (ctrs',stacks) V /\
   current_allocation_consistent V (H ++ tail) s' (ctrs',stacks)
@@ -498,4 +500,174 @@ Proof
   first_x_assum drule >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >>
   simp[EVERY_APPEND] >> metis_tac[current_events_trace_extend]
+QED
+
+(* Allocation keys can only originate in the immutable annotations of a
+   visited subtree. This boundary is independent of allocation freshness. *)
+Theorem current_tree_trace_keys_bound:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events ==>
+    !t. MEM t (MAP FST H') ==> MEM t (MAP FST H) \/
+      ?l. MEM l (dom_tree_labels tree) /\ MEM t (MAP FST (FLAT (A l)))) /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events ==>
+    !t. MEM t (MAP FST H') ==> MEM t (MAP FST H) \/
+      ?l. MEM l (FLAT (MAP dom_tree_labels trees)) /\
+        MEM t (MAP FST (FLAT (A l))))
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def, Once dom_tree_labels_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      drule current_local_trace_keys >> strip_tac >>
+      first_x_assum drule >> simp[] >> metis_tac[]) 
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[] >> metis_tac[]
+QED
+
+(* Pending labels retain fresh tokens even though history is global. *)
+Definition current_pending_annotations_def:
+  current_pending_annotations V A (H : (current_token # string # string) list) visited <=>
+    !l. ~MEM l visited ==> current_annotations_ok V H (FLAT (A l))
+End
+
+Definition current_annotation_separation_def:
+  current_annotation_separation (A : string -> (current_token # string) list list) <=>
+    !l k t. MEM t (MAP FST (FLAT (A l))) /\
+      MEM t (MAP FST (FLAT (A k))) ==> l = k
+End
+
+Theorem current_pending_annotations_visit:
+  current_pending_annotations V A H visited /\
+  current_annotation_separation A /\
+  MAP FST H1 = MAP FST H ++ MAP FST (FLAT (A l)) ==>
+  current_pending_annotations V A H1 (l::visited)
+Proof
+  rw[current_pending_annotations_def] >>
+  `current_annotations_ok V H (FLAT (A l'))` by
+    metis_tac[current_pending_annotations_def] >>
+  gvs[current_annotations_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+  rpt strip_tac >> gvs[] >>
+  metis_tac[current_annotation_separation_def, MEM_MAP, FST]
+QED
+
+Theorem current_tree_trace_pending:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A ==>
+    current_pending_annotations V A H' visited') /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A ==>
+    current_pending_annotations V A H' visited')
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+      simp[current_tree_trace_def] >>
+      Cases_on `lookup_block lbl bbs` >> simp[] >> strip_tac >> gvs[] >>
+      drule current_local_trace_keys >> strip_tac >>
+      first_x_assum irule >> metis_tac[current_pending_annotations_visit])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[current_tree_trace_def] >> strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem current_tree_trace_extends:
+  current_tree_trace A sm tree s rs bbs H E visited
+    ctrs' s' bbs' H' visited' events ==> ssa_supply_extends s s'
+Proof
+  strip_tac >> drule (cj 1 current_tree_trace_projection) >>
+  metis_tac[cj 1 rename_current_blocks_extends]
+QED
+
+Theorem current_children_trace_extends:
+  current_children_trace A sm trees s ctrs stacks bbs H E visited
+    ctrs' s' bbs' H' visited' events ==> ssa_supply_extends s s'
+Proof
+  strip_tac >> drule (cj 2 current_tree_trace_projection) >>
+  metis_tac[cj 2 rename_current_blocks_extends]
+QED
+
+Theorem current_tree_trace_preserves:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (dom_tree_labels tree) /\
+    (!l. MEM l (dom_tree_labels tree) ==> ~MEM l visited) /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A /\
+    current_allocation_consistent V H s rs /\ current_env_realizes H E rs V ==>
+    current_allocation_consistent V H' s' (ctrs',SND rs) /\
+    current_env_realizes H' E (ctrs',SND rs) V) /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited) /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A /\
+    current_allocation_consistent V H s (ctrs,stacks) /\
+    current_env_realizes H E (ctrs,stacks) V ==>
+    current_allocation_consistent V H' s' (ctrs',stacks) /\
+    current_env_realizes H' E (ctrs',stacks) V)
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      Cases_on `lookup_block lbl bbs`
+      >- gvs[current_tree_trace_def] >>
+      gvs[current_tree_trace_def] >>
+      `current_annotations_ok V H (FLAT (A lbl))` by
+        (fs[current_pending_annotations_def, dom_tree_labels_def] >> metis_tac[]) >>
+      `current_allocation_consistent V H1 s1 rs1 /\ current_env_realizes H1 E1 rs1 V` by
+        (irule current_local_trace_preserves >> metis_tac[]) >>
+      `current_pending_annotations V A H1 (lbl::visited)` by
+        (drule current_local_trace_keys >> strip_tac >>
+         irule current_pending_annotations_visit >> simp[] >>
+         qexists_tac `H` >> simp[]) >>
+      `ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+        (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l (lbl::visited))` by
+        (fs[dom_tree_labels_def, EVERY_MEM] >> metis_tac[]) >>
+      `current_allocation_consistent V H' s' (ctrs',SND rs1)` by
+        (Cases_on `rs1` >> gvs[] >> first_x_assum drule >> simp[]) >>
+      `?tail. H' = H ++ tail` by
+        (drule current_local_trace_history >>
+         drule (cj 2 current_tree_trace_history) >>
+         metis_tac[APPEND_ASSOC]) >>
+      `ssa_supply_extends s s'` by
+        (drule current_local_trace_projection >>
+         drule current_children_trace_extends >>
+         metis_tac[rename_current_block_insts_extends, ssa_supply_extends_trans]) >>
+      gvs[] >> Cases_on `rs` >> gvs[] >> conj_tac
+      >- (`ssa_stacks_covered s r` by
+            (qpat_x_assum `current_allocation_consistent V H s (q,r)` mp_tac >>
+             simp[current_allocation_consistent_def]) >>
+          irule current_allocation_consistent_restore >> conj_tac
+          >- (qexists_tac `s` >> simp[]) >>
+          qexists_tac `SND rs1` >> simp[]) >>
+      irule current_env_realizes_restore >> simp[] >>
+      qexists_tac `q` >> simp[])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[current_tree_trace_def] >>
+  `ALL_DISTINCT (dom_tree_labels tree) /\
+    (!l. MEM l (dom_tree_labels tree) ==> ~MEM l visited)` by
+    fs[ALL_DISTINCT_APPEND, EVERY_MEM] >>
+  `current_allocation_consistent V H1 s1 (ctrs1,stacks) /\
+    current_env_realizes H1 E (ctrs1,stacks) V` by
+    (first_x_assum drule_all >> simp[]) >>
+  `current_pending_annotations V A H1 visited1` by
+    metis_tac[cj 1 current_tree_trace_pending] >>
+  `!l. MEM l visited1 ==> MEM l visited \/ MEM l (dom_tree_labels tree)` by
+    metis_tac[cj 1 current_tree_trace_visited] >>
+  `ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited1)` by
+    (fs[ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> simp[]
 QED
