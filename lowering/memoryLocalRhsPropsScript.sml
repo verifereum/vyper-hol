@@ -26,9 +26,81 @@ Ancestors
   exprSimAggregateSource vyperValueOperation abiCallerAbiBound supportedTypes
   supportedExprs supportedExprForms vyperABI exprSimHyps
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeCallGraph
-  valueTypingMemoryProps valueCopyBytes
+  valueTypingMemoryProps valueCopyBytes compileVyper supportedNames loweringShapeProps supportedProgram supportedDecls
 Libs
   monadsyntax
+
+Theorem build_func_return_type_distinct:
+  !tops vis mut nr rr name args dflts ret stmts.
+    ALL_DISTINCT (supported_function_names tops) /\ vis <> External /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops ==>
+    build_func_return_type tops name = ret
+Proof
+  Induct >> simp[] >> Cases >>
+  simp[build_func_return_type_def, supported_function_names_def] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  `MEM name (supported_function_names tops)` by
+    (simp[MEM_supported_function_names] >> metis_tac[]) >>
+  `name <> s` by (strip_tac >> gvs[]) >> rw[]
+QED
+
+Theorem supported_internal_function_lookup[local]:
+  !tops id mut nr rr args dflts ret body.
+    supported_function_decl tops id Internal =
+      SOME (mut, nr, rr, args, dflts, ret, body) ==>
+    FST id = NONE /\
+    lookup_function NONE (SND id) Internal tops =
+      SOME (mut, nr, args, dflts, ret, body) /\
+    MEM (FunctionDecl Internal mut nr rr (SND id) args dflts ret body) tops
+Proof
+  Induct >> Cases_on `id` >> simp[supported_function_decl_def] >>
+  Cases_on `h` >> simp[supported_function_decl_def, lookup_function_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum drule >> simp[lookup_function_def] >>
+  Cases_on `v` >> simp[lookup_function_def]
+QED
+
+Theorem supported_internal_return_type[local]:
+  !tops id mut nr rr args dflts ret body cenv.
+    supported_program tops /\
+    supported_function_decl tops id Internal =
+      SOME (mut, nr, rr, args, dflts, ret, body) /\
+    cenv.ce_func_return_type = build_func_return_type tops ==>
+    cenv.ce_func_return_type (nsid_to_string id) = ret
+Proof
+  rpt strip_tac >> drule supported_internal_function_lookup >> strip_tac >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    metis_tac[supported_program_names, supported_declaration_names_unique] >>
+  Cases_on `id` >> gvs[nsid_to_string_def] >>
+  irule build_func_return_type_distinct >> simp[] >>
+  qexistsl_tac [`args`, `dflts`, `mut`, `nr`, `rr`, `body'`, `Internal`] >> simp[]
+QED
+
+Theorem supported_internal_signature_return[local]:
+  !tops id mut nr rr args dflts ret body cenv cx env es sig.
+    supported_program tops /\
+    supported_function_decl tops id Internal =
+      SOME (mut, nr, rr, args, dflts, ret, body) /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    get_module_code cx NONE = SOME tops /\
+    expr_sim_inv cenv cx env es /\
+    FLOOKUP env.fn_sigs id = SOME sig ==>
+    cenv.ce_func_return_type (nsid_to_string id) = sig.ret_ty
+Proof
+  rpt strip_tac >>
+  `cenv.ce_func_return_type (nsid_to_string id) = ret` by
+    (drule_all supported_internal_return_type >> simp[]) >>
+  drule supported_internal_function_lookup >> strip_tac >>
+  `vyperTypeInvariants$fn_sigs_consistent env.fn_sigs cx` by
+    gvs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  gvs[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+  Cases_on `id` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  gvs[lookup_callable_function_def] >>
+  metis_tac[]
+QED
 
 Theorem eval_empty_bytes_read:
   !cx ann es.
@@ -250,9 +322,64 @@ Proof
   gvs[expr_body_pre_def, expr_sim_inv_def]
 QED
 
+Theorem frame_signature_return_well_formed[local]:
+  !cenv cx env es id sig.
+    expr_sim_inv cenv cx env es /\ FLOOKUP env.fn_sigs id = SOME sig ==>
+    well_formed_type env.type_defs sig.ret_ty
+Proof
+  rpt strip_tac >>
+  `env_consistent env cx es /\ functions_well_typed cx` by
+    gvs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
+    (qpat_x_assum `env_consistent _ _ _` mp_tac >>
+     simp[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  Cases_on `id` >>
+  qpat_assum `fn_sigs_consistent _ _` mp_tac >>
+  pure_rewrite_tac[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+  disch_then drule >> strip_tac >>
+  `IS_SOME (FLOOKUP env.fn_sigs (q,r))` by simp[] >>
+  drule_all callable_body_typing_from_env_consistent >>
+  simp[] >> strip_tac >>
+  simp[well_formed_type_def]
+QED
+
+Theorem internal_call_annotation_eval[local]:
+  !cx a b id args drv.
+    eval_expr cx (Call a (IntCall id) args drv) =
+    eval_expr cx (Call b (IntCall id) args drv)
+Proof
+  rpt gen_tac >> Cases_on `id` >> once_rewrite_tac[evaluate_def] >> REFL_TAC
+QED
+
+Theorem internal_call_read_signature_typed[local]:
+  !cenv cx env es ann id args drv sig v es'.
+    expr_body_pre cenv cx env (Call ann (IntCall id) args drv) es /\
+    expr_sim_inv cenv cx env es /\ FLOOKUP env.fn_sigs id = SOME sig /\
+    (do r <- eval_expr cx (Call ann (IntCall id) args drv);
+        read_result cx r od) es = (INL v, es') ==>
+    value_runtime_typed env sig.ret_ty v
+Proof
+  rpt strip_tac >>
+  `well_formed_type env.type_defs sig.ret_ty` by
+    (drule_all frame_signature_return_well_formed >> simp[]) >>
+  `well_typed_expr env (Call sig.ret_ty (IntCall id) args drv)` by
+    (Cases_on `id` >>
+     gvs[expr_body_pre_def, well_typed_expr_def, type_widens_to_def] >>
+     metis_tac[]) >>
+  `(do r <- eval_expr cx (Call sig.ret_ty (IntCall id) args drv);
+       read_result cx r od) es = (INL v, es')` by
+    metis_tac[internal_call_annotation_eval] >>
+  drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
+  disch_then (qspec_then `env` mp_tac) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def, int_calls_expr_def, expr_type_def]
+QED
+
 Theorem memory_rhs_read_lowered_typed:
   !cenv e env tops cx es v es'.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env (lowered_value_type cenv e) v
 Proof
@@ -292,7 +419,23 @@ Proof
           (BaseT (BytesT (Dynamic (abi_size_bound cenv.ce_struct_fields (expr_type a) + 4))))
           (AbiEncode F (SOME mid)) target [a])` by
         metis_tac[abi_encode_lowered_well_typed] >>
-      metis_tac[type_builtin_read_annotation_typed]) >>
+      metis_tac[type_builtin_read_annotation_typed])
+  >- (rpt gen_tac >> strip_tac >>
+      simp[lowered_value_type_def] >>
+      `expr_sim_inv cenv cx env es /\
+       well_typed_expr env (Call v4 (IntCall func_id) v5 v6)` by
+        gvs[expr_body_pre_def] >>
+      qpat_x_assum `supported_expr _ _` mp_tac >>
+      simp[supported_expr_def, supported_pure_expr_def,
+           supported_effect_expr_def] >> strip_tac >>
+      Cases_on `v6` >> gvs[supported_effect_expr_def,
+                                 optionTheory.IS_SOME_EXISTS] >>
+      PairCases_on `x` >>
+      `?sig. FLOOKUP env.fn_sigs func_id = SOME sig` by
+        (Cases_on `func_id` >>
+         gvs[well_typed_expr_def, optionTheory.IS_SOME_EXISTS]) >>
+      drule_all supported_internal_signature_return >> strip_tac >>
+      drule_all internal_call_read_signature_typed >> gvs[]) >>
   rpt gen_tac >> strip_tac >> simp[lowered_value_type_def] >>
   metis_tac[memory_rhs_read_annotation_typed]
 QED
@@ -419,6 +562,8 @@ QED
 Theorem memory_rhs_read_destination_footprint:
   !cenv cx env e es tops ty tyv v es1.
     expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    cenv.ce_func_return_type = build_func_return_type tops /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
     type_widens_to env.type_defs (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
