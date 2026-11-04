@@ -33,6 +33,8 @@
 
 Theory targetPlaceSimCases
 Ancestors
+  targetPlaceSimDefs
+  stmtSimProps
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

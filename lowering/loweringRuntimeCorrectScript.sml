@@ -44,6 +44,7 @@
 
 Theory loweringRuntimeCorrect
 Ancestors
+  stmtSimProps
   stmtSimDefs
   exprSimDefs
   loweringPosts

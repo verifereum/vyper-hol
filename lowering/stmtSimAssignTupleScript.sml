@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignTuple
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs

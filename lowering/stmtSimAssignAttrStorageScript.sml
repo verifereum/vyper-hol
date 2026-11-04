@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  stmtSimProps
   exprSimHypsDefs
   stmtSimDefs
   loweringPosts

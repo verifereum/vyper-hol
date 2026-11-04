@@ -18,6 +18,7 @@
 
 Theory stmtSimAssignTupleMem
 Ancestors
+  stmtSimProps
   stmtSimDefs
   loweringPosts
   list rich_list finite_map pred_set

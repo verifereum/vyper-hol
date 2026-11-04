@@ -14,6 +14,7 @@
 
 Theory stmtSimDeclEmpty
 Ancestors
+  stmtSimProps
   stmtSimDefs
   exprSimDefs
   loweringPosts

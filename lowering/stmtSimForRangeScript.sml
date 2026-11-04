@@ -25,6 +25,7 @@
 
 Theory stmtSimForRange
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs

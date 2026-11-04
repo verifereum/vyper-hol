@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  stmtSimProps
   exprSimHypsDefs
   vyperTypeStoragePreservation
   list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps

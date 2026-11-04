@@ -24,6 +24,7 @@
 
 Theory stmtSimAssignMem
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs

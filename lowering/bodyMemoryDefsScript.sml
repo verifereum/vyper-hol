@@ -5,7 +5,7 @@ Theory bodyMemoryDefs
 Ancestors
   exprSimMemDefs stmtSimDefs
   loweringPosts
-  bodySim stmtSim exprSim exprSimHyps fragExecMem memSafeRun allocaHistory compileEnv
+  bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExecMem memSafeRun allocaHistory compileEnv
   exprLowering exprLoweringProps context venomState venomExecSemantics
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph list finite_map words
 
@@ -53,16 +53,15 @@ QED
 
 Definition frame_ret_ok_mem_def:
   frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty <=>
-    !cenv' env lctx eo es res es'.
+    !cenv' env lctx eo es.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
               expr_sim_mem ctx func cenv' cx ty e es /\
-              expr_vv_sim_mem ctx func cenv' cx ty e es) /\
-      eval_stmt cx (Return eo) es = (res, es') ==>
+              expr_vv_sim_mem ctx func cenv' cx ty e es) ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv'
-        (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
+        (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End
 
 val () = List.app (fn th =>

@@ -23,6 +23,7 @@
 
 Theory stmtSimDecl
 Ancestors
+  stmtSimProps
   stmtSimDefs
   exprSimDefs
   loweringPosts

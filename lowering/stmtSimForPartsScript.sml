@@ -16,6 +16,7 @@
 
 Theory stmtSimForParts
 Ancestors
+  stmtSimProps
   stmtSim
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice

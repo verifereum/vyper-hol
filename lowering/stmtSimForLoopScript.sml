@@ -15,6 +15,7 @@
 
 Theory stmtSimForLoop
 Ancestors
+  stmtSimProps
   stmtSimDefs
   loweringPosts
   stmtSim stmtSimForParts stmtSimDeclStore

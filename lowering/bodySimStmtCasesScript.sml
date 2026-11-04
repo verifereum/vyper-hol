@@ -48,6 +48,9 @@
 
 Theory bodySimStmtCases
 Ancestors
+  stmtSimSeqEnv
+  stmtSimPass
+  stmtSimProps
   exprSimHypsDefs
   stmtSimZero
   stmtSimDefs

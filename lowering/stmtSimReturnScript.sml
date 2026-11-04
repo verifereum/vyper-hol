@@ -23,6 +23,7 @@
 
 Theory stmtSimReturn
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs

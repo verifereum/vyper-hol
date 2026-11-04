@@ -30,6 +30,7 @@
 
 Theory stmtSimAugAssignAttrStorage
 Ancestors
+  stmtSimProps
   exprSimProps
   exprSimHypsDefs
   stmtSimDefs

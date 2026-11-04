@@ -25,6 +25,7 @@
 
 Theory stmtSimDeclMem
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs

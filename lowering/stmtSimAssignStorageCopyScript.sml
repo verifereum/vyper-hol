@@ -16,6 +16,7 @@
 
 Theory stmtSimAssignStorageCopy
 Ancestors
+  stmtSimProps
   exprSimProps
   stmtSimDefs
   exprSimDefs
