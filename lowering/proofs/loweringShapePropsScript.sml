@@ -12020,7 +12020,7 @@ Proof
 
 QED
 
-Theorem shape_state_initial_compile_state[local]:
+Theorem shape_state_initial_compile_state:
   !lbl. shape_state (initial_compile_state lbl)
 Proof
   simp[initial_compile_state_def, shape_state_def, shape_base_state_def,
@@ -12028,7 +12028,7 @@ Proof
        state_insts_def, all_blocks_def]
 QED
 
-Theorem runtime_entry_blocks_shape[local]:
+Theorem runtime_entry_blocks_shape:
   !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
     all_blocks st <> [] /\
     (HD (all_blocks st)).bb_label = "__entry" /\
@@ -12054,7 +12054,7 @@ Proof
   simp[EVERY_FLAT, EVERY_MAP]
 QED
 
-Theorem runtime_fallback_shape[local]:
+Theorem runtime_fallback_shape:
   !fallback_fn. fallback_shape_ok fallback_fn ==>
     shape_step F jump_label_ok (\st. T)
       (case fallback_fn of
@@ -12085,7 +12085,7 @@ Proof
   simp[jump_label_ok_def]
 QED
 
-Theorem runtime_entry_prefix_shape[local]:
+Theorem runtime_entry_prefix_shape:
   !selectors external_fns fallback_fn.
     EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
     EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn ==>

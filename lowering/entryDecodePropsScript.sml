@@ -441,6 +441,240 @@ Proof
   qspecl_then [`m`, `n`] mp_tac n2w_lsr_clamp_ok >> simp[]
 QED
 
+(* Inverse primitives use the actual accepted word, not a source encoding. *)
+Theorem unsigned_word_clamp_bound[local]:
+  !n (w:bytes32).
+    n <= 256 /\
+    abi_clamp_ok (if n = 256 then NoClamp else IntClamp n F) w ==>
+    w2n w < 2 ** n
+Proof
+  rpt strip_tac >> Cases_on `n = 256` >> gvs[abi_clamp_ok_def]
+  >- (mp_tac (Q.ISPEC `w:bytes32` w2n_lt) >> simp[dimword_def]) >>
+  gvs[w2n_n2w, dimword_def] >>
+  qpat_x_assum `_ = 0w` mp_tac >>
+  pure_rewrite_tac[GSYM w2n_eq_0, w2n_lsr] >> simp[DIV_EQ_X]
+QED
+
+Theorem unsigned_word_clamp_value[local]:
+  !n (w:bytes32).
+    n <= 256 /\
+    abi_clamp_ok (if n = 256 then NoClamp else IntClamp n F) w ==>
+    ?v. value_has_type (BaseTV (UintT n)) v /\
+        typed_val_to_w256 (BaseTV (UintT n)) v = w
+Proof
+  rpt strip_tac >> drule_all unsigned_word_clamp_bound >> strip_tac >>
+  qexists_tac `IntV (&(w2n w))` >>
+  simp[value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
+       integer_wordTheory.i2w_def]
+QED
+
+Theorem flag_word_clamp_value[local]:
+  !m (w:bytes32).
+    m <= 256 /\
+    abi_clamp_ok (if m = 256 then NoClamp else IntClamp m F) w ==>
+    ?v. value_has_type (FlagTV m) v /\ typed_val_to_w256 (FlagTV m) v = w
+Proof
+  rpt strip_tac >> drule_all unsigned_word_clamp_bound >> strip_tac >>
+  qexists_tac `FlagV (w2n w)` >>
+  simp[value_has_type_def, typed_val_to_w256_def, val_to_w256_def]
+QED
+
+Theorem bool_word_clamp_value[local]:
+  !(w:bytes32). abi_clamp_ok BoolClamp w ==>
+    ?v. value_has_type (BaseTV BoolT) v /\
+        typed_val_to_w256 (BaseTV BoolT) v = w
+Proof
+  rw[abi_clamp_ok_def] >>
+  `w2n w < 2` by
+    (qpat_x_assum `_ = 0w` mp_tac >>
+     pure_rewrite_tac[GSYM w2n_eq_0, w2n_lsr] >> simp[DIV_EQ_X]) >>
+  qexists_tac `BoolV (w = 1w)` >>
+  simp[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  Cases_on `w = 1w` >> simp[] >>
+  `w2n w <> 1` by
+    (strip_tac >> `w = (1w:bytes32)` by metis_tac[n2w_w2n] >> fs[]) >>
+  `w2n w = 0` by decide_tac >> fs[w2n_eq_0]
+QED
+
+Theorem signed_int_mod_range[local]:
+  !m i. 0 < m ==> within_int_bound (Signed m) (signed_int_mod m i)
+Proof
+  rpt strip_tac >>
+  `2 ** m = 2 * 2 ** (m - 1)` by
+    (`m = SUC (m - 1)` by simp[] >> pop_assum SUBST1_TAC >> simp[EXP]) >>
+  `&(2 ** m) <> 0i` by simp[] >>
+  drule integerTheory.INT_MOD_BOUNDS >>
+  disch_then (qspec_then `i` strip_assume_tac) >>
+  simp[within_int_bound_ineq, signed_int_mod_def, LET_THM] >>
+  qpat_x_assum `2 ** m = _` (fn th =>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE[th, GSYM integerTheory.INT_MUL]) >>
+    PURE_REWRITE_TAC[th, GSYM integerTheory.INT_MUL]) >>
+  rw[] >> intLib.ARITH_TAC
+QED
+
+Theorem signed_word_clamp_representation[local]:
+  !n (w:bytes32).
+    8 <= n /\ n <= 256 /\ n MOD 8 = 0 /\
+    abi_clamp_ok (if n = 256 then NoClamp else IntClamp n T) w ==>
+    (i2w (signed_int_mod n (&(w2n w))) : bytes32) = w
+Proof
+  rpt strip_tac >> Cases_on `n = 256` >> gvs[abi_clamp_ok_def]
+  >- (mp_tac (INST_TYPE [alpha |-> ``:256``] signed_int_mod_w2i) >>
+      simp[] >> disch_then (qspec_then `&(w2n w)` SUBST1_TAC) >>
+      simp[integer_wordTheory.i2w_def]) >>
+  `n = n DIV 8 * 8` by
+    (`0 < 8n` by simp[] >> drule DIVISION >>
+     disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+  `n DIV 8 - 1 <= 30 /\ 8 * (n DIV 8 - 1 + 1) = n` by decide_tac >>
+  qspecl_then [`n DIV 8 - 1`, `&(w2n w)`] mp_tac
+    i2w_signed_int_mod_sign_extend >>
+  simp[integer_wordTheory.i2w_def]
+QED
+
+Theorem signed_word_clamp_value[local]:
+  !n (w:bytes32).
+    8 <= n /\ n <= 256 /\ n MOD 8 = 0 /\
+    abi_clamp_ok (if n = 256 then NoClamp else IntClamp n T) w ==>
+    ?v. value_has_type (BaseTV (IntT n)) v /\
+        typed_val_to_w256 (BaseTV (IntT n)) v = w
+Proof
+  rpt strip_tac >> drule_all signed_word_clamp_representation >> strip_tac >>
+  qexists_tac `IntV (signed_int_mod n (&(w2n w)))` >>
+  simp[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  irule signed_int_mod_range >> simp[]
+QED
+
+Theorem decimal_word_clamp_value[local]:
+  !(w:bytes32). abi_clamp_ok (IntClamp 168 T) w ==>
+    ?v. value_has_type (BaseTV DecimalT) v /\
+        typed_val_to_w256 (BaseTV DecimalT) v = w
+Proof
+  rpt strip_tac >>
+  `i2w (signed_int_mod 168 (&(w2n w))) = w` by
+    (irule signed_word_clamp_representation >> simp[]) >>
+  qexists_tac `DecimalV (signed_int_mod 168 (&(w2n w)))` >>
+  simp[value_has_type_def, typed_val_to_w256_def, val_to_w256_def] >>
+  irule signed_int_mod_range >> simp[]
+QED
+
+Theorem address_word_clamp_value[local]:
+  !(w:bytes32). abi_clamp_ok (IntClamp 160 F) w ==>
+    ?v. value_has_type (BaseTV AddressT) v /\
+        typed_val_to_w256 (BaseTV AddressT) v = w
+Proof
+  rpt strip_tac >>
+  `w2n w < 2 ** 160` by
+    (irule unsigned_word_clamp_bound >> simp[]) >>
+  qexists_tac `AddressV (w2w w)` >>
+  simp[value_has_type_def, byteTheory.LENGTH_word_to_bytes,
+       typed_val_to_w256_def, GSYM word_to_bytes_w2w_address,
+       byteTheory.word_of_bytes_be_def,
+       vfmTypesTheory.word_to_bytes_word_of_bytes_256,
+       w2w_def, w2n_n2w, dimword_def] >> fs[]
+QED
+
+Theorem fixed_bytes_word_clamp_value[local]:
+  !m (w:bytes32).
+    m <= 32 /\
+    abi_clamp_ok (if m = 32 then NoClamp else BytesMClamp m) w ==>
+    ?v. value_has_type (BaseTV (BytesT (Fixed m))) v /\
+        typed_val_to_w256 (BaseTV (BytesT (Fixed m))) v = w
+Proof
+  rpt strip_tac >>
+  `TAKE m (word_to_bytes w T) = word_to_bytes_aux m w T` by
+    (irule LIST_EQ >> simp[LENGTH_TAKE_EQ] >>
+     rpt strip_tac >> simp[EL_TAKE, word_to_bytes_def, EL_word_to_bytes_aux]) >>
+  qexists_tac `BytesV (TAKE m (word_to_bytes w T))` >>
+  simp[value_has_type_def, LENGTH_TAKE_EQ, typed_val_to_w256_def,
+       word_of_bytes_be_pad_right, word_of_bytes_be_def] >>
+  `word_of_bytes T (0w:bytes32) (word_to_bytes_aux m w T) =
+   word_slice_alt 256 (8 * (32 - m)) w` by
+    (mp_tac (Q.SPECL [`m`, `w`] (Q.GENL [`n`, `w`]
+       (INST_TYPE [alpha |-> ``:256``] word_of_bytes_word_to_bytes_aux_be))) >>
+     simp[]) >>
+  simp[] >> Cases_on `m = 32` >- simp[word_slice_alt_full] >>
+  gvs[abi_clamp_ok_def, w2n_n2w, dimword_def] >>
+  `!j. j < 8 * (32 - m) ==> ~w ' j` by
+    (rpt strip_tac >> `j + m * 8 < 256` by decide_tac >>
+     qpat_x_assum `_ << _ = 0w`
+       (mp_tac o Q.AP_TERM `\v:bytes32. v ' (j + m * 8)`) >>
+     simp[word_lsl_def, fcpTheory.FCP_BETA, word_0]) >>
+  simp[word_slice_alt_def, fcpTheory.CART_EQ, fcpTheory.FCP_BETA] >>
+  rpt strip_tac >> qmatch_goalsub_rename_tac `(w:bytes32) ' idx` >>
+  Cases_on `idx < 8 * (32 - m)` >> simp[]
+QED
+
+(* Every accepted primitive word has a source value with the same encoding. *)
+Theorem word_arg_clamp_inverse:
+  !tenv sfields cenv ty tv (w:bytes32).
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
+      cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    abi_clamp_ok
+      (case type_to_abi_dec_info sfields cenv ty of
+         DecPrimWord c => c | _ => NoClamp) w ==>
+    ?v. value_has_type tv v /\ typed_val_to_w256 tv v = w
+Proof
+  rpt strip_tac >> Cases_on `ty`
+  >~ [`evaluate_type tenv (BaseT bt) = SOME tv`] >-
+    (Cases_on `bt`
+     >~ [`evaluate_type tenv (BaseT (BytesT bd)) = SOME tv`] >-
+       (Cases_on `bd` >>
+        gvs[is_word_type_def, evaluate_type_def, type_to_abi_dec_info_def,
+            type_to_abi_clamp_def, AllCaseEqs()] >>
+        irule fixed_bytes_word_clamp_value >> simp[]) >>
+     gvs[is_word_type_def, evaluate_type_def, type_to_abi_dec_info_def,
+         type_to_abi_clamp_def, AllCaseEqs()]
+     >~ [`BaseTV (UintT n)`] >- (irule unsigned_word_clamp_value >> simp[])
+     >~ [`BaseTV (IntT n)`] >-
+       (irule signed_word_clamp_value >> simp[] >> CCONTR_TAC >>
+        `n < 8` by decide_tac >> fs[LESS_MOD])
+     >~ [`BaseTV BoolT`] >- (irule bool_word_clamp_value >> simp[])
+     >~ [`BaseTV AddressT`] >- (irule address_word_clamp_value >> simp[])
+     >~ [`BaseTV DecimalT`] >- (irule decimal_word_clamp_value >> simp[]))
+  >~ [`evaluate_type tenv (FlagT nsid) = SOME tv`] >-
+    (gvs[evaluate_type_def, AllCaseEqs()] >>
+     rename1 `FLOOKUP tenv nsid = SOME (FlagArgs m)` >>
+     qpat_x_assum `!nsid m. _ ==> _` drule >> strip_tac >>
+     gvs[type_to_abi_dec_info_def] >> irule flag_word_clamp_value >> simp[]) >>
+  fs[is_word_type_def]
+QED
+
+(* Selected flags suffice: unrelated environment entries are immaterial. *)
+Theorem word_arg_clamp_inverse_selected:
+  !tenv sfields cenv ty tv (w:bytes32).
+    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
+    (!nsid. ty = FlagT nsid ==>
+      ?m. FLOOKUP tenv nsid = SOME (FlagArgs m) /\
+          cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
+    abi_clamp_ok
+      (case type_to_abi_dec_info sfields cenv ty of
+         DecPrimWord c => c | _ => NoClamp) w ==>
+    ?v. value_has_type tv v /\ typed_val_to_w256 tv v = w
+Proof
+  rpt strip_tac >> Cases_on `ty`
+  >~ [`evaluate_type tenv (BaseT bt) = SOME tv`] >-
+    (Cases_on `bt`
+     >~ [`evaluate_type tenv (BaseT (BytesT bd)) = SOME tv`] >-
+       (Cases_on `bd` >>
+        gvs[is_word_type_def, evaluate_type_def, type_to_abi_dec_info_def,
+            type_to_abi_clamp_def, AllCaseEqs()] >>
+        irule fixed_bytes_word_clamp_value >> simp[]) >>
+     gvs[is_word_type_def, evaluate_type_def, type_to_abi_dec_info_def,
+         type_to_abi_clamp_def, AllCaseEqs()]
+     >~ [`BaseTV (UintT n)`] >- (irule unsigned_word_clamp_value >> simp[])
+     >~ [`BaseTV (IntT n)`] >-
+       (irule signed_word_clamp_value >> simp[] >> CCONTR_TAC >>
+        `n < 8` by decide_tac >> fs[LESS_MOD])
+     >~ [`BaseTV BoolT`] >- (irule bool_word_clamp_value >> simp[])
+     >~ [`BaseTV AddressT`] >- (irule address_word_clamp_value >> simp[])
+     >~ [`BaseTV DecimalT`] >- (irule decimal_word_clamp_value >> simp[]))
+  >~ [`evaluate_type tenv (FlagT nsid) = SOME tv`] >-
+    (gvs[evaluate_type_def, AllCaseEqs()] >>
+     gvs[type_to_abi_dec_info_def] >> irule flag_word_clamp_value >> simp[]) >>
+  fs[is_word_type_def]
+QED
+
 (* ===== The decode code ===== *)
 
 (* The is_prim path of compile_decode_args for one calldata argument:
