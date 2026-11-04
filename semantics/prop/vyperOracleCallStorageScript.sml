@@ -65,3 +65,24 @@ Proof
   strip_tac >> gvs[AllCaseEqs()] >>
   drule_all eval_ext_call_effects_oracle_storage_preserved >> simp[]
 QED
+
+(* A call or staticcall raw_call adopts its oracle outcome; a delegate
+   raw_call runs the callee even in oracle mode, so it is excluded. *)
+Theorem eval_raw_call_oracle_storage_preserved:
+  contract_storage_well_formed cx st /\ oracle_storage_ok cx st /\
+  IS_SOME st.outcomes /\ ~flags.rcf_is_delegate /\
+  eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  Cases_on `st.outcomes` >> simp[] >>
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, COND_RATOR,
+       vfmTypesTheory.option_CASE_rator, vfmTypesTheory.prod_CASE_rator,
+       vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[pairTheory.UNCURRY_RATOR, pairTheory.UNCURRY_EQ, combinTheory.C_THM,
+      combinTheory.o_THM, AllCaseEqs(), COND_RATOR, bind_def, return_def,
+      raise_def, assert_def, adopt_call_outcome_INR_storage] >>
+  metis_tac[take_call_outcome_storage_suffix,
+            take_adopt_call_outcome_storage_suffix]
+QED

@@ -272,6 +272,12 @@ Proof
          first_x_assum drule >> decide_tac) >>
      simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
      rpt strip_tac >> gvs[]) >>
+  `immutable_base_zero cenv
+     (mstore p (n2w (LENGTH data))
+       (write_memory_with_expansion (p + 32) data s))` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[mstore_def, write_memory_with_expansion_def, lookup_var_def, LET_THM] >>
+     gvs[stmt_state_rel_def]) >>
   qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   rewrite_tac[stmt_state_rel_def] >> conj_tac
@@ -283,6 +289,11 @@ Proof
   conj_tac
   >- (irule alloca_room_fields >> qexists_tac `s` >>
       asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  conj_tac
+  >- (irule fmp_room_fields >> qexists_tac `s` >>
+      asm_simp_tac (srw_ss()) [mstore_def, write_memory_with_expansion_def, LET_THM]) >>
+  simp[] >>
+  qpat_x_assum `immutable_base_zero cenv (mstore _ _ _)` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `local_ptrs_rel _ _ _ _` kall_tac >>
   qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
@@ -739,6 +750,9 @@ Proof
       >- (rpt strip_tac >>
           fs[local_ptrs_reserved_def] >>
           qpat_x_assum `!n1 n2 p sz1 sz2. _` drule >> strip_tac >> simp[])
+      >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+          qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x t` irule >>
+          first_assum ACCEPT_TAC)
       >- (qpat_assum `u.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
           simp[immutableMemoryFrameTheory.immutable_mstore_capacity,
                immutableMemoryFrameTheory.immutable_write_memory_capacity] >>

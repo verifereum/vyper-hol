@@ -258,6 +258,32 @@ Proof
   simp[function_live_def]
 QED
 
+Theorem check_contract_public_variable_lock_slot:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated layouts addr src ts /\
+  MEM (VariableDecl (Public nr) mut fn ty slot) ts /\ nr ==>
+  lookup_nonreentrant_slot layouts addr = SOME 0
+Proof
+  strip_tac >>
+  drule_all check_contract_toplevel_body_MEM >>
+  simp[check_toplevel_body_def] >>
+  metis_tac[module_allocated_function_live]
+QED
+
+Theorem check_contract_public_hashmap_lock_slot:
+  check_contract in_deploy layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated layouts addr src ts /\
+  MEM (HashMapDecl (Public nr) tr fn kt vt slot) ts /\ nr ==>
+  lookup_nonreentrant_slot layouts addr = SOME 0
+Proof
+  strip_tac >>
+  drule_all check_contract_toplevel_body_MEM >>
+  simp[check_toplevel_body_def] >>
+  metis_tac[module_allocated_function_live]
+QED
+
 Theorem check_contract_main_module_allocated:
   check_contract in_deploy layouts addr mods = SOME art /\
   ALOOKUP mods NONE = SOME ts ==>

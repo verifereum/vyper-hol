@@ -559,9 +559,10 @@ Theorem step_inst_base_outputs_in_fdom[local]:
     !out. MEM out inst.inst_outputs ==> out IN FDOM s'.vs_vars
 Proof
   rpt gen_tac >>
-  ONCE_REWRITE_TAC[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >>
-  PURE_REWRITE_TAC[venomInstTheory.opcode_case_def] >>
+  qpat_assum `inst.inst_opcode = _` (fn eq =>
+    PURE_ONCE_REWRITE_TAC
+      [MATCH_MP (opcode_clause (rhs (concl eq))) eq]) >>
   gvs[is_terminator_def] >>
   gvs[opcode_has_output_def] >>
   gvs[exec_pure1_def] >>

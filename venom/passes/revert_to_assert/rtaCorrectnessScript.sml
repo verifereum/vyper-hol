@@ -12,7 +12,8 @@
 
 Theory rtaCorrectness
 Ancestors
-  rtaDefs rtaCorrectnessProofs venomWf
+  rtaDefs rtaCorrectnessProofs rtaSupplyProofs venomWf irSupply
+  venomFnScheduleRunner
   crossBlockSimProps passSimulationProps
   stateEquiv stateEquivProps execEquivProps
   venomExecProps venomExecSemantics venomInst venomState
@@ -37,16 +38,20 @@ Proof
   ACCEPT_TAC rta_pass_correct_proof
 QED
 
-(* ===== Obligations ===== *)
+(* ===== Obligations =====
+   Stated for the supply-threaded transform, whose inserted instructions get
+   fresh ids and a fresh ISZERO output, as the compiler's do. *)
 
 Theorem rta_preserves_ssa_form:
-  ∀fn. ssa_form fn ⇒ ssa_form (transform_function fn)
+  ∀s fn. ssa_form fn ∧ ir_supply_covers_fn s fn ⇒
+         ssa_form (FST (rta_transform_function_supply s fn))
 Proof
-  cheat
+  ACCEPT_TAC rta_transform_function_supply_ssa_form
 QED
 
 Theorem rta_preserves_wf_function:
-  ∀fn. wf_function fn ⇒ wf_function (transform_function fn)
+  ∀s fn. wf_function fn ∧ ir_supply_inst_ok s ∧ ir_supply_covers_fn s fn ⇒
+         wf_function (FST (rta_transform_function_supply s fn))
 Proof
-  cheat
+  ACCEPT_TAC rta_transform_function_supply_wf_function
 QED

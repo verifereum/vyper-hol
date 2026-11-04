@@ -299,23 +299,24 @@ Theorem append_storage_place_scopes_immutables:
     st'.scopes = st.scopes ∧ st'.immutables = st.immutables
 Proof
   rpt gen_tac >>
-  Cases_on `case tv of ArrayTV etv bd => bd | _ => Fixed 0` >>
-  Cases_on `tv` >> gvs[] >>
-  simp[append_place_def, place_type_value_def, read_place_def, write_place_def,
-       bind_def, ignore_bind_def, return_def, raise_def, lift_sum_def,
-       check_def, assert_def] >>
-  strip_tac >>
-  gvs[AllCaseEqs(), bind_def, ignore_bind_def, return_def, raise_def,
-      lift_sum_def, check_def, assert_def] >>
-  (* Original terminal search left the write implication unintroduced:
-  metis_tac[get_storage_backend_state, read_storage_slot_state,
-            write_storage_slot_scopes, write_storage_slot_immutables]
-  *)
-  imp_res_tac read_storage_slot_state >>
-  imp_res_tac get_storage_backend_state >> gvs[] >>
-  imp_res_tac write_storage_slot_scopes >>
-  imp_res_tac write_storage_slot_immutables >> gvs[] >>
-  BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]
+  qabbrev_tac `P = \s. s.scopes = st.scopes /\ s.immutables = st.immutables` >>
+  `!s r s'. append_place cx (StoragePlace tr slot tv) v s = (r,s') ==>
+     P s ==> P s'` suffices_by (simp[Abbr `P`] >> metis_tac[]) >>
+  Cases_on `tv` >> simp[append_place_def]
+  >> FIRST [rename1 `StoragePlace tr slot (ArrayTV etv bd)` >>
+            Cases_on `bd` >> simp[append_place_def], all_tac] >>
+  simp[ignore_bind_def] >>
+  rpt (rpt gen_tac >> BETA_TAC >> strip_tac >> strip_tac >>
+       dxrule (SRULE [GSYM AND_IMP_INTRO] bind_preserves) >>
+       disch_then (qspec_then `P` match_mp_tac) >> simp[] >>
+       conj_tac
+       >- (simp[Abbr `P`] >>
+           metis_tac[get_storage_backend_state, check_state,
+                     place_type_value_state, read_place_state, lift_sum_state,
+                     write_storage_slot_scopes, write_storage_slot_immutables])) >>
+  simp[Abbr `P`] >>
+  metis_tac[write_storage_slot_scopes, write_storage_slot_immutables,
+            write_storage_place_scopes_immutables]
 QED
 
 Theorem pop_storage_place_scopes_immutables:
