@@ -25,6 +25,7 @@
 
 Theory stmtSimAssignAttrStorage
 Ancestors
+  exprSimSource
   stmtSimProps
   exprSimHypsDefs
   stmtSimDefs

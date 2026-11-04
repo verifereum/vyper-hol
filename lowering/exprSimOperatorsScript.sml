@@ -72,6 +72,7 @@
 
 Theory exprSimOperators
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   exprSimDefs
   allocLimits

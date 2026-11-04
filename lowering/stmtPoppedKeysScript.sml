@@ -14,6 +14,7 @@
 
 Theory stmtPoppedKeys
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   list finite_map exprSimHyps vyperInterpreter vyperState
   vyperPlaceResultTyping vyperScopePreservation vyperLookup

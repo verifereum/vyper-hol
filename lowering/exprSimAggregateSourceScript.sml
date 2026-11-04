@@ -22,6 +22,7 @@
  *)
 Theory exprSimAggregateSource
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   loweringPosts

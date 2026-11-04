@@ -18,6 +18,7 @@
 
 Theory bodySimLog
 Ancestors
+  exprSimSource
   bodyExprPreFacts
   exprSimHypsDefs
   list bodySim bodySimStmtCases stmtSimLog   exprSimHyps

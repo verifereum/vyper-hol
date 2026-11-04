@@ -23,6 +23,7 @@
 
 Theory bodySimExprCases
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST

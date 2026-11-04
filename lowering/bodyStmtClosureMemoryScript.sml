@@ -1,5 +1,6 @@
 Theory bodyStmtClosureMemory
 Ancestors
+  exprSimSource
   bodyExprPreFacts
   stmtSimSeqMem stmtIfMemory
   bodyMemoryPreds bodyLiteralMemory bodyLiteralForceMemory bodySimStmtCases bodySim

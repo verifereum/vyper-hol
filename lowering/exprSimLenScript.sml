@@ -21,6 +21,7 @@
 
 Theory exprSimLen
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

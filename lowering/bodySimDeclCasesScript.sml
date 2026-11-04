@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  exprSimSource
   bodyExprPreFacts
   stmtSimProps
   exprSimHypsDefs

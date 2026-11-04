@@ -48,6 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  exprSimSource
   bodyExprPreFacts
   exprSimTopLevelProps
   stmtSimBreak stmtSimContinue

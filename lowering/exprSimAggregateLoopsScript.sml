@@ -17,6 +17,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs
