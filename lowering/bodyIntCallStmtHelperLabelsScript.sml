@@ -1758,3 +1758,218 @@ Proof
   simp[compiler_label_hoare_internal_return_from_env,
        compiler_label_hoare_context_primitives]
 QED
+
+(* General support consumers admit internal calls in RHSs and target keys. *)
+Theorem supported_stmt_rhs_expr_general:
+  (s = Expr e \/ s = Return (SOME e) \/
+   (?id ty. s = AnnAssign id ty e) \/ (?target. s = Assign target e) \/
+   (?ty target op. s = AugAssign ty target op e) \/
+   (?target. s = Append target e)) /\
+  supported_stmt tops bindings s ==> supported_expr tops e
+Proof
+  strip_tac >> gvs[supported_stmt_def, supported_assignment_def, supported_expr_def] >>
+  metis_tac[]
+QED
+
+Theorem compiler_label_hoare_target_info_general:
+  !target ce pt origin pending.
+    supportedTargets$supported_target_info tops bindings target = SOME pt ==>
+    compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_get_target_ptr ce target)
+      (\r out. compiler_label_reservation origin pending out)
+Proof
+  `((!e:expr. T) /\ (!target. !ce pt origin pending.
+      supportedTargets$supported_target_info tops bindings target = SOME pt ==>
+      compiler_label_hoare (compiler_label_reservation origin pending)
+        (compile_get_target_ptr ce target)
+        (\r out. compiler_label_reservation origin pending out)))` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[] >> rpt conj_tac >> rpt strip_tac
+  >- simp[compiler_label_hoare_target_name]
+  >- simp[compiler_label_hoare_target_top]
+  >- (gvs[supportedTargetsTheory.supported_target_info_def, AllCaseEqs()] >>
+      (irule compiler_label_hoare_target_subscript >> reverse conj_tac
+       >- metis_tac[] >>
+       irule compiler_label_hoare_lower_value >>
+       metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def])) >>
+  drule supported_target_info_attribute_target_base >> strip_tac >>
+  irule compiler_label_hoare_target_attribute >> metis_tac[]
+QED
+
+Theorem compiler_label_hoare_supported_target_general:
+  supportedStmts$supported_target tops bindings target ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_get_target_ptr ce target)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  Cases_on `target` >>
+  simp[compiler_label_hoare_target_name, compiler_label_hoare_target_top] >>
+  rename1 `supported_target tops bindings (_ bt _)` >> Cases_on `bt` >>
+  simp[supportedStmtsTheory.supported_target_def] >> rpt strip_tac
+  >- (irule compiler_label_hoare_target_subscript >> reverse conj_tac
+      >- simp[compiler_label_hoare_target_top] >>
+      irule compiler_label_hoare_lower_value >>
+      metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def]) >>
+  irule compiler_label_hoare_target_attribute >> simp[compiler_label_hoare_target_top]
+QED
+
+Theorem compiler_label_hoare_assign_base_target_general:
+  supported_assignment tops bindings (BaseTarget bt) e ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_get_target_ptr ce bt)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  simp[supported_assignment_def] >> strip_tac
+  >- metis_tac[compiler_label_hoare_supported_target_general] >>
+  Cases_on `supported_target_info tops bindings bt` >> gvs[] >>
+  rename1 `supported_target_info _ _ _ = SOME pt` >> Cases_on `pt` >> gvs[] >>
+  metis_tac[compiler_label_hoare_target_info_general]
+QED
+
+Theorem compiler_label_hoare_stmt_expr_general:
+  supported_stmt tops bindings (Expr e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (Expr e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  simp[compile_stmt_def, comp_ignore_bind_def] >>
+  irule compiler_label_hoare_preserving_bind >> simp[compiler_label_hoare_typed_primitives] >>
+  metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def]
+QED
+
+Theorem compiler_label_hoare_stmt_annassign_general:
+  supported_stmt tops bindings (AnnAssign id vtyp e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (AnnAssign id vtyp e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  simp[compile_stmt_def, comp_ignore_bind_def, LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_emit_local_alloca] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_unwrap_value]) >>
+  gen_tac >> BETA_TAC >> simp[tuple_comp_return_bind] >>
+  Cases_on `FLOOKUP ce.ce_vars id` >> simp[compiler_label_hoare_typed_primitives] >>
+  rename1 `FLOOKUP _ _ = SOME loc` >> Cases_on `loc` >>
+  simp[compiler_label_hoare_typed_primitives] >> IF_CASES_TAC >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_assign_value, LET_THM]
+QED
+
+Theorem compiler_label_hoare_stmt_assign_base_general:
+  supported_stmt tops bindings (Assign (BaseTarget bt) e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (Assign (BaseTarget bt) e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  `compiler_label_hoare (compiler_label_reservation origin pending)
+     (compile_get_target_ptr ce bt) (\r out. compiler_label_reservation origin pending out)` by
+    (irule compiler_label_hoare_assign_base_target_general >>
+     gvs[supported_stmt_def] >> metis_tac[]) >>
+  simp[compile_stmt_def, LET_THM] >> IF_CASES_TAC
+  >- (irule compiler_label_hoare_preserving_bind >> simp[compiler_label_hoare_store_at_loc]) >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  qx_gen_tac `tgt` >> BETA_TAC >> simp[tuple_comp_return_bind] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[compiler_label_hoare_unwrap_value] >>
+  gen_tac >> BETA_TAC >> simp[tuple_comp_return_bind] >>
+  Cases_on `FST (SND tgt)` >>
+  simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_assign_value]
+QED
+
+Theorem supported_tuple_assignment_target_general:
+  supported_stmt tops bindings (Assign (TupleTarget targets) e) /\
+  MEM (BaseTarget bt) targets ==> supported_target tops bindings bt
+Proof
+  simp[supported_stmt_def, supported_assignment_def, EVERY_MEM] >>
+  rpt strip_tac >> first_x_assum drule >> simp[]
+QED
+
+Theorem compiler_label_hoare_stmt_assign_tuple_general:
+  supported_stmt tops bindings (Assign (TupleTarget targets) e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (Assign (TupleTarget targets) e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  simp[compile_stmt_def, LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_unwrap_value] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_tuple_unpack >>
+  metis_tac[supported_tuple_assignment_target_general, compiler_label_hoare_supported_target_general]
+QED
+
+Theorem compiler_label_hoare_stmt_augassign_general:
+  supported_stmt tops bindings (AugAssign target_ty bt bop e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (AugAssign target_ty bt bop e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  `compiler_label_hoare (compiler_label_reservation origin pending)
+     (compile_get_target_ptr ce bt) (\r out. compiler_label_reservation origin pending out)` by
+    (gvs[supported_stmt_def, supported_aug_target_def, AllCaseEqs()]
+     >- metis_tac[compiler_label_hoare_supported_target_general] >>
+     Cases_on `supported_target_info tops bindings bt` >> gvs[] >>
+     rename1 `supported_target_info _ _ _ = SOME pt` >> Cases_on `pt` >> gvs[] >>
+     metis_tac[compiler_label_hoare_target_info_general]) >>
+  simp[compile_stmt_def] >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  qx_gen_tac `tgt` >> BETA_TAC >> simp[tuple_comp_return_bind] >>
+  Cases_on `FST (SND tgt)` >> simp[compiler_label_hoare_typed_primitives] >>
+  simp[tuple_comp_return_bind] >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_typed_primitives, compiler_label_hoare_context_primitives] >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_lower_value >>
+      metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def]) >>
+  gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+  simp[compiler_label_hoare_typed_primitives, bodyIntCallBuiltinLabelsTheory.compiler_label_hoare_binop]
+QED
+
+Theorem compiler_label_hoare_stmt_append_general:
+  supported_stmt tops bindings (Append target e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (Append target e))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >>
+  `supported_expr tops e` by metis_tac[supported_stmt_rhs_expr_general] >>
+  simp[compile_stmt_def, LET_THM] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (irule compiler_label_hoare_lower_value >>
+      metis_tac[compiler_label_hoare_supported_expr_general, supported_expr_def]) >>
+  gen_tac >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[LET_THM, comp_ignore_bind_def]
+      >- simp[compiler_label_hoare_def, comp_return_def] >>
+      irule compiler_label_hoare_preserving_bind >> simp[compiler_label_hoare_alloc_buffer] >>
+      gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_store_memory] >>
+      simp[compiler_label_hoare_def, comp_return_def]) >>
+  gen_tac >> simp[tuple_comp_return_bind, compiler_label_hoare_dynarray_append]
+QED
+
+Theorem compiler_label_hoare_stmt_log_general:
+  supported_stmt tops bindings (vyperAST$Log event_id args) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_stmt ce lctx ty (vyperAST$Log event_id args))
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> irule compiler_label_hoare_stmt_log >>
+  reverse conj_tac >- metis_tac[] >>
+  simp[supported_stmt_expr_exists_def,
+       supportedExprTraverseTheory.supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM,
+       GSYM supportedExprTraverseTheory.expr_has_internal_call_def] >>
+  metis_tac[supported_log_member_expr]
+QED
