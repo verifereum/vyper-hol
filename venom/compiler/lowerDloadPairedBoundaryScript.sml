@@ -165,3 +165,51 @@ Proof
   Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >>
   gvs[] >> metis_tac[optionTheory.option_CLAUSES]
 QED
+
+Theorem ld_owned_operands_values:
+  !ops. ld_owned_vars V E AG AH tn un s t /\
+    (!v. MEM (Var v) ops ==> v IN V) ==>
+    (eval_operands ops s = NONE <=> eval_operands ops t = NONE) /\
+    (!xs ys. eval_operands ops s = SOME xs /\
+      eval_operands ops t = SOME ys ==>
+      LIST_REL (\(op,x) y. ld_owned_value E (ld_op_prov AG op)
+        (ld_op_prov AH op) (op_taint tn op) (op_taint un op) x y)
+        (ZIP (ops,xs)) ys)
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
+  `eval_operand h s = NONE <=> eval_operand h t = NONE` by
+    (irule ld_owned_operand_defined >> simp[] >> metis_tac[]) >>
+  first_x_assum (mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operand h t` >> gvs[] >>
+  Cases_on `eval_operands ops s` >> Cases_on `eval_operands ops t` >>
+  gvs[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[ld_owned_operand_value]
+QED
+
+Theorem ld_owned_operands_source:
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) ops ==> v IN V) /\
+  eval_operands ops s = SOME xs ==>
+  ?ys. eval_operands ops t = SOME ys /\
+    LIST_REL (\(op,x) y. ld_owned_value E (ld_op_prov AG op)
+      (ld_op_prov AH op) (op_taint tn op) (op_taint un op) x y)
+      (ZIP (ops,xs)) ys
+Proof
+  strip_tac >> drule_all ld_owned_operands_values >> strip_tac >>
+  Cases_on `eval_operands ops t` >> gvs[] >>
+  metis_tac[optionTheory.option_CLAUSES]
+QED
+
+Theorem ld_owned_operands_target:
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) ops ==> v IN V) /\
+  eval_operands ops t = SOME ys ==>
+  ?xs. eval_operands ops s = SOME xs /\
+    LIST_REL (\(op,x) y. ld_owned_value E (ld_op_prov AG op)
+      (ld_op_prov AH op) (op_taint tn op) (op_taint un op) x y)
+      (ZIP (ops,xs)) ys
+Proof
+  strip_tac >> drule_all ld_owned_operands_values >> strip_tac >>
+  Cases_on `eval_operands ops s` >> gvs[] >>
+  metis_tac[optionTheory.option_CLAUSES]
+QED
