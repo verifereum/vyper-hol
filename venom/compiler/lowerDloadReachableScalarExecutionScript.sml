@@ -1,7 +1,8 @@
 Theory lowerDloadReachableScalarExecution
 Ancestors
   lowerDloadProvenanceSupport lowerDloadOrdinaryExecution lowerDloadOwnership
-  lowerDloadOperand ptrDiscipline pointerConfinedDefs contextCodegenRel
+  lowerDloadOperand lowerDloadReachableDiscipline ptrDiscipline
+  pointerConfinedDefs contextCodegenRel
   memLocDefs venomInst o1PassContract list pred_set
 
 Theorem ld_annotated_pure_scalar_prov:
@@ -47,4 +48,31 @@ Proof
     (rpt strip_tac >> drule_all ld_annotated_pure_scalar_prov >> simp[]) >>
   irule ld_owned_pure_scalar_backward >> simp[] >>
   qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> metis_tac[]
+QED
+
+Theorem ld_annotated_clean_scalar_backward:
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
+  ptr_discipline lo ctx vs0 /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn i s /\
+  MEM i.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+    SLT; SGT; ISZERO; AND; OR; XOR; NOT] /\
+  i.inst_outputs = [out] /\ ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS ctx i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
+  `!op. MEM op i.inst_operands ==> op_taint tn op = {}` by
+    (rpt strip_tac >> irule ld_taint_operand_clean >>
+     qexistsl [`fn`, `i`, `s`] >> simp[] >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
+     strip_tac >> gvs[]) >>
+  `MEM i.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+     SLT; SGT; ISZERO; AND; OR; XOR; NOT; SHL; SHR; SAR]` by
+    (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
+     strip_tac >> gvs[]) >>
+  drule_all ld_annotated_pure_scalar_backward >> simp[]
 QED
