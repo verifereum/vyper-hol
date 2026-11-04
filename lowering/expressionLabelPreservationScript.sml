@@ -1337,3 +1337,236 @@ Proof
   >- metis_tac[label_preserving_emit_inst] >> gen_tac >> CONVERT_LEAF
 QED
 
+Theorem label_preserving_internal_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty fid args default_ret s r t.
+    compile_call cfn cenv ret_ty ty (IntCall fid) args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp_tac pure_ss [compile_call_def, LET_THM] >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule_all label_preserving_multi_vvs >> strip_tac >>
+  qpat_x_assum `!c ty e s r t. _` kall_tac >>
+  Cases_on `returns_count > 0` >> asm_rewrite_tac[]
+  >- suspend "stack_results" >>
+  Cases_on `return_buf_size > 0` >> asm_rewrite_tac[]
+  >- suspend "buffer_result" >> suspend "no_result"
+QED
+
+Resume label_preserving_internal_call[stack_results]:
+  Cases_on `compile_alloc_buffer (32 * returns_count) st1` >> gvs[] >>
+  drule label_preserving_abi_alloc_buffer >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_stage_intcall_args >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_emit_multi_op >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_store_multi_results >> strip_tac >>
+  simp_tac bool_ss [pairTheory.PAIR_EQ] >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_internal_call[buffer_result]:
+  Cases_on `compile_alloc_buffer return_buf_size st1` >> gvs[] >>
+  drule label_preserving_abi_alloc_buffer >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_stage_intcall_args >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_emit_void >> strip_tac >>
+  simp_tac bool_ss [pairTheory.PAIR_EQ] >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_internal_call[no_result]:
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_stage_intcall_args >> strip_tac >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule label_preserving_emit_void >> strip_tac >>
+  simp_tac bool_ss [pairTheory.PAIR_EQ] >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+
+Finalise label_preserving_internal_call
+
+(* Invert one direct compiler LET before using its boundary theorem. *)
+fun CALL_PAIR th =
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  drule_all (Q.INST [`LP` |-> `jump_label_ok`] th) >> strip_tac;
+
+Theorem label_preserving_send_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty hg args default_ret s r t.
+    compile_call cfn cenv ret_ty ty (Send hg) args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >>
+  Cases_on `args` >> simp_tac pure_ss [compile_call_def, LET_THM]
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  Cases_on `t'` >> simp_tac (srw_ss()) []
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  Cases_on `LENGTH t'' = (if hg then 1 else 0)` >> asm_rewrite_tac[]
+  >- suspend "send_success" >>
+  CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]
+QED
+
+Resume label_preserving_send_call[send_success]:
+  simp_tac (srw_ss()) [] >>
+  `!c ty e s r t. lower_value cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)` by
+    (rpt gen_tac >> disch_tac >> drule_at Any label_preserving_lower_value >>
+     (impl_tac >- metis_tac[]) >> simp[]) >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  Cases_on `t''` >> simp_tac (srw_ss()) []
+  >- suspend "send_zero_gas" >>
+  Cases_on `t'` >> simp_tac (srw_ss()) []
+  >- suspend "send_explicit_gas" >>
+  suspend "send_bad_gas"
+QED
+
+Resume label_preserving_send_call[send_zero_gas]:
+  CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_emit_void >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+Resume label_preserving_send_call[send_explicit_gas]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_emit_void >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+Resume label_preserving_send_call[send_bad_gas]:
+  Cases_on `hg` >> gvs[]
+QED
+Finalise label_preserving_send_call
+
+fun CALL_VALUE g =
+  (pairarg_tac >> asm_rewrite_tac[] >>
+   CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+   drule_at Any label_preserving_lower_value >>
+   (impl_tac >- metis_tac[]) >> strip_tac) g;
+
+Theorem label_preserving_external_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty ist skip name ats rt opts args default_ret s r t.
+    compile_call cfn cenv ret_ty ty (ExtCall ist skip (name,ats,rt) opts)
+      args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  CALL_VALUE >> CALL_PAIR label_preserving_multi_vvs >>
+  CALL_PAIR label_preserving_ext_call_kwargs >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  Cases_on `gas_opt` >> simp_tac (srw_ss()) []
+  >- suspend "default_gas" >> suspend "explicit_gas"
+QED
+
+Resume label_preserving_external_call[default_gas]:
+  CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_external_call_kwargs >>
+  rpt IF_CASES_TAC >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+Resume label_preserving_external_call[explicit_gas]:
+  CALL_PAIR label_preserving_external_call_kwargs >>
+  rpt IF_CASES_TAC >> strip_tac >> gvs[] >>
+  metis_tac[label_extends_trans]
+QED
+Finalise label_preserving_external_call
+
+Theorem label_preserving_raw_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty flags args default_ret s r t.
+    compile_call cfn cenv ret_ty ty (RawCallTarget flags) args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  Cases_on `t'` >> simp_tac (srw_ss()) []
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  CALL_VALUE >> CALL_VALUE >> CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_emit_op >> CALL_PAIR label_preserving_ext_call_kwargs >>
+  Cases_on `gas_opt` >> simp_tac (srw_ss()) []
+  >- suspend "default_gas" >> suspend "explicit_gas"
+QED
+Resume label_preserving_raw_call[default_gas]:
+  CALL_PAIR label_preserving_emit_op >> CALL_PAIR label_preserving_raw_call_outbuf >>
+  CALL_PAIR label_preserving_raw_call_finish >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+Resume label_preserving_raw_call[explicit_gas]:
+  CALL_PAIR label_preserving_raw_call_outbuf >> CALL_PAIR label_preserving_raw_call_finish >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+Finalise label_preserving_raw_call
+
+Theorem label_preserving_raw_calldata_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty flags args default_ret s r t.
+    compile_call cfn cenv ret_ty ty (RawCallCalldataTarget flags) args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `args` >>
+  simp_tac (srw_ss()) [compile_call_def, LET_THM]
+  >- (CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]) >>
+  CALL_VALUE >> CALL_PAIR label_preserving_ext_call_kwargs >>
+  Cases_on `gas_opt` >> simp_tac (srw_ss()) []
+  >- suspend "default_gas" >> suspend "explicit_gas"
+QED
+Resume label_preserving_raw_calldata_call[default_gas]:
+  CALL_PAIR label_preserving_emit_op >> CALL_PAIR label_preserving_raw_call_outbuf >>
+  CALL_PAIR label_preserving_msg_data_to_memory >> CALL_PAIR label_preserving_raw_call_finish >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+Resume label_preserving_raw_calldata_call[explicit_gas]:
+  CALL_PAIR label_preserving_raw_call_outbuf >> CALL_PAIR label_preserving_msg_data_to_memory >>
+  CALL_PAIR label_preserving_raw_call_finish >>
+  IF_CASES_TAC >> strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+Finalise label_preserving_raw_calldata_call
+
+Theorem label_preserving_call[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty target args default_ret s r t.
+    compile_call cfn cenv ret_ty ty target args default_ret s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `target`
+  >~ [`IntCall fid`] >- metis_tac[label_preserving_internal_call]
+  >~ [`ExtCall ist skip signature opts`]
+  >- (PairCases_on `signature` >> metis_tac[label_preserving_external_call])
+  >~ [`Send hg`] >- metis_tac[label_preserving_send_call]
+  >~ [`RawCallTarget flags`] >- metis_tac[label_preserving_raw_call]
+  >~ [`RawCallCalldataTarget flags`] >- metis_tac[label_preserving_raw_calldata_call] >>
+  simp_tac pure_ss [compile_call_def, LET_THM] >>
+  CALL_PAIR label_preserving_emit_inst >> strip_tac >> gvs[]
+QED
