@@ -386,8 +386,10 @@ Proof
     (irule o1_prune_sim >> metis_tac[raw_mem_ok_ctx_free]) >>
   `o1_walk_src_inv (prune_unit_fcg_unreachable pre
                       (fcg_analyze pre.cu_context)).cu_context vs` by
-    fs[o1_walk_src_inv_def, o1_src_inv_def, prune_unit_fcg_unreachable_fields,
-       o1_prune_every] >>
+    (qpat_x_assum `o1_walk_src_inv pre.cu_context vs` mp_tac >>
+     rewrite_tac[o1_walk_src_inv_def, o1_src_inv_def,
+                 prune_unit_fcg_unreachable_fields] >>
+     metis_tac[o1_prune_every]) >>
   `ctx_sim D unit.cu_context
       (prune_unit_fcg_unreachable pre (fcg_analyze pre.cu_context)).cu_context vs vs` by
     (irule ctx_sim_run_context_eq >> qexists_tac `pre.cu_context` >> simp[]) >>
