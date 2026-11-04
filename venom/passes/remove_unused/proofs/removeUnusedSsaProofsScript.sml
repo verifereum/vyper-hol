@@ -164,7 +164,7 @@ QED
 
 
 (* Strongest SSA uniqueness: same output var ⇒ same instruction AND same block *)
-Theorem ssa_unique_output_block[local]:
+Theorem ssa_unique_output_block:
   !fn bb1 inst1 bb2 inst2 v.
     ssa_form fn /\
     MEM bb1 fn.fn_blocks /\ MEM inst1 bb1.bb_instructions /\

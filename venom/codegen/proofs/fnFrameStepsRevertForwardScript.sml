@@ -2,7 +2,7 @@
 Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
-  stackPlanGen venomExecProofs
+  stackPlanGen venomExecProofs removeUnusedSsaProofs
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -149,4 +149,38 @@ Proof
      rpt strip_tac >> spose_not_then assume_tac >>
      first_x_assum (qspec_then `LENGTH pre` mp_tac) >> simp[]) >>
   simp[]
+QED
+
+Theorem ssa_output_location:
+  !fn. ssa_form fn /\ fn_inst_ids_distinct fn ==>
+    ?loc : string -> basic_block # num.
+      !bb p v. MEM bb fn.fn_blocks /\ p < LENGTH bb.bb_instructions /\
+        MEM v (EL p bb.bb_instructions).inst_outputs ==> loc v = (bb,p)
+Proof
+  rpt strip_tac >>
+  `!bb. MEM bb fn.fn_blocks ==>
+     ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    (rpt strip_tac >> irule all_distinct_flat_map_member >>
+     qexists_tac `MAP (\bb. bb.bb_instructions) fn.fn_blocks` >>
+     gvs[fn_inst_ids_distinct_def, MAP_MAP_o, combinTheory.o_DEF, MEM_MAP] >>
+     metis_tac[]) >>
+  `!bb p cc q v.
+     MEM bb fn.fn_blocks /\ p < LENGTH bb.bb_instructions /\
+     MEM v (EL p bb.bb_instructions).inst_outputs /\
+     MEM cc fn.fn_blocks /\ q < LENGTH cc.bb_instructions /\
+     MEM v (EL q cc.bb_instructions).inst_outputs ==> bb = cc /\ p = q` by
+    (rpt strip_tac >>
+     `bb = cc /\ EL p bb.bb_instructions = EL q cc.bb_instructions` by
+       (irule ssa_unique_output_block >> metis_tac[EL_MEM]) >>
+     gvs[] >>
+     `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by metis_tac[] >>
+     `EL p (MAP (\i. i.inst_id) bb.bb_instructions) =
+      EL q (MAP (\i. i.inst_id) bb.bb_instructions)` by simp[EL_MAP] >>
+     metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP]) >>
+  qexists_tac `\v. @bp. MEM (FST bp) fn.fn_blocks /\
+    SND bp < LENGTH (FST bp).bb_instructions /\
+    MEM v (EL (SND bp) (FST bp).bb_instructions).inst_outputs` >>
+  rpt strip_tac >> simp[] >> SELECT_ELIM_TAC >> conj_tac
+  >- (qexists_tac `(bb,p)` >> simp[]) >>
+  Cases >> simp[] >> metis_tac[]
 QED
