@@ -35,6 +35,7 @@
 
 Theory exprSimUnwrap
 Ancestors
+  exprSimProps
   exprSimDefs
   loweringPosts
   list finite_map

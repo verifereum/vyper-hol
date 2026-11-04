@@ -50,6 +50,8 @@
 
 Theory exprSimTuple
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   list rich_list finite_map pair

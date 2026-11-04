@@ -16,6 +16,7 @@
  *)
 Theory exprSimBuffer
 Ancestors
+  exprSimProps
   loweringPosts
   exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv

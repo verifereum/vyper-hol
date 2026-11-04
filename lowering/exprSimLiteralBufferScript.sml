@@ -15,6 +15,8 @@
 
 Theory exprSimLiteralBuffer
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   exprSimAlloc

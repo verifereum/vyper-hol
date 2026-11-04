@@ -48,6 +48,8 @@
 
 Theory exprSimPrecompiles
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs exprSimStack
   loweringPosts
   exprSimAlloc

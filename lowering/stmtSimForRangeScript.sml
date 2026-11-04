@@ -25,6 +25,7 @@
 
 Theory stmtSimForRange
 Ancestors
+  exprSimProps
   exprSimDefs
   loweringPosts
   stmtSim stmtSimForParts stmtSimForLoop exprWordOperand

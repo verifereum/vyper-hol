@@ -63,6 +63,8 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   exprSimAlloc

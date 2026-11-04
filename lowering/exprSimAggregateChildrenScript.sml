@@ -24,6 +24,7 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
+  exprSimProps
   loweringPosts
   exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer

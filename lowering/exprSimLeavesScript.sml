@@ -22,7 +22,7 @@
  *   compile_env_case_sim     — an environment read: by compile_env_sim
  *                              (exprSim), block.prevhash by
  *                              compile_prevhash_sim, msg.gas by
- *                              compile_msg_gas_sim
+ *                              compile_msg_gas_sim (msgGasPost)
  *   compile_toplevel_name_sim — storage, transient, immutable and constant
  *                              reads: a storage or transient variable by
  *                              compile_toplevel_storage_vv_sim, a pointer
@@ -50,17 +50,13 @@
  *                              RuntimeError where BLOCKHASH returns 0 (#671),
  *                              and call_ctx_rel does not relate the block
  *                              hashes.
- *   compile_msg_gas_sim      — msg.gas: the source reads the next of the
- *                              state's gas readings where the lowering emits
- *                              GAS, and call_ctx_rel does not relate the two;
- *                              with no readings left the source raises a
- *                              RuntimeError where GAS does not abort.  It
- *                              needs call_ctx_rel to relate gas_obs to the
- *                              frame's GAS readings.
  *)
 
 Theory exprSimLeaves
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
+  msgGasPost
   exprSimDefs
   loweringPosts
   list finite_map
@@ -358,11 +354,6 @@ Proof
   cheat
 QED
 
-Theorem compile_msg_gas_sim:
-  !cenv ann args. expr_sim_ok cenv (Builtin ann (Env MsgGas) args)
-Proof
-  cheat
-QED
 
 Theorem compile_env_case_sim:
   !cenv ann item args. expr_sim_ok cenv (Builtin ann (Env item) args)

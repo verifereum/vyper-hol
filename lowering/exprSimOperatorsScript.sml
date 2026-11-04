@@ -72,6 +72,7 @@
 
 Theory exprSimOperators
 Ancestors
+  exprSimHypsDefs
   exprSimDefs
   allocLimits
   list finite_map

@@ -1,6 +1,7 @@
 (* A checked function body's entry is admissible for every gas oracle. *)
 Theory bodyGasAdmissible
 Ancestors
+  exprSimHypsDefs
   exprSimHyps stmtSim gasContext vyperState vyperTypeExprSoundness
   vyperTypeStmtSoundness vyperTypeEvalSoundness
 

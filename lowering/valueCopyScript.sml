@@ -26,6 +26,7 @@
 
 Theory valueCopy
 Ancestors
+  exprSimProps
   list rich_list arithmetic
   valueEncoding valueEncodingProps valueEncodingProofs exprSim valueCopyBytes
   compileEnv context exprLoweringProps emitHelper emitHelperProps

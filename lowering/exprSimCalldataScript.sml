@@ -16,6 +16,8 @@
 
 Theory exprSimCalldata
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimValues
   loweringPosts
   list fragExec loweringSlice exprSim exprSimHyps exprSimWordBuiltins

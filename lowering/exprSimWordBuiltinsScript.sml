@@ -34,6 +34,7 @@
 
 Theory exprSimWordBuiltins
 Ancestors
+  exprSimHypsDefs
   exprSimStack
   list words integer_word vfmExecution valueEncoding loweringSlice
   vyperEvalExprPreservesScopesDom

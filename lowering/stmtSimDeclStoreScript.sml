@@ -22,6 +22,7 @@
 
 Theory stmtSimDeclStore
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
   fragExec localPtrsProps venomMemDefs loweringSlice exprSim
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps

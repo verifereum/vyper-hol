@@ -1,8 +1,9 @@
 (* The explicit read preserves the complete expression frame. *)
 Theory msgGasPost
 Ancestors
+  gasOutcome
   loweringPosts
-  msgGasSim gasSummary exprSim exprSimHyps exprLoweringProps
+  msgGasSim gasSummary exprSimDefs exprSimProps exprSimHypsDefs exprLoweringProps
   exprLowering emitHelperProps compileEnv loweringSlice
   vyperInterpreter vyperState venomState
 
@@ -105,3 +106,26 @@ Proof
                  vs_inst_idx := LENGTH sb.cs_current_insts|>))`] >>
   simp[msg_gas_source] >> gvs[update_var_def]
 QED
+
+Theorem compile_msg_gas_sim:
+  !cenv ann args. expr_sim_ok cenv (Builtin ann (Env MsgGas) args)
+Proof
+  rw[expr_sim_ok_def, expr_sim_def] >>
+  drule_all compile_msg_gas_post >> strip_tac >>
+  PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `[T]` >> disj1_tac >>
+  fs[gas_summary_at_def, gas_marked_exec_def,
+     fragGasModeTheory.gas_marked_path_def] >>
+  rename1 `expr_post ctx func cenv cx _ es sa sb s0
+             (ee with gas_obs := []) v op t` >>
+  qexistsl_tac [`INL v`, `ee`, `OK t`] >> simp[] >>
+  metis_tac[fragGasPathMemTheory.gas_path_mem_exec]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag compile_msg_gas_sim)
+  in
+    if null axioms andalso null (Thm.hyp compile_msg_gas_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "MSG_GAS_SIM_AUDIT compile_msg_gas_sim OK\n"
+    else raise Fail "compile_msg_gas_sim: admitted proof dependency"
+  end;

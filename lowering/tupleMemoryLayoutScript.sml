@@ -7,6 +7,7 @@
  *)
 Theory tupleMemoryLayout
 Ancestors
+  exprSimProps
   list rich_list arithmetic valueEncoding exprSim vyperTyping valueTypingMemoryProps
 
 Theorem tuple_in_memory_element:

@@ -26,6 +26,7 @@
 
 Theory exprSimBinopFrag
 Ancestors
+  exprSimHypsDefs
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimCompare exprSimArith
   exprBopLowering loweringSlice

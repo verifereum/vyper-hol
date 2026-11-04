@@ -17,6 +17,7 @@
  *)
 Theory exprSimMemoryTransport
 Ancestors
+  exprSimProps
   exprSim valueEncoding valueEncodingProps valueEncodingProofs list rich_list
 
 Theorem memory_bridge_window:

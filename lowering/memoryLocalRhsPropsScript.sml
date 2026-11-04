@@ -21,6 +21,8 @@
 
 Theory memoryLocalRhsProps
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   compileEnv exprLowering stmtLowering vyperTypeSystem exprSimAggregates
   vyperAST vyperInterpreter vyperValue vyperState exprSim
   exprSimAggregateSource vyperValueOperation abiCallerAbiBound supportedTypes

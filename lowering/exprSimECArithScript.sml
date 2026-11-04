@@ -38,6 +38,8 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   exprOperandVar exprSafeOperand exprSafeOperandBuiltins

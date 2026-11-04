@@ -35,6 +35,7 @@
 
 Theory exprSimSend
 Ancestors
+  exprSimHypsDefs
   exprSimDefs exprSimStack
   loweringPosts
   allocLimits

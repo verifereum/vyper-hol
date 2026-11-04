@@ -25,6 +25,7 @@
 
 Theory stmtSimDeclMem
 Ancestors
+  exprSimProps
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set

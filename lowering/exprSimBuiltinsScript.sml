@@ -69,6 +69,7 @@
 
 Theory exprSimBuiltins
 Ancestors
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins

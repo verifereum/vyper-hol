@@ -8,6 +8,7 @@
  *)
 Theory tupleTypedLoad
 Ancestors
+  exprSimProps
   tupleLoadProps tupleMemoryLayout tupleStageProps stmtSimReturn exprSimLeaves
   stmtLowering compileEnv valueEncoding vyperTyping
   list rich_list words arithmetic valueEncodingProofs vyperTypeDefaults

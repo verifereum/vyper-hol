@@ -31,6 +31,7 @@
 
 Theory exprSimUnop
 Ancestors
+  exprSimProps
   exprSimDefs
   loweringPosts
   arithmetic list integer words integer_word byte

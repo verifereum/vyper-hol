@@ -7,6 +7,7 @@
  *)
 Theory valueCopySource
 Ancestors
+  exprSimProps
   valueCopy valueCopyBytes valueTypingMemoryProps exprSim arithmetic
 
 Theorem compile_store_memory_run_source_bound_with_capacity:

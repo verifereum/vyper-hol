@@ -21,6 +21,7 @@
 
 Theory exprSimIfExp
 Ancestors
+  exprSimProps
   exprSimDefs
   loweringPosts
   list rich_list finite_map marker

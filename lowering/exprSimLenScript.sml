@@ -21,6 +21,8 @@
 
 Theory exprSimLen
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   list fragExec exprSim exprSimHyps exprSimWordBuiltins exprBopLowering exprLowering

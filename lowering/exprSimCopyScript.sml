@@ -21,6 +21,7 @@
 
 Theory exprSimCopy
 Ancestors
+  exprSimProps
   loweringPosts
   exprSimAlloc exprSimOps
   list finite_map

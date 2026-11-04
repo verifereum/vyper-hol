@@ -34,6 +34,8 @@
 
 Theory exprSimAttribute
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs
   loweringPosts
   allocLimits

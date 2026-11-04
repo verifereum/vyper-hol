@@ -40,6 +40,7 @@
 
 Theory exprSimOperands
 Ancestors
+  exprSimProps
   loweringPosts
   finite_map
   exprSim exprSimOps localPtrsProps compileEnv exprLoweringProps

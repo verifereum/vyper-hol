@@ -32,6 +32,8 @@
 
 Theory exprSimConvert
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
   exprSimDefs exprSimStack
   loweringPosts
   allocLimits

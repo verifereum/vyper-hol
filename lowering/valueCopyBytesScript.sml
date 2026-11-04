@@ -11,6 +11,7 @@
  *)
 Theory valueCopyBytes
 Ancestors
+  exprSimProps
   loweringPosts
   exprSim context compileEnv valueTypingMemoryProps vyperTyping vyperValue valueEncoding
 
