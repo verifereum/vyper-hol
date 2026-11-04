@@ -221,3 +221,28 @@ taking those facts at `expr_type a` instead of `expr_post`, or keep their
 equality premise and add a sibling that takes the transported facts. New
 helper lemmas are allowed; exported statements stay frozen except as the
 approved exception says.
+
+## Owner contract revision: IfExp same-layout disjunct (supersedes the frozen statements below)
+
+The frozen hypotheses of `compile_ifexp_vv_sim` lack what the transport needs.
+Restate these, and only these, as follows (owner-approved internal restatement):
+
+- In `compile_ifexp_vv_sim` (exported) and `compile_ifexp_forced_frag` (local),
+  the last disjunct of the arm condition
+  `same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` becomes
+  ```
+  same_memory_layout cenv (lowered_value_type cenv e) (expr_type e) /\
+  arg_type_fits (lowered_value_type cenv e) (expr_type e) /\
+  (?tvp. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvp)
+  ```
+- `ifexp_body_pre_lowered_type_compatible` concludes the same strengthened
+  disjunct. Its proof gets `arg_type_fits` from `post_value_type_widens` /
+  `type_widens_to_def` (the case `lowered = expr_type` is the first disjunct)
+  and evaluability from `post_type_evaluates` (now exported in exprSimHyps).
+- Then prove the transport lemma (see "Owner guidance" above) from facts at
+  the physical type to facts at `expr_type a` under
+  `same_memory_layout` + `arg_type_fits` + both types evaluating, and use it in
+  `compile_ifexp_forced_frag`'s same-layout arms. Consumers of the restated
+  theorems (exprSimOperators' IfExp case, bodySimExprCases) use the
+  strengthened `ifexp_body_pre_lowered_type_compatible`.
+- List these restatements in LEARNINGS. Everything else stays frozen.
