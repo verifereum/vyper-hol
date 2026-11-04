@@ -162,6 +162,11 @@ Proof
   `alloc_limits_stmt c = alloc_limits_stmt cenv` by
     (rw[FUN_EQ_THM] >> irule (cj 1 alloc_limits_stmt_struct_fields) >>
      simp[]) >>
+  `c.ce_is_external = cenv.ce_is_external /\
+   c.ce_raw_return = cenv.ce_raw_return /\
+   return_buffer_ok c = return_buffer_ok cenv` by
+    (qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >>
+     simp[return_buffer_ok_def]) >>
   simp[FUN_EQ_THM, stmt_exprs_ok_def]
 QED
 
@@ -170,11 +175,13 @@ Theorem stmts_exprs_ok_EVERY:
     EVERY (stmt_exprs_ok cenv) ss <=>
     ~supported_stmts_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) ss /\
-    alloc_limits_stmts cenv ss
+    alloc_limits_stmts cenv ss /\
+    (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+       return_buffer_ok cenv)
 Proof
   gen_tac >> Induct >>
   simp[supported_stmt_expr_exists_def, stmt_exprs_ok_def,
-       alloc_limits_stmt_def] >>
+       alloc_limits_stmt_def, stmt_valued_return_def] >>
   metis_tac[]
 QED
 
@@ -2619,7 +2626,8 @@ Proof
   rpt (qpat_x_assum `body_stmts_ok _ _`
          (strip_assume_tac o REWRITE_RULE [body_stmts_ok_def])) >>
   Cases_on `b` >> fs[] >> first_x_assum irule >>
-  gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def, alloc_limits_stmt_def] >>
+  gvs[stmts_exprs_ok_EVERY, stmt_exprs_ok_def, alloc_limits_stmt_def,
+      stmt_valued_return_def] >>
   metis_tac[call_evaluation_safe_append_left, call_evaluation_safe_append_right]
 QED
 

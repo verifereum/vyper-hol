@@ -116,6 +116,7 @@ Definition frame_ret_ok_mem_def:
   frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty <=>
     !cenv' env lctx eo es res es'.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>

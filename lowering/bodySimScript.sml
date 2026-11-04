@@ -110,7 +110,9 @@ Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
-    alloc_limits_stmt cenv s
+    alloc_limits_stmt cenv s /\
+    (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
+       return_buffer_ok cenv)
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -152,6 +154,7 @@ Definition frame_ret_ok_def:
   frame_ret_ok ctx func cx RetQ cenv ret_ty <=>
     !cenv' env lctx eo es res es'.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
