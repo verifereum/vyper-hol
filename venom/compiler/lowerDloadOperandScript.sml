@@ -59,3 +59,42 @@ Proof
   simp[eval_operand_def, op_prov_def, op_taint_def, ld_vars_def] >>
   rpt strip_tac >> gvs[ld_value_def, ld_mask_word_def] >> metis_tac[]
 QED
+
+Theorem ld_operand_clean:
+  ld_vars V B G H tn un s t /\ (!v. op = Var v ==> v IN V) /\
+  op_prov G op = NONE /\ op_taint tn op = {} ==>
+  eval_operand op s = eval_operand op t
+Proof
+  strip_tac >>
+  `eval_operand op s = NONE <=> eval_operand op t = NONE` by
+    metis_tac[ld_operand_defined] >>
+  Cases_on `eval_operand op s` >> Cases_on `eval_operand op t` >> gvs[] >>
+  drule_all ld_operand_value >>
+  simp[ld_value_def] >> metis_tac[ld_mask_word_clean]
+QED
+
+Theorem ld_operands_clean:
+  !ops. ld_vars V B G H tn un s t /\
+  EVERY (\op. (!v. op = Var v ==> v IN V) /\
+              op_prov G op = NONE /\ op_taint tn op = {}) ops ==>
+  eval_operands ops s = eval_operands ops t
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h s = eval_operand h t` by metis_tac[ld_operand_clean] >>
+  `eval_operands ops s = eval_operands ops t` by metis_tac[] >> simp[]
+QED
+
+Theorem ld_value_compare:
+  ld_value B (SOME (bs,sz)) px Ms Mt x x' /\
+  ld_value B (SOME (bs,sz)) py Ns Nt y y' /\
+  bs <= w2n x /\ w2n x <= bs+sz /\
+  bs <= w2n y /\ w2n y <= bs+sz /\
+  bs+sz < dimword(:256) /\ B (bs,sz)+sz < dimword(:256) ==>
+  ((x <+ y <=> x' <+ y') /\
+   (y <+ x <=> y' <+ x') /\ (x = y <=> x' = y'))
+Proof
+  strip_tac >> gvs[ld_value_def] >>
+  `B (bs,sz) + sz < dimword (:256)` by decide_tac >>
+  irule ld_ptr_rel_compare >>
+  qexistsl [`bs`, `B (bs,sz)`, `sz`] >> simp[]
+QED
