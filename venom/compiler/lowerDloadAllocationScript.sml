@@ -182,3 +182,31 @@ Proof
   qabbrev_tac `tw = (n2w (e+x0):bytes32)` >>
   CONV_TAC wordsLib.WORD_ARITH_CONV
 QED
+
+Theorem ld_alloc_account_transport:
+  ld_alloc_account keys d0 A s t /\
+  s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+  t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next ==>
+  ld_alloc_account keys d0 A s' t'
+Proof
+  simp[ld_alloc_account_def]
+QED
+
+Theorem ld_alloc_account_enter:
+  ld_alloc_account keys d0 A s t /\
+  setup_callee fn args s = SOME u /\
+  setup_callee fn' args' t = SOME v /\ FINITE kc ==>
+  ld_alloc_account kc (d0 + 32 * CARD A) {} u v
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  irule ld_alloc_account_init >> simp[] >>
+  drule ld_alloc_account_frontier >> simp[]
+QED
+
+Theorem ld_alloc_account_return:
+  ld_alloc_account keys d0 A s t ==>
+  ld_alloc_account keys d0 A (merge_callee_state s u) (merge_callee_state t v)
+Proof
+  strip_tac >> irule ld_alloc_account_transport >>
+  qexistsl_tac [`s`, `t`] >> simp[merge_callee_state_def]
+QED
