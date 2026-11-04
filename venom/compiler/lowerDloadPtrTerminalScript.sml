@@ -4,7 +4,8 @@ Ancestors
   lowerDloadPtrRel o1ContractLowerDload lowerDloadPtrCopy frameRawReachable
   lowerDloadDefs venomInst list rich_list unitShapeDefs lowerDloadPtrStatic
   lowerDloadPtrAggregate lowerDloadPtrPhi lowerDloadPtrCall venomState ptrDiscipline
-  venomExecSemantics o1PassContract venomWf contextCodegenRel
+  venomExecSemantics o1PassContract venomWf contextCodegenRel lowerDloadPtrOrdinary
+  lowerDloadPtrBlockEntry finite_map pred_set
 
 (* Reverse prefix origin is independent of resolver equalities and freshness.
    Even malformed DLOAD branches cannot begin with ASSIGN or REVERT. *)
@@ -301,4 +302,97 @@ Proof
      first_x_assum drule >> simp[]) >>
   irule dload_copy_boundary_terminal_fields >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* Success reflection is independent of opaque-variable ghost matching. *)
+Theorem dload_terminal_assign_definedness:
+  i.inst_opcode = ASSIGN /\ s.vs_labels = t.vs_labels /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN U) /\
+  (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel C i s = OK s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next /\
+    s'.vs_labels = t'.vs_labels /\
+    (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE))
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst _ _ _ t = _` mp_tac >>
+  simp[assign_step_success] >> strip_tac >> gvs[] >>
+  `eval_operand op s <> NONE` by
+    (drule eval_operand_definedness >>
+     disch_then (qspec_then `op` mp_tac) >>
+     (impl_tac >- metis_tac[MEM]) >> simp[]) >>
+  Cases_on `eval_operand op s` >- gvs[] >>
+  qexists `update_var out x s` >>
+  simp[assign_step_success, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `v = out` >> gvs[lookup_var_def]
+QED
+
+Theorem dload_terminal_assign_vars_match:
+  MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
+  i.inst_operands = [op] /\ i.inst_outputs = [out] /\
+  eval_operand op s = SOME a /\ eval_operand op t = SOME b /\
+  s.vs_labels = t.vs_labels /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t ==>
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    (step_prov PG G i (update_var out a s))
+    (step_prov PH H i (update_var out b t))
+    (step_taint i s (update_var out a s) tn)
+    (step_taint i t (update_var out b t) un)
+    (update_var out a s) (update_var out b t)
+Proof
+  strip_tac >>
+  `out IN set (fn_ir_vars f) DIFF {v | retpc_var f v} ==>
+    op_taint tn op = op_taint un op /\
+    dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
+    (strip_tac >>
+     `!v. op = Var v ==> v IN set (fn_ir_vars f) DIFF {v | retpc_var f v}` by
+       (simp[] >> gen_tac >> strip_tac >> conj_tac
+        >- metis_tac[fn_ir_vars_operand, MEM] >>
+        irule retpc_assign_input_tracked >> qexistsl [`i`,`out`] >> gvs[]) >>
+     conj_tac
+     >- (Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def]) >>
+     irule dload_matched_operand >>
+     qexistsl [`set (fn_ir_vars f) DIFF {v | retpc_var f v}`,`s`,`t`,`un`] >> simp[]) >>
+  `step_prov PG G i (update_var out a s) = set_prov G [out] (op_prov G op) /\
+   step_taint i s (update_var out a s) tn =
+     tn with t_var := set_var_taint tn.t_var [out] (op_taint tn op)` by
+    (irule assign_ghost_updates >> simp[]) >>
+  `step_prov PH H i (update_var out b t) = set_prov H [out] (op_prov H op) /\
+   step_taint i t (update_var out b t) un =
+     un with t_var := set_var_taint un.t_var [out] (op_taint un op)` by
+    (irule assign_ghost_updates >> simp[]) >>
+  simp[] >> irule dload_vars_match_write >> simp[]
+QED
+
+Theorem dload_terminal_assign_fields:
+  MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
+  s.vs_labels = t.vs_labels /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    G H tn un s t /\ step_inst fuel Ct i t = OK t' ==>
+  ?s'. step_inst fuel C i s = OK s' /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    t'.vs_allocas = t.vs_allocas /\ t'.vs_alloca_next = t.vs_alloca_next /\
+    s'.vs_labels = t'.vs_labels /\
+    (!v. v IN set (fn_ir_vars f) ==>
+      (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
+    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+      (step_prov PG G i s') (step_prov PH H i t')
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) i.inst_operands ==> v IN set (fn_ir_vars f)` by
+    metis_tac[fn_ir_vars_operand] >>
+  drule_all dload_terminal_assign_definedness >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  qexists `s'` >> simp[] >>
+  qpat_x_assum `step_inst _ _ _ t = _` mp_tac >>
+  qpat_x_assum `step_inst _ _ _ s = _` mp_tac >>
+  simp[assign_step_success] >> rpt strip_tac >> gvs[] >>
+  irule dload_terminal_assign_vars_match >>
+  goal_assum (drule_at Any) >> simp[]
 QED

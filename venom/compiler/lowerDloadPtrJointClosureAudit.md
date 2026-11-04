@@ -479,3 +479,30 @@ normal invariant or use source shape to restrict suffix taint transport to V
 (non-retpc outputs cannot copy retpc inputs). No all-U matching is claimed by
 this checkpoint. Structural suffix alignment, source reachability advancement,
 terminal safety and complete joint closure remain unproved.
+
+## 10. Separate ASSIGN interfaces (C1.12.70.1)
+
+The original Ordinary theory already proved `retpc_assign_input_tracked`,
+`assign_step_success` and `assign_ghost_updates`. They are now public, with
+unchanged statements/proofs; no duplicate copy-closure lemma is introduced.
+
+The Terminal theory adds:
+
+* `dload_terminal_assign_definedness`: source success reflection, allocation
+  table/frontier preservation, equal labels and post Defs(U), with no ghost
+  premise at all. Equal labels plus Defs(U) supplies operand NONE-equivalence;
+  actual target success supplies the singleton operand/output shape.
+* `dload_terminal_assign_vars_match`: post vars_match(V) from pre vars_match(V),
+  source instruction membership and matched labels. It uses retpc copy closure
+  only when the queried updated output belongs to V. Then any Var input is
+  non-retpc and original, so its matched taint/value relation is available.
+  Opaque-only ASSIGNs require no ghost matching outside V.
+* `dload_terminal_assign_fields`: the consumer combining those two independent
+  interfaces. Source instruction membership derives all operand membership in
+  U=set(fn_ir_vars f). It concludes source OK, labels, allocation fields,
+  Defs(U) and step-provenance/step-taint vars_match(V). No memory agreement,
+  all-U taint matching, or source forwarding pair is assumed or restored.
+
+These are local terminal transition interfaces, not a global reachability
+closure proof. C1.12.70.2 still must validate immediate-REVERT access and identify
+all required retained layout/provenance clauses before integration is safe.

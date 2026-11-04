@@ -5,7 +5,7 @@ Ancestors
   venomExecSemantics venomState venomInst ptrDiscipline
   unitShapeDefs codegenRel memLocDefs pointerConfinedDefs finite_map list pred_set
 
-Theorem retpc_assign_input_tracked[local]:
+Theorem retpc_assign_input_tracked:
   MEM i (fn_insts f) /\ i.inst_opcode = ASSIGN /\
   MEM v i.inst_outputs /\ ~retpc_var f v /\
   i.inst_operands = [Var w] ==> ~retpc_var f w
@@ -13,7 +13,7 @@ Proof
   simp[retpc_var_def] >> metis_tac[copy_phi_var_assign]
 QED
 
-Theorem assign_step_success[local]:
+Theorem assign_step_success:
   i.inst_opcode = ASSIGN ==>
   (step_inst fuel C i s = OK s' <=>
    ?op out a. i.inst_operands = [op] /\ i.inst_outputs = [out] /\
@@ -23,7 +23,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem assign_ghost_updates[local]:
+Theorem assign_ghost_updates:
   i.inst_opcode = ASSIGN /\ i.inst_operands = [op] /\ i.inst_outputs = [out] /\
   eval_operand op s = SOME a ==>
   step_prov PG G i (update_var out a s) = set_prov G [out] (op_prov G op) /\
