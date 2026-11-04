@@ -131,3 +131,29 @@ Proof
       gen_tac >> LABEL_IGNORE >> LABEL_LEAF) >>
   simp_tac pure_ss [LET_THM] >> ntac 2 LABEL_BIND >> LABEL_IGNORE >> LABEL_LEAF
 QED
+
+Theorem label_preserving_select:
+  !s r t. compile_select c x y s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[builtinSimpleTheory.compile_select_def] >>
+  ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_wrap_truncate:
+  !s r t. wrap_truncate v ty s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[wrap_truncate_def] >> IF_CASES_TAC
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> LABEL_LEAF
+QED
+
+Theorem label_preserving_compare:
+  !s r t. compile_compare op x y ty s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `op` >> Cases_on `is_uint256 ty` >>
+  simp_tac (srw_ss()) [compile_compare_def, LET_THM,
+                       comp_ignore_bind_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
