@@ -7,6 +7,7 @@ Ancestors
   compileEnv fragExec exprSim valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState freshWrites varsExt integer_word
   arithmeticProps vyperArith vyperTypeSystem vyperTyping exprSimHyps
+  exprBopLowering bodyUnopMemory exprSimOperators
 
 Theorem body_neg_no_ranges_seq[local]:
   !is s. EVERY (\i. !q. inst_mem_below_frontier i q) is ==>
@@ -406,3 +407,106 @@ val () = List.app (fn th =>
      then print "BODY_NEG_TAIL_MEMORY_AUDIT OK\n"
      else raise Fail "Neg tail inherited admission"
   end) [expr_body_pre_neg, body_neg_tail_mem];
+
+Theorem body_compile_expr_neg[local]:
+  compile_expr cenv ty (Builtin ann Neg [e]) sa =
+  compile_builtin_dispatch cenv ann ty Neg [e] sa
+Proof
+  Cases_on `e` >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       expr_type_def, listTheory.list_size_def, vyperASTTheory.expr_size_def,
+       basicSizeTheory.option_size_def]
+QED
+
+Theorem body_lower_value_neg[local]:
+  lower_value compile_expr cenv ty (Builtin ann Neg [e]) sa = (op,sb) ==>
+  ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+         compile_neg x (expr_type e) sm = (op,sb)
+Proof
+  strip_tac >> qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, body_compile_expr_neg] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, lower_value_child_call] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  strip_tac >> qexistsl_tac [`v`, `st1`] >> simp[]
+QED
+
+Theorem body_compile_neg_stack[local]:
+  !sa. ?t op sb. compile_expr cenv ty (Builtin ann Neg [e]) sa =
+                (StackValue t op,sb)
+Proof
+  simp[body_compile_expr_neg] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, as_stack_val_pair, pairTheory.UNCURRY]
+QED
+
+Theorem compile_neg_sim_mem:
+  expr_body_pre cenv cx env (Builtin ann Neg [e]) es /\
+  expr_sim_mem ctx func cenv cx (expr_type e) e es ==>
+  expr_sim_mem ctx func cenv cx ty (Builtin ann Neg [e]) es
+Proof
+  strip_tac >> drule expr_body_pre_neg >> strip_tac >>
+  qpat_x_assum `ann = expr_type e` SUBST_ALL_TAC >>
+  simp[expr_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  drule body_lower_value_neg >> strip_tac >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+   (!z. x = Var z ==> not_fresh_at sm z)` by
+    (drule expr_body_pre_lower_value_word_shape >>
+     disch_then drule >> simp[]) >>
+  `cs_extends sm sb` by
+    (drule_at Any straight_fresh_cs_extends >> simp[body_neg_straight_fresh]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (irule fn_has_code_split >> simp[]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `builtin_args_length_ok Neg 1 /\ Neg <> Len` by
+    simp[vyperContextTheory.builtin_args_length_ok_def] >>
+  drule_all eval_expr_unop_cases >> strip_tac
+  >- (qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+      disch_then (qspecl_then [`sa`, `sm`, `x`, `INR exc`, `es'`, `s0`] mp_tac) >>
+      (impl_tac >- gvs[]) >>
+      disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
+      disch_then (qspecl_then
+        [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s`,
+         `\s. F`, `expr_exit res`] mp_tac) >>
+      (impl_tac >- gvs[]) >> strip_tac >>
+      irule frag_exec_mem_exit_prefix >> qexists_tac `sm` >> simp[]) >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+         value_has_type tv v1` by
+    (drule expr_body_pre_word_value >> simp[]) >>
+  qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `x`, `INL v1`, `es'`, `s0`] mp_tac) >>
+  (impl_tac >- simp[expr_res_ok_def]) >>
+  disch_then (mp_tac o MATCH_MP frag_exec_mem_pre_exit_c) >>
+  disch_then (qspecl_then
+    [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s`,
+     `expr_exit res`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (fn th => irule (MATCH_MP frag_exec_mem_then th)) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  irule body_neg_tail_mem >> simp[] >> qexistsl_tac [`v1`, `x`] >> simp[]
+QED
+
+Theorem compile_neg_vv_sim_mem:
+  expr_body_pre cenv cx env (Builtin ann Neg [e]) es /\
+  expr_sim_mem ctx func cenv cx (expr_type e) e es ==>
+  expr_vv_sim_mem ctx func cenv cx ty (Builtin ann Neg [e]) es
+Proof
+  strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  conj_tac >- simp[body_compile_neg_stack] >>
+  conj_tac >- metis_tac[eval_expr_builtin_value] >>
+  irule compile_neg_sim_mem >> simp[] >> qexists_tac `env` >> simp[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NEG_COMPOSITION_MEMORY_AUDIT OK\n"
+     else raise Fail "Neg composition inherited admission"
+  end) [body_compile_expr_neg, body_lower_value_neg, body_compile_neg_stack,
+        compile_neg_sim_mem, compile_neg_vv_sim_mem];

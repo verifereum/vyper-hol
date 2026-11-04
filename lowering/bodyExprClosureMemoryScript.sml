@@ -4,7 +4,7 @@ Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
   bodyLiteralMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
-  bodyUnopMemory vyperTyping vyperValue vyperAST vyperTypeSystem
+  bodyUnopMemory bodyNegMemory vyperTyping vyperValue vyperAST vyperTypeSystem
 
 Theorem body_ifexp_word_mem_case:
   !cx t c a b. is_word_type t /\
@@ -238,4 +238,26 @@ val () =
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_NOT_FLAG_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "flag Not closure inherited admission"
+  end;
+
+Theorem body_neg_mem_case:
+  !cx ann e. body_expr_mem_ok cx e ==>
+    body_expr_mem_ok cx (Builtin ann Neg [e])
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[expr_body_pre_neg] >>
+  `expr_sim_mem ctx func cenv cx (expr_type e) e es` by
+    metis_tac[body_expr_mem_ok_def] >>
+  metis_tac[compile_neg_sim_mem, compile_neg_vv_sim_mem]
+QED
+
+val () =
+  let val th = body_neg_mem_case
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NEG_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "Neg closure inherited admission"
   end;
