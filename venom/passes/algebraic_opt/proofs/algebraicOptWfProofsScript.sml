@@ -1612,6 +1612,50 @@ val _ = List.app (fn th =>
   [ao_handle_offset_inst_wf, ao_offset_block_structure, ao_offset_fn_insts,
    ao_offset_fn_inst_wf, ao_offset_fn_inst_bound, ao_offset_fn_well_formed];
 
+Theorem ao_transform_blocks_supply_fn_bound:
+  EVERY inst_wf (fn_insts fn) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts fn) /\
+  ao_transform_blocks_supply dfg ra targets s fn.fn_blocks = (bbs,s') ==>
+  EVERY (\i. i.inst_id < s'.irs_next_inst) (fn_insts (fn with fn_blocks := bbs))
+Proof
+  simp[fn_insts_def] >> metis_tac[ao_transform_blocks_supply_bound]
+QED
+
+Theorem ao_transform_blocks_supply_fn_well_formed:
+  wf_function fn /\ EVERY inst_wf (fn_insts fn) /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts fn) /\
+  EVERY (\p. EVERY (\op. get_label op = NONE) (SND p)) targets /\
+  ao_transform_blocks_supply dfg ra targets s fn.fn_blocks = (bbs,s') ==>
+  wf_function (fn with fn_blocks := bbs)
+Proof
+  strip_tac >>
+  `EVERY bb_well_formed fn.fn_blocks` by
+    gvs[wf_function_def, listTheory.EVERY_MEM] >>
+  `EVERY inst_wf (fn_insts_blocks fn.fn_blocks)` by gvs[fn_insts_def] >>
+  `EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts_blocks fn.fn_blocks)` by
+    gvs[fn_insts_def] >>
+  drule_all ao_transform_blocks_supply_well_formed >> strip_tac >>
+  drule_all ao_transform_blocks_supply_labels >> strip_tac >>
+  drule_all ao_transform_blocks_supply_successors >> strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts_blocks fn.fn_blocks))` by
+    gvs[wf_function_def, ao_fn_inst_ids_distinct_alt, fn_insts_def] >>
+  drule_all ao_transform_blocks_supply_distinct >> strip_tac >>
+  gvs[wf_function_def, fn_labels_def, fn_has_entry_def,
+      ao_fn_inst_ids_distinct_alt, fn_insts_def, listTheory.EVERY_MEM] >>
+  conj_tac >- (Cases_on `bbs` >> gvs[]) >>
+  gvs[fn_succs_closed_def, fn_labels_def] >> rpt strip_tac >>
+  `MEM (bb_succs bb) (MAP bb_succs bbs)` by
+    (simp[listTheory.MEM_MAP] >> qexists `bb` >> simp[]) >>
+  `MEM (bb_succs bb) (MAP bb_succs fn.fn_blocks)` by metis_tac[] >>
+  pop_assum mp_tac >> simp[listTheory.MEM_MAP] >> strip_tac >>
+  `MEM succ (MAP (\bb. bb.bb_label) fn.fn_blocks)` by metis_tac[] >>
+  gvs[listTheory.MEM_MAP] >> metis_tac[]
+QED
+
+val _ = List.app (fn th =>
+  if null (hyp th) then () else raise Fail "residual hypotheses in AO block phase")
+  [ao_transform_blocks_supply_fn_bound, ao_transform_blocks_supply_fn_well_formed];
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
