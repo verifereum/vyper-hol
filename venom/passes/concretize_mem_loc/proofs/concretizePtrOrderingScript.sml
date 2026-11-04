@@ -1,6 +1,6 @@
 Theory concretizePtrOrdering
 Ancestors
-  concretizeMemLocDefs enumeral
+  concretizeMemLocDefs enumeral concretizePtrStoreCoverage
 
 Theorem ptr_incr_sbuild_ordered[local]:
   !xs. OL_sublists cmp (incr_sbuild cmp xs)
@@ -334,4 +334,153 @@ Theorem ptr_ordered_iter_initial_used_ordered:
 Proof
   strip_tac >> irule ptr_ordered_iter_used_ordered >>
   goal_assum (drule_at Any) >> simp[OL]
+QED
+
+Definition ptr_livesets_ordered_def:
+  ptr_livesets_ordered (ls : (allocation, inst_addr list) fmap) <=>
+    !a xs. FLOOKUP ls a = SOME xs ==> OL inst_addr_to xs
+End
+
+Theorem ptr_livesets_ordered_empty[simp]:
+  ptr_livesets_ordered FEMPTY
+Proof
+  simp[ptr_livesets_ordered_def]
+QED
+
+Theorem ptr_livesets_default_ordered:
+  ptr_livesets_ordered ls ==>
+  OL inst_addr_to (case FLOOKUP ls a of NONE => [] | SOME xs => xs)
+Proof
+  strip_tac >> CASE_TAC >> simp[OL] >>
+  metis_tac[ptr_livesets_ordered_def]
+QED
+
+Theorem ptr_store_insert_ordered:
+  ptr_livesets_ordered ls ==> ptr_livesets_ordered (ptr_store_insert addr ls a)
+Proof
+  strip_tac >>
+  drule (ptr_livesets_default_ordered) >> disch_then (qspec_then `a` assume_tac) >>
+  simp[ptr_store_insert_def, ptr_livesets_ordered_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[]
+  >- (strip_tac >> gvs[] >> irule smerge_OL >> simp[OL]) >>
+  metis_tac[ptr_livesets_ordered_def]
+QED
+
+Theorem ptr_store_fold_ordered:
+  !ls. ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered (FOLDL (ptr_store_insert addr) ls keys)
+Proof
+  Induct_on `keys` >> simp[] >> metis_tac[ptr_store_insert_ordered]
+QED
+
+Theorem ptr_livesets_insts_ordered:
+  !ls. ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered (ml_livesets_insts label la us ls insts)
+Proof
+  Induct_on `insts` >- simp[ml_livesets_insts_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[ml_livesets_insts_def, GSYM ptr_store_insert_def, SF ETA_ss] >>
+  rpt strip_tac >> first_x_assum irule >>
+  irule ptr_store_fold_ordered >> simp[]
+QED
+
+Theorem ptr_mark_stores_insts_ordered:
+  !ls. ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered (ml_mark_stores_insts bpr label ls insts)
+Proof
+  Induct_on `insts` >- simp[ml_mark_stores_insts_def] >>
+  gen_tac >> PairCases_on `h` >>
+  simp[ml_mark_stores_insts_def, GSYM ptr_store_insert_def, SF ETA_ss] >>
+  rpt strip_tac >> first_x_assum irule >>
+  irule ptr_store_fold_ordered >> simp[]
+QED
+
+Theorem ptr_livesets_blocks_ordered[local]:
+  !ls. ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered
+    (FOLDL (\m bb. ml_livesets_insts bb.bb_label la us m
+      (MAPi (\i inst. (i,inst)) bb.bb_instructions)) ls blocks)
+Proof
+  Induct_on `blocks` >> simp[] >>
+  metis_tac[ptr_livesets_insts_ordered]
+QED
+
+Theorem ptr_compute_livesets_ordered:
+  ptr_livesets_ordered (ml_compute_livesets la us fn)
+Proof
+  simp[ml_compute_livesets_def, ptr_livesets_blocks_ordered]
+QED
+
+Theorem ptr_store_blocks_ordered[local]:
+  !ls. ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered
+    (FOLDL (\m bb. ml_mark_stores_insts bpr bb.bb_label m
+      (MAPi (\i inst. (i,inst)) bb.bb_instructions)) ls blocks)
+Proof
+  Induct_on `blocks` >> simp[] >>
+  metis_tac[ptr_mark_stores_insts_ordered]
+QED
+
+Theorem ptr_mark_stores_live_ordered:
+  ptr_livesets_ordered ls ==>
+  ptr_livesets_ordered (ml_mark_stores_live bpr fn ls)
+Proof
+  simp[ml_mark_stores_live_def, ptr_store_blocks_ordered]
+QED
+
+Theorem ptr_mem_liveness_ordered:
+  ptr_livesets_ordered
+    (mem_liveness_analyze bpr mems sizes pallocas cfg fn)
+Proof
+  rewrite_tac[mem_liveness_analyze_def] >>
+  Cases_on `ml_iterate bpr mems sizes pallocas cfg fn` >> simp[] >>
+  PairCases_on `x` >>
+  simp[ptr_mark_stores_live_ordered, ptr_compute_livesets_ordered]
+QED
+
+Theorem ptr_mem_liveness_fuel_ordered:
+  ptr_livesets_ordered
+    (mem_liveness_analyze_fuel fuel bpr mems sizes pallocas cfg fn)
+Proof
+  rewrite_tac[mem_liveness_analyze_fuel_def] >>
+  Cases_on `ml_iterate_fuel fuel bpr mems sizes pallocas cfg fn FEMPTY FEMPTY` >>
+  simp[ptr_mark_stores_live_ordered, ptr_compute_livesets_ordered]
+QED
+
+Theorem ptr_context_mem_livesets_ordered:
+  ptr_livesets_ordered (context_mem_livesets fuel ctx fn bpr cfg)
+Proof
+  simp[context_mem_livesets_def, ptr_mem_liveness_fuel_ordered]
+QED
+
+Theorem ptr_livesets_sinter_membership:
+  ptr_livesets_ordered ls /\
+  FLOOKUP ls a = SOME xs /\ FLOOKUP ls b = SOME ys ==>
+  (MEM addr (sinter inst_addr_to xs ys) <=> MEM addr xs /\ MEM addr ys)
+Proof
+  rpt strip_tac >>
+  `OL inst_addr_to xs /\ OL inst_addr_to ys` by
+    metis_tac[ptr_livesets_ordered_def] >>
+  qpat_x_assum `OL inst_addr_to xs` (mp_tac o MATCH_MP OL_INTER_IMP) >>
+  disch_then (qspec_then `ys` mp_tac) >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem ptr_context_liveset_default_ordered:
+  OL inst_addr_to
+    (case FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) a of
+       NONE => [] | SOME xs => xs)
+Proof
+  irule ptr_livesets_default_ordered >>
+  simp[ptr_context_mem_livesets_ordered]
+QED
+
+Theorem ptr_context_livesets_sinter_membership:
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) a = SOME xs /\
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) b = SOME ys ==>
+  (MEM addr (sinter inst_addr_to xs ys) <=> MEM addr xs /\ MEM addr ys)
+Proof
+  strip_tac >> irule ptr_livesets_sinter_membership >>
+  metis_tac[ptr_context_mem_livesets_ordered]
 QED
