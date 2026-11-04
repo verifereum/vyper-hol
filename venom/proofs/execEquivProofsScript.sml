@@ -1035,7 +1035,7 @@ Proof
 QED
 
 (* exec_create preserves equiv when states and operands match *)
-Triviality exec_create_equiv:
+Theorem exec_create_equiv[local]:
   !vars inst s1 s2 value offset sz salt_opt.
     state_equiv vars s1 s2 ==>
     result_equiv vars
@@ -1043,6 +1043,12 @@ Triviality exec_create_equiv:
       (exec_create inst s2 value offset sz salt_opt)
 Proof
   rpt strip_tac >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (Cases_on `inst.inst_outputs` >> simp[exec_create_def, result_equiv_def] >>
+      rename1 `inst.inst_outputs = out::rest_outputs` >>
+      Cases_on `rest_outputs` >> simp[exec_create_def, result_equiv_def] >>
+      gvs[state_equiv_def, execution_equiv_def, halt_state_def,
+          set_returndata_def, lookup_var_def]) >>
   `venom_create_request s1 value offset sz salt_opt =
    venom_create_request s2 value offset sz salt_opt` by
     fs[state_equiv_def, execution_equiv_def,

@@ -597,9 +597,13 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_create_def, lift_result_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_create_def, lift_result_def] >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (simp[lift_result_def, halt_state_def] >>
+      irule vsr_halted_R_term >>
+      metis_tac[vsr_set_returndata_R_term]) >>
   Cases_on `(FST (take_outcome
     (venom_create_request s2 value offset sz salt_opt) s2.vs_outcomes)).co_success` >>
-  simp[] >> ext_call_result_tac ()
+  simp[lift_result_def] >> ext_call_result_tac ()
 QED
 
 Theorem vsr_exec_alloca:

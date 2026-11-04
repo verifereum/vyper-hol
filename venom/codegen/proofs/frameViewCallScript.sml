@@ -223,6 +223,7 @@ Proof
   strip_tac >>
   drule venom_create_request_frame_view >> strip_tac >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = OK t` mp_tac >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[exec_create_def] >>
   simp[exec_create_def] >> strip_tac >> gvs[] >>
   simp[frame_view_def, update_var_def, finite_mapTheory.FMAP_MAP2_FUPDATE]
 QED
