@@ -510,3 +510,75 @@ Proof
   Cases_on `addr = (lbl,h0)` >- gvs[] >>
   drule_all ml_used_other_address >> simp[]
 QED
+
+Theorem ml_liveat_record_bit_index:
+  !n i bit old. i < LENGTH insts ==>
+  (ml_liveat_record_bit a bpr mems sizes lbl (lbl,n+i)
+    (MAPi (\j inst. (n+j,inst)) insts) bit old <=>
+   ml_liveat_before_bit a bpr mems sizes
+     (DROP (SUC i) (MAPi (\j inst. (n+j,inst)) insts)) bit \/
+   ml_read_gen a bpr mems (EL i insts))
+Proof
+  Induct_on `insts` >- simp[] >>
+  rpt gen_tac >> Cases_on `i` >>
+  simp[indexedListsTheory.MAPi_def, ml_liveat_record_bit_def,
+    combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  first_x_assum (qspecl_then [`SUC n`, `n'`, `bit`, `old`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  `(\j (inst:instruction). (SUC (j+n),inst)) = (\j inst. (SUC (n+j),inst))` by
+    simp[FUN_EQ_THM, arithmeticTheory.ADD_COMM] >>
+  pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem ml_liveat_record_bit_adjacent:
+  !n i bit old. SUC i < LENGTH insts /\
+    ml_liveat_record_bit a bpr mems sizes lbl (lbl,n + SUC i)
+      (MAPi (\j inst. (n+j,inst)) insts) bit old /\
+    ~ptr_ml_can_kill a bpr sizes (EL (SUC i) insts) ==>
+    ml_liveat_record_bit a bpr mems sizes lbl (lbl,n+i)
+      (MAPi (\j inst. (n+j,inst)) insts) bit old
+Proof
+  Induct_on `insts` >- simp[] >> rpt gen_tac >> Cases_on `i`
+  >- (Cases_on `insts` >>
+      simp[indexedListsTheory.MAPi_def, ml_liveat_record_bit_def,
+        ml_liveat_before_bit_def, combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES]) >>
+  simp[indexedListsTheory.MAPi_def, ml_liveat_record_bit_def,
+    combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  first_x_assum (qspecl_then [`SUC n`, `n'`, `bit`, `old`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  `(\j (inst:instruction). (SUC (j+n),inst)) = (\j inst. (SUC (n+j),inst))` by
+    simp[FUN_EQ_THM, arithmeticTheory.ADD_COMM] >>
+  pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem ml_used_record_bit_other_address:
+  !bit old. ~MEM addr (MAP (\p. (lbl,FST p)) insts) ==>
+  (ml_used_record_bit a bpr mems lbl addr insts bit old <=> old)
+Proof
+  Induct_on `insts` >- simp[ml_used_record_bit_def] >>
+  rpt gen_tac >> PairCases_on `h` >> simp[ml_used_record_bit_def]
+QED
+
+Theorem ml_used_record_bit_index:
+  !n i bit old. i < LENGTH insts ==>
+  (ml_used_record_bit a bpr mems lbl (lbl,n+i)
+    (MAPi (\j inst. (n+j,inst)) insts) bit old <=>
+   bit \/ EXISTS (ml_used_gen a bpr mems) (TAKE (SUC i) insts))
+Proof
+  Induct_on `insts` >- simp[] >>
+  rpt gen_tac >> Cases_on `i`
+  >- (simp[indexedListsTheory.MAPi_def, ml_used_record_bit_def,
+        combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+      irule ml_used_record_bit_other_address >>
+      simp[MEM_MAP, indexedListsTheory.MEM_MAPi] >>
+      rpt strip_tac >> PairCases_on `p` >> gvs[]) >>
+  simp[indexedListsTheory.MAPi_def, ml_used_record_bit_def,
+    combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  first_x_assum (qspecl_then [`SUC n`, `n'`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  `(\j (inst:instruction). (SUC (j+n),inst)) = (\j inst. (SUC (n+j),inst))` by
+    simp[FUN_EQ_THM, arithmeticTheory.ADD_COMM] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  disch_then (qspecl_then [`bit \/ ml_used_gen a bpr mems h`, `old`] mp_tac) >>
+  metis_tac[]
+QED
