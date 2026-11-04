@@ -1,7 +1,7 @@
 Theory concretizePtrLedgerProbe
 Ancestors
-  concretizePtrPrefixProbe concretizePtrChronologicalHistory contextCodegenRel
-  mem2varBlockSimHelpers concretizeMemLocDefs venomExecSemantics venomState ptrDiscipline venomInst words list finite_map
+  concretizePtrBytes concretizePtrPrefixLedger concretizePtrPrefixProbe concretizePtrChronologicalHistory contextCodegenRel
+  regularCallEmitSim venomMemProps codegenRel mem2varBlockSimHelpers concretizeMemLocDefs venomExecSemantics venomState ptrDiscipline venomInst words list finite_map
 Libs wordsLib
 
 Definition ptr_ledger_probe_source_def:
@@ -481,4 +481,118 @@ Proof
     SOME [ptr_ledger_q1 s; ptr_ledger_q2 s; ptr_ledger_q3 s]` by
     simp[ptr_ledger_target_follows] >>
   drule_all ptr_ledger_follow_history >> simp[]
+QED
+
+Theorem ptr_ledger_read_ranges:
+  source_memory_read_ranges (ptr_ledger_o3 s).po_inst
+    (ptr_ledger_o3 s).po_state =
+      [(w2n (n2w s.vs_alloca_next : bytes32),32)] /\
+  source_memory_read_ranges (ptr_ledger_q2 s).po_inst
+    (ptr_ledger_q2 s).po_state = [(0,32)]
+Proof
+  simp[source_memory_read_ranges_def, mk_inst_def, eval_operand_def]
+QED
+
+Theorem ptr_ledger_o2_memory_taint[local]:
+  (ptr_ledger_o2 s).po_taint.t_mem =
+    (ptr_ledger_o1 s).po_taint.t_mem DIFF
+      range_bytes [(w2n (n2w s.vs_alloca_next : bytes32),32)]
+Proof
+  simp[ptr_ledger_o2_def, ptr_ledger_next_def, ptr_observe_def,
+    step_taint_def, mem_taint_def, mk_inst_def, step_writes_def,
+    source_memory_write_ranges_def, fixed_source_write_range_def,
+    eval_operand_def, written_taint_def, op_taint_def, new_site_bytes_def,
+    ptr_ledger_s2_def, mstore_preserves] >>
+  simp[FLOOKUP_DEF] >> SET_TAC[]
+QED
+
+Theorem ptr_ledger_o3_memory_taint[local]:
+  (ptr_ledger_o3 s).po_taint.t_mem = (ptr_ledger_o2 s).po_taint.t_mem
+Proof
+  simp[ptr_ledger_o3_def, ptr_ledger_next_def, ptr_observe_def,
+    step_taint_def, mem_taint_def, mk_inst_def, step_writes_def,
+    source_memory_write_ranges_def, written_taint_def, new_site_bytes_def,
+    FLOOKUP_DEF, range_bytes_def] >> SET_TAC[]
+QED
+
+Theorem ptr_ledger_source_read_demand:
+  ptr_ledger_read_demand (ptr_ledger_o3 s) =
+    range_bytes [(w2n (n2w s.vs_alloca_next : bytes32),32)]
+Proof
+  simp[ptr_ledger_read_demand_def, ptr_ledger_read_ranges,
+    ptr_ledger_o3_memory_taint, ptr_ledger_o2_memory_taint] >> SET_TAC[]
+QED
+
+Theorem ptr_ledger_target_read_demand:
+  ptr_ledger_read_demand (ptr_ledger_q2 s) = range_bytes [(0,32)]
+Proof
+  simp[ptr_ledger_read_demand_def, ptr_ledger_read_ranges,
+    ptr_ledger_q2_def, ptr_ledger_next_def, ptr_observe_def,
+    step_taint_def, mem_taint_def, mk_inst_def, step_writes_def,
+    source_memory_write_ranges_def, fixed_source_write_range_def,
+    eval_operand_def, written_taint_def, op_taint_def, new_site_bytes_def,
+    ptr_ledger_t2_def, mstore_preserves, FLOOKUP_DEF] >> SET_TAC[]
+QED
+
+(* The paired write supplies these bytes regardless of initial memory. *)
+Theorem ptr_ledger_written_bytes:
+  k < 32 ==>
+  read_byte (w2n (n2w s.vs_alloca_next : bytes32) + k)
+    (ptr_ledger_s2 s).vs_memory =
+  read_byte k (ptr_ledger_t2 s).vs_memory
+Proof
+  strip_tac >>
+  simp[ptr_ledger_s2_def, ptr_ledger_t2_def, mstore_eq_write_mem,
+    read_byte_write_memory_with_expansion]
+QED
+
+Theorem ptr_ledger_read_bytes:
+  k < 32 ==>
+  read_byte (w2n (n2w s.vs_alloca_next : bytes32) + k)
+    (ptr_ledger_o3 s).po_state.vs_memory =
+  read_byte k (ptr_ledger_q2 s).po_state.vs_memory
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `k`] mp_tac (GEN_ALL ptr_ledger_written_bytes) >>
+  simp[ptr_ledger_s3_def]
+QED
+
+Theorem ptr_ledger_next_step[local]:
+  active_inst obs.po_fn obs.po_inst obs.po_state /\
+  ~is_terminator obs.po_inst.inst_opcode /\ obs.po_inst.inst_opcode <> INVOKE /\
+  step_inst 0 ctx obs.po_inst obs.po_state = OK post /\
+  active_inst obs.po_fn inst (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx) ==>
+  ptr_chrono_step ctx obs (ptr_ledger_next obs inst post)
+Proof
+  strip_tac >> Cases_on `obs` >>
+  gvs[ptr_ledger_next_def, ptr_observe_def] >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def,
+    ptr_observation_component_equality] >>
+  qexistsl_tac [`post`,`0`] >> simp[]
+QED
+
+Theorem ptr_ledger_paired_store_steps[local]:
+  ptr_chrono_step C (ptr_ledger_o1 s) (ptr_ledger_o2 s) /\
+  ptr_chrono_step Ct (ptr_ledger_q1 s) (ptr_ledger_q2 s)
+Proof
+  conj_tac
+  >- (pure_rewrite_tac[ptr_ledger_o2_def] >> irule ptr_ledger_next_step >>
+      simp[ptr_ledger_store_edge, is_terminator_def, ptr_ledger_s2_fields]) >>
+  pure_rewrite_tac[ptr_ledger_q2_def] >> irule ptr_ledger_next_step >>
+  simp[ptr_ledger_target_store_edge, is_terminator_def, ptr_ledger_t2_fields]
+QED
+
+Theorem ptr_ledger_probe_write_pair:
+  ptr_ledger_write_pair C Ct
+    (\i. i - w2n (n2w s.vs_alloca_next : bytes32))
+    (ptr_ledger_o1 s) (ptr_ledger_o2 s)
+    (ptr_ledger_q1 s) (ptr_ledger_q2 s)
+Proof
+  simp[ptr_ledger_write_pair_def, ptr_ledger_paired_store_steps,
+    step_writes_def, is_terminator_def, mk_inst_def,
+    source_memory_write_ranges_def, fixed_source_write_range_def,
+    eval_operand_def, ptr_bytes_agree_def, range_bytes_def] >>
+  rpt strip_tac >> gvs[] >>
+  qspecl_then [`s`, `i - w2n (n2w s.vs_alloca_next : bytes32)`]
+    mp_tac (GEN_ALL ptr_ledger_written_bytes) >> simp[]
 QED
