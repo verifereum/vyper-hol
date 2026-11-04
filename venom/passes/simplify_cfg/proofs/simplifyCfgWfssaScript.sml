@@ -2,7 +2,7 @@ Theory simplifyCfgWfssa
 Ancestors
   simplifyCfgPhiRepair simplifyCfgDataflow simplifyCfgStruct simplifyCfgDefs
   simplifyCfgRepairDataflow simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  cfgTransform simplifyCfgPhiPreds
+  cfgTransform simplifyCfgPhiPreds simplifyCfgShape
   venomWf venomInst venomExecProofs cfgWf unitShapeDefs simplifyCfgLabelProps
   list rich_list relation
 
@@ -881,45 +881,51 @@ Proof
   simp[stackPlanTypesTheory.is_label_operand_def]
 QED
 
-Theorem subst_label_inst_label_positions_ok:
+Theorem bypass_source_label_positions_ok:
   label_positions_ok inst ==>
-  label_positions_ok (subst_label_inst old new inst)
+  label_positions_ok (if ~is_terminator inst.inst_opcode then inst
+    else canon_jnz_inst (subst_label_inst old new inst))
 Proof
-  Cases_on `inst.inst_opcode = JMP`
-  >- (Cases_on `inst.inst_operands` >>
-      simp[subst_label_inst_def, label_positions_ok_def] >>
-      Cases_on `h` >> Cases_on `t` >>
-      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
-        stackPlanTypesTheory.is_label_operand_def, EVERY_MAP,
-        subst_label_op_is_label] >> IF_CASES_TAC >>
-      simp[stackPlanTypesTheory.is_label_operand_def]) >>
+  strip_tac >> IF_CASES_TAC >- simp[] >>
   Cases_on `inst.inst_opcode = JNZ`
   >- (Cases_on `inst.inst_operands` >>
-      simp[subst_label_inst_def, label_positions_ok_def] >>
-      Cases_on `t` >> simp[subst_label_inst_def, label_positions_ok_def,
-        subst_label_op_is_label] >>
-      Cases_on `h'` >> simp[subst_label_inst_def, label_positions_ok_def,
-        subst_label_op_def, subst_label_op_is_label, EVERY_MAP,
-        stackPlanTypesTheory.is_label_operand_def] >>
-      Cases_on `t'` >> simp[subst_label_inst_def, label_positions_ok_def,
-        subst_label_op_def, subst_label_op_is_label,
-        stackPlanTypesTheory.is_label_operand_def] >>
-      Cases_on `h'` >> Cases_on `t` >>
-      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
-        subst_label_op_is_label, EVERY_MAP,
-        stackPlanTypesTheory.is_label_operand_def] >>
-      rpt IF_CASES_TAC >> simp[stackPlanTypesTheory.is_label_operand_def]) >>
-  Cases_on `inst.inst_opcode = PHI`
-  >- gvs[subst_label_inst_def, label_positions_ok_def] >>
-  Cases_on `inst.inst_opcode = INVOKE`
+      gvs[subst_label_inst_def, canon_jnz_inst_def, label_positions_ok_def,
+          EVERY_MAP, subst_label_op_is_label] >>
+      Cases_on `t` >>
+      gvs[subst_label_inst_def, canon_jnz_inst_def, label_positions_ok_def,
+          EVERY_MAP, subst_label_op_is_label] >>
+      Cases_on `t'`
+      >- (Cases_on `h'` >>
+          gvs[subst_label_inst_def, canon_jnz_inst_def, label_positions_ok_def,
+              EVERY_MAP, subst_label_op_is_label, subst_label_op_def,
+              stackPlanTypesTheory.is_label_operand_def]) >>
+      gvs[subst_label_inst_def, canon_jnz_inst_def, label_positions_ok_def,
+          EVERY_MAP, subst_label_op_is_label] >>
+      Cases_on `t` >>
+      gvs[subst_label_inst_def, canon_jnz_inst_def, label_positions_ok_def,
+          EVERY_MAP, subst_label_op_is_label] >>
+      Cases_on `h'` >> Cases_on `h''` >>
+      gvs[label_positions_ok_def, subst_label_op_def, subst_label_op_is_label,
+          EVERY_MAP, stackPlanTypesTheory.is_label_operand_def] >>
+      rpt IF_CASES_TAC >>
+      gvs[label_positions_ok_def, subst_label_op_is_label,
+          stackPlanTypesTheory.is_label_operand_def]) >>
+  `canon_jnz_inst (subst_label_inst old new inst) =
+   subst_label_inst old new inst` by
+    (spose_not_then (mp_tac o MATCH_MP canon_jnz_inst_changed) >>
+     simp[subst_label_inst_def]) >>
+  simp[] >> Cases_on `inst.inst_opcode = JMP`
   >- (Cases_on `inst.inst_operands` >>
-      simp[subst_label_inst_def, label_positions_ok_def] >>
-      Cases_on `h` >>
-      simp[subst_label_inst_def, label_positions_ok_def, subst_label_op_def,
-        stackPlanTypesTheory.is_label_operand_def, EVERY_MAP,
-        subst_label_op_is_label] >> IF_CASES_TAC >> simp[]) >>
-  simp[subst_label_inst_def, label_positions_ok_def, EVERY_MAP,
-       subst_label_op_is_label] >> Cases_on `inst.inst_opcode` >> fs[]
+      gvs[subst_label_inst_def, label_positions_ok_def,
+          EVERY_MAP, subst_label_op_is_label] >>
+      Cases_on `h` >> Cases_on `t` >>
+      gvs[subst_label_inst_def, label_positions_ok_def,
+          subst_label_op_def, EVERY_MAP, subst_label_op_is_label,
+          stackPlanTypesTheory.is_label_operand_def] >>
+      rpt IF_CASES_TAC >> simp[]) >>
+  Cases_on `inst.inst_opcode` >>
+  gvs[is_terminator_def, subst_label_inst_def,
+      label_positions_ok_def, EVERY_MAP, subst_label_op_is_label]
 QED
 
 Theorem bypass_source_successors_exact:
@@ -932,16 +938,30 @@ Theorem bypass_source_successors_exact:
 Proof
   strip_tac >> IF_CASES_TAC
   >- simp[get_successors_mem_label] >>
-  `label_positions_ok (subst_label_inst old new inst)` by
-    metis_tac[subst_label_inst_label_positions_ok] >>
-  simp[canon_jnz_inst_successors_exact, get_successors_mem_label,
-       subst_label_inst_def, MEM_MAP] >>
-  eq_tac >> rpt strip_tac >> gvs[]
-  >- (rename1 `MEM op inst.inst_operands` >> Cases_on `op` >>
-      gvs[subst_label_op_def] >> qexists `s` >>
-      Cases_on `s = old` >> gvs[]) >>
-  qexists `Label src` >> simp[subst_label_op_def] >>
-  Cases_on `src = old` >> gvs[]
+  Cases_on `canon_jnz_inst (subst_label_inst old new inst) =
+            subst_label_inst old new inst`
+  >- (simp[get_successors_mem_label, subst_label_inst_def, MEM_MAP] >>
+      eq_tac >> rpt strip_tac >> gvs[]
+      >- (rename1 `MEM op inst.inst_operands` >> Cases_on `op` >>
+          gvs[subst_label_op_def] >> qexists `s` >>
+          Cases_on `s = old` >> gvs[]) >>
+      qexists `Label src` >> simp[subst_label_op_def] >>
+      Cases_on `src = old` >> gvs[]) >>
+  drule canon_jnz_inst_changed >>
+  simp[subst_label_inst_def] >> strip_tac >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  Cases_on `t` >> gvs[] >> Cases_on `t'` >> gvs[] >>
+  rename1 `inst.inst_operands = [cond; yes; no]` >>
+  Cases_on `yes` >> Cases_on `no` >>
+  gvs[label_positions_ok_def, subst_label_op_def,
+      stackPlanTypesTheory.is_label_operand_def] >>
+  rpt IF_CASES_TAC >>
+  gvs[get_successors_mem_label, subst_label_op_is_label] >>
+  Cases_on `cond` >>
+  gvs[subst_label_op_def, stackPlanTypesTheory.is_label_operand_def,
+      is_terminator_def, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  rpt IF_CASES_TAC >> gvs[]
+
 QED
 
 Theorem bb_bypass_source_successors_exact:
@@ -1294,8 +1314,7 @@ Proof
   `EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn'.fn_blocks` by
     (irule do_merge_jump_every_inst >> qexistsl [`a`, `b`, `fn`, `lm`, `lm'`] >>
      simp[update_phi_bypass_label_positions_ok] >> rpt strip_tac >>
-     IF_CASES_TAC >> simp[canon_jnz_inst_label_positions_ok,
-       subst_label_inst_label_positions_ok]) >>
+     irule bypass_source_label_positions_ok >> simp[]) >>
   fs[EVERY_MEM, fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]
 QED
 
