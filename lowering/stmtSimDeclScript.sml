@@ -23,6 +23,7 @@
 
 Theory stmtSimDecl
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps

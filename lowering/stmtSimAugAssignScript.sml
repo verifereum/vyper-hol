@@ -23,6 +23,7 @@
 
 Theory stmtSimAugAssign
 Ancestors
+  loweringPosts
   allocLimits
   list rich_list finite_map pred_set
   fragExec localPtrsProps exprSim exprSimHyps exprSimOps exprSimBinopFrag

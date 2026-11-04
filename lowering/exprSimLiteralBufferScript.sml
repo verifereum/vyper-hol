@@ -15,6 +15,7 @@
 
 Theory exprSimLiteralBuffer
 Ancestors
+  loweringPosts
   exprSimAlloc
   allocLimits
   list finite_map exprSimWordArgs loweringHalt exprLoweringProps

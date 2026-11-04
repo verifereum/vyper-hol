@@ -80,6 +80,7 @@
 
 Theory exprSim
 Ancestors
+  loweringPosts
   list rich_list finite_map pred_set
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
@@ -132,43 +133,6 @@ Definition expr_res_ok_def:
     (?str. res = INR (AssertException str))
 End
 
-(* The value v of an expression of type t held by operand op in s: a word
-   type's value as the operand, in the typed word encoding of t (the one
-   the lowering uses for address and bytesN), any other type's value in
-   memory at the operand's address, as val_in_memory lays it out.  The
-   lowering makes the same split: unwrap_value loads a word type and hands
-   out the pointer of any other.  Nothing is said where t does not
-   evaluate. *)
-Definition expr_val_rel_def:
-  expr_val_rel cx t v op s <=>
-    ?w. eval_operand op s = SOME w /\
-        !tv. evaluate_type (get_tenv cx) t = SOME tv ==>
-             if is_word_type t then w = typed_val_to_w256 tv v
-             else val_in_memory tv v (w2n w) s.vs_memory
-End
-
-(* The bytes from its address that the value v of type tv occupies in
-   memory: for a dynamic bytes or string value, its length word and its data
-   bytes; for any other value, type_memory_size tv.  A
-   bytes or string literal's annotation is the type it is used at (Bytes[100]
-   for a literal of 3 bytes assigned to a Bytes[100] local), while the
-   lowering, like Python's _lower_bytelike, allocates a buffer the size of
-   the literal's own length, so expr_val_at bounds a value by this and not
-   by its type's size.  val_in_memory reads no more than these bytes
-   (val_in_memory_footprint_agree). *)
-Definition val_footprint_def:
-  val_footprint tv v =
-    case v of
-      BytesV bs =>
-        (case tv of
-           BaseTV (BytesT (Dynamic _)) => 32 + LENGTH bs
-         | _ => type_memory_size tv)
-    | StringV str =>
-        (case tv of
-           BaseTV (StringT _) => 32 + LENGTH str
-         | _ => type_memory_size tv)
-    | _ => type_memory_size tv
-End
 
 (* The bytes from its address that storing the value v of type tv writes
    (compile_store_memory): for a dynamic bytes or string value, its length
@@ -188,33 +152,6 @@ Definition val_store_size_def:
     | _ => type_memory_size tv
 End
 
-(* A dynamic array type: its memory layout starts with the length word. *)
-Definition dynarray_type_def:
-  dynarray_type t <=> ?et n. t = ArrayT et (Dynamic n)
-End
-
-(* The local n is a dynamic array, by the compile environment's type of it,
-   which expr_sim_inv makes the local's type. *)
-Definition dynarray_local_def:
-  dynarray_local cenv n <=> ?t. cenv.ce_var_type n = SOME t /\ dynarray_type t
-End
-
-(* Code run from s0 to s leaves the live locals' memory alone, but for the
-   length word of a dynamic array local: the bytes of every live local's
-   region at es, from its second word on for a dynamic array, are kept.
-   The only memory of a local an expression writes is the length word of
-   the array x.pop() pops (exprSimPop).  A pop on a nested place
-   (x.f.pop(), x[i].pop()) would write a length word inside the region,
-   which this frame does not exempt; its lowering is wrong as it stands
-   (exprSimPlaces's compile_pop_other_sim), and lowering it right means
-   exempting the length words of nested dynamic arrays here too. *)
-Definition locals_kept_def:
-  locals_kept cenv es s0 s <=>
-    !n b sz off len.
-      local_region cenv es.scopes s0 n b sz /\ b <= off /\
-      off + len <= b + sz /\ (dynarray_local cenv n ==> b + 32 <= off) ==>
-      mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory
-End
 
 Theorem locals_kept_mem_tail:
   !cenv es s0 t u.
@@ -271,39 +208,6 @@ Proof
   metis_tac[locals_kept_regions_tail, locals_kept_refl]
 QED
 
-(* Where the value v of an expression of type t, lowered from compile state
-   sa to sb, sits in s when t is not a word type: well formed for its type
-   (val_wf), and its val_footprint bytes lie inside
-   - an allocation of one of the expression's own ALLOCAs (instruction id
-     in [sa.cs_next_id, sb.cs_next_id)), clear of every live local's
-     region, or
-   - the region of a live local at es, past its length word where the
-     local is a dynamic array and t is not (an element, or the popped one,
-     of the array; the array itself starts at the length word),
-   or it occupies no bytes (a NoneV, the result of send, has
-   val_footprint 0 and sits nowhere: the lowering hands out Lit 0w).
-   An operator's proof needs this to keep a first operand's value through
-   the second operand's fragment: an allocation of the first is below the
-   second's start counter and clear of the live locals, and expr_post
-   keeps such allocations' bytes;
-   a local's region it keeps but for a dynamic array's length word
-   (locals_kept). *)
-Definition expr_val_at_def:
-  expr_val_at cenv cx t sa sb es v op s <=>
-    !tv. evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t ==>
-      val_wf tv v /\
-      ?w. eval_operand op s = SOME w /\
-          ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
-                       sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                       b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-                       (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
-                                   b + sz <= lb \/ lb + lsz <= b)) \/
-           (?n b sz. local_region cenv es.scopes s n b sz /\
-                     b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
-                     (dynarray_local cenv n /\ ~dynarray_type t ==>
-                      b + 32 <= w2n w)) \/
-           val_footprint tv v = 0)
-End
 
 Theorem expr_val_at_start_mono:
   sa.cs_next_id <= s1.cs_next_id /\
@@ -487,38 +391,6 @@ Proof
   qexists_tac `s.vs_memory` >> simp[]
 QED
 
-(* Where the fragment of e that started in s0, related at es, lowered from
-   compile state sa to sb, ends when the source gives v and es': related at
-   es', the operand op holding v (and, for a memory-backed value, placed as
-   expr_val_at says), the variables handed out before sa and the
-   allocations of s0 kept, and the memory of the allocations of s0 kept,
-   but for two kinds:
-   - those of e's own ALLOCAs (instruction id sa.cs_next_id or above): an
-     ALLOCA run again, in a loop body, returns its earlier buffer, which e
-     then writes again;
-   - those holding a live local: e can write a local (x.pop()), and
-     stmt_state_rel at es' says what the locals hold.
-   The rest are the buffers of the expressions lowered before e, so a
-   value an earlier operand left in memory survives e's fragment.  And the
-   live locals' regions kept but for a dynamic array's length word
-   (locals_kept), so a value an earlier operand left in a local survives
-   too, where it does not cover that word (expr_val_at). *)
-Definition expr_post_def:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
-    expr_val_rel cx (expr_type e) v op s /\
-    expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x s = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) /\
-    (!aid off sz.
-       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
-       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-                  off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
-End
 
 (* The fragment of e lowered as a value of type ty, run from a state
    related at es, the source state where e is evaluated, under the code
@@ -549,123 +421,6 @@ End
    when compile_expr's code ends.  expr_vv_sim says that; expr_sim follows
    from it and unwrap_value's code (exprSimHyps). *)
 
-(* The slot w holds the value obtained by reading the captured source
-   result at es, the slots it occupies are in range (slots_in_range):
-   a word's slot holds its value's encoding, so a load of the slot gives
-   the value's word, and s's storage or transient storage agrees with the
-   source's on those slots, but at the bytes the value itself leaves dead
-   (storage_range_agree).  A read of a declared region has that from
-   storage_rel and transient_rel; a popped element, past its array's new
-   length, keeps it though its slots are dead in the array. *)
-Definition storage_holds_def:
-  storage_holds cx is_transient t tv (w:bytes32) es s <=>
-    ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
-            read_storage_slot cx is_transient w tvt es = (INL v, es) /\
-            read_result cx tv es = (INL v, es) /\
-            slots_in_range (get_storage cx es is_transient) (w2n w) tvt /\
-            storage_range_agree (get_storage cx es is_transient)
-              (if is_transient then contract_transient s
-               else contract_storage s) w tvt
-End
-
-(* tvt v sits at offset k inside the layout of itv iv: wherever memory holds
-   iv, it holds v k bytes further on, inside iv's bytes.  A struct's field
-   sits so in the struct, and any value at offset 0 in itself. *)
-Definition sub_layout_def:
-  sub_layout itv iv k tvt v <=>
-    k + type_memory_size tvt <= type_memory_size itv /\
-    !b mem. val_in_memory itv iv b mem ==> val_in_memory tvt v (b + k) mem
-End
-
-(* w points k bytes into the data of an immutable of the module being
-   lowered, and tv is the value of type t that sits there (sub_layout)
-   inside the immutable's value at es; immutables_rel says where the Venom
-   state keeps that value.  The immutable's bytes end below 2 ** 256, so a
-   load reads at off + k itself.  No invariant gives that bound yet:
-   immutables_rel at runtime bounds the offset only by the data section's
-   length, so a producer of a code pointer needs a compile-env clause
-   bounding ImmutableLoc offsets. *)
-Definition immutable_holds_def:
-  immutable_holds cenv cx t tv (w:bytes32) (es:evaluation_state) <=>
-    ?name off itv iv k tvt v.
-      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
-        SOME (ImmutableLoc off) /\ w = n2w (off + k) /\
-      off + type_memory_size itv < dimword (:256) /\
-      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
-                 NONE => FEMPTY
-               | SOME imms => get_source_immutables cenv.ce_module imms)
-              name = SOME (itv, iv) /\
-      evaluate_type (get_tenv cx) t = SOME tvt /\
-      sub_layout itv iv k tvt v /\ value_has_type tvt v /\
-      read_result cx tv es = (INL v, es)
-End
-
-(* A compiled value holds the value read from the captured source result
-   at es.  Located values retain their expression type and location;
-   memory words also retain their typed encoding.  No current compiler
-   case returns a calldata pointer. *)
-Definition vv_holds_def:
-  (vv_holds cenv cx t tv (StackValue t' op) es s <=>
-     ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
-  (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
-     t' = t /\
-     ?w. eval_operand p.ptr_operand s = SOME w /\
-         case p.ptr_location of
-           LocMemory =>
-             ?v. read_result cx tv es = (INL v, es) /\
-                 !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
-                       val_in_memory tvt v (w2n w) s.vs_memory /\
-                       (is_word_type t ==>
-                        mem_word_at (w2n w) s.vs_memory =
-                          typed_val_to_w256 tvt v)
-         | LocStorage => storage_holds cx F t tv w es s
-         | LocTransient => storage_holds cx T t tv w es s
-         | LocCode => immutable_holds cenv cx t tv w es
-         | LocCalldata => F)
-End
-
-(* Where a value in memory sits, as expr_val_at says for expr_post: for a
-   StackValue, expr_val_at itself; for a pointer into memory, the value's
-   bytes inside one of the expression's own allocations or a live local's
-   region, word types included, unless it occupies none. *)
-Definition vv_at_def:
-  (vv_at cenv cx t sa sb es tv (StackValue t' op) s <=>
-     !v. read_result cx tv es = (INL v, es) ==> expr_val_at cenv cx t sa sb es v op s) /\
-  (vv_at cenv cx t sa sb es tv (LocatedValue t' p) s <=>
-     p.ptr_location = LocMemory ==>
-     !v tvt. read_result cx tv es = (INL v, es) /\
-             evaluate_type (get_tenv cx) t = SOME tvt ==>
-       val_wf tvt v /\
-       ?w. eval_operand p.ptr_operand s = SOME w /\
-           ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b, sz) /\
-                        sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
-                        b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                        (!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
-                                    b + sz <= lb \/ lb + lsz <= b)) \/
-            (?n b sz. local_region cenv es.scopes s n b sz /\
-                      b <= w2n w /\ w2n w + val_footprint tvt v <= b + sz /\
-                      (dynarray_local cenv n /\ ~dynarray_type t ==>
-                       b + 32 <= w2n w)) \/
-            val_footprint tvt v = 0))
-End
-
-(* expr_post with a value_vv in place of an operand. *)
-Definition vv_post_def:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
-    vv_holds cenv cx (expr_type e) tv vv es' s /\
-    vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
-    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-           lookup_var x s = SOME w) /\
-    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-             FLOOKUP s.vs_allocas aid = SOME b) /\
-    (!aid off sz.
-       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
-       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
-                  off + sz <= b \/ b + sz' <= off) ==>
-       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
-End
 
 (* Raw expression results include values and captured places.  Mapping
    roots are excluded because they cannot be read as values. *)

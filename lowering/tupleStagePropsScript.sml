@@ -9,6 +9,7 @@
  *)
 Theory tupleStageProps
 Ancestors
+  loweringPosts
   stmtSimDeclMem valueCopyBytes stmtSimReturn tupleMemoryLayout exprSim valueTypingMemoryProps
   list rich_list finite_map compileEnv valueEncoding vyperTyping
   loweringHalt context emitHelper emitHelperProps exprLoweringProps freshWrites

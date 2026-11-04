@@ -21,6 +21,7 @@
 
 Theory exprSimCopy
 Ancestors
+  loweringPosts
   exprSimAlloc exprSimOps
   list finite_map
   exprSim exprLowering compileEnv context vyperAST vyperInterpreter

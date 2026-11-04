@@ -16,6 +16,7 @@
  *)
 Theory exprSimBuffer
 Ancestors
+  loweringPosts
   exprSimAlloc
   exprSimLiteralBuffer emitHelperProps exprLoweringProps compileEnv
   context venomInst venomState words fragExec rich_list list
