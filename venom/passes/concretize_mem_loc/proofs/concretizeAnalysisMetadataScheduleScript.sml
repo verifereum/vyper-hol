@@ -1,7 +1,7 @@
 Theory concretizeAnalysisMetadataSchedule
 Ancestors
   o1PassContract venomPassSchedule venomPassDispatcher venomInst
-  concretizeMemLocDefs list
+  concretizeMemLocDefs concretizeSuffixMetadataDirect concretizeSuffixMetadataCFG list
 
 Theorem concretize_observation_suffix:
   DROP 3 o1_fn_passes =
@@ -42,38 +42,47 @@ Proof
   qexists_tac `g` >> metis_tac[fn_steps_name]
 QED
 
-(* Source audit for the remaining unconditional suffix interface:
-   - fn_pass_step checks fn_name, but fn_static_layout_eq checks only fn_eom.
-     Neither contract field mentions fn_mems_used; executable preservation
-     proofs are required, not consequence of the runner's metadata checks.
-   - fmp_lower_function delegates to fmp_lower_function_with_info; its success
-     branches return fn unchanged or fmp_checked_seal. fmp_seal updates only
-     fn_blocks and fn_fmp_signature.
-   - make_ssa_current_fn returns fn unchanged or updates only fn_blocks.
-   - simplify_cfg_fn_with_labels iterates simplify_cfg_round_with_labels;
-     need preservation through remove_unreachable_blocks, fix_all_phis,
-     collapse_dfs and subst_block_labels_fn, then its iterator.
-   - sue_expand_function_supply updates only fn_blocks.
-   - dft_fn updates only fn_blocks.
-   - cfg_norm_function_supply iterates find_and_split_supply; its modifying
-     primitive insert_split_supply updates only fn_blocks.
-   Required exported interfaces (in new proof theories, executable defs frozen):
-     fmp_lower_function ctx s fn = SOME (out,s') ==> out.fn_mems_used = fn.fn_mems_used
-     make_ssa_current_fn s fn = (out,s') ==> out.fn_mems_used = fn.fn_mems_used
-     simplify_cfg_fn_with_labels fn = (out,lm) ==> out.fn_mems_used = fn.fn_mems_used
-     sue_expand_function_supply s fn = (out,s') ==> out.fn_mems_used = fn.fn_mems_used
-     (dft_fn fn).fn_mems_used = fn.fn_mems_used
-     cfg_norm_function_supply s fn = (out,s') ==> out.fn_mems_used = fn.fn_mems_used
-   Then dispatcher case projections and list induction give the unconditional
-   fn_steps suffix equality needed by walk_view_mems_used. Existing *_metadata
-   theorems establish other field equalities, not this field.
+(* Summary equality is established from executable field-preservation facts
+   below, not from fn_static_layout_eq (which checks only fn_eom). These
+   interfaces transport summaries; they do not assert source ownership. *)
 
-   Source/output pairing is LIST_REL in ctx_pass_stage_def. A consumer needs a
-   lookup-pair elimination: given distinct source function names and lookup of
-   a source fn, obtain the corresponding output fn, observed unit and step,
-   and lookup that same name in C'. Name preservation in fn_pass_step provides
-   the mapped-name equality; walk_view_mems_used then transports output summary
-   ownership to the actually observed callee. No equality of whole functions
-   is justified or needed. These obligations remain separate from source
-   ownership and from the proof that actual summaries have source owners.
-*)
+Theorem fn_steps_projection:
+  !passes fn fn'.
+    EVERY (\pass. !observed s f out.
+      fn_pass_step rpolicy pass observed s f out ==>
+      proj out.fpo_function = proj f) passes /\
+    fn_steps rpolicy passes fn fn' ==> proj fn' = proj fn
+Proof
+  Induct >> simp[fn_steps_def] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem concretize_suffix_step_mems_used[local]:
+  MEM pass (DROP 3 o1_fn_passes) /\
+  fn_pass_step rpolicy pass observed s fn out ==>
+  out.fpo_function.fn_mems_used = fn.fn_mems_used
+Proof
+  simp[concretize_observation_suffix] >> strip_tac >>
+  gvs[fn_pass_step_def, AllCaseEqs(), dft_fn_mems_used] >>
+  metis_tac[fmp_lower_function_mems_used, make_ssa_current_fn_mems_used,
+    simplify_cfg_fn_with_labels_mems_used, sue_expand_function_supply_mems_used,
+    cfg_norm_function_supply_mems_used]
+QED
+
+Theorem concretize_suffix_mems_used:
+  fn_steps rpolicy (DROP 3 o1_fn_passes) fn fn' ==>
+  fn'.fn_mems_used = fn.fn_mems_used
+Proof
+  strip_tac >> irule fn_steps_projection >>
+  goal_assum (drule_at Any) >>
+  simp[EVERY_MEM] >> metis_tac[concretize_suffix_step_mems_used]
+QED
+
+Theorem concretize_walk_view_mems_used:
+  walk_view rpolicy (DROP 3 o1_fn_passes) C' fn observed /\
+  MEM name (fn_invoke_targets fn) /\
+  lookup_function name C'.ctx_functions = SOME g' ==>
+  ?g. lookup_function name observed.cu_context.ctx_functions = SOME g /\
+      g.fn_name = g'.fn_name /\ g.fn_mems_used = g'.fn_mems_used
+Proof
+  metis_tac[walk_view_mems_used, concretize_suffix_mems_used]
+QED
