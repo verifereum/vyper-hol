@@ -6,13 +6,13 @@
  * frame's rest needs no lifting beyond the run on top ++ rest.
  *
  * TOP-LEVEL:
- *   gen_inst_halt_frame_sim   — an instruction whose step Halts (pending)
- *   gen_inst_abort_frame_sim  — an instruction whose step Aborts (proved)
+ *   gen_inst_halt_frame_sim   — an instruction whose step Halts
+ *   gen_inst_abort_frame_sim  — an instruction whose step Aborts
  *)
 
 Theory fnFrameTerminal
 Ancestors
-  fnFrameTerminalAbort opcodeClass
+  fnFrameTerminalHalt fnFrameTerminalAbort asmIR blockSimHelpers opcodeClass
   genFrameSim frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
@@ -86,8 +86,73 @@ Theorem gen_inst_halt_frame_sim:
         asm_steps lo o2pc prog n as = AsmHalt as' /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  gen_tac >> disch_tac >>
+  SUBGOAL_THEN ``inst.inst_opcode = STOP \/ inst.inst_opcode = RETURN \/
+    inst.inst_opcode = SELFDESTRUCT`` assume_tac
+  >- (drule step_inst_halt_opcodes >> strip_tac >> simp[] >>
+      qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+      gvs[generate_inst_plan_def, is_pre_codegen_opcode_def]) >>
+  drule_all frame_terminal_prefix_setup >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qpat_x_assum `_ \/ _ \/ _` strip_assume_tac
+  >- suspend "stop"
+  >- suspend "return"
+  >> suspend "selfdestruct"
 QED
+
+Resume gen_inst_halt_frame_sim[stop]:
+  `vs' = halt_state (vs with vs_returndata := [])` by
+    (qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
+     simp[Once step_inst_def, step_inst_base_def]) >>
+  `name = "STOP"` by fs[venom_to_evm_name_def] >>
+  `asm_block_at prog mid.as_pc [AsmOp "STOP"]` by metis_tac[] >>
+  drule_all terminal_stop_step >>
+  disch_then (qspecl_then [`lo`, `o2pc`] strip_assume_tac) >>
+  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
+  gvs[]
+QED
+
+Resume gen_inst_halt_frame_sim[return]:
+  qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >>
+  `inst.inst_operands = [off_op; sz_op]` by metis_tac[] >>
+  `name = "RETURN"` by fs[venom_to_evm_name_def] >>
+  `asm_block_at prog mid.as_pc [AsmOp "RETURN"]` by metis_tac[] >>
+  `mid.as_stack = off :: sz :: DROP 2 mid.as_stack` by
+    (qpat_x_assum `!values. eval_operands _ _ = _ ==> _` mp_tac >>
+     simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def, eval_operands_def]) >>
+  `MEM (w2n off, w2n sz) (source_memory_read_ranges inst vs)` by
+    simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
+  drule_all context_memory_read_range >> disch_tac >>
+  drule_all terminal_return_payload_step >>
+  disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
+  gvs[]
+QED
+
+Resume gen_inst_halt_frame_sim[selfdestruct]:
+  qpat_x_assum `step_inst _ _ _ _ = Halt _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >>
+  `name = "SELFDESTRUCT"` by fs[venom_to_evm_name_def] >>
+  `asm_block_at prog mid.as_pc [AsmOp "SELFDESTRUCT"]` by metis_tac[] >>
+  `mid.as_stack = addr :: DROP 1 mid.as_stack` by
+    (qpat_x_assum `!values. eval_operands _ _ = _ ==> _` mp_tac >>
+     simp[compute_operands_def, python_stack_operands_def,
+       ir_specific_operand_order_def, eval_operands_def]) >>
+  drule_all terminal_selfdestruct_rel_step >>
+  disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
+  qexistsl_tac [`n + 1`, `st'`] >> conj_tac
+  >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
+  gvs[]
+QED
+
+Finalise gen_inst_halt_frame_sim
 
 (* Used for an instruction whose step Aborts (REVERT, ASSERT,
    ASSERT_UNREACHABLE, INVALID, a faulting RETURNDATACOPY or CREATE) in
