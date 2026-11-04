@@ -255,3 +255,11 @@ Resume gas_path_mem_exec[compose]:
   metis_tac[gas_path_mem_edge_continue, exit_result_not_error])
 QED
 Finalise gas_path_mem_exec
+
+Theorem gas_path_mem_ok_suffix:
+  gas_path_mem ctx fn s n (OK t) ==>
+  t.vs_gas_readings = DROP n s.vs_gas_readings
+Proof
+  strip_tac >> drule gas_path_mem_exec >> strip_tac >>
+  drule gas_path_suffix >> simp[gas_count_suffix_def]
+QED
