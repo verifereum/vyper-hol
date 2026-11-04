@@ -114,6 +114,115 @@ Proof
   simp[venomExecSemanticsTheory.merge_callee_state_def]
 QED
 
+Theorem dead_stor_taint_transport:
+  dead_wf D /\ storage_agree_except (D.d_stor a st) st st' /\
+  X SUBSET D.d_stor a st /\ Y SUBSET X ==>
+  Y SUBSET D.d_stor a st'
+Proof
+  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem dead_trans_taint_transport:
+  dead_wf D /\ storage_agree_except (D.d_trans a st) st st' /\
+  X SUBSET D.d_trans a st /\ Y SUBSET X ==>
+  Y SUBSET D.d_trans a st'
+Proof
+  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem dead_imm_taint_transport:
+  dead_wf D /\ imms_agree_except D im im' /\
+  X SUBSET D.d_imm im /\ Y SUBSET X ==>
+  Y SUBSET D.d_imm im'
+Proof
+  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem dead_ret_taint_transport:
+  dead_wf D /\ LENGTH r = LENGTH r' /\
+  (!i. i < LENGTH r /\ i NOTIN D.d_ret r ==> EL i r = EL i r') /\
+  X SUBSET D.d_ret r /\ Y SUBSET X ==>
+  Y SUBSET D.d_ret r'
+Proof
+  rw[dead_wf_def] >> metis_tac[pred_setTheory.SUBSET_TRANS]
+QED
+
+Theorem request_taint_transport:
+  dead_wf D /\ taint_within D C vs /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode <> INVOKE /\ step_inst fuel C inst s = OK s' /\
+  LENGTH s.vs_requests < LENGTH s'.vs_requests /\
+  t.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+  storage_agree_except
+    (D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage)
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage
+    (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+  storage_agree_except
+    (D.d_trans s.vs_call_ctx.cc_address (s.vs_transient s.vs_call_ctx.cc_address))
+    (s.vs_transient s.vs_call_ctx.cc_address)
+    (t.vs_transient t.vs_call_ctx.cc_address) /\
+  tt.t_stor SUBSET tn.t_stor /\ tt.t_trans SUBSET tn.t_trans ==>
+  tt.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
+    (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+  tt.t_trans SUBSET D.d_trans t.vs_call_ctx.cc_address
+    (t.vs_transient t.vs_call_ctx.cc_address)
+Proof
+  strip_tac >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+     (s.vs_transient s.vs_call_ctx.cc_address)` by
+    (fs[taint_within_def] >> first_x_assum drule_all >> simp[]) >>
+  conj_tac
+  >- (irule dead_stor_taint_transport >> goal_assum drule >> simp[] >>
+      metis_tac[]) >>
+  irule dead_trans_taint_transport >> goal_assum drule >> simp[] >>
+  metis_tac[]
+QED
+
+Theorem final_taint_transport:
+  dead_wf D /\ taint_within D C vs /\ final_taint vs C s tn R /\
+  t.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+  storage_agree_except
+    (D.d_stor s.vs_call_ctx.cc_address
+      (s.vs_accounts s.vs_call_ctx.cc_address).storage)
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage
+    (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+  storage_agree_except
+    (D.d_trans s.vs_call_ctx.cc_address (s.vs_transient s.vs_call_ctx.cc_address))
+    (s.vs_transient s.vs_call_ctx.cc_address)
+    (t.vs_transient t.vs_call_ctx.cc_address) /\
+  imms_agree_except D s.vs_immutables t.vs_immutables /\
+  LENGTH s.vs_returndata = LENGTH t.vs_returndata /\
+  (!i. i < LENGTH s.vs_returndata /\ i NOTIN D.d_ret s.vs_returndata ==>
+       EL i s.vs_returndata = EL i t.vs_returndata) /\
+  tt.t_stor SUBSET tn.t_stor /\ tt.t_trans SUBSET tn.t_trans /\
+  tt.t_imm SUBSET tn.t_imm /\ Rt SUBSET R ==>
+  tt.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
+    (t.vs_accounts t.vs_call_ctx.cc_address).storage /\
+  tt.t_trans SUBSET D.d_trans t.vs_call_ctx.cc_address
+    (t.vs_transient t.vs_call_ctx.cc_address) /\
+  tt.t_imm SUBSET D.d_imm t.vs_immutables /\ Rt SUBSET D.d_ret t.vs_returndata
+Proof
+  strip_tac >>
+  `tn.t_stor SUBSET D.d_stor s.vs_call_ctx.cc_address
+     (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+   tn.t_trans SUBSET D.d_trans s.vs_call_ctx.cc_address
+     (s.vs_transient s.vs_call_ctx.cc_address) /\
+   tn.t_imm SUBSET D.d_imm s.vs_immutables /\ R SUBSET D.d_ret s.vs_returndata` by
+    (fs[taint_within_def] >> first_x_assum drule >> simp[]) >>
+  conj_tac
+  >- (irule dead_stor_taint_transport >> goal_assum drule >> simp[] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (irule dead_trans_taint_transport >> goal_assum drule >> simp[] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (irule dead_imm_taint_transport >> goal_assum drule >> metis_tac[]) >>
+  irule dead_ret_taint_transport >> goal_assum drule >> metis_tac[]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
