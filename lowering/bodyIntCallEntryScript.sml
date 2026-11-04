@@ -34,15 +34,6 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem body_inv_build_internal_env:
-  body_inv tops ctx caller cx ==>
-  body_inv tops ctx
-    (build_compile_env tops Internal mut name args ret ss use_trans) cx
-Proof
-  simp[body_inv_def, build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[]) >> simp[]
-QED
-
 (* All source hypotheses here refer to the state after evaluating arguments. *)
 Theorem bind_arguments_pushed_env_consistent:
   env_consistent env cx st /\ state_well_typed st /\
@@ -171,7 +162,7 @@ Proof
 QED
 
 Theorem body_inv_runtime_internal_entry:
-  body_inv tops ctx caller cx /\
+  body_inv tops ctx caller cx /\ target = caller.ce_target /\
   set_internal_package_target target
     (package_internal_fn tops use_trans nkeys F 0
       (mut,nr,rr,name,args,dflts,ret,ss)) =
@@ -182,7 +173,8 @@ Theorem body_inv_runtime_internal_entry:
 Proof
   strip_tac >> drule_all body_inv_push_function >> strip_tac >>
   `body_inv tops ctx
-     (build_compile_env tops Internal mut name args ret ss use_trans) cxf` by
+     (build_compile_env tops Internal mut name args ret ss use_trans
+        with ce_target := caller.ce_target) cxf` by
     (irule body_inv_build_internal_env >> goal_assum drule) >>
   irule body_inv_internal_prologue >> goal_assum drule >>
   gvs[compileVyperTheory.package_internal_fn_def,
