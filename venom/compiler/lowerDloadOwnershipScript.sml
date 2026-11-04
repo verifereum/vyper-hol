@@ -391,3 +391,295 @@ Theorem ld_two_phis_parallel:
 Proof
   simp[ld_phis_prov_def, ld_set_prov_def, FLOOKUP_UPDATE]
 QED
+
+(* One event selection per fresh static ID of this active frame. *)
+Definition ld_select_alloca_def:
+  ld_select_alloca k (L:(num, (num # num) # (num # num)) fmap) i s =
+    if i.inst_opcode = ALLOCA /\ FLOOKUP L i.inst_id = NONE then
+      case FLOOKUP s.vs_allocas i.inst_id of
+        SOME site => (SUC k, L |+ (i.inst_id,((0,k),site)))
+      | NONE => (k,L)
+    else (k,L)
+End
+
+Datatype:
+  ld_saved_frame = <|
+    lf_fn : ir_function;
+    lf_inst : instruction;
+    lf_state : venom_state;
+    lf_params : ((num # num) # (num # num)) option list;
+    lf_prov : (string, (num # num) # (num # num)) fmap;
+    lf_tvar : (string, num set) fmap;
+    lf_local : (num, (num # num) # (num # num)) fmap |>
+End
+
+Definition ld_erase_frame_def:
+  ld_erase_frame f =
+    <| cf_fn := f.lf_fn; cf_inst := f.lf_inst; cf_state := f.lf_state;
+       cf_params := MAP (OPTION_MAP SND) f.lf_params;
+       cf_prov := ld_erase f.lf_prov; cf_tvar := f.lf_tvar |>
+End
+
+Inductive ld_annotated_reachable:
+[~entry:]
+  (!vs0 ctx name fn lbl inst s1.
+     ctx.ctx_entry = SOME name /\
+     lookup_function name ctx.ctx_functions = SOME fn /\
+     fn_entry_label fn = SOME lbl /\
+     enters_block fn
+       (vs0 with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>) s1 /\
+     s1.vs_allocas = FEMPTY /\ active_inst fn inst s1 ==>
+     ld_annotated_reachable vs0 ctx [] 0 FEMPTY [] FEMPTY
+       entry_taint fn inst s1)
+[~next:]
+  (!vs0 ctx astk k L AP AG tn fn inst inst' s s' fuel k' L'.
+     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+     active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
+     inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
+     step_inst fuel ctx inst s = OK s' /\
+     ld_select_alloca k L inst s' = (k',L') /\
+     ld_erase L' = s'.vs_allocas /\
+     active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+     ld_annotated_reachable vs0 ctx astk k' L' AP
+       (ld_step_prov AP AG L' inst) (step_taint inst s s' tn) fn inst'
+       (s' with vs_inst_idx := SUC s.vs_inst_idx))
+[~block:]
+  (!vs0 ctx astk k L AP AG tn fn inst inst' s s' s1 fuel.
+     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+     active_inst fn inst s /\ is_terminator inst.inst_opcode /\
+     step_inst fuel ctx inst s = OK s' /\ ~s'.vs_halted /\
+     enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+     ld_annotated_reachable vs0 ctx astk k L AP (ld_entry_prov fn s' AG)
+       (entry_taint_vars fn s' tn) fn inst' s1)
+[~call:]
+  (!vs0 ctx astk k L AP AG tn caller inv s nm ops callee args cs s1 inst.
+     ld_annotated_reachable vs0 ctx astk k L AP AG tn caller inv s /\
+     active_inst caller inv s /\ inv.inst_opcode = INVOKE /\
+     decode_invoke inv = SOME (nm,ops) /\
+     lookup_function nm ctx.ctx_functions = SOME callee /\
+     eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+     enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+     ld_annotated_reachable vs0 ctx
+       (<| lf_fn := caller; lf_inst := inv; lf_state := s;
+           lf_params := AP; lf_prov := AG; lf_tvar := tn.t_var;
+           lf_local := L |> :: astk)
+       k FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY
+       (tn with t_var := FEMPTY) callee inst s1)
+[~ret:]
+  (!vs0 ctx f astk k L AP AG tn fn rinst s ret s_end s' inst' fuel.
+     ld_annotated_reachable vs0 ctx (f::astk) k L AP AG tn fn rinst s /\
+     active_inst fn rinst s /\
+     step_inst fuel ctx rinst s = IntRet ret s_end /\
+     bind_outputs f.lf_inst.inst_outputs ret.iret_values
+       (adopt_return_fmp ret (merge_callee_state f.lf_state s_end)) = SOME s' /\
+     active_inst f.lf_fn inst'
+       (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx) ==>
+     ld_annotated_reachable vs0 ctx astk k f.lf_local f.lf_params
+       (DRESTRICT f.lf_prov (COMPL (set f.lf_inst.inst_outputs)))
+       (tn with t_var := DRESTRICT f.lf_tvar (COMPL (set f.lf_inst.inst_outputs)))
+       f.lf_fn inst' (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx))
+End
+
+Theorem ld_annotated_erasure:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  frame_reachable vs0 ctx (MAP ld_erase_frame astk)
+    (MAP (OPTION_MAP SND) AP) (ld_erase AG) tn fn inst s
+Proof
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_annotated_erasure[entry]:
+  rpt strip_tac >> simp[ld_erase_def, o_f_FEMPTY] >>
+  irule frame_reachable_entry >> metis_tac[]
+QED
+
+Resume ld_annotated_erasure[next]:
+  rpt strip_tac >>
+  drule_all ld_erase_step_prov >> disch_then (fn th => simp[th]) >>
+  irule frame_reachable_next >> metis_tac[]
+QED
+
+Resume ld_annotated_erasure[block]:
+  rpt strip_tac >> simp[ld_erase_entry_prov] >>
+  irule frame_reachable_block >> metis_tac[]
+QED
+
+Resume ld_annotated_erasure[call]:
+  rpt strip_tac >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, ld_erase_op_prov,
+       ld_erase_frame_def, ETA_THM] >>
+  `ld_erase (FEMPTY:(string, (num # num) # (num # num)) fmap) = FEMPTY`
+    by simp[ld_erase_def, o_f_FEMPTY] >>
+  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule frame_reachable_call >> metis_tac[]
+QED
+
+Resume ld_annotated_erasure[ret]:
+  rpt strip_tac >> simp[ld_erase_restrict] >>
+  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ld_erase_frame_def] >> strip_tac >>
+  drule frame_reachable_ret >> simp[ld_erase_frame_def] >>
+  disch_then irule >> metis_tac[]
+QED
+
+Finalise ld_annotated_erasure
+
+Theorem ld_select_alloca_erase:
+  ld_erase L = s.vs_allocas /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK s' ==>
+  ld_erase (SND (ld_select_alloca k L i s')) = s'.vs_allocas
+Proof
+  strip_tac >>
+  `FLOOKUP s.vs_allocas i.inst_id =
+   OPTION_MAP SND (FLOOKUP L i.inst_id)` by metis_tac[ld_erase_lookup] >>
+  Cases_on `i.inst_opcode = ALLOCA`
+  >- (gvs[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst_base i s = _` mp_tac >>
+      simp[step_inst_base_def] >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+      simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+      rpt strip_tac >> gvs[] >>
+      simp[ld_select_alloca_def, FLOOKUP_UPDATE] >>
+      Cases_on `FLOOKUP L i.inst_id` >>
+      gvs[ld_erase_lookup, ld_erase_update]) >>
+  drule_all ld_step_nonallocation_fields >> strip_tac >>
+  simp[ld_select_alloca_def]
+QED
+
+Theorem ld_annotated_local_maps:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  ld_erase L = s.vs_allocas /\
+  EVERY (\f. ld_erase f.lf_local = f.lf_state.vs_allocas) astk
+Proof
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac
+  >- (simp[ld_erase_def, o_f_FEMPTY])
+  >- (rpt strip_tac >> simp[])
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_annotated_local_maps[block]:
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
+    (rpt strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  drule_all ld_step_nonallocation_fields >> strip_tac >>
+  drule ld_enters_block_allocation_fields >> simp[]
+QED
+
+Resume ld_annotated_local_maps[call]:
+  rpt strip_tac >> simp[] >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
+  simp[setup_callee_def] >> strip_tac >>
+  gvs[ld_erase_def, o_f_FEMPTY]
+QED
+
+Resume ld_annotated_local_maps[ret]:
+  rpt strip_tac >> gvs[] >>
+  drule ld_bind_outputs_allocas >>
+  simp[adopt_return_fmp_allocas, merge_callee_local_fields]
+QED
+
+Finalise ld_annotated_local_maps
+
+Theorem ld_annotated_active_lookup:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  FLOOKUP s.vs_allocas id = OPTION_MAP SND (FLOOKUP L id)
+Proof
+  strip_tac >> drule ld_annotated_local_maps >>
+  strip_tac >> metis_tac[ld_erase_lookup]
+QED
+
+Theorem ld_annotated_saved_lookup:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\ MEM f astk ==>
+  FLOOKUP f.lf_state.vs_allocas id =
+    OPTION_MAP SND (FLOOKUP f.lf_local id)
+Proof
+  strip_tac >> drule ld_annotated_local_maps >>
+  simp[EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> metis_tac[ld_erase_lookup]
+QED
+
+Theorem ld_source_annotation:
+  !vs0 ctx stk PG G tn fn inst s.
+  frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+  !D. o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  ?astk k L AP AG.
+    ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+    MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\
+    ld_erase AG = G
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_source_annotation[entry]:
+  rpt strip_tac >>
+  qexistsl [`[]`, `0`, `FEMPTY`, `[]`, `FEMPTY`] >>
+  simp[ld_erase_def, o_f_FEMPTY] >>
+  irule ld_annotated_reachable_entry >>
+  `vs0.vs_allocas = FEMPTY` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Resume ld_source_annotation[next]:
+  rpt strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >> gvs[] >>
+  drule ld_annotated_erasure >> strip_tac >>
+  `inst.inst_opcode <> DALLOCA` by metis_tac[ld_source_frame_no_dalloca] >>
+  drule ld_annotated_local_maps >> strip_tac >>
+  drule_all ld_select_alloca_erase >>
+  disch_then (qspec_then `k` assume_tac) >>
+  Cases_on `ld_select_alloca k L inst s'` >> gvs[] >>
+  qexistsl [`astk`, `q`, `r`, `AP`, `ld_step_prov AP AG r inst`] >>
+  simp[] >> conj_tac
+  >- (irule ld_annotated_reachable_next >> metis_tac[]) >>
+  irule ld_erase_step_prov >> simp[]
+QED
+
+Resume ld_source_annotation[block]:
+  rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >> gvs[] >>
+  qexistsl [`astk`, `k`, `L`, `AP`, `ld_entry_prov fn s' AG`] >>
+  simp[ld_erase_entry_prov] >>
+  irule ld_annotated_reachable_block >> metis_tac[]
+QED
+
+Resume ld_source_annotation[call]:
+  rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >> gvs[] >>
+  qexistsl [`<| lf_fn := fn; lf_inst := inst; lf_state := s;
+                lf_params := AP; lf_prov := AG; lf_tvar := tn.t_var;
+                lf_local := L |> :: astk`,
+             `k`, `FEMPTY`, `MAP (ld_op_prov AG) ops`, `FEMPTY`] >>
+  simp[ld_erase_frame_def, ld_erase_def, o_f_FEMPTY,
+       MAP_MAP_o, combinTheory.o_DEF, ld_erase_op_prov] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >>
+  irule ld_annotated_reachable_call >> metis_tac[]
+QED
+
+Resume ld_source_annotation[ret]:
+  rpt strip_tac >> first_x_assum (drule_then strip_assume_tac) >> gvs[] >>
+  Cases_on `astk` >> gvs[ld_erase_frame_def] >>
+  qexistsl [`t`, `k`, `h.lf_local`, `h.lf_params`,
+    `DRESTRICT h.lf_prov (COMPL (set h.lf_inst.inst_outputs))`] >>
+  simp[ld_erase_restrict] >>
+  irule ld_annotated_reachable_ret >> metis_tac[]
+QED
+
+Finalise ld_source_annotation
