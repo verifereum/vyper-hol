@@ -1024,6 +1024,25 @@ Proof
   metis_tac[build_hashmap_info_absent, module_toplevel_vtype_key_MEM_Variable]
 QED
 
+(* expr_sim_inv's storage-variable clause from the program's frame: in a
+   single-module program, a storage or transient variable has its declared
+   type in ce_module_var_type and is not a mapping. *)
+Theorem body_inv_storage_var_types:
+  !tops ctx cenv cx.
+    body_inv tops ctx cenv cx /\
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE) ==>
+    !src id ts tr typ id_str.
+      get_module_code cx src = SOME ts /\
+      find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
+      cenv.ce_hashmap_info (src,id) = NONE /\
+      cenv.ce_module_var_type (src,id) = SOME typ
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `src = NONE` by metis_tac[] >> gvs[body_inv_def] >>
+  drule find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  drule_all build_maps_variable >> simp[]
+QED
+
 Theorem env_assignable_find_NONE[local]:
   !env cx st src id ty.
     env_consistent env cx st /\

@@ -46,7 +46,7 @@
 
 Theory exprSimPlaces
 Ancestors
-  list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
+  list exprSim exprSimHyps exprSimPop exprSimPopStorage exprSimAttribute exprSimTuple
   exprSimArrayIndex
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
@@ -221,17 +221,18 @@ Proof
   simp[expr_sim_case_of_vv]
 QED
 
-(* pop on a module variable in storage or transient storage.  Cheated:
-   the source reads the popped element from its slots (read_storage_slot),
-   which raises a RuntimeError where the slots do not decode, while the
-   lowering never reads it and hands out the slot; expr_sim_inv's storage
-   clauses keep the slots decoding (as in exprSimLeaves's
-   compile_toplevel_storage_undecodable_sim), but the proof also needs
-   expr_sim_inv to give ce_var_type of the module variable's key, from
-   which the lowering reads the element type.
-   It also breaks expr_post's frame on the live locals (locals_kept): the
-   lowering MSTOREs at the slot's fixed memory address, where an allocation
-   holding a local can sit (allocation starts at 0). *)
+(* pop on a module variable in storage or transient storage.  The target's
+   pointer is the variable's slot (compile_get_target_ptr_toplevel, from
+   storage_vars_rel and expr_sim_inv's module variable clause), and
+   compile_dynarray_pop loads the length with SLOAD (TLOAD), aborts on zero
+   as the source's check raises, stores the length less one, and hands out
+   the last element's slot, as pop_place does.  The element is past the new
+   length, so its slots are dead in the array: storage_holds asks for the
+   element's slots to agree with Venom's (storage_range_agree), which holds
+   before the pop by storage_rel (the element is live) and after it since
+   only the header slot changed (dead_bytes_frame).  stmt_state_rel after
+   the header write: the dead set only grows as the length shrinks, which
+   is what accounts_rel_sstore and accounts_rel_tstore take. *)
 Theorem compile_pop_storage_sim:
   !cenv ann src id ctx func cx env ty es ts d.
     expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
@@ -239,7 +240,11 @@ Theorem compile_pop_storage_sim:
     expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `well_typed_expr env (Pop ann (TopLevelNameTarget (src,id))) /\
+   env_consistent env cx es` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all pop_storage_target_facts >> strip_tac >> gvs[] >>
+  irule compile_pop_storage_normalized_sim >> metis_tac[]
 QED
 
 (* Python requires an immutable's constructor assignment and rejects a second

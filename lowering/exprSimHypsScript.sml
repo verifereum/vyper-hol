@@ -311,6 +311,14 @@ Definition expr_sim_inv_def:
     IS_SOME es.outcomes /\
     contract_storage_well_formed cx es /\ storage_layout_safe cx /\
     oracle_storage_ok cx es /\
+    (* A storage or transient variable has its declared type in
+       ce_module_var_type, where the lowering reads a pop's element type,
+       and is not a mapping (build_var_type_map, build_hashmap_info). *)
+    (!src id ts tr typ id_str.
+       get_module_code cx src = SOME ts /\
+       find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
+       cenv.ce_hashmap_info (src,id) = NONE /\
+       cenv.ce_module_var_type (src,id) = SOME typ) /\
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>

@@ -2093,13 +2093,22 @@ Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
 QED
 
+Theorem storage_holds_inst_idx[local]:
+  storage_holds cx tr t tv w es (s with vs_inst_idx := n) <=>
+  storage_holds cx tr t tv w es s
+Proof
+  simp[storage_holds_def, venomStateTheory.contract_storage_def,
+       venomStateTheory.contract_transient_def]
+QED
+
 Theorem vv_post_inst_idx[simp]:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   Cases_on `vv` >>
   simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def]
+       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
+       storage_holds_inst_idx]
 QED
 
 Theorem hash_buffer_suffix_shape:

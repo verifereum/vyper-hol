@@ -885,7 +885,7 @@ Theorem step_MLOAD_local:
     step_inst_base (mk_inst id MLOAD [op1] [out]) ss =
       OK (update_var out (mload (w2n v) ss) ss)
 Proof
-  rw[step_inst_base_def, venomInstTheory.mk_inst_def,
+  rw[step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
      comp_return_def, comp_bind_def, comp_ignore_bind_def,
      mload_def, update_var_def, LET_THM, exec_read1_def]
 QED
