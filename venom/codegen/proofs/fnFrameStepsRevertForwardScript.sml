@@ -184,3 +184,82 @@ Proof
   >- (qexists_tac `(bb,p)` >> simp[]) >>
   Cases >> simp[] >> metis_tac[]
 QED
+
+Theorem codegen_assign_rank:
+  !fn. codegen_ready_fn fn ==> ?rank : string -> num.
+    !x inst y. FLOOKUP (dfg_build_function fn).dfg_defs x = SOME inst /\
+      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var y] ==>
+      rank y < rank x
+Proof
+  rpt strip_tac >>
+  `ssa_form fn /\ fn_inst_ids_distinct fn` by
+    gvs[codegen_ready_fn_def, wf_function_def] >>
+  drule_all ssa_output_location >> strip_tac >>
+  qspec_then `fn` strip_assume_tac fn_dominates_strict_measure >>
+  qabbrev_tac `M = SUC (SUM (MAP (\bb. LENGTH bb.bb_instructions) fn.fn_blocks))` >>
+  `!bb. MEM bb fn.fn_blocks ==> LENGTH bb.bb_instructions < M` by
+    (simp[Abbr `M`] >>
+     `!bbs bb:basic_block. MEM bb bbs ==>
+       LENGTH bb.bb_instructions <= SUM (MAP (\cc. LENGTH cc.bb_instructions) bbs)`
+       suffices_by (simp[arithmeticTheory.LESS_EQ_IFF_LESS_SUC]) >>
+     Induct >> simp[] >> rpt strip_tac >> gvs[] >>
+     first_x_assum drule >> simp[]) >>
+  qexists_tac `\v. if IS_SOME (dfg_get_def (dfg_build_function fn) v)
+    then depth (FST (loc v)).bb_label * M + SND (loc v) + 1 else 0` >>
+  rpt strip_tac >>
+  `dfg_get_def (dfg_build_function fn) x = SOME inst` by
+    simp[dfg_get_def_def] >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    (gvs[venomInstTheory.fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[]) >>
+  `?p. p < LENGTH bb.bb_instructions /\ EL p bb.bb_instructions = inst` by
+    metis_tac[MEM_EL] >>
+  `loc x = (bb,p)` by metis_tac[] >>
+  Cases_on `dfg_get_def (dfg_build_function fn) y`
+  >- simp[] >>
+  rename1 `dfg_get_def (dfg_build_function fn) y = SOME def` >>
+  drule_all dfg_assign_input_available >> strip_tac >>
+  Cases_on `db = bb`
+  >- (gvs[] >>
+      `loc x = (bb,q) /\ loc y = (bb,p')` by
+        (conj_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
+      qpat_x_assum `!bb p v. _` kall_tac >> gvs[]) >>
+  `?q. q < LENGTH db.bb_instructions /\ EL q db.bb_instructions = def` by
+    metis_tac[MEM_EL] >>
+  `loc y = (db,q)` by metis_tac[] >>
+  `db.bb_label <> bb.bb_label` by
+    (strip_tac >>
+     `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+       gvs[codegen_ready_fn_def, wf_function_def, venomInstTheory.fn_labels_def] >>
+     `?a. a < LENGTH fn.fn_blocks /\ EL a fn.fn_blocks = bb` by metis_tac[MEM_EL] >>
+     `?b. b < LENGTH fn.fn_blocks /\ EL b fn.fn_blocks = db` by metis_tac[MEM_EL] >>
+     `EL a (MAP (\b. b.bb_label) fn.fn_blocks) =
+      EL b (MAP (\b. b.bb_label) fn.fn_blocks)` by simp[EL_MAP] >>
+     metis_tac[ALL_DISTINCT_EL_IMP, LENGTH_MAP]) >>
+  `depth db.bb_label < depth bb.bb_label` by metis_tac[] >>
+  `q < M` by metis_tac[arithmeticTheory.LESS_TRANS] >>
+  simp[] >>
+  `M * SUC (depth db.bb_label) <= M * depth bb.bb_label` by
+    simp[arithmeticTheory.LE_MULT_LCANCEL] >>
+  qpat_x_assum `M * SUC _ <= _` mp_tac >>
+  pure_rewrite_tac[arithmeticTheory.MULT_SUC] >> decide_tac
+QED
+
+Theorem normalize_operand_codegen_assign:
+  !fn x inst op. codegen_ready_fn fn /\
+    dfg_get_def (dfg_build_function fn) x = SOME inst /\
+    inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] ==>
+    normalize_operand (dfg_build_function fn) [] (Var x) =
+    normalize_operand (dfg_build_function fn) [] op
+Proof
+  rpt strip_tac >> drule codegen_assign_rank >> strip_tac >>
+  `FLOOKUP (dfg_build_function fn).dfg_defs x = SOME inst` by
+    gvs[dfg_get_def_def] >>
+  simp[Once normalize_operand_def] >>
+  Cases_on `op`
+  >- simp[normalize_operand_def]
+  >- (irule normalize_operand_rank_visited >>
+      qexists_tac `rank` >> simp[] >> metis_tac[]) >>
+  simp[normalize_operand_def]
+QED
