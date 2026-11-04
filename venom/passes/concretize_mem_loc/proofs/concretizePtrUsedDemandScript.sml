@@ -162,3 +162,30 @@ Proof
   strip_tac >> simp[ml_used_block_def] >> pairarg_tac >> simp[] >>
   metis_tac[ptr_used_insts_other_label, pairTheory.SND]
 QED
+
+Theorem ptr_indexed_distinct[local]:
+  ALL_DISTINCT (MAP FST (MAPi (\i inst. (i,inst)) insts))
+Proof
+  `MAP FST (MAPi (\i inst. (i,inst)) insts) = GENLIST I (LENGTH insts)` by
+    (irule listTheory.LIST_EQ >> simp[indexedListsTheory.EL_MAPi]) >>
+  simp[listTheory.ALL_DISTINCT_GENLIST]
+QED
+
+Theorem ptr_used_block_pred_records:
+  MEM pred (cfg_preds_of cfg bb.bb_label) /\
+  FIND (\b. b.bb_label = pred) blocks = SOME pbb /\
+  MEM a (ml_lookup us (pbb.bb_label,PRE (LENGTH pbb.bb_instructions))) /\
+  MEM (j,i) (MAPi (\n inst. (n,inst)) bb.bb_instructions) ==>
+  MEM a (ml_lookup (SND (ml_used_block bp mems pallocas cfg us bb blocks))
+    (bb.bb_label,j))
+Proof
+  strip_tac >> simp[ml_used_block_def] >> pairarg_tac >> simp[] >>
+  qmatch_asmsub_abbrev_tac `ml_used_insts bp mems bb.bb_label initial us _` >>
+  `MEM a initial` by
+    (simp[Abbr `initial`, ptr_smerge_union, ptr_merge_fold_membership,
+          listTheory.EXISTS_MEM, listTheory.MEM_MAP] >>
+     disj2_tac >>
+     qexists_tac `ml_lookup us (pbb.bb_label,PRE (LENGTH pbb.bb_instructions))` >>
+     simp[] >> qexists_tac `pred` >> simp[]) >>
+  metis_tac[ptr_used_insts_input_records, ptr_indexed_distinct, pairTheory.SND]
+QED
