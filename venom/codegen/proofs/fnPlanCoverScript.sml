@@ -16,7 +16,36 @@
 
 Theory fnPlanCover
 Ancestors
-  fnPlanLineage stackPlanGen stackPlanTypes venomWf
+  fnPlanLineage stackPlanGen stackPlanTypes venomWf cfgAnalysisProps
+  dfAnalyzeProofs
+
+Theorem ready_fn_cfg_edge:
+  codegen_ready_fn fn /\ fn_cfg_edge fn a b ==>
+  ?bb. lookup_block a fn.fn_blocks = SOME bb /\
+       MEM b (cfg_succs_of (cfg_analyze fn) a)
+Proof
+  rpt strip_tac >>
+  gvs[codegen_ready_fn_def, wf_function_def, fn_cfg_edge_def] >>
+  `MEM bb.bb_label (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+  drule dfAnalyzeProofsTheory.lookup_block_exists >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  metis_tac[cfgAnalysisPropsTheory.bb_succs_in_cfg_succs]
+QED
+
+Theorem cleanup_plan_entry_call:
+  fn_entry_label fn = SOME entry /\
+  generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
+    spill_base lbl_ctr = SOME (ops, ps_end) ==>
+  ?visited.
+    generate_fn_plan_aux liveness dfg cfg fn [entry] []
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) =
+      SOME (ops, visited, ps_end)
+Proof
+  simp[generate_fn_plan_with_cleanup_analyzed_def] >>
+  Cases_on `canonical_param_prefix fn` >> simp[] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
 
 (* Used at each jump of the block induction (JMP, both JNZ targets): the
    target is fn_reachable (the current block is, and the jump is a CFG
