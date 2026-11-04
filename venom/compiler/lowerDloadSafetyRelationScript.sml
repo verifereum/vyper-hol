@@ -412,3 +412,74 @@ Proof
   Cases_on `source` >> gvs[FLOOKUP_UPDATE, AllCaseEqs()]
 QED
 
+
+Theorem ld_slots_cons:
+  ld_slots A (f::frames) = ld_slots A [f] UNION ld_slots A frames
+Proof
+  simp[ld_slots_def, EXTENSION] >> metis_tac[]
+QED
+
+Theorem ld_slots_head_cong:
+  g.lf_serial = f.lf_serial /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas ==>
+  ld_slots A (g::frames) = ld_slots A (f::frames)
+Proof
+  simp[ld_slots_def, EXTENSION] >> metis_tac[]
+QED
+
+Theorem ld_slots_empty_push:
+  f.lf_src.vs_allocas = FEMPTY ==>
+  ld_slots A (f::frames) = ld_slots A frames
+Proof
+  strip_tac >> once_rewrite_tac[ld_slots_cons] >>
+  `ld_slots A [f] = {}` by simp[ld_slots_def, EXTENSION] >>
+  simp[]
+QED
+
+Theorem ld_slots_restrict:
+  ld_slots (DRESTRICT A keep) frames = ld_slots A frames INTER keep
+Proof
+  simp[ld_slots_def, EXTENSION, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> eq_tac >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_slots_serials:
+  k IN ld_slots A frames ==> ?f aid. MEM f frames /\ k = (f.lf_serial,aid)
+Proof
+  simp[ld_slots_def] >> metis_tac[]
+QED
+
+Theorem ld_slots_pop_domain:
+  FDOM A = ld_slots A (f::frames) /\
+  (!g. MEM g frames ==> g.lf_serial <> f.lf_serial) ==>
+  FDOM (DRESTRICT A {k | FST k <> f.lf_serial}) =
+  ld_slots (DRESTRICT A {k | FST k <> f.lf_serial}) frames
+Proof
+  strip_tac >>
+  simp[FDOM_DRESTRICT, ld_slots_restrict] >>
+  once_rewrite_tac[ld_slots_cons] >>
+  simp[EXTENSION, ld_slots_def] >> gen_tac >>
+  PairCases_on `x` >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_slots_insert_head:
+  g.lf_serial = f.lf_serial /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas |+ (ai,(b,n)) /\
+  (!h. MEM h frames ==> h.lf_serial <> f.lf_serial) ==>
+  ld_slots (A |+ ((f.lf_serial,ai),(b,c,n))) (g::frames) =
+  (f.lf_serial,ai) INSERT ld_slots A (f::frames)
+Proof
+  strip_tac >>
+  simp[ld_slots_def, EXTENSION] >> gen_tac >> PairCases_on `x` >>
+  Cases_on `x0 = f.lf_serial` >> Cases_on `x1 = ai` >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs(), SF DNF_ss] >> metis_tac[]
+QED
+
+Theorem ld_maps_restrict:
+  ld_maps A f /\ (!aid. (f.lf_serial,aid) IN keep) ==>
+  ld_maps (DRESTRICT A keep) f
+Proof
+  simp[ld_maps_def, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> metis_tac[]
+QED
