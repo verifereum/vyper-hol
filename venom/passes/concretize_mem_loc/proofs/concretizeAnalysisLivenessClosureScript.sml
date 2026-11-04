@@ -369,3 +369,142 @@ Proof
   drule_all ml_used_block_sw_update >> strip_tac >>
   simp[sw_scan_def] >> first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem ml_scan_blocks_find:
+  !bb. MEM bb (ml_scan_blocks blocks lbls) ==>
+  FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb
+Proof
+  Induct_on `lbls` >- simp[ml_scan_blocks_def] >>
+  gen_tac >> pure_rewrite_tac[ml_scan_blocks_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> gvs[] >>
+  rename1 `FIND _ blocks = SOME found` >>
+  `found.bb_label = h` by (drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem ml_scan_blocks_consistent:
+  (!bb. sw_out (desc bb) = bb.bb_label) ==>
+  sw_consistent (MAP desc (ml_scan_blocks blocks lbls))
+Proof
+  simp[sw_consistent_def, MEM_MAP] >> rpt strip_tac >>
+  drule ml_scan_blocks_find >> strip_tac >>
+  rev_drule ml_scan_blocks_find >> strip_tac >>
+  gvs[] >> metis_tac[optionTheory.SOME_11]
+QED
+
+Theorem ml_scan_blocks_mem:
+  MEM bb (ml_scan_blocks blocks lbls) ==> MEM bb blocks
+Proof
+  strip_tac >> drule ml_scan_blocks_find >>
+  metis_tac[venomExecProofsTheory.FIND_MEM]
+QED
+
+Theorem ml_scan_blocks_outputs:
+  (!bb. sw_out (desc bb) = bb.bb_label) ==>
+  IMAGE sw_out (set (MAP desc (ml_scan_blocks blocks lbls))) SUBSET
+    set (MAP (\bb. bb.bb_label) blocks)
+Proof
+  simp[SUBSET_DEF, MEM_MAP, PULL_EXISTS] >> rpt strip_tac >>
+  drule ml_scan_blocks_mem >> strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem ml_scan_blocks_card_bound:
+  (!bb. sw_out (desc bb) = bb.bb_label) ==>
+  CARD (IMAGE sw_out (set (MAP desc (ml_scan_blocks blocks lbls)))) <= LENGTH blocks
+Proof
+  strip_tac >>
+  `CARD (IMAGE sw_out (set (MAP desc (ml_scan_blocks blocks lbls)))) <=
+   CARD (set (MAP (\bb. bb.bb_label) blocks))` by
+    (irule CARD_SUBSET >> simp[] >> irule ml_scan_blocks_outputs >> simp[]) >>
+  qspec_then `MAP (\bb. bb.bb_label) blocks` mp_tac (GEN_ALL listTheory.CARD_LIST_TO_SET) >> simp[]
+QED
+
+Theorem ml_boundary_rounds_stable:
+  (!bb. sw_out (desc bb) = bb.bb_label) /\ LENGTH blocks <= n ==>
+  sw_scan (MAP desc (ml_scan_blocks blocks lbls))
+    (sw_rounds (MAP desc (ml_scan_blocks blocks lbls)) n) =
+  sw_rounds (MAP desc (ml_scan_blocks blocks lbls)) n
+Proof
+  strip_tac >>
+  `sw_consistent (MAP desc (ml_scan_blocks blocks lbls))` by
+    (irule ml_scan_blocks_consistent >> simp[]) >>
+  `CARD (IMAGE sw_out (set (MAP desc (ml_scan_blocks blocks lbls)))) <= n` by
+    (drule ml_scan_blocks_card_bound >>
+     disch_then (qspecl_then [`lbls`, `blocks`] mp_tac) >> decide_tac) >>
+  drule sw_rounds_stable >> disch_then (mp_then Any mp_tac sw_rounds_stationary) >>
+  qmatch_goalsub_abbrev_tac `sw_rounds ds` >>
+  qmatch_asmsub_abbrev_tac `bound <= n` >>
+  strip_tac >>
+  first_assum (qspec_then `n - bound` mp_tac) >>
+  first_x_assum (qspec_then `SUC n - bound` mp_tac) >>
+  `bound + (n - bound) = n /\ bound + (SUC n - bound) = SUC n` by decide_tac >>
+  simp[sw_rounds_def]
+QED
+
+Theorem ml_liveat_block_false_boundary:
+  ml_liveat_block bpr mems sizes cfg la bb = (F,la') ==>
+  !lbl. ml_lookup la' (lbl,0) = ml_lookup la (lbl,0)
+Proof
+  strip_tac >> gen_tac >> Cases_on `lbl = bb.bb_label`
+  >- (gvs[] >> qpat_x_assum `ml_liveat_block _ _ _ _ _ _ = _` mp_tac >>
+      simp[ml_liveat_block_def] >> pairarg_tac >> simp[] >> metis_tac[]) >>
+  drule_all ml_liveat_block_other_label >> simp[]
+QED
+
+Theorem ml_used_block_false_boundary:
+  ml_used_block bpr mems pallocas cfg us bb blocks = (F,us') /\
+  FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb ==>
+  !lbl. ml_used_boundary_lookup blocks us' lbl = ml_used_boundary_lookup blocks us lbl
+Proof
+  strip_tac >> gen_tac >> Cases_on `lbl = bb.bb_label`
+  >- (gvs[ml_used_boundary_lookup_def] >>
+      qpat_x_assum `ml_used_block _ _ _ _ _ _ _ = _` mp_tac >>
+      simp[ml_used_block_def] >> pairarg_tac >> simp[] >> metis_tac[]) >>
+  simp[ml_used_boundary_lookup_def] >>
+  Cases_on `FIND (\b. b.bb_label = lbl) blocks` >> simp[]
+  >- (drule_all ml_used_block_other_label >> simp[]) >>
+  drule venomExecProofsTheory.FIND_P >> simp[] >> strip_tac >>
+  drule_all ml_used_block_other_label >> simp[]
+QED
+
+Theorem ml_liveat_pass_false_boundary:
+  !la la'.
+  ml_one_pass_liveat bpr mems sizes cfg blocks lbls la = (F,la') ==>
+  !lbl. ml_lookup la' (lbl,0) = ml_lookup la (lbl,0)
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_liveat_def] >>
+  rpt gen_tac >> simp[ml_one_pass_liveat_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule ml_liveat_block_false_boundary >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ml_used_pass_false_boundary:
+  !us us'.
+  ml_one_pass_used bpr mems pallocas cfg blocks lbls us = (F,us') ==>
+  !lbl. ml_used_boundary_lookup blocks us' lbl = ml_used_boundary_lookup blocks us lbl
+Proof
+  Induct_on `lbls` >- simp[ml_one_pass_used_def] >>
+  rpt gen_tac >> simp[ml_one_pass_used_def] >>
+  Cases_on `FIND (\bb. bb.bb_label = h) blocks` >> simp[] >>
+  rename1 `FIND _ blocks = SOME bb` >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `bb.bb_label = h` by (drule venomExecProofsTheory.FIND_P >> simp[]) >>
+  `FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb` by simp[] >>
+  drule_all ml_used_block_false_boundary >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem ml_one_pass_false_boundary:
+  ml_one_pass bpr mems sizes pallocas cfg fn la us = (F,la',us') ==>
+  (!lbl. ml_lookup la' (lbl,0) = ml_lookup la (lbl,0)) /\
+  (!lbl. ml_used_boundary_lookup fn.fn_blocks us' lbl =
+         ml_used_boundary_lookup fn.fn_blocks us lbl)
+Proof
+  simp[ml_one_pass_def] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (drule ml_liveat_pass_false_boundary >> simp[]) >>
+  drule ml_used_pass_false_boundary >> simp[]
+QED
