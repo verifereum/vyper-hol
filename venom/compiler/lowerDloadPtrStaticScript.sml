@@ -164,9 +164,9 @@ Proof
   metis_tac[pointer_derived_vars_edge]
 QED
 
-Theorem lower_dload_inst_supply_reserved_alloca:
+Theorem lower_dload_inst_supply_reserved_output:
   lower_dload_inst_supply s i = (xs,t) /\ MEM j xs /\
-  j.inst_opcode = ALLOCA /\ inst_output j = SOME v /\
+  j.inst_opcode <> MLOAD /\ inst_output j = SOME v /\
   MEM v s.irs_used_vars ==> j = i
 Proof
   Cases_on `i.inst_opcode = DLOAD`
@@ -174,47 +174,48 @@ Proof
       rpt strip_tac >> gvs[inst_output_def] >>
       imp_res_tac fresh_ir_var_contract >> gvs[]) >>
   Cases_on `i.inst_opcode = DLOADBYTES`
-  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[]) >>
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> gvs[inst_output_def] >>
+      imp_res_tac fresh_ir_var_contract >> gvs[]) >>
   rw[lower_dload_inst_supply_def] >> gvs[]
 QED
 
-Theorem lower_dload_insts_supply_reserved_alloca:
+Theorem lower_dload_insts_supply_reserved_output:
   !s xs t j v. lower_dload_insts_supply s ins = (xs,t) /\ MEM j xs /\
-  j.inst_opcode = ALLOCA /\ inst_output j = SOME v /\
+  j.inst_opcode <> MLOAD /\ inst_output j = SOME v /\
   MEM v s.irs_used_vars ==> MEM j ins
 Proof
   Induct_on `ins` >- simp[lower_dload_insts_supply_def] >>
   simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
-  >- (drule_all lower_dload_inst_supply_reserved_alloca >> simp[]) >>
+  >- (drule_all lower_dload_inst_supply_reserved_output >> simp[]) >>
   drule lower_dload_inst_supply_preserves_vars >> strip_tac >>
   metis_tac[]
 QED
 
-Theorem lower_dload_blocks_supply_reserved_alloca:
+Theorem lower_dload_blocks_supply_reserved_output:
   !s bs t j v. lower_dload_blocks_supply s bbs = (bs,t) /\
-  MEM j (fn_insts_blocks bs) /\ j.inst_opcode = ALLOCA /\
+  MEM j (fn_insts_blocks bs) /\ j.inst_opcode <> MLOAD /\
   inst_output j = SOME v /\ MEM v s.irs_used_vars ==>
   MEM j (fn_insts_blocks bbs)
 Proof
   Induct_on `bbs` >- simp[lower_dload_blocks_supply_def, fn_insts_blocks_def] >>
   simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
        AllCaseEqs()] >> rpt strip_tac >> gvs[fn_insts_blocks_def]
-  >- (drule_all lower_dload_insts_supply_reserved_alloca >> simp[]) >>
+  >- (drule_all lower_dload_insts_supply_reserved_output >> simp[]) >>
   drule (cj 1 lower_dload_insts_supply_reserved_operand) >> strip_tac >>
   metis_tac[]
 QED
 
-Theorem lower_dload_function_supply_reserved_alloca:
+Theorem lower_dload_function_supply_reserved_output:
   lower_dload_function_supply s f = (g,t) /\
-  MEM j (fn_insts g) /\ j.inst_opcode = ALLOCA /\
+  MEM j (fn_insts g) /\ j.inst_opcode <> MLOAD /\
   inst_output j = SOME v /\ MEM v s.irs_used_vars ==>
   MEM j (fn_insts f)
 Proof
   simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def] >>
   rpt strip_tac >> gvs[] >>
-  metis_tac[lower_dload_blocks_supply_reserved_alloca]
+  metis_tac[lower_dload_blocks_supply_reserved_output]
 QED
 
 Theorem lower_dload_function_supply_scratch_fresh:
@@ -223,7 +224,10 @@ Theorem lower_dload_function_supply_scratch_fresh:
 Proof
   simp[DISJOINT_DEF, EXTENSION, alloca_roots_def] >> rpt strip_tac >>
   gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
-  metis_tac[lower_dload_function_supply_reserved_alloca]
+  spose_not_then strip_assume_tac >> gvs[] >>
+  `MEM inst (fn_insts f)` by
+    (irule lower_dload_function_supply_reserved_output >> simp[] >>
+     qexistsl [`g`,`s`,`t`] >> simp[]) >> metis_tac[]
 QED
 
 Theorem lower_dload_function_supply_alloca_roots:
@@ -499,4 +503,159 @@ Proof
        (v IN fn_pv P f <=> v IN fn_pv P g)` by
     metis_tac[lower_dload_function_supply_old_pv, fn_ir_vars_operand] >>
   drule ptr_use_ok_cong >> metis_tac[]
+QED
+
+Theorem lower_dload_inst_supply_fresh_outputs:
+  lower_dload_inst_supply s i = (xs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars) i.inst_outputs ==>
+  EVERY (\v. MEM v t.irs_used_vars) (FLAT (MAP (\j. j.inst_outputs) xs)) /\
+  (!v. MEM v s.irs_used_vars /\ MEM v (FLAT (MAP (\j. j.inst_outputs) xs)) ==>
+       MEM v i.inst_outputs) /\
+  (!j k v. MEM j xs /\ MEM k xs /\ MEM v j.inst_outputs /\
+      MEM v k.inst_outputs /\ ~MEM v s.irs_used_vars ==> j = k)
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[EVERY_MEM] >>
+      metis_tac[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+      rpt strip_tac >> imp_res_tac fresh_ir_var_contract >> gvs[EVERY_MEM] >>
+      metis_tac[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[EVERY_MEM]
+QED
+
+Theorem lower_dload_insts_supply_fresh_outputs:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars) (FLAT (MAP (\i. i.inst_outputs) ins)) ==>
+  EVERY (\v. MEM v t.irs_used_vars) (FLAT (MAP (\j. j.inst_outputs) xs)) /\
+  (!v. MEM v s.irs_used_vars /\ MEM v (FLAT (MAP (\j. j.inst_outputs) xs)) ==>
+       MEM v (FLAT (MAP (\i. i.inst_outputs) ins))) /\
+  (!j k v. MEM j xs /\ MEM k xs /\ MEM v j.inst_outputs /\
+      MEM v k.inst_outputs /\ ~MEM v s.irs_used_vars ==> j = k)
+Proof
+  Induct_on `ins` >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all lower_dload_inst_supply_fresh_outputs >> strip_tac >>
+  drule lower_dload_inst_supply_preserves_vars >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) ins))` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  drule (cj 1 lower_dload_insts_supply_reserved_operand) >> strip_tac >>
+  gvs[EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_fresh_outputs:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) /\
+  EVERY (\v. MEM v s.irs_used_vars)
+    (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs))) ==>
+  EVERY (\v. MEM v t.irs_used_vars)
+    (FLAT (MAP (\j. j.inst_outputs) (fn_insts_blocks bs))) /\
+  (!v. MEM v s.irs_used_vars /\
+       MEM v (FLAT (MAP (\j. j.inst_outputs) (fn_insts_blocks bs))) ==>
+       MEM v (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))) /\
+  (!j k v. MEM j (fn_insts_blocks bs) /\ MEM k (fn_insts_blocks bs) /\
+      MEM v j.inst_outputs /\ MEM v k.inst_outputs /\
+      ~MEM v s.irs_used_vars ==> j = k)
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, fn_insts_blocks_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs(), fn_insts_blocks_def, MAP_APPEND, FLAT_APPEND] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  drule_all lower_dload_insts_supply_fresh_outputs >> strip_tac >>
+  drule (cj 1 lower_dload_insts_supply_reserved_operand) >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks bbs)))` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  drule (cj 1 lower_dload_blocks_supply_reserved_operand) >> strip_tac >>
+  gvs[fn_insts_blocks_def, EVERY_MEM, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_fresh_output_unique:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  MEM j (fn_insts g) /\ MEM k (fn_insts g) /\
+  MEM v j.inst_outputs /\ MEM v k.inst_outputs /\ ~MEM v (fn_ir_vars f) ==>
+  j = k
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `EVERY (\v. MEM v s.irs_used_vars)
+     (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks f.fn_blocks)))` by
+    (gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+     rpt strip_tac >> first_x_assum irule >>
+     simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP,
+          PULL_EXISTS, inst_ir_vars_def] >>
+     gvs[MEM_FLAT, MEM_MAP, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  drule_all lower_dload_blocks_supply_fresh_outputs >> strip_tac >>
+  `~MEM v s.irs_used_vars` by
+    (strip_tac >>
+     `MEM v (FLAT (MAP (\i. i.inst_outputs) (fn_insts_blocks f.fn_blocks)))` by
+       (gvs[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[]) >>
+     gvs[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP,
+         PULL_EXISTS, inst_ir_vars_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_nonalloca_output:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  MEM j (fn_insts g) /\ j.inst_opcode <> ALLOCA /\
+  MEM v j.inst_outputs /\ ~MEM v (fn_ir_vars f) ==> v NOTIN alloca_roots g
+Proof
+  simp[alloca_roots_def] >> rpt strip_tac >>
+  `MEM v inst.inst_outputs` by gvs[inst_output_def, AllCaseEqs()] >>
+  `j = inst` by metis_tac[lower_dload_function_supply_fresh_output_unique] >>
+  gvs[]
+QED
+
+Theorem lower_dload_insts_supply_member_covered:
+  !s xs t. lower_dload_insts_supply s ins = (xs,t) /\ MEM j xs /\
+    EVERY (\v. MEM v s.irs_used_vars) reserved ==>
+  ?i u ys w. MEM i ins /\ lower_dload_inst_supply u i = (ys,w) /\
+    MEM j ys /\ EVERY (\v. MEM v u.irs_used_vars) reserved
+Proof
+  Induct_on `ins` >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (qexistsl [`h`,`s`,`out`,`s1`] >> simp[]) >>
+  drule lower_dload_inst_supply_preserves_vars >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars) reserved` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_blocks_supply_member_covered:
+  !s bs t. lower_dload_blocks_supply s bbs = (bs,t) /\
+    MEM j (fn_insts_blocks bs) /\ EVERY (\v. MEM v s.irs_used_vars) reserved ==>
+  ?i u ys w. MEM i (fn_insts_blocks bbs) /\
+    lower_dload_inst_supply u i = (ys,w) /\ MEM j ys /\
+    EVERY (\v. MEM v u.irs_used_vars) reserved
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, fn_insts_blocks_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs()] >> rpt gen_tac >> strip_tac >> gvs[fn_insts_blocks_def]
+  >- (drule_all lower_dload_insts_supply_member_covered >>
+      strip_tac >> metis_tac[]) >>
+  drule (cj 1 lower_dload_insts_supply_reserved_operand) >> strip_tac >>
+  `EVERY (\v. MEM v s1.irs_used_vars) reserved` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_member_covered:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  MEM j (fn_insts g) ==>
+  ?i u ys w. MEM i (fn_insts f) /\ lower_dload_inst_supply u i = (ys,w) /\
+    MEM j ys /\ EVERY (\v. MEM v u.irs_used_vars) (fn_ir_vars f)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs(), fn_insts_def] >>
+  strip_tac >> gvs[] >>
+  `EVERY (\v. MEM v s.irs_used_vars) (fn_ir_vars f)` by
+    gvs[ir_supply_covers_fn_def, list_subset_def] >>
+  drule_all lower_dload_blocks_supply_member_covered >> simp[]
 QED
