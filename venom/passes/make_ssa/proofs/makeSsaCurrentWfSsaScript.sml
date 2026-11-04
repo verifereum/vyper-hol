@@ -397,6 +397,169 @@ Proof
   disch_then (qspecl_then [`n`, `j`] mp_tac) >> gvs[]
 QED
 
+Theorem current_wf_outputs_trace_length[local]:
+  !anns s rs H E names s' rs' H' E'.
+  current_outputs_trace anns s rs H E names s' rs' H' E' ==>
+  LENGTH names = LENGTH anns
+Proof
+  Induct >> simp[current_outputs_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[current_outputs_trace_def] >>
+  rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]
+QED
+
+(* Full output alignment, including repeated outputs within an instruction. *)
+Theorem current_wf_local_output_alignment:
+  !annss insts s rs H E insts' s' rs' H' E'.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' ==>
+  MAP LENGTH annss = MAP (\inst. LENGTH inst.inst_outputs) insts'
+Proof
+  Induct >> simp[current_local_trace_def] >> rpt strip_tac >> gvs[] >>
+  conj_tac
+  >- (gvs[current_inst_trace_def] >>
+      drule current_wf_outputs_trace_length >> strip_tac >>
+      Cases_on `inst.inst_opcode = PHI` >> gvs[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem current_wf_local_output_relation:
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  current_annotations_ok V H (FLAT annss) ==>
+  LIST_REL (LIST_REL (\(t,v) n. current_token_name H' t = SOME n))
+    annss (MAP (\inst. inst.inst_outputs) insts')
+Proof
+  strip_tac >> drule current_wf_local_output_alignment >> strip_tac >>
+  drule current_wf_local_output_name >> simp[] >> strip_tac >>
+  `LENGTH annss = LENGTH insts'` by metis_tac[LENGTH_MAP] >>
+  simp[LIST_REL_EL_EQN, EL_MAP] >>
+  qx_gen_tac `k` >> strip_tac >> conj_tac
+  >- (qpat_x_assum `MAP LENGTH _ = _`
+        (mp_tac o Q.AP_TERM `EL k`) >> simp[EL_MAP]) >>
+  qx_gen_tac `j` >> strip_tac >>
+  first_x_assum (qspecl_then [`V`, `k`, `j`] mp_tac) >>
+  Cases_on `EL j (EL k annss)` >> gvs[]
+QED
+
+Theorem current_wf_named_outputs_distinct:
+  !anns names.
+  LIST_REL (\(t,v) n. current_token_name H t = SOME n) anns names /\
+  ALL_DISTINCT (MAP FST anns) /\
+  EVERY (\(t,v). !w. t <> CurrentDefault w) anns /\
+  current_history_valid V H ==>
+  ALL_DISTINCT names
+Proof
+  Induct >> simp[] >> gen_tac >> PairCases_on `h` >>
+  Cases_on `names` >> simp[] >> rpt strip_tac >>
+  gvs[MEM_EL, LIST_REL_EL_EQN] >>
+      `n < LENGTH anns` by metis_tac[] >>
+      qpat_x_assum `!i. i < LENGTH t ==> _` (qspec_then `n` mp_tac) >>
+      Cases_on `EL n anns` >> simp[] >> strip_tac >>
+      `!w. q <> CurrentDefault w` by
+        (qpat_x_assum `EVERY _ anns` mp_tac >>
+         simp[EVERY_EL] >> disch_then (qspec_then `n` mp_tac) >> simp[]) >>
+      `h0 = q` by metis_tac[current_allocated_name_injective] >>
+      qpat_x_assum `!i. h0 = _ ==> _` (qspec_then `n` mp_tac) >>
+      simp[EL_MAP]
+QED
+
+Theorem current_wf_event_output_relation:
+  current_event_trace A H ev /\ current_event_valid A V ev ==>
+  LIST_REL (LIST_REL (\(t,v) n. current_token_name H t = SOME n))
+    (A (current_event_label ev))
+    (MAP (\inst. inst.inst_outputs)
+      (current_event_renamed_block ev).bb_instructions)
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_trace_def, current_event_valid_def,
+    current_event_label_def, current_event_renamed_block_def] >> strip_tac >>
+  drule_all current_wf_local_output_relation >> strip_tac >>
+  irule LIST_REL_mono >> goal_assum $ drule_at Any >>
+  rpt strip_tac >> irule LIST_REL_mono >> goal_assum $ drule_at Any >>
+  Cases >> simp[] >> rpt strip_tac >>
+  metis_tac[current_token_name_append_stable]
+QED
+
+Theorem current_wf_list_rel_flat[local]:
+  !xss yss. LIST_REL (LIST_REL R) xss yss ==>
+    LIST_REL R (FLAT xss) (FLAT yss)
+Proof
+  Induct >> Cases_on `yss` >> simp[] >> rpt strip_tac >>
+  irule LIST_REL_APPEND_suff >> simp[]
+QED
+
+Theorem current_wf_local_outputs_distinct:
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  current_annotations_ok V H (FLAT annss) /\ current_history_valid V H' ==>
+  ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) insts'))
+Proof
+  strip_tac >> drule_all current_wf_local_output_relation >> strip_tac >>
+  drule current_wf_list_rel_flat >> strip_tac >>
+  drule current_wf_named_outputs_distinct >>
+  gvs[current_annotations_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+  disch_then (qspec_then `V` mp_tac) >>
+  (impl_tac >- metis_tac[]) >> simp[]
+QED
+
+Theorem current_wf_events_annotations_distinct:
+  !events.
+  ALL_DISTINCT (MAP current_event_label events) /\
+  EVERY (current_event_valid A V) events /\ current_annotation_separation A ==>
+  ALL_DISTINCT (MAP FST
+    (FLAT (MAP (\ev. FLAT (A (current_event_label ev))) events)))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  simp[MAP_APPEND, ALL_DISTINCT_APPEND] >> conj_tac
+  >- (qpat_x_assum `current_event_valid _ _ h` mp_tac >>
+      PairCases_on `h` >>
+      simp[current_event_valid_def, current_event_label_def,
+        current_annotations_ok_def]) >>
+  rpt strip_tac >> gvs[MEM_MAP, MEM_FLAT] >>
+  `current_event_label h = current_event_label ev` by
+    (irule (iffLR current_annotation_separation_def |> SPEC_ALL) >>
+     goal_assum $ drule_at Any >> simp[MEM_MAP, MEM_FLAT] >> metis_tac[]) >>
+  metis_tac[MEM_MAP]
+QED
+
+Theorem current_wf_events_output_relation:
+  !events.
+  EVERY (current_event_trace A H) events /\
+  EVERY (current_event_valid A V) events ==>
+  LIST_REL (\(t,v) n. current_token_name H t = SOME n)
+    (FLAT (MAP (\ev. FLAT (A (current_event_label ev))) events))
+    (FLAT (MAP (\ev. FLAT (MAP (\inst. inst.inst_outputs)
+      (current_event_renamed_block ev).bb_instructions)) events))
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  irule LIST_REL_APPEND_suff >> conj_tac
+  >- (irule current_wf_list_rel_flat >>
+      irule current_wf_event_output_relation >> metis_tac[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem current_wf_events_outputs_distinct:
+  ALL_DISTINCT (MAP current_event_label events) /\
+  EVERY (current_event_trace A H) events /\
+  EVERY (current_event_valid A V) events /\
+  current_annotation_separation A /\ current_history_valid V H ==>
+  ALL_DISTINCT (FLAT (MAP (\ev. FLAT (MAP (\inst. inst.inst_outputs)
+    (current_event_renamed_block ev).bb_instructions)) events))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST
+    (FLAT (MAP (\ev. FLAT (A (current_event_label ev))) events)))` by
+    (irule current_wf_events_annotations_distinct >> metis_tac[]) >>
+  drule_all current_wf_events_output_relation >> strip_tac >>
+  drule current_wf_named_outputs_distinct >> simp[] >>
+  disch_then (qspec_then `V` mp_tac) >> simp[] >>
+  impl_tac >- (
+    simp[EVERY_MEM, MEM_FLAT, MEM_MAP] >> rpt strip_tac >>
+    qpat_x_assum `EVERY (current_event_valid A V) events` mp_tac >>
+    simp[EVERY_MEM] >> disch_then drule >>
+    PairCases_on `ev` >> gvs[current_event_label_def] >> Cases_on `e` >>
+    simp[current_event_valid_def, current_annotations_ok_def, EVERY_MEM] >>
+    strip_tac >> qpat_x_assum `!e. MEM e _ ==> _`
+      (qspec_then `(q,r)` mp_tac) >> simp[]) >> simp[]
+QED
+
 Definition current_wf_output_at_def:
   current_wf_output_at A H ev k t <=>
     k < LENGTH (A (current_event_label ev)) /\
