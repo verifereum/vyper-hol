@@ -296,21 +296,15 @@ Definition sop_frame2_def:
     cf_tvar := sop_t3.t_var|>
 End
 
-Theorem sop_in_second_callee:
-  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg
-    FEMPTY (sop_t3 with t_var := FEMPTY) sop_callee
-    (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 [sop_o1] FEMPTY
+Theorem sop_s3_control:
+  sop_s3.vs_inst_idx = 3 /\ sop_s3.vs_current_bb = "entry" /\
+  sop_s3.vs_vars = FEMPTY |+ ("a",256w)
 Proof
-  assume_tac sop_second_call >> drule origin_frame_reachable_call >>
-  disch_then (qspecl_then [`"leaf"`, `[Var "a"]`, `sop_callee`] mp_tac) >>
-  disch_then (qspecl_then [`[256w]`, `sop_cs2`, `sop_cs2`,
-    `HD (HD sop_callee.fn_blocks).bb_instructions`] mp_tac) >>
-  simp[sop_frame2_def] >>
-  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_t3``]) >>
-  simp[venomExecSemanticsTheory.eval_phis_def,
-    venomExecSemanticsTheory.phi_prefix_length_def]
+  simp[sop_s3_def, venomExecSemanticsTheory.merge_callee_state_def,
+    sop_s2_def, venomStateTheory.mstore_def, sop_s1_def,
+    venomStateTheory.update_var_def, sop_initial_def,
+    venomStateTheory.init_venom_state_def]
 QED
-
 
 Theorem sop_cs2_projections:
   sop_cs2.vs_inst_idx = 0 /\ sop_cs2.vs_current_bb = "entry" /\
@@ -320,6 +314,50 @@ Proof
   simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
        sop_callee_def, venomInstTheory.mk_raw_function_def]
 QED
+
+Theorem sop_second_call_cert:
+  active_inst sop_caller (EL 3 (HD sop_caller.fn_blocks).bb_instructions) sop_s3 /\
+  setup_callee sop_callee [256w] sop_s3 = SOME sop_cs2 /\
+  enters_block sop_callee sop_cs2 sop_cs2 /\
+  active_inst sop_callee (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 /\
+  eval_operands [Var "a"] sop_s3 = SOME [256w]
+Proof
+  conj_tac >- simp[contextCodegenRelTheory.active_inst_def, sop_s3_control,
+    sop_caller_def, venomInstTheory.mk_raw_function_def] >>
+  conj_tac >- simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
+    sop_callee_def, venomInstTheory.mk_raw_function_def] >>
+  conj_tac >- (
+    simp[contextCodegenRelTheory.enters_block_def, sop_cs2_projections,
+      sop_callee_def, venomInstTheory.mk_raw_function_def,
+      venomInstTheory.lookup_block_def, listTheory.FIND_def, listTheory.INDEX_FIND_def,
+      venomExecSemanticsTheory.eval_phis_def, venomExecSemanticsTheory.phi_prefix_length_def,
+      venomInstTheory.mk_inst_def] >>
+    simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
+      sop_callee_def, venomInstTheory.mk_raw_function_def]) >>
+  conj_tac >- simp[contextCodegenRelTheory.active_inst_def, sop_cs2_projections,
+    sop_callee_def, venomInstTheory.mk_raw_function_def] >>
+  simp[venomStateTheory.eval_operands_def, venomStateTheory.eval_operand_def,
+    venomStateTheory.lookup_var_def, sop_s3_control, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem sop_in_second_callee:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg
+    FEMPTY (sop_t3 with t_var := FEMPTY) sop_callee
+    (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 [sop_o1] FEMPTY
+Proof
+  assume_tac sop_second_call >> drule origin_frame_reachable_call >>
+  disch_then (qspecl_then [`"leaf"`, `[Var "a"]`, `sop_callee`] mp_tac) >>
+  disch_then (qspecl_then [`[256w]`, `sop_cs2`, `sop_cs2`,
+    `HD (HD sop_callee.fn_blocks).bb_instructions`] mp_tac) >>
+  `lookup_function "leaf" sop_ctx.ctx_functions = SOME sop_callee /\
+    decode_invoke (EL 3 (HD sop_caller.fn_blocks).bb_instructions) =
+      SOME ("leaf",[Var "a"]) /\
+    (EL 3 (HD sop_caller.fn_blocks).bb_instructions).inst_opcode = INVOKE /\
+    op_prov sop_g1 (Var "a") = SOME (256,32)` by EVAL_TAC >>
+  simp[sop_frame2_def, sop_second_call_cert, sop_pg_def]
+QED
+
+
 
 Definition sop_cp2_def:
   sop_cp2 = (update_var "p" 256w sop_cs2) with vs_inst_idx := 1
@@ -390,4 +428,303 @@ Proof
   simp[sop_cs2_def, venomExecSemanticsTheory.setup_callee_def,
     sop_callee_def, venomInstTheory.mk_raw_function_def,
     sop_cb_def, venomStateTheory.update_var_def]
+QED
+
+Definition sop_cb2_def:
+  sop_cb2 = (update_var "b" 288w
+    (sop_cp2 with <|vs_allocas := FEMPTY |+ (101,(288,32));
+                         vs_alloca_next := 320|>)) with vs_inst_idx := 2
+End
+Definition sop_tb2_def:
+  sop_tb2 = step_taint (EL 1 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cp2 (sop_cb2 with vs_inst_idx := 1) sop_tp2
+End
+
+Theorem sop_cp2_projections:
+  sop_cp2.vs_inst_idx = 1 /\ sop_cp2.vs_current_bb = "entry" /\
+  sop_cp2.vs_alloca_next = 288 /\ sop_cp2.vs_allocas = FEMPTY /\
+  sop_cp2.vs_vars = FEMPTY |+ ("p",256w)
+Proof
+  simp[sop_cp2_def, venomStateTheory.update_var_def,
+    sop_cs2_projections, sop_second_allocator]
+QED
+
+Theorem sop_second_alloca_step:
+  step_inst 0 sop_ctx (EL 1 (HD sop_callee.fn_blocks).bb_instructions) sop_cp2 =
+    OK (sop_cb2 with vs_inst_idx := 1)
+Proof
+  simp[sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomExecSemanticsTheory.step_inst_def,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_alloca_def, sop_cp2_projections,
+    sop_cb2_def, venomStateTheory.update_var_def] >>
+  simp[venomStateTheory.venom_state_component_equality, sop_cp2_projections]
+QED
+
+Theorem sop_second_alloca_control:
+  active_inst sop_callee (EL 1 (HD sop_callee.fn_blocks).bb_instructions) sop_cp2 /\
+  active_inst sop_callee (EL 2 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cb2 with vs_inst_idx := SUC sop_cp2.vs_inst_idx)
+Proof
+  simp[contextCodegenRelTheory.active_inst_def, sop_cp2_projections,
+    sop_cb2_def, venomStateTheory.update_var_def, sop_callee_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Theorem sop_cb2_projections:
+  sop_cb2.vs_inst_idx = 2 /\ sop_cb2.vs_current_bb = "entry" /\
+  sop_cb2.vs_allocas = FEMPTY |+ (101,(288,32)) /\
+  sop_cb2.vs_vars = (FEMPTY |+ ("p",256w)) |+ ("b",288w)
+Proof
+  simp[sop_cb2_def, venomStateTheory.update_var_def, sop_cp2_projections]
+QED
+
+Theorem sop_second_alloca_origins:
+  step_prov sop_pg sop_gp (EL 1 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cb2 with vs_inst_idx := 1) = sop_gb /\
+  origin_step sop_pg sop_op (EL 1 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cb2 with vs_inst_idx := 1) = sop_ob
+Proof
+  simp[ptrDisciplineTheory.step_prov_def, frameOriginUpdatesTheory.origin_step_def,
+    ptrDisciplineTheory.set_prov_def, ptrDisciplineTheory.out_prov_def,
+    frameOriginUpdatesTheory.origin_set_def, frameOriginUpdatesTheory.origin_out_def,
+    finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY,
+    sop_cb2_projections, sop_gb_def, sop_ob_def, sop_callee_def,
+    venomInstTheory.mk_raw_function_def, venomInstTheory.mk_inst_def]
+QED
+
+Theorem sop_second_imported_write:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg sop_gb
+    sop_tb2 sop_callee (EL 2 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cb2 [sop_o1] sop_ob
+Proof
+  assume_tac sop_second_param >> drule origin_frame_reachable_next >>
+  disch_then (qspecl_then
+    [`EL 2 (HD sop_callee.fn_blocks).bb_instructions`,
+     `sop_cb2 with vs_inst_idx := 1`, `0`] mp_tac) >>
+  simp[sop_second_alloca_control, sop_second_alloca_step,
+    sop_second_alloca_origins, sop_tb2_def, sop_cp2_projections] >>
+  `~is_terminator (EL 1 (HD sop_callee.fn_blocks).bb_instructions).inst_opcode /\
+    (EL 1 (HD sop_callee.fn_blocks).bb_instructions).inst_opcode <> INVOKE`
+    by EVAL_TAC >>
+  `sop_cb2 with vs_inst_idx := 2 = sop_cb2` by simp[sop_cb2_def] >>
+  simp[contextCodegenRelTheory.active_inst_def, sop_cb2_projections,
+    sop_callee_def, venomInstTheory.mk_raw_function_def]
+QED
+
+Definition sop_cw2_def:
+  sop_cw2 = (mstore 256 7w sop_cb2) with vs_inst_idx := 3
+End
+Definition sop_tw2_def:
+  sop_tw2 = step_taint (EL 2 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cb2 (sop_cw2 with vs_inst_idx := 2) sop_tb2
+End
+
+Theorem sop_second_imported_store_step:
+  step_inst 0 sop_ctx (EL 2 (HD sop_callee.fn_blocks).bb_instructions) sop_cb2 =
+    OK (sop_cw2 with vs_inst_idx := 2)
+Proof
+  simp[sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomExecSemanticsTheory.step_inst_def,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    sop_cb2_projections, finite_mapTheory.FLOOKUP_UPDATE,
+    finite_mapTheory.FLOOKUP_EMPTY, sop_cw2_def] >>
+  simp[venomStateTheory.mstore_def,
+    venomStateTheory.venom_state_component_equality, sop_cb2_projections]
+QED
+
+Theorem sop_cw2_projections:
+  sop_cw2.vs_inst_idx = 3 /\ sop_cw2.vs_current_bb = "entry" /\
+  sop_cw2.vs_allocas = FEMPTY |+ (101,(288,32)) /\
+  sop_cw2.vs_vars = (FEMPTY |+ ("p",256w)) |+ ("b",288w)
+Proof
+  simp[sop_cw2_def, venomStateTheory.mstore_def, sop_cb2_projections]
+QED
+
+Theorem sop_second_store_origins:
+  step_prov sop_pg sop_gb (EL 2 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cw2 with vs_inst_idx := 2) = sop_gb /\
+  origin_step sop_pg sop_ob (EL 2 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cw2 with vs_inst_idx := 2) = sop_ob
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_cw2``, ``sop_gb``, ``sop_ob``]) >>
+  EVAL_TAC >> simp[finite_mapTheory.FUPDATE_EQ]
+QED
+
+Theorem sop_second_local_write:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg sop_gb
+    sop_tw2 sop_callee (EL 3 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cw2 [sop_o1] sop_ob
+Proof
+  assume_tac sop_second_imported_write >> drule origin_frame_reachable_next >>
+  disch_then (qspecl_then
+    [`EL 3 (HD sop_callee.fn_blocks).bb_instructions`,
+     `sop_cw2 with vs_inst_idx := 2`, `0`] mp_tac) >>
+  simp[sop_second_imported_store_step, sop_second_store_origins,
+    sop_tw2_def, sop_cb2_projections] >>
+  `sop_cw2 with vs_inst_idx := 3 = sop_cw2` by simp[sop_cw2_def] >>
+  simp[contextCodegenRelTheory.active_inst_def, sop_cb2_projections,
+    sop_cw2_projections, sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Definition sop_cr2_def:
+  sop_cr2 = (mstore 288 9w sop_cw2) with vs_inst_idx := 4
+End
+Definition sop_tr2_def:
+  sop_tr2 = step_taint (EL 3 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cw2 (sop_cr2 with vs_inst_idx := 3) sop_tw2
+End
+
+Theorem sop_second_local_store_step:
+  step_inst 0 sop_ctx (EL 3 (HD sop_callee.fn_blocks).bb_instructions) sop_cw2 =
+    OK (sop_cr2 with vs_inst_idx := 3)
+Proof
+  simp[sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomExecSemanticsTheory.step_inst_def,
+    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.exec_write2_def,
+    venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+    sop_cw2_projections, finite_mapTheory.FLOOKUP_UPDATE,
+    finite_mapTheory.FLOOKUP_EMPTY, sop_cr2_def] >>
+  simp[venomStateTheory.mstore_def,
+    venomStateTheory.venom_state_component_equality, sop_cw2_projections]
+QED
+
+Theorem sop_cr2_projections:
+  sop_cr2.vs_inst_idx = 4 /\ sop_cr2.vs_current_bb = "entry" /\
+  sop_cr2.vs_allocas = FEMPTY |+ (101,(288,32)) /\
+  sop_cr2.vs_vars = (FEMPTY |+ ("p",256w)) |+ ("b",288w)
+Proof
+  simp[sop_cr2_def, venomStateTheory.mstore_def, sop_cw2_projections]
+QED
+
+Theorem sop_second_local_store_origins:
+  step_prov sop_pg sop_gb (EL 3 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cr2 with vs_inst_idx := 3) = sop_gb /\
+  origin_step sop_pg sop_ob (EL 3 (HD sop_callee.fn_blocks).bb_instructions)
+    (sop_cr2 with vs_inst_idx := 3) = sop_ob
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_cr2``, ``sop_gb``, ``sop_ob``]) >>
+  EVAL_TAC >> simp[finite_mapTheory.FUPDATE_EQ]
+QED
+
+Theorem sop_second_return:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg sop_gb
+    sop_tr2 sop_callee (EL 4 (HD sop_callee.fn_blocks).bb_instructions)
+    sop_cr2 [sop_o1] sop_ob
+Proof
+  assume_tac sop_second_local_write >> drule origin_frame_reachable_next >>
+  disch_then (qspecl_then
+    [`EL 4 (HD sop_callee.fn_blocks).bb_instructions`,
+     `sop_cr2 with vs_inst_idx := 3`, `0`] mp_tac) >>
+  simp[sop_second_local_store_step, sop_second_local_store_origins,
+    sop_tr2_def, sop_cw2_projections] >>
+  `sop_cr2 with vs_inst_idx := 4 = sop_cr2` by simp[sop_cr2_def] >>
+  simp[contextCodegenRelTheory.active_inst_def, sop_cw2_projections,
+    sop_cr2_projections, sop_callee_def, venomInstTheory.mk_raw_function_def,
+    venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]
+QED
+
+Theorem sop_second_origin_lookups:
+  FLOOKUP sop_ob "b" = SOME (OriginLocal 101,(288,32)) /\
+  FLOOKUP sop_ob "p" = SOME (OriginParameter 0,(256,32)) /\
+  FLOOKUP sop_cr2.vs_allocas 101 = SOME (288,32)
+Proof
+  simp[sop_cr2_projections] >> EVAL_TAC
+QED
+
+Definition sop_s4_def:
+  sop_s4 = (merge_callee_state sop_s3 sop_cr2) with vs_inst_idx := 4
+End
+Definition sop_t4_def:
+  sop_t4 = sop_tr2 with t_var := sop_t3.t_var
+End
+
+Theorem sop_second_ret_step:
+  step_inst 0 sop_ctx (EL 4 (HD sop_callee.fn_blocks).bb_instructions) sop_cr2 =
+    IntRet <|iret_values := []; iret_adopt_fmp := NONE|> sop_cr2
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_cr2``, ``sop_ctx``])
+QED
+
+Theorem sop_second_ret_control:
+  active_inst sop_callee (EL 4 (HD sop_callee.fn_blocks).bb_instructions) sop_cr2 /\
+  active_inst sop_caller (EL 4 (HD sop_caller.fn_blocks).bb_instructions)
+    (sop_s4 with vs_inst_idx := SUC sop_s3.vs_inst_idx)
+Proof
+  simp[contextCodegenRelTheory.active_inst_def, sop_cr2_projections,
+    sop_s4_def, venomExecSemanticsTheory.merge_callee_state_def,
+    sop_s3_control, sop_caller_def, sop_callee_def,
+    venomInstTheory.mk_raw_function_def]
+QED
+
+Theorem sop_after_second_return:
+  origin_frame_reachable sop_initial sop_ctx [] [] sop_g1 sop_t4
+    sop_caller (EL 4 (HD sop_caller.fn_blocks).bb_instructions)
+    sop_s4 [] sop_o1
+Proof
+  assume_tac sop_second_return >> drule origin_frame_reachable_ret >>
+  disch_then (qspecl_then
+    [`<|iret_values := []; iret_adopt_fmp := NONE|>`, `sop_cr2`,
+     `sop_s4 with vs_inst_idx := 3`] mp_tac) >>
+  disch_then (qspecl_then
+    [`EL 4 (HD sop_caller.fn_blocks).bb_instructions`, `0`] mp_tac) >>
+  simp[sop_second_ret_step, sop_frame2_def, sop_t4_def,
+    sop_second_ret_control, sop_s3_control] >>
+  `!m:string |-> (num # num). DRESTRICT m UNIV = m` by
+    simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  `!m:string |-> (frame_origin # num # num). DRESTRICT m UNIV = m` by
+    simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  `!m:string |-> (num set). DRESTRICT m UNIV = m` by
+    simp[finite_mapTheory.fmap_eq_flookup, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  `sop_s4 with vs_inst_idx := 4 = sop_s4` by simp[sop_s4_def] >>
+  `sop_s4 with vs_inst_idx := 3 = merge_callee_state sop_s3 sop_cr2` by
+    simp[sop_s4_def, venomStateTheory.venom_state_component_equality,
+      venomExecSemanticsTheory.merge_callee_state_def, sop_s3_control] >>
+  simp[contextCodegenRelTheory.active_inst_def, sop_s4_def,
+    venomExecSemanticsTheory.merge_callee_state_def, sop_s3_control,
+    sop_caller_def, venomInstTheory.mk_raw_function_def, venomInstTheory.mk_inst_def,
+    venomExecSemanticsTheory.bind_outputs_def]
+QED
+
+Theorem sop_defs_reach_checks:
+  fn_defs_reach_uses sop_caller /\ fn_defs_reach_uses sop_callee /\
+  ctx_inst_ids_distinct sop_ctx
+Proof
+  conj_tac >- (
+    rw[venomWfTheory.fn_defs_reach_uses_def, sop_caller_def,
+      venomInstTheory.mk_raw_function_def, venomInstTheory.mk_inst_def] >>
+    simp[venomWfTheory.def_on_all_paths_def] >> rpt strip_tac >>
+    disj2_tac >> qexists `0` >> simp[] >>
+    FIRST_PROVE (map (fn n => qexists n >> simp[]) [`1`, `2`, `3`, `4`])) >>
+  conj_tac >- (
+    rw[venomWfTheory.fn_defs_reach_uses_def, sop_callee_def,
+      venomInstTheory.mk_raw_function_def, venomInstTheory.mk_inst_def] >>
+    simp[venomWfTheory.def_on_all_paths_def] >> rpt strip_tac >>
+    disj2_tac >>
+    FIRST_PROVE (map (fn n => qexists n >> simp[] >>
+      FIRST_PROVE (map (fn j => qexists j >> simp[]) [`2`, `3`])) [`0`, `1`])) >>
+  EVAL_TAC
+QED
+
+Theorem sop_no_derived:
+  FINITE roots ==>
+  pointer_derived_vars sop_callee roots = roots /\
+  pointer_derived_vars sop_caller roots = roots
+Proof
+  strip_tac >>
+  `!xs. pointer_use_step_step sop_callee xs = NONE /\
+         pointer_use_step_step sop_caller xs = NONE` by
+    simp[pointerConfinedDefsTheory.pointer_use_step_step_def,
+      pointerConfinedDefsTheory.pointer_use_step_def,
+      pointerConfinedDefsTheory.is_pointer_preserving_op_def,
+      sop_caller_def, sop_callee_def, venomInstTheory.mk_raw_function_def,
+      venomInstTheory.mk_inst_def] >>
+  simp[pointerConfinedDefsTheory.pointer_derived_vars_def,
+    pointerConfinedDefsTheory.pointer_use_vars_def] >>
+  once_rewrite_tac[WhileTheory.OWHILE_THM] >> simp[] >>
+  once_rewrite_tac[WhileTheory.OWHILE_THM] >> simp[listTheory.SET_TO_LIST_INV]
 QED
