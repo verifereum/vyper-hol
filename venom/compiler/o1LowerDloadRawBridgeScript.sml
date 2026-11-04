@@ -1,6 +1,6 @@
 Theory o1LowerDloadRawBridge
 Ancestors
-  o1PassLift venomExecProps venomExecSemantics venomWf contextCodegenRel list venomInst
+  ptrDiscipline contextRawReachable o1PassLift venomExecProps venomExecSemantics venomWf contextCodegenRel list venomInst
 
 (* An existential finite return from an already-entered instruction boundary.
    run_blocks alone would re-evaluate this block's PHIs. *)
@@ -98,4 +98,116 @@ Theorem ld_returns_invoke:
 Proof
   strip_tac >> drule_all ld_returns_enter >> strip_tac >>
   qexists_tac `k` >> simp[Once step_inst_def]
+QED
+
+Definition ld_raw_stack_def:
+  (ld_raw_stack vs C [] fn s <=>
+    !i. active_inst fn i s ==> raw_reachable vs C fn i s) /\
+  (ld_raw_stack vs C (f::fs) fn s <=>
+    (!i. active_inst fn i s ==> raw_reachable vs C fn i s) /\
+    !ret se s' i'. ld_returns C fn s ret se /\
+      bind_outputs f.cf_inst.inst_outputs ret.iret_values
+        (adopt_return_fmp ret (merge_callee_state f.cf_state se)) = SOME s' /\
+      active_inst f.cf_fn i' (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx) ==>
+      ld_raw_stack vs C fs f.cf_fn
+        (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx))
+End
+
+Theorem ld_raw_stack_active:
+  ld_raw_stack vs C stk fn s /\ active_inst fn i s ==>
+  raw_reachable vs C fn i s
+Proof
+  Cases_on `stk` >> simp[ld_raw_stack_def]
+QED
+
+Theorem ld_frame_raw_stack:
+  !vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    (!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f) ==>
+    wf_function fn /\ ld_raw_stack vs C stk fn s
+Proof
+  `!vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    (!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f) ==>
+    wf_function fn /\ EVERY (\f. wf_function f.cf_fn) stk /\
+      ld_raw_stack vs C stk fn s` suffices_by metis_tac[] >>
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_frame_raw_stack[entry]:
+  rpt gen_tac >> strip_tac >> disch_tac >> conj_tac >- metis_tac[] >>
+  simp[ld_raw_stack_def] >> rpt strip_tac >>
+  irule raw_reachable_entry >> metis_tac[]
+QED
+
+Resume ld_frame_raw_stack[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  Cases_on `stk`
+  >- (gvs[ld_raw_stack_def] >> rpt strip_tac >>
+      irule raw_reachable_next >> metis_tac[]) >>
+  gvs[ld_raw_stack_def] >> conj_tac
+  >- (rpt strip_tac >> irule raw_reachable_next >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[ld_returns_next]
+QED
+
+Resume ld_frame_raw_stack[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  Cases_on `stk`
+  >- (gvs[ld_raw_stack_def] >> rpt strip_tac >>
+      irule raw_reachable_block >> metis_tac[]) >>
+  gvs[ld_raw_stack_def] >> conj_tac
+  >- (rpt strip_tac >> irule raw_reachable_block >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[ld_returns_block]
+QED
+
+Resume ld_frame_raw_stack[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[ld_raw_stack_def] >>
+  `ld_returns C fn s ret s_end` by metis_tac[ld_returns_immediate] >>
+  metis_tac[]
+QED
+
+Resume ld_frame_raw_stack[call]:
+  rpt gen_tac >> strip_tac >> disch_tac >>
+  qpat_x_assum `_ ==> _ /\ _ /\ _` drule >> strip_tac >>
+  `wf_function fn'` by metis_tac[] >>
+  simp[ld_raw_stack_def] >> conj_tac
+  >- (rpt strip_tac >> irule raw_reachable_callee >>
+      metis_tac[ld_raw_stack_active]) >>
+  rpt strip_tac >>
+  `?k. step_inst k C inst s = OK s'` by
+    (irule ld_returns_invoke >> metis_tac[]) >>
+  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  Cases_on `stk`
+  >- (gvs[ld_raw_stack_def] >> rpt strip_tac >>
+      irule raw_reachable_next >> metis_tac[]) >>
+  gvs[ld_raw_stack_def] >> conj_tac
+  >- (rpt strip_tac >> irule raw_reachable_next >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >>
+  metis_tac[ld_returns_next]
+QED
+
+Finalise ld_frame_raw_stack
+
+Theorem ld_frame_raw_reachable:
+  (!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f) /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  raw_reachable vs C fn inst s
+Proof
+  strip_tac >> drule_all ld_frame_raw_stack >> strip_tac >>
+  irule ld_raw_stack_active >>
+  conj_tac
+  >- (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[Once frame_reachable_cases] >> metis_tac[]) >>
+  metis_tac[]
 QED
