@@ -271,3 +271,22 @@ Proof
   simp[] >> strip_tac >> simp[inst_uses_def] >>
   metis_tac[MEM_phi_pairs_SND_operand_vars]
 QED
+
+Theorem native_phi_matching_class:
+  phi_uses_disjoint phis /\ i < LENGTH phis /\
+  IS_SOME (FLOOKUP (SND (build_phi_maps q phis)) i) ==>
+  native_phi_class p phis
+    (Var (THE (FLOOKUP (SND (build_phi_maps q phis)) i))) = SOME i
+Proof
+  strip_tac >>
+  drule build_phi_maps_matching_index >>
+  disch_then (qspec_then `q` assume_tac) >>
+  Cases_on `FIND (\(l,v). l = q) (phi_pairs (EL i phis).inst_operands)`
+  >- gvs[] >> PairCases_on `x` >> gvs[] >>
+  `MEM (x0,x1) (phi_pairs (EL i phis).inst_operands)` by
+    (drule venomExecPropsTheory.FIND_MEM >> simp[]) >>
+  simp[native_phi_class_def] >>
+  drule build_phi_maps_operand_class >>
+  disch_then (qspecl_then [`x1`, `p`, `i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
