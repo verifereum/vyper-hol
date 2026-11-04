@@ -2,7 +2,7 @@
 Theory entryInternalAppend
 Ancestors
   entryCompileIntervals moduleLowering compileEnv context fragExec
-  stmtLoweringMono abiDecoderAppend
+  stmtLoweringMono abiDecoderAppend list loweringShapeDefs
 
 Theorem cs_appends_fixed_region[local]:
   cs_appends (compile_fixed_region_with_id n)
@@ -58,4 +58,26 @@ Proof
   rpt (FIRST [CHANGED_TAC (simp[cs_appends_prims,
     cs_appends_internal_function]), gen_tac, irule cs_appends_bind,
     irule cs_appends_ignore_bind, conj_tac])
+QED
+
+Theorem cs_extends_closed_prefix:
+  cs_extends a b ==>
+  ?tail. REVERSE b.cs_blocks = REVERSE a.cs_blocks ++ tail
+Proof
+  simp[cs_extends_def] >> rpt strip_tac >> simp[REVERSE_APPEND]
+QED
+
+Theorem internal_fn_bodies_retains_prefix:
+  xs <> [] /\ compile_internal_fn_bodies xs sa = ((),sz) ==>
+  ?tail. all_blocks sz = all_blocks sa ++ tail
+Proof
+  Cases_on `xs` >- simp[] >> PairCases_on `h` >>
+  simp[compile_internal_fn_bodies_def, comp_ignore_bind_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  drule (SRULE [cs_appends_def] cs_appends_internal_function) >> strip_tac >>
+  drule (SRULE [cs_appends_def] cs_appends_internal_fn_bodies) >> strip_tac >>
+  `cs_extends cs' sz` by metis_tac[cs_extends_trans] >>
+  drule cs_extends_closed_prefix >> strip_tac >>
+  gvs[new_block_def, all_blocks_def, REVERSE_APPEND] >>
+  metis_tac[APPEND_ASSOC]
 QED
