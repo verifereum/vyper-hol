@@ -1,6 +1,6 @@
 Theory loadElimMemoryRel
 Ancestors
-  venomState stateFrame pred_set list rich_list codegenRel regularCallEmitSim
+  venomState stateFrame pred_set list rich_list codegenRel regularCallEmitSim venomMemProps loadElimByteHelpers
 
 Definition padded_exec_equiv_def:
   padded_exec_equiv vars s1 s2 <=>
@@ -91,4 +91,48 @@ Theorem read_memory_read_byte_ext:
 Proof
   strip_tac >> irule listTheory.LIST_EQ >> simp[read_memory_length] >>
   simp[read_memory_read_byte]
+QED
+
+Theorem read_memory_write_read_slice:
+  venomState$read_memory i k
+    (write_memory_with_expansion off (venomState$read_memory off n s) s) =
+  venomState$read_memory i k s
+Proof
+  irule read_memory_read_byte_ext >> gen_tac >>
+  simp[read_byte_write_memory_with_expansion, read_memory_length] >>
+  IF_CASES_TAC >-
+    (`j - off < n` by decide_tac >>
+     simp[read_memory_read_byte]) >>
+  simp[]
+QED
+
+Theorem mstore_mload_write_slice:
+  mstore off (mload off s) s =
+    write_memory_with_expansion off (venomState$read_memory off 32 s) s
+Proof
+  `word_to_bytes (mload off s) T = venomState$read_memory off 32 s` by
+    (rewrite_tac[venomStateTheory.mload_def, GSYM venomStateTheory.read_memory_def] >>
+     simp[LET_THM] >> irule word_bytes_roundtrip_256 >> simp[read_memory_length]) >>
+  simp[mstore_def, write_memory_with_expansion_def, read_memory_length,
+    byteTheory.LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
+Theorem padded_exec_equiv_mstore_mload:
+  padded_exec_equiv vars s (mstore off (mload off s) s)
+Proof
+  rewrite_tac[padded_exec_equiv_def] >> conj_tac
+  >- simp[lookup_var_def, mstore_def] >>
+  conj_tac
+  >- (gen_tac >> sym_tac >> rewrite_tac[mstore_mload_write_slice] >>
+      irule read_memory_write_read_slice) >>
+  simp[mstore_def, stateFrameTheory.execution_frame_def]
+QED
+
+Theorem padded_exec_equiv_empty_zero_store:
+  padded_exec_equiv {} (s with vs_memory := [])
+    (mstore 0 0w (s with vs_memory := []))
+Proof
+  `mload 0 (s with vs_memory := []) = 0w` by
+    simp[venomStateTheory.mload_def, listTheory.TAKE_LENGTH_ID_rwt, word_of_bytes_zero_256] >>
+  metis_tac[padded_exec_equiv_mstore_mload]
 QED
