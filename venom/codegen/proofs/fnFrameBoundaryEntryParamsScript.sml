@@ -1101,3 +1101,60 @@ Theorem entry_wrap_finite_witness_checks:
 Proof
   EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
 QED
+
+Theorem entry_wrap_plan_position:
+  EL 1 (REVERSE entry_wrap_plan.ps_stack) =
+    Var (entry_probe_name (dimword (:256)))
+Proof
+  `!n. EL 1 (REVERSE
+      (MAP (\i. Var (entry_probe_name i)) (GENLIST I (SUC n)) ++ [Var "retpc"])) =
+      Var (entry_probe_name n)` by
+    (gen_tac >> simp[REVERSE_APPEND, EL_REVERSE, EL_APPEND_EQN,
+                     EL_MAP, EL_GENLIST]) >>
+  rewrite_tac[entry_wrap_plan_def, plan_state_accfupds, combinTheory.K_THM] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem entry_wrap_asm_position:
+  EL 1 (asm_next entry_wrap_asm).as_stack = 1w
+Proof
+  `!n. EL 0 (REVERSE (GENLIST (\i. if i = 0 then 0w else 1w :256 word) (SUC n))) =
+        (if n = 0 then 0w else 1w)` by
+    (gen_tac >> simp[EL_REVERSE, EL_GENLIST]) >>
+  rewrite_tac[asm_next_def, entry_wrap_asm_def, asm_state_accfupds,
+              asm_state_accessors, combinTheory.K_THM, EL] >>
+  once_rewrite_tac[ONE] >> rewrite_tac[EL, TL, GSYM ONE] >>
+  rewrite_tac[GSYM (CONJUNCT1 EL), entry_wrap_inputs_def] >>
+  asm_rewrite_tac[param_index_wrap_discriminator]
+QED
+
+Theorem entry_wrap_frame_impossible:
+  ~fn_frame_inv ctx entry_wrap_context lo
+    (entry_ret_family (SUC (dimword (:256)))) 0w []
+    entry_wrap_asm.as_memory entry_wrap_plan
+    (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source)
+    (asm_next entry_wrap_asm)
+Proof
+  strip_tac >>
+  `plan_stack_rel lo
+    (frame_view (entry_ret_family (SUC (dimword (:256)))) 0w
+      (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source))
+    entry_wrap_plan.ps_stack (asm_next entry_wrap_asm).as_stack` by
+    (qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[fn_frame_inv_def, APPEND_NIL] >>
+     strip_tac >> gvs[contextCodegenRelTheory.context_venom_asm_rel_def]) >>
+  qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  `1 < LENGTH entry_wrap_plan.ps_stack` by
+    (rewrite_tac[entry_wrap_plan_def, plan_state_accfupds,
+                 combinTheory.K_THM, LENGTH_APPEND, LENGTH_MAP, LENGTH_GENLIST] >>
+     simp[]) >>
+  `FLOOKUP (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source).vs_vars
+      (entry_probe_name (dimword (:256))) = SOME 0w` by
+    (irule entry_ret_prefix_wrapped_lookup >> simp[entry_wrap_source_def]) >>
+  fs[codegenRelTheory.plan_stack_rel_def] >>
+  first_x_assum (qspec_then `1` mp_tac) >>
+  asm_rewrite_tac[entry_wrap_plan_position, entry_wrap_asm_position] >>
+  simp[dead_stack_marker_def, codegenRelTheory.operand_val_def, frame_view_vars_lookup,
+       entry_ret_family_opaque_vars] >>
+  wordsLib.WORD_DECIDE_TAC
+QED
