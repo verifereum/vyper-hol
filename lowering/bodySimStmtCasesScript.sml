@@ -2542,6 +2542,11 @@ Theorem aug_place_metadata_completion[local]:
       (!id. cenv'.ce_module_var_type (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
       (!nsid vt. FLOOKUP env.toplevel_vtypes nsid = SOME vt ==>
         cenv'.ce_hashmap_info nsid = cenv.ce_hashmap_info nsid) /\
+      (!src id ts tr typ id_str.
+        get_module_code cx src = SOME ts /\
+        find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+        cenv'.ce_hashmap_info (src,id) = cenv.ce_hashmap_info (src,id) /\
+        cenv'.ce_module_var_type (src,id) = cenv.ce_module_var_type (src,id)) /\
       cenv' = cenv with <| ce_hashmap_info := cenv'.ce_hashmap_info;
                           ce_module_var_type := cenv'.ce_module_var_type |>
 Proof
@@ -2581,7 +2586,11 @@ Proof
       qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
       drule_then strip_assume_tac aug_place_defined_metadata >>
       gvs[] >> metis_tac[])) >>
-  simp[Abbr `h`, Abbr `m`]
+  simp[Abbr `h`, Abbr `m`] >> rpt strip_tac >>
+  `cenv.ce_hashmap_info (src,id) = NONE /\
+   cenv.ce_module_var_type (src,id) = SOME typ` by
+    (gvs[expr_sim_inv_def] >> metis_tac[]) >>
+  Cases_on `src = NONE` >> gvs[]
 QED
 
 Theorem aug_place_stmt_state_rel_metadata:
@@ -2626,7 +2635,12 @@ Theorem aug_place_expr_sim_inv_metadata:
   (!nsid vt. FLOOKUP env.toplevel_vtypes nsid = SOME vt ==>
              h nsid = cenv.ce_hashmap_info nsid) /\
   (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-             h nsid = cenv.ce_hashmap_info nsid) ==>
+             h nsid = cenv.ce_hashmap_info nsid) /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) ==>
   (expr_sim_inv
      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env es <=>
    expr_sim_inv cenv cx env es)
@@ -2902,12 +2916,17 @@ Theorem aug_place_uniform_inv_metadata:
   env_context_consistent env0 cx /\
   (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
      h k = cenv.ce_hashmap_info k) /\
-  env_context_consistent env1 cx ==>
+  env_context_consistent env1 cx /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) ==>
   (expr_sim_inv
      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 es <=>
    expr_sim_inv cenv cx env1 es)
 Proof
-  strip_tac >> irule aug_place_expr_sim_inv_metadata >>
+  strip_tac >> irule aug_place_expr_sim_inv_metadata >> simp[] >>
   conj_tac >> rpt strip_tac >>
   `IS_SOME (FLOOKUP env0.toplevel_vtypes nsid)` by
     (Cases_on `nsid` >>
@@ -2919,6 +2938,11 @@ Theorem aug_place_uniform_inv_backward:
   env_context_consistent env0 cx /\
   (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
      h k = cenv.ce_hashmap_info k) /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) /\
   expr_sim_inv
      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 es ==>
   expr_sim_inv cenv cx env1 es
@@ -2963,13 +2987,18 @@ Theorem aug_place_uniform_body_pre_backward:
   env_context_consistent env0 cx /\
   (!k vt. FLOOKUP env0.toplevel_vtypes k = SOME vt ==>
      h k = cenv.ce_hashmap_info k) /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) /\
   expr_body_pre
      (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env1 e es ==>
   expr_body_pre cenv cx env1 e es
 Proof
   simp[expr_body_pre_def, aug_place_alloc_limits_metadata] >>
   strip_tac >> irule aug_place_uniform_inv_backward >>
-  goal_assum (drule_at Any) >> simp[] >> qexists_tac `m` >> simp[]
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `env0` >> simp[]
 QED
 
 Theorem aug_place_variable_decl_namespace:
@@ -3014,21 +3043,6 @@ Proof
       supportedExprsTheory.supported_pure_expr_def,
       supportedExprsTheory.supported_effect_expr_def] >>
   metis_tac[]
-QED
-
-Theorem aug_place_array_dynamic_metadata:
-  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
-  (supportedExprs$supported_expr tops e \/ supported_place_expr tops e \/
-   supported_effect_place_expr tops e) ==>
-  infer_array_is_dynamic
-    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
-  infer_array_is_dynamic cenv e
-Proof
-  strip_tac >> Cases_on `e` >>
-  simp[exprLoweringTheory.infer_array_is_dynamic_def] >>
-  rename1 `TopLevelName ty nsid` >> PairCases_on `nsid` >>
-  `nsid0 = NONE` by metis_tac[aug_place_toplevel_expr_namespace] >>
-  gvs[]
 QED
 
 Theorem aug_place_array_location_metadata:
@@ -3502,6 +3516,7 @@ Proof
   simp[exprLoweringTheory.compile_type_builtin_dispatch_body_def,
        SRULE [] aug_place_memory_bytes_metadata,
        SRULE [] aug_place_abi_enc_metadata, SRULE [] aug_place_abi_dec_metadata,
+       SRULE [] aug_place_lowered_value_type_metadata,
        SRULE [] aug_place_unwrap_metadata]
 QED
 
@@ -3954,6 +3969,11 @@ Theorem aug_place_body_expr_cases_metadata:
      h k = cenv.ce_hashmap_info k) /\
   (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
   (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) /\
   supportedExprs$supported_expr tops e ==>
   expr_sim_case F ctx func
     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx e /\
@@ -3979,6 +3999,11 @@ Theorem aug_place_target_idx_metadata:
      h k = cenv.ce_hashmap_info k) /\
   (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
   (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  (!src id ts tr typ id_str.
+     get_module_code cx src = SOME ts /\
+     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+     h (src,id) = cenv.ce_hashmap_info (src,id) /\
+     m (src,id) = cenv.ce_module_var_type (src,id)) /\
   IS_SOME (supported_target_info tops bindings t) ==>
   target_idx_case F ctx func
     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx t
@@ -3990,6 +4015,11 @@ Proof
        h k = cenv.ce_hashmap_info k) /\
     (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
     (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+    (!src id ts tr typ id_str.
+       get_module_code cx src = SOME ts /\
+       find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) ==>
+       h (src,id) = cenv.ce_hashmap_info (src,id) /\
+       m (src,id) = cenv.ce_module_var_type (src,id)) /\
     IS_SOME (supported_target_info tops bindings t) ==>
     target_idx_case F ctx func
       (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx t)`
@@ -4397,10 +4427,21 @@ Theorem aug_place_binop_ready:
   type_bits ty MOD 8 = 0 /\
   evaluate_type (get_tenv cx) ty = SOME tvcur /\ value_has_type tvcur cur /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
-  value_has_type tvrhs rhs ==>
-  binop_frag ctx func cenv cx bop ty ty bl el tys cur rhs st
+  value_has_type tvrhs rhs /\
+  (bop = Exp ==> el = expr_int_literal e) /\
+  (do tv <- eval_expr cx e; read_result cx tv od) st0 = (INL rhs,st1) ==>
+  binop_frag ctx func cenv cx bop ty ty NONE el
+    [ty;expr_type e] cur rhs st1
 Proof
   strip_tac >> drule aug_place_typing >> strip_tac >>
+  drule eval_expr_read_INL >> strip_tac >>
+  `!n. expr_int_literal e = SOME n ==> rhs = IntV n` by
+    metis_tac[eval_expr_int_literal_agrees] >>
+  `(bop = ShL \/ bop = ShR ==> ?i. rhs = IntV i /\ 0 <= i)` by
+    (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+  `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
+    (strip_tac >> gvs[nonneg_int_literal_def, GSYM expr_int_literal_value] >>
+     Cases_on `expr_int_literal e` >> gvs[]) >>
   irule exprSimBinopFragTheory.binop_frag_word_typed >> simp[] >> metis_tac[]
 QED
 
@@ -4774,6 +4815,7 @@ Theorem aug_place_memory_continue:
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
   stmt_exprs_ok cenv (AugAssign ty t bop e) /\
   call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+  (bop = Exp ==> el = expr_int_literal e) /\
   ((?bt fld. t = AttributeTarget bt fld) \/ (?bt key. t = SubscriptTarget bt key)) /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,stc) /\
@@ -4841,7 +4883,7 @@ QED
 Theorem aug_place_storage_load_frag:
   emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,sb) /\
   eval_operand dst s0 = SOME slot /\
-  storage_holds cx tr ty (Value v) slot es /\ is_word_type ty /\
+  storage_holds cx tr ty (Value v) slot es s0 /\ is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v /\
   local_ptrs_reserved cenv sa /\
   (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) ==>
@@ -4883,7 +4925,7 @@ QED
 Theorem aug_place_storage_bop_frag:
   emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,s1) /\
   eval_operand dst s0 = SOME slot /\
-  storage_holds cx tr ty (Value v1) slot es /\ is_word_type ty /\
+  storage_holds cx tr ty (Value v1) slot es s0 /\ is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v1 /\
   (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
   cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
@@ -4971,7 +5013,7 @@ QED
 Theorem aug_place_storage_continue_ready:
   emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur_op,s1) /\
   eval_operand dst s0 = SOME slot /\
-  storage_holds cx tr ty (Value cur) slot st /\ is_word_type ty /\
+  storage_holds cx tr ty (Value cur) slot st s0 /\ is_word_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ word_value cur /\
   (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
   cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
@@ -5346,8 +5388,9 @@ Theorem aug_place_storage_read_holds:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   read_storage_slot cx tr slot tv st = (INL cur,st) /\
   slots_in_range (get_storage cx st tr) (w2n slot) tv /\
-  storage_read_live cx tr (get_storage cx st tr) slot tv ==>
-  storage_holds cx tr ty (Value cur) slot st
+  storage_range_agree (get_storage cx st tr)
+    (if tr then contract_transient s0 else contract_storage s0) slot tv ==>
+  storage_holds cx tr ty (Value cur) slot st s0
 Proof
   strip_tac >> simp[storage_holds_def, read_result_def, return_def] >>
   qexists_tac `tv` >> simp[]
@@ -5518,6 +5561,8 @@ Proof
       `(!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l)` by
         fs[exprSafeOperandTheory.safe_operand_def] >>
       `fn_has_code s0' sb func` by metis_tac[fn_has_code_split] >>
+      `(bop = Exp ==> (if bop = Exp then expr_int_literal e else NONE) =
+                       expr_int_literal e)` by simp[] >>
       drule_all aug_place_memory_continue >>
       simp[exprSafeOperandTheory.safe_operand_def, ci_mono_def] >>
       simp[frag_exec_def] >>
@@ -5709,32 +5754,155 @@ Proof
   metis_tac[]
 QED
 
-Theorem aug_place_supported_pure_mutual:
-  (!tops e. supported_pure_expr tops e ==> pure_expr e) /\
-  (!tops es. supported_pure_exprs tops es ==> EVERY pure_expr es) /\
-  (!tops fs. supported_pure_fields tops fs ==> EVERY pure_expr (MAP SND fs)) /\
-  (!tops e. supported_place_expr tops e ==> pure_expr e)
+Theorem aug_place_precompile_storage:
+  precompile_call_success bt s = (r,s') ==>
+  get_storage cx s' tr = get_storage cx s tr
+Proof
+  simp[precompile_call_success_def] >>
+  Cases_on `precompile_builtin bt` >>
+  gvs[return_def, check_def, assert_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> Cases_on `tr` >> gvs[vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem aug_place_singleton_storage:
+  (!r s'. eval_exprs cx [e] s = (r,s') ==>
+     get_storage cx s' tr = get_storage cx s tr) /\
+  eval_expr cx e s = (r,s') ==>
+  get_storage cx s' tr = get_storage cx s tr
+Proof
+  strip_tac >>
+  `?r'. eval_exprs cx [e] s = (r',s')` by
+    (Cases_on `r`
+     >- (rename1 `eval_expr cx e s = (INL tv,s')` >>
+         simp[evaluate_def, bind_def, return_def] >>
+         Cases_on `read_result cx tv s'` >>
+         drule read_result_state >> strip_tac >> gvs[] >>
+         rename1 `read_result cx tv s' = (rr,s')` >>
+         Cases_on `rr` >> simp[])
+     >> simp[evaluate_def, bind_def]) >>
+  metis_tac[]
+QED
+
+Theorem aug_place_pure_storage_mutual:
+  (!tops e. supported_pure_expr tops e ==>
+    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops es. supported_pure_exprs tops es ==>
+    !cx s r s' tr. eval_exprs cx es s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops fs. supported_pure_fields tops fs ==>
+    !cx s r s' tr. eval_exprs cx (MAP SND fs) s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr) /\
+  (!tops e. supported_place_expr tops e ==>
+    !cx s r s' tr. eval_expr cx e s = (r,s') ==>
+      get_storage cx s' tr = get_storage cx s tr)
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, pure_expr_def] >>
-  rpt strip_tac >> gvs[ETA_THM] >>
-  Cases_on `es` >> gvs[supportedExprFormsTheory.supported_builtin_form_def]
+  simp[supported_pure_expr_def] >>
+  rpt conj_tac >> rpt gen_tac >> rpt strip_tac
+  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
+  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >~ [`eval_expr cx (Literal ty lit) s = (r,s')`]
+  >- (gvs[evaluate_def, return_def])
+  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
+  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >~ [`eval_expr cx (IfExp ty e e' e'') s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()] >>
+     imp_res_tac read_result_state >> imp_res_tac vyperStatePreservationTheory.conditional_result_state >>
+     gvs[return_def, raise_def] >>
+     rpt (CHANGED_TAC (gvs[AllCaseEqs(), COND_RATOR, raise_def])) >>
+     qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
+       (drule_then assume_tac) >>
+     first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
+  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >~ [`eval_expr cx (StructLit ty id fs) s = (r,s')`]
+  >- (PairCases_on `id` >> gvs[evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+      metis_tac[])
+  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
+        (drule_then assume_tac) >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (Builtin ty blt es) s = (r,s')`]
+  >- (Cases_on `blt = Len`
+      >- (gvs[] >> Cases_on `es` >>
+          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+          rename1 `supported_pure_exprs tops (h::t)` >> Cases_on `t` >>
+          gvs[supportedExprFormsTheory.supported_builtin_form_def] >>
+          `!cx s r s' tr. eval_expr cx h s = (r,s') ==>
+             get_storage cx s' tr = get_storage cx s tr` by
+            (rpt strip_tac >> irule aug_place_singleton_storage >>
+             goal_assum (drule_at Any) >> metis_tac[]) >>
+          gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
+              assert_def, return_def, raise_def, AllCaseEqs()] >>
+          imp_res_tac vyperStatePreservationTheory.result_array_length_state >>
+          gvs[] >> first_x_assum (drule_then assume_tac) >> simp[])
+      >> Cases_on `blt = Env MsgGas`
+      >- (Cases_on `es` >> gvs[supportedExprFormsTheory.supported_builtin_form_def])
+      >> gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
+             assert_def, return_def, raise_def, get_accounts_def, lift_sum_def,
+             AllCaseEqs()] >>
+      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      imp_res_tac aug_place_precompile_storage >>
+      gvs[return_def, raise_def] >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (TypeBuiltin ty blt target es) s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, ignore_bind_def, type_check_def,
+          assert_def, return_def, raise_def, lift_sum_def, AllCaseEqs()] >>
+      gvs[vyperMiscTheory.sum_CASE_rator, AllCaseEqs(), return_def, raise_def, ETA_THM] >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_exprs cx (e::es) s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
+        (drule_then assume_tac) >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_exprs cx (e::es) s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs(), return_def] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
+        (drule_then assume_tac) >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (Name ty name) s = (r,s')`]
+  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >~ [`eval_expr cx (TopLevelName ty id) s = (r,s')`]
+  >- (metis_tac[eval_expr_preserves_state, pure_expr_def])
+  >~ [`eval_expr cx (Subscript ty e e') s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+      qpat_x_assum `!cx s r s' tr. eval_expr cx e s = (r,s') ==> _`
+        (drule_then assume_tac) >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >~ [`eval_expr cx (Attribute ty e fld) s = (r,s')`]
+  >- (gvs[evaluate_def, bind_def, AllCaseEqs()] >>
+      imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+      first_x_assum (drule_then assume_tac) >> simp[])
+  >> gvs[evaluate_def, return_def]
 QED
 
-Theorem aug_place_pure_eval_state:
-  supported_pure_expr tops e /\ eval_expr cx e s = (r,s') ==> s' = s
+Theorem aug_place_pure_eval_storage:
+  supported_pure_expr tops e /\ eval_expr cx e s = (r,s') ==>
+  get_storage cx s' tr = get_storage cx s tr
 Proof
-  metis_tac[aug_place_supported_pure_mutual, eval_expr_preserves_state]
+  metis_tac[aug_place_pure_storage_mutual]
 QED
 
-Theorem aug_place_pure_index_state:
+Theorem aug_place_pure_index_storage:
   supported_pure_expr tops e /\
   (do result <- eval_expr cx e; read_result cx result od) s = (r,s') ==>
-  s' = s
+  get_storage cx s' tr = get_storage cx s tr
 Proof
   strip_tac >>
   gvs[bind_def, AllCaseEqs()] >>
-  metis_tac[aug_place_pure_eval_state, read_result_state, raise_def]
+  metis_tac[aug_place_pure_eval_storage, read_result_state, raise_def]
 QED
 
 Theorem aug_place_dead_array_selected:
@@ -5902,10 +6070,11 @@ Proof
   qexists_tac `AttrSubscript s` >> asm_rewrite_tac [extend_storage_place_def]
 QED
 
-Theorem aug_place_pure_base_state:
-  !t tops cx s r s'.
+Theorem aug_place_pure_base_storage:
+  !t tops cx s r s' tr.
     EVERY (supported_pure_expr tops) (target_indices t) /\
-    eval_base_place cx t s = (r,s') ==> s' = s
+    eval_base_place cx t s = (r,s') ==>
+    get_storage cx s' tr = get_storage cx s tr
 Proof
   measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
   rpt gen_tac >> TRY (PairCases_on `p`) >>
@@ -5917,16 +6086,17 @@ Proof
   gvs[bind_def, AllCaseEqs()] >>
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac >>
-  metis_tac[aug_place_pure_eval_state, read_result_state,
+  metis_tac[aug_place_pure_eval_storage, read_result_state,
             vyperPlaceFramesTheory.extend_place_state, raise_def]
 QED
 
-Theorem aug_place_pure_target_state:
+Theorem aug_place_pure_target_storage:
   EVERY (supported_pure_expr tops) (target_indices t) /\
-  eval_target_place cx t s = (r,s') ==> s' = s
+  eval_target_place cx t s = (r,s') ==>
+  get_storage cx s' tr = get_storage cx s tr
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  metis_tac[aug_place_pure_base_state, vyperPlaceFramesTheory.get_place_state,
+  metis_tac[aug_place_pure_base_storage, vyperPlaceFramesTheory.get_place_state,
             raise_def]
 QED
 
@@ -5970,8 +6140,9 @@ Proof
   qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
   simp[expr_size_def] >> strip_tac
   >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
-      `s3 = s''` by metis_tac[aug_place_pure_eval_state] >>
-      gvs[] >> drule read_result_state >> strip_tac >> gvs[] >>
+      `!tr. get_storage cx s3 tr = get_storage cx s'' tr` by
+        metis_tac[aug_place_pure_eval_storage] >>
+      drule read_result_state >> strip_tac >> gvs[] >>
       drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
       Cases_on `pv`
       >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
@@ -5980,7 +6151,9 @@ Proof
           gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
               extend_memory_place_def, AllCaseEqs()] >>
           first_x_assum drule_all >> strip_tac >>
-          drule_all aug_place_storage_extend_live_all >> simp[]) >>
+          drule_at (Pat `extend_storage_place _ _ _ _ _ _ = _`)
+            aug_place_storage_extend_live_all >>
+          (impl_tac >- metis_tac[]) >> simp[]) >>
       gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
       irule aug_place_mapping_extend_live >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
@@ -6020,11 +6193,24 @@ Proof
   strip_tac >> drule read_place_state >> strip_tac >> gvs[] >>
   `read_storage_slot cx tr slot tv st = (INL cur,st)` by
     gvs[read_place_def] >>
-  `storage_holds cx tr ty (Value cur) slot st` by
+  `storage_agree (storage_dead cx tr (get_storage cx st tr))
+     (get_storage cx st tr)
+     (if tr then contract_transient vs else contract_storage vs)` by
+    (Cases_on `tr` >>
+     gvs[target_post_def, stmt_state_rel_def, state_rel_def,
+         storage_rel_def, transient_rel_def, vfmStateTheory.lookup_account_def,
+         vyperStorageBackendTheory.get_storage_def]) >>
+  `w2n slot + type_slot_size tv <= dimword (:256)` by
+    (drule_all exprSimUnwrapTheory.word_type_slot_size >> strip_tac >>
+     qspec_then `slot` mp_tac wordsTheory.w2n_lt >> simp[]) >>
+  `storage_range_agree (get_storage cx st tr)
+     (if tr then contract_transient vs else contract_storage vs) slot tv` by
+    (irule accountsRelPropsTheory.storage_range_agree_of_live >>
+     simp[] >> qexistsl_tac [`cx`, `tr`] >> simp[]) >>
+  `storage_holds cx tr ty (Value cur) slot st vs` by
     (irule aug_place_storage_read_holds >> simp[]) >>
   irule exprSimUnwrapTheory.storage_holds_load >>
-  gvs[target_post_def] >> goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[]
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem aug_place_tuple_range_selected[local]:
@@ -6089,7 +6275,7 @@ Proof
   gvs[resolve_array_element_def, bind_def, ignore_bind_def, check_def,
       assert_def, return_def, raise_def, AllCaseEqs(),
       vyperStorageBackendTheory.get_storage_backend_eq] >>
-  gvs[aug_place_resolve_array_empty, return_def] >>
+  gvs[aug_place_resolve_array_empty, return_def]
   >- (irule aug_place_range_word_offset >>
       gvs[Once vyperLookupStorageTheory.slots_in_range_def,
           cj 1 vyperLookupStorageTheory.array_slots_in_range_indexed]) >>
