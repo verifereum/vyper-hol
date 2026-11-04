@@ -1,6 +1,7 @@
 Theory makeSsaCurrentLastSite
 Ancestors
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
+  makeSsaCurrentTokens dominatorAnalysisProps
   makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaCurrentDefs
   venomInst venomWf venomExecProps cfgAnalysisProps dominatorDefs
   list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation
@@ -245,4 +246,199 @@ Proof
   drule dom_on_every_path >>
   disch_then (qspecl_then [`eb`, `ls`, `a`] mp_tac) >>
   gvs[dominates_def] >> metis_tac[]
+QED
+
+Theorem current_cut_nearest_site:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn a b /\
+  ~ins v b /\ current_phi_cut_clear fn v b /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) b = SOME vs /\ MEM v vs) /\
+  (!pb phi. MEM pb fn.fn_blocks /\
+    MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) /\
+  (!x y. current_changing_site fn ins v x /\
+    MEM y (frontier_of (dom_analyze (cfg_analyze fn) fn) x) /\
+    (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) y = SOME vs /\ MEM v vs) ==> ins v y) ==>
+  (!e. dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+    ~current_changing_site fn ins v e) \/
+  ?d. current_changing_site fn ins v d /\
+    dominates (dom_analyze (cfg_analyze fn) fn) d a /\
+    strict_dominates (dom_analyze (cfg_analyze fn) fn) d b /\
+    (!e. current_changing_site fn ins v e /\
+      dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+      dominates (dom_analyze (cfg_analyze fn) fn) e d)
+Proof
+  strip_tac >>
+  `MEM a (fn_labels fn)` by
+    metis_tac[current_cfg_edge_preds, cfg_analyze_pred_labels] >>
+  drule_all current_reachable_cfg_route >> strip_tac >>
+  drule current_cfg_path_last_site >>
+  disch_then (qspec_then `current_changing_site fn ins v` mp_tac) >> strip_tac
+  >- (disj1_tac >> rpt strip_tac >>
+      `MEM e (ls ++ [a])` by metis_tac[current_cfg_path_dom_member] >>
+      gvs[EVERY_MEM] >> metis_tac[]) >>
+  disj2_tac >> qexists_tac `d` >> simp[] >>
+  `MEM d (fn_labels fn)` by
+    (Cases_on `post` >> gvs[LRC_def] >>
+     metis_tac[current_cfg_edge_preds, cfg_analyze_pred_labels]) >>
+  `LRC (fn_cfg_edge fn) (post ++ [a]) d b` by
+    (simp[current_lrc_append, LRC_def] >> metis_tac[]) >>
+  `strict_dominates (dom_analyze (cfg_analyze fn) fn) d b` by
+    (irule current_last_site_route_dominates >> simp[] >>
+     qexistsl_tac [`ins`, `post ++ [a]`, `v`] >> simp[] >> metis_tac[]) >>
+  conj_tac >- metis_tac[current_strict_dom_cfg_pred] >>
+  simp[] >> metis_tac[current_site_path_nearest]
+QED
+
+Theorem current_chain_prefix_dominated:
+  !ps a pre d ds. wf_function fn /\ all_reachable fn /\
+  entry_block fn = SOME eb /\ MEM a (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  a::ps = pre ++ d::ds ==>
+  !e. MEM e pre ==> dominates (dom_analyze (cfg_analyze fn) fn) d e
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- (Cases_on `pre` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  `current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps h /\
+    idom_of (dom_analyze (cfg_analyze fn) fn) a = SOME h` by
+    gvs[current_token_chain_def] >>
+  `MEM h (fn_labels fn)` by
+    metis_tac[idom_is_immediate, strict_dominates_def, dom_labels_bounded,
+      dominates_def, current_all_labels_reachable] >>
+  Cases_on `pre` >- simp[] >>
+  fs[] >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) d a` by
+    (qspecl_then [`t ++ [d] ++ ds`, `a`] mp_tac current_actual_chain_membership >>
+     simp[] >> disch_then (qspec_then `d` mp_tac) >>
+     simp[strict_dominates_def]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_chain_nearest_site_split:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  MEM d (a::ps) /\ P d /\
+  (!e. MEM e (a::ps) /\ P e ==>
+    dominates (dom_analyze (cfg_analyze fn) fn) e d) ==>
+  ?pre ds. a::ps = pre ++ d::ds /\ EVERY (\e. ~P e) pre
+Proof
+  strip_tac >> drule_all current_token_chain_member_suffix >> strip_tac >>
+  qexistsl_tac [`pre`, `ds`] >> simp[EVERY_MEM] >> rpt strip_tac >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) d e` by
+    metis_tac[current_chain_prefix_dominated] >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) e d` by
+    metis_tac[MEM_APPEND, MEM] >>
+  `cfg_reachable_of (cfg_analyze fn) d` by
+    (drule_all current_actual_chain_membership >>
+     disch_then (qspec_then `d` mp_tac) >>
+     gvs[strict_dominates_def] >>
+     metis_tac[dominates_reachable, current_all_labels_reachable]) >>
+  `cfg_reachable_of (cfg_analyze fn) e` by metis_tac[dominates_reachable] >>
+  `e = d` by metis_tac[dominates_antisym] >>
+  `ALL_DISTINCT (pre ++ d::ds)` by metis_tac[current_actual_chain_distinct] >>
+  fs[ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem current_nearest_site_common_scans:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  fn_cfg_edge fn a b /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  current_changing_site fn ins v d /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d a /\
+  strict_dominates (dom_analyze (cfg_analyze fn) fn) d b /\
+  (!e. current_changing_site fn ins v e /\
+    dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+    dominates (dom_analyze (cfg_analyze fn) fn) e d) ==>
+  ?apre apost bpre bpost.
+    REVERSE ps ++ [a] = apre ++ d::apost /\
+    REVERSE qs = bpre ++ d::bpost /\
+    EVERY (\e. ~current_changing_site fn ins v e) apost /\
+    EVERY (\e. ~current_changing_site fn ins v e) bpost
+Proof
+  strip_tac >>
+  `MEM a (fn_labels fn) /\ MEM b (fn_labels fn)` by
+    metis_tac[current_cfg_edge_succs, current_cfg_edge_preds,
+      cfg_analyze_succ_labels, cfg_analyze_pred_labels] >>
+  `!e. MEM e ps <=> strict_dominates (dom_analyze (cfg_analyze fn) fn) e a` by
+    metis_tac[current_actual_chain_membership] >>
+  `!e. MEM e qs <=> strict_dominates (dom_analyze (cfg_analyze fn) fn) e b` by
+    metis_tac[current_actual_chain_membership] >>
+  `MEM d (a::ps)` by gvs[strict_dominates_def] >>
+  `?pre ds. a::ps = pre ++ d::ds /\
+    EVERY (\e. ~current_changing_site fn ins v e) pre` by
+    (irule current_chain_nearest_site_split >> simp[] >>
+     metis_tac[strict_dominates_def, dom_self, current_all_labels_reachable]) >>
+  `?pre' ds'. b::qs = pre' ++ d::ds' /\
+    EVERY (\e. ~(e <> b /\ current_changing_site fn ins v e)) pre'` by
+    (irule (BETA_RULE (Q.INST [`P` |-> `\e. e <> b /\ current_changing_site fn ins v e`]
+       current_chain_nearest_site_split)) >> simp[] >>
+     rpt strip_tac >>
+     metis_tac[current_strict_dom_cfg_pred, strict_dominates_def]) >>
+  Cases_on `pre'` >- gvs[strict_dominates_def] >>
+  `qs = t ++ d::ds'` by gvs[] >>
+  qexistsl_tac [`REVERSE ds`, `REVERSE pre`, `REVERSE ds'`, `REVERSE t`] >>
+  conj_tac
+  >- (pure_rewrite_tac[GSYM (CONJUNCT2 REVERSE_DEF)] >>
+      once_asm_rewrite_tac[] >> simp[REVERSE_APPEND]) >>
+  simp[REVERSE_APPEND] >> gvs[EVERY_MEM] >>
+  metis_tac[strict_dominates_def]
+QED
+
+Theorem current_no_site_common_scans:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  fn_cfg_edge fn a b /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  (!e. dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+    ~current_changing_site fn ins v e) ==>
+  EVERY (\e. ~current_changing_site fn ins v e) (REVERSE ps ++ [a]) /\
+  EVERY (\e. ~current_changing_site fn ins v e) (REVERSE qs)
+Proof
+  strip_tac >>
+  `MEM a (fn_labels fn) /\ MEM b (fn_labels fn)` by
+    metis_tac[current_cfg_edge_succs, current_cfg_edge_preds,
+      cfg_analyze_succ_labels, cfg_analyze_pred_labels] >>
+  `!e. MEM e ps <=> strict_dominates (dom_analyze (cfg_analyze fn) fn) e a` by
+    metis_tac[current_actual_chain_membership] >>
+  `!e. MEM e qs <=> strict_dominates (dom_analyze (cfg_analyze fn) fn) e b` by
+    metis_tac[current_actual_chain_membership] >>
+  simp[EVERY_MEM] >>
+  metis_tac[current_strict_dom_cfg_pred, strict_dominates_def,
+    dom_self, current_all_labels_reachable]
+QED
+
+Theorem current_cut_common_last_site:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn a b /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  ~ins v b /\ current_phi_cut_clear fn v b /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) b = SOME vs /\ MEM v vs) /\
+  (!pb phi. MEM pb fn.fn_blocks /\
+    MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) /\
+  (!x y. current_changing_site fn ins v x /\
+    MEM y (frontier_of (dom_analyze (cfg_analyze fn) fn) x) /\
+    (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+      (liveness_analyze fn) fn) y = SOME vs /\ MEM v vs) ==> ins v y) ==>
+  (EVERY (\e. ~current_changing_site fn ins v e) (REVERSE ps ++ [a]) /\
+   EVERY (\e. ~current_changing_site fn ins v e) (REVERSE qs)) \/
+  ?d apre apost bpre bpost.
+    current_changing_site fn ins v d /\
+    REVERSE ps ++ [a] = apre ++ d::apost /\
+    REVERSE qs = bpre ++ d::bpost /\
+    EVERY (\e. ~current_changing_site fn ins v e) apost /\
+    EVERY (\e. ~current_changing_site fn ins v e) bpost
+Proof
+  strip_tac >> drule current_cut_nearest_site >>
+  disch_then (qspecl_then [`v`, `ins`, `eb`, `b`, `a`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac
+  >- (disj1_tac >> metis_tac[current_no_site_common_scans]) >>
+  disj2_tac >> qexists_tac `d` >> simp[] >>
+  irule (SRULE [] current_nearest_site_common_scans) >> simp[] >> metis_tac[]
 QED
