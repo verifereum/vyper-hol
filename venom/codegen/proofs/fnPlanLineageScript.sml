@@ -24,7 +24,7 @@
 
 Theory fnPlanLineage
 Ancestors
-  stackPlanGen stackPlanTypes
+  stackPlanGen stackPlanTypes fnPlanLineageJoinEntry
 
 (* ===== The calls of the DFS function planner ===== *)
 
@@ -138,6 +138,92 @@ Proof
       simp[dfs_block_state_def, plan_state_component_equality] >>
       qexistsl_tac [`[]`, `[]`] >> simp[dfs_aux_call_entry])
   >> qexists_tac `ps_succ` >> simp[]
+QED
+
+(* Projection-only provenance: this predicate adds no reachability rules. *)
+Definition predecessor_plan_fields_def:
+  predecessor_plan_fields lv dfg cfg fn lbl stk spills <=>
+  ?pred pb psBefore ops psAfter.
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of cfg pred) /\
+    generate_block_plan lv dfg cfg fn pb psBefore = SOME (ops, psAfter) /\
+    stk = psAfter.ps_stack /\ spills = psAfter.ps_spilled
+End
+
+Theorem dfs_calls_predecessor_fields[local]:
+  !lv dfg cfg fn ps0.
+  (!wl visited ps.
+    dfs_aux_call lv dfg cfg fn ps0 wl visited ps ==>
+    wl = [] \/
+    (?lbl. wl = [lbl] /\
+      ((fn_entry_label fn = SOME lbl /\ ps = ps0) \/
+       predecessor_plan_fields lv dfg cfg fn lbl ps.ps_stack ps.ps_spilled))) /\
+  (!stk spills succs visited ps.
+    dfs_succs_call lv dfg cfg fn ps0 stk spills succs visited ps ==>
+    !lbl. MEM lbl succs ==> predecessor_plan_fields lv dfg cfg fn lbl stk spills)
+Proof
+  rpt gen_tac >> ho_match_mp_tac dfs_aux_call_ind >> rpt strip_tac >> gvs[] >>
+  simp[predecessor_plan_fields_def] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem dfs_block_state_predecessor_origin:
+  !lv dfg cfg fn ps0 lbl ps.
+  dfs_block_state lv dfg cfg fn ps0 lbl ps /\ fn_entry_label fn <> SOME lbl ==>
+  ?pred pb psBefore ops psAfter.
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of cfg pred) /\
+    generate_block_plan lv dfg cfg fn pb psBefore = SOME (ops, psAfter) /\
+    ps.ps_stack = psAfter.ps_stack /\ ps.ps_spilled = psAfter.ps_spilled
+Proof
+  rpt strip_tac >> gvs[dfs_block_state_def] >>
+  drule (cj 1 dfs_calls_predecessor_fields) >>
+  simp[predecessor_plan_fields_def] >> strip_tac >> gvs[]
+QED
+
+Theorem lineage_state_predecessor_origin:
+  !lv dfg cfg fn ps0 lbl ps.
+  lineage_state lv dfg cfg fn ps0 lbl ps /\ fn_entry_label fn <> SOME lbl ==>
+  ?pred pb psBefore ops psAfter.
+    lookup_block pred fn.fn_blocks = SOME pb /\
+    MEM lbl (cfg_succs_of cfg pred) /\
+    generate_block_plan lv dfg cfg fn pb psBefore = SOME (ops, psAfter) /\
+    ps.ps_stack = psAfter.ps_stack /\ ps.ps_spilled = psAfter.ps_spilled
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lineage_state _ _ _ _ _ _ _` mp_tac >>
+  simp[Once lineage_state_cases] >> strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem lineage_dfs_join_common_cells:
+  !fn succ sb dfg ps0 psL psD.
+  codegen_ready_fn fn /\ lookup_block succ fn.fn_blocks = SOME sb /\
+  fn_entry_label fn <> SOME succ /\
+  1 < LENGTH (cfg_preds_of (cfg_analyze fn) succ) /\
+  ~NULL (collect_phis sb.bb_instructions) /\
+  lineage_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psL /\
+  dfs_block_state (liveness_analyze fn) dfg (cfg_analyze fn) fn ps0 succ psD ==>
+  ?pred cells prefixL prefixD.
+    MEM succ (cfg_succs_of (cfg_analyze fn) pred) /\
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells /\
+    psL.ps_stack = prefixL ++ MAP (phi_cell_value T) cells /\
+    psD.ps_stack = prefixD ++ MAP (phi_cell_value F) cells
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all lineage_state_predecessor_origin >> strip_tac >>
+  drule_all dfs_block_state_predecessor_origin >> strip_tac >>
+  `?cells prefixL prefixD.
+    phi_origin_classes (native_phi_class pred (collect_phis sb.bb_instructions)) cells /\
+    psAfter.ps_stack = prefixL ++ MAP (phi_cell_value T) cells /\
+    psAfter'.ps_stack = prefixD ++ MAP (phi_cell_value F) cells` by
+    (irule successful_join_edges_common_cells >>
+     goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any)) >>
+  qexistsl_tac [`pred`, `cells`, `prefixL`, `prefixD`] >> simp[]
 QED
 
 (* ===== Successor transfer ===== *)
