@@ -4,7 +4,7 @@ Ancestors
   stackPlanGen stackPlanOps allocMono frameViewFacts frameViewMemory
   contextCodegenRel list venomWf finite_map planWf stackModel
   codegenRel asmFrame venomInst venomEffects asmIR genBlockSim stackOpSim reorderSim
-  frameRel planExec asmSem venomState
+  frameRel planExec asmSem venomState regularMemorySim stackOpAsmSim
 
 (* Empty outputs eliminate both postfix phases.  Keep the arranged planner
    as the semantic boundary, so prefix simulation needs no shadow-state
@@ -226,3 +226,51 @@ Resume frame_terminal_prefix_setup[ready]:
 QED
 
 Finalise frame_terminal_prefix_setup
+
+(* RETURN only needs agreement of the actual payload, not ordered spill bounds. *)
+Theorem terminal_return_payload_step:
+  asm_block_at prog st.as_pc [AsmOp "RETURN"] /\
+  st.as_stack = offv :: szv :: tail /\
+  venom_asm_terminal_rel vs st /\
+  TAKE (w2n szv) (DROP (w2n offv) st.as_memory ++ REPLICATE (w2n szv) 0w) =
+  TAKE (w2n szv) (DROP (w2n offv) vs.vs_memory ++ REPLICATE (w2n szv) 0w) ==>
+  ?st'. asm_steps lo o2pc prog 1 st = AsmHalt st' /\
+    venom_asm_terminal_rel
+      (halt_state (set_returndata
+        (TAKE (w2n szv) (DROP (w2n offv) vs.vs_memory ++
+          REPLICATE (w2n szv) 0w)) vs)) st'
+Proof
+  strip_tac >> `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
+  fs[asm_block_at_def] >>
+  simp[asm_step_def, asm_step_op_def, asm_step_arith_def,
+    asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+    asm_step_control_def, asm_return_op_def] >>
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def] >>
+  Cases_on `w2n szv = 0` >> simp[] >>
+  fs[venom_returndata_read_byte, expanded_slice_padded_range]
+QED
+
+Theorem terminal_selfdestruct_rel_step:
+  asm_block_at prog st.as_pc [AsmOp "SELFDESTRUCT"] /\
+  st.as_stack = addr :: tail /\
+  venom_asm_terminal_rel vs st /\
+  st.as_call_ctx = vs.vs_call_ctx ==>
+  ?st'. asm_steps lo o2pc prog 1 st = AsmHalt st' /\
+    venom_asm_terminal_rel
+      (halt_state (set_returndata [] (vs with vs_accounts :=
+        (\a. if a = vs.vs_call_ctx.cc_address then
+          lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts with balance := 0
+        else if a = (w2w addr : address) then
+          lookup_account (w2w addr) vs.vs_accounts with balance :=
+            (lookup_account vs.vs_call_ctx.cc_address vs.vs_accounts).balance +
+            (lookup_account (w2w addr) vs.vs_accounts).balance
+        else vs.vs_accounts a)))) st'
+Proof
+  strip_tac >> `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
+  fs[asm_block_at_def] >>
+  rewrite_tac[stackOpAsmSimTheory.asm_step_selfdestruct, asm_selfdestruct_def] >>
+  asm_rewrite_tac[] >>
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+QED
