@@ -687,7 +687,8 @@ Finalise ld_source_annotation
 (* Sites retained by one frame, and by the simultaneously live call stack.
    Numeric equality of sites is deliberately not used to select an owner. *)
 Definition ld_selected_def:
-  ld_selected L AP AG site <=>
+  ld_selected (L:(num, (num # num) # (num # num)) fmap) AP
+              (AG:(string, (num # num) # (num # num)) fmap) site <=>
     (?id. FLOOKUP L id = SOME site) \/
     MEM (SOME site) AP \/ (?v. FLOOKUP AG v = SOME site)
 End
@@ -833,3 +834,359 @@ Resume ld_annotated_serial[ret]:
 QED
 
 Finalise ld_annotated_serial
+
+(* Bounds are natural endpoints, independent of the word no-wrap bound. *)
+Definition ld_frame_bound_def:
+  ld_frame_bound n (L:(num, (num # num) # (num # num)) fmap) AP
+                   (AG:(string, (num # num) # (num # num)) fmap) <=>
+    !site. ld_selected L AP AG site ==>
+      FST (SND site) + SND (SND site) <= n
+End
+
+Definition ld_stack_bound_def:
+  ld_stack_bound n [] = T /\
+  ld_stack_bound n (f::astk) =
+    (f.lf_state.vs_alloca_next <= n /\
+     ld_frame_bound f.lf_state.vs_alloca_next f.lf_local f.lf_params f.lf_prov /\
+     ld_stack_bound f.lf_state.vs_alloca_next astk)
+End
+
+Theorem ld_frame_bound_mono:
+  ld_frame_bound n L AP AG /\ n <= m ==> ld_frame_bound m L AP AG
+Proof
+  simp[ld_frame_bound_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem ld_stack_bound_mono:
+  !astk n m. ld_stack_bound n astk /\ n <= m ==> ld_stack_bound m astk
+Proof
+  Cases >> simp[ld_stack_bound_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem ld_frame_bound_step:
+  ld_frame_bound n L AP AG ==> ld_frame_bound n L AP (ld_step_prov AP AG L i)
+Proof
+  simp[ld_frame_bound_def] >> metis_tac[ld_step_selected]
+QED
+
+Theorem ld_frame_bound_entry:
+  ld_frame_bound n L AP AG ==> ld_frame_bound n L AP (ld_entry_prov fn s AG)
+Proof
+  simp[ld_frame_bound_def] >> metis_tac[ld_entry_selected]
+QED
+
+Theorem ld_frame_bound_call:
+  ld_frame_bound n L AP AG ==>
+  ld_frame_bound n FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY
+Proof
+  simp[ld_frame_bound_def] >> metis_tac[ld_call_selected]
+QED
+
+Theorem ld_frame_bound_restrict:
+  ld_frame_bound n L AP AG ==> ld_frame_bound n L AP (DRESTRICT AG keys)
+Proof
+  simp[ld_frame_bound_def] >> metis_tac[ld_restrict_selected]
+QED
+
+Theorem ld_select_alloca_endpoints:
+  ld_erase L = s.vs_allocas /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK s' /\ ld_select_alloca k L i s' = (k',L') ==>
+  s.vs_alloca_next <= s'.vs_alloca_next /\
+  (!id site. FLOOKUP L' id = SOME site ==>
+    FLOOKUP L id = SOME site \/
+    (FST (SND site) = s.vs_alloca_next /\
+     FST (SND site) + SND (SND site) = s'.vs_alloca_next))
+Proof
+  strip_tac >>
+  `FLOOKUP s.vs_allocas i.inst_id =
+   OPTION_MAP SND (FLOOKUP L i.inst_id)` by metis_tac[ld_erase_lookup] >>
+  Cases_on `i.inst_opcode = ALLOCA`
+  >- (gvs[step_inst_non_invoke] >>
+      qpat_x_assum `step_inst_base i s = _` mp_tac >>
+      simp[step_inst_base_def] >>
+      strip_tac >> gvs[AllCaseEqs()] >>
+      qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+      simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+      rpt strip_tac >> gvs[] >>
+      Cases_on `FLOOKUP L i.inst_id` >>
+      gvs[ld_select_alloca_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[AllCaseEqs()]) >>
+  drule_all ld_step_nonallocation_fields >> strip_tac >>
+  gvs[ld_select_alloca_def]
+QED
+
+Theorem ld_frame_bound_alloca:
+  ld_erase L = s.vs_allocas /\ i.inst_opcode <> INVOKE /\
+  step_inst fuel C i s = OK s' /\ ld_select_alloca k L i s' = (k',L') /\
+  ld_frame_bound s.vs_alloca_next L AP AG ==>
+  ld_frame_bound s'.vs_alloca_next L' AP AG
+Proof
+  strip_tac >> drule_all ld_select_alloca_endpoints >> strip_tac >>
+  simp[ld_frame_bound_def] >> gen_tac >> disch_tac >>
+  `ld_selected L AP AG site \/
+   FST (SND site) + SND (SND site) = s'.vs_alloca_next` by
+    (gvs[ld_selected_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >- (
+    qpat_x_assum `ld_frame_bound _ _ _ _` mp_tac >>
+    simp[ld_frame_bound_def] >>
+    disch_then (qspec_then `site` mp_tac) >> simp[]) >>
+  simp[]
+QED
+
+Theorem ld_annotated_bounds:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  ld_frame_bound s.vs_alloca_next L AP AG /\ ld_stack_bound s.vs_alloca_next astk
+Proof
+  ho_match_mp_tac ld_annotated_reachable_strongind >> rpt conj_tac
+  >- simp[ld_frame_bound_def, ld_selected_def, ld_stack_bound_def]
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_annotated_bounds[next]:
+  rpt gen_tac >> strip_tac >>
+  `ld_erase L = s.vs_allocas` by metis_tac[ld_annotated_local_maps] >>
+  drule_all ld_select_alloca_endpoints >> strip_tac >>
+  conj_tac
+  >- (simp[] >> irule ld_frame_bound_step >>
+      irule ld_frame_bound_alloca >> metis_tac[]) >>
+  simp[] >> irule ld_stack_bound_mono >> metis_tac[]
+QED
+
+Resume ld_annotated_bounds[block]:
+  rpt strip_tac >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> ALLOCA` by
+    (rpt strip_tac >> gvs[venomInstTheory.is_terminator_def]) >>
+  drule_all ld_step_nonallocation_fields >> strip_tac >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[] >> metis_tac[ld_frame_bound_entry]
+QED
+
+Resume ld_annotated_bounds[call]:
+  rpt strip_tac >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  drule ld_enters_block_allocation_fields >> strip_tac >>
+  gvs[ld_stack_bound_def] >> metis_tac[ld_frame_bound_call]
+QED
+
+Theorem ld_adopt_return_alloca_next[simp]:
+  (adopt_return_fmp ret s).vs_alloca_next = s.vs_alloca_next
+Proof
+  irule adopt_return_fmp_projection >> simp[]
+QED
+
+Resume ld_annotated_bounds[ret]:
+  rpt strip_tac >> gvs[ld_stack_bound_def] >>
+  drule bind_outputs_shared_fields >>
+  simp[adopt_return_fmp_allocas, merge_callee_local_fields] >>
+  strip_tac >> gvs[] >> metis_tac[ld_frame_bound_restrict]
+QED
+
+Finalise ld_annotated_bounds
+
+Theorem ld_stack_bound_member:
+  !astk n f. ld_stack_bound n astk /\ MEM f astk ==>
+    f.lf_state.vs_alloca_next <= n /\
+    ld_frame_bound f.lf_state.vs_alloca_next f.lf_local f.lf_params f.lf_prov
+Proof
+  Induct >> simp[ld_stack_bound_def] >> rpt strip_tac >> gvs[] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem ld_annotated_live_endpoint:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+  ld_live astk L AP AG site ==>
+  FST (SND site) + SND (SND site) <= s.vs_alloca_next
+Proof
+  strip_tac >> drule ld_annotated_bounds >> strip_tac >>
+  qpat_x_assum `ld_live _ _ _ _ _` mp_tac >> simp[ld_live_def] >> strip_tac
+  >- gvs[ld_frame_bound_def] >>
+  drule_all ld_stack_bound_member >> strip_tac >>
+  qpat_x_assum `ld_frame_bound _ _ _ _` mp_tac >>
+  simp[ld_frame_bound_def] >> disch_then (qspec_then `site` mp_tac) >> simp[]
+QED
+
+Definition ld_compatible_def:
+  ld_compatible (a:(num # num) # (num # num)) b <=>
+    if FST a = FST b then SND a = SND b
+    else FST (SND a) + SND (SND a) <= FST (SND b) \/
+         FST (SND b) + SND (SND b) <= FST (SND a)
+End
+
+Definition ld_coherent_def:
+  ld_coherent astk L AP AG <=>
+    !a b. ld_live astk L AP AG a /\ ld_live astk L AP AG b ==>
+      ld_compatible a b
+End
+
+Theorem ld_compatible_refl[simp]:
+  ld_compatible a a
+Proof
+  simp[ld_compatible_def]
+QED
+
+Theorem ld_compatible_sym:
+  ld_compatible a b ==> ld_compatible b a
+Proof
+  simp[ld_compatible_def] >> metis_tac[]
+QED
+
+Theorem ld_coherent_mono:
+  ld_coherent astk L AP AG /\
+  (!site. ld_live astk' L' AP' AG' site ==> ld_live astk L AP AG site) ==>
+  ld_coherent astk' L' AP' AG'
+Proof
+  simp[ld_coherent_def] >> metis_tac[]
+QED
+
+Theorem ld_coherent_step:
+  ld_coherent astk L AP AG ==> ld_coherent astk L AP (ld_step_prov AP AG L i)
+Proof
+  strip_tac >> irule ld_coherent_mono >>
+  goal_assum (drule_at Any) >> simp[ld_live_def] >>
+  metis_tac[ld_step_selected]
+QED
+
+Theorem ld_coherent_entry:
+  ld_coherent astk L AP AG ==> ld_coherent astk L AP (ld_entry_prov fn s AG)
+Proof
+  strip_tac >> irule ld_coherent_mono >>
+  goal_assum (drule_at Any) >> simp[ld_live_def] >>
+  metis_tac[ld_entry_selected]
+QED
+
+Theorem ld_coherent_call:
+  ld_coherent astk L AP AG ==>
+  ld_coherent
+    (<| lf_fn := caller; lf_inst := ins; lf_state := s;
+        lf_params := AP; lf_prov := AG; lf_tvar := tv; lf_local := L |> :: astk)
+    FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY
+Proof
+  strip_tac >> irule ld_coherent_mono >>
+  goal_assum (drule_at Any) >> simp[ld_live_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[ld_call_selected]
+QED
+
+Theorem ld_coherent_ret:
+  ld_coherent (f::astk) L AP AG ==>
+  ld_coherent astk f.lf_local f.lf_params (DRESTRICT f.lf_prov keys)
+Proof
+  strip_tac >> irule ld_coherent_mono >>
+  goal_assum (drule_at Any) >> simp[ld_live_def] >>
+  metis_tac[ld_restrict_selected]
+QED
+
+Theorem ld_live_update:
+  ld_live astk (L |+ (id,site)) AP AG a ==>
+  ld_live astk L AP AG a \/ a = site
+Proof
+  simp[ld_live_def, ld_selected_def, FLOOKUP_UPDATE, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem ld_coherent_update:
+  ld_coherent astk L AP AG /\
+  (!a. ld_live astk L AP AG a ==> ld_compatible a site) ==>
+  ld_coherent astk (L |+ (id,site)) AP AG
+Proof
+  simp[ld_coherent_def] >> rpt strip_tac >>
+  drule ld_live_update >> strip_tac >> gvs[] >>
+  metis_tac[ld_live_update, ld_compatible_sym, ld_compatible_refl]
+QED
+
+Theorem ld_select_alloca_cases:
+  ld_select_alloca k L i s = (k',L') ==>
+  L' = L \/
+  ?p. L' = L |+ (i.inst_id,((0,k),p)) /\
+      FLOOKUP L i.inst_id = NONE /\
+      FLOOKUP s.vs_allocas i.inst_id = SOME p
+Proof
+  simp[ld_select_alloca_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem ld_annotated_coherent:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  ld_coherent astk L AP AG
+Proof
+  ho_match_mp_tac ld_annotated_reachable_strongind >> rpt conj_tac
+  >- simp[ld_coherent_def, ld_live_def, ld_selected_def]
+  >- suspend "next"
+  >- (rpt strip_tac >> metis_tac[ld_coherent_entry])
+  >- (rpt strip_tac >> metis_tac[ld_coherent_call])
+  >> (rpt strip_tac >> metis_tac[ld_coherent_ret])
+QED
+
+Resume ld_annotated_coherent[next]:
+  rpt strip_tac >> irule ld_coherent_step >>
+  drule ld_select_alloca_cases >> strip_tac >- gvs[] >>
+  gvs[] >> irule ld_coherent_update >> simp[] >>
+  gen_tac >> disch_tac >>
+  `FST (FST a) = (0:num) /\ SND (FST a) < k` by
+    metis_tac[ld_annotated_serial] >>
+  `FST (SND a) + SND (SND a) <= s.vs_alloca_next` by
+    metis_tac[ld_annotated_live_endpoint] >>
+  `ld_erase L = s.vs_allocas` by metis_tac[ld_annotated_local_maps] >>
+  drule_all ld_select_alloca_endpoints >> strip_tac >>
+  qpat_x_assum `!id site. _`
+    (qspecl_then [`inst.inst_id`, `((0,k),p)`] mp_tac) >>
+  simp[FLOOKUP_UPDATE] >> strip_tac >>
+  `FST a <> (0,k)` by (strip_tac >> gvs[]) >>
+  simp[ld_compatible_def]
+QED
+
+Finalise ld_annotated_coherent
+
+(* Lookup consumers use ld_selected_def for local/parameter/provenance
+   selections, without unfolding any annotated propagation operation. *)
+Theorem ld_annotated_saved_endpoint:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\ MEM f astk /\
+  ld_selected f.lf_local f.lf_params f.lf_prov site ==>
+  FST (SND site) + SND (SND site) <= f.lf_state.vs_alloca_next /\
+  f.lf_state.vs_alloca_next <= s.vs_alloca_next
+Proof
+  strip_tac >> drule ld_annotated_bounds >> strip_tac >>
+  drule_all ld_stack_bound_member >>
+  simp[ld_frame_bound_def] >> metis_tac[]
+QED
+
+Theorem ld_annotated_owner_site:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+  ld_live astk L AP AG a /\ ld_live astk L AP AG b /\ FST a = FST b ==>
+  SND a = SND b
+Proof
+  strip_tac >> drule ld_annotated_coherent >>
+  simp[ld_coherent_def] >>
+  disch_then (qspecl_then [`a`, `b`] mp_tac) >> simp[ld_compatible_def]
+QED
+
+Theorem ld_annotated_owner_separation:
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+  ld_live astk L AP AG a /\ ld_live astk L AP AG b /\ FST a <> FST b ==>
+  FST (SND a) + SND (SND a) <= FST (SND b) \/
+  FST (SND b) + SND (SND b) <= FST (SND a)
+Proof
+  strip_tac >> drule ld_annotated_coherent >>
+  simp[ld_coherent_def] >>
+  disch_then (qspecl_then [`a`, `b`] mp_tac) >> simp[ld_compatible_def]
+QED
+
+Theorem ld_source_ownership:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  ?astk k L AP AG.
+    ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+    MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\
+    ld_erase AG = G /\
+    ld_frame_bound s.vs_alloca_next L AP AG /\
+    ld_stack_bound s.vs_alloca_next astk /\ ld_coherent astk L AP AG
+Proof
+  strip_tac >> drule_all ld_source_annotation >> strip_tac >>
+  qexistsl [`astk`, `k`, `L`, `AP`, `AG`] >> simp[] >>
+  metis_tac[ld_annotated_bounds, ld_annotated_coherent]
+QED
