@@ -1320,3 +1320,17 @@ Proof
   conj_tac >- (qexists `r` >> simp[]) >>
   qexists `st.as_memory` >> gvs[context_venom_asm_rel_def]
 QED
+
+(* The initialized entry allocator supports cleanup below SWAP16. *)
+Theorem entry_cleanup_deep_initialized_probe:
+  FST (popmany_plan [Var "a"]
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+      [Var "a"; Var "b"; Var "c"; Var "d"; Var "e"; Var "f";
+       Var "g"; Var "h"; Var "i"; Var "j"; Var "k"; Var "l";
+       Var "m"; Var "n"; Var "o"; Var "p"; Var "q"; Var "r"])) =
+    GENLIST (\i. SOSpill (32 * i)) 18 ++
+    MAP SORestore (0 :: GENLIST (\i. 32 * (16 - i)) 16 ++ [544]) ++
+    [SOPop 1]
+Proof
+  EVAL_TAC
+QED
