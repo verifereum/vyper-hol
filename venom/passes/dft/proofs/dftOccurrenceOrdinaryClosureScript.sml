@@ -5,7 +5,7 @@ Ancestors
   dftOccurrenceReplay dftOccurrenceMachine dftOpenErase dftOpenMachine dftOpenFuel
   venomExecSemantics venomInst dftAvailability dftOccurrenceAvailability
   dftScheduleOrder dftCorrectness dftOrdinarySwap venomWf venomState sccpCorrectnessProofs finite_map
-  list arithmetic allocaRemapSSA
+  list arithmetic allocaRemapSSA venomExecProofs venomExecProps
 
 Theorem dft_nonphi_edit_phi_bound:
   !pre. x.inst_opcode <> PHI ==>
@@ -306,4 +306,239 @@ Proof
   `MEM y (fn_insts fn)` by
     (irule mem_fn_insts_intro >> qexists `bb` >> simp[]) >>
   fs[dft_ordinary_swap_pair_def] >> metis_tac[]
+QED
+
+Definition dft_source_control_def:
+  (dft_source_control C L (DftEnter fn b s) <=>
+    MEM fn C.ctx_functions /\ s.vs_labels = L) /\
+  (dft_source_control C L (DftAt fn b bb s) <=>
+    MEM fn C.ctx_functions /\ s.vs_labels = L) /\
+  (dft_source_control C L (DftDone r) <=> T)
+End
+
+Definition dft_source_frame_def:
+  dft_source_frame C L (DftCaller fn b bb inst s) <=>
+    MEM fn C.ctx_functions /\ s.vs_labels = L
+End
+
+Definition dft_source_core_def:
+  dft_source_core C L (DftOpen ctl stack n) <=>
+    dft_source_control C L ctl /\ EVERY (dft_source_frame C L) stack
+End
+
+Definition dft_source_provenance_def:
+  dft_source_provenance C L c <=> dft_source_core C L c.dft_occ_core
+End
+
+Theorem dft_source_root:
+  MEM fn C.ctx_functions /\ s.vs_labels = L ==>
+  dft_source_provenance C L (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))
+Proof
+  simp[dft_source_provenance_def, dft_occ_init_def, dft_source_core_def,
+       dft_source_control_def]
+QED
+
+Theorem dft_source_frame_fill[local,simp]:
+  dft_source_frame C L (dft_fill_frame b f) = dft_source_frame C L f
+Proof
+  Cases_on `f` >> simp[dft_source_frame_def, dft_fill_frame_def]
+QED
+
+Theorem dft_source_fill[local,simp]:
+  dft_source_core C L (dft_fill b c) = dft_source_core C L c
+Proof
+  Cases_on `c` >> rename1 `DftOpen ctl stack n` >> Cases_on `ctl` >>
+  simp[dft_fill_def, dft_fill_control_def, dft_source_core_def,
+       dft_source_control_def, EVERY_MAP, combinTheory.o_DEF, SF ETA_ss]
+QED
+
+Theorem dft_source_base_labels[local]:
+  step_inst_base inst s = OK t ==> t.vs_labels = s.vs_labels
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by metis_tac[step_inst_base_OK_not_INVOKE] >>
+  `step_inst 0 ARB inst s = OK t` by simp[step_inst_non_invoke] >>
+  metis_tac[step_inst_preserves_labels_always]
+QED
+
+Theorem dft_source_continue[local]:
+  MEM fn C.ctx_functions /\ t.vs_labels = L ==>
+  dft_source_control C L (dft_open_continue fn b bb inst s t)
+Proof
+  simp[dft_open_continue_def] >> rpt strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode` >> simp[dft_source_control_def] >>
+  Cases_on `t.vs_halted` >> simp[dft_source_control_def]
+QED
+
+Theorem dft_source_deliver[local]:
+  MEM fn C.ctx_functions /\ EVERY (dft_source_frame C L) stack /\
+  (!t. result = OK t ==> t.vs_labels = L) ==>
+  dft_source_core C L (dft_open_deliver fn b bb inst s stack n result)
+Proof
+  Cases_on `result` >> simp[dft_open_deliver_def, dft_source_core_def,
+    dft_source_control_def, dft_source_continue]
+QED
+
+Theorem dft_source_entry[local]:
+  dft_source_core C L (DftOpen (DftEnter fn b s) stack n) ==>
+  dft_source_core C L (dft_open_next a C (DftOpen (DftEnter fn b s) stack n))
+Proof
+  simp[dft_source_core_def, dft_source_control_def] >> strip_tac >>
+  Cases_on `b` >> simp[dft_open_next_def, dft_source_core_def, dft_source_control_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `eval_phis s bb.bb_instructions` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  metis_tac[eval_phis_preserves_labels]
+QED
+
+Theorem dft_source_invoke[local]:
+  MEM fn C.ctx_functions /\ s.vs_labels = L /\
+  EVERY (dft_source_frame C L) stack ==>
+  dft_source_core C L (dft_open_invoke C fn b bb inst s stack n)
+Proof
+  strip_tac >> simp[dft_open_invoke_def] >>
+  Cases_on `decode_invoke inst` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `lookup_function x0 C.ctx_functions` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  rename1 `lookup_function _ _ = SOME callee` >>
+  `MEM callee C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  Cases_on `eval_operands x1 s` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  rename1 `eval_operands _ _ = SOME args` >>
+  Cases_on `setup_callee callee args s` >>
+  simp[dft_source_core_def, dft_source_control_def, dft_source_frame_def] >>
+  gvs[setup_callee_def, AllCaseEqs()]
+QED
+
+Theorem dft_source_at[local]:
+  dft_source_core C L (DftOpen (DftAt fn b bb s) stack n) ==>
+  dft_source_core C L (dft_open_next a C (DftOpen (DftAt fn b bb s) stack n))
+Proof
+  simp[dft_source_core_def, dft_source_control_def] >> strip_tac >>
+  simp[dft_open_next_def] >> Cases_on `get_instruction bb s.vs_inst_idx`
+  >- simp[dft_source_core_def, dft_source_control_def] >>
+  rename1 `get_instruction _ _ = SOME inst` >>
+  Cases_on `inst.inst_opcode = INVOKE` >- simp[dft_source_invoke] >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- (Cases_on `inst.inst_outputs` >>
+      simp[dft_source_core_def, dft_source_control_def] >>
+      Cases_on `t` >> simp[dft_source_core_def, dft_source_control_def] >>
+      irule dft_source_deliver >> simp[update_var_def]) >>
+  simp[] >> irule dft_source_deliver >> simp[] >> rpt strip_tac >>
+  metis_tac[dft_source_base_labels]
+QED
+
+Theorem dft_source_fold_labels[local]:
+  !xs s. (FOLDL (\s' (out,v). update_var out v s') s xs).vs_labels = s.vs_labels
+Proof
+  Induct >> simp[] >> Cases_on `h` >> simp[update_var_def]
+QED
+
+Theorem dft_source_bind_labels[local]:
+  bind_outputs outs vals s = SOME t ==> t.vs_labels = s.vs_labels
+Proof
+  simp[bind_outputs_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[dft_source_fold_labels]
+QED
+
+Theorem dft_source_return[local]:
+  EVERY (dft_source_frame C L) stack ==>
+  dft_source_core C L (dft_open_return result stack n)
+Proof
+  Cases_on `result` >> Cases_on `stack` >>
+  simp[dft_open_return_def, dft_source_core_def, dft_source_control_def] >>
+  Cases_on `h` >> simp[dft_source_frame_def] >> strip_tac >>
+  rename1 `bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs))` >>
+  Cases_on `bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state caller cs))` >>
+  simp[dft_source_core_def, dft_source_control_def] >>
+  irule dft_source_deliver >> simp[] >>
+  drule dft_source_bind_labels >>
+  simp[adopt_return_fmp_def, merge_callee_state_def] >>
+  Cases_on `ret.iret_adopt_fmp` >> simp[]
+QED
+
+Theorem dft_source_open_next[local]:
+  dft_source_core C L c ==> dft_source_core C L (dft_open_next a C c)
+Proof
+  Cases_on `c` >> rename1 `DftOpen ctl stack n` >> Cases_on `ctl`
+  >- metis_tac[dft_source_entry]
+  >- metis_tac[dft_source_at] >>
+  simp[dft_source_core_def, dft_source_control_def, dft_open_next_def,
+       dft_source_return]
+QED
+
+Theorem dft_source_step:
+  dft_source_provenance C L c ==>
+  dft_source_provenance C L (dft_occ_oracle_next w C c)
+Proof
+  simp[dft_source_provenance_def, dft_occ_oracle_next_def,
+       dft_next_inf_def, dft_erase_def] >>
+  metis_tac[dft_source_fill, dft_source_open_next]
+QED
+
+Theorem dft_source_run:
+  !k c. dft_source_provenance C L c ==>
+    dft_source_provenance C L (FUNPOW (dft_occ_oracle_next w C) k c)
+Proof
+  Induct >> simp[FUNPOW_SUC] >> metis_tac[dft_source_step]
+QED
+
+Theorem dft_source_active_at:
+  dft_source_provenance C L c /\
+  c.dft_occ_core = DftOpen (DftAt fn b bb s) stack n ==>
+  MEM fn C.ctx_functions /\ s.vs_labels = L
+Proof
+  strip_tac >> fs[dft_source_provenance_def] >>
+  gvs[dft_source_core_def, dft_source_control_def]
+QED
+
+Theorem dft_source_saved_caller:
+  dft_source_provenance C L c /\
+  c.dft_occ_core = DftOpen ctl stack n /\
+  MEM (DftCaller fn b bb inst s) stack ==>
+  MEM fn C.ctx_functions /\ s.vs_labels = L
+Proof
+  strip_tac >> fs[dft_source_provenance_def] >>
+  gvs[dft_source_core_def, EVERY_MEM] >>
+  metis_tac[dft_source_frame_def]
+QED
+
+Theorem dft_source_ready_crossed_operands:
+  dft_source_provenance C L c /\ dft_runtime_ready c /\
+  EVERY wf_ssa C.ctx_functions /\
+  c.dft_occ_core = DftOpen (DftAt fn b bb s) stack n /\
+  bb.bb_instructions = pre ++ [x;y] ++ post /\
+  s.vs_inst_idx = LENGTH pre /\ dft_ordinary_swap_pair x y /\
+  (!f i l. MEM f C.ctx_functions /\ MEM i (fn_insts f) /\
+    MEM (Label l) i.inst_operands /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode /\ ~is_pseudo i.inst_opcode ==>
+    l IN FDOM L) ==>
+  !op. MEM op y.inst_operands ==> ?v. eval_operand op s = SOME v
+Proof
+  strip_tac >>
+  `MEM fn C.ctx_functions /\ s.vs_labels = L` by
+    metis_tac[dft_source_active_at] >>
+  `wf_ssa fn` by fs[EVERY_MEM] >>
+  `wf_function fn /\ MEM bb fn.fn_blocks /\ dft_activation_cut fn bb s` by
+    (fs[dft_runtime_ready_def] >>
+     gvs[dft_runtime_core_ready_def, dft_runtime_control_ready_def,
+         dft_runtime_fn_ok_def]) >>
+  `!l. MEM (Label l) y.inst_operands ==> l IN FDOM s.vs_labels` by
+    (rpt strip_tac >> irule dft_ordinary_crossed_labels >> metis_tac[]) >>
+  rpt strip_tac >> irule dft_ordinary_crossed_operands >> metis_tac[]
+QED
+
+Theorem dft_source_active_enter:
+  dft_source_provenance C L c /\
+  c.dft_occ_core = DftOpen (DftEnter fn b s) stack n ==>
+  MEM fn C.ctx_functions /\ s.vs_labels = L
+Proof
+  strip_tac >> fs[dft_source_provenance_def] >>
+  gvs[dft_source_core_def, dft_source_control_def]
 QED
