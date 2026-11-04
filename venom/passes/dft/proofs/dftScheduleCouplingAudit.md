@@ -295,3 +295,16 @@ a genuine Enter-to-before-to-middle instance are checked. No recursive
 transition preservation or trajectory transport is claimed here. Those remain
 C3.2.11 and C3.2.12, and unrestricted GAS/INVOKE and effectful closure remain
 separate unresolved work.
+
+## Actual GAS/GAS transition closure (C3.2.11)
+
+`dft_gas_edit_rel_next` proves preservation by the actual occurrence-oracle
+next function under the stated adjacent well-shaped distinct-output GAS edit.
+The generated middle phase rejoins after the two GAS steps with arbitrary
+mapped stacks; the synchronized phase uses unchanged-fetch commutation through
+entry, shared base-instruction results, INVOKE pushes/errors, and all return
+results. Source safety and exclusion of the middle index are preserved using
+actual saved INVOKE slots and the PHI-entry bound. No callee termination or
+simulation hypothesis occurs in these proofs. This is recursive one-step
+closure for this single fixed GAS/GAS edit only; trajectory/observation
+corollaries and the general effectful/GAS-INVOKE extension remain distinct.
