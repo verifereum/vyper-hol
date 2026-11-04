@@ -13,7 +13,8 @@
  *)
 Theory unitShapeDefs
 Ancestors
-  venomCompilerTypes venomInst venomEffects stackPlanTypes stackPlanGen contextCodegenRel
+  venomCompilerTypes venomInst venomWf venomEffects stackPlanTypes
+  stackPlanGen contextCodegenRel simplifyCfgDefs
   list
 
 (* ===== Least copy/PHI closure ===== *)
@@ -99,20 +100,163 @@ Proof
   metis_tac[opaque_use_ok_def]
 QED
 
+(* The code SimplifyCFG keeps: the blocks reachable from the entry block,
+   each PHI keeping only the pairs from reachable predecessors
+   (remove_unreachable_blocks, then fix_all_phis' operand filter). *)
+Definition reachable_preds_def:
+  reachable_preds fn lbl =
+    FILTER (\l. fn_reachable fn l /\ fn_cfg_edge fn l lbl)
+      (MAP (\bb. bb.bb_label) fn.fn_blocks)
+End
+
+Definition reachable_inst_def:
+  reachable_inst fn lbl inst =
+    if inst.inst_opcode = PHI then
+      inst with inst_operands :=
+        filter_phi_ops (reachable_preds fn lbl) inst.inst_operands
+    else inst
+End
+
+Definition reachable_fn_def:
+  reachable_fn fn =
+    fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+                   MAP (reachable_inst fn bb.bb_label) bb.bb_instructions)
+        (FILTER (\bb. fn_reachable fn bb.bb_label) fn.fn_blocks)
+End
+
+Theorem reachable_inst_fields:
+  (reachable_inst fn lbl inst).inst_opcode = inst.inst_opcode /\
+  (reachable_inst fn lbl inst).inst_outputs = inst.inst_outputs /\
+  (inst.inst_opcode <> PHI ==> reachable_inst fn lbl inst = inst) /\
+  (MEM op (reachable_inst fn lbl inst).inst_operands ==>
+   MEM op inst.inst_operands)
+Proof
+  rw[reachable_inst_def] >> metis_tac[MEM_filter_phi_ops]
+QED
+
+Theorem MEM_fn_insts_blocks_iff:
+  !bbs inst. MEM inst (fn_insts_blocks bbs) <=>
+             ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
+Proof
+  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Theorem MEM_reachable_fn_insts:
+  !fn inst. MEM inst (fn_insts (reachable_fn fn)) <=>
+            ?bb i. MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+                   MEM i bb.bb_instructions /\
+                   inst = reachable_inst fn bb.bb_label i
+Proof
+  simp[reachable_fn_def, fn_insts_def, MEM_fn_insts_blocks_iff, MEM_FILTER,
+       MEM_MAP, PULL_EXISTS] >>
+  metis_tac[]
+QED
+
+Theorem reachable_fn_insts_mem:
+  !fn inst. MEM inst (fn_insts (reachable_fn fn)) ==>
+            ?lbl i. MEM i (fn_insts fn) /\ inst = reachable_inst fn lbl i
+Proof
+  simp[MEM_reachable_fn_insts, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+  metis_tac[]
+QED
+
+Theorem reachable_fn_insts_nonphi:
+  !fn inst. MEM inst (fn_insts (reachable_fn fn)) /\ inst.inst_opcode <> PHI ==>
+            MEM inst (fn_insts fn)
+Proof
+  rpt strip_tac >> drule reachable_fn_insts_mem >> strip_tac >>
+  gvs[reachable_inst_fields]
+QED
+
+Theorem reachable_fn_insts_operand:
+  !fn inst op. MEM inst (fn_insts (reachable_fn fn)) /\
+               MEM op inst.inst_operands ==>
+               ?i. MEM i (fn_insts fn) /\ i.inst_opcode = inst.inst_opcode /\
+                   MEM op i.inst_operands
+Proof
+  rpt strip_tac >> drule reachable_fn_insts_mem >> strip_tac >>
+  gvs[reachable_inst_fields] >> metis_tac[reachable_inst_fields]
+QED
+
+Theorem copy_phi_var_mono:
+  !origin fn x. copy_phi_var origin fn x ==>
+    !fn'. (!i. MEM i (fn_insts fn) ==> MEM i (fn_insts fn')) ==>
+          copy_phi_var origin fn' x
+Proof
+  Induct_on `copy_phi_var` >> metis_tac[copy_phi_var_rules]
+QED
+
+Theorem entry_insts_reachable:
+  !fn inst. fn.fn_blocks <> [] /\ MEM inst (HD fn.fn_blocks).bb_instructions /\
+            inst.inst_opcode <> PHI ==>
+            MEM inst (fn_insts (reachable_fn fn))
+Proof
+  rw[MEM_reachable_fn_insts] >> Cases_on `fn.fn_blocks` >> gvs[] >>
+  qexistsl_tac [`h`, `inst`] >>
+  simp[reachable_inst_fields, fn_reachable_def, fn_entry_label_def,
+       entry_block_def, relationTheory.RTC_REFL]
+QED
+
+Theorem reachable_fn_single_block:
+  !fn bb. fn.fn_blocks = [bb] /\
+          EVERY (\i. i.inst_opcode <> PHI) bb.bb_instructions ==>
+          reachable_fn fn = fn
+Proof
+  rw[reachable_fn_def, fn_reachable_def, fn_entry_label_def, entry_block_def,
+     relationTheory.RTC_REFL, ir_function_component_equality,
+     basic_block_component_equality] >>
+  simp[LIST_EQ_REWRITE, EL_MAP] >> gvs[EVERY_EL, reachable_inst_fields]
+QED
+
+Theorem reachable_retpc_var:
+  retpc_var (reachable_fn fn) x ==> retpc_var fn x
+Proof
+  rw[retpc_var_def] >>
+  `!origin g x. copy_phi_var origin g x ==> g = reachable_fn fn ==>
+                copy_phi_var origin fn x`
+    suffices_by metis_tac[] >>
+  Induct_on `copy_phi_var` >> rw[] >>
+  drule reachable_fn_insts_mem >> strip_tac >> gvs[reachable_inst_fields] >>
+  metis_tac[copy_phi_var_rules, reachable_inst_fields]
+QED
+
 (* The generated code for RET jumps to its last operand, so the function
    theorem can land at the caller's return pc only if that operand is a
    return-PC variable; and a PHI that merges a return-PC variable with an
    ordinary one would read as ra on the ordinary path too.  opaque_use_ok
    restricts where return-PC variables may be used but requires neither.
    RETFMP and DRET become RET with the same last operand (DretDesugar,
-   FmpLowering), so they carry the same requirement. *)
+   FmpLowering), so they carry the same requirement.
+
+   The first two clauses range over reachable_fn, the code SimplifyCFG
+   keeps, so a witness that only dead code supplies doesn't count.  The
+   last two range over every instruction and the full closure, the one
+   frame_view classifies by: retpc_var is a may-closure and the input need
+   not be in SSA form, so they make each return-PC variable written once,
+   by a RETPC_PARAM, a copy of one, or a PHI all of whose variables are
+   return-PC variables. *)
 Definition retpc_shape_ok_def:
   retpc_shape_ok fn <=>
-    (!inst. MEM inst (fn_insts fn) /\ MEM inst.inst_opcode [RET; RETFMP; DRET] ==>
-       ?front x. inst.inst_operands = front ++ [Var x] /\ retpc_var fn x) /\
-    (!inst x y. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
+    (!inst. MEM inst (fn_insts (reachable_fn fn)) /\
+       MEM inst.inst_opcode [RET; RETFMP; DRET] ==>
+       ?front x. inst.inst_operands = front ++ [Var x] /\
+                 retpc_var (reachable_fn fn) x) /\
+    (!inst x y. MEM inst (fn_insts (reachable_fn fn)) /\
+       inst.inst_opcode = PHI /\
        MEM (Var x) inst.inst_operands /\ MEM (Var y) inst.inst_operands /\
-       retpc_var fn x ==> retpc_var fn y)
+       retpc_var (reachable_fn fn) x ==> retpc_var (reachable_fn fn) y) /\
+    (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs /\
+       retpc_var fn x ==>
+       inst.inst_opcode = RETPC_PARAM \/
+       (inst.inst_opcode = ASSIGN /\ ?y. inst.inst_operands = [Var y] /\
+                                          retpc_var fn y) \/
+       (inst.inst_opcode = PHI /\
+        (?y. MEM (Var y) inst.inst_operands /\ retpc_var fn y) /\
+        (!y. MEM (Var y) inst.inst_operands ==> retpc_var fn y))) /\
+    (!i j x. MEM i (fn_insts fn) /\ MEM j (fn_insts fn) /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs /\
+       retpc_var fn x ==> i = j)
 End
 
 (* Label operands sit only where the codegen expects them: jump targets,

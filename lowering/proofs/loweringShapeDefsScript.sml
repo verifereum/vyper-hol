@@ -9,10 +9,12 @@
  *   all_blocks, state_insts      — the blocks and instructions of a state
  *   internal_label_ok            — internal entry labels ("internal ..."),
  *                                  which start each internal function
- *   fn_suffix, cur_fn_insts      — the blocks and instructions of the
- *                                  function being compiled
+ *   fn_suffix                    — the blocks of the function being
+ *                                  compiled
+ *   fn_entry_insts, cur_entry_insts
+ *                                — the instructions of its entry block
  *   rets_scoped                  — every RET returns to a return PC of its
- *                                  own function
+ *                                  own function's entry block
  *   added_insts, added_labels    — what a compile action appended
  *   opaque_out, opaque_insts_ok  — GAS / RETPC_PARAM outputs used only where
  *                                  gas_use_ok / retpc_use_ok allow, and never
@@ -31,7 +33,7 @@
  *   shape_stable                 — a state predicate kept by every append
  *   gas_operand, retpc_operand   — a variable holding a GAS / RETPC_PARAM
  *                                  output (RETPC_PARAM: of the current
- *                                  function)
+ *                                  function's entry block)
  *
  * The rules for shape_step are in loweringShapeRules.
  *)
@@ -72,9 +74,15 @@ Definition fn_suffix_def:
     else bb :: bbs
 End
 
-Definition cur_fn_insts_def:
-  cur_fn_insts (st : compile_state) =
-    FLAT (MAP (\bb. bb.bb_instructions) (fn_suffix (all_blocks st)))
+(* The entry block's instructions: the return PC is a parameter, read
+   there, so the RETs it reaches are those of reachable code. *)
+Definition fn_entry_insts_def:
+  fn_entry_insts bbs =
+    case fn_suffix bbs of [] => [] | b :: _ => b.bb_instructions
+End
+
+Definition cur_entry_insts_def:
+  cur_entry_insts (st : compile_state) = fn_entry_insts (all_blocks st)
 End
 
 (* Under cs_extends st st', state_insts st is a prefix of state_insts st'
@@ -109,17 +117,15 @@ Definition opaque_insts_ok_def:
          ?front. inst.inst_operands = front ++ [Var x] /\ ~MEM (Var x) front)
 End
 
-(* Every RET's last operand is a RETPC_PARAM output of its own function:
-   of the blocks up to the RET's own since that function's entry block. *)
+(* Every RET's last operand is a RETPC_PARAM output of its own function's
+   entry block. *)
 Definition rets_scoped_def:
   rets_scoped bbs <=>
     !pre bb post inst.
       bbs = pre ++ [bb] ++ post /\ MEM inst bb.bb_instructions /\
       inst.inst_opcode = RET ==>
       ?front x. inst.inst_operands = front ++ [Var x] /\
-                opaque_out RETPC_PARAM
-                  (FLAT (MAP (\b. b.bb_instructions) (fn_suffix (pre ++ [bb]))))
-                  x
+                opaque_out RETPC_PARAM (fn_entry_insts (pre ++ [bb])) x
 End
 
 (* An operand that may appear in any position: no label, no compiler
@@ -393,9 +399,14 @@ Definition shape_base_state_def:
     opaque_insts_ok (state_insts st) /\ rets_scoped (all_blocks st) /\
     (!inst x. MEM inst (state_insts st) /\ MEM (Var x) inst.inst_operands ==>
               not_fresh_at st x) /\
-    (!inst x. MEM inst (state_insts st) /\
-              MEM inst.inst_opcode [GAS; RETPC_PARAM] /\
-              MEM x inst.inst_outputs ==> not_fresh_at st x)
+    (!inst x. MEM inst (state_insts st) /\ MEM x inst.inst_outputs ==>
+              not_fresh_at st x) /\
+    (!inst x. MEM inst (state_insts st) /\ MEM x inst.inst_outputs /\
+              opaque_out RETPC_PARAM (state_insts st) x ==>
+              inst.inst_opcode = RETPC_PARAM) /\
+    (!i j x. MEM i (state_insts st) /\ MEM j (state_insts st) /\
+             i.inst_opcode = RETPC_PARAM /\
+             MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j)
 End
 
 Definition shape_state_def:
@@ -448,7 +459,7 @@ End
 Definition retpc_operand_def:
   retpc_operand (st : compile_state) op <=>
     ?r. op = Var r /\ not_fresh_at st r /\
-        opaque_out RETPC_PARAM (cur_fn_insts st) r /\
+        opaque_out RETPC_PARAM (cur_entry_insts st) r /\
         ~opaque_out GAS (state_insts st) r
 End
 
@@ -579,29 +590,80 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem cur_fn_insts_state_insts:
-  !st i. MEM i (cur_fn_insts st) ==> MEM i (state_insts st)
+Theorem fn_suffix_nonempty:
+  !bbs. bbs <> [] ==> fn_suffix bbs <> []
 Proof
-  simp[cur_fn_insts_def, state_insts_def, MEM_FLAT, MEM_MAP] >>
-  metis_tac[fn_suffix_mem]
+  Induct >> simp[fn_suffix_def] >> rw[] >>
+  Cases_on `bbs` >> gvs[]
 QED
 
-Theorem cur_fn_insts_mono:
+Theorem fn_entry_insts_suffix:
+  !bbs i. MEM i (fn_entry_insts bbs) ==>
+          MEM i (FLAT (MAP (\b. b.bb_instructions) (fn_suffix bbs)))
+Proof
+  rw[fn_entry_insts_def] >> Cases_on `fn_suffix bbs` >> gvs[]
+QED
+
+Theorem fn_entry_insts_mem:
+  !bbs i. MEM i (fn_entry_insts bbs) ==>
+          MEM i (FLAT (MAP (\b. b.bb_instructions) bbs))
+Proof
+  rw[] >> drule fn_entry_insts_suffix >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[fn_suffix_mem]
+QED
+
+Theorem fn_entry_insts_internal_last:
+  !xs bb. internal_label_ok bb.bb_label ==>
+          fn_entry_insts (xs ++ [bb]) = bb.bb_instructions
+Proof
+  rw[fn_entry_insts_def] >>
+  `fn_suffix (xs ++ [bb]) = [bb]` suffices_by simp[] >>
+  Induct_on `xs` >> simp[fn_suffix_def, EXISTS_APPEND]
+QED
+
+Theorem fn_entry_insts_append:
+  !xs ys. xs <> [] /\ EVERY (\b. ~internal_label_ok b.bb_label) ys ==>
+          fn_entry_insts (xs ++ ys) = fn_entry_insts xs
+Proof
+  rw[fn_entry_insts_def, fn_suffix_append] >>
+  drule fn_suffix_nonempty >> Cases_on `fn_suffix xs` >> simp[]
+QED
+
+Theorem fn_entry_insts_last_update:
+  !xs bb bb'. bb.bb_label = bb'.bb_label /\
+    isPREFIX bb.bb_instructions bb'.bb_instructions ==>
+    !i. MEM i (fn_entry_insts (xs ++ [bb])) ==>
+        MEM i (fn_entry_insts (xs ++ [bb']))
+Proof
+  Induct >> simp[fn_entry_insts_def, fn_suffix_def] >-
+    (rpt strip_tac >> gvs[IS_PREFIX_APPEND] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`bb`, `bb'`] mp_tac) >>
+  simp[fn_entry_insts_def, EXISTS_APPEND] >> rw[] >> metis_tac[]
+QED
+
+Theorem cur_entry_insts_state_insts:
+  !st i. MEM i (cur_entry_insts st) ==> MEM i (state_insts st)
+Proof
+  rw[cur_entry_insts_def, state_insts_def] >> metis_tac[fn_entry_insts_mem]
+QED
+
+Theorem cur_entry_insts_mono:
   !internal LP st st'. shape_extends internal LP st st' ==>
-    !i. MEM i (cur_fn_insts st) ==> MEM i (cur_fn_insts st')
+    !i. MEM i (cur_entry_insts st) ==> MEM i (cur_entry_insts st')
 Proof
   rpt gen_tac >> strip_tac >>
   fs[shape_extends_def, cs_extends_def] >>
   Cases_on `new = []` >> gvs[] >-
-    (simp[cur_fn_insts_def, all_blocks_def] >>
-     rpt strip_tac >> irule fn_suffix_last_update >>
+    (simp[cur_entry_insts_def, all_blocks_def] >>
+     rpt strip_tac >> irule fn_entry_insts_last_update >>
      goal_assum (drule_at Any) >> simp[]) >>
   `new = FRONT new ++ [LAST new]` by simp[APPEND_FRONT_LAST] >>
   qpat_x_assum `EVERY (\l. ~internal_label_ok l) _` mp_tac >>
   simp[added_labels_def, all_blocks_def, REVERSE_APPEND, MAP_APPEND,
        DROP_LENGTH_APPEND, DROP_LENGTH_TOO_LONG, DROP_APPEND] >>
   strip_tac >>
-  simp[cur_fn_insts_def, all_blocks_def, REVERSE_APPEND] >>
+  simp[cur_entry_insts_def, all_blocks_def, REVERSE_APPEND] >>
   `REVERSE new = LAST new :: REVERSE (FRONT new)`
     by metis_tac[REVERSE_APPEND, REVERSE_DEF, APPEND] >>
   pop_assum SUBST_ALL_TAC >>
@@ -623,9 +685,10 @@ Proof
       [<| bb_label := st'.cs_current_bb;
           bb_instructions := st'.cs_current_insts |>])` by simp[] >>
   pop_assum SUBST1_TAC >>
-  asm_simp_tac std_ss [fn_suffix_append, MAP_APPEND, FLAT_APPEND, MEM_APPEND] >>
-  rpt strip_tac >> disj1_tac >>
-  irule fn_suffix_last_update >> goal_assum (drule_at Any) >> simp[]
+  `REVERSE st.cs_blocks ++ [LAST new] <> []` by simp[] >>
+  drule_all fn_entry_insts_append >> disch_then (fn th => rewrite_tac[th]) >>
+  rpt strip_tac >>
+  irule fn_entry_insts_last_update >> goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem not_fresh_at_mono:
@@ -697,9 +760,9 @@ Theorem retpc_operand_mono:
     retpc_operand st' op
 Proof
   rpt gen_tac >> strip_tac >>
-  drule cur_fn_insts_mono >> strip_tac >>
+  drule cur_entry_insts_mono >> strip_tac >>
   gvs[retpc_operand_def] >>
-  `opaque_out RETPC_PARAM (cur_fn_insts st') r`
+  `opaque_out RETPC_PARAM (cur_entry_insts st') r`
     by (fs[opaque_out_def] >> metis_tac[]) >>
   fs[shape_extends_def] >>
   imp_res_tac state_insts_cs_extends >> gvs[] >>

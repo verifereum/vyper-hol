@@ -259,6 +259,14 @@ Proof
        GSYM AND_IMP_INTRO, DISJ_IMP_THM, FORALL_AND_THM, APPEND_EQ_CONS]
 QED
 
+Theorem reachable_shape_probe_fn[local]:
+  !insts. EVERY (\i. i.inst_opcode <> PHI) insts ==>
+          reachable_fn (shape_probe_fn insts) = shape_probe_fn insts
+Proof
+  rw[] >> irule reachable_fn_single_block >>
+  simp[shape_probe_fn_def, mk_raw_function_def]
+QED
+
 (* A RET must end in a return-PC variable, and a PHI must not mix one with
  * an ordinary variable. *)
 Theorem retpc_shape_checks:
@@ -267,18 +275,29 @@ Theorem retpc_shape_checks:
     [mk_inst 0 ASSIGN [Lit 1w] ["q"]; mk_inst 1 RET [Var "q"] []]) /\
   ~retpc_shape_ok (shape_probe_fn
     [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"];
-     mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]])
+     mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]]) /\
+  ~retpc_shape_ok (shape_probe_fn
+    [mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"]; mk_inst 1 ASSIGN [Lit 1w] ["pc"]])
 Proof
   rpt conj_tac >>
   qmatch_goalsub_abbrev_tac `retpc_shape_ok (shape_probe_fn insts)` >>
   `fn_insts (shape_probe_fn insts) = insts`
     by simp[shape_probe_fn_def, mk_raw_function_def, fn_insts_def,
             fn_insts_blocks_def] >>
-  qabbrev_tac `fn = shape_probe_fn insts`
-  >- (simp[retpc_shape_ok_def, Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
+  qabbrev_tac `fn = shape_probe_fn insts` >>
+  rewrite_tac[retpc_shape_ok_def]
+  >- (`reachable_fn fn = fn`
+        by simp[Abbr `fn`, Abbr `insts`, reachable_shape_probe_fn,
+                mk_inst_def] >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      simp[Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
            EXISTS_OR_THM] >>
       rpt strip_tac >> Cases_on `front` >> gvs[])
-  >- (simp[retpc_shape_ok_def, Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
+  >- (`reachable_fn fn = fn`
+        by simp[Abbr `fn`, Abbr `insts`, reachable_shape_probe_fn,
+                mk_inst_def] >>
+      pop_assum (fn th => rewrite_tac[th]) >>
+      simp[Abbr `insts`, mk_inst_def, RIGHT_AND_OVER_OR,
            EXISTS_OR_THM] >>
       rpt strip_tac >> gvs[retpc_var_def] >>
       drule copy_phi_var_has_seed >> simp[mk_inst_def, PULL_EXISTS] >>
@@ -287,14 +306,22 @@ Proof
     by (simp[retpc_var_def] >> irule copy_phi_var_seed >>
         qexists_tac `mk_inst 0 RETPC_PARAM [Lit 0w] ["pc"]` >>
         simp[Abbr `insts`, mk_inst_def]) >>
-  `~retpc_var fn "q"`
-    by (simp[retpc_var_def, Once copy_phi_var_cases] >>
-        simp[Abbr `insts`, mk_inst_def] >> rpt strip_tac >> CCONTR_TAC >>
-        gvs[]) >>
-  simp[retpc_shape_ok_def, Abbr `insts`] >> disj2_tac >>
-  qexistsl_tac [`mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]`,
-                `"pc"`, `"q"`] >>
-  simp[mk_inst_def]
+  rewrite_tac[DE_MORGAN_THM] >> disj2_tac >> disj2_tac >> disj1_tac >>
+  CONV_TAC (REDEPTH_CONV NOT_FORALL_CONV)
+  >- (`~retpc_var fn "q"`
+        by (simp[retpc_var_def, Once copy_phi_var_cases] >>
+            simp[Abbr `insts`, mk_inst_def] >> rpt strip_tac >> CCONTR_TAC >>
+            gvs[]) >>
+      `retpc_var fn "r"`
+        by (simp[retpc_var_def] >> irule copy_phi_var_phi >>
+            qexistsl_tac [`mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]`,
+                          `"pc"`] >>
+            fs[retpc_var_def, Abbr `insts`, mk_inst_def]) >>
+      qexistsl_tac [`mk_inst 1 PHI [Label "a"; Var "pc"; Label "b"; Var "q"] ["r"]`,
+                    `"r"`] >>
+      simp[Abbr `insts`, mk_inst_def] >> disj2_tac >> qexists_tac `"q"` >> simp[]) >>
+  qexistsl_tac [`mk_inst 1 ASSIGN [Lit 1w] ["pc"]`, `"pc"`] >>
+  simp[Abbr `insts`, mk_inst_def]
 QED
 
 (* ===== Raw-only control-flow restrictions ===== *)
@@ -338,8 +365,11 @@ Theorem complete_unit_shape_checks:
   ~o1_source_unit_ok (shape_probe_unit [mk_inst 0 JMP [Label "entry"] []])
 Proof
   simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
+       mk_venom_context_def, entry_fn_first_def, fn_shape_ok_def,
+       retpc_shape_ok_def, reachable_shape_probe_fn, mk_inst_def] >>
+  simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
        entry_fn_first_def, fn_shape_ok_def, shape_probe_fn_def,
-       retpc_shape_ok_def,
+       retpc_shape_ok_def, retpc_var_def, copy_phi_var_no_seed,
        mk_venom_context_def, mk_raw_function_def, fn_entry_label_def,
        entry_block_def, opaque_use_ok_def, fn_insts_def, fn_insts_blocks_def,
        entry_fn_no_ret_def, get_params_def, inst_shape_ok_def,
@@ -373,12 +403,18 @@ Proof
     by (simp[retpc_var_def] >> irule copy_phi_var_seed >>
         qexists_tac `mk_inst 2 RETPC_PARAM [Lit 0w] ["pc"]` >>
         simp[mk_inst_def]) >>
+  `~retpc_var callee "fmp"`
+    by (simp[retpc_var_def, Once copy_phi_var_cases] >>
+        simp[mk_inst_def] >> rpt strip_tac >> CCONTR_TAC >> gvs[]) >>
   `!x. ~gas_var callee x`
     by (simp[gas_var_def] >> irule copy_phi_var_no_seed >>
         simp[mk_inst_def] >> rw[] >> simp[]) >>
+  `reachable_fn callee = callee`
+    by (irule reachable_fn_single_block >>
+        simp[Abbr `callee`, mk_raw_function_def, mk_inst_def]) >>
   `retpc_shape_ok callee`
-    by (simp[retpc_shape_ok_def, mk_inst_def] >>
-        conj_tac >> rpt strip_tac >> gvs[] >>
+    by (gs[retpc_shape_ok_def, mk_inst_def] >>
+        rpt conj_tac >> rpt strip_tac >> gvs[] >>
         qexistsl_tac [`[]`, `"pc"`] >> simp[]) >>
   `fn_shape_ok callee`
     by (simp[fn_shape_ok_def, opaque_use_ok_def, retpc_use_ok_def,
@@ -389,6 +425,9 @@ Proof
              entry_block_def, reserved_label_def, call_checks_ok_def,
              calls_flagged_def, mk_inst_def] >>
         rpt strip_tac >> gvs[] >> qexists_tac `[]` >> simp[]) >>
+  simp[unit_shape_ok_def, o1_source_unit_ok_def, shape_probe_unit_def,
+       mk_venom_context_def, entry_fn_first_def, fn_shape_ok_def,
+       retpc_shape_ok_def, reachable_shape_probe_fn, mk_inst_def] >>
   simp[unit_shape_ok_def, entry_fn_first_def, fn_shape_ok_def,
        shape_probe_fn_def, mk_venom_context_def, mk_raw_function_def,
        fn_entry_label_def, entry_block_def, opaque_use_ok_def,

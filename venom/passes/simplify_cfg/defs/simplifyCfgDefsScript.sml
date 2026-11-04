@@ -53,6 +53,12 @@ Definition filter_phi_ops_def:
     x :: y :: filter_phi_ops pred_labels rest
 End
 
+Theorem MEM_filter_phi_ops:
+  !preds ops x. MEM x (filter_phi_ops preds ops) ==> MEM x ops
+Proof
+  recInduct filter_phi_ops_ind >> rw[filter_phi_ops_def] >> gvs[]
+QED
+
 (* Fix a single PHI instruction given actual predecessor labels:
    - 0 operands → NOP
    - 2 operands (1 predecessor) → ASSIGN

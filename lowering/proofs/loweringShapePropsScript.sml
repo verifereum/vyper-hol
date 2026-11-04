@@ -278,6 +278,7 @@ Theorem shape_step_emit_inst_guarded:
   !internal LP P opc ops outs.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
     (!st. P st ==> EVERY (label_or_plain st) ops /\
+      EVERY (plain_operand st) (MAP Var outs) /\
       (!id. lowered_inst_ok internal (mk_inst id opc ops outs))) ==>
     shape_step internal LP P (emit_inst opc ops outs) (\x st. P st)
 Proof
@@ -920,7 +921,10 @@ Proof
        stackPlanTypesTheory.is_label_operand_def, lowered_inst_ok_def, mk_inst_def,
        raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
        is_terminator_def, is_read0_opcode_def, label_positions_ok_def, operand_case_not_label,
-       is_param_opcode_def]
+       is_param_opcode_def] >>
+  strip_tac >> irule shape_step_conseq >> first_assum (irule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  drule_all cenv_shape_ok_lookup >> simp[loc_shape_ok_def, plain_operand_def]
 QED
 
 Theorem emit_jmp_if_not_terminated_shape[local]:
@@ -967,6 +971,7 @@ Theorem stmt_shape_emit_inst[local]:
     shape_stable P /\
     (!st. P st ==> EVERY (label_or_plain st) ops) /\
     ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+    (!st. P st ==> EVERY (plain_operand st) (MAP Var outs)) /\
     (!st. P st ==> !id. lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
     shape_step internal compiler_label P (emit_inst opc ops outs)
       (\x st. P st)
@@ -974,10 +979,12 @@ Proof
   rpt strip_tac >> rewrite_tac[shape_step_def] >> rpt strip_tac >>
   `!id. lowered_inst_ok internal (mk_inst id opc ops outs)` by metis_tac[] >>
   `shape_step internal compiler_label
-     (\st. P st /\ EVERY (label_or_plain st) ops) (emit_inst opc ops outs)
+     (\st. P st /\ EVERY (label_or_plain st) ops /\
+            EVERY (plain_operand st) (MAP Var outs)) (emit_inst opc ops outs)
      (\x st. P st)` by
     (irule shape_step_emit_inst >> simp[]) >>
-  `EVERY (label_or_plain st) ops` by metis_tac[] >>
+  `EVERY (label_or_plain st) ops /\ EVERY (plain_operand st) (MAP Var outs)`
+    by metis_tac[] >>
   fs[shape_step_def] >> metis_tac[]
 QED
 
@@ -993,7 +1000,7 @@ Proof
   rpt strip_tac >>
   `emit_void opc ops = emit_inst opc ops []` by
     simp[emit_void_def, emit_inst_def] >>
-  asm_rewrite_tac[] >> irule stmt_shape_emit_inst >> metis_tac[]
+  asm_rewrite_tac[] >> irule stmt_shape_emit_inst >> simp[] >> metis_tac[]
 QED
 
 Theorem stmt_shape_stable_plain[local]:
@@ -3169,6 +3176,7 @@ QED
 
 Theorem shape_step_emit_inst_guarded_framed[local]:
   shape_stable R /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
+  (!st. R st ==> EVERY (plain_operand st) (MAP Var outs)) /\
   (!st id. R st /\ EVERY (label_or_plain st) ops ==>
      lowered_inst_ok internal (mk_inst id opc ops outs)) ==>
   shape_step internal compiler_label
@@ -3180,7 +3188,7 @@ Proof
   qexists_tac `\st. R st /\ EVERY (label_or_plain st) ops` >>
   qexists_tac `compiler_label` >> simp[] >> conj_tac
   >- (ho_match_mp_tac shape_stable_conj >> simp[shape_stable_label_or_plains]) >>
-  rpt strip_tac >> first_x_assum irule >> qexists_tac `st` >> simp[]
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem shape_step_emit_void_plain[local]:
@@ -9933,7 +9941,8 @@ Resume compile_for_array_shape[index]:
   stmt_sequence `\u st. idx_live st`
     (ho_match_mp_tac stmt_shape_emit_inst >> simp[SF ETA_ss] >>
      stmt_shape_emit_simp >> simp[label_or_plain_def, plain_operand_def,
-       stackPlanTypesTheory.is_label_operand_def]) >>
+       stackPlanTypesTheory.is_label_operand_def] >>
+     simp[Abbr `idx_live`, plain_operand_def]) >>
   stmt_sequence `\u st. idx_live st`
     (ho_match_mp_tac stmt_shape_jmp >> simp[SF ETA_ss]) >>
   stmt_sequence `\u st. idx_live st`
@@ -10165,11 +10174,13 @@ Theorem shape_step_emit_inst_under:
   !internal LP P opc ops outs.
     shape_stable P /\ ~MEM opc [GAS; RETPC_PARAM; RET; CALL; STATICCALL] /\
     (!id. lowered_inst_ok internal (mk_inst id opc ops outs)) /\
-    (!st. P st ==> EVERY (label_or_plain st) ops) ==>
+    (!st. P st ==> EVERY (label_or_plain st) ops) /\
+    (!st. P st ==> EVERY (plain_operand st) (MAP Var outs)) ==>
     shape_step internal LP P (emit_inst opc ops outs) (\x st. P st)
 Proof
   rpt strip_tac >> irule shape_step_conseq >>
-  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops`,
+  qexistsl_tac [`LP`, `\st. P st /\ EVERY (label_or_plain st) ops /\
+                            EVERY (plain_operand st) (MAP Var outs)`,
                `\x st. P st`] >>
   simp[] >> irule shape_step_emit_inst >> simp[]
 QED
@@ -11751,6 +11762,36 @@ Resume internal_alloc_body_suffix_shape[return_buffer]:
 QED
 Finalise internal_alloc_body_suffix_shape[local]
 
+Theorem shape_step_keep_bb[local]:
+  !internal LP P m Q R.
+    shape_step internal LP P m Q /\
+    (!st x st'. m st = (x, st') ==> st'.cs_current_bb = st.cs_current_bb) ==>
+    shape_step internal LP (\st. P st /\ R st.cs_current_bb) m
+      (\x st. Q x st /\ R st.cs_current_bb)
+Proof
+  rw[shape_step_def] >> metis_tac[]
+QED
+
+Theorem emit_op_keep_bb[local]:
+  !opc ops st x st'.
+    emit_op opc ops st = (x, st') ==> st'.cs_current_bb = st.cs_current_bb
+Proof
+  metis_tac[emit_op_facts]
+QED
+
+Theorem compile_internal_param_decls_keep_bb[local]:
+  !params idx st x st'.
+    compile_internal_param_decls params idx st = (x, st') ==>
+    st'.cs_current_bb = st.cs_current_bb
+Proof
+  Induct_on `params`
+  >- simp[compile_internal_param_decls_def, comp_return_def] >>
+  qx_gen_tac `h` >> PairCases_on `h` >> rpt gen_tac >>
+  simp[compile_internal_param_decls_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule emit_op_keep_bb >> first_x_assum drule >> simp[]
+QED
+
 (* The PARAM/RETPC_PARAM prologue, then the body via compile_stmt_shape with
    ce_return_pc = SOME (PtrVar return_pc 0), so internal = T. *)
 Theorem compile_internal_function_shape:
@@ -11758,7 +11799,7 @@ Theorem compile_internal_function_shape:
    ret_type.
     cenv_static_ok cenv /\
     ~supported_stmts_expr_exists expr_shape_root body ==>
-    shape_step T compiler_label (\st. T)
+    shape_step T compiler_label (\st. internal_label_ok st.cs_current_bb)
       (compile_internal_function cenv params has_ret_buf is_nr nkey
          use_trans is_view is_ctor imm_len body ret_type) (\x st. T)
 Proof
@@ -11766,19 +11807,24 @@ Proof
   rename1 `~supported_stmts_expr_exists expr_shape_root ss` >>
   simp[Once compile_internal_function_def, internal_comp_bind_return] >>
   irule shape_step_bind >>
-  qexists_tac `\rb st. case rb of NONE => T | SOME op => plain_operand st op` >>
+  qexists_tac `\rb st. (case rb of NONE => T | SOME op => plain_operand st op) /\
+    internal_label_ok st.cs_current_bb` >>
   reverse conj_tac
   >- (reverse (Cases_on `has_ret_buf`) >> simp[]
       >- (irule shape_step_return >> simp[]) >>
       irule shape_step_bind >>
-      qexists_tac `\op st. plain_operand st op` >> conj_tac
+      qexists_tac `\op st. plain_operand st op /\ internal_label_ok st.cs_current_bb` >>
+      conj_tac
       >- (gen_tac >> BETA_TAC >> irule shape_step_return >> simp[]) >>
       mp_tac (Q.SPECL [`T`, `compiler_label`, `\st. T`, `PARAM`, `[Lit 0w]`]
-        shape_step_emit_op) >> simp intfn_emit_simps) >>
+        shape_step_emit_op) >> simp intfn_emit_simps >> strip_tac >>
+      drule_then (qspec_then `internal_label_ok` mp_tac) shape_step_keep_bb >>
+      impl_tac >- MATCH_ACCEPT_TAC emit_op_keep_bb >> simp[]) >>
   qx_gen_tac `rb` >> BETA_TAC >>
   irule shape_step_bind >> qexists_tac
-    `\r st. (case rb of NONE => T | SOME op => plain_operand st op) /\
-       EVERY (\(name,is_stack,op). plain_operand st op) (FST r)` >>
+    `\r st. ((case rb of NONE => T | SOME op => plain_operand st op) /\
+       EVERY (\(name,is_stack,op). plain_operand st op) (FST r)) /\
+       internal_label_ok st.cs_current_bb` >>
   reverse conj_tac
   >- (qspecl_then [`params`, `if has_ret_buf then 1 else 0`] assume_tac
         compile_internal_param_decls_shape >>
@@ -11786,7 +11832,10 @@ Proof
         `\st. case rb of NONE => T | SOME op => plain_operand st op` mp_tac) >>
       simp[] >> impl_tac
       >- (Cases_on `rb` >> simp[shape_stable_def] >>
-          metis_tac[plain_operand_mono]) >> simp[]) >>
+          metis_tac[plain_operand_mono]) >> strip_tac >>
+      drule_then (qspec_then `internal_label_ok` mp_tac) shape_step_keep_bb >>
+      impl_tac >- MATCH_ACCEPT_TAC compile_internal_param_decls_keep_bb >>
+      simp[]) >>
   qx_gen_tac `r` >> BETA_TAC >>
   irule shape_step_bind >> qexists_tac
     `\pc st. ((case rb of NONE => T | SOME op => plain_operand st op) /\
@@ -11905,7 +11954,8 @@ QED
 Theorem compile_internal_fn_bodies_shape:
   !fns st r st'.
     compile_internal_fn_bodies fns st = (r, st') /\ shape_state st /\
-    EVERY internal_fn_shape_ok fns ==>
+    EVERY internal_fn_shape_ok fns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors fns) ==>
     shape_state st' /\
     ?segs. all_blocks st' = all_blocks st ++ FLAT segs /\
            LIST_REL internal_segment_ok (internal_fn_descriptors fns) segs
@@ -11915,13 +11965,15 @@ Proof
       rpt strip_tac >> gvs[] >> qexists_tac `[]` >>
       simp[internal_fn_descriptors_def]) >>
   qx_gen_tac `h` >> PairCases_on `h` >>
-  simp[Once compile_internal_fn_bodies_def, internal_fn_shape_ok_def] >>
+  simp[Once compile_internal_fn_bodies_def, internal_fn_shape_ok_def,
+       internal_fn_descriptors_def] >>
   rpt gen_tac >> strip_tac >>
   qmatch_asmsub_abbrev_tac `comp_ignore_bind (new_block name) m st` >>
   Cases_on `new_block name st` >>
   fs[comp_ignore_bind_def, comp_bind_def] >>
   rename1 `new_block name st = (old,s)` >>
   drule_all shape_state_new_block >> strip_tac >>
+  `s.cs_current_bb = name` by gvs[new_block_def] >>
   fs[Abbr `m`, comp_bind_def] >>
   pairarg_tac >> fs[] >>
   drule_all compile_internal_function_shape >>
@@ -11994,7 +12046,8 @@ Proof
       >- simp[label_or_plain_def, plain_operand_def,
               stackPlanTypesTheory.is_label_operand_def] >>
       conj_tac >- simp[] >>
-      ho_match_mp_tac shape_step_emit_inst >>
+      mp_tac (Q.SPECL [`F`, `jump_label_ok`, `\st. T`, `REVERT`,
+        `[Lit 0w; Lit 0w]`, `[]`] shape_step_emit_inst) >>
       simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
            raw_opcode_ok_def, inst_shape_ok_def, inst_jump_labels_ok_def,
            is_param_opcode_def, is_read0_opcode_def, label_positions_ok_def, operand_case_not_label,
@@ -12064,7 +12117,8 @@ Theorem compile_generate_runtime_shape:
     EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
     EVERY external_fn_shape_ok external_fns /\
     fallback_shape_ok fallback_fn /\
-    EVERY internal_fn_shape_ok internal_fns ==>
+    EVERY internal_fn_shape_ok internal_fns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) ==>
     shape_state st1 /\
     ?entry_blocks segs.
       all_blocks st1 = entry_blocks ++ FLAT segs /\
@@ -12553,13 +12607,6 @@ QED
 
 (* ===== Successors and instructions of a block list ===== *)
 
-Theorem MEM_fn_insts_blocks_iff:
-  !bbs inst. MEM inst (fn_insts_blocks bbs) <=>
-             ?bb. MEM bb bbs /\ MEM inst bb.bb_instructions
-Proof
-  Induct >> simp[fn_insts_blocks_def] >> metis_tac[]
-QED
-
 Theorem get_successors_jump_label_ok:
   !internal inst l.
     lowered_inst_ok internal inst /\ MEM l (get_successors inst) ==>
@@ -12618,29 +12665,6 @@ Proof
   irule raw_checked_blocks_segments >> simp[] >> qexists_tac `entry` >> simp[]
 QED
 
-Theorem fn_suffix_reset[local]:
-  !prefix bs. EXISTS (\b. internal_label_ok b.bb_label) bs ==>
-    fn_suffix (prefix ++ bs) = fn_suffix bs
-Proof
-  Induct >> simp[fn_suffix_def, EXISTS_APPEND]
-QED
-
-Theorem fn_suffix_segment_mem[local]:
-  !seg mid bb tail prefix b.
-    seg <> [] /\ internal_label_ok (HD seg).bb_label /\
-    seg = mid ++ [bb] ++ tail /\
-    MEM b (fn_suffix (prefix ++ mid ++ [bb])) ==> MEM b seg
-Proof
-  rpt strip_tac >>
-  `EXISTS (\b. internal_label_ok b.bb_label) (mid ++ [bb])` by
-    (Cases_on `mid` >> gvs[]) >>
-  `fn_suffix (prefix ++ mid ++ [bb]) = fn_suffix (mid ++ [bb])` by
-    metis_tac[fn_suffix_reset, APPEND_ASSOC] >>
-  `MEM b (fn_suffix (mid ++ [bb]))` by metis_tac[] >>
-  `MEM b (mid ++ [bb])` by metis_tac[fn_suffix_mem] >>
-  gvs[]
-QED
-
 Theorem internal_segments_have_entries[local]:
   !descs segs. LIST_REL internal_segment_ok descs segs /\
     EVERY (\d. internal_label_ok (FST d)) descs ==>
@@ -12651,7 +12675,32 @@ Proof
   simp[internal_segment_ok_def] >> metis_tac[]
 QED
 
-(* Localize each historical return witness at the segment's entry. *)
+Theorem internal_segments_tl_compiler[local]:
+  !descs segs. LIST_REL internal_segment_ok descs segs ==>
+    EVERY (\seg. EVERY compiler_label (TL (MAP (\bb. bb.bb_label) seg))) segs
+Proof
+  Induct >> Cases_on `segs` >> simp[] >>
+  qx_gen_tac `d` >> PairCases_on `d` >>
+  simp[internal_segment_ok_def] >> metis_tac[]
+QED
+
+(* Inside a segment, the entry block of a prefix is the segment's head. *)
+Theorem fn_entry_insts_segment[local]:
+  !pre seg mid bb tail.
+    seg = mid ++ bb :: tail /\ internal_label_ok (HD seg).bb_label /\
+    EVERY compiler_label (TL (MAP (\b. b.bb_label) seg)) ==>
+    fn_entry_insts (pre ++ mid ++ [bb]) = (HD seg).bb_instructions
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >> Cases_on `mid` >> gvs[]
+  >- (irule fn_entry_insts_internal_last >> simp[]) >>
+  `fn_entry_insts ((pre ++ [h]) ++ (t ++ [bb])) = fn_entry_insts (pre ++ [h])`
+    by (irule fn_entry_insts_append >>
+        gvs[EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
+        metis_tac[compiler_label_not_internal]) >>
+  fs[fn_entry_insts_internal_last]
+QED
+
+(* Localize each historical return witness at the segment's entry block. *)
 Theorem rets_scoped_segments:
   !descs segs entry.
     rets_scoped (entry ++ FLAT segs) /\
@@ -12661,11 +12710,13 @@ Theorem rets_scoped_segments:
       MEM seg segs /\ MEM bb seg /\ MEM inst bb.bb_instructions /\
       inst.inst_opcode = RET ==>
       ?front x. inst.inst_operands = front ++ [Var x] /\
-                opaque_out RETPC_PARAM
-                  (FLAT (MAP (\b. b.bb_instructions) seg)) x
+                opaque_out RETPC_PARAM (HD seg).bb_instructions x
 Proof
   rpt strip_tac >>
   drule_all internal_segments_have_entries >>
+  simp[EVERY_MEM] >> disch_then (qspec_then `seg` mp_tac) >> simp[] >>
+  strip_tac >>
+  drule internal_segments_tl_compiler >>
   simp[EVERY_MEM] >> disch_then (qspec_then `seg` mp_tac) >> simp[] >>
   strip_tac >>
   qpat_x_assum `MEM seg segs` mp_tac >> simp[MEM_SPLIT] >>
@@ -12677,13 +12728,14 @@ Proof
   disch_then (qspecl_then [`entry ++ FLAT before ++ mid`, `bb`,
                           `tail ++ FLAT after`, `inst`] mp_tac) >>
   impl_tac >- gvs[FLAT_APPEND, APPEND_ASSOC] >>
-  strip_tac >> qexistsl_tac [`front`, `x`] >> simp[] >>
-  gvs[opaque_out_def, MEM_FLAT, MEM_MAP] >>
-  `MEM b (mid ++ [bb] ++ tail)` by
-    (irule fn_suffix_segment_mem >> simp[] >>
-     qexistsl_tac [`bb`, `mid`, `entry ++ FLAT before`, `tail`] >>
-     simp[APPEND_ASSOC]) >>
-  qexists_tac `inst'` >> gvs[] >> metis_tac[]
+  strip_tac >>
+  `fn_entry_insts (entry ++ FLAT before ++ mid ++ [bb]) =
+   (HD seg).bb_instructions`
+    by (irule fn_entry_insts_segment >> rpt conj_tac
+        >- first_assum ACCEPT_TAC
+        >- (qexists_tac `tail` >> fs[])
+        >> metis_tac[EVERY_MEM]) >>
+  metis_tac[]
 QED
 
 (* One packaged function whose entry label no block jumps to. *)
@@ -12695,9 +12747,13 @@ Theorem lowered_fn_ok:
     EVERY (\bb. EVERY (lowered_inst_ok b) bb.bb_instructions) fn.fn_blocks /\
     opaque_insts_ok insts /\ call_checks_ok fn /\
     (!inst. MEM inst (fn_insts fn) ==> MEM inst insts) /\
+    (!i x. MEM i insts /\ MEM x i.inst_outputs /\
+           opaque_out RETPC_PARAM insts x ==> i.inst_opcode = RETPC_PARAM) /\
+    (!i j x. MEM i insts /\ MEM j insts /\ i.inst_opcode = RETPC_PARAM /\
+             MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
     (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = RET ==>
             ?front x. inst.inst_operands = front ++ [Var x] /\
-                      opaque_out RETPC_PARAM (fn_insts fn) x) ==>
+                      opaque_out RETPC_PARAM (HD fn.fn_blocks).bb_instructions x) ==>
     fn_shape_ok fn /\ EVERY (lowered_inst_ok b) (fn_insts fn) /\
     first_block_no_preds fn
 Proof
@@ -12719,7 +12775,8 @@ Proof
                  (mp_tac o REWRITE_RULE [EVERY_MEM]) >>
                disch_then drule >>
                simp[lowered_inst_ok_def, raw_opcode_ok_def]) >>
-         metis_tac[opaque_insts_ok_retpc_shape_ok]) >>
+         match_mp_tac (Q.SPECL [`insts`, `fn`] opaque_insts_ok_retpc_shape_ok) >>
+         ASM_REWRITE_TAC[]) >>
       gvs[EVERY_MEM, lowered_inst_ok_def])
   >- simp[]
   >> simp[first_block_no_preds_def, EVERY_MEM] >> rpt strip_tac >>
@@ -12745,12 +12802,15 @@ Theorem internal_fns_ok:
     opaque_insts_ok insts /\
     (!inst. MEM inst (FLAT (MAP (\bb. bb.bb_instructions) (FLAT segs))) ==>
             MEM inst insts) /\
+    (!i x. MEM i insts /\ MEM x i.inst_outputs /\
+           opaque_out RETPC_PARAM insts x ==> i.inst_opcode = RETPC_PARAM) /\
+    (!i j x. MEM i insts /\ MEM j insts /\ i.inst_opcode = RETPC_PARAM /\
+             MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
     (!seg bb inst.
        MEM seg segs /\ MEM bb seg /\ MEM inst bb.bb_instructions /\
        inst.inst_opcode = RET ==>
        ?front x. inst.inst_operands = front ++ [Var x] /\
-                 opaque_out RETPC_PARAM
-                   (FLAT (MAP (\b. b.bb_instructions) seg)) x) /\
+                 opaque_out RETPC_PARAM (HD seg).bb_instructions x) /\
     MEM fn (MAP2 (\d seg. mk_internal_function (FST d) seg (FST (SND d))
                             (SND (SND d))) descs segs) ==>
     fn_shape_ok fn /\ EVERY (lowered_inst_ok T) (fn_insts fn) /\
@@ -12794,6 +12854,16 @@ Theorem lowered_unit_source_ok:
     EVERY (\seg. EVERY (\bb. calls_flagged seg bb.bb_instructions) seg) segs /\
     opaque_insts_ok
       (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+    (!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+           MEM x i.inst_outputs /\
+           opaque_out RETPC_PARAM
+             (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) x ==>
+           i.inst_opcode = RETPC_PARAM) /\
+    (!i j x.
+       MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry ++ FLAT segs))) /\
+       i.inst_opcode = RETPC_PARAM /\
+       MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j) /\
     rets_scoped (entry ++ FLAT segs) ==>
     o1_source_unit_ok
       <| cu_context :=
@@ -12928,6 +12998,20 @@ Proof
   `opaque_insts_ok
      (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs)))`
     by (fs[shape_state_def, shape_base_state_def, state_insts_def]) >>
+  `!i x. MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+         MEM x i.inst_outputs /\
+         opaque_out RETPC_PARAM
+           (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) x ==>
+         i.inst_opcode = RETPC_PARAM`
+    by (fs[shape_state_def, shape_base_state_def, state_insts_def] >>
+        metis_tac[]) >>
+  `!i j x.
+     MEM i (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+     MEM j (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs))) /\
+     i.inst_opcode = RETPC_PARAM /\
+     MEM x i.inst_outputs /\ MEM x j.inst_outputs ==> i = j`
+    by (fs[shape_state_def, shape_base_state_def, state_insts_def] >>
+        metis_tac[]) >>
   `raw_checked_blocks (entry_blocks ++ FLAT segs)`
     by fs[shape_state_def, raw_checked_state_def] >>
   `rets_scoped (entry_blocks ++ FLAT segs)`
@@ -12946,7 +13030,7 @@ Proof
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
-  irule lowered_unit_source_ok >> gs[]
+  irule lowered_unit_source_ok >> gs[] >> conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* ===== Source side: selectors and internal names ===== *)
