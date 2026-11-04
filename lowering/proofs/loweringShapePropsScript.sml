@@ -15615,6 +15615,11 @@ val expr_label_case_lift_thms =
          nchotomy = TypeBase.nchotomy_of ty}
   in map TypeBase.case_rand_of tys @ map constant tys end;
 
+val expr_builtin_label_case =
+  simp([compile_expr_body_def, LET_THM, compile_addmod_names_labels,
+        compile_mulmod_names_labels, compile_powmod256_names_labels] @
+       expr_label_case_lift_thms);
+
 Theorem compile_expr_builtin_labels[local]:
   (!ce rt t bi es s. cs_extends s (SND (g ce rt t bi es s)) /\
     EVERY (isPREFIX "@") (added_labels s (SND (g ce rt t bi es s)))) ==>
@@ -15622,10 +15627,34 @@ Theorem compile_expr_builtin_labels[local]:
   EVERY (isPREFIX "@") (added_labels st
     (SND (compile_expr_body f g h cenv ty (Builtin ann bi args) st)))
 Proof
-  disch_tac >> Cases_on `bi` >>
-  simp([compile_expr_body_def, LET_THM, compile_addmod_names_labels,
-        compile_mulmod_names_labels, compile_powmod256_names_labels] @
-       expr_label_case_lift_thms)
+  disch_tac >> Cases_on `bi`
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >- expr_builtin_label_case
+  >> expr_builtin_label_case
 QED
 
 Theorem compile_expr_body_labels:
@@ -15674,4 +15703,314 @@ Proof
     irule expr_child_callback_labels >> simp[]) >>
   irule compile_type_builtin_dispatch_body_labels >>
   irule expr_child_callback_labels >> simp[]
+QED
+
+(* Statement actions preserve the fresh-label namespace, independently of
+   instruction shape or immutable storage layout. *)
+fun stmt_labels_chain rws =
+  rpt gen_tac >> simp (comp_return_labels :: rws) >>
+  rpt (FIRST [ho_match_mp_tac fresh_label_pair_labels,
+              irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac,
+              FIRST_ASSUM MATCH_ACCEPT_TAC,
+              disch_tac, IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
+       rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC >>
+       simp (comp_return_labels :: rws));
+
+val stmt_labels_rws =
+  [emit_op_labels, emit_void_labels, emit_inst_labels, fresh_var_action_labels,
+   compile_alloc_buffer_labels, unwrap_value_labels, compile_store_memory_labels,
+   compile_copy_memory_labels, compile_word_copy_loop_labels,
+   compile_store_bytestring_labels, compile_keccak256_key_labels,
+   compile_mapping_subscript_labels, compile_array_subscript_labels,
+   compile_bytelike_literal_labels, typed_memory_family_labels,
+   compile_abi_encode_labels, compile_ptr_load_labels,
+   compile_imm_store_word_labels, compile_imm_store_words_labels,
+   compile_imm_copy_to_memory_labels, compile_expr_labels,
+   lower_value_labels, compile_binop_labels];
+
+Theorem stmt_context_helpers_labels:
+  (!buf slot n s. cs_extends s (SND (compile_memory_to_storage buf slot n s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_memory_to_storage buf slot n s)))) /\
+  (!buf slot n s. cs_extends s (SND (compile_memory_to_transient buf slot n s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_memory_to_transient buf slot n s)))) /\
+  (!src dst n loc s. cs_extends s (SND (compile_slot_to_memory src dst n loc s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_slot_to_memory src dst n loc s)))) /\
+  (!p b s. cs_extends s (SND (compile_load_memory p b s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_load_memory p b s)))) /\
+  (!v b s. cs_extends s (SND (compile_encode_log_topic v b s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_encode_log_topic v b s)))) /\
+  (!k t v s. cs_extends s (SND (compile_nonreentrant_unlock k t v s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_nonreentrant_unlock k t v s)))) /\
+  (!src dst ew ems t s. cs_extends s (SND (compile_dynarray_to_storage src dst ew ems t s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_dynarray_to_storage src dst ew ems t s))))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  once_rewrite_tac[compile_memory_to_storage_def, compile_memory_to_transient_def,
+    compile_slot_to_memory_def, compile_load_memory_def, compile_encode_log_topic_def,
+    compile_nonreentrant_unlock_def, compile_dynarray_to_storage_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem compile_dynarray_append_labels:
+  !cenv b v ws es dt st cap p lo so s.
+    cs_extends s (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_dynarray_append cenv b v ws es dt st cap p lo so s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_dynarray_append_def] >>
+  simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `compile_word_copy_loop _ _ _ LocMemory dl F` >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem comp_get_labels:
+  !s P. cs_extends s (SND (comp_get s)) /\
+    EVERY P (added_labels s (SND (comp_get s)))
+Proof
+  simp[comp_get_def, cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem compile_get_target_ptr_expr_labels:
+  !bt cenv s.
+    cs_extends s (SND (compile_get_target_ptr compile_expr cenv bt s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_get_target_ptr compile_expr cenv bt s)))
+Proof
+  rpt gen_tac >> irule compile_get_target_ptr_labels >> simp[compile_expr_labels]
+QED
+
+val stmt_labels_rws = stmt_labels_rws @
+  [stmt_context_helpers_labels, compile_dynarray_append_labels, comp_get_labels,
+   compile_get_target_ptr_expr_labels];
+
+Theorem compile_assign_value_labels:
+  !cenv d l v p sl dt st da m s.
+    cs_extends s (SND (compile_assign_value cenv d l v p sl dt st da m s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_assign_value cenv d l v p sl dt st da m s)))
+Proof
+  rpt gen_tac >> Cases_on `l` >>
+  once_rewrite_tac[compile_assign_value_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem compile_store_at_loc_labels:
+  !imm d v l s. cs_extends s (SND (compile_store_at_loc imm d v l s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_store_at_loc imm d v l s)))
+Proof
+  rpt gen_tac >> Cases_on `l` >>
+  TRY (rename1 `SOME loc` >> Cases_on `loc`) >>
+  simp[compile_store_at_loc_def, emit_void_labels, compile_imm_store_word_labels]
+QED
+
+Theorem compile_reason_message_labels:
+  !cenv e s. cs_extends s (SND (compile_reason_message cenv e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_reason_message cenv e s)))
+Proof
+  rpt gen_tac >> Cases_on `e` >>
+  simp[compile_reason_message_def, compile_expr_labels] >>
+  rename1 `Literal ty lit` >> Cases_on `ty` >> Cases_on `lit` >>
+  simp[compile_reason_message_def, compile_expr_labels] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[compile_reason_message_def, compile_expr_labels] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem stmt_simple_helpers_labels:
+  (!cenv m t sz s. cs_extends s (SND (compile_revert_with_reason cenv m t sz s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_revert_with_reason cenv m t sz s)))) /\
+  (!a e r rb b s. cs_extends s (SND (compile_range_bound_checks a e r rb b s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_range_bound_checks a e r rb b s)))) /\
+  (!cenv e i sz l a t et s. cs_extends s (SND (compile_iter_elem_copy cenv e i sz l a t et s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_iter_elem_copy cenv e i sz l a t et s)))) /\
+  (!cenv id ty s. cs_extends s (SND (declare_local cenv id ty s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (declare_local cenv id ty s)))) /\
+  (!cenv id s. cs_extends s (SND (emit_local_alloca cenv id s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (emit_local_alloca cenv id s)))) /\
+  (!l s. cs_extends s (SND (emit_jmp_if_not_terminated l s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (emit_jmp_if_not_terminated l s))))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  once_rewrite_tac[compile_revert_with_reason_def, compile_range_bound_checks_def,
+    compile_iter_elem_copy_def, declare_local_def, emit_local_alloca_def,
+    emit_jmp_if_not_terminated_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem declare_stmt_local_labels:
+  !cenv st s. cs_extends s (SND (declare_stmt_local cenv st s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (declare_stmt_local cenv st s)))
+Proof
+  rpt gen_tac >> Cases_on `st` >>
+  simp[declare_stmt_local_def, stmt_simple_helpers_labels, comp_return_labels]
+QED
+
+val stmt_labels_rws = stmt_labels_rws @
+  [compile_assign_value_labels, compile_store_at_loc_labels,
+   compile_reason_message_labels, stmt_simple_helpers_labels, declare_stmt_local_labels];
+
+Theorem stmt_list_helpers_labels:
+  (!cenv es s. cs_extends s (SND (compile_log_eval_all cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_eval_all cenv es s)))) /\
+  (!xs s. cs_extends s (SND (compile_log_topic_ops xs s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_topic_ops xs s)))) /\
+  (!cenv xs b off s. cs_extends s (SND (compile_log_store_data cenv xs b off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_log_store_data cenv xs b off s)))) /\
+  (!cenv src tys off s. cs_extends s (SND (compile_tuple_load_all cenv src tys off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_tuple_load_all cenv src tys off s)))) /\
+  (!cenv tys ts vs s. cs_extends s (SND (compile_tuple_store_all cenv tys ts vs s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_tuple_store_all cenv tys ts vs s)))) /\
+  (!cenv b tys off s. cs_extends s (SND (compile_load_tuple_elements cenv b tys off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_load_tuple_elements cenv b tys off s))))
+Proof
+  rpt conj_tac
+  >- (gen_tac >> Induct >> once_rewrite_tac[compile_log_eval_all_def] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (Induct >> once_rewrite_tac[compile_log_topic_ops_def] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (gen_tac >> Induct >> once_rewrite_tac[compile_log_store_data_def] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (gen_tac >> gen_tac >> Induct >> once_rewrite_tac[compile_tuple_load_all_def] >>
+      stmt_labels_chain stmt_labels_rws)
+  >- (ho_match_mp_tac compile_tuple_store_all_ind >> rpt conj_tac >>
+      rpt gen_tac >> TRY strip_tac >> once_rewrite_tac[compile_tuple_store_all_def] >>
+      stmt_labels_chain stmt_labels_rws) >>
+  gen_tac >> gen_tac >> Induct >> once_rewrite_tac[compile_load_tuple_elements_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem stmt_return_helpers_labels:
+  (!cenv v pc n rt st ets rb s.
+    cs_extends s (SND (compile_internal_return cenv v pc n rt st ets rb s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_internal_return cenv v pc n rt st ets rb s)))) /\
+  (!cenv ty st v pc s.
+    cs_extends s (SND (compile_internal_return_from_env cenv ty st v pc s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_internal_return_from_env cenv ty st v pc s)))) /\
+  (!v p r ei m n k t w s.
+    cs_extends s (SND (compile_external_return v p r ei m n k t w s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_external_return v p r ei m n k t w s)))) /\
+  (!cenv t m tgs src s.
+    cs_extends s (SND (compile_tuple_unpack cenv t m tgs src s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_tuple_unpack cenv t m tgs src s))))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  once_rewrite_tac[compile_internal_return_def, compile_internal_return_from_env_def,
+    compile_external_return_def, compile_tuple_unpack_def] >>
+  stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws) >>
+  once_rewrite_tac[compile_internal_return_def] >>
+  stmt_labels_chain (stmt_list_helpers_labels :: stmt_labels_rws)
+QED
+
+val stmt_labels_rws = stmt_return_helpers_labels :: stmt_list_helpers_labels :: stmt_labels_rws;
+
+val stmt_labels_case =
+  rpt gen_tac >> once_rewrite_tac[compile_stmt_def] >>
+  stmt_labels_chain stmt_labels_rws >>
+  simp[pairTheory.ELIM_UNCURRY] >> stmt_labels_chain stmt_labels_rws;
+
+Theorem compile_stmt_labels:
+  (!cenv lctx ty st s. cs_extends s (SND (compile_stmt cenv lctx ty st s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_stmt cenv lctx ty st s)))) /\
+  (!cenv lctx ty ss s. cs_extends s (SND (compile_stmts cenv lctx ty ss s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_stmts cenv lctx ty ss s))))
+Proof
+  ho_match_mp_tac compile_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
+  TRY (disch_then strip_assume_tac)
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_labels_case)
+  >- (RULE_ASSUM_TAC (SIMP_RULE bool_ss []) >> stmt_labels_case)
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >- stmt_labels_case
+  >> qpat_x_assum `!cs cenv. _ ==> !s. cs_extends _ (SND (compile_stmt _ _ _ _ _)) /\ _`
+       (qspec_then `ARB with cs_current_insts := []`
+         (assume_tac o SIMP_RULE (srw_ss()) [block_is_terminated_def]))
+  >> qpat_x_assum `!cs cenv. _ ==> !s. cs_extends _ (SND (compile_stmts _ _ _ _ _)) /\ _`
+       (qspec_then `ARB with cs_current_insts := []`
+         (assume_tac o SIMP_RULE (srw_ss()) [block_is_terminated_def]))
+  >> stmt_labels_case
+QED
+
+Theorem compile_decode_args_labels:
+  !cenv args off opc hi adj s.
+    cs_extends s (SND (compile_decode_args cenv args off opc hi adj s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_decode_args cenv args off opc hi adj s)))
+Proof
+  gen_tac >> Induct >> rpt gen_tac
+  >- simp[compile_decode_args_def, comp_return_labels] >>
+  PairCases_on `h` >> once_rewrite_tac[compile_decode_args_def] >>
+  stmt_labels_chain (compile_abi_clamp_basetype_labels :: compile_abi_decode_labels :: stmt_labels_rws)
+QED
+
+Theorem compile_register_positional_args_labels:
+  !cenv args off s.
+    cs_extends s (SND (compile_register_positional_args cenv args off s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_register_positional_args cenv args off s)))
+Proof
+  Induct_on `args` >> rpt gen_tac
+  >- simp[compile_register_positional_args_def, comp_return_labels] >>
+  PairCases_on `h` >> once_rewrite_tac[compile_register_positional_args_def] >>
+  stmt_labels_chain (compile_decode_args_labels :: stmt_labels_rws)
+QED
+
+Theorem compile_nonreentrant_lock_labels:
+  !k t v s. cs_extends s (SND (compile_nonreentrant_lock k t v s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_nonreentrant_lock k t v s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_nonreentrant_lock_def] >>
+  stmt_labels_chain stmt_labels_rws
+QED
+
+Theorem compile_guarded_body_labels:
+  !cenv nr k t v body rt s.
+    cs_extends s (SND (compile_guarded_body cenv nr k t v body rt s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_guarded_body cenv nr k t v body rt s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_guarded_body_def] >>
+  stmt_labels_chain (compile_nonreentrant_lock_labels :: compile_stmt_labels :: stmt_labels_rws)
+QED
+
+Theorem compile_external_function_body_labels:
+  !cenv args nr k t v body rt s.
+    cs_extends s (SND (compile_external_function_body cenv args nr k t v body rt s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_external_function_body cenv args nr k t v body rt s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_external_function_body_def] >>
+  stmt_labels_chain [compile_register_positional_args_labels, compile_guarded_body_labels]
+QED
+
+Theorem compile_entry_checks_labels:
+  !mincd pay s. cs_extends s (SND (compile_entry_checks mincd pay s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_entry_checks mincd pay s)))
+Proof
+  rpt gen_tac >> once_rewrite_tac[compile_entry_checks_def] >>
+  stmt_labels_chain stmt_labels_rws
 QED
