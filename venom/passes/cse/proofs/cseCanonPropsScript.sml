@@ -1097,3 +1097,42 @@ Proof
  simp[] >> irule MEM_lookup_block >>
  fs[venomWfTheory.wf_function_def, venomInstTheory.fn_labels_def]
 QED
+
+Theorem compute_canon_representative_occurrence:
+ wf_function fn /\ fn_inst_wf fn /\ cse_static_trace fn ps /\
+ cse_point_has_id fn (LAST ps) k ==>
+ ?q. MEM q ps /\ cse_point_has_id fn q
+   (canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) k)
+Proof
+ rpt strip_tac >>
+ drule_all compute_canon_path_preorder >>
+ simp[cse_path_preorder_def] >> metis_tac[]
+QED
+
+Theorem compute_canon_representative_member:
+ wf_function fn /\ fn_inst_wf fn /\ cse_static_trace fn ps /\
+ cse_point_has_id fn (LAST ps) k ==>
+ ?r. MEM r (fn_insts fn) /\ r.inst_id =
+   canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) k
+Proof
+ rpt strip_tac >> drule_all compute_canon_representative_occurrence >> strip_tac >>
+ PairCases_on `q` >> fs[cse_point_has_id_def] >>
+ qexists_tac `EL q1 bb.bb_instructions` >> simp[] >>
+ `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+ `MEM (EL q1 bb.bb_instructions) bb.bb_instructions` by simp[listTheory.EL_MEM] >>
+ simp[venomInstTheory.fn_insts_def] >>
+ qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
+ qspec_tac (`fn.fn_blocks`, `bbs`) >> Induct >>
+ simp[venomInstTheory.fn_insts_blocks_def] >> metis_tac[]
+QED
+
+Theorem compute_canon_path_common_predecessor:
+ wf_function fn /\ fn_inst_wf fn /\
+ canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) a =
+ canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) b ==>
+ ?r. cse_path_preorder fn r a /\ cse_path_preorder fn r b
+Proof
+ rpt strip_tac >>
+ qexists_tac `canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) a` >>
+ metis_tac[compute_canon_path_preorder]
+QED
