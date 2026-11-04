@@ -8,28 +8,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem continue_jump_path[local]:
-  sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
-  sb.cs_current_insts = sa.cs_current_insts ++
-    [mk_inst sa.cs_next_id JMP [Label inc] []] /\
-  fn_has_code sa sb func /\
-  s.vs_current_bb = sa.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
-  gas_path ctx func s 0 (OK (jump_to inc s))
-Proof
-  strip_tac >> drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id JMP [Label inc] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `gas_path_edge ctx func s 0 (OK (jump_to inc s))` by
-    (rewrite_tac[gas_path_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     metis_tac[]) >>
-  `~(jump_to inc s).vs_halted` by simp[jump_to_def] >>
-  metis_tac[gas_path_rules, arithmeticTheory.ADD_CLAUSES]
-QED
 
 Theorem continue_jump_post[local]:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted ==>
@@ -65,7 +43,7 @@ Proof
   qexistsl_tac [`INR ContinueException`, `es`, `OK (jump_to inc s0)`] >>
   conj_tac
   >- (simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
-           raise_def] >> irule continue_jump_path >> simp[] >>
+           raise_def] >> irule emit_jump_zero_path >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
   irule continue_jump_post >> simp[]

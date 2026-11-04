@@ -8,27 +8,6 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem break_jump_path[local]:
-  emit_inst JMP [Label ex] [] sa = (u,sb) /\
-  fn_has_code sa sb func /\
-  s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s0.vs_halted ==>
-  gas_path ctx func s0 0 (OK (jump_to ex s0))
-Proof
-  Cases_on `u` >> strip_tac >> drule emit_inst_extends >> strip_tac >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb (LENGTH sa.cs_current_insts) =
-    SOME (mk_inst sa.cs_next_id JMP [Label ex] [])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `gas_path_edge ctx func s0 0 (OK (jump_to ex s0))` by
-    (rewrite_tac[gas_path_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, step_jmp_behavior,
-          gas_count_step_def, is_terminator_def] >> metis_tac[]) >>
-  drule (cj 2 gas_path_rules) >>
-  disch_then (qspec_then `0` mp_tac) >>
-  simp[jump_to_def, Once (cj 1 gas_path_rules)]
-QED
 
 Theorem stmt_post_break[local]:
   stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted ==>
@@ -56,13 +35,15 @@ Proof
   simp[stmt_env_def, declare_stmt_local_def, comp_ignore_bind_def,
        comp_bind_def, compile_stmt_def, comp_return_def] >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  rename1 `emit_inst _ _ _ sa = (_, sj)` >>
+  drule emit_inst_extends >> strip_tac >>
   pure_rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   pure_rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR BreakException`, `es`, `OK (jump_to ex s0)`] >>
   conj_tac
   >- (simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
-           raise_def] >> irule break_jump_path >> simp[] >>
-      goal_assum (drule_at Any) >> simp[]) >>
+           raise_def] >> irule emit_jump_zero_path >> simp[] >>
+      qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
   irule stmt_post_break >> simp[]
 QED
