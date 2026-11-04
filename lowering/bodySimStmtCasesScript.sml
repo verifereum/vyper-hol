@@ -5079,6 +5079,17 @@ Proof
   qexists_tac `leaf` >> simp[]
 QED
 
+Theorem aug_place_storage_read_holds:
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  read_storage_slot cx tr slot tv st = (INL cur,st) /\
+  slots_in_range (get_storage cx st tr) (w2n slot) tv /\
+  storage_read_live cx tr (get_storage cx st tr) slot tv ==>
+  storage_holds cx tr ty (Value cur) slot st
+Proof
+  strip_tac >> simp[storage_holds_def, read_result_def, return_def] >>
+  qexists_tac `tv` >> simp[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
