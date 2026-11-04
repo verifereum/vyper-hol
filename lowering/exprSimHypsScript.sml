@@ -1406,6 +1406,16 @@ Proof
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
+(* The premises eval_expr_read_type_sound needs, from expr_body_pre. *)
+Theorem expr_body_pre_read_type_sound_pre[local]:
+  expr_body_pre cenv cx env e es ==>
+  well_typed_expr env e /\ env_consistent env cx es /\ state_well_typed es /\
+  context_well_typed cx /\ accounts_well_typed es.accounts /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e)
+Proof
+  simp[expr_body_pre_def, expr_sim_inv_def]
+QED
+
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
@@ -1441,9 +1451,9 @@ Proof
       gvs[expr_body_pre_def] >> goal_assum drule >> simp[] >>
       metis_tac[])
   >> (strip_tac >>
+      drule expr_body_pre_read_type_sound_pre >> strip_tac >>
       drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-      disch_then (qspec_then `env` mp_tac) >>
-      gvs[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+      disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
       irule value_runtime_typed_zero_bytestring_empty >>
       qexists_tac `env` >>
       gvs[lowered_value_type_def, expr_type_def] >> metis_tac[])
