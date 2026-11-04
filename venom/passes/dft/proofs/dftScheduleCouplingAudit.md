@@ -335,3 +335,22 @@ outputs, no operands, and distinct instruction IDs. This does NOT establish
 effectful adjacent edits, GAS/INVOKE saved residual phases, intermediate
 schedule readiness, full DFT composition, finite gas-list realization,
 `dft_run_block_gas`, or `dft_ctx_sim_gas`.
+
+## Shared non-PHI synchronized transition kernel (C3.2.13)
+
+`dft_nonphi_edit_phis_list`, `dft_nonphi_edit_phi_length_list` and their
+block-edit corollaries check entry preservation for any adjacent non-PHI
+pair. `dft_nonphi_edit_open_entry`, `dft_nonphi_edit_open_next`,
+`dft_nonphi_edit_next_inf` and `dft_nonphi_edit_occ_next` check actual
+transition equalities, using the existing structural maps. The At boundary
+`dft_gas_edit_open_at` was already opcode-independent and is reused unchanged.
+The occurrence theorem permits arbitrary oracle and suspended callers; its
+hypothesis is equality of the current fetched instruction, not simulation,
+termination, or an endpoint. `dft_nonphi_edit_occ_next_outside` discharges that
+fetch hypothesis by excluding the edited positions. GAS/GAS exported entry,
+open-next, next-inf and occurrence-next statements remain unchanged as wrappers.
+
+This kernel deliberately does not transport readiness of saved frames for
+edits containing INVOKE and does not cross the swapped pair. GAS/INVOKE
+residual phases, general independent diamonds and full scheduling composition
+remain open, as do both frozen task obligations.

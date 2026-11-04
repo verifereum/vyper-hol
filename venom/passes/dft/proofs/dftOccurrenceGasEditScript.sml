@@ -59,11 +59,46 @@ Proof
   Cases_on `fn.fn_blocks` >> simp[setup_callee_def, dft_gas_edit_fn_def]
 QED
 
+Theorem dft_nonphi_edit_phis_list:
+  !pre. x.inst_opcode <> PHI /\ y.inst_opcode <> PHI ==>
+  eval_phis s (pre ++ [y;x] ++ post) = eval_phis s (pre ++ [x;y] ++ post)
+Proof
+  Induct >> simp[eval_phis_def] >> rpt strip_tac >> simp[]
+QED
+
+Theorem dft_nonphi_edit_phi_length_list:
+  !pre. x.inst_opcode <> PHI /\ y.inst_opcode <> PHI ==>
+  phi_prefix_length (pre ++ [y;x] ++ post) =
+  phi_prefix_length (pre ++ [x;y] ++ post)
+Proof
+  Induct >> simp[phi_prefix_length_def]
+QED
+
+Theorem dft_nonphi_edit_phis:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI ==>
+  eval_phis s (dft_gas_edit_block bb0 pre x y post bb).bb_instructions =
+  eval_phis s bb.bb_instructions
+Proof
+  strip_tac >> simp[dft_gas_edit_block_def] >> IF_CASES_TAC >>
+  gvs[dft_nonphi_edit_phis_list]
+QED
+
+Theorem dft_nonphi_edit_phi_length:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI ==>
+  phi_prefix_length (dft_gas_edit_block bb0 pre x y post bb).bb_instructions =
+  phi_prefix_length bb.bb_instructions
+Proof
+  strip_tac >> simp[dft_gas_edit_block_def] >> IF_CASES_TAC >>
+  gvs[dft_nonphi_edit_phi_length_list]
+QED
+
 Theorem dft_gas_edit_phis_list:
   !pre. x.inst_opcode = GAS /\ y.inst_opcode = GAS ==>
   eval_phis s (pre ++ [y;x] ++ post) = eval_phis s (pre ++ [x;y] ++ post)
 Proof
-  Induct >> simp[eval_phis_def] >> rpt strip_tac >> simp[]
+  rpt strip_tac >> irule dft_nonphi_edit_phis_list >> simp[]
 QED
 
 Theorem dft_gas_edit_phi_length_list:
@@ -71,7 +106,7 @@ Theorem dft_gas_edit_phi_length_list:
   phi_prefix_length (pre ++ [y;x] ++ post) =
   phi_prefix_length (pre ++ [x;y] ++ post)
 Proof
-  Induct >> simp[phi_prefix_length_def]
+  rpt strip_tac >> irule dft_nonphi_edit_phi_length_list >> simp[]
 QED
 
 Theorem dft_gas_edit_phi_bound:
@@ -482,9 +517,9 @@ Proof
   simp[dft_edit_core_def, dft_edit_control_def, dft_edit_frame_def]
 QED
 
-Theorem dft_gas_edit_open_entry:
+Theorem dft_nonphi_edit_open_entry:
   bb0.bb_instructions = pre ++ [x;y] ++ post /\
-  x.inst_opcode = GAS /\ y.inst_opcode = GAS ==>
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI ==>
   dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
     (dft_gas_edit_block bb0 pre x y post)
     (dft_open_next a C (DftOpen (DftEnter fn fuel s) stack n)) =
@@ -497,10 +532,23 @@ Proof
        dft_gas_edit_lookup_block] >>
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >>
   simp[dft_edit_core_def, dft_edit_control_def] >>
-  simp[dft_gas_edit_phis, dft_gas_edit_phi_length] >>
+  simp[dft_nonphi_edit_phis, dft_nonphi_edit_phi_length] >>
   rename1 `eval_phis s blk.bb_instructions` >>
   Cases_on `eval_phis s blk.bb_instructions` >>
   simp[dft_edit_core_def, dft_edit_control_def]
+QED
+
+Theorem dft_gas_edit_open_entry:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS ==>
+  dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+    (dft_gas_edit_block bb0 pre x y post)
+    (dft_open_next a C (DftOpen (DftEnter fn fuel s) stack n)) =
+  dft_open_next a (dft_gas_edit_ctx bb0 pre x y post C)
+    (dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+      (dft_gas_edit_block bb0 pre x y post) (DftOpen (DftEnter fn fuel s) stack n))
+Proof
+  strip_tac >> irule dft_nonphi_edit_open_entry >> simp[]
 QED
 
 Theorem dft_gas_edit_open_at:
@@ -538,9 +586,9 @@ Proof
   rpt CASE_TAC >> gvs[dft_edit_core_def, dft_edit_control_def]
 QED
 
-Theorem dft_gas_edit_open_next:
+Theorem dft_nonphi_edit_open_next:
   bb0.bb_instructions = pre ++ [x;y] ++ post /\
-  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI /\
   (!fn b bb s stack n. core = DftOpen (DftAt fn b bb s) stack n ==>
     get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
       get_instruction bb s.vs_inst_idx) ==>
@@ -552,14 +600,14 @@ Theorem dft_gas_edit_open_next:
 Proof
   Cases_on `core` >> rename1 `DftOpen ctl stack n` >> Cases_on `ctl` >>
   simp[] >> rpt strip_tac
-  >- simp[dft_gas_edit_open_entry]
+  >- simp[dft_nonphi_edit_open_entry]
   >- simp[dft_gas_edit_open_at]
   >> simp[dft_open_next_def, dft_edit_core_def, dft_edit_control_def, dft_edit_return]
 QED
 
-Theorem dft_gas_edit_next_inf:
+Theorem dft_nonphi_edit_next_inf:
   bb0.bb_instructions = pre ++ [x;y] ++ post /\
-  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI /\
   (!fn b bb s stack n. core = DftOpen (DftAt fn b bb s) stack n ==>
     get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
       get_instruction bb s.vs_inst_idx) ==>
@@ -575,7 +623,7 @@ Proof
       get_instruction bb s.vs_inst_idx` by
     (Cases_on `core` >> rename1 `DftOpen ctl stack n` >> Cases_on `ctl` >>
      gvs[dft_fill_def, dft_fill_control_def]) >>
-  simp[dft_next_inf_def, dft_erase_def, dft_edit_fill, dft_gas_edit_open_next]
+  simp[dft_next_inf_def, dft_erase_def, dft_edit_fill, dft_nonphi_edit_open_next]
 QED
 
 Theorem dft_edit_occ_address:
@@ -588,9 +636,9 @@ Proof
   gvs[dft_occ_address_def, dft_edit_occ_def, dft_edit_core_def, dft_edit_control_def]
 QED
 
-Theorem dft_gas_edit_occ_next:
+Theorem dft_nonphi_edit_occ_next:
   bb0.bb_instructions = pre ++ [x;y] ++ post /\
-  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI /\
   (!fn b bb s stack n. c.dft_occ_core = DftOpen (DftAt fn b bb s) stack n ==>
     get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
       get_instruction bb s.vs_inst_idx) ==>
@@ -608,12 +656,72 @@ Proof
        (dft_gas_edit_block bb0 pre x y post) c).dft_occ_core =
    dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
      (dft_gas_edit_block bb0 pre x y post) (dft_next_inf a C c.dft_occ_core)` by
-    simp[dft_edit_occ_def, dft_gas_edit_next_inf] >>
+    simp[dft_edit_occ_def, dft_nonphi_edit_next_inf] >>
   simp[] >>
   Cases_on `c.dft_occ_core` >>
   rename1 `c.dft_occ_core = DftOpen ctl stack n` >>
   Cases_on `dft_next_inf a C (DftOpen ctl stack n)` >>
   simp[dft_edit_occ_update, dft_edit_occ_def]
+QED
+
+Theorem dft_gas_edit_open_next:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  (!fn b bb s stack n. core = DftOpen (DftAt fn b bb s) stack n ==>
+    get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
+      get_instruction bb s.vs_inst_idx) ==>
+  dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+    (dft_gas_edit_block bb0 pre x y post) (dft_open_next a C core) =
+  dft_open_next a (dft_gas_edit_ctx bb0 pre x y post C)
+    (dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+      (dft_gas_edit_block bb0 pre x y post) core)
+Proof
+  strip_tac >> irule dft_nonphi_edit_open_next >> simp[]
+QED
+
+Theorem dft_gas_edit_next_inf:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  (!fn b bb s stack n. core = DftOpen (DftAt fn b bb s) stack n ==>
+    get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
+      get_instruction bb s.vs_inst_idx) ==>
+  dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+    (dft_gas_edit_block bb0 pre x y post) (dft_next_inf a C core) =
+  dft_next_inf a (dft_gas_edit_ctx bb0 pre x y post C)
+    (dft_edit_core (dft_gas_edit_fn bb0 pre x y post)
+      (dft_gas_edit_block bb0 pre x y post) core)
+Proof
+  strip_tac >> irule dft_nonphi_edit_next_inf >> simp[]
+QED
+
+Theorem dft_gas_edit_occ_next:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  (!fn b bb s stack n. c.dft_occ_core = DftOpen (DftAt fn b bb s) stack n ==>
+    get_instruction (dft_gas_edit_block bb0 pre x y post bb) s.vs_inst_idx =
+      get_instruction bb s.vs_inst_idx) ==>
+  dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)
+    (dft_edit_occ (dft_gas_edit_fn bb0 pre x y post)
+      (dft_gas_edit_block bb0 pre x y post) c) =
+  dft_edit_occ (dft_gas_edit_fn bb0 pre x y post)
+    (dft_gas_edit_block bb0 pre x y post) (dft_occ_oracle_next w C c)
+Proof
+  strip_tac >> irule dft_nonphi_edit_occ_next >> simp[]
+QED
+
+Theorem dft_nonphi_edit_occ_next_outside:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode <> PHI /\ y.inst_opcode <> PHI /\
+  (!fn b bb s stack n. c.dft_occ_core = DftOpen (DftAt fn b bb s) stack n ==>
+    bb <> bb0 \/ (s.vs_inst_idx <> LENGTH pre /\ s.vs_inst_idx <> SUC (LENGTH pre))) ==>
+  dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)
+    (dft_edit_occ (dft_gas_edit_fn bb0 pre x y post)
+      (dft_gas_edit_block bb0 pre x y post) c) =
+  dft_edit_occ (dft_gas_edit_fn bb0 pre x y post)
+    (dft_gas_edit_block bb0 pre x y post) (dft_occ_oracle_next w C c)
+Proof
+  strip_tac >> irule dft_nonphi_edit_occ_next >> simp[] >>
+  rpt strip_tac >> irule dft_gas_edit_instruction_outside >> metis_tac[]
 QED
 
 Theorem dft_edit_safe_control_fill[local,simp]:
