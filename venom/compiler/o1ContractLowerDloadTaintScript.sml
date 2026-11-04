@@ -76,6 +76,44 @@ Proof
   simp[venomExecSemanticsTheory.exec_alloca_def]
 QED
 
+Theorem data_copy_taint:
+  (inst.inst_opcode = DLOADBYTES \/ inst.inst_opcode = CODECOPY) /\
+  inst.inst_operands = [dst; src; len] /\
+  eval_operand dst s = SOME dstw /\ eval_operand src s = SOME srcw /\
+  eval_operand len s = SOME lenw ==>
+  mem_taint tn inst s s' =
+    (tn.t_mem UNION new_site_bytes s s') DIFF
+      {i | w2n dstw <= i /\ i < w2n dstw + w2n lenw}
+Proof
+  strip_tac >>
+  simp[mem_taint_def, written_taint_def, step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       codegenRelTheory.sized_source_write_range_def, range_bytes_def] >>
+  fs[]
+QED
+
+Theorem codecopy_success_operands:
+  inst.inst_opcode = CODECOPY /\ step_inst fuel ctx inst s = OK s' ==>
+  ?dst src len dstw srcw lenw.
+    inst.inst_operands = [dst; src; len] /\
+    eval_operand dst s = SOME dstw /\ eval_operand src s = SOME srcw /\
+    eval_operand len s = SOME lenw
+Proof
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by fs[] >>
+  drule venomExecSemanticsTheory.step_inst_non_invoke >>
+  disch_then (qspecl_then [`fuel`,`ctx`,`s`] assume_tac) >>
+  gvs[venomExecSemanticsTheory.step_inst_base_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem merge_callee_alloca_frontier:
+  (merge_callee_state caller callee).vs_allocas = caller.vs_allocas /\
+  (merge_callee_state caller callee).vs_alloca_next = caller.vs_alloca_next
+Proof
+  simp[venomExecSemanticsTheory.merge_callee_state_def]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
