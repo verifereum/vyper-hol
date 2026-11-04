@@ -513,3 +513,13 @@ headroom. H' is witnessed by `set_prov H inst.inst_outputs NONE`; coverage uses
 the common OrdinaryCoverage adapter. This is successful live-successor coverage
 only: current raw safety, terminal alternatives, control and target-prefix
 integration remain open as described above.
+
+### Storage write consumer reconciliation (C1.11.5.67)
+
+`lowerDloadSafetyStorageWriteCoverage` exports `ld_sync_storage_write_effect`
+and `ld_sync_storage_write_coverage` for [SSTORE;TSTORE], discharging the storage
+write row above. Local operand assembly proves equal scalar keys and masked
+(rather than equal) values; selected provenance stays H'=H. The common ordinary
+adapter is used once. No headroom or non-forward premise is needed. As with the
+other grouped consumers, this does not discharge current raw safety, control,
+terminal alternatives or exhaustive target-prefix integration.
