@@ -38,7 +38,8 @@ Theorem calldata_member_address_shape:
   inst_extends st mid /\ mid.cs_blocks = st.cs_blocks /\
   mid.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-    ~is_alloca_op i.inst_opcode /\ (!s. inst_mem_below_frontier i s))
+    ~is_alloca_op i.inst_opcode /\ (!s. inst_mem_below_frontier i s) /\
+    i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
     (emitted_insts st mid)
 Proof
   Cases_on `dyn` >>

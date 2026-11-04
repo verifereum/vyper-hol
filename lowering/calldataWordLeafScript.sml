@@ -7,6 +7,26 @@ Ancestors
   exprLoweringProps compileEnv emitHelper valueEncoding valueEncodingProps
   venomExecSemantics venomState venomInst words arithmetic list rich_list
 
+(* The calldata decoders emit no INVOKE, terminator, DLOAD or DLOADBYTES,
+   as frag_exec_mem_run_inst_seq requires. *)
+Theorem calldata_word_opcodes:
+  compile_abi_decode_to_buf dst src CALLDATALOAD hi (DecPrimWord clamp) st = ((),st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  Cases_on `clamp` >>
+  FIRST [rename1 `IntClamp bits signed` >> Cases_on `signed`, all_tac] >>
+  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+       compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+       compile_abi_bytes_clamp_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+       fresh_id_def, emit_def, emitted_insts_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  gvs[DROP_LENGTH_APPEND, is_terminator_def, mk_inst_def]
+QED
+
 Theorem abi_decode_frame_bytes:
   abi_decode_frame d n s t /\ (q + k <= d \/ d + n <= q) ==>
   mem_bytes_at q k t.vs_memory = mem_bytes_at q k s.vs_memory
@@ -245,6 +265,7 @@ Proof
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule calldata_word_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_safe) >>
@@ -269,6 +290,7 @@ Proof
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st st')` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule calldata_word_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_safe) >>

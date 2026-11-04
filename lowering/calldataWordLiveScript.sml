@@ -375,6 +375,7 @@ Proof
   drule_all abi_decoder_clamped_word_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
      (emitted_insts st last)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  drule calldata_word_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> simp[] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_word_prefix_live) >>
