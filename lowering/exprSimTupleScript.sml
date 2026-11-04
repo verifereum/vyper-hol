@@ -32,7 +32,7 @@
  *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
  *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
  *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
- *   storage_read_live_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
+ *   storage_range_agree_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
  *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
  *   tuple_memory_no_snapshot
  *
@@ -275,12 +275,20 @@ Theorem read_storage_slot_array_not_tuple[local]:
     read_storage_slot cx tr slot (ArrayTV etv bd) es <>
       (INL (ArrayV (TupleV vs)), es1)
 Proof
-  rpt gen_tac >> Cases_on `tr` >> Cases_on `bd` >>
+  rpt gen_tac >> Cases_on `tr` >>
   simp[read_storage_slot_def, get_storage_backend_def,
        get_transient_storage_def, get_accounts_def, bind_def, return_def] >>
   qmatch_goalsub_abbrev_tac `decode_value stor` >>
+  (namedCases_on `bd` ["n", "max"]
+  >- (simp[Once decode_value_def] >>
+      Cases_on `decode_static_array stor (w2n slot) etv n` >>
+      simp[lift_option_def, raise_def, return_def]) >>
   simp[Once decode_value_def] >>
-  rpt (CASE_TAC >> simp[lift_option_def, raise_def, return_def])
+  Cases_on `w2n (read_slot stor (w2n slot)) <= max` >>
+  simp[lift_option_def, raise_def, return_def] >>
+  Cases_on `decode_dyn_array stor (w2n slot + 1) etv
+              (MIN (w2n (read_slot stor (w2n slot))) max)` >>
+  simp[lift_option_def, raise_def, return_def])
 QED
 
 (* ===== The source's selection ===== *)
@@ -513,11 +521,11 @@ Theorem base_vv_holds_loc[local]:
         (vv_loc vv = LocStorage ==>
            read_storage_slot cx F w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es F) (w2n w) tvt /\
-           storage_read_live cx F (get_storage cx es F) w tvt) /\
+           storage_range_agree (get_storage cx es F) (contract_storage s) w tvt) /\
         (vv_loc vv = LocTransient ==>
            read_storage_slot cx T w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) tvt /\
-           storage_read_live cx T (get_storage cx es T) w tvt) /\
+           storage_range_agree (get_storage cx es T) (contract_transient s) w tvt) /\
         (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
         vv_loc vv <> LocCalldata
 Proof
@@ -739,36 +747,36 @@ Proof
   impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
-(* A tuple element of a value read live is read live. *)
-Theorem storage_read_live_tuple_elem[local]:
-  !cx tr st w tvs k.
-    storage_read_live cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
-    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
-      (EL k tvs)
+(* A tuple element of a value whose slots agree has its slots agree. *)
+Theorem storage_range_agree_tuple_elem[local]:
+  !st st' w tvs i.
+    storage_range_agree st st' w (TupleTV tvs) /\ i < LENGTH tvs ==>
+    storage_range_agree st st' (w + n2w (tuple_prefix_slot_size i tvs))
+      (EL i tvs)
 Proof
   rpt gen_tac >> strip_tac >>
   drule tuple_prefix_el_bound >> strip_tac >>
-  Cases_on `type_slot_size (EL k tvs) = 0`
-  >- (simp[storage_read_live_def] >> rpt strip_tac >>
-      qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
-        wordsTheory.w2n_lt >>
-      decide_tac) >>
-  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
-  rewrite_tac[storage_read_live_def] >> strip_tac >>
-  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
-  `w2n w + tuple_prefix_slot_size k tvs < dimword (:256)` by decide_tac >>
-  `w2n w + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) <=
-   dimword (:256)` by decide_tac >>
-  `w2n (w + n2w (tuple_prefix_slot_size k tvs)) =
-   w2n w + tuple_prefix_slot_size k tvs` by
+  Cases_on `type_slot_size (EL i tvs) = 0`
+  >- (`w2n (w + n2w (tuple_prefix_slot_size i tvs)) <= dimword (:256)` by
+        (irule arithmeticTheory.LESS_IMP_LESS_OR_EQ >>
+         simp[wordsTheory.w2n_lt]) >>
+      simp[accountsRelPropsTheory.storage_range_agree_def] >> rpt strip_tac >>
+      `w2n (w + n2w (tuple_prefix_slot_size i tvs)) < w2n (w + n2w (tuple_prefix_slot_size i tvs))` by
+        (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+         qexists_tac `w2n k` >> simp[]) >>
+      gvs[]) >>
+  gvs[accountsRelPropsTheory.storage_range_agree_def] >>
+  `w2n w + tuple_prefix_slot_size i tvs < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w (tuple_prefix_slot_size i tvs)) =
+   w2n w + tuple_prefix_slot_size i tvs` by
     (Cases_on `w` >> gvs[wordsTheory.word_add_n2w]) >>
-  simp[] >> strip_tac >>
-  `w2n w <= j /\ j < w2n w + type_slot_size (TupleTV tvs)` by decide_tac >>
-  `dead_bytes_list st (w2n w) tvs j b` by
-    (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!k b. _ ==> _` irule >> simp[] >> strip_tac >>
+  `dead_bytes_list st (w2n w) tvs (w2n k) b` by
+    (qpat_x_assum `dead_bytes _ _ (TupleTV _) _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
   drule dead_bytes_list_el >>
-  disch_then (qspec_then `k` mp_tac) >> simp[]
+  disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
 (* The element's value_vv holds the element, from the base's. *)
@@ -821,7 +829,7 @@ Proof
     (irule tuple_offset_slots >> simp[] >> metis_tac[]) >>
   simp[storage_holds_def] >>
   drule_all read_storage_slot_tuple_elem >> strip_tac >> gvs[] >>
-  simp[tuple_elem_slots_in_range, storage_read_live_tuple_elem]
+  simp[tuple_elem_slots_in_range, storage_range_agree_tuple_elem]
 QED
 
 (* The base's read, a tuple of the element types. *)

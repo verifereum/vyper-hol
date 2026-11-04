@@ -13,6 +13,7 @@ Ancestors
   vyperCalldataSliceTest
   vyperCheckContractFrontendLibTest
   vyperCheckContractLibTest
+  rawReturnDeclarationTest
   vyperCheckContractTraceLibTest
   vyperCreateSelfdestruct
   vyperCreateStorageTest
@@ -22,6 +23,8 @@ Ancestors
   vyperDecimalMulTest
   vyperDelegateRawCallTest
   vyperECPrecompileTest
+  vyperEventFixtureTest
+  vyperEventRegression
   vyperExtCallConsumptionTest
   vyperExtCallCpsCVKernelCheck
   vyperExtCallCpsCVTest

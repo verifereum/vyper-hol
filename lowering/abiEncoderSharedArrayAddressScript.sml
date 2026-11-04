@@ -20,16 +20,22 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def]
 QED
 
+val address_step_eqs = map (fn opc => valOf (List.find (fn th =>
+  let val (_, body) = strip_forall (concl th)
+  in aconv (rhs (fst (dest_imp body))) opc end)
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs)))
+  [``ADD``, ``MUL``, ``MLOAD``];
+
 Theorem abi_encoder_array_address_step_globals[local]:
   (i.inst_opcode = ADD \/ i.inst_opcode = MUL \/ i.inst_opcode = MLOAD) /\
   step_inst_base i s = OK t ==>
   (t.vs_accounts,t.vs_transient,t.vs_logs,t.vs_requests,t.vs_pending_deletions) =
   (s.vs_accounts,s.vs_transient,s.vs_logs,s.vs_requests,s.vs_pending_deletions)
 Proof
-  strip_tac
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >> gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def]
+  strip_tac >>
+  gvs address_step_eqs >>
+  gvs[exec_pure2_def, exec_read1_def, AllCaseEqs()] >>
+  simp[update_var_def]
 QED
 
 Theorem abi_encoder_array_address_raw_globals:

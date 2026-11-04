@@ -36,7 +36,7 @@
 Theory stmtSimAssignStorage
 Ancestors
   list rich_list finite_map pred_set
-  fragExec exprSim exprSimLeaves stmtSim stmtSimDecl stmtSimDeclMem
+  storageStoreFrame fragExec exprSim exprSimLeaves stmtSim stmtSimDecl stmtSimDeclMem
   stmtSimAssign stmtSimAssignMem accountsRelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProofs
@@ -156,8 +156,13 @@ Proof
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           set_storage_def, local_region_def, lookup_var_def] >>
      metis_tac[]) >>
-  irule stmt_state_rel_allocas_frame >> simp[] >>
-  qexistsl [`es`, `s`] >> simp[] >>
+  `immutable_base_zero cenv s1` by
+    (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >>
+     Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
+  qexistsl [`s`, `es`] >> simp[] >>
   Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
@@ -253,29 +258,8 @@ Theorem assign_storage_store_run:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt strip_tac >>
-  `frag_exec ctx st st' (\t. t = s)
-     (\t. stmt_state_rel ctx func cenv cx es' t /\
-          (!x. lookup_var x t = lookup_var x s) /\
-          (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-                   FLOOKUP t.vs_allocas aid = SOME b)) (\r. F)` by
-    (imp_res_tac emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
-     `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-        (emitted_insts st st')` by
-       (Cases_on `tr` >> gvs[venomInstTheory.mk_inst_def, is_terminator_def]) >>
-     irule frag_exec_run_inst_seq >>
-     fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-     rpt strip_tac >> gvs[] >>
-     `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
-                        [Lit slot; op] []) s =
-        OK (if tr then tstore slot w s else sstore slot w s)` by
-       (Cases_on `tr` >>
-        simp[step_inst_base_def, exec_write2_def, mk_inst_def,
-             eval_operand_def]) >>
-     Cases_on `tr` >> gvs[] >>
-     simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
-     gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>
-  drule frag_exec_no_exit_run >> disch_then drule >>
-  disch_then (qspec_then `s` mp_tac) >> simp[] >> metis_tac[]
+  `eval_operand (Lit slot) s = SOME slot` by simp[eval_operand_def] >>
+  drule_all storage_emit_frame_run >> metis_tac[]
 QED
 
 (* On a value: e's fragment reaches the store in expr_post, at the state e

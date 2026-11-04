@@ -131,6 +131,10 @@ val abi_dynamic_ready_inst_wf_eval = EVAL
   ``fn_inst_wf ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_ssa_eval = EVAL
   ``ssa_form ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_phi_eval = EVAL
+  ``phi_operands_ready ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_entries_eval = EVAL
+  ``block_entries_ready (cfg_analyze ^abi_dynamic_ready_fn) ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_cfg_eval = save_thm
   ("abi_dynamic_ready_cfg_eval", EVAL ``cfg_analyze ^abi_dynamic_ready_fn``)
 val abi_dynamic_ready_dom_analysis_eval = save_thm
@@ -278,6 +282,8 @@ val abi_dynamic_ready_fn_rhs = LIST_CONJ
    abi_dynamic_ready_dom_eval,
    EQT_ELIM abi_dynamic_ready_sue_eval,
    EQT_ELIM abi_dynamic_ready_cfg_norm_eval,
+   EQT_ELIM abi_dynamic_ready_entries_eval,
+   EQT_ELIM abi_dynamic_ready_phi_eval,
    EQT_ELIM abi_dynamic_ready_insts_eval]
 val abi_dynamic_ready_fn_thm = prove
   (``codegen_ready_fn ^abi_dynamic_ready_fn``,
