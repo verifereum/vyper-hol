@@ -700,7 +700,7 @@ Theorem compile_ifexp_vv_sim:
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
-         int_calls_expr e = [] \/
+         lowered_value_type cenv e = expr_type e \/ is_bytestring_type (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\

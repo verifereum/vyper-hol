@@ -8,7 +8,7 @@ Location: project root
 
 ## Theorem Statement (FROZEN)
 
-In `lowering/exprSimIfExpScript.sml` (restated: the `~is_word_type t ==>` arm hypothesis is new):
+In `lowering/exprSimIfExpScript.sml` (restated: the `~is_word_type t ==>` arm hypothesis is new; `compile_ifexp_aggregate_case`, `compile_ifexp_case` and `body_ifexp_case` below keep their statements):
 
 ```sml
 Theorem compile_ifexp_vv_sim:
@@ -16,7 +16,7 @@ Theorem compile_ifexp_vv_sim:
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
     (~is_word_type t ==>
      !e. (e = a \/ e = b) ==>
-         int_calls_expr e = [] \/
+         lowered_value_type cenv e = expr_type e \/ is_bytestring_type (expr_type e) \/
          same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
@@ -133,8 +133,9 @@ So every proof in `exprSimIfExpScript.sml` that unfolds the lowering (starting w
 Notes from a read-only audit (not built):
 - The `lower_value` monotonicity hypotheses of `compile_ifexp_vv_sim` are now unused; `compile_expr_grows` (`lowering/exprLoweringPropsScript.sml`) and `ci_mono_compile_ifexp_arm` cover the new arm code unconditionally.
 - `lowered_value_type` differs from `expr_type` only for String/Bytes literals, `AbiEncode`, Concat-shaped buffers and internal calls. For the rest `same_memory_layout t t` holds and the arm code is the old one.
-- The new hypothesis excludes internal-call arms whose layout differs (their `expr_sim` at `expr_type` can't describe a value laid out at the callee's type). The copy branch is then reached by literal/`AbiEncode`-like bytestring arms, whose value is a memory `LocatedValue`, so `unwrap_value` emits no code; the copy reads the source footprint (32 + len bytes) and writes inside the fresh `ALLOCA`, whose id lies in `[sa.cs_next_id, sb.cs_next_id)`.
-- `compile_ifexp_case` with `nocalls = T` gets the arm hypothesis from `int_calls_expr (IfExp ..) = []`; `compile_ifexp_sim` uses `nocalls = T`.
+- The arm hypothesis of `compile_ifexp_vv_sim` (revised): with `expr_type e = t`, its first and third disjuncts make `compile_ifexp_arm` take the `unwrap_value` branch (`same_memory_layout t t`, or the given one), i.e. the old code. Only the bytestring disjunct with differing layouts reaches the copy, where the result type is a bytestring, so `compile_store_memory` is `compile_store_bytestring`, which ignores the arm type and copies the source's length word plus data into the fresh `ALLOCA` (id in `[sa.cs_next_id, sb.cs_next_id)`); `expr_sim` at `t` bounds the source value.
+- `compile_ifexp_aggregate_case` and `compile_ifexp_case` keep their hypothesis `(~nocalls ==> !e. ... int_calls_expr e = [] \/ same_memory_layout ...)`. They derive the revised one from `well_typed_expr` (in `expr_body_pre` of the IfExp, whose `well_typed_expr_def` clause types both arms): a well-typed arm that is not an internal call has `lowered_value_type cenv e = expr_type e` or both types bytestrings (the proof pattern of `lowered_value_type_shape` in `lowering/memoryLocalRhsPropsScript.sml`: `ho_match_mp_tac lowered_value_type_ind` with `well_typed_expr_def`, `type_builtin_result_ok_def`; an arm with `int_calls_expr e = []` is not an `IntCall`). When `nocalls`, `int_calls_expr (IfExp ..) = []` gives that for both arms. `compile_ifexp_sim` uses `nocalls = T`.
+- Don't try to prove the copy semantically for arbitrary (ill-typed) annotations: the revised hypothesis rules those out.
 - `body_ifexp_case`: case on whether some arm has internal calls and a layout that differs; if so, `body_ifexp_widened_call_arm`; otherwise `compile_ifexp_case`.
 
 ## Domain Constraints
