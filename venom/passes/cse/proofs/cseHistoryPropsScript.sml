@@ -1164,3 +1164,56 @@ Proof
  `MEM es (MAP SND done)` by (simp[MEM_MAP] >> qexists `(bb,es)` >> simp[]) >>
  gvs[MEM_FLAT, MEM_APPEND] >> metis_tac[]
 QED
+
+Theorem cse_prefix_event_provenance:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ !ev. MEM ev events ==>
+ case ev of
+ CsePhi n bb s t =>
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   eval_phis s bb.bb_instructions = OK t
+ | CseStep n bb inst s t =>
+   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb s.vs_inst_idx = SOME inst /\
+   step_inst n ctx inst s = OK t
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac >>
+ rpt gen_tac >> strip_tac >> strip_tac >> rpt gen_tac >>
+ simp[MEM_APPEND] >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> simp[]
+QED
+
+Theorem cse_prefix_covered_block:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ MEM ev events /\ cse_event_covers ev bb k inst ==>
+ MEM bb fn.fn_blocks
+Proof
+ strip_tac >> drule_all cse_prefix_event_provenance >>
+ Cases_on `ev` >> gvs[cse_event_covers_def] >>
+ metis_tac[lookup_block_MEM]
+QED
+
+Theorem cse_prefix_covered_write:
+ cse_event_covers ev bb k inst /\ MEM v inst.inst_outputs ==>
+ cse_event_writes ev v
+Proof
+ Cases_on `ev` >> simp[cse_event_covers_def, cse_event_writes_def] >>
+ strip_tac >> gvs[] >> qexists `inst` >> simp[MEM_EL] >>
+ qexists `k` >> gvs[get_instruction_def, AllCaseEqs(), EL_TAKE, LENGTH_TAKE, phi_prefix_length_le]
+QED
+
+Theorem cse_prefix_segment_block:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ cse_visit_segment bb es k /\
+ (!ev. MEM ev es ==> MEM ev events) ==>
+ MEM bb fn.fn_blocks
+Proof
+ strip_tac >> drule cse_visit_segment_phi_head >> strip_tac >>
+ `MEM (CsePhi n bb s t) events` by metis_tac[MEM] >>
+ drule_all cse_prefix_event_provenance >> simp[] >>
+ metis_tac[lookup_block_MEM]
+QED
