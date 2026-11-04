@@ -4,6 +4,7 @@
 Theory frameRelocationBinding
 Ancestors
   frameRelocationDemand frameDemandTaint frameJointDemand frameJointTaint
+  frameJointRevert o1PassContract
   frameActivationCache frameJointTrace frameJointTransition ptrDiscipline
   finite_map list pred_set arithmetic
 
@@ -88,4 +89,22 @@ Theorem joint_relocation_demand_initial_agreement:
 Proof
   strip_tac >> irule demand_agree_identity >> rpt strip_tac >>
   sym_tac >> irule joint_relocation_demand_empty_entry >> metis_tac[]
+QED
+
+Theorem joint_nonrevert_read_exempt:
+  joint_nonrevert q <=> ~joint_read_exempt q
+Proof
+  Cases_on `q` >> simp[joint_nonrevert_def, joint_read_exempt_def]
+QED
+
+Theorem joint_relocation_demand_nonrevert:
+  joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\
+  joint_relocation_demand lo positions q0 es qs n a z ==>
+  ~joint_read_exempt (EL n (q0::qs))
+Proof
+  rw[joint_relocation_demand_def, joint_observed_read_def] >>
+  rewrite_tac[GSYM joint_nonrevert_read_exempt] >>
+  irule joint_trace_nonrevert_read_at >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  qexistsl_tac [`a`, `j`] >> simp[joint_nonrevert_read_exempt]
 QED
