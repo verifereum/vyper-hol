@@ -14427,3 +14427,98 @@ Resume compile_abi_encode_labels[loop]:
             emit_inst_labels, compile_alloc_buffer_labels])
 QED
 Finalise compile_abi_encode_labels
+
+Theorem compile_abi_decode_labels:
+  (!dst src lop hi info s.
+    cs_extends s (SND (compile_abi_decode_to_buf dst src lop hi info s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_to_buf dst src lop hi info s)))) /\
+  (!dst src lop hi elems ao vo s.
+    cs_extends s (SND (compile_abi_decode_complex_elems dst src lop hi elems ao vo s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_complex_elems dst src lop hi elems ao vo s)))) /\
+  (!dst src lop hi info asz msz ip cnt s.
+    cs_extends s (SND (compile_abi_decode_dyn_loop dst src lop hi info asz msz ip cnt s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_abi_decode_dyn_loop dst src lop hi info asz msz ip cnt s))))
+Proof
+  ho_match_mp_tac abiEncoderTheory.compile_abi_decode_to_buf_ind >> rpt conj_tac
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "tuple"
+  >- suspend "nil"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+Resume compile_abi_decode_labels[word]:
+  rpt gen_tac >> once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  irule compile_abi_decode_static_labels >> simp[compile_abi_clamp_basetype_labels]
+QED
+Resume compile_abi_decode_labels[nil]:
+  rpt gen_tac >> once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  simp[comp_return_labels]
+QED
+Resume compile_abi_decode_labels[cons]:
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  simp[LET_THM] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[compile_getelemptr_abi_labels, emit_op_labels]) >>
+  first_x_assum (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  simp[arithmeticTheory.ADD_COMM]
+QED
+Resume compile_abi_decode_labels[bytes]:
+  rpt gen_tac >> once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels])
+  >- (IF_CASES_TAC >> simp[comp_return_labels] >>
+      rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >>
+           simp[emit_op_labels, emit_void_labels])) >>
+  Cases_on `lop` >> simp[emit_void_labels]
+QED
+Resume compile_abi_decode_labels[tuple]:
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  simp[LET_THM] >> IF_CASES_TAC >> gvs[] >> rpt gen_tac >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels]) >>
+  first_x_assum (irule o SRULE[]) >> simp[]
+QED
+Resume compile_abi_decode_labels[array]:
+  rpt gen_tac >> strip_tac >>
+  once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels])
+  >- (IF_CASES_TAC >> simp[comp_return_labels] >>
+      rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >>
+           simp[emit_op_labels, emit_void_labels])) >>
+  IF_CASES_TAC >> gvs[]
+  >- (rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> simp[emit_op_labels]) >>
+      Cases_on `lop` >> simp[emit_void_labels]) >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, compile_alloc_buffer_labels, emit_void_labels]) >>
+  first_x_assum (irule o SRULE[]) >> simp[]
+QED
+Resume compile_abi_decode_labels[loop]:
+  rpt gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `dec_info_needs_offset info` mp_tac) >> simp[] >>
+  disch_tac >>
+  once_rewrite_tac[abiEncoderTheory.compile_abi_decode_to_buf_def] >>
+  simp[LET_THM] >> BETA_TAC >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, comp_return_labels, emit_op_labels, emit_void_labels, emit_inst_labels]) >>
+  IF_CASES_TAC >> simp[compile_abi_decode_dyn_elem_ptr_labels, comp_return_labels]
+QED
+Finalise compile_abi_decode_labels
