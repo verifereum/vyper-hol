@@ -29,7 +29,7 @@ Proof
   simp[collapse_dfs_result_def, collapse_dfs_succs_result_def]
 QED
 
-Theorem fn_labels_update_succ_phi_labels[local]:
+Theorem fn_labels_update_succ_phi_labels:
   !old new bbs succs.
     MAP (\bb. bb.bb_label) (update_succ_phi_labels old new bbs succs) =
     MAP (\bb. bb.bb_label) bbs
@@ -69,7 +69,7 @@ Proof
   simp[MEM_MAP, FILTER_ALL_DISTINCT] >> metis_tac[]
 QED
 
-Theorem can_bypass_jump_target_distinct[local]:
+Theorem can_bypass_jump_target_distinct:
   !func a b target.
     ALL_DISTINCT (fn_labels func) /\
     lookup_block a.bb_label func.fn_blocks = SOME a /\
@@ -361,7 +361,7 @@ Proof
   simp[collapse_result_events_def]
 QED
 
-Theorem collapse_events_joint[local]:
+Theorem collapse_events_joint:
   (!func incoming visited lbl.
      ALL_DISTINCT (fn_labels func) ==>
      collapse_dfs_result
@@ -593,14 +593,14 @@ Proof
   >> gvs[]
 QED
 
-Theorem bb_label_fix_phis_in_block[local]:
+Theorem bb_label_fix_phis_in_block:
   (fix_phis_in_block actual_preds bb).bb_label = bb.bb_label
 Proof
   simp[fix_phis_in_block_def] >>
   pairarg_tac >> simp[]
 QED
 
-Theorem fn_labels_fix_all_phis[local]:
+Theorem fn_labels_fix_all_phis:
   fn_labels (fix_all_phis func) = fn_labels func
 Proof
   simp[fix_all_phis_def, venomInstTheory.fn_labels_def,
@@ -640,7 +640,7 @@ Proof
   gen_tac >> Cases_on `pred h.bb_label` >> simp[]
 QED
 
-Theorem fn_labels_remove_unreachable_all_distinct[local]:
+Theorem fn_labels_remove_unreachable_all_distinct:
   ALL_DISTINCT (fn_labels func) ==>
   ALL_DISTINCT (fn_labels (remove_unreachable_blocks func))
 Proof
@@ -663,7 +663,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem label_event_trace_sources_absent[local]:
+Theorem label_event_trace_sources_absent:
   !initial events final.
     label_event_trace initial events final ==>
     EVERY (\entry. ~MEM (FST entry) final) events
@@ -678,6 +678,19 @@ Proof
   first_x_assum drule >>
   gvs[listTheory.EVERY_MEM, MEM_FILTER] >>
   metis_tac[]
+QED
+
+Theorem collapse_dfs_empty_log_sources_absent:
+  ALL_DISTINCT (fn_labels func) /\
+  collapse_dfs func [] visited lbl = (func',lm,visited') ==>
+  EVERY (\entry. ~MEM (FST entry) (fn_labels func')) lm
+Proof
+  strip_tac >>
+  qspecl_then [`func`, `[]`, `visited`, `lbl`] mp_tac
+    (CONJUNCT1 collapse_events_joint) >>
+  simp[collapse_dfs_result_def, collapse_result_events_def,
+       fn_result_events_def] >> strip_tac >> gvs[] >>
+  drule label_event_trace_sources_absent >> simp[EVERY_MEM, MEM_REVERSE]
 QED
 
 Theorem label_event_trace_transition[local]:
@@ -1066,7 +1079,7 @@ Proof
   rpt gen_tac >> rpt CASE_TAC >> gvs[]
 QED
 
-Theorem fn_insts_blocks_mem[local]:
+Theorem fn_insts_blocks_mem:
   !blocks inst.
     MEM inst (fn_insts_blocks blocks) <=>
     ?bb. MEM bb blocks /\ MEM inst bb.bb_instructions
@@ -1257,7 +1270,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fn_cfg_edge_iff_fn_succ[local]:
+Theorem fn_cfg_edge_iff_fn_succ:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_cfg_edge func src dst <=> fn_succ func src dst)
 Proof
@@ -1272,7 +1285,7 @@ Proof
             venomExecPropsTheory.lookup_block_label]
 QED
 
-Theorem fn_reachable_iff_reachable[local]:
+Theorem fn_reachable_iff_reachable:
   ALL_DISTINCT (fn_labels func) ==>
   (fn_reachable func lbl <=> reachable func lbl)
 Proof
@@ -1622,7 +1635,7 @@ Proof
 QED
 
 
-Theorem do_merge_jump_metadata[local]:
+Theorem do_merge_jump_metadata:
   do_merge_jump func a b label_map = SOME (func',label_map') ==>
   fn_identity_metadata_eq func' func /\
   fn_static_input_eq func' func /\

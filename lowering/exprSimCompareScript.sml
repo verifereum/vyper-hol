@@ -90,38 +90,35 @@ Proof
   irule w2i_i2w_within_signed >> qexists_tac `w` >> simp[]
 QED
 
-Theorem value_has_type_IntV_pair[local]:
-  value_has_type tv (IntV n) /\ value_has_type tv v ==>
-  ?j. v = IntV j
+Theorem typed_int_operand_shape[local]:
+  value_has_type tv (IntV n) /\ value_has_type tv v ==> ?m. v = IntV m
 Proof
-  Cases_on `tv` >> simp[value_has_type_def] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[value_has_type_def] >> Cases_on `v` >> simp[value_has_type_def]
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
 QED
 
-Theorem value_has_type_DecimalV_pair[local]:
-  value_has_type tv (DecimalV n) /\ value_has_type tv v ==>
-  ?j. v = DecimalV j
+Theorem typed_decimal_operand_shape[local]:
+  value_has_type tv (DecimalV n) /\ value_has_type tv v ==> ?m. v = DecimalV m
 Proof
-  Cases_on `tv` >> simp[value_has_type_def] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[value_has_type_def] >> Cases_on `v` >> simp[value_has_type_def]
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
 QED
 
-Theorem value_has_type_FlagV_pair[local]:
-  value_has_type tv (FlagV k) /\ value_has_type tv v ==>
-  ?j. v = FlagV j
+Theorem typed_flag_operand_shape[local]:
+  value_has_type tv (FlagV n) /\ value_has_type tv v ==> ?m. v = FlagV m
 Proof
-  Cases_on `tv` >> Cases_on `v` >> simp[value_has_type_def]
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
 QED
 
-Theorem value_has_type_BoolV_pair[local]:
-  value_has_type tv (BoolV b) /\ value_has_type tv v ==>
-  ?j. v = BoolV j
+Theorem typed_bool_operand_shape[local]:
+  value_has_type tv (BoolV n) /\ value_has_type tv v ==> ?m. v = BoolV m
 Proof
-  Cases_on `tv` >> simp[value_has_type_def] >>
-  rename1 `BaseTV bt` >> Cases_on `bt` >>
-  simp[value_has_type_def] >> Cases_on `v` >> simp[value_has_type_def]
+  Cases_on `tv` >> gvs[value_has_type_def] >>
+  Cases_on `b` >> gvs[value_has_type_def] >>
+  Cases_on `v` >> gvs[value_has_type_def]
 QED
 
 (* The source result of a comparison of two word values of one type is
@@ -142,7 +139,7 @@ Proof
   (* one kind of v1 at a time, so that each unfolding of evaluate_binop
      covers a quarter of the value pairs *)
   >>~- ([`value_has_type _ (IntV _)`],
-        drule_all value_has_type_IntV_pair >>
+        drule_all typed_int_operand_shape >>
         disch_then (qx_choose_then `j` SUBST_ALL_TAC) >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
@@ -153,8 +150,8 @@ Proof
         Cases_on `is_uint256 ty` >> fs[eval_compare_def, val_to_w256_def] >>
         word_cmp_tac)
   >>~- ([`value_has_type _ (DecimalV _)`],
-        drule_all value_has_type_DecimalV_pair >>
-        disch_then (qx_choose_then `i` SUBST_ALL_TAC) >>
+        drule_all typed_decimal_operand_shape >>
+        disch_then (qx_choose_then `i` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -164,8 +161,8 @@ Proof
            simp[]) >>
         fs[eval_compare_def, val_to_w256_def] >> word_cmp_tac)
   >>~- ([`value_has_type _ (FlagV _)`],
-        drule_all value_has_type_FlagV_pair >>
-        disch_then (qx_choose_then `n` SUBST_ALL_TAC) >>
+        drule_all typed_flag_operand_shape >>
+        disch_then (qx_choose_then `n` strip_assume_tac) >> gvs[] >>
         gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
             expr_res_ok_def, binop_negate_def] >>
         Cases_on `tv` >> gvs[value_has_type_def] >>
@@ -177,8 +174,8 @@ Proof
         fs[eval_compare_def, val_to_w256_def, n2w_11, dimword_def,
            arithmeticTheory.LESS_MOD]) >>
   (* booleans *)
-  drule_all value_has_type_BoolV_pair >>
-  disch_then (qx_choose_then `b2` SUBST_ALL_TAC) >>
+  drule_all typed_bool_operand_shape >>
+  disch_then (qx_choose_then `b2` strip_assume_tac) >> gvs[] >>
   gvs[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
       expr_res_ok_def, binop_negate_def] >>
   rw[eval_compare_def, val_to_w256_def]

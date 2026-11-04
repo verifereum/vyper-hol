@@ -6,6 +6,7 @@
  * - constants_fold_evaluate_module_constants
  * - check_contract_evaluate_all_constants
  * - contract_namespaces_ok_constants_order
+ * - type_env_all_modules_PERM, type_env_all_modules_constants_order
  *
  * Helper:
  * - get_tenv_constant_context, get_tenv_sources
@@ -556,6 +557,15 @@ Definition constant_machine_immutables_def:
     case ALOOKUP am.immutables addr of NONE => [] | SOME imms => imms
 End
 
+(* Constant folding runs without the outcome oracle, so a precompile's
+   success check passes without consuming anything. *)
+Theorem precompile_call_success_initial_state:
+  precompile_call_success bt (initial_state am sc) =
+  return () (initial_state am sc)
+Proof
+  simp[precompile_call_success_def, initial_state_def]
+QED
+
 Theorem constant_value_eval_expr_shape[local]:
   (!mods imms e v cx am sc artifact current_src mode checker_layouts checker_addr.
      constant_value mods imms e = SOME v /\
@@ -705,7 +715,8 @@ Proof
     qexists `Value v` >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
-         read_result_def, value_runtime_typed_def, constant_result_shape_def] >>
+         read_result_def, value_runtime_typed_def, constant_result_shape_def,
+         precompile_call_success_initial_state] >>
     metis_tac[])
   >~ [`TypeBuiltin`] >- (
     `well_typed_exprs (artifact_env artifact mods current_src) es /\
@@ -1018,9 +1029,11 @@ Resume constant_eval_expr_fold_agreement[builtin]:
          lift_sum_def, get_accounts_def, return_def] >> strip_tac >>
     gvs[sum_CASE_rator, AllCaseEqs()] >>
     drule_all constant_eval_exprs_fold_lift >> strip_tac >>
-    gvs[return_def, raise_def, constant_result_shape_def, read_result_def] >>
+    gvs[return_def, raise_def, constant_result_shape_def, read_result_def,
+        precompile_call_success_initial_state] >>
     `get_tenv cx = type_env_all_modules mods` by simp[get_tenv_def] >>
-    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL v''` by
+    rename1 `evaluate_builtin cx _ v8 bt (MAP expr_type es) vs = INL bv` >>
+    `evaluate_builtin (constant_context mods) empty_accounts v8 bt (MAP expr_type es) vs = INL bv` by
       metis_tac[evaluate_builtin_constant_context] >>
     gvs[constant_value_def]
 QED
@@ -1195,6 +1208,53 @@ Proof
   simp[EVERY_MEM, MEM_constants_order] >> disch_then drule_all >> metis_tac[]
 QED
 
+(* ===== Namespace preservation under module reordering ===== *)
+
+Theorem type_env_for_module_other_source[local]:
+  src <> src' ==>
+  FLOOKUP (type_env_for_module src ts) (src',id) = NONE
+Proof
+  Induct_on `ts` >- simp[type_env_for_module_def] >>
+  Cases_on `h` >> simp[type_env_for_module_def, FLOOKUP_UPDATE]
+QED
+
+Theorem FLOOKUP_type_env_all_modules:
+  !mods src id.
+  ALL_DISTINCT (MAP FST mods) ==>
+  FLOOKUP (type_env_all_modules mods) (src,id) =
+    case ALOOKUP mods src of
+      NONE => NONE
+    | SOME ts => FLOOKUP (type_env_for_module src ts) (src,id)
+Proof
+  Induct >- simp[type_env_all_modules_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  Cases_on `h0 = src` >>
+  gvs[type_env_all_modules_def, FLOOKUP_FUNION, GSYM ALOOKUP_NONE,
+      type_env_for_module_other_source] >>
+  CASE_TAC >> simp[]
+QED
+
+Theorem type_env_all_modules_PERM:
+  PERM mods mods' /\ ALL_DISTINCT (MAP FST mods) ==>
+  type_env_all_modules mods = type_env_all_modules mods'
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP FST mods')` by
+    metis_tac[ALL_DISTINCT_PERM, PERM_MAP] >>
+  `ALOOKUP mods = ALOOKUP mods'` by
+    (drule_all alist_to_fmap_PERM >> strip_tac >>
+     metis_tac[ALOOKUP_EQ_FLOOKUP]) >>
+  simp[fmap_eq_flookup, FORALL_PROD, FLOOKUP_type_env_all_modules]
+QED
+
+Theorem type_env_all_modules_constants_order:
+  ALL_DISTINCT (MAP FST mods) ==>
+  type_env_all_modules (constants_order mods) = type_env_all_modules mods
+Proof
+  strip_tac >> irule EQ_SYM >> irule type_env_all_modules_PERM >>
+  simp[] >> once_rewrite_tac[PERM_SYM] >> simp[PERM_constants_order]
+QED
+
 Theorem ALL_DISTINCT_contract_keys_constants_order[local]:
   ALL_DISTINCT (contract_keys f (constants_order mods)) <=>
   ALL_DISTINCT (contract_keys f mods)
@@ -1208,5 +1268,8 @@ Theorem contract_namespaces_ok_constants_order:
 Proof
   `ALL_DISTINCT (MAP FST (constants_order mods)) <=> ALL_DISTINCT (MAP FST mods)` by (
     irule ALL_DISTINCT_PERM >> irule PERM_MAP >> simp[PERM_constants_order]) >>
-  simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order]
+  Cases_on `ALL_DISTINCT (MAP FST mods)` >>
+  simp[contract_namespaces_ok_def, ALL_DISTINCT_contract_keys_constants_order,
+       type_env_all_modules_constants_order,
+       MATCH_MP PERM_EVERY (SPEC_ALL PERM_constants_order)]
 QED

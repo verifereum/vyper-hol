@@ -57,7 +57,8 @@ Proof
   `eval_operand count_op (update_var iv (n2w i) s) = SOME (n2w n)` by
     (Cases_on `count_op` >> gvs[eval_operand_def, lookup_var_update_var]) >>
   `step_inst_base (mk_inst id MLOAD [ip] [iv]) s = OK (update_var iv (n2w i) s)` by
-    simp[Once step_inst_base_def, exec_read1_def, mk_inst_def] >>
+    (pure_rewrite_tac [Once step_inst_base_def, mk_inst_def] >>
+     simp[exec_read1_def]) >>
   `i < dimword (:256)` by decide_tac >>
   simp[abi_encode_array_header_insts_def, run_inst_seq_def] >>
   simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def,

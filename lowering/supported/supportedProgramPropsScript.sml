@@ -187,7 +187,7 @@ Theorem supported_declaration_exclusions_assembled:
      FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
-     VariableDecl Public Storage "x" (BaseT (UintT 256)) (SOME 0);
+     VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
      FlagDecl "Flag" ["a"];

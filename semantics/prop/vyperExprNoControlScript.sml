@@ -2,7 +2,8 @@ Theory vyperExprNoControl
 
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps
+  vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
@@ -354,21 +355,40 @@ Proof
   gvs[COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >> metis_tac[]
 QED
 
+Theorem array_length_backend_no_failure[local]:
+  !cx tr s exc s'. get_storage_backend cx tr s <> (INR exc, s')
+Proof
+  Cases_on `tr` >>
+  simp[get_storage_backend_def, bind_def, get_transient_storage_def,
+       get_accounts_def, return_def]
+QED
+
+Theorem array_length_value_no_control[local]:
+  !v s exc s'.
+  (case v of
+   | ArrayV (DynArrayV vs) => return (LENGTH vs)
+   | ArrayV (SArrayV vs) => return (LENGTH vs)
+   | ArrayV (TupleV vs) => return (LENGTH vs)
+   | BytesV bs => return (LENGTH bs)
+   | StringV bs => return (LENGTH bs)
+   | _ => raise (Error (TypeError "result_array_length"))) s = (INR exc, s') ==>
+  no_control_exc exc
+Proof
+  Cases_on `v` >>
+  simp[return_def, raise_def, no_control_exc_def] >>
+  rename1 `array_value_CASE av` >> Cases_on `av` >> simp[return_def]
+QED
+
 Theorem result_array_length_no_control:
   ∀cx tv s exc s'.
   result_array_length cx tv s = (INR exc, s') ⇒ no_control_exc exc
 Proof
   ho_match_mp_tac result_array_length_ind >> rpt gen_tac >>
-  simp[result_array_length_def, bind_def, return_def,
-    prod_CASE_rator, sum_CASE_rator, vyperValueTheory.value_CASE_rator,
-    vyperValueTheory.array_value_CASE_rator, get_storage_backend_def,
-    get_transient_storage_def, get_accounts_def, COND_RATOR] >>
-  rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def] >>
-  FIRST [
-    qpat_x_assum `get_storage_backend _ tr _ = _` mp_tac >>
-      Cases_on `tr` >> simp[get_storage_backend_def, bind_def,
-        get_transient_storage_def, get_accounts_def, return_def],
-    metis_tac[read_result_no_control, no_control_exc_def]]
+  simp[result_array_length_def, return_def] >>
+  rpt strip_tac >> drule bind_no_control >> disch_then irule >>
+  simp[array_length_backend_no_failure, return_def] >>
+  (conj_tac >- metis_tac[read_result_no_control]) >>
+  rpt strip_tac >> drule array_length_value_no_control >> simp[]
 QED
 
 Theorem place_type_value_no_control:
@@ -513,8 +533,15 @@ Proof
   rw[return_def, raise_def, no_control_exc_def]
 QED
 
+Theorem precompile_call_success_no_control:
+  precompile_call_success bt s = (INR exc, s') ==> no_control_exc exc
+Proof
+  strip_tac >> drule vyperStatePreservationTheory.precompile_call_success_exception >>
+  rw[] >> simp[no_control_exc_def]
+QED
+
 val helpers = [eval_create_no_control, check_create_blueprint_no_control,
-               next_gas_reading_no_control,
+               next_gas_reading_no_control, precompile_call_success_no_control,
                check_no_control, type_check_no_control,
                lift_option_no_control, lift_option_type_no_control,
                lift_sum_no_control, lift_sum_runtime_no_control,
@@ -753,22 +780,13 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  Cases_on `~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
-    ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0)` >>
-  fs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
-       get_transient_storage_def, no_control_exc_def] >>
-  Cases_on `run_raw_call cx flags target_addr calldata amount gas
-    st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_def, return_def, raise_def, no_control_exc_def] >>
-  rename1 `run_raw_call _ _ _ _ _ _ _ _ = SOME call_result` >>
-  PairCases_on `call_result` >>
-  Cases_on `flags.rcf_revert_on_failure` >> Cases_on `call_result0` >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[update_accounts_def, update_transient_def, append_logs_def,
-       check_def, assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-       no_control_exc_def] >>
-  rpt strip_tac >> gvs[]
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       take_call_outcome_def, adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs(), no_control_exc_def]
 QED
 
 (* ===== Case 20: RawCallTarget ===== *)
@@ -898,8 +916,10 @@ Resume canonical_eval_no_control_with_results[Builtin]:
   rpt strip_tac >>
   imp_res_tac result_array_length_no_control >>
   imp_res_tac next_gas_reading_no_control >>
+  imp_res_tac precompile_call_success_no_control >>
   imp_res_tac lift_sum_no_control >>
   gvs[type_check_def, assert_def, return_def] >>
+  imp_res_tac lift_sum_no_control >>
   gvs[no_control_exc_def] >> metis_tac[]
 QED
 
@@ -1100,3 +1120,16 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("No-control oracle debt: " ^ name)
   end) (DB.thms "vyperExprNoControl");
+
+Theorem Send_outcome_runtime_error:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (INR exc,st') ==>
+  ?msg. exc = Error (RuntimeError msg)
+Proof
+  simp[checked_call_outcome_cases, return_def] >> rpt strip_tac
+  >- (drule take_call_outcome_error >> rw[] >> simp[]) >> simp[]
+QED
