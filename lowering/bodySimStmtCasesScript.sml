@@ -4200,6 +4200,83 @@ Proof
     ptv bop cur rhs` >> simp[]
 QED
 
+Theorem aug_place_rhs_pre:
+  body_inv tops ctx cenv cx /\
+  supportedExprs$supported_expr tops e /\
+  expr_sim_inv cenv cx env st /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+  call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) ==>
+  expr_body_pre cenv cx env e st
+Proof
+  strip_tac >> drule_then strip_assume_tac supported_expr_body_calls >>
+  drule aug_place_typing >> strip_tac >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  irule stmt_expr_body_pre >>
+  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      int_calls_stmt_def] >>
+  qexists_tac `[]` >> simp[] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem aug_place_rhs_ready:
+  (!s0 p s1 s2 cur s3 s4 ptv s5.
+     eval_target_place cx t s0 = (INL p,s1) /\
+     read_place cx p s2 = (INL cur,s3) /\
+     place_type_value cx p s4 = (INL ptv,s5) ==> body_expr_ok cx e) /\
+  eval_target_place cx t es = (INL p,stp) /\
+  read_place cx p stp = (INL cur,stc) /\
+  place_type_value cx p stc = (INL ptv,st) /\
+  body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e st /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  (do tv <- eval_expr cx e; read_result cx tv od) st = (r1,st1) ==>
+  expr_sim ctx func cenv cx ty e st /\ expr_res_ok r1 /\
+  expr_sim_inv cenv cx env st1 /\
+  (!rhs. r1 = INL rhs ==>
+    word_value rhs /\ is_word_type (expr_type e) /\
+    ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+         value_has_type tv rhs)
+Proof
+  strip_tac >> drule aug_place_typing >> strip_tac >>
+  `body_expr_ok cx e` by metis_tac[] >>
+  drule_all expr_body_pre_word_result >> strip_tac >>
+  `expr_sim ctx func cenv cx ty e st` by metis_tac[body_expr_ok_def] >>
+  simp[] >> metis_tac[exprSimOperatorsTheory.word_value_type_word]
+QED
+
+Theorem aug_place_binop_ready:
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  type_bits ty MOD 8 = 0 /\
+  evaluate_type (get_tenv cx) ty = SOME tvcur /\ value_has_type tvcur cur /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tvrhs /\
+  value_has_type tvrhs rhs ==>
+  binop_frag ctx func cenv cx bop ty ty bl el tys cur rhs st
+Proof
+  strip_tac >> drule aug_place_typing >> strip_tac >>
+  irule exprSimBinopFragTheory.binop_frag_word_typed >> simp[] >> metis_tac[]
+QED
+
+Theorem aug_place_bop_res_ok:
+  bop <> In /\ bop <> NotIn /\ stmt_res_ok lctx res /\
+  (case evaluate_binop
+     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+     ptv bop cur rhs of
+     INR err => res = INR (Error err) /\ es' = st
+   | INL v => write_place cx p v st = (res,es')) ==>
+  expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st)
+Proof
+  strip_tac >>
+  `bop_result cx ty bop [ty;expr_type e] cur rhs st =
+   case evaluate_binop
+     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+     ptv bop cur rhs of INL v => INL v | INR err => INR (Error err)` by
+    (irule bop_result_augassign >> simp[]) >>
+  Cases_on `evaluate_binop
+    (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
+    ptv bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
