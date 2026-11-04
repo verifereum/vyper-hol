@@ -891,7 +891,6 @@ Proof
    o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
   drule_all o1_lowered_codegen_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  conj_tac >- gvs[] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
 QED

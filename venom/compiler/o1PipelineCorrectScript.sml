@@ -135,10 +135,11 @@ QED
  * (mem_inv_codegen_obligations). *)
 (* Consume the output invariant of the same witness used for S4. *)
 Theorem o1_lowered_codegen_memory_obligations:
-  generate_context_plan C = SOME cp /\ o1_lowered_inv C vs /\
-  vs.vs_initial_fmp = n2w cp.cp_initial_fmp ==>
-  ?Inv. codegen_memory_obligations Inv C cp /\
-        codegen_reachability_package Inv C vs
+  !C cp vs.
+    generate_context_plan C = SOME cp /\ o1_lowered_inv C vs /\
+    vs.vs_initial_fmp = n2w cp.cp_initial_fmp ==>
+    ?Inv. codegen_memory_obligations Inv C cp /\
+          codegen_reachability_package Inv C vs
 Proof
   rpt strip_tac >>
   drule generate_context_plan_spill_gap >> strip_tac >>
