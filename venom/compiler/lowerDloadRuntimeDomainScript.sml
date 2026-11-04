@@ -3,6 +3,7 @@ Ancestors
   lowerDloadOwnership lowerDloadScratchFreshness venomMemProofs
   ptrDiscipline finite_map pred_set venomExecSemantics venomState venomInst
   contextRawReachable contextCodegenRel o1PassLift list
+  lowerDloadReachability
 
 Theorem ld_step_alloca_domain:
   step_inst fuel C i s = OK t ==>
@@ -77,4 +78,58 @@ Theorem ld_frame_scratch_cap_exclusion:
     (FDOM s.vs_allocas)
 Proof
   strip_tac >> drule ld_frame_alloca_domain >> ASM_SET_TAC[]
+QED
+
+Theorem ld_stack_origin_empty_allocas:
+  ld_stack_origin vs C stk fn s0 /\ vs.vs_allocas = FEMPTY ==>
+  s0.vs_allocas = FEMPTY
+Proof
+  simp[Once ld_stack_origin_cases] >> rpt strip_tac >>
+  gvs[setup_callee_def, AllCaseEqs()]
+QED
+
+Theorem ld_stack_origin_saved_domains:
+  !vs C stk fn s0. ld_stack_origin vs C stk fn s0 ==>
+  vs.vs_allocas = FEMPTY ==>
+  EVERY (\f. FDOM f.cf_state.vs_allocas SUBSET
+    set (MAP (\j. j.inst_id)
+      (FILTER (\j. j.inst_opcode = ALLOCA) (fn_insts f.cf_fn)))) stk
+Proof
+  ho_match_mp_tac ld_stack_origin_strongind >> rpt conj_tac >> rpt strip_tac
+  >- simp[] >>
+  drule_all ld_stack_origin_empty_allocas >> strip_tac >>
+  drule ld_frame_alloca_domain >> simp[]
+QED
+
+Theorem ld_reachable_alloca_domain:
+  o1_ctx_shape C /\ vs.vs_allocas = FEMPTY /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  FDOM s.vs_allocas SUBSET
+    set (MAP (\j. j.inst_id) (FILTER (\j. j.inst_opcode = ALLOCA) (fn_insts fn)))
+Proof
+  strip_tac >> drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_empty_allocas >> strip_tac >>
+  drule ld_frame_alloca_domain >> simp[]
+QED
+
+Theorem ld_reachable_saved_alloca_domains:
+  o1_ctx_shape C /\ vs.vs_allocas = FEMPTY /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  EVERY (\f. FDOM f.cf_state.vs_allocas SUBSET
+    set (MAP (\j. j.inst_id)
+      (FILTER (\j. j.inst_opcode = ALLOCA) (fn_insts f.cf_fn)))) stk
+Proof
+  strip_tac >> drule_all ld_frame_reachable_prefix >> strip_tac >>
+  drule_all ld_stack_origin_saved_domains >> simp[]
+QED
+
+Theorem ld_reachable_scratch_cap_exclusion:
+  o1_ctx_shape C /\ vs.vs_allocas = FEMPTY /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  DISJOINT
+    (set (MAP (\j. j.inst_id) (FILTER (\j. j.inst_opcode = ALLOCA) (fn_insts fn'))) DIFF
+     set (MAP (\j. j.inst_id) (FILTER (\j. j.inst_opcode = ALLOCA) (fn_insts fn))))
+    (FDOM s.vs_allocas)
+Proof
+  strip_tac >> drule_all ld_reachable_alloca_domain >> ASM_SET_TAC[]
 QED
