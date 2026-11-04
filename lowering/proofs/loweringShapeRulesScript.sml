@@ -913,6 +913,17 @@ Proof
   first_x_assum (qspec_then `s` mp_tac) >> simp[]
 QED
 
+Theorem pair_case_labels:
+  !s p k P.
+    (cs_extends s (SND p) /\ EVERY P (added_labels s (SND p))) /\
+    (!x t. cs_extends t (SND (k x t)) /\ EVERY P (added_labels t (SND (k x t)))) ==>
+    cs_extends s (SND ((\(x,t). k x t) p)) /\
+    EVERY P (added_labels s (SND ((\(x,t). k x t) p)))
+Proof
+  rpt gen_tac >> PairCases_on `p` >> simp[] >> strip_tac >>
+  irule cs_extends_labels_trans >> qexists_tac `p1` >> simp[]
+QED
+
 Theorem added_labels_new_block:
   !lbl s v t. new_block lbl s = (v,t) ==> added_labels s t = [lbl]
 Proof

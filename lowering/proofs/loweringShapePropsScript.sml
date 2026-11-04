@@ -14522,3 +14522,126 @@ Resume compile_abi_decode_labels[loop]:
   IF_CASES_TAC >> simp[compile_abi_decode_dyn_elem_ptr_labels, comp_return_labels]
 QED
 Finalise compile_abi_decode_labels
+
+Theorem compile_struct_lit_labels:
+  !cfn cenv ty fields buf off s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_struct_lit cfn cenv ty fields buf off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_struct_lit cfn cenv ty fields buf off s)))
+Proof
+  Induct_on `fields`
+  >- simp[compile_struct_lit_def, comp_return_labels] >>
+  rpt gen_tac >> Cases_on `h` >> disch_tac >>
+  once_rewrite_tac[compile_struct_lit_def] >> simp[LET_THM] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, unwrap_value_labels, compile_store_memory_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_make_array_elems_labels:
+  !cfn cenv es elem_ty elem_size has_lw buf off s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_make_array_elems cfn cenv es elem_ty elem_size has_lw buf off s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_make_array_elems cfn cenv es elem_ty elem_size has_lw buf off s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_make_array_elems_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >>
+  once_rewrite_tac[compile_make_array_elems_def] >> simp[LET_THM] >> BETA_TAC >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[emit_op_labels, unwrap_value_labels, compile_store_memory_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_make_array_labels:
+  !cfn cenv es elem_ty elem_size has_lw buf s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_make_array cfn cenv es elem_ty elem_size has_lw buf s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_make_array cfn cenv es elem_ty elem_size has_lw buf s)))
+Proof
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_make_array_def] >>
+  irule comp_ignore_bind_labels >> conj_tac
+  >- (Cases_on `has_lw` >> simp[emit_void_labels, comp_return_labels]) >>
+  simp[compile_make_array_elems_labels]
+QED
+
+Theorem lower_value_labels:
+  !cfn cenv ty e s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (lower_value cfn cenv ty e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (lower_value cfn cenv ty e s)))
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[lower_value_def] >>
+  irule comp_bind_labels >> simp[unwrap_value_labels]
+QED
+
+Theorem compile_multi_exprs_labels:
+  !cfn cenv es s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_multi_exprs cfn cenv es s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_multi_exprs cfn cenv es s)))
+Proof
+  Induct_on `es`
+  >- simp[compile_multi_exprs_def, comp_return_labels] >>
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_multi_exprs_def] >>
+  simp[LET_THM] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, lower_value_labels]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem compile_concat_labels:
+  !cfn cenv es data_ptr infos offset_op s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_concat cfn cenv es data_ptr infos offset_op s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_concat cfn cenv es data_ptr infos offset_op s)))
+Proof
+  recInduct compile_concat_ind >> rpt conj_tac
+  >- (rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_concat_def] >> simp[comp_return_labels])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+      Cases_on `is_bs` >> gvs[] >>
+      once_rewrite_tac[compile_concat_def] >> simp[LET_THM] >> BETA_TAC >>
+      rpt (FIRST [irule comp_bind_labels >> conj_tac,
+                  irule comp_ignore_bind_labels >> conj_tac] >>
+           rpt gen_tac >> BETA_TAC >>
+           simp[comp_return_labels, emit_op_labels, emit_void_labels, lower_value_labels]) >>
+      first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> disch_tac >> once_rewrite_tac[compile_concat_def] >> simp[comp_return_labels]
+QED
+
+Theorem compile_attribute_labels:
+  !cfn cenv ret_ty ty base_e field s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_attribute cfn cenv ret_ty ty base_e field s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_attribute cfn cenv ret_ty ty base_e field s)))
+Proof
+  rpt gen_tac >> disch_tac >> rewrite_tac[compile_attribute_def] >>
+  BETA_TAC >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[LET_THM, emit_op_labels, comp_return_labels])
+QED
+
+Theorem compile_acc_labels:
+  !cfn cenv addr_e item s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_acc cfn cenv addr_e item s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_acc cfn cenv addr_e item s)))
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `item` >>
+  once_rewrite_tac[compile_acc_def] >> simp[lower_value_labels] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[lower_value_labels, emit_op_labels, emit_inst_labels]) >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
