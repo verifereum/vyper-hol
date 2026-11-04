@@ -1,7 +1,7 @@
 (* Minimal safety-only relocation kernel. No paired execution is asserted. *)
 Theory lowerDloadSafetyKernel
 Ancestors
-  lowerDloadSafetyBoundary ptrDiscipline finite_map pred_set
+  lowerDloadSafetyBoundary ptrDiscipline finite_map pred_set list rich_list
 
 Type ld_site = ``:num # num``;
 Type ld_alloc = ``:(ld_site, num # num # num) fmap``;
@@ -151,4 +151,42 @@ Theorem ld_prefix_active:
   ld_prefix C fn X p h t0 t ==> active_inst fn (EL h X) t
 Proof
   simp[ld_prefix_def] >> metis_tac[]
+QED
+
+Theorem ld_prefix_extend:
+  ld_prefix C fn X p h t0 t /\ SUC h < LENGTH X /\
+  step_inst 0 C (EL h X) t = OK u /\
+  t' = (u with vs_inst_idx := SUC (p+h)) /\
+  active_inst fn (EL (SUC h) X) t' ==>
+  ld_prefix C fn X p (SUC h) t0 t'
+Proof
+  simp[ld_prefix_def] >> rpt strip_tac >>
+  `R <> []` by (Cases_on `R` >> gvs[]) >>
+  qexists_tac `R ++ [t']` >>
+  simp[LENGTH_APPEND, HD_APPEND_NOT_NIL, LAST_APPEND] >>
+  rpt strip_tac >> Cases_on `j < h`
+  >- (simp[EL_APPEND1] >> first_x_assum drule >>
+      strip_tac >> qexists_tac `u'` >> simp[EL_APPEND1]) >>
+  `j = h` by decide_tac >> gvs[] >>
+  simp[EL_APPEND1, EL_APPEND2] >>
+  `LAST R = EL h R` by simp[LAST_EL] >>
+  qexists_tac `u` >> gvs[]
+QED
+
+Theorem ld_prefix_predecessor:
+  ld_prefix C fn X p (SUC h) t0 t' ==>
+  ?t u. ld_prefix C fn X p h t0 t /\
+        step_inst 0 C (EL h X) t = OK u /\
+        t' = (u with vs_inst_idx := SUC (p+h))
+Proof
+  simp[ld_prefix_def] >> rpt strip_tac >>
+  `R <> []` by (Cases_on `R` >> gvs[]) >>
+  qpat_x_assum `LAST R = t'` mp_tac >> simp[LAST_EL] >> strip_tac >>
+  qpat_assum `!j. j < SUC h ==> _` (qspec_then `h` mp_tac) >>
+  simp[NoAsms] >> strip_tac >>
+  qexistsl_tac [`EL h R`, `u`] >> gvs[] >>
+  qexists_tac `TAKE (SUC h) R` >>
+  simp[LENGTH_TAKE, HD_TAKE, LAST_EL, EL_TAKE] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  qexists_tac `u'` >> simp[EL_TAKE]
 QED
