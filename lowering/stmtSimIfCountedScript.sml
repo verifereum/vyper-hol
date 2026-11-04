@@ -94,9 +94,10 @@ Resume compile_if_stmt_frag[selected_branch]:
     (fs[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
      metis_tac[gas_path_normal]) >>
   `gas_path ctx func t 0 (OK (jump_to (if b then tl else el) t))` by
-    (irule emit_if_jnz_zero_path >>
+    (irule assert_jnz_zero_path >>
      drule emit_inst_extends >> strip_tac >> simp[] >>
-     qexistsl_tac [`op`, `pre`, `post`] >> simp[]) >>
+     qexistsl_tac [`op`, `pre`, `post`] >>
+     simp[valueEncodingTheory.val_to_w256_def]) >>
   qpat_x_assum `!gs b es1. _` mp_tac >>
   disch_then (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `b`,
     `es_end with gas_obs := []`] mp_tac) >>
@@ -136,3 +137,12 @@ Resume compile_if_stmt_frag[selected_branch]:
 QED
 
 Finalise compile_if_stmt_frag
+
+val () =
+  let val th = compile_if_stmt_frag
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles then
+       print "STMT_IF_AUDIT compile_if_stmt_frag OK\n"
+     else raise Fail "compile_if_stmt_frag: admitted proof dependency"
+  end;
