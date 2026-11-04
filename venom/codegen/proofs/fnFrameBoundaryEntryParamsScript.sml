@@ -3,7 +3,7 @@ Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
-  livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel
+  livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -1292,4 +1292,31 @@ Proof
      simp[closure_spill_byte_def, fcgDefsTheory.fcg_path_def] >>
      qexists `r` >> simp[relationTheory.RTC_REFL]) >>
   gvs[memory_rel_def]
+QED
+
+Theorem entry_context_mixed_prefix:
+  prefix_wf lo (LENGTH ps.ps_stack) ops /\
+  prefix_spill_wf initial_fmp lo ops ps /\
+  EVERY is_prefix_op ops /\
+  context_venom_asm_rel cplan lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+  ps' = apply_prefix_ops initial_fmp lo ops ps /\
+  MEM r cplan.cp_regions /\
+  r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+  ps'.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+        st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+        context_venom_asm_rel cplan lo ps' vs st' /\
+        memory_rel ps'.ps_alloc st.as_memory st'.as_memory
+Proof
+  rpt strip_tac >>
+  drule entry_context_to_local_memory >> strip_tac >>
+  drule_all mixed_prefix_venom_asm_rel >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists `st'` >>
+  drule entry_local_memory_footprint >> strip_tac >>
+  gvs[] >>
+  irule entry_local_to_context_memory >>
+  conj_tac >- (qexists `r` >> simp[]) >>
+  qexists `st.as_memory` >> gvs[context_venom_asm_rel_def]
 QED
