@@ -2,7 +2,7 @@ Theory lowerDloadProvenanceSupport
 Ancestors
   lowerDloadOwnership pointerConfinedProps ptrDiscipline o1PassContract
   finite_map pred_set list option pointerConfinedDefs venomInst
-  execEquivParamBase venomExecProps
+  execEquivParamBase venomExecProps contextCodegenRel ctxLookupAgreeHelpers
 
 Theorem ld_ptr_roots_finite[local]:
   FINITE (ptr_roots P fn)
@@ -132,4 +132,80 @@ Proof
     (fs[fn_ptr_ok_def] >> metis_tac[]) >>
   qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
   simp[ptr_use_ok_def] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_active_inst_member[local]:
+  active_inst fn i s ==> MEM i (fn_insts fn)
+Proof
+  simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+  metis_tac[EL_MEM]
+QED
+
+Theorem ld_annotated_prov_support_all[local]:
+  !vs0 ctx astk k L AP AG tn fn inst s.
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) ==>
+  MEM fn ctx.ctx_functions /\ FDOM AG SUBSET fn_pv P fn /\
+  (!j. j < LENGTH AP /\ EL j AP <> NONE ==> j IN P fn.fn_name) /\
+  EVERY (\f. MEM f.lf_fn ctx.ctx_functions /\
+             FDOM f.lf_prov SUBSET fn_pv P f.lf_fn /\
+             (!j. j < LENGTH f.lf_params /\ EL j f.lf_params <> NONE ==>
+                  j IN P f.lf_fn.fn_name)) astk
+Proof
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
+QED
+
+Resume ld_annotated_prov_support_all[entry]:
+  rpt gen_tac >> strip_tac >> strip_tac >> simp[] >>
+  drule lookup_function_MEM >> simp[]
+QED
+Resume ld_annotated_prov_support_all[next]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  simp[] >> irule ld_step_prov_support >> simp[] >>
+  metis_tac[ld_active_inst_member]
+QED
+Resume ld_annotated_prov_support_all[block]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  simp[] >> irule ld_entry_prov_support >> simp[]
+QED
+Resume ld_annotated_prov_support_all[call]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  `fn'.fn_name = nm` by metis_tac[lookup_function_selected_name] >>
+  simp[] >> conj_tac >- metis_tac[lookup_function_MEM] >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
+  rpt strip_tac >> drule_all ld_invoke_prov_support >> simp[]
+QED
+Resume ld_annotated_prov_support_all[ret]:
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  gvs[] >> fs[FDOM_DRESTRICT, SUBSET_DEF]
+QED
+Finalise ld_annotated_prov_support_all
+
+Theorem ld_annotated_prov_support:
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
+  FDOM AG SUBSET fn_pv P fn
+Proof
+  strip_tac >> drule ld_annotated_prov_support_all >> simp[]
+QED
+
+Theorem ld_annotated_scalar_prov:
+  (!f. MEM f ctx.ctx_functions ==> fn_ptr_ok P f) /\
+  ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
+  (!v. op = Var v ==> v NOTIN fn_pv P fn) ==>
+  ld_op_prov AG op = NONE
+Proof
+  strip_tac >> drule_all ld_annotated_prov_support >> strip_tac >>
+  Cases_on `ld_op_prov AG op = NONE` >> simp[] >>
+  drule_all ld_op_support >> metis_tac[]
 QED
