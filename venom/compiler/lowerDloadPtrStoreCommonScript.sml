@@ -1,5 +1,6 @@
 Theory lowerDloadPtrStoreCommon
 Ancestors
+  lowerDloadPtrRegion
   lowerDloadPtrRel lowerDloadPtrAffine ptrDiscipline venomExecSemantics
   venomState venomInst codegenRel memLocDefs pointerConfinedDefs
   list pred_set arithmetic words finite_map
@@ -40,28 +41,11 @@ Proof
     (qpat_x_assum `_ \/ _` strip_assume_tac >>
      gvs[access_ok_def, source_memory_write_ranges_def,
          fixed_source_write_range_def, mem_write_ops_def] >> metis_tac[]) >>
-  qpat_x_assum `_ \/ _` kall_tac >>
-  Cases_on `op_prov G a`
-  >- (Cases_on `q` >>
-      gvs[dload_value_word_def, word_agree_except_bits] >>
-      disj1_tac >> conj_tac
-      >- (simp[fcpTheory.CART_EQ] >> metis_tac[]) >>
-      spose_not_then assume_tac >>
-      `lo < w2n x + len` by decide_tac >>
-      `?u b sz. a = Var u /\ FLOOKUP G u = SOME (b,sz)` by
-        metis_tac[ADD_COMM] >>
-      gvs[op_prov_def]) >>
-  PairCases_on `x'` >>
-  qpat_x_assum `(_ \/ _) ==> _` mp_tac >>
-  impl_tac >- simp[] >>
-  strip_tac >> gvs[op_prov_def] >>
-  Cases_on `q` >> gvs[dload_value_word_def] >>
-  PairCases_on `x'` >> gvs[dload_pointer_word_def] >>
-  `dload_pointer_word fs (b,sz) (x'0,sz) x
-     (x - n2w b + n2w x'0)` by
-    (simp[dload_pointer_word_def] >> metis_tac[]) >>
-  `w2n x <= b+sz` by decide_tac >>
-  drule_all dload_pointer_word_interval >> strip_tac >>
-  disj2_tac >> qexistsl [`owner`,`id`,`b`,`x'0`,`sz`,`w2n x-b`] >>
-  simp[] >> decide_tac
+  irule dload_value_contained_region >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`op_prov G a`,`q`] >> simp[] >>
+  strip_tac >>
+  `?u b sz. a = Var u /\ FLOOKUP G u = SOME (b,sz) /\
+    b <= w2n x /\ w2n x + len <= b+sz` by metis_tac[ADD_COMM] >>
+  gvs[op_prov_def] >> metis_tac[]
 QED
