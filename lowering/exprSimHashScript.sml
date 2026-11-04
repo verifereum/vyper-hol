@@ -1591,6 +1591,7 @@ Proof
 QED
 
 Theorem hash_post_footprint_bound:
+  post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ eval_operand op s = SOME p ==>
@@ -1618,6 +1619,8 @@ Theorem hash_dynamic_post_view:
     b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (BytesV bs) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `evaluate_type (get_tenv cx) (expr_type e) =
@@ -1641,6 +1644,8 @@ Theorem hash_string_post_view:
     b + 32 < dimword (:256) /\ LENGTH str < dimword (:256)
 Proof
   strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e) (StringV str) op s` by gvs[expr_post_def] >>
   `?p. eval_operand op s = SOME p` by gvs[expr_val_rel_def] >>
   `~is_word_type (expr_type e)` by simp[is_word_type_def] >>
@@ -1929,6 +1934,7 @@ Proof
 QED
 
 Theorem vv_post_frame_intro:
+  post_value_type cenv e = expr_type e /\
   stmt_state_rel ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
@@ -1947,7 +1953,7 @@ Theorem vv_post_word_intro:
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue ty op) s
 Proof
   strip_tac >> irule vv_post_frame_intro >>
-  simp[vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
+  simp[post_value_type_word, vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
        read_result_def, return_def] >>
   metis_tac[]
 QED
@@ -1965,6 +1971,7 @@ Proof
 QED
 
 Theorem vv_post_allocated_memory_intro:
+  post_value_type cenv e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\

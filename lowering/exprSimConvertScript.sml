@@ -233,7 +233,7 @@ Proof
   rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es' v1 x t0` >>
   `stmt_state_rel ctx func cenv cx es' t0 /\
    eval_operand x t0 = SOME (val_to_w256 v1)` by
-    (fs[expr_post_def] >> irule expr_val_rel_word >> asm_rewrite_tac[] >>
+    (fs[expr_post_def] >> rfs[post_value_type_word] >> irule expr_val_rel_word >> asm_rewrite_tac[] >>
      first_assum (irule_at Any) >> asm_rewrite_tac[]) >>
   qpat_x_assum `convert_frag _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [convert_frag_def]) >>

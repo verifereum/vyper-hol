@@ -67,15 +67,16 @@ Theorem vv_post_materialise:
   vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s
 Proof
   pure_rewrite_tac[vv_post_def] >> strip_tac >>
-  `vv_holds cenv cx (expr_type e) (Value v) vv es' s` by
+  `vv_holds cenv cx (post_value_type cenv e) (Value v) vv es' s` by
     (drule_all vv_holds_materialise >> simp[]) >>
-  `vv_at cenv cx (expr_type e) sa sb es' (Value v) vv s` by
+  `vv_at cenv cx (post_value_type cenv e) sa sb es' (Value v) vv s` by
     (drule_all vv_at_materialise >> simp[]) >>
   asm_rewrite_tac[]
 QED
 
 Theorem unwrap_value_materialise_sim:
   !ctx func cenv cx e es sa sm sb s0 es' tv v vv op R.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op,sb) /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\
@@ -178,9 +179,9 @@ Proof
       (mp_tac o AP_TERM ``\z. (z.vs_memory,z.vs_allocas)``) >> simp[]) >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
-  `vv_holds cenv cx (expr_type e) tv vv es' t` by
+  `vv_holds cenv cx (post_value_type cenv e) tv vv es' t` by
     (drule_all vv_holds_vars_frame >> simp[]) >>
-  `vv_at cenv cx (expr_type e) sa sn es' tv vv t` by
+  `vv_at cenv cx (post_value_type cenv e) sa sn es' tv vv t` by
     (irule vv_at_vars_frame >> qexistsl_tac [`s`, `sm`] >>
      simp[] >> conj_tac
      >- (rpt strip_tac >> irule local_region_frame_fwd >>
@@ -307,6 +308,7 @@ Proof
 QED
 
 Theorem unwrap_value_rebased_sim:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
@@ -347,6 +349,7 @@ QED
 (* Store the just-unwrapped value.  Both reference-state frames are composed
    here, so consumers need not inspect the rebased expr_post. *)
 Theorem aggregate_store_rebased_slice_run:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
@@ -448,6 +451,7 @@ Proof
 QED
 
 Theorem aggregate_store_rebased_slice_sim:
+  post_value_type ce e = expr_type e /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -531,6 +535,7 @@ Proof
 QED
 
 Theorem aggregate_unwrap_store_slice_sim:
+  post_value_type ce e = expr_type e /\
   unwrap_value ce vv sm = (op,su) /\
   compile_store_memory ce op (Var x) (expr_type e) (expr_type e) su = ((),sb) /\
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
@@ -698,6 +703,7 @@ Proof
 QED
 
 Theorem buffer_loop_memory_vv_post:
+  post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v b r.vs_memory /\
