@@ -3,7 +3,7 @@ Theory lowerDloadSafetyUpdates
 Ancestors
   lowerDloadSafetyValues lowerDloadSafetyRelation lowerDloadSafetyKernel
   ptrDiscipline unitShapeDefs venomState venomExecSemantics execEquivParamBase
-  finite_map pred_set list
+  finite_map pred_set list lowerDloadPointerClosure pointerConfinedDefs irSupply unitLabelMapIdentity
 
 Theorem ld_erase_set_prov:
   ld_erase A o_f set_prov H outs q =
@@ -127,4 +127,65 @@ Proof
   simp[phi_prov_def, phi_taint_def] >>
   irule ld_vars_operand_agree >> simp[] >>
   metis_tac[ld_phi_input_nonopaque, resolve_phi_MEM, MEM]
+QED
+
+Theorem ld_phi_selected_output:
+  ld_vars P A f /\ MEM inst (fn_insts f.lf_fn) /\
+  inst.inst_opcode = PHI /\
+  eval_one_phi f.lf_src inst = SOME (out,x) /\
+  phi_prov f.lf_src.vs_prev_bb f.lf_H inst = SOME a ==>
+  out IN fn_pv P f.lf_fn
+Proof
+  simp[eval_one_phi_def, phi_prov_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  rename1 `op_prov f.lf_H op = SOME a` >>
+  Cases_on `op` >> gvs[op_prov_def] >>
+  `s IN fn_pv P f.lf_fn` by
+    (gvs[ld_vars_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
+  gvs[fn_pv_def] >> irule ld_pointer_preserving_output >>
+  qexistsl_tac [`inst`, `s`] >> simp[is_pointer_preserving_op_def] >>
+  metis_tac[resolve_phi_MEM]
+QED
+
+Theorem ld_inst_output_ir:
+  MEM inst (fn_insts fn) /\ MEM out inst.inst_outputs ==>
+  MEM out (fn_ir_vars fn)
+Proof
+  simp[fn_insts_MEM] >> strip_tac >>
+  simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  irule_at Any EQ_REFL >> qexists_tac `bb` >> simp[] >>
+  simp[MEM_FLAT, MEM_MAP] >> irule_at Any EQ_REFL >>
+  qexists_tac `inst` >> simp[inst_ir_vars_def]
+QED
+
+Theorem ld_vars_phis:
+  !insts f tn ss ts.
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  f.lf_src.vs_prev_bb = f.lf_tgt.vs_prev_bb /\ tn.t_var = f.lf_tv /\
+  EVERY (\i. MEM i (fn_insts f.lf_fn)) insts /\
+  eval_phis f.lf_src insts = OK ss /\
+  eval_phis f.lf_tgt insts = OK ts ==>
+  ld_vars P A (f with <| lf_src := ss; lf_tgt := ts;
+    lf_H := phis_prov f.lf_src.vs_prev_bb f.lf_H insts;
+    lf_tv := phis_taint f.lf_src.vs_prev_bb tn insts |> )
+Proof
+  Induct_on `insts` >> rpt gen_tac >>
+  simp[eval_phis_def, phis_prov_def, phis_taint_def] >>
+  Cases_on `h.inst_opcode = PHI` >> simp[] >> strip_tac >> gvs[] >>
+  gvs[AllCaseEqs()] >>
+  `?out x y. eval_one_phi f.lf_src h = SOME (out,x) /\
+     eval_one_phi f.lf_tgt h = SOME (out,y) /\ h.inst_outputs = [out]` by
+    (gvs[eval_one_phi_def, AllCaseEqs()] >> metis_tac[]) >>
+  gvs[] >>
+  first_x_assum (drule_all_then assume_tac) >>
+  drule ld_vars_write >>
+  simp[update_var_def] >>
+  disch_then irule >>
+  simp[set_var_taint_def, FLOOKUP_UPDATE] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> irule ld_phi_selected_output >>
+      metis_tac[]) >>
+  reverse conj_tac
+  >- (irule ld_inst_output_ir >> metis_tac[MEM]) >>
+  strip_tac >> drule_all ld_vars_phi_snapshot >> simp[]
 QED
