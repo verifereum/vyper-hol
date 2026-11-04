@@ -4221,3 +4221,56 @@ Proof
   disj1_tac >> qexistsl_tac [`aid`,`w2n w`,`32`] >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
+
+Theorem probe_word_shrink_invoke_frame:
+  !ctx func cenv env e0 es s sa sI nm r.
+    emit_op INVOKE [Label nm] sa = (Var r,sI) /\
+    r = "%" ++ toString sa.cs_next_var /\
+    local_ptrs_reserved cenv sa /\
+    expr_body_pre cenv probe_word_context env e0 es /\
+    stmt_state_rel ctx func cenv probe_word_context es s /\
+    MEM (mk_inst sa.cs_next_id INVOKE [Label nm] [r]) (fn_insts func) /\
+    lookup_function nm ctx.ctx_functions =
+      SOME (probe_word_function with fn_name := nm) ==>
+    frag_exec ctx sa sI (\t. t = s)
+      (\t. ?es'. eval_expr probe_word_context
+         (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+         (INL (Value (IntV 0)),es') /\ es'.scopes = es.scopes /\
+         stmt_state_rel ctx func cenv probe_word_context es' t /\
+         wb_frame cenv es sa s t /\ lookup_var r t = SOME 0w /\
+         (!x. x <> r ==> lookup_var x t = lookup_var x s)) (\res. F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all probe_word_invoke_prepare >> strip_tac >>
+  `not_local_ptr cenv es.scopes r` by
+    (gvs[] >> irule local_ptrs_reserved_fresh >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all probe_word_invoke_stmt_state_summary >> strip_tac >>
+  `!x. not_fresh_at sa x ==> x <> r` by
+    (gvs[] >> rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  drule_all probe_word_invoke_wb_frame >> strip_tac >>
+  drule probe_word_pre_machine_header >>
+  disch_then (qspec_then `s` mp_tac) >>
+  impl_tac >- (fs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+        get_storage_def, lookup_account_def, call_ctx_rel_def]) >>
+  disch_then assume_tac >>
+  irule frag_exec_invoke >>
+  conj_tac >- gvs[emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  conj_tac >- gvs[emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  qexists_tac `mk_inst sa.cs_next_id INVOKE [Label nm] [r]` >>
+  reverse conj_tac >-
+    gvs[emit_op_def, fresh_id_def, fresh_var_def, emit_def,
+        comp_bind_def, comp_return_def, comp_ignore_bind_def, mk_inst_def] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> gen_tac >> disch_then SUBST1_TAC >>
+  qexists_tac `(if sload 3w s = 0w then 11 else 19) + 0` >>
+  qexists_tac `update_var r 0w (merge_callee_state s (probe_word_final_state cs))` >>
+  conj_tac >- (irule probe_word_renamed_invoke >>
+    goal_assum (drule_at Any) >> simp[eval_operands_def]) >>
+  rewrite_tac[stmt_state_rel_inst_idx] >>
+  qexists_tac `es'` >> simp[] >>
+  gvs[wb_frame_def, exprSimTheory.locals_kept_def, local_region_def,
+     lookup_var_def, update_var_def, merge_callee_state_def,
+     finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC
+QED

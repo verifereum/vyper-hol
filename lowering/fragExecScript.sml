@@ -1144,3 +1144,91 @@ val _ =
     then print "frag_exec_loop: kernel proof audit passed\n"
     else raise Fail "frag_exec_loop has oracle or axiom dependencies"
   end;
+
+(* Generic returning INVOKE fragments, independent of call lowering. *)
+Theorem foldl_update_var_vars:
+  !kvs s. FOLDL (\s' (k,v). update_var k v s') s kvs =
+          s with vs_vars := FOLDL (\m (k,v). m |+ (k,v)) s.vs_vars kvs
+Proof
+  Induct >- simp[venom_state_component_equality] >>
+  Cases >> simp[update_var_def]
+QED
+
+Theorem step_inst_invoke_OK_control:
+  !fuel ctx inst s s'.
+    inst.inst_opcode = INVOKE /\ step_inst fuel ctx inst s = OK s' ==>
+    s'.vs_current_bb = s.vs_current_bb /\
+    s'.vs_inst_idx = s.vs_inst_idx /\
+    s'.vs_halted = s.vs_halted
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, AllCaseEqs(), bind_outputs_def] >> strip_tac >>
+  gvs[foldl_update_var_vars, merge_callee_state_def, adopt_return_fmp_def] >>
+  BasicProvers.every_case_tac >> simp[]
+QED
+
+Theorem run_from_fuel_mono[local]:
+  !fuel m ctx fn s r.
+    run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\ fuel <= m ==>
+    run_from m ctx fn s = r
+Proof
+  rpt gen_tac >> strip_tac >> gvs[run_from_def] >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> gvs[] >>
+  rename1 `lookup_block _ _ = SOME bb` >>
+  Cases_on `exec_block fuel ctx bb s` >> gvs[]
+  >~ [`exec_block fuel ctx bb s = OK s1`]
+  >- (`exec_block m ctx bb s = OK s1` by
+        (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+      IF_CASES_TAC >> gvs[] >>
+      irule (cj 3 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `exec_block m ctx bb s = exec_block fuel ctx bb s` by
+    (irule (cj 2 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  simp[]
+QED
+
+Theorem run_from_step_invoke[local]:
+  !fuel ctx fn s bb inst s1.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    ~is_terminator inst.inst_opcode /\
+    step_inst fuel ctx inst s = OK s1 /\
+    s1.vs_current_bb = s.vs_current_bb ==>
+    run_from fuel ctx fn s =
+    run_from fuel ctx fn (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  rpt strip_tac >> simp[run_from_def] >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[]
+QED
+
+Theorem frag_exec_invoke:
+  !ctx st st' inst P Q R.
+    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
+    st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
+    inst.inst_opcode = INVOKE /\
+    (!s. P s ==>
+       ?fuel s1. step_inst fuel ctx inst s = OK s1 /\
+                 Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
+    frag_exec ctx st st' P Q R
+Proof
+  rw[frag_exec_def] >> disj1_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_all step_inst_invoke_OK_control >> strip_tac >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH st.cs_current_insts) = SOME inst` by
+    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
+  `~is_terminator inst.inst_opcode` by gvs[is_terminator_def] >>
+  qexists_tac `s1 with vs_inst_idx := SUC (LENGTH st.cs_current_insts)` >>
+  gvs[arithmeticTheory.ADD1] >> rpt strip_tac >>
+  rename1 `!e. run_from k ctx fn _ <> Error e` >>
+  qexists_tac `MAX fuel k` >>
+  `step_inst (MAX fuel k) ctx inst s = OK s1` by
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
+  `run_from (MAX fuel k) ctx fn s =
+   run_from (MAX fuel k) ctx fn
+     (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule run_from_step_invoke >> simp[]) >>
+  gvs[arithmeticTheory.ADD1] >>
+  irule run_from_fuel_mono >> simp[] >> qexists_tac `k` >> simp[]
+QED
