@@ -2971,9 +2971,11 @@ Proof
 QED
 
 Theorem supported_value_type_proper_array_path:
-  !tops ty tv path et bd.
+  !tops tenv ty tv path et bd.
     supported_value_type tops ty /\
-    evaluate_type (type_env tops) ty = SOME tv /\ path <> [] ==>
+    (!id fields. supported_struct_fields tops id = SOME fields ==>
+      FLOOKUP tenv id = SOME (StructArgs fields)) /\
+    evaluate_type tenv ty = SOME tv /\ path <> [] ==>
     subscripts_type tv path <> SOME (ArrayTV et bd)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `path` >> gvs[] >>
@@ -3006,7 +3008,7 @@ Proof
   rename1 `supported_struct_fields tops ns` >>
   Cases_on `supported_struct_fields tops ns` >> gvs[] >>
   rename1 `supported_struct_fields tops ns = SOME fields` >>
-  drule retAbiPlanPropsTheory.supported_struct_fields_type_env >> strip_tac >>
+  qpat_x_assum `!id fields. _` drule >> strip_tac >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
   `EVERY supported_scalar_type (MAP SND fields)` by
     (gvs[listTheory.EVERY_MAP, listTheory.EVERY_MEM,
@@ -4022,3 +4024,179 @@ Resume eval_expr_immutable_bare_global[Send]:
   pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()]
 QED
 Finalise eval_expr_immutable_bare_global
+
+Theorem is_bare_global_decl_origin:
+  !tops nm. is_bare_global_decl nm tops ==>
+    ?vis mut ty init. MEM (VariableDecl vis mut nm ty init) tops /\
+      (mut = Immutable \/ ?e. mut = Constant e)
+Proof
+  Induct >> simp[is_bare_global_decl_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[is_bare_global_decl_def] >>
+  all_tac >~ [`VariableDecl vis mut name ty init`]
+  >- (Cases_on `mut` >> simp[is_bare_global_decl_def] >>
+      rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem env_context_supported_bare_global_type:
+  env_context_consistent env cx /\
+  FLOOKUP env.bare_globals (src,nm) = SOME ty /\
+  get_module_code cx src = SOME tops /\ supported_program tops ==>
+  supported_value_type tops ty
+Proof
+  strip_tac >> drule_all env_context_consistent_bare_global_find_NONE >>
+  strip_tac >> gvs[] >> drule is_bare_global_decl_origin >> strip_tac >>
+  rename1 `MEM (VariableDecl vis mut nm dty init) tops` >>
+  `FLOOKUP env.bare_globals (src,nm) = SOME dty` by
+    (fs[env_context_consistent_def, bare_globals_complete_def] >>
+     qpat_x_assum `!src ts vis mut id ty init. _`
+       (qspecl_then [`src`,`tops`,`vis`,`mut`] mp_tac) >>
+     simp[] >> disch_then drule >> simp[]) >>
+  gvs[] >> drule_all supportedProgramTheory.supported_program_declaration >>
+  simp[supportedDeclsTheory.supported_declaration_header_def,
+       supportedProgramTheory.supported_declaration_body_def] >>
+  rpt strip_tac >> Cases_on `vis` >> Cases_on `init` >> gvs[]
+QED
+
+Theorem type_env_for_module_other_source[local]:
+  !tops src other nm. src <> other ==>
+    FLOOKUP (type_env_for_module src tops) (other,nm) = NONE
+Proof
+  Induct >> simp[vyperContextTheory.type_env_for_module_def] >> Cases >>
+  simp[vyperContextTheory.type_env_for_module_def, finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem type_env_all_modules_lookup_source:
+  !mods src tops nm args.
+    ALOOKUP mods src = SOME tops /\
+    FLOOKUP (type_env_for_module src tops) (src,nm) = SOME args ==>
+    FLOOKUP (type_env_all_modules mods) (src,nm) = SOME args
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[vyperContextTheory.type_env_all_modules_def, finite_mapTheory.FLOOKUP_FUNION] >>
+  Cases_on `h0 = src` >> gvs[] >> rpt strip_tac >> gvs[] >>
+  simp[type_env_for_module_other_source]
+QED
+
+Theorem get_tenv_main_lookup:
+  get_module_code cx NONE = SOME tops /\
+  FLOOKUP (type_env tops) (NONE,nm) = SOME args ==>
+  FLOOKUP (get_tenv cx) (NONE,nm) = SOME args
+Proof
+  simp[vyperContextTheory.get_module_code_def, vyperContextTheory.get_tenv_def,
+       vyperContextTheory.type_env_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  irule type_env_all_modules_lookup_source >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem supported_struct_fields_get_tenv:
+  get_module_code cx NONE = SOME tops /\
+  supported_struct_fields tops id = SOME fields ==>
+  FLOOKUP (get_tenv cx) id = SOME (StructArgs fields)
+Proof
+  strip_tac >> PairCases_on `id` >>
+  `id0 = NONE` by
+    (Cases_on `tops` >>
+     gvs[supportedTypesTheory.supported_struct_fields_def, AllCaseEqs()]) >>
+  gvs[] >> irule get_tenv_main_lookup >>
+  goal_assum (drule_at Any) >>
+  irule retAbiPlanPropsTheory.supported_struct_fields_type_env >> simp[]
+QED
+
+Theorem expr_body_pre_called_main_array_path:
+  !cenv cx env ann obj idx es callee et bd nm path mid.
+    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    MEM (NONE,callee) (int_calls_expr idx) /\
+    expr_type obj = ArrayT et bd /\
+    eval_expr cx obj es =
+      (INL (PlaceR (ImmutablePlace NONE nm path)), mid) ==> path = []
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?tops. get_module_code cx NONE = SOME tops /\ supported_program tops` by
+    (fs[expr_body_pre_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+        listTheory.EVERY_MEM] >>
+     qpat_x_assum `!c. _ ==> FST c = NONE /\ _`
+       (qspec_then `(NONE,callee)` mp_tac) >> simp[] >> metis_tac[]) >>
+  `env_context_consistent env cx` by
+    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def] >>
+  `well_typed_expr env obj \/ IS_SOME (type_place_expr env obj)` by
+    (fs[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def] >> simp[]) >>
+  `?ty. FLOOKUP env.bare_globals (NONE,nm) = SOME ty` by
+    (drule_at (Pat `eval_expr _ _ _ = _`) eval_expr_immutable_bare_global >>
+     disch_then irule >> simp[]) >>
+  `supported_value_type tops ty` by
+    (drule_all env_context_supported_bare_global_type >> simp[]) >>
+  drule_at (Pat `eval_expr _ _ _ = _`)
+    (cj 1 (cj 5 vyperTypeEvalSoundnessTheory.eval_scc_type_sound_mutual)) >>
+  disch_then (qspec_then `env` mp_tac) >>
+  (impl_tac >-
+    (fs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeCallGraphTheory.int_calls_expr_def] >>
+     drule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left >> simp[])) >>
+  strip_tac >>
+  `env_consistent env cx mid /\
+   eval_result_typed (env,cx,mid) (PlaceR (ImmutablePlace NONE nm path))
+     (Type (ArrayT et bd))` by
+    (gvs[optionTheory.IS_SOME_EXISTS] >>
+     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     rename1 `type_place_expr env obj = SOME vt` >> Cases_on `vt` >>
+     gvs[eval_result_typed_def, vyperTypeSystemTheory.vtype_annotation_ok_def]) >>
+  qpat_x_assum `well_typed_expr env obj ==> _` kall_tac >>
+  qpat_x_assum `!vt. type_place_expr _ _ = SOME vt ==> _` kall_tac >>
+  `env.type_defs = get_tenv cx` by fs[env_context_consistent_def] >>
+  gvs[eval_result_typed_def, runtime_place_typed_def] >>
+  gvs[Once vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  gvs[place_type_value_def, get_immutables_def, get_address_immutables_def,
+      bind_def, return_def, lift_option_type_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+  PairCases_on `tva` >>
+  `evaluate_type (get_tenv cx) ty = SOME tva0` by
+    (fs[env_consistent_def, env_immutables_consistent_def] >>
+     qpat_x_assum `!src id ty tv v. _` drule_all >> simp[]) >>
+  `!id fields. supported_struct_fields tops id = SOME fields ==>
+     FLOOKUP (get_tenv cx) id = SOME (StructArgs fields)` by
+    (rpt strip_tac >> drule_all supported_struct_fields_get_tenv >> simp[]) >>
+  spose_not_then assume_tac >>
+  drule_all supported_value_type_proper_array_path >> simp[] >>
+  qexistsl [`tv'`,`bd`] >> gvs[]
+QED
+
+Theorem compile_expr_called_main_array_root:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  MEM (NONE,callee) (int_calls_expr idx) /\ expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace NONE nm path)),mid) /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop obj /\ compile_expr cenv ty obj sc = (vv,sc') /\
+  vv_location vv = SOME LocCode ==>
+  path = [] /\ ?a off. obj = TopLevelName a (NONE,nm) /\
+    FLOOKUP cenv.ce_module_vars (NONE,nm) = SOME (ImmutableLoc off) /\
+    vv = LocatedValue a (mk_ptr (Lit (n2w off)) LocCode) /\
+    sc' = sc /\ mid = es
+Proof
+  strip_tac >> drule_all expr_body_pre_called_main_array_path >> strip_tac >>
+  gvs[] >> drule_all compile_expr_code_empty_path_root >> simp[]
+QED
+
+Theorem compile_expr_called_main_array_root_holds:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  MEM (NONE,callee) (int_calls_expr idx) /\ expr_type obj = ArrayT et bd /\
+  eval_expr cx obj es = (INL (PlaceR (ImmutablePlace NONE nm path)),mid) /\
+  storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+  ~expr_has_pop obj /\ compile_expr cenv ty obj sc = (vv,sc') /\
+  vv_location vv = SOME LocCode /\ cenv.ce_module = NONE /\
+  FLOOKUP (case ALOOKUP later.immutables cx.txn.target of
+             NONE => FEMPTY | SOME imms => get_source_immutables NONE imms)
+    nm = SOME (tvt,v) /\
+  evaluate_type (get_tenv cx) (expr_type obj) = SOME tvt /\
+  value_has_type tvt v /\
+  (!off. FLOOKUP cenv.ce_module_vars (NONE,nm) = SOME (ImmutableLoc off) ==>
+         off + type_memory_size tvt < dimword (:256)) ==>
+  vv_holds cenv cx (expr_type obj)
+    (PlaceR (ImmutablePlace NONE nm path)) vv later s
+Proof
+  strip_tac >> drule_all expr_body_pre_called_main_array_path >> strip_tac >>
+  gvs[] >>
+  drule_at (Pat `compile_expr _ _ _ _ = _`) compile_expr_code_empty_path_root_holds >>
+  simp[] >> disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`es`,`mid`] >> simp[]
+QED
