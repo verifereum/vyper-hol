@@ -1,7 +1,7 @@
 (* Local provenance boundaries; not a reachable-frame coherence theorem. *)
 Theory o1LowerDloadGhost
 Ancestors
-  contextCodegenRel lowerDloadClassify venomExecProps o1LowerDloadClosure ptrDiscipline finite_map pointerConfinedDefs venomInst memLocDefs pred_set list
+  contextCodegenRel execEquivParamBase venomExecProps o1LowerDloadClosure ptrDiscipline finite_map pointerConfinedDefs venomInst memLocDefs pred_set list
 
 Theorem first_prov_origin:
   !ops G site. first_prov G ops = SOME site ==>
