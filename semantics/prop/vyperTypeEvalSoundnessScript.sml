@@ -3361,7 +3361,9 @@ Resume eval_scc_type_sound_results_mutual[If]:
       irule push_scope_preserves_state_well_typed >>
       qexistsl_tac [`st1`,`()`] >>
       simp[push_scope_def, return_def, evaluation_state_component_equality]) >>
-    conj_tac >- gvs[no_type_error_result_def] >>
+    conj_tac >- (
+      qpat_x_assum `no_type_error_result (INR exn)` mp_tac >>
+      simp [NoAsms, no_type_error_result_def]) >>
     irule no_control_exc_return_exception_typed >> simp[]) >>
   `accounts_well_typed st2.accounts` by simp[Abbr`st2`] >>
   `env_consistent env cx st2` by (simp[Abbr`st2`] >> irule push_scope_env_consistent >> simp[]) >>
@@ -7512,7 +7514,6 @@ Resume eval_scc_type_sound_results_mutual[Expr_Call_CreateTarget]:
     simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
                          type_check_def, assert_def, return_def, raise_def,
                          lift_option_type_def, get_accounts_def, update_accounts_def] >>
-    simp[] >>
     Cases_on `eval_exprs cx es st` >>
     rename1 `eval_exprs cx es st = (args_res,args_st)` >>
     qpat_x_assum `!env0 st0 res0 st0'. _ ==> _ /\ _ /\ _ /\ _ /\
