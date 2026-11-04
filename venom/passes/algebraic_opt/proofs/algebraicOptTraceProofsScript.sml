@@ -514,3 +514,69 @@ Proof
   first_x_assum (qspecl_then [`ctx`,`fn`,`h`] mp_tac) >>
   simp[]
 QED
+
+Theorem ao_source_trace_crosses_index:
+  !trace ctx fn k s j t bb r inst.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    EVERY (\a. ~FST (SND a)) trace /\
+    HD trace = (k,F,s) /\ LAST trace = (j,F,t) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb r = SOME inst /\ s.vs_inst_idx <= r /\ r < t.vs_inst_idx ==>
+    ?front q u v back.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      ?w. step_inst q ctx inst u = OK w /\ v = w with vs_inst_idx := SUC r
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `trace`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[ao_source_trace_def] >> strip_tac >> gvs[] >>
+  PairCases_on `h'` >> gvs[] >>
+  drule ao_source_step_sequential >> strip_tac >>
+  Cases_on `r = s.vs_inst_idx`
+  >- (qexistsl [`[]`,`k`,`s`,`h'2`,`t'`] >>
+      gvs[]) >>
+  `h'2.vs_inst_idx <= r` by decide_tac >>
+  first_x_assum (qspecl_then [`ctx`,`fn`,`bb`,`r`,`inst`] mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  qexistsl [`(k,F,s)::front`,`q`,`u'`,`v`,`back`] >>
+  simp[]
+QED
+
+Theorem ao_source_trace_crosses_before_exit:
+  !trace ctx fn k s j t bb r inst out.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    EVERY (\a. ~FST (SND a)) trace /\
+    HD trace = (k,F,s) /\ LAST trace = (j,F,t) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb r = SOME inst /\ s.vs_inst_idx <= r /\
+    ao_source_step ctx fn (j,F,t) (j,T,out) /\
+    wf_function fn /\ ~is_terminator inst.inst_opcode ==>
+    ?front q u v back.
+      trace = front ++ (q,F,u)::(q,F,v)::back /\
+      u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = r /\
+      ao_source_step ctx fn (q,F,u) (q,F,v) /\
+      ?w. step_inst q ctx inst u = OK w /\ v = w with vs_inst_idx := SUC r
+Proof
+  rpt strip_tac >>
+  `t.vs_current_bb = s.vs_current_bb` by
+    (Cases_on `trace` >> gvs[] >>
+     drule_all ao_source_trace_single_visit_label >>
+     rewrite_tac[EVERY_MEM] >>
+     disch_then (qspec_then `LAST ((k,F,s)::t')` mp_tac) >>
+     simp[LAST_MEM]) >>
+  drule ao_source_step_exit >> strip_tac >>
+  `bb' = bb` by gvs[] >> gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `bb_well_formed bb` by metis_tac[wf_function_def] >>
+  `r < LENGTH bb.bb_instructions /\ inst = EL r bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `t.vs_inst_idx < LENGTH bb.bb_instructions /\
+    inst' = EL t.vs_inst_idx bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  `t.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
+    metis_tac[bb_well_formed_def] >>
+  `r <> t.vs_inst_idx` by metis_tac[] >>
+  `r < t.vs_inst_idx` by decide_tac >>
+  drule_all ao_source_trace_crosses_index >> simp[]
+QED
