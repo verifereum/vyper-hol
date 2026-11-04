@@ -70,6 +70,52 @@ Proof
   first_x_assum (qspecl_then [`u`, `w`] mp_tac) >> simp[]
 QED
 
+(* Allocation boundary equations: no memory is initialized by ALLOCA. *)
+Theorem lower_dload_alloca_fresh:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
+  exec_alloca inst s amount =
+    OK (update_var out (n2w s.vs_alloca_next)
+      (s with <|vs_allocas := s.vs_allocas |+
+                    (inst.inst_id, (s.vs_alloca_next, w2n amount));
+                vs_alloca_next := s.vs_alloca_next + w2n amount|>))
+Proof
+  simp[venomExecSemanticsTheory.exec_alloca_def]
+QED
+
+Theorem lower_dload_alloca_repeated:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (addr,sz) ==>
+  exec_alloca inst s amount = OK (update_var out (n2w addr) s)
+Proof
+  simp[venomExecSemanticsTheory.exec_alloca_def]
+QED
+
+Theorem lower_dload_merge_allocation_memory:
+  (merge_callee_state caller callee).vs_allocas = caller.vs_allocas /\
+  (merge_callee_state caller callee).vs_alloca_next = caller.vs_alloca_next /\
+  (merge_callee_state caller callee).vs_memory = callee.vs_memory
+Proof
+  simp[venomExecSemanticsTheory.merge_callee_state_def]
+QED
+
+(* Within a nonwrapping site, unsigned comparison is independent of base. *)
+Theorem lower_dload_site_comparisons:
+  !b c sz i j.
+    i <= sz /\ j <= sz /\
+    b + sz < dimword (:256) /\ c + sz < dimword (:256) ==>
+    (((n2w (b+i):bytes32) = n2w (b+j)) <=>
+       ((n2w (c+i):bytes32) = n2w (c+j))) /\
+    ((w2n (n2w (b+i):bytes32) < w2n (n2w (b+j):bytes32)) <=>
+       (w2n (n2w (c+i):bytes32) < w2n (n2w (c+j):bytes32)))
+Proof
+  rpt strip_tac >>
+  `b+i < dimword (:256) /\ b+j < dimword (:256) /\
+   c+i < dimword (:256) /\ c+j < dimword (:256)` by decide_tac >>
+  simp[GSYM wordsTheory.w2n_11, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD]
+QED
+
 (* The simulation: every terminating run of C is matched by a run of C'
    up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
    the code_end-relative CODECOPY offset from wrapping; code_layout_valid
