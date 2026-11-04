@@ -11,6 +11,51 @@ Ancestors
 Libs
   monadsyntax intLib
 
+Theorem eval_expr_stmt_success[local]:
+  eval_expr cx e s = (INL tv, ee) /\ ~is_HashMapRef tv ==>
+  eval_stmt cx (Expr e) s = (INL (), ee)
+Proof
+  simp[Once evaluate_def, bind_def, type_check_def, assert_def,
+       return_def]
+QED
+
+Theorem eval_expr_stmt_exception[local]:
+  eval_expr cx e s = (INR ex, ee) ==>
+  eval_stmt cx (Expr e) s = (INR ex, ee)
+Proof
+  simp[Once evaluate_def, bind_def]
+QED
+
+Theorem expr_stmt_not_hashmap[local]:
+  gas_admissible (eval_stmt cx (Expr e)) (stmt_res_ok lctx) es /\
+  eval_expr cx e (es with gas_obs := gs) = (INL tv, ee) ==>
+  ~is_HashMapRef tv
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_admissible _ _ _`
+    (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+  disch_then (qspec_then `gs` mp_tac) >>
+  simp[Once evaluate_def, bind_def, type_check_def, assert_def,
+       raise_def, stmt_res_ok_def]
+QED
+
+Theorem expr_stmt_admissible[local]:
+  gas_admissible (eval_stmt cx (Expr e)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res`
+  >- (rename1 `INL tv` >>
+      `~is_HashMapRef tv` by metis_tac[expr_stmt_not_hashmap] >>
+      Cases_on `tv` >> gvs[expr_vv_res_ok_def]) >>
+  rename1 `INR ex` >>
+  drule eval_expr_stmt_exception >> strip_tac >>
+  drule_all gas_admissible_result >> strip_tac >>
+  drule (cj 1 eval_expr_no_control) >>
+  Cases_on `ex` >>
+  gvs[no_control_exc_def, stmt_res_ok_def, expr_vv_res_ok_def]
+QED
+
 Theorem compile_expr_stmt_frag_ok:
   !ctx func cx lctx RetQ cenv ty e es.
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
