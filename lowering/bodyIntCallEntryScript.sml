@@ -190,3 +190,27 @@ Proof
       compileVyperTheory.update_cenv_nonreentrant_def, body_inv_def] >>
   metis_tac[]
 QED
+
+(* Canonical maps are built from tops only, whereas get_tenv may include
+   imported modules. These checked projections diagnose the entry interface;
+   they are not counterexamples to body_intcall_case. *)
+Theorem imported_flag_canonical_count_diagnostic:
+  FLOOKUP
+    (type_env_all_modules
+      [(NONE, []); (SOME 0, [FlagDecl "Imported" ["member"]])])
+    (SOME 0, "Imported") = SOME (FlagArgs 1) /\
+  SND (build_flag_info [] (K (K 0)) (K 0))
+    (nsid_to_string (SOME 0, "Imported")) = 0
+Proof
+  EVAL_TAC >> simp[FLOOKUP_FUNION, FLOOKUP_UPDATE]
+QED
+
+Theorem imported_struct_canonical_map_diagnostic:
+  ~sfields_tenv_consistent (make_struct_fields_map [])
+    (type_env_all_modules
+      [(NONE, []); (SOME 0, [StructDecl "Imported" []])])
+Proof
+  simp[sfields_tenv_consistent_def, make_struct_fields_map_def,
+       build_struct_fields_map_def] >>
+  qexistsl_tac [`(SOME 0, "Imported")`, `[]`] >> EVAL_TAC >> simp[FLOOKUP_FUNION, FLOOKUP_UPDATE]
+QED
