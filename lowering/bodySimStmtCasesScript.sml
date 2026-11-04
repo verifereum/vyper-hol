@@ -2892,6 +2892,146 @@ Proof
   Cases >> simp[exprLoweringTheory.infer_array_location_def]
 QED
 
+Theorem aug_place_memory_bytes_metadata:
+  !cenv ty. type_memory_bytes
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty =
+    type_memory_bytes cenv ty
+Proof
+  rpt gen_tac >> irule aug_place_type_memory_bytes_cong >> simp[]
+QED
+
+Theorem aug_place_unwrap_metadata:
+  !vv. unwrap_value
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vv =
+    unwrap_value cenv vv
+Proof
+  Cases >> simp[exprLoweringTheory.unwrap_value_def, aug_place_memory_bytes_metadata]
+QED
+
+Theorem aug_place_abi_enc_metadata:
+  !sf cenv ty. type_to_abi_enc_info sf
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty =
+    type_to_abi_enc_info sf cenv ty
+Proof
+  recInduct exprLoweringTheory.type_to_abi_enc_info_ind >> rpt strip_tac >>
+  simp[exprLoweringTheory.type_to_abi_enc_info_def, aug_place_memory_bytes_metadata] >>
+  rpt IF_CASES_TAC >> gvs[] >>~-
+    ([`GENLIST _ n = GENLIST _ n`],
+     irule GENLIST_CONG >> metis_tac[]) >>
+  all_tac >>~-
+    ([`MAP _ tys = MAP _ tys`],
+     irule listTheory.MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]) >>
+  Cases_on `FLOOKUP sfields (nsid_to_string nsid)` >> simp[] >>
+  irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
+Theorem aug_place_abi_dec_metadata:
+  !sf cenv ty. type_to_abi_dec_info sf
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty =
+    type_to_abi_dec_info sf cenv ty
+Proof
+  recInduct exprLoweringTheory.type_to_abi_dec_info_ind >> rpt strip_tac >>
+  simp[exprLoweringTheory.type_to_abi_dec_info_def, aug_place_memory_bytes_metadata] >>
+  gvs[] >>~-
+    ([`GENLIST _ n = GENLIST _ n`],
+     irule GENLIST_CONG >> simp[] >> metis_tac[]) >>~-
+    ([`MAP _ tys = MAP _ tys`],
+     irule listTheory.MAP_CONG >> simp[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP sfields (nsid_to_string nsid)` >> simp[] >>
+  irule listTheory.MAP_CONG >>
+  simp[pairTheory.FORALL_PROD] >> metis_tac[]
+QED
+
+Theorem aug_place_stage_intcall_metadata:
+  !cenv vs fs ts. compile_stage_intcall_args
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vs fs ts =
+    compile_stage_intcall_args cenv vs fs ts
+Proof
+  recInduct exprLoweringTheory.compile_stage_intcall_args_ind >>
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_stage_intcall_args_def,
+       aug_place_unwrap_metadata, aug_place_memory_bytes_metadata]
+QED
+
+Theorem aug_place_typed_copy_metadata:
+  (!cenv dst dt src st. compile_store_memory_typed
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst dt src st =
+    compile_store_memory_typed cenv dst dt src st) /\
+  (!cenv dst src dts sts doff soff. compile_typed_copy_fields
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst src dts sts doff soff =
+    compile_typed_copy_fields cenv dst src dts sts doff soff) /\
+  (!cenv dst dt src st n. compile_copy_sarray_typed
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst dt src st n =
+    compile_copy_sarray_typed cenv dst dt src st n) /\
+  (!cenv dst dt cap src st. compile_copy_dynarray_typed
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst dt cap src st =
+    compile_copy_dynarray_typed cenv dst dt cap src st) /\
+  (!cenv dst src dfs sfs doff soff. compile_struct_typed_copy
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst src dfs sfs doff soff =
+    compile_struct_typed_copy cenv dst src dfs sfs doff soff)
+Proof
+  ho_match_mp_tac contextTheory.compile_store_memory_typed_ind >>
+  rpt strip_tac
+  >- (once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+      Cases_on `dt` >> Cases_on `st` >>
+      simp[aug_place_memory_bytes_metadata] >>
+      rpt IF_CASES_TAC >> gvs[] >>
+      Cases_on `b` >> Cases_on `b'` >> gvs[]) >>
+  once_rewrite_tac[contextTheory.compile_store_memory_typed_def] >>
+  simp[aug_place_memory_bytes_metadata] >>
+  gvs[] >> Cases_on `ALOOKUP sfs name` >> gvs[] >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem aug_place_store_memory_metadata:
+  compile_store_memory
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) src dst dt st =
+    compile_store_memory cenv src dst dt st
+Proof
+  simp[contextTheory.compile_store_memory_def,
+       cj 1 aug_place_typed_copy_metadata, aug_place_memory_bytes_metadata]
+QED
+
+Theorem aug_place_materialize_metadata:
+  compile_materialize_vv
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty vv =
+    compile_materialize_vv cenv ty vv
+Proof
+  simp[exprLoweringTheory.compile_materialize_vv_def,
+       aug_place_memory_bytes_metadata, aug_place_unwrap_metadata,
+       aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_extcall_store_metadata:
+  !cenv vs buf off. compile_extcall_store_values
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vs buf off =
+    compile_extcall_store_values cenv vs buf off
+Proof
+  recInduct exprLoweringTheory.compile_extcall_store_values_ind >>
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_extcall_store_values_def,
+       aug_place_memory_bytes_metadata, aug_place_unwrap_metadata]
+QED
+
+Theorem aug_place_default_return_metadata:
+  compile_default_return_path
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+    compile_default_return_path cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_default_return_path_def,
+       aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_external_kwargs_metadata:
+  compile_external_call_kwargs
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+    compile_external_call_kwargs cenv
+Proof
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_external_call_kwargs_def,
+       aug_place_extcall_store_metadata, aug_place_default_return_metadata]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
