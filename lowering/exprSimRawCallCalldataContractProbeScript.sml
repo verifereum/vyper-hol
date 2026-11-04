@@ -3,7 +3,8 @@ Ancestors
   exprSimHyps supportedExprTraverse vyperTypeSystem compileEnv allocLimits
   vyperTypeCallGraph vyperTypeCallStackSoundness vyperAST vyperContext
   vyperTypeInvariants vyperTypeCallGraphSoundness relation vyperState
-  vyperCallOutcome vyperRuntimeAccounts
+  vyperCallOutcome vyperRuntimeAccounts vyperStorageLayoutSafety
+  vyperLookupStorage vyperTypeStoragePreservation placeTypingProps
 
 (* This isolates the expression-side obstruction; it does not assume
    that expr_sim_inv has an inhabitant. *)
@@ -130,4 +131,49 @@ Theorem probe_accounts_typed[local]:
 Proof
   rewrite_tac[accounts_well_typed_def] >> gen_tac >>
   simp[probe_es_def, empty_state_def, account_well_typed_def] >> EVAL_TAC
+QED
+
+Theorem probe_region[local]:
+  declared_storage_region probe_cx mid n subs = NONE
+Proof
+  simp[declared_storage_region_def, probe_module]
+QED
+
+Theorem probe_storage_info[local]:
+  storage_var_info probe_cx mid n = NONE
+Proof
+  simp[storage_var_info_def, probe_module]
+QED
+
+Theorem probe_storage_wf[local]:
+  contract_storage_well_formed probe_cx probe_es
+Proof
+  simp[contract_storage_well_formed_def, probe_region,
+       well_formed_storage_def, storage_var_in_range_def, probe_storage_info]
+QED
+
+Theorem probe_layout_safe[local]:
+  storage_layout_safe probe_cx
+Proof
+  simp[storage_layout_safe_def, well_formed_layout_def, probe_storage_info,
+       probe_region, nonreentrant_slot_separated_def, probe_cx_def,
+       empty_evaluation_context_def]
+QED
+
+Theorem probe_oracle_storage[local]:
+  oracle_storage_ok probe_cx probe_es
+Proof
+  simp[oracle_storage_ok_def, probe_es_def]
+QED
+
+Theorem probe_inv[local]:
+  expr_sim_inv (cenv with ce_struct_fields := FEMPTY) probe_cx
+    (probe_env env) probe_es
+Proof
+  simp[expr_sim_inv_def, probe_env_consistent, probe_state_typed,
+       probe_accounts_typed, probe_context_typed, probe_functions_typed,
+       probe_outcomes_typed, probe_storage_wf, probe_layout_safe,
+       probe_oracle_storage, probe_env_def, probe_module, probe_tenv,
+       probe_es_def, sfields_tenv_consistent_def, popped_keys_indexed_def,
+       place_map_tables_agree_on_defined_def]
 QED
