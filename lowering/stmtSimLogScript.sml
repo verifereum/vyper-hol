@@ -33,10 +33,10 @@ Libs
    reads has that type and leaves Inv holding; a later argument only if
    the ones before it can evaluate, as evaluate_ind gives them. *)
 Definition log_args_ready_def:
-  log_args_ready ctx func cenv cx Inv [] = T /\
-  log_args_ready ctx func cenv cx Inv (e::args) =
+  log_args_ready H ctx func cenv cx Inv [] = T /\
+  log_args_ready H ctx func cenv cx Inv (e::args) =
     ((!es. Inv es ==>
-       expr_sim ctx func cenv cx (expr_type e) e es /\
+       expr_sim H ctx func cenv cx (expr_type e) e es /\
        !v es'. (do r <- eval_expr cx e; read_result cx r od) es =
                  (INL v, es') ==>
                Inv es' /\
@@ -44,7 +44,7 @@ Definition log_args_ready_def:
                     value_has_type tv v) /\
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
-      log_args_ready ctx func cenv cx Inv args))
+      log_args_ready H ctx func cenv cx Inv args))
 End
 
 (* log E(args) where the compile env and the source give E the same
@@ -84,8 +84,8 @@ Theorem compile_log_stmt_frag:
       dimword (:256) /\
     abi_size_bound cenv.ce_struct_fields
       (TupleT (log_non_indexed_types flags tys)) < dimword (:256) /\
-    log_args_ready ctx func cenv cx Inv args /\ Inv es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    log_args_ready H ctx func cenv cx Inv args /\ Inv es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Log id args)) es res es'
 Proof
   cheat

@@ -99,7 +99,7 @@ QED
    allocations kept; on an error it exits as expr_exit allows. *)
 Theorem cond_jump_frag:
   !ctx func cx cenv e es r1 es1 sa op s1 s3 s4 lt lf s0.
-    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) e es /\
     expr_type e = BaseT BoolT /\
     lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (r1, es1) /\ expr_res_ok r1 /\
@@ -112,11 +112,11 @@ Theorem cond_jump_frag:
               bb_instructions := s4.cs_current_insts |> /\
     fn_has_code sa s1 func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     (?b s. r1 = INL (BoolV b) /\
-           stmt_state_rel ctx func cenv cx es1 s /\ ~s.vs_halted /\
+           stmt_state_rel H ctx func cenv cx es1 s /\ ~s.vs_halted /\
            (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                   lookup_var x s = SOME w) /\
            (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
@@ -128,14 +128,14 @@ Theorem cond_jump_frag:
               expr_exit r1 r)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
   simp[frag_exec_def] >>
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- (
     disj1_tac >> gvs[expr_post_def] >>
-    rename1 `stmt_state_rel ctx func cenv cx es1 sv` >> qexists_tac `sv` >>
+    rename1 `stmt_state_rel H ctx func cenv cx es1 sv` >> qexists_tac `sv` >>
     simp[] >> rpt strip_tac >>
     drule emit_inst_extends >> strip_tac >>
     qabbrev_tac `jnz = mk_inst s3.cs_next_id JNZ [op; Label lt; Label lf] []` >>
@@ -286,13 +286,13 @@ QED
 Theorem if_branch_frag[local]:
   !ctx func cx lctx RetQ cenv ty ss esA res es2 sc rest sa sb sj sx lbl' x
    exit_lbl st' s0.
-    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty ss)
+    stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty ss)
       esA res es2 /\
     compile_stmts cenv lctx ty ss sa = ((), sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
     sa.cs_current_insts = [] /\ stmt_res_ok lctx res /\
-    stmt_state_rel ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx esA s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = 0 /\
     es2.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) /\
@@ -302,7 +302,7 @@ Theorem if_branch_frag[local]:
      st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = []) ==>
     (?s. stmt_lands lctx st' res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb) /\
-         stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s /\
+         stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -313,7 +313,7 @@ Theorem if_branch_frag[local]:
               stmt_exit RetQ (es2 with scopes := rest) res r)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_frag H _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`,
                            `FST (stmts_env cenv lctx ty ss sa)`] mp_tac) >>
@@ -322,8 +322,8 @@ Proof
       Cases_on `stmts_env cenv lctx ty ss sa` >> gvs[]) >>
   strip_tac
   >- (
-    rename1 `stmt_state_rel ctx func cenv2 cx es2 s1` >>
-    `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s1` by
+    rename1 `stmt_state_rel H ctx func cenv2 cx es2 s1` >>
+    `stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) s1` by
       (qspecl_then [`func`, `cenv`, `cenv2`, `cx`, `es2`, `s1`, `sc`, `rest`, `ctx`]
          mp_tac stmt_state_rel_pop_top_ext >> simp[]) >>
     qpat_x_assum `stmt_lands _ _ _ _`
@@ -387,7 +387,7 @@ Theorem compile_if_stmt_frag:
   !ctx func cx lctx RetQ cenv ty c ss1 ss2 es res es'.
     eval_stmt cx (If c ss1 ss2) es = (res, es') /\
     expr_type c = BaseT BoolT /\
-    expr_sim ctx func cenv cx (BaseT BoolT) c es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) c es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
                 cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
     cs_mono (stmts_env cenv lctx ty ss1) /\
@@ -396,10 +396,10 @@ Theorem compile_if_stmt_frag:
        (do result <- eval_expr cx c; read_result cx result od) es = (INL (BoolV b), es1) /\
        eval_stmts cx (if b then ss1 else ss2)
          (es1 with scopes := FEMPTY :: es1.scopes) = (res2, es2) ==>
-       stmt_frag ctx func cx lctx RetQ cenv
+       stmt_frag H ctx func cx lctx RetQ cenv
          (stmts_env cenv lctx ty (if b then ss1 else ss2))
          (es1 with scopes := FEMPTY :: es1.scopes) res2 es2) ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (If c ss1 ss2))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (If c ss1 ss2))
       es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -473,7 +473,7 @@ Proof
                `s5`, `then_lbl`, `else_lbl`, `s0`] mp_tac cond_jump_frag >>
   impl_tac >- fs[expr_res_ok_def] >>
   strip_tac >> fs[] >>
-  rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
+  rename1 `stmt_state_rel H ctx func cenv cx es1 sv` >>
   rename1 `jump_to (if bj then then_lbl else else_lbl) sv` >>
   `!st l. sa.cs_next_var <= st.cs_next_var ==>
           ret_pc_ok cenv st (jump_to l sv)` by
@@ -506,7 +506,7 @@ Proof
     strip_tac
     >- (
       disj1_tac >>
-      rename1 `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) sz` >>
+      rename1 `stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) sz` >>
       qexistsl_tac [`sz`, `cenv`] >> fs[cenv_top_ext_refl] >> rpt conj_tac
       >- (strip_tac >> fs[] >>
           `?x11. new_block exit_lbl s11 = (x11, sb)` by metis_tac[] >>
@@ -580,7 +580,7 @@ Theorem compile_raise_frag:
   !ctx func cx lctx RetQ cenv ty rk es res es'.
     (rk = RaiseBare \/ rk = RaiseUnreachable) /\
     eval_stmt cx (Raise rk) es = (res, es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Raise rk))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Raise rk))
       es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -610,10 +610,10 @@ Theorem compile_assert_frag:
     (ak = AssertBare \/ ak = AssertUnreachable) /\
     eval_stmt cx (Assert e ak) es = (res, es') /\
     expr_type e = BaseT BoolT /\
-    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) e es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) e sa = (op, sb) ==>
                 cs_extends sa sb) ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Assert e ak))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Assert e ak))
       es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -659,13 +659,13 @@ Proof
       Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
       >- (
         (* the condition holds: the ok block, where the code ends *)
-        disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
+        disj1_tac >> rename1 `stmt_state_rel H ctx func cenv cx es' sv` >>
         qexists_tac `jump_to s7.cs_current_bb sv` >>
         gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
             block_is_terminated_def] >>
         simp[jump_to_def, lookup_var_def] >> fs[lookup_var_def, jump_to_def]) >>
       (* it fails: the fail block aborts *)
-      disj2_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
+      disj2_tac >> rename1 `stmt_state_rel H ctx func cenv cx es' sv` >>
       qmatch_goalsub_abbrev_tac `stmt_exit RetQ es' rres _` >>
       qspecl_then [`ctx`, `func`, `opc`, `ops`, `s5`, `s6`,
                    `jump_to s5.cs_current_bb sv`, `RetQ`, `es'`, `rres`]

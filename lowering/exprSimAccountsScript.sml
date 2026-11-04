@@ -83,7 +83,7 @@ Theorem unop_frag_read_then:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           w = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) /\
     (!c sa sb op ss.
@@ -91,7 +91,7 @@ Theorem unop_frag_read_then:
        eval_operand c ss = SOME r ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME w) ==>
-    unop_frag ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
+    unop_frag H ctx func cenv cx (\x. comp_bind (emit_op opc [x]) g) w1 t
       (INL v) es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_def] >> rpt gen_tac >>
@@ -116,9 +116,9 @@ Proof
   `!z. not_fresh_at sa z ==> not_fresh_at s1 z` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
+  `(\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es0 s /\
         eval_operand x s = SOME w1) =
-   (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s)` by
+   (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es0 s)` by
     (rw[FUN_EQ_THM] >> eq_tac >> rw[] >> gvs[]) >>
   pop_assum SUBST1_TAC >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es0`, `opc`, `[x]`, `sa`, `c`,
@@ -158,10 +158,10 @@ Theorem unop_frag_read:
     (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
           r = typed_val_to_w256 tv v) /\
     (!x ss n out.
-       eval_operand x ss = SOME w1 /\ stmt_state_rel ctx func cenv cx es0 ss ==>
+       eval_operand x ss = SOME w1 /\ stmt_state_rel H ctx func cenv cx es0 ss ==>
        step_inst_base (mk_inst n opc [x] [out]) ss =
          OK (update_var out r ss)) ==>
-    unop_frag ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
+    unop_frag H ctx func cenv cx (\x. emit_op opc [x]) w1 t (INL v) es0
 Proof
   rpt strip_tac >>
   `(\x. emit_op opc [x]) = (\x. comp_bind (emit_op opc [x]) comp_return)` by
@@ -178,7 +178,7 @@ QED
 Theorem compile_acc_frag:
   !ctx func cenv cx item bs es0.
     item <> Code /\ LENGTH bs = 20 /\ accounts_well_typed es0.accounts ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. case item of
              Balance => emit_op BALANCE [x]
            | Codesize => emit_op EXTCODESIZE [x]
@@ -307,8 +307,8 @@ QED
    operand lowered as an address, and compile_acc_frag. *)
 Theorem compile_acc_read_case:
   !nocalls ctx func cenv cx ann item args.
-    item <> Code /\ exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
+    item <> Code /\ exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Acc item) args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -319,8 +319,8 @@ Proof
     (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
-  `expr_body_pre cenv cx env e1 es /\
-   expr_sim ctx func cenv cx (BaseT AddressT) e1 es` by
+  `expr_body_pre H cenv cx env e1 es /\
+   expr_sim H ctx func cenv cx (BaseT AddressT) e1 es` by
     metis_tac[unop_operand_sim] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `account_item_type item`,
                `Acc item`, `e1`, `BaseT AddressT`,

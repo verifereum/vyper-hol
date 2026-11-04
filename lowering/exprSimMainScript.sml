@@ -2,7 +2,7 @@
  * The expression simulation theorem (#636)
  *
  * compile_expr_sim: every expression's lowering simulates it (expr_sim,
- * exprSim) at every source state that meets expr_sim_pre (exprSimHyps).
+ * exprSim) at every source state that meets expr_sim_pre H (exprSimHyps).
  * It is proved by compile_expr_ind over compile_expr and its two
  * dispatchers, each case by a case lemma of exprSimLeaves,
  * exprSimOperators, exprSimPlaces, exprSimAggregates, exprSimBuiltins or
@@ -38,12 +38,12 @@ Theorem compile_builtin_case:
   !nocalls ctx func cenv cx ann bi args.
     (!bop. bi <> Bop bop) /\ (!t n. bi <> MakeArray t n) /\
     bi <> ECAdd /\ bi <> ECMul /\
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann bi args) /\
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann bi args) /\
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann bi args)
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (Builtin ann bi args)`
+  `expr_vv_case H nocalls ctx func cenv cx (Builtin ann bi args)`
     suffices_by metis_tac[expr_sim_case_of_vv] >>
   Cases_on `bi`
   >~ [`Builtin _ (Bop _) _`] >- metis_tac[]
@@ -66,8 +66,8 @@ QED
 
 Theorem compile_builtin_case_sim:
   !cenv ann bi args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    builtin_sim_ok cenv ann bi args
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    builtin_sim_ok H cenv ann bi args
 Proof
   rw[builtin_sim_ok_def] >> Cases_on `?bop. bi = Bop bop`
   >- (gvs[] >> irule compile_bop_ok >> gvs[]) >>
@@ -84,12 +84,12 @@ QED
 
 Theorem compile_type_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_sim_case H nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)`
+  `expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann tb t args)`
     suffices_by metis_tac[expr_sim_case_of_vv] >>
   Cases_on `tb`
   >~ [`TypeBuiltin _ MaxValue _ _`] >- simp[compile_bound_builtin_case]
@@ -102,8 +102,8 @@ QED
 
 Theorem compile_type_builtin_case_sim:
   !cenv ann tb t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    type_builtin_sim_ok cenv ann tb t args
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    type_builtin_sim_ok H cenv ann tb t args
 Proof
   rw[type_builtin_sim_ok_def, expr_ok_case] >> drule exprs_case_below >>
   disch_then (qspecl_then [`ctx`, `func`, `cx`] assume_tac) >>
@@ -112,8 +112,8 @@ QED
 
 Theorem compile_call_case_sim:
   !cenv ann target args dflt.
-    expr_sim_below cenv (expr_size (Call ann target args dflt)) ==>
-    expr_ok cenv (Call ann target args dflt)
+    expr_sim_below H cenv (expr_size (Call ann target args dflt)) ==>
+    expr_ok H cenv (Call ann target args dflt)
 Proof
   rpt strip_tac >> Cases_on `target`
   >~ [`IntCall _`]
@@ -127,7 +127,7 @@ QED
 
 Theorem compile_names_builtin_sim:
   !cenv ann bi args.
-    names_builtin bi args ==> expr_ok cenv (Builtin ann bi args)
+    names_builtin bi args ==> expr_ok H cenv (Builtin ann bi args)
 Proof
   rpt gen_tac >> qid_spec_tac `args` >> qid_spec_tac `bi` >>
   ho_match_mp_tac names_builtin_ind >> simp[names_builtin_def] >>
@@ -138,21 +138,21 @@ QED
 
 Theorem compile_expr_case_sim:
   !cenv e.
-    expr_sim_below cenv (expr_size e) /\
+    expr_sim_below H cenv (expr_size e) /\
     (!ann bi args. list_size expr_size args < expr_size e ==>
-                   builtin_sim_ok cenv ann bi args) /\
+                   builtin_sim_ok H cenv ann bi args) /\
     (!ann tb t args. list_size expr_size args < expr_size e ==>
-                     type_builtin_sim_ok cenv ann tb t args) ==>
-    expr_ok cenv e
+                     type_builtin_sim_ok H cenv ann tb t args) ==>
+    expr_ok H cenv e
 Proof
   rpt strip_tac >> Cases_on `e`
   >~ [`Builtin ann bi args`]
   >- (Cases_on `names_builtin bi args` >- simp[compile_names_builtin_sim] >>
-      `builtin_sim_ok cenv ann bi args` by
+      `builtin_sim_ok H cenv ann bi args` by
         (first_x_assum irule >> simp expr_sizes) >>
       gvs[builtin_sim_ok_def])
   >~ [`TypeBuiltin ann tb t args`]
-  >- (`type_builtin_sim_ok cenv ann tb t args` by
+  >- (`type_builtin_sim_ok H cenv ann tb t args` by
         (first_x_assum irule >> simp expr_sizes) >>
       gvs[type_builtin_sim_ok_def])
   >~ [`Call _ _ _ _`] >- (irule compile_call_case_sim >> gvs[])
@@ -168,15 +168,15 @@ QED
 (* ===== The theorem ===== *)
 
 Theorem compile_expr_sim_mutual:
-  (!cenv e. expr_ok cenv e) /\
-  (!cenv ann bi args. builtin_sim_ok cenv ann bi args) /\
-  (!cenv ann tb t args. type_builtin_sim_ok cenv ann tb t args)
+  (!cenv e. expr_ok H cenv e) /\
+  (!cenv ann bi args. builtin_sim_ok H cenv ann bi args) /\
+  (!cenv ann tb t args. type_builtin_sim_ok H cenv ann tb t args)
 Proof
   mp_tac (BETA_RULE (Q.SPECL
-    [`\cenv ty e st. expr_ok cenv e`,
-     `\cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args`,
+    [`\cenv ty e st. expr_ok H cenv e`,
+     `\cenv ret_ty ty bi args st. builtin_sim_ok H cenv ret_ty bi args`,
      `\cenv vv_ty ty tb ret_ty args st.
-        type_builtin_sim_ok cenv vv_ty tb ret_ty args`] compile_expr_ind)) >>
+        type_builtin_sim_ok H cenv vv_ty tb ret_ty args`] compile_expr_ind)) >>
   impl_tac
   >- (rpt conj_tac >> rpt gen_tac >> strip_tac
       >- (irule compile_expr_case_sim >> rw[expr_sim_below_def] >>
@@ -190,14 +190,14 @@ QED
 
 Theorem compile_expr_sim:
   !ctx func cenv cx env ty e es.
-    expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
+    expr_sim_pre H cenv cx env e es ==> expr_sim H ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_sim_ok_def]
 QED
 
 Theorem compile_expr_vv_sim:
   !ctx func cenv cx env ty e es.
-    expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
+    expr_sim_pre H cenv cx env e es ==> expr_vv_sim H ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_vv_ok_def]
 QED

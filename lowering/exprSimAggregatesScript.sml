@@ -36,14 +36,14 @@
  * StructLit, MakeArray and empty(T) of a type that is not a word build
  * their value in a buffer of their own, an ALLOCA of type_memory_bytes
  * bytes, as exprSimLiteralBuffer's bytes literals do:
- *   - expr_sim_pre's alloc_limits_expr bounds the buffer below 2 ** 64, so
+ *   - expr_sim_pre H's alloc_limits_expr bounds the buffer below 2 ** 64, so
  *     the ALLOCA's literal size does not wrap, and stmt_state_rel's
  *     alloca_room keeps the buffer's end below 2 ** 256, so the stores at
  *     ADD buf off do not wrap either;
  *   - the buffer is a fresh allocation, disjoint from the live locals and
  *     every other allocation, so the stores keep stmt_state_rel and the
  *     memory expr_post's frame asks for;
- *   - expr_sim_inv's struct fields clauses make the lowering's layout the
+ *   - expr_sim_inv H's struct fields clauses make the lowering's layout the
  *     source's: type_memory_bytes is type_memory_size, and a struct's
  *     fields, from ce_struct_fields, are the declaration's in its order,
  *     which well_typed_expr makes the literal's (the StructLit case takes
@@ -74,7 +74,7 @@ Ancestors
 
 (* The allocation must be a generated ALLOCA, not merely a tracked map entry. *)
 Theorem aggregate_alloca_immutable_sep[local]:
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = venomInst$ALLOCA /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) ==>
   cenv.ce_is_ctor ==>
@@ -87,7 +87,7 @@ Theorem aggregate_alloca_immutable_sep[local]:
     regions_disjoint io (type_memory_size itv) b sz
 Proof
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
   simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
   qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
@@ -96,16 +96,16 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
-    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
+    exprs_case H nocalls ctx func cenv cx (MAP SND fields) ==>
+    expr_vv_case H nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
   drule struct_literal_lookup_types >> strip_tac >>
   drule struct_literal_evaluated_layout >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e (MAP SND fields) /\ expr_sim_inv H cenv cx env st ==>
+    expr_body_pre H cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_struct_field] >>
   `!e. MEM e (MAP SND fields) /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   Cases_on `eval_exprs cx (MAP SND fields) es` >>
@@ -140,7 +140,7 @@ Proof
   disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -182,8 +182,8 @@ QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt gen_tac >> Cases_on `topt`
   >- suspend "tuple" >> suspend "array"
@@ -193,9 +193,9 @@ Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv H cenv cx env st ==>
+    expr_body_pre H cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
@@ -229,7 +229,7 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
   (impl_tac >- (rpt strip_tac >> simp[] >>
     irule aggregate_alloca_immutable_sep >>
-    goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+    goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
     simp[venomInstTheory.mk_inst_def] >>
@@ -267,9 +267,9 @@ Resume compile_make_array_vv_case[array]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_array_literal_inv >> strip_tac >> gvs[] >>
   drule make_array_evaluated_layout >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-    expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `!e st. MEM e args /\ expr_sim_inv H cenv cx env st ==>
+    expr_body_pre H cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
     metis_tac[expr_body_pre_builtin_arg, int_calls_builtin_arg] >>
   `!e. MEM e args /\ nocalls ==> int_calls_expr e = []` by metis_tac[] >>
   `compatible_bound bnd (LENGTH args)` by
@@ -307,7 +307,7 @@ Resume compile_make_array_vv_case[array]:
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (irule aggregate_alloca_immutable_sep >>
-       goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
+       goal_assum (drule_at (Pat `stmt_state_rel H ctx _ _ _ _ _`)) >>
        qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
        goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
        simp[venomInstTheory.mk_inst_def] >>
@@ -366,19 +366,19 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
-    exprs_case nocalls ctx func cenv cx (MAP SND fields) ==>
-    expr_sim_case nocalls ctx func cenv cx (StructLit ann nsid fields) /\
-    expr_vv_case nocalls ctx func cenv cx (StructLit ann nsid fields)
+    exprs_case H nocalls ctx func cenv cx (MAP SND fields) ==>
+    expr_sim_case H nocalls ctx func cenv cx (StructLit ann nsid fields) /\
+    expr_vv_case H nocalls ctx func cenv cx (StructLit ann nsid fields)
 Proof
   metis_tac[compile_struct_lit_vv_case, expr_sim_case_of_vv]
 QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_sim_case H nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args) /\
-    expr_vv_case nocalls ctx func cenv cx
+    expr_vv_case H nocalls ctx func cenv cx
       (Builtin ann (MakeArray topt bnd) args)
 Proof
   metis_tac[compile_make_array_vv_case, expr_sim_case_of_vv]
@@ -386,8 +386,8 @@ QED
 
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
-    expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
-    expr_vv_ok cenv (StructLit ann nsid fields)
+    expr_sim_below H cenv (expr_size (StructLit ann nsid fields)) ==>
+    expr_vv_ok H cenv (StructLit ann nsid fields)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
   irule compile_struct_lit_vv_case >> irule exprs_case_every_ok >>
@@ -396,8 +396,8 @@ QED
 
 Theorem compile_make_array_sim:
   !cenv ann topt bnd args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
   irule compile_make_array_vv_case >> irule exprs_case_every_ok >>
@@ -463,7 +463,7 @@ QED
 (* empty(T) of a word type: the literal 0, no code. *)
 Theorem compile_empty_word_sim:
   !cenv ann t args.
-    is_word_type t ==> expr_sim_ok cenv (TypeBuiltin ann Empty t args)
+    is_word_type t ==> expr_sim_ok H cenv (TypeBuiltin ann Empty t args)
 Proof
   rw[expr_sim_ok_def, expr_sim_def] >>
   drule_all eval_expr_empty >> strip_tac >> gvs[] >>
@@ -479,11 +479,11 @@ QED
 
 Theorem compile_empty_word_case_sim:
   !cenv ann t args.
-    is_word_type t ==> expr_ok cenv (TypeBuiltin ann Empty t args)
+    is_word_type t ==> expr_ok H cenv (TypeBuiltin ann Empty t args)
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
-  >~ [`expr_sim_ok`] >- simp[compile_empty_word_sim] >>
+  >~ [`expr_sim_ok H`] >- simp[compile_empty_word_sim] >>
   rpt gen_tac >>
   simp[compile_expr_type_builtin_dispatch, Once compile_expr_def]
 QED
@@ -496,7 +496,7 @@ QED
    bytestring or dynamic array is empty, its length word 0. *)
 Theorem compile_empty_memory_sim:
   !cenv ann t args.
-    ~is_word_type t ==> expr_vv_ok cenv (TypeBuiltin ann Empty t args)
+    ~is_word_type t ==> expr_vv_ok H cenv (TypeBuiltin ann Empty t args)
 Proof
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
   reverse (Cases_on `res`)
@@ -518,7 +518,7 @@ Proof
   irule compile_builtin_empty_complex_frag >>
   reverse conj_tac >- (goal_assum (drule_at Any)) >>
   rpt strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_sim_pre_def] >>
+  `expr_sim_inv H cenv cx env es` by gvs[expr_sim_pre_def] >>
   `type_memory_bytes cenv ann < dimword (:256)` by
     (gvs[expr_sim_pre_def, alloc_limits_expr_def] >>
      simp[wordsTheory.dimword_def] >> decide_tac) >>
@@ -553,7 +553,7 @@ QED
 
 Theorem compile_empty_case:
   !nocalls ctx func cenv cx ann t args.
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Empty t args)
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann Empty t args)
 Proof
   rpt gen_tac >> irule expr_vv_case_nil >> conj_tac
   >- rw[expr_body_pre_def, well_typed_expr_def, well_typed_type_builtin_args_def,
@@ -594,7 +594,7 @@ QED
 Theorem compile_bound_builtin_word_sim:
   !cenv ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_sim_ok cenv (TypeBuiltin ann tb t args)
+    expr_sim_ok H cenv (TypeBuiltin ann tb t args)
 Proof
   rw[expr_sim_ok_def, expr_sim_def] >>
   drule eval_expr_bound_builtin >> disch_then drule >> simp[] >>
@@ -627,11 +627,11 @@ QED
 Theorem compile_bound_builtin_case_sim:
   !cenv ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_ok cenv (TypeBuiltin ann tb t args)
+    expr_ok H cenv (TypeBuiltin ann tb t args)
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
   >~ [`eval_expr`] >- metis_tac[eval_expr_type_builtin_value]
-  >~ [`expr_sim_ok`]
+  >~ [`expr_sim_ok H`]
   >- (irule compile_bound_builtin_word_sim >> first_assum ACCEPT_TAC) >>
   Cases_on `tb` >> gvs[] >> rpt gen_tac >>
   simp[compile_expr_type_builtin_dispatch, Once compile_expr_def] >>
@@ -641,7 +641,7 @@ QED
 Theorem compile_bound_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
     MEM tb [MaxValue; MinValue; Epsilon] ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
   rpt strip_tac >> irule expr_vv_case_nil >> conj_tac
   >- (qpat_x_assum `MEM _ _` mp_tac >>
@@ -655,24 +655,24 @@ QED
 
 Theorem compile_max_value_sim:
   !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann MaxValue t args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (TypeBuiltin ann MaxValue t args)
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
 
 Theorem compile_min_value_sim:
   !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann MinValue t args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (TypeBuiltin ann MinValue t args)
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
 
 Theorem compile_epsilon_sim:
   !cenv ann t args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (TypeBuiltin ann Epsilon t args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (TypeBuiltin ann Epsilon t args)
 Proof
   metis_tac[compile_bound_builtin_case_sim, expr_ok_def, listTheory.MEM]
 QED
@@ -682,17 +682,17 @@ QED
    of them the checker, the lowering and the semantics disagree (#548). *)
 Theorem compile_convert_other_case:
   !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args /\
+    exprs_case H nocalls ctx func cenv cx args /\
     ~(?e1. args = [e1] /\ int_convert_pair (expr_type e1) t) ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   cheat
 QED
 
 Theorem compile_convert_case:
   !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   rpt strip_tac >>
   Cases_on `?e1. args = [e1] /\ int_convert_pair (expr_type e1) t`
@@ -702,16 +702,16 @@ QED
 
 Theorem compile_abi_encode_case:
   !nocalls ctx func cenv cx ann ensure mid t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann (AbiEncode ensure mid) t args)
 Proof
   cheat
 QED
 
 Theorem compile_abi_decode_case:
   !nocalls ctx func cenv cx ann unwrap t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann (AbiDecode unwrap) t args)
 Proof
   cheat
 QED

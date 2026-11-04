@@ -37,6 +37,12 @@ Proof
   simp[log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
+Theorem storage_trace_frame_logs[local]:
+  st' = st with storage_trace := observations ==> st'.logs = st.logs
+Proof
+  disch_then (mp_tac o Q.AP_TERM `\s:evaluation_state. s.logs`) >> simp[]
+QED
+
 Theorem return_log_extends[local]:
   return x st = (res,st') ==> log_extends st st'
 Proof
@@ -352,7 +358,7 @@ Theorem set_global_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `set_global _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperStateTheory.set_global_def, vyperStateTheory.bind_def,
+  simp[Once vyperStateTheory.set_global_def, ignore_bind_def, record_storage_event_def, vyperStateTheory.bind_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
@@ -363,7 +369,8 @@ Proof
       AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac lift_option_type_state >> gvs[] >>
-  imp_res_tac write_storage_slot_logs >> gvs[]
+  imp_res_tac write_storage_slot_logs >>
+  gvs[record_storage_event_def, vyperStateTheory.return_def]
 QED
 
 Theorem append_place_logs[local]:
@@ -432,7 +439,10 @@ Proof
   rpt strip_tac >>
   gvs[vyperStateTheory.bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  imp_res_tac select_result_state >> gvs[log_extends_refl]
+  imp_res_tac select_result_state >> gvs[log_extends_refl] >>
+  qpat_x_assum `st' = _`
+    (mp_tac o Q.AP_TERM `\s:evaluation_state. s.logs`) >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 Theorem new_variable_logs[local]:
   new_variable id tv v st = (res,st') ==> st'.logs = st.logs
@@ -874,8 +884,9 @@ QED
 Theorem lookup_global_log_extends[local]:
   lookup_global cx src id st = (res,st') ==> log_extends st st'
 Proof
-  strip_tac >> imp_res_tac lookup_global_state >>
-  gvs[log_extends_refl]
+  strip_tac >> drule lookup_global_state >>
+  disch_then (mp_tac o Q.AP_TERM `\s:evaluation_state. s.logs`) >>
+  simp[log_extends_def, rich_listTheory.IS_PREFIX_REFL]
 QED
 
 Theorem lookup_flag_mem_log_extends[local]:
@@ -964,7 +975,9 @@ Proof
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      record_storage_backend_def, record_storage_event_def,
+      vyperStateTheory.return_def]
 QED
 
 Theorem case_expr_send_logs[local]:
@@ -1038,7 +1051,7 @@ Proof
     `lookup_storage (n2w slot)
        (vfmExecution$lookup_transient_storage addr st.tStorage) = 1w` >>
   Cases_on `is_view` >>
-  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
@@ -1051,7 +1064,7 @@ Theorem release_nonreentrant_lock_log_extends[local]:
   release_nonreentrant_lock addr slot st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[vyperInterpreterTheory.release_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
        vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def] >>
@@ -1591,6 +1604,15 @@ Proof
        rich_listTheory.IS_PREFIX_REFL]
 QED
 
+Theorem log_monad_storage_observations[local]:
+  log_monad (record_storage_event observation) /\
+  log_monad record_storage_backend
+Proof
+  simp[log_monad_def, record_storage_backend_def, record_storage_event_def,
+       vyperStateTheory.return_def, log_extends_def,
+       rich_listTheory.IS_PREFIX_REFL]
+QED
+
 (* Index primitive leaves once; never traverse their continuations or the
    large guarded IHs just to recognise a primitive computation. *)
 val EXTCALL_LOG_MONAD_LEAF_TAC =
@@ -1600,7 +1622,8 @@ val EXTCALL_LOG_MONAD_LEAF_TAC =
        MATCH_MP_TAC log_monad_bind_guarded >> conj_tac) Net.empty
     val leaves = List.foldl (fn (th,net) =>
       Net.insert (concl th, MATCH_ACCEPT_TAC th) net) structural
-      (log_monad_take :: CONJUNCTS log_monad_primitives)
+      (log_monad_take :: CONJUNCTS log_monad_storage_observations @
+       CONJUNCTS log_monad_primitives)
   in
     fn (asl,w) => FIRST (Net.match w leaves) (asl,w)
   end;
@@ -1724,7 +1747,9 @@ Proof
        vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
        COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
   strip_tac >>
-  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND]
+  gvs[AllCaseEqs(), log_extends_def, rich_listTheory.IS_PREFIX_APPEND,
+      record_storage_backend_def, record_storage_event_def,
+      vyperStateTheory.return_def]
 QED
 
 Theorem case_expr_raw_call_logs[local]:
@@ -1802,7 +1827,10 @@ Proof
        vyperStateTheory.return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac select_result_state >> gvs[log_extends_refl] >>
-  first_x_assum drule >> simp[]
+  qpat_x_assum `st' = _`
+    (assume_tac o SIMP_RULE (srw_ss()) [] o
+      Q.AP_TERM `\s:evaluation_state. s.logs`) >>
+  first_x_assum drule >> simp[log_extends_def]
 QED
 
 Theorem case_expr_type_builtin_logs[local]:
@@ -1998,6 +2026,7 @@ val PLACE_LOG_CASE_TAC =
   imp_res_tac read_place_state >> imp_res_tac read_result_state >>
   imp_res_tac place_type_value_state >> imp_res_tac get_place_state >>
   imp_res_tac lookup_global_state >> imp_res_tac extend_place_state >>
+  imp_res_tac storage_trace_frame_logs >>
   imp_res_tac read_result_state >>
   imp_res_tac read_result_state >> gvs[log_extends_refl] >>
   imp_res_tac write_place_logs >>
@@ -2304,14 +2333,16 @@ QED
 Theorem evaluate_all_constants_logs:
   evaluate_all_constants cx am addr mods = SOME am' ==> am'.logs = am.logs
 Proof
-  simp[vyperInterpreterTheory.evaluate_all_constants_def] >>
+  simp[vyperInterpreterTheory.evaluate_all_constants_def,
+       vyperInterpreterTheory.evaluate_module_constants_def] >>
   qid_spec_tac `am` >>
   qspec_tac (`constants_order mods`, `mods`) >> Induct >-
-    simp[vyperInterpreterTheory.evaluate_module_constants_def] >>
+    simp[vyperInterpreterTheory.evaluate_module_constants_trace_def] >>
   gen_tac >> PairCases_on `h` >> gen_tac >>
-  simp[vyperInterpreterTheory.evaluate_module_constants_def, AllCaseEqs()] >>
-  rpt strip_tac >>
-  first_x_assum drule >>
+  simp[Once vyperInterpreterTheory.evaluate_module_constants_trace_def] >>
+  pairarg_tac >> Cases_on `result` >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  first_x_assum (qspec_then `merge_constants addr h0 x am` mp_tac) >>
   simp[merge_constants_logs]
 QED
 
@@ -2321,7 +2352,7 @@ Theorem acquire_nonreentrant_lock_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
@@ -2339,7 +2370,7 @@ Theorem release_nonreentrant_lock_logs[local]:
 Proof
   rpt strip_tac >>
   qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
-  simp[vyperInterpreterTheory.release_nonreentrant_lock_def,
+  simp[vyperInterpreterTheory.release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
        vyperStateTheory.bind_def, vyperStateTheory.get_transient_storage_def,
        vyperStateTheory.update_transient_def, vyperStateTheory.return_def,
        AllCaseEqs()] >>
@@ -2420,46 +2451,74 @@ Proof
   imp_res_tac eval_stmts_log_extends >>
   metis_tac[log_extends_eq_logs, log_extends_trans]
 QED
+Theorem evaluate_module_constants_trace_logs[local]:
+  evaluate_module_constants_trace cx am addr (constants_order mods) =
+    (SOME am_c,obs) ==> am_c.logs = am.logs
+Proof
+  strip_tac >>
+  irule evaluate_all_constants_logs >>
+  qexistsl [`addr`,`cx`,`mods`] >>
+  simp[vyperInterpreterTheory.evaluate_all_constants_def,
+       vyperInterpreterTheory.evaluate_module_constants_def]
+QED
+
+Theorem call_external_function_trace_success_log_extends[local]:
+  call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (INL v,am',rqs,observations) ==> machine_log_extends am am'
+Proof
+  simp[Once vyperInterpreterTheory.call_external_function_trace_def] >>
+  IF_CASES_TAC >> simp[] >>
+  pairarg_tac >> Cases_on `defaults` >> simp[] >>
+  PairCases_on `x` >> simp[] >>
+  rename1 `vals ++ dflt_vs` >>
+  Cases_on `bind_arguments (type_env_all_modules all_mods) args (vals ++ dflt_vs)` >> simp[] >>
+  pairarg_tac >> Cases_on `constants` >> simp[] >>
+  rename1 `initial_state am_c [env]` >>
+  `am_c.logs = am.logs` by
+    (Cases_on `cx.in_deploy` >> gvs[] >>
+     drule evaluate_module_constants_trace_logs >> simp[]) >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  qmatch_asmsub_abbrev_tac `(do lock; send_call_value mut cx; eval_stmts cx body od) st0` >>
+  Cases_on `(do lock; send_call_value mut cx; eval_stmts cx body od) st0` >>
+  `log_extends st0 r` by
+    (drule call_body_pipeline_log_extends >>
+     disch_then irule >> simp[Abbr `lock`] >>
+     metis_tac[entry_lock_action_logs]) >>
+  Cases_on `q` >> gvs[]
+  >- suspend "normal" >>
+  Cases_on `y` >> gvs[] >>
+  suspend "return"
+QED
+
+Resume call_external_function_trace_success_log_extends[normal]:
+  qmatch_asmsub_abbrev_tac `(if nr /\ mut <> View /\ mut <> Pure then act else return ()) r` >>
+  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then act else return ()) r` >>
+  Cases_on `q` >> gvs[] >>
+  gvs[Abbr `act`] >>
+  drule external_unlock_action_logs >> strip_tac >>
+  gvs[machine_log_extends_def, log_extends_def, Abbr `st0`]
+QED
+
+Resume call_external_function_trace_success_log_extends[return]:
+  qmatch_asmsub_abbrev_tac `(if nr /\ mut <> View /\ mut <> Pure then act else return ()) r` >>
+  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then act else return ()) r` >>
+  Cases_on `q` >> gvs[] >>
+  Cases_on `evaluate_type (type_env_all_modules all_mods) ret` >> gvs[] >>
+  Cases_on `safe_cast x v'` >> gvs[] >>
+  gvs[Abbr `act`] >>
+  drule external_unlock_action_logs >> strip_tac >>
+  gvs[machine_log_extends_def, log_extends_def, Abbr `st0`]
+QED
+
+Finalise call_external_function_trace_success_log_extends
+
 Theorem call_external_function_success_log_extends:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
     (INL v,am',rqs) ==>
   machine_log_extends am am'
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_function_def,
-       AllCaseEqs()] >>
-  rpt strip_tac >>
-  Cases_on `(do
-               if nr then
-                 case cx.nonreentrant_slot of
-                   NONE => raise (Error (TypeError "nonreentrant slot missing"))
-                 | SOME slot =>
-                     acquire_nonreentrant_lock cx.txn.target slot
-                       (mut = View \/ mut = Pure)
-               else return ();
-               send_call_value mut cx;
-               eval_stmts cx body
-             od) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>)` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  Cases_on `(if nr /\ mut <> View /\ mut <> Pure then
-               case cx.nonreentrant_slot of
-                 NONE => return ()
-               | SOME slot =>
-                   release_nonreentrant_lock cx.txn.target slot
-             else return ()) r` >>
-  Cases_on `q` >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `y` >> gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `evaluate_type (type_env_all_modules all_mods) ret` >>
-       gvs[AllCaseEqs()]) >>
-  TRY (Cases_on `safe_cast x v'` >> gvs[AllCaseEqs()]) >>
-  drule call_body_pipeline_log_extends >>
-  (impl_tac >-
-     (rpt strip_tac >> imp_res_tac entry_lock_action_logs)) >>
-  strip_tac >>
-  imp_res_tac external_unlock_action_logs >>
-  imp_res_tac evaluate_all_constants_logs >>
-  gvs[machine_log_extends_def, log_extends_def]
+  simp[vyperInterpreterTheory.call_external_function_def, AllCaseEqs()] >>
+  metis_tac[call_external_function_trace_success_log_extends]
 QED
 
 Theorem call_external_success_log_extends:
@@ -2467,9 +2526,10 @@ Theorem call_external_success_log_extends:
 Proof
   rpt strip_tac >>
   qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-  simp[Once vyperInterpreterTheory.call_external_def, AllCaseEqs()] >>
+  simp[Once vyperInterpreterTheory.call_external_def,
+       Once vyperInterpreterTheory.call_external_trace_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
-  imp_res_tac call_external_function_success_log_extends >>
+  imp_res_tac call_external_function_trace_success_log_extends >>
   gvs[machine_log_extends_def, vyperInterpreterTheory.finalize_pending_deletions_def]
 QED
 
@@ -2550,6 +2610,8 @@ Theorem Send_outcome_log_extends:
   od) st = (res,st') ==> log_extends st st'
 Proof
   strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  `!s t observations. log_extends s t ==>
+     log_extends s (t with storage_trace := observations)` by simp[log_extends_def] >>
   drule_all (Send_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
 QED
 
@@ -2567,5 +2629,7 @@ Theorem ExtCall_outcome_log_extends:
   od) st = (res,st') ==> log_extends st st'
 Proof
   rpt strip_tac >> strip_assume_tac log_extends_outcome_rules >>
+  `!s t observations. log_extends s t ==>
+     log_extends s (t with storage_trace := observations)` by simp[log_extends_def] >>
   drule_all (ExtCall_outcome_transport |> Q.INST [`R` |-> `log_extends`]) >> simp[]
 QED

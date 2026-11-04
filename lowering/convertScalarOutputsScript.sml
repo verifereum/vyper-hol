@@ -47,7 +47,7 @@ QED
 Theorem scalar_int_bytes_result_frag:
   !ctx func cenv cx sg bits m i es0.
     bits <= 8*m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToBytesM sg bits m))
       (i2w i) (BaseT (BytesT (Fixed m)))
       (convert_result cx (BaseT (if sg then IntT bits else UintT bits))
@@ -65,7 +65,7 @@ QED
 Theorem scalar_address_bytes_result_frag:
   !ctx func cenv cx bs m es0.
     LENGTH bs = 20 /\ 20 <= m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToBytesM F 160 m))
       (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
       (BaseT (BytesT (Fixed m)))
@@ -84,7 +84,7 @@ QED
 
 Theorem scalar_flag_bytes_result_frag:
   !ctx func cenv cx nsid k m es0.
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToBytesM F 256 32))
       (typed_val_to_w256 (FlagTV k) (FlagV m))
       (BaseT (BytesT (Fixed 32)))
@@ -106,7 +106,7 @@ QED
 Theorem scalar_address_uint_result_frag:
   !ctx func cenv cx bs b es0.
     LENGTH bs = 20 /\ 0 < b /\ b <= 256 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToInt F 160 F b))
       (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))
       (BaseT (UintT b))
@@ -196,7 +196,7 @@ QED
 Theorem scalar_int_address_result_frag:
   !ctx func cenv cx src i es0.
     -&(2**255) <= i /\ i < &(2**256) ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x ConvToAddress)
       (i2w i) (BaseT AddressT)
       (convert_result cx src (BaseT AddressT) (IntV i)) es0

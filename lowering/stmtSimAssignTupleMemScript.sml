@@ -77,8 +77,8 @@ Theorem compile_assign_tuple_locals_memory_stmt_frag:
          ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
               evaluate_type (get_tenv cx) vt = SOME entry.type /\
               value_has_type entry.type (EL i vs)) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    expr_sim H ctx func cenv cx (TupleT tys) e es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
       es res es'

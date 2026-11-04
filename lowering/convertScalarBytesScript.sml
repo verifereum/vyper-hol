@@ -6,7 +6,7 @@ Ancestors
 
 Theorem scalar_bytes_bool_frag:
   !ctx func cenv cx m bs es0. LENGTH bs <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x ConvToBool)
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT BoolT) (INL (BoolV (EXISTS (\b. b <> 0w) bs))) es0
@@ -23,7 +23,7 @@ QED
 
 Theorem scalar_bytes_widen_frag:
   !ctx func cenv cx m n bs es0. m <= n /\ n <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesMToBytesM m n))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (BytesT (Fixed n))) (INL (BytesV (PAD_RIGHT 0w n bs))) es0
@@ -40,7 +40,7 @@ QED
 Theorem scalar_bytes_bool_result_frag:
   !ctx func cenv cx m bs es0.
     LENGTH bs = m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x ConvToBool)
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT BoolT)
@@ -55,7 +55,7 @@ QED
 Theorem scalar_bytes_widen_result_frag:
   !ctx func cenv cx m n bs es0.
     LENGTH bs = m /\ m <= n /\ n <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesMToBytesM m n))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (BytesT (Fixed n)))
@@ -71,7 +71,7 @@ QED
 Theorem scalar_bytes_uint_result_frag:
   !ctx func cenv cx m b bs es0.
     LENGTH bs = m /\ m <= 32 /\ 0 < b /\ b <= 256 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesToInt m F b))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (UintT b))
@@ -98,7 +98,7 @@ QED
 Theorem scalar_bytes_int_result_frag:
   !ctx func cenv cx m b bs es0.
     LENGTH bs = m /\ 0 < m /\ m <= 32 /\ 1 < b /\ b <= 256 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesToInt m T b))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (IntT b))
@@ -135,7 +135,7 @@ QED
 Theorem scalar_bytes_address_result_frag:
   !ctx func cenv cx m bs es0.
     LENGTH bs = m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesToAddress m))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT AddressT)
@@ -161,7 +161,7 @@ Theorem scalar_bytes_integer_result_frag:
   !ctx func cenv cx sg m b bs es0.
     LENGTH bs = m /\ m <= 32 /\ 0 < b /\ b <= 256 /\
     (sg ==> 1 < b /\ 0 < m) ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesToInt m sg b))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (if sg then IntT b else UintT b))
@@ -176,7 +176,7 @@ QED
 Theorem scalar_bytes_decimal_result_frag:
   !ctx func cenv cx m divisor bs es0.
     LENGTH bs = m /\ 0 < m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (ConvBytesMToDecimal m divisor (-&(2**167)) (&(2**167)-1)))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
@@ -204,7 +204,7 @@ QED
 Theorem scalar_bytes_narrow_result_frag:
   !ctx func cenv cx m n bs es0.
     LENGTH bs = m /\ n < m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesMToBytesM m n))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (BytesT (Fixed n)))
@@ -230,7 +230,7 @@ QED
 Theorem scalar_bytes_fixed_result_frag:
   !ctx func cenv cx m n bs es0.
     LENGTH bs = m /\ m <= 32 /\ n <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesMToBytesM m n))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
       (BaseT (BytesT (Fixed n)))

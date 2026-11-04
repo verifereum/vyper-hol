@@ -62,7 +62,7 @@ End
 
 Theorem vv_holds_reason_vv[local]:
   !cenv cx t tv vv es s op.
-    vv_holds cenv cx t tv vv es s /\ reason_vv vv = SOME op ==>
+    vv_holds H cenv cx t tv vv es s /\ reason_vv vv = SOME op ==>
     ?w. eval_operand op s = SOME w
 Proof
   Cases_on `vv` >> rw[vv_holds_def, reason_vv_def] >>
@@ -109,20 +109,20 @@ Theorem reason_expr_revert_frag_general:
   !ctx func cenv cx r es res1 es1 sa vv sm sb s0 R P.
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
     cs_extends sm sb /\
-    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    expr_vv_sim H ctx func cenv cx (expr_type r) r es /\
     eval_expr cx r es = (res1, es1) /\ expr_vv_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\
-    (!tv s. vv_holds cenv cx (expr_type r) tv vv es1 s ==> P s) /\
+    (!tv s. vv_holds H cenv cx (expr_type r) tv vv es1 s ==> P s) /\
     frag_exec ctx sm sb P (\s. F) R ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
       (\s. F) R
 Proof
   rpt gen_tac >> strip_tac >>
   drule compile_expr_extends >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `res1`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -139,13 +139,13 @@ Theorem reason_expr_revert_frag:
     compile_expr cenv (expr_type r) r sa = (vv, sm) /\
     compile_revert_with_reason cenv vv rty msz sm = ((), sb) /\
     reason_vv_ok vv /\
-    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    expr_vv_sim H ctx func cenv cx (expr_type r) r es /\
     (do raw <- eval_expr cx r; read_result cx raw od) es = (res1, es1) /\
     expr_res_ok res1 /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     (!rr. expr_exit res1 rr ==> R rr) /\ (!t. R (Abort Revert_abort t)) ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
       (\s. F) R
 Proof
   rpt gen_tac >> strip_tac >> gvs[reason_vv_ok_def] >>
@@ -172,7 +172,7 @@ Proof
      qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
      simp[bind_def] >> strip_tac >> gvs[] >>
      metis_tac[expr_exit_exception_transport]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `raw`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -261,10 +261,10 @@ Theorem compile_raise_reason_frag:
   !ctx func cx lctx RetQ cenv ty r es res es'.
     eval_stmt cx (Raise (RaiseReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
-    expr_vv_sim ctx func cenv cx (expr_type r) r es /\
+    expr_vv_sim H ctx func cenv cx (expr_type r) r es /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_vv_ok vv) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Raise (RaiseReason r))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -317,13 +317,13 @@ Theorem compile_assert_reason_frag:
     eval_stmt cx (Assert e (AssertReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
-    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) e es /\
     (!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
              (INL (BoolV F), es1) ==>
-           expr_vv_sim ctx func cenv cx (expr_type r) r es1) /\
+           expr_vv_sim H ctx func cenv cx (expr_type r) r es1) /\
     (!sa vv sb. compile_expr cenv (expr_type r) r sa = (vv, sb) ==>
                 reason_vv_ok vv) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assert e (AssertReason r))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -396,7 +396,7 @@ Resume compile_assert_reason_frag[control]:
    s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
   drule_all cond_jump_frag >> strip_tac
   >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
-      >- (disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
+      >- (disj1_tac >> rename1 `stmt_state_rel H ctx func cenv cx es' sv` >>
           qexists_tac `jump_to s7.cs_current_bb sv` >>
           gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
               block_is_terminated_def] >>
@@ -408,7 +408,7 @@ Resume compile_assert_reason_frag[control]:
 QED
 
 Resume compile_assert_reason_frag[abort]:
-  disj2_tac >> rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
+  disj2_tac >> rename1 `stmt_state_rel H ctx func cenv cx es1 sv` >>
   `eval_stmt cx (Raise (RaiseReason r)) es1 = (res, es')` by
     (first_x_assum irule >> simp[]) >>
   drule_all eval_raise_reason_cases >> disch_then (qx_choose_then `rr` assume_tac) >>
@@ -439,7 +439,7 @@ Theorem compile_assert_reason_frag_general:
     eval_stmt cx (Assert e (AssertReason r)) es = (res, es') /\
     (!ml str. r <> Literal (BaseT (StringT ml)) (StringL str)) /\
     expr_type e = BaseT BoolT /\
-    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) e es /\
     (!es1 sa vv sm sb s0.
        (do raw <- eval_expr cx e; read_result cx raw od) es =
          (INL (BoolV F), es1) /\
@@ -448,9 +448,9 @@ Theorem compile_assert_reason_frag_general:
          (type_memory_bytes cenv (expr_type r)) sm = ((), sb) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\ stmt_res_ok lctx res ==>
-       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es1 s)
+       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es1 s)
          (\s. F) (stmt_exit RetQ es' res)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assert e (AssertReason r))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -518,7 +518,7 @@ Resume compile_assert_reason_frag_general[control]:
    s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
   drule_all cond_jump_frag >> strip_tac
   >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
-      >- (disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
+      >- (disj1_tac >> rename1 `stmt_state_rel H ctx func cenv cx es' sv` >>
           qexists_tac `jump_to s7.cs_current_bb sv` >>
           gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
               block_is_terminated_def] >>
@@ -530,9 +530,9 @@ Resume compile_assert_reason_frag_general[control]:
 QED
 
 Resume compile_assert_reason_frag_general[abort]:
-  disj2_tac >> rename1 `stmt_state_rel ctx func cenv cx es1 sv` >>
+  disj2_tac >> rename1 `stmt_state_rel H ctx func cenv cx es1 sv` >>
   `frag_exec ctx s5 s6
-     (\s. s = jump_to s5.cs_current_bb sv /\ stmt_state_rel ctx func cenv cx es1 s)
+     (\s. s = jump_to s5.cs_current_bb sv /\ stmt_state_rel H ctx func cenv cx es1 s)
      (\s. F) (stmt_exit RetQ es' res)` by
     (first_x_assum irule >> simp[] >> metis_tac[]) >>
   qpat_x_assum `frag_exec _ s5 s6 _ _ _`

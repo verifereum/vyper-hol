@@ -604,17 +604,17 @@ QED
 
 Theorem copied_storage_live_memory:
   !cx tr st rt w tv dst mem.
-    storage_read_live cx tr st w tv /\
-    storage_agree (storage_dead cx tr st) st rt /\
+    storage_read_live H cx tr st w tv /\
+    storage_agree (storage_dead_on H tr st) st rt /\
     (!i. i < type_slot_size tv ==>
       mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
     storage_live_memory st (w2n w) tv dst mem
 Proof
   rpt gen_tac >> strip_tac >>
   simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
-  `~storage_dead cx tr st (w2n (w + n2w i)) b` by
+  `~storage_dead_on H tr st (w2n (w + n2w i)) b` by
     (strip_tac >>
-     qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+     qpat_x_assum `storage_read_live H _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[storage_read_live_def] >>
      disch_then drule >> strip_tac >>
      `w2n w + i < dimword (:256)` by decide_tac >>
@@ -634,8 +634,8 @@ Theorem copied_storage_decode_in_memory:
   !cx tr st rt w tv v dst mem.
     well_formed_type_value tv /\ slots_in_range st (w2n w) tv /\
     decode_value st (w2n w) tv = SOME v /\
-    storage_read_live cx tr st w tv /\
-    storage_agree (storage_dead cx tr st) st rt /\
+    storage_read_live H cx tr st w tv /\
+    storage_agree (storage_dead_on H tr st) st rt /\
     (!i. i < type_slot_size tv ==>
       mem_word_at (dst + 32 * i) mem = lookup_storage (w + n2w i) rt) ==>
     val_in_memory tv v dst mem

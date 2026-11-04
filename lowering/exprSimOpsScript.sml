@@ -74,7 +74,7 @@ End
    type holds its value in the typed encoding typed_val_to_w256, which for
    a bytes20 differs from val_to_w256 (compile_bop_typed_sim). *)
 Definition binop_frag_words_def:
-  binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+  binop_frag_words H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
     !sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
@@ -83,11 +83,11 @@ Definition binop_frag_words_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es0 s /\
              eval_operand x s = SOME w1 /\ eval_operand y s = SOME w2)
         (\s. ?v. bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
-                 stmt_state_rel ctx func cenv cx es0 s /\
+                 stmt_state_rel H ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -100,8 +100,8 @@ End
 (* binop_frag_words with the operands held in val_to_w256 of their values,
    as word_values are (compile_bop_sim). *)
 Definition binop_frag_def:
-  binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
-    binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2
+  binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
+    binop_frag_words H ctx func cenv cx bop ty ann bl el tys v1 v2
       (val_to_w256 v1) (val_to_w256 v2) es0
 End
 
@@ -173,7 +173,7 @@ Theorem binop_frag_straight:
             eval_operand y ss = SOME (val_to_w256 v2) ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
@@ -329,9 +329,9 @@ QED
 (* The end of an operator's fragment from the ends of its operands'. *)
 Theorem expr_post_bop:
   !func cenv cx ann bop e1 e2 es es1 es' sa s1 s2 sb s0 t u ss x y op v1 v2 v ctx.
-    expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-    expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
-    stmt_state_rel ctx func cenv cx es' ss /\
+    expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+    expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+    stmt_state_rel H ctx func cenv cx es' ss /\
     eval_operand op ss = SOME (val_to_w256 v) /\ word_value v /\
     (!z w. not_fresh_at s2 z /\ lookup_var z u = SOME w ==>
            lookup_var z ss = SOME w) /\
@@ -339,11 +339,11 @@ Theorem expr_post_bop:
              FLOOKUP ss.vs_allocas aid = SOME b) /\
     ss.vs_memory = u.vs_memory /\
     is_word_type ann /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
     sa.cs_next_id <= s1.cs_next_id ==>
-    expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
+    expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) es sa sb s0 es'
       v op ss
 Proof
   rpt gen_tac >> simp[expr_post_def] >> strip_tac >>
@@ -412,21 +412,21 @@ Theorem compile_bop_typed_sim:
          (if bop = Exp then expr_int_literal e1 else NONE)
          (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    expr_sim ctx func cenv cx (expr_type e1) e1 es /\
+    expr_sim H ctx func cenv cx (expr_type e1) e1 es /\
     (!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = (INL v1, es1) ==>
-       expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
+       expr_sim H ctx func cenv cx (expr_type e1) e2 es1 /\
        !v2 es2. (do result <- eval_expr cx e2; read_result cx result od) es1 = (INL v2, es2) ==>
-         binop_frag_words ctx func cenv cx bop (expr_type e1) ann
+         binop_frag_words H ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2
            (typed_val_to_w256 tv1 v1) (typed_val_to_w256 tv2 v2) es2) ==>
-    expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+    expr_sim H ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_sim_def] >> rpt gen_tac >> strip_tac >>
   (* only a start state related at es is of interest *)
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
+  reverse (Cases_on `stmt_state_rel H ctx func cenv cx es s0`)
   >- (`frag_exec ctx sa sb (\s. F) (\s. F) (\r. F)` by
         simp[frag_exec_false_pre] >>
       pop_assum (fn th => irule (MATCH_MP frag_exec_weaken th)) >>
@@ -445,32 +445,32 @@ Proof
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   drule eval_expr_bop_cases >> strip_tac
   >- ((* e1 raises *)
-      qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+      qpat_x_assum `expr_sim H _ _ _ _ _ e1 _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`sa`, `s1`, `x`, `INR exc`, `es'`, `s0`]
                     mp_tac) >>
       (impl_tac >- gvs[]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s`,
                                `\s. F`, `expr_exit res`] mp_tac) >>
       (impl_tac >- gvs[]) >> strip_tac >>
       irule frag_exec_exit_prefix >> qexists_tac `s1` >> simp[])
   >- ((* e2 raises *)
       qpat_x_assum `!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = _ ==> _` drule >>
       strip_tac >>
-      qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+      qpat_x_assum `expr_sim H _ _ _ _ _ e1 _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es1`,
                                `s0`] mp_tac) >>
       (impl_tac >- simp[expr_res_ok_def]) >>
       disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+      disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s`,
                                `expr_exit res`] mp_tac) >>
       (impl_tac >- simp[]) >>
       disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
       asm_rewrite_tac[] >> rpt strip_tac >> fs[expr_post_def] >>
       irule frag_exec_exit_prefix >> qexists_tac `s2` >> asm_rewrite_tac[] >>
-      qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
+      qpat_x_assum `expr_sim H _ _ _ _ _ e2 _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`s1`, `s2`, `y`, `INR exc`, `es'`, `t`]
                     mp_tac) >>
@@ -488,23 +488,23 @@ Proof
      simp[bind_def, AllCaseEqs()] >> strip_tac >>
      imp_res_tac read_result_state >> gvs[] >>
      metis_tac[eval_expr_preserves_scopes_dom]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+  qpat_x_assum `expr_sim H _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `x`, `INL v1`, `es1`, `s0`]
                 mp_tac) >>
   (impl_tac >- simp[expr_res_ok_def]) >>
   disch_then (mp_tac o MATCH_MP frag_exec_pre_exit_c) >>
-  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
+  disch_then (qspecl_then [`\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s`,
                            `expr_exit res`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
-  `stmt_state_rel ctx func cenv cx es1 t /\
+  rename1 `expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
+  `stmt_state_rel H ctx func cenv cx es1 t /\
    eval_operand x t = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> irule expr_val_rel_typed >> metis_tac[]) >>
   (* the right operand, from t *)
-  qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
+  qpat_x_assum `expr_sim H _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`s1`, `s2`, `y`, `INL v2`, `es'`, `t`]
                 mp_tac) >>
@@ -516,15 +516,15 @@ Proof
   (impl_tac >- simp[]) >>
   disch_then (fn th => irule (MATCH_MP frag_exec_then th)) >>
   asm_rewrite_tac[] >> rpt strip_tac >> fs[] >>
-  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
-  `stmt_state_rel ctx func cenv cx es' u /\
+  rename1 `expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u` >>
+  `stmt_state_rel H ctx func cenv cx es' u /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
    eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
     (fs[expr_post_def] >> conj_tac
      >- (irule expr_val_rel_typed >> metis_tac[]) >>
      irule eval_operand_frame >> metis_tac[]) >>
   (* the operator, from u *)
-  qpat_x_assum `binop_frag_words _ _ _ _ _ _ _ _ _ tys _ _ _ _ _`
+  qpat_x_assum `binop_frag_words H _ _ _ _ _ _ _ _ _ tys _ _ _ _ _`
     (mp_tac o REWRITE_RULE [binop_frag_words_def]) >>
   disch_then (qspecl_then [`s2`, `sb`, `x`, `y`, `op`, `u`] mp_tac) >>
   (impl_tac >- (gvs[] >> metis_tac[not_fresh_at_mono])) >>
@@ -558,17 +558,17 @@ Theorem compile_bop_sim:
          (if bop = Exp then expr_int_literal e1 else NONE)
          (if bop = Exp then expr_int_literal e2 else NONE) sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    expr_sim ctx func cenv cx (expr_type e1) e1 es /\
+    expr_sim H ctx func cenv cx (expr_type e1) e1 es /\
     (!v1 es1. (do result <- eval_expr cx e1; read_result cx result od) es = (INL v1, es1) ==>
        word_value v1 /\
-       expr_sim ctx func cenv cx (expr_type e1) e2 es1 /\
+       expr_sim H ctx func cenv cx (expr_type e1) e2 es1 /\
        !v2 es2. (do result <- eval_expr cx e2; read_result cx result od) es1 = (INL v2, es2) ==>
          word_value v2 /\
-         binop_frag ctx func cenv cx bop (expr_type e1) ann
+         binop_frag H ctx func cenv cx bop (expr_type e1) ann
            (if bop = Exp then expr_int_literal e1 else NONE)
            (if bop = Exp then expr_int_literal e2 else NONE)
            [expr_type e1; expr_type e2] v1 v2 es2) ==>
-    expr_sim ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
+    expr_sim H ctx func cenv cx ty (Builtin ann (Bop bop) [e1; e2]) es
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qpat_x_assum `IS_SOME (evaluate_type _ (expr_type e1))`
@@ -661,7 +661,7 @@ Theorem compile_bitwise_sim:
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
        within_int_bound
          (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) ==>
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>
@@ -779,7 +779,7 @@ Theorem compile_flag_in_sim:
     (bop = In \/ bop = NotIn) /\
     value_has_type (FlagTV m) v1 /\ value_has_type (FlagTV m) v2 /\
     m <= 256 ==>
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   qspecl_then [`cx`, `ann`, `bop`, `m`, `v1`, `v2`, `es0`] mp_tac
@@ -852,7 +852,7 @@ Theorem compile_shift_sim:
       SOME (if is_signed_type ty then Signed 256 else Unsigned 256) /\
     within_int_bound (if is_signed_type ty then Signed 256 else Unsigned 256)
       i1 ==>
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> simp[binop_frag_def, binop_frag_words_def] >> rpt gen_tac >>
   strip_tac >>

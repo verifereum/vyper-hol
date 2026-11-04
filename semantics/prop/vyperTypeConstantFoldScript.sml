@@ -113,7 +113,7 @@ Proof
   `read_place cx (ImmutablePlace src id path) st = (INL v,st)` by
     gvs[read_result_def] >>
   conj_tac
-  >- simp[select_result_def, extend_place_def, bind_def, ignore_bind_def,
+  >- simp[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
           lift_sum_def, return_def, extend_memory_place_def] >>
   `well_formed_type_value etv` by
     metis_tac[evaluate_type_well_formed_type_value] >>
@@ -180,7 +180,7 @@ Proof
          bind_def, lift_option_type_def, lift_sum_def, return_def,
          option_CASE_rator, sum_CASE_rator, raise_def, AllCaseEqs()] >>
   gvs[eval_result_typed_def, runtime_place_typed_def] >>
-  gvs[select_result_def, extend_place_def, extend_memory_place_def,
+  gvs[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, extend_memory_place_def,
       bind_def, ignore_bind_def, lift_sum_def, return_def,
       sum_CASE_rator, AllCaseEqs()] >>
   gvs[place_type_value_def, read_result_def, read_place_def,
@@ -203,7 +203,7 @@ Proof
   >- gvs[select_result_def, read_result_def, constant_result_shape_def,
          bind_def, lift_option_type_def, lift_sum_def, return_def,
          option_CASE_rator, sum_CASE_rator, raise_def, AllCaseEqs()] >>
-  gvs[select_result_def, extend_place_def, extend_memory_place_def,
+  gvs[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, extend_memory_place_def,
       bind_def, ignore_bind_def, lift_sum_def, return_def,
       sum_CASE_rator, AllCaseEqs()] >>
   drule place_type_value_state >>
@@ -247,7 +247,7 @@ Proof
    value_has_type z0 z1` by
     (gvs[deployment_constant_cells_typed_def] >> metis_tac[]) >>
   qexists `PlaceR (ImmutablePlace src id [])` >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        get_tenv_def, get_immutables_def, get_address_immutables_def,
        bind_def, return_def, lift_option_type_def, initial_state_def,
        eval_result_typed_def, runtime_place_typed_def, place_type_value_def,

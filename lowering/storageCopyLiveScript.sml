@@ -1215,12 +1215,12 @@ Theorem copy_storage_dead_outside[local]:
     w2n k + type_slot_size tv <= dimword (:256) /\
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     ~(w2n k <= x /\ x < w2n k + type_slot_size tv) /\
-    storage_dead cx tr st x b ==>
-    storage_dead cx tr (apply_writes k writes st) x b
+    storage_dead_on H tr st x b ==>
+    storage_dead_on H tr (apply_writes k writes st) x b
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [storage_dead_def] >> strip_tac >>
+  simp_tac bool_ss [storage_dead_on_def] >> strip_tac >>
   rename1 `dead_bytes st (w2n slot) t x b` >>
   Cases_on `(slot,t) = (k,tv)`
   >- (gvs[] >> drule (cj 1 dead_bytes_range) >> strip_tac >>
@@ -1235,7 +1235,7 @@ Proof
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      irule copy_encoded_outside >> conj_tac >- decide_tac >>
      qexistsl_tac [`tv`, `v`] >> fs[ranges_disjoint_def] >> decide_tac) >>
-  simp_tac bool_ss [storage_dead_def] >>
+  simp_tac bool_ss [storage_dead_on_def] >>
   qexistsl_tac [`mid'`, `n'`, `subs'`, `slot`, `t`] >> asm_rewrite_tac[]
 QED
 
@@ -1261,15 +1261,15 @@ Theorem storage_agree_copy_region:
          (?b. b < 32 /\
               ~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n k + i) b) ==>
          ws i = mem_word_at (off + 32 * i) mem) /\
-    storage_agree (storage_dead cx tr st1) st1 st2 ==>
-    storage_agree (storage_dead cx tr (apply_writes k writes st1))
+    storage_agree (storage_dead_on H tr st1) st1 st2 ==>
+    storage_agree (storage_dead_on H tr (apply_writes k writes st1))
       (apply_writes k writes st1)
       (FOLDL (\t i. update_storage (k + n2w i) (ws i) t)
              st2 (COUNT_LIST (type_slot_size tv)))
 Proof
   rpt gen_tac >> strip_tac >>
   simp_tac bool_ss [storage_agree_def] >> rpt gen_tac >> strip_tac >>
-  rename1 `~storage_dead cx tr (apply_writes k writes st1) (w2n q) b` >>
+  rename1 `~storage_dead_on H tr (apply_writes k writes st1) (w2n q) b` >>
   `lookup_storage q
     (FOLDL (\t i. update_storage (k+n2w i) (ws i) t)
       st2 (COUNT_LIST (type_slot_size tv))) =
@@ -1281,7 +1281,7 @@ Proof
   asm_rewrite_tac[]
   >- (`~dead_bytes (apply_writes k writes st1) (w2n k) tv (w2n q) b` by
         (strip_tac >> qpat_x_assum `~storage_dead _ _ _ _ _` mp_tac >>
-         simp_tac bool_ss [storage_dead_def] >>
+         simp_tac bool_ss [storage_dead_on_def] >>
          qexistsl_tac [`mid`, `n`, `subs`, `k`, `tv`] >> asm_rewrite_tac[]) >>
       `w2n k+(w2n q-w2n k) = w2n q` by decide_tac >>
       `w2n q-w2n k < type_slot_size tv` by decide_tac >>
@@ -1293,7 +1293,7 @@ Proof
       disch_then drule >> disch_then drule >> disch_then drule >>
       disch_then (qspecl_then [`k`, `st1`, `w2n q-w2n k`, `b`] mp_tac) >>
       simp[] ) >>
-  `~storage_dead cx tr st1 (w2n q) b` by
+  `~storage_dead_on H tr st1 (w2n q) b` by
     (strip_tac >> qpat_x_assum `~storage_dead _ _ (apply_writes _ _ _) _ _`
        (fn th => mp_tac th) >> simp[] >>
      irule copy_storage_dead_outside >> reverse conj_tac >- asm_rewrite_tac[] >>

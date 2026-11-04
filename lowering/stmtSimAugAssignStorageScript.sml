@@ -25,7 +25,7 @@
  *   eval_augassign_toplevel_assign  — self.x op= e runs as
  *                                     self.x = self.x op e
  *   stmt_env_augassign_toplevel     — and has its code
- *   expr_body_pre_augassign_toplevel — self.x op e meets expr_body_pre
+ *   expr_body_pre_augassign_toplevel — self.x op e meets expr_body_pre H
  *                                     where e does
  *
  * Helpers: eval_target_place_toplevel, eval_augassign_toplevel,
@@ -330,17 +330,17 @@ QED
 
 (* ===== The operator ===== *)
 
-(* The typing side: self.x op e meets expr_body_pre where e does, x is a
+(* The typing side: self.x op e meets expr_body_pre H where e does, x is a
    module variable of type ty and the type checker accepts self.x op= e. *)
 Theorem expr_body_pre_augassign_toplevel:
   !cenv cx env ty nsid bop e es.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     FLOOKUP env.toplevel_vtypes nsid = SOME (Type ty) /\
     well_formed_type env.type_defs ty /\
     (bop = Exp ==> nonneg_int_literal e) /\
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
-    expr_body_pre cenv cx env (Builtin ty (Bop bop) [TopLevelName ty nsid; e])
+    expr_body_pre H cenv cx env (Builtin ty (Bop bop) [TopLevelName ty nsid; e])
       es
 Proof
   rpt strip_tac >>
@@ -367,11 +367,11 @@ Theorem toplevel_storage_name_case[local]:
   !nocalls ctx func cenv cx ann src id ts tr typ id_str.
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
-    expr_sim_case nocalls ctx func cenv cx (TopLevelName ann (src, id))
+    expr_sim_case H nocalls ctx func cenv cx (TopLevelName ann (src, id))
 Proof
   rpt strip_tac >> irule expr_sim_case_of_vv >>
   rw[expr_vv_case_def] >>
-  `expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es` by
+  `expr_sim_pre H cenv cx env (TopLevelName ann (src, id)) es` by
     simp[expr_sim_pre_body, int_calls_expr_def] >>
   Cases_on `?slot tvt v.
               lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -387,11 +387,11 @@ QED
    outcome, given e's expr_sim_case (so e may make internal calls unless
    nocalls).  The statement's type ty is x's declared type, and the
    typing gives x that type (toplevel_vtypes). *)
-(* Why it holds.  x's slot decodes wherever expr_sim_inv holds
+(* Why it holds.  x's slot decodes wherever expr_sim_inv H holds
    (toplevel_storage_read_decodes), so the source runs as
    self.x = self.x op e (eval_augassign_toplevel_assign), and the code is
    that assignment's (stmt_env_augassign_toplevel) once stmt_state_rel
-   gives cenv's view of x's slot.  self.x op e meets expr_body_pre, its
+   gives cenv's view of x's slot.  self.x op e meets expr_body_pre H, its
    operands simulate, so it does (compile_bop_word_case), and its values
    are of x's type: compile_assign_storage_typed_stmt_frag applies. *)
 Theorem compile_augassign_toplevel_case:
@@ -399,8 +399,8 @@ Theorem compile_augassign_toplevel_case:
    ts tr id_str slot tvt vtyp.
     eval_stmt cx (AugAssign ty (TopLevelNameTarget (src, id)) bop e) es =
       (res, es') /\
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
+    expr_sim_case H nocalls ctx func cenv cx e /\
+    expr_body_pre H cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -412,7 +412,7 @@ Theorem compile_augassign_toplevel_case:
     (bop = Exp ==> nonneg_int_literal e) /\
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
          (AugAssign ty (TopLevelNameTarget (src, id)) bop e))
       es res es'
@@ -421,23 +421,23 @@ Proof
   `word_value_type ty /\ word_value_type (expr_type e)` by
     metis_tac[well_typed_binop_augassign_word] >>
   `is_word_type ty` by metis_tac[word_value_type_word] >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_sim_inv H cenv cx env es` by fs[expr_body_pre_def] >>
   `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
     (irule toplevel_storage_read_decodes >>
      gvs[expr_sim_inv_def] >> metis_tac[]) >>
   drule_all eval_augassign_toplevel_assign >> strip_tac >>
-  `expr_body_pre cenv cx env
+  `expr_body_pre H cenv cx env
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
     (irule expr_body_pre_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  `expr_sim_case nocalls ctx func cenv cx
+  `expr_sim_case H nocalls ctx func cenv cx
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])` by
     (irule compile_bop_word_case >>
      simp[vyperASTTheory.expr_type_def] >>
      metis_tac[toplevel_storage_name_case]) >>
-  `expr_sim ctx func cenv cx ty
+  `expr_sim H ctx func cenv cx ty
      (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]) es` by
     (irule expr_sim_case_apply >> simp[int_calls_expr_def] >> metis_tac[]) >>
-  `stmt_frag ctx func cx lctx RetQ cenv
+  `stmt_frag H ctx func cx lctx RetQ cenv
      (stmt_env cenv lctx ty0
         (Assign (BaseTarget (TopLevelNameTarget (src, id)))
            (Builtin ty (Bop bop) [TopLevelName ty (src, id); e])))
@@ -463,7 +463,7 @@ Proof
      (Assign (BaseTarget (TopLevelNameTarget (src, id)))
         (Builtin ty (Bop bop) [TopLevelName ty (src, id); e]))` by
     (irule stmt_env_augassign_toplevel >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `stmt_frag H _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
   gvs[] >> disch_then drule_all >> simp[]
 QED

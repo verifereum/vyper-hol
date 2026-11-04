@@ -65,7 +65,7 @@ Theorem copy_buffer_original_local_separation:
   !ctx func cenv cx e es sa sm s0 es' tv vv s b sz.
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
     (!name lb len. local_region cenv es'.scopes s name lb len ==>
        b + sz <= lb \/ lb + len <= b) ==>
     (!name lb len. local_region cenv es.scopes s0 name lb len ==>
@@ -96,7 +96,7 @@ QED
 
 Theorem copy_buffer_state_rel_frame:
   !ctx func cenv cx es st s t inst b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     local_ptrs_reserved cenv st /\ copy_static t = copy_static s /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -106,11 +106,11 @@ Theorem copy_buffer_state_rel_frame:
        b + sz <= lb \/ lb + len <= b) /\
     (!off len. off + len <= b \/ b + sz <= off ==>
        mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt gen_tac >> strip_tac >>
   drule copy_static_fields >> strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes t` by
     (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
@@ -151,7 +151,7 @@ Theorem copy_buffer_expr_post:
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
-    stmt_state_rel ctx func cenv cx es' s /\
+    stmt_state_rel H ctx func cenv cx es' s /\
     eval_operand op s = SOME w /\
     FLOOKUP s.vs_allocas aid = SOME (w2n w,sz) /\
     sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -168,7 +168,7 @@ Theorem copy_buffer_expr_post:
           off + len <= b \/ b + k <= off) ==>
        mem_bytes_at off len s.vs_memory = mem_bytes_at off len s0.vs_memory) /\
     locals_kept cenv es s0 s ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   rpt gen_tac >> strip_tac >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def] >>
@@ -183,12 +183,12 @@ QED
 (* Common semantic boundary for an allocation followed by either copy. *)
 Theorem copy_buffer_post_transport:
   !ctx func cenv cx e es sa sm mid sb s0 es' v vv s u z tv op w sz inst.
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= mid.cs_next_var /\
     sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < sb.cs_next_id /\
-    stmt_state_rel ctx func cenv cx es' u /\
+    stmt_state_rel H ctx func cenv cx es' u /\
     u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -210,7 +210,7 @@ Theorem copy_buffer_post_transport:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
     val_footprint tv v <= sz /\ eval_operand op z = SOME w ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op z
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op z
 Proof
   rpt gen_tac >> strip_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
@@ -228,7 +228,7 @@ Proof
      gvs[vv_post_def] >> metis_tac[]) >>
   `local_ptrs_reserved cenv mid` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
-  `stmt_state_rel ctx func cenv cx es' z` by
+  `stmt_state_rel H ctx func cenv cx es' z` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
      simp[] >> gvs[regions_disjoint_def] >> metis_tac[]) >>
@@ -266,8 +266,8 @@ QED
 
 Theorem copy_buffer_storage_contents:
   !ctx func cenv cx es u t v a tr tv b z.
-    stmt_state_rel ctx func cenv cx es u /\
-    storage_holds cx tr t (Value v) a es /\
+    stmt_state_rel H ctx func cenv cx es u /\
+    storage_holds H cx tr t (Value v) a es /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     copy_prefix (if tr then LocTransient else LocStorage)
       a b (type_slot_size tv) u (type_slot_size tv) z ==>
@@ -309,8 +309,8 @@ Theorem storage_copy_suffix_value_frag:
      else do compile_word_copy_loop src dst n loc LocMemory F; return () od)
       mid = (result,sb) /\
     (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
-    stmt_state_rel ctx func cenv cx es u /\
-    storage_holds cx (loc = LocTransient) t (Value v) a es /\
+    stmt_state_rel H ctx func cenv cx es u /\
+    storage_holds H cx (loc = LocTransient) t (Value v) a es /\
     evaluate_type (get_tenv cx) t = SOME tv /\ n = type_slot_size tv /\
     eval_operand src u = SOME a /\ eval_operand dst u = SOME w /\
     n < 2**256 /\ w2n w + 32*n < 2**256 ==>
@@ -376,9 +376,9 @@ Theorem unwrap_storage_copy_sim:
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) ==>
     frag_exec ctx sm sb
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s)
-      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+      (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
   rpt gen_tac >>
   disch_then (CONJUNCTS_THEN2 assume_tac
@@ -399,9 +399,9 @@ Proof
   `t = expr_type e` by
     gvs[vv_post_def, vv_holds_def] >>
   `?a. eval_operand p.ptr_operand s1 = SOME a /\
-       storage_holds cx (p.ptr_location = LocTransient)
+       storage_holds H cx (p.ptr_location = LocTransient)
          (expr_type e) (Value v) a es'` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      Cases_on `p.ptr_location` >>
      gvs[vv_post_def, vv_holds_def]) >>
   `cs_extends sm mid` by
@@ -413,7 +413,7 @@ Proof
      gvs[comp_ignore_bind_def]) >>
   `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
     (gvs[storage_holds_def] >> metis_tac[]) >>
   `type_memory_bytes cenv t = type_memory_size tv /\
@@ -447,7 +447,7 @@ Proof
     (fs[type_memory_size_slots, wordsTheory.dimword_def] >> decide_tac) >>
   qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
   disch_then irule >> simp[] >>
-  `storage_holds cx (p.ptr_location = LocTransient) t (Value v) a es'` by metis_tac[] >>
+  `storage_holds H cx (p.ptr_location = LocTransient) t (Value v) a es'` by metis_tac[] >>
   drule_all (REWRITE_RULE[comp_ignore_bind_def] storage_copy_suffix_value_frag) >>
   disch_then (qspec_then `R` mp_tac) >>
   disch_then (mp_then Any mp_tac frag_exec_conseq) >>
@@ -467,7 +467,7 @@ QED
 
 Theorem immutable_holds_data:
   !func cenv cx es s t tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+    stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
     immutable_holds cenv cx t tv w es ==>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_result cx tv es = (INL v, es) /\
@@ -492,7 +492,7 @@ Proof
 QED
 
 Theorem immutable_holds_memory:
-  stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   val_in_memory tv v (w2n a) uu.vs_memory
@@ -506,7 +506,7 @@ Proof
 QED
 
 Theorem immutable_holds_alloca_disjoint:
-  stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -524,7 +524,7 @@ QED
 
 Theorem copy_runtime_contents:
   !ctx func cenv cx es u t v a tv w z.
-    stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+    stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
     immutable_holds cenv cx t (Value v) a es /\
     evaluate_type (get_tenv cx) t = SOME tv /\
     w2n w + type_memory_size tv < dimword (:256) /\
@@ -1090,7 +1090,7 @@ Proof
 QED
 
 Theorem copy_ctor_contents:
-  stmt_state_rel ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es uu /\ cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -1137,9 +1137,9 @@ Theorem unwrap_runtime_code_copy_sim:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec ctx sm sb
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s)
-      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+      (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
@@ -1170,7 +1170,7 @@ Proof
     gvs[ci_mono_def] >>
   `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
@@ -1251,9 +1251,9 @@ Theorem unwrap_ctor_code_copy_base_sim:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec ctx sm sb
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s /\ immutable_base_zero cenv s)
-      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+      (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
@@ -1285,7 +1285,7 @@ Proof
     gvs[ci_mono_def] >>
   `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s1` by gvs[vv_post_def] >>
   drule_all alloc_buffer_source_frag_labels >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
@@ -1364,9 +1364,9 @@ Theorem unwrap_ctor_code_copy_sim:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) ==>
     frag_exec ctx sm sb
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
              (LocatedValue t p) s)
-      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R
+      (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s) R
 Proof
   cheat
 QED

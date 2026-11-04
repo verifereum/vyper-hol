@@ -127,6 +127,15 @@ End
 
 val () = cv_auto_trans empty_immutables_def;
 
+(* Resolved roots retain natural layout offsets so range checks precede n2w.
+   Backend events record external replacement, not local typed writes. *)
+Datatype:
+  storage_trace_event = StorageRoot bool num type_value
+                      | StorageLock num
+                      | StorageOutcome extCallOracle$call_request extCallOracle$call_outcome
+                      | StorageBackend evm_accounts transient_storage
+End
+
 Datatype:
   evaluation_state = <|
     immutables: (address, module_immutables) alist
@@ -138,6 +147,7 @@ Datatype:
   ; outcomes: extCallOracle$call_outcome list option
   ; requests: extCallOracle$call_request list
   ; gas_obs: bytes32 list
+  ; storage_trace: storage_trace_event list
   |>
 End
 
@@ -151,7 +161,8 @@ Definition empty_state_def:
     pending_deletions := [];
     outcomes := NONE;
     requests := [];
-    gas_obs := []
+    gas_obs := [];
+    storage_trace := []
   |>
 End
 
@@ -166,6 +177,32 @@ Definition return_def:
 End
 
 val () = cv_auto_trans return_def;
+
+(* This bookkeeping survives exceptions; it is projected away at machine entry. *)
+Definition record_storage_event_def:
+  record_storage_event observation st =
+    return () (st with storage_trace := st.storage_trace ++ [observation])
+End
+
+val () = cv_auto_trans record_storage_event_def;
+
+Definition record_storage_backend_def:
+  record_storage_backend st =
+    record_storage_event (StorageBackend st.accounts st.tStorage) st
+End
+
+val () = cv_auto_trans record_storage_backend_def;
+
+Definition erase_storage_trace_def:
+  erase_storage_trace st = st with storage_trace := []
+End
+
+Theorem record_storage_event_erasure:
+  SND (record_storage_event observation st) with storage_trace := [] =
+  erase_storage_trace st
+Proof
+  simp[record_storage_event_def, return_def, erase_storage_trace_def]
+QED
 
 (* writing logs *)
 
@@ -476,6 +513,7 @@ Definition lookup_global_def:
     | SOME (StorageVarDecl tr typ, id) => do
         slot <- lift_option_type (lookup_var_slot_from_layout cx tr src_id_opt id) "lookup_global var_slot";
         tv <- lift_option_type (evaluate_type tenv typ) "lookup_global evaluate_type";
+        record_storage_event (StorageRoot tr slot tv);
         return (PlaceR (StoragePlace tr (n2w slot) tv))
       od
     | SOME (HashMapVarDecl tr kt vt, id) => do
@@ -486,7 +524,7 @@ Definition lookup_global_def:
 End
 
 val () = lookup_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, option_CASE_rator,
             prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
@@ -596,6 +634,7 @@ Definition set_global_def:
     | SOME (StorageVarDecl is_transient typ, id) => do
         var_slot <- lift_option_type (lookup_var_slot_from_layout cx is_transient src_id_opt id) "set_global var_slot";
         tv <- lift_option_type (evaluate_type tenv typ) "set_global evaluate_type";
+        record_storage_event (StorageRoot is_transient var_slot tv);
         write_storage_slot cx is_transient (n2w var_slot) tv v
       od
     | SOME (HashMapVarDecl _ kt vt, id) =>
@@ -604,7 +643,7 @@ Definition set_global_def:
 End
 
 val () = set_global_def
-  |> SRULE [bind_def, FUN_EQ_THM, option_CASE_rator,
+  |> SRULE [bind_def, ignore_bind_def, FUN_EQ_THM, option_CASE_rator,
             prod_CASE_rator, var_decl_info_CASE_rator, UNCURRY, LET_THM]
   |> cv_auto_trans;
 
@@ -1187,6 +1226,7 @@ Definition extend_place_def:
      | Type ty => do
          tv <- lift_option_type (evaluate_type (get_tenv cx) ty)
                  "mapping element type";
+         record_storage_event (StorageRoot tr (w2n slot') tv);
          return (PlaceR (StoragePlace tr slot' tv))
        od) /\
   extend_place cx _ _ = raise (Error (TypeError "extend_place"))
@@ -1317,10 +1357,13 @@ Theorem extend_place_mapping_leaf:
   evaluate_type (get_tenv cx) typ = SOME tv ==>
   extend_place cx (HashMapRef tr slot kt (Type typ))
     (ValueSubscript kv) st =
-  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)), st)
+  (INL (PlaceR (StoragePlace tr (hashmap_slot slot (encode_hashmap_key kt kv)) tv)),
+   st with storage_trace := st.storage_trace ++
+     [StorageRoot tr (w2n (hashmap_slot slot (encode_hashmap_key kt kv))) tv])
 Proof
   simp[extend_place_def,
-       lift_option_type_def, bind_def, return_def]
+       lift_option_type_def, bind_def, ignore_bind_def,
+       record_storage_event_def, return_def]
 QED
 
 (* Place reads are observations, even when lookup or decoding fails. *)

@@ -114,34 +114,42 @@ Theorem typing_and_storage_contracts:
     ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE,tops)] am tx /\
           machine_well_typed am /\ call_tx_well_typed tx) /\
-  (source_storage_ok tops am tx <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      contract_storage_well_formed cx (initial_state am []) /\
-      storage_layout_safe cx)
+  (source_storage_ok am tx os gobs <=>
+    storage_roots_fit (source_storage_trace am tx os gobs) /\
+    regions_consistent (storage_trace_regions (source_storage_trace am tx os gobs)) /\
+    storage_locks_separated
+      (storage_trace_regions (source_storage_trace am tx os gobs))
+      (storage_trace_locks (source_storage_trace am tx os gobs)) /\
+    storage_well_formed_on
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [])
+      (storage_trace_regions (source_storage_trace am tx os gobs)))
 Proof
   simp[source_typing_ok_def, source_storage_ok_def]
 QED
 
-Theorem outcome_guard_success_only:
-  call_outcomes_ok tops am tx [] /\
-  (call_outcomes_ok tops am tx [co with co_success := F] <=>
-    LENGTH co.co_returnData < dimword(:256) /\
-    accounts_runtime_well_typed co.co_accounts /\
-    contract_storage_well_formed
+Theorem outcome_guard_actual_observations:
+  call_outcomes_ok am tx os gobs <=>
+    EVERY (\observation. case observation of
+      StorageOutcome rq outcome => LENGTH outcome.co_returnData < dimword(:256)
+    | _ => T) (source_storage_trace am tx os gobs) /\
+    EVERY (\observation. case observation of
+      StorageBackend accounts transient => accounts_runtime_well_typed accounts
+    | _ => T) (source_storage_trace am tx os gobs) /\
+    storage_trace_backends_well_formed
       (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <|accounts := co.co_accounts;
-                               tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx [co with co_success := T] <=>
-    LENGTH co.co_returnData < dimword(:256) /\
-    accounts_runtime_well_typed co.co_accounts /\
-    contract_storage_well_formed
-      (initial_evaluation_context am.sources am.layouts tx NONE)
-      (initial_state (am with <|accounts := co.co_accounts;
-                               tStorage := co.co_tStorage|>) [])) /\
-  (call_outcomes_ok tops am tx (xs ++ ys) <=>
-    call_outcomes_ok tops am tx xs /\ call_outcomes_ok tops am tx ys)
+      (storage_trace_regions (source_storage_trace am tx os gobs))
+      (source_storage_trace am tx os gobs)
 Proof
-  simp[call_outcomes_ok_def, EVERY_APPEND]
+  simp[call_outcomes_ok_def]
+QED
+
+Theorem storage_contracts_ignore_unobserved_outcomes:
+  source_storage_trace am tx os gobs = source_storage_trace am tx os' gobs ==>
+  (source_storage_ok am tx os gobs <=> source_storage_ok am tx os' gobs) /\
+  (call_outcomes_ok am tx os gobs <=> call_outcomes_ok am tx os' gobs)
+Proof
+  simp[source_storage_ok_def, call_outcomes_ok_def]
 QED
 
 (* ===== Exact lookup/bind; no default/fallback relaxation ===== *)
@@ -314,11 +322,11 @@ Theorem success_requires_requests_and_effects:
   (call_result_rel tops ret am tx es r es' <=>
     ?out lgs. frame_outcome es r es' NONE out lgs /\
       tx_return_bytes tops ret tx v out /\
-      accounts_agree cx am'.accounts
+      accounts_agree H cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree cx am'.tStorage es'.rollback.tStorage /\
+      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
       logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (MAP FST (call_trace es)))
+      LIST_REL (request_agree H cx) rqs (MAP FST (call_trace es)))
 Proof
   simp[call_result_rel_def]
 QED

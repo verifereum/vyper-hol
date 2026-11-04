@@ -20,7 +20,7 @@ QED
 Theorem scalar_fixed_decimal_mk_frag[local]:
   !ctx func cenv cx m bs es0.
     LENGTH bs = m /\ 0 < m /\ m <= 32 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (mk_convert_op (BaseT (BytesT (Fixed m))) (BaseT DecimalT)))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed m))) (BytesV bs))
@@ -40,8 +40,8 @@ Theorem scalar_address_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT AddressT) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op (BaseT AddressT) t))
@@ -64,8 +64,8 @@ Theorem scalar_fixed_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op (BaseT (BytesT (Fixed m))) t))
@@ -114,8 +114,8 @@ Theorem scalar_int_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT (IntT n)) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op (BaseT (IntT n)) t))
@@ -151,7 +151,7 @@ Finalise scalar_int_typed_dispatch
 Theorem scalar_uint_address_result_frag:
   !ctx func cenv cx n i es0.
     0 < n /\ n <= 256 /\ within_int_bound (Unsigned n) i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToInt F n F 160))
       (i2w i) (BaseT AddressT)
       (convert_result cx (BaseT (UintT n)) (BaseT AddressT) (IntV i)) es0
@@ -186,8 +186,8 @@ Theorem scalar_uint_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT (UintT n)) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op (BaseT (UintT n)) t))
@@ -244,8 +244,8 @@ Theorem scalar_decimal_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (BaseT DecimalT) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op (BaseT DecimalT) t))
@@ -270,8 +270,8 @@ Theorem scalar_flag_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) (FlagT name) = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT target => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string target))
                  | _ => mk_convert_op (FlagT name) t))
@@ -313,8 +313,8 @@ Theorem scalar_typed_dispatch:
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) /\
     evaluate_type (get_tenv cx) src = SOME tv /\
     IS_SOME (evaluate_type (get_tenv cx) t) /\ value_has_type tv v /\
-    expr_sim_inv cenv cx env es1 ==>
-    unop_frag ctx func cenv cx
+    expr_sim_inv H cenv cx env es1 ==>
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (case t of FlagT name => ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
                  | _ => mk_convert_op src t))

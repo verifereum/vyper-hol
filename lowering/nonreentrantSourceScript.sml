@@ -9,12 +9,12 @@ Ancestors
    transient region, including bytes ignored by the storage relation. *)
 Theorem nonreentrant_storage_live:
   storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey ==>
-  ~storage_dead cx T st (w2n ((n2w nkey):bytes32)) b
+  ~storage_dead_on H T st (w2n ((n2w nkey):bytes32)) b
 Proof
   strip_tac >>
   drule_all storage_layout_safe_nonreentrant_slot_nonoverflow >> strip_tac >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  pure_rewrite_tac[storage_dead_def] >> strip_tac >>
+  pure_rewrite_tac[storage_dead_on_def] >> strip_tac >>
   drule_all storage_layout_safe_nonreentrant_slot_separation >>
   drule (cj 1 dead_bytes_range) >>
   simp[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac
@@ -40,23 +40,23 @@ QED
 
 Theorem nonreentrant_storage_dead_frame:
   storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey ==>
-  (storage_dead cx T (update_storage (n2w nkey) v st) j b <=>
-   storage_dead cx T st j b)
+  (storage_dead_on H T (update_storage (n2w nkey) v st) j b <=>
+   storage_dead_on H T st j b)
 Proof
-  strip_tac >> pure_rewrite_tac[storage_dead_def] >>
+  strip_tac >> pure_rewrite_tac[storage_dead_on_def] >>
   eq_tac >> strip_tac >>
   drule_all nonreentrant_region_frame >> strip_tac >>
   metis_tac[]
 QED
 
 Theorem nonreentrant_lock_agreement:
-  state_rel func cenv cx es ss /\ storage_layout_safe cx /\
+  state_rel H func cenv cx es ss /\ storage_layout_safe cx /\
   cx.nonreentrant_slot = SOME nkey ==>
   lookup_storage (n2w nkey) (es.tStorage cx.txn.target) =
     tload (n2w nkey) ss
 Proof
   strip_tac >>
-  `!b. ~storage_dead cx T (es.tStorage cx.txn.target)
+  `!b. ~storage_dead_on H T (es.tStorage cx.txn.target)
            (w2n ((n2w nkey):bytes32)) b` by
     (gen_tac >> irule nonreentrant_storage_live >> metis_tac[]) >>
   gvs[state_rel_def, transient_rel_def, tload_def,
@@ -66,17 +66,17 @@ Proof
 QED
 
 Theorem nonreentrant_state_rel_write:
-  state_rel func cenv cx es ss /\ storage_layout_safe cx /\
+  state_rel H func cenv cx es ss /\ storage_layout_safe cx /\
   cx.nonreentrant_slot = SOME nkey ==>
-  state_rel func cenv cx
+  state_rel H func cenv cx
     (es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) v (es.tStorage cx.txn.target)) es.tStorage)
     (tstore (n2w nkey) v ss)
 Proof
   strip_tac >>
-  `accounts_rel cx es ss /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
+  `accounts_rel H cx es ss /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
     gvs[state_rel_def, call_ctx_rel_def] >>
-  `transient_agree cx
+  `transient_agree H cx
     ((cx.txn.target =+ update_storage (n2w nkey) v
        (es.tStorage cx.txn.target)) es.tStorage)
     ((cx.txn.target =+ update_storage (n2w nkey) v
@@ -85,11 +85,11 @@ Proof
      >- gvs[accounts_rel_def] >>
      rpt strip_tac >>
      drule_all nonreentrant_storage_dead_frame >> simp[]) >>
-  qmatch_goalsub_abbrev_tac `state_rel func cenv cx es1 ss1` >>
-  `accounts_rel cx es1 ss1` by
+  qmatch_goalsub_abbrev_tac `state_rel H func cenv cx es1 ss1` >>
+  `accounts_rel H cx es1 ss1` by
     gvs[Abbr `es1`, Abbr `ss1`, accounts_rel_def, tstore_def] >>
-  `storage_rel cx cx.txn.target es1 ss1 /\
-   transient_rel cx cx.txn.target es1 ss1` by
+  `storage_rel H cx cx.txn.target es1 ss1 /\
+   transient_rel H cx cx.txn.target es1 ss1` by
     (drule accounts_rel_storage_transient >>
      gvs[Abbr `ss1`, tstore_def]) >>
   gvs[state_rel_def, Abbr `es1`, Abbr `ss1`, tstore_def,
@@ -100,13 +100,13 @@ QED
 
 Theorem source_nonreentrant_lock_state_rel:
   !func cenv cx es ss nkey is_view.
-    state_rel func cenv cx es ss /\ storage_layout_safe cx /\
+    state_rel H func cenv cx es ss /\ storage_layout_safe cx /\
     cx.nonreentrant_slot = SOME nkey ==>
     lookup_storage (n2w nkey) (es.tStorage cx.txn.target) =
       tload (n2w nkey) ss /\
     (!es'. acquire_nonreentrant_lock cx.txn.target nkey is_view es =
              (INL (), es') ==>
-           state_rel func cenv cx es'
+           state_rel H func cenv cx es'
              (if is_view then ss else tstore (n2w nkey) 1w ss))
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -124,7 +124,7 @@ Proof
   >- (simp[vyperStateTheory.return_def] >> metis_tac[]) >>
   simp[update_transient_def, vyperStateTheory.return_def] >>
   strip_tac >> gvs[] >>
-  qmatch_goalsub_abbrev_tac `state_rel func cenv cx es1 _` >>
+  qmatch_goalsub_abbrev_tac `state_rel H func cenv cx es1 _` >>
   `es1 = es with tStorage := (cx.txn.target =+
       update_storage (n2w nkey) 1w (es.tStorage cx.txn.target)) es.tStorage` by
     simp[Abbr `es1`, evaluation_state_component_equality,

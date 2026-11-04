@@ -31,7 +31,7 @@ QED
 
 Theorem scalar_bytes32_identity_frag:
   !ctx func cenv cx bs es0.
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvBytesMToBytesM 32 32))
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs))
       (BaseT (BytesT (Fixed 32))) (INL (BytesV bs)) es0
@@ -46,7 +46,7 @@ QED
 
 Theorem scalar_bytes0_bool_frag:
   !ctx func cenv cx es0.
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x ConvToBool)
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 0))) (BytesV []))
       (BaseT BoolT) (INL (BoolV F)) es0

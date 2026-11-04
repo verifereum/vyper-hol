@@ -30,7 +30,7 @@ Theorem annassign_empty_store_run[local]:
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -39,7 +39,7 @@ Theorem annassign_empty_store_run[local]:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     has_length_word t /\ evaluate_type tenv t = SOME tyv /\
     type_memory_size tyv <= sz ==>
-    ?u. stmt_state_rel ctx func cenv cx
+    ?u. stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv;
                            value := default_value tyv; popped := []|>)) :: rest) u /\
@@ -64,7 +64,7 @@ QED
 
 Theorem annassign_empty_store_post_run[local]:
   !ctx func cenv cx e es es1 s0 s sa sb sf tv vv id p sz w inst t tyv sc rest a tenv.
-    vv_post ctx func cenv cx e es sa sb s0 es1 tv vv s /\
+    vv_post H ctx func cenv cx e es sa sb s0 es1 tv vv s /\
     emit_void MSTORE [Var p; Lit 0w] sb = ((), sf) /\ fn_has_code sb sf func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\ fn_inst_ids_distinct func /\
@@ -76,7 +76,7 @@ Theorem annassign_empty_store_post_run[local]:
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     has_length_word t /\ evaluate_type tenv t = SOME tyv /\
     type_memory_size tyv <= sz ==>
-    ?u. stmt_state_rel ctx func cenv cx
+    ?u. stmt_state_rel H ctx func cenv cx
           (es1 with scopes :=
              (sc |+ (id, <|assignable := a; type := tyv;
                            value := default_value tyv; popped := []|>)) :: rest) u /\
@@ -90,7 +90,7 @@ Theorem annassign_empty_store_post_run[local]:
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> strip_tac >>
   `lookup_var p s = SOME w` by metis_tac[] >>
   `FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz)` by metis_tac[] >>
@@ -105,19 +105,19 @@ Theorem annassign_empty_success_run[local]:
     has_length_word vtyp /\ evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
               tv = Value (default_value tyv)) /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_vv_sim H ctx func cenv cx (expr_type e) e es /\
     compile_expr cenv (expr_type e) e sa = (vv, sb) /\
     emit_void MSTORE [Var p; Lit 0w] sb = ((), sf) /\
     fn_has_code sa sb func /\ fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     lookup_var p s0 = SOME w /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     type_memory_size tyv <= sz ==>
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x t = SOME u) /\
         (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
@@ -130,7 +130,7 @@ Proof
   qpat_x_assum `!tv es1. eval_expr _ _ _ = _ ==> _` drule >> strip_tac >>
   gvs[read_result_def, return_def] >>
   `not_local_ptr cenv es1.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `INL (Value (default_value tyv))`,
                            `es1`, `s0`] mp_tac) >>
   impl_tac >- simp[expr_vv_res_ok_def] >>
@@ -144,19 +144,19 @@ QED
 
 Theorem expr_vv_sim_error_run[local]:
   !ctx func cenv cx ty e es ex es' sa sb vv s0.
-    expr_vv_sim ctx func cenv cx ty e es /\
+    expr_vv_sim H ctx func cenv cx ty e es /\
     eval_expr cx e es = (INR ex, es') /\
     expr_res_ok (INR ex : value + exception) /\
     compile_expr cenv ty e sa = (vv, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
              expr_exit (INR ex : unit + exception) r
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `INR ex`, `es'`, `s0`] mp_tac) >>
   impl_tac >- gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
@@ -240,10 +240,10 @@ Theorem compile_annassign_empty_stmt_frag:
     (!tv es1. eval_expr cx e es = (INL tv, es1) ==>
               tv = Value (default_value tyv)) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
-       expr_vv_sim ctx func c cx (expr_type e) e es /\
+       expr_vv_sim H ctx func c cx (expr_type e) e es /\
        !sa sb vv. compile_expr c (expr_type e) e sa = (vv, sb) ==>
                   cs_extends sa sb) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e)) es res es'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -255,7 +255,7 @@ Proof
   disch_then (qx_choosel_then [`st`, `sA`, `sB`, `vv`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id vtyp sa = (c,st)` >>
   qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
-  `stmt_state_rel ctx func c cx es s0` by
+  `stmt_state_rel H ctx func c cx es s0` by
     (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   `s0.vs_current_bb = st.cs_current_bb /\

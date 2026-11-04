@@ -17,7 +17,7 @@ Theorem tuple_assignment_prefix_run:
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) tys tvs /\
     0 < type_memory_size_list tvs /\
-    expr_sim ctx func cenv cx (TupleT tys) e es /\
+    expr_sim H ctx func cenv cx (TupleT tys) e es /\
     lower_value compile_expr cenv (TupleT tys) e sa = (op,su) /\
     (if flag then
        do buf <- compile_alloc_buffer (type_memory_bytes cenv (TupleT tys));
@@ -30,13 +30,13 @@ Theorem tuple_assignment_prefix_run:
     cs_extends sa su /\ cs_extends su sl /\ cs_extends sl ss /\
     fn_has_code sa su func /\ fn_has_code su sl func /\ fn_has_code sl ss func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems /\
     local_ptrs_reserved cenv ss /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
-    ?t (w:256 word) b sz. stmt_state_rel ctx func cenv cx es1 t /\ ~t.vs_halted /\
+    ?t (w:256 word) b sz. stmt_state_rel H ctx func cenv cx es1 t /\ ~t.vs_halted /\
       t.vs_current_bb = ss.cs_current_bb /\
       t.vs_inst_idx = LENGTH ss.cs_current_insts /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\ b <= w2n w /\
@@ -57,12 +57,12 @@ Theorem tuple_assignment_prefix_run:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_res_ok (INL (ArrayV (TupleV vs)))` by simp[expr_res_ok_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then drule_all >> disch_then (qspec_then `s0` mp_tac) >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+  rename1 `expr_post H ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
+  qpat_x_assum `expr_post H ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `expr_type e = TupleT tys`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>

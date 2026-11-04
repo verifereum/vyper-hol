@@ -5,7 +5,7 @@
  *   eval_builtin_head_success, eval_type_builtin_head_success — the
  *     first argument's evaluation succeeds
  *   expr_body_pre_builtin_head, expr_body_pre_type_builtin_head —
- *     expr_body_pre holds of it
+ *     expr_body_pre H holds of it
  *)
 
 Theory exprOpenFirstOperand
@@ -15,8 +15,8 @@ Ancestors
 
 Theorem expr_body_pre_builtin_head:
   !cenv cx env ann bi arg args es.
-    expr_body_pre cenv cx env (Builtin ann bi (arg::args)) es ==>
-    expr_body_pre cenv cx env arg es
+    expr_body_pre H cenv cx env (Builtin ann bi (arg::args)) es ==>
+    expr_body_pre H cenv cx env arg es
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
@@ -26,8 +26,8 @@ QED
 
 Theorem expr_body_pre_type_builtin_head:
   !cenv cx env ann tb ty arg args es.
-    expr_body_pre cenv cx env (TypeBuiltin ann tb ty (arg::args)) es ==>
-    expr_body_pre cenv cx env arg es
+    expr_body_pre H cenv cx env (TypeBuiltin ann tb ty (arg::args)) es ==>
+    expr_body_pre H cenv cx env arg es
 Proof
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,

@@ -234,7 +234,7 @@ Theorem compile_compare_words_sim:
     (expr_res_ok (bop_result cx ann bop tys v1 v2 es0) ==>
      bop_result cx ann bop tys v1 v2 es0 =
        INL (BoolV (eval_compare bop ty w1 w2))) ==>
-    binop_frag_words ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
+    binop_frag_words H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_words_def] >>
   rpt strip_tac >>
@@ -270,7 +270,7 @@ Theorem compile_compare_sim:
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag ctx func cenv cx bop ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx bop ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[binop_frag_def] >>
   irule compile_compare_words_sim >>
@@ -315,7 +315,7 @@ Theorem compile_compare_bytes_sim:
     (bop = Eq \/ bop = NotEq) /\
     (tv = BaseTV AddressT \/ ?m. tv = BaseTV (BytesT (Fixed m)) /\ m <= 32) /\
     value_has_type tv (BytesV b1) /\ value_has_type tv (BytesV b2) ==>
-    binop_frag_words ctx func cenv cx bop ty ann bl el tys
+    binop_frag_words H ctx func cenv cx bop ty ann bl el tys
       (BytesV b1) (BytesV b2)
       (typed_val_to_w256 tv (BytesV b1)) (typed_val_to_w256 tv (BytesV b2)) es0
 Proof
@@ -432,7 +432,7 @@ Theorem compile_minmax_sim:
     (is_uint256 ty <=> tv = BaseTV (UintT 256)) /\
     (!m. tv = BaseTV (UintT m) \/ tv = BaseTV (IntT m) \/ tv = FlagTV m ==>
          m <= 256) ==>
-    binop_frag ctx func cenv cx mm ty ann bl el tys v1 v2 es0
+    binop_frag H ctx func cenv cx mm ty ann bl el tys v1 v2 es0
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   match_mp_tac binop_frag_straight >> conj_tac

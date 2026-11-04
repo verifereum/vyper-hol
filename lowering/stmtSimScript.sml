@@ -189,21 +189,21 @@ End
    continue) it is at some cenv'' that extends cenv in the innermost scope:
    cenv' may hold declarations the source never ran. *)
 Definition stmt_frag_def:
-  stmt_frag ctx func cx lctx RetQ cenv (m : compile_env compiler) es res es'
+  stmt_frag H ctx func cx lctx RetQ cenv (m : compile_env compiler) es res es'
   <=>
     !sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       (?s cenv''.
          stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
          cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel ctx func cenv'' cx es' s /\
+         stmt_state_rel H ctx func cenv'' cx es' s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -220,21 +220,21 @@ End
    constructor immutable memory against ALLOCA.  The postcondition is the
    same as stmt_frag; no preservation of an arbitrary Frame is promised. *)
 Definition stmt_framed_frag_def:
-  stmt_framed_frag Frame ctx func cx lctx RetQ cenv
+  stmt_framed_frag H Frame ctx func cx lctx RetQ cenv
     (m : compile_env compiler) es res es' <=>
     !sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      Frame s0 /\ stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      Frame s0 /\ stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       (?s cenv''.
          stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
          cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel ctx func cenv'' cx es' s /\
+         stmt_state_rel H ctx func cenv'' cx es' s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -254,8 +254,8 @@ Definition alloca_prefix_def:
 End
 
 Theorem stmt_framed_frag_zero:
-  stmt_framed_frag (alloca_prefix 0) ctx func cx lctx RetQ cenv m es res es'
-  <=> stmt_frag ctx func cx lctx RetQ cenv m es res es'
+  stmt_framed_frag H (alloca_prefix 0) ctx func cx lctx RetQ cenv m es res es'
+  <=> stmt_frag H ctx func cx lctx RetQ cenv m es res es'
 Proof
   simp[stmt_framed_frag_def, stmt_frag_def, alloca_prefix_def]
 QED
@@ -280,7 +280,7 @@ QED
 
 Theorem exec_alloca_prefix_base:
   !func cenv cx es inst s n s' p w cap ctx.
-    stmt_state_rel ctx func cenv cx es s /\ alloca_prefix cap s /\
+    stmt_state_rel H ctx func cenv cx es s /\ alloca_prefix cap s /\
     inst.inst_outputs = [p] /\ exec_alloca inst s n = OK s' /\
     lookup_var p s' = SOME w ==> cap <= w2n w
 Proof
@@ -367,7 +367,7 @@ QED
 
 Theorem compile_pass_frag:
   !ctx func cx lctx RetQ cenv ty es.
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty Pass) es
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty Pass) es
       (INL ()) es
 Proof
   rw[stmt_frag_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
@@ -380,7 +380,7 @@ QED
    block. *)
 Theorem compile_break_frag:
   !ctx func cx RetQ cenv ty ex inc es.
-    stmt_frag ctx func cx (InLoop ex inc) RetQ cenv
+    stmt_frag H ctx func cx (InLoop ex inc) RetQ cenv
       (stmt_env cenv (InLoop ex inc) ty Break) es (INR BreakException) es
 Proof
   rw[stmt_frag_def, stmt_env_def, declare_stmt_local_def, comp_bind_def,
@@ -405,7 +405,7 @@ QED
 
 Theorem compile_continue_frag:
   !ctx func cx RetQ cenv ty ex inc es.
-    stmt_frag ctx func cx (InLoop ex inc) RetQ cenv
+    stmt_frag H ctx func cx (InLoop ex inc) RetQ cenv
       (stmt_env cenv (InLoop ex inc) ty Continue) es (INR ContinueException)
       es
 Proof
@@ -467,10 +467,10 @@ QED
    to the environment the list started in. *)
 Theorem stmt_state_rel_pop_top_ext:
   !func cenv cenv' cx es ss sc rest ctx.
-    stmt_state_rel ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
+    stmt_state_rel H ctx func cenv' cx es ss /\ cenv_top_ext cenv cenv' es.scopes /\
     es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel ctx func cenv cx (es with scopes := rest) ss
+    stmt_state_rel H ctx func cenv cx (es with scopes := rest) ss
 Proof
   rpt strip_tac >>
   drule_all stmt_state_rel_pop_scope >> strip_tac >>
@@ -513,7 +513,7 @@ QED
 
 Theorem stmt_frag_nil:
   !ctx func cx lctx RetQ cenv ty es.
-    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty []) es
+    stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty []) es
       (INL ()) es
 Proof
   rw[stmt_frag_def, stmts_env_def, comp_return_def] >>
@@ -552,14 +552,14 @@ Theorem stmt_frag_cons_env:
     (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
     (!c. cs_mono (stmts_env c lctx ty ss)) /\
     (!r1 es1. eval_stmt cx stmt es = (r1, es1) ==>
-       stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
+       stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
          es r1 es1) /\
     (!es1 c sa sm. eval_stmt cx stmt es = (INL (), es1) /\
                    stmt_env cenv lctx ty stmt sa = (c, sm) /\
                    cenv_top_ext cenv c es1.scopes ==>
-       stmt_frag ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
+       stmt_frag H ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
          es1 res es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
       es res es'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -574,7 +574,7 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_split] >>
   Cases_on `eval_stmt cx stmt es` >> rename1 `_ = (r1, es1)` >>
-  qpat_x_assum `!r1 es1. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `!r1 es1. _ ==> stmt_frag H _ _ _ _ _ _ _ _ _ _`
     (qspecl_then [`r1`, `es1`] mp_tac) >>
   qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, ignore_bind_def] >>
@@ -587,19 +587,19 @@ Proof
     simp[stmt_res_ok_def, stmt_exit_def] >> strip_tac >>
     qpat_x_assum `stmt_lands _ _ _ _`
       (strip_assume_tac o SIMP_RULE (srw_ss()) [stmt_lands_def]) >>
-    rename1 `stmt_state_rel ctx func c cx es1 s1` >>
+    rename1 `stmt_state_rel H ctx func c cx es1 s1` >>
     `ret_pc_ok c sm s1` by
       (qspecl_then [`cenv`, `c`, `sa`, `sm`, `s0`, `s1`] mp_tac
          ret_pc_ok_frame >>
        impl_tac >- (fs[] >> drule cenv_top_ext_return_pc >> simp[]) >>
        simp[]) >>
-    qpat_x_assum `!c' sa' sm'. _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+    qpat_x_assum `!c' sa' sm'. _ ==> stmt_frag H _ _ _ _ _ _ _ _ _ _`
       (qspecl_then [`c`, `sa`, `sm`] mp_tac) >>
     simp[stmt_frag_def] >>
     disch_then (qspecl_then [`sm`, `sb`, `s1`, `cenv'`] mp_tac) >>
     simp[] >> strip_tac
     >- (
-      disj1_tac >> rename1 `stmt_state_rel ctx func c3 cx es' s2` >>
+      disj1_tac >> rename1 `stmt_state_rel H ctx func c3 cx es' s2` >>
       qexistsl_tac [`s2`, `c3`] >> simp[] >>
       `cenv_top_ext cenv c3 es'.scopes` by
         (irule cenv_top_ext_trans >> qexistsl_tac [`c`, `es1.scopes`] >>
@@ -631,7 +631,7 @@ Proof
   rpt strip_tac >> gvs[stmt_frag_def] >>
   first_x_assum (qspecl_then [`sa`, `sm`, `s0`, `c`] mp_tac) >>
   simp[] >> strip_tac
-  >- (disj1_tac >> rename1 `stmt_state_rel ctx func c4 cx es' s4` >>
+  >- (disj1_tac >> rename1 `stmt_state_rel H ctx func c4 cx es' s4` >>
       qexistsl_tac [`s4`, `c4`] >> fs[stmt_lands_def]) >>
   disj2_tac >> qexists_tac `fuel` >> simp[]
 QED
@@ -644,13 +644,13 @@ Theorem stmt_frag_cons:
     (!c. cs_mono (compile_stmt c lctx ty stmt)) /\
     (!c. cs_mono (stmts_env c lctx ty ss)) /\
     (!r1 es1. eval_stmt cx stmt es = (r1, es1) ==>
-       stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
+       stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty stmt)
          es r1 es1) /\
     (!es1 c. eval_stmt cx stmt es = (INL (), es1) /\
              cenv_top_ext cenv c es1.scopes ==>
-       stmt_frag ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
+       stmt_frag H ctx func cx lctx RetQ c (stmts_env c lctx ty ss)
          es1 res es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ty (stmt::ss))
       es res es'
 Proof
   rpt strip_tac >> irule stmt_frag_cons_env >> simp[] >> rpt strip_tac >>
@@ -718,13 +718,13 @@ QED
 Theorem compile_expr_stmt_frag_ok:
   !ctx func cx lctx RetQ cenv ty e es res es'.
     eval_stmt cx (Expr e) es = (res, es') /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_vv_sim H ctx func cenv cx (expr_type e) e es /\
     (!sa vv sb tv es1.
        storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
        eval_expr cx e es = (INL tv, es1) /\
        compile_expr cenv (expr_type e) e sa = (vv, sb) /\
        ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
       es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -746,7 +746,7 @@ Proof
          gvs[expr_vv_res_ok_def, expr_res_ok_def] >> NO_TAC) >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
     gvs[no_control_exc_def, expr_vv_res_ok_def, expr_res_ok_def]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `vv`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
@@ -754,7 +754,7 @@ Proof
   disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
   >- (gvs[vv_post_def] >> Cases_on `is_HashMapRef tv` >>
       gvs[stmt_res_ok_def] >>
-      disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx _ s1` >>
+      disj1_tac >> rename1 `stmt_state_rel H ctx func cenv cx _ s1` >>
       qexists_tac `s1` >>
       simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
   disj2_tac >> qexists_tac `fuel` >> gvs[stmt_exit_def] >>
@@ -767,10 +767,10 @@ QED
 Theorem compile_expr_stmt_frag:
   !ctx func cx lctx RetQ cenv ty e es res es'.
     eval_stmt cx (Expr e) es = (res, es') /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_vv_sim H ctx func cenv cx (expr_type e) e es /\
     (!sa vv sb. compile_expr cenv (expr_type e) e sa = (vv, sb) /\
                 ~block_is_terminated sa ==> ~block_is_terminated sb) ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ty (Expr e))
       es res es'
 Proof
   rpt strip_tac >> irule compile_expr_stmt_frag_ok >> simp[] >>

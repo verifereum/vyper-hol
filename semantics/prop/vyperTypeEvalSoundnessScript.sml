@@ -1011,7 +1011,7 @@ Theorem acquire_nonreentrant_lock_accounts[local]:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ==>
     st'.accounts = st.accounts
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -1021,7 +1021,7 @@ Theorem release_nonreentrant_lock_accounts[local]:
     release_nonreentrant_lock addr slot st = (res, st') ==>
     st'.accounts = st.accounts
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -1742,7 +1742,7 @@ Theorem lookup_global_live[local]:
   lookup_global cx src id st = (res,st') ==>
   (case res of INL pv => live_memory_result st' pv | INR _ => T)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def, return_def,
@@ -2151,7 +2151,7 @@ Theorem extend_live_memory_success[local]:
   extend_place cx (PlaceR (MemoryPlace id path)) sb st = (INL pv,st') ==>
   live_memory_result st' pv
 Proof
-  simp[live_memory_result_def, extend_place_def, bind_def, ignore_bind_def,
+  simp[live_memory_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
        lift_sum_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[place_type_value_def, get_scopes_def, lift_option_type_def,
       bind_def, return_def, raise_def, AllCaseEqs()] >>
@@ -2185,7 +2185,7 @@ Proof
     gvs[runtime_place_typed_def] >>
   `?v w. read_place cx (MemoryPlace id path) st = (INL v,st) /\
          evaluate_subscripts tv v [sb] = INL w` by
-    (gvs[extend_place_def, bind_def, ignore_bind_def, lift_sum_def,
+    (gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, lift_sum_def,
          return_def, AllCaseEqs()] >>
      gvs[vyperMiscTheory.sum_CASE_rator, raise_def, return_def, AllCaseEqs()] >>
      metis_tac[read_place_preserves_state]) >>
@@ -2202,10 +2202,10 @@ Theorem extend_live_place_typed_success[local]:
   live_memory_result st' pv
 Proof
   rpt strip_tac >> Cases_on `p`
-  >- (gvs[extend_place_def, bind_def, return_def, AllCaseEqs()] >>
+  >- (gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, return_def, AllCaseEqs()] >>
       drule extend_storage_place_live >> simp[])
   >- metis_tac[extend_live_memory_typed_success] >>
-  gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+  gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
       AllCaseEqs(), extend_memory_place_def, live_memory_result_def]
 QED
 
@@ -2238,9 +2238,9 @@ Proof
          >> simp[live_memory_result_def]) >>
       gvs[select_result_def] >>
       drule_all extend_live_place_typed_success >> simp[]) >>
-  gvs[select_result_def, extend_place_def, bind_def, lift_option_type_def,
+  gvs[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
       return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
-  Cases_on `sb` >> gvs[extend_place_def, bind_def, lift_option_type_def,
+  Cases_on `sb` >> gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
       return_def, raise_def, AllCaseEqs(), live_memory_result_def] >>
   rename1 `HashMapRef tr slot kt value_ty` >> Cases_on `value_ty` >>
   gvs[bind_def, return_def, raise_def, AllCaseEqs(), live_memory_result_def]
@@ -2253,12 +2253,12 @@ Theorem extend_typed_result_live[local]:
   live_memory_result u pv
 Proof
   rpt strip_tac >> Cases_on `bp`
-  >- gvs[extend_place_def, raise_def]
+  >- gvs[extend_place_def, ignore_bind_def, record_storage_event_def, raise_def]
   >- (Cases_on `vt` >> gvs[eval_result_typed_def] >>
       drule_all extend_live_place_typed_success >> simp[]) >>
-  Cases_on `sb` >> gvs[extend_place_def, raise_def] >>
+  Cases_on `sb` >> gvs[extend_place_def, ignore_bind_def, record_storage_event_def, raise_def] >>
   rename1 `HashMapRef tr slot kt value_ty` >> Cases_on `value_ty` >>
-  gvs[extend_place_def, bind_def, lift_option_type_def, return_def,
+  gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def,
       raise_def, AllCaseEqs(), live_memory_result_def]
 QED
 
@@ -2273,11 +2273,11 @@ Proof
   `place_type_value cx p st = (INL tv,st)` by
     gvs[runtime_place_typed_def] >>
   Cases_on `p`
-  >- (gvs[runtime_place_typed_storage, extend_place_def] >>
+  >- (gvs[runtime_place_typed_storage, extend_place_def, ignore_bind_def, record_storage_event_def] >>
       drule extend_storage_place_attribute_ready >>
       disch_then (qspecl_then [`b`, `st`, `c`, `cx`] strip_assume_tac) >>
       gvs[bind_def, return_def, no_type_error_result_def]) >>
-  gvs[extend_place_def, bind_def, ignore_bind_def, AllCaseEqs(),
+  gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, AllCaseEqs(),
       return_def, no_type_error_result_def] >>
   TRY (rename1 `read_place cx loc st = (INR err,st')` >>
        drule_all read_place_typed_error >> simp[] >> NO_TAC) >>
@@ -2347,10 +2347,10 @@ Proof
   `place_type_value cx p st = (INL (ArrayTV etv bd),st)` by
     gvs[runtime_place_typed_def] >>
   Cases_on `p`
-  >- (gvs[runtime_place_typed_storage, extend_place_def, bind_def, AllCaseEqs()] >>
+  >- (gvs[runtime_place_typed_storage, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, AllCaseEqs()] >>
       drule_all extend_storage_array_place_sound >>
       gvs[return_def, no_type_error_result_def] >> metis_tac[]) >>
-  gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+  gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
       AllCaseEqs()] >>
   TRY (rename1 `read_place cx _ st = (INR err,_)` >>
        drule_all read_place_typed_error >> simp[no_type_error_result_def] >> NO_TAC) >>
@@ -2376,10 +2376,10 @@ Proof
       `place_type_value cx p st = (INL (TupleTV tvs),st)` by
         gvs[runtime_place_typed_def] >>
       Cases_on `p`
-      >- (gvs[runtime_place_typed_storage, extend_place_def, bind_def, AllCaseEqs()] >>
+      >- (gvs[runtime_place_typed_storage, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, AllCaseEqs()] >>
           drule_all extend_storage_tuple_place_sound >>
           gvs[return_def, no_type_error_result_def]) >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+      gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
       TRY (rename1 `read_place cx _ st = (INR err,_)` >>
            drule_all read_place_typed_error >> simp[no_type_error_result_def] >> NO_TAC) >>
       imp_res_tac read_place_preserves_state >> gvs[] >>
@@ -2479,7 +2479,7 @@ Proof
     gvs[env_consistent_def, env_context_consistent_def] >>
   Cases_on `leaf` >>
   gvs[well_formed_vtype_def, well_formed_type_def, IS_SOME_EXISTS,
-      extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
+      extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def, return_def, raise_def,
       AllCaseEqs()] >>
   simp[no_type_error_result_def, eval_result_typed_def, runtime_place_typed_def,
        place_type_value_def, return_def] >>
@@ -4571,7 +4571,7 @@ Theorem select_projection_subscript_sound[local]:
   subscript_vtype bvt (expr_type ie) = SOME out /\
   value_runtime_typed env (expr_type ie) idx /\
   select_result cx ct bp (ValueSubscript idx) st = (res,st') ==>
-  st' = st /\ no_type_error_result res /\
+  st' = st with storage_trace := st'.storage_trace /\ no_type_error_result res /\
   (case res of INL pv => eval_result_typed (env,cx,st') pv out | INR _ => T)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `bvt`
@@ -6034,13 +6034,13 @@ Proof
   TRY (rename1 `eval_stmts cxf body' pushed_st = (INR y,_)` >>
        Cases_on `y`) >>
   gvs[try_def, handle_function_def, pop_function_def, set_scopes_def,
-      release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+      release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, get_transient_storage_def, update_transient_def,
       bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
   Cases_on `nr /\ ~is_view` >>
-  gvs[release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+  gvs[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, get_transient_storage_def, update_transient_def,
       bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
   Cases_on `cx.nonreentrant_slot` >>
-  gvs[release_nonreentrant_lock_def, get_transient_storage_def, update_transient_def,
+  gvs[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, get_transient_storage_def, update_transient_def,
       bind_def, return_def, raise_def, no_type_error_result_def, AllCaseEqs()] >>
   `value_has_type rtv v` by
     gvs[return_exception_typed_def, value_runtime_typed_def] >>
@@ -6584,7 +6584,7 @@ Proof
   rpt strip_tac >>
   Cases_on `nr` >> gvs[return_def, raise_def, no_type_error_result_def] >>
   Cases_on `cx.nonreentrant_slot` >>
-  gvs[raise_def, no_type_error_result_def, acquire_nonreentrant_lock_def,
+  gvs[raise_def, no_type_error_result_def, acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def,
       get_transient_storage_def, update_transient_def, bind_def, ignore_bind_def,
       return_def, raise_def] >>
   Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target st.tStorage) = 1w` >>
@@ -6618,7 +6618,7 @@ Proof
   gvs[no_type_error_result_def] >>
   Cases_on `nr` >> gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >>
-  gvs[raise_def, acquire_nonreentrant_lock_def, get_transient_storage_def,
+  gvs[raise_def, acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, get_transient_storage_def,
       update_transient_def, bind_def, ignore_bind_def, return_def,
       no_type_error_result_def] >>
   Cases_on `lookup_storage (n2w x) (lookup_transient_storage cx.txn.target dflt_st.tStorage) = 1w` >>

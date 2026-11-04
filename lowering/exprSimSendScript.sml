@@ -8,7 +8,7 @@
  * oracle mode the CALL takes the same outcome as the source's eval_send
  * (extCallOracleStep's send_call_oracle_step): on success both adopt it and
  * state_rel holds after, on failure the source raises "send failed" and
- * the ASSERT of the 0w success word aborts.  expr_sim_inv's
+ * the ASSERT of the 0w success word aborts.  expr_sim_inv H's
  * outcomes_accounts_typed rules out the third source result, the
  * "call outcome accounts" error, which Venom does not make.  The NoneV
  * result occupies no bytes, so expr_val_at holds of it wherever Lit 0w
@@ -256,9 +256,9 @@ QED
 
 Theorem expr_body_pre_send_arg:
   !cenv cx env ann has_gas args dflt e es es'.
-    expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-    MEM e args /\ expr_sim_inv cenv cx env es' ==>
-    expr_body_pre cenv cx env e es'
+    expr_body_pre H cenv cx env (Call ann (Send has_gas) args dflt) es /\
+    MEM e args /\ expr_sim_inv H cenv cx env es' ==>
+    expr_body_pre H cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def] >>
@@ -269,7 +269,7 @@ Proof
 QED
 
 Theorem send_pre_types:
-  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es ==>
+  expr_body_pre H cenv cx env (Call ann (Send has_gas) args dflt) es ==>
   ann = NoneT /\
   MAP expr_type args =
     [BaseT AddressT; BaseT (UintT 256)] ++
@@ -289,7 +289,7 @@ QED
 (* The invariant of typed_args_ready holds after all the operands. *)
 Theorem typed_args_ready_inv:
   !args es vs es' ctx.
-    typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    typed_args_ready H ctx func cenv cx arg_ty Inv args /\ Inv es /\
     eval_exprs cx args es = (INL vs, es') ==>
     Inv es'
 Proof
@@ -304,9 +304,9 @@ QED
 (* ===== The CALL and the ASSERT ===== *)
 
 Theorem expr_post_none_intro:
-  expr_type e = NoneT /\ stmt_state_rel ctx func cenv cx es' s /\
+  expr_type e = NoneT /\ stmt_state_rel H ctx func cenv cx es' s /\
   wb_frame cenv es sa s0 s ==>
-  expr_post ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
+  expr_post H ctx func cenv cx e es sa sb s0 es' NoneV (Lit 0w) s
 Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def, wb_frame_def,
        eval_operand_def, vyperValueTheory.evaluate_type_def,
@@ -338,7 +338,7 @@ Proof
 QED
 
 Theorem send_call_read_step[local]:
-  stmt_state_rel ctx func cenv cx es1 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -357,14 +357,14 @@ Theorem send_call_read_step[local]:
     ((res = INL NoneV /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
-        OK (update_var out 1w t') /\ state_rel func cenv cx es' t') \/
+        OK (update_var out 1w t') /\ state_rel H func cenv cx es' t') \/
      (res = INR (Error (RuntimeError "send failed")) /\
       step_inst_base (mk_inst id CALL
         [gas_op;addr_op;val_op;Lit 0w;Lit 0w;Lit 0w;Lit 0w] [out]) t =
         OK (update_var out 0w t')))
 Proof
   strip_tac >> drule eval_send_read >> strip_tac >>
-  `state_rel func cenv cx es1 t` by fs[stmt_state_rel_def] >>
+  `state_rel H func cenv cx es1 t` by fs[stmt_state_rel_def] >>
   `es1.outcomes = SOME t.vs_outcomes` by fs[state_rel_def] >>
   `r <> INR (Error (RuntimeError "call outcome accounts"))` by
     (drule_all eval_send_outcome_typed >> simp[]) >>
@@ -381,7 +381,7 @@ Theorem send_tail_frag:
     sm = (success, s3) /\
   emit_void ASSERT [success] s3 = (u, sb) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -393,7 +393,7 @@ Theorem send_tail_frag:
   expr_type e = NoneT ==>
   frag_exec ctx sm sb (\s. s = t)
     (\s. ?v. res = INL v /\
-             expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
+             expr_post H ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
     (expr_exit res)
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
@@ -453,21 +453,21 @@ Proof
 QED
 
 Theorem send_expr_sim:
-  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-  (!arg_ty. typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
-  expr_sim ctx func cenv cx ty (Call ann (Send has_gas) args dflt) es
+  expr_body_pre H cenv cx env (Call ann (Send has_gas) args dflt) es /\
+  (!arg_ty. typed_args_ready H ctx func cenv cx arg_ty (expr_sim_inv H cenv cx env) args) ==>
+  expr_sim H ctx func cenv cx ty (Call ann (Send has_gas) args dflt) es
 Proof
   strip_tac >> drule send_pre_types >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
-         expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `!e s. MEM e args /\ expr_sim_inv H cenv cx env s ==>
+         expr_body_pre H cenv cx env e s /\ is_word_type (expr_type e)` by
     (rpt strip_tac >- metis_tac[expr_body_pre_send_arg] >>
      gvs[EVERY_MEM]) >>
   `wb_args_shape cenv expr_type args` by metis_tac[typed_stack_args_shape] >>
   qpat_x_assum `!arg_ty. _` (qspec_then `expr_type` assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
+  reverse (Cases_on `stmt_state_rel H ctx func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   drule lower_value_send >> strip_tac >> gvs[] >>
@@ -482,7 +482,7 @@ Proof
       strip_tac >> irule frag_exec_exit_prefix >>
       goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `expr_sim_inv cenv cx env es1` by metis_tac[typed_args_ready_inv] >>
+  `expr_sim_inv H cenv cx env es1` by metis_tac[typed_args_ready_inv] >>
   `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) args vs` by
     (drule_all stack_args_values_typed_body >> simp[]) >>
@@ -517,12 +517,12 @@ QED
 (* TOP-LEVEL *)
 Theorem compile_send_case:
   !nocalls ctx func cenv cx ann has_gas args dflt.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_sim_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt) /\
-    expr_vv_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_sim_case H nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt) /\
+    expr_vv_case H nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)`
+  `expr_vv_case H nocalls ctx func cenv cx (Call ann (Send has_gas) args dflt)`
     suffices_by simp[expr_sim_case_of_vv] >>
   rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
   drule send_pre_types >> strip_tac >>
@@ -541,11 +541,11 @@ QED
 
 Theorem compile_send_case_sim:
   !cenv ann has_gas args dflt.
-    expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (Send has_gas) args dflt)
 Proof
   rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
-  `exprs_case T ctx func cenv cx args` by
+  `exprs_case H T ctx func cenv cx args` by
     (irule exprs_case_below >> irule expr_sim_below_mono >>
      goal_assum (drule_at Any) >> simp[expr_size_def]) >>
   metis_tac[compile_send_case]

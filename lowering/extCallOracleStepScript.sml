@@ -34,7 +34,7 @@
  * (INL); send_call_oracle_step lists that error as a case of its own.
  * Ruling it out takes an invariant that the outcomes still to consume are
  * well typed, as e2eDefs's call_outcomes_ok states for the initial ones;
- * state_rel carries no such invariant, and exprSimHyps's expr_sim_inv does
+ * state_rel carries no such invariant, and exprSimHyps's expr_sim_inv H does
  * (outcomes_accounts_typed), which is how exprSimSend proves send.
  *)
 
@@ -53,10 +53,10 @@ Ancestors
    says. *)
 Theorem venom_call_request_source:
   !cx es s aw vw ao az stat target value_opt.
-    accounts_rel cx es s /\ w2w aw = target /\
+    accounts_rel H cx es s /\ w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
     (stat \/ s.vs_call_ctx.cc_static) = IS_NONE value_opt ==>
-    request_agree cx
+    request_agree H cx
       (call_outcome_request target (read_memory (w2n ao) (w2n az) s)
          value_opt es)
       (venom_call_request s aw vw ao az stat)
@@ -100,14 +100,14 @@ QED
    record and adopt the same outcome. *)
 Theorem state_rel_adopt_consume[local]:
   !func cenv cx es s rq rq' outcome rest ro rz.
-    state_rel func cenv cx es s /\ request_agree cx rq rq' /\
+    state_rel H func cenv cx es s /\ request_agree H cx rq rq' /\
     take_outcome rq s.vs_outcomes = (outcome, rest) /\
     local_ptrs_rel func cenv es.scopes
       (SND (consume_call_outcome rq' ro rz s)) /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
       (SND (consume_call_outcome rq' ro rz s)) ==>
 
-    state_rel func cenv cx
+    state_rel H func cenv cx
       (SND (adopt_call_outcome rq outcome
               (es with <| outcomes := SOME rest;
                           requests := record_request rq es.requests |>)))
@@ -127,7 +127,7 @@ Proof
      simp[computed_precompile_def]) >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     fs[state_rel_def, call_ctx_rel_def] >>
-  `accounts_rel cx
+  `accounts_rel H cx
      (SND (adopt_call_outcome rq outcome
              (es with <| outcomes := SOME rest;
                          requests := record_request rq es.requests |>)))
@@ -159,7 +159,7 @@ QED
 Theorem exec_ext_call_oracle_step:
   !func cenv cx es s inst gas aw vw ao az ro rz stat out target
    value_opt rq outcome es1.
-    state_rel func cenv cx es s /\ inst.inst_outputs = [out] /\
+    state_rel H func cenv cx es s /\ inst.inst_outputs = [out] /\
     w2w aw = target /\
     w2n vw = (case value_opt of NONE => 0 | SOME n => n) /\
     stat = IS_NONE value_opt /\
@@ -181,10 +181,10 @@ Theorem exec_ext_call_oracle_step:
          s'.vs_returndata = outcome.co_returnData /\
          (local_ptrs_rel func cenv es.scopes s' /\
           immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' ==>
-          state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
+          state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) s')
 Proof
   rpt gen_tac >> strip_tac >>
-  `accounts_rel cx es s /\ es.outcomes = SOME s.vs_outcomes /\
+  `accounts_rel H cx es s /\ es.outcomes = SOME s.vs_outcomes /\
    ~s.vs_call_ctx.cc_static` by fs[state_rel_def] >>
   `?rest. rq = call_outcome_request target (read_memory (w2n ao) (w2n az) s)
                  value_opt es /\
@@ -194,7 +194,7 @@ Proof
     (qpat_x_assum `take_call_outcome _ _ _ _ = _` mp_tac >>
      simp[take_call_outcome_def] >> pairarg_tac >> simp[] >> rw[] >>
      qexists_tac `rest` >> simp[]) >>
-  `request_agree cx rq (venom_call_request s aw vw ao az stat)` by
+  `request_agree H cx rq (venom_call_request s aw vw ao az stat)` by
     (qpat_x_assum `rq = _` SUBST1_TAC >>
      irule venom_call_request_source >> simp[]) >>
   qabbrev_tac `rq' = venom_call_request s aw vw ao az stat` >>
@@ -226,7 +226,7 @@ QED
 Theorem send_call_oracle_step:
   !func cenv cx es s inst gas_op addr_op val_op out has_gas to_v amount_v
    gas_vs aw vw res es'.
-    state_rel func cenv cx es s /\
+    state_rel H func cenv cx es s /\
     inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
     inst.inst_operands =
       [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] /\
@@ -245,7 +245,7 @@ Theorem send_call_oracle_step:
                         vs_returndata := s'.vs_returndata |> /\
          ((res = INL (Value NoneV) /\
            step_inst_base inst s = OK (update_var out 1w s') /\
-           state_rel func cenv cx es' s') \/
+           state_rel H func cenv cx es' s') \/
           (res = INR (Error (RuntimeError "send failed")) /\
            step_inst_base inst s = OK (update_var out 0w s')))
 Proof

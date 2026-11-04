@@ -3,7 +3,7 @@
  *
  * The main theorems (exprSimMain's compile_expr_sim and
  * compile_expr_vv_sim) say expr_ok of every expression: expr_sim and
- * expr_vv_sim (exprSim) hold at every source state where expr_sim_pre
+ * expr_vv_sim (exprSim) hold at every source state where expr_sim_pre H
  * holds.  expr_sim speaks of lower_value's code, expr_vv_sim of
  * compile_expr's alone and the value_vv it hands out, for a case that
  * unwraps an operand later or never.  The case lemmas each prove expr_ok,
@@ -12,23 +12,23 @@
  * which is the induction hypothesis compile_expr_ind gives.
  *
  * TOP-LEVEL:
- *   expr_sim_inv      — the facts about the source state and the context
+ *   expr_sim_inv H      — the facts about the source state and the context
  *                       that every subexpression keeps: type soundness's
  *                       invariants, the locals of the type environment
  *                       held through pointer variables, the flag
  *                       member ids, flag member counts and struct fields
  *                       of the compile environment, and the storage
  *                       invariants
- *   expr_sim_pre      — expr_sim_inv, the expression well typed, its
+ *   expr_sim_pre H      — expr_sim_inv H, the expression well typed, its
  *                       integer types of whole bytes, its buffers below
  *                       the allocation limit, and no internal call,
  *                       raw_call or create in it
  *   byte_widths_expr  — every node's type has a width of whole bytes
- *   expr_body_pre     — expr_sim_pre less int_calls_expr e = []: the
+ *   expr_body_pre H     — expr_sim_pre H less int_calls_expr e = []: the
  *                       body simulation's (bodySim); its calls are to
  *                       the main module of a supported program
- *   expr_sim_ok       — expr_sim wherever expr_sim_pre holds
- *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre holds
+ *   expr_sim_ok       — expr_sim wherever expr_sim_pre H holds
+ *   expr_vv_ok        — expr_vv_sim wherever expr_sim_pre H holds
  *   expr_ok           — both: the induction predicate
  *   expr_sim_below    — expr_ok of every expression below a size
  *   builtin_sim_ok, type_builtin_sim_ok — expr_ok of a builtin and a type
@@ -41,13 +41,13 @@
  *   popped_keys_indexed — a local's popped history is typed and keyed
  *                       at dynamic-array indices
  *   eval_expr_popped_keys_indexed — evaluation keeps popped_keys_indexed
- *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv and
+ *   expr_sim_pre_eval — type soundness: evaluation keeps expr_sim_inv H and
  *                       raises no type error
  *   expr_sim_pre_res_ok, expr_sim_pre_word_result — the results of an
  *                       expression are those expr_sim speaks of; a
  *                       word_value_type one's values are word_values
- *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre
- *                       wherever expr_sim_inv holds
+ *   expr_sim_pre_builtin_arg — an argument of a builtin meets expr_sim_pre H
+ *                       wherever expr_sim_inv H holds
  *   byte_widths_expr_type — the expression's own type has whole bytes
  *   expr_sim_pre_var_types_well_formed — the local types are well formed
  *   well_typed_expr_type_evaluates — a well-typed expression's type
@@ -58,7 +58,7 @@
  *   expr_sim_case, expr_vv_case — the judgments of a shared case lemma,
  *                       which compile_expr_sim and the body simulation
  *                       both use: expr_sim and expr_vv_sim wherever
- *                       expr_body_pre holds, and with no internal call if
+ *                       expr_body_pre H holds, and with no internal call if
  *                       its nocalls flag is set (expr_sim_ok_case,
  *                       expr_vv_ok_case, expr_ok_case)
  *   expr_sim_case_of_vv, expr_vv_case_stack — expr_ok_of_vv and
@@ -70,7 +70,7 @@
  *   expr_case_of_ok, expr_vv_case_nil — the judgments of a form with no
  *                       internal call from its expr_ok or expr_vv_ok
  *
- * The type-soundness lemmas above hold of expr_body_pre too
+ * The type-soundness lemmas above hold of expr_body_pre H too
  * (expr_body_pre_eval_result, expr_body_pre_eval, ...): they use
  * call_evaluation_safe, not int_calls_expr e = [].
  *
@@ -114,7 +114,7 @@
  *     (codegen_venom/expr.py).  build_compile_env fills
  *     ce_flag_member_id from the main module's declarations only, so for
  *     a flag of an imported module with two members or more the clause
- *     does not hold of the environment it builds.  expr_sim_inv is about
+ *     does not hold of the environment it builds.  expr_sim_inv H is about
  *     the whole target, so the theorem then says nothing about any
  *     expression of the contract, not only those that use the flag.
  *   - The flag counts clause: the compile environment's member count of a
@@ -221,7 +221,7 @@
  *   - The rest of the compile environment's metadata (dynamic array
  *     capacities, method ids) is not related to the source context.  The
  *     cases that read it (Attribute, ...) will need a clause each in
- *     expr_sim_inv, as pop has the local types clause, and
+ *     expr_sim_inv H, as pop has the local types clause, and
  *     TopLevelName needs every immutable to be in ce_module_vars (#563);
  *     storage and transient variables are there by storage_vars_rel and
  *     transient_vars_rel.  Each is to match what Vyper's compiler
@@ -234,6 +234,7 @@
 
 Theory exprSimHyps
 Ancestors
+  vyperStorageFootprint vyperFiniteStoragePreservation
   list finite_map abiTypeBoundProps
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -293,7 +294,7 @@ End
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
    places a supported program's immutables (immutableLocationProps). *)
 Definition expr_sim_inv_def:
-  expr_sim_inv cenv cx env (es:evaluation_state) <=>
+  expr_sim_inv H cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
     accounts_well_typed es.accounts /\
     context_well_typed cx /\ functions_well_typed cx /\
@@ -313,10 +314,10 @@ Definition expr_sim_inv_def:
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
                                      sz = type_memory_size tv) fields) /\
-    outcomes_accounts_typed es.outcomes /\
     IS_SOME es.outcomes /\
-    contract_storage_well_formed cx es /\ storage_layout_safe cx /\
-    oracle_storage_ok cx es /\
+    storage_well_formed_on cx es (FST H) /\
+    regions_consistent (FST H) /\
+    storage_locks_separated (FST H) (SND H) /\
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
@@ -397,21 +398,25 @@ Termination
 End
 
 Definition expr_sim_pre_def:
-  expr_sim_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_sim_pre H cenv cx env e es <=>
+    expr_sim_inv H cenv cx env es /\ well_typed_expr env e /\
+    (!res es'. eval_expr cx e es = (res,es') ==>
+       storage_observations_ok cx H es'.storage_trace) /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e
 End
 
-(* expr_sim_pre without int_calls_expr e = []: the body simulation's
+(* expr_sim_pre H without int_calls_expr e = []: the body simulation's
    (bodySim), where an operand may call an internal function.  Its calls
    are to the main module of a supported program, as supported_expr's
    are, so the callees' bodies keep storage well formed
    (bodyStoragePreservation). *)
 Definition expr_body_pre_def:
-  expr_body_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_body_pre H cenv cx env e es <=>
+    expr_sim_inv H cenv cx env es /\ well_typed_expr env e /\
+    (!res es'. eval_expr cx e es = (res,es') ==>
+       storage_observations_ok cx H es'.storage_trace) /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     EVERY (\c. FST c = NONE /\
@@ -422,74 +427,74 @@ End
 
 Theorem expr_sim_pre_body:
   !cenv cx env e es.
-    expr_sim_pre cenv cx env e es <=>
-    expr_body_pre cenv cx env e es /\ int_calls_expr e = []
+    expr_sim_pre H cenv cx env e es <=>
+    expr_body_pre H cenv cx env e es /\ int_calls_expr e = []
 Proof
   rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
 QED
 
 Theorem expr_sim_pre_body_pre:
   !cenv cx env e es.
-    expr_sim_pre cenv cx env e es ==> expr_body_pre cenv cx env e es
+    expr_sim_pre H cenv cx env e es ==> expr_body_pre H cenv cx env e es
 Proof
   simp[expr_sim_pre_body]
 QED
 
 Definition expr_sim_ok_def:
-  expr_sim_ok cenv e <=>
+  expr_sim_ok H cenv e <=>
     !ctx func cx env ty es.
-      expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
+      expr_sim_pre H cenv cx env e es ==> expr_sim H ctx func cenv cx ty e es
 End
 
 Definition expr_vv_ok_def:
-  expr_vv_ok cenv e <=>
+  expr_vv_ok H cenv e <=>
     !ctx func cx env ty es.
-      expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
+      expr_sim_pre H cenv cx env e es ==> expr_vv_sim H ctx func cenv cx ty e es
 End
 
 (* The induction predicate: both judgments, so a case can use whichever an
    operand's lowering needs. *)
 Definition expr_ok_def:
-  expr_ok cenv e <=> expr_sim_ok cenv e /\ expr_vv_ok cenv e
+  expr_ok H cenv e <=> expr_sim_ok H cenv e /\ expr_vv_ok H cenv e
 End
 
 Definition expr_sim_below_def:
-  expr_sim_below cenv n <=> !e. expr_size e < n ==> expr_ok cenv e
+  expr_sim_below H cenv n <=> !e. expr_size e < n ==> expr_ok H cenv e
 End
 
 (* The judgments a shared case lemma takes of its operands and concludes of
    its expression: expr_sim and expr_vv_sim at one ctx, func and cx, at
-   every state meeting expr_body_pre, and with no internal call in the
+   every state meeting expr_body_pre H, and with no internal call in the
    expression if nocalls.  With nocalls they are expr_sim_ok and
    expr_vv_ok (expr_sim_ok_case, expr_vv_ok_case), compile_expr_sim's
    induction predicate; without, what the body simulation's body_expr_ok
    gives in a frame of the lowered program.  So one case lemma serves
    both. *)
 Definition expr_sim_case_def:
-  expr_sim_case nocalls ctx func cenv cx e <=>
+  expr_sim_case H nocalls ctx func cenv cx e <=>
     !env ty es.
-      expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
-      expr_sim ctx func cenv cx ty e es
+      expr_body_pre H cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
+      expr_sim H ctx func cenv cx ty e es
 End
 
 Definition expr_vv_case_def:
-  expr_vv_case nocalls ctx func cenv cx e <=>
+  expr_vv_case H nocalls ctx func cenv cx e <=>
     !env ty es.
-      expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
-      expr_vv_sim ctx func cenv cx ty e es
+      expr_body_pre H cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
+      expr_vv_sim H ctx func cenv cx ty e es
 End
 
 (* The operands of an expression, evaluated and read in order, as
    evaluate_ind gives their judgments: each one's if the ones before it can
    evaluate (bodySim's body_exprs_ok). *)
 Definition exprs_case_def:
-  exprs_case nocalls ctx func cenv cx [] = T /\
-  exprs_case nocalls ctx func cenv cx (e::es) =
-    (expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e /\
+  exprs_case H nocalls ctx func cenv cx [] = T /\
+  exprs_case H nocalls ctx func cenv cx (e::es) =
+    (expr_sim_case H nocalls ctx func cenv cx e /\
+     expr_vv_case H nocalls ctx func cenv cx e /\
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
-      exprs_case nocalls ctx func cenv cx es))
+      exprs_case H nocalls ctx func cenv cx es))
 End
 
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
@@ -503,27 +508,27 @@ Definition names_builtin_def:
 End
 
 Definition builtin_sim_ok_def:
-  builtin_sim_ok cenv ann bi args <=>
-    ~names_builtin bi args ==> expr_ok cenv (Builtin ann bi args)
+  builtin_sim_ok H cenv ann bi args <=>
+    ~names_builtin bi args ==> expr_ok H cenv (Builtin ann bi args)
 End
 
 Definition type_builtin_sim_ok_def:
-  type_builtin_sim_ok cenv ann tb t args <=>
-    expr_ok cenv (TypeBuiltin ann tb t args)
+  type_builtin_sim_ok H cenv ann tb t args <=>
+    expr_ok H cenv (TypeBuiltin ann tb t args)
 End
 
 (* ===== The induction hypothesis ===== *)
 
 Theorem expr_sim_below_mono:
-  !cenv m n. expr_sim_below cenv n /\ m <= n ==> expr_sim_below cenv m
+  !cenv m n. expr_sim_below H cenv n /\ m <= n ==> expr_sim_below H cenv m
 Proof
   rw[expr_sim_below_def]
 QED
 
 Theorem expr_sim_below_mem:
   !cenv args e.
-    expr_sim_below cenv (list_size expr_size args) /\ MEM e args ==>
-    expr_ok cenv e
+    expr_sim_below H cenv (list_size expr_size args) /\ MEM e args ==>
+    expr_ok H cenv e
 Proof
   rw[expr_sim_below_def] >> first_x_assum irule >>
   irule expr_list_member_bound >> simp[]
@@ -547,14 +552,14 @@ QED
 
 (* ===== Type soundness ===== *)
 
-(* The storage conjuncts of expr_sim_inv after evaluating e: with no
+(* The storage conjuncts of expr_sim_inv H after evaluating e: with no
    internal call by exprStoragePreservation, with one by
    bodyStoragePreservation.  The outcomes still to consume are a suffix of
    the earlier ones (vyperEvalOutcomeSuffix), so oracle_storage_ok
    carries over. *)
 Theorem expr_body_pre_storage_preserved:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_body_pre H cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
 Proof
   rpt gen_tac >> strip_tac >> conj_tac
@@ -738,8 +743,8 @@ QED
 
 Theorem expr_body_pre_eval_result:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_body_pre H cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_inv H cenv cx env es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
@@ -748,7 +753,7 @@ Proof
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
      gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
-  qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_body_pre H _ _ _ _ _` mp_tac >>
   simp[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
   drule_all eval_expr_popped_keys_indexed >> strip_tac >>
   qspecl_then [`cx`, `e`] (mp_tac o CONJUNCT1)
@@ -768,8 +773,8 @@ QED
 
 Theorem expr_sim_pre_eval_result:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_pre H cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_inv H cenv cx env es' /\ no_type_error_result res /\
     !tv. res = INL tv ==>
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
@@ -778,8 +783,8 @@ QED
 
 Theorem expr_body_pre_eval:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_body_pre H cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv H cenv cx env es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   rpt strip_tac >>
@@ -798,8 +803,8 @@ QED
 
 Theorem expr_sim_pre_eval:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ no_type_error_result res /\
+    expr_sim_pre H cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv H cenv cx env es' /\ no_type_error_result res /\
     !v. res = INL v ==> expr_result_typed env e (Value v)
 Proof
   metis_tac[expr_body_pre_eval, expr_sim_pre_body_pre]
@@ -807,7 +812,7 @@ QED
 
 Theorem expr_body_pre_res_ok:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_body_pre H cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_res_ok res
 Proof
   rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
@@ -823,7 +828,7 @@ QED
 
 Theorem expr_sim_pre_res_ok:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_pre H cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
     expr_res_ok res
 Proof
   metis_tac[expr_body_pre_res_ok, expr_sim_pre_body_pre]
@@ -831,7 +836,7 @@ QED
 
 Theorem expr_body_pre_vv_res_ok:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_body_pre H cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_vv_res_ok res
 Proof
   rpt strip_tac >> drule_all expr_body_pre_eval_result >> strip_tac >>
@@ -846,7 +851,7 @@ QED
 
 Theorem expr_sim_pre_vv_res_ok:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    expr_sim_pre H cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
     expr_vv_res_ok res
 Proof
   metis_tac[expr_body_pre_vv_res_ok, expr_sim_pre_body_pre]
@@ -870,9 +875,9 @@ QED
 
 Theorem expr_body_pre_word_result:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
+    expr_body_pre H cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv H cenv cx env es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -890,9 +895,9 @@ QED
 
 Theorem expr_sim_pre_word_result:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ word_value_type (expr_type e) /\
+    expr_sim_pre H cenv cx env e es /\ word_value_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    expr_sim_inv H cenv cx env es' /\ expr_res_ok res /\
     !tv. res = INL tv ==>
          ?tyv. word_value tv /\
                  evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
@@ -930,9 +935,9 @@ QED
 
 Theorem expr_sim_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
-    expr_sim_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
-    expr_sim_pre cenv cx env e es'
+    expr_sim_pre H cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_sim_inv H cenv cx env es' ==>
+    expr_sim_pre H cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
@@ -972,9 +977,9 @@ QED
 
 Theorem expr_body_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
-    expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
-    expr_sim_inv cenv cx env es' ==>
-    expr_body_pre cenv cx env e es'
+    expr_body_pre H cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_sim_inv H cenv cx env es' ==>
+    expr_body_pre H cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
      byte_widths_expr_def, alloc_limits_expr_def] >>
@@ -997,7 +1002,7 @@ QED
 (* The local types are well formed: they evaluate by env_scopes_consistent. *)
 Theorem expr_body_pre_var_types_well_formed:
   !cenv cx env e es.
-    expr_body_pre cenv cx env e es ==>
+    expr_body_pre H cenv cx env e es ==>
     !id t. FLOOKUP env.var_types id = SOME t ==>
            well_formed_type env.type_defs t
 Proof
@@ -1009,7 +1014,7 @@ QED
 
 Theorem expr_sim_pre_var_types_well_formed:
   !cenv cx env e es.
-    expr_sim_pre cenv cx env e es ==>
+    expr_sim_pre H cenv cx env e es ==>
     !id t. FLOOKUP env.var_types id = SOME t ==>
            well_formed_type env.type_defs t
 Proof
@@ -1019,7 +1024,7 @@ QED
 (* A well-typed expression's type evaluates. *)
 Theorem expr_body_pre_type_evaluates:
   !cenv cx env e es.
-    expr_body_pre cenv cx env e es ==>
+    expr_body_pre H cenv cx env e es ==>
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e))
 Proof
   rpt strip_tac >> drule expr_body_pre_var_types_well_formed >> strip_tac >>
@@ -1031,13 +1036,13 @@ QED
 
 Theorem well_typed_expr_type_evaluates:
   !cenv cx env e es.
-    expr_sim_pre cenv cx env e es ==>
+    expr_sim_pre H cenv cx env e es ==>
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e))
 Proof
   metis_tac[expr_body_pre_type_evaluates, expr_sim_pre_body_pre]
 QED
 
-(* Under expr_sim_inv the compile environment's memory size of a type is
+(* Under expr_sim_inv H the compile environment's memory size of a type is
    the source's (the struct fields clause sizes each field). *)
 Theorem struct_layout_size_list:
   !fields tvs.
@@ -1060,7 +1065,7 @@ QED
 
 Theorem expr_sim_inv_memory_size:
   !cenv ty cx env es tv.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes cenv ty = type_memory_size tv
 Proof
@@ -1113,7 +1118,7 @@ QED
    transient storage or code asks of its type (expr_sim_of_vv_sim). *)
 Theorem expr_body_pre_copy_ok:
   !cenv cx env e es tvt.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     ~is_word_type (expr_type e) ==>
     type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
@@ -1128,11 +1133,11 @@ QED
 
 (* A case lemma that proves expr_vv_ok proves expr_ok. *)
 Theorem expr_ok_of_vv:
-  !cenv e. expr_vv_ok cenv e ==> expr_ok cenv e
+  !cenv e. expr_vv_ok H cenv e ==> expr_ok H cenv e
 Proof
   rw[expr_ok_def, expr_sim_ok_def] >> irule expr_sim_of_vv_sim >>
   rpt strip_tac
-  >~ [`expr_vv_sim`] >- (fs[expr_vv_ok_def] >> metis_tac[]) >>
+  >~ [`expr_vv_sim H`] >- (fs[expr_vv_ok_def] >> metis_tac[]) >>
   metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
 QED
 
@@ -1140,10 +1145,10 @@ QED
    from expr_sim_ok (exprSim's expr_vv_sim_stack). *)
 Theorem expr_ok_stack:
   !cenv e.
-    expr_sim_ok cenv e /\
+    expr_sim_ok H cenv e /\
     (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
     (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_ok cenv e
+    expr_ok H cenv e
 Proof
   rw[expr_ok_def, expr_vv_ok_def] >> irule expr_vv_sim_stack >>
   gvs[expr_sim_ok_def] >> metis_tac[]
@@ -1175,23 +1180,23 @@ QED
 
 Theorem expr_sim_ok_case:
   !cenv e.
-    expr_sim_ok cenv e <=> !ctx func cx. expr_sim_case T ctx func cenv cx e
+    expr_sim_ok H cenv e <=> !ctx func cx. expr_sim_case H T ctx func cenv cx e
 Proof
   rw[expr_sim_ok_def, expr_sim_case_def, expr_sim_pre_body] >> metis_tac[]
 QED
 
 Theorem expr_vv_ok_case:
   !cenv e.
-    expr_vv_ok cenv e <=> !ctx func cx. expr_vv_case T ctx func cenv cx e
+    expr_vv_ok H cenv e <=> !ctx func cx. expr_vv_case H T ctx func cenv cx e
 Proof
   rw[expr_vv_ok_def, expr_vv_case_def, expr_sim_pre_body] >> metis_tac[]
 QED
 
 Theorem expr_ok_case:
   !cenv e.
-    expr_ok cenv e <=>
-    !ctx func cx. expr_sim_case T ctx func cenv cx e /\
-                  expr_vv_case T ctx func cenv cx e
+    expr_ok H cenv e <=>
+    !ctx func cx. expr_sim_case H T ctx func cenv cx e /\
+                  expr_vv_case H T ctx func cenv cx e
 Proof
   metis_tac[expr_ok_def, expr_sim_ok_case, expr_vv_ok_case]
 QED
@@ -1199,8 +1204,8 @@ QED
 (* expr_ok_of_vv for one ctx, func and cx. *)
 Theorem expr_sim_case_of_vv:
   !nocalls ctx func cenv cx e.
-    expr_vv_case nocalls ctx func cenv cx e ==>
-    expr_sim_case nocalls ctx func cenv cx e
+    expr_vv_case H nocalls ctx func cenv cx e ==>
+    expr_sim_case H nocalls ctx func cenv cx e
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_sim_of_vv_sim >>
   conj_tac >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
@@ -1210,10 +1215,10 @@ QED
 (* expr_ok_stack for one ctx, func and cx. *)
 Theorem expr_vv_case_stack:
   !nocalls ctx func cenv cx e.
-    expr_sim_case nocalls ctx func cenv cx e /\
+    expr_sim_case H nocalls ctx func cenv cx e /\
     (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
     (!es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_vv_case nocalls ctx func cenv cx e
+    expr_vv_case H nocalls ctx func cenv cx e
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_vv_sim_stack >>
   metis_tac[]
@@ -1221,9 +1226,9 @@ QED
 
 Theorem expr_sim_case_apply:
   !nocalls ctx func cenv cx env ty e es.
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
-    expr_sim ctx func cenv cx ty e es
+    expr_sim_case H nocalls ctx func cenv cx e /\
+    expr_body_pre H cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
+    expr_sim H ctx func cenv cx ty e es
 Proof
   metis_tac[expr_sim_case_def]
 QED
@@ -1232,9 +1237,9 @@ QED
    expr_ok's, whatever the flag. *)
 Theorem expr_case_of_ok:
   !nocalls ctx func cenv cx e.
-    int_calls_expr e = [] /\ expr_ok cenv e ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e
+    int_calls_expr e = [] /\ expr_ok H cenv e ==>
+    expr_sim_case H nocalls ctx func cenv cx e /\
+    expr_vv_case H nocalls ctx func cenv cx e
 Proof
   rw[expr_ok_case] >> gvs[expr_sim_case_def, expr_vv_case_def] >>
   metis_tac[]
@@ -1244,9 +1249,9 @@ QED
    so no internal call. *)
 Theorem expr_vv_case_nil:
   !nocalls ctx func cenv cx e.
-    (!env es. expr_body_pre cenv cx env e es ==> int_calls_expr e = []) /\
-    expr_vv_ok cenv e ==>
-    expr_vv_case nocalls ctx func cenv cx e
+    (!env es. expr_body_pre H cenv cx env e es ==> int_calls_expr e = []) /\
+    expr_vv_ok H cenv e ==>
+    expr_vv_case H nocalls ctx func cenv cx e
 Proof
   rw[expr_vv_case_def, expr_vv_ok_def, expr_sim_pre_body] >> metis_tac[]
 QED
@@ -1255,15 +1260,15 @@ QED
    at nocalls = T. *)
 Theorem exprs_case_every_ok:
   !ctx func cenv cx es.
-    EVERY (expr_ok cenv) es ==> exprs_case T ctx func cenv cx es
+    EVERY (expr_ok H cenv) es ==> exprs_case H T ctx func cenv cx es
 Proof
   ntac 4 gen_tac >> Induct >> rw[exprs_case_def] >> gvs[expr_ok_case]
 QED
 
 Theorem exprs_case_below:
   !cenv args ctx func cx.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    exprs_case T ctx func cenv cx args
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    exprs_case H T ctx func cenv cx args
 Proof
   rpt strip_tac >> irule exprs_case_every_ok >> simp[EVERY_MEM] >>
   metis_tac[expr_sim_below_mem]
@@ -1309,7 +1314,7 @@ QED
 
 Theorem type_builtin_read_annotation_typed:
   !cenv cx env es es' ty ty' tb target args v.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     well_typed_expr env (TypeBuiltin ty' tb target args) /\
     call_evaluation_safe cx (int_calls_expr (TypeBuiltin ty tb target args)) /\
     (do r <- eval_expr cx (TypeBuiltin ty tb target args);
@@ -1329,7 +1334,7 @@ QED
    including the ABI encoder's computed capacity. *)
 Theorem expr_body_pre_abi_encode_zero_size:
   !cenv cx env ann ensure mid target args es.
-    expr_body_pre cenv cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+    expr_body_pre H cenv cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
     lowered_value_type cenv (TypeBuiltin ann (AbiEncode ensure mid) target args) =
       BaseT (BytesT (Dynamic 0)) ==>
     abi_encode_size_ok env.type_defs ensure target mid 0
@@ -1374,7 +1379,7 @@ QED
 
 Theorem expr_body_pre_abi_encode_zero_annotation:
   !cenv cx env ann ensure mid target args es.
-    expr_body_pre cenv cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
+    expr_body_pre H cenv cx env (TypeBuiltin ann (AbiEncode ensure mid) target args) es /\
     lowered_value_type cenv (TypeBuiltin ann (AbiEncode ensure mid) target args) =
       BaseT (BytesT (Dynamic 0)) ==>
     well_typed_expr env
@@ -1400,7 +1405,7 @@ QED
 
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     (lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
      lowered_value_type cenv e = BaseT (StringT 0)) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
@@ -1420,7 +1425,7 @@ Proof
           read_result_def])
   >~ [`TypeBuiltin _ (AbiEncode _ _) _ _`]
   >- (strip_tac >>
-      rename1 `expr_body_pre cenv cx env
+      rename1 `expr_body_pre H cenv cx env
         (TypeBuiltin ann (AbiEncode ensure method_id) target args) es` >>
       `lowered_value_type cenv
          (TypeBuiltin ann (AbiEncode ensure method_id) target args) =
@@ -1481,7 +1486,7 @@ QED
 
 Theorem expr_body_pre_bop_operands:
   !cenv cx env ann bop e1 e2 es.
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_body_pre H cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     (bop = Exp ==> IS_SOME (expr_int_literal e1) \/
       ?n. expr_int_literal e2 = SOME n /\ 0 <= n) /\
     (bop = ShL \/ bop = ShR ==> shift_amount_ok e2)

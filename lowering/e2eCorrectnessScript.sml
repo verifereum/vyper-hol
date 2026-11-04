@@ -207,15 +207,15 @@ End
    Source exemption is handled before the conditional stages are opened.
    Totality supplies an actual EVM run even when neither stage applies.
    The middle stage matches runs up to the source result's dead bytes
-   (external_call_dead), which the source relation ignores. *)
+   (external_call_dead H), which the source relation ignores. *)
 Theorem e2e_vyper_to_evm:
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
-    (?fuel. external_call_result_rel tops ret tx
+    (?fuel. external_call_result_rel H tops ret tx
               (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
     (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
-       ctx_sim (external_call_dead tx
+       ctx_sim (external_call_dead H tx
                   (call_external (SOME vs.vs_outcomes) [] am tx))
          ctx ctx' vs vs /\
        !fuel. ?r es'.
@@ -745,10 +745,10 @@ Theorem vyper_call_correct:
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     supported_program tops /\ immutable_free_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx (MAP SND (call_trace es)) [] /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok tops am tx (MAP SND (call_trace es))
+    call_outcomes_ok am tx (MAP SND (call_trace es)) []
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -781,7 +781,7 @@ Proof
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-   call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
+   call_outcomes_ok am tx vs.vs_outcomes []` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `source_unit_execution_correct tops ret am tx unit vs` by
     (irule lower_vyper_runtime_unit_correct >> simp[] >>
@@ -799,7 +799,7 @@ Proof
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
-  `dead_wf (external_call_dead tx
+  `dead_wf (external_call_dead H tx
               (call_external (SOME vs.vs_outcomes) [] am tx))` by
     simp[external_call_dead_wf] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>

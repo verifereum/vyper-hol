@@ -97,9 +97,9 @@ QED
 Theorem external_body_source_ok:
   !tops am tx ret vs mut args fbody env es0 res es'.
     supported_program tops /\ source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\ source_deployment_rel tops am tx /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -126,11 +126,11 @@ Theorem external_entry_value_revert:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -158,11 +158,11 @@ Theorem external_entry_reaches_body:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -184,7 +184,7 @@ Theorem external_entry_reaches_body:
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_state_rel unit.cu_context func cenv
+      stmt_state_rel H unit.cu_context func cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -210,11 +210,11 @@ Theorem external_body_frame:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -236,7 +236,7 @@ Theorem external_body_frame:
     cenv.ce_return_pc = NONE /\
     ?bindings env_t env'.
       supported_stmts tops bindings fbody /\
-      expr_sim_inv cenv
+      expr_sim_inv H cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret fbody = SOME env' /\
@@ -265,11 +265,11 @@ Theorem external_frame_ret_ok:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
@@ -281,12 +281,12 @@ Theorem external_frame_ret_ok:
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
-    frame_ret_ok unit.cu_context func
+    frame_ret_ok H unit.cu_context func
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (\v es r. ?tv v'.
          evaluate_type (type_env tops) ret = SOME tv /\
          safe_cast tv v = SOME v' /\
-         external_call_result_rel tops ret tx
+         external_call_result_rel H tops ret tx
            (INL v', finalize_pending_deletions
                       (abstract_machine_from_state am.sources am.exports
                          am.layouts es),
@@ -304,17 +304,17 @@ Theorem external_body_revert_data_reverts:
   !tops bindings ctx func cenv cx env_t env' ret_ty RetQ fbody es0 d es' sa
    sb cenv' s0 fuel a t.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings fbody /\
-    expr_sim_inv cenv cx env_t es0 /\ ce_locals_declared cenv env_t /\
+    expr_sim_inv H cenv cx env_t es0 /\ ce_locals_declared cenv env_t /\
     locals_alloc_ok cenv env_t /\
     type_stmts env_t ret_ty fbody = SOME env' /\
     EVERY (stmt_exprs_ok cenv) fbody /\
     call_evaluation_safe cx (int_calls_stmts fbody) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    frame_ret_ok H ctx func cx RetQ cenv ret_ty /\
     eval_stmts cx fbody es0 = (INR (Error (RevertData d)), es') /\
     stmts_env cenv NoLoop ret_ty fbody sa = (cenv', sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
-    ~block_is_terminated sa /\ stmt_state_rel ctx func cenv cx es0 s0 /\
+    ~block_is_terminated sa /\ stmt_state_rel H ctx func cenv cx es0 s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     run_from fuel ctx func s0 = Abort a t ==>
@@ -337,9 +337,9 @@ Theorem external_fallthrough_result_rel_any:
     compile_stmts cenv NoLoop (BaseT BoolT) stmts st = ((), sb) /\
     ~block_is_terminated sb ==>
     frag_exec ctx sb st'
-      (\s. state_rel func cenv' cx es s)
+      (\s. state_rel H func cenv' cx es s)
       Q
-      (external_call_result_rel tops NoneT tx
+      (external_call_result_rel H tops NoneT tx
          (INL NoneV, finalize_pending_deletions
                        (abstract_machine_from_state srcs exps layouts es),
           es.requests))
@@ -505,7 +505,7 @@ Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
     expr_exit (INR e : unit + exception) r /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
-    external_call_result_rel tops ret tx (INR e, am, rqs) r
+    external_call_result_rel H tops ret tx (INR e, am, rqs) r
 Proof
   rpt strip_tac >>
   Cases_on `r` >> gvs[expr_exit_def] >>
@@ -522,11 +522,11 @@ Theorem lower_vyper_runtime_unit_body[local]:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     LENGTH tx.args = LENGTH args /\
@@ -553,8 +553,8 @@ Proof
     gvs[package_external_fn_def, set_external_package_target_def] >>
   drule guarded_body_code >> strip_tac >>
   drule_all guarded_body_stmts_env >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `frame_ret_ok _ _ _ RetQ _ _` >>
-  `stmt_frag unit.cu_context func cx NoLoop RetQ cenv
+  qmatch_asmsub_abbrev_tac `frame_ret_ok H _ _ _ RetQ _ _` >>
+  `stmt_frag H unit.cu_context func cx NoLoop RetQ cenv
      (stmts_env cenv NoLoop ret fbody) es0 res es'` by
     (qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                   `cx`, `env_t`, `env'`, `ret`, `NoLoop`, `RetQ`, `fbody`,
@@ -562,7 +562,7 @@ Proof
      asm_rewrite_tac[]) >>
   `fn_has_code sa sb func /\ fn_has_code sb st' func` by
     (drule_all fn_has_code_split >> simp[]) >>
-  qpat_x_assum `stmt_frag _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_frag H _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac >- gvs[ret_pc_ok_def] >>
@@ -574,7 +574,7 @@ Proof
       `res = INL ()` by gvs[stmt_lands_def] >> gvs[] >>
       `~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
         (irule source_typing_none_return_plain >> metis_tac[]) >>
-      `state_rel func cenv' cx es' s` by fs[stmt_state_rel_def] >>
+      `state_rel H func cenv' cx es' s` by fs[stmt_state_rel_def] >>
       qspecl_then [`unit.cu_context`, `cenv`, `cenv'`, `nkey`, `ut'`, `iv`,
                    `fbody`, `sa`, `()`, `st'`, `sb`, `func`, `cx`, `es'`,
                    `tops`, `tx`, `am.sources`, `am.exports`, `am.layouts`,
@@ -637,11 +637,11 @@ Theorem lower_vyper_runtime_unit_correct:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes
+    call_outcomes_ok am tx vs.vs_outcomes []
     ==>
     source_unit_execution_correct tops ret am tx unit vs
 Proof

@@ -27,10 +27,10 @@ Proof
 QED
 
 (* Context consistency installs the declaration in bare_globals;
-   expr_sim_inv supplies its compiler location. *)
+   expr_sim_inv H supplies its compiler location. *)
 Theorem supported_immutable_bound:
   !tops ctx cenv cx env es nsid ty.
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+    body_inv tops ctx cenv cx /\ expr_sim_inv H cenv cx env es /\
     supported_immutable_type tops nsid = SOME ty ==>
     ?off. FLOOKUP cenv.ce_module_vars nsid = SOME (ImmutableLoc off)
 Proof
@@ -55,7 +55,7 @@ QED
 Theorem compile_expr_open_general:
   !e tops ctx cenv cx env es tv es1 aty sa vv sb.
     body_inv tops ctx cenv cx /\ supported_expr tops e /\
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     eval_expr cx e es = (INL tv,es1) /\
     compile_expr cenv aty e sa = (vv,sb) /\

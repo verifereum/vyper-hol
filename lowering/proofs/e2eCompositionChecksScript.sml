@@ -22,18 +22,18 @@ Proof
 QED
 
 Theorem source_nonterminal_results_rejected:
-  ~external_call_result_rel tops ret tx src (Error m) /\
-  ~external_call_result_rel tops ret tx src (OK ss) /\
-  ~external_call_result_rel tops ret tx src (IntRet vals ss)
+  ~external_call_result_rel H tops ret tx src (Error m) /\
+  ~external_call_result_rel H tops ret tx src (OK ss) /\
+  ~external_call_result_rel H tops ret tx src (IntRet vals ss)
 Proof
   PairCases_on `src` >> Cases_on `src0` >>
   simp[external_call_result_rel_def]
 QED
 
 Theorem source_escaped_control_rejected:
-  ~external_call_result_rel tops ret tx (INR BreakException, am', rqs) res /\
-  ~external_call_result_rel tops ret tx (INR ContinueException, am', rqs) res /\
-  ~external_call_result_rel tops ret tx (INR (ReturnException v), am', rqs) res
+  ~external_call_result_rel H tops ret tx (INR BreakException, am', rqs) res /\
+  ~external_call_result_rel H tops ret tx (INR ContinueException, am', rqs) res /\
+  ~external_call_result_rel H tops ret tx (INR (ReturnException v), am', rqs) res
 Proof
   Cases_on `res` >> simp[external_call_result_rel_def]
 QED
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem runtime_failure_no_request_or_data_constraint:
-  external_call_result_rel tops ret tx (INR (Error (RuntimeError m)), am', rqs)
+  external_call_result_rel H tops ret tx (INR (Error (RuntimeError m)), am', rqs)
     (Abort a (ss with <| vs_requests := different_requests;
                        vs_returndata := different_data;
                        vs_outcomes := remaining_outcomes |>))
@@ -57,9 +57,9 @@ Proof
 QED
 
 Theorem ordinary_assert_revert_and_unreachable:
-  (external_call_result_rel tops ret tx (INR (AssertException s), am', rqs)
+  (external_call_result_rel H tops ret tx (INR (AssertException s), am', rqs)
      (Abort ExHalt_abort ss) <=> s = "UNREACHABLE") /\
-  external_call_result_rel tops ret tx (INR (AssertException s), am', rqs)
+  external_call_result_rel H tops ret tx (INR (AssertException s), am', rqs)
      (Abort Revert_abort ss)
 Proof
   simp[external_call_result_rel_def]
@@ -68,10 +68,10 @@ QED
 (* Successful composition matches requests up to request_agree, but not
    leftover outcomes. *)
 Theorem successful_composition_requests:
-  external_call_result_rel tops ret tx (INL v, am', rqs) (Halt raw) /\
+  external_call_result_rel H tops ret tx (INL v, am', rqs) (Halt raw) /\
   unit_result_rel (Halt raw) (Halt output) /\
   venom_frame_rel es r es' (Halt output) ==>
-  LIST_REL (request_agree (initial_evaluation_context am'.sources am'.layouts
+  LIST_REL (request_agree H (initial_evaluation_context am'.sources am'.layouts
                              tx NONE))
     rqs (MAP FST (call_trace es))
 Proof
@@ -81,9 +81,9 @@ Proof
 QED
 
 Theorem successful_leftover_outcomes_unobserved:
-  (external_call_result_rel tops ret tx (INL v, am', rqs)
+  (external_call_result_rel H tops ret tx (INL v, am', rqs)
      (Halt (ss with vs_outcomes := os)) <=>
-   external_call_result_rel tops ret tx (INL v, am', rqs) (Halt ss)) /\
+   external_call_result_rel H tops ret tx (INL v, am', rqs) (Halt ss)) /\
   (venom_frame_rel es r es' (Halt (ss with vs_outcomes := os)) <=>
    venom_frame_rel es r es' (Halt ss))
 Proof
@@ -96,11 +96,11 @@ QED
 val expected_composition = ``
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
-    (?fuel. external_call_result_rel tops ret tx
+    (?fuel. external_call_result_rel H tops ret tx
               (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
     (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
-       ctx_sim (external_call_dead tx
+       ctx_sim (external_call_dead H tx
                   (call_external (SOME vs.vs_outcomes) [] am tx))
          ctx ctx' vs vs /\
        !fuel. ?r es'.

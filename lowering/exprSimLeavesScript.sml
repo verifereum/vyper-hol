@@ -29,10 +29,10 @@
  *                              to its slot, whose ce_module_vars entry
  *                              comes from storage_vars_rel and
  *                              transient_vars_rel; its slot decodes by
- *                              expr_sim_inv's storage clauses
+ *                              expr_sim_inv H's storage clauses
  *                              (compile_toplevel_storage_undecodable_sim)
  *   compile_flag_member_case_sim — a flag member: the literal 2 ** id, by
- *                              expr_sim_inv's flag members clause
+ *                              expr_sim_inv H's flag members clause
  *
  * Helpers: expr_sim_of_vv_sim_memory, eval_expr_toplevel_storage,
  *   toplevel_storage_ce_vars, toplevel_storage_read_decodes,
@@ -80,11 +80,11 @@ val expr_sizes = [listTheory.list_size_def, vyperASTTheory.expr_size_def,
    unwrap_memory_sim's load or nothing, so no cheated unwrap case is. *)
 Theorem expr_sim_of_vv_sim_memory:
   !ctx func cenv cx ty e es.
-    expr_vv_sim ctx func cenv cx ty e es /\
+    expr_vv_sim H ctx func cenv cx ty e es /\
     (!sa vv sm. compile_expr cenv ty e sa = (vv, sm) ==>
                 sm = sa /\
                 ?t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory) ==>
-    expr_sim ctx func cenv cx ty e es
+    expr_sim H ctx func cenv cx ty e es
 Proof
   rw[expr_sim_def] >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
@@ -105,19 +105,19 @@ Proof
       `expr_vv_res_ok (INL r)` by
         (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
                              raise_def, expr_res_ok_def]) >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+      qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _`
         (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
       disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
       simp[] >> strip_tac >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
+      qexistsl_tac [`\s. vv_post H ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
       simp[cs_extends_refl] >> conj_tac
       >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
           simp[FUN_EQ_THM]) >>
       irule unwrap_memory_read_result_sim >> simp[]) >>
   rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
   `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -138,12 +138,12 @@ val () =
 
 (* ===== Locals ===== *)
 
-(* A local held through its pointer variable p, as expr_sim_inv's locals
+(* A local held through its pointer variable p, as expr_sim_inv H's locals
    clause has every local: its value_vv is p as a memory pointer, no code,
    and local_ptrs_rel lays the value out at p's word, inside the local's
    region. *)
 Theorem compile_name_vv_sim:
-  !cenv ann id. expr_vv_ok cenv (Name ann id)
+  !cenv ann id. expr_vv_ok H cenv (Name ann id)
 Proof
   rw[expr_vv_ok_def, expr_vv_sim_def] >>
   `?entry. lookup_scopes id es.scopes = SOME entry /\
@@ -186,14 +186,14 @@ QED
 
 Theorem compile_name_other_sim:
   !ctx func cenv cx env ty ann id es.
-    expr_sim_pre cenv cx env (Name ann id) es /\
+    expr_sim_pre H cenv cx env (Name ann id) es /\
     ~(is_word_type ann /\
       ?entry. lookup_scopes id es.scopes = SOME entry /\
               word_value entry.value) ==>
-    expr_sim ctx func cenv cx ty (Name ann id) es
+    expr_sim H ctx func cenv cx ty (Name ann id) es
 Proof
   rpt strip_tac >> irule expr_sim_of_vv_sim_memory >> conj_tac
-  >~ [`expr_vv_sim`] >- metis_tac[compile_name_vv_sim, expr_vv_ok_def] >>
+  >~ [`expr_vv_sim H`] >- metis_tac[compile_name_vv_sim, expr_vv_ok_def] >>
   `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
   simp[compile_expr_def, compile_name_vv_def, comp_return_def,
@@ -201,7 +201,7 @@ Proof
 QED
 
 Theorem compile_name_sim:
-  !cenv ann id. expr_sim_ok cenv (Name ann id)
+  !cenv ann id. expr_sim_ok H cenv (Name ann id)
 Proof
   rw[expr_sim_ok_def] >>
   Cases_on `is_word_type ann /\
@@ -215,7 +215,7 @@ Proof
 QED
 
 Theorem compile_name_case_sim:
-  !cenv ann id. expr_ok cenv (Name ann id)
+  !cenv ann id. expr_ok H cenv (Name ann id)
 Proof
   simp[expr_ok_def, compile_name_sim, compile_name_vv_sim]
 QED
@@ -236,9 +236,9 @@ val literal_bytes_word_tac =
    expr_val_rel has them.  No code. *)
 Theorem compile_literal_bytes_word_sim:
   !ctx func cenv cx env ty ann bs es.
-    expr_sim_pre cenv cx env (Literal ann (BytesL bs)) es /\
+    expr_sim_pre H cenv cx env (Literal ann (BytesL bs)) es /\
     is_word_type ann ==>
-    expr_sim ctx func cenv cx ty (Literal ann (BytesL bs)) es
+    expr_sim H ctx func cenv cx ty (Literal ann (BytesL bs)) es
 Proof
   rw[expr_sim_def] >> gvs[Once evaluate_def, return_def, expr_sim_pre_def,
                           well_typed_expr_def] >>
@@ -252,8 +252,8 @@ QED
 
 Theorem compile_literal_memory_sim:
   !ctx func cenv cx env ty ann l es.
-    expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
-    expr_sim ctx func cenv cx ty (Literal ann l) es
+    expr_sim_pre H cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
+    expr_sim H ctx func cenv cx ty (Literal ann l) es
 Proof
   rpt strip_tac >> irule exprSimUnwrapTheory.expr_sim_of_vv_sim_buffer >>
   `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)` by
@@ -261,9 +261,9 @@ Proof
      Cases_on `ann` >> gvs[well_typed_literal_def] >>
      rename1 `BaseT bt` >> Cases_on `bt` >>
      gvs[well_typed_literal_def, is_word_type_def]) >>
-  `expr_vv_ok cenv (Literal ann l)` by
+  `expr_vv_ok H cenv (Literal ann l)` by
     (irule compile_literal_other_vv_sim >> gvs[]) >>
-  `expr_vv_sim ctx func cenv cx ty (Literal ann l) es` by
+  `expr_vv_sim H ctx func cenv cx ty (Literal ann l) es` by
     (gvs[expr_vv_ok_def] >> metis_tac[]) >>
   simp[Once evaluate_def, return_def, evaluate_literal_def] >>
   gvs[expr_sim_pre_def, well_typed_expr_def] >>
@@ -284,10 +284,10 @@ QED
 
 Theorem compile_literal_other_sim:
   !ctx func cenv cx env ty ann l es.
-    expr_sim_pre cenv cx env (Literal ann l) es /\
+    expr_sim_pre H cenv cx env (Literal ann l) es /\
     ~(is_word_type ann /\
       ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i))) ==>
-    expr_sim ctx func cenv cx ty (Literal ann l) es
+    expr_sim H ctx func cenv cx ty (Literal ann l) es
 Proof
   rpt strip_tac >> Cases_on `is_word_type ann`
   >- (Cases_on `l` >> gvs[]
@@ -300,7 +300,7 @@ Proof
 QED
 
 Theorem compile_literal_sim:
-  !cenv ann l. expr_sim_ok cenv (Literal ann l)
+  !cenv ann l. expr_sim_ok H cenv (Literal ann l)
 Proof
   rw[expr_sim_ok_def] >>
   Cases_on `is_word_type ann /\
@@ -326,7 +326,7 @@ Proof
 QED
 
 Theorem compile_literal_case_sim:
-  !cenv ann l. expr_ok cenv (Literal ann l)
+  !cenv ann l. expr_ok H cenv (Literal ann l)
 Proof
   rpt gen_tac >>
   Cases_on `(?bs. l = BytesL bs /\ ~is_word_type ann) \/ (?str. l = StringL str)`
@@ -351,19 +351,19 @@ QED
 (* ===== Environment reads ===== *)
 
 Theorem compile_prevhash_sim:
-  !cenv ann args. expr_sim_ok cenv (Builtin ann (Env PrevHash) args)
+  !cenv ann args. expr_sim_ok H cenv (Builtin ann (Env PrevHash) args)
 Proof
   cheat
 QED
 
 Theorem compile_msg_gas_sim:
-  !cenv ann args. expr_sim_ok cenv (Builtin ann (Env MsgGas) args)
+  !cenv ann args. expr_sim_ok H cenv (Builtin ann (Env MsgGas) args)
 Proof
   cheat
 QED
 
 Theorem compile_env_case_sim:
-  !cenv ann item args. expr_sim_ok cenv (Builtin ann (Env item) args)
+  !cenv ann item args. expr_sim_ok H cenv (Builtin ann (Env item) args)
 Proof
   rpt gen_tac >> Cases_on `item = PrevHash`
   >- simp[compile_prevhash_sim] >>
@@ -401,7 +401,7 @@ Proof
 QED
 
 Theorem compile_env_case_ok:
-  !cenv ann item args. expr_ok cenv (Builtin ann (Env item) args)
+  !cenv ann item args. expr_ok H cenv (Builtin ann (Env item) args)
 Proof
   rpt gen_tac >> irule expr_ok_stack >> simp[compile_env_case_sim] >>
   rpt conj_tac
@@ -475,13 +475,13 @@ QED
    slot, no code. *)
 Theorem compile_toplevel_storage_vv_sim:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str slot tvt v.
-    expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
+    expr_sim_pre H cenv cx env (TopLevelName ann (src, id)) es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) ==>
-    expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
+    expr_vv_sim H ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
   `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
@@ -498,8 +498,8 @@ Proof
       simp[fragExecTheory.frag_exec_false_pre] >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
-    (gen_tac >> irule declared_storage_region_read_live >>
+  `!st. storage_read_live H cx tr st (n2w slot) tvt` by
+    (gen_tac >> irule observed_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def]) >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
@@ -540,16 +540,16 @@ QED
 (* A storage or transient variable whose slot does not decode at es: the
    source raises a TypeError when the layout has no slot for it or its
    type does not evaluate, and otherwise the slot decodes
-   (toplevel_storage_read_decodes, by expr_sim_inv's storage clauses). *)
+   (toplevel_storage_read_decodes, by expr_sim_inv H's storage clauses). *)
 Theorem compile_toplevel_storage_undecodable_sim:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str.
-    expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
+    expr_sim_pre H cenv cx env (TopLevelName ann (src, id)) es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     ~(?slot tvt v. lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
                    evaluate_type (get_tenv cx) typ = SOME tvt /\
                    read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)) ==>
-    expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
+    expr_vv_sim H ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rpt strip_tac >> simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   `F` suffices_by simp[] >>
@@ -580,13 +580,13 @@ Proof
 QED
 
 (* An immutable or a constant (no storage declaration of the name; both
-   are read from the immutables).  expr_sim_inv puts it at an ImmutableLoc
+   are read from the immutables).  expr_sim_inv H puts it at an ImmutableLoc
    of the module being lowered: a pointer into the immutables, no code. *)
 Theorem compile_toplevel_immutable_sim:
   !ctx func cenv cx env ty ann src id es ts.
-    expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
+    expr_sim_pre H cenv cx env (TopLevelName ann (src, id)) es /\
     get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE ==>
-    expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
+    expr_vv_sim H ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
   `env_consistent env cx es /\ state_well_typed es /\
@@ -637,7 +637,7 @@ QED
 Theorem compile_toplevel_no_module_sim:
   !ctx func cenv cx ty ann src id es.
     get_module_code cx src = NONE ==>
-    expr_vv_sim ctx func cenv cx ty (TopLevelName ann (src, id)) es
+    expr_vv_sim H ctx func cenv cx ty (TopLevelName ann (src, id)) es
 Proof
   rw[expr_vv_sim_def] >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
@@ -647,7 +647,7 @@ QED
 (* Storage, transient, immutable and constant reads.  A hashmap is not a
    typed TopLevelName. *)
 Theorem compile_toplevel_name_sim:
-  !cenv ann nsid. expr_vv_ok cenv (TopLevelName ann nsid)
+  !cenv ann nsid. expr_vv_ok H cenv (TopLevelName ann nsid)
 Proof
   rw[expr_vv_ok_def] >> PairCases_on `nsid` >>
   rename1 `TopLevelName ann (src, id)` >>
@@ -691,9 +691,9 @@ Proof
 QED
 
 (* A flag member is the literal 2 ** id, id its index in its flag's
-   declaration by expr_sim_inv's flag members clause. *)
+   declaration by expr_sim_inv H's flag members clause. *)
 Theorem compile_flag_member_word_sim:
-  !cenv ann nsid mid. expr_sim_ok cenv (FlagMember ann nsid mid)
+  !cenv ann nsid mid. expr_sim_ok H cenv (FlagMember ann nsid mid)
 Proof
   rw[expr_sim_ok_def, expr_sim_def] >> PairCases_on `nsid` >>
   drule_all eval_expr_flag_member >> strip_tac >> gvs[] >>
@@ -709,7 +709,7 @@ Proof
 QED
 
 Theorem compile_flag_member_case_sim:
-  !cenv ann nsid mid. expr_ok cenv (FlagMember ann nsid mid)
+  !cenv ann nsid mid. expr_ok H cenv (FlagMember ann nsid mid)
 Proof
   rpt gen_tac >> irule expr_ok_stack >>
   simp[compile_flag_member_word_sim, compile_expr_def] >>
@@ -719,7 +719,7 @@ Proof
 QED
 
 Theorem compile_flag_member_sim:
-  !cenv ann nsid mid. expr_vv_ok cenv (FlagMember ann nsid mid)
+  !cenv ann nsid mid. expr_vv_ok H cenv (FlagMember ann nsid mid)
 Proof
   metis_tac[compile_flag_member_case_sim, expr_ok_def]
 QED

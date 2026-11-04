@@ -24,7 +24,7 @@
  * Where the base is a local's place memory no longer holds (a popped
  * element), the source reads the field from the popped history, which
  * holds no snapshot at the field itself: its keys end in array indices
- * (expr_sim_inv's popped_keys_indexed, exprSimAttributeFields's
+ * (expr_sim_inv H's popped_keys_indexed, exprSimAttributeFields's
  * popped_keys_indexed_not_at_field).
  *
  * A base in code (an immutable, LocCode) points into an immutable's data:
@@ -94,8 +94,8 @@ QED
 
 Theorem attr_pre_base[local]:
   !cenv cx env ann obj fld es.
-    expr_body_pre cenv cx env (Attribute ann obj fld) es ==>
-    expr_body_pre cenv cx env obj es /\
+    expr_body_pre H cenv cx env (Attribute ann obj fld) es ==>
+    expr_body_pre H cenv cx env obj es /\
     ?sid. expr_type obj = StructT sid /\
           attribute_type (get_tenv cx) (StructT sid) fld = SOME ann
 Proof
@@ -115,10 +115,10 @@ Theorem attr_add_post[local]:
     compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-        vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+        vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
         eval_operand (vv_operand vv) q = SOME w /\
         eval_operand dst q = SOME (w + n2w off)
 Proof
@@ -146,8 +146,8 @@ Theorem attr_add_frag:
     sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) ==>
     frag_exec ctx sm sn
-      (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s)
-      (\s. ?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
+      (\s. vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s)
+      (\s. ?w. vv_post H ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) R
 Proof
@@ -177,7 +177,7 @@ QED
 
 Theorem stmt_state_rel_region_lt:
   !func cenv cx es s ctx.
-    stmt_state_rel ctx func cenv cx es s ==>
+    stmt_state_rel H ctx func cenv cx es s ==>
     (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
                 b + sz < dimword (:256)) /\
     (!n b sz. local_region cenv es.scopes s n b sz ==>
@@ -212,7 +212,7 @@ QED
 (* What the base's value_vv says of the struct it holds, by location. *)
 Theorem base_vv_holds_struct[local]:
   !cenv cx sid tv vv es s stv w.
-    vv_holds cenv cx (StructT sid) tv vv es s /\
+    vv_holds H cenv cx (StructT sid) tv vv es s /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME stv /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?v. read_result cx tv es = (INL v, es) /\
@@ -224,9 +224,9 @@ Theorem base_vv_holds_struct[local]:
            read_storage_slot cx T w stv es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) stv) /\
         (vv_loc vv = LocStorage ==>
-           storage_read_live cx F (get_storage cx es F) w stv) /\
+           storage_read_live H cx F (get_storage cx es F) w stv) /\
         (vv_loc vv = LocTransient ==>
-           storage_read_live cx T (get_storage cx es T) w stv) /\
+           storage_read_live H cx T (get_storage cx es T) w stv) /\
         (vv_loc vv = LocCode ==>
            immutable_holds cenv cx (StructT sid) tv w es) /\
         vv_loc vv <> LocCalldata
@@ -277,7 +277,7 @@ QED
 (* The field's placement in memory, from the base's. *)
 Theorem attr_vv_at_field[local]:
   !func cenv cx sid sa sn es1 tv bvv q w dst ann fld fs ftv vals fv tv' ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\
+    stmt_state_rel H ctx func cenv cx es1 q /\
     vv_at cenv cx (StructT sid) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (StructV vals), es1) /\
     read_result cx tv' es1 = (INL fv, es1) /\
@@ -364,7 +364,7 @@ QED
 (* The field's value_vv after the ADD, from the base's. *)
 Theorem attr_vv_post[local]:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -378,11 +378,11 @@ Theorem attr_vv_post[local]:
     (!vals. read_result cx tv es1 = (INL (StructV vals), es1) ==>
        ?fv. ALOOKUP vals fld = SOME fv /\
             read_result cx tv' es1 = (INL fv, es1)) ==>
-    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
+    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H ctx _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   gvs[] >>
   drule_all base_vv_holds_struct >> strip_tac >>
@@ -393,7 +393,7 @@ Proof
     (drule_all vyperAssignPreservesTypeTheory.struct_field_has_type >>
      strip_tac >> gvs[]) >>
   rewrite_tac[vv_post_def] >> rpt conj_tac
-  >~ [`vv_holds _ _ _ _ (LocatedValue _ _) _ _`]
+  >~ [`vv_holds H _ _ _ _ (LocatedValue _ _) _ _`]
   >- (simp[vv_holds_def, mk_ptr_def, expr_type_def] >>
       gvs[attr_offset_def] >>
       qabbrev_tac `fields =
@@ -439,13 +439,13 @@ QED
 
 Theorem compile_attribute_vv_case:
   !nocalls ctx func cenv cx ann obj fld.
-    expr_vv_case nocalls ctx func cenv cx obj ==>
-    expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
+    expr_vv_case H nocalls ctx func cenv cx obj ==>
+    expr_vv_case H nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
-  `expr_vv_sim ctx func cenv cx ty obj es` by
+  `expr_vv_sim H ctx func cenv cx ty obj es` by
     (irule (iffLR expr_vv_case_def) >>
      gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]) >>
   simp[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
@@ -457,13 +457,13 @@ Proof
   gvs[eval_expr_attribute, bind_def] >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
   `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ obj _` mp_tac >>
   simp[expr_vv_sim_def] >>
   disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
   Cases_on `er` >> gvs[]
   >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
       drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+      `expr_sim_inv H cenv cx env es` by fs[expr_body_pre_def] >>
       drule_all struct_fields_layout >> strip_tac >> gvs[] >>
       drule_all attribute_type_evaluates >> strip_tac >>
       `~popped_at_field btv fld es1` by
@@ -472,7 +472,7 @@ Proof
       `!m. res <> INR (Error (TypeError m))` by
         (rpt strip_tac >> gvs[expr_vv_res_ok_def]) >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
+      qexistsl_tac [`\s. vv_post H ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
                     `sm`] >>
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>
@@ -496,22 +496,22 @@ QED
 
 Theorem compile_attribute_case:
   !nocalls ctx func cenv cx ann obj fld.
-    expr_vv_case nocalls ctx func cenv cx obj ==>
-    expr_sim_case nocalls ctx func cenv cx (Attribute ann obj fld) /\
-    expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
+    expr_vv_case H nocalls ctx func cenv cx obj ==>
+    expr_sim_case H nocalls ctx func cenv cx (Attribute ann obj fld) /\
+    expr_vv_case H nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
   metis_tac[compile_attribute_vv_case, expr_sim_case_of_vv]
 QED
 
 Theorem compile_attribute_vv_sim:
   !cenv obj.
-    expr_vv_ok cenv obj ==>
+    expr_vv_ok H cenv obj ==>
     !ctx func cx env ty ann fld es.
-      expr_sim_pre cenv cx env (Attribute ann obj fld) es ==>
-      expr_vv_sim ctx func cenv cx ty (Attribute ann obj fld) es
+      expr_sim_pre H cenv cx env (Attribute ann obj fld) es ==>
+      expr_vv_sim H ctx func cenv cx ty (Attribute ann obj fld) es
 Proof
   rw[expr_vv_ok_case] >>
-  `expr_vv_case T ctx func cenv cx (Attribute ann obj fld)` by
+  `expr_vv_case H T ctx func cenv cx (Attribute ann obj fld)` by
     simp[compile_attribute_vv_case] >>
   gvs[expr_vv_case_def, expr_sim_pre_body] >> metis_tac[]
 QED

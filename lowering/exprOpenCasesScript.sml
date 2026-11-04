@@ -19,7 +19,7 @@ Ancestors
 
 Theorem compile_expr_name_open:
   !cenv cx env es ann id ty sa vv sb.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env (Name ann id) /\
+    expr_sim_inv H cenv cx env es /\ well_typed_expr env (Name ann id) /\
     ~block_is_terminated sa /\
     compile_expr cenv ty (Name ann id) sa = (vv,sb) ==>
     ~block_is_terminated sb
@@ -151,7 +151,7 @@ QED
 
 Theorem compile_struct_literal_body_open:
   !cfn bfn tfn cenv cx env es ty ann nsid fields sa vv sb.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     well_typed_expr env (StructLit ann nsid fields) /\
     compile_expr_body cfn bfn tfn cenv ty (StructLit ann nsid fields) sa = (vv,sb) ==>
     ~block_is_terminated sb

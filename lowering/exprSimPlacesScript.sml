@@ -67,7 +67,7 @@ Ancestors
    header), and the slot computation:
    compile_mapping_subscript's SHA3 over the slot and key words stored in a
    64-byte buffer against hashmap_slot slot (encode_hashmap_key kt kv), with
-   compile_keccak256_key for a bytes or string key.  expr_sim_inv's map
+   compile_keccak256_key for a bytes or string key.  expr_sim_inv H's map
    table clauses make MapPT mean a declared mapping.  For a storage or
    transient subscript, here and in compile_subscript_array_case,
    storage_holds also asks that the element's or hashmap leaf's slots are in
@@ -77,23 +77,23 @@ Ancestors
    names and struct fields. *)
 Theorem compile_subscript_map_case:
   !nocalls ctx func cenv cx ann obj idx kt vt.
-    expr_vv_case nocalls ctx func cenv cx obj /\
+    expr_vv_case H nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+              expr_sim_case H nocalls ctx func cenv cx idx) /\
     place_type cenv obj = MapPT kt vt ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+    expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   cheat
 QED
 
 (* The compiler's dispatch type disagrees with the base's type: place_type
    says ValPT bt with bt not the base's expr_type.  Unreachable: under
-   expr_sim_inv's map table clauses a well-typed base's place_type is its
+   expr_sim_inv H's map table clauses a well-typed base's place_type is its
    own type, and a place-typed base's is that of its vtype. *)
 Theorem compile_subscript_mismatch_case:
   !nocalls ctx func cenv cx ann obj idx bt.
     place_type cenv obj = ValPT bt /\ bt <> expr_type obj ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+    expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rw[expr_vv_case_def, expr_body_pre_def, expr_sim_inv_def] >>
   gvs[Once well_typed_expr_def]
@@ -109,7 +109,7 @@ QED
    indexes only for an array. *)
 Theorem subscript_base_array_or_tuple[local]:
   !cenv cx env ann obj idx es.
-    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_body_pre H cenv cx env (Subscript ann obj idx) es /\
     place_type cenv obj = ValPT (expr_type obj) ==>
     (?et bd. expr_type obj = ArrayT et bd) \/ (?tys. expr_type obj = TupleT tys)
 Proof
@@ -140,11 +140,11 @@ QED
    exprSimArrayIndex has no array_len_ok lemma yet. *)
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
-    expr_vv_case nocalls ctx func cenv cx obj /\
+    expr_vv_case H nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+              expr_sim_case H nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+    expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   cheat
 QED
@@ -155,10 +155,10 @@ QED
    compile_subscript_array_case for an array; no other base types. *)
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
-    expr_vv_case nocalls ctx func cenv cx obj /\
+    expr_vv_case H nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+              expr_sim_case H nocalls ctx func cenv cx idx) ==>
+    expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >> Cases_on `place_type cenv obj`
   >- metis_tac[compile_subscript_map_case] >>
@@ -167,25 +167,25 @@ Proof
   >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
   gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   drule_all subscript_base_array_or_tuple >> strip_tac
-  >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
+  >- (`expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)` by
         metis_tac[compile_subscript_array_case] >>
-      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
+      qpat_x_assum `expr_vv_case H _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
       simp[expr_vv_case_def] >>
       disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
-  `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
+  `expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)` by
     (irule compile_subscript_tuple_sim >> gvs[]) >>
-  qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
+  qpat_x_assum `expr_vv_case H _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
   simp[expr_vv_case_def] >>
   disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]
 QED
 
 Theorem compile_subscript_sim:
   !cenv ann obj idx.
-    expr_sim_below cenv (expr_size (Subscript ann obj idx)) ==>
-    expr_vv_ok cenv (Subscript ann obj idx)
+    expr_sim_below H cenv (expr_size (Subscript ann obj idx)) ==>
+    expr_vv_ok H cenv (Subscript ann obj idx)
 Proof
   rpt strip_tac >>
-  `expr_ok cenv obj /\ expr_ok cenv idx` by
+  `expr_ok H cenv obj /\ expr_ok H cenv idx` by
     (fs[expr_sim_below_def] >> rpt strip_tac >> first_x_assum irule >>
      simp[expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>
@@ -196,11 +196,11 @@ QED
 
 Theorem compile_attribute_sim:
   !cenv ann obj fld.
-    expr_sim_below cenv (expr_size (Attribute ann obj fld)) ==>
-    expr_vv_ok cenv (Attribute ann obj fld)
+    expr_sim_below H cenv (expr_size (Attribute ann obj fld)) ==>
+    expr_vv_ok H cenv (Attribute ann obj fld)
 Proof
   rpt strip_tac >>
-  `expr_vv_ok cenv obj` by
+  `expr_vv_ok H cenv obj` by
     (fs[expr_sim_below_def, expr_ok_def] >> first_x_assum irule >>
      simp[expr_size_def]) >>
   rw[expr_vv_ok_def] >>
@@ -208,14 +208,14 @@ Proof
 QED
 
 (* pop on a local: exprSimPop's compile_pop_name_sim.  Its target has no
-   operand that can call, so expr_body_pre is expr_sim_pre here. *)
+   operand that can call, so expr_body_pre H is expr_sim_pre H here. *)
 Theorem compile_pop_name_case:
   !nocalls ctx func cenv cx ann id.
-    expr_sim_case nocalls ctx func cenv cx (Pop ann (NameTarget id)) /\
-    expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))
+    expr_sim_case H nocalls ctx func cenv cx (Pop ann (NameTarget id)) /\
+    expr_vv_case H nocalls ctx func cenv cx (Pop ann (NameTarget id))
 Proof
   rpt gen_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (Pop ann (NameTarget id))` by
+  `expr_vv_case H nocalls ctx func cenv cx (Pop ann (NameTarget id))` by
     (rw[expr_vv_case_def] >> irule compile_pop_name_sim >>
      gvs[expr_sim_pre_body, int_calls_expr_def] >> metis_tac[]) >>
   simp[expr_sim_case_of_vv]
@@ -224,20 +224,20 @@ QED
 (* pop on a module variable in storage or transient storage.  Cheated:
    the source reads the popped element from its slots (read_storage_slot),
    which raises a RuntimeError where the slots do not decode, while the
-   lowering never reads it and hands out the slot; expr_sim_inv's storage
+   lowering never reads it and hands out the slot; expr_sim_inv H's storage
    clauses keep the slots decoding (as in exprSimLeaves's
    compile_toplevel_storage_undecodable_sim), but the proof also needs
-   expr_sim_inv to give ce_var_type of the module variable's key, from
+   expr_sim_inv H to give ce_var_type of the module variable's key, from
    which the lowering reads the element type.
    It also breaks expr_post's frame on the live locals (locals_kept): the
    lowering MSTOREs at the slot's fixed memory address, where an allocation
    holding a local can sit (allocation starts at 0). *)
 Theorem compile_pop_storage_sim:
   !cenv ann src id ctx func cx env ty es ts d.
-    expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
+    expr_sim_below H cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
     get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d /\
-    expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
+    expr_sim_pre H cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
+    expr_vv_sim H ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
   cheat
 QED
@@ -247,11 +247,11 @@ QED
    globals here; a typed module target must have a storage declaration. *)
 Theorem compile_pop_immutable_sim:
   !cenv ann src id ctx func cx env ty es.
-    expr_sim_below cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
+    expr_sim_below H cenv (expr_size (Pop ann (TopLevelNameTarget (src,id)))) /\
     (!ts. get_module_code cx src = SOME ts ==>
           find_var_decl_by_name id ts = NONE) /\
-    expr_sim_pre cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
+    expr_sim_pre H cenv cx env (Pop ann (TopLevelNameTarget (src,id))) es ==>
+    expr_vv_sim H ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
   rpt strip_tac >>
   fs[expr_sim_pre_def, expr_sim_inv_def,
@@ -285,8 +285,8 @@ QED
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
-    expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
-    expr_vv_ok cenv (Pop ann tgt)
+    expr_sim_below H cenv (expr_size (Pop ann tgt)) ==>
+    expr_vv_ok H cenv (Pop ann tgt)
 Proof
   cheat
 QED
@@ -295,8 +295,8 @@ QED
    compile_pop_immutable_sim and compile_pop_nested_sim, by kind. *)
 Theorem compile_pop_other_sim:
   !cenv ann tgt.
-    (!id. tgt <> NameTarget id) /\ expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
-    expr_vv_ok cenv (Pop ann tgt)
+    (!id. tgt <> NameTarget id) /\ expr_sim_below H cenv (expr_size (Pop ann tgt)) ==>
+    expr_vv_ok H cenv (Pop ann tgt)
 Proof
   rpt strip_tac >> Cases_on `?src id. tgt = TopLevelNameTarget (src,id)`
   >- (qpat_x_assum `?src id. _` strip_assume_tac >>
@@ -313,8 +313,8 @@ QED
 
 Theorem compile_pop_sim:
   !cenv ann tgt.
-    expr_sim_below cenv (expr_size (Pop ann tgt)) ==>
-    expr_vv_ok cenv (Pop ann tgt)
+    expr_sim_below H cenv (expr_size (Pop ann tgt)) ==>
+    expr_vv_ok H cenv (Pop ann tgt)
 Proof
   rpt strip_tac >> Cases_on `?id. tgt = NameTarget id`
   >- (gvs[] >> rw[expr_vv_ok_def] >> irule compile_pop_name_sim >>

@@ -176,9 +176,9 @@ Theorem tuple_store_locals_run:
     fn_has_code st st' func /\ ~s.vs_halted /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es s ==>
+    stmt_state_rel H ctx func cenv cx es s ==>
     (ids <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -329,7 +329,7 @@ Theorem assign_tuple_locals_success_run[local]:
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        store_lays_out (EL i tvs) entry.type (EL i vs)) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es /\
+    expr_sim H ctx func cenv cx (TupleT tys) e es /\
     lower_value compile_expr cenv (TupleT tys) e sa = (op, s1) /\
     compile_load_tuple_elements cenv op tys 0 s1 = (elems, s2) /\
     compile_tuple_store_all cenv tys (MAP (BaseTarget o NameTarget) ids)
@@ -338,11 +338,11 @@ Theorem assign_tuple_locals_success_run[local]:
     fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
     fn_has_code s2 sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ~block_is_terminated sf /\
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
         t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -364,18 +364,18 @@ Proof
     (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
   `!x. op = Var x ==> not_fresh_at s1 x` by
     metis_tac[compile_lower_value_var] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `INL (ArrayV (TupleV vs))`,
                            `es1`, `s0`] mp_tac) >>
   impl_tac >- simp[expr_res_ok_def] >>
   simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
+  rename1 `expr_post H ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
   suspend "value"
 QED
 
 Resume assign_tuple_locals_success_run[value]:
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post H ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `expr_type e = TupleT tys`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
@@ -417,7 +417,7 @@ Resume assign_tuple_locals_success_run[loads]:
      qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
      irule environment_var_not_fresh >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es1 sl` by
+  `stmt_state_rel H ctx func cenv cx es1 sl` by
     (simp[Abbr `sl`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_inst_idx] >>
      fs[lookup_var_def] >> metis_tac[]) >>
@@ -467,8 +467,8 @@ Theorem compile_assign_tuple_locals_stmt_frag:
        tup_tv = TupleTV tvs /\ i < LENGTH ids /\
        lookup_scopes (EL i ids) es1.scopes = SOME entry ==>
        store_lays_out (EL i tvs) entry.type (EL i vs)) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    expr_sim H ctx func cenv cx (TupleT tys) e es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
       es res es'

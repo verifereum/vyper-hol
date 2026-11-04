@@ -26,9 +26,9 @@ Ancestors
    (its stack values are none, as intret_vals_match allows), where the
    caller's return buffer, at address buf, holds the returned value. *)
 Definition intret_mem_q_def:
-  intret_mem_q func cenv cx ret_tv (buf:bytes32) v
+  intret_mem_q H func cenv cx ret_tv (buf:bytes32) v
                (es : evaluation_state) r <=>
-    intret_q func cenv cx ret_tv v es r /\
+    intret_q H func cenv cx ret_tv v es r /\
     ?ir s. r = IntRet ir s /\ val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
@@ -84,16 +84,16 @@ Theorem compile_internal_return_memory_frag:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx ty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q H func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   (* the shape needs one state to run the store from *)
-  reverse (Cases_on `?s0. stmt_state_rel ctx func cenv cx (es with scopes := []) s0 /\
+  reverse (Cases_on `?s0. stmt_state_rel H ctx func cenv cx (es with scopes := []) s0 /\
                           expr_val_rel cx ty v val_op s0 /\
                           eval_operand buf_op s0 = SOME bw`)
   >- (simp[frag_exec_def] >> metis_tac[]) >>
@@ -114,7 +114,7 @@ Proof
     (irule cs_extends_same_block >> gvs[same_blocks_def, IS_PREFIX_APPEND]) >>
   `cs_extends sm sb` by (irule cs_extends_emit_inst >> metis_tac[]) >>
   irule frag_exec_seq >>
-  qexistsl_tac [`\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+  qexistsl_tac [`\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
                      val_in_memory tv v (w2n bw) s.vs_memory /\
                      ?pc. eval_operand rpc s = SOME pc`, `sm`] >>
   simp[] >> rpt conj_tac

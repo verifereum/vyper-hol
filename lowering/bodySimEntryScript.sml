@@ -13,7 +13,7 @@
  *                                — each entry's compile env binds the
  *                                  parameters only
  *   build_compile_env_bare_globals
- *                                — expr_sim_inv's immutable clause
+ *                                — expr_sim_inv H's immutable clause
  *                                  for build_compile_env
  *)
 
@@ -193,7 +193,7 @@ Proof
   metis_tac[]
 QED
 
-(* expr_sim_inv's immutable clause at a body's entry: build_compile_env
+(* expr_sim_inv H's immutable clause at a body's entry: build_compile_env
    places every immutable of a supported single-module program, and the
    installed immutables section, whose length is below 2 ** 256, holds
    each one's bytes (immutables_section_rel). *)

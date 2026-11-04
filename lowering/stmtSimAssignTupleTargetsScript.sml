@@ -11,20 +11,20 @@ Libs
 
 Theorem stmt_frag_storage_maps_intro:
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
-     stmt_frag ctx func cx lctx RetQ cenv m es res es') ==>
-  stmt_frag ctx func cx lctx RetQ cenv m es res es'
+     stmt_frag H ctx func cx lctx RetQ cenv m es res es') ==>
+  stmt_frag H ctx func cx lctx RetQ cenv m es res es'
 Proof
   strip_tac >> rw[stmt_frag_def] >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[stmt_state_rel_def, state_rel_def] >>
-  qpat_x_assum `_ /\ _ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `_ /\ _ ==> stmt_frag H _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [stmt_frag_def]) >>
   simp[] >> disch_then drule >> simp[]
 QED
 
 Theorem tuple_target_aligned_sizes:
   !cenv cx g ty tv.
-    tuple_target_aligned cenv cx g ty tv ==>
+    tuple_target_aligned H cenv cx g ty tv ==>
     evaluate_type (get_tenv cx) ty = SOME tv /\
     type_memory_bytes cenv ty = type_memory_size tv /\
     0 < type_memory_size tv
@@ -46,7 +46,7 @@ Theorem assign_tuple_targets_success_run:
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
       type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH gs ==>
-      tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs)) /\
+      tuple_target_aligned H cenv cx (EL i gs) (EL i tys) (EL i tvs)) /\
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
       type_memory_size (EL i tvs) + 64 < dimword (:256)) /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
@@ -55,14 +55,14 @@ Theorem assign_tuple_targets_success_run:
       (do result <- eval_expr cx e; read_result cx result od) es =
         (INL (ArrayV (TupleV vs)),es1) /\ i < LENGTH gs ==>
       tuple_target_layout es1.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es /\
+    expr_sim H ctx func cenv cx (TupleT tys) e es /\
     stmt_env cenv lctx ty (Assign (TupleTarget gs) e) sa = (cenv,sf) /\
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ~block_is_terminated sf /\
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -128,7 +128,7 @@ Resume assign_tuple_targets_success_run[stores]:
     else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs))` by
     (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
   `!i. i < LENGTH gs ==>
-    tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
+    tuple_target_aligned H cenv cx (EL i gs) (EL i tys) (EL i tvs) /\
     tuple_target_layout es1.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)` by
     (rpt strip_tac >> simp[]) >>
   `!i. i < LENGTH tys ==>
@@ -142,7 +142,7 @@ Resume assign_tuple_targets_success_run[stores]:
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.SPECL [`gs`, `T`] tuple_store_targets_run)) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ es' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ es' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   suspend "compose"
 QED
@@ -175,7 +175,7 @@ Theorem compile_assign_tuple_targets_stmt_frag:
     (is_memory_view e /\ EXISTS (\t. ~is_word_type t) tys ==>
       type_memory_size (TupleTV tvs) < dimword (:256)) /\
     (!i. i < LENGTH gs ==>
-      tuple_target_aligned cenv cx (EL i gs) (EL i tys) (EL i tvs)) /\
+      tuple_target_aligned H cenv cx (EL i gs) (EL i tys) (EL i tvs)) /\
     (!i. i < LENGTH tys /\ ~is_word_type (EL i tys) ==>
       type_memory_size (EL i tvs) + 64 < dimword (:256)) /\
     (!v es1. (do result <- eval_expr cx e; read_result cx result od) es =
@@ -185,8 +185,8 @@ Theorem compile_assign_tuple_targets_stmt_frag:
         (INL (ArrayV (TupleV vs)),es1) /\ i < LENGTH gs ==>
       tuple_target_layout es1.scopes (EL i gs) (EL i tys) (EL i tvs) (EL i vs)) /\
     gs <> [] /\
-    expr_sim ctx func cenv cx (TupleT tys) e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    expr_sim H ctx func cenv cx (TupleT tys) e es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (TupleTarget gs) e)) es res es'
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

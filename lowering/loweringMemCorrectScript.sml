@@ -49,14 +49,14 @@ val _ = Parse.hide "body";
 Theorem body_stmts_sim_mem:
   !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv H cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
+    frame_ret_ok_mem H d ctx func cx RetQ cenv ret_ty /\
     eval_stmts cx ss es = (res, es') ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
+    stmt_frag_mem H d ctx func cx lctx RetQ cenv
       (stmts_env cenv lctx ret_ty ss) es res es'
 Proof
   cheat
@@ -70,11 +70,11 @@ Theorem external_entry_value_revert_mem:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -104,11 +104,11 @@ Theorem external_entry_reaches_body_mem:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -133,7 +133,7 @@ Theorem external_entry_reaches_body_mem:
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
-      stmt_state_rel unit.cu_context func cenv
+      stmt_state_rel H unit.cu_context func cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
       alloca_history func s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -158,11 +158,11 @@ Theorem external_frame_ret_ok_mem:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
@@ -175,7 +175,7 @@ Theorem external_frame_ret_ok_mem:
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) ==>
-    frame_ret_ok_mem NONE unit.cu_context func
+    frame_ret_ok_mem H NONE unit.cu_context func
       (initial_evaluation_context am.sources am.layouts tx NONE)
       (\v es r. T) cenv ret
 Proof
@@ -250,13 +250,13 @@ QED
 
 Theorem stmt_frag_mem_complete:
   !d ctx func cx lctx RetQ cenv m es res es' sa sb s0 cenv'.
-    stmt_frag_mem d ctx func cx lctx RetQ cenv m es res es' /\
+    stmt_frag_mem H d ctx func cx lctx RetQ cenv m es res es' /\
     m sa = (cenv', sb) /\ fn_has_code sa sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\
     ~block_is_terminated sa /\ stmt_res_ok lctx res /\
     res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!s. stmt_lands lctx sb res s /\ ~s.vs_halted /\
@@ -266,7 +266,7 @@ Theorem stmt_frag_mem_complete:
     !fuel. mem_safe_run fuel ctx func s0
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `stmt_frag_mem H _ _ _ _ _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [stmt_frag_mem_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   simp[] >> strip_tac
@@ -288,11 +288,11 @@ Theorem lower_vyper_runtime_unit_run_mem_safe:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
@@ -359,15 +359,15 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> ptr_discipline 0 unit.cu_context vs /\
         taint_within
-          (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+          (external_call_dead H tx (call_external (SOME vs.vs_outcomes) [] am tx))
           unit.cu_context vs
 Proof
   cheat
@@ -386,18 +386,18 @@ Theorem lower_vyper_runtime_unit_memory_ok:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> raw_unit_memory_ok unit.cu_context vs /\
         EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
         fixed_region_reserved 0 unit.cu_context /\
         ptr_discipline 0 unit.cu_context vs /\
         taint_within
-          (external_call_dead tx (call_external (SOME vs.vs_outcomes) [] am tx))
+          (external_call_dead H tx (call_external (SOME vs.vs_outcomes) [] am tx))
           unit.cu_context vs
 Proof
   rpt strip_tac >>
@@ -448,11 +448,11 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
     supported_program tops /\
     source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
+    source_storage_ok am tx vs.vs_outcomes [] /\
     source_deployment_rel tops am tx /\
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
-    call_outcomes_ok tops am tx vs.vs_outcomes /\
+    call_outcomes_ok am tx vs.vs_outcomes [] /\
     code_layout_valid vs /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> mem_inv dload_offset_ok unit.cu_context vs

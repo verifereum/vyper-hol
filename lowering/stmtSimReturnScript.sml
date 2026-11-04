@@ -39,16 +39,16 @@ Libs
    intret_vals_match checks the values only for stack returns; a memory
    return's are not on the stack. *)
 Definition intret_q_def:
-  intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
+  intret_q H func cenv cx ret_tv v (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir s /\
-           result_rel func ret_tv cenv cx (INR (ReturnException v), es) r
+           result_rel H func ret_tv cenv cx (INR (ReturnException v), es) r
 End
 
 (* No scope holds a local once the frame is left. *)
 Theorem state_rel_scopes_nil:
   !func cenv cx es s.
-    state_rel func cenv cx es s ==>
-    state_rel func cenv cx (es with scopes := []) s
+    state_rel H func cenv cx es s ==>
+    state_rel H func cenv cx (es with scopes := []) s
 Proof
   rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
      logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
@@ -102,10 +102,10 @@ Theorem compile_return_word_int_frag:
     cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
     expr_type e = ty /\ is_word_type ty /\
     evaluate_type (get_tenv cx) ty = SOME ret_tv /\
-    expr_sim ctx func cenv cx ty e es /\
+    expr_sim H ctx func cenv cx ty e es /\
     (!sa op sb. lower_value compile_expr cenv ty e sa = (op, sb) ==>
                 cs_extends sa sb) ==>
-    stmt_frag ctx func cx lctx (intret_q func cenv cx ret_tv) cenv
+    stmt_frag H ctx func cx lctx (intret_q H func cenv cx ret_tv) cenv
       (stmt_env cenv lctx ty (Return (SOME e))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -144,7 +144,7 @@ Proof
     imp_res_tac read_result_no_control >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
   simp[frag_exec_def] >>
@@ -167,7 +167,7 @@ Proof
            eval_operands_def, eval_operand_def] >>
     qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
       (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-    `state_rel func cenv cx (es' with scopes := []) sv` by
+    `state_rel H func cenv cx (es' with scopes := []) sv` by
       (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
     qexists_tac `fuel'` >>
     simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def] >>
@@ -406,7 +406,7 @@ QED
    allocation or a live local's region, both below the frontier. *)
 Theorem expr_val_at_bound:
   !func cenv cx t sa sb es v op s tv w ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     eval_operand op s = SOME w ==>
@@ -566,11 +566,11 @@ Theorem compile_return_tuple_int_frag:
     evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
     (!v es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
                (INL v, es1) ==> value_has_type ret_tv v) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es /\
+    expr_sim H ctx func cenv cx (TupleT tys) e es /\
     (!sa op sb. local_ptrs_reserved cenv sa /\
                 lower_value compile_expr cenv (TupleT tys) e sa = (op, sb) ==>
                 !x. op = Var x ==> not_fresh_at sb x) ==>
-    stmt_frag ctx func cx lctx (intret_q func cenv cx ret_tv) cenv
+    stmt_frag H ctx func cx lctx (intret_q H func cenv cx ret_tv) cenv
       (stmt_env cenv lctx (TupleT tys) (Return (SOME e))) es res es'
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
@@ -613,7 +613,7 @@ Resume compile_return_tuple_int_frag[code]:
     imp_res_tac read_result_no_control >>
     imp_res_tac (cj 1 eval_expr_no_control) >>
     gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
   simp[frag_exec_def] >>
@@ -624,7 +624,7 @@ Resume compile_return_tuple_int_frag[code]:
 QED
 
 Resume compile_return_tuple_int_frag[value]:
-  rename1 `expr_post ctx func cenv cx e es sa s1 s0 es1 v op sv` >>
+  rename1 `expr_post H ctx func cenv cx e es sa s1 s0 es1 v op sv` >>
   `value_has_type ret_tv v` by
     (qpat_x_assum `!v es1. _ ==> _` (qspecl_then [`v`, `es1`] mp_tac) >>
      simp[]) >>
@@ -689,13 +689,13 @@ Resume compile_return_tuple_int_frag[loads]:
   qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
     (qspec_then `fv` mp_tac) >> simp[] >> strip_tac >>
   rename1 `run_from f0 ctx func s0 = _` >>
-  `state_rel func cenv cx (es' with scopes := []) sl` by
-    (`state_rel func cenv cx (es' with scopes := []) sv` by
+  `state_rel H func cenv cx (es' with scopes := []) sl` by
+    (`state_rel H func cenv cx (es' with scopes := []) sv` by
        (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
      irule state_rel_frame >>
      simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
      qexistsl [`es' with scopes := []`, `sv`] >> simp[Abbr `sl`] >>
-     qpat_x_assum `state_rel _ _ _ _ sv` mp_tac >>
+     qpat_x_assum `state_rel H _ _ _ _ sv` mp_tac >>
      simp[state_rel_def, immutables_rel_def] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
   `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by

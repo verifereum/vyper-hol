@@ -10,10 +10,10 @@ Ancestors
 (* The strengthened relation requires oracle mode and agreeing requests.
    Reuse existing frame-preserving update proofs; no per-field API matrix. *)
 Theorem statement_oracle_boundary:
-  state_rel func cenv cx es ss /\ not_local_ptr cenv es.scopes name ==>
+  state_rel H func cenv cx es ss /\ not_local_ptr cenv es.scopes name ==>
   es.outcomes = SOME ss.vs_outcomes /\
-  LIST_REL (request_agree cx) es.requests ss.vs_requests /\
-  state_rel func cenv cx es (update_var name w ss)
+  LIST_REL (request_agree H cx) es.requests ss.vs_requests /\
+  state_rel H func cenv cx es (update_var name w ss)
 Proof
   rpt gen_tac >> strip_tac >> conj_tac >- fs[state_rel_def] >>
   conj_tac >- fs[state_rel_def] >>
@@ -21,15 +21,15 @@ Proof
 QED
 
 Theorem statement_rejects_none_oracle:
-  ~state_rel func cenv cx (es with outcomes := NONE) ss
+  ~state_rel H func cenv cx (es with outcomes := NONE) ss
 Proof
   simp[state_rel_def]
 QED
 
 Theorem statement_assert_boundary:
-  result_rel func tv cenv cx (INR (AssertException reason), es)
+  result_rel H func tv cenv cx (INR (AssertException reason), es)
     (Abort Revert_abort ss) /\
-  (result_rel func tv cenv cx (INR (AssertException reason), es)
+  (result_rel H func tv cenv cx (INR (AssertException reason), es)
     (Abort ExHalt_abort ss) <=> reason = "UNREACHABLE")
 Proof
   simp[result_rel_def]
@@ -38,20 +38,20 @@ QED
 (* Fuel exhaustion or malformed dispatch cannot witness the clean obligation,
    even when the source strict-decoding failure is exempt. *)
 Theorem lowering_rejects_nonterminal:
-  ~external_call_result_rel tops ret tx src (Error msg) /\
-  ~external_call_result_rel tops ret tx src (OK ss) /\
-  ~external_call_result_rel tops ret tx src (IntRet ir ss)
+  ~external_call_result_rel H tops ret tx src (Error msg) /\
+  ~external_call_result_rel H tops ret tx src (OK ss) /\
+  ~external_call_result_rel H tops ret tx src (IntRet ir ss)
 Proof
   PairCases_on `src` >> Cases_on `src0`
   >- simp[external_call_result_rel_def] >>
-  rename1 `external_call_result_rel _ _ _ (INR exc,_,_) _` >> Cases_on `exc` >>
+  rename1 `external_call_result_rel H _ _ _ (INR exc,_,_) _` >> Cases_on `exc` >>
   simp[external_call_result_rel_def] >>
   rename1 `vyperState$Error err` >> Cases_on `err` >>
   simp[external_call_result_rel_def]
 QED
 
 Theorem lowering_real_termination:
-  external_call_result_rel tops ret tx src vres ==>
+  external_call_result_rel H tops ret tx src vres ==>
   (?ss. vres = Halt ss) \/ (?kind ss. vres = Abort kind ss)
 Proof
   Cases_on `vres` >> simp[lowering_rejects_nonterminal]
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem lowering_zero_fuel_rejected:
-  ~external_call_result_rel tops ret tx src (run_context 0 ctx vs)
+  ~external_call_result_rel H tops ret tx src (run_context 0 ctx vs)
 Proof
   qspecl_then [`ctx`, `vs`] strip_assume_tac lowering_run_context_zero_error >>
   simp[lowering_rejects_nonterminal]
@@ -101,22 +101,22 @@ QED
 (* Assert reasons, including ordinary raise "UNREACHABLE", may REVERT;
    INVALID may correspond only to the distinguished unreachable exception. *)
 Theorem lowering_assert_boundary:
-  external_call_result_rel tops ret tx (INR (AssertException s), am, rqs)
+  external_call_result_rel H tops ret tx (INR (AssertException s), am, rqs)
     (Abort Revert_abort ss) /\
-  (external_call_result_rel tops ret tx (INR (AssertException s), am, rqs)
+  (external_call_result_rel H tops ret tx (INR (AssertException s), am, rqs)
     (Abort ExHalt_abort ss) <=> s = "UNREACHABLE")
 Proof
   simp[external_call_result_rel_def]
 QED
 
 Theorem lowering_runtime_boundary:
-  external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
+  external_call_result_rel H tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
     (Abort kind ss) /\
-  (external_call_result_rel tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
+  (external_call_result_rel H tops ret tx (INR (Error (RuntimeError msg)), am, rqs)
     (Halt ss) <=> unspecified_behaviour_exempt tops (RuntimeError msg)) /\
-  ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
+  ~external_call_result_rel H tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Abort kind ss) /\
-  ~external_call_result_rel tops ret tx (INR (Error (TypeError msg)), am, rqs)
+  ~external_call_result_rel H tops ret tx (INR (Error (TypeError msg)), am, rqs)
     (Halt ss)
 Proof
   Cases_on `kind` >> simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
@@ -125,11 +125,11 @@ QED
 (* A failed external call re-raises the callee's revert data: it may only
    REVERT. *)
 Theorem lowering_revert_data_boundary:
-  external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+  external_call_result_rel H tops ret tx (INR (Error (RevertData bs)), am, rqs)
     (Abort Revert_abort ss) /\
-  ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+  ~external_call_result_rel H tops ret tx (INR (Error (RevertData bs)), am, rqs)
     (Abort ExHalt_abort ss) /\
-  ~external_call_result_rel tops ret tx (INR (Error (RevertData bs)), am, rqs)
+  ~external_call_result_rel H tops ret tx (INR (Error (RevertData bs)), am, rqs)
     (Halt ss)
 Proof
   simp[external_call_result_rel_def, unspecified_behaviour_exempt_def]
@@ -148,23 +148,23 @@ QED
 Theorem lowering_static_decode_not_exempt:
   (!ty. occurs_abi_decode_target ty tops ==>
         ~is_dynamic (vyper_to_abi_type (type_env tops) ty)) ==>
-  ~external_call_result_rel tops ret tx
+  ~external_call_result_rel H tops ret tx
     (INR (Error (RuntimeError "abi_decode invalid")), am, rqs) (Halt ss)
 Proof
   simp[external_call_result_rel_def, unspecified_behaviour_exempt_def] >> metis_tac[]
 QED
 
 Theorem lowering_success_boundary:
-  external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) <=>
+  external_call_result_rel H tops ret tx (INL v, am, rqs) (Halt ss) <=>
   tx_return_bytes tops ret tx v ss.vs_returndata /\
-  accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+  accounts_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
     am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-  transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+  transient_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
     am.tStorage ss.vs_transient /\
   logs_correspond (compiled_event_info tops) (type_env tops)
     tx.target am.logs ss.vs_logs /\
   LIST_REL
-    (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+    (request_agree H (initial_evaluation_context am.sources am.layouts tx NONE))
     rqs ss.vs_requests
 Proof
   simp[external_call_result_rel_def]
@@ -173,18 +173,18 @@ QED
 Theorem lowering_wrapped_return:
   ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
   needs_external_call_wrap ret /\ ret <> NoneT ==>
-  (external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) <=>
+  (external_call_result_rel H tops ret tx (INL v, am, rqs) (Halt ss) <=>
    (?abi_v. vyper_to_abi (type_env tops) ret v = SOME abi_v /\
      ss.vs_returndata =
        enc (Tuple [vyper_to_abi_type (type_env tops) ret]) (ListV [abi_v])) /\
-   accounts_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+   accounts_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
      am.accounts (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-   transient_agree (initial_evaluation_context am.sources am.layouts tx NONE)
+   transient_agree H (initial_evaluation_context am.sources am.layouts tx NONE)
      am.tStorage ss.vs_transient /\
    logs_correspond (compiled_event_info tops) (type_env tops)
      tx.target am.logs ss.vs_logs /\
    LIST_REL
-     (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+     (request_agree H (initial_evaluation_context am.sources am.layouts tx NONE))
      rqs ss.vs_requests)
 Proof
   simp[lowering_success_boundary, tx_return_bytes_def, return_bytes_def]
@@ -194,7 +194,7 @@ QED
    list that does not agree rejected. Leftover outcomes are intentionally unconstrained. *)
 Theorem lowering_none_return_witness:
   ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops ==>
-  external_call_result_rel tops NoneT tx (INL v, am, rqs)
+  external_call_result_rel H tops NoneT tx (INL v, am, rqs)
     (Halt (ss with <| vs_accounts := am.accounts; vs_pending_deletions := [];
        vs_transient := am.tStorage;
        vs_logs := am.logs; vs_returndata := []; vs_requests := rqs |>))
@@ -206,18 +206,18 @@ Proof
 QED
 
 Theorem lowering_success_requests_exact:
-  external_call_result_rel tops ret tx (INL v, am, rqs) (Halt ss) /\
+  external_call_result_rel H tops ret tx (INL v, am, rqs) (Halt ss) /\
   ~LIST_REL
-     (request_agree (initial_evaluation_context am.sources am.layouts tx NONE))
+     (request_agree H (initial_evaluation_context am.sources am.layouts tx NONE))
      rqs rqs' ==>
-  ~external_call_result_rel tops ret tx (INL v, am, rqs)
+  ~external_call_result_rel H tops ret tx (INL v, am, rqs)
     (Halt (ss with vs_requests := rqs'))
 Proof
   simp[lowering_success_boundary]
 QED
 
 Theorem lowering_abort_requests_free:
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INR (Error (RuntimeError msg)), am, rqs)
     (Abort kind (ss with <| vs_requests := rqs'; vs_outcomes := os |>))
 Proof

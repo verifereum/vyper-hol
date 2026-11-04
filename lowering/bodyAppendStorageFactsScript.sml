@@ -182,7 +182,7 @@ QED
 Theorem body_append_target_bounds:
   body_inv tops ctx cenv cx /\
   supported_storage_dynamic_array tops (src,id) /\
-  expr_sim_inv cenv cx env es /\
+  expr_sim_inv H cenv cx env es /\
   type_stmt env ret_ty (Append (TopLevelNameTarget (src,id)) e) = SOME env' ==>
   ?elem n tr key slot tv.
     supported_full_word_type elem /\ 0 < n /\ n + 1 < dimword(:256) /\

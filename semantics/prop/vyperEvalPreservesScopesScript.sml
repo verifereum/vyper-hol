@@ -1216,6 +1216,13 @@ Proof
   simp[preserves_tv_def]
 QED
 
+Theorem preserves_tv_storage_trace[simp]:
+  preserves_tv cx s (t with storage_trace := observations) <=>
+  preserves_tv cx s t
+Proof
+  simp[preserves_tv_def]
+QED
+
 Theorem preserves_tv_gas_obs[simp]:
   ∀cx st g. preserves_tv cx st (st with gas_obs := g)
 Proof
@@ -1505,7 +1512,7 @@ Theorem acquire_nonreentrant_lock_immutables[local]:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
     st'.immutables = st.immutables
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -1516,7 +1523,7 @@ Theorem release_nonreentrant_lock_immutables[local]:
     release_nonreentrant_lock addr slot st = (res, st') ⇒
     st'.immutables = st.immutables
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -1622,6 +1629,8 @@ val PLACE_TV_TAC =
   imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
   imp_res_tac read_result_state >> imp_res_tac get_place_state >>
   imp_res_tac extend_place_state >> imp_res_tac lookup_global_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => once_rewrite_tac [th])) >>
   imp_res_tac read_result_state >>
   imp_res_tac lift_sum_state >> imp_res_tac read_result_state >>
   imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
@@ -1884,7 +1893,9 @@ Proof
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
     gvs[Once evaluate_def] >>
-    imp_res_tac lookup_global_state >> gvs[]) >>
+    drule lookup_global_state >>
+    disch_then (fn th => once_rewrite_tac [th]) >>
+    simp[preserves_tv_def]) >>
   (* FlagMember *)
   conj_tac >- (
     rpt gen_tac >> strip_tac >>
@@ -1919,6 +1930,8 @@ Proof
          prod_CASE_rator] >>
     imp_res_tac lift_option_type_state >>
     imp_res_tac select_result_state >>
+    rpt (qpat_x_assum `_ = _ with storage_trace := _`
+      (fn th => once_rewrite_tac [th])) >>
     imp_res_tac lift_sum_state >>
     imp_res_tac read_result_state >>
     imp_res_tac read_storage_slot_state >> gvs[] >>
@@ -1933,7 +1946,9 @@ Proof
     gvs[Once evaluate_def, bind_apply, return_def, AllCaseEqs()] >>
     imp_res_tac lift_option_type_state >> gvs[] >>
     imp_res_tac lift_sum_state >> gvs[] >>
-    imp_res_tac select_result_state >> gvs[] >>
+    imp_res_tac select_result_state >>
+    rpt (qpat_x_assum `_ = _ with storage_trace := _`
+      (fn th => once_rewrite_tac [th])) >> gvs[] >>
     first_x_assum drule >> rw[]) >>
   (* Builtin *)
   conj_tac >- (
@@ -2117,6 +2132,8 @@ Proof
   imp_res_tac read_place_state >> imp_res_tac place_type_value_state >>
   imp_res_tac read_result_state >> imp_res_tac get_place_state >>
   imp_res_tac extend_place_state >> imp_res_tac lookup_global_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => once_rewrite_tac [th])) >>
   imp_res_tac read_result_state >>
   imp_res_tac lift_sum_state >> imp_res_tac read_result_state >>
   imp_res_tac write_place_preserves_tv >> imp_res_tac type_check_state >>
@@ -2523,6 +2540,8 @@ Proof
       (s with <|accounts := accounts; tStorage := transient;
                 logs := s.logs ++ logs; pending_deletions := pending|>)` by simp[preserves_tv_def] >>
   `!s. preserves_tv cx s s` by simp[] >>
+  `!s t observations. preserves_tv cx s t ==>
+     preserves_tv cx s (t with storage_trace := observations)` by simp[] >>
   drule_all (ExtCall_outcome_transport |> Q.INST
     [`R` |-> `preserves_tv cx`]) >> simp[]
 QED

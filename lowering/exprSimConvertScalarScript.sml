@@ -19,7 +19,7 @@ Ancestors
 
 Theorem compile_convert_scalar_case:
   !nocalls ctx func cenv cx ann t e1.
-    exprs_case nocalls ctx func cenv cx [e1] /\
+    exprs_case H nocalls ctx func cenv cx [e1] /\
     ~is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
     ~int_convert_pair (expr_type e1) t /\
     (* Interim exclusion, dropped once the expression contract exempts it:
@@ -27,13 +27,13 @@ Theorem compile_convert_scalar_case:
        "convert empty bytes to signed". *)
     ~(expr_type e1 = BaseT (BytesT (Fixed 0)) /\
       ((?k. t = BaseT (IntT k)) \/ t = BaseT DecimalT)) ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann Convert t [e1])
 Proof
   rw[expr_vv_case_def] >>
   drule expr_body_pre_scalar_convert >> strip_tac >>
   `is_word_type (expr_type e1) /\ is_word_type t` by
     (drule_all scalar_conversion_word_types >> simp[]) >>
-  `expr_sim ctx func cenv cx (expr_type e1) e1 es` by
+  `expr_sim H ctx func cenv cx (expr_type e1) e1 es` by
     (gvs[exprs_case_def] >>
      irule expr_sim_case_apply >> conj_tac >- (qexists `env` >> simp[]) >>
      qexists `nocalls` >> simp[] >>

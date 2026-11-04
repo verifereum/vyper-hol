@@ -125,7 +125,7 @@ QED
 
 Theorem scalar_flag_member_count:
   !cenv cx env es name m.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     FLOOKUP (get_tenv cx) name = SOME (FlagArgs m) ==>
     cenv.ce_flag_n_members (nsid_to_string name) = m
 Proof
@@ -134,9 +134,9 @@ QED
 
 Theorem expr_body_pre_scalar_convert:
   !cenv cx env ann t e1 es.
-    expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es ==>
+    expr_body_pre H cenv cx env (TypeBuiltin ann Convert t [e1]) es ==>
     ann = t /\ valid_conversion (expr_type e1) t /\
-    expr_body_pre cenv cx env e1 es /\
+    expr_body_pre H cenv cx env e1 es /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
     IS_SOME (evaluate_type (get_tenv cx) t)
 Proof

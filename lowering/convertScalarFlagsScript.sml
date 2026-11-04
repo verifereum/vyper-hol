@@ -9,7 +9,7 @@ Libs
 Theorem scalar_flag_int_result_frag:
   !ctx func cenv cx nsid m sg b es0.
     m < 2 ** 256 /\ 0 < b /\ (sg ==> 1 < b) /\ b <= 256 ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvIntToInt F 256 sg b))
       (typed_val_to_w256 (FlagTV n) (FlagV m))
       (BaseT (if sg then IntT b else UintT b))
@@ -86,7 +86,7 @@ Theorem scalar_to_flag_result_frag:
   !ctx func cenv cx nsid n i es0.
     FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs n) /\
     within_int_bound (Unsigned 256) i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x (ConvToFlag n))
       (i2w i) (FlagT nsid)
       (convert_result cx (BaseT (UintT 256)) (FlagT nsid) (IntV i)) es0

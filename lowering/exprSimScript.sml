@@ -197,7 +197,7 @@ Definition dynarray_type_def:
 End
 
 (* The local n is a dynamic array, by the compile environment's type of it,
-   which expr_sim_inv makes the local's type. *)
+   which expr_sim_inv H makes the local's type. *)
 Definition dynarray_local_def:
   dynarray_local cenv n <=> ?t. cenv.ce_var_type n = SOME t /\ dynarray_type t
 End
@@ -508,8 +508,8 @@ QED
    (locals_kept), so a value an earlier operand left in a local survives
    too, where it does not cover that word (expr_val_at). *)
 Definition expr_post_def:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s <=>
+    stmt_state_rel H ctx func cenv cx es' s /\
     expr_val_rel cx (expr_type e) v op s /\
     expr_val_at cenv cx (expr_type e) sa sb es' v op s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -531,15 +531,15 @@ End
    as expr_exit allows.  This is expr_frag (loweringSlice) with the failing
    outcomes added. *)
 Definition expr_sim_def:
-  expr_sim ctx func cenv cx ty e es <=>
+  expr_sim H ctx func cenv cx ty e es <=>
     !sa sb op res es' s0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\ expr_res_ok res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
         (\s. ?v. res = INL v /\
-                 expr_post ctx func cenv cx e es sa sb s0 es' v op s)
+                 expr_post H ctx func cenv cx e es sa sb s0 es' v op s)
         (expr_exit res)
 End
 
@@ -559,12 +559,12 @@ End
    the value's word, and the read sees no other value's dead bytes, so
    storage_rel and transient_rel relate the Venom slots it reads. *)
 Definition storage_holds_def:
-  storage_holds cx is_transient t tv (w:bytes32) es <=>
+  storage_holds H cx is_transient t tv (w:bytes32) es <=>
     ?tvt v. evaluate_type (get_tenv cx) t = SOME tvt /\
             read_storage_slot cx is_transient w tvt es = (INL v, es) /\
             read_result cx tv es = (INL v, es) /\
             slots_in_range (get_storage cx es is_transient) (w2n w) tvt /\
-            storage_read_live cx is_transient (get_storage cx es is_transient)
+            storage_read_live H cx is_transient (get_storage cx es is_transient)
               w tvt
 End
 
@@ -605,9 +605,9 @@ End
    memory words also retain their typed encoding.  No current compiler
    case returns a calldata pointer. *)
 Definition vv_holds_def:
-  (vv_holds cenv cx t tv (StackValue t' op) es s <=>
+  (vv_holds H cenv cx t tv (StackValue t' op) es s <=>
      ?v. read_result cx tv es = (INL v, es) /\ expr_val_rel cx t v op s) /\
-  (vv_holds cenv cx t tv (LocatedValue t' p) es s <=>
+  (vv_holds H cenv cx t tv (LocatedValue t' p) es s <=>
      t' = t /\
      ?w. eval_operand p.ptr_operand s = SOME w /\
          case p.ptr_location of
@@ -618,8 +618,8 @@ Definition vv_holds_def:
                        (is_word_type t ==>
                         mem_word_at (w2n w) s.vs_memory =
                           typed_val_to_w256 tvt v)
-         | LocStorage => storage_holds cx F t tv w es
-         | LocTransient => storage_holds cx T t tv w es
+         | LocStorage => storage_holds H cx F t tv w es
+         | LocTransient => storage_holds H cx T t tv w es
          | LocCode => immutable_holds cenv cx t tv w es
          | LocCalldata => F)
 End
@@ -651,9 +651,9 @@ End
 
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
-    vv_holds cenv cx (expr_type e) tv vv es' s /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s <=>
+    stmt_state_rel H ctx func cenv cx es' s /\
+    vv_holds H cenv cx (expr_type e) tv vv es' s /\
     vv_at cenv cx (expr_type e) sa sb es' tv vv s /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
@@ -689,15 +689,15 @@ End
    value_vv holding the source result as vv_post says, or exits as
    expr_exit allows. *)
 Definition expr_vv_sim_def:
-  expr_vv_sim ctx func cenv cx ty e es <=>
+  expr_vv_sim H ctx func cenv cx ty e es <=>
     !sa sb vv res es' s0.
       compile_expr cenv ty e sa = (vv, sb) /\
       eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
         (\s. ?tv. res = INL tv /\
-                  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s)
+                  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s)
         (expr_exit res)
 End
 
@@ -705,10 +705,10 @@ End
    expr_sim is expr_vv_sim on the results that are values. *)
 Theorem expr_vv_sim_stack:
   !ctx func cenv cx ty e es.
-    expr_sim ctx func cenv cx ty e es /\
+    expr_sim H ctx func cenv cx ty e es /\
     (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
     (!tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_vv_sim ctx func cenv cx ty e es
+    expr_vv_sim H ctx func cenv cx ty e es
 Proof
   rw[expr_vv_sim_def] >>
   first_x_assum (qspec_then `sa` strip_assume_tac) >> gvs[] >>
@@ -717,7 +717,7 @@ Proof
   Cases_on `res`
   >- (rename1 `eval_expr cx e es = (INL raw, es')` >>
       `?v. raw = Value v` by metis_tac[] >> gvs[] >>
-      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+      qpat_x_assum `expr_sim H _ _ _ _ _ _ _`
         (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
       disch_then (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`] mp_tac) >>
       simp[bind_def, read_result_def, return_def, expr_res_ok_def] >>
@@ -729,7 +729,7 @@ Proof
   rename1 `eval_expr cx e es = (INR exc, es')` >>
   `expr_res_ok (INR exc : value + exception)` by
     gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+  qpat_x_assum `expr_sim H _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `sb`, `op`, `INR exc`, `es'`, `s0`] mp_tac) >>
   simp[bind_def] >> strip_tac >>
@@ -744,11 +744,11 @@ QED
    with val_to_w256, the encoding expr_frag uses. *)
 Theorem expr_sim_expr_frag:
   !ctx func cenv cx ty e es R tv.
-    expr_sim ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
+    expr_sim H ctx func cenv cx ty e es /\ is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     (!v es'. (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') ==>
              typed_val_to_w256 tv v = val_to_w256 v) ==>
-    expr_frag ctx func cenv cx ty e es R
+    expr_frag H ctx func cenv cx ty e es R
 Proof
   rw[expr_sim_def, expr_frag_def] >>
   first_x_assum (qspecl_then [`sa`, `sb`, `op`, `INL v`, `es'`, `s0`]
@@ -774,9 +774,9 @@ Theorem expr_sim_values:
        (do result <- eval_expr cx e; read_result cx result od) es = (INL v, es') /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa ==>
-       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-         (expr_post ctx func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
-    expr_sim ctx func cenv cx ty e es
+       frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+         (expr_post H ctx func cenv cx e es sa sb s0 es' v op) (\r. F)) ==>
+    expr_sim H ctx func cenv cx ty e es
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_sim_def] >> rpt strip_tac >>
   qpat_x_assum `!res es'. _ ==> _` (drule_all_then strip_assume_tac) >>
@@ -792,12 +792,12 @@ QED
    live locals. *)
 Theorem stmt_state_rel_vars_frame:
   !func cenv cx es s V ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     (!name entry p sz.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
-    stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
+    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (s with vs_vars := V)` by
@@ -823,8 +823,8 @@ QED
 
 Theorem stmt_state_rel_vars_ext:
   !func cenv cx es t t' ctx.
-    stmt_state_rel ctx func cenv cx es t /\ vars_ext t t' ==>
-    stmt_state_rel ctx func cenv cx es t'
+    stmt_state_rel H ctx func cenv cx es t /\ vars_ext t t' ==>
+    stmt_state_rel H ctx func cenv cx es t'
 Proof
   rw[vars_ext_def] >>
   qpat_x_assum `t' = _` (fn th => ONCE_REWRITE_TAC [th]) >>
@@ -837,8 +837,8 @@ QED
 Theorem stmt_state_rel_drop_fresh:
   !func cenv cx es st s ctx.
     local_ptrs_reserved cenv st ==>
-    (stmt_state_rel ctx func cenv cx es (drop_fresh st s) <=>
-     stmt_state_rel ctx func cenv cx es s)
+    (stmt_state_rel H ctx func cenv cx es (drop_fresh st s) <=>
+     stmt_state_rel H ctx func cenv cx es s)
 Proof
   rpt strip_tac >> eq_tac >> strip_tac
   >- (irule stmt_state_rel_vars_ext >> qexists_tac `drop_fresh st s` >>
@@ -885,7 +885,7 @@ Theorem compile_name_word_sim:
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     is_word_type ann /\
     lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
-    expr_sim ctx func cenv cx ty (Name ann id) es
+    expr_sim H ctx func cenv cx ty (Name ann id) es
 Proof
   rpt strip_tac >> irule expr_sim_values >>
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
@@ -919,7 +919,7 @@ Theorem compile_literal_word_sim:
   !ctx func cenv cx ty ann l es.
     is_word_type ann /\
     ((?b. l = BoolL b) \/ (?i. l = IntL i) \/ (?i. l = DecimalL i)) ==>
-    expr_sim ctx func cenv cx ty (Literal ann l) es
+    expr_sim H ctx func cenv cx ty (Literal ann l) es
 Proof
   rw[expr_sim_def] >> gvs[Once evaluate_def, bind_def, read_result_def, return_def]
   >~ [`BoolL b`] >- (Cases_on `b` >> literal_word_tac) >>
@@ -962,7 +962,7 @@ QED
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
-    expr_sim ctx func cenv cx ty (Builtin ann (Env item) []) es
+    expr_sim H ctx func cenv cx ty (Builtin ann (Env item) []) es
 Proof
   rpt strip_tac >> irule expr_sim_values >>
   conj_tac >~ [`expr_res_ok _`]
@@ -981,8 +981,8 @@ Proof
      simp_tac (srw_ss() ++ wordsLib.SIZES_ss) []) >>
   drule lower_value_env >> strip_tac >>
   irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                `\s. stmt_state_rel ctx func cenv cx es s /\
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s`,
+                `\s. stmt_state_rel H ctx func cenv cx es s /\
                      eval_operand op s = SOME (val_to_w256 v) /\
                      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                             lookup_var x s = SOME w) /\

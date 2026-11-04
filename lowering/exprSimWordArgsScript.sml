@@ -95,17 +95,17 @@ QED
 
 (* ===== A list-indexed word fragment interface ===== *)
 Definition word_builtin_frag_def:
-  word_builtin_frag ctx func cenv cx code res vs es0 <=>
+  word_builtin_frag H ctx func cenv cx code res vs es0 <=>
     !sa sb xs op s0.
       code xs sa = (op, sb) /\ expr_res_ok res /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es0 s /\
+        (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es0 s /\
              LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs)
         (\s. ?v. res = INL v /\ word_value v /\
-                 stmt_state_rel ctx func cenv cx es0 s /\
+                 stmt_state_rel H ctx func cenv cx es0 s /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -134,7 +134,7 @@ Theorem word_builtin_frag_success:
        LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
              eval_operand op ss' = SOME (val_to_w256 v)) ==>
-    word_builtin_frag ctx func cenv cx code res vs es0
+    word_builtin_frag H ctx func cenv cx code res vs es0
 Proof
   rpt gen_tac >> strip_tac >>
   simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -153,7 +153,7 @@ Theorem word_builtin_frag_revert:
        code xs sa = (op, sb) /\ fresh_vars_wrt sa ss /\
        LIST_REL (\x v. eval_operand x ss = SOME (val_to_w256 v)) xs vs ==>
        ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss') ==>
-    word_builtin_frag ctx func cenv cx code res vs es0
+    word_builtin_frag H ctx func cenv cx code res vs es0
 Proof
   rpt gen_tac >> strip_tac >>
   simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
@@ -246,7 +246,7 @@ QED
 
 Theorem expr_post_frame:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s ==>
     wb_frame cenv es sa s0 s
 Proof
   simp[expr_post_def, wb_frame_def] >> metis_tac[]
@@ -254,15 +254,15 @@ QED
 
 Theorem expr_post_state:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s ==>
-    stmt_state_rel ctx func cenv cx es' s
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s ==>
+    stmt_state_rel H ctx func cenv cx es' s
 Proof
   simp[expr_post_def]
 QED
 
 Theorem expr_post_word_operand:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     is_word_type (expr_type e) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v ==>
     eval_operand op s = SOME (val_to_w256 v)
@@ -273,9 +273,9 @@ QED
 
 Theorem expr_post_word_intro:
   !func cenv cx e es sa sb s0 es' v op s ctx.
-    stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
+    stmt_state_rel H ctx func cenv cx es' s /\ is_word_type (expr_type e) /\ word_value v /\
     eval_operand op s = SOME (val_to_w256 v) /\ wb_frame cenv es sa s0 s ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, wb_frame_def, expr_val_rel_def, expr_val_at_def,
        typed_val_to_w256_word_value] >> metis_tac[]
@@ -297,7 +297,7 @@ QED
 
 Theorem wb_frame_trans:
   !func cenv cx es s0 sa es1 s1 t u ctx.
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
     wb_frame cenv es sa s0 t /\ wb_frame cenv es1 s1 t u ==>
@@ -332,10 +332,10 @@ QED
 (* Each operand's facts at every state of the invariant; a later operand's
    only if the ones before it can evaluate, as evaluate_ind gives them. *)
 Definition wb_args_ready_def:
-  wb_args_ready ctx func cenv cx arg_ty Inv [] = T /\
-  wb_args_ready ctx func cenv cx arg_ty Inv (e::args) =
+  wb_args_ready H ctx func cenv cx arg_ty Inv [] = T /\
+  wb_args_ready H ctx func cenv cx arg_ty Inv (e::args) =
     ((!es. Inv es ==>
-       expr_sim ctx func cenv cx (arg_ty e) e es /\
+       expr_sim H ctx func cenv cx (arg_ty e) e es /\
        is_word_type (expr_type e) /\
        IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
        (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
@@ -343,13 +343,13 @@ Definition wb_args_ready_def:
          word_value v /\ Inv es')) /\
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
-      wb_args_ready ctx func cenv cx arg_ty Inv args))
+      wb_args_ready H ctx func cenv cx arg_ty Inv args))
 End
 
 Theorem wb_args_ready_head:
   !ctx func cenv cx arg_ty I e args es.
-    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es ==>
-      expr_sim ctx func cenv cx (arg_ty e) e es /\
+    wb_args_ready H ctx func cenv cx arg_ty I (e::args) /\ I es ==>
+      expr_sim H ctx func cenv cx (arg_ty e) e es /\
       is_word_type (expr_type e) /\
       IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
       (!res es'. (do r <- eval_expr cx e; read_result cx r od) es = (res, es') ==> expr_res_ok res) /\
@@ -361,9 +361,9 @@ QED
 
 Theorem wb_args_ready_tail:
   !ctx func cenv cx arg_ty I e args es v es1.
-    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\
+    wb_args_ready H ctx func cenv cx arg_ty I (e::args) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) ==>
-    wb_args_ready ctx func cenv cx arg_ty I args
+    wb_args_ready H ctx func cenv cx arg_ty I args
 Proof
   simp[wb_args_ready_def] >> rpt strip_tac >> first_x_assum irule >>
   drule eval_expr_read_INL >> metis_tac[]
@@ -377,7 +377,7 @@ QED
 
 Theorem wb_args_cons_cases:
   !ctx func cenv cx arg_ty I e args es res es'.
-    wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es /\
+    wb_args_ready H ctx func cenv cx arg_ty I (e::args) /\ I es /\
     eval_exprs cx (e::args) es = (res, es') ==>
     (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
     ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
@@ -399,8 +399,8 @@ End
 
 (* ===== Argument fragment execution ===== *)
 Definition wb_args_post_def:
-  wb_args_post ctx func cenv cx es sa s0 es' xs vs s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+  wb_args_post H ctx func cenv cx es sa s0 es' xs vs s <=>
+    stmt_state_rel H ctx func cenv cx es' s /\
     LIST_REL (\x v. eval_operand x s = SOME (val_to_w256 v)) xs vs /\
     wb_frame cenv es sa s0 s
 End
@@ -435,13 +435,13 @@ QED
 
 Theorem expr_sim_apply:
   !ctx func cenv cx ty e es sa sb op res es' s0.
-    expr_sim ctx func cenv cx ty e es /\
+    expr_sim H ctx func cenv cx ty e es /\
     lower_value compile_expr cenv ty e sa = (op, sb) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (res, es') /\ expr_res_ok res /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
       (\s. ?v. res = INL v /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op s)
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op s)
       (expr_exit res)
 Proof
   simp[expr_sim_def]
@@ -449,8 +449,8 @@ QED
 
 Theorem lower_word_args_nil_sim:
   !ctx func cenv cx es sa s0.
-    frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. wb_args_post ctx func cenv cx es sa s0 es [] [] s)
+    frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+      (\s. wb_args_post H ctx func cenv cx es sa s0 es [] [] s)
       (wb_args_exit (INL []))
 Proof
   rpt gen_tac >> irule frag_exec_refl >>
@@ -459,15 +459,15 @@ QED
 
 Theorem wb_args_post_cons:
   !func cenv cx e es sa s1 s0 es1 v x t es' xs vs u ctx.
-    expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
-    wb_args_post ctx func cenv cx es1 s1 t es' xs vs u /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
+    wb_args_post H ctx func cenv cx es1 s1 t es' xs vs u /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
     is_word_type (expr_type e) /\
     IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\ word_value v /\
     (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
-    wb_args_post ctx func cenv cx es sa s0 es' (x::xs) (v::vs) u
+    wb_args_post H ctx func cenv cx es sa s0 es' (x::xs) (v::vs) u
 Proof
   rpt strip_tac >>
   `eval_operand x t = SOME (val_to_w256 v)` by
@@ -505,22 +505,22 @@ QED
 
 Theorem lower_word_args_sim:
   !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
-    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+    wb_args_ready H ctx func cenv cx arg_ty I args /\ I es /\
     wb_args_shape cenv arg_ty args /\
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     eval_exprs cx args es = (rr,es') /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?vs. rr = INL vs /\ wb_args_post ctx func cenv cx es sa s0 es' xs vs s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+      (\s. ?vs. rr = INL vs /\ wb_args_post H ctx func cenv cx es sa s0 es' xs vs s)
       (wb_args_exit rr)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
       irule lower_word_args_nil_sim) >>
   rpt gen_tac >> strip_tac >>
-  rename1 `wb_args_ready ctx func cenv cx arg_ty Inv (e::args)` >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
+  rename1 `wb_args_ready H ctx func cenv cx arg_ty Inv (e::args)` >>
+  reverse (Cases_on `stmt_state_rel H ctx func cenv cx es s0`)
+  >- (`(\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule frag_exec_false_pre) >>
   `wb_args_shape cenv arg_ty args` by metis_tac[wb_args_shape_tail] >>
@@ -544,7 +544,7 @@ Proof
   rename1 `eval_exprs cx args es1 = (rr1, _)` >>
   `local_ptrs_reserved cenv s1` by
     metis_tac[local_ptrs_reserved_next_var] >>
-  `wb_args_ready ctx func cenv cx arg_ty Inv args` by
+  `wb_args_ready H ctx func cenv cx arg_ty Inv args` by
     metis_tac[wb_args_ready_tail] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
     (drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
@@ -564,13 +564,13 @@ QED
 
 Theorem expr_post_word_builtin:
   !func cenv cx es sa sm s0 es' xs vs t ann bt args sb v op u ctx.
-    wb_args_post ctx func cenv cx es sa s0 es' xs vs t /\
+    wb_args_post H ctx func cenv cx es sa s0 es' xs vs t /\
     sa.cs_next_var <= sm.cs_next_var /\ is_word_type ann /\ word_value v /\
-    stmt_state_rel ctx func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
+    stmt_state_rel H ctx func cenv cx es' u /\ eval_operand op u = SOME (val_to_w256 v) /\
     (!z w. not_fresh_at sm z /\ lookup_var z t = SOME w ==> lookup_var z u = SOME w) /\
     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==> FLOOKUP u.vs_allocas aid = SOME b) /\
     u.vs_memory = t.vs_memory ==>
-    expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
+    expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 es' v op u
 Proof
   rpt strip_tac >> irule expr_post_word_intro >>
   simp[vyperASTTheory.expr_type_def] >> irule wb_frame_readonly_tail >>
@@ -580,15 +580,15 @@ QED
 Theorem compile_word_builtin_sim:
   !ctx func cenv cx ty ann bt args arg_ty Inv es code.
     bt <> Len /\ bt <> Env MsgGas /\ builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
-    wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    wb_args_ready H ctx func cenv cx arg_ty Inv args /\ Inv es /\
     wb_args_shape cenv arg_ty args /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
     (!xs sm sb op. code xs sm = (op,sb) ==> cs_extends sm sb) /\
     (!vs es'. eval_exprs cx args es = (INL vs,es') ==>
-      word_builtin_frag ctx func cenv cx code
+      word_builtin_frag H ctx func cenv cx code
         (builtin_result cx es'.accounts ann bt (MAP expr_type args) vs) vs es') ==>
-    expr_sim ctx func cenv cx ty (Builtin ann bt args) es
+    expr_sim H ctx func cenv cx ty (Builtin ann bt args) es
 Proof
   rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_def] >>
   rpt gen_tac >> strip_tac >>
@@ -608,7 +608,7 @@ Proof
   drule_all lower_word_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
   simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
-  gvs[] >> qpat_x_assum `word_builtin_frag _ _ _ _ _ _ _ _` mp_tac >>
+  gvs[] >> qpat_x_assum `word_builtin_frag H _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[word_builtin_frag_def] >> disch_then drule_all >>
   disch_then (qspec_then `t` mp_tac) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>

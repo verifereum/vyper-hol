@@ -694,7 +694,7 @@ Theorem compile_raise_reason_lit_frag:
   !ctx func cx lctx RetQ cenv ty ml str es res es'.
     eval_stmt cx (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str))))
       es = (res, es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
       es res es'
@@ -749,10 +749,10 @@ Theorem compile_assert_reason_lit_frag:
       (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str))))
       es = (res, es') /\
     expr_type e = BaseT BoolT /\
-    expr_sim ctx func cenv cx (BaseT BoolT) e es /\
+    expr_sim H ctx func cenv cx (BaseT BoolT) e es /\
     (!sa op sb. lower_value compile_expr cenv (BaseT BoolT) e sa = (op, sb) ==>
                 cs_extends sa sb) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assert e (AssertReason (Literal (BaseT (StringT ml)) (StringL str)))))
       es res es'
@@ -828,7 +828,7 @@ Resume compile_assert_reason_lit_frag[condition]:
    s3.cs_current_insts = s1.cs_current_insts` by metis_tac[] >>
   drule_all cond_jump_frag >> strip_tac
   >- (Cases_on `b` >> gvs[switch_BoolV_def, return_def, raise_def]
-      >- (disj1_tac >> rename1 `stmt_state_rel ctx func cenv cx es' sv` >>
+      >- (disj1_tac >> rename1 `stmt_state_rel H ctx func cenv cx es' sv` >>
           qexists_tac `jump_to s7.cs_current_bb sv` >>
           gvs[stmt_lands_def, stmt_state_rel_jump_to, cenv_top_ext_refl,
               block_is_terminated_def] >>

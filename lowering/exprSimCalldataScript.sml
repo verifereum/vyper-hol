@@ -78,11 +78,11 @@ QED
    transaction's calldata (call_ctx_rel), as a uint256. *)
 Theorem compile_calldatasize_sim:
   !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann CalldataLen args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (Builtin ann CalldataLen args)
 Proof
   rpt strip_tac >>
-  `expr_ok cenv (Builtin ann CalldataLen args)` suffices_by
+  `expr_ok H cenv (Builtin ann CalldataLen args)` suffices_by
     simp[expr_ok_def] >>
   irule expr_ok_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -100,8 +100,8 @@ Proof
   rpt strip_tac >>
   gvs[lower_value_calldata_len] >>
   irule frag_exec_conseq >>
-  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s`,
-                `\s. stmt_state_rel ctx func cenv cx es s /\
+  qexistsl_tac [`\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s`,
+                `\s. stmt_state_rel H ctx func cenv cx es s /\
                      eval_operand op s =
                        SOME (val_to_w256 (IntV &LENGTH cx.txn.calldata)) /\
                      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>

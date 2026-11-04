@@ -1,7 +1,7 @@
 (* PLAN §8.1 composition helpers. No stage theorem is used here.
  * TOP-LEVEL: raw-result termination/transport, source exemption,
  *   successful and failed frame composition, unconditional run_call totality.
- *   external_call_dead_wf (external_call_dead is in vyperLoweringCorrect),
+ *   external_call_dead_wf (external_call_dead H is in vyperLoweringCorrect),
  *   external_call_result_rel_dead_transport — the source result's dead
  *   bytes, and the source relation's transport up to them.
  * Requests are compared only on success; abort kinds/data are not equated.
@@ -43,8 +43,8 @@ Proof
 QED
 
 Theorem storage_agree_except_storage_dead[local]:
-  storage_agree_except {(k,b) | storage_dead cx tr st (w2n k) b} st st' <=>
-  storage_agree (storage_dead cx tr st) st st'
+  storage_agree_except {(k,b) | storage_dead_on H tr st (w2n k) b} st st' <=>
+  storage_agree (storage_dead_on H tr st) st st'
 Proof
   simp[storage_agree_except_def, word_agree_except_def, key_taint_def,
        storage_agree_def, vfmStateTheory.lookup_storage_def] >>
@@ -60,22 +60,22 @@ Proof
 QED
 
 Theorem external_call_dead_wf:
-  dead_wf (external_call_dead tx src)
+  dead_wf (external_call_dead H tx src)
 Proof
   PairCases_on `src` >>
   rw[dead_wf_def, external_call_dead_def] >>
   Cases_on `a = tx.target` >> gvs[storage_agree_except_storage_dead] >>
-  drule storage_agree_storage_dead >> simp[]
+  drule storage_agree_storage_dead_on >> simp[]
 QED
 
 Theorem storage_agree_dead_trans[local]:
-  storage_agree (storage_dead cx tr st0) st0 st1 /\
-  storage_agree (storage_dead cx tr st1) st1 st2 ==>
-  storage_agree (storage_dead cx tr st0) st0 st2
+  storage_agree (storage_dead_on H tr st0) st0 st1 /\
+  storage_agree (storage_dead_on H tr st1) st1 st2 ==>
+  storage_agree (storage_dead_on H tr st0) st0 st2
 Proof
   strip_tac >>
-  `storage_dead cx tr st1 = storage_dead cx tr st0` by
-    (irule storage_agree_storage_dead >> simp[]) >>
+  `storage_dead_on H tr st1 = storage_dead_on H tr st0` by
+    (irule storage_agree_storage_dead_on >> simp[]) >>
   gvs[storage_agree_def]
 QED
 
@@ -83,11 +83,11 @@ QED
    source's dead bytes: equal off the running contract, which agrees up to
    storage_dead. *)
 Theorem accounts_agree_except_external_call_dead[local]:
-  accounts_agree_except (external_call_dead tx (res, am', rqs)) a1 a2 <=>
+  accounts_agree_except (external_call_dead H tx (res, am', rqs)) a1 a2 <=>
   (!a. (a1 a with storage := (a2 a).storage) = a2 a) /\
   (!a. a <> tx.target ==> (a1 a).storage = (a2 a).storage) /\
   storage_agree
-    (storage_dead (initial_evaluation_context am'.sources am'.layouts tx NONE)
+    (storage_dead_on H
        F (a1 tx.target).storage)
     (a1 tx.target).storage (a2 tx.target).storage
 Proof
@@ -105,10 +105,10 @@ Proof
 QED
 
 Theorem transient_agree_except_external_call_dead[local]:
-  transient_agree_except (external_call_dead tx (res, am', rqs)) t1 t2 <=>
+  transient_agree_except (external_call_dead H tx (res, am', rqs)) t1 t2 <=>
   (!a. a <> tx.target ==> t1 a = t2 a) /\
   storage_agree
-    (storage_dead (initial_evaluation_context am'.sources am'.layouts tx NONE)
+    (storage_dead_on H
        T (t1 tx.target))
     (t1 tx.target) (t2 tx.target)
 Proof
@@ -123,12 +123,12 @@ Proof
 QED
 
 Theorem accounts_agree_storage_dead_trans[local]:
-  accounts_agree cx a0 a1 /\
+  accounts_agree H cx a0 a1 /\
   (!a. (a1 a with storage := (a2 a).storage) = a2 a) /\
   (!a. a <> cx.txn.target ==> (a1 a).storage = (a2 a).storage) /\
-  storage_agree (storage_dead cx F (a1 cx.txn.target).storage)
+  storage_agree (storage_dead_on H F (a1 cx.txn.target).storage)
     (a1 cx.txn.target).storage (a2 cx.txn.target).storage ==>
-  accounts_agree cx a0 a2
+  accounts_agree H cx a0 a2
 Proof
   rw[accounts_agree_def] >>
   TRY (irule storage_agree_dead_trans >>
@@ -137,11 +137,11 @@ Proof
 QED
 
 Theorem transient_agree_storage_dead_trans[local]:
-  transient_agree cx t0 t1 /\
+  transient_agree H cx t0 t1 /\
   (!a. a <> cx.txn.target ==> t1 a = t2 a) /\
-  storage_agree (storage_dead cx T (t1 cx.txn.target))
+  storage_agree (storage_dead_on H T (t1 cx.txn.target))
     (t1 cx.txn.target) (t2 cx.txn.target) ==>
-  transient_agree cx t0 t2
+  transient_agree H cx t0 t2
 Proof
   rw[transient_agree_def] >>
   irule storage_agree_dead_trans >>
@@ -150,9 +150,9 @@ QED
 
 Theorem accounts_agree_dead_trans[local]:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  accounts_agree cx a0 a1 /\
-  accounts_agree_except (external_call_dead tx (res, am', rqs)) a1 a2 ==>
-  accounts_agree cx a0 a2
+  accounts_agree H cx a0 a1 /\
+  accounts_agree_except (external_call_dead H tx (res, am', rqs)) a1 a2 ==>
+  accounts_agree H cx a0 a2
 Proof
   rw[accounts_agree_except_external_call_dead] >>
   irule accounts_agree_storage_dead_trans >>
@@ -161,9 +161,9 @@ QED
 
 Theorem transient_agree_dead_trans[local]:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  transient_agree cx t0 t1 /\
-  transient_agree_except (external_call_dead tx (res, am', rqs)) t1 t2 ==>
-  transient_agree cx t0 t2
+  transient_agree H cx t0 t1 /\
+  transient_agree_except (external_call_dead H tx (res, am', rqs)) t1 t2 ==>
+  transient_agree H cx t0 t2
 Proof
   rw[transient_agree_except_external_call_dead] >>
   irule transient_agree_storage_dead_trans >>
@@ -172,9 +172,9 @@ QED
 
 Theorem request_agree_dead_trans[local]:
   cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
-  request_agree cx r0 r1 /\
-  request_agree_except (external_call_dead tx (res, am', rqs)) r1 r2 ==>
-  request_agree cx r0 r2
+  request_agree H cx r0 r1 /\
+  request_agree_except (external_call_dead H tx (res, am', rqs)) r1 r2 ==>
+  request_agree H cx r0 r2
 Proof
   rw[request_agree_def, request_agree_except_def]
   >- gvs[extCallOracleTheory.call_request_component_equality]
@@ -183,9 +183,9 @@ Proof
 QED
 
 Theorem external_call_result_rel_abort_transport[local]:
-  external_call_result_rel tops ret tx src (Abort a ss) /\
+  external_call_result_rel H tops ret tx src (Abort a ss) /\
   (a = Revert_abort ==> a' = Revert_abort) ==>
-  external_call_result_rel tops ret tx src (Abort a' ss')
+  external_call_result_rel H tops ret tx src (Abort a' ss')
 Proof
   PairCases_on `src` >> Cases_on `a` >> Cases_on `a'` >>
   simp[external_call_result_rel_def] >> rpt CASE_TAC >> simp[]
@@ -194,16 +194,16 @@ QED
 (* The source relation holds of every run that matches one it holds of up
    to the source's dead bytes. *)
 Theorem external_call_result_rel_dead_transport:
-  external_call_result_rel tops ret tx src res /\
-  dead_result_rel (external_call_dead tx src) res res' ==>
-  external_call_result_rel tops ret tx src res'
+  external_call_result_rel H tops ret tx src res /\
+  dead_result_rel (external_call_dead H tx src) res res' ==>
+  external_call_result_rel H tops ret tx src res'
 Proof
   PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
   simp[dead_result_rel_def] >> rpt strip_tac >>
   TRY (drule_all external_call_result_rel_abort_transport >> simp[] >>
        NO_TAC) >>
   Cases_on `src0` >> gvs[external_call_result_rel_def, AllCaseEqs()] >>
-  qmatch_goalsub_abbrev_tac `accounts_agree cx` >>
+  qmatch_goalsub_abbrev_tac `accounts_agree H cx` >>
   `v'.vs_returndata = v.vs_returndata` by
     (irule LIST_EQ >> gvs[external_call_dead_def]) >>
   rpt conj_tac
@@ -215,7 +215,7 @@ Proof
 QED
 
 Theorem external_call_result_rel_terminal:
-  external_call_result_rel tops ret tx src res ==>
+  external_call_result_rel H tops ret tx src res ==>
   (?ss. res = Halt ss) \/ (?a ss. res = Abort a ss)
 Proof
   PairCases_on `src` >> Cases_on `src0` >> Cases_on `res` >>
@@ -223,15 +223,15 @@ Proof
 QED
 
 Theorem external_call_result_rel_terminates:
-  external_call_result_rel tops ret tx src res ==> terminates res
+  external_call_result_rel H tops ret tx src res ==> terminates res
 Proof
   strip_tac >> drule external_call_result_rel_terminal >>
   rw[terminates_def] >> simp[]
 QED
 
 Theorem external_call_result_rel_unit_transport:
-  external_call_result_rel tops ret tx src res /\ unit_result_rel res res' ==>
-  external_call_result_rel tops ret tx src res'
+  external_call_result_rel H tops ret tx src res /\ unit_result_rel res res' ==>
+  external_call_result_rel H tops ret tx src res'
 Proof
   PairCases_on `src` >> Cases_on `res` >> Cases_on `res'` >>
   gvs[unit_result_rel_def, external_call_result_rel_def, AllCaseEqs(),
@@ -261,7 +261,7 @@ QED
 
 Theorem external_call_result_rel_frame_success:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v, am', rqs) /\
-  external_call_result_rel tops ret tx (INL v, am', rqs) (Halt ss) /\
+  external_call_result_rel H tops ret tx (INL v, am', rqs) (Halt ss) /\
   venom_frame_rel es r es' (Halt ss) ==>
   call_result_rel tops ret am tx es r es'
 Proof
@@ -273,7 +273,7 @@ QED
 Theorem external_call_result_rel_frame_assertion:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (AssertException s), am', rqs) /\
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INR (AssertException s), am', rqs) (Abort a ss) /\
   venom_frame_rel es r es' (Abort a ss) ==>
   call_result_rel tops ret am tx es r es'
@@ -296,7 +296,7 @@ QED
 Theorem external_call_result_rel_frame_error:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR (Error e), am', rqs) /\
-  external_call_result_rel tops ret tx (INR (Error e), am', rqs) res /\
+  external_call_result_rel H tops ret tx (INR (Error e), am', rqs) res /\
   venom_frame_rel es r es' res ==>
   call_result_rel tops ret am tx es r es'
 Proof
@@ -310,7 +310,7 @@ QED
  * A Halt paired with Error can only be the deliberately exempt decoder case.
  *)
 Theorem external_call_result_rel_frame:
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (call_external (SOME (MAP SND (call_trace es))) [] am tx) res /\
   venom_frame_rel es r es' res ==>
   call_result_rel tops ret am tx es r es'

@@ -19,7 +19,7 @@
  *                          expr_ok, with no internal calls
  *   target_place_sim       — the judgment for eval_target_place: the place
  *                          of a target typed by a value type
- *   eval_base_place_sim_inv — expr_sim_inv after the target's evaluation
+ *   eval_base_place_sim_inv — expr_sim_inv H after the target's evaluation
  *   place_ptr_rel_vars_frame, target_post_add — the pointer and the post
  *                          through code that writes only fresh variables
  *
@@ -73,7 +73,7 @@ QED
    the type value its declared type evaluates to. *)
 Theorem struct_field_type[local]:
   !cenv cx env es sid fs fld fty fsz.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) ==>
@@ -107,7 +107,7 @@ QED
 (* A field the typing gives a struct is in the lowering's struct table. *)
 Theorem attribute_type_struct_field[local]:
   !cenv cx env es sid fld fty.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     attribute_type (get_tenv cx) (StructT sid) fld = SOME fty ==>
     ?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
                      (nsid_to_string sid)) fld = SOME (fty, fsz)
@@ -158,11 +158,11 @@ QED
 (* ===== The source, by step ===== *)
 
 (* No step of the target's evaluation but its indices' changes the state,
-   and those keep expr_sim_inv (expr_body_pre_eval_result). *)
+   and those keep expr_sim_inv H (expr_body_pre_eval_result). *)
 Theorem eval_base_place_sim_inv:
   !bt cenv cx env es res es'.
-    target_pre cenv cx env bt es /\ eval_base_place cx bt es = (res, es') ==>
-    expr_sim_inv cenv cx env es'
+    target_pre H cenv cx env bt es /\ eval_base_place cx bt es = (res, es') ==>
+    expr_sim_inv H cenv cx env es'
 Proof
   recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
   >- (strip_tac >> imp_res_tac eval_base_place_NameTarget_preserves_state >>
@@ -175,12 +175,12 @@ Proof
       qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def] >>
       Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
-      `expr_sim_inv cenv cx env es1` by metis_tac[] >>
+      `expr_sim_inv H cenv cx env es1` by metis_tac[] >>
       reverse (Cases_on `r1`) >> simp[] >- (strip_tac >> gvs[]) >>
-      `expr_body_pre cenv cx env e es1` by
+      `expr_body_pre H cenv cx env e es1` by
         gvs[target_pre_def, target_indices_pre_def] >>
       Cases_on `eval_expr cx e es1` >> rename1 `(r2, es2)` >>
-      `expr_sim_inv cenv cx env es2` by
+      `expr_sim_inv H cenv cx env es2` by
         metis_tac[exprSimHypsTheory.expr_body_pre_eval_result] >>
       reverse (Cases_on `r2`) >> simp[] >- (strip_tac >> gvs[]) >>
       rename1 `eval_expr cx e es1 = (INL tv, es2)` >>
@@ -304,9 +304,9 @@ QED
 
 Theorem target_post_inst_idx[simp]:
   !ctx func cenv cx es sa sb s0 es' pv vt r s n.
-    target_post ctx func cenv cx es sa sb s0 es' pv vt r
+    target_post H ctx func cenv cx es sa sb s0 es' pv vt r
       (s with vs_inst_idx := n) <=>
-    target_post ctx func cenv cx es sa sb s0 es' pv vt r s
+    target_post H ctx func cenv cx es sa sb s0 es' pv vt r s
 Proof
   rpt gen_tac >>
   `!q. eval_operand q (s with vs_inst_idx := n) = eval_operand q s` by
@@ -324,14 +324,14 @@ QED
    its output is the new place's pointer, and the frame carries over. *)
 Theorem target_post_add:
   !ctx func cenv cx es sa sm sb s0 es' pv vt rb s dst w0 off pv' vt'.
-    target_post ctx func cenv cx es sa sm s0 es' pv vt rb s /\
+    target_post H ctx func cenv cx es sa sm s0 es' pv vt rb s /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
     eval_operand (FST rb) s = SOME w0 /\
     place_ptr_rel cenv cx s pv' (w0 + n2w off) (FST (SND rb)) vt' /\
     place_readable cx es' pv' ==>
     ?q. run_inst_seq (emitted_insts sm sb) s = OK q /\
-        target_post ctx func cenv cx es sa sb s0 es' pv' vt'
+        target_post H ctx func cenv cx es sa sb s0 es' pv' vt'
           (dst, FST (SND rb), SOME (value_type_place vt')) q
 Proof
   rpt strip_tac >> drule_all buffer_emit_add_run >> strip_tac >>
@@ -348,7 +348,7 @@ Proof
     (rw[not_local_ptr_def] >> strip_tac >>
      metis_tac[local_ptrs_reserved_def]) >>
   fs[target_post_def] >>
-  `stmt_state_rel ctx func cenv cx es' (update_var x (w0 + n2w off) s)` by
+  `stmt_state_rel H ctx func cenv cx es' (update_var x (w0 + n2w off) s)` by
     metis_tac[stmt_state_rel_update_var] >>
   simp[eval_operand_def, lookup_var_update_var] >> rpt conj_tac
   >~ [`place_ptr_rel _ _ (update_var _ _ _) _ _ _ _`]
@@ -362,14 +362,14 @@ QED
 
 Theorem target_attr_add_frag[local]:
   !ctx func cenv cx es sa sm sb s0 es1 pv vt rb dst off pv' vt' R t w0.
-    target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+    target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
     eval_operand (FST rb) t = SOME w0 /\
     place_ptr_rel cenv cx t pv' (w0 + n2w off) (FST (SND rb)) vt' /\
     place_readable cx es1 pv' ==>
     frag_exec ctx sm sb (\s. s = t)
-      (\s. target_post ctx func cenv cx es sa sb s0 es1 pv' vt'
+      (\s. target_post H ctx func cenv cx es sa sb s0 es1 pv' vt'
              (dst, FST (SND rb), SOME (value_type_place vt')) s) R
 Proof
   rpt strip_tac >> irule frag_exec_run_inst_seq >>
@@ -385,7 +385,7 @@ QED
    place, at the base's pointer plus the field's offset. *)
 Theorem attr_place_step[local]:
   !cenv cx env es1 es' t pv w0 rb sid fld fty res.
-    expr_sim_inv cenv cx env es1 /\
+    expr_sim_inv H cenv cx env es1 /\
     place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\
     SND (SND rb) = SOME (ValPT (StructT sid)) /\
     place_readable cx es1 pv /\
@@ -453,13 +453,13 @@ Finalise attr_place_step
    source extends the base's place by the field. *)
 Theorem target_attr_case:
   !nocalls ctx func cenv cx bt fld.
-    target_case nocalls ctx func cenv cx bt ==>
-    target_case nocalls ctx func cenv cx (AttributeTarget bt fld)
+    target_case H nocalls ctx func cenv cx bt ==>
+    target_case H nocalls ctx func cenv cx (AttributeTarget bt fld)
 Proof
   rpt gen_tac >> strip_tac >> simp[target_case_def, target_sim_def] >>
   rpt gen_tac >> strip_tac >>
-  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
-  `target_sim ctx func cenv cx env bt es` by
+  `target_pre H cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `target_sim H ctx func cenv cx env bt es` by
     (fs[target_case_def] >> first_x_assum irule >>
      gvs[int_calls_expr_def]) >>
   rpt gen_tac >> strip_tac >>
@@ -475,7 +475,7 @@ Proof
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
-  qpat_x_assum `target_sim _ _ _ _ _ bt _`
+  qpat_x_assum `target_sim H _ _ _ _ _ bt _`
     (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
   disch_then (qspecl_then [`Type bty`, `sa`, `sm`, `rb`, `r1`, `es1`, `s0`]
                 mp_tac) >>
@@ -485,7 +485,7 @@ Proof
   rpt strip_tac >>
   `target_res_ok (INR exc : eval_result + exception)` by
     (gvs[] >> fs[target_res_ok_def]) >>
-  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
      (\s. F) (expr_exit (INR exc : eval_result + exception))` by
     (qpat_x_assum `_ ==> frag_exec _ _ _ _ _ _` mp_tac >> gvs[]) >>
   gvs[] >> irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[]
@@ -494,15 +494,15 @@ QED
 Resume target_attr_case[place]:
   rename1 `eval_base_place cx bt es = (INL pv, es1)` >>
   simp[target_res_ok_def] >> rpt strip_tac >>
-  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-     (\s. target_post ctx func cenv cx es sa sm s0 es1 pv (Type bty) rb s)
+  `frag_exec ctx sa sm (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+     (\s. target_post H ctx func cenv cx es sa sm s0 es1 pv (Type bty) rb s)
      (expr_exit res)` by
     (qpat_x_assum `frag_exec _ sa sm _ _ _`
        (mp_then Any irule frag_exec_weaken) >> simp[]) >>
   irule frag_exec_seq_pointwise >>
   qpat_assum `frag_exec _ sa sm _ _ (expr_exit res)` (irule_at Any) >>
   simp[] >> rpt strip_tac >>
-  `expr_sim_inv cenv cx env es1` by metis_tac[eval_base_place_sim_inv] >>
+  `expr_sim_inv H cenv cx env es1` by metis_tac[eval_base_place_sim_inv] >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   `?sid. bty = StructT sid` by
@@ -517,7 +517,7 @@ Resume target_attr_case[place]:
     (fs[target_post_def, value_type_place_def] >> metis_tac[]) >>
   drule_all attr_place_step >> strip_tac >> gvs[] >>
   `frag_exec ctx sm sb (\s. s = t)
-     (\s. target_post ctx func cenv cx es sa sb s0 es' pv' (Type fty)
+     (\s. target_post H ctx func cenv cx es sa sb s0 es' pv' (Type fty)
             (dst, FST (SND rb), SOME (value_type_place (Type fty))) s)
      (expr_exit (INL pv'))` by
     (irule target_attr_add_frag >> metis_tac[]) >>
@@ -561,11 +561,11 @@ Finalise target_attr_case
    slot for storage. *)
 Theorem target_subscript_case:
   !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
+    target_case H nocalls ctx func cenv cx bt /\
     ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+     expr_sim_case H nocalls ctx func cenv cx e /\
+     expr_vv_case H nocalls ctx func cenv cx e) ==>
+    target_case H nocalls ctx func cenv cx (SubscriptTarget bt e)
 Proof
   cheat
 QED
@@ -574,8 +574,8 @@ QED
 
 Theorem target_case_all:
   !bt nocalls ctx func cenv cx.
-    target_idx_case nocalls ctx func cenv cx bt ==>
-    target_case nocalls ctx func cenv cx bt
+    target_idx_case H nocalls ctx func cenv cx bt ==>
+    target_case H nocalls ctx func cenv cx bt
 Proof
   recInduct base_assignment_target_induct >>
   rw[target_idx_case_def, target_name_case, target_toplevel_case]
@@ -596,8 +596,8 @@ End
 Theorem target_idx_case_ok:
   !bt nocalls ctx func cenv cx.
     int_calls_target bt = [] /\
-    (!e. MEM e (target_indices bt) ==> expr_ok cenv e) ==>
-    target_idx_case nocalls ctx func cenv cx bt
+    (!e. MEM e (target_indices bt) ==> expr_ok H cenv e) ==>
+    target_idx_case H nocalls ctx func cenv cx bt
 Proof
   recInduct base_assignment_target_induct >>
   rw[target_idx_case_def, target_indices_def, int_calls_expr_def] >>
@@ -610,7 +610,7 @@ QED
    evaluates to a place, at the pointer. *)
 Theorem target_place_sim:
   !ctx func cenv cx env bt es ty sa sb r res es' s0.
-    target_sim ctx func cenv cx env bt es /\
+    target_sim H ctx func cenv cx env bt es /\
     type_place_target env bt = SOME (Type ty) /\
     compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
     eval_target_place cx bt es = (res, es') /\
@@ -619,9 +619,9 @@ Theorem target_place_sim:
      (?str. res = INR (AssertException str))) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
       (\s. ?p. res = INL p /\
-               target_post ctx func cenv cx es sa sb s0 es' (PlaceR p)
+               target_post H ctx func cenv cx es sa sb s0 es' (PlaceR p)
                  (Type ty) r s)
       (expr_exit res)
 Proof
@@ -629,7 +629,7 @@ Proof
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
-  qpat_x_assum `target_sim _ _ _ _ _ _ _`
+  qpat_x_assum `target_sim H _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
   disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `r1`, `es1`, `s0`]
                 mp_tac) >>

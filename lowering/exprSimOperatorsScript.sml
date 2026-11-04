@@ -62,7 +62,7 @@
  *
  * Helpers: expr_body_pre_lower_value_word_shape, expr_body_pre_word_value,
  *   expr_body_pre_word_type_result, expr_body_pre_ifexp and their
- *   expr_sim_pre corollaries.
+ *   expr_sim_pre H corollaries.
  *)
 
 Theory exprSimOperators
@@ -114,12 +114,12 @@ Proof
   drule exprLoweringPropsTheory.compile_binop_grows >> simp[]
 QED
 
-(* lower_value_word_shape for an operand that meets expr_body_pre, which
+(* lower_value_word_shape for an operand that meets expr_body_pre H, which
    carries both typing hypotheses. *)
 Theorem expr_body_pre_lower_value_word_shape:
   !cenv cx env e es ty sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) ==>
+    expr_body_pre H cenv cx env e es /\ is_word_type (expr_type e) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
@@ -137,7 +137,7 @@ QED
 Theorem expr_sim_pre_lower_value_word_shape:
   !cenv cx env e es ty sa op sb.
     lower_value compile_expr cenv ty e sa = (op, sb) /\
-    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) ==>
+    expr_sim_pre H cenv cx env e es /\ is_word_type (expr_type e) ==>
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
     (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
@@ -150,7 +150,7 @@ QED
 (* Forced success has the expression's evaluated type, including place reads. *)
 Theorem expr_body_pre_word_value:
   !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    expr_body_pre H cenv cx env e es /\ is_word_type (expr_type e) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
           value_has_type tyv v
@@ -164,7 +164,7 @@ QED
 
 Theorem expr_sim_pre_word_value:
   !cenv cx env e es v es'.
-    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    expr_sim_pre H cenv cx env e es /\ is_word_type (expr_type e) /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
           value_has_type tyv v
@@ -193,7 +193,7 @@ QED
 (* A well-typed binary operator has two operands. *)
 Theorem expr_body_pre_bop_args:
   !cenv cx env ann bop args es.
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) args) es ==>
+    expr_body_pre H cenv cx env (Builtin ann (Bop bop) args) es ==>
     ?e1 e2. args = [e1; e2]
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
@@ -202,10 +202,10 @@ QED
 
 Theorem expr_body_pre_bop:
   !cenv cx env ann bop e1 e2 es.
-    expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_body_pre H cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-    expr_body_pre cenv cx env e1 es /\
-    !es'. expr_sim_inv cenv cx env es' ==> expr_body_pre cenv cx env e2 es'
+    expr_body_pre H cenv cx env e1 es /\
+    !es'. expr_sim_inv H cenv cx env es' ==> expr_body_pre H cenv cx env e2 es'
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
@@ -221,10 +221,10 @@ QED
 
 Theorem expr_sim_pre_bop:
   !cenv cx env ann bop e1 e2 es.
-    expr_sim_pre cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
+    expr_sim_pre H cenv cx env (Builtin ann (Bop bop) [e1; e2]) es ==>
     well_typed_binop ann bop (expr_type e1) (expr_type e2) /\
-    expr_sim_pre cenv cx env e1 es /\
-    !es'. expr_sim_inv cenv cx env es' ==> expr_sim_pre cenv cx env e2 es'
+    expr_sim_pre H cenv cx env e1 es /\
+    !es'. expr_sim_inv H cenv cx env es' ==> expr_sim_pre H cenv cx env e2 es'
 Proof
   rpt strip_tac
   >- gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def]
@@ -235,8 +235,8 @@ QED
 
 Theorem expr_sim_ok_apply:
   !ctx func cenv cx env ty e es.
-    expr_sim_ok cenv e /\ expr_sim_pre cenv cx env e es ==>
-    expr_sim ctx func cenv cx ty e es
+    expr_sim_ok H cenv e /\ expr_sim_pre H cenv cx env e es ==>
+    expr_sim H ctx func cenv cx ty e es
 Proof
   metis_tac[expr_sim_ok_def]
 QED
@@ -256,20 +256,20 @@ QED
    is read, and binop_frag_typed. *)
 Theorem compile_bop_word_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
-    expr_sim_case nocalls ctx func cenv cx e1 /\
+    expr_sim_case H nocalls ctx func cenv cx e1 /\
     ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv, t) /\
                        read_result cx tv s1 = (INL v, t1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e2) /\
+     expr_sim_case H nocalls ctx func cenv cx e2) /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_sim_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_bop_operands >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>
   drule int_calls_bop_operands >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_body_pre H cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `is_word_type (expr_type e1) /\ ~is_ArrayT (expr_type e1) /\
    ~is_bytestring_type (expr_type e1) /\
    is_word_type (expr_type e2) /\ ~is_ArrayT (expr_type e2) /\
@@ -279,15 +279,15 @@ Proof
     (irule byte_widths_expr_type >> gvs[expr_body_pre_def]) >>
   `is_word_type ann` by (drule_all well_typed_binop_word_result >> simp[]) >>
   irule compile_bop_sim >> rpt conj_tac
-  >~ [`binop_frag`]
+  >~ [`binop_frag H`]
   >- (rpt gen_tac >> strip_tac >>
       qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL v1`, `es1`]
         mp_tac expr_body_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v1` mp_tac) >> simp[] >> strip_tac >>
       rename1 `value_has_type tv1 v1` >>
-      `expr_body_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
-      `expr_sim_case nocalls ctx func cenv cx e2` by
+      `expr_body_pre H cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
+      `expr_sim_case H nocalls ctx func cenv cx e2` by
         (drule eval_expr_read_INL >> strip_tac >> first_x_assum irule >>
          metis_tac[]) >>
       conj_tac >- gvs[] >>
@@ -317,16 +317,16 @@ Proof
   >~ [`lower_value`]
   >- (rpt gen_tac >> strip_tac >>
       drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
-  >~ [`expr_sim`]
+  >~ [`expr_sim H`]
   >- (irule expr_sim_case_apply >> metis_tac[]) >>
   gvs[]
 QED
 
 Theorem compile_bop_word_sim:
   !cenv ann bop e1 e2.
-    expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\
+    expr_sim_ok H cenv e1 /\ expr_sim_ok H cenv e2 /\
     word_value_type (expr_type e1) /\ word_value_type (expr_type e2) ==>
-    expr_sim_ok cenv (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_ok H cenv (Builtin ann (Bop bop) [e1; e2])
 Proof
   simp[expr_sim_ok_case] >> rpt strip_tac >> irule compile_bop_word_case >>
   simp[]
@@ -338,9 +338,9 @@ QED
    is no word_value_type, so expr_body_pre_word_result does not cover it. *)
 Theorem expr_body_pre_word_type_result:
   !cenv cx env e es res es'.
-    expr_body_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    expr_body_pre H cenv cx env e es /\ is_word_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
+    expr_sim_inv H cenv cx env es' /\
     !v. res = INL v ==>
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
@@ -352,9 +352,9 @@ QED
 
 Theorem expr_sim_pre_word_type_result:
   !cenv cx env e es res es'.
-    expr_sim_pre cenv cx env e es /\ is_word_type (expr_type e) /\
+    expr_sim_pre H cenv cx env e es /\ is_word_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
-    expr_sim_inv cenv cx env es' /\
+    expr_sim_inv H cenv cx env es' /\
     !v. res = INL v ==>
         ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
               value_has_type tyv v
@@ -367,22 +367,22 @@ QED
    compile_compare_bytes_sim (exprSimCompare) for the EQ on them. *)
 Theorem compile_bop_bytes_eq_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
-    expr_sim_case nocalls ctx func cenv cx e1 /\
+    expr_sim_case H nocalls ctx func cenv cx e1 /\
     ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv, t) /\
                        read_result cx tv s1 = (INL v, t1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e2) /\
+     expr_sim_case H nocalls ctx func cenv cx e2) /\
     (bop = Eq \/ bop = NotEq) /\
     (expr_type e1 = BaseT AddressT \/
      ?m. expr_type e1 = BaseT (BytesT (Fixed m))) ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
   (* one goal for the four cases: they are split only where it matters *)
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[Once expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
   drule expr_body_pre_bop >> strip_tac >>
   drule int_calls_bop_operands >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
-  `expr_body_pre cenv cx env e2 es` by (first_assum irule >> simp[]) >>
+  `expr_sim_inv H cenv cx env es` by gvs[expr_body_pre_def] >>
+  `expr_body_pre H cenv cx env e2 es` by (first_assum irule >> simp[]) >>
   `expr_type e2 = expr_type e1 /\ ann = BaseT BoolT` by
     (qpat_x_assum `bop = _ \/ _` strip_assume_tac >>
      gvs[well_typed_binop_def]) >>
@@ -397,7 +397,7 @@ Proof
          is_word_type_def, is_bytestring_type_def]) >>
   `evaluate_type (get_tenv cx) (expr_type e2) = SOME ot` by gvs[] >>
   irule compile_bop_typed_sim >> rpt conj_tac
-  >~ [`binop_frag_words`]
+  >~ [`binop_frag_words H`]
   >- (qexistsl_tac [`ot`, `ot`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       rpt gen_tac >> strip_tac >>
@@ -405,8 +405,8 @@ Proof
         mp_tac expr_body_pre_word_type_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v1` mp_tac) >> simp[] >> strip_tac >>
-      `expr_body_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
-      `expr_sim_case nocalls ctx func cenv cx e2` by
+      `expr_body_pre H cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
+      `expr_sim_case H nocalls ctx func cenv cx e2` by
         (drule eval_expr_read_INL >> strip_tac >> first_x_assum irule >>
          metis_tac[]) >>
       conj_tac
@@ -428,17 +428,17 @@ Proof
   >~ [`lower_value`]
   >- (rpt gen_tac >> strip_tac >>
       drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
-  >~ [`expr_sim`]
+  >~ [`expr_sim H`]
   >- (irule expr_sim_case_apply >> metis_tac[]) >>
   gvs[is_word_type_def]
 QED
 
 Theorem compile_bop_bytes_eq_sim:
   !cenv ann bop e1 e2.
-    expr_sim_ok cenv e1 /\ expr_sim_ok cenv e2 /\ (bop = Eq \/ bop = NotEq) /\
+    expr_sim_ok H cenv e1 /\ expr_sim_ok H cenv e2 /\ (bop = Eq \/ bop = NotEq) /\
     (expr_type e1 = BaseT AddressT \/
      ?m. expr_type e1 = BaseT (BytesT (Fixed m))) ==>
-    expr_sim_ok cenv (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_ok H cenv (Builtin ann (Bop bop) [e1; e2])
 Proof
   simp[expr_sim_ok_case] >> rpt strip_tac >> irule compile_bop_bytes_eq_case >>
   simp[]
@@ -454,19 +454,19 @@ QED
    (expr_body_pre_type_evaluates). *)
 Theorem compile_bop_rest_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
-    expr_sim_case nocalls ctx func cenv cx e1 /\
-    expr_vv_case nocalls ctx func cenv cx e1 /\
+    expr_sim_case H nocalls ctx func cenv cx e1 /\
+    expr_vv_case H nocalls ctx func cenv cx e1 /\
     ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv, t) /\
                        read_result cx tv s1 = (INL v, t1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e2 /\
-     expr_vv_case nocalls ctx func cenv cx e2) /\
+     expr_sim_case H nocalls ctx func cenv cx e2 /\
+     expr_vv_case H nocalls ctx func cenv cx e2) /\
     ~(word_value_type (expr_type e1) /\ word_value_type (expr_type e2)) /\
     ~((bop = Eq \/ bop = NotEq) /\
       (expr_type e1 = BaseT AddressT \/
        ?m. expr_type e1 = BaseT (BytesT (Fixed m)))) /\
     ((bop = In \/ bop = NotIn) ==>
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
   cheat
 QED
@@ -478,10 +478,10 @@ QED
    bodySimExprCases' body_bop_in_literal_case. *)
 Theorem compile_bop_in_literal_sim:
   !cenv ann bop e1 a t n elems.
-    expr_sim_below cenv
+    expr_sim_below H cenv
       (list_size expr_size [e1; Builtin a (MakeArray t n) elems]) /\
     (bop = In \/ bop = NotIn) ==>
-    expr_ok cenv (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
+    expr_ok H cenv (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
   cheat
 QED
@@ -522,19 +522,19 @@ QED
    (compile_bop_in_literal_sim). *)
 Theorem compile_bop_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
-    expr_sim_case nocalls ctx func cenv cx e1 /\
-    expr_vv_case nocalls ctx func cenv cx e1 /\
+    expr_sim_case H nocalls ctx func cenv cx e1 /\
+    expr_vv_case H nocalls ctx func cenv cx e1 /\
     ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv, t) /\
                        read_result cx tv s1 = (INL v, t1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e2 /\
-     expr_vv_case nocalls ctx func cenv cx e2) /\
+     expr_sim_case H nocalls ctx func cenv cx e2 /\
+     expr_vv_case H nocalls ctx func cenv cx e2) /\
     ((bop = In \/ bop = NotIn) ==>
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) /\
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2]) /\
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])` by
+  `expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) [e1; e2])` by
     (Cases_on `word_value_type (expr_type e1) /\
                word_value_type (expr_type e2)`
      >- (irule compile_bop_word_case >> simp[] >> rpt strip_tac >>
@@ -550,12 +550,12 @@ Proof
 QED
 
 (* An ill-typed binary operator, without two operands, meets no
-   expr_body_pre. *)
+   expr_body_pre H. *)
 Theorem compile_bop_args_case:
   !nocalls ctx func cenv cx ann bop args.
     (!e1 e2. args <> [e1; e2]) ==>
-    expr_sim_case nocalls ctx func cenv cx (Builtin ann (Bop bop) args) /\
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Bop bop) args)
+    expr_sim_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) args) /\
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Bop bop) args)
 Proof
   rw[expr_sim_case_def, expr_vv_case_def] >>
   drule expr_body_pre_bop_args >> strip_tac >> gvs[]
@@ -563,8 +563,8 @@ QED
 
 Theorem compile_bop_ok:
   !cenv ann bop args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_ok cenv (Builtin ann (Bop bop) args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_ok H cenv (Builtin ann (Bop bop) args)
 Proof
   rpt strip_tac >> simp[expr_ok_case] >> rpt gen_tac >>
   Cases_on `?e1 e2. args = [e1; e2]`
@@ -574,12 +574,12 @@ Proof
       >- (qpat_x_assum `_ /\ ?a t n elems. _`
             (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
           rpt BasicProvers.VAR_EQ_TAC >>
-          `expr_ok cenv (Builtin ann (Bop bop)
+          `expr_ok H cenv (Builtin ann (Bop bop)
                            [e1; Builtin a (MakeArray t n) elems])` by
             (irule compile_bop_in_literal_sim >> rpt conj_tac >>
              first_assum ACCEPT_TAC) >>
           fs[expr_ok_case]) >>
-      `expr_ok cenv e1 /\ expr_ok cenv e2` by
+      `expr_ok H cenv e1 /\ expr_ok H cenv e2` by
         metis_tac[expr_sim_below_mem, listTheory.MEM] >>
       gvs[expr_ok_case] >> irule compile_bop_case >> simp[]) >>
   irule compile_bop_args_case >> gvs[]
@@ -591,13 +591,13 @@ QED
    the operand's exprs_case. *)
 Theorem unop_operand_sim:
   !nocalls ctx func cenv cx env ann bi e1 ty1 es.
-    exprs_case nocalls ctx func cenv cx [e1] /\
-    expr_body_pre cenv cx env (Builtin ann bi [e1]) es /\
+    exprs_case H nocalls ctx func cenv cx [e1] /\
+    expr_body_pre H cenv cx env (Builtin ann bi [e1]) es /\
     (nocalls ==> int_calls_expr (Builtin ann bi [e1]) = []) ==>
-    expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty1 e1 es
+    expr_body_pre H cenv cx env e1 es /\ expr_sim H ctx func cenv cx ty1 e1 es
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e1 es` by
+  `expr_body_pre H cenv cx env e1 es` by
     (drule expr_body_pre_builtin_arg >> disch_then irule >>
      gvs[expr_body_pre_def]) >>
   gvs[exprs_case_def] >> irule expr_sim_case_apply >>
@@ -611,8 +611,8 @@ QED
    lower_value_word_shape's. *)
 Theorem compile_not_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Not args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Not args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -627,7 +627,7 @@ Proof
                   is_bytes32_type (expr_type e1) \/ is_flag_type (expr_type e1)`
     ASSUME_TAC
   >- gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  `expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty e1 es` by
+  `expr_body_pre H cenv cx env e1 es /\ expr_sim H ctx func cenv cx ty e1 es` by
     metis_tac[unop_operand_sim] >>
   `is_word_type (expr_type e1)` by
     (drule not_type_cases >> rw[] >> gvs[is_word_type_def]) >>
@@ -651,7 +651,7 @@ Proof
     rpt strip_tac >> drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
     irule_at Any compile_not_frag >> gvs[] >>
     rpt strip_tac >> gvs[] >>
-    qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+    qpat_x_assum `expr_body_pre H _ _ _ (Builtin _ _ _) _` mp_tac >>
     simp[expr_body_pre_def, expr_sim_inv_def] >> rpt strip_tac >>
     first_x_assum irule >>
     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
@@ -660,10 +660,10 @@ QED
 
 Theorem expr_body_pre_neg:
   !cenv cx env ann args es.
-    expr_body_pre cenv cx env (Builtin ann Neg args) es ==>
+    expr_body_pre H cenv cx env (Builtin ann Neg args) es ==>
     ?e1. args = [e1] /\ ann = expr_type e1 /\
       is_numeric_type (expr_type e1) /\ ~is_uint_type (expr_type e1) /\
-      expr_body_pre cenv cx env e1 es
+      expr_body_pre H cenv cx env e1 es
 Proof
   rpt strip_tac >>
   `?e1. args = [e1] /\ ann = expr_type e1 /\
@@ -677,8 +677,8 @@ QED
 
 Theorem compile_neg_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Neg args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Neg args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -708,8 +708,8 @@ QED
    lower_value_word_shape's. *)
 Theorem compile_abs_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Abs args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Abs args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -720,7 +720,7 @@ Proof
     (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
-  `expr_body_pre cenv cx env e1 es /\ expr_sim ctx func cenv cx ty e1 es` by
+  `expr_body_pre H cenv cx env e1 es /\ expr_sim H ctx func cenv cx ty e1 es` by
     metis_tac[unop_operand_sim] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (IntT 256)`, `Abs`,
                `e1`, `ty`, `compile_builtin_abs`, `es`]
@@ -750,11 +750,11 @@ QED
 
 Theorem expr_body_pre_ifexp:
   !cenv cx env t c a b es.
-    expr_body_pre cenv cx env (IfExp t c a b) es ==>
+    expr_body_pre H cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
-    expr_body_pre cenv cx env c es /\
-    !es'. expr_sim_inv cenv cx env es' ==>
-          expr_body_pre cenv cx env a es' /\ expr_body_pre cenv cx env b es'
+    expr_body_pre H cenv cx env c es /\
+    !es'. expr_sim_inv H cenv cx env es' ==>
+          expr_body_pre H cenv cx env a es' /\ expr_body_pre H cenv cx env b es'
 Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
@@ -770,11 +770,11 @@ QED
 
 Theorem expr_sim_pre_ifexp:
   !cenv cx env t c a b es.
-    expr_sim_pre cenv cx env (IfExp t c a b) es ==>
+    expr_sim_pre H cenv cx env (IfExp t c a b) es ==>
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
-    expr_sim_pre cenv cx env c es /\
-    !es'. expr_sim_inv cenv cx env es' ==>
-          expr_sim_pre cenv cx env a es' /\ expr_sim_pre cenv cx env b es'
+    expr_sim_pre H cenv cx env c es /\
+    !es'. expr_sim_inv H cenv cx env es' ==>
+          expr_sim_pre H cenv cx env a es' /\ expr_sim_pre H cenv cx env b es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
@@ -807,7 +807,7 @@ QED
 
 Theorem expr_body_pre_ifexp_word_readable:
   !cenv cx env t c a b es res es'.
-    expr_body_pre cenv cx env (IfExp t c a b) es /\ is_word_type t /\
+    expr_body_pre H cenv cx env (IfExp t c a b) es /\ is_word_type t /\
     eval_expr cx (IfExp t c a b) es = (res,es') ==>
     expr_read_res_ok cx es' res
 Proof
@@ -865,7 +865,7 @@ QED
 (* A conditional's result reads: a value, or a live memory place. *)
 Theorem expr_body_pre_ifexp_readable[local]:
   !cenv cx env t c a b es res es'.
-    expr_body_pre cenv cx env (IfExp t c a b) es /\
+    expr_body_pre H cenv cx env (IfExp t c a b) es /\
     eval_expr cx (IfExp t c a b) es = (res,es') ==>
     expr_read_res_ok cx es' res
 Proof
@@ -912,11 +912,11 @@ QED
    condition evaluates, and their shape from lower_value_word_shape. *)
 Theorem compile_ifexp_word_case:
   !nocalls ctx func cenv cx t c a b.
-    is_word_type t /\ expr_sim_case nocalls ctx func cenv cx c /\
+    is_word_type t /\ expr_sim_case H nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
-     expr_sim_case nocalls ctx func cenv cx a /\
-     expr_sim_case nocalls ctx func cenv cx b) ==>
-    expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)
+     expr_sim_case H nocalls ctx func cenv cx a /\
+     expr_sim_case H nocalls ctx func cenv cx b) ==>
+    expr_vv_case H nocalls ctx func cenv cx (IfExp t c a b)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
@@ -933,16 +933,16 @@ Proof
           drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
           simp[is_word_type_def])
       >- (rpt gen_tac >> strip_tac >>
-          (`expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-           `expr_body_pre cenv cx env e es /\ is_word_type (expr_type e)` by
+          (`expr_sim_inv H cenv cx env es` by fs[expr_body_pre_def] >>
+           `expr_body_pre H cenv cx env e es /\ is_word_type (expr_type e)` by
              gvs[] >>
            drule expr_body_pre_lower_value_word_shape >> disch_then drule >>
            simp[]))
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
       rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
       drule eval_expr_read_INL >> strip_tac >>
-      `expr_sim_case nocalls ctx func cenv cx a /\
-       expr_sim_case nocalls ctx func cenv cx b` by
+      `expr_sim_case H nocalls ctx func cenv cx a /\
+       expr_sim_case H nocalls ctx func cenv cx b` by
         (first_x_assum irule >> metis_tac[]) >>
       conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
   disch_then irule >> simp[]
@@ -958,14 +958,14 @@ QED
 Theorem compile_ifexp_aggregate_case:
   !nocalls ctx func cenv cx t c a b.
     ~is_word_type t /\
-    expr_sim_case nocalls ctx func cenv cx c /\
-    expr_vv_case nocalls ctx func cenv cx c /\
+    expr_sim_case H nocalls ctx func cenv cx c /\
+    expr_vv_case H nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
-     expr_sim_case nocalls ctx func cenv cx a /\
-     expr_vv_case nocalls ctx func cenv cx a /\
-     expr_sim_case nocalls ctx func cenv cx b /\
-     expr_vv_case nocalls ctx func cenv cx b) ==>
-    expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)
+     expr_sim_case H nocalls ctx func cenv cx a /\
+     expr_vv_case H nocalls ctx func cenv cx a /\
+     expr_sim_case H nocalls ctx func cenv cx b /\
+     expr_vv_case H nocalls ctx func cenv cx b) ==>
+    expr_vv_case H nocalls ctx func cenv cx (IfExp t c a b)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
@@ -983,8 +983,8 @@ Proof
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
       rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
       drule eval_expr_read_INL >> strip_tac >>
-      `expr_sim_case nocalls ctx func cenv cx a /\
-       expr_sim_case nocalls ctx func cenv cx b` by
+      `expr_sim_case H nocalls ctx func cenv cx a /\
+       expr_sim_case H nocalls ctx func cenv cx b` by
         (qpat_x_assum `(?s tv s'. _) ==> _` mp_tac >>
          impl_tac >- metis_tac[] >> simp[]) >>
       conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
@@ -997,18 +997,18 @@ QED
    for the rest. *)
 Theorem compile_ifexp_case:
   !nocalls ctx func cenv cx t c a b.
-    expr_sim_case nocalls ctx func cenv cx c /\
-    expr_vv_case nocalls ctx func cenv cx c /\
+    expr_sim_case H nocalls ctx func cenv cx c /\
+    expr_vv_case H nocalls ctx func cenv cx c /\
     ((?s tv s'. eval_expr cx c s = (INL tv, s')) ==>
-     expr_sim_case nocalls ctx func cenv cx a /\
-     expr_vv_case nocalls ctx func cenv cx a /\
-     expr_sim_case nocalls ctx func cenv cx b /\
-     expr_vv_case nocalls ctx func cenv cx b) ==>
-    expr_sim_case nocalls ctx func cenv cx (IfExp t c a b) /\
-    expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)
+     expr_sim_case H nocalls ctx func cenv cx a /\
+     expr_vv_case H nocalls ctx func cenv cx a /\
+     expr_sim_case H nocalls ctx func cenv cx b /\
+     expr_vv_case H nocalls ctx func cenv cx b) ==>
+    expr_sim_case H nocalls ctx func cenv cx (IfExp t c a b) /\
+    expr_vv_case H nocalls ctx func cenv cx (IfExp t c a b)
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_vv_case nocalls ctx func cenv cx (IfExp t c a b)` by
+  `expr_vv_case H nocalls ctx func cenv cx (IfExp t c a b)` by
     (Cases_on `is_word_type t`
      >- (irule compile_ifexp_word_case >> simp[] >> rpt strip_tac >>
          metis_tac[]) >>
@@ -1019,11 +1019,11 @@ QED
 
 Theorem compile_ifexp_sim:
   !cenv ann c e1 e2.
-    expr_sim_below cenv (expr_size (IfExp ann c e1 e2)) ==>
-    expr_vv_ok cenv (IfExp ann c e1 e2)
+    expr_sim_below H cenv (expr_size (IfExp ann c e1 e2)) ==>
+    expr_vv_ok H cenv (IfExp ann c e1 e2)
 Proof
   rpt strip_tac >>
-  `expr_ok cenv c /\ expr_ok cenv e1 /\ expr_ok cenv e2` by
+  `expr_ok H cenv c /\ expr_ok H cenv e1 /\ expr_ok H cenv e2` by
     (fs[expr_sim_below_def] >> rpt conj_tac >> first_x_assum irule >>
      simp[vyperASTTheory.expr_size_def]) >>
   gvs[expr_ok_case, expr_vv_ok_case] >> rpt gen_tac >>

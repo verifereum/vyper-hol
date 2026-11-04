@@ -89,15 +89,15 @@ Theorem assign_tuple_locals_memory_success_run:
       else ?vt. cenv.ce_var_type (EL i ids) = SOME vt /\
         evaluate_type (get_tenv cx) vt = SOME entry.type /\
         value_has_type entry.type (EL i vs)) /\
-    expr_sim ctx func cenv cx (TupleT tys) e es /\
+    expr_sim H ctx func cenv cx (TupleT tys) e es /\
     stmt_env cenv lctx ty
       (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e) sa = (cenv,sf) /\
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ~block_is_terminated sf /\
-    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -226,7 +226,7 @@ Resume assign_tuple_locals_memory_success_run[store_ready]:
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.SPECL [`ids`, `T`] tupleLocalStoreRunTheory.tuple_store_mixed_locals_run)) >>
   disch_then ((MAP_EVERY assume_tac o CONJUNCTS)) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ es' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ es' _ /\ _`
     (qx_choose_then `sfv` (MAP_EVERY assume_tac o CONJUNCTS)) >>
   suspend "compose"
 QED

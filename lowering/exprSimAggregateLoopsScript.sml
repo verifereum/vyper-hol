@@ -24,7 +24,7 @@ Ancestors
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
 
 Theorem aggregate_alloca_slice_excludes_local:
-  stmt_state_rel ctx func ce cx es r /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es r /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
   not_local_ptr ce es.scopes x /\
   FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz) /\
@@ -99,14 +99,14 @@ Theorem aggregate_make_tuple_sim:
   compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
   eval_exprs cx args es = (res,es') /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
-  expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
-  exprs_case nocalls ctx func ce cx args /\
+  expr_sim_inv H ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv H ce cx env st ==>
+    expr_body_pre H ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
+  exprs_case H nocalls ctx func ce cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
-  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  (!st. expr_sim_inv H ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
@@ -120,9 +120,9 @@ Theorem aggregate_make_tuple_sim:
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) ==>
   out = Var x /\
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s)
+    (\r. ?vs. res = INL vs /\ expr_sim_inv H ce cx env es' /\
+      stmt_state_rel H ctx func ce cx es' r /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -152,7 +152,7 @@ Proof
   simp[Once compile_make_tuple_def, LET_THM, comp_bind_def,
        comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func ce cx es s0`)
+  reverse (Cases_on `stmt_state_rel H ctx func ce cx es s0`)
   >- simp[frag_exec_def] >>
   suspend "cons"
 QED
@@ -171,9 +171,9 @@ Resume aggregate_make_tuple_sim[cons]:
   `cs_extends sa sm /\ cs_extends sm sb` by
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
-  `expr_body_pre ce cx env h es /\ (nocalls ==> int_calls_expr h = [])` by
+  `expr_body_pre H ce cx env h es /\ (nocalls ==> int_calls_expr h = [])` by
     metis_tac[listTheory.MEM] >>
-  `expr_vv_sim ctx func ce cx (expr_type h) h es` by
+  `expr_vv_sim H ctx func ce cx (expr_type h) h es` by
     (gvs[exprs_case_def, expr_vv_case_def] >> metis_tac[]) >>
   drule aggregate_eval_exprs_cons >> strip_tac
   >- suspend "child_error"
@@ -186,7 +186,7 @@ Resume aggregate_make_tuple_sim[child_error]:
   `expr_res_ok (INR exc)` by
     (drule expr_body_pre_res_ok >>
      disch_then (qspecl_then [`INR exc`, `es'`] mp_tac) >> simp[bind_def]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `INR exc`, `es'`, `s0`] mp_tac) >>
   fs[expr_vv_res_ok_def, expr_res_ok_def] >> strip_tac >>
@@ -198,7 +198,7 @@ QED
 Resume aggregate_make_tuple_sim[materialise_error]:
   qpat_x_assum `!ce cx env off sa out sb es res es' tvs func inst x b asz s0 ctx nocalls. _` kall_tac >>
   `expr_vv_res_ok (INL tv)` by metis_tac[aggregate_child_res_ok] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `INL tv`, `es1`, `s0`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -212,7 +212,7 @@ Resume aggregate_make_tuple_sim[child_success]:
   `expr_vv_res_ok (INL tv)` by metis_tac[aggregate_child_res_ok] >>
   `value_has_type h' v /\ val_wf h' v` by
     metis_tac[aggregate_materialised_child_typed, aggregate_materialised_child_wf] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_vv_sim_def] >>
   disch_then (qspecl_then [`sa`, `sm`, `vv`, `INL tv`, `es1`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_tac >>
@@ -243,7 +243,7 @@ Resume aggregate_make_tuple_sim[after_add]:
         (type_memory_size_list (h'::t)))` by
     (match_mp_tac (GEN_ALL aggregate_immutable_footprint_transport) >>
      qexists_tac `es` >> asm_rewrite_tac[]) >>
-  `expr_sim_inv ce cx env es1` by
+  `expr_sim_inv H ce cx env es1` by
     (drule_all expr_body_pre_eval_result >> simp[]) >>
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
@@ -275,7 +275,7 @@ Resume aggregate_make_tuple_sim[after_add]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sm` >> fs[ci_mono_def] >>
      drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es1 r /\
+  `stmt_state_rel H ctx func ce cx es1 r /\
    FLOOKUP r.vs_allocas inst.inst_id = SOME (b,asz)` by
     (fs[vv_post_def] >> metis_tac[]) >>
   `off + type_memory_size h' <= asz /\ b+off+type_memory_size h' < dimword (:256)` by
@@ -286,7 +286,7 @@ Resume aggregate_make_tuple_sim[after_add]:
      rpt strip_tac >> drule_all aggregate_alloca_slice_excludes_local >> simp[]) >>
   irule frag_exec_seq_pointwise >>
   qexists_tac `\q. val_in_memory h' v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es1 q /\
+    stmt_state_rel H ctx func ce cx es1 q /\
     (!z a. not_fresh_at sn z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==>
@@ -306,7 +306,7 @@ Resume aggregate_make_tuple_sim[after_add]:
       irule aggregate_unwrap_store_slice_sim >>
       qpat_assum `unwrap_value _ _ _ = _` (irule_at Any) >>
       qpat_assum `compile_store_memory _ _ _ _ _ _ = _` (irule_at Any) >>
-      qpat_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
       qexists_tac `n2w (b+off)` >>
       fs[ci_mono_def] >> rpt conj_tac
       >- (rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.ADD_ASSOC])
@@ -336,8 +336,8 @@ Resume aggregate_make_tuple_sim[after_store]:
   `lookup_var x r = SOME (n2w b)` by (fs[vv_post_def] >> metis_tac[]) >>
   `lookup_var x t' = SOME (n2w b) /\
    FLOOKUP t'.vs_allocas inst.inst_id = SOME (b,asz)` by metis_tac[] >>
-  `exprs_case nocalls ctx func ce cx args` by
-    (qpat_x_assum `exprs_case _ _ _ _ _ (h::args)` mp_tac >>
+  `exprs_case H nocalls ctx func ce cx args` by
+    (qpat_x_assum `exprs_case H _ _ _ _ _ (h::args)` mp_tac >>
      simp[Once exprs_case_def] >> metis_tac[]) >>
   qpat_x_assum `!ce':compile_env. _` drule >>
   disch_then drule >> disch_then drule >> disch_then drule >>
@@ -387,14 +387,14 @@ Resume aggregate_make_tuple_sim[vars_join]:
   `not_fresh_at sn z /\ not_fresh_at ss z` by
     (conj_tac >> irule freshWritesTheory.not_fresh_at_mono >>
      qexists_tac `sa` >> fs[ci_mono_def] >> decide_tac) >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >>
   metis_tac[]
 QED
 
 Resume aggregate_make_tuple_sim[allocas_join]:
   rpt strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp_tac std_ss [vv_post_def] >> strip_tac >> metis_tac[]
 QED
 
@@ -404,20 +404,20 @@ Resume aggregate_make_tuple_sim[slice_join]:
       b + asz <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es s0` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def]) >>
   `mem_bytes_at b asz r.vs_memory = mem_bytes_at b asz s0.vs_memory` by
-    (qpat_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any irule vv_post_old_buffer) >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `!name lo sz. local_region ce es1.scopes r name lo sz ==>
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es1.scopes x` by simp[] >>
      `alloca_inv r /\ local_ptrs_rel func ce es1.scopes r` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es1 r` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es1 r` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
@@ -457,7 +457,7 @@ Resume aggregate_make_tuple_sim[exterior_join]:
      qpat_x_assum `!name lo sz. local_region ce es1.scopes r name lo sz ==> p + n <= lo \/ _`
        (qspecl_then [`name`, `lo`, `sz`] mp_tac) >> asm_rewrite_tac[]) >>
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory` by
-    (qpat_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_then Any irule vv_post_old_buffer) >>
      reverse conj_tac
      >- (qexists_tac `aid` >> asm_rewrite_tac[]) >>
@@ -466,7 +466,7 @@ Resume aggregate_make_tuple_sim[exterior_join]:
        (qspecl_then [`n'`, `b'`, `k`] mp_tac) >>
      asm_rewrite_tac[] >> decide_tac) >>
   `FLOOKUP r.vs_allocas aid = SOME (p,n)` by
-    (qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp_tac std_ss [vv_post_def] >> strip_tac >>
      qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
      asm_rewrite_tac[]) >>
@@ -516,14 +516,14 @@ Theorem aggregate_struct_fields_sim:
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
   eval_exprs cx (MAP SND fields) es = (res,es') /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
-  expr_sim_inv ce cx env es /\
-  (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
-  exprs_case nocalls ctx func ce cx (MAP SND fields) /\
+  expr_sim_inv H ce cx env es /\
+  (!e st. MEM e (MAP SND fields) /\ expr_sim_inv H ce cx env st ==>
+    expr_body_pre H ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
+  exprs_case H nocalls ctx func ce cx (MAP SND fields) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
-  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  (!st. expr_sim_inv H ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + type_memory_size_list tvs <= asz /\ b + asz < dimword (:256) /\
@@ -537,9 +537,9 @@ Theorem aggregate_struct_fields_sim:
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) ==>
   out = Var x /\
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s)
+    (\r. ?vs. res = INL vs /\ expr_sim_inv H ce cx env es' /\
+      stmt_state_rel H ctx func ce cx es' r /\
       fields_in_memory (ZIP (MAP FST fields,vs))
         (ZIP (MAP FST fields,tvs)) (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -592,14 +592,14 @@ Theorem aggregate_make_array_elems_sim:
   off = (if header then 32 else 0) + idx * type_memory_size tv /\
   compile_make_array_elems compile_expr ce args elem_ty
     (type_memory_bytes ce elem_ty) header (Var x) idx sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
-  exprs_case nocalls ctx func ce cx args /\
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv H ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv H ce cx env st ==>
+    expr_body_pre H ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
+  exprs_case H nocalls ctx func ce cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
-  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  (!st. expr_sim_inv H ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   off + LENGTH args * type_memory_size tv <= asz /\ b + asz < dimword (:256) /\
@@ -613,9 +613,9 @@ Theorem aggregate_make_array_elems_sim:
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s)
+    (\r. ?vs. res = INL vs /\ expr_sim_inv H ce cx env es' /\
+      stmt_state_rel H ctx func ce cx es' r /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -662,14 +662,14 @@ Theorem aggregate_make_array_start_sim:
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array_elems compile_expr ce args elem_ty stride header (Var x) 0 sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
-  exprs_case nocalls ctx func ce cx args /\
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv H ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv H ce cx env st ==>
+    expr_body_pre H ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
+  exprs_case H nocalls ctx func ce cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
-  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  (!st. expr_sim_inv H ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
@@ -684,9 +684,9 @@ Theorem aggregate_make_array_start_sim:
      regions_disjoint io (type_memory_size itv) (b+(if header then 32 else 0))
        (LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s)
+    (\r. ?vs. res = INL vs /\ expr_sim_inv H ce cx env es' /\
+      stmt_state_rel H ctx func ce cx es' r /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -736,14 +736,14 @@ Theorem aggregate_make_array_sim:
   stride = type_memory_size tv /\
   type_memory_bytes ce elem_ty = type_memory_size tv /\
   compile_make_array compile_expr ce args elem_ty stride header (Var x) sa = (out,sb) /\
-  eval_exprs cx args es = (res,es') /\ expr_sim_inv ce cx env es /\
-  (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
-  exprs_case nocalls ctx func ce cx args /\
+  eval_exprs cx args es = (res,es') /\ expr_sim_inv H ce cx env es /\
+  (!e st. MEM e args /\ expr_sim_inv H ce cx env st ==>
+    expr_body_pre H ce cx env e st /\ (nocalls ==> int_calls_expr e = [])) /\
+  exprs_case H nocalls ctx func ce cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [x] /\ inst.inst_id < sa.cs_next_id /\
-  (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
+  (!st. expr_sim_inv H ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
   (if header then 32 else 0) + LENGTH args * type_memory_size tv <= asz /\
@@ -758,9 +758,9 @@ Theorem aggregate_make_array_sim:
      regions_disjoint io (type_memory_size itv) b
        ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) ==>
   out = Var x /\
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\r. ?vs. res = INL vs /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s)
+    (\r. ?vs. res = INL vs /\ expr_sim_inv H ce cx env es' /\
+      stmt_state_rel H ctx func ce cx es' r /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -799,7 +799,7 @@ Proof
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `out = Var x` by metis_tac[exprOperandVarTheory.compiler_make_array_elems_result] >>
   gvs[] >>
-  reverse (Cases_on `stmt_state_rel ctx func ce cx es s0`)
+  reverse (Cases_on `stmt_state_rel H ctx func ce cx es s0`)
   >- simp[frag_exec_def] >>
   qmatch_goalsub_abbrev_tac `frag_exec ctx sa sb P Q R` >>
   qabbrev_tac `s1 = mstore b (n2w (LENGTH args)) s0 with
@@ -823,7 +823,7 @@ Resume aggregate_make_array_sim[header_run]:
 QED
 
 Resume aggregate_make_array_sim[header_suffix]:
-  `stmt_state_rel ctx func ce cx es s1` by
+  `stmt_state_rel H ctx func ce cx es s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      irule exprSimLiteralBufferTheory.literal_state_memory_frame >>
      qexists_tac `s0` >> rpt conj_tac
@@ -869,7 +869,7 @@ Resume aggregate_make_array_sim[header_post]:
   qpat_x_assum `type_memory_bytes _ _ = _` kall_tac >>
   qpat_x_assum `eval_exprs _ _ _ = _` kall_tac >>
   qpat_x_assum `!e st. MEM e args /\ _ ==> _` kall_tac >>
-  qpat_x_assum `exprs_case _ _ _ _ _ args` kall_tac >>
+  qpat_x_assum `exprs_case H _ _ _ _ _ args` kall_tac >>
   qpat_x_assum `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `compile_make_tuple _ _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `frag_exec _ sm sb _ _ _` kall_tac >>

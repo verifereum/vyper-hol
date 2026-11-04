@@ -149,7 +149,7 @@ Theorem assign_attr_storage_source:
     eval_stmt cx
       (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id)) fld))
          e) es = (res, es') /\
-    stmt_res_ok lctx res /\ expr_body_pre cenv cx env e es /\
+    stmt_res_ok lctx res /\ expr_body_pre H cenv cx env e es /\
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr (StructT sid), id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
@@ -169,12 +169,12 @@ Theorem assign_attr_storage_source:
                          (nsid_to_string sid)) fld))
                    ftv v es1 = (res, es') /\
                  !u st.
-                   storage_dead cx tr
+                   storage_dead_on H tr
                      (update_storage
                         (n2w slot + n2w (struct_field_offset_slots
                            (get_struct_fields cenv.ce_struct_fields
                               (nsid_to_string sid)) fld)) u st) =
-                   storage_dead cx tr st)
+                   storage_dead_on H tr st)
 Proof
   rpt gen_tac >> strip_tac >>
   `!m. res <> INR (Error (TypeError m))` by
@@ -184,7 +184,7 @@ Proof
   conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `expr_sim_inv H cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
   drule_all struct_field_type >> strip_tac >>
@@ -195,8 +195,8 @@ Proof
   gvs[expr_result_typed_def, expr_runtime_typed_def,
       value_result_typed_def] >>
   rpt conj_tac
-  >~ [`storage_dead`]
-  >- (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
+  >~ [`storage_dead_on H`]
+  >- (rpt gen_tac >> irule storage_dead_on_update_struct_word_field >>
       qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
       simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
       metis_tac[exprSimUnwrapTheory.word_type_slot_size]) >>
@@ -264,10 +264,10 @@ Theorem store_var_frag:
   !ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel ctx func cenv cx es' t /\
+      (\t. stmt_state_rel H ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
@@ -290,7 +290,7 @@ Theorem assign_attr_storage_frag:
     emit_void (if tr then TSTORE else SSTORE) [dst; op] su = ((), sf) /\
     fn_has_code sa sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
+    expr_vv_sim H ctx func cenv cx (expr_type e) e es /\
     is_word_type (expr_type e) /\
     (do result <- eval_expr cx e; read_result cx result od) es = (r, es1) /\
     expr_res_ok r /\
@@ -300,10 +300,10 @@ Theorem assign_attr_storage_frag:
                write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
                  (res, es') /\
                !u st.
-                 storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
-                 storage_dead cx tr st) ==>
-    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\t. res = INL () /\ stmt_state_rel ctx func cenv cx es' t /\
+                 storage_dead_on H tr (update_storage (n2w slot + n2w off) u st) =
+                 storage_dead_on H tr st) ==>
+    frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+      (\t. res = INL () /\ stmt_state_rel H ctx func cenv cx es' t /\
            (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
                   lookup_var x t = SOME u) /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -356,9 +356,9 @@ Theorem compile_assign_attr_storage_case:
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ expr_type e = fty /\
-    expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    expr_vv_sim H ctx func cenv cx (expr_type e) e es /\
+    expr_body_pre H cenv cx env e es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
@@ -401,16 +401,16 @@ Theorem compile_assign_attr_storage_stmt_frag:
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (fty, fsz) /\
     is_word_type fty /\ expr_type e = fty /\
-    expr_vv_ok cenv e /\ expr_sim_pre cenv cx env e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    expr_vv_ok H cenv e /\ expr_sim_pre H cenv cx env e es ==>
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (Assign (BaseTarget (AttributeTarget (TopLevelNameTarget (src, id))
             fld)) e))
       es res es'
 Proof
   rpt strip_tac >> irule compile_assign_attr_storage_case >>
-  `expr_body_pre cenv cx env e es` by fs[expr_sim_pre_body] >>
-  `expr_vv_sim ctx func cenv cx (expr_type e) e es` by
+  `expr_body_pre H cenv cx env e es` by fs[expr_sim_pre_body] >>
+  `expr_vv_sim H ctx func cenv cx (expr_type e) e es` by
     metis_tac[expr_vv_ok_def] >>
   simp[] >> metis_tac[]
 QED

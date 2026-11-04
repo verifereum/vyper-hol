@@ -32,11 +32,11 @@ Ancestors
 Theorem body_expr_ok_intro:
   !cx e.
     (!tops ctx func cenv env ty es.
-       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es /\
+       body_inv tops ctx cenv cx /\ expr_body_pre H cenv cx env e es /\
        int_calls_expr e <> [] ==>
-       expr_sim ctx func cenv cx ty e es /\
-       expr_vv_sim ctx func cenv cx ty e es) ==>
-    body_expr_ok cx e
+       expr_sim H ctx func cenv cx ty e es /\
+       expr_vv_sim H ctx func cenv cx ty e es) ==>
+    body_expr_ok H cx e
 Proof
   rw[body_expr_ok_def] >> Cases_on `int_calls_expr e = []` >> gvs[] >>
   metis_tac[compile_expr_sim, compile_expr_vv_sim, expr_sim_pre_body]
@@ -44,8 +44,8 @@ QED
 
 Theorem body_expr_ok_case:
   !cx e tops ctx func cenv.
-    body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
-    expr_sim_case F ctx func cenv cx e /\ expr_vv_case F ctx func cenv cx e
+    body_expr_ok H cx e /\ body_inv tops ctx cenv cx ==>
+    expr_sim_case H F ctx func cenv cx e /\ expr_vv_case H F ctx func cenv cx e
 Proof
   rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
@@ -54,17 +54,17 @@ Theorem body_expr_ok_of_case:
   !cx e.
     (!tops ctx func cenv.
        body_inv tops ctx cenv cx ==>
-       expr_sim_case F ctx func cenv cx e /\
-       expr_vv_case F ctx func cenv cx e) ==>
-    body_expr_ok cx e
+       expr_sim_case H F ctx func cenv cx e /\
+       expr_vv_case H F ctx func cenv cx e) ==>
+    body_expr_ok H cx e
 Proof
   rw[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 
 Theorem body_exprs_ok_case:
   !cx es tops ctx func cenv.
-    body_exprs_ok cx es /\ body_inv tops ctx cenv cx ==>
-    exprs_case F ctx func cenv cx es
+    body_exprs_ok H cx es /\ body_inv tops ctx cenv cx ==>
+    exprs_case H F ctx func cenv cx es
 Proof
   gen_tac >> Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
   metis_tac[body_expr_ok_case]
@@ -73,10 +73,10 @@ QED
 (* exprSimOperators' compile_ifexp_case. *)
 Theorem body_ifexp_case:
   !cx v5 e1 e2 e3.
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e2) /\
-    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok cx e3) /\
-    body_expr_ok cx e1 ==>
-    body_expr_ok cx (IfExp v5 e1 e2 e3)
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok H cx e2) /\
+    (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_ok H cx e3) /\
+    body_expr_ok H cx e1 ==>
+    body_expr_ok H cx (IfExp v5 e1 e2 e3)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   irule compile_ifexp_case >> rpt conj_tac
@@ -87,8 +87,8 @@ QED
 (* exprSimAggregates' compile_struct_lit_case. *)
 Theorem body_structlit_case:
   !cx v7 src_id_opt id kes.
-    (!ks. ks = MAP FST kes ==> body_exprs_ok cx (MAP SND kes)) ==>
-    body_expr_ok cx (StructLit v7 (src_id_opt,id) kes)
+    (!ks. ks = MAP FST kes ==> body_exprs_ok H cx (MAP SND kes)) ==>
+    body_expr_ok H cx (StructLit v7 (src_id_opt,id) kes)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
   strip_tac >> irule compile_struct_lit_case >>
@@ -99,12 +99,12 @@ QED
    cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
   !cx v8 e1 e2.
-    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok cx e2) /\
-    body_expr_ok cx e1 ==>
-    body_expr_ok cx (Subscript v8 e1 e2)
+    (!s'' res t. eval_expr cx e1 s'' = (INL res,t) ==> body_expr_ok H cx e2) /\
+    body_expr_ok H cx e1 ==>
+    body_expr_ok H cx (Subscript v8 e1 e2)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func cenv cx (Subscript v8 e1 e2)` by
+  `expr_vv_case H F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule exprSimPlacesTheory.compile_subscript_case >> conj_tac
      >- metis_tac[body_expr_ok_case] >>
      rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
@@ -113,7 +113,7 @@ QED
 
 (* exprSimAttribute's compile_attribute_case. *)
 Theorem body_attribute_case:
-  !cx v9 e id. body_expr_ok cx e ==> body_expr_ok cx (Attribute v9 e id)
+  !cx v9 e id. body_expr_ok H cx e ==> body_expr_ok H cx (Attribute v9 e id)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >>
   strip_tac >> irule compile_attribute_case >> metis_tac[body_expr_ok_case]
@@ -127,7 +127,7 @@ Theorem body_bop_case:
   !cx ty bop e1 e2.
     ((bop = In \/ bop = NotIn) ==>
      !a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
-    body_exprs_ok cx [e1; e2] ==> body_expr_ok cx (Builtin ty (Bop bop) [e1; e2])
+    body_exprs_ok H cx [e1; e2] ==> body_expr_ok H cx (Builtin ty (Bop bop) [e1; e2])
 Proof
   rw[body_exprs_ok_def] >> irule body_expr_ok_of_case >> rpt gen_tac >>
   strip_tac >> irule compile_bop_case >> rpt conj_tac
@@ -153,8 +153,8 @@ QED
 Theorem body_make_array_case:
   !cx ty t n es.
     (builtin_args_length_ok (MakeArray t n) (LENGTH es) ==>
-     body_exprs_ok cx es) ==>
-    body_expr_ok cx (Builtin ty (MakeArray t n) es)
+     body_exprs_ok H cx es) ==>
+    body_expr_ok H cx (Builtin ty (MakeArray t n) es)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `builtin_args_length_ok (MakeArray t n) (LENGTH es)`)
@@ -173,17 +173,17 @@ QED
 Theorem body_builtin_residual_case:
   !cx ty bt es.
     (bt = ECAdd \/ bt = ECMul) /\
-    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ok cx es) ==>
-    body_expr_ok cx (Builtin ty bt es)
+    (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ok H cx es) ==>
+    body_expr_ok H cx (Builtin ty bt es)
 Proof
   rpt strip_tac >> (irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func cenv cx (Builtin ty bt es)`
+  `expr_vv_case H F ctx func cenv cx (Builtin ty bt es)`
     suffices_by metis_tac[expr_sim_case_of_vv] >>
   reverse (Cases_on `builtin_args_length_ok bt (LENGTH es)`)
   >- (rw[expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  `exprs_case F ctx func cenv cx es` by metis_tac[body_exprs_ok_case] >>
+  `exprs_case H F ctx func cenv cx es` by metis_tac[body_exprs_ok_case] >>
   gvs[compile_ecadd_call_case, compile_ecmul_call_case])
 QED
 
@@ -197,12 +197,12 @@ Theorem body_builtin_rest_case:
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
-       body_exprs_ok cx es) /\
+       body_exprs_ok H cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt = Len ==>
-       body_expr_ok cx (HD es)) ==>
-    body_expr_ok cx (Builtin ty bt es)
+       body_expr_ok H cx (HD es)) ==>
+    body_expr_ok H cx (Builtin ty bt es)
 Proof
   rpt strip_tac >> Cases_on `?t n. bt = MakeArray t n`
   >- (gvs[] >> irule body_make_array_case >> strip_tac >>
@@ -215,13 +215,13 @@ Proof
   >- (rw[expr_sim_case_def, expr_vv_case_def] >>
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule well_typed_builtin_app_length >> simp[]) >>
-  `exprs_case F ctx func cenv cx es` by
+  `exprs_case H F ctx func cenv cx es` by
     (Cases_on `bt = Len`
      >- (gvs[builtin_args_length_ok_def, listTheory.LENGTH_EQ_NUM_compute] >>
-         `body_expr_ok cx h` by
+         `body_expr_ok H cx h` by
            (first_x_assum irule >> simp[type_check_def, assert_def]) >>
          simp[exprs_case_def] >> metis_tac[body_expr_ok_case]) >>
-     `body_exprs_ok cx es` by
+     `body_exprs_ok H cx es` by
        (Cases_on `bt = Env MsgGas`
         >- gvs[builtin_args_length_ok_def, body_exprs_ok_def] >>
         first_x_assum irule >> simp[type_check_def, assert_def]) >>
@@ -237,8 +237,8 @@ QED
 Theorem body_bop_in_literal_case:
   !cx ty bop e1 a t n elems.
     (bop = In \/ bop = NotIn) /\
-    body_exprs_ok cx [e1; Builtin a (MakeArray t n) elems] ==>
-    body_expr_ok cx
+    body_exprs_ok H cx [e1; Builtin a (MakeArray t n) elems] ==>
+    body_expr_ok H cx
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
@@ -249,18 +249,18 @@ Theorem body_builtin_case:
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\ bt <> Env MsgGas ==>
-       body_exprs_ok cx es) /\
+       body_exprs_ok H cx es) /\
     (!s'' x t.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt = Len ==>
-       body_expr_ok cx (HD es)) ==>
-    body_expr_ok cx (Builtin ty bt es)
+       body_expr_ok H cx (HD es)) ==>
+    body_expr_ok H cx (Builtin ty bt es)
 Proof
   rpt strip_tac >> reverse (Cases_on `?bop. bt = Bop bop`)
   >- (irule body_builtin_rest_case >> gvs[] >> metis_tac[]) >>
   gvs[] >> Cases_on `?e1 e2. es = [e1; e2]`
   >- (gvs[] >>
-      `body_exprs_ok cx [e1; e2]` by
+      `body_exprs_ok H cx [e1; e2]` by
         (first_x_assum irule >>
          simp[type_check_def, assert_def, builtin_args_length_ok_def]) >>
       Cases_on `(bop = In \/ bop = NotIn) /\
@@ -279,8 +279,8 @@ QED
 Theorem body_pop_nested_case:
   !cx v10 bt.
     (!id. bt <> NameTarget id) /\ (!nid. bt <> TopLevelNameTarget nid) /\
-    body_base_target_ok cx bt ==>
-    body_expr_ok cx (Pop v10 bt)
+    body_base_target_ok H cx bt ==>
+    body_expr_ok H cx (Pop v10 bt)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -289,7 +289,7 @@ QED
    variable or immutable, which makes no internal call, compile_expr_sim;
    the rest by body_pop_nested_case. *)
 Theorem body_pop_case:
-  !cx v10 bt. body_base_target_ok cx bt ==> body_expr_ok cx (Pop v10 bt)
+  !cx v10 bt. body_base_target_ok H cx bt ==> body_expr_ok H cx (Pop v10 bt)
 Proof
   rpt strip_tac >> Cases_on `?id. bt = NameTarget id`
   >- (gvs[] >> irule body_expr_ok_of_case >> simp[compile_pop_name_case]) >>
@@ -305,8 +305,8 @@ Theorem body_type_builtin_case:
     (!s'' x t.
        type_check (type_builtin_args_length_ok tb (LENGTH es))
          "TypeBuiltin args" s'' = (INL x,t) ==>
-       body_exprs_ok cx es) ==>
-    body_expr_ok cx (TypeBuiltin v11 tb typ es)
+       body_exprs_ok H cx es) ==>
+    body_expr_ok H cx (TypeBuiltin v11 tb typ es)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
   reverse (Cases_on `type_builtin_args_length_ok tb (LENGTH es)`)
@@ -314,7 +314,7 @@ Proof
       gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
       drule vyperTypeBuiltinsTheory.well_typed_type_builtin_args_length >>
       simp[]) >>
-  `body_exprs_ok cx es` by
+  `body_exprs_ok H cx es` by
     (first_x_assum irule >> simp[type_check_def, assert_def]) >>
   irule compile_type_builtin_case >> metis_tac[body_exprs_ok_case]
 QED
@@ -326,16 +326,16 @@ Theorem body_send_case:
     (!s'' x t.
        type_check (LENGTH es = if has_gas then 3 else 2) "Send args" s'' =
        (INL x,t) ==>
-       body_exprs_ok cx es) ==>
-    body_expr_ok cx (Call v12 (Send has_gas) es v13)
+       body_exprs_ok H cx es) ==>
+    body_expr_ok H cx (Call v12 (Send has_gas) es v13)
 Proof
   rpt strip_tac >> irule body_expr_ok_of_case >> rpt gen_tac >> strip_tac >>
-  `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)`
+  `expr_vv_case H F ctx func cenv cx (Call v12 (Send has_gas) es v13)`
     suffices_by simp[expr_sim_case_of_vv] >>
   rw[expr_vv_case_def] >> drule send_pre_types >> strip_tac >>
-  `body_exprs_ok cx es` by
+  `body_exprs_ok H cx es` by
     (first_x_assum irule >> simp[type_check_def, assert_def]) >>
-  `expr_vv_case F ctx func cenv cx (Call v12 (Send has_gas) es v13)` by
+  `expr_vv_case H F ctx func cenv cx (Call v12 (Send has_gas) es v13)` by
     metis_tac[compile_send_case, body_exprs_ok_case] >>
   fs[expr_vv_case_def] >> metis_tac[]
 QED
@@ -348,13 +348,13 @@ Theorem body_extcall_case:
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) /\
        eval_expr_results cx (TAKE nargs (DROP 1 es)) s'3' = (INL results,t') ==>
-       body_exprs_ok cx (DROP (1 + nargs) es)) /\
+       body_exprs_ok H cx (DROP (1 + nargs) es)) /\
     (!s'' target t nargs.
        eval_exprs cx (TAKE 1 es) s'' = (INL target,t) /\
        nargs = LENGTH (FST (SND sig)) ==>
-       body_results_ok cx (TAKE nargs (DROP 1 es))) /\
-    body_exprs_ok cx (TAKE 1 es) ==>
-    body_expr_ok cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
+       body_results_ok H cx (TAKE nargs (DROP 1 es))) /\
+    body_exprs_ok H cx (TAKE 1 es) ==>
+    body_expr_ok H cx (Call v14 (ExtCall is_static skip_check sig opts) es v15)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -385,7 +385,7 @@ QED
    Left (the push transfer): the callee body's premises at its entry:
    body_inv (whose target conjunct needs the callee's compile env at the
    unit's policy target, as set_*_package_target installs it) and
-   expr_sim_inv for the callee's compile env and env at cxf, and
+   expr_sim_inv H for the callee's compile env and env at cxf, and
    frame_ret_ok for the internal return; and that the callee
    body's code in ctx is stmts_env's in that compile env.
    ce_locals_declared there is bodySimEntry's internal_entry_declared and
@@ -424,7 +424,7 @@ Theorem body_intcall_case:
        (INL rtv,t'9') /\ (is_view <=> is_view_mut mut) /\
        lock_if_nr cx nr is_view s'12' = (INL x'',t'10') /\
        push_function (src_id_opt,fn) env cx s'13' = (INL cxf,t'11') ==>
-       body_stmts_ok cxf body') /\
+       body_stmts_ok H cxf body') /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3' s'6' results t'4' needed_dflts cxd s'7' prev
          t'5' s'8' x'' t'6'.
@@ -444,7 +444,7 @@ Theorem body_intcall_case:
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
        set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
-       body_exprs_ok cxd needed_dflts) /\
+       body_exprs_ok H cxd needed_dflts) /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
@@ -458,8 +458,8 @@ Theorem body_intcall_case:
        type_check
          (LENGTH es <= LENGTH args /\ LENGTH args - LENGTH es <= LENGTH dflts)
          "IntCall args length" s'5' = (INL x',t'3') ==>
-       body_results_ok cx es) ==>
-    body_expr_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
+       body_results_ok H cx es) ==>
+    body_expr_ok H cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -468,8 +468,8 @@ QED
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_call_case:
   !cx ty flags es v18.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call ty (RawCallTarget flags) es v18)
+    body_exprs_ok H cx es ==>
+    body_expr_ok H cx (Call ty (RawCallTarget flags) es v18)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -478,8 +478,8 @@ QED
    case lemma is still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_call_calldata_case:
   !cx ty flags es v19.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call ty (RawCallCalldataTarget flags) es v19)
+    body_exprs_ok H cx es ==>
+    body_expr_ok H cx (Call ty (RawCallCalldataTarget flags) es v19)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -488,7 +488,7 @@ QED
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_log_case:
   !cx v20 es v21.
-    body_exprs_ok cx es ==> body_expr_ok cx (Call v20 RawLog es v21)
+    body_exprs_ok H cx es ==> body_expr_ok H cx (Call v20 RawLog es v21)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -497,7 +497,7 @@ QED
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_raw_revert_case:
   !cx v22 es v23.
-    body_exprs_ok cx es ==> body_expr_ok cx (Call v22 RawRevert es v23)
+    body_exprs_ok H cx es ==> body_expr_ok H cx (Call v22 RawRevert es v23)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -506,8 +506,8 @@ QED
    still stated over expr_sim_below, for compile_expr_sim only. *)
 Theorem body_selfdestruct_case:
   !cx v24 es v25.
-    body_exprs_ok cx es ==>
-    body_expr_ok cx (Call v24 SelfDestructTarget es v25)
+    body_exprs_ok H cx es ==>
+    body_expr_ok H cx (Call v24 SelfDestructTarget es v25)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED
@@ -520,26 +520,26 @@ Theorem body_create_case:
        kind = CreateFromBlueprint raw_args /\
        eval_exprs cx (TAKE (if has_salt then 4 else 3) es) s'' = (INL prefix,t) /\
        check_create_blueprint has_salt prefix s'3' = (INL code_size,t') ==>
-       body_results_ok cx (DROP (if has_salt then 4 else 3) es)) /\
+       body_results_ok H cx (DROP (if has_salt then 4 else 3) es)) /\
     (!raw_args.
        kind = CreateFromBlueprint raw_args ==>
-       body_exprs_ok cx (TAKE (if has_salt then 4 else 3) es)) /\
+       body_exprs_ok H cx (TAKE (if has_salt then 4 else 3) es)) /\
     (!s'' prefix t ctor_es nargs s'3' results t' s'4' args t''.
        kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
        ctor_es = DROP 2 es /\
        nargs = LENGTH ctor_es - (if has_salt then 1 else 0) /\
        eval_expr_results cx (TAKE nargs ctor_es) s'3' = (INL results,t') /\
        read_results cx results s'4' = (INL args,t'') ==>
-       body_exprs_ok cx (DROP nargs ctor_es)) /\
+       body_exprs_ok H cx (DROP nargs ctor_es)) /\
     (!s'' prefix t ctor_es nargs.
        kind = RawCreate /\ eval_exprs cx (TAKE 2 es) s'' = (INL prefix,t) /\
        ctor_es = DROP 2 es /\
        nargs = LENGTH ctor_es - (if has_salt then 1 else 0) ==>
-       body_results_ok cx (TAKE nargs ctor_es)) /\
-    (kind = CreateCopyOf ==> body_exprs_ok cx es) /\
-    (kind = CreateMinimalProxy ==> body_exprs_ok cx es) /\
-    (kind = RawCreate ==> body_exprs_ok cx (TAKE 2 es)) ==>
-    body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
+       body_results_ok H cx (TAKE nargs ctor_es)) /\
+    (kind = CreateCopyOf ==> body_exprs_ok H cx es) /\
+    (kind = CreateMinimalProxy ==> body_exprs_ok H cx es) /\
+    (kind = RawCreate ==> body_exprs_ok H cx (TAKE 2 es)) ==>
+    body_expr_ok H cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >> cheat
 QED

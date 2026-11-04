@@ -854,10 +854,10 @@ Theorem compile_for_range_checked_frag_active:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tyv /\
     is_word_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tyv /\
-    expr_sim ctx func cenv cx fty e1 es /\
+    expr_sim H ctx func cenv cx fty e1 es /\
     (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
        ?n1. tv = IntV n1 /\ value_has_type tyv (IntV n1) /\
-            expr_sim ctx func cenv cx fty e2 es1 /\
+            expr_sim H ctx func cenv cx fty e2 es1 /\
             !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
                    P es2 /\
@@ -876,7 +876,7 @@ Theorem compile_for_range_checked_frag_active:
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
          (r2, es2) ==>
-       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       stmt_frag H ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -893,7 +893,7 @@ Theorem compile_for_range_checked_frag_active:
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
 Proof
   map_every qx_gen_tac [`P`, `Q`] >>
@@ -959,7 +959,7 @@ Proof
 QED
 
 Resume compile_for_range_checked_frag_active[ends]:
-  qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
+  qpat_x_assum `expr_sim H _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op1`, `r1`, `es1`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
@@ -972,18 +972,18 @@ Resume compile_for_range_checked_frag_active[ends]:
   >- (gvs[] >> strip_tac >> disj2_tac >> qexists_tac `fuel` >> simp[] >>
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r1 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
+  rename1 `expr_post H ctx func cenv cx e1 es sa s1 s0 es1 (IntV n1) op1 t1` >>
   qpat_x_assum `!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = _ ==> _` drule >> strip_tac >>
   qpat_x_assum `IntV n1 = _`
     (SUBST_ALL_TAC o SYM o SIMP_RULE (srw_ss()) []) >>
   `eval_operand op1 t1 = SOME (i2w n1)` by
-    (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post H ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
      simp_tac (srw_ss ())
        [typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
-  `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
+  `stmt_state_rel H ctx func cenv cx es1 t1` by fs[expr_post_def] >>
+  qpat_x_assum `expr_sim H _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`s1`, `s2`, `op2`, `r2`, `es2`, `t1`] mp_tac) >>
   impl_tac >- fs[] >>
@@ -1001,7 +1001,7 @@ Resume compile_for_range_checked_frag_active[ends]:
       qexists_tac `f0` >> simp[] >>
       irule expr_exit_stmt_exit >> qexists `INR ex` >> simp[]) >>
   qpat_x_assum `r2 = _` SUBST_ALL_TAC >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
+  rename1 `expr_post H ctx func cenv cx e2 es1 s1 s2 t1 es2 (IntV n2) op2 t2` >>
   suspend "alloca"
 QED
 
@@ -1011,9 +1011,9 @@ Resume compile_for_range_checked_frag_active[alloca]:
      0 < Num (n2 - n1)) ==> Q)` by
     (qpat_x_assum `!tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = _ ==> _` drule >>
      simp[]) >>
-  `stmt_state_rel ctx func cenv cx es2 t2` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es2 t2` by fs[expr_post_def] >>
   `eval_operand op2 t2 = SOME (i2w n2)` by
-    (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post H ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
      simp_tac (srw_ss ())
@@ -1188,7 +1188,7 @@ Resume compile_for_range_checked_frag_active[state]:
   `!q. not_fresh_at s2 q ==> ~MEM q [cv; rv; g1; z1; g2; z2; ev] /\ q <> p` by
     (rpt strip_tac >> fs[not_fresh_at_def] >> rw[] >>
      first_x_assum irule >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es2 cc` by
+  `stmt_state_rel H ctx func cenv cx es2 cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
      qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
@@ -1258,7 +1258,7 @@ Resume compile_for_range_checked_frag_active[run_loop]:
           (FEMPTY |+ (id, <| assignable := F; type := tyv;
                              value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
        (r9, es9) ==>
-     stmt_frag ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+     stmt_frag H ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
        (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts)
        (ei with scopes :=
           (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -1329,10 +1329,10 @@ Theorem compile_for_range_checked_frag:
     evaluate_type (get_tenv cx) (expr_type e1) = SOME tyv /\
     is_word_type (expr_type e2) /\
     evaluate_type (get_tenv cx) (expr_type e2) = SOME tyv /\
-    expr_sim ctx func cenv cx fty e1 es /\
+    expr_sim H ctx func cenv cx fty e1 es /\
     (!tv es1. (do raw <- eval_expr cx e1; read_result cx raw od) es = (INL tv, es1) ==>
        ?n1. tv = IntV n1 /\ value_has_type tyv (IntV n1) /\
-            expr_sim ctx func cenv cx fty e2 es1 /\
+            expr_sim H ctx func cenv cx fty e2 es1 /\
             !tv2 es2. (do raw <- eval_expr cx e2; read_result cx raw od) es1 = (INL tv2, es2) ==>
               ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\
                    P es2) /\
@@ -1349,7 +1349,7 @@ Theorem compile_for_range_checked_frag:
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) =
          (r2, es2) ==>
-       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       stmt_frag H ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -1366,7 +1366,7 @@ Theorem compile_for_range_checked_frag:
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
 Proof
   rpt gen_tac >> strip_tac >>

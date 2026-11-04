@@ -9,13 +9,13 @@
  *
  * TOP-LEVEL:
  *   fields_layout, struct_fields_layout — ce_struct_fields lays a struct out
- *                                  as its evaluated type, under expr_sim_inv
+ *                                  as its evaluated type, under expr_sim_inv H
  *   fields_in_memory_field, fields_val_wf_field, struct_field_offset_le,
  *   struct_field_offset_slots_eq — a field of a laid out struct
  *   read_storage_slot_field      — a field of a struct read from storage
  *   popped_at_field, select_attr_read — the source's selection
  *   popped_keys_indexed_not_at_field — popped_at_field never holds where
- *                                  expr_sim_inv does
+ *                                  expr_sim_inv H does
  *   slot_count_of_memory_size    — a type's slots are its memory size
  *                                  rounded up to words
  *   decode_value_n2w, decode_struct_field,
@@ -74,7 +74,7 @@ QED
 
 Theorem struct_fields_layout:
   !cenv cx env es sid stv.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME stv ==>
     ?fs. stv = StructTV fs /\
          fields_layout
@@ -336,7 +336,7 @@ Definition popped_at_field_def:
   popped_at_field _ _ _ = F
 End
 
-(* Under popped_keys_indexed (an expr_sim_inv clause) no popped key is a
+(* Under popped_keys_indexed (an expr_sim_inv H clause) no popped key is a
    field: every key ends in an array index. *)
 Theorem popped_keys_indexed_not_at_field:
   !tv id es. popped_keys_indexed es.scopes ==> ~popped_at_field tv id es

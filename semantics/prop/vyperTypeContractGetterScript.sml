@@ -136,7 +136,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -242,7 +242,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_state_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -347,7 +347,7 @@ Proof
        metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
     drule_all module_allocated_VariableDecl_slots >> strip_tac >>
     qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-    simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+    simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
          return_def, raise_def, initial_evaluation_context_def] >>
     Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                           well_formed_type_def]
@@ -423,7 +423,7 @@ Proof
      metis_tac[check_contract_namespaces_ok, ALOOKUP_MEM]) >>
   drule_all module_allocated_VariableDecl_slots >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, initial_evaluation_context_def] >>
   Cases_on `mut` >> gvs[check_toplevel_decl_def, assignable_type_def,
                         well_formed_type_def]
@@ -552,7 +552,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def] >>
@@ -583,7 +583,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def,
@@ -615,7 +615,7 @@ Proof
     metis_tac[check_contract_toplevel_decl_MEM] >>
   drule_all module_allocated_HashMapDecl_slot >> strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        initial_evaluation_context_def, bind_def, lift_option_type_def,
        return_def, raise_def, lookup_var_slot_from_layout_def,
        lookup_var_slot_in_layouts_def] >>

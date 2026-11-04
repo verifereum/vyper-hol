@@ -30,7 +30,7 @@ Theorem release_nonreentrant_lock_machine_components:
   st'.immutables = st.immutables /\
   st'.accounts = st.accounts
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
      assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]

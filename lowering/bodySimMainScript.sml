@@ -21,23 +21,23 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph
 
 val body_ind = evaluate_ind
-  |> Q.SPECL [`body_stmt_ok`, `body_stmts_ok`, `body_iterator_ok`,
-              `body_for_ok`, `body_expr_ok`, `body_exprs_ok`,
-              `body_base_target_ok`, `body_base_target_ok`,
-              `body_tuple_target_ok`, `body_tuple_targets_ok`,
-              `body_results_ok`];
+  |> Q.SPECL [`body_stmt_ok H`, `body_stmts_ok H`, `body_iterator_ok H`,
+              `body_for_ok H`, `body_expr_ok H`, `body_exprs_ok H`,
+              `body_base_target_ok H`, `body_base_target_ok H`,
+              `body_tuple_target_ok H`, `body_tuple_targets_ok`,
+              `body_results_ok H`];
 
 (* ===== The induction ===== *)
 
 Theorem body_sim_mutual:
-  (!cx s. body_stmt_ok cx s) /\ (!cx ss. body_stmts_ok cx ss) /\
-  (!cx it. body_iterator_ok cx it) /\
-  (!cx tyv nm body vs. body_for_ok cx tyv nm body vs) /\
-  (!cx e. body_expr_ok cx e) /\ (!cx es. body_exprs_ok cx es) /\
-  (!cx t. body_base_target_ok cx t) /\
-  (!cx g v. body_tuple_target_ok cx g v) /\
+  (!cx s. body_stmt_ok H cx s) /\ (!cx ss. body_stmts_ok H cx ss) /\
+  (!cx it. body_iterator_ok H cx it) /\
+  (!cx tyv nm body vs. body_for_ok H cx tyv nm body vs) /\
+  (!cx e. body_expr_ok H cx e) /\ (!cx es. body_exprs_ok H cx es) /\
+  (!cx t. body_base_target_ok H cx t) /\
+  (!cx g v. body_tuple_target_ok H cx g v) /\
   (!cx gs vs. body_tuple_targets_ok cx gs vs) /\
-  (!cx es. body_results_ok cx es)
+  (!cx es. body_results_ok H cx es)
 Proof
   mp_tac body_ind >> impl_tac
   >- (rpt conj_tac >| [
@@ -113,14 +113,14 @@ QED
 Theorem body_stmts_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res es'.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv H cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    frame_ret_ok H ctx func cx RetQ cenv ret_ty /\
     eval_stmts cx ss es = (res, es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
+    stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
       es res es'
 Proof
   metis_tac[body_sim_mutual, body_stmts_ok_def]
@@ -129,13 +129,13 @@ QED
 Theorem body_stmt_sim:
   !tops bindings ctx func cenv cx env env' ret_ty lctx RetQ s es res es'.
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    expr_sim_inv H cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
     call_evaluation_safe cx (int_calls_stmt s) /\
-    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    frame_ret_ok H ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx s es = (res, es') ==>
-    stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
+    stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
       es res es'
 Proof
   metis_tac[body_sim_mutual, body_stmt_ok_def]
@@ -145,8 +145,8 @@ QED
    lowered program. *)
 Theorem body_expr_sim:
   !tops ctx func cenv cx env ty e es.
-    body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-    expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es
+    body_inv tops ctx cenv cx /\ expr_body_pre H cenv cx env e es ==>
+    expr_sim H ctx func cenv cx ty e es /\ expr_vv_sim H ctx func cenv cx ty e es
 Proof
   metis_tac[body_sim_mutual, body_expr_ok_def]
 QED

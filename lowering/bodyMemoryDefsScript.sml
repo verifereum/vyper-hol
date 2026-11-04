@@ -53,7 +53,7 @@ QED
 (* Frontier monotonicity also preserves caller buffers absent from the
    callee's allocation map.  The other expression postconditions are S1's. *)
 Definition expr_sim_mem_def:
-  expr_sim_mem ctx func cenv cx ty e es <=>
+  expr_sim_mem H ctx func cenv cx ty e es <=>
     !sa sb op res es' s0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\
@@ -61,16 +61,16 @@ Definition expr_sim_mem_def:
       res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
       frag_exec_mem ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+        (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
              alloca_history func s)
         (\s. ?v. res = INL v /\
-          expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+          expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
           s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
         (expr_exit res)
 End
 
 Definition expr_vv_sim_mem_def:
-  expr_vv_sim_mem ctx func cenv cx ty e es <=>
+  expr_vv_sim_mem H ctx func cenv cx ty e es <=>
     !sa sb vv res es' s0.
       compile_expr cenv ty e sa = (vv, sb) /\
       eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
@@ -78,10 +78,10 @@ Definition expr_vv_sim_mem_def:
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
       frag_exec_mem ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+        (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\
              alloca_history func s)
         (\s. ?tv. res = INL tv /\
-          vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+          vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s /\
           s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
         (expr_exit res)
 End
@@ -90,7 +90,7 @@ End
    landing, including break and continue.  Terminal exits carry their own
    memory-safe run witness. *)
 Definition stmt_frag_mem_def:
-  stmt_frag_mem d ctx func cx lctx RetQ cenv
+  stmt_frag_mem H d ctx func cx lctx RetQ cenv
     (m : compile_env compiler) es res es' <=>
     !sa sb s0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
@@ -99,7 +99,7 @@ Definition stmt_frag_mem_def:
       return_buf_frame d cenv sa s0 /\
       ~block_is_terminated sa /\ stmt_res_ok lctx res /\
       res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
       ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -107,7 +107,7 @@ Definition stmt_frag_mem_def:
          stmt_lands lctx sb res s /\ ~s.vs_halted /\
          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
          cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel ctx func cenv'' cx es' s /\ alloca_history func s /\
+         stmt_state_rel H ctx func cenv'' cx es' s /\ alloca_history func s /\
          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                 lookup_var x s = SOME w) /\
          (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -123,16 +123,16 @@ Definition stmt_frag_mem_def:
 End
 
 Definition frame_ret_ok_mem_def:
-  frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty <=>
+  frame_ret_ok_mem H d ctx func cx RetQ cenv ret_ty <=>
     !cenv' env lctx eo es res es'.
-      same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      same_frame cenv cenv' /\ expr_sim_inv H cenv' cx env es /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
-              expr_sim_mem ctx func cenv' cx ty e es /\
-              expr_vv_sim_mem ctx func cenv' cx ty e es) /\
+              expr_sim_mem H ctx func cenv' cx ty e es /\
+              expr_vv_sim_mem H ctx func cenv' cx ty e es) /\
       eval_stmt cx (Return eo) es = (res, es') ==>
-      stmt_frag_mem d ctx func cx lctx RetQ cenv'
+      stmt_frag_mem H d ctx func cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
 End
 

@@ -89,18 +89,18 @@ Ancestors
    compile_len_vv_case.) *)
 Theorem compile_len_ctor_code_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\
+    exprs_case H nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\
     (?ty st. vv_location (FST (compile_expr cenv ty (HD args) st)) =
              SOME LocCode) ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Len args)
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Len args)
 Proof
   cheat
 QED
 
 Theorem compile_len_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Len args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Len args)
 Proof
   rpt strip_tac >>
   Cases_on `cenv.ce_is_ctor /\
@@ -112,7 +112,7 @@ QED
 
 Theorem compile_calldata_len_case:
   !nocalls ctx func cenv cx ann args.
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann CalldataLen args)
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann CalldataLen args)
 Proof
   rpt gen_tac >> irule expr_vv_case_nil >> conj_tac
   >- rw[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
@@ -145,8 +145,8 @@ QED
    literal_mstore_state_rel). *)
 Theorem compile_keccak256_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Keccak256 args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Keccak256 args)
 Proof
   rw[expr_vv_case_def] >>
   `well_typed_builtin_app ann Keccak256 (MAP expr_type args)` by
@@ -155,15 +155,15 @@ Proof
     `ts` |-> `MAP expr_type args`] hash_builtin_types) >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `Builtin _ Keccak256 [e]` >>
-  `expr_sim ctx func cenv cx (expr_type e) e es` by
+  `expr_sim H ctx func cenv cx (expr_type e) e es` by
     metis_tac[unop_operand_sim] >>
   irule compile_keccak256_typed_vv_sim >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_sha256_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Sha256 args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Sha256 args)
 Proof
   rw[expr_vv_case_def] >>
   `well_typed_builtin_app ann Sha256 (MAP expr_type args)` by
@@ -172,7 +172,7 @@ Proof
     `ts` |-> `MAP expr_type args`] hash_builtin_types) >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `Builtin _ Sha256 [e]` >>
-  `expr_sim ctx func cenv cx (expr_type e) e es` by
+  `expr_sim H ctx func cenv cx (expr_type e) e es` by
     metis_tac[unop_operand_sim] >>
   irule compile_sha256_typed_vv_sim >> simp[] >> metis_tac[]
 QED
@@ -203,8 +203,8 @@ QED
 
 Theorem compile_ceil_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann Ceil args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann Ceil args)
 Proof
   rpt gen_tac >> disch_tac >>
   rewrite_tac[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
@@ -218,21 +218,21 @@ QED
 
 Theorem compile_addmod_names_sim:
   !cenv ann aty a bty b mty m.
-    expr_vv_ok cenv (Builtin ann AddMod [Name aty a; Name bty b; Name mty m])
+    expr_vv_ok H cenv (Builtin ann AddMod [Name aty a; Name bty b; Name mty m])
 Proof
   rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
 
 Theorem compile_mulmod_names_sim:
   !cenv ann aty a bty b mty m.
-    expr_vv_ok cenv (Builtin ann MulMod [Name aty a; Name bty b; Name mty m])
+    expr_vv_ok H cenv (Builtin ann MulMod [Name aty a; Name bty b; Name mty m])
 Proof
   rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
 
 Theorem compile_powmod256_names_sim:
   !cenv ann aty a bty b.
-    expr_vv_ok cenv (Builtin ann PowMod256 [Name aty a; Name bty b])
+    expr_vv_ok H cenv (Builtin ann PowMod256 [Name aty a; Name bty b])
 Proof
   rpt gen_tac >> irule word_modular_names_sim >> simp[]
 QED
@@ -241,24 +241,24 @@ QED
 
 Theorem compile_concat_case:
   !nocalls ctx func cenv cx ann n args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Concat n) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Concat n) args)
 Proof
   cheat
 QED
 
 Theorem compile_slice_case:
   !nocalls ctx func cenv cx ann n args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
   cheat
 QED
 
 Theorem compile_extract32_case:
   !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Extract32 t args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (TypeBuiltin ann Extract32 t args)
 Proof
   cheat
 QED
@@ -273,8 +273,8 @@ QED
    buf + n + 31 and the length at buf + n - 1. *)
 Theorem compile_uint2str_case:
   !nocalls ctx func cenv cx ann n args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Uint2Str n) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Uint2Str n) args)
 Proof
   rw[expr_vv_case_def] >>
   `well_typed_expr env (Builtin ann (Uint2Str n) args)` by
@@ -289,8 +289,8 @@ QED
 
 Theorem compile_blockhash_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann BlockHash args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann BlockHash args)
 Proof
   cheat
 QED
@@ -339,7 +339,7 @@ QED
 Theorem compile_blobhash_frag:
   !ctx func cenv cx i es0.
     0 <= i /\ i < 2 ** 256 ==>
-    unop_frag ctx func cenv cx (\x. emit_op BLOBHASH [x])
+    unop_frag H ctx func cenv cx (\x. emit_op BLOBHASH [x])
       (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
       (BaseT (BytesT (Fixed 32)))
       (unop_result cx (BaseT (BytesT (Fixed 32))) BlobHash
@@ -360,8 +360,8 @@ QED
 
 Theorem compile_blobhash_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann BlobHash args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann BlobHash args)
 Proof
   rpt strip_tac >> irule expr_vv_case_stack >> rpt conj_tac
   >- metis_tac[eval_expr_builtin_value]
@@ -372,8 +372,8 @@ Proof
     (gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
      Cases_on `args` >> gvs[] >> rename1 `h::t` >> Cases_on `t` >> gvs[]) >>
   gvs[] >>
-  `expr_body_pre cenv cx env e1 es /\
-   expr_sim ctx func cenv cx ty e1 es` by
+  `expr_body_pre H cenv cx env e1 es /\
+   expr_sim H ctx func cenv cx ty e1 es` by
     metis_tac[unop_operand_sim] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ty`, `BaseT (BytesT (Fixed 32))`,
                `BlobHash`, `e1`, `ty`, `\x. emit_op BLOBHASH [x]`, `es`]
@@ -407,20 +407,20 @@ QED
    stand.  Python's codegen rejects it too (CompilerPanic ".code requires
    slice() context", codegen_venom/expr.py): x.code is only lowered as
    slice's first argument, with EXTCODECOPY.  The supported subset leaves
-   it out (supported_builtin_form), so expr_body_pre needs that exclusion
+   it out (supported_builtin_form), so expr_body_pre H needs that exclusion
    for this case to go. *)
 Theorem compile_acc_code_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc Code) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Acc Code) args)
 Proof
   cheat
 QED
 
 Theorem compile_acc_case:
   !nocalls ctx func cenv cx ann item args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann (Acc item) args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann (Acc item) args)
 Proof
   rpt strip_tac >> Cases_on `item = Code`
   >- (gvs[] >> irule compile_acc_code_case >> simp[]) >>
@@ -432,7 +432,7 @@ QED
 Theorem compile_method_id_literal_word_sim:
   !cenv la l.
     IS_SOME (method_id_literal (Literal la l)) ==>
-    expr_sim_ok cenv
+    expr_sim_ok H cenv
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rw[expr_sim_ok_def, expr_sim_def, optionTheory.IS_SOME_EXISTS] >>
@@ -452,12 +452,12 @@ QED
 Theorem compile_method_id_literal_word_case_sim:
   !cenv la l.
     IS_SOME (method_id_literal (Literal la l)) ==>
-    expr_ok cenv
+    expr_ok H cenv
       (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l])
 Proof
   rpt strip_tac >> irule expr_ok_stack >> rpt conj_tac
   >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value]
-  >~ [`expr_sim_ok`] >- simp[compile_method_id_literal_word_sim] >>
+  >~ [`expr_sim_ok H`] >- simp[compile_method_id_literal_word_sim] >>
   gvs[optionTheory.IS_SOME_EXISTS] >> rpt gen_tac >>
   drule compile_expr_method_id_literal >>
   simp[compile_literal_vv_def, comp_return_def]
@@ -476,11 +476,11 @@ QED
      that word goes after the length 4 in an ALLOCA'd 64-byte buffer. *)
 Theorem compile_method_id_other_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args /\
+    exprs_case H nocalls ctx func cenv cx args /\
     ~(ann = BaseT (BytesT (Fixed 4)) /\
       ?la l. args = [Literal la l] /\
              IS_SOME (method_id_literal (Literal la l))) ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann MethodId args)
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann MethodId args)
 Proof
   rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
   `well_typed_builtin_app ann MethodId (MAP expr_type args)` by
@@ -491,15 +491,15 @@ Proof
   disch_then (qx_choose_then `t` (mp_tac o CONJUNCT1)) >>
   simp[] >> strip_tac >> gvs[] >>
   rename1 `Builtin _ MethodId [e]` >>
-  `expr_sim ctx func cenv cx (expr_type e) e es` by
+  `expr_sim H ctx func cenv cx (expr_type e) e es` by
     metis_tac[unop_operand_sim] >>
   irule compile_method_id_other_typed_vv_sim >> simp[] >> metis_tac[]
 QED
 
 Theorem compile_method_id_case:
   !nocalls ctx func cenv cx ann args.
-    exprs_case nocalls ctx func cenv cx args ==>
-    expr_vv_case nocalls ctx func cenv cx (Builtin ann MethodId args)
+    exprs_case H nocalls ctx func cenv cx args ==>
+    expr_vv_case H nocalls ctx func cenv cx (Builtin ann MethodId args)
 Proof
   rpt strip_tac >>
   Cases_on `ann = BaseT (BytesT (Fixed 4)) /\
@@ -515,8 +515,8 @@ QED
 
 Theorem compile_ecadd_sim:
   !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann ECAdd args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (Builtin ann ECAdd args)
 Proof
   simp[expr_vv_ok_case] >>
   metis_tac[compile_ecadd_call_case, exprs_case_below]
@@ -524,8 +524,8 @@ QED
 
 Theorem compile_ecmul_sim:
   !cenv ann args.
-    expr_sim_below cenv (list_size expr_size args) ==>
-    expr_vv_ok cenv (Builtin ann ECMul args)
+    expr_sim_below H cenv (list_size expr_size args) ==>
+    expr_vv_ok H cenv (Builtin ann ECMul args)
 Proof
   simp[expr_vv_ok_case] >>
   metis_tac[compile_ecmul_call_case, exprs_case_below]

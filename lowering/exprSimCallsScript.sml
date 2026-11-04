@@ -14,7 +14,7 @@
  *   5 the creates: compile_create_sim
  *
  * Unprovable as the definitions stand (for raw_call and the creates, once
- * expr_sim_pre's exclusion of them, below, is lifted):
+ * expr_sim_pre H's exclusion of them, below, is lifted):
  *   - compile_raw_log_sim and compile_selfdestruct_sim:
  *     compile_call lowers RawLog and SelfDestructTarget to
  *     INVALID, where
@@ -33,13 +33,13 @@
  *     row 2).
  *
  * A call or staticcall raw_call takes its outcome from the oracle, as the
- * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
+ * lowered CALL/STATICCALL does.  expr_sim_pre H excludes delegate raw_calls
  * and the creates (~expr_has_evm_run e), so those cases hold vacuously.  It also
  * excludes raw_calls without revert_on_failure: a computed precompile is
  * answered as a success without the oracle on both sides, while the EVM
  * call can fail for lack of gas and such a raw_call returns the failure.
  *
- * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
+ * Internal calls (row 6) have no lemma: expr_sim_pre H excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.
  *)
 
@@ -49,64 +49,64 @@ Ancestors
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
-    expr_sim_below cenv (expr_size (Call ann (ExtCall is_static skip sig opts) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (ExtCall is_static skip sig opts) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (ExtCall is_static skip sig opts) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_send_sim:
   !cenv ann has_gas args dflt.
-    expr_sim_below cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (Send has_gas) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (Send has_gas) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (Send has_gas) args dflt)
 Proof
   ACCEPT_TAC compile_send_case_sim
 QED
 
 Theorem compile_raw_call_sim:
   !cenv ann flags args dflt.
-    expr_sim_below cenv (expr_size (Call ann (RawCallTarget flags) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (RawCallTarget flags) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (RawCallTarget flags) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (RawCallTarget flags) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_raw_call_calldata_sim:
   !cenv ann flags args dflt.
-    expr_sim_below cenv (expr_size (Call ann (RawCallCalldataTarget flags) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (RawCallCalldataTarget flags) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (RawCallCalldataTarget flags) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (RawCallCalldataTarget flags) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_raw_log_sim:
   !cenv ann args dflt.
-    expr_sim_below cenv (expr_size (Call ann (RawLog) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (RawLog) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (RawLog) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (RawLog) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_raw_revert_sim:
   !cenv ann args dflt.
-    expr_sim_below cenv (expr_size (Call ann (RawRevert) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (RawRevert) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (RawRevert) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (RawRevert) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_selfdestruct_sim:
   !cenv ann args dflt.
-    expr_sim_below cenv (expr_size (Call ann (SelfDestructTarget) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (SelfDestructTarget) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (SelfDestructTarget) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (SelfDestructTarget) args dflt)
 Proof
   cheat
 QED
 
 Theorem compile_create_sim:
   !cenv ann kind has_salt rof order args dflt.
-    expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
-    expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
+    expr_sim_below H cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
+    expr_vv_ok H cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
 Proof
   cheat
 QED

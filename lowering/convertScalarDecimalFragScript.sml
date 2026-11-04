@@ -10,7 +10,7 @@ Theorem scalar_int_decimal_frag:
   !ctx func cenv cx es0 sg bits i.
     0 < bits /\ bits <= 256 /\
     within_int_bound (if sg then Signed bits else Unsigned bits) i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (ConvIntToDecimal sg bits 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)))
       (i2w i) (BaseT DecimalT)
@@ -50,7 +50,7 @@ Theorem scalar_int_decimal_mk_frag:
   !ctx func cenv cx es0 sg bits i.
     0 < bits /\ bits <= 256 /\
     within_int_bound (if sg then Signed bits else Unsigned bits) i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (mk_convert_op (BaseT (if sg then IntT bits else UintT bits))
           (BaseT DecimalT)))
@@ -64,7 +64,7 @@ QED
 Theorem scalar_decimal_signed_frag:
   !ctx func cenv cx es0 bits i.
     0 < bits /\ bits <= 256 /\ within_int_bound decimal_bound i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (ConvDecimalToInt 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)
           (-&(2 ** (bits-1))) (&(2 ** (bits-1))-1) T))
@@ -98,7 +98,7 @@ QED
 Theorem scalar_decimal_unsigned_frag:
   !ctx func cenv cx es0 bits i.
     0 < bits /\ bits < 256 /\ within_int_bound decimal_bound i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (ConvDecimalToInt 10000000000 (-&(2 ** 167)) (&(2 ** 167)-1)
           0 (&(2 ** bits)-1) T))
@@ -151,7 +151,7 @@ QED
 Theorem scalar_decimal_signed_mk_frag:
   !ctx func cenv cx es0 bits i.
     0 < bits /\ bits <= 256 /\ within_int_bound decimal_bound i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (mk_convert_op (BaseT DecimalT) (BaseT (IntT bits))))
       (i2w i) (BaseT (IntT bits))
@@ -178,7 +178,7 @@ QED
 Theorem scalar_decimal_unsigned_mk_frag:
   !ctx func cenv cx es0 bits i.
     0 < bits /\ bits < 256 /\ within_int_bound decimal_bound i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (mk_convert_op (BaseT DecimalT) (BaseT (UintT bits))))
       (i2w i) (BaseT (UintT bits))
@@ -199,7 +199,7 @@ QED
 Theorem scalar_decimal_uint256_mk_frag:
   !ctx func cenv cx es0 i.
     within_int_bound decimal_bound i ==>
-    unop_frag ctx func cenv cx
+    unop_frag H ctx func cenv cx
       (\x. compile_type_convert x
         (mk_convert_op (BaseT DecimalT) (BaseT (UintT 256))))
       (i2w i) (BaseT (UintT 256))

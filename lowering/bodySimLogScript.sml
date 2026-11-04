@@ -104,7 +104,7 @@ QED
 
 (* ===== The arguments ===== *)
 
-(* A supported pure argument meets expr_body_pre wherever expr_sim_inv
+(* A supported pure argument meets expr_body_pre H wherever expr_sim_inv H
    holds: it makes no internal call and runs no EVM code. *)
 Theorem log_arg_body_pre[local]:
   !tops ctx cenv cx env e calls es.
@@ -113,8 +113,8 @@ Theorem log_arg_body_pre[local]:
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
-    expr_sim_inv cenv cx env es ==>
-    expr_body_pre cenv cx env e es
+    expr_sim_inv H cenv cx env es ==>
+    expr_body_pre H cenv cx env e es
 Proof
   rpt strip_tac >>
   `int_calls_expr e = []` by metis_tac[supported_pure_int_calls] >>
@@ -123,17 +123,17 @@ Proof
   irule stmt_expr_body_pre >> simp[] >> qexists_tac `calls` >> gvs[]
 QED
 
-(* The arguments of a supported log are pure, so each meets expr_body_pre
-   wherever expr_sim_inv holds, and its evaluation keeps expr_sim_inv and
+(* The arguments of a supported log are pure, so each meets expr_body_pre H
+   wherever expr_sim_inv H holds, and its evaluation keeps expr_sim_inv H and
    types its value (expr_body_pre_eval). *)
 Theorem body_log_args_ready:
   !tops ctx func cenv cx env args.
-    body_inv tops ctx cenv cx /\ body_exprs_ok cx args /\
+    body_inv tops ctx cenv cx /\ body_exprs_ok H cx args /\
     supported_pure_exprs tops args /\ well_typed_exprs env args /\
     ~supported_exprs_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) args /\
     call_evaluation_safe cx (int_calls_exprs args) ==>
-    log_args_ready ctx func cenv cx (\es. expr_sim_inv cenv cx env es) args
+    log_args_ready H ctx func cenv cx (\es. expr_sim_inv H cenv cx env es) args
 Proof
   Induct_on `args` >> simp[log_args_ready_def] >>
   rpt gen_tac >> strip_tac >>
@@ -151,7 +151,7 @@ Proof
      qexists_tac `int_calls_expr h` >> simp[]) >>
   reverse conj_tac >- (strip_tac >> first_x_assum irule >> metis_tac[]) >>
   gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env h es` by
+  `expr_body_pre H cenv cx env h es` by
     (irule log_arg_body_pre >> simp[DE_MORGAN_THM] >> metis_tac[]) >>
   conj_tac >- metis_tac[body_expr_ok_def] >>
   rpt gen_tac >> strip_tac >>
@@ -162,7 +162,7 @@ Proof
 QED
 
 Theorem body_log_case:
-  !cx id es. body_exprs_ok cx es ==> body_stmt_ok cx (Log id es)
+  !cx id es. body_exprs_ok H cx es ==> body_stmt_ok H cx (Log id es)
 Proof
   rw[body_stmt_ok_def] >>
   `?fields. supported_event_fields tops id = SOME fields /\
@@ -185,7 +185,7 @@ Proof
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
       simp[]) >>
-  qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
+  qexists_tac `\s. expr_sim_inv H cenv cx env s` >> simp[] >>
   irule body_log_args_ready >>
   gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>

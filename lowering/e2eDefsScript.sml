@@ -17,7 +17,7 @@ Ancestors
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperStorageFootprint vyperRuntimeAccounts
   supportedProgram compileEnv selectorDispatch immutableSectionRel
 
 (* ===== Source deployment, typing and storage ===== *)
@@ -48,24 +48,51 @@ Definition source_typing_ok_def:
           machine_well_typed am /\ call_tx_well_typed tx
 End
 
+(* All regions come from the source run compared by call_result_rel. *)
 Definition source_storage_ok_def:
-  source_storage_ok (tops : toplevel list) am tx <=>
+  source_storage_ok am tx os gobs <=>
+    let observations = source_storage_trace am tx os gobs in
+    let regions = storage_trace_regions observations in
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      contract_storage_well_formed cx (initial_state am []) /\
-      storage_layout_safe cx
+      storage_roots_fit observations /\ regions_consistent regions /\
+      storage_locks_separated regions (storage_trace_locks observations) /\
+      storage_well_formed_on cx (initial_state am []) regions
 End
 
+(* Unused outcomes are unrestricted; only observed payloads and actual
+   backend adoptions cross this execution's boundary. *)
 Definition call_outcomes_ok_def:
-  call_outcomes_ok (tops : toplevel list) am tx os <=>
+  call_outcomes_ok am tx os gobs <=>
+    let observations = source_storage_trace am tx os gobs in
+    let regions = storage_trace_regions observations in
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      EVERY (\outcome.
-               LENGTH outcome.co_returnData < dimword(:256) /\
-               accounts_runtime_well_typed outcome.co_accounts /\
-               contract_storage_well_formed cx
-                 (initial_state (am with <| accounts := outcome.co_accounts;
-                                            tStorage := outcome.co_tStorage |>) []))
-            os
+      EVERY (\observation. case observation of
+        StorageOutcome rq outcome => LENGTH outcome.co_returnData < dimword(:256)
+      | _ => T) observations /\
+      EVERY (\observation. case observation of
+        StorageBackend accounts transient => accounts_runtime_well_typed accounts
+      | _ => T) observations /\
+      storage_trace_backends_well_formed cx regions observations
 End
+
+(* Consumed payload typing comes from the concrete EVM frame invariant.
+   The public outcome contract checks the backends actually adopted. *)
+Theorem source_storage_observations_ok:
+  source_storage_ok am tx os gobs /\ call_outcomes_ok am tx os gobs /\
+  EVERY (\observation. case observation of
+    StorageOutcome rq outcome =>
+      (~rq.cr_static /\ (outcome.co_success \/ rq.cr_kind <> MessageCall) ==>
+       accounts_runtime_well_typed outcome.co_accounts)
+  | _ => T) (source_storage_trace am tx os gobs) ==>
+  storage_observations_ok
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (storage_trace_horizon (source_storage_trace am tx os gobs))
+    (source_storage_trace am tx os gobs)
+Proof
+  simp[source_storage_ok_def, call_outcomes_ok_def,
+       storage_observations_ok_def, storage_trace_horizon_def, EVERY_MEM] >>
+  metis_tac[]
+QED
 
 (* ===== Transaction environment and entry transfer ===== *)
 
@@ -389,18 +416,19 @@ End
 Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     let trace = call_trace es in
+    let H = storage_trace_horizon (source_storage_trace am tx (MAP SND trace) []) in
     case call_external (SOME (MAP SND trace)) [] am tx of
       (INL v, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
           frame_outcome es r es' NONE out lgs /\
           tx_return_bytes tops ret tx v out /\
-          accounts_agree cx am'.accounts
+          accounts_agree H cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree H cx) rqs (MAP FST trace)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")

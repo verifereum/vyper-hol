@@ -153,7 +153,7 @@ QED
 
 Theorem struct_literal_store_paths:
   !cenv cx env ann nsid kes es.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env (StructLit ann nsid kes) ==>
+    expr_sim_inv H cenv cx env es /\ well_typed_expr env (StructLit ann nsid kes) ==>
     !name e fty sz.
       MEM (name,e) kes /\
       ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid)) name =

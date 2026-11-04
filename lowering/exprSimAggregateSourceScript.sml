@@ -32,7 +32,7 @@ Ancestors
 
 (* A captured storage place accepted by storage_holds reads to a value. *)
 Theorem storage_holds_materialised:
-  storage_holds cx trans t tv w es ==>
+  storage_holds H cx trans t tv w es ==>
   ?v. read_result cx tv es = (INL v, es)
 Proof
   simp[storage_holds_def] >> metis_tac[]
@@ -61,7 +61,7 @@ Proof
 QED
 
 Theorem vv_post_materialises:
-  vv_post ctx func ce cx e es sa sb s0 es' tv vv r ==>
+  vv_post H ctx func ce cx e es sa sb s0 es' tv vv r ==>
   ?v. read_result cx tv es' = (INL v,es')
 Proof
   simp[vv_post_def] >> strip_tac >> Cases_on `vv` >>
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem aggregate_materialised_child_typed:
-  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre H ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   read_result cx tv es' = (INL v,es') ==>
   value_has_type tyv v
@@ -88,7 +88,7 @@ Proof
 QED
 
 Theorem aggregate_child_res_ok:
-  expr_body_pre ce cx env e es /\ eval_expr cx e es = (res,es') ==>
+  expr_body_pre H ce cx env e es /\ eval_expr cx e es = (res,es') ==>
   expr_vv_res_ok res
 Proof
   metis_tac[expr_body_pre_vv_res_ok]
@@ -108,7 +108,7 @@ Proof
 QED
 
 Theorem aggregate_materialised_child_wf:
-  expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
+  expr_body_pre H ce cx env e es /\ eval_expr cx e es = (INL tv,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
   read_result cx tv es' = (INL v,es') ==>
   val_wf tyv v
@@ -144,13 +144,13 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
-(* A field meets expr_body_pre wherever expr_sim_inv holds, and has no
+(* A field meets expr_body_pre H wherever expr_sim_inv H holds, and has no
    internal call where the literal has none. *)
 Theorem expr_body_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
-    expr_body_pre ce cx env (StructLit ann nsid fields) es /\
-    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
-    expr_body_pre ce cx env e es' /\
+    expr_body_pre H ce cx env (StructLit ann nsid fields) es /\
+    MEM e (MAP SND fields) /\ expr_sim_inv H ce cx env es' ==>
+    expr_body_pre H ce cx env e es' /\
     (int_calls_expr (StructLit ann nsid fields) = [] ==>
      int_calls_expr e = [])
 Proof
@@ -171,16 +171,16 @@ QED
 
 Theorem expr_sim_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
-    expr_sim_pre ce cx env (StructLit ann nsid fields) es /\
-    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
-    expr_sim_pre ce cx env e es'
+    expr_sim_pre H ce cx env (StructLit ann nsid fields) es /\
+    MEM e (MAP SND fields) /\ expr_sim_inv H ce cx env es' ==>
+    expr_sim_pre H ce cx env e es'
 Proof
   rw[expr_sim_pre_body] >> metis_tac[expr_body_pre_struct_field]
 QED
 
 Theorem expr_sim_below_struct_fields:
-  expr_sim_below ce (expr_size (StructLit ann nsid fields)) ==>
-  EVERY (expr_ok ce) (MAP SND fields)
+  expr_sim_below H ce (expr_size (StructLit ann nsid fields)) ==>
+  EVERY (expr_ok H ce) (MAP SND fields)
 Proof
   rw[EVERY_MEM, MEM_MAP] >> Cases_on `y` >> gvs[] >>
   drule exprCallBoundsTheory.expr_struct_field_bound >>
@@ -189,8 +189,8 @@ Proof
 QED
 
 Theorem expr_sim_below_args:
-  expr_sim_below ce (list_size expr_size args) ==>
-  EVERY (expr_ok ce) args
+  expr_sim_below H ce (list_size expr_size args) ==>
+  EVERY (expr_ok H ce) args
 Proof
   simp[EVERY_MEM] >> metis_tac[expr_sim_below_mem]
 QED

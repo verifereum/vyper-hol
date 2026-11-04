@@ -345,7 +345,7 @@ QED
 
 (* Shared source/compiler locations; no execution assumptions. *)
 Definition tuple_target_aligned_def:
-  tuple_target_aligned cenv cx g ty tv <=>
+  tuple_target_aligned H cenv cx g ty tv <=>
     (?id p sz. g = BaseTarget (NameTarget id) /\
       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type id = SOME ty /\ 0 < type_memory_bytes cenv ty /\
@@ -360,8 +360,8 @@ Definition tuple_target_aligned_def:
       cenv.ce_hashmap_info (src,id) = NONE /\
       cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k) u mem) =
-               storage_dead cx tr mem)) \/
+      (!u mem. storage_dead_on H tr (update_storage (n2w k) u mem) =
+               storage_dead_on H tr mem)) \/
     (?src id ts tr id_str k sid fs fld off fsz.
       g = BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld) /\
       get_module_code cx src = SOME ts /\
@@ -378,8 +378,8 @@ Definition tuple_target_aligned_def:
       off = struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld /\
       is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k + n2w off) u mem) =
-               storage_dead cx tr mem))
+      (!u mem. storage_dead_on H tr (update_storage (n2w k + n2w off) u mem) =
+               storage_dead_on H tr mem))
 End
 
 Definition tuple_target_layout_def:
@@ -391,7 +391,7 @@ End
 
 Theorem tuple_target_aligned_compiler:
   !cenv cx g ty tv.
-    tuple_target_aligned cenv cx g ty tv ==> tuple_compiler_target cenv g ty
+    tuple_target_aligned H cenv cx g ty tv ==> tuple_compiler_target cenv g ty
 Proof
   rpt gen_tac >> simp[tuple_target_aligned_def, tuple_compiler_target_def] >>
   strip_tac >> metis_tac[]
@@ -399,7 +399,7 @@ QED
 
 Theorem tuple_target_aligned_source:
   !cenv cx scopes g ty tv v.
-    tuple_target_aligned cenv cx g ty tv /\ tuple_target_layout scopes g ty tv v ==>
+    tuple_target_aligned H cenv cx g ty tv /\ tuple_target_layout scopes g ty tv v ==>
     tuple_source_target cx scopes g tv
 Proof
   rpt gen_tac >>
@@ -409,7 +409,7 @@ QED
 
 Theorem tuple_target_aligned_nonlocal_word:
   !cenv cx g ty tv.
-    tuple_target_aligned cenv cx g ty tv /\
+    tuple_target_aligned H cenv cx g ty tv /\
     (!id. g <> BaseTarget (NameTarget id)) ==> is_word_type ty
 Proof
   simp[tuple_target_aligned_def] >> metis_tac[]
@@ -434,7 +434,7 @@ QED
 
 Theorem tuple_target_aligned_local:
   !cenv cx id ty tv.
-    tuple_target_aligned cenv cx (BaseTarget (NameTarget id)) ty tv <=>
+    tuple_target_aligned H cenv cx (BaseTarget (NameTarget id)) ty tv <=>
     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type id = SOME ty /\ 0 < type_memory_bytes cenv ty /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -454,7 +454,7 @@ QED
 
 Theorem tuple_target_aligned_toplevel:
   !cenv cx src id ty tv.
-    tuple_target_aligned cenv cx (BaseTarget (TopLevelNameTarget (src,id))) ty tv <=>
+    tuple_target_aligned H cenv cx (BaseTarget (TopLevelNameTarget (src,id))) ty tv <=>
     ?ts tr id_str k.
       get_module_code cx src = SOME ts /\
       find_var_decl_by_name id ts = SOME (StorageVarDecl tr ty,id_str) /\
@@ -464,15 +464,15 @@ Theorem tuple_target_aligned_toplevel:
       cenv.ce_hashmap_info (src,id) = NONE /\
       cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
       evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k) u mem) =
-               storage_dead cx tr mem)
+      (!u mem. storage_dead_on H tr (update_storage (n2w k) u mem) =
+               storage_dead_on H tr mem)
 Proof
   simp[tuple_target_aligned_def]
 QED
 
 Theorem tuple_target_aligned_field:
   !cenv cx src id fld ty tv.
-    tuple_target_aligned cenv cx
+    tuple_target_aligned H cenv cx
       (BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld)) ty tv <=>
     ?ts tr id_str k sid fs off fsz.
       get_module_code cx src = SOME ts /\
@@ -489,8 +489,8 @@ Theorem tuple_target_aligned_field:
       off = struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld /\
       is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k + n2w off) u mem) =
-               storage_dead cx tr mem)
+      (!u mem. storage_dead_on H tr (update_storage (n2w k + n2w off) u mem) =
+               storage_dead_on H tr mem)
 Proof
   simp[tuple_target_aligned_def]
 QED
@@ -550,7 +550,7 @@ QED
 
 Theorem tuple_target_assignment_scope_frame:
   !cenv cx g ty tv v es es'.
-    tuple_target_aligned cenv cx g ty tv /\
+    tuple_target_aligned H cenv cx g ty tv /\
     tuple_target_layout es.scopes g ty tv v /\
     assign_tuple_targets cx g v es = (INL (),es') ==>
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
@@ -575,7 +575,7 @@ QED
 
 Theorem tuple_target_list_cons_success:
   !cenv cx g gs ty tv v vs es es'.
-    tuple_target_aligned cenv cx g ty tv /\
+    tuple_target_aligned H cenv cx g ty tv /\
     tuple_target_layout es.scopes g ty tv v /\ value_has_type tv v /\
     assign_tuple_target_list cx (g::gs) (v::vs) es = (INL (),es') ==>
     ?es1. assign_tuple_targets cx g v es = (INL (),es1) /\

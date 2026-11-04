@@ -256,7 +256,7 @@ QED
 
 Theorem memory_rhs_read_annotation_typed:
   !cenv cx env e es v es'.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env (expr_type e) v
 Proof
@@ -268,7 +268,7 @@ QED
 
 Theorem memory_rhs_read_lowered_typed:
   !cenv e env tops cx es v es'.
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    expr_body_pre H cenv cx env e es /\ supported_expr tops e /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env (lowered_value_type cenv e) v
 Proof
@@ -315,7 +315,7 @@ QED
 
 Theorem memory_rhs_read_destination_typed:
   !cenv cx env e es v es' ty.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     type_widens_to env.type_defs (expr_type e) ty /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es') ==>
     value_runtime_typed env ty v
@@ -329,7 +329,7 @@ QED
 
 Theorem memory_rhs_runtime_layout:
   !cenv cx env es ty v.
-    expr_sim_inv cenv cx env es /\ value_runtime_typed env ty v ==>
+    expr_sim_inv H cenv cx env es /\ value_runtime_typed env ty v ==>
     ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
          value_has_type tv v /\ type_memory_bytes cenv ty = type_memory_size tv
 Proof
@@ -434,7 +434,7 @@ QED
 
 Theorem memory_rhs_read_destination_footprint:
   !cenv cx env e es tops ty tyv v es1.
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
+    expr_body_pre H cenv cx env e es /\ supported_expr tops e /\
     type_widens_to env.type_defs (expr_type e) ty /\
     (expr_type e = ty \/ is_bytestring_type ty) /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
@@ -443,7 +443,7 @@ Theorem memory_rhs_read_destination_footprint:
     val_footprint tyv v <= type_memory_bytes cenv (lowered_value_type cenv e)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_sim_inv cenv cx env es /\ well_typed_expr env e` by
+  `expr_sim_inv H cenv cx env es /\ well_typed_expr env e` by
     fs[expr_body_pre_def] >>
   `value_runtime_typed env ty v` by
     metis_tac[memory_rhs_read_destination_typed] >>
@@ -499,13 +499,13 @@ QED
 
 Theorem memory_rhs_lowered_runtime_layout:
   !cenv cx env e es.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     type_memory_bytes cenv (lowered_value_type cenv e) < 2 ** 64 ==>
     ?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv /\
           type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv
 Proof
   rpt strip_tac >>
-  `well_typed_expr env e /\ expr_sim_inv cenv cx env es` by
+  `well_typed_expr env e /\ expr_sim_inv H cenv cx env es` by
     fs[expr_body_pre_def] >>
   `?ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv` by
     (drule lowered_value_type_shape >>
@@ -582,7 +582,7 @@ QED
 
 Theorem memory_rhs_read_local_type:
   !cenv cx env e es ty id tyv v es1 entry.
-    expr_body_pre cenv cx env e es /\
+    expr_body_pre H cenv cx env e es /\
     FLOOKUP env.var_types id = SOME ty /\
     evaluate_type (get_tenv cx) ty = SOME tyv /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\

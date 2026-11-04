@@ -15,7 +15,7 @@
  *                               no longer holds, with a popped snapshot at
  *                               the element itself
  *   tuple_popped_clash        — popped_at_elem of the evaluated base
- *   tuple_popped_clash_unreachable — never under expr_body_pre
+ *   tuple_popped_clash_unreachable — never under expr_body_pre H
  *   select_tuple_read         — the source's selection reads the element
  *   compile_subscript_tuple_sim — expr_vv_case of a tuple subscript from
  *                               its base's
@@ -43,7 +43,7 @@
  *
  * A popped snapshot recorded at the element itself (tuple_popped_clash)
  * would be read instead of the element of the base's snapshot.  It never
- * is: expr_sim_inv's popped_keys_indexed keys every snapshot at an index
+ * is: expr_sim_inv H's popped_keys_indexed keys every snapshot at an index
  * into a dynamic array, and the element's path indexes a tuple
  * (tuple_popped_clash_unreachable).
  *)
@@ -135,7 +135,7 @@ QED
 
 Theorem map_elem_size_in_location[local]:
   !tys tvs cenv cx env es.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
     MAP (elem_size_in_location cenv LocMemory) tys =
       MAP type_memory_size tvs /\
@@ -159,7 +159,7 @@ QED
 
 Theorem tuple_offset_memory[local]:
   !cenv cx env es tys tvs k.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
     tuple_offset cenv tys LocMemory k = SUM (TAKE k (MAP type_memory_size tvs))
 Proof
@@ -169,7 +169,7 @@ QED
 
 Theorem tuple_offset_code[local]:
   !cenv cx env es tys tvs k.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs ==>
     tuple_offset cenv tys LocCode k = SUM (TAKE k (MAP type_memory_size tvs))
 Proof
@@ -179,7 +179,7 @@ QED
 
 Theorem tuple_offset_slots[local]:
   !cenv cx env es tys tvs k loc.
-    expr_sim_inv cenv cx env es /\
+    expr_sim_inv H cenv cx env es /\
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     (loc = LocStorage \/ loc = LocTransient) ==>
     tuple_offset cenv tys loc k = tuple_prefix_slot_size k tvs
@@ -460,16 +460,16 @@ QED
    well_typed_expr) is an array or a mapping, never a tuple. *)
 Theorem tuple_pre_base[local]:
   !cenv cx env ann obj idx es tys.
-    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_body_pre H cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
-    expr_body_pre cenv cx env obj es /\
+    expr_body_pre H cenv cx env obj es /\
     int_calls_expr (Subscript ann obj idx) = int_calls_expr obj /\
     ?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\
             EL k tys = ann
 Proof
   rpt gen_tac >> strip_tac >>
   `well_typed_expr env obj /\ subscript_type_ok (TupleT tys) idx ann` by
-    (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_body_pre H _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
      drule type_place_expr_vtype_annotation >>
@@ -505,7 +505,7 @@ QED
    by location. *)
 Theorem base_vv_holds_loc[local]:
   !cenv cx t tv vv es s tvt w.
-    vv_holds cenv cx t tv vv es s /\ ~is_word_type t /\
+    vv_holds H cenv cx t tv vv es s /\ ~is_word_type t /\
     evaluate_type (get_tenv cx) t = SOME tvt /\
     eval_operand (vv_operand vv) s = SOME w ==>
     ?v. read_result cx tv es = (INL v, es) /\
@@ -513,11 +513,11 @@ Theorem base_vv_holds_loc[local]:
         (vv_loc vv = LocStorage ==>
            read_storage_slot cx F w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es F) (w2n w) tvt /\
-           storage_read_live cx F (get_storage cx es F) w tvt) /\
+           storage_read_live H cx F (get_storage cx es F) w tvt) /\
         (vv_loc vv = LocTransient ==>
            read_storage_slot cx T w tvt es = (INL v, es) /\
            slots_in_range (get_storage cx es T) (w2n w) tvt /\
-           storage_read_live cx T (get_storage cx es T) w tvt) /\
+           storage_read_live H cx T (get_storage cx es T) w tvt) /\
         (vv_loc vv = LocCode ==> immutable_holds cenv cx t tv w es) /\
         vv_loc vv <> LocCalldata
 Proof
@@ -557,7 +557,7 @@ QED
    bytes, so its address does not wrap, and the base sits where vv_at says. *)
 Theorem tuple_elem_ptr[local]:
   !func cenv cx env es sa sn es1 tv bvv q w tys tvs vs k ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv H cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     eval_operand (vv_operand bvv) q = SOME w /\ vv_loc bvv = LocMemory /\
@@ -603,7 +603,7 @@ QED
 (* The element's placement in memory, from the base's. *)
 Theorem tuple_vv_at_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' t ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv H cenv cx env es /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     read_result cx tv' es1 = (INL (EL k vs), es1) /\
@@ -742,8 +742,8 @@ QED
 (* A tuple element of a value read live is read live. *)
 Theorem storage_read_live_tuple_elem[local]:
   !cx tr st w tvs k.
-    storage_read_live cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
-    storage_read_live cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
+    storage_read_live H cx tr st w (TupleTV tvs) /\ k < LENGTH tvs ==>
+    storage_read_live H cx tr st (w + n2w (tuple_prefix_slot_size k tvs))
       (EL k tvs)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -753,7 +753,7 @@ Proof
       qspec_then `w + n2w (tuple_prefix_slot_size k tvs)` mp_tac
         wordsTheory.w2n_lt >>
       decide_tac) >>
-  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  qpat_x_assum `storage_read_live H _ _ _ _ _` mp_tac >>
   rewrite_tac[storage_read_live_def] >> strip_tac >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   `w2n w + tuple_prefix_slot_size k tvs < dimword (:256)` by decide_tac >>
@@ -774,8 +774,8 @@ QED
 (* The element's value_vv holds the element, from the base's. *)
 Theorem tuple_vv_holds_elem[local]:
   !func cenv cx env es sa sn es1 tv bvv q w dst tys tvs vs k tv' ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\ expr_sim_inv cenv cx env es /\
-    vv_holds cenv cx (TupleT tys) tv bvv es1 q /\
+    stmt_state_rel H ctx func cenv cx es1 q /\ expr_sim_inv H cenv cx env es /\
+    vv_holds H cenv cx (TupleT tys) tv bvv es1 q /\
     vv_at cenv cx (TupleT tys) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
@@ -786,7 +786,7 @@ Theorem tuple_vv_holds_elem[local]:
     OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     k < LENGTH tvs ==>
-    vv_holds cenv cx (EL k tys) tv'
+    vv_holds H cenv cx (EL k tys) tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) es1 q
 Proof
   rpt gen_tac >> strip_tac >>
@@ -827,7 +827,7 @@ QED
 (* The base's read, a tuple of the element types. *)
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
-    vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    vv_post H ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -851,8 +851,8 @@ QED
 (* The element's value_vv after the ADD, from the base's. *)
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
-    expr_sim_inv cenv cx env es /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    expr_sim_inv H cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) /\
@@ -863,11 +863,11 @@ Theorem tuple_vv_post[local]:
     read_result cx tv es1 = (INL (ArrayV (TupleV vs)), es1) /\
     values_have_types tvs vs /\
     read_result cx tv' es1 = (INL (EL k vs), es1) ==>
-    vv_post ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
+    vv_post H ctx func cenv cx (Subscript (EL k tys) obj idx) es sa sn s0 es1 tv'
       (LocatedValue (EL k tys) (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H _ _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   rewrite_tac[vv_post_def] >> gvs[vyperASTTheory.expr_type_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
@@ -917,13 +917,13 @@ Proof
   gvs[rich_listTheory.APPEND_11_LENGTH]
 QED
 
-(* Never under expr_body_pre: the base's place has its tuple type
-   (eval_expr's type soundness), while expr_sim_inv's popped_keys_indexed
+(* Never under expr_body_pre H: the base's place has its tuple type
+   (eval_expr's type soundness), while expr_sim_inv H's popped_keys_indexed
    keys every snapshot at an index into a dynamic array, which the clash's
    key path ++ [i] would make path's type. *)
 Theorem tuple_popped_clash_unreachable:
   !cenv cx env ann obj idx es tys.
-    expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+    expr_body_pre H cenv cx env (Subscript ann obj idx) es /\
     expr_type obj = TupleT tys ==>
     ~tuple_popped_clash cx obj idx es
 Proof
@@ -941,17 +941,17 @@ QED
 
 Theorem compile_subscript_tuple_sim:
   !nocalls ctx func cenv cx ann obj idx tys.
-    expr_vv_case nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
+    expr_vv_case H nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
     place_type cenv obj = ValPT (TupleT tys) ==>
-    expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
+    expr_vv_case H nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   `~tuple_popped_clash cx obj idx es` by
     (drule_all tuple_popped_clash_unreachable >> simp[]) >>
   drule_all tuple_pre_base >> strip_tac >> gvs[] >>
-  `expr_vv_sim ctx func cenv cx ty obj es` by
-    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+  `expr_vv_sim H ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case H _ _ _ _ _ obj` mp_tac >>
      simp[expr_vv_case_def] >> disch_then irule >> simp[] >>
      qexists_tac `env` >> simp[]) >>
   `literal_int_index (Literal ity (IntL (&k))) = k` by
@@ -965,14 +965,14 @@ Proof
   gvs[eval_expr_tuple_subscript, bind_def] >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (er, es1)` >>
   `expr_vv_res_ok er` by (drule_all expr_body_pre_vv_res_ok >> simp[]) >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _` mp_tac >>
+  qpat_x_assum `expr_vv_sim H _ _ _ _ _ obj _` mp_tac >>
   simp[expr_vv_sim_def] >>
   disch_then drule_all >> disch_then (qspec_then `s0` assume_tac) >>
   Cases_on `er` >> gvs[]
   >- (rename1 `eval_expr cx obj es = (INL btv, es1)` >>
       drule_all expr_body_pre_runtime_typed >> strip_tac >> gvs[] >>
       drule evaluate_tuple_type >> strip_tac >> gvs[] >>
-      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+      `expr_sim_inv H cenv cx env es` by fs[expr_body_pre_def] >>
       `~popped_at_elem btv k es1` by
         (fs[tuple_popped_clash_def] >> metis_tac[]) >>
       `!m. res <> INR (Error (TypeError m))` by
@@ -980,7 +980,7 @@ Proof
       `LENGTH tvs = LENGTH tys` by
         (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
       irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
+      qexistsl_tac [`\s. vv_post H ctx func cenv cx obj es sa sm s0 es1 btv bvv s`,
                     `sm`] >>
       simp[] >> conj_tac
       >- (irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >>

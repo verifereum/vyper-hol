@@ -5,7 +5,7 @@
  * (bodySimMain): a predicate for each of evaluate's functions, so the
  * internal-call case can use the callee body's statement predicate.
  *   - Expressions (body_expr_ok): expr_sim and expr_vv_sim, under
- *     expr_sim_pre less its int_calls_expr e = [], in a frame of the
+ *     expr_sim_pre H less its int_calls_expr e = [], in a frame of the
  *     lowered program (body_inv).
  *   - Statements and lists (body_stmt_ok, body_stmts_ok): stmt_frag,
  *     with the frame's RetQ, under the typing of the statement.
@@ -22,7 +22,7 @@
  *                         type environment's
  *   locals_alloc_ok     — every local's type is below the allocation limit
  *   stmt_exprs_ok       — the byte_widths and alloc_limits premises of
- *                         expr_sim_pre for each expression of a statement,
+ *                         expr_sim_pre H for each expression of a statement,
  *                         and alloc_limits_stmt
  *   same_frame, frame_ret_ok — the frame's RetQ accepts its returns
  *   body_stmt_ok, body_stmts_ok, body_iterator_ok, body_for_ok,
@@ -93,7 +93,7 @@ Definition locals_alloc_ok_def:
             type_memory_bytes cenv ty < 2 ** 64
 End
 
-(* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
+(* expr_sim_pre H's byte_widths_expr and alloc_limits_expr for every
    expression of a statement, targets' keys included, and alloc_limits_stmt,
    which also bounds the type of each local the statement declares. *)
 Definition stmt_exprs_ok_def:
@@ -139,16 +139,16 @@ QED
    compile_internal_return_memory_frag is the fragment of its store and
    RET, for a value of the return type itself). *)
 Definition frame_ret_ok_def:
-  frame_ret_ok ctx func cx RetQ cenv ret_ty <=>
+  frame_ret_ok H ctx func cx RetQ cenv ret_ty <=>
     !cenv' env lctx eo es res es'.
-      same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      same_frame cenv cenv' /\ expr_sim_inv H cenv' cx env es /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
-              expr_sim ctx func cenv' cx ty e es /\
-              expr_vv_sim ctx func cenv' cx ty e es) /\
+              expr_sim H ctx func cenv' cx ty e es /\
+              expr_vv_sim H ctx func cenv' cx ty e es) /\
       eval_stmt cx (Return eo) es = (res, es') ==>
-      stmt_frag ctx func cx lctx RetQ cenv'
+      stmt_frag H ctx func cx lctx RetQ cenv'
         (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
 End
 
@@ -157,10 +157,10 @@ End
 (* An expression of a frame of the lowered program, internal calls
    allowed, simulates as a value and as compile_expr's value_vv. *)
 Definition body_expr_ok_def:
-  body_expr_ok cx e <=>
+  body_expr_ok H cx e <=>
     !tops ctx func cenv env ty es.
-      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
-      expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es
+      body_inv tops ctx cenv cx /\ expr_body_pre H cenv cx env e es ==>
+      expr_sim H ctx func cenv cx ty e es /\ expr_vv_sim H ctx func cenv cx ty e es
 End
 
 (* A well-typed, supported statement of the frame, with its declaration,
@@ -169,94 +169,94 @@ End
    supported_stmt for every function body's statements, with the
    body's bindings. *)
 Definition body_stmt_ok_def:
-  body_stmt_ok cx s <=>
+  body_stmt_ok H cx s <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
-      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+      expr_sim_inv H cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+      frame_ret_ok H ctx func cx RetQ cenv ret_ty /\
       eval_stmt cx s es = (res, es') ==>
-      stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
+      stmt_frag H ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
         es res es'
 End
 
 Definition body_stmts_ok_def:
-  body_stmts_ok cx ss <=>
+  body_stmts_ok H cx ss <=>
     !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
-      expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+      expr_sim_inv H cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+      frame_ret_ok H ctx func cx RetQ cenv ret_ty /\
       eval_stmts cx ss es = (res, es') ==>
-      stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
+      stmt_frag H ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
         es res es'
 End
 
 (* The operands of an expression, evaluated and read in order: each
    simulates if the ones before it can evaluate. *)
 Definition body_exprs_ok_def:
-  body_exprs_ok cx [] = T /\
-  body_exprs_ok cx (e::es) =
-    (body_expr_ok cx e /\
+  body_exprs_ok H cx [] = T /\
+  body_exprs_ok H cx (e::es) =
+    (body_expr_ok H cx e /\
      ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
-      body_exprs_ok cx es))
+      body_exprs_ok H cx es))
 End
 
 (* The same, evaluated without reading (eval_expr_results). *)
 Definition body_results_ok_def:
-  body_results_ok cx [] = T /\
-  body_results_ok cx (e::es) =
-    (body_expr_ok cx e /\
-     ((?s res t. eval_expr cx e s = (INL res, t)) ==> body_results_ok cx es))
+  body_results_ok H cx [] = T /\
+  body_results_ok H cx (e::es) =
+    (body_expr_ok H cx e /\
+     ((?s res t. eval_expr cx e s = (INL res, t)) ==> body_results_ok H cx es))
 End
 
 (* An iterator's expressions, the end of a range if its start can
    evaluate. *)
 Definition body_iterator_ok_def:
-  body_iterator_ok cx (Array e) = body_expr_ok cx e /\
-  body_iterator_ok cx (Range e1 e2) =
-    (body_expr_ok cx e1 /\
+  body_iterator_ok H cx (Array e) = body_expr_ok H cx e /\
+  body_iterator_ok H cx (Range e1 e2) =
+    (body_expr_ok H cx e1 /\
      ((?s tv t s1 v t1. eval_expr cx e1 s = (INL tv, t) /\
                         read_result cx tv s1 = (INL v, t1)) ==>
-      body_expr_ok cx e2))
+      body_expr_ok H cx e2))
 End
 
 (* A loop over vs runs its body if vs is not empty. *)
 Definition body_for_ok_def:
-  body_for_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
+  body_for_ok H cx (tyv : type_value) (nm : identifier) body (vs : value list)
   <=>
-    vs <> [] ==> body_stmts_ok cx body
+    vs <> [] ==> body_stmts_ok H cx body
 End
 
 (* A target's keys, each if the place before it can evaluate.  It stands
    for both eval_base_place and eval_target_place. *)
 Definition body_base_target_ok_def:
-  body_base_target_ok cx (NameTarget id) = T /\
-  body_base_target_ok cx (TopLevelNameTarget nid) = T /\
-  body_base_target_ok cx (AttributeTarget t id) = body_base_target_ok cx t /\
-  body_base_target_ok cx (SubscriptTarget t e) =
-    (body_base_target_ok cx t /\
+  body_base_target_ok H cx (NameTarget id) = T /\
+  body_base_target_ok H cx (TopLevelNameTarget nid) = T /\
+  body_base_target_ok H cx (AttributeTarget t id) = body_base_target_ok H cx t /\
+  body_base_target_ok H cx (SubscriptTarget t e) =
+    (body_base_target_ok H cx t /\
      ((?s pv s1. eval_base_place cx t s = (INL pv, s1)) ==>
-      body_expr_ok cx e))
+      body_expr_ok H cx e))
 End
 
 (* The targets of a tuple assignment, each if the ones before it can be
    assigned. *)
 Definition body_tuple_target_ok_def:
-  body_tuple_target_ok cx (BaseTarget t) (v : value) =
-    body_base_target_ok cx t /\
-  body_tuple_target_ok cx (TupleTarget gs) v =
+  body_tuple_target_ok H cx (BaseTarget t) (v : value) =
+    body_base_target_ok H cx t /\
+  body_tuple_target_ok H cx (TupleTarget gs) v =
     (!vs. v = ArrayV (TupleV vs) ==> body_tuple_targets_ok cx gs vs) /\
   body_tuple_targets_ok cx [] vs = T /\
   body_tuple_targets_ok cx (g::gs) [] = T /\
   body_tuple_targets_ok cx (g::gs) (v::vs) =
-    (body_tuple_target_ok cx g v /\
+    (body_tuple_target_ok H cx g v /\
      ((?s x t. assign_tuple_targets cx g v s = (INL x, t)) ==>
       body_tuple_targets_ok cx gs vs))
 Termination

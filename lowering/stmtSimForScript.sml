@@ -76,7 +76,7 @@ Theorem compile_for_range_frag:
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
-       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       stmt_frag H ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -90,7 +90,7 @@ Theorem compile_for_range_frag:
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (For id fty (Range e1 e2) bound stmts)) es res es'
 Proof
   rpt gen_tac >> strip_tac >> REWRITE_TAC [stmt_frag_def] >>
@@ -180,7 +180,7 @@ Proof
   (* the state at the condition block *)
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev (i2w n2)
                   (update_var cv (i2w n1) (jump_to entry_lbl s1)))` >>
-  `stmt_state_rel ctx func cenv cx es cc` by
+  `stmt_state_rel H ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >>
      conj_tac >- (irule reserved_fresh_not_local >> qexists_tac `sa` >> simp[]) >>
@@ -268,7 +268,7 @@ Theorem compile_for_range_lit_frag:
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                value := IntV (n1 + &j); popped := [] |>)) :: ei.scopes) = (r2, es2) ==>
-       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       stmt_frag H ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts)
          (ei with scopes :=
             (FEMPTY |+ (id, <| assignable := F; type := tyv;
@@ -282,7 +282,7 @@ Theorem compile_for_range_lit_frag:
        (r2 = INL () \/ r2 = INR ContinueException) /\
        es2.scopes = sc :: rest ==>
        P (es2 with scopes := rest)) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
             bound stmts)) es res es'
@@ -316,9 +316,9 @@ Theorem compile_for_range_lit_frag_simple:
     (!st0 c st1 ex inc es1 r2 es2.
        declare_local cenv id fty st0 = (c, st1) /\
        eval_stmts cx stmts es1 = (r2, es2) ==>
-       stmt_frag ctx func cx (InLoop ex inc) RetQ c
+       stmt_frag H ctx func cx (InLoop ex inc) RetQ c
          (stmts_env c (InLoop ex inc) ty stmts) es1 r2 es2) ==>
-    stmt_frag ctx func cx lctx RetQ cenv
+    stmt_frag H ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty
          (For id fty (Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2)))
             bound stmts)) es res es'

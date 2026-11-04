@@ -77,31 +77,35 @@ Theorem acquire_nonreentrant_lock_eq:
   acquire_nonreentrant_lock addr slot is_view st =
     if lookup_storage (n2w slot)
          (lookup_transient_storage addr st.tStorage) = 1w then
-      (INR (Error (RuntimeError "nonreentrant lock")),st)
-    else if is_view then (INL (),st)
+      (INR (Error (RuntimeError "nonreentrant lock")),
+       st with storage_trace := st.storage_trace ++ [StorageLock slot])
+    else if is_view then
+      (INL (),st with storage_trace := st.storage_trace ++ [StorageLock slot])
     else
       (INL (),
-       st with tStorage updated_by
+       st with <|tStorage updated_by
          update_transient_storage addr
            (update_storage (n2w slot) 1w
-             (lookup_transient_storage addr st.tStorage)))
+             (lookup_transient_storage addr st.tStorage));
+         storage_trace := st.storage_trace ++ [StorageLock slot]|>)
 Proof
   Cases_on `lookup_storage (n2w slot)
     (lookup_transient_storage addr st.tStorage) = 1w` >>
   Cases_on `is_view` >>
-  simp[acquire_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  simp[acquire_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, get_transient_storage_def,
        update_transient_def, return_def, raise_def]
 QED
 
 Theorem release_nonreentrant_lock_eq:
   release_nonreentrant_lock addr slot st =
     (INL (),
-     st with tStorage updated_by
+     st with <|tStorage updated_by
        update_transient_storage addr
          (update_storage (n2w slot) 0w
-           (lookup_transient_storage addr st.tStorage)))
+           (lookup_transient_storage addr st.tStorage));
+       storage_trace := st.storage_trace ++ [StorageLock slot]|>)
 Proof
-  simp[release_nonreentrant_lock_def, bind_def, get_transient_storage_def,
+  simp[release_nonreentrant_lock_def, ignore_bind_def, record_storage_event_def, bind_def, get_transient_storage_def,
        update_transient_def, return_def]
 QED
 

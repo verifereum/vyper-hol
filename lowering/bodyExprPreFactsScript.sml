@@ -78,7 +78,7 @@ Proof
 QED
 
 (* A supported expression runs no EVM code, and its internal calls are to
-   the main module, as expr_body_pre asks. *)
+   the main module, as expr_body_pre H asks. *)
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e)
@@ -106,17 +106,17 @@ Proof
   gvs[supported_string_reason_def]
 QED
 
-(* A statement's expression meets expr_body_pre. *)
+(* A statement's expression meets expr_body_pre H. *)
 Theorem stmt_expr_body_pre:
   !cenv cx env e es calls.
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+    expr_sim_inv H cenv cx env es /\ well_typed_expr env e /\
     ~supported_expr_exists
        (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e /\
     call_evaluation_safe cx (int_calls_expr e ++ calls) /\
     ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
     (int_calls_expr e <> [] ==>
      ?tops. supported_program tops /\ get_module_code cx NONE = SOME tops) ==>
-    expr_body_pre cenv cx env e es
+    expr_body_pre H cenv cx env e es
 Proof
   rpt gen_tac >> strip_tac >>
   `byte_widths_expr e /\ alloc_limits_expr cenv e` by
