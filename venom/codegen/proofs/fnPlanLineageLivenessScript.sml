@@ -89,7 +89,7 @@ Proof
   first_x_assum irule >> decide_tac
 QED
 
-Theorem collect_phis_prefix[local]:
+Theorem collect_phis_prefix:
   !insts. ?rest. insts = collect_phis insts ++ rest
 Proof
   Induct >- simp[livenessDefsTheory.collect_phis_def] >>
