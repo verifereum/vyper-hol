@@ -467,3 +467,72 @@ Proof
   gen_tac >> BETA_TAC >> irule compiler_label_hoare_preserving_bind >>
   simp[compiler_label_hoare_context_primitives, compiler_label_hoare_typed_primitives]
 QED
+
+Theorem compile_call_intcall_action[local]:
+  compile_call cfn ce rt ty (IntCall fid) args dflt =
+    comp_bind (compile_multi_vvs cfn ce args) (\vals.
+    comp_bind
+      (if FST (ce.ce_func_info (nsid_to_string fid)) > 0 then
+         comp_bind (compile_alloc_buffer (32 * FST (ce.ce_func_info (nsid_to_string fid))))
+           (\b. comp_return (SOME b))
+       else if FST (SND (ce.ce_func_info (nsid_to_string fid))) > 0 then
+         comp_bind (compile_alloc_buffer (FST (SND (ce.ce_func_info (nsid_to_string fid)))))
+           (\b. comp_return (SOME b))
+       else comp_return NONE) (\buf.
+    comp_bind (compile_stage_intcall_args ce vals
+      (SND (SND (ce.ce_func_info (nsid_to_string fid)))) (MAP expr_type args)) (\ops.
+    let label = internal_fn_label (ce.ce_func_ids (nsid_to_string fid))
+                  (nsid_to_string fid) (ce.ce_func_param_types (nsid_to_string fid))
+                  ce.ce_is_ctor in
+    let n = FST (ce.ce_func_info (nsid_to_string fid)) in
+    let operands = Label label ::
+          ((case buf of SOME b => if n = 0 then [b.buf_operand] else []
+                      | NONE => []) ++ ops) in
+    if n > 0 then
+      (case buf of
+         SOME b => comp_bind (emit_multi_op INVOKE operands n) (\results.
+           comp_ignore_bind (store_multi_results b.buf_operand results 0)
+             (comp_return (LocatedValue rt (base_ptr b))))
+       | NONE => comp_bind (emit_op INVOKE operands)
+           (\result. comp_return (StackValue rt result)))
+    else comp_ignore_bind (emit_void INVOKE operands)
+      (comp_return (case buf of SOME b => LocatedValue rt (base_ptr b)
+                             | NONE => StackValue rt (Lit 0w))))))
+Proof
+  Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
+  rename1 `ce.ce_func_info _ = (n,rest)` >> Cases_on `rest` >>
+  simp[FUN_EQ_THM, compile_call_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >> gen_tac >>
+  pairarg_tac >> gvs[] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def])
+QED
+
+Theorem compiler_label_hoare_intcall:
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_multi_vvs cfn ce args)
+    (\r out. compiler_label_reservation origin pending out) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_call cfn ce rt ty (IntCall fid) args dflt)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> rewrite_tac[compile_call_intcall_action] >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac >- simp[] >>
+  qx_gen_tac `vals` >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- (rpt IF_CASES_TAC >> simp[compiler_label_hoare_typed_primitives] >>
+      irule compiler_label_hoare_preserving_bind >>
+      simp[compiler_label_hoare_alloc_buffer, compiler_label_hoare_typed_primitives]) >>
+  qx_gen_tac `buf` >> BETA_TAC >>
+  irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+  >- simp[compiler_label_hoare_stage_intcall_args] >>
+  qx_gen_tac `ops` >> BETA_TAC >> simp[] >>
+  IF_CASES_TAC >> Cases_on `buf` >> simp[comp_ignore_bind_def] >>
+  rpt (rewrite_tac[comp_ignore_bind_def] >>
+       irule compiler_label_hoare_preserving_bind >> reverse conj_tac
+       >- simp[compiler_label_hoare_emit_multi_op,
+               compiler_label_hoare_store_multi_results,
+               compiler_label_hoare_typed_primitives,
+               compiler_label_hoare_context_primitives] >> gen_tac >> BETA_TAC) >>
+  simp[compiler_label_hoare_typed_primitives]
+QED
