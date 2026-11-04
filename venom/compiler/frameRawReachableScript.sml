@@ -88,3 +88,56 @@ Proof
     (gvs[get_instruction_def, AllCaseEqs()]) >>
   first_x_assum irule >> simp[]
 QED
+
+Theorem frame_exec_prepend:
+  !ctx bb inst s s' f g r.
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  ~is_terminator inst.inst_opcode /\ step_inst f ctx inst s = OK s' /\
+  exec_block g ctx bb (s' with vs_inst_idx := SUC s.vs_inst_idx) = r /\
+  (!e. r <> Error e) ==>
+  ?h. exec_block h ctx bb s = r
+Proof
+  rpt strip_tac >>
+  `!e. step_inst f ctx inst s <> Error e` by simp[] >>
+  drule frame_step_fuel_mono >> disch_then (qspec_then `g` assume_tac) >>
+  `!e. exec_block g ctx bb (s' with vs_inst_idx := SUC s.vs_inst_idx) <> Error e`
+    by simp[] >>
+  drule frame_exec_fuel_mono >> disch_then (qspec_then `f` assume_tac) >>
+  qexists_tac `f+g` >> once_rewrite_tac[exec_block_def] >>
+  gvs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem frame_run_prepend_block:
+  !ctx fn cs bb f g s' ret se.
+  lookup_block cs.vs_current_bb fn.fn_blocks = SOME bb /\
+  run_block f ctx bb cs = OK s' /\ ~s'.vs_halted /\
+  run_blocks g ctx fn s' = IntRet ret se ==>
+  ?h. run_blocks h ctx fn cs = IntRet ret se
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `run_block _ _ _ _ = _` mp_tac >>
+  simp[run_block_def] >>
+  mp_tac (Q.SPECL [`cs`,`bb.bb_instructions`] eval_phis_ok_or_error_defs) >>
+  strip_tac >> gvs[] >>
+  rename1 `eval_phis cs bb.bb_instructions = OK sp` >>
+  strip_tac >>
+  `!e. exec_block f ctx bb
+    (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) <> Error e`
+    by simp[] >>
+  drule frame_exec_fuel_mono >> disch_then (qspec_then `g` assume_tac) >>
+  `terminates (run_blocks g ctx fn s')` by simp[terminates_def] >>
+  drule run_blocks_fuel_mono >> disch_then (qspec_then `f` assume_tac) >>
+  qexists_tac `SUC (f+g)` >>
+  simp[Once run_blocks_unfold, run_block_def] >>
+  gvs[arithmeticTheory.ADD_COMM]
+QED
+
+Theorem frame_run_from_exec_return:
+  !ctx fn cs bb sp f ret se.
+  lookup_block cs.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis cs bb.bb_instructions = OK sp /\
+  exec_block f ctx bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = IntRet ret se ==>
+  run_blocks (SUC f) ctx fn cs = IntRet ret se
+Proof
+  rpt strip_tac >> simp[Once run_blocks_unfold, run_block_def]
+QED
