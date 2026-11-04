@@ -48,7 +48,7 @@
 
 Theory bodySimStmtCases
 Ancestors
-  vyperStorageLayoutSafety vyperLookupStorage
+  vyperStorageLayoutSafety vyperLookupStorage vyperPureExpr
   list finite_map bodySim allocLimits allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
@@ -5563,6 +5563,34 @@ Proof
   metis_tac[]
 QED
 
+Theorem aug_place_supported_pure_mutual:
+  (!tops e. supported_pure_expr tops e ==> pure_expr e) /\
+  (!tops es. supported_pure_exprs tops es ==> EVERY pure_expr es) /\
+  (!tops fs. supported_pure_fields tops fs ==> EVERY pure_expr (MAP SND fs)) /\
+  (!tops e. supported_place_expr tops e ==> pure_expr e)
+Proof
+  ho_match_mp_tac supported_pure_expr_ind >>
+  simp[supported_pure_expr_def, pure_expr_def] >>
+  rpt strip_tac >> gvs[ETA_THM] >>
+  Cases_on `es` >> gvs[supportedExprFormsTheory.supported_builtin_form_def]
+QED
+
+Theorem aug_place_pure_eval_state:
+  supported_pure_expr tops e /\ eval_expr cx e s = (r,s') ==> s' = s
+Proof
+  metis_tac[aug_place_supported_pure_mutual, eval_expr_preserves_state]
+QED
+
+Theorem aug_place_pure_index_state:
+  supported_pure_expr tops e /\
+  (do result <- eval_expr cx e; read_result cx result od) s = (r,s') ==>
+  s' = s
+Proof
+  strip_tac >>
+  gvs[bind_def, AllCaseEqs()] >>
+  metis_tac[aug_place_pure_eval_state, read_result_state, raise_def]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
@@ -5649,10 +5677,15 @@ Theorem body_augassign_place:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
   rpt strip_tac >>
-  Cases_on `(?id. target_root t = NameTarget id) \/
-            EVERY (supported_pure_expr tops) (target_indices t)`
-  >- (irule body_augassign_place_pure >> metis_tac[]) >>
-  irule body_augassign_place_effectful_storage >> gvs[] >> metis_tac[]
+  (Cases_on `(?id. target_root t = NameTarget id) \/
+             EVERY (supported_pure_expr tops) (target_indices t)`
+   >- (irule body_augassign_place_pure >> metis_tac[]) >>
+   irule body_augassign_place_effectful_storage >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   qpat_x_assum `!s'' p t' s3 cur t'' s4 ptv t3. _` kall_tac >>
+   gvs[] >> rpt conj_tac >> simp[] >>
+   FIRST [qexistsl_tac [`bindings`, `tops`] >> simp[],
+          qexistsl_tac [`env`, `env'`] >> simp[]])
 QED
 
 (* RESIDUAL (#637 augmented assignment): a top-level target other than a
