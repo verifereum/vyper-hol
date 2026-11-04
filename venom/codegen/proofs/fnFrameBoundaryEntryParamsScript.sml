@@ -767,3 +767,187 @@ Proof
   strip_tac >> drule entry_ret_family_prepare_params >>
   simp[parameter_stack_fold] >> strip_tac >> gvs[]
 QED
+
+Definition entry_wrap_inputs_def:
+  entry_wrap_inputs = GENLIST (\i. if i = 0 then 0w else 1w : 256 word)
+    (SUC (dimword (:256)))
+End
+
+Theorem entry_ret_family_wrap_param_shape:
+  s.vs_params = entry_wrap_inputs ==>
+  EVERY (entry_param_shape s)
+    (get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions)
+Proof
+  strip_tac >>
+  simp[entry_ret_family_get_params, entry_probe_params_def, EVERY_GENLIST,
+       entry_param_shape_def, mk_inst_def, entry_wrap_inputs_def,
+       w2n_n2w] >>
+  rpt strip_tac >>
+  `i MOD dimword (:256) < dimword (:256)` by
+    simp[DIVISION] >> decide_tac
+QED
+
+Definition entry_ret_prefix_state_def:
+  entry_ret_prefix_state n s =
+    (entry_bind_pairs (entry_param_pairs s
+      (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions)) s)
+      with vs_inst_idx := n+1
+End
+
+Theorem entry_ret_family_param_pairs:
+  entry_param_pairs s
+    (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions) =
+  GENLIST (\i. (entry_probe_name i,
+    EL (i MOD dimword (:256)) s.vs_params)) n ++
+    [("retpc", s.vs_return_pc_token)]
+Proof
+  simp[entry_param_pairs_def, entry_ret_family_get_params,
+       entry_probe_params_def, MAP_GENLIST, mk_inst_def,
+       combinTheory.o_DEF, w2n_n2w]
+QED
+
+Theorem entry_ret_family_pairs_distinct:
+  ALL_DISTINCT (MAP FST (entry_param_pairs s
+    (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions)))
+Proof
+  simp[entry_ret_family_param_pairs, MAP_GENLIST, combinTheory.o_DEF,
+       ALL_DISTINCT_APPEND, ALL_DISTINCT_GENLIST, MEM_GENLIST]
+QED
+
+Theorem entry_ret_prefix_lookup:
+  !i n s. i < n ==>
+    FLOOKUP (entry_ret_prefix_state n s).vs_vars (entry_probe_name i) =
+    SOME (EL (i MOD dimword (:256)) s.vs_params)
+Proof
+  rpt strip_tac >> simp[entry_ret_prefix_state_def] >>
+  irule entry_bind_pairs_lookup >>
+  simp[entry_ret_family_pairs_distinct, entry_ret_family_param_pairs,
+       MEM_GENLIST] >> metis_tac[]
+QED
+
+Theorem entry_ret_prefix_retpc_lookup:
+  FLOOKUP (entry_ret_prefix_state n s).vs_vars "retpc" =
+    SOME s.vs_return_pc_token
+Proof
+  simp[entry_ret_prefix_state_def] >> irule entry_bind_pairs_lookup >>
+  simp[entry_ret_family_pairs_distinct, entry_ret_family_param_pairs]
+QED
+
+Theorem entry_ret_prefix_wrapped_lookup:
+  s.vs_params = entry_wrap_inputs ==>
+  FLOOKUP (entry_ret_prefix_state (SUC (dimword (:256))) s).vs_vars
+    (entry_probe_name (dimword (:256))) = SOME 0w
+Proof
+  strip_tac >>
+  simp[entry_ret_prefix_lookup, entry_wrap_inputs_def, EL_GENLIST, GENLIST_CONS]
+QED
+
+Theorem entry_ret_prefix_eval:
+  eval_operands
+    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"])
+    (entry_ret_prefix_state n s) =
+  SOME (GENLIST (\i. EL (i MOD dimword (:256)) s.vs_params) n ++
+    [s.vs_return_pc_token])
+Proof
+  `!xs. EVERY (\i. i < n) xs ==>
+    eval_operands (MAP (\i. Var (entry_probe_name i)) xs ++ [Var "retpc"])
+      (entry_ret_prefix_state n s) =
+    SOME (MAP (\i. EL (i MOD dimword (:256)) s.vs_params) xs ++
+      [s.vs_return_pc_token])` by
+    (Induct >> simp[eval_operands_def, eval_operand_def, lookup_var_def,
+                   entry_ret_prefix_retpc_lookup] >>
+     rpt strip_tac >> gvs[] >>
+     simp[eval_operands_def, eval_operand_def, lookup_var_def,
+          entry_ret_prefix_lookup]) >>
+  first_x_assum (qspec_then `GENLIST I n` mp_tac) >>
+  simp[EVERY_GENLIST, MAP_GENLIST, combinTheory.o_DEF]
+QED
+
+Theorem entry_ret_prefix_at_ret:
+  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+    (entry_ret_prefix_state n s) =
+  IntRet <|iret_values := GENLIST
+     (\i. EL (i MOD dimword (:256)) s.vs_params) n;
+     iret_adopt_fmp := NONE|> (entry_ret_prefix_state n s)
+Proof
+  `get_instruction (HD (entry_ret_family n).fn_blocks)
+    (entry_ret_prefix_state n s).vs_inst_idx =
+    SOME (mk_inst (SUC n) RET
+      (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])` by
+    simp[get_instruction_def, entry_ret_prefix_state_def,
+         entry_ret_family_def, entry_probe_params_def, EL_APPEND_EQN] >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+       entry_ret_prefix_eval, FRONT_APPEND] >>
+  Cases_on `GENLIST (\i. EL (i MOD dimword (:256)) s.vs_params) n` >>
+  simp[FRONT_DEF, GSYM SNOC_APPEND, FRONT_SNOC]
+QED
+
+Theorem entry_ret_family_wrap_exec:
+  s.vs_params = entry_wrap_inputs ==>
+  exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+    (s with vs_inst_idx := 0) =
+  IntRet <|iret_values := GENLIST
+      (\i. EL (i MOD dimword (:256)) s.vs_params) (SUC (dimword (:256)));
+      iret_adopt_fmp := NONE|>
+    (entry_ret_prefix_state (SUC (dimword (:256))) s)
+Proof
+  strip_tac >>
+  `exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+    (s with vs_inst_idx := 0) =
+   exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+    (entry_ret_prefix_state (SUC (dimword (:256))) s)` by
+    (mp_tac (Q.INST
+       [`insts` |-> `get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions`,
+        `bb` |-> `HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks`,
+        `suffix` |-> `[mk_inst (SUC (SUC (dimword (:256)))) RET
+          (MAP (\i. Var (entry_probe_name i)) (GENLIST I (SUC (dimword (:256)))) ++
+           [Var "retpc"]) []]`]
+       entry_param_skip_prefix) >>
+     simp[entry_ret_family_wrap_param_shape, entry_ret_family_get_params,
+          entry_ret_prefix_state_def, entry_ret_family_def,
+          entry_probe_params_def, APPEND_ASSOC]) >>
+  simp[entry_ret_prefix_at_ret]
+QED
+
+Theorem entry_ret_family_ret_result_state:
+  s.vs_inst_idx = n+1 /\
+  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) s = IntRet vals t ==>
+  t = s
+Proof
+  strip_tac >>
+  `get_instruction (HD (entry_ret_family n).fn_blocks) s.vs_inst_idx =
+    SOME (mk_inst (SUC n) RET
+      (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])` by
+    simp[get_instruction_def, entry_ret_family_def,
+         entry_probe_params_def, EL_APPEND_EQN] >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[exec_block_def] >>
+  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def] >>
+  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_family_wrap_witness:
+  s.vs_params = entry_wrap_inputs /\
+  t.vs_inst_idx = SUC (dimword (:256)) + 1 /\
+  exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+    (s with vs_inst_idx := 0) =
+  exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) t ==>
+  t = entry_ret_prefix_state (SUC (dimword (:256))) s
+Proof
+  strip_tac >> drule entry_ret_family_wrap_exec >>
+  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
+  strip_tac >>
+  `exec_block fuel ctx
+    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) t =
+    IntRet <|iret_values := GENLIST
+      (\i. EL (i MOD dimword (:256)) s.vs_params) (SUC (dimword (:256)));
+      iret_adopt_fmp := NONE|>
+      (entry_ret_prefix_state (SUC (dimword (:256))) s)` by metis_tac[] >>
+  drule_all entry_ret_family_ret_result_state >> simp[]
+QED
