@@ -1,7 +1,7 @@
 Theory loadElimConvergence
 Ancestors
   loadElimDefs loadElimSupportHelpers loadElimOrderHelpers loadElimSolverHelpers
-  dfAnalyzeDefs dfAnalyzeProofs cfgAnalysisProps worklistDefs
+  dfAnalyzeDefs dfAnalyzeProofs cfgAnalysisProps worklistDefs worklistProofs
   venomInst finite_map pred_set list
 
 Theorem le_solver_entry_init:
@@ -64,4 +64,75 @@ Proof
   >- (drule le_solver_entry_init >>
       Cases_on `fn_entry_label fn` >> simp[fn_labels_def]) >>
   irule le_solver_bounded_measure >> simp[]
+QED
+
+Theorem le_process_changed[local]:
+  (df_boundary NONE (le_solver_process ctx fn lbl st) lbl <>
+     df_boundary NONE st lbl) <=> le_solver_process ctx fn lbl st <> st
+Proof
+  rw[le_solver_process_def, df_process_block_def, df_joined_val_def,
+     df_boundary_def] >> pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
+  simp[df_state_component_equality, fmap_eq_flookup, FLOOKUP_UPDATE] >>
+  CCONTR_TAC >> fs[] >>
+  first_x_assum (qspec_then `lbl` mp_tac) >> simp[] >>
+  Cases_on `FLOOKUP st.ds_boundary lbl` >> fs[]
+QED
+
+Theorem le_solver_iterate_supported:
+  wf_function fn ==>
+  le_solver_inv (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+    (le_generated_operands (fn_insts fn))
+    (SND (wl_iterate
+      (\lbl old new. df_boundary NONE new lbl <> df_boundary NONE old lbl)
+      (le_solver_process ctx fn) (cfg_succs_of (cfg_analyze fn))
+      (cfg_analyze fn).cfg_dfs_pre
+      (case fn_entry_label fn of
+         NONE => init_df_state NONE (fn_labels fn)
+       | SOME lbl => (init_df_state NONE (fn_labels fn)) with
+           ds_boundary := (init_df_state NONE (fn_labels fn)).ds_boundary |+
+             (lbl, SOME FEMPTY))))
+Proof
+  strip_tac >> irule wl_iterate_invariant_proof >>
+  simp[le_process_changed, le_solver_entry_init] >>
+  conj_tac >- metis_tac[le_solver_process_closed] >>
+  qexistsl [
+    `CARD (set (fn_labels fn)) *
+      (1 + CARD (le_generated_keys ctx (fn_insts fn)) *
+        (CARD (le_generated_operands (fn_insts fn)) + 1))`,
+    `le_solver_leq`,
+    `le_solver_rank (set (fn_labels fn)) (le_generated_keys ctx (fn_insts fn))
+      (le_generated_operands (fn_insts fn))`] >>
+  conj_tac >- metis_tac[le_solver_process_inflationary] >>
+  irule le_solver_bounded_measure >> simp[]
+QED
+
+Theorem le_inst_fold_boundary[local]:
+  !lbls acc.
+    (!st lbl. (f st lbl).ds_boundary = st.ds_boundary) ==>
+    (FOLDL f acc lbls).ds_boundary = acc.ds_boundary
+Proof
+  Induct >> simp[]
+QED
+
+Theorem le_populate_boundary[local]:
+  (df_populate_inst dir bottom join transfer edge_transfer ctx entry cfg bbs lbls st).
+    ds_boundary = st.ds_boundary
+Proof
+  simp[df_populate_inst_def] >> irule le_inst_fold_boundary >>
+  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[]
+QED
+
+Theorem le_analyze_boundary_supported:
+  wf_function fn ==>
+  le_lattice_supported (le_generated_keys ctx (fn_insts fn))
+    (le_generated_operands (fn_insts fn))
+    (df_boundary NONE (load_analyze ctx fn) lbl)
+Proof
+  strip_tac >> drule le_solver_iterate_supported >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule le_solver_boundary_supported >>
+  disch_then (qspec_then `lbl` mp_tac) >>
+  simp[load_analyze_def, df_analyze_def, df_boundary_def,
+    le_populate_boundary, fn_labels_def, le_solver_process_def] >>
+  Cases_on `fn_entry_label fn` >> simp[]
 QED

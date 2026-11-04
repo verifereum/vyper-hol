@@ -156,8 +156,8 @@ Proof
   metis_tac[le_join_supported]
 QED
 
-Theorem le_solver_joined_supported:
-  le_solver_inv labels keys vals st ==>
+Theorem le_boundary_joined_supported:
+  (!lbl. le_lattice_supported keys vals (df_boundary NONE st lbl)) ==>
   le_lattice_supported keys vals
     (df_joined_val Forward NONE load_join load_edge_transfer ctx
       (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
@@ -168,10 +168,21 @@ Proof
     (FOLDL load_join NONE
       (MAP (df_boundary NONE st) (cfg_preds_of (cfg_analyze fn) lbl)))` by
     (irule le_join_fold_supported >>
-     simp[EVERY_MAP, EVERY_MEM] >> metis_tac[le_solver_boundary_supported]) >>
+     simp[EVERY_MAP, EVERY_MEM]) >>
   Cases_on `fn_entry_label fn` >> simp[] >>
   Cases_on `cfg_preds_of (cfg_analyze fn) lbl` >> gvs[] >>
   Cases_on `lbl = x` >> gvs[] >> metis_tac[le_join_supported, le_lattice_supported_empty]
+QED
+
+Theorem le_solver_joined_supported:
+  le_solver_inv labels keys vals st ==>
+  le_lattice_supported keys vals
+    (df_joined_val Forward NONE load_join load_edge_transfer ctx
+      (OPTION_MAP (\lbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
+      (cfg_analyze fn) st lbl)
+Proof
+  strip_tac >> irule le_boundary_joined_supported >>
+  metis_tac[le_solver_boundary_supported]
 QED
 
 Theorem le_solver_fold_supported:
