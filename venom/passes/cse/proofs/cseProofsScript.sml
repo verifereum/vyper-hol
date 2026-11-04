@@ -19,7 +19,7 @@
 
 Theory cseProofs
 Ancestors
-  cseDefs analysisSimProps passSimulationProps
+  cseDefs analysisSimProps passSimulationProps venomWf
 
 (* CSE soundness: for every ae entry where operand_ids_match holds,
    the source variable holds the same value that re-executing the
@@ -50,7 +50,8 @@ End
 
 Theorem cse_function_correct_proof:
   !fuel ctx fn s.
-    fn_inst_wf fn /\ s.vs_inst_idx = 0 ==>
+    wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+    s.vs_inst_idx = 0 /\ fn_entry_label fn = SOME s.vs_current_bb ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv {}) (execution_equiv {}) (execution_equiv {})
       (run_blocks fuel ctx fn s)
