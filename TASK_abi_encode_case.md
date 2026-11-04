@@ -21,7 +21,7 @@ Do not modify this statement. Prove it as-is, or produce a counterexample.
 
 - Replace the target admission with a kernel-checked proof; no new admissions or axioms in its helpers.
 - Preserve internal-call operands, exceptions, all method-id, tuple and singleton forms, and every existing value/frame guarantee.
-- Repair ancestor proofs affected by the frozen snapshot definition changes while preserving their existing semantic statements. Keep unrelated admissions and report inherited admitted dependencies of the target.
+- Repair ancestor proofs affected by the frozen snapshot definition changes while preserving their existing semantic statements, except the four explicitly authorized internal argument-compiler premise migrations below. Keep unrelated admissions and report inherited admitted dependencies of the target.
 - Build the target and every changed helper theory.
 - Commit checked work with trailer `Bot: astra (OpenAI GPT-6 Astra)`; do not push.
 
@@ -69,3 +69,16 @@ An independent preflight found no counterexample but returned UNKNOWN for the fu
 The target already contains its original admission. Snapshot definitions and the actual-builtin argument-prefix regression built successfully before launch. This does not establish the full expression case or authorize changing its frozen boundary.
 
 The owner build reached `exprLoweringProps.ci_mono_type_builtin_abi_encode` and failed because its proof still handles `compile_multi_exprs`, while the frozen dispatch now calls `compile_abi_encode_args`. Repair this and any subsequent ancestor proof migrations without changing their semantic contracts. The full target has therefore not yet been parsed under the changed ancestors; independent statement preflight returned UNKNOWN with no counterexample. Definitions at 4c8875d94 are audited and frozen. The rounded scratch-producer fix is present at 898978c4e.
+
+
+## Authorized snapshot helper migration (2026-11-04)
+
+Argon approved this exact internal migration after checking the frozen dispatcher and the counterexample to the old structural trace:
+
+- In `compile_abi_encode_tuple_trace` (abiBuiltinEncodeWord), replace `compile_multi_exprs cfn ce args origin = (ops,arg_st)` with `compile_abi_encode_args cfn ce args origin = (ops,arg_st)`.
+- Make the same premise replacement in `compile_abi_encode_tuple_source`, `compile_abi_encode_tuple_output_live`, and `compile_abi_encode_tuple_producer` (abiBuiltinEncodeReusedInput).
+- Keep every conclusion, resource bound, and frame guarantee relative to the actual `arg_st` unchanged. Replace the proof's old length lemma with a checked `compile_abi_encode_args_length`; search for and reuse it if already available.
+
+Owner explicitly authorizes a replacement PLAN for C1.2 covering the structural trace and each of the three semantic consumers as separate proof/audit obligations. Prove the argument evaluation/snapshot relation needed by the frozen full endpoint independently; the premise migration does not establish that relation. Check downstream consumers (including abiScratchBuiltinProducer's theory import) before delivery. No other statement or executable-definition change is authorized by this clarification.
+
+The diagnostic `abiEncodeTupleTraceProbe` confirms only a stale helper falsehood. It is not a counterexample to the full target. Remove this diagnostic theory from the final deliverable after its evidence has served the migration; retain the actual alias regression. The frozen full target and its assumptions remain unchanged.
