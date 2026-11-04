@@ -1333,8 +1333,21 @@ Proof
     metis_tac[decode_value_storable])
 QED
 
+(* A static frame's update leaves the state unchanged. *)
+Theorem update_toplevel_name_static:
+  ∀cx st mid n v.
+    cx.txn.is_static ⇒ update_toplevel_name cx st mid n v = st
+Proof
+  rpt strip_tac >> simp[update_toplevel_name_def] >>
+  Cases_on `set_global cx mid n v st` >> simp[] >>
+  gvs[set_global_def, bind_def, lift_option_type_def, return_def, raise_def,
+      write_storage_slot_eq, LET_THM, option_CASE_rator, prod_CASE_rator,
+      var_decl_info_CASE_rator, AllCaseEqs()]
+QED
+
 Theorem lookup_toplevel_name_after_update_core[local]:
   ∀cx st mid n v.
+    ¬cx.txn.is_static ∧
     var_in_storage cx mid n ∧
     storable_value cx mid n v ⇒
     ∃ref_v.
@@ -1354,7 +1367,7 @@ Proof
   Cases_on `encode_value tv v` >> gvs[] >>
   simp[lookup_toplevel_name_def, update_toplevel_name_def] >>
   simp[Once set_global_def, write_storage_slot_def,
-       bind_def, lift_option_type_def, lift_option_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def] >>
   `∃storage0. get_storage_backend cx b st = (INL storage0, st)` by
     metis_tac[get_storage_backend_INL] >>
@@ -1366,7 +1379,7 @@ Proof
       encode_decode_roundtrip_ok_def, read_result_def, read_place_def] >>
   (* ArrayTV case: unfold set_global in read_result side *)
   simp[Once set_global_def, write_storage_slot_def,
-       bind_def, lift_option_type_def, lift_option_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def,
        get_after_set_storage_backend] >>
   Cases_on `v` >> gvs[value_has_type_def]
@@ -1374,6 +1387,7 @@ QED
 
 Theorem lookup_toplevel_name_read_result_after_update:
   ∀cx st mid n v.
+    ¬cx.txn.is_static ∧
     var_in_storage cx mid n ∧
     storable_value cx mid n v ⇒
     ∃ref_v.
@@ -1388,6 +1402,7 @@ QED
 
 Theorem lookup_toplevel_name_after_update:
   ∀cx st mid n v.
+    ¬cx.txn.is_static ∧
     var_in_storage cx mid n ∧
     (∀av. v ≠ ArrayV av) ∧
     storable_value cx mid n v ⇒
@@ -1431,6 +1446,7 @@ Theorem lookup_toplevel_name_preserved_after_update:
     lookup_toplevel_name cx st mid2 n2
 Proof
   rpt gen_tac \\ strip_tac
+  \\ Cases_on `cx.txn.is_static` >- simp[update_toplevel_name_static]
   \\ `∃b1 off1 tv1. storage_var_info cx mid1 n1 = SOME (b1, off1, tv1) ∧
     well_formed_type_value tv1` by metis_tac[var_in_storage_storage_var_info]
   \\ `∃b2 off2 tv2. storage_var_info cx mid2 n2 = SOME (b2, off2, tv2) ∧
@@ -1450,7 +1466,7 @@ Proof
   \\ gvs[storage_var_info_def, AllCaseEqs()]
   \\ simp[update_toplevel_name_def]
   \\ simp[Once set_global_def, write_storage_slot_def,
-       bind_def, lift_option_type_def, lift_option_def,
+       bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
        return_def, LET_THM, raise_def]
   \\ `∃storage0. get_storage_backend cx b1 st = (INL storage0, st)` by
     metis_tac[get_storage_backend_INL]
@@ -1470,6 +1486,7 @@ Theorem update_toplevel_name_preserves_well_formed_storage:
   well_formed_storage cx (update_toplevel_name cx st mid n v)
 Proof
   strip_tac >>
+  Cases_on `cx.txn.is_static` >- simp[update_toplevel_name_static] >>
   `∃b1 off1 tv1.
      storage_var_info cx mid n = SOME (b1, off1, tv1) ∧
      well_formed_type_value tv1`
@@ -1490,7 +1507,7 @@ Proof
     qpat_x_assum `storage_var_info cx mid n = _` mp_tac >>
     simp[storage_var_info_def, AllCaseEqs()] >> strip_tac >>
     simp[update_toplevel_name_def, Once set_global_def,
-         write_storage_slot_def, bind_def, lift_option_type_def,
+         write_storage_slot_def, bind_def, ignore_bind_def, lift_option_type_def,
          lift_option_def, return_def, LET_THM, raise_def] >>
     qpat_x_assum `get_storage_backend cx b1 st = _` (fn th => simp[th])) >>
   simp[well_formed_storage_def] >>
@@ -1585,6 +1602,7 @@ QED
 
 Theorem lookup_toplevel_name_after_update_uint:
   ∀cx st mid n b new_val.
+    ¬cx.txn.is_static ∧
     var_in_storage cx mid n ∧
     storage_type_of cx mid n = SOME (BaseTV (UintT b)) ∧
     within_int_bound (Unsigned b) new_val ∧ b ≤ 256 ⇒
@@ -1601,6 +1619,7 @@ QED
 
 Theorem lookup_toplevel_name_after_update_int:
   ∀cx st mid n b new_val.
+    ¬cx.txn.is_static ∧
     var_in_storage cx mid n ∧
     storage_type_of cx mid n = SOME (BaseTV (IntT b)) ∧
     within_int_bound (Signed b) new_val ∧ b ≤ 256 ⇒

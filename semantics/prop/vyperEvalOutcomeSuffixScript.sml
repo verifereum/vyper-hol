@@ -470,7 +470,8 @@ Proof
   simp[outcomes_frame_def] >> gen_tac >>
   namedCases_on `write_place cx p v st` ["res fin"] >>
   namedCases_on `p` ["tr slot tv", "id path", "src id path"]
-  >- (gvs[write_storage_place_eq, AllCaseEqs()] >>
+  >- (Cases_on `cx.txn.is_static` >>
+      gvs[write_storage_place_eq, AllCaseEqs()] >>
       Cases_on `tr` >> simp[get_storage_def, set_storage_def])
   >- (drule write_memory_place_frame >> strip_tac >> gvs[]) >>
   drule write_immutable_place_frame >> strip_tac >> gvs[]

@@ -329,7 +329,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
   simp[vyperStateTheory.write_storage_slot_def, vyperStateTheory.bind_def,
-       AllCaseEqs()] >>
+       vyperStateTheory.ignore_bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac vyperStorageBackendTheory.get_storage_backend_state >>
   imp_res_tac lift_option_type_state >> gvs[] >>

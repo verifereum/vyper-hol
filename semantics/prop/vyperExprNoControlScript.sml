@@ -245,7 +245,7 @@ Theorem write_storage_slot_no_control:
 Proof
   rpt gen_tac >> strip_tac >> pop_assum mp_tac
   >> PURE_REWRITE_TAC[write_storage_slot_def]
-  >> simp[bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
+  >> simp[bind_def, ignore_bind_def, return_def, prod_CASE_rator, sum_CASE_rator, LET_THM,
     get_storage_backend_def, set_storage_backend_def,
     get_accounts_def, get_transient_storage_def,
     update_accounts_def, update_transient_def]
