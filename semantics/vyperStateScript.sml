@@ -215,6 +215,15 @@ End
 
 val () = cv_auto_trans check_not_static_def;
 
+Theorem check_not_static_eq[simp]:
+  check_not_static cx st =
+    ((if cx.txn.is_static then INR (Error (RuntimeError "write in static context"))
+      else INL ()), st)
+Proof
+  Cases_on `cx.txn.is_static` >>
+  simp[check_not_static_def, check_def, assert_def]
+QED
+
 Definition type_check_def:
   type_check b str = assert b (Error (TypeError str))
 End
