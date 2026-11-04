@@ -2,7 +2,8 @@
 Theory lowerDloadCorrectedProbe
 Ancestors
   lowerDloadProgramProbe o1PassContract lowerDloadDefs venomInst
-  venomFnScheduleRunner fcgDefs unitShapeDefs
+  venomFnScheduleRunner fcgDefs unitShapeDefs venomState unitTransformDefs
+  finite_map vfmState
 
 val _ = temp_overload_on ("corrected_helper",
   ``mk_raw_function "f" [<|bb_label := "f"; bb_instructions := [
@@ -76,4 +77,36 @@ Proof
          EVAL_TAC >> rewrite_tac[get_invoke_targets_def] >> EVAL_TAC) >>
       gvs[] >> EVAL_TAC) >>
   gvs[probe_helper_targets]
+QED
+
+val _ = temp_overload_on ("corrected_vs",
+  ``(init_venom_state "entry") with
+     <|vs_accounts := K empty_account_state;
+       vs_outcomes := [<| co_success := T; co_returnData := [];
+         co_accounts := K empty_account_state;
+         co_tStorage := K (K (0w:bytes32)); co_logs := []; co_toDelete := [] |>];
+       vs_labels := FEMPTY |+ ("code_end",0w)|>``);
+
+Theorem corrected_initial:
+  o1_initial_state_ok corrected_vs /\
+  corrected_vs.vs_fmp = corrected_vs.vs_initial_fmp /\
+  corrected_vs.vs_alloca_next = 0 /\
+  corrected_vs.vs_memory = [] /\ corrected_vs.vs_allocas = FEMPTY /\
+  corrected_vs.vs_vars = FEMPTY /\
+  corrected_vs.vs_code = [] /\ corrected_vs.vs_data_section = [] /\
+  ~corrected_vs.vs_call_ctx.cc_static
+Proof
+  EVAL_TAC
+QED
+
+Theorem corrected_code_layout:
+  code_layout_valid corrected_vs
+Proof
+  simp[code_layout_valid_def, init_venom_state_def] >> EVAL_TAC
+QED
+
+Theorem corrected_run_state:
+  o1_run_state_ok corrected_vs
+Proof
+  simp[o1_run_state_ok_def, corrected_initial, corrected_code_layout]
 QED
