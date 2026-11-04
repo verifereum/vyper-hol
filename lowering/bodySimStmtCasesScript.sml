@@ -5591,6 +5591,96 @@ Proof
   metis_tac[aug_place_pure_eval_state, read_result_state, raise_def]
 QED
 
+Theorem aug_place_dead_array_selected:
+  i < n /\ (dyn ==> i < w2n (lookup_storage (n2w bs) st)) /\
+  c = (if dyn then bs+1 else bs) + i * type_slot_size tv /\
+  c <= j /\ j < c + type_slot_size tv /\
+  dead_bytes st bs (ArrayTV tv (if dyn then Dynamic n else Fixed n)) j b ==>
+  dead_bytes st c tv j b
+Proof
+  Cases_on `dyn` >> simp[dead_bytes_def] >> rpt strip_tac >> gvs[] >>
+  rename1 `h < n` >>
+  `h = i` suffices_by (strip_tac >> gvs[]) >>
+  spose_not_then assume_tac >>
+  `bs + h * type_slot_size tv + type_slot_size tv <= bs + i * type_slot_size tv \/
+   bs + i * type_slot_size tv + type_slot_size tv <= bs + h * type_slot_size tv` by
+    metis_tac[aug_place_cells_disjoint] >>
+  gvs[AllCaseEqs()] >>
+  imp_res_tac accountsRelPropsTheory.dead_bytes_range >>
+  gvs[arithmeticTheory.RIGHT_ADD_DISTRIB] >> decide_tac
+QED
+
+Theorem aug_place_storage_read_live_array:
+  storage_read_live cx tr st w (ArrayTV tv (if dyn then Dynamic n else Fixed n)) /\
+  i < n /\ (dyn ==> i < w2n (lookup_storage w st)) ==>
+  storage_read_live cx tr st
+    (w + n2w ((if dyn then 1 else 0) + i * type_slot_size tv)) tv
+Proof
+  strip_tac >> Cases_on `type_slot_size tv = 0`
+  >- (simp[storage_read_live_def] >> rpt strip_tac >>
+      qspec_then `w + n2w (if dyn then 1 else 0)` mp_tac wordsTheory.w2n_lt >>
+      decide_tac) >>
+  `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+    (`(i+1) * type_slot_size tv <= n * type_slot_size tv` by
+       simp[arithmeticTheory.LE_MULT_RCANCEL] >>
+     pop_assum mp_tac >>
+     pure_rewrite_tac[arithmeticTheory.RIGHT_ADD_DISTRIB,
+                      arithmeticTheory.MULT_CLAUSES] >> decide_tac) >>
+  qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+  rewrite_tac[storage_read_live_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
+  `w2n w + ((if dyn then 1 else 0) + i * type_slot_size tv) < dimword (:256)` by
+    (Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]) >>
+  `w2n (w + n2w ((if dyn then 1 else 0) + i * type_slot_size tv)) =
+   w2n w + ((if dyn then 1 else 0) + i * type_slot_size tv)` by
+    (Cases_on `dyn` >> gvs[] >>
+     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+          arithmeticTheory.LESS_MOD] >> decide_tac) >>
+  conj_tac >- (Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]) >>
+  strip_tac >> irule aug_place_dead_array_selected >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qexistsl_tac [`w2n w`, `dyn`, `i`, `n`] >>
+  Cases_on `dyn` >> gvs[vyperValueTheory.type_slot_size_def]
+QED
+
+Theorem aug_place_resolve_array_empty[local]:
+  resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
+Proof
+  Cases_on `tv` >> simp[resolve_array_element_def, return_def]
+QED
+
+Theorem aug_place_storage_extend_live:
+  storage_read_live cx tr (get_storage cx st tr) slot tv /\
+  ((?fs. tv = StructTV fs) \/ (?et bd. tv = ArrayTV et bd)) /\
+  extend_storage_place cx tr slot tv sb st =
+    (INL (StoragePlace tr child leaf),st') ==>
+  storage_read_live cx tr (get_storage cx st' tr) child leaf
+Proof
+  reverse (strip_tac >> Cases_on `tv` >> gvs[])
+  >- (rename1 `ArrayTV et bd` >> Cases_on `sb` >>
+      gvs[extend_storage_place_def, raise_def] >>
+      rename1 `ValueSubscript key` >> Cases_on `key` >>
+      gvs[extend_storage_place_def, raise_def] >>
+      Cases_on `bd` >>
+      gvs[extend_storage_place_def, resolve_array_element_def, bind_def,
+          ignore_bind_def, check_def, assert_def, return_def, raise_def,
+          vyperStorageBackendTheory.get_storage_backend_eq,
+          aug_place_resolve_array_empty, AllCaseEqs()]
+      >- (irule (aug_place_storage_read_live_array |> Q.INST [`dyn` |-> `F`] |> SRULE []) >>
+          simp[] >> goal_assum (drule_at Any) >> simp[])
+      >> (drule_all (aug_place_storage_read_live_array |> Q.INST [`dyn` |-> `T`] |> SRULE []) >>
+          simp_tac pure_ss [arithmeticTheory.ADD_COMM] >> disch_then ACCEPT_TAC)) >>
+  Cases_on `sb` >>
+  gvs[extend_storage_place_def, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()]
+  >- (Cases_on `v` >> gvs[extend_storage_place_def, raise_def]) >>
+  Cases_on `struct_field_slot fs s` >>
+  gvs[return_def, raise_def] >>
+  PairCases_on `x` >> gvs[return_def] >>
+  irule accountsRelPropsTheory.storage_read_live_field >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
