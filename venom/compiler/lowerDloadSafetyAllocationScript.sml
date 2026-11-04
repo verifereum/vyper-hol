@@ -366,3 +366,107 @@ Proof
   qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
   irule ld_original_alloca_fresh >> simp[] >> qexists_tac `A` >> simp[]
 QED
+
+Theorem ld_fresh_alloca_taint:
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s sz = OK ss ==>
+  step_taint inst s ss tn =
+    tn with <| t_var := tn.t_var |+ (out,{});
+               t_mem := tn.t_mem UNION
+                 {i | s.vs_alloca_next <= i /\
+                      i < s.vs_alloca_next + w2n sz} |>
+Proof
+  strip_tac >> gvs[exec_alloca_def] >>
+  simp[step_taint_def, out_taint_def, mem_taint_def, update_var_def,
+       new_site_bytes_def, step_writes_def, range_bytes_def,
+       source_memory_write_ranges_def, written_taint_def,
+       store_taint_def, adopt_reset_def, imm_taint_def,
+       set_var_taint_def, eval_operand_def,
+       taint_component_equality] >>
+  AP_TERM_TAC >> simp[EXTENSION, FLOOKUP_UPDATE, AllCaseEqs()] >>
+  rpt strip_tac >> eq_tac >> rpt strip_tac >> gvs[] >>
+  metis_tac[FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem ld_fresh_alloca_effect:
+  ld_vars P A f /\ f.lf_tv = tn.t_var /\
+  ld_memory lo A tn f.lf_src f.lf_tgt /\
+  ld_nonghost tn f.lf_src f.lf_tgt /\
+  FRANGE f.lf_H SUBSET FDOM A /\
+  MEM out (fn_ir_vars f.lf_fn) /\ out IN fn_pv P f.lf_fn /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit sz] /\
+  inst.inst_outputs = [out] /\
+  FLOOKUP f.lf_src.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP f.lf_tgt.vs_allocas inst.inst_id = NONE /\
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  A' = A |+ ((f.lf_serial,inst.inst_id),
+    (f.lf_src.vs_alloca_next,f.lf_tgt.vs_alloca_next,w2n sz)) /\
+  exec_alloca inst f.lf_src sz = OK ss /\
+  exec_alloca inst f.lf_tgt sz = OK ts ==>
+  step_inst fuel C inst f.lf_src = OK ss /\
+  step_inst fuel C' inst f.lf_tgt = OK ts /\
+  step_prov PG (ld_erase A o_f f.lf_H) inst ss =
+    ld_erase A' o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) /\
+  ld_vars P A' (f with <|lf_src := ss; lf_tgt := ts;
+    lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+    lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
+  ld_memory lo A' (step_taint inst f.lf_src ss tn) ss ts /\
+  ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+  FRANGE (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) SUBSET FDOM A'
+Proof
+  strip_tac >>
+  `ld_vars P A' f` by (gvs[] >> irule ld_vars_fresh_update >> simp[]) >>
+  `ld_erase A' o_f f.lf_H = ld_erase A o_f f.lf_H` by
+    (gvs[] >> irule ld_erase_fresh_compose >> simp[]) >>
+  `step_taint inst f.lf_src ss tn =
+    tn with <|t_var := tn.t_var |+ (out,{});
+      t_mem := tn.t_mem UNION {i | f.lf_src.vs_alloca_next <= i /\
+        i < f.lf_src.vs_alloca_next + w2n sz}|>` by
+    (irule ld_fresh_alloca_taint >> simp[]) >>
+  simp[ld_alloca_step] >>
+  conj_tac
+  >- (gvs[exec_alloca_def, update_var_def, step_prov_def, out_prov_def,
+          set_prov_def, FLOOKUP_UPDATE, ld_erase_def, FLOOKUP_o_f]) >>
+  conj_tac
+  >- (`ld_vars P A' (f with <|
+         lf_src := update_var out (n2w f.lf_src.vs_alloca_next) f.lf_src;
+         lf_tgt := update_var out (n2w f.lf_tgt.vs_alloca_next) f.lf_tgt;
+         lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+         lf_tv := f.lf_tv |+ (out,{})|>)` by
+        (irule ld_vars_alloca_output >> simp[FLOOKUP_UPDATE] >>
+         qexists_tac `w2n sz` >> simp[FLOOKUP_UPDATE]) >>
+      gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE, ld_vars_def]) >>
+  gvs[exec_alloca_def, update_var_def] >>
+  conj_tac
+  >- (irule ld_memory_new_slot >>
+      conj_tac >- (simp[] >> rpt strip_tac >> decide_tac) >>
+      qexists_tac `tn` >>
+      gvs[ld_memory_def, SUBSET_DEF] >> first_x_assum ACCEPT_TAC) >>
+  conj_tac >- gvs[ld_nonghost_def] >>
+  simp[SUBSET_DEF, IN_FRANGE, DOMSUB_FAPPLY_THM] >>
+  metis_tac[SUBSET_DEF, IN_FRANGE]
+QED
+
+Theorem ld_fresh_alloca_dispatch:
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  step_inst fuel C' inst t = OK ts ==>
+  ?sz ss.
+    inst.inst_operands = [Lit sz] /\
+    step_inst fuel C inst s = OK ss /\
+    exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts /\
+    ss = update_var out (n2w s.vs_alloca_next)
+      (s with <|vs_allocas := s.vs_allocas |+
+        (inst.inst_id,(s.vs_alloca_next,w2n sz));
+        vs_alloca_next := s.vs_alloca_next + w2n sz|>) /\
+    ts = update_var out (n2w t.vs_alloca_next)
+      (t with <|vs_allocas := t.vs_allocas |+
+        (inst.inst_id,(t.vs_alloca_next,w2n sz));
+        vs_alloca_next := t.vs_alloca_next + w2n sz|>)
+Proof
+  strip_tac >> drule_all ld_alloca_step >> strip_tac >>
+  gvs[exec_alloca_def] >> simp[ld_alloca_step, exec_alloca_def]
+QED
