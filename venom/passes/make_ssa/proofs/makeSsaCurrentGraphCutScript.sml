@@ -1,6 +1,7 @@
 Theory makeSsaCurrentGraphCut
 Ancestors
   makeSsaCurrentTokenGraph makeSsaCurrentTokens makeSsaCurrentAnalysis
+  makeSsaCurrentFrontier dominatorProofs cfgDefs venomWf cfgAnalysisProps
   dominatorAnalysisProps dominatorDefs venomInst list pred_set
 
 Theorem current_strict_dom_parent:
@@ -145,4 +146,97 @@ Proof
      simp[strict_dominates_def]) >>
   rpt gen_tac >> strip_tac >> Cases_on `d = l` >> Cases_on `e = l` >>
   gvs[] >> metis_tac[dom_self]
+QED
+
+Theorem current_frontier_edge_intro:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ MEM d (fn_labels fn) /\
+  MEM y (fn_labels fn) /\ MEM p (cfg_preds_of (cfg_analyze fn) y) /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d p /\
+  ~strict_dominates (dom_analyze (cfg_analyze fn) fn) d y ==>
+  MEM y (THE (ALOOKUP (current_frontier_map fn) d))
+Proof
+  strip_tac >>
+  `fn_entry_label fn <> SOME y` by
+    (strip_tac >> drule_all current_entry_preds_empty >> simp[] >>
+     strip_tac >> gvs[]) >>
+  `y <> eb.bb_label` by gvs[fn_entry_label_def] >>
+  `cfg_reachable_of (cfg_analyze fn) y` by
+    metis_tac[current_all_labels_reachable] >>
+  `LENGTH (cfg_preds_of (cfg_analyze fn) y) > 1` by
+    (spose_not_then assume_tac >>
+     `cfg_preds_of (cfg_analyze fn) y = [p]` by
+       (Cases_on `cfg_preds_of (cfg_analyze fn) y` >> gvs[] >>
+        Cases_on `t` >> gvs[]) >>
+     Cases_on `d = y`
+     >- (drule_all exists_pred_not_dominated >> gvs[]) >>
+     `set (cfg_preds_of (cfg_analyze fn) y) = {p}` by simp[] >>
+     drule_all current_single_pred_dominates >>
+     disch_then (qspec_then `d` mp_tac) >> gvs[strict_dominates_def]) >>
+  `!q. MEM q (cfg_preds_of (cfg_analyze fn) y) ==>
+     cfg_reachable_of (cfg_analyze fn) q` by
+    (rpt strip_tac >> irule current_all_labels_reachable >> simp[] >>
+     gvs[GSYM current_cfg_edge_preds, fn_cfg_edge_def, fn_labels_def, MEM_MAP] >>
+     metis_tac[]) >>
+  `cfg_reachable_of (cfg_analyze fn) d` by
+    metis_tac[current_all_labels_reachable] >>
+  mp_tac (Q.INST [`n` |-> `d`] current_frontier_query_correct) >>
+  simp[] >> metis_tac[]
+QED
+
+(* The prefix includes its source and excludes the first failing vertex. *)
+Theorem current_route_first_exit:
+  !ls a b. LRC R ls a b /\ P a /\ ~P b ==>
+  ?pre p y post. ls = pre ++ p::post /\
+    LRC R pre a p /\ EVERY P pre /\ P p /\ R p y /\ ~P y /\
+    LRC R post y b
+Proof
+  Induct >> simp[LRC_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `P z`
+  >- (first_x_assum drule_all >> strip_tac >>
+      qexistsl_tac [`h::pre`, `p`, `y`, `post`] >> simp[LRC_def] >>
+      qexists_tac `z` >> simp[]) >>
+  qexistsl_tac [`[]`, `h`, `z`, `ls`] >> simp[LRC_def]
+QED
+
+Theorem current_route_first_subsequent_exit:
+  !ls a b. LRC R ls a b /\ ls <> [] /\ ~P b ==>
+  ?pre p y post. ls = pre ++ p::post /\
+    LRC R pre a p /\ EVERY P (TL (pre ++ [p])) /\
+    (p = a \/ P p) /\ R p y /\ ~P y /\ LRC R post y b
+Proof
+  Cases >> simp[LRC_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `P z`
+  >- (`?pre p y post. t = pre ++ p::post /\
+         LRC R pre z p /\ EVERY P pre /\ P p /\ R p y /\ ~P y /\
+         LRC R post y b` by metis_tac[current_route_first_exit] >>
+      qexistsl_tac [`h::pre`, `p`, `y`, `post`] >> simp[LRC_def] >>
+      qexists_tac `z` >> simp[]) >>
+  qexistsl_tac [`[]`, `h`, `z`, `t`] >> simp[LRC_def]
+QED
+
+Theorem current_route_frontier_crossing:
+  wf_function fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ MEM d (fn_labels fn) /\
+  LRC (fn_cfg_edge fn) ls d b /\ ls <> [] /\
+  ~strict_dominates (dom_analyze (cfg_analyze fn) fn) d b ==>
+  ?pre p y post. ls = pre ++ p::post /\
+    LRC (fn_cfg_edge fn) pre d p /\
+    EVERY (strict_dominates (dom_analyze (cfg_analyze fn) fn) d)
+      (TL (pre ++ [p])) /\
+    fn_cfg_edge fn p y /\
+    dominates (dom_analyze (cfg_analyze fn) fn) d p /\
+    ~strict_dominates (dom_analyze (cfg_analyze fn) fn) d y /\
+    MEM y (THE (ALOOKUP (current_frontier_map fn) d)) /\
+    LRC (fn_cfg_edge fn) post y b
+Proof
+  strip_tac >> drule_all current_route_first_subsequent_exit >> strip_tac >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) d p` by
+    metis_tac[dom_self, strict_dominates_def] >>
+  `MEM y (THE (ALOOKUP (current_frontier_map fn) d))` by
+    (irule current_frontier_edge_intro >>
+     simp[GSYM current_cfg_edge_preds] >>
+     conj_tac >- metis_tac[current_cfg_edge_succs, cfg_analyze_succ_labels] >>
+     qexists_tac `p` >> simp[]) >>
+  qexistsl_tac [`pre`, `p`, `y`, `post`] >> metis_tac[]
 QED
