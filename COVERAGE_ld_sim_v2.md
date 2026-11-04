@@ -221,3 +221,15 @@ ISTORE/log effects; (iv) external effect protocol; (v) two-state PHI entry;
 The strategist must decide ownership/dependencies and de-risk these families
 before new opcode leaves. In particular do not schedule more scalar leaves
 as if they exhausted the dispatcher. Preserve all completed successors.
+
+## Clean-write normal successors (C1.4.1.13.2.3)
+
+`o1LowerDloadJointCleanWriteTheory.ld_joint_clean_write_next` now supplies the
+full normal joint-boundary successor for MSTORE8, CALLDATACOPY, CODECOPY,
+RETURNDATACOPY and EXTCODECOPY, under the same source safety and next-active
+premises as MCOPY. Shared scalar and destination interfaces cover aliased
+operands; the execution packet constructs the target write with identical
+payload and handles padding and successful returndata bounds. Zero-length
+writes use the empty-write byte relation and impose no address geometry.
+RETURNDATACOPY's out-of-bounds Abort and Revert forwarding are not covered by
+this normal-success theorem and remain separate obligations.
