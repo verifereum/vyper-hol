@@ -2,7 +2,9 @@ Theory bodySimAugPlaceStore
 Ancestors
   bodySimAugPlaceLoad stmtSimAssignAttr valueEncodingProps valueEncodingProofs
   valueEncoding targetPlaceSim vyperValue vyperTyping vyperState vyperValueOperation alist arithmetic list sorting relation
-  stmtSimDeclStore vyperPlaceStatePreservation
+  stmtSimDeclStore vyperPlaceStatePreservation vyperLookup stmtSimAssignStore
+  exprSimHyps vyperTypeInvariants exprLoweringProps compileEnv exprSimBuffer
+  venomState
 Libs
   wordsLib
 
@@ -469,3 +471,76 @@ Proof
   gvs[store_lays_out_def] >> rpt strip_tac >>
   irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
+
+Theorem aug_place_memory_write_state_rel:
+  stmt_state_rel ctx func cenv cx es s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
+    (SOME LocMemory) (Type ty) /\
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL old /\
+  store_lays_out etv ptv v /\ evaluate_type (get_tenv cx) ty = SOME ptv /\
+  write_place cx (MemoryPlace id path) v es = (INL (),es') ==>
+  stmt_state_rel ctx func cenv cx es'
+    (mstore (w2n w) (typed_val_to_w256 etv v) s)
+Proof
+  rpt strip_tac >>
+  gvs[place_ptr_rel_def] >>
+  `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
+    (irule aug_place_entry_type_agrees >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `write_place _ _ _ _ = _` mp_tac >>
+  simp[write_place_def, get_scopes_def, bind_def, lift_option_type_def,
+       type_check_def, assert_def, lift_sum_def, set_scopes_def,
+       return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  Cases_on `find_containing_scope id es.scopes` >>
+  gvs[return_def, raise_def] >>
+  rename1 `find_containing_scope id es.scopes = SOME fc` >> PairCases_on `fc` >>
+  `fc2 = entry` by metis_tac[find_containing_scope_lookup, optionTheory.SOME_11] >>
+  gvs[ignore_bind_def, bind_def, assert_def, return_def, raise_def,
+      set_scopes_def, replace_memory_entry_def, AllCaseEqs()] >>
+  Cases_on `assign_subscripts entry.type entry.value path (Replace v)` >>
+  gvs[return_def, raise_def] >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    (irule aug_place_lookup_typed >>
+     fs[expr_sim_inv_def, state_well_typed_def] >> metis_tac[]) >>
+  suspend "lift_local_store"
+QED
+
+Resume aug_place_memory_write_state_rel[lift_local_store]:
+  `local_ptrs_rel func cenv es.scopes s /\ alloca_room ctx func s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `w2n b + sz <= s.vs_alloca_next /\ type_memory_size entry.type <= sz /\
+   val_wf entry.type entry.value /\
+   val_in_memory entry.type entry.value (w2n b) s.vs_memory` by
+    (qpat_assum `local_ptrs_rel _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
+     first_x_assum drule_all >> strip_tac >> gvs[]) >>
+  `k + type_memory_size ptv <= type_memory_size entry.type` by
+    metis_tac[mem_path_offset_sound] >>
+  `s.vs_alloca_next < dimword (:256)` by metis_tac[alloca_room_next_lt] >>
+  `w2n (b + n2w k) = w2n b + k` by
+    (irule buffer_offset_no_wrap >> qexists_tac `sz` >> decide_tac) >>
+  qpat_assum `w2n (b + n2w k) = _` (fn th => simp_tac bool_ss [th]) >>
+  qabbrev_tac `t = mstore (w2n b+k) (typed_val_to_w256 etv v) s` >>
+  `val_wf entry.type x /\ val_in_memory entry.type x (w2n b) t.vs_memory` by
+    (qunabbrev_tac `t` >> irule aug_place_path_mstore >> metis_tac[]) >>
+  `(t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
+    simp[Abbr `t`, mstore_def, LET_THM, venom_state_component_equality] >>
+  `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+    simp[Abbr `t`, mstore_def, LET_THM, lookup_var_def] >>
+  `type_memory_size ptv = 32` by fs[store_lays_out_def] >>
+  `!q n. q+n <= w2n b \/ w2n b+type_memory_size entry.type <= q ==>
+      mem_bytes_at q n t.vs_memory = mem_bytes_at q n s.vs_memory` by
+    (rpt strip_tac >> simp[Abbr `t`] >>
+     irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
+  `local_region cenv es.scopes s id (w2n b) sz` by simp[local_region_def] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (qunabbrev_tac `t` >> irule local_mstore_immutables_at >>
+     conj_tac >- (qexistsl_tac [`id`, `sz`] >> simp[]) >>
+     metis_tac[]) >>
+  drule_all stmt_state_rel_write_local >> simp[Abbr `t`]
+QED
+
+Finalise aug_place_memory_write_state_rel
