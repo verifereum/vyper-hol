@@ -3,6 +3,7 @@ Theory stmtSimAssertProps
 Ancestors
   stmtSimIfProps stmtSimDefs exprSimDefs vyperInterpreter vyperState
   gasContext gasExemptCert stmtSimProps fragGasPath gasCount
+  bodyMemoryDefs allocaHistory
   emitHelperProps compileEnv venomExecSemantics venomExecProofs venomInst
   venomState fragExec loweringPosts stmtLowering exprLowering emitHelper exprLoweringProps
 Libs
@@ -127,4 +128,34 @@ Proof
   simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
        cenv_top_ext_refl] >>
   gvs[jump_to_def, lookup_var_def]
+QED
+
+Theorem assert_success_post_mem:
+  expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
+  ~t.vs_halted /\ sb.cs_current_insts = [] /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  return_buf_frame d cenv sa s0 /\ alloca_history func t /\
+  s0.vs_alloca_next <= t.vs_alloca_next ==>
+  ?cenv''. stmt_lands lctx sb (INL () : unit + exception)
+      (jump_to sb.cs_current_bb t) /\
+    ~(jump_to sb.cs_current_bb t).vs_halted /\
+    (~block_is_terminated sb /\ cenv'' = cenv) /\
+    cenv_top_ext cenv cenv'' ee.scopes /\
+    stmt_state_rel ctx func cenv'' cx ee (jump_to sb.cs_current_bb t) /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+      lookup_var x (jump_to sb.cs_current_bb t) = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+      FLOOKUP (jump_to sb.cs_current_bb t).vs_allocas aid = SOME b) /\
+    return_buf_frame d cenv'' sb (jump_to sb.cs_current_bb t) /\
+    alloca_history func (jump_to sb.cs_current_bb t) /\
+    s0.vs_alloca_next <= (jump_to sb.cs_current_bb t).vs_alloca_next
+Proof
+  strip_tac >>
+  drule_all assert_success_post >>
+  simp[stmt_post_def] >> strip_tac >>
+  conj_tac
+  >- (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s0`, `sa`] >>
+      gvs[expr_post_def]) >>
+  gvs[alloca_history_def, jump_to_def]
 QED
