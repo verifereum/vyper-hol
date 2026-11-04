@@ -301,8 +301,8 @@ The generic control proofs need the same history and guard plumbing.
 
 Owner performs exact frozen-statement comparisons, export checks and
 dependency auditing after completion. Before each push, perform one
-`holbuild -j4 build --skip-checkpoints` of the edited theories at the default
-step limit, with proof steps and cache enabled; no second forced or CI-flag
+`holbuild -j4 build` of the edited theories at the default
+step limit, with proof steps, cache and checkpoints enabled; no second forced or CI-flag
 replay is required. This supersedes the
 stopped TASK_body_history_thread.md by including the approved guard and actual
 body consumer on the current integration base. The old task is not amended.
