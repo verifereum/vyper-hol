@@ -104,7 +104,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem ptr_smerge_union[local]:
+Theorem ptr_smerge_union:
   !cmp xs ys. MEM a (smerge cmp xs ys) <=> MEM a xs \/ MEM a ys
 Proof
   recInduct enumeralTheory.smerge_ind >>
