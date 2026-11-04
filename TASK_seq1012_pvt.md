@@ -246,3 +246,23 @@ Restate these, and only these, as follows (owner-approved internal restatement):
   theorems (exprSimOperators' IfExp case, bodySimExprCases) use the
   strengthened `ifexp_body_pre_lowered_type_compatible`.
 - List these restatements in LEARNINGS. Everything else stays frozen.
+
+## Owner contract revision 2: size bridge for the IfExp transport (supersedes the frozen statements below)
+
+The stride gap (E0026: `punnable` equates compiler `type_memory_bytes`, evaluated
+strides use semantic `type_memory_size`) is closed by one more hypothesis.
+Add, and only add, this premise to `compile_ifexp_vv_sim` (exported) and
+`compile_ifexp_forced_frag` (local), and to any local IfExp helper that needs it
+on the way to the transport lemma:
+
+```
+(!ty' tv'. evaluate_type (get_tenv cx) ty' = SOME tv' ==>
+           type_memory_bytes cenv ty' = type_memory_size tv')
+```
+
+The transport lemma may take it too. Its producer is
+`exprSimHypsTheory.expr_sim_inv_memory_size`; the only consumer,
+`exprSimOperators`' IfExp case (around line 982), already has
+`expr_sim_inv cenv cx env es` in scope and discharges it with
+`metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size]`.
+List it in LEARNINGS with the other restatements. Everything else stays frozen.
