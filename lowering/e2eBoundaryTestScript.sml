@@ -189,7 +189,7 @@ QED
    independent supported whitelist rejects public variables. Do not silently
    strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
 Theorem source_lookup_getter_outside_supported:
-  let tops = [VariableDecl Public Storage "g" (BaseT (UintT 256)) (SOME 0)] in
+  let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\

@@ -984,7 +984,7 @@ Theorem frag_outcome_jmp[local]:
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   conj_tac >- simp[] >>
-  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  qexistsl [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
   simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
 QED
 
