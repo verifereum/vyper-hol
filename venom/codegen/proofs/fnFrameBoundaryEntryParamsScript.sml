@@ -1158,3 +1158,85 @@ Proof
        entry_ret_family_opaque_vars] >>
   wordsLib.WORD_DECIDE_TAC
 QED
+
+Theorem entry_wrap_no_conclusion:
+  ~(?n t vp.
+    asm_steps (SND (compute_label_offsets [AsmLabel "entry"]))
+      (build_offset_to_pc [AsmLabel "entry"]) [AsmLabel "entry"] n
+      entry_wrap_asm = AsmOK t /\
+    t.as_pc = entry_wrap_asm.as_pc +
+      LENGTH (execute_plan entry_wrap_context.cp_initial_fmp
+        (SOLabel (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_label :: [])) /\
+    exec_block fuel ctx (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+      (entry_wrap_source with vs_inst_idx := 0) =
+    exec_block fuel ctx (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) vp /\
+    vp.vs_inst_idx = LENGTH (get_params
+      (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions) /\
+    fn_frame_inv ctx entry_wrap_context
+      (SND (compute_label_offsets [AsmLabel "entry"]))
+      (entry_ret_family (SUC (dimword (:256)))) 0w []
+      entry_wrap_asm.as_memory entry_wrap_plan vp t)
+Proof
+  strip_tac >>
+  `t.as_pc = 1` by
+    (qpat_x_assum `t.as_pc = _` mp_tac >>
+     simp[entry_wrap_asm_def, entry_wrap_context_def, execute_plan_def,
+          exec_stack_op_def]) >>
+  drule_all entry_wrap_asm_inversion >> strip_tac >> gvs[] >>
+  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
+    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
+  `vp = entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source` by
+    (irule entry_ret_family_wrap_witness >>
+     conj_tac
+     >- (qexistsl [`ctx`, `fuel`] >> simp[]) >>
+     asm_rewrite_tac[] >> simp[entry_wrap_source_def]) >>
+  gvs[] >>
+  mp_tac (Q.INST [`lo` |-> `SND (compute_label_offsets [AsmLabel "entry"])`]
+    entry_wrap_frame_impossible) >> simp[]
+QED
+
+(* A concrete instance of the frozen implication is false.  The huge list is
+   kept symbolic; entry_wrap_finite_witness_checks supplies finite EVAL evidence. *)
+Theorem entry_params_frame_sim_counterexample:
+  ~((SND (compute_label_offsets [AsmLabel "entry"]) =
+       SND (compute_label_offsets [AsmLabel "entry"]) /\
+     build_offset_to_pc [AsmLabel "entry"] = build_offset_to_pc [AsmLabel "entry"] /\
+     liveness_analyze (entry_ret_family (SUC (dimword (:256)))) =
+       liveness_analyze (entry_ret_family (SUC (dimword (:256)))) /\
+     codegen_ready_fn (entry_ret_family (SUC (dimword (:256)))) /\
+     retpc_shape_ok (entry_ret_family (SUC (dimword (:256)))) /\
+     opaque_use_ok (entry_ret_family (SUC (dimword (:256)))) /\
+     init_cleanup_plan_state NONE [] 0 0 = init_cleanup_plan_state NONE [] 0 0 /\
+     prepare_params_plan (liveness_analyze (entry_ret_family (SUC (dimword (:256)))))
+       (entry_ret_family (SUC (dimword (:256)))) (init_cleanup_plan_state NONE [] 0 0) =
+         ([], entry_wrap_plan) /\
+     MEM entry_wrap_region entry_wrap_context.cp_regions /\
+     entry_wrap_region.sr_fn_name = (entry_ret_family (SUC (dimword (:256)))).fn_name /\
+     entry_wrap_region.sr_spill_base <= 0 /\
+     entry_wrap_plan.ps_alloc.sa_next_offset <= entry_wrap_region.sr_spill_end /\
+     (!off. MEM (SOSpill off) [] ==> off < dimword (:256)) /\
+     fn_entry_state_rel entry_wrap_context (entry_ret_family (SUC (dimword (:256))))
+       entry_wrap_source entry_wrap_asm 0w [] /\
+     asm_block_at [AsmLabel "entry"] entry_wrap_asm.as_pc
+       (execute_plan entry_wrap_context.cp_initial_fmp
+         (SOLabel (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_label :: [])))
+    ==>
+    ?n t vp.
+      asm_steps (SND (compute_label_offsets [AsmLabel "entry"]))
+        (build_offset_to_pc [AsmLabel "entry"]) [AsmLabel "entry"] n
+        entry_wrap_asm = AsmOK t /\
+      t.as_pc = entry_wrap_asm.as_pc +
+        LENGTH (execute_plan entry_wrap_context.cp_initial_fmp
+          (SOLabel (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_label :: [])) /\
+      exec_block fuel ctx (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
+        (entry_wrap_source with vs_inst_idx := 0) =
+      exec_block fuel ctx (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) vp /\
+      vp.vs_inst_idx = LENGTH (get_params
+        (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions) /\
+      fn_frame_inv ctx entry_wrap_context
+        (SND (compute_label_offsets [AsmLabel "entry"]))
+        (entry_ret_family (SUC (dimword (:256)))) 0w []
+        entry_wrap_asm.as_memory entry_wrap_plan vp t)
+Proof
+  rewrite_tac[entry_wrap_frozen_premises, entry_wrap_no_conclusion]
+QED
