@@ -9261,7 +9261,7 @@ Resume eval_scc_type_sound_results_mutual[Live_Send_Returned_Result]:
   drule eval_send_success_value >> strip_tac >> gvs[]
 QED
 
-Theorem eval_raw_call_success_value[local]:
+Theorem eval_raw_call_success_value:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
