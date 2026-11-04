@@ -828,7 +828,7 @@ QED
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
-    post_value_type cenv obj = expr_type obj /\
+    post_value_type cenv obj = TupleT tys /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -853,7 +853,7 @@ QED
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
-    post_value_type cenv obj = expr_type obj /\
+    post_value_type cenv obj = TupleT tys /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
@@ -944,11 +944,15 @@ QED
 Theorem compile_subscript_tuple_sim:
   !nocalls ctx func cenv cx ann obj idx tys.
     expr_vv_case nocalls ctx func cenv cx obj /\ expr_type obj = TupleT tys /\
-    place_type cenv obj = ValPT (TupleT tys) ==>
+    place_type cenv obj = ValPT (TupleT tys) /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt gen_tac >> strip_tac >> simp[expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+     metis_tac[exprSimHypsTheory.post_value_type_no_calls]) >>
   `~tuple_popped_clash cx obj idx es` by
     (drule_all tuple_popped_clash_unreachable >> simp[]) >>
   drule_all tuple_pre_base >> strip_tac >> gvs[] >>
