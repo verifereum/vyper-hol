@@ -211,3 +211,63 @@ QED
    actual compile environment; constructor memory is not a data section.
    This diagnostic neither proves the DLOAD loop nor allocation framing.
 *)
+
+(* Allocation/held-entry diagnostic (C1.6.2.12.7; NOT a proof).
+
+   For non-word LocStorage, LocTransient or LocCode, unwrap_value calls
+   compile_ensure_in_memory, whose FIRST instruction is compile_alloc_buffer
+   mem_bytes at sm.cs_next_id, with output Var (% ++ toString sm.cs_next_var).
+   compile_alloc_buffer_insts identifies the operand and exact requested
+   size; compile_alloc_buffer_fresh_frag proves the fresh execution formula.
+   However, NONE at that allocation id does NOT follow from vv_post,
+   local_ptrs_reserved or increasing compile ids: vv_post permits replayed
+   allocations. A correct semantic boundary must handle BOTH ALLOCA cases.
+
+   Fresh: alloca_room_fresh gives base+mem_bytes<dimword(:256), provided
+   this ALLOCA belongs to func and mem_bytes<dimword(:256). The latter
+   requires expr_sim_inv_memory_size plus actual alloc_limits_expr/type
+   capacity facts; it is NOT a consequence of the unrestricted vv_post.
+   local_ptrs_rel_exec_alloca_fresh supplies identity and local separation,
+   using not_local_ptr from local_ptrs_reserved and compile var freshness.
+   alloca_inv gives separation from all previous tracked allocations.
+   Replay: stmt_state_rel's per-instruction size clause identifies the
+   recorded size, alloca_inv bounds its end by the frontier and separates
+   distinct ids. fn_inst_ids_distinct plus reserved local-pointer outputs
+   must exclude this instruction from a live local's backing ALLOCA;
+   borrowed locals are disjoint from EVERY recorded allocation by
+   local_backed. A held temporary has aid<sm.cs_next_id by vv_at, so it
+   cannot use this allocation's id. Reuse these cases rather than assuming
+   that every unwrap ALLOCA is fresh.
+
+   Missing at the formerly proposed unrestricted boundary (lines 110-118):
+   fn_has_code sm sb func, fn_inst_ids_distinct func, the actual size bound
+   mem_bytes<dimword(:256), and type/layout correspondence. frag_exec's
+   own fn_has_code refers to a quantified executing function, not necessarily
+   the func in stmt_state_rel. Therefore the old contract is not justified
+   by the advertised premises. These facts exist at expression/body callers
+   but must be threaded by an authorized interface repair, not presumed.
+
+   Consumer-matching single-entry target, under the repaired runtime unwrap
+   hypotheses and read_result cx raw es'=(INL v,es'):
+   frag_exec ctx sm sb
+     (\s. vv_post ctx func cenv cx e es sa sm s0 es' raw vv s /\
+       vv_holds cenv cx ty r held es' s /\
+       vv_at cenv cx ty lo sm es' r held s /\
+       safe_operand sm (vv_operand held))
+     (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+       vv_holds cenv cx ty r held es' s /\
+       vv_at cenv cx ty lo sb es' r held s /\
+       safe_operand sb (vv_operand held)) R.
+   lo is unchanged. The EVERY target replaces the last three conjuncts
+   by EVERY (\(ty,r,held,lo). ...same three conjuncts...) hs at each end.
+   The old-variable frame preserves held operands; immutable/storage holds
+   use unchanged data/storage/transient fields; LocMemory uses disjoint
+   copy framing on its vv_at allocation or live-local window. Stack holds
+   may themselves encode memory, so also use expr_val_at/val_footprint
+   framing, not merely operand equality. vv_at_region_frame and
+   local_region_pointer_frame handle allocation-map inclusion and local
+   pointer preservation. vv_post_read_result covers raw inputs without
+   changing the read source state. EVERY then lifts the SAME single-entry
+   frame over hs, retaining each original lo. Neither the existing
+   vv_post_deferred_prefix (compile_expr only) nor this diagnostic proves it.
+*)
