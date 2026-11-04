@@ -119,7 +119,7 @@ Proof
       simp[frag_exec_false_pre] >>
       gvs[stmt_state_rel_def, state_rel_def]) >>
   fs[] >>
-  drule_at (Pat `find_var_decl_by_name _ _ = _`) toplevel_storage_ce_vars >>
+  drule_at (Pat `find_var_decl_by_name _ _ = _`) toplevel_storage_ce_vars_decl >>
   simp[var_decl_transient_def] >> disch_then drule_all >> strip_tac >>
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
