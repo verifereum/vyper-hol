@@ -2,7 +2,7 @@
 Theory abiMetadataLayout
 Ancestors
   abiMetadataErasure abiLayoutSource abiEncoderProps structFieldsProps vyperTyping
-  vyperTypeABI vyperValue compileEnv vyperABI finite_map list rich_list pair option vyperMisc
+  vyperTypeABI vyperValue compileEnv vyperABI finite_map list rich_list pair option vyperMisc valueEncoding vfmConstants
 
 Theorem abi_layout_list_assemble[local]:
   !ts. EVERY (\t.
@@ -154,4 +154,63 @@ Proof
   gvs[EVERY_MAP, EVERY_MEM, IS_SOME_EXISTS] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
   drule_all abi_layout_vyper_type >> simp[]
+QED
+
+(* Stored struct field widths determine memory layout at the root environment. *)
+Theorem struct_layout_size_list:
+  !fields tvs.
+    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
+    EVERY (\(name, ty, sz). !tv. evaluate_type tenv ty = SOME tv ==>
+                                  sz = type_memory_size tv) fields ==>
+    SUM (MAP (SND o SND) fields) = type_memory_size_list tvs
+Proof
+  Induct >> simp[type_memory_size_def] >>
+  Cases >> rename1 `(name, info)` >> Cases_on `info` >>
+  simp[type_memory_size_def] >> rpt strip_tac >> gvs[type_memory_size_def]
+QED
+
+Theorem struct_layout_size_zip:
+  !names tvs. LENGTH names = LENGTH tvs ==>
+    type_memory_size_fields (ZIP (names, tvs)) = type_memory_size_list tvs
+Proof
+  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
+QED
+
+Theorem metadata_type_memory_size:
+  !cenv ty root tv.
+    sfields_tenv_consistent cenv.ce_struct_fields root /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname, fty, sz). !v. evaluate_type root fty = SOME v ==>
+                                      sz = type_memory_size v) fields) /\
+    evaluate_type root ty = SOME tv ==>
+    type_memory_bytes cenv ty = type_memory_size tv
+Proof
+  ho_match_mp_tac type_memory_bytes_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`StructT nsid`]
+  >- (rpt strip_tac >>
+      gvs[evaluate_type_def, AllCaseEqs(),
+          type_memory_bytes_def, type_memory_size_def] >>
+      qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+      simp[sfields_tenv_consistent_def] >> strip_tac >>
+      qpat_x_assum `!nsid args. _` drule >> strip_tac >>
+      gvs[get_struct_fields_def, evaluate_types_OPT_MMAP] >>
+      `LENGTH tvs = LENGTH (MAP FST args)` by
+        (drule OPT_MMAP_LENGTH >> simp[]) >>
+      simp[struct_layout_size_zip] >>
+      irule struct_layout_size_list >>
+      qexists_tac `root \\ nsid` >> conj_tac >- gvs[] >>
+      qpat_x_assum `!name fields. _ ==> EVERY _ _` drule >>
+      simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
+      drule (cj 1 vyper_to_abi_type_submap) >>
+      disch_then (qspec_then `root` mp_tac) >> simp[] >> metis_tac[])
+  >~ [`TupleT tys`]
+  >- (rpt strip_tac >>
+      gvs[evaluate_type_def, AllCaseEqs(),
+          type_memory_bytes_def, type_memory_size_def, evaluate_types_OPT_MMAP] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule tuple_memory_bytes_size >>
+      qexists_tac `root` >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  gvs[evaluate_type_def, AllCaseEqs(),
+      type_memory_bytes_def, type_memory_size_def, word_size_def] >>
+  metis_tac[]
 QED

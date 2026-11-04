@@ -249,7 +249,7 @@ Ancestors
   supportedExprTraverse exprStoragePreservation
   vyperLookup vyperPlaceResultTyping supportedProgram bodyStoragePreservation
   structFieldsProps vyperTypeABI vyperValue vfmConstants valueEncoding pair
-  vyperPlaceInvariants placeTypingProps allocLimits
+  vyperPlaceInvariants placeTypingProps allocLimits abiMetadataLayout
 Libs
   pairLib
 
@@ -1058,24 +1058,9 @@ QED
 
 (* Under expr_sim_inv the compile environment's memory size of a type is
    the source's (the struct fields clause sizes each field). *)
-Theorem struct_layout_size_list:
-  !fields tvs.
-    OPT_MMAP (evaluate_type tenv) (MAP (FST o SND) fields) = SOME tvs /\
-    EVERY (\(name, ty, sz). !tv. evaluate_type tenv ty = SOME tv ==>
-                                  sz = type_memory_size tv) fields ==>
-    SUM (MAP (SND o SND) fields) = type_memory_size_list tvs
-Proof
-  Induct >> simp[type_memory_size_def] >>
-  Cases >> rename1 `(name, info)` >> Cases_on `info` >>
-  simp[type_memory_size_def] >> rpt strip_tac >> gvs[type_memory_size_def]
-QED
+Theorem struct_layout_size_list = abiMetadataLayoutTheory.struct_layout_size_list;
 
-Theorem struct_layout_size_zip:
-  !names tvs. LENGTH names = LENGTH tvs ==>
-    type_memory_size_fields (ZIP (names, tvs)) = type_memory_size_list tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[type_memory_size_def]
-QED
+Theorem struct_layout_size_zip = abiMetadataLayoutTheory.struct_layout_size_zip;
 
 Theorem expr_sim_inv_memory_size:
   !cenv ty cx env es tv.
@@ -1083,41 +1068,9 @@ Theorem expr_sim_inv_memory_size:
     evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes cenv ty = type_memory_size tv
 Proof
-  ho_match_mp_tac type_memory_bytes_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt strip_tac >>
-      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-          type_memory_bytes_def, type_memory_size_def] >>
-      `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-        gvs[expr_sim_inv_def] >>
-      `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-        EVERY (\(fname, fty, sz). !tv.
-          evaluate_type (get_tenv cx) fty = SOME tv ==>
-          sz = type_memory_size tv) fields` by
-        (fs[expr_sim_inv_def] >> metis_tac[]) >>
-      qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-      simp[sfields_tenv_consistent_def] >> strip_tac >>
-      qpat_x_assum `!nsid args. _` drule >> strip_tac >>
-      gvs[get_struct_fields_def, evaluate_types_OPT_MMAP] >>
-      `LENGTH tvs = LENGTH (MAP FST args)` by
-        (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
-      simp[struct_layout_size_zip] >>
-      irule struct_layout_size_list >>
-      qexists_tac `get_tenv cx \\ nsid` >> conj_tac >- gvs[] >>
-      qpat_x_assum `!name fields. _ ==> EVERY _ _` drule >>
-      simp[EVERY_MEM, FORALL_PROD] >> rpt strip_tac >>
-      drule (cj 1 vyperTypeExprSoundnessTheory.evaluate_type_mono) >>
-      metis_tac[])
-  >~ [`TupleT tys`]
-  >- (rpt strip_tac >>
-      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-          type_memory_bytes_def, type_memory_size_def, evaluate_types_OPT_MMAP] >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >> irule tuple_memory_bytes_size >>
-      qexists_tac `get_tenv cx` >> simp[] >> metis_tac[]) >>
-  rpt strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
-      type_memory_bytes_def, type_memory_size_def, word_size_def] >>
-  metis_tac[]
+  rpt gen_tac >> strip_tac >> irule metadata_type_memory_size >>
+  qexists_tac `get_tenv cx` >> simp[] >>
+  fs[expr_sim_inv_def] >> metis_tac[]
 QED
 
 
