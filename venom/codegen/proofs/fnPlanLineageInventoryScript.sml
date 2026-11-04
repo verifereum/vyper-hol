@@ -973,3 +973,40 @@ Proof
       simp[clean_stack_plan_def]) >>
   simp[clean_stack_plan_def]
 QED
+
+(* The cleanup partition is independent of a bottom dead extension. *)
+Theorem bottom_dead_equiv_cleanup_partitions:
+  !xs ys ops inputs.
+    bottom_dead_equiv xs ys /\ ~MEM dead_stack_marker ops ==>
+    FILTER (\op. below_all_live op inputs xs)
+      (FILTER (\op. IS_SOME (stack_get_depth op xs)) ops) =
+    FILTER (\op. below_all_live op inputs ys)
+      (FILTER (\op. IS_SOME (stack_get_depth op ys)) ops) /\
+    FILTER (\op. ~MEM op
+      (FILTER (\p. below_all_live p inputs xs)
+        (FILTER (\p. IS_SOME (stack_get_depth p xs)) ops)))
+      (FILTER (\op. IS_SOME (stack_get_depth op xs)) ops) =
+    FILTER (\op. ~MEM op
+      (FILTER (\p. below_all_live p inputs ys)
+        (FILTER (\p. IS_SOME (stack_get_depth p ys)) ops)))
+      (FILTER (\op. IS_SOME (stack_get_depth op ys)) ops)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `FILTER (\op. IS_SOME (stack_get_depth op xs)) ops =
+   FILTER (\op. IS_SOME (stack_get_depth op ys)) ops` by
+    metis_tac[bottom_dead_equiv_physical] >>
+  `!op. MEM op ops ==> below_all_live op inputs xs =
+                        below_all_live op inputs ys` by
+    (rpt strip_tac >> irule bottom_dead_equiv_below_all_live >>
+     simp[] >> metis_tac[]) >>
+  `FILTER (\op. below_all_live op inputs xs)
+     (FILTER (\op. IS_SOME (stack_get_depth op ys)) ops) =
+   FILTER (\op. below_all_live op inputs ys)
+     (FILTER (\op. IS_SOME (stack_get_depth op ys)) ops)` by
+    (qpat_x_assum `!op. _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Induct_on `ops` >> simp[] >> rpt strip_tac >>
+     Cases_on `IS_SOME (stack_get_depth h ys)` >> simp[] >>
+     metis_tac[]) >>
+  simp[]
+QED
