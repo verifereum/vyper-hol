@@ -670,3 +670,21 @@ difference, original-site table correspondence, live source-function indices and
 their distinctness across the stack, and the full paired control/definedness and
 memory invariant. The single-frame runtime bound does not bound the stack sum
 without those remaining producers; it does not complete the frozen contract.
+
+## C1.12.18: actual live-frame index producer
+
+`lowerDloadPtrLiveFramesTheory` now proves `dload_frame_live_order`,
+`dload_frame_live_names_distinct`, and `dload_frame_live_indices` from actual
+`frame_reachable` and `callee_first` alone. The live list is current function
+followed by saved callers. Strict order is quantified over i<j<LENGTH of that
+list (no new predicate). Calls prepend a strict predecessor, returns take a
+tail; entry singleton requires no membership in the scheduling names.
+The index witnesses are distinct positions in `C.ctx_functions`, reconstruct
+the exact live list, and are bounded by its context length. No uniqueness of
+context names or functions is assumed.
+
+This is not a source/target frame correspondence producer. Combining it with
+the runtime domain budget still requires the joint invariant to identify
+scratch domains and actual supply-related live frames, and retain saved
+control/definedness and suffix layouts. No frozen-contract completion follows
+from these independent bounds alone.
