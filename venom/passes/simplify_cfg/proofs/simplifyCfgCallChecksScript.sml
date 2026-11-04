@@ -680,6 +680,35 @@ Proof
   simp[]
 QED
 
+Theorem revert_path_chain_merge:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  bbs = update_succ_phi_labels b.bb_label a.bb_label
+    (replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks))
+    (bb_succs (merge_blocks a b)) /\
+  l <> b.bb_label /\ revert_path fn.fn_blocks n l ==>
+  revert_path bbs (LENGTH bbs) l
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `merged_bbs = replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks)` >>
+  `?k. revert_path merged_bbs k l` by
+    (irule revert_path_chain_merge_base >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) merged_bbs)` by
+    (simp[Abbr `merged_bbs`, fn_labels_replace_block, merge_blocks_def] >>
+     irule ALL_DISTINCT_remove_block >> fs[fn_labels_def]) >>
+  `EVERY bb_well_formed merged_bbs` by
+    (simp[Abbr `merged_bbs`] >> irule EVERY_replace_block >>
+     conj_tac
+     >- (irule bb_well_formed_merge_blocks >> fs[EVERY_MEM, can_merge_blocks_def]) >>
+     fs[remove_block_def, EVERY_MEM, MEM_FILTER]) >>
+  irule revert_path_fuel_normalize >>
+  qexists_tac `k` >>
+  qpat_x_assum `bbs = _` SUBST1_TAC >>
+  irule revert_path_update_succ_phi_labels >> simp[]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
