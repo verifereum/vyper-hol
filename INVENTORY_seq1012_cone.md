@@ -133,3 +133,43 @@ L0012's old Len skip and L0013's old EC skip are superseded by checked repairs.
 L0007's old Unwrap stop is superseded by D0002. The known tuple-base limitation
 is retained as TASK documentation, not verified falsehood. No new counterexample
 probes, cheats, axioms, or source edits were introduced by this inventory pass.
+
+## Tuple local boundary classification (C1.2.10)
+
+m0960 verifies tuple_base_read and tuple_vv_post after adding exactly the local
+post_value_type cenv obj = expr_type obj premise. Inference-driven application
+replaces tuple_base_read's nine-argument manual specialization. Build now stops
+in unchanged compile_subscript_tuple_sim at line995: its context has only
+nocalls ==> int_calls_expr obj = [], so post_value_type_no_calls cannot supply
+unconditional equality. This is the TASK-known unsupported tuple-base route,
+not a new counterexample. compile_subscript_case (Places line176) calls this
+export without extra equality; body_subscript_case (bodySimExprCases line165)
+uses that generic case with nocalls=F. Their statements remain unchanged.
+Local prefix evidence does not certify exprSimTupleTheory. Four-target blocked
+partition above remains; no new cheats or probe theorems were introduced.
+
+## Final contract audit (C2)
+
+Exact 109-target TASK batch m0977 was run with proof steps/default settings and
+failed at exprSimTuple.compile_subscript_tuple_sim line995, applying the repaired
+local tuple_base_read. The missing unconditional post/annotation equality is the
+TASK-known exception described above. exprSimTuple is directly unsupported;
+exprSimPlaces, exprSimMain and bodySimExprCases are dependency-blocked, not proved.
+A fresh filtered batch m0983 passes all other 105 targets. No new source failures
+were exposed. Full-build completion criterion is not met.
+
+Diff audit m0981 against adc0d901d confirms no protected definitions or excluded
+files changed, no added cheats/axioms or guarded search, and all existing exported
+statement edits add only the approved equality premise. Newly introduced physical
+boundary exports are separate theorems, not weakened replacements. Helper ledger
+L0003/L0008/L0009/L0011/L0013-L0016 accounts for changed exported signatures;
+L0018 records the two changed local tuple helpers. Local Attribute and literal
+helpers likewise gain the equality; Len's local interfaces instead use physical
+evaluation/widening. Temporary seq1012 probes are absent (m0980); whitespace diff
+check passes (m0988). Generated oracle-index audit could not be completed:
+.holbuild/gen is absent and .holbuild/obj has no *Theory.txt. Baseline cheats
+remain intentionally present; no claim of oracle-free completion is made.
+
+This is final partial repair/classification evidence, not a full task-completion
+certificate or checked counterexample. No further retry of the unchanged tuple
+failure is justified under the current directives.

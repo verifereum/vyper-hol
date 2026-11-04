@@ -828,6 +828,7 @@ QED
 Theorem tuple_base_read[local]:
   !func cenv cx obj es sa sb s0 es1 btv bvv s w tys tvs ctx.
     vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv s /\
+    post_value_type cenv obj = expr_type obj /\
     expr_type obj = TupleT tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
     eval_operand (vv_operand bvv) s = SOME w /\
@@ -839,9 +840,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?v. read_result cx btv es1 = (INL v, es1)` by
     (gvs[vv_post_def] >>
-     qspecl_then [`cenv`, `cx`, `TupleT tys`, `btv`, `bvv`, `es1`, `s`,
-                  `TupleTV tvs`, `w`] mp_tac base_vv_holds_loc >>
-     simp[is_word_type_def] >> metis_tac[]) >>
+     `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+     drule_all base_vv_holds_loc >> simp[is_word_type_def] >>
+     metis_tac[]) >>
   `value_has_type (TupleTV tvs) v` by metis_tac[] >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[value_has_type_def] >>
@@ -852,6 +853,7 @@ QED
 Theorem tuple_vv_post[local]:
   !func cenv cx env obj idx es sa sn s0 es1 tv bvv q w dst tys tvs vs k tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = expr_type obj /\
     expr_sim_inv cenv cx env es /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
