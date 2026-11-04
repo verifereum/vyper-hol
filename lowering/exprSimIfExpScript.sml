@@ -2263,3 +2263,23 @@ Proof
   disch_then (qspec_then `sf` mp_tac) >>
   (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >> simp[]
 QED
+
+Theorem ifexp_abi_tuple_size_bound_source:
+  evaluate_types env tys [] = SOME tvs /\
+  sfields_tenv_consistent (sf : (string, (string # type # num) list) fmap) env ==>
+  abi_size_bound sf (TupleT tys) <= vyper_abi_size_bound env (TupleT tys)
+Proof
+  strip_tac >>
+  `!nsid args fields.
+    FLOOKUP env nsid = SOME (StructArgs args) /\
+    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args` by
+      (rpt gen_tac >> strip_tac >> irule ifexp_sfields_partial >> metis_tac[]) >>
+  drule (cj 2 ifexp_abi_bound_induction) >>
+  disch_then (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
+  strip_tac >>
+  simp[Once abi_size_bound_def, abi_embedded_static_size_def,
+       Once vyperABITheory.vyper_abi_size_bound_def] >>
+  irule ifexp_abi_members_bound >> simp[]
+QED
