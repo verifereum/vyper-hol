@@ -1,6 +1,7 @@
 Theory fnFrameBoundaryGenRet
 Ancestors
   genFrameSim frameRel contextCodegenRel codegenRel
+  fnFrameTerminalPrep preparedPrefixSim asmFrame strongPrefixSim prefixSim stackOpSim
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map callLayoutDefs list rich_list reorderSim planWf stackModel
@@ -302,4 +303,84 @@ Proof
   drule_all reorder_plan_small_result >> strip_tac >>
   `LENGTH prepared.ps_stack <= 16` by decide_tac >>
   drule_all emit_input_plan_small_result >> strip_tac >> gvs[]
+QED
+
+
+val ret_dispatch = map
+  (fn name => SIMP_CONV (srw_ss())
+    [asm_step_def, asm_step_op_def, asm_step_arith_def,
+     asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+     asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+     asm_step_context_def, swap_table_def, dup_table_def, log_table_def]
+    ``asm_step lo o2pc (AsmOp ^name) st``)
+  [``"POP"``, ``"MLOAD"``,
+   ``"SWAP1"``, ``"SWAP2"``, ``"SWAP3"``, ``"SWAP4"``,
+   ``"SWAP5"``, ``"SWAP6"``, ``"SWAP7"``, ``"SWAP8"``,
+   ``"SWAP9"``, ``"SWAP10"``, ``"SWAP11"``, ``"SWAP12"``,
+   ``"SWAP13"``, ``"SWAP14"``, ``"SWAP15"``, ``"SWAP16"``, ``"SWAP?"``,
+   ``"DUP1"``, ``"DUP2"``, ``"DUP3"``, ``"DUP4"``,
+   ``"DUP5"``, ``"DUP6"``, ``"DUP7"``, ``"DUP8"``,
+   ``"DUP9"``, ``"DUP10"``, ``"DUP11"``, ``"DUP12"``,
+   ``"DUP13"``, ``"DUP14"``, ``"DUP15"``, ``"DUP16"``, ``"DUP?"``];
+
+Theorem no_spill_prefix_step_bytes:
+  !op initial_fmp ins lo o2pc st st'.
+  is_prefix_op op /\ (!off. op <> SOSpill off) /\
+  MEM ins (exec_stack_op initial_fmp op) /\
+  asm_step lo o2pc ins st = AsmOK st' ==>
+  st'.as_pc = st.as_pc + 1 /\
+  (!b. read_byte b st'.as_memory = read_byte b st.as_memory)
+Proof
+  Cases >> simp[is_prefix_op_def, exec_stack_op_def, MEM_REPLICATE] >>
+  rpt gen_tac >> strip_tac
+  >- (Cases_on `o'` >> gvs[exec_stack_op_def, asm_step_def, asm_next_def,
+        AllCaseEqs()])
+  >- (fs ret_dispatch >> gvs[asm_pop_def, asm_next_def, AllCaseEqs()])
+  >- (pop_assum mp_tac >> pure_rewrite_tac[swap_name_def] >>
+      rpt IF_CASES_TAC >> strip_tac >> fs ret_dispatch >>
+      gvs[asm_swap_def, asm_next_def, AllCaseEqs()])
+  >- (pop_assum mp_tac >> pure_rewrite_tac[dup_name_def] >>
+      rpt IF_CASES_TAC >> strip_tac >> fs ret_dispatch >>
+      gvs[asm_dup_def, asm_next_def, AllCaseEqs()])
+  >> fs ret_dispatch >>
+  gvs[asm_step_def, AllCaseEqs()] >>
+  fs[asm_step_op_def, asm_step_arith_def, asm_step_compare_def,
+     asm_step_bitwise_def, asm_step_memory_def] >>
+  gvs[asm_mload_def, asm_next_def, AllCaseEqs(), read_byte_expand]
+QED
+
+Theorem read_only_block_bytes[local]:
+  !code st st'.
+  asm_block_at prog st.as_pc code /\
+  asm_steps lo o2pc prog (LENGTH code) st = AsmOK st' /\
+  (!ai si si'. MEM ai code /\ asm_step lo o2pc ai si = AsmOK si' ==>
+    si'.as_pc = si.as_pc + 1 /\
+    (!b. read_byte b si'.as_memory = read_byte b si.as_memory)) ==>
+  !b. read_byte b st'.as_memory = read_byte b st.as_memory
+Proof
+  Induct >- simp[asm_steps_def] >>
+  rpt gen_tac >> simp[asm_block_at_cons, Once asm_steps_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `s''.as_pc = st.as_pc + 1 /\
+   (!b. read_byte b s''.as_memory = read_byte b st.as_memory)` by
+    (qpat_x_assum `!ai si si'. _` irule >> simp[] >> metis_tac[]) >>
+  `!b. read_byte b st'.as_memory = read_byte b s''.as_memory` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >> simp[]
+QED
+
+Theorem no_spill_prefix_bytes:
+  EVERY is_prefix_op ops /\ (!off. ~MEM (SOSpill off) ops) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+  asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' ==>
+  !b. read_byte b st'.as_memory = read_byte b st.as_memory
+Proof
+  strip_tac >> irule read_only_block_bytes >>
+  qexists `execute_plan initial_fmp ops` >> simp[] >>
+  qexistsl_tac [`lo`, `o2pc`, `prog`] >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `?op. MEM op ops /\ MEM ai (exec_stack_op initial_fmp op)` by
+    (gvs[execute_plan_def, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  irule no_spill_prefix_step_bytes >>
+  qexistsl_tac [`initial_fmp`, `ai`, `lo`, `o2pc`, `op`] >>
+  gvs[EVERY_MEM] >> metis_tac[]
 QED
