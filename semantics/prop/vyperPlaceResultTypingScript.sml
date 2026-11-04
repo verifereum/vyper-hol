@@ -1246,7 +1246,8 @@ Theorem scope_pop_effect_place_primitives[simp]:
   scope_pop_effect (place_type_value cx p)
 Proof
   rpt conj_tac >> irule scope_pop_effect_identity >> rpt strip_tac >>
-  FIRST (map (fn th => drule th >> simp[])
+  FIRST (map (fn th => drule th >>
+    disch_then (mp_tac o Q.AP_TERM `\s:evaluation_state. s.scopes`) >> simp[])
     [lookup_global_state, get_place_state, extend_place_state, read_place_state, place_type_value_state])
 QED
 
@@ -1796,7 +1797,8 @@ val () = List.app (fn (name,th) =>
 Theorem lookup_global_toplevel_ready:
   FLOOKUP env.toplevel_vtypes (src,id) = SOME vt /\
   env_consistent env cx st ==>
-  ?pv. lookup_global cx src id st = (INL pv,st) /\
+  ?pv observations. lookup_global cx src id st =
+         (INL pv,st with storage_trace := observations) /\
        eval_result_typed (env,cx,st) pv vt
 Proof
   strip_tac >> Cases_on `vt`
@@ -1805,9 +1807,10 @@ Proof
           gvs[IS_SOME_EXISTS] >>
           `env.type_defs = get_tenv cx` by
             gvs[env_consistent_def, env_context_consistent_def] >>
-          simp[lookup_global_def, bind_def, lift_option_type_def,
+          simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
                return_def, runtime_place_typed_storage] >>
-          irule evaluate_type_well_formed_type_value >>
+          qexists_tac `st.storage_trace ++ [StorageRoot is_transient x' x]` >>
+          simp[] >> irule evaluate_type_well_formed_type_value >>
           goal_assum drule >>
           gvs[env_consistent_def, env_context_consistent_def,
               well_formed_vtype_def] >> metis_tac[]) >>
@@ -1833,15 +1836,14 @@ Proof
          gvs[env_consistent_def, env_context_consistent_def,
              well_formed_vtype_def] >> metis_tac[]) >>
       qexists_tac `PlaceR (ImmutablePlace src id [])` >>
-      simp[lookup_global_def, bind_def, lift_option_type_def,
+      simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
            return_def, runtime_place_typed_immutable, subscripts_type_def] >>
-      metis_tac[]) >>
+      qexists_tac `st.storage_trace` >> simp[]) >>
   drule_all env_consistent_toplevel_hashmap_static >> strip_tac >>
   gvs[IS_SOME_EXISTS] >>
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, eval_result_typed_def] >>
-  gvs[env_consistent_def, env_context_consistent_def, well_formed_vtype_def] >>
-  metis_tac[]
+  qexists_tac `st.storage_trace` >> simp[]
 QED
 
 Theorem type_place_target_global_lookup:
@@ -1864,6 +1866,25 @@ Proof
   strip_tac >> drule_all type_place_target_global_lookup >> strip_tac >>
   drule_all lookup_global_toplevel_ready >> strip_tac >>
   gvs[no_type_error_result_def]
+QED
+
+Theorem runtime_place_typed_storage_trace[simp]:
+  runtime_place_typed cx (st with storage_trace := observations) p tv <=>
+  runtime_place_typed cx st p tv
+Proof
+  Cases_on `p` >>
+  simp[runtime_place_typed_storage, runtime_place_typed_memory,
+       runtime_place_typed_immutable] >>
+  simp[get_immutables_def, get_address_immutables_def, bind_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >> simp[return_def, raise_def]
+QED
+
+Theorem eval_result_typed_storage_trace[simp]:
+  eval_result_typed (env,cx,st with storage_trace := observations) pv vt <=>
+  eval_result_typed (env,cx,st) pv vt
+Proof
+  Cases_on `vt` >> Cases_on `pv` >> simp[eval_result_typed_def]
 QED
 
 Theorem lookup_global_target_success_typed:
@@ -1932,7 +1953,7 @@ Theorem lookup_global_result_shape:
   (?p. pv = PlaceR p) \/
   (?tr slot kt vt. pv = HashMapRef tr slot kt vt)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
@@ -1945,7 +1966,7 @@ Theorem extend_place_result_shape:
   (?tr slot kt vt. out = HashMapRef tr slot kt vt)
 Proof
   Cases_on `pv` >> Cases_on `sb` >>
-  simp[oneline extend_place_def, bind_def, ignore_bind_def,
+  simp[oneline extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
        lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
   rpt strip_tac >>
   gvs[bind_def, return_def, raise_def, lift_sum_def,
@@ -1976,7 +1997,7 @@ Theorem extend_place_place_success_shape:
   ?q. out = PlaceR q
 Proof
   Cases_on `p` >>
-  simp[extend_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[]
 QED
 

@@ -19,7 +19,7 @@ Ancestors
   vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractFunction vyperTypeContractGetter vyperTypeEntryReadiness
   vyperTypeStatePreservation vyperTypeConstantFold vyperTypeExternalDefaults
-  vyperTypeConstantCells
+  vyperTypeConstantCells vyperStorageTrace
 Libs
   wordsLib
 
@@ -112,25 +112,19 @@ Theorem load_contract_success_cases:
     am_deployed = finalize_pending_deletions
       (am_ctor with sources updated_by CONS (tx.target,mods))
 Proof
-  rw[load_contract_def] >>
+  rw[load_contract_def, load_contract_trace_def] >>
   Cases_on `initial_immutables (type_env_all_modules mods) mods` >> gvs[] >>
+  rename1 `initial_immutables _ _ = SOME imms` >>
   Cases_on `lookup_function NONE tx.function_name Deploy
               (case ALOOKUP mods NONE of SOME ts => ts | NONE => [])` >> gvs[] >>
-  Cases_on `x'` >> gvs[] >>
-  Cases_on `r` >> gvs[] >>
-  Cases_on `r''` >> gvs[] >>
-  Cases_on `r` >> gvs[] >>
-  Cases_on `r''` >> gvs[] >>
-  Cases_on `call_external_function orc gobs
-      (am with <|immutables updated_by CONS (tx.target,x);
-                exports updated_by CONS (tx.target,exps)|>)
-      ((initial_evaluation_context ((tx.target,mods)::am.sources) am.layouts tx NONE)
-         with in_deploy := T)
-      q' q (case ALOOKUP mods NONE of SOME ts => ts | NONE => []) mods q'' q''' tx.args r q''''` >>
-  gvs[] >>
-  Cases_on `q'''''` >> gvs[] >>
-  rename1 `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = (INL value, machine_requests)` >>
-  Cases_on `machine_requests` >> gvs[]
+  rename1 `lookup_function _ _ _ _ = SOME fields` >>
+  PairCases_on `fields` >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `call_external_function_trace orc gobs am0 cx0 nr0 mut0 ts0 mods args0 dflts0 tx.args body0 ret0` >>
+  Cases_on `call_external_function_trace orc gobs am0 cx0 nr0 mut0 ts0 mods args0 dflts0 tx.args body0 ret0` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (result, rest)` >>
+  PairCases_on `rest` >>
+  Cases_on `result` >> gvs[call_external_function_def]
+
 QED
 
 Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
@@ -141,8 +135,9 @@ Theorem call_external_function_deploy_success_evaluate_all_constants[local]:
   ?am_c.
     evaluate_all_constants cx am cx.txn.target all_mods = SOME am_c
 Proof
-  rw[call_external_function_def] >>
-  gvs[AllCaseEqs()]
+  rpt strip_tac >>
+  drule call_external_function_success_phases >>
+  strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem constants_env_preserves_lookup_not_key[local]:
@@ -152,15 +147,29 @@ Theorem constants_env_preserves_lookup_not_key[local]:
   FLOOKUP cenv id = SOME x
 Proof
   qid_spec_tac `cenv` >> qid_spec_tac `acc` >>
-  Induct_on `ts` >- (rw[constants_env_def] >> gvs[]) >>
-  gen_tac >> gen_tac >> Cases_on `h` >>
-  rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
-  TRY (Cases_on `v0` >>
-       gvs[constants_env_def, toplevel_vtype_keys_toplevel_def]) >>
-  gvs[AllCaseEqs(), FLOOKUP_UPDATE] >>
-  metis_tac[FLOOKUP_UPDATE]
+  Induct_on `ts` >- simp[constants_env_def, constants_env_trace_def] >>
+  Cases_on `h` >>
+  simp[constants_env_def, constants_env_trace_def, toplevel_vtype_keys_toplevel_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), constants_env_def] >>
+  (IF (qpat_assum `FST (constants_env_trace _ _ _ _ (VariableDecl _ _ _ _ _ :: _) _) = _` (K all_tac))
+    (rename1 `VariableDecl vis mut name ty slot` >>
+     Cases_on `mut` >>
+     Cases_on `evaluate_type (get_tenv cx) ty` >>
+     gvs[constants_env_trace_def, AllCaseEqs()] >>
+     rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+     IF (qpat_assum `FST (case res of INL v => _ | INR err => _) = _` (K all_tac))
+       (Cases_on `res` >> gvs[] >> pairarg_tac >> gvs[] >>
+        suspend "constant_update")
+       (metis_tac[]))
+    (metis_tac[]))
 QED
 
+
+Resume constants_env_preserves_lookup_not_key[constant_update]:
+  first_x_assum irule >>
+  qexists `acc |+ (name,(x',x''))` >> simp[FLOOKUP_UPDATE]
+QED
+Finalise constants_env_preserves_lookup_not_key
 
 Theorem constants_env_head_constant_type[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src)
@@ -171,9 +180,15 @@ Theorem constants_env_head_constant_type[local]:
          evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
-  gvs[AllCaseEqs()] >>
-  qexists `v` >> simp[] >>
-  metis_tac[constants_env_preserves_lookup_not_key, FLOOKUP_UPDATE]
+  Cases_on `evaluate_type (get_tenv cx) ty` >>
+  gvs[constants_env_trace_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `res` >> gvs[] >> pairarg_tac >> gvs[] >>
+  qexists `x'` >>
+  `constants_env cx am addr src ts (acc |+ (id,(x,x'))) = SOME cenv`
+    by simp[constants_env_def] >>
+  `FLOOKUP (acc |+ (id,(x,x'))) id = SOME (x,x')` by simp[FLOOKUP_UPDATE] >>
+  drule_all constants_env_preserves_lookup_not_key >> simp[]
 QED
 Theorem constants_env_contains_constant_type[local]:
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)) /\
@@ -185,14 +200,35 @@ Proof
   qid_spec_tac `init` >> qid_spec_tac `ty` >> qid_spec_tac `id` >>
   qid_spec_tac `e` >> qid_spec_tac `vis` >>
   qid_spec_tac `cenv` >> qid_spec_tac `acc` >>
-  qid_spec_tac `ts` >> qid_spec_tac `src` >> qid_spec_tac `addr` >>
-  qid_spec_tac `am` >> qid_spec_tac `cx` >>
-  recInduct constants_env_ind >>
-  rw[constants_env_def, toplevel_vtype_keys_toplevel_def] >>
-  gvs[AllCaseEqs(), FLOOKUP_UPDATE] >>
-  metis_tac[constants_env_head_constant_type, constants_env_preserves_lookup_not_key,
-            FLOOKUP_UPDATE]
+  Induct_on `ts` >- simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h = VariableDecl vis (Constant e) id ty init`
+  >- (gvs[] >> metis_tac[SRULE [] constants_env_head_constant_type]) >>
+  `MEM (VariableDecl vis (Constant e) id ty init) ts` by gvs[] >>
+  qpat_x_assum `MEM _ (h::ts)` kall_tac >>
+  Cases_on `h` >>
+  gvs[constants_env_def, constants_env_trace_def, toplevel_vtype_keys_toplevel_def] >>
+  all_tac
+  >>~- ([`FST (constants_env_trace _ _ _ _ (VariableDecl vis0 mut name typ slot::ts) _) = _`],
+    Cases_on `mut`
+    >- (Cases_on `evaluate_type (get_tenv cx) typ` >>
+        gvs[constants_env_trace_def, AllCaseEqs()] >>
+        rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+        Cases_on `res` >> gvs[] >> pairarg_tac >> gvs[] >>
+        suspend "constant_tail") >>
+    gvs[constants_env_trace_def] >> metis_tac[]) >>
+  metis_tac[]
 QED
+
+Resume constants_env_contains_constant_type[constant_tail]:
+  first_x_assum irule >>
+  conj_tac
+  >- (qexists `acc |+ (name,(x,x'))` >> simp[]) >>
+  metis_tac[]
+QED
+Finalise constants_env_contains_constant_type
+
+
 
 Theorem merge_constants_preserves_lookup_not_source[local]:
   src <> src' /\
@@ -216,14 +252,15 @@ Theorem evaluate_module_constants_preserves_lookup_not_source[local]:
     (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => [])) id = SOME x
 Proof
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
-  Induct_on `mods` >- (rw[evaluate_module_constants_def] >> gvs[]) >>
+  Induct_on `mods` >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   gen_tac >> gen_tac >> PairCases_on `h` >>
-  rw[evaluate_module_constants_def] >>
-  gvs[AllCaseEqs()] >>
+  rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `result` >> gvs[] >> pairarg_tac >> gvs[] >>
   first_x_assum irule >>
   simp[] >>
-  qexists `merge_constants addr h0 cenv am` >>
-  simp[] >>
+  qexists `merge_constants addr h0 x' am` >>
+  simp[evaluate_module_constants_def] >>
   irule merge_constants_preserves_lookup_not_source >>
   simp[]
 QED
@@ -257,8 +294,16 @@ Proof
   qid_spec_tac `ts` >> qid_spec_tac `src` >>
   Induct_on `mods` >- rw[evaluate_module_constants_def] >>
   gen_tac >> gen_tac >> gen_tac >> gen_tac >> PairCases_on `h` >>
-  rw[evaluate_module_constants_def, alistTheory.ALOOKUP_def] >>
-  gvs[AllCaseEqs()] >-
+  rw[evaluate_module_constants_def, evaluate_module_constants_trace_def,
+     alistTheory.ALOOKUP_def] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `result` >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  `constants_env (set_current_module cx h0) am addr h0 h1 FEMPTY = SOME cenv`
+    by simp[constants_env_def] >>
+  `evaluate_module_constants cx (merge_constants addr h0 cenv am) addr mods = SOME am_c`
+    by simp[evaluate_module_constants_def] >>
+  all_tac >-
     (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel h0) h1))` by
        gvs[contract_keys_def, ALL_DISTINCT_APPEND] >>
      drule constants_env_contains_constant_type >>
@@ -589,16 +634,18 @@ Theorem checked_constants_env_output_invariants[local]:
     constant_fmap_declared_typed (type_env_all_modules mods) tls cenv
 Proof
   Induct_on `work`
-  >- simp[constants_env_def] >>
+  >- simp[constants_env_def, constants_env_trace_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `h` >> gvs[constants_env_def]
+  Cases_on `h` >> gvs[constants_env_def, constants_env_trace_def]
   >- (first_x_assum (qspecl_then [`acc`,`cenv`] mp_tac) >> simp[])
-  >- (Cases_on `v0` >> gvs[constants_env_def]
+  >- (Cases_on `v0` >> gvs[constants_env_def, constants_env_trace_def]
       >- (fs[set_current_module_def, get_tenv_def] >>
           Cases_on `evaluate_type (type_env_all_modules mods) t` >>
       gvs[AllCaseEqs()] >>
+      rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+      Cases_on `res` >> gvs[] >> pairarg_tac >> gvs[] >>
       qmatch_asmsub_rename_tac
-        `FST ((do result <- eval_expr _ e; read_result _ result od) _) = INL eval_v` >>
+        `(do result <- eval_expr _ e; read_result _ result od) _ = (INL eval_v, eval_st)` >>
       qmatch_asmsub_rename_tac
         `evaluate_type (type_env_all_modules mods) t = SOME eval_tv` >>
       `?st'. (do result <- eval_expr (set_current_module cx src) e;
@@ -668,9 +715,14 @@ Theorem checked_evaluate_module_constants_preserves_invariants[local]:
       (type_env_all_modules mods) cx.txn.target mods am_c
 Proof
   Induct_on `work`
-  >- simp[evaluate_module_constants_def] >>
+  >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   rpt gen_tac >> PairCases_on `h` >> strip_tac >>
-  gvs[evaluate_module_constants_def, AllCaseEqs()] >>
+  gvs[evaluate_module_constants_def, evaluate_module_constants_trace_def, AllCaseEqs()] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `result` >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  `constants_env (set_current_module cx h0) am cx.txn.target h0 h1 FEMPTY = SOME cenv`
+    by simp[constants_env_def] >>
   `ALOOKUP mods h0 = SOME h1` by
     (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
      gvs[contract_namespaces_ok_def]) >>
@@ -1243,9 +1295,9 @@ Proof
   rw[] >> gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
   qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
-     assert_def, check_def] >>
+     record_storage_event_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -1333,9 +1385,9 @@ Proof
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[return_def, raise_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
-     return_def, raise_def, assert_def, check_def] >>
+     return_def, raise_def, record_storage_event_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -1352,7 +1404,7 @@ Proof
   qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
   rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
-     return_def, raise_def, assert_def, check_def] >>
+     return_def, raise_def, record_storage_event_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def, no_control_exc_def]
 QED
 
@@ -1364,20 +1416,25 @@ Theorem call_external_function_no_loop_control_c53[local]:
 Proof
   strip_tac >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[call_external_function_def] >> IF_CASES_TAC >> simp[] >>
-  Cases_on `if cx.in_deploy then evaluate_all_constants cx am cx.txn.target mods else SOME am` >>
-  simp[] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `pair_CASE entry` >>
+  simp[call_external_function_def, call_external_function_trace_def,
+       lock_if_nr_def, unlock_if_nr_def, is_view_mut_def] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `if cx.in_deploy then evaluate_module_constants_trace cx am cx.txn.target (constants_order mods) else (SOME am,[])` >>
+  rename1 `_ = (constants, constant_trace)` >>
+  Cases_on `constants` >> simp[] >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `ignore_bind (send_call_value mut cx) continuation initial` >>
+  qabbrev_tac `entry = ignore_bind (send_call_value mut cx) continuation initial` >>
   `!exc rt. entry = (INR exc,rt) ==>
      exc <> BreakException /\ exc <> ContinueException` by
-    (qpat_x_assum `(\(res,am_out,rqs). _) _ = _` kall_tac >>
+    (qpat_x_assum `(case _ of (res,am_out,rqs,observations) => _) = _` kall_tac >>
      unabbrev_all_tac >> rpt gen_tac >> disch_tac >>
      drule_at (Pos last) call_entry_eval_no_loop_control_c53 >> simp[]) >>
   Cases_on `entry` >> Cases_on `q` >> gvs[] >>
   qpat_x_assum `ignore_bind _ _ _ = _` kall_tac >>
-  qpat_x_assum `(\(res,am_out,rqs). _) _ = _` mp_tac >>
+  qpat_x_assum `(case _ of (res,am_out,rqs,observations) => _) = _` mp_tac >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
   imp_res_tac unlock_action_no_control_c53 >> gvs[no_control_exc_def]
 QED
 
@@ -1399,7 +1456,7 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
   rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
-     return_def, raise_def, assert_def, check_def] >>
+     return_def, raise_def, record_storage_event_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -1730,7 +1787,7 @@ Proof
             Cases_on `lookup_nonreentrant_slot am.layouts tx.target` >>
             gvs[return_def, raise_def] >> strip_tac >> gvs[] >>
             qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
-            rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+            rw[acquire_nonreentrant_lock_def, record_storage_event_def, bind_def, ignore_bind_def,
                get_transient_storage_def, update_transient_def, return_def,
                raise_def, assert_def, check_def] >>
             gvs[AllCaseEqs(), return_def, raise_def]) >>
@@ -1777,11 +1834,16 @@ Proof
     metis_tac[checked_contract_runtime_ready_def,
               immutables_ready_initial_evaluation_context_source] >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac bool_ss [call_external_function_def, LET_THM] >>
+  simp_tac bool_ss [call_external_function_def, call_external_function_trace_def,
+                    lock_if_nr_def, unlock_if_nr_def, is_view_mut_def, LET_THM] >>
   `cx.in_deploy = F` by simp[initial_evaluation_context_def] >>
   qpat_assum `cx.in_deploy = F` (fn th => pure_rewrite_tac [th, COND_CLAUSES]) >>
   IF_CASES_TAC >- simp[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   simp_tac (srw_ss()) [] >>
+  `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|> =
+   initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>`
+    by simp[initial_state_def] >>
+  pop_assum (fn th => pure_rewrite_tac [th]) >>
   qmatch_goalsub_abbrev_tac `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   Cases_on `entry (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
   `state_well_typed r /\ accounts_well_typed r.accounts /\ no_type_error_result q /\
@@ -2073,11 +2135,14 @@ Proof
   simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
   qspec_tac (`constants_order mods`, `mods`) >>
-  Induct >- rw[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   Cases_on `h` >>
-  rw[evaluate_module_constants_def] >>
-  gvs[AllCaseEqs(), merge_constants_def] >>
-  first_x_assum drule >> simp[]
+  rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `result` >> gvs[] >> pairarg_tac >> gvs[] >>
+  qpat_x_assum `!am am_c. _` (mp_tac o SRULE [evaluate_module_constants_def]) >>
+  disch_then (qspecl_then [`merge_constants addr q x am`, `am_c`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem call_external_function_deploy_success_preserves_layouts:
@@ -2463,11 +2528,14 @@ Proof
   simp[evaluate_all_constants_def] >>
   qid_spec_tac `am_c` >> qid_spec_tac `am` >>
   qspec_tac (`constants_order mods`, `mods`) >>
-  Induct >- rw[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   Cases_on `h` >>
-  rw[evaluate_module_constants_def] >>
-  gvs[AllCaseEqs(), merge_constants_def] >>
-  first_x_assum drule >> simp[]
+  rw[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
+  rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+  Cases_on `result` >> gvs[] >> pairarg_tac >> gvs[] >>
+  qpat_x_assum `!am am_c. _` (mp_tac o SRULE [evaluate_module_constants_def]) >>
+  disch_then (qspecl_then [`merge_constants addr q x am`, `am_c`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem call_external_function_deploy_success_preserves_exports[local]:
@@ -3301,14 +3369,39 @@ QED
 
 Theorem view_lock_prefix_execution:
   (nr ==> cx.nonreentrant_slot <> NONE) ==>
-  (do lock_if_nr cx nr T; action od) st = action st \/
+  ?observations.
+  (do lock_if_nr cx nr T; action od) st =
+    action (st with storage_trace := st.storage_trace ++ observations) \/
   ?msg. (do lock_if_nr cx nr T; action od) st =
-          (INR (Error (RuntimeError msg)),st)
+          (INR (Error (RuntimeError msg)),
+           st with storage_trace := st.storage_trace ++ observations)
 Proof
-  strip_tac >> Cases_on `cx.nonreentrant_slot` >> Cases_on `nr` >>
-  gvs[lock_if_nr_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  rw[acquire_nonreentrant_lock_def, get_transient_storage_def,
-     bind_def, ignore_bind_def, return_def, raise_def]
+  strip_tac >> reverse (Cases_on `nr`)
+  >- (qexists_tac `[]` >>
+      simp[lock_if_nr_def, ignore_bind_def, vyperStateTheory.bind_def,
+           vyperStateTheory.return_def]) >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
+  rename1 `cx.nonreentrant_slot = SOME slot` >>
+  qexists_tac `[StorageLock slot]` >>
+  simp[lock_if_nr_def, acquire_nonreentrant_lock_def,
+       record_storage_event_def, get_transient_storage_def,
+       bind_def, ignore_bind_def, vyperStateTheory.return_def] >>
+  IF_CASES_TAC >> simp[vyperStateTheory.raise_def, vyperStateTheory.return_def]
+QED
+
+Theorem view_lock_body_success_physical:
+  (nr ==> cx.nonreentrant_slot <> NONE) /\
+  (do lock_if_nr cx nr T; eval_stmts cx body od) st = (res,t) /\
+  (res = INL () \/ ?v. res = INR (ReturnException v)) ==>
+  ?u. eval_stmts cx body st = (res,u) /\
+      (t with storage_trace := []) = (u with storage_trace := [])
+Proof
+  strip_tac >>
+  drule (INST_TYPE [alpha |-> ``:unit``] view_lock_prefix_execution) >>
+  disch_then (qspecl_then [`st`, `eval_stmts cx body`] strip_assume_tac) >>
+  gvs[] >>
+  irule storage_trace_frame_replace >>
+  simp[evaluate_storage_trace_frame] >> metis_tac[]
 QED
 
 Theorem call_external_function_view_success_without_lock:
@@ -3318,26 +3411,25 @@ Theorem call_external_function_view_success_without_lock:
   call_external_function orc gobs am cx F View ts mods args dflts vals body ret =
     (INL v,am',rqs)
 Proof
+  simp_tac bool_ss [call_external_function_view_success_iff] >>
   strip_tac >>
-  drule call_external_function_success_phases >> strip_tac >>
-  `((do lock_if_nr cx nr T; eval_stmts cx body od)
-      (s2 with scopes := [env])) = (res,st_body)` by
-    gvs[lock_if_nr_def] >>
-  `(do lock_if_nr cx nr T; eval_stmts cx body od)
-      (s2 with scopes := [env]) = eval_stmts cx body (s2 with scopes := [env]) \/
-   ?msg. (do lock_if_nr cx nr T; eval_stmts cx body od)
-      (s2 with scopes := [env]) =
-        (INR (Error (RuntimeError msg)),s2 with scopes := [env])` by
-    (irule view_lock_prefix_execution >> simp[]) >>
-  gvs[Excl "lock_if_nr_def"] >>
-  rule_assum_tac (REWRITE_RULE [ignore_bind_def, bind_def, lock_if_nr_def, return_def]) >>
-  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [call_external_function_def, LET_THM, is_view_mut_def,
-       unlock_if_nr_def, return_def] >>
-  simp_tac (srw_ss()) [ignore_bind_def, bind_def] >>
-  asm_simp_tac (srw_ss()) [] >>
-  asm_simp_tac (srw_ss()) [set_scopes_def, bind_def, ignore_bind_def,
-                       lock_if_nr_def, return_def]
+  `res = INL () \/ ?rv. res = INR (ReturnException rv)` by metis_tac[] >>
+  drule external_entry_success_phases >> simp[] >> strip_tac >>
+  drule view_lock_body_success_physical >>
+  simp_tac bool_ss [lock_if_nr_def] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  qexistsl_tac [`FST (eval_stmts cx body (s2 with scopes := [env]))`, `u`] >>
+  conj_tac
+  >- (gvs[] >> simp[ignore_bind_def, bind_def, set_scopes_def, return_def]) >>
+  `abstract_machine_from_state am_c.sources am_c.exports am_c.layouts t =
+   abstract_machine_from_state am_c.sources am_c.exports am_c.layouts u` by
+    (qpat_x_assum `t with storage_trace := [] = _`
+       (mp_tac o AP_TERM ``abstract_machine_from_state am_c.sources am_c.exports am_c.layouts``) >>
+     simp[abstract_machine_from_state_storage_trace]) >>
+  `t.requests = u.requests` by
+    (qpat_x_assum `t with storage_trace := [] = _`
+       (mp_tac o AP_TERM ``\s:evaluation_state. s.requests``) >> simp[]) >>
+  gvs[] >> simp[ignore_bind_def, bind_def, set_scopes_def, return_def]
 QED
 
 Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
@@ -3379,33 +3471,47 @@ Proof
   gvs[] >>
   drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
   qmatch_asmsub_abbrev_tac `no_type_error_eval (eval_stmts ctx _ st0)` >>
-  `(do lock_if_nr ctx nr T; eval_stmts ctx [Return (SOME exp)] od) st0 =
-       eval_stmts ctx [Return (SOME exp)] st0 \/
-   ?msg. (do lock_if_nr ctx nr T; eval_stmts ctx [Return (SOME exp)] od) st0 =
-           (INR (Error (RuntimeError msg)),st0)` by
-    (irule view_lock_prefix_execution >> gvs[Abbr `ctx`]) >>
+  `!observations r t. eval_stmts ctx [Return (SOME exp)]
+      (st0 with storage_trace := observations) = (r,t) ==>
+      ?u. eval_stmts ctx [Return (SOME exp)] st0 = (r,u)` by
+    (rpt strip_tac >>
+     `storage_trace_frame (eval_stmts ctx [Return (SOME exp)])` by
+       simp[evaluate_storage_trace_frame] >>
+     drule_all storage_trace_frame_replace >> metis_tac[]) >>
+  `!observations r t. eval_stmts ctx [Return (SOME exp)]
+      (st0 with storage_trace := observations) = (r,t) ==>
+      no_type_error_result r` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     gvs[vyperTypeExprSoundnessTheory.no_type_error_eval_def]) >>
+  `!observations rv t. eval_stmts ctx [Return (SOME exp)]
+      (st0 with storage_trace := observations) = (INR (ReturnException rv),t) ==>
+      ?tv. evaluate_type (type_env_all_modules mods) ret = SOME tv /\
+           value_has_type tv rv` by metis_tac[] >>
   `~ctx.in_deploy` by simp[Abbr `ctx`, initial_evaluation_context_def] >>
-  gvs[Abbr `st0`, lock_if_nr_def] >>
-  rule_assum_tac (REWRITE_RULE [ignore_bind_def, bind_def, initial_state_def]) >>
+  drule (INST_TYPE [alpha |-> ``:unit``] view_lock_prefix_execution) >>
+  disch_then (qspecl_then [`st0`, `eval_stmts ctx [Return (SOME exp)]`] strip_assume_tac) >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  Cases_on `ctx.txn.value = 0` >>
-  simp[call_external_function_def, send_call_value_def, check_def, assert_def,
+  simp[call_external_function_def, call_external_function_trace_def,
+       send_call_value_def, check_def, assert_def,
        unlock_if_nr_def, is_view_mut_def, bind_def, ignore_bind_def,
-       eval_external_defaults_nil, set_scopes_def, initial_state_def,
-       vyperTypeExprSoundnessTheory.no_type_error_result_def,
-       return_def, raise_def] >>
-  strip_tac >> gvs[] >>
-  Cases_on `eval_stmts ctx [Return (SOME exp)]
-    (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `q` >>
-  gvs[initial_state_def, vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+       eval_external_defaults_nil, set_scopes_def, return_def, raise_def] >>
+  Cases_on `ctx.txn.value = 0` >>
+  gvs[assert_def, bind_def, return_def, raise_def,
       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-  Cases_on `y` >>
-  gvs[return_def, raise_def,
-      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
-      vyperTypeExprSoundnessTheory.no_type_error_result_def,
-      vyperTypingTheory.safe_cast_well_typed] >>
-  rpt strip_tac >> gvs[vyperTypingTheory.safe_cast_well_typed]
+  qpat_x_assum `ignore_bind _ _ st0 = _` mp_tac >>
+  simp_tac bool_ss [ignore_bind_def, bind_def, lock_if_nr_def] >>
+  simp[Abbr `st0`, initial_state_def] >>
+  disch_then SUBST1_TAC >> simp[] >> rpt strip_tac >> gvs[] >>
+  Cases_on `eval_stmts ctx [Return (SOME exp)]
+    (initial_state am [scope] with
+      <|outcomes := orc; requests := []; gas_obs := gobs;
+        storage_trace := observations|>)` >>
+  gvs[initial_state_def] >>
+  rename1 `eval_stmts _ _ _ = (br,bt)` >>
+  namedCases_on `br` ["unit_result", "body_exc"] >> gvs[] >>
+  Cases_on `body_exc` >> gvs[] >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule vyperTypingTheory.safe_cast_well_typed >> strip_tac >> gvs[]
 QED
 
 Theorem checked_explicit_external_body_no_control_escape_selected:
@@ -3464,9 +3570,9 @@ Theorem acquire_nonreentrant_lock_accounts[local]:
   acquire_nonreentrant_lock target slot ro st = (res,st') ==>
   st'.accounts = st.accounts
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, record_storage_event_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
-     assert_def, check_def] >>
+     record_storage_event_def, assert_def, check_def] >>
   gvs[AllCaseEqs(), return_def, raise_def]
 QED
 
@@ -3597,9 +3703,14 @@ Proof
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   Cases_on `bind_arguments (type_env_all_modules mods) args tx.args`
   >- (qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-      simp[call_external_function_def, initial_evaluation_context_def,
+      simp[call_external_function_def, call_external_function_trace_def,
+           initial_evaluation_context_def, eval_external_defaults_nil,
            bind_def, ignore_bind_def, raise_def] >>
       IF_CASES_TAC >- simp[vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+      `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|> =
+       initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>`
+        by simp[initial_state_def] >>
+      pop_assum (fn th => pure_rewrite_tac [th]) >>
       Cases_on `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src)
         (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
       mp_tac (Q.INST [`mut` |-> `mut`, `cx` |-> `initial_evaluation_context am.sources am.layouts tx src`,
@@ -3631,7 +3742,7 @@ Proof
           (find_function_module am tx.target tx.function_name) ts` by
     metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc gobs am tx = (res,am',rqs)` mp_tac >>
-  simp[Once call_external_def,
+  simp[Once call_external_def, Once call_external_trace_def,
        vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[AllCaseEqs(),
       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
@@ -3652,6 +3763,11 @@ Proof
     gvs[get_module_code_def, initial_evaluation_context_def] >>
   `checked_contract_runtime_ready art all_mods am tx` by
     simp[checked_contract_runtime_ready_def] >>
+  `call_external_function orc gobs am
+     (initial_evaluation_context am.sources am.layouts tx
+       (find_function_module am tx.target tx.function_name))
+     nr mut ts all_mods args dflts tx.args body' ret = (INR v7,am',rqs)` by
+    simp[call_external_function_def] >>
   `no_type_error_result ((INR v7):value + vyperState$exception)` by
     (FIRST
        [metis_tac[call_external_function_selected_explicit_raw_args_no_type_error_c53],
@@ -3680,7 +3796,7 @@ Proof
           (find_function_module am tx.target tx.function_name) ts` by
     metis_tac[checked_contract_runtime_ready_module_allocated] >>
   qpat_x_assum `call_external orc gobs am tx = (INR exc,am',rqs)` mp_tac >>
-  simp[Once call_external_def] >>
+  simp[Once call_external_def, Once call_external_trace_def] >>
   gvs[AllCaseEqs()] >>
   strip_tac >>
   gvs[checked_contract_runtime_ready_def, get_self_code_def] >>
@@ -3693,6 +3809,11 @@ Proof
       external_getter_tuple (find_function_module am tx.target tx.function_name) decl =
         SOME (mut,nr,args,dflts,ret,body'))` by
     (irule lookup_exported_function_checked_cases_current >> simp[] >> metis_tac[]) >>
+  `call_external_function orc gobs am
+     (initial_evaluation_context am.sources am.layouts tx
+       (find_function_module am tx.target tx.function_name))
+     nr mut ts all_mods args dflts tx.args body' ret = (INR exc,am',rqs)` by
+    simp[call_external_function_def] >>
   gvs[]
   >- (gvs[get_module_code_def, initial_evaluation_context_def] >>
       metis_tac[call_external_function_no_loop_control_c53,

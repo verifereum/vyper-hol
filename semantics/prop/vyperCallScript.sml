@@ -215,7 +215,7 @@ local
      sumTheory.sum_distinct, optionTheory.option_case_def,
      exception_case_def];
 in
-  val call_rollback_simp_tac = simp_tac rollback_ss;
+  val call_rollback_simp_tac = asm_simp_tac rollback_ss;
   fun call_rollback_step (goal as (asl,_)) =
     (BasicProvers.PURE_TOP_CASE_TAC >>
      (fn (next as (asl',_)) =>
@@ -224,19 +224,32 @@ in
   val call_rollback_cases_tac = rpt call_rollback_step;
 end;
 
+Theorem call_external_function_trace_error_rollback:
+  call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (INR e,am',rqs,observations) ==> am' = am
+Proof
+  Cases_on `evaluate_module_constants_trace cx am cx.txn.target
+    (constants_order all_mods)` >>
+  call_rollback_simp_tac [Once call_external_function_trace_def] >>
+  call_rollback_cases_tac
+QED
+
 Theorem call_external_function_error_rollback:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) ⇒
   am' = am
 Proof
-  call_rollback_simp_tac [Once call_external_function_def] >>
-  call_rollback_cases_tac
+  simp[Once call_external_function_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule call_external_function_trace_error_rollback >> simp[]
 QED
 
 Theorem call_external_error_rollback:
   call_external orc gobs am tx = (INR e, am', rqs) ⇒
   am' = am
 Proof
-  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >> imp_res_tac call_external_function_error_rollback
+  simp[Once call_external_def, Once call_external_trace_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac call_external_function_trace_error_rollback
 QED
 
 Theorem call_external_transaction_error_logs_empty:

@@ -149,8 +149,27 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem extend_place_PlaceR_state:
+  extend_place cx (PlaceR p) sb st = (res,st') ==> st' = st
+Proof
+  Cases_on `p`
+  >- (Cases_on `extend_storage_place cx b c t sb st` >>
+      drule extend_storage_place_state >> strip_tac >> gvs[] >>
+      Cases_on `q` >> simp[extend_place_def, bind_def, return_def]) >>
+  qmatch_goalsub_abbrev_tac `extend_place cx (PlaceR place) sb st` >>
+  Cases_on `place_type_value cx place st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> gvs[Abbr `place`, extend_place_def, bind_def, ignore_bind_def] >>
+  qmatch_goalsub_abbrev_tac `read_place cx place state` >>
+  Cases_on `read_place cx place state` >>
+  drule read_place_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[bind_def, ignore_bind_def] >>
+  Cases_on `evaluate_subscripts x x' [sb]` >>
+  simp[lift_sum_def, return_def, raise_def]
+QED
+
 Theorem extend_place_state:
-  extend_place cx res sb st = (result,st') ==> st' = st
+  extend_place cx res sb st = (result,st') ==> st' = st with storage_trace := st'.storage_trace
 Proof
   Cases_on `res`
   >- simp[extend_place_def, raise_def]
@@ -176,12 +195,19 @@ Proof
       Cases_on `evaluate_subscripts tv value subs` >>
       simp[return_def, raise_def]) >>
   Cases_on `sb` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def])
+  simp[extend_place_def, bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def, return_def, raise_def] >>
+  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, ignore_bind_def, record_storage_event_def, return_def, raise_def]) >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem extend_place_logs:
+  extend_place cx res sb st = (result,st') ==> st'.logs = st.logs
+Proof
+  strip_tac >> drule extend_place_state >> disch_then SUBST1_TAC >> simp[]
 QED
 
 Theorem select_result_state:
-  select_result cx ty res sb st = (result,st') ==> st' = st
+  select_result cx ty res sb st = (result,st') ==> st' = st with storage_trace := st'.storage_trace
 Proof
   Cases_on `res` >>
   simp[select_result_def, bind_def, lift_option_type_def,
