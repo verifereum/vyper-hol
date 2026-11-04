@@ -1,7 +1,9 @@
 (* External completion observations: no equality of masked requests is required. *)
 Theory lowerDloadExternalBoundary
 Ancestors
-  lowerDloadSafetyKernel lowerDloadSafetyValues ptrDiscipline extCallOracle venomCallOracleDefs venomState pair vfmState
+  lowerDloadSafetyKernel lowerDloadSafetyValues lowerDloadSafetyWriteBytes
+  regularCallEmitSim finite_map pred_set list arithmetic
+  ptrDiscipline extCallOracle venomCallOracleDefs venomState pair vfmState
 
 Theorem ld_take_outcome_rest:
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
@@ -124,4 +126,31 @@ Proof
   gvs[consume_call_outcome_eq] >>
   gvs[ld_nonghost_def, storage_agree_except_def, word_agree_except_def] >>
   metis_tac[]
+QED
+
+(* Only actual returned bytes are overwritten; an empty write has no bounds. *)
+Theorem ld_memory_write_classified:
+  ld_memory lo A tn s t /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a k u v z b c sz.
+    FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
+    a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
+  (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
+  ld_memory lo A tn'
+    (write_memory_with_expansion ro xs s)
+    (write_memory_with_expansion rt xs t)
+Proof
+  strip_tac
+  >- (gvs[ld_memory_def, read_byte_write_memory_with_expansion] >> metis_tac[])
+  >- (gvs[] >> irule ld_memory_write_low >>
+      conj_tac >- metis_tac[] >>
+      qexistsl_tac [`{}`, `LENGTH xs`, `tn`] >> simp[ADD_COMM])
+  >> gvs[] >> irule ld_memory_write_slot >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`{}`, `k`, `LENGTH xs`, `sz`, `tn`] >>
+  simp[NoAsms, GSYM ADD_ASSOC] >> metis_tac[]
 QED
