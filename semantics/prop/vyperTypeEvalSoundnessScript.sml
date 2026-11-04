@@ -9249,15 +9249,14 @@ Theorem eval_raw_call_success_value[local]:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
-  simp[eval_raw_call_def, bind_apply, ignore_bind_apply, type_check_def,
-       check_def, assert_def, get_accounts_def, get_transient_storage_def,
-       return_def, raise_def] >>
-  Cases_on `run_raw_call cx flags addr data amount gas st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_apply, ignore_bind_apply, return_def, raise_def,
-       update_accounts_def, update_transient_def, append_logs_def] >>
-  rpt (IF_CASES_TAC >>
-    simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       check_def, assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:
