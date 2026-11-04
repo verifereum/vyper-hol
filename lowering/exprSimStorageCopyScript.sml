@@ -238,7 +238,7 @@ Proof
   rpt strip_tac >> first_x_assum irule >> decide_tac
 QED
 
-Theorem compile_storage_copy_certificate[local]:
+Theorem compile_storage_copy_certificate:
   !loc src dst n sa u sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_word_copy_loop src dst n loc LocMemory F sa = (u,sb) ==>
