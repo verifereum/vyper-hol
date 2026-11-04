@@ -362,9 +362,28 @@ Proof
 QED
 
 (* The field's value_vv after the ADD, from the base's. *)
+Theorem type_widens_to_struct[local]:
+  type_widens_to tenv t (StructT sid) ==> t = StructT sid
+Proof
+  Cases_on `t` >> simp[type_widens_to_def, arg_type_fits_def] >>
+  metis_tac[]
+QED
+
+Theorem attr_post_value_type[local]:
+  expr_body_pre cenv cx env obj es /\ expr_type obj = StructT sid ==>
+  post_value_type cenv obj = expr_type obj
+Proof
+  strip_tac >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env obj` by
+    fs[expr_body_pre_def] >>
+  drule_all post_value_type_widens >>
+  simp[] >> metis_tac[type_widens_to_struct]
+QED
+
 Theorem attr_vv_post[local]:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
     vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    post_value_type cenv obj = expr_type obj /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -445,6 +464,8 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once expr_vv_case_def] >>
   rpt gen_tac >> strip_tac >>
   drule attr_pre_base >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (drule_all attr_post_value_type >> simp[]) >>
   `expr_vv_sim ctx func cenv cx ty obj es` by
     (irule (iffLR expr_vv_case_def) >>
      gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >> metis_tac[]) >>
@@ -500,7 +521,10 @@ Theorem compile_attribute_case:
     expr_sim_case nocalls ctx func cenv cx (Attribute ann obj fld) /\
     expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)
 Proof
-  metis_tac[compile_attribute_vv_case, expr_sim_case_of_vv]
+  rpt strip_tac >>
+  `expr_vv_case nocalls ctx func cenv cx (Attribute ann obj fld)` by
+    metis_tac[compile_attribute_vv_case] >>
+  simp[] >> irule expr_sim_case_of_vv >> simp[]
 QED
 
 Theorem compile_attribute_vv_sim:
