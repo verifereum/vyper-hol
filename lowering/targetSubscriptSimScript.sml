@@ -880,3 +880,105 @@ Proof
   >- (qexists_tac `tv` >> simp[]) >>
   goal_assum (drule_at Any)
 QED
+
+(* Current local memory, rather than the declared capacity, supplies the
+   runtime bound for a dynamic target. *)
+Theorem target_memory_array_suffix:
+  !ctx func cenv cx env es sa sm sb s0 es2 es3 id path et bd etv
+    rb t entry av ix iw i bt bits dst w res.
+    target_post ctx func cenv cx es sa sm s0 es2
+      (PlaceR (MemoryPlace id path)) (Type (ArrayT et bd)) rb t /\
+    expr_sim_inv cenv cx env es2 /\
+    stmt_state_rel ctx func cenv cx es2 t /\
+    lookup_scopes id es2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+    subscripts_type entry.type path = SOME (ArrayTV etv bd) /\
+    value_has_type (ArrayTV etv bd) (ArrayV av) /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
+    evaluate_type (get_tenv cx) et = SOME etv /\
+    (bt = IntT bits \/ bt = UintT bits) /\ bits <= 256 /\
+    value_has_type (BaseTV bt) (IntV i) /\
+    iw = typed_val_to_w256 (BaseTV bt) (IntV i) /\
+    compile_array_subscript (FST rb) ix ((case bd of Fixed _ => F | Dynamic _ => T))
+      (if (case bd of Fixed _ => F | Dynamic _ => T) then 0 else bound_length bd) 32 (type_memory_size etv)
+      (is_signed_type (BaseT bt))
+      (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sm = (dst,sb) /\
+    eval_operand (FST rb) t = SOME w /\ eval_operand ix t = SOME iw /\
+    (!x. ix = Var x ==> not_fresh_at sm x) /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+    extend_place cx (PlaceR (MemoryPlace id path))
+      (ValueSubscript (IntV i)) es2 = (res,es3) ==>
+    frag_exec ctx sm sb
+      (\s. s = t /\ stmt_state_rel ctx func cenv cx es2 s)
+      (\s. ?pv'. res = INL pv' /\
+        target_post ctx func cenv cx es sa sb s0 es3 pv' (Type et)
+          (dst,SOME LocMemory,SOME (ValPT et)) s)
+      (expr_exit res)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `bd`
+  >- (gnvs[bound_length_def] >>
+      irule target_memory_array_static_suffix >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >>
+      qexists_tac `bits` >> simp[] >>
+      qexistsl_tac [`bt`, `rb`, `w`] >> simp[]) >>
+  gnvs[bound_length_def] >>
+  rename1 `ArrayT et (Dynamic cap)` >>
+  `place_ptr_rel cenv cx t (PlaceR (MemoryPlace id path)) w
+     (FST (SND rb)) (Type (ArrayT et (Dynamic cap)))` by
+    gvs[target_post_def] >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  Cases_on `av` >> gnvs[value_has_type_def] >>
+  rename1 `ArrayV (DynArrayV vs)` >>
+  `mload (w2n w) t = n2w (LENGTH vs)` by
+    gvs[val_in_memory_def, mem_word_at_eq_mload] >>
+  `cap < dimword (:256)` by
+    (drule evaluate_type_array_bound_word >> simp[bound_length_def]) >>
+  `(idx_in_range (is_signed_type (BaseT bt))
+      (typed_val_to_w256 (BaseTV bt) (IntV i)) (n2w (LENGTH vs)) <=>
+      0 <= i /\ Num i < LENGTH vs)` by
+    (irule idx_in_range_typed_int >> simp[] >>
+     qexists_tac `bits` >> simp[]) >>
+  `extend_place cx (PlaceR (MemoryPlace id path))
+     (ValueSubscript (IntV i)) es2 =
+     (if 0 <= i /\ Num i < LENGTH vs then
+        (INL (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV i)]))),es2)
+      else (INR (Error (RuntimeError "evaluate_subscripts array_index")),es2))` by
+    (drule extend_place_memory_array_index >>
+     disch_then (qspecl_then [`cx`, `path`] mp_tac) >>
+     disch_then drule >> disch_then drule >>
+     simp[value_has_type_def, array_length_def] >>
+     disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  `!x. FST rb = Var x ==> not_fresh_at sm x` by gvs[target_post_def] >>
+  drule compile_array_dynamic_outcome >>
+  simp[] >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es2`] mp_tac) >>
+  simp[] >>
+  disch_then (mp_then Any match_mp_tac frag_exec_weaken) >>
+  simp[] >> conj_tac
+  >- suspend "dynamic_success" >>
+  suspend "dynamic_exit"
+QED
+
+Resume target_memory_array_suffix[dynamic_success]:
+  rpt strip_tac >> gnvs[] >> RULE_L_ASSUM_TAC CONJUNCTS >> gnvs[] >>
+  `typed_val_to_w256 (BaseTV bt) (IntV i) = n2w (Num i)` by
+    (`i = &Num i` by simp[INT_OF_NUM] >>
+     pop_assum SUBST1_TAC >>
+     gvs[typed_val_to_w256_def, val_to_w256_def, i2w_pos]) >>
+  drule_then irule target_post_memory_step >>
+  simp[word_mul_n2w, word_add_n2w, WORD_ADD_ASSOC] >>
+  qexistsl_tac [`32 + Num i * type_memory_size etv`, `ValueSubscript (IntV i)`] >>
+  simp[mem_step_offset_def] >>
+  simp[GSYM word_add_n2w, AC WORD_ADD_ASSOC WORD_ADD_COMM]
+QED
+
+Resume target_memory_array_suffix[dynamic_exit]:
+  rpt strip_tac >> gvs[expr_exit_def]
+QED
+
+Finalise target_memory_array_suffix
