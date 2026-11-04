@@ -1354,15 +1354,22 @@ Theorem no_mem_read_effect_from_no_mem_read_ops[local]:
 Proof
   rpt strip_tac >>
   spose_not_then strip_assume_tac >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  qpat_x_assum `mem_read_ops _ = _` mp_tac >>
-  simp[step_inst_base_def, mem_read_ops_def] >>
+  (* only the memory-reading opcodes survive the effect check *)
   Cases_on `inst.inst_opcode` >>
   gvs[is_alloca_op_def, is_terminator_def, is_ext_call_op_def,
       read_effects_def, all_effects_def, empty_effects_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  qpat_x_assum `mem_read_ops _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, mem_read_ops_def] >>
   simp[exec_pure1_def, exec_pure2_def, exec_pure3_def,
        exec_read0_def, exec_read1_def, exec_write2_def,
        AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  (* LOG behind the static-frame guard: two operands are too few *)
+  disj2_tac >>
+  `LENGTH inst.inst_operands = 2` by
+    (`LENGTH (REVERSE inst.inst_operands) = LENGTH [ofst; sz]` by
+       asm_rewrite_tac[] >> fs[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -2600,6 +2607,48 @@ Proof
   simp[]
 QED
 
+Triviality eval_operands_IS_SOME_EVERY:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+          EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` mp_tac) >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
+QED
+
+(* LOG reads its offset, size and topics off the reversed operand list, so
+   when they all evaluate, the whole list does. *)
+Triviality log_operands_defined:
+  !rest s off sz topics n.
+    LENGTH rest = n + 2 /\
+    eval_operand (HD (REVERSE rest)) s = SOME off /\
+    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
+    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
+    IS_SOME (eval_operands rest s)
+Proof
+  rpt strip_tac >>
+  `2 <= LENGTH (REVERSE rest)` by simp[] >>
+  `?a b t. REVERSE rest = a::b::t` by
+    (Cases_on `REVERSE rest` >> fs[] >> Cases_on `t` >> fs[]) >>
+  `rest = REVERSE (a::b::t)` by metis_tac[REVERSE_REVERSE] >>
+  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
+  `IS_SOME (eval_operands t s)` by simp[] >>
+  fs[eval_operands_IS_SOME_EVERY]
+QED
+
+(* A LOG that steps to OK ran outside a static frame: its operands all
+   evaluate, so a static frame would have aborted. *)
+Triviality log_ok_not_static:
+  !inst s v. inst.inst_opcode = LOG /\ step_inst_base inst s = OK v ==>
+             ~s.vs_call_ctx.cc_static
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule_all log_operands_defined >> strip_tac >>
+  gvs[optionTheory.IS_SOME_EXISTS, eval_operands_def, eval_operand_def]
+QED
+
 Theorem remap_preserved_mem_ops[local]:
   !fn roots remap inst s1 s2 v1 bb.
     alloca_remap_rel fn roots remap s1 s2 /\
@@ -2960,6 +3009,7 @@ QED
 
 (* --- LOG: read from memory, append to logs, no memory write --- *)
 Resume remap_preserved_mem_ops[log]:
+  `~s1.vs_call_ctx.cc_static` by metis_tac[log_ok_not_static] >>
   with_opcode_clause (fn c => fs(c @ [AllCaseEqs()])) >>
   Cases_on `REVERSE rest` >> gvs[] >>
   Cases_on `t` >> gvs[] >>
@@ -3937,6 +3987,9 @@ Theorem step_inst_base_error_transfer[local]:
 Proof
   rpt strip_tac >>
   `s1.vs_params = s2.vs_params` by fs[alloca_remap_rel_def, LET_DEF] >>
+  (* the static-frame guard reads the same frame flag on both sides *)
+  `s1.vs_call_ctx.cc_static <=> s2.vs_call_ctx.cc_static` by
+    fs[alloca_remap_rel_def, LET_DEF] >>
   `!op. eval_operand op s1 = NONE ==> eval_operand op s2 = NONE` by
     metis_tac[eval_operand_none_transfer] >>
   `!ops. eval_operands ops s1 = NONE ==> eval_operands ops s2 = NONE` by
@@ -4029,8 +4082,41 @@ Resume step_inst_base_error_transfer[ISTORE]:
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[LOG]:
-  Cases_on `inst.inst_operands` >> gvs[] >>
-  Cases_on `h` >> gvs[] >>
+  Cases_on `inst.inst_operands` >> gvs[]
+  >- (Cases_on `s2.vs_call_ctx.cc_static` >> gvs[eval_operands_def]) >>
+  Cases_on `h` >> gvs[]
+  >- (
+    (* Lit topic count: drop the static-frame guard on both sides first;
+       undefined operands transfer *)
+    `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands (Lit c::t) s1))` by
+      (strip_tac >> gvs[]) >>
+    `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands (Lit c::t) s2))` by
+      (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+    qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+    rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
+    error_inline_tac) >>
+  error_inline_tac
+QED
+Resume step_inst_base_error_transfer[SSTORE]:
+  (* drop the static-frame guard on both sides first; undefined operands
+     transfer *)
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s1))`
+    by (strip_tac >> gvs[]) >>
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s2))`
+    by (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+  qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+  rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
+  error_inline_tac
+QED
+Resume step_inst_base_error_transfer[TSTORE]:
+  (* drop the static-frame guard on both sides first; undefined operands
+     transfer *)
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s1))`
+    by (strip_tac >> gvs[]) >>
+  `~(s2.vs_call_ctx.cc_static /\ IS_SOME (eval_operands inst.inst_operands s2))`
+    by (rpt strip_tac >> fs[] >> res_tac >> fs[]) >>
+  qpat_x_assum `_ = Error err` mp_tac >> ASM_REWRITE_TAC[] >> strip_tac >>
+  rpt (qpat_x_assum `~(_ /\ _)` kall_tac) >>
   error_inline_tac
 QED
 Resume step_inst_base_error_transfer[MCOPY]:
@@ -4084,7 +4170,9 @@ Proof
   Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `eval_operand h s1` >> gvs[] >>
   Cases_on `eval_operands ops s1` >> gvs[] >>
-  `eval_operand h s2 <> NONE` by metis_tac[operand_defined_transfer] >>
+  `eval_operand h s2 <> NONE` by
+    (drule operand_defined_transfer >>
+     disch_then (qspec_then `h` mp_tac) >> simp[]) >>
   first_x_assum (qspecl_then [`fn`, `roots`, `remap`, `s1`, `s2`] mp_tac) >>
   simp[] >> strip_tac >>
   Cases_on `eval_operand h s2` >> gvs[] >>
@@ -4413,6 +4501,16 @@ val is_terminator_cases = prove(
   Cases >> simp[is_terminator_def]);
 
 (* Helper: operand agreement for non-RETURN/REVERT terminators *)
+Triviality eval_operands_MEM_agree:
+  !ops s1 s2.
+    (!op. MEM op ops ==> eval_operand op s1 = eval_operand op s2) ==>
+    eval_operands ops s1 = eval_operands ops s2
+Proof
+  Induct >> rw[eval_operands_def] >>
+  `eval_operands ops s1 = eval_operands ops s2` by metis_tac[] >>
+  simp[]
+QED
+
 fun term_op_agree (g as (asl, _)) = (
   qspecl_then [`fn`,`roots`,`remap`,`inst`,`s1`,`s2`]
     mp_tac terminator_control_flow_remap >>
@@ -4611,10 +4709,15 @@ Proof
                       irule alloca_remap_rel_halted >> simp[])
   (* SELFDESTRUCT *)
   >- (term_op_agree >>
+      (* the static-frame guard reads the same operands on both sides *)
+      `eval_operands inst.inst_operands s1 =
+       eval_operands inst.inst_operands s2` by
+        (irule eval_operands_MEM_agree >> simp[]) >>
       BasicProvers.every_case_tac >>
       gvs[lift_result_def] >>
       irule alloca_remap_rel_halt_returndata >>
-      irule alloca_remap_rel_accounts_update >> simp[])
+      (* the static-frame abort leaves the accounts alone *)
+      TRY (irule alloca_remap_rel_accounts_update) >> simp[])
   (* INVALID *)
   >> (irule alloca_remap_rel_halt_returndata >> simp[])
 QED
