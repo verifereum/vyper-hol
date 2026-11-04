@@ -4830,6 +4830,12 @@ Definition probe_deep_code_def:
         Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
 End
 
+Theorem probe_deep_supported:
+  supported_program probe_deep_code
+Proof
+  EVAL_TAC >> simp[]
+QED
+
 Definition probe_deep_context_def:
   probe_deep_context = empty_evaluation_context with
     <| sources := [(0w,[(NONE,probe_deep_code)])];
