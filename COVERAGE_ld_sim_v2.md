@@ -448,3 +448,21 @@ The exceptional ordinary guards are separately covered by
 CREATE/CREATE2), alongside the existing ASSERT consumer. ForwardAbort is
 imported by Sim. These results cover this exceptional family only: standalone
 terminators, INVOKE, full run lifting and the frozen stage theorem remain open.
+
+### C1.4.29 internal RET step consumer
+
+`o1LowerDloadJointReturn.ld_joint_ret_step` consumes J, P, opaque_use_ok,
+active RET and actual source `step_inst = IntRet ir s1`. It returns an actual
+target `IntRet jr t`, equal `iret_values`, both adopt_fmp fields NONE and
+`s1=s`. Its operand boundary `ld_joint_ret_front` proves equality only on
+FRONT operands. Availability includes the final token, but value equality
+does not: the opaque token may differ. The empty operand case is excluded by
+source operational success, not by an additional theorem premise.
+
+Equal `iret_values` supplies the common `vals` input to
+`ld_return_local_restore` after rewriting the target list. That restoration
+lemma still requires saved caller environment/parameters and successful
+source bind_outputs. This RET step consumer does not establish target active
+control, whole-boundary caller restoration, ownership restriction, credit
+restoration, or INVOKE entry. It is imported into Sim but is not a proof of
+the frozen stage theorem.
