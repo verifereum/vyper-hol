@@ -1,6 +1,7 @@
 Theory algebraicOptReachabilityProofs
 Ancestors
   algebraicOptDefs venomExecSemantics venomState venomInstProps venomExecProofs
+  removeUnusedProofs venomInst unitShapeDefs
 
 (* A chain boundary must retain a Boolean value at value-sensitive uses;
    at truthy uses the root word itself suffices. *)
@@ -314,4 +315,43 @@ Proof
   rpt strip_tac >> drule_all step_terminator_preserves_vars >>
   disch_then (qspec_then `x` mp_tac) >> strip_tac >>
   first_x_assum irule >> gvs[]
+QED
+
+Theorem ao_iszero_historical_operand:
+  !ctx fn s0 n k phase s i op x w.
+    ssa_form fn /\ MEM i (fn_insts fn) /\
+    i.inst_opcode = ISZERO /\ i.inst_operands = [op] /\ i.inst_outputs = [x] /\
+    ao_source_prefix ctx fn s0 n k phase s /\
+    lookup_var x s0 = NONE /\ lookup_var x s = SOME w ==>
+    ?j u bb t a.
+      ao_source_prefix ctx fn s0 n j F u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME i /\
+      step_inst j ctx i u = OK t /\
+      eval_operand op u = SOME a /\ w = bool_to_word (a = 0w)
+Proof
+  rpt strip_tac >> drule_all ao_source_prefix_value_origin >> strip_tac
+  >- (rename1 `MEM x h.inst_outputs` >>
+      `MEM h (fn_insts fn)` by
+        (gvs[fn_insts_def, fn_insts_blocks_def, lookup_block_def,
+             get_instruction_def, AllCaseEqs()] >>
+         simp[MEM_fn_insts_blocks_iff] >> qexists `bb` >>
+         metis_tac[execEquivParamBaseTheory.FIND_MEM, listTheory.EL_MEM]) >>
+      `h = i` by
+        (irule ssa_outputs_same_inst >>
+         gvs[fn_insts_def] >> metis_tac[]) >>
+      gvs[] >> qexistsl [`j`, `u`, `bb`, `t`] >> simp[] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[Once step_inst_def, step_inst_base_def, exec_pure1_def,
+           AllCaseEqs()] >> rpt strip_tac >>
+      gvs[lookup_var_def, update_var_def,
+          finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rename1 `eval_one_phi u h = SOME (x,w)` >>
+  `MEM h (fn_insts fn)` by
+    (simp[fn_insts_def, MEM_fn_insts_blocks_iff] >> qexists `bb` >>
+     metis_tac[execEquivParamBaseTheory.FIND_MEM, lookup_block_def]) >>
+  drule ao_eval_one_phi_output >> strip_tac >>
+  `h = i` by
+    (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[]) >>
+  gvs[]
 QED
