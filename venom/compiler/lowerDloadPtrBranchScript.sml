@@ -2,8 +2,9 @@ Theory lowerDloadPtrBranch
 Ancestors
   lowerDloadPtrAggregate lowerDloadPtrRel lowerDloadPtrCall
   lowerDloadPtrScalar lowerDloadPtrPhi lowerDloadPtrStatic
+  lowerDloadPtrBlockEntry lowerDloadPtrJointEntry lowerDloadDefs
   ptrDiscipline pointerConfinedDefs venomExecSemantics venomState venomInst
-  memLocDefs finite_map list pred_set words
+  memLocDefs finite_map list pred_set words contextCodegenRel
 
 Theorem dload_boundary_core_jump[local]:
   dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
@@ -83,4 +84,75 @@ Proof
   drule dload_boundary_core_jump >>
   disch_then (qspec_then `lbl` assume_tac) >>
   qexistsl [`jump_to lbl s`,`lbl`] >> gvs[jump_to_def, lookup_var_def]
+QED
+
+Theorem lower_dload_function_supply_entry_ghosts:
+  lower_dload_function_supply q f = (g,q') /\
+  s.vs_current_bb = t.vs_current_bb /\ s.vs_prev_bb = t.vs_prev_bb /\
+  enters_block g t t2 ==>
+  entry_prov g t H = entry_prov f s H /\
+  entry_taint_vars g t un = entry_taint_vars f s un
+Proof
+  simp[lower_dload_function_supply_def, enters_block_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  drule_all lower_dload_blocks_supply_lookup >> strip_tac >>
+  drule lower_dload_block_supply_phi_exact >> strip_tac >>
+  simp[entry_prov_def, entry_taint_vars_def] >>
+  metis_tac[phi_prefix_computations]
+QED
+
+Theorem dload_actual_branch_block:
+  frame_reachable vs C cs PG G tn f i s /\
+  dload_control_match q f g s t i [i] 0 /\
+  MEM i.inst_opcode [JMP; JNZ; DJMP] /\
+  fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\ taint_ok f tn i s /\
+  (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
+  lower_dload_function_supply q f = (g,q') /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
+  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  (!v. v IN set (fn_ir_vars f) ==>
+    (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
+  step_inst fuel C' i t = OK t1 /\ ~t1.vs_halted /\
+  enters_block g t1 t2 /\ active_inst g j t2 ==>
+  ?s1 s2 i' emitted'.
+    step_inst fuel C i s = OK s1 /\ ~s1.vs_halted /\
+    enters_block f s1 s2 /\
+    frame_reachable vs C cs PG (entry_prov f s1 G)
+      (entry_taint_vars f s1 tn) f i' s2 /\
+    dload_control_match q f g s2 t2 i' emitted' 0 /\ j = HD emitted' /\
+    (!v. v IN set (fn_ir_vars f) ==>
+      (lookup_var v s2 = NONE <=> lookup_var v t2 = NONE)) /\
+    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+      (entry_prov f s1 G) (entry_prov g t1 H)
+      (entry_taint_vars f s1 tn) (entry_taint_vars g t1 un) s2 t2 cs ds
+Proof
+  strip_tac >>
+  `MEM i (fn_insts f) /\ active_inst f i s` by
+    (qpat_x_assum `dload_control_match _ _ _ _ _ _ _ _` mp_tac >>
+     simp[dload_control_match_def, active_inst_def, fn_insts_def,
+          o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `!v. MEM (Var v) i.inst_operands ==>
+    ~retpc_var f v /\ v IN set (fn_ir_vars f)` by
+    metis_tac[fn_ir_vars_operand] >>
+  drule_all (Q.INST [`U` |-> `set (fn_ir_vars f)`] dload_boundary_core_branch) >>
+  disch_then (qspec_then `C` strip_assume_tac) >>
+  `s1.vs_labels = t1.vs_labels` by
+    (drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 t1 _ _`)
+       dload_boundary_environment >>
+     simp[dload_equal_environment_def, venom_state_component_equality]) >>
+  `!a v. MEM a (fn_insts f) /\ MEM (Var v) a.inst_operands ==>
+    v IN set (fn_ir_vars f)` by metis_tac[fn_ir_vars_operand] >>
+  drule_at (Pat `enters_block _ _ _`) lower_dload_function_supply_enters_boundary >>
+  disch_then drule_all >> strip_tac >>
+  drule_all dload_enters_block_control_match >> strip_tac >>
+  `active_inst f i' s'` by
+    (qpat_x_assum `dload_control_match _ _ _ s' _ _ _ _` mp_tac >>
+     simp[dload_control_match_def] >> metis_tac[]) >>
+  `is_terminator i.inst_opcode` by gvs[MEM, is_terminator_def] >>
+  `frame_reachable vs C cs PG (entry_prov f s1 G)
+     (entry_taint_vars f s1 tn) f i' s'` by
+    (irule frame_reachable_block >> metis_tac[]) >>
+  drule_all lower_dload_function_supply_entry_ghosts >> strip_tac >>
+  qexistsl [`s1`,`s'`,`i'`,`emitted`] >> simp[] >>
+  gvs[entry_prov_def, entry_taint_vars_def]
 QED
