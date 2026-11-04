@@ -228,7 +228,7 @@ Definition ao_opt_producer_def:
                     if producer.inst_opcode = SIGNEXTEND then
                       (case producer.inst_operands of
                          [Lit inner_w; _] =>
-                           if w >= inner_w then
+                           if inner_w <=+ w then
                              SOME [inst with <| inst_opcode := ASSIGN;
                                                 inst_operands := [x] |>]
                            else NONE
@@ -279,7 +279,7 @@ Definition ao_opt_signextend_def:
       [n_op; x] =>
         (case n_op of
            Lit w =>
-             if w >= 31w then
+             if 31w <=+ w then
                [inst with <| inst_opcode := ASSIGN; inst_operands := [x] |>]
              else
                let n = w2n w in
@@ -588,7 +588,7 @@ Definition ao_opt_comparator_def:
           let signed = (opc = SGT \/ opc = SLT) in
           (* Range-based optimization *)
           let range_result = ao_opt_cmp_range ra lbl idx inst is_gt signed in
-          case range_result of
+          (case range_result of
             SOME replacement =>
               [inst with <| inst_opcode := ASSIGN;
                             inst_operands := [replacement] |>]
@@ -641,7 +641,7 @@ Definition ao_opt_comparator_def:
                           inst_operands := [Var tmp] |>]
           (* Remaining comparators: iszero insertion/removal handled by
              ao_cmp_flip_function (separate mini-pass after peephole). *)
-          else [inst]
+          else [inst])
     | _ => [inst]
 End
 
