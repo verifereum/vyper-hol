@@ -192,3 +192,109 @@ val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag compile_call_not_label) in
   if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
   then raise Fail "General call operand dependency" else ()
 end;
+
+Theorem compile_name_vv_local_not_label[local]:
+  ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz)) /\
+  compile_name_vv ce ty id sa = (vv,sb) ==> !l. vv_operand vv <> Label l
+Proof
+  Cases_on `FLOOKUP ce.ce_vars id` >>
+  simp[compile_name_vv_def, comp_return_def, comp_bind_def, comp_ignore_bind_def] >>
+  TRY (rename1 `SOME loc` >> Cases_on `loc` >> simp[]) >>
+  rpt strip_tac >> gvs[vv_operand_def, mk_ptr_def, comp_return_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[vv_operand_def, mk_ptr_def, comp_return_def, comp_bind_def]) >>
+  metis_tac[]
+QED
+
+Theorem compile_expr_body_not_label[local]:
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+    ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))) /\
+  (!ann bi args s vv s'. well_typed_expr env (Builtin ann bi args) /\
+    g ce ann ty bi args s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  (!ann tb rt args s vv s'. well_typed_expr env (TypeBuiltin ann tb rt args) /\
+    h ce ann ty tb rt args s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  well_typed_expr env e /\
+  compile_expr_body f g h ce ty e sa = (vv,sb) ==>
+  !l. vv_operand vv <> Label l
+Proof
+  Cases_on `e` >> rpt strip_tac
+  >~ [`Builtin ann bi args`] >- suspend "builtin"
+  >~ [`TopLevelName ann nsid`] >- metis_tac[compile_expr_toplevelname_not_label]
+  >~ [`Pop ann target`] >- metis_tac[compile_expr_pop_not_label]
+  >~ [`StructLit ann name fields`] >- metis_tac[compile_expr_structlit_not_label]
+  >~ [`IfExp ann cond_e then_e else_e`] >- metis_tac[compile_expr_ifexp_not_label] >>
+  gvs[compile_expr_body_def, expr_type_def, LET_THM]
+  >~ [`compile_name_vv _ _ _ _ = _`] >- suspend "name"
+  >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[compile_literal_vv_not_label]
+  >~ [`compile_subscript _ _ _ _ _ _ _ = _`] >- metis_tac[compile_subscript_not_label]
+  >~ [`compile_attribute _ _ _ _ _ _ _ = _`] >-
+    metis_tac[compile_attribute_safe_operand, safe_operand_def]
+  >~ [`compile_call _ _ _ _ _ _ _ _ = _`] >- metis_tac[compile_call_not_label]
+  >~ [`h ce _ ty _ _ _ sa = (vv,sb)`] >-
+    (qpat_x_assum `!ann tb rt args s vv s'. _` drule_all >> simp[]) >>
+  gvs[vv_operand_def]
+QED
+
+Resume compile_expr_body_not_label[name]:
+  fs[well_typed_expr_def] >>
+  metis_tac[compile_name_vv_local_not_label]
+QED
+
+Theorem named_modular_not_label[local]:
+  (!ce rt at a bt b mt m s vv s'.
+    compile_addmod_names ce rt at a bt b mt m s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  (!ce rt at a bt b mt m s vv s'.
+    compile_mulmod_names ce rt at a bt b mt m s = (vv,s') ==> !l. vv_operand vv <> Label l) /\
+  (!ce rt at a bt b s vv s'.
+    compile_powmod256_names ce rt at a bt b s = (vv,s') ==> !l. vv_operand vv <> Label l)
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[compile_addmod_names_def, compile_mulmod_names_def,
+       compile_powmod256_names_def, LET_THM] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  qmatch_asmsub_abbrev_tac `as_stack_val rt result` >>
+  PairCases_on `result` >> gvs[as_stack_val_def, vv_operand_def, markerTheory.Abbrev_def] >>
+  metis_tac[compile_addmod_safe_operand, compile_mulmod_safe_operand,
+            compile_pow_mod256_safe_operand, safe_operand_def]
+QED
+
+Theorem compile_expr_builtin_not_label_classify[local]:
+  compile_expr_body f g h ce ty (Builtin ann bi args) sa = (vv,sb) ==>
+  g ce ann ty bi args sa = (vv,sb) \/ (!l. vv_operand vv <> Label l)
+Proof
+  Cases_on `bi` >>
+  simp[compile_expr_body_def, expr_type_def, LET_THM,
+       word_list_result_elim, word_expr_result_elim] >>
+  rpt strip_tac >> metis_tac[named_modular_not_label]
+QED
+
+Resume compile_expr_body_not_label[builtin]:
+  drule compile_expr_builtin_not_label_classify >> strip_tac >> metis_tac[]
+QED
+Finalise compile_expr_body_not_label
+
+Theorem compile_type_convert_not_label[local]:
+  (!l. v <> Label l) /\ compile_type_convert v conv sa = (r,sb) ==>
+  !l. r <> Label l
+Proof
+  Cases_on `conv` >>
+  simp[compile_type_convert_def, compile_int_clamp_def,
+       load_bytestring_as_word_def,
+       compile_alloc_buffer_def, emit_op_def, emit_void_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def, LET_THM] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt (IF_CASES_TAC >>
+       simp[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+            fresh_id_def, fresh_var_def, emit_def]) >>
+  strip_tac >> gvs[]
+QED
+
+val _ = List.app (fn th =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail "Typed body operand dependency" else ()
+  end) [compile_name_vv_local_not_label, named_modular_not_label,
+         compile_expr_builtin_not_label_classify, compile_expr_body_not_label,
+         compile_type_convert_not_label];
