@@ -285,7 +285,7 @@ Proof
   gvs[ptr_used_path_def] >> metis_tac[listTheory.MEM]
 QED
 
-Theorem ptr_rounds_member_stationary[local]:
+Theorem ptr_rounds_member_stationary:
   (!v. a IN sw_rounds ds (SUC n) v <=> a IN sw_rounds ds n v) ==>
   !k v. a IN sw_rounds ds (n+k) v <=> a IN sw_rounds ds n v
 Proof
