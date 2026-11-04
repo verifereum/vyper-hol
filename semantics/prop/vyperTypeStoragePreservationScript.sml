@@ -187,7 +187,7 @@ QED
 
 
 
-Theorem zero_read_slots_in_range_mutual[local]:
+Theorem zero_read_slots_in_range_mutual:
   (!storage off tv.
      (!n. read_slot storage n = 0w) ==>
      slots_in_range storage off tv) /\

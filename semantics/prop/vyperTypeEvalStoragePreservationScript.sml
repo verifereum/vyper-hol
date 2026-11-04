@@ -2419,7 +2419,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
   rpt strip_tac >> gvs[]
 QED
 
-Theorem transfer_value_storage_frame[local]:
+Theorem transfer_value_storage_frame:
   transfer_value fromAddr toAddr amount st = (res,st') ==>
   !b. get_storage cx st' b = get_storage cx st b
 Proof
