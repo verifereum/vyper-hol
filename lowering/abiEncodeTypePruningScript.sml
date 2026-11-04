@@ -123,3 +123,64 @@ Proof
      simp[] >> disch_then drule_all >> simp[]) >>
   simp[Once evaluate_type_def]
 QED
+
+Theorem abi_encode_alias_restrict_submap:
+  DRESTRICT E (COMPL {k | ?fs. FLOOKUP E k = SOME (StructArgs fs) /\
+    nsid_to_string k = nsid_to_string a}) SUBMAP E
+Proof
+  simp[SUBMAP_FLOOKUP_EQN, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
+  gvs[AllCaseEqs()]
+QED
+
+Theorem abi_encode_alias_restrict_consistent:
+  sfields_tenv_consistent sf E ==>
+  sfields_tenv_consistent (sf \\ nsid_to_string a)
+    (DRESTRICT E (COMPL {k | ?fs. FLOOKUP E k = SOME (StructArgs fs) /\
+      nsid_to_string k = nsid_to_string a}))
+Proof
+  simp[sfields_tenv_consistent_def, FLOOKUP_DRESTRICT,
+    DOMSUB_FLOOKUP_THM] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem abi_encode_alias_restrict_fields:
+  sfields_tenv_consistent sf E /\ FLOOKUP E a = SOME (StructArgs args) /\
+  evaluate_type E (StructT a) = SOME v /\
+  evaluate_types (E \\ a) (MAP SND args) [] = SOME tvs ==>
+  evaluate_types
+    (DRESTRICT E (COMPL {k | ?fs. FLOOKUP E k = SOME (StructArgs fs) /\
+      nsid_to_string k = nsid_to_string a}))
+    (MAP SND args) [] = SOME tvs
+Proof
+  strip_tac >>
+  qpat_x_assum `evaluate_type E (StructT a) = SOME v` mp_tac >>
+  simp[Once evaluate_type_def] >> strip_tac >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `DRESTRICT E (COMPL B)` >>
+  `DRESTRICT (E \\ a) (COMPL B) = DRESTRICT E (COMPL B)` by
+    (simp[fmap_eq_flookup, FLOOKUP_DRESTRICT, DOMSUB_FLOOKUP_THM] >>
+     qx_gen_tac `k` >> Cases_on `a = k` >>
+     gvs[Abbr `B`]) >>
+  `LENGTH tvs = LENGTH args` by
+    (drule vyperTypeDefaultsTheory.evaluate_types_length >> simp[]) >>
+  `EVERY (\tv. type_value_size tv <
+      type_value_size (StructTV (ZIP (MAP FST args,tvs)))) tvs` by
+    (rewrite_tac[EVERY_MEM] >> qx_gen_tac `tv` >> strip_tac >>
+     `?nm. MEM (nm,tv) (ZIP (MAP FST args,tvs))` by
+       metis_tac[MEM_ZIP, MEM_EL, LENGTH_MAP] >>
+     metis_tac[MEM_type_value_size_StructTV]) >>
+  drule (cj 2 abi_encode_evaluate_types_prune) >>
+  disch_then (qspecl_then [`E`, `B`,
+    `type_value_size (StructTV (ZIP (MAP FST args,tvs)))`] mp_tac) >>
+  (impl_tac >-
+    (rpt conj_tac
+     >- simp[SUBMAP_FLOOKUP_EQN, DOMSUB_FLOOKUP_THM]
+     >- simp[]
+     >- (gvs[Abbr `B`] >> metis_tac[]) >>
+     rpt strip_tac >>
+     `evaluate_type E (StructT a) =
+        SOME (StructTV (ZIP (MAP FST args,tvs)))` by
+       simp[Once evaluate_type_def] >>
+     `w = StructTV (ZIP (MAP FST args,tvs))` by
+       (irule abi_encode_struct_alias_value >>
+        gvs[Abbr `B`] >> metis_tac[]) >> simp[])) >> simp[]
+QED
