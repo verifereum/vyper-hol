@@ -4843,6 +4843,109 @@ Definition probe_deep_context_def:
        stk := [(NONE,"caller")] |>
 End
 
+Definition probe_deep_env_def:
+  probe_deep_env = <|
+    current_src := NONE; var_types := FEMPTY; var_assignable := FEMPTY;
+    bare_globals := FEMPTY; bare_global_assignable := FEMPTY;
+    toplevel_vtypes := FEMPTY |+ ((NONE,"outer"), Type probe_deep_type)
+      |+ ((NONE,"donor"), Type probe_deep_type);
+    type_defs := FEMPTY;
+    fn_sigs := FEMPTY |+ ((NONE,"shrink"),
+      <|param_types := []; num_defaults := 0; ret_ty := BaseT (UintT 256)|>);
+    flag_members := FEMPTY |>
+End
+
+Theorem probe_deep_body_typed:
+  ?env_after. type_stmts probe_deep_env (BaseT (UintT 256))
+    [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+       (TopLevelName probe_deep_type (NONE,"donor"));
+     Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] = SOME env_after
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem probe_deep_context_typed:
+  context_well_typed probe_deep_context
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_deep_module_code:
+  !src. get_module_code probe_deep_context src =
+    if src = NONE then SOME probe_deep_code else NONE
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Theorem probe_deep_env_context:
+  env_context_consistent probe_deep_env probe_deep_context
+Proof
+  rw[vyperTypeInvariantsTheory.env_context_consistent_def,
+     vyperTypeInvariantsTheory.fn_sigs_consistent_def,
+     vyperTypeInvariantsTheory.fn_sigs_live_def,
+     vyperTypeInvariantsTheory.fn_sigs_declared_complete_def,
+     vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+     vyperTypeInvariantsTheory.bare_globals_complete_def,
+     vyperTypeInvariantsTheory.bare_global_assignable_complete_def,
+     vyperTypeInvariantsTheory.flag_members_complete_def,
+     probe_deep_env_def, probe_deep_module_code] >>
+  gvs[probe_deep_code_def, FLOOKUP_UPDATE, FUNION_FEMPTY_1,
+      FUNION_FEMPTY_2] >>
+  EVAL_TAC >> simp[]
+  >- (Cases_on `mut` >> simp[]) >>
+  gvs[AllCaseEqs()] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_deep_callable:
+  !fn fm nr args dflts ret body.
+    lookup_callable_function probe_deep_context.in_deploy fn
+      probe_deep_code = SOME (fm,nr,args,dflts,ret,body) ==>
+    fn = "shrink" /\ fm = Nonpayable /\ nr = F /\ args = [] /\
+    dflts = [] /\ ret = BaseT (UintT 256) /\
+    body = [Assign (BaseTarget (TopLevelNameTarget (NONE,"outer")))
+       (TopLevelName probe_deep_type (NONE,"donor"));
+     Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]
+Proof
+  rpt gen_tac >> Cases_on `fn = "shrink"` >> EVAL_TAC >> gvs[]
+QED
+
+Theorem probe_deep_functions_typed:
+  functions_well_typed probe_deep_context
+Proof
+  rewrite_tac[vyperTypeInvariantsTheory.functions_well_typed_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[probe_deep_module_code] >>
+  drule probe_deep_callable >> strip_tac >> gvs[] >>
+  qexists_tac `probe_deep_env with <|fn_sigs := fn_sigs;
+    bare_globals := bare_globals; bare_global_assignable := bare_global_assignable;
+    toplevel_vtypes := toplevel_vtypes; flag_members := flag_members|>` >>
+  qpat_x_assum `toplevel_vtypes_complete _ _` mp_tac >>
+  simp[vyperTypeInvariantsTheory.toplevel_vtypes_complete_def,
+       probe_deep_module_code, probe_deep_code_def] >>
+  strip_tac >>
+  `IS_SOME (lookup_var_slot_from_layout probe_deep_context F NONE "outer") /\
+   IS_SOME (lookup_var_slot_from_layout probe_deep_context F NONE "donor")`
+    by EVAL_TAC >>
+  `FLOOKUP toplevel_vtypes (NONE,"outer") = SOME (Type probe_deep_type) /\
+   FLOOKUP toplevel_vtypes (NONE,"donor") = SOME (Type probe_deep_type)` by
+    (conj_tac >> first_x_assum irule >> simp[]) >>
+  `!id. FLOOKUP bare_globals (NONE,id) = NONE` by
+    (gen_tac >> Cases_on `FLOOKUP bare_globals (NONE,id)` >> simp[] >>
+     qpat_x_assum `!src id ty. FLOOKUP bare_globals _ = _ ==> _` drule >>
+     CONV_TAC (computeLib.RESTR_EVAL_CONV [``FLOOKUP``]) >> simp[]) >>
+  `!id. FLOOKUP bare_global_assignable (NONE,id) = NONE` by
+    (gen_tac >> Cases_on `FLOOKUP bare_global_assignable (NONE,id)` >> simp[] >>
+     qpat_x_assum `!src id ty. FLOOKUP bare_global_assignable _ = _ ==> _` drule >>
+     CONV_TAC (computeLib.RESTR_EVAL_CONV [``FLOOKUP``]) >> simp[]) >>
+  qpat_x_assum `FLOOKUP toplevel_vtypes (NONE,"outer") = _` mp_tac >>
+  qpat_x_assum `FLOOKUP toplevel_vtypes (NONE,"donor") = _` mp_tac >>
+  qpat_x_assum `!id. FLOOKUP bare_globals _ = NONE` mp_tac >>
+  qpat_x_assum `!id. FLOOKUP bare_global_assignable _ = NONE` mp_tac >>
+  rpt (pop_assum kall_tac) >> rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``FLOOKUP``]) >>
+  simp[probe_deep_type_def, probe_word_outer_type_def]
+QED
+
 Theorem probe_deep_layout:
   type_slot_size (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) = 2 /\
   type_slot_size (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1)) (Dynamic 1)) = 3 /\
