@@ -35,6 +35,8 @@ Ancestors
   vyperValueOperation vyperState exprSimWordBuiltins
   vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
   exprOperandVar
+Libs
+  stepInstBaseLib
 
 Theorem hash_builtin_types:
   (b = Keccak256 \/ b = Sha256 \/ b = MethodId) /\
@@ -1132,8 +1134,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
-       bind_outputs_def, lookup_var_update_var] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``SHR``,
+       stepInstBaseLib.simp_opcode_clause ``SHL``, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def,
+       lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
   first_assum (qspec_then `sa.cs_next_var + 1` assume_tac) >>
@@ -1998,7 +2002,7 @@ QED
 Theorem expr_body_pre_base_result:
   expr_body_pre cenv cx env e es /\ expr_type e = BaseT bt /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,es') ==>
-  expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+  expr_sim_inv cenv cx env es' /\ source_supply es' /\ expr_res_ok res /\
   !v. res = INL v ==> value_has_type (BaseTV bt) v
 Proof
   strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
@@ -2053,6 +2057,7 @@ Theorem compile_typed_unary_builtin_vv_sim:
     local_ptrs_reserved cenv sm /\
     (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
+    source_supply es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
     expr_post ctx func cenv cx e es sa sm s0 es' v x s ==>
     frag_exec ctx sm sb (\t. t = s)
@@ -2069,7 +2074,7 @@ Proof
   `cs_appends (code x)` by simp[] >>
   drule_all hash_unary_suffix_cut >> strip_tac >>
   `!ar es1. (do r <- eval_expr cx e; read_result cx r od) es = (ar,es1) ==>
-     expr_sim_inv cenv cx env es1 /\ expr_res_ok ar /\
+     expr_sim_inv cenv cx env es1 /\ source_supply es1 /\ expr_res_ok ar /\
      !v. ar = INL v ==> value_has_type (BaseTV bty) v` by
     (rpt strip_tac >> drule_all expr_body_pre_base_result >> simp[]) >>
   drule_at (Pos last) eval_expr_unary_builtin_cases >> simp[] >>

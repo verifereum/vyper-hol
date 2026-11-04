@@ -149,7 +149,7 @@ QED
 Theorem expr_body_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
     expr_body_pre ce cx env (StructLit ann nsid fields) es /\
-    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
+    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' /\ source_supply es' ==>
     expr_body_pre ce cx env e es' /\
     (int_calls_expr (StructLit ann nsid fields) = [] ==>
      int_calls_expr e = [])
@@ -172,7 +172,8 @@ QED
 Theorem expr_sim_pre_struct_field:
   !ce cx env ann nsid fields e es es'.
     expr_sim_pre ce cx env (StructLit ann nsid fields) es /\
-    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' ==>
+    MEM e (MAP SND fields) /\ expr_sim_inv ce cx env es' /\
+    source_supply es' ==>
     expr_sim_pre ce cx env e es'
 Proof
   rw[expr_sim_pre_body] >> metis_tac[expr_body_pre_struct_field]

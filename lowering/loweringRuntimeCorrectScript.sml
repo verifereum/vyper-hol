@@ -47,6 +47,7 @@ Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect
+  vyperSourceSupplyDefs vyperSourceSupplyFields vyperSourceTransferSupply
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -56,7 +57,8 @@ val _ = Parse.hide "body";
 (* ===== The source side (#639) ===== *)
 
 (* The call valid_vyper_call selects runs call_external_body from the
-   bound arguments, with pending deletions finalised on success. *)
+   bound arguments, with pending deletions finalised on success and on
+   halt. *)
 Theorem call_external_selected_body:
   !tops am tx ret mut args fbody env orc.
     source_deployment_rel tops am tx /\
@@ -69,6 +71,8 @@ Theorem call_external_selected_body:
              (initial_evaluation_context am.sources am.layouts tx NONE)
              F mut (type_env tops) env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rw[source_deployment_rel_def] >>
@@ -414,7 +418,7 @@ Theorem call_external_body_run[local]:
                (INL v',
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
-    (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
+    (!e. res = INR e /\ (!v. e <> ReturnException v) /\ e <> HaltException ==>
      call_external_body orc [] am cx F mut tenv env fbody ret =
        (INR e, am, es'.requests))
 Proof
@@ -496,7 +500,7 @@ QED
    asks of the call's failure, given that a RevertData exit reverts. *)
 Theorem expr_exit_external_result[local]:
   !e r tops ret tx am rqs.
-    expr_exit (INR e : unit + exception) r /\
+    e <> HaltException /\ expr_exit (INR e : unit + exception) r /\
     (!d a t. e = Error (RevertData d) /\ r = Abort a t ==> a = Revert_abort) ==>
     external_call_result_rel tops ret tx (INR e, am, rqs) r
 Proof
@@ -539,6 +543,14 @@ Proof
   Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx
                           NONE) fbody es0` >> rename1 `_ = (res, es')` >>
   drule_all external_body_source_ok >> strip_tac >>
+  `source_supply es0` by
+    (drule_all source_typing_outcomes_supply >> strip_tac >>
+     drule machine_supply_initial_state >>
+     disch_then (qspecl_then [`[env]`, `[]`] assume_tac) >>
+     qspecl_then [`mut`,
+                  `initial_evaluation_context am.sources am.layouts tx NONE`]
+       mp_tac (Q.GENL [`mut`, `cx`] source_supply_action_send_call_value) >>
+     simp[source_supply_action_def] >> disch_then drule >> simp[]) >>
   drule_all call_external_selected_body >>
   disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
@@ -599,6 +611,7 @@ Proof
   strip_tac
   >- ((* an error or an assertion *)
       Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR e) _` >>
+      `e <> HaltException` by (strip_tac >> gvs[stmt_res_ok_def]) >>
       `!v. e <> ReturnException v` by
         (rpt strip_tac >> gvs[expr_exit_def] >>
          Cases_on `run_from fuel unit.cu_context func s0` >>
@@ -609,13 +622,14 @@ Proof
         expr_exit_external_result >>
       impl_tac
       >- (conj_tac >- first_assum ACCEPT_TAC >>
+          conj_tac >- first_assum ACCEPT_TAC >>
           rpt strip_tac >> gvs[] >>
           qspecl_then [`tops`, `bindings`, `unit.cu_context`, `func`, `cenv`,
                        `cx`, `env_t`, `env'`, `ret`, `RetQ`, `fbody`, `es0`,
                        `d`, `es'`, `sa`, `sb`, `cenv'`, `s0`, `fuel`, `a`, `t`]
             mp_tac external_body_revert_data_reverts >>
           impl_tac >- gvs[ret_pc_ok_def] >> simp[]) >>
-      simp[]) >>
+      Cases_on `e` >> gvs[]) >>
   (* a return *)
   gvs[Abbr`RetQ`, abstract_machine_from_state_def]
 QED
