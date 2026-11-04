@@ -3308,17 +3308,6 @@ Proof
   simp[pairTheory.FORALL_PROD] >> metis_tac[]
 QED
 
-Theorem aug_place_stage_intcall_metadata:
-  !cenv vs fs ts. compile_stage_intcall_args
-    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vs fs ts =
-    compile_stage_intcall_args cenv vs fs ts
-Proof
-  recInduct exprLoweringTheory.compile_stage_intcall_args_ind >>
-  rpt strip_tac >>
-  simp[exprLoweringTheory.compile_stage_intcall_args_def,
-       aug_place_unwrap_metadata, aug_place_memory_bytes_metadata]
-QED
-
 Theorem aug_place_typed_copy_metadata:
   (!cenv dst dt src st. compile_store_memory_typed
     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) dst dt src st =
@@ -3356,6 +3345,50 @@ Theorem aug_place_store_memory_metadata:
 Proof
   simp[contextTheory.compile_store_memory_def,
        cj 1 aug_place_typed_copy_metadata, aug_place_memory_bytes_metadata]
+QED
+
+Theorem aug_place_lowered_value_type_metadata:
+  !cenv e. lowered_value_type
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    lowered_value_type cenv e
+Proof
+  recInduct exprLoweringTheory.lowered_value_type_ind >>
+  simp[exprLoweringTheory.lowered_value_type_def]
+QED
+
+Theorem aug_place_punnable_metadata:
+  (!cenv s d. punnable
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) s d =
+     punnable cenv s d) /\
+  (!cenv ss ds. punnable_list
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ss ds =
+     punnable_list cenv ss ds)
+Proof
+  ho_match_mp_tac contextTheory.punnable_ind >>
+  rw[contextTheory.punnable_def, aug_place_memory_bytes_metadata]
+QED
+
+Theorem aug_place_ifexp_arm_metadata:
+  compile_ifexp_arm
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt at vv =
+    compile_ifexp_arm cenv rt at vv
+Proof
+  simp[exprLoweringTheory.compile_ifexp_arm_def,
+       contextTheory.same_memory_layout_def, aug_place_punnable_metadata,
+       aug_place_memory_bytes_metadata, aug_place_unwrap_metadata,
+       aug_place_store_memory_metadata]
+QED
+
+Theorem aug_place_stage_intcall_metadata:
+  !cenv vs fs ts. compile_stage_intcall_args
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) vs fs ts =
+    compile_stage_intcall_args cenv vs fs ts
+Proof
+  recInduct exprLoweringTheory.compile_stage_intcall_args_ind >>
+  rpt strip_tac >>
+  simp[exprLoweringTheory.compile_stage_intcall_args_def,
+       aug_place_unwrap_metadata, aug_place_memory_bytes_metadata,
+       aug_place_store_memory_metadata]
 QED
 
 Theorem aug_place_materialize_metadata:
@@ -3435,7 +3468,8 @@ Proof
   Induct >> simp[exprLoweringTheory.compile_make_tuple_def] >> rpt strip_tac >>
   gvs[] >> simp[SRULE [] aug_place_memory_bytes_metadata,
                 SRULE [] aug_place_unwrap_metadata,
-                SRULE [] aug_place_store_memory_metadata]
+                SRULE [] aug_place_store_memory_metadata,
+                SRULE [] aug_place_lowered_value_type_metadata]
 QED
 
 Theorem aug_place_make_array_elems_metadata:
@@ -3447,7 +3481,8 @@ Theorem aug_place_make_array_elems_metadata:
 Proof
   Induct >> simp[exprLoweringTheory.compile_make_array_elems_def] >> rpt strip_tac >>
   gvs[] >> simp[SRULE [] aug_place_unwrap_metadata,
-                SRULE [] aug_place_store_memory_metadata]
+                SRULE [] aug_place_store_memory_metadata,
+                SRULE [] aug_place_lowered_value_type_metadata]
 QED
 
 Theorem aug_place_make_array_metadata:
@@ -3476,7 +3511,8 @@ Proof
      compile_struct_lit g cenv ty fields buf off` by
     (rpt gen_tac >> first_x_assum irule >> metis_tac[]) >>
   simp[exprLoweringTheory.compile_struct_lit_def,
-       SRULE [] aug_place_unwrap_metadata, SRULE [] aug_place_store_memory_metadata]
+       SRULE [] aug_place_unwrap_metadata, SRULE [] aug_place_store_memory_metadata,
+                SRULE [] aug_place_lowered_value_type_metadata]
 QED
 
 Theorem aug_place_attribute_metadata:
@@ -3525,7 +3561,7 @@ Theorem aug_place_ext_kwarg_metadata:
 Proof
   strip_tac >> simp[exprLoweringTheory.compile_ext_call_kwarg_def,
     exprLoweringTheory.lower_value_def, aug_place_materialize_metadata,
-    aug_place_unwrap_metadata]
+    aug_place_unwrap_metadata, SRULE [] aug_place_lowered_value_type_metadata]
 QED
 
 Theorem aug_place_ext_kwargs_metadata:
@@ -3551,15 +3587,6 @@ Proof
   strip_tac >> Cases_on `op` >>
   simp[FUN_EQ_THM, exprLoweringTheory.compile_acc_def,
        exprLoweringTheory.lower_value_def, aug_place_unwrap_metadata]
-QED
-
-Theorem aug_place_lowered_value_type_metadata:
-  !cenv e. lowered_value_type
-    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
-    lowered_value_type cenv e
-Proof
-  recInduct exprLoweringTheory.lowered_value_type_ind >>
-  simp[exprLoweringTheory.lowered_value_type_def]
 QED
 
 Theorem aug_place_ext_arg_types_metadata:
@@ -3900,7 +3927,9 @@ Resume aug_place_expr_body_metadata[ifexp]:
     lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ety x =
     lower_value g cenv ety x` by
     (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
-  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def]
+  simp[exprLoweringTheory.compile_expr_body_def, expr_type_def,
+       aug_place_ifexp_arm_metadata,
+       SRULE [] aug_place_lowered_value_type_metadata]
 QED
 Resume aug_place_expr_body_metadata[structlit]:
   `!name x ety. MEM (name,x) fields ==>
