@@ -9,7 +9,7 @@ Ancestors
   vyperTyping valueEncoding arithmetic vyperValueOperation valueEncodingProofs list
   vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
   words finite_map option exprSimArrayIndex valueEncodingProps accountsRelProps
-  venomState venomMemDefs vyperArith integer integer_word
+  venomState venomMemDefs vyperArith integer integer_word exprNoEffectStorage
 Libs
   pairLib
 
@@ -838,4 +838,45 @@ Proof
     (irule LESS_TRANS >> goal_assum (drule_at Any) >> simp[w2n_lt]) >>
   simp[extend_place_storage_array_index, idx_in_range_def, expr_exit_def,
        w2n_n2w, LESS_MOD]
+QED
+
+(* A live captured header is observable through the post-index state relation.
+   Liveness is an explicit premise, not a consequence of target_post. *)
+Theorem stmt_state_rel_storage_live_head:
+  !ctx func cenv cx es s tr slot tv.
+    stmt_state_rel ctx func cenv cx es s /\
+    storage_read_live cx tr (get_storage cx es tr) slot tv /\
+    0 < type_slot_size tv ==>
+    (if tr then tload slot s else sload slot s) =
+      lookup_storage slot (get_storage cx es tr)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
+     (get_storage cx es tr)
+     (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+         vyperStorageBackendTheory.get_storage_def,
+         vfmStateTheory.lookup_account_def]) >>
+  drule_all storage_agree_read_head >> strip_tac >>
+  Cases_on `tr` >> gvs[sload_def, tload_def]
+QED
+
+Theorem target_index_storage_live_head:
+  !ctx func cenv cx e es1 res es2 s tr slot tv.
+    ~expr_has_effect e /\
+    (do raw <- eval_expr cx e; read_result cx raw od) es1 = (res,es2) /\
+    stmt_state_rel ctx func cenv cx es2 s /\
+    storage_read_live cx tr (get_storage cx es1 tr) slot tv /\
+    0 < type_slot_size tv ==>
+    (if tr then tload slot s else sload slot s) =
+      lookup_storage slot (get_storage cx es2 tr)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all eval_expr_read_noeffect_storage >>
+  disch_then (qspec_then `tr` assume_tac) >>
+  irule stmt_state_rel_storage_live_head >>
+  conj_tac
+  >- (qexists_tac `tv` >> simp[]) >>
+  goal_assum (drule_at Any)
 QED
