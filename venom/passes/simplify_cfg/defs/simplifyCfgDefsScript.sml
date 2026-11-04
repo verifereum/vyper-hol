@@ -776,3 +776,39 @@ Definition simplify_cfg_ctx_def:
   simplify_cfg_ctx ctx =
     ctx with ctx_functions := MAP simplify_cfg_fn ctx.ctx_functions
 End
+
+(* ===== Precondition ===== *)
+
+(* What the pass needs of a function's PHIs and JNZ conditions for its
+   output to run like its input.  A block left with one predecessor has its
+   PHIs turned into sequential ASSIGNs; PHIs in the first block become NOPs;
+   a JNZ whose targets meet is dropped with its condition.  These facts make
+   each change invisible:
+   - the first block has no PHI (it runs with no previous block, so a PHI
+     there fails);
+   - in reachable blocks, a PHI's output is written by no other instruction;
+   - in a reachable block, each PHI has a value for each reachable
+     predecessor;
+   - every use, and every PHI value at its predecessor's end, is written on
+     every path from the entry (fn_defs_reach_uses), so a dropped JNZ
+     condition is defined, and a one-predecessor block's PHI never reads
+     another PHI output of its block: the shortest path to the predecessor
+     avoids the block. *)
+Definition simplify_cfg_fn_ok_def:
+  simplify_cfg_fn_ok fn <=>
+    EVERY (\inst. inst.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions /\
+    (!bb inst bb' inst' v.
+       MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+       MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+       MEM v inst.inst_outputs /\
+       MEM bb' fn.fn_blocks /\ fn_reachable fn bb'.bb_label /\
+       MEM inst' bb'.bb_instructions /\ MEM v inst'.inst_outputs ==>
+       inst' = inst) /\
+    (!bb inst pred_bb.
+       MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+       MEM inst bb.bb_instructions /\ inst.inst_opcode = PHI /\
+       MEM pred_bb fn.fn_blocks /\ fn_reachable fn pred_bb.bb_label /\
+       MEM bb.bb_label (bb_succs pred_bb) ==>
+       ?op. resolve_phi pred_bb.bb_label inst.inst_operands = SOME op) /\
+    fn_defs_reach_uses fn
+End

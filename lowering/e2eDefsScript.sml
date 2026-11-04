@@ -57,7 +57,7 @@ Definition source_storage_ok_def:
 End
 
 Definition call_outcomes_ok_def:
-  call_outcomes_ok (tops : toplevel list) am tx os <=>
+  call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
       EVERY (\outcome.
                LENGTH outcome.co_returnData < dimword(:256) /\
@@ -148,8 +148,17 @@ Theorem call_external_transaction_pending_deletions:
 Proof
   rw[call_external_transaction_def] >> Cases_on `r`
   >- (qpat_x_assum `call_external _ _ _ _ = _` mp_tac >>
-      simp[call_external_def] >> rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-      rw[] >> simp[])
+      simp[call_external_def] >>
+      Cases_on `ALOOKUP (clear_machine_logs am).sources tx.target` >> simp[] >>
+      qmatch_goalsub_abbrev_tac `get_self_code cx` >>
+      Cases_on `(case find_function_module (clear_machine_logs am) tx.target tx.function_name of
+                   NONE => get_self_code cx
+                 | SOME sid => get_module_code cx (SOME sid))` >> simp[] >>
+      Cases_on `lookup_exported_function cx (clear_machine_logs am) tx.function_name` >> simp[] >>
+      rename1 `SOME fn` >> PairCases_on `fn` >> simp[] >>
+      Cases_on `call_external_function orc gobs (clear_machine_logs am) cx fn1 fn0 x'' x' fn2 fn3 tx.args fn5 fn4` >>
+      rename1 `(res, tail)` >> PairCases_on `tail` >> Cases_on `res` >> simp[] >>
+      rw[] >> simp[finalize_pending_deletions_metadata])
   >> drule call_external_error_rollback >> simp[clear_machine_logs_def]
 QED
 
@@ -396,7 +405,7 @@ Definition call_result_rel_def:
           transient_agree cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs /\
-          LIST_REL (request_agree cx) rqs (MAP FST trace)
+          LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                       (exc = Reverted \/ s = "UNREACHABLE")

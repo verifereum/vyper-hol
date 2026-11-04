@@ -527,8 +527,13 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, storage_copy_backend_fold,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
-  irule stmt_state_rel_allocas_frame >> simp[] >>
-  qexistsl_tac [`es`, `s`] >> simp[] >> Cases_on `tr` >>
+  `immutable_base_zero cenv s1` by
+    (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >>
+     Cases_on `tr` >> simp[Abbr `s1`, storage_copy_backend_fold, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
+  qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
 
@@ -609,7 +614,8 @@ Proof
    fmp_room ctx func (s with vs_vars := V)` by
     (irule fmp_room_fields_cong >> simp[]) >>
   simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
-       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       local_region_def, local_backed_def, immutable_base_zero_alt,
+       lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,

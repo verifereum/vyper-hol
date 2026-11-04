@@ -85,7 +85,7 @@ End
 Theorem eval_expr_unop_cases:
   !cx ann bi e1 es res es'.
     (do r <- eval_expr cx (Builtin ann bi [e1]); read_result cx r od) es = (res, es') /\ bi <> Len /\
-    builtin_args_length_ok bi 1 ==>
+    ~precompile_builtin bi /\ builtin_args_length_ok bi 1 ==>
     (?exc. (do r <- eval_expr cx e1; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
     ?v1. (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1, es') /\
          res = unop_result cx ann bi [expr_type e1] v1 es'
@@ -143,7 +143,7 @@ QED
    at ty1, and unop_frag. *)
 Theorem compile_unop_sim:
   !ctx func cenv cx ty ann bi e1 ty1 f es.
-    bi <> Len /\ builtin_args_length_ok bi 1 /\
+    bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
     is_word_type ann /\ is_word_type (expr_type e1) /\
     (!sa sb op.
        lower_value compile_expr cenv ty (Builtin ann bi [e1]) sa = (op, sb) ==>
@@ -180,7 +180,8 @@ Proof
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `builtin_args_length_ok bi 1 /\ bi <> Len` by asm_rewrite_tac[] >>
+  `builtin_args_length_ok bi 1 /\ bi <> Len /\ ~precompile_builtin bi` by
+    asm_rewrite_tac[] >>
   drule_all eval_expr_unop_cases >> strip_tac
   >- ((* e1 raises *)
       qpat_x_assum `expr_sim _ _ _ _ _ e1 _`

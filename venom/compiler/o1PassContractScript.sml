@@ -49,8 +49,8 @@ Ancestors
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
-  passSimulationDefs vfmState extCallOracle finite_map dretDesugarDefs fcgDefs
-  list
+  passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
+  fcgDefs list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -306,6 +306,14 @@ Definition unit_first_block_no_phi_def:
     EVERY first_block_no_phi unit.cu_context.ctx_functions
 End
 
+(* Definite assignment of the source: every variable a use reads is
+   written on every path to it.  SimplifyCFG's pre-walk needs it, and S3
+   owes it (S2b). *)
+Definition unit_defs_reach_uses_def:
+  unit_defs_reach_uses unit <=>
+    EVERY fn_defs_reach_uses unit.cu_context.ctx_functions
+End
+
 (* The lowering leaves every function's FMP convention unset; only
    FmpLowering sets it. *)
 Definition unit_fmp_unsealed_def:
@@ -533,6 +541,29 @@ Definition o1_src_inv_def:
     taint_within D C vs /\ fmp_free_ctx C /\ mem_inv dload_offset_ok C vs
 End
 
+(* The pre-walk's input, the lowering's output: no PHI, and every variable
+   a use reads is written on every path to it (S3 owes the latter; the
+   source shape gives the former).  SimplifyCFG needs both: they make its
+   PHI fix-up and its dropped JNZ conditions invisible. *)
+Definition o1_pre_walk_inv_def:
+  o1_pre_walk_inv D C vs <=>
+    o1_src_inv D C vs /\
+    EVERY (\fn. fn_defs_reach_uses fn /\
+                EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+      C.ctx_functions
+End
+
+(* The walk's input (row 0), SimplifyCFG's pre-walk output: every block
+   reachable, definite assignment, and no PHI reading a variable written
+   twice (vacuous here, with no PHI yet), which MakeSSA needs. *)
+Definition o1_walk_src_inv_def:
+  o1_walk_src_inv D C vs <=>
+    o1_src_inv D C vs /\
+    EVERY (\fn. all_reachable fn /\ fn_defs_reach_uses fn /\
+                fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn)
+      C.ctx_functions
+End
+
 (* After ConcretizeMemLoc: every access below the context's layout end,
    max_live_eom (the largest function layout end and global reserved end),
    where codegen's spill regions start.  The bound is the context's, not
@@ -550,6 +581,12 @@ Definition o1_lowered_inv_def:
     ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
+(* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
+   second run establishes it and SimplifyCFG keeps it. *)
+Definition o1_ssa_inv_def:
+  o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
+End
+
 (* The invariant of the k-th stage context of the walk (k = 0 its input,
    k = 9 its output).  A pass run's contract takes row k to row k+1; a
    fact a run needs of its input is a conjunct of its row, put there by
@@ -560,10 +597,13 @@ End
    order. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
-    if k <= 2 then
+    if k = 0 then
+      (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k <= 2 then
       (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
     else if k = 3 then
       (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k = 5 \/ k = 6 then o1_ssa_inv
     else o1_lowered_inv
 End
 

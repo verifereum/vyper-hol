@@ -34,7 +34,8 @@
  *   fresh_vars_wrt       — compiler var counter ahead of existing venom vars
  *   local_region         — a live local's region through its pointer variable
  *   local_backed         — what backs a live local's region in the current frame
- *   not_local_ptr        — a variable is not a live local's pointer
+ *   not_local_ptr        — a variable is not a live local's pointer or the
+ *                          constructor's immutable base
  *   bound_labels         — set of labels bound to blocks in compile state
  *   compiler_labels_future — co-domain of fresh_label for counter values ≥ n
  *)
@@ -43,7 +44,7 @@ Theory compileEnv
 Ancestors
   immutableValue immutableEncoding vyperStorageLayoutSafety
   venomExecSemantics venomInst venomPolicyTypes
-  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI
+  vyperState vyperContext vyperValue vyperABI vyperEvent contractABI vyperTypeSystem
   byte keccak finite_map pred_set list rich_list
 Libs
   monadsyntax
@@ -885,11 +886,21 @@ End
 
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
-Definition not_local_ptr_def:
-  not_local_ptr cenv scopes x ⇔
+Definition not_scope_ptr_def:
+  not_scope_ptr cenv scopes x ⇔
     ∀name entry sz.
       lookup_scopes name scopes = SOME entry ⇒
       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
+End
+
+(* x is neither the pointer variable of a live local nor the constructor's
+   immutable base, so assigning it leaves the locals and the base in place. *)
+Definition not_local_ptr_def:
+  not_local_ptr cenv scopes x ⇔
+    (∀name entry sz.
+       lookup_scopes name scopes = SOME entry ⇒
+       FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)) ∧
+    cenv.ce_imm_alloca ≠ SOME (Var x)
 End
 
 (* The locals of cenv are held through pointer variables that were handed out
@@ -903,14 +914,20 @@ End
    - no compiler variable fresh at st is a local's pointer, so a temporary of
      the code compiled from st on never overwrites one;
    - distinct locals have distinct pointers, so declaring a local leaves the
-     others' pointers alone. *)
+     others' pointers alone;
+   - the constructor's immutable base variable (ASSIGN 0 in the prologue,
+     before the body) is no fresh compiler variable and no local's pointer,
+     so neither a temporary nor a local's pointer overwrites it. *)
 Definition local_ptrs_reserved_def:
   local_ptrs_reserved cenv (st:compile_state) ⇔
     (∀name off sz. FLOOKUP cenv.ce_vars name ≠ SOME (MemLoc off sz)) ∧
-    ∀n1 n2 p sz1 sz2.
-      FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
-      not_fresh_at st p ∧
-      (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)
+    (∀n1 n2 p sz1 sz2.
+       FLOOKUP cenv.ce_vars n1 = SOME (PtrVar (Var p) sz1) ⇒
+       not_fresh_at st p ∧
+       (FLOOKUP cenv.ce_vars n2 = SOME (PtrVar (Var p) sz2) ⇒ n1 = n2)) ∧
+    ∀x. cenv.ce_imm_alloca = SOME (Var x) ⇒
+      not_fresh_at st x ∧
+      ∀name sz. FLOOKUP cenv.ce_vars name ≠ SOME (PtrVar (Var x) sz)
 End
 
 (* What backs a live local's region [base, base + sz) in the current frame
@@ -1148,11 +1165,12 @@ End
    ce_module_vars maps (src_id_opt, name) to ImmutableLoc byte_offset.
    Semantic contents and capacity bounds do not determine unused padding;
    exact staging is tracked separately in immutableRelation. *)
-(* Base invariant is separate: register updates need not preserve it unless
-   they leave the chosen region operand alone. *)
+(* Constructor accesses keep the region base at zero and retain the runtime
+   label needed by the deployment epilogue. *)
 Definition immutable_base_zero_def:
   immutable_base_zero cenv ss <=>
-    !base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w
+    (!base. cenv.ce_imm_alloca = SOME base ==> eval_operand base ss = SOME 0w) /\
+    (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin"))
 End
 
 Definition immutables_rel_def:
@@ -1542,6 +1560,37 @@ Definition is_word_type_def:
   is_word_type (FlagT _) = T ∧
   is_word_type _ = F
 End
+
+Theorem type_widens_to_word:
+  !tenv t u. type_widens_to tenv t u /\ is_word_type u ==> t = u
+Proof
+  rw[type_widens_to_def] >>
+  Cases_on `t` >> Cases_on `u` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT b1) (BaseT b2)` >>
+  Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def, is_word_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT d1)) (BaseT (BytesT d2))` >>
+  Cases_on `d1` >> Cases_on `d2` >> gvs[arg_type_fits_def, is_word_type_def]
+QED
+
+Theorem arg_type_fits_bytestring_source:
+  !t u. is_bytestring_type u /\ arg_type_fits t u ==> is_bytestring_type t
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `u` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT ub` >> Cases_on `ub` >> gvs[is_bytestring_type_def]
+  >~ [`is_bytestring_type (BaseT (BytesT bd))`]
+  >- (Cases_on `bd` >> gvs[is_bytestring_type_def] >>
+      Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def] >>
+      rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+      gvs[arg_type_fits_def, is_bytestring_type_def]) >>
+  Cases_on `t` >> gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT tb) _` >> Cases_on `tb` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT bd)) _` >> Cases_on `bd` >>
+  gvs[arg_type_fits_def, is_bytestring_type_def]
+QED
 
 (* ===== Internal Calling Convention ===== *)
 

@@ -369,7 +369,7 @@ Datatype:
 End
 
 Datatype:
-  variable_visibility = Public | Private
+  variable_visibility = Public bool | Private
 End
 
 Datatype:

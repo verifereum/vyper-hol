@@ -1676,7 +1676,16 @@ Proof
 QED
 
 Resume dynamic_frag_writes_fresh_exact[state]:
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (`not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      `FLOOKUP s0.vs_vars p = SOME 0w` by
+        fs[stmt_state_rel_def, immutable_base_zero_def,
+           eval_operand_def, lookup_var_def] >>
+      qpat_x_assum `!x v. not_fresh_at sa x /\ _ ==> _`
+        (qspecl_then [`p`, `0w`] mp_tac) >>
+      fs[lookup_var_def]) >>
   fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> res_tac) >>
@@ -1919,7 +1928,16 @@ Proof
 QED
 
 Resume dynamic_frag_read_fresh_exact[state]:
-  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`]
+  >- (`not_fresh_at sa p` by
+        (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      `FLOOKUP s0.vs_vars p = SOME 0w` by
+        fs[stmt_state_rel_def, immutable_base_zero_def,
+           eval_operand_def, lookup_var_def] >>
+      qpat_x_assum `!x v. not_fresh_at sa x /\ _ ==> _`
+        (qspecl_then [`p`, `0w`] mp_tac) >>
+      fs[lookup_var_def]) >>
   fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
   first_x_assum drule_all >> strip_tac >>
   `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> res_tac) >>

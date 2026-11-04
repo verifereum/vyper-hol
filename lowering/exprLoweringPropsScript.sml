@@ -38,10 +38,14 @@
  *   stmt_state_rel_cenv_cong — the relations at another compile
  *                              environment that agrees on what they read
  *   local_ptrs_reserved_next_var, local_ptrs_reserved_fresh,
- *   local_ptrs_reserved_not_live — local_ptrs_reserved survives a later
- *                              cs_next_var, and fresh variables and the
+ *   local_ptrs_reserved_not_live, local_ptrs_reserved_imm_base —
+ *                              local_ptrs_reserved survives a later
+ *                              cs_next_var, fresh variables and the
  *                              pointers of locals out of scope are not
- *                              live local pointers
+ *                              live local pointers, and the immutable base
+ *                              is not fresh
+ *   immutable_base_zero_alt, immutable_base_zero_frame — the base holds 0
+ *                              while its variable keeps its value
  *
  * Mirrors correctness of: exprLoweringScript.sml (compile_expr)
  * Source semantics: vyperInterpreterScript.sml (eval_expr)
@@ -343,6 +347,32 @@ Proof
   metis_tac[compileEnvTheory.regions_disjoint_def]
 QED
 
+(* Expose the base operand and constructor runtime-label requirements. *)
+Theorem immutable_base_zero_alt:
+  !cenv ss.
+    immutable_base_zero cenv ss <=>
+    (!base. cenv.ce_imm_alloca = SOME base ==>
+      case base of
+        Lit v => v = 0w
+      | Var x => FLOOKUP ss.vs_vars x = SOME 0w
+      | Label l => FLOOKUP ss.vs_labels l = SOME 0w) /\
+    (cenv.ce_is_ctor ==> IS_SOME (FLOOKUP ss.vs_labels "runtime_begin"))
+Proof
+  rw[immutable_base_zero_def] >> Cases_on `cenv.ce_imm_alloca` >> simp[] >>
+  Cases_on `x` >>
+  simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem immutable_base_zero_frame:
+  !cenv s s'.
+    immutable_base_zero cenv s /\ s'.vs_labels = s.vs_labels /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==> lookup_var x s' = lookup_var x s) ==>
+    immutable_base_zero cenv s'
+Proof
+  rw[immutable_base_zero_alt] >> first_x_assum drule >>
+  every_case_tac >> gvs[lookup_var_def]
+QED
+
 (* state_rel in func, the function running, with the Venom-side facts a
    statement fragment needs and keeps:
    - alloca_inv: the recorded allocations are disjoint and below the
@@ -354,12 +384,15 @@ QED
    - alloca_room: func's allocations still to come, and a frame for each
      function it can call, fit below 2 ** 256, so the frontier stays below
      2 ** 256 and a declaration's ALLOCA hands out its base unwrapped,
-     after other declarations, inside bodies and in callees. *)
+     after other declarations, inside bodies and in callees;
+   - immutable_base_zero: the constructor's immutable base operand holds 0,
+     so the ADD of the base in a constructor immutable access is the offset
+     itself, and the runtime label remains available for its epilogue. *)
 Definition stmt_state_rel_def:
   stmt_state_rel ctx func cenv cx vs ss ⇔
     state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
     fmp_room ctx func ss ∧
-    immutable_alloca_sep func cenv cx vs ss ∧
+    immutable_alloca_sep func cenv cx vs ss ∧ immutable_base_zero cenv ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
       inst.inst_operands = [Lit n] ∧
@@ -402,7 +435,7 @@ Theorem stmt_state_rel_allocas_frame:
     stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
-    s'.vs_fmp = s.vs_fmp ==>
+    s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' ==>
     stmt_state_rel ctx func cenv cx es' s'
 Proof
   rw[stmt_state_rel_def]
@@ -714,7 +747,8 @@ Theorem state_rel_update_var_local:
 Proof
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
-    (irule local_ptrs_rel_update_var >> fs[state_rel_def]) >>
+    (irule local_ptrs_rel_update_var >> fs[state_rel_def] >>
+     metis_tac[not_local_ptr_scope]) >>
   gvs[state_rel_def, update_var_def, storage_rel_def,
      transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
      contract_storage_def, contract_transient_def] >> metis_tac[]
@@ -789,7 +823,7 @@ Proof
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def,
-       local_region_def, lookup_var_def]
+       local_region_def, lookup_var_def, immutable_base_zero_alt]
 QED
 
 Theorem stmt_state_rel_inst_idx:
@@ -805,7 +839,8 @@ Proof
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
-       pending_alloca_size_def, immutable_alloca_sep_def]
+       pending_alloca_size_def, immutable_alloca_sep_def,
+       immutable_base_zero_alt]
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -908,13 +943,15 @@ Theorem stmt_state_rel_cenv_cong:
            FLOOKUP cenv'.ce_module_vars n = SOME l) /\
     (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv.ce_module_vars n = SOME l) /\
-    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
+    cenv'.ce_imm_alloca = cenv.ce_imm_alloca ==>
     stmt_state_rel ctx func cenv cx es ss
 Proof
   rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
   >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >>
-      fs[local_region_def] >> metis_tac[]) >>
+      fs[local_region_def] >> metis_tac[])
+  >~ [`immutable_base_zero _ _`] >- gvs[immutable_base_zero_def] >>
   res_tac
 QED
 
@@ -932,7 +969,10 @@ Proof
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[update_var_def] >> rpt strip_tac >> qexists_tac `id` >>
       fs[local_region_def, lookup_var_def, not_local_ptr_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
+      fs[not_local_ptr_def, update_var_def, lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
   simp[update_var_def] >> metis_tac[]
 QED
 
@@ -964,8 +1004,19 @@ Theorem local_ptrs_reserved_not_live:
     lookup_scopes id scopes = NONE ==>
     not_local_ptr cenv scopes p
 Proof
-  rw[local_ptrs_reserved_def, not_local_ptr_def] >> strip_tac >>
+  rw[local_ptrs_reserved_def, not_local_ptr_def] >> strip_tac
+  >~ [`cenv.ce_imm_alloca = SOME (Var p)`] >- metis_tac[] >>
   `name = id` by metis_tac[] >> gvs[]
+QED
+
+(* The constructor's immutable base is no variable the compiler hands out
+   from st on. *)
+Theorem local_ptrs_reserved_imm_base:
+  !cenv st p.
+    local_ptrs_reserved cenv st /\ cenv.ce_imm_alloca = SOME (Var p) ==>
+    not_fresh_at st p
+Proof
+  rw[local_ptrs_reserved_def]
 QED
 
 (* step_inst_base for MLOAD: reads 32 bytes from memory *)
@@ -4157,26 +4208,26 @@ Theorem ci_mono_builtin_hash[local]:
   ∀bi. (bi = Keccak256 ∨ bi = Sha256) ⇒
   ci_mono st (SND (compile_builtin_dispatch_body f cenv ret_ty ty bi args st))
 Proof
-  strip_tac >> gen_tac >> Cases_on `bi` >> simp[]
-  >- (simp[compile_builtin_dispatch_body_def, LET_THM] >>
-      rpt IF_CASES_TAC >>
-      Cases_on `expr_type (HD args)` >> simp[] >>
-      TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-           TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
-      rpt (irule ci_mono_uncurry >> reverse conj_tac
-           >- simp[ci_mono_lower_value_cfn]
-           >> rpt gen_tac >> BETA_TAC) >>
-      simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
-           ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word]) >>
+  strip_tac >> gen_tac >> Cases_on `bi` >> simp[] >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt IF_CASES_TAC >>
-  Cases_on `expr_type (HD args)` >> simp[] >>
-  TRY (rename1 `BaseT bt` >> Cases_on `bt` >> simp[] >>
-       TRY (rename1 `BytesT bound` >> Cases_on `bound` >> simp[])) >>
+  rpt IF_CASES_TAC >> Cases_on `expr_type (HD args)` >> simp[] >>
   rpt (irule ci_mono_uncurry >> reverse conj_tac
        >- simp[ci_mono_lower_value_cfn]
        >> rpt gen_tac >> BETA_TAC) >>
-  simp[ci_mono_as_stack_val, ci_mono_compile_sha256_bytes,
+  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_bytes,
+       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
+       ci_mono_compile_sha256_bytes, ci_mono_compile_sha256_bytesm,
+       ci_mono_compile_sha256_word] >>
+  Cases_on `b` >> simp[] >>
+  rpt (irule ci_mono_uncurry >> reverse conj_tac
+       >- simp[ci_mono_lower_value_cfn]
+       >> rpt gen_tac >> BETA_TAC) >>
+  simp[ci_mono_as_stack_val, ci_mono_compile_keccak256_word,
+       ci_mono_compile_sha256_word] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >> simp[] >>
+  irule ci_mono_uncurry >>
+  simp[ci_mono_lower_value_cfn, ci_mono_as_stack_val,
+       ci_mono_compile_keccak256_bytesm, ci_mono_compile_keccak256_word,
        ci_mono_compile_sha256_bytesm, ci_mono_compile_sha256_word]
 QED
 
@@ -4205,12 +4256,18 @@ Theorem ci_mono_builtin_membership[local]:
           as_stack_val ret_ty
             (compile_var_array_membership cenv needle vv rhs_ty is_in st'))))
 Proof
-  strip_tac >> drule ci_mono_membership_var_array >> strip_tac >>
-  Cases_on `e` >> gs[LET_THM] >>
-  rename1 `Builtin _ bt _` >> Cases_on `bt` >> gs[] >>
+  strip_tac >>
+  `!e. ci_mono st (SND
+     ((\(vv,st'). as_stack_val ret_ty
+         (compile_var_array_membership cenv needle vv rhs_ty is_in st'))
+       (f cenv rhs_ty e st)))` by
+    (gen_tac >> irule ci_mono_uncurry >>
+     simp[ci_mono_as_stack_val, ci_mono_compile_var_array_membership]) >>
+  Cases_on `e` >> simp[LET_THM] >>
+  rename1 `Builtin ann bi elems` >> Cases_on `bi` >> simp[] >>
   irule ci_mono_uncurry >> reverse conj_tac
   >- simp[ci_mono_compile_multi_exprs] >>
-  rpt gen_tac >> BETA_TAC >> rpt IF_CASES_TAC >>
+  rpt gen_tac >> Cases_on `is_in` >>
   simp[ci_mono_as_stack_val, ci_mono_compile_list_membership_in,
        ci_mono_compile_list_membership_notin]
 QED
