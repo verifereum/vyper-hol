@@ -114,3 +114,82 @@ Proof
   strip_tac >> sym_tac >> irule current_token_parent_edge >>
   metis_tac[current_single_pred_idom, current_token_root_idom]
 QED
+
+(* DIAGNOSTIC ONLY -- proposed pruned cut, NOT a theorem or an axiom.
+
+   Ordinary/non-PHI-operand branch (all variables universally quantified):
+
+   wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\
+   fn_defs_reach_uses fn /\ entry_block fn = SOME eb /\
+   MEM a (fn_labels fn) /\ MEM b (fn_labels fn) /\
+   fn_cfg_edge fn a b /\ b <> eb.bb_label /\
+   LENGTH (cfg_preds_of (cfg_analyze fn) b) > 1 /\
+   fn_entry_label fn <> SOME b /\
+   (!p. MEM p (cfg_preds_of (cfg_analyze fn) b) ==>
+        cfg_reachable_of (cfg_analyze fn) p) /\
+   (!w l. ins w l ==> MEM l (fn_labels fn)) /\
+   (!d y.
+     ((?db di. MEM db fn.fn_blocks /\ db.bb_label = d /\
+                MEM di db.bb_instructions /\ MEM v di.inst_outputs) \/ ins v d) /\
+     MEM y (frontier_of (dom_analyze (cfg_analyze fn) fn) d) /\
+     (?vs. ALOOKUP
+       (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+          (liveness_analyze fn) fn) y = SOME vs /\ MEM v vs) ==>
+     ins v y) /\
+   current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+   current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+   lookup_block b fn.fn_blocks = SOME bb /\ ~ins v b /\
+   (!phi. MEM phi (collect_phis bb.bb_instructions) ==>
+          ~MEM v phi.inst_outputs) /\
+   MEM v (live_vars_at (liveness_analyze fn) b
+     (LENGTH (collect_phis bb.bb_instructions))) /\
+   (?vs. ALOOKUP
+     (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+        (liveness_analyze fn) fn) b = SOME vs /\ MEM v vs) /\
+   ~(?pb phi pred. MEM pb fn.fn_blocks /\
+        MEM phi (collect_phis pb.bb_instructions) /\
+        MEM (pred,v) (phi_pairs phi.inst_operands))
+   ==>
+   current_block_token fn ins v a
+     (current_inherited_token fn ins v (REVERSE ps)) =
+   current_inherited_token fn ins v (REVERSE qs).
+
+   The duplicate-looking selected-map and cut-slot premises intentionally
+   expose the missing adapter rather than assume the two queries coincide.
+   Original defining blocks are stated directly, not via an unproved converse
+   of compute_defs_support.  Actual placement must eventually instantiate
+   ins from its insertion provenance, NOT the larger processed/has_phi set.
+
+   Exceptional PHI-operand branch: replace the final negated existential by
+   its positive form and add fn_phi_operands_single_def fn.  At the demanded
+   cut use current_live_phi_cut_single_definition to obtain one defining
+   occurrence, semantic dominance, and a local earlier index if appropriate.
+   This branch must not use ordinary liveness propagation through PHI inputs.
+
+   Missing interfaces, not assumptions silently available to a proof:
+   1. Finite analyzed parent-chain membership <=> semantic fn_dominates,
+      plus comparability/common prefix, with an adapter from fn_dominates
+      to the analyzed dominates relation.  Chain existence alone does not
+      identify which sites lie on a predecessor's chain.
+   2. A differing-token witness: the last original/inserted changing site on
+      one suffix after the chains' common prefix, together with a CFG route
+      to the target and a definition-free suffix.  Must handle loops and
+      revisited blocks, not assume the dominator chain is a CFG path.
+   3. First frontier crossing: such a site dominates a reachable predecessor
+      of a crossing y but does not strictly dominate y.  dom_frontier_correct
+      additionally requires y non-entry, >1 predecessors and all reachable;
+      these must be proved at y, not merely assumed at final block b.
+   4. Selected-liveness backward transport on that definition-free suffix.
+      current_demand is an over-approximation of the selected live sets:
+      demand alone cannot activate live-filtered closure.  The source audit
+      found no exported current_demand_path/current_demand_at_phi_cut/
+      current_demand_cross_block under those names.  The available boundary
+      current_liveness_edge_origin gives an inversion, not this converse.
+   5. For the exceptional branch, singleton-definition availability gives
+      semantic dominance (DemandDominance), but still needs (1) and an
+      insertion-locality argument.  current_phi_operand_available currently
+      lives in Defined with protected SCCP prerequisites; do not import it
+      into this lightweight graph boundary or presume it is build-verified.
+
+   None of (1)--(5), nor either candidate cut, is exported by this file.
+*)
