@@ -730,3 +730,99 @@ Proof
   >- (rpt gen_tac >> Cases_on `r` >> metis_tac[label_preserving_abi_decode]) >>
   gen_tac >> LABEL_LEAF
 QED
+
+Theorem label_preserving_dynarray_pop:
+  !s r t. compile_dynarray_pop base_op scale sz load_opc store_opc s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_dynarray_pop_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> ntac 8 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_dynarray_append:
+  !s r t. compile_dynarray_append cenv base_op v scale sz dt st cap prim load_opc store_opc s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_dynarray_append_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> ntac 6 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >- LABEL_LEAF >> IF_CASES_TAC
+      >- (ho_match_mp_tac label_preserving_bind >> conj_tac
+          >- metis_tac[label_preserving_store_memory] >> gen_tac >> LABEL_LEAF) >>
+      ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- metis_tac[label_preserving_word_copy_loop] >> gen_tac >> LABEL_LEAF) >>
+  gen_tac >> LABEL_BIND >> LABEL_LEAF
+QED
+
+val label_simps = label_simps @ [label_preserving_unwrap_value];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+
+Theorem label_preserving_stage_intcall_args:
+  !vals flags tys s r t.
+    compile_stage_intcall_args cenv vals flags tys s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  qid_spec_tac `cenv` >>
+  ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
+  >- (rpt gen_tac >> rewrite_tac[compile_stage_intcall_args_def] >> LABEL_LEAF)
+  >- (rpt gen_tac >> strip_tac >>
+      rewrite_tac[compile_stage_intcall_args_def] >> ntac 2 LABEL_BIND >> LABEL_LEAF)
+  >- (rpt gen_tac >> strip_tac >>
+      rewrite_tac[compile_stage_intcall_args_def] >> simp_tac pure_ss [LET_THM] >>
+      ntac 2 LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      rewrite_tac[comp_ignore_bind_def] >>
+      ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- (IF_CASES_TAC >- LABEL_LEAF >> IF_CASES_TAC
+          >- (LABEL_BIND >> LABEL_LEAF) >> LABEL_LEAF) >>
+      gen_tac >> LABEL_BIND >> LABEL_LEAF) >>
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[compile_stage_intcall_args_def] >> ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_store_multi_results:
+  !ops buf off s r t. store_multi_results buf ops off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct_on `ops` >> rewrite_tac[store_multi_results_def, comp_ignore_bind_def]
+  >- LABEL_LEAF >> ntac 3 gen_tac >> ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_array_subscript:
+  (!ptr s r t. loader ptr s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_array_subscript arr idx dyn n scale sz signed loader s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_array_subscript_def, comp_ignore_bind_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >> ntac 5 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> simp_tac pure_ss [LET_THM] >> LABEL_LEAF) >>
+  gen_tac >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_store_byte_chunks:
+  !ptr bs off s r t. compile_store_byte_chunks ptr bs off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  ho_match_mp_tac compile_store_byte_chunks_ind >> conj_tac
+  >- (rpt gen_tac >> rewrite_tac[compile_store_byte_chunks_def] >> LABEL_LEAF) >>
+  rpt gen_tac >> strip_tac >> rewrite_tac[Once compile_store_byte_chunks_def] >>
+  simp_tac pure_ss [LET_THM] >> rewrite_tac[comp_ignore_bind_def] >>
+  ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_bytelike_literal:
+  !s r t. compile_bytelike_literal bs n s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_bytelike_literal_def] >> simp_tac pure_ss [LET_THM] >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_store_byte_chunks] >> gen_tac >> LABEL_LEAF
+QED
