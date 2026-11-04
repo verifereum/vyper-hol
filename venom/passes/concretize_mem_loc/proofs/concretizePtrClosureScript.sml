@@ -62,3 +62,21 @@ Proof
   >- metis_tac[pointer_derived_vars_closed]
   >> metis_tac[pointer_derived_vars_roots, SUBSET_TRANS]
 QED
+
+Theorem ptr_derived_root_witness:
+  FINITE R /\ v IN pointer_derived_vars fn R ==>
+  ?r. r IN R /\ v IN pointer_derived_vars fn {r}
+Proof
+  strip_tac >>
+  `pointer_derived_vars fn R SUBSET
+    {u | ?r. r IN R /\ u IN pointer_derived_vars fn {r}}` suffices_by
+    (simp[SUBSET_DEF] >> metis_tac[]) >>
+  irule ptr_derived_least >> simp[SUBSET_DEF] >>
+  conj_tac
+  >- (rpt strip_tac >> qexists `r` >> simp[] >>
+      irule pointer_derived_vars_closed >> simp[] >>
+      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> qexists `x` >> simp[] >>
+  mp_tac (Q.INST [`roots` |-> `{x}`, `fn` |-> `fn`] pointer_derived_vars_roots) >>
+  simp[SUBSET_DEF]
+QED
