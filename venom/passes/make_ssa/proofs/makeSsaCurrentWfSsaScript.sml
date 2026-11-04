@@ -3538,6 +3538,69 @@ Proof
   simp[current_wf_history_provenance_def]
 QED
 
+Theorem current_wf_outputs_trace_append:
+  !anns s rs H E names s1 rs1 H1 E1 rest more s' rs' H' E'.
+  current_outputs_trace anns s rs H E names s1 rs1 H1 E1 /\
+  current_outputs_trace rest s1 rs1 H1 E1 more s' rs' H' E' ==>
+  current_outputs_trace (anns ++ rest) s rs H E (names ++ more) s' rs' H' E'
+Proof
+  Induct >> simp[current_outputs_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[current_outputs_trace_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_wf_local_outputs_trace:
+  !annss insts s rs H E insts' s' rs' H' E'.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' ==>
+  ?names. current_outputs_trace (FLAT annss) s rs H E names s' rs' H' E'
+Proof
+  Induct >> simp[current_local_trace_def, current_outputs_trace_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  fs[current_inst_trace_def] >> metis_tac[current_wf_outputs_trace_append]
+QED
+
+Theorem current_wf_outputs_first_owner:
+  !pre t v post s rs H E names s' rs' H' E' V tail.
+  current_outputs_trace (pre ++ (t,v)::post) s rs H E
+    names s' rs' H' E' /\
+  current_annotations_ok V H (pre ++ (t,v)::post) /\
+  current_allocation_consistent V H s rs /\
+  EVERY (\a. SND a <> v) pre /\ current_owner_count H v = 0 ==>
+  current_token_name (H' ++ tail) t = SOME v
+Proof
+  Induct
+  >- (simp[current_outputs_trace_def] >> rpt strip_tac >>
+      `(!w. t <> CurrentDefault w) /\ ~MEM t (MAP FST H)` by
+        fs[current_annotations_ok_def] >>
+      drule_all current_first_allocation_alias >> strip_tac >>
+      drule current_outputs_trace_history >> strip_tac >> gvs[] >>
+      metis_tac[current_token_name_append_stable, current_token_name_default]) >>
+  gen_tac >> PairCases_on `h` >>
+  simp[current_outputs_trace_def] >> rpt gen_tac >> strip_tac >>
+  `(!w. h0 <> CurrentDefault w) /\ ~MEM h0 (MAP FST H) /\ MEM h1 V` by
+    fs[current_annotations_ok_def] >>
+  `current_allocation_consistent V (H ++ [(h0,h1,n)]) s1 rs1` by
+    (irule current_push_consistent >> metis_tac[]) >>
+  `current_annotations_ok V (H ++ [(h0,h1,n)]) (pre ++ (t,v)::post)` by
+    metis_tac[current_annotations_tail] >>
+  first_x_assum irule >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem current_wf_local_first_owner:
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  FLAT annss = pre ++ (t,v)::post /\
+  current_annotations_ok V H (FLAT annss) /\
+  current_allocation_consistent V H s rs /\
+  EVERY (\a. SND a <> v) pre /\ current_owner_count H v = 0 ==>
+  current_token_name (H' ++ tail) t = SOME v
+Proof
+  strip_tac >> drule current_wf_local_outputs_trace >> strip_tac >>
+  qpat_x_assum `FLAT annss = _` SUBST_ALL_TAC >>
+  drule_all current_wf_outputs_first_owner >> simp[]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
