@@ -1,7 +1,7 @@
 (* Constructor probes for delayed reads of provenance-bearing raw results. *)
 Theory exprPlaceTransport
 Ancestors
-  exprSim placeProvenance vyperPlaceResultTyping compileEnv
+  exprSim placeProvenance vyperPlaceResultTyping compileEnv exprEffectStorage
   exprSimAggregateEncoding valueEncoding list rich_list
   vyperState vyperValue vyperValueOperation vyperMisc exprLoweringProps words
 
@@ -105,4 +105,18 @@ Proof
     (rewrite_tac[GSYM arithmeticTheory.MULT] >>
      irule arithmeticTheory.LESS_MONO_MULT >> simp[]) >>
   simp[]
+QED
+
+(* Keeping the backend keeps both the decoded value and all dynamic length
+   slots used by range/liveness checks. No claim about popped storage. *)
+Theorem storage_holds_backend_transport:
+  storage_holds cx tr t (PlaceR (StoragePlace tr slot leaf)) w es /\
+  get_storage cx es2 tr = get_storage cx es tr ==>
+  storage_holds cx tr t (PlaceR (StoragePlace tr slot leaf)) w es2
+Proof
+  simp[storage_holds_def, read_result_def, read_place_def,
+       read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+       bind_def, lift_option_def, vyperMiscTheory.option_CASE_rator,
+       return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
