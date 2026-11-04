@@ -643,7 +643,7 @@ Proof
 QED
 
 (* Exact sequence equations complement the register-frame run boundaries. *)
-Theorem storage_copy_source_run_effect[local]:
+Theorem storage_copy_source_run_effect:
   (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand src s = SOME a /\ eval_operand (Var cv) s = SOME k /\
   (!x. src = Var x ==> x <> sv) ==>
@@ -702,7 +702,7 @@ Proof
   qexistsl [`[sv; vv]`, `s`] >> simp[] >> metis_tac[]
 QED
 
-Theorem storage_copy_destination_run_effect[local]:
+Theorem storage_copy_destination_run_effect:
   eval_operand dst s = SOME b /\ eval_operand (Var cv) s = SOME k /\
   eval_operand (Var vv) s = SOME v /\
   vv <> mv /\ vv <> dv /\
@@ -778,7 +778,7 @@ Proof
   qexists_tac `t` >> simp[run_inst_seq_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_increment_run_effect[local]:
+Theorem storage_copy_increment_run_effect:
   eval_operand (Var cv) s = SOME k ==>
   run_inst_seq
     [mk_inst id ADD [Var cv; Lit 1w] [nv];
@@ -820,7 +820,7 @@ Proof
   qexists_tac `s2` >> simp[run_inst_seq_def] >> metis_tac[]
 QED
 
-Theorem storage_copy_body_run[local]:
+Theorem storage_copy_body_run:
   !opc src dst a b cv sv vv mv dv nv id s k.
     (opc = SLOAD \/ opc = TLOAD) /\
     eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
@@ -882,7 +882,7 @@ Proof
 QED
 
 (* Exact observations complement the register-frame existence theorem. *)
-Theorem storage_copy_body_run_effect[local]:
+Theorem storage_copy_body_run_effect:
   (loc = LocStorage \/ loc = LocTransient) /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
   eval_operand (Var cv) s = SOME k /\
