@@ -985,18 +985,6 @@ Proof
   metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
 QED
 
-(* A form lowered to a StackValue, with only values as results: expr_ok
-   from expr_sim_ok (exprSim's expr_vv_sim_stack). *)
-Theorem expr_ok_stack:
-  !cenv e.
-    expr_sim_ok cenv e /\
-    (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_ok cenv e
-Proof
-  rw[expr_ok_def, expr_vv_ok_def] >> irule expr_vv_sim_stack >>
-  gvs[expr_sim_ok_def] >> metis_tac[]
-QED
 
 Theorem as_stack_val_stack:
   !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
@@ -1004,14 +992,6 @@ Proof
   Cases_on `p` >> simp[as_stack_val_def]
 QED
 
-Theorem eval_expr_builtin_value:
-  !cx ann bi args es tv es'.
-    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
-Proof
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
-  rw[] >> gvs[AllCaseEqs()]
-QED
 
 Theorem eval_expr_literal_value:
   !cx ann l es tv es'.

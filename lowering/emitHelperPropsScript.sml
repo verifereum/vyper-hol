@@ -29,6 +29,7 @@
 
 Theory emitHelperProps
 Ancestors
+  fragGasPath gasCount fragExec
   exprLoweringProps localPtrsProps emitHelper compileEnv
   venomExecSemantics venomState venomInst
   instIdxIndep vfmState freshLabelStringProps ASCIInumbers
@@ -39,6 +40,7 @@ Libs
 (* ===== Pure Opcode Execution ===== *)
 
 (* exec_pure1: 1-operand pure instruction succeeds when operand is defined *)
+
 Theorem exec_pure1_ok:
   ∀ f op1 v1 id opc out ss v.
     eval_operand op1 ss = SOME v1 ∧ v = f v1 ⇒
@@ -2603,4 +2605,38 @@ Theorem label_external_mono:
 Proof
   rw[label_external_def] >>
   metis_tac[compiler_labels_future_antimono, SUBSET_DEF]
+QED
+
+Theorem emit_op_zero_path:
+  emit_op opc args sa = (op, sb) /\ fn_has_code sa sb func /\
+  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s =
+         OK (update_var out w s)) ==>
+  gas_path ctx func s 0
+    (OK ((update_var (STRING #"%" (toString sa.cs_next_var)) w s)
+      with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+       comp_ignore_bind_def, comp_return_def, emit_def] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb (LENGTH sa.cs_current_insts) =
+    SOME (mk_inst sa.cs_next_id opc args
+      [STRING #"%" (toString sa.cs_next_var)])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_edge ctx func s 0
+    (OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s
+      with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (rw[gas_path_edge_def] >>
+      qexists_tac `0` >>
+      simp[step_inst_def, gas_count_defs, venomInstTheory.mk_inst_def,
+           update_var_def]) >>
+  `~(update_var (STRING #"%" (toString sa.cs_next_var)) w s
+      with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by simp[update_var_def] >>
+  drule (cj 1 gas_path_rules) >> strip_tac >>
+  metis_tac[cj 2 gas_path_rules, arithmeticTheory.ADD_CLAUSES]
 QED

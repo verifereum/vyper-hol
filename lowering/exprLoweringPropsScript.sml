@@ -59,6 +59,18 @@ Ancestors
 Libs
   pairLib BasicProvers monadsyntax
 
+
+
+
+Theorem eval_expr_builtin_value:
+  !cx ann bi args es tv es'.
+    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
+  rw[] >> gvs[AllCaseEqs()]
+QED
+
 (* The shared semantic predicate preserves the former ExtCall wrap test. *)
 Theorem needs_external_call_wrap_extcall:
   (if needs_external_call_wrap ty then TupleT [ty] else ty) =

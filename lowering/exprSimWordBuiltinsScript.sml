@@ -162,48 +162,7 @@ Proof
               is_decimal_type_def, is_signed_type_def]
 QED
 
-Theorem compile_expr_body_builtin_dispatch:
-  !f g h cenv ty ann bt args st.
-    ~names_builtin bt args ==>
-    compile_expr_body f g h cenv ty (Builtin ann bt args) st =
-    g cenv ann ty bt args st
-Proof
-  rpt gen_tac >>
-  Cases_on `args` >> simp[compile_expr_body_def, names_builtin_def,
-                             vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (a::rest)` >>
-  Cases_on `a` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest` >> simp[compile_expr_body_def, names_builtin_def,
-                          vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (_::b::rest)` >>
-  Cases_on `b` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest`
-  >- (Cases_on `bt` >> simp[compile_expr_body_def, names_builtin_def,
-                            vyperASTTheory.expr_type_def]) >>
-  simp[compile_expr_body_def, names_builtin_def,
-       vyperASTTheory.expr_type_def] >>
-  rename1 `names_builtin bt (_::_::c::rest)` >>
-  Cases_on `c` >> simp[compile_expr_body_def, names_builtin_def,
-                       vyperASTTheory.expr_type_def] >>
-  Cases_on `rest` >> simp[compile_expr_body_def, names_builtin_def,
-                          vyperASTTheory.expr_type_def] >>
-  Cases_on `bt` >> simp[compile_expr_body_def, names_builtin_def,
-                        vyperASTTheory.expr_type_def]
-QED
 
-Theorem compile_expr_builtin_dispatch:
-  !cenv ty ann bt args st.
-    ~names_builtin bt args ==>
-    compile_expr cenv ty (Builtin ann bt args) st =
-    compile_builtin_dispatch cenv ann ty bt args st
-Proof
-  rpt strip_tac >>
-  simp[Once (CONJUNCT1 compile_expr_raw_def),
-       compile_expr_body_builtin_dispatch, vyperASTTheory.expr_size_def,
-       list_size_def, basicSizeTheory.option_size_def]
-QED
 
 Theorem lower_value_name:
   !cenv ty ann id st.

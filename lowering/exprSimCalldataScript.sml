@@ -20,7 +20,7 @@ Ancestors
   exprSimHypsDefs
   exprSimValues
   loweringPosts
-  list fragExec loweringSlice  exprSimHyps exprSimWordBuiltins
+  list fragExec loweringSlice exprSimStack gasNormalPrefix gasSummary gasContext fragGasMode fragGasPath
   exprBopLowering exprLowering exprLoweringProps builtinSimple emitHelper
   compileEnv valueEncoding
   venomExecSemantics venomInst venomState vyperAST vyperInterpreter vyperState
