@@ -234,3 +234,50 @@ Proof
   qspecl_then [`bt.bb_instructions`, `bt`, `prepend bb.bb_label`]
     mp_tac le_phi_insert_succs >> simp[]
 QED
+
+Theorem le_global_insert_perm:
+  !bs old added cut g.
+    PERM
+      (FLAT (MAP (\b. FLAT (MAP g
+        (TAKE (cut b) (old b) ++ added b ++ DROP (cut b) (old b)))) bs))
+      (FLAT (MAP (\b. FLAT (MAP g (old b))) bs) ++
+       FLAT (MAP (\b. FLAT (MAP g (added b))) bs))
+Proof
+  Induct_on `bs` >- simp[] >>
+  rpt gen_tac >> pure_rewrite_tac[MAP, FLAT] >>
+  first_x_assum (qspecl_then [`old`, `added`, `cut`, `g`] assume_tac) >>
+  irule PERM_TRANS >>
+  qexists_tac `(FLAT (MAP g (old h)) ++ FLAT (MAP g (added h))) ++
+    (FLAT (MAP (\b. FLAT (MAP g (old b))) bs) ++
+     FLAT (MAP (\b. FLAT (MAP g (added b))) bs))` >>
+  conj_tac
+  >- (CONV_TAC (DEPTH_CONV BETA_CONV) >>
+      metis_tac[PERM_APPEND_IFF, PERM_TRANS, le_insert_flat_map_perm]) >>
+  metis_tac[PERM_APPEND_IFF, PERM_APPEND, PERM_REFL, APPEND_ASSOC]
+QED
+
+Theorem le_global_insert_distinct:
+  !bs old added cut g.
+    ALL_DISTINCT
+      (FLAT (MAP (\b. FLAT (MAP g
+        (TAKE (cut b) (old b) ++ added b ++ DROP (cut b) (old b)))) bs)) <=>
+    ALL_DISTINCT
+      (FLAT (MAP (\b. FLAT (MAP g (old b))) bs) ++
+       FLAT (MAP (\b. FLAT (MAP g (added b))) bs))
+Proof
+  metis_tac[le_global_insert_perm, ALL_DISTINCT_PERM]
+QED
+
+Theorem le_global_insert_distinct_sufficient:
+  !bs old added cut g.
+    ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP g (old b))) bs)) /\
+    ALL_DISTINCT (FLAT (MAP (\b. FLAT (MAP g (added b))) bs)) /\
+    (!x. MEM x (FLAT (MAP (\b. FLAT (MAP g (old b))) bs)) ==>
+         ~MEM x (FLAT (MAP (\b. FLAT (MAP g (added b))) bs))) ==>
+    ALL_DISTINCT
+      (FLAT (MAP (\b. FLAT (MAP g
+        (TAKE (cut b) (old b) ++ added b ++ DROP (cut b) (old b)))) bs))
+Proof
+  simp[le_global_insert_distinct, ALL_DISTINCT_APPEND]
+QED
+
