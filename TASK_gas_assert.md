@@ -57,4 +57,4 @@ Independent exact statement audit answered PROVABLE. The uniform If branch premi
 
 ## Notes
 
-The parser owner is checking the shared prerequisites and the restated root; if it stops before that root, the statement has not yet been parsed. Independent exact statement audit is complete. Existing executable definitions, gas judgments, strict posts and concrete error gates are frozen. No proof strategy is prescribed.
+The shared prerequisites and stmtSimIfProps built. ML compilation of the retained old proof stopped at its reference to unported cond_jump_frag, so the assigned root has not yet been parsed. Its independent exact statement audit is complete. That old fixed-result intermediate contract is reference text, not a dependency of the actual-source proof. Existing executable definitions, gas judgments, strict posts and concrete error gates are frozen. No proof strategy is prescribed.
