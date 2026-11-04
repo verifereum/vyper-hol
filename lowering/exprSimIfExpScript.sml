@@ -26,9 +26,232 @@ Ancestors
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
   exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst
-  venomState
+  venomState exprSimLiteralBuffer words integer_word vfmConstants valueEncodingProps
 Libs
-  pairLib
+  pairLib intLib
+
+Theorem compile_ifexp_arm_unwrap[local]:
+  !cenv rt at vv.
+    is_word_type rt \/ same_memory_layout cenv at rt ==>
+    compile_ifexp_arm cenv rt at vv = unwrap_value cenv vv
+Proof
+  simp[compile_ifexp_arm_def]
+QED
+
+Theorem ifexp_layout_refl[local]:
+  (!t. punnable cenv t t) /\
+  (!ts. punnable_list cenv ts ts)
+Proof
+  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops type_induction) >>
+  simp[punnable_def]
+QED
+
+Theorem ifexp_copy_types[local]:
+  !cenv rt at.
+    (at = rt \/
+     is_bytestring_type rt /\ is_bytestring_type at /\ arg_type_fits at rt \/
+     same_memory_layout cenv at rt) /\
+    ~is_word_type rt /\ ~same_memory_layout cenv at rt ==>
+    is_bytestring_type rt /\ is_bytestring_type at
+Proof
+  rpt strip_tac >> gvs[same_memory_layout_def, ifexp_layout_refl]
+QED
+
+(* Low-level bytestring copy interface, kept below the operator layer. *)
+Theorem ifexp_round_no_wrap[local]:
+  !len. 32 + 32 * word_size len < dimword (:256) ==>
+    len + 31 < dimword (:256)
+Proof
+  rpt gen_tac >> rewrite_tac[word_size_def] >> strip_tac >>
+  qspec_then `32` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `len + 31` strip_assume_tac) >>
+  `(len + 31) MOD 32 < 32` by simp[] >>
+  gvs[] >> intLib.ARITH_TAC
+QED
+
+Theorem ifexp_round_size[local]:
+  !len. 32 + 32 * word_size len < dimword (:256) ==>
+    ((((n2w len:bytes32) + 31w) && i2w (- &32)) + 32w =
+     n2w (32 + 32 * word_size len))
+Proof
+  rpt strip_tac >> drule ifexp_round_no_wrap >> strip_tac >>
+  rewrite_tac[exprSimTheory.buffer_round_mask, word_add_n2w] >>
+  `n2w (len + 31):bytes32 >>> 5 = n2w ((len + 31) DIV 32)` by
+    (simp[GSYM n2w_DIV]) >>
+  simp[word_size_def, word_lsl_n2w, word_add_n2w] >>
+  AP_TERM_TAC >> decide_tac
+QED
+
+Theorem ifexp_emit_mcopy_run[local]:
+  !sa sb dst src sz d w n s.
+    emit_void MCOPY [dst; src; sz] sa = ((),sb) /\
+    eval_operand dst s = SOME d /\ eval_operand src s = SOME w /\
+    eval_operand sz s = SOME n ==>
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (mcopy (w2n d) (w2n w) (w2n n) s)
+Proof
+  rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id MCOPY [dst; src; sz] []) s =
+     OK (mcopy (w2n d) (w2n w) (w2n n) s)` by
+    simp[step_inst_base_def] >>
+  simp[run_inst_seq_def]
+QED
+
+Theorem ifexp_copy_len_shape[local]:
+  !src out sa sb.
+    compile_bytestring_copy_len src sa = (out,sb) ==>
+    same_blocks sa sb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    sb.cs_next_var = sa.cs_next_var + 4 /\
+    sb.cs_next_id = sa.cs_next_id + 4
+Proof
+  rpt strip_tac >>
+  gvs[compile_bytestring_copy_len_def, emitHelperTheory.emit_op_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  simp[same_blocks_def, emitted_insts_def, rich_listTheory.DROP_APPEND1]
+QED
+
+Theorem ifexp_copy_len_run[local]:
+  !src out sa sb s w len.
+    compile_bytestring_copy_len src sa = (out,sb) /\
+    eval_operand src s = SOME w /\ mload (w2n w) s = n2w len /\
+    32 + 32 * word_size len < dimword (:256) ==>
+    ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      eval_operand out q = SOME (n2w (32 + 32 * word_size len)) /\
+      (q with vs_vars := s.vs_vars) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+Proof
+  rpt strip_tac >>
+  gvs[compile_bytestring_copy_len_def, emitHelperTheory.emit_op_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  drule_then assume_tac step_MLOAD >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst aid ADD ops [v1]) s1` >>
+  `step_inst_base (mk_inst aid ADD ops [v1]) s1 =
+     OK (update_var v1 ((n2w len:bytes32) + 31w) s1)` by
+    (simp[Abbr `ops`] >> irule step_ADD >> simp[Abbr `s1`, eval_operand_def,
+                           lookup_var_update_var]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst bid AND bops [v2]) s2` >>
+  `step_inst_base (mk_inst bid AND bops [v2]) s2 =
+     OK (update_var v2 (((n2w len:bytes32) + 31w) && i2w (- &32)) s2)` by
+    (qunabbrev_tac `bops` >> irule step_AND >> simp[Abbr `s2`, eval_operand_def,
+                           lookup_var_update_var]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst cid ADD cops [v3]) s3` >>
+  `step_inst_base (mk_inst cid ADD cops [v3]) s3 =
+     OK (update_var v3 ((((n2w len:bytes32) + 31w) && i2w (- &32)) + 32w) s3)` by
+    (simp[Abbr `cops`] >> irule step_ADD >> simp[Abbr `s3`, eval_operand_def,
+                           lookup_var_update_var]) >>
+  simp[] >> conj_tac
+  >- (qspec_then `len` mp_tac ifexp_round_size >>
+      simp[eval_operand_def, lookup_var_update_var]) >>
+  simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def] >>
+  rpt strip_tac >>
+  gvs[not_fresh_at_def, Abbr `v1`, Abbr `v2`, Abbr `v3`,
+      ASCIInumbersTheory.toString_11, lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem ifexp_store_bytestring_shape[local]:
+  !src dst sa sb.
+    compile_store_bytestring src dst sa = ((),sb) ==>
+    same_blocks sa sb /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    sb.cs_next_var = sa.cs_next_var + 4 /\
+    sb.cs_next_id = sa.cs_next_id + 5
+Proof
+  rpt strip_tac >>
+  gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+      emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def,
+      fresh_id_def, fresh_var_def, emit_def] >>
+  simp[same_blocks_def, emitted_insts_def, rich_listTheory.DROP_APPEND1]
+QED
+
+Theorem ifexp_store_bytestring_run[local]:
+  !src dst sa sb s w d len.
+    compile_store_bytestring src dst sa = ((),sb) /\
+    eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+    mload (w2n w) s = n2w len /\
+    32 + 32 * word_size len < dimword (:256) ==>
+    ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      q.vs_memory = (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) s).vs_memory /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [compile_store_bytestring_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+  rename1 `compile_bytestring_copy_len src sa = (out,mid)` >>
+  drule_all ifexp_copy_len_run >> strip_tac >>
+  drule ifexp_copy_len_shape >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa mid ++ emitted_insts mid sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `q.vs_memory = s.vs_memory` by
+    (qpat_x_assum `q with vs_vars := _ = s`
+       (mp_tac o AP_TERM ``\z. z.vs_memory``) >> simp[]) >>
+  `q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|> = s` by
+    (qpat_assum `q with vs_vars := _ = s`
+       (mp_tac o AP_TERM ``\z. z with vs_memory := s.vs_memory``) >> simp[]) >>
+  `eval_operand src q = SOME w` by
+    (`eval_operand src q = eval_operand src s` by
+       (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  `eval_operand dst q = SOME d` by
+    (`eval_operand dst q = eval_operand dst s` by
+       (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  drule_all ifexp_emit_mcopy_run >> strip_tac >>
+  qexists_tac `mcopy (w2n d) (w2n w) (32 + 32 * word_size len) q` >>
+  conj_tac
+  >- (asm_rewrite_tac[] >>
+      qpat_assum `run_inst_seq (emitted_insts sa mid) s = OK q`
+        (mp_then Any mp_tac run_inst_seq_append) >>
+      disch_then (qspec_then `emitted_insts mid sb` mp_tac) >> gvs[]) >>
+  simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def] >>
+  fs[lookup_var_def]
+QED
+
+Theorem ifexp_bytes_header[local]:
+  !cap bs src s.
+    val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
+    mload src s = n2w (LENGTH bs)
+Proof
+  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+QED
+
+Theorem ifexp_string_header[local]:
+  !cap str src s.
+    val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
+    mload src s = n2w (LENGTH str)
+Proof
+  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+QED
+
+Theorem ifexp_typed_bytestring_header[local]:
+  !tenv ty tv v p s.
+    is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+    value_has_type tv v /\ val_in_memory tv v p s.vs_memory ==>
+    ?len. mload p s = n2w len /\
+      val_store_size tv v = 32 + 32 * word_size len
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ty` >> gvs[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_bytestring_type_def]
+  >~ [`BytesT bd`] >- (Cases_on `bd` >>
+      gvs[is_bytestring_type_def, vyperValueTheory.evaluate_type_def] >>
+      Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+      drule ifexp_bytes_header >> strip_tac >>
+      qexists_tac `LENGTH l` >> simp[exprSimTheory.val_store_size_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  drule ifexp_string_header >> strip_tac >>
+  qexists_tac `LENGTH s'` >> simp[exprSimTheory.val_store_size_def]
+QED
 
 (* What compile_expr emits for an IfExp. *)
 Theorem compile_expr_ifexp:
