@@ -1,7 +1,7 @@
 (* Control-flow boundaries for statement compiler history and reservations. *)
 Theory bodyIntCallStmtControlLabels
 Ancestors
-  bodyIntCallStmtHelperLabels bodyIntCallLabelReservations
+  bodyIntCallStmtHelperSoundLabels bodyIntCallLabelReservations
   bodyIntCallLabelFrame bodyIntCallContextLabels compileEnv emitHelper pred_set
   stmtLowering list
 

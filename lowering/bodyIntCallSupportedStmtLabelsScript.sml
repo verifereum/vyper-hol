@@ -1,7 +1,7 @@
 (* Structural closure of the internal statement compiler label contracts. *)
 Theory bodyIntCallSupportedStmtLabels
 Ancestors
-  bodyIntCallStmtControlLabels bodyIntCallStmtHelperLabels supportedStmtTraverse
+  bodyIntCallStmtControlLabels bodyIntCallStmtHelperSoundLabels supportedStmtTraverse
   supportedStmts stmtLowering bodyIntCallLabelFrame bodyIntCallLabelReservations
   bodyIntCallContextLabels compileEnv emitHelper bodyIntCallSupportedExprLabels
   bodyIntCallExprLabels supportedExprs

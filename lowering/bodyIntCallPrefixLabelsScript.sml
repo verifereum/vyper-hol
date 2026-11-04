@@ -1,7 +1,7 @@
 (* Label reservation boundaries for the runtime prefix before internal bodies. *)
 Theory bodyIntCallPrefixLabels
 Ancestors
-  bodyIntCallSupportedStmtLabels bodyIntCallStmtHelperLabels bodyIntCallAbiLabels
+  bodyIntCallSupportedStmtLabels bodyIntCallStmtHelperSoundLabels bodyIntCallAbiLabels
   bodyIntCallStmtControlLabels
   bodyIntCallLabelReservations bodyIntCallContextLabels moduleLowering
   context compileEnv emitHelper list vyperCompiler loweringShapeProps

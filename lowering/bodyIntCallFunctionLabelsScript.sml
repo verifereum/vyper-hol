@@ -1,7 +1,7 @@
 (* Runtime internal wrappers establish their own return-PC environment. *)
 Theory bodyIntCallFunctionLabels
 Ancestors
-  bodyIntCallSupportedStmtLabels bodyIntCallStmtHelperLabels
+  bodyIntCallSupportedStmtLabels bodyIntCallStmtHelperSoundLabels
   bodyIntCallStmtControlLabels bodyIntCallMaterialLabels bodyIntCallLabelFrame
   bodyIntCallLabelReservations bodyIntCallContextLabels moduleLowering
   stmtLowering compileEnv emitHelper
