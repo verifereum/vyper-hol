@@ -861,6 +861,44 @@ Proof
       simp[LAST_MEM]
 QED
 
+Theorem flag_path_chain_merge_revert_suffix:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) /\
+  revert_path fn.fn_blocks n b.bb_label ==>
+  !vs. flag_path raw vs b.bb_instructions
+Proof
+  strip_tac >> drule revert_path_step_witness >> strip_tac >>
+  `bb = b` by
+    (`lookup_block b.bb_label fn.fn_blocks = SOME bb /\
+      lookup_block b.bb_label fn.fn_blocks = SOME b` by
+       (conj_tac >> irule MEM_lookup_block >> gvs[fn_labels_def]) >> gvs[]) >>
+  `b <> a` by metis_tac[can_merge_blocks_distinct] >>
+  gvs[] >> gen_tac >> irule flag_path_unconditional_last >> simp[] >>
+  irule flag_fails_chain_merge_other >>
+  qexistsl_tac [`a`, `b`, `b`, `fn`] >>
+  simp[LAST_MEM, flag_fails_def] >>
+  irule revert_path_fuel_normalize >> metis_tac[]
+QED
+
+Theorem flag_path_chain_merge_terminal:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  raw = replace_block a.bb_label (merge_blocks a b) (remove_block b.bb_label fn.fn_blocks) ==>
+  !vs. flag_path fn.fn_blocks vs [LAST a.bb_instructions] ==>
+       flag_path raw vs b.bb_instructions
+Proof
+  strip_tac >>
+  `bb_well_formed a /\ EVERY label_positions_ok a.bb_instructions` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `bb_succs a = [b.bb_label]` by gvs[can_merge_blocks_def] >>
+  drule_all shaped_bb_single_successor_jmp >> strip_tac >>
+  simp[flag_path_def, flag_fails_def] >> rpt strip_tac >>
+  irule flag_path_chain_merge_revert_suffix >> metis_tac[]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
