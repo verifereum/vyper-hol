@@ -26,7 +26,7 @@ Ancestors
   makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
   makeSsaCurrentPlacementCut makeSsaCurrentOccurrence makeSsaCurrentCutTokens
   makeSsaCurrentDefSupport makeSsaCurrentPlacement makeSsaCurrentFrontier
-  makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive
+  makeSsaCurrentInduct makeSsaDefs makeSsaCurrentSelectedLive cfgDefs cfgHelpers finite_map
   ssaPipeline codegenReadyCompute o1ContractSimplifyCfg
 Libs
   rich_listTheory
@@ -4031,6 +4031,151 @@ Proof
      simp[] >> qexistsl_tac [`h`, `old`] >> simp[]) >>
   irule current_live_post_phi_demand >>
   goal_assum (drule_at Any) >> simp[current_collect_phis_length]
+QED
+
+Theorem current_wf_inserted_phi_pair:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+  MAP FST pairs = (case ALOOKUP (current_pred_map fn) h of SOME ps => ps | NONE => []) /\
+  i < LENGTH pairs /\ EL i pairs = (p,n) ==>
+  ?ev. MEM ev events /\ current_event_label ev = p /\ fn_cfg_edge fn p h /\
+    current_token_name H (current_event_exit_env ev v) = SOME n
+Proof
+  strip_tac >>
+  `i < LENGTH (MAP FST pairs) /\ EL i (MAP FST pairs) = p` by simp[EL_MAP] >>
+  drule_all current_wf_inserted_phi_slot >> strip_tac >>
+  `EL (2 * i + 1) (current_phi_slots pairs) = Var n` by
+    metis_tac[current_phi_slots_index, pairTheory.SND] >>
+  `n' = n` by
+    (qpat_x_assum `EL (2 * i + 1) (EL q new.bb_instructions).inst_operands = _` mp_tac >>
+     simp[]) >>
+  qexists_tac `ev` >> simp[]
+QED
+
+Theorem current_wf_inserted_phi_pair_available:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) /\
+  (EL q new.bb_instructions).inst_operands = current_phi_slots pairs /\
+  MAP FST pairs = (case ALOOKUP (current_pred_map fn) h of SOME ps => ps | NONE => []) /\
+  i < LENGTH pairs /\ EL i pairs = (p,n) ==>
+  ?pb. MEM pb renamed /\ pb.bb_label = p /\
+    fn_cfg_edge (fn with fn_blocks := renamed) p h /\
+    def_available_at (fn with fn_blocks := renamed) pb NONE n
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_pair >> strip_tac >>
+  drule_all current_wf_inserted_phi_prefix >> strip_tac >>
+  qpat_assum `current_wf_phi_context _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_phi_context_def] >> strip_tac >>
+  `?pred. lookup_block p fn.fn_blocks = SOME pred` by
+    (fs[fn_cfg_edge_def] >>
+     `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+       fs[wf_function_def, fn_labels_def] >>
+     metis_tac[MEM_lookup_block]) >>
+  `current_demand fn v p (LENGTH pred.bb_instructions)` by
+    (irule current_wf_inserted_pred_demand >> metis_tac[]) >>
+  `?pb. MEM pb renamed /\ pb.bb_label = p` by
+    (drule current_wf_precleanup_labels >> strip_tac >>
+     `MEM p (MAP (\b. b.bb_label) fn.fn_blocks)` by
+       metis_tac[lookup_block_MEM, lookup_block_label, MEM_MAP] >>
+     metis_tac[MEM_MAP]) >>
+  qexists_tac `pb` >> simp[] >> conj_tac
+  >- metis_tac[current_wf_precleanup_cfg] >>
+  irule current_wf_precleanup_exit_available >> metis_tac[]
+QED
+
+Theorem current_wf_ordered_insert_distinct[local]:
+  !x xs. ALL_DISTINCT xs ==> ALL_DISTINCT (ordered_set_insert x xs)
+Proof
+  simp[ordered_set_insert_def] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[ALL_DISTINCT_APPEND]
+QED
+
+Theorem current_wf_map_update_distinct[local]:
+  (!k. ALL_DISTINCT (fmap_lookup_list m k)) /\ ALL_DISTINCT xs ==>
+  !k. ALL_DISTINCT (fmap_lookup_list (m |+ (l,xs)) k)
+Proof
+  simp[fmap_lookup_list_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem current_wf_init_fold_distinct[local]:
+  !bbs m. (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+  !k. ALL_DISTINCT (fmap_lookup_list
+    (FOLDL (\m bb. m |+ (bb.bb_label, [])) m bbs) k)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  irule current_wf_map_update_distinct >> simp[]
+QED
+
+Theorem current_wf_pred_inner_distinct[local]:
+  !ls m l. (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+  !k. ALL_DISTINCT (fmap_lookup_list
+    (FOLDR (\succ m2. m2 |+ (succ, ordered_set_insert l (fmap_lookup_list m2 succ))) m ls) k)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  irule current_wf_map_update_distinct >>
+  simp[current_wf_ordered_insert_distinct]
+QED
+
+Theorem current_wf_pred_outer_distinct[local]:
+  !bbs m succs. (!k. ALL_DISTINCT (fmap_lookup_list m k)) ==>
+  !k. ALL_DISTINCT (fmap_lookup_list
+    (FOLDL (\m bb. FOLDR (\succ m2.
+       m2 |+ (succ, ordered_set_insert bb.bb_label (fmap_lookup_list m2 succ)))
+       m (fmap_lookup_list succs bb.bb_label)) m bbs) k)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  irule current_wf_pred_inner_distinct >> simp[]
+QED
+
+Theorem current_wf_build_preds_distinct:
+  !bbs succs h. ALL_DISTINCT (fmap_lookup_list (build_preds bbs succs) h)
+Proof
+  rpt gen_tac >> simp[build_preds_def] >>
+  irule current_wf_pred_outer_distinct >>
+  simp[init_preds_def] >> irule current_wf_init_fold_distinct >>
+  simp[fmap_lookup_list_def]
+QED
+
+Theorem cfg_analyze_preds_distinct:
+  !fn h. ALL_DISTINCT (cfg_preds_of (cfg_analyze fn) h)
+Proof
+  simp[cfg_analyze_preds, current_wf_build_preds_distinct]
+QED
+
+Theorem current_wf_inserted_phi_edge_wf:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\ current_wf_inserted_phi_at A renamed h q v /\
+  lookup_block h fn.fn_blocks = SOME old /\ lookup_block h renamed = SOME new /\
+  (!di. MEM di old.bb_instructions /\ di.inst_opcode = PHI ==> ~MEM v di.inst_outputs) ==>
+  phi_edge_uses_wf (fn with fn_blocks := renamed) new (EL q new.bb_instructions)
+Proof
+  strip_tac >> drule_all current_wf_inserted_phi_slots >> strip_tac >>
+  `new.bb_label = h` by metis_tac[lookup_block_label] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by
+    fs[current_wf_phi_context_def] >>
+  `MEM h (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `MAP FST pairs = cfg_preds_of (cfg_analyze fn) h` by
+    (drule ALOOKUP_current_pred_map >> disch_tac >>
+     qpat_x_assum `MAP FST pairs = _` mp_tac >> simp[]) >>
+  `ALL_DISTINCT (MAP FST pairs)` by
+    simp[cfg_analyze_preds_distinct] >>
+  simp[phi_edge_uses_wf_def, current_wf_slots_shape, cfg_analyze_preds_distinct] >> conj_tac
+  >- (drule current_wf_precleanup_cfg >> strip_tac >>
+      `!p. fn_cfg_edge (fn with fn_blocks := renamed) p h <=>
+        MEM p (MAP FST pairs)` by metis_tac[current_cfg_edge_preds] >>
+      metis_tac[MEM_MAP]) >>
+  rpt strip_tac >>
+  `?i. i < LENGTH pairs /\ EL i pairs = (pred,v')` by metis_tac[MEM_EL] >>
+  drule_all current_wf_inserted_phi_pair_available >> strip_tac >>
+  metis_tac[]
 QED
 
 Theorem current_wf_precleanup_ordinary_available:
