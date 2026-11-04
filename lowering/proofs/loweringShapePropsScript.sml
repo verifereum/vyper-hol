@@ -4,8 +4,8 @@
  * Each generator family gets one shape_step fact (loweringShapeDefs); the
  * runtime stream lemma assembles them, package_internal_blocks_segments
  * splits the stream exactly at the internal entry labels, and
- * run_lowering_source_unit_ok reads o1_source_unit_ok off the packaged
- * unit.
+ * run_lowering_source_unit_ok reads o1_source_unit_ok, and that the entry
+ * function has no PARAM, off the packaged unit.
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
@@ -12900,7 +12900,9 @@ Theorem run_lowering_source_unit_ok:
     EVERY internal_fn_shape_ok internal_fns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
-    o1_source_unit_ok unit
+    o1_source_unit_ok unit /\
+    EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+      (fn_insts (HD unit.cu_context.ctx_functions))
 Proof
   rpt gen_tac >> strip_tac >>
   `lowering_policy_ok rpolicy`
@@ -12912,6 +12914,12 @@ Proof
               entry_info (initial_compile_state "__entry")` >>
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule_all compile_generate_runtime_shape >> strip_tac >>
+  `EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+     (fn_insts (mk_raw_function "__entry" entry_blocks))`
+    by (simp[fn_insts_def, mk_raw_function_fields, EVERY_MEM,
+             MEM_fn_insts_blocks_iff, PULL_EXISTS] >>
+        rpt strip_tac >> gvs[EVERY_MEM] >> res_tac >>
+        gvs[lowered_inst_ok_def]) >>
   `opaque_insts_ok
      (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs)))`
     by (fs[shape_state_def, shape_base_state_def, state_insts_def]) >>
@@ -12931,7 +12939,8 @@ Proof
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
-  irule lowered_unit_source_ok >> gs[]
+  conj_tac >- (irule lowered_unit_source_ok >> gs[]) >>
+  simp[mk_venom_context_def]
 QED
 
 (* ===== Source side: selectors and internal names ===== *)
@@ -13015,7 +13024,9 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
     ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                     (FST (SND (classify_functions tops)))) /\
     immutable_free_program tops ==>
-    o1_source_unit_ok unit
+    o1_source_unit_ok unit /\
+    EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+      (fn_insts (HD unit.cu_context.ctx_functions))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
