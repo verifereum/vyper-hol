@@ -2,7 +2,7 @@
 Theory abiMetadataCoherence
 Ancestors
   abiMetadataHeader abiMetadataLayout abiMetadataCoverage abiDecoderCoherence retAbiPlanProps
-  vyperTyping vyperTypeSystem vyperValue vyperTypeABI finite_map list pair
+  abiReturndataSource vyperTyping vyperTypeSystem vyperValue vyperTypeABI finite_map list pair
 
 Definition abi_metadata_root_def:
   abi_metadata_root ce root <=>
@@ -132,3 +132,28 @@ Resume abi_metadata_coherent[struct]:
 QED
 
 Finalise abi_metadata_coherent
+
+Theorem abi_metadata_root_coherent:
+  abi_metadata_root ce root /\ evaluate_type root ty = SOME tv /\
+  assignable_type root ty ==>
+  abi_decoder_coherent ce root ce.ce_struct_fields ty tv
+Proof
+  strip_tac >> irule abi_metadata_coherent >>
+  simp[] >> conj_tac >- (qexists_tac `root` >> simp[]) >>
+  irule abi_metadata_coverage_root >>
+  gvs[abi_metadata_root_def]
+QED
+
+Theorem abi_metadata_return_coherent:
+  abi_metadata_root ce root /\
+  evaluate_type root (if needs_external_call_wrap ty then TupleT [ty] else ty) = SOME wtv /\
+  assignable_type root (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
+  evaluate_abi_decode_return root ty data = INL v ==>
+  abi_decoder_coherent ce root ce.ce_struct_fields
+    (if needs_external_call_wrap ty then TupleT [ty] else ty) wtv /\
+  evaluate_abi_decode_returndata root
+    (if needs_external_call_wrap ty then TupleT [ty] else ty) data =
+      INL (if needs_external_call_wrap ty then ArrayV (TupleV [v]) else v)
+Proof
+  metis_tac[abi_metadata_root_coherent, abi_return_source_observation]
+QED
