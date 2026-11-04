@@ -63,7 +63,8 @@ Theorem context_plan_acc_layout_extend:
       cpa_peak_spill_end :=
         if region.sr_spill_base < region.sr_spill_end then
           MAX acc.cpa_peak_spill_end region.sr_spill_end
-        else acc.cpa_peak_spill_end |> )
+        else acc.cpa_peak_spill_end;
+      cpa_stack := stk |> )
 Proof
   rw[context_plan_acc_layout_def, EVERY_SNOC,
      ordered_spill_regions_SNOC] >>
