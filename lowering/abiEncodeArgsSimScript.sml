@@ -1,7 +1,7 @@
 Theory abiEncodeArgsSim
 Ancestors
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows
-  exprSim exprSimHyps exprSimWordArgs
+  compileEnv exprSim exprSimHyps exprSimWordArgs
 
 Definition abi_args_post_def:
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s <=>
@@ -117,4 +117,51 @@ Proof
   gvs[dynarray_local_def] >>
   Cases_on `ty` >> gvs[dynarray_type_def, vyperValueTheory.evaluate_type_def,
                          AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem abi_args_local_region_kept:
+  expr_sim_inv ce cx env es /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  local_region ce es.scopes s0 name b sz ==>
+  mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
+Proof
+  strip_tac >>
+  `locals_kept ce es s0 s1` by gvs[wb_frame_def] >>
+  Cases_on `dynarray_local ce name`
+  >- (qpat_assum `local_region _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [local_region_def]) >>
+      drule_all abi_args_dynamic_local_type >> strip_tac >>
+      `lookup_var p s1 = SOME w` by
+        (gvs[wb_frame_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+      `local_ptrs_rel func ce es.scopes s0 /\
+       local_ptrs_rel func ce es.scopes s1` by
+        gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+      drule_all local_ptrs_rel_value_at >> strip_tac >>
+      `val_in_memory entry.type entry.value (w2n w) s0.vs_memory` by
+        metis_tac[local_ptrs_rel_value_at] >>
+      `val_wf entry.type entry.value` by
+        (gvs[local_ptrs_rel_def] >> metis_tac[]) >>
+      `value_has_type entry.type entry.value` by
+        (irule vyperTypeStatePreservationTheory.lookup_scopes_state_well_typed_value_has_type >>
+         qexistsl [`name`, `es`] >> gvs[expr_sim_inv_def]) >>
+      `mem_word_at b s1.vs_memory = mem_word_at b s0.vs_memory` by
+        (Cases_on `entry.value` >>
+         gvs[valueEncodingTheory.val_wf_def, valueEncodingTheory.val_in_memory_def,
+             vyperTypingTheory.value_has_type_inv] >>
+         rename1 `entry.value = ArrayV av` >>
+         Cases_on `av` >> gvs[valueEncodingTheory.val_wf_def,
+                              valueEncodingTheory.val_in_memory_def]) >>
+      `32 <= sz` by gvs[valueEncodingTheory.type_memory_size_def] >>
+      `mem_bytes_at b 32 s1.vs_memory = mem_bytes_at b 32 s0.vs_memory` by
+        simp[valueEncodingProofsTheory.mem_bytes_at_word] >>
+      `mem_bytes_at (b + 32) (sz - 32) s1.vs_memory =
+       mem_bytes_at (b + 32) (sz - 32) s0.vs_memory` by
+        (gvs[locals_kept_def] >> first_x_assum irule >>
+         qexistsl [`w2n w`, `name`, `sz`] >> simp[]) >>
+      `sz = 32 + (sz - 32)` by decide_tac >>
+      metis_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded]) >>
+  gvs[locals_kept_def] >> first_x_assum irule >>
+  qexistsl [`b`, `name`, `sz`] >> simp[]
 QED
