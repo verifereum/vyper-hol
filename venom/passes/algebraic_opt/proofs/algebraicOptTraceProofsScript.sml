@@ -736,3 +736,36 @@ Proof
   simp[ao_source_trace_def] >>
   Cases_on `front` >> gvs[ao_source_trace_def]
 QED
+
+Theorem ao_source_step_labels:
+  !ctx fn a b. ao_source_step ctx fn a b ==>
+    (SND (SND b)).vs_labels = (SND (SND a)).vs_labels
+Proof
+  ho_match_mp_tac ao_source_step_ind >> simp[] >> rpt strip_tac >>
+  metis_tac[venomExecPropsTheory.step_inst_preserves_labels_always,
+            venomExecPropsTheory.eval_phis_preserves_labels]
+QED
+
+Theorem ao_source_trace_member_labels[local]:
+  !trace ctx fn a b.
+    ao_source_trace ctx fn (a::trace) /\ MEM b (a::trace) ==>
+    (SND (SND b)).vs_labels = (SND (SND a)).vs_labels
+Proof
+  Induct >> simp[ao_source_trace_def] >> rpt gen_tac >>
+  strip_tac >> gvs[ao_source_trace_def] >>
+  drule ao_source_step_labels >> strip_tac >>
+  first_x_assum (qspecl_then [`ctx`,`fn`,`h`,`b`] mp_tac) >> simp[]
+QED
+
+Theorem ao_source_trace_labels:
+  !ctx fn trace k p u h q t.
+    ao_source_trace ctx fn trace /\ MEM (k,p,u) trace /\ MEM (h,q,t) trace ==>
+    t.vs_labels = u.vs_labels
+Proof
+  rpt gen_tac >> Cases_on `trace` >- simp[] >> strip_tac >>
+  qspecl_then [`t'`,`ctx`,`fn`,`h'`] mp_tac ao_source_trace_member_labels >>
+  simp[] >> strip_tac >>
+  first_assum (qspec_then `(k,p,u)` mp_tac) >>
+  first_x_assum (qspec_then `(h,q,t)` mp_tac) >>
+  fs[listTheory.MEM] >> rpt strip_tac >> gvs[]
+QED
