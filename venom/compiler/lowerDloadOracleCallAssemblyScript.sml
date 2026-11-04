@@ -2,8 +2,8 @@ Theory lowerDloadOracleCallAssembly
 Ancestors
   lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
-  lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomState
-  memLocDefs pointerConfinedDefs venomInst finite_map pred_set list words arithmetic
+  lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
+  memLocDefs pointerConfinedDefs codegenRel contextCodegenRel venomInst finite_map pred_set list words arithmetic
 
 (* A numeric use observes either a selected translated pointer or an
    untainted scalar.  Definedness is transported independently of value class. *)
@@ -246,4 +246,91 @@ Proof
       qexistsl_tac [`A`,`lo`,`tn`] >> simp[ADD_COMM]) >>
   gvs[] >> irule ld_memory_read_slot >>
   qexistsl_tac [`A`,`k`,`lo`,`sz`,`tn`] >> simp[GSYM ADD_ASSOC]
+QED
+
+Theorem ld_oracle_call_ranges:
+  ld_memory lo A tn s t /\
+  access_ok lo (ld_erase A o_f H) fn inst s /\ taint_ok fn tn inst s /\
+  ~in_revert_forward fn s /\
+  ((inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+    eval_operand v s = SOME value) \/
+   (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz])) /\
+  eval_operand g s = SOME gas /\ eval_operand a s = SOME addr /\
+  eval_operand ao s = SOME x /\ eval_operand az s = SOME n /\
+  eval_operand ro s = SOME r /\ eval_operand rz s = SOME rsize /\
+  (op_prov H ao = NONE ==> x = y) /\
+  (!k. op_prov H ao = SOME k ==> ld_wordrel A (SOME k) x y) /\
+  (op_prov H ro = NONE ==> r = q) /\
+  (!k. op_prov H ro = SOME k ==> ld_wordrel A (SOME k) r q) /\
+  (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) ==>
+  read_memory (w2n x) (w2n n) s = read_memory (w2n y) (w2n n) t /\
+  (w2n rsize = 0 \/ (w2n r = w2n q /\ w2n r + w2n rsize <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `mem_read_ops inst = SOME <|iao_ofst := ao; iao_size := SOME az;
+                            iao_max_size := SOME az|> /\
+   mem_write_ops inst = SOME <|iao_ofst := ro; iao_size := NONE;
+                             iao_max_size := SOME rz|> /\
+   MEM (w2n x,w2n n) (source_memory_read_ranges inst s) /\
+   MEM (w2n r,w2n rsize) (source_memory_write_ranges inst s) /\
+   ~about_to_revert fn inst s /\
+   ~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN]` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >>
+     simp[mem_read_ops_def, mem_write_ops_def, source_memory_read_ranges_def,
+       memory_range_of_operands_def, source_memory_write_ranges_def,
+       fixed_source_write_range_def, eval_operands_def, about_to_revert_def]) >>
+  conj_tac
+  >- (irule ld_observed_memory_read >> simp[] >>
+      qexistsl_tac [`A`,`H`,`fn`,`inst`,`lo`,
+        `<|iao_ofst := ao; iao_size := SOME az; iao_max_size := SOME az|>`,`tn`] >>
+      fs[] >> metis_tac[]) >>
+  Cases_on `w2n rsize = 0` >- gvs[] >>
+  `0 < w2n rsize` by decide_tac >>
+  drule ld_write_access_classified >> simp[] >>
+  disch_then (qspecl_then [`q`,`r`,`w2n rsize`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >>
+  simp[ADD_COMM] >> metis_tac[]
+QED
+
+Theorem ld_exec_ext_call_frame:
+  exec_ext_call inst s gas addr value ao az ro rz st = OK ss /\
+  inst.inst_outputs = [out] /\ FLOOKUP ss.vs_vars out = SOME w ==>
+  ss.vs_vars = s.vs_vars |+ (out,w) /\
+  ss.vs_params = s.vs_params /\ ss.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >>
+  gvs[exec_ext_call_def, consume_call_outcome_eq, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem ld_oracle_call_taint:
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  3 < LENGTH inst.inst_operands /\
+  source_memory_write_ranges inst s = [(w2n ro,w2n rz)] /\
+  ss.vs_allocas = s.vs_allocas /\ ss.vs_fmp = s.vs_fmp ==>
+  step_taint inst s ss tn = tn with <|
+    t_var := set_var_taint tn.t_var inst.inst_outputs {};
+    t_mem := tn.t_mem DIFF {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)};
+    t_stor := adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor;
+    t_trans := adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans |>
+Proof
+  strip_tac >>
+  `written_taint tn inst s = {} /\ out_taint tn inst s = {}` by
+    (Cases_on `inst.inst_operands` >> fs[] >>
+     Cases_on `t` >> fs[] >> Cases_on `t'` >> fs[] >>
+     Cases_on `t` >> fs[written_taint_def, out_taint_def]) >>
+  `new_site_bytes s ss = {}` by
+    (simp[new_site_bytes_def, EXTENSION] >> rpt strip_tac >>
+     Cases_on `aid IN FDOM s.vs_allocas` >> fs[FLOOKUP_DEF]) >>
+  `range_bytes (step_writes inst s ss) =
+    {w2n ro+j | j < LENGTH (TAKE (w2n rz) ss.vs_returndata)}` by
+    (simp[step_writes_def, range_bytes_def, LENGTH_TAKE_EQ, EXTENSION] >>
+     Cases_on `w2n rz <= LENGTH ss.vs_returndata` >> simp[MIN_DEF] >>
+     gen_tac >> (eq_tac
+     >- (strip_tac >> qexists_tac `x - w2n ro` >> decide_tac) >>
+     strip_tac >> gvs[] >> decide_tac)) >>
+  Cases_on `tn` >>
+  simp[step_taint_def, mem_taint_def, store_taint_def, imm_taint_def,
+       taint_component_equality]
 QED
