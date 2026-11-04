@@ -1450,7 +1450,13 @@ Proof
   irule pair_let_snd_preserves >> reverse conj_tac
   >- (irule bound_labels_lower_value >> simp[]) >>
   rpt strip_tac >> simp[] >> IF_CASES_TAC >> simp[] >>
-  Cases_on `rt` >> simp[bound_labels_as_stack_val, bound_labels_type_convert]
+  Cases_on `rt` >> simp[bound_labels_as_stack_val, bound_labels_type_convert] >>
+  IF_CASES_TAC >> simp[bound_labels_as_stack_val, bound_labels_type_convert] >>
+  simp[compile_bytestring_widen_copy_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer,
+    bound_labels_copy_memory, comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac])
 QED
 
 Theorem bound_labels_type_builtin_constants[local]:
