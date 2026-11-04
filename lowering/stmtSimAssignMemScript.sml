@@ -406,8 +406,7 @@ QED
    in, not 0, and 64 bytes below 2 ** 256.  expr_type e = T leaves out
    assignments that widen e's value to T. *)
 Theorem compile_assign_local_memory_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es res es' p sz vtyp tyv.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ ~is_word_type vtyp /\
     ~(has_length_word vtyp /\ is_empty_value_expr e) /\
@@ -415,15 +414,15 @@ Theorem compile_assign_local_memory_stmt_frag:
     evaluate_type (get_tenv cx) vtyp = SOME tyv /\
     type_memory_bytes cenv vtyp = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    (!v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
        entry.type = tyv /\ value_has_type tyv v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `expr_type e = vtyp` (SUBST_ALL_TAC o SYM) >>
@@ -770,16 +769,17 @@ Proof
 QED
 
 Theorem compile_assign_local_empty_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es res es' p sz vtyp tyv.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp tyv.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     has_length_word (expr_type e) /\ is_empty_value_expr e /\
     has_length_word vtyp /\ evaluate_type (get_tenv cx) vtyp = SOME tyv /\
-    (do result <- eval_expr cx e; read_result cx result od) es =
-      (INL (default_value tyv), es) /\
+    (!gs. (do result <- eval_expr cx e; read_result cx result od)
+            (es with gas_obs := gs) =
+          (INL (default_value tyv), es with gas_obs := gs)) /\
     (!entry. lookup_scopes id es.scopes = SOME entry ==> entry.type = tyv) ==>
     stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e)) es res es'
+      (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
   drule_all assign_local_empty_code_parts >> strip_tac >>

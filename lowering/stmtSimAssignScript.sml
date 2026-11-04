@@ -189,21 +189,20 @@ QED
    a word_value, or an address or bytesN of x's type
    (store_lays_out_word_value, store_lays_out_typed). *)
 Theorem compile_assign_local_stmt_frag:
-  !ctx func cx lctx RetQ cenv ty id e es res es' p sz vtyp etv.
-    eval_stmt cx (Assign (BaseTarget (NameTarget id)) e) es = (res, es') /\
+  !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ is_word_type vtyp /\
     is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
-    (!v es1 entry.
-       (do result <- eval_expr cx e; read_result cx result od) es =
-         (INL v, es1) /\
+    (!gs v es1 entry.
+       (do result <- eval_expr cx e; read_result cx result od)
+         (es with gas_obs := gs) = (INL v, es1) /\
        lookup_scopes id es1.scopes = SOME entry ==>
        store_lays_out etv entry.type v) /\
     expr_sim ctx func cenv cx (expr_type e) e es ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (NameTarget id)) e))
-      es res es'
+      (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
