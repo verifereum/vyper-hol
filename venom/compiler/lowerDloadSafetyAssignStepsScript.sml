@@ -15,22 +15,6 @@ Proof
   simp[retpc_var_def] >> metis_tac[copy_phi_var_assign]
 QED
 
-Theorem ld_inst_input_ir[local]:
-  MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands ==>
-  MEM v (fn_ir_vars fn)
-Proof
-  simp[fn_insts_MEM] >> strip_tac >>
-  simp[fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
-  irule_at Any EQ_REFL >> qexists_tac `bb` >> simp[] >>
-  simp[MEM_FLAT, MEM_MAP] >> irule_at Any EQ_REFL >>
-  qexists_tac `inst` >> simp[inst_ir_vars_def] >> disj2_tac >>
-  simp[inst_uses_def] >>
-  qpat_x_assum `MEM (Var v) inst.inst_operands` mp_tac >>
-  Q.SPEC_TAC (`inst.inst_operands`, `ops`) >> Induct >>
-  simp[operand_vars_def] >> Cases_on `h` >>
-  simp[operand_var_def] >> metis_tac[]
-QED
-
 Theorem ld_assign_selected_output[local]:
   ld_vars P A f /\ MEM inst (fn_insts f.lf_fn) /\
   inst.inst_opcode = ASSIGN /\ inst.inst_operands = [op] /\

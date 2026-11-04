@@ -189,3 +189,19 @@ Proof
   >- (irule ld_inst_output_ir >> metis_tac[MEM]) >>
   strip_tac >> drule_all ld_vars_phi_snapshot >> simp[]
 QED
+
+Theorem ld_memory_update_var:
+  ld_memory lo A tn s t ==>
+  ld_memory lo A (tn with t_var := tv)
+    (update_var v x s) (update_var w y t)
+Proof
+  strip_tac >> gvs[ld_memory_def, update_var_def] >> metis_tac[]
+QED
+
+Theorem ld_nonghost_update_var:
+  ld_nonghost tn s t ==>
+  ld_nonghost (tn with t_var := tv)
+    (update_var v x s) (update_var w y t)
+Proof
+  strip_tac >> gvs[ld_nonghost_def, update_var_def] >> metis_tac[]
+QED
