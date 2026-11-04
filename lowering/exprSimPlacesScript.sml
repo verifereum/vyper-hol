@@ -13,7 +13,7 @@
  * compile_pop_nested_sim).  Admitted: an array subscript with a pop
  * (compile_subscript_array_pop_case), with a call in the index of a
  * storage or transient base (compile_subscript_array_storage_call_case),
- * or of an immutable in the constructor
+ * or of an immutable in the constructor or with an effectful index
  * (compile_subscript_array_ctor_code_case).
  *
  * TOP-LEVEL:
@@ -205,7 +205,7 @@ Theorem compile_subscript_array_nopop_case:
     (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
                is_slot_addressed l ==> ~expr_has_effect idx) /\
     (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
-             ~cenv.ce_is_ctor) ==>
+             ~cenv.ce_is_ctor /\ ~expr_has_effect idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   cheat
@@ -251,10 +251,17 @@ Proof
   cheat
 QED
 
-(* An element of an immutable array in the constructor.  ADMITTED (cheat),
-   as exprSimBuiltins' compile_len_ctor_code_case is for len: the lowering
+(* An element of an immutable array in the constructor, or at runtime with
+   an index that has an effect.  ADMITTED (cheat).  In the constructor, as
+   exprSimBuiltins' compile_len_ctor_code_case is for len: the lowering
    loads the array's length word with ILOAD, but immutables_rel relates
-   that word to typed_val_to_w256 of the whole value, not to its length. *)
+   that word to typed_val_to_w256 of the whole value, not to its length.
+   At runtime, the source lets a call in the index write the immutable
+   (write_place has no deploy check on an ImmutablePlace, and the type
+   system has no immutable rule), so a[f()] with f reassigning a reads the
+   new value, while the lowering reads the old one from code.  Vyper
+   rejects that program (ImmutableViolation); a type-checker rule that
+   immutables are written only in the constructor replaces that half. *)
 Theorem compile_subscript_array_ctor_code_case:
   !nocalls ctx func cenv cx ann obj idx et bd ty st.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -262,7 +269,7 @@ Theorem compile_subscript_array_ctor_code_case:
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode /\
-    cenv.ce_is_ctor ==>
+    (cenv.ce_is_ctor \/ expr_has_effect idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   cheat
@@ -281,7 +288,7 @@ Proof
   Cases_on `?ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
                       is_slot_addressed l /\ expr_has_effect idx`
   >- metis_tac[compile_subscript_array_storage_call_case] >>
-  Cases_on `cenv.ce_is_ctor /\
+  Cases_on `(cenv.ce_is_ctor \/ expr_has_effect idx) /\
             ?ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode`
   >- metis_tac[compile_subscript_array_ctor_code_case] >>
   irule compile_subscript_array_nopop_case >> metis_tac[]

@@ -21,7 +21,7 @@ Theorem compile_subscript_array_nopop_case:
     (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
                is_slot_addressed l ==> ~expr_has_effect idx) /\
     (!ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
-             ~cenv.ce_is_ctor) ==>
+             ~cenv.ce_is_ctor /\ ~expr_has_effect idx) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 ```
 
@@ -56,7 +56,7 @@ Source: `eval_expr` of `Subscript` evaluates the base, then the index, reads the
 
 Lowering: `compile_subscript` lowers the base, then the index (`lower_value`), then `compile_array_subscript`: the bounds check (an ASSERT, which aborts; the source raises a RuntimeError, allowed by `expr_exit`, see exprSimArrayIndex) against the length the loader reads, and the element's pointer.
 
-The base's `vv_holds` gives, for a pointer into a local, `local_place_at`: the pointer is the local's base plus the offset of the base's path (`mem_path_offset`). It survives the index's fragment by `local_place_at_vars_frame` / `vv_holds_vars_frame`. Without a pop in the subscript, evaluating the index leaves the caller's scopes as they were (an internal call restores them via `pop_function`; the only expression that writes a local is `Pop`), so the base's path still reads the current value; this needs a new lemma by mutual induction over evaluation (model: `eval_mutual_scope_pop_effect` in semantics/prop/vyperPlaceResultTypingScript.sml). For storage the index has no call, so storage is unchanged and liveness carries over. For an immutable, the premise excludes the constructor.
+The base's `vv_holds` gives, for a pointer into a local, `local_place_at`: the pointer is the local's base plus the offset of the base's path (`mem_path_offset`). It survives the index's fragment by `local_place_at_vars_frame` / `vv_holds_vars_frame`. Without a pop in the subscript, evaluating the index leaves the caller's scopes as they were (an internal call restores them via `pop_function`; the only expression that writes a local is `Pop`), so the base's path still reads the current value; this needs a new lemma by mutual induction over evaluation (model: `eval_mutual_scope_pop_effect` in semantics/prop/vyperPlaceResultTypingScript.sml). For storage the index has no call, so storage is unchanged and liveness carries over. For an immutable, the premise excludes the constructor and an index with an effect (amended 2026-11-04: the source lets a call write an immutable at runtime, which Vyper rejects; that subcase is admitted in `compile_subscript_array_ctor_code_case`).
 
 ## Domain Constraints
 
