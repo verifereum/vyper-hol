@@ -80,7 +80,7 @@
 
 Theory exprSim
 Ancestors
-  list rich_list finite_map pred_set
+  list rich_list finite_map pred_set placeProvenance
   fragExec varsExt loweringSlice localPtrsProps venomMemDefs
   exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
   vyperInterpreter vyperState vyperValueOperation vyperContext
@@ -576,6 +576,58 @@ Definition vv_at_def:
             val_footprint tvt v = 0))
 End
 
+(* Raw-result adapter to the shared target-place relation.  The target
+   relation deliberately excludes immutable assignment targets; expression
+   pointers into code instead retain the immutable_holds layout witness. *)
+Definition vv_place_ptr_rel_def:
+  (vv_place_ptr_rel cenv cx es pl (StackValue t op) s <=> F) /\
+  (vv_place_ptr_rel cenv cx es pl (LocatedValue t p) s <=>
+     ?w. eval_operand p.ptr_operand s = SOME w /\
+       case pl of
+         ImmutablePlace src id path =>
+           p.ptr_location = LocCode /\
+           immutable_holds cenv cx t (PlaceR pl) w es
+       | _ => place_ptr_rel cenv cx s (PlaceR pl) w
+                (SOME p.ptr_location) (Type t))
+End
+
+Theorem vv_place_ptr_rel_stack[simp]:
+  ~vv_place_ptr_rel cenv cx es pl (StackValue t op) s
+Proof
+  simp[vv_place_ptr_rel_def]
+QED
+
+Theorem vv_place_ptr_rel_storage:
+  vv_place_ptr_rel cenv cx es (StoragePlace tr slot tv)
+    (LocatedValue t p) s <=>
+  eval_operand p.ptr_operand s = SOME slot /\
+  p.ptr_location = slot_loc tr /\
+  evaluate_type (get_tenv cx) t = SOME tv
+Proof
+  simp[vv_place_ptr_rel_def, place_ptr_rel_def]
+QED
+
+Theorem vv_place_ptr_rel_memory_root:
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var x) sz) /\
+  lookup_var x s = SOME b /\ cenv.ce_var_type id = SOME t /\
+  evaluate_type (get_tenv cx) t = SOME tv /\
+  eval_operand p.ptr_operand s = SOME b /\ p.ptr_location = LocMemory ==>
+  vv_place_ptr_rel cenv cx es (MemoryPlace id []) (LocatedValue t p) s
+Proof
+  simp[vv_place_ptr_rel_def, place_ptr_rel_def, mem_path_offset_def] >>
+  rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem vv_place_ptr_rel_immutable:
+  vv_place_ptr_rel cenv cx es (ImmutablePlace src id path)
+    (LocatedValue t p) s <=>
+  p.ptr_location = LocCode /\
+  ?w. eval_operand p.ptr_operand s = SOME w /\
+      immutable_holds cenv cx t (PlaceR (ImmutablePlace src id path)) w es
+Proof
+  simp[vv_place_ptr_rel_def] >> metis_tac[]
+QED
+
 (* expr_post with a value_vv in place of an operand. *)
 Definition vv_post_def:
   vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
@@ -591,8 +643,35 @@ Definition vv_post_def:
        (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
-    locals_kept cenv es s0 s
+    locals_kept cenv es s0 s /\
+    (!p. tv = PlaceR p ==> vv_place_ptr_rel cenv cx es' p vv s)
 End
+
+Theorem vv_post_place_ptr:
+  vv_post ctx func cenv cx e es sa sb s0 es' (PlaceR p) vv s ==>
+  vv_place_ptr_rel cenv cx es' p vv s
+Proof
+  simp[vv_post_def]
+QED
+
+Theorem vv_post_value:
+  vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s <=>
+    stmt_state_rel ctx func cenv cx es' s /\
+    vv_holds cenv cx (expr_type e) (Value v) vv es' s /\
+    vv_at cenv cx (expr_type e) sa sb es' (Value v) vv s /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x s = SOME w) /\
+    (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    (!aid off sz.
+       FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+       (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                  off + sz <= b \/ b + sz' <= off) ==>
+       mem_bytes_at off sz s.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
+    locals_kept cenv es s0 s
+Proof
+  simp[vv_post_def]
+QED
 
 (* Raw expression results include values and captured places.  Mapping
    roots are excluded because they cannot be read as values. *)
