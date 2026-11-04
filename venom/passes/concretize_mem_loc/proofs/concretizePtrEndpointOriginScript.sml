@@ -105,3 +105,46 @@ Proof
   >- (`k = PRE (LENGTH h)` by decide_tac >> gvs[]) >>
   `k = LENGTH h` by decide_tac >> simp[]
 QED
+
+Theorem ptr_chrono_last_write_index:
+  !j. (?k. i <= k /\ k < j /\ ptr_chrono_write ctx x (EL k h)) ==>
+  ?w. i <= w /\ w < j /\ ptr_chrono_write ctx x (EL w h) /\
+      (!k. w < k /\ k < j ==> ~ptr_chrono_write ctx x (EL k h))
+Proof
+  Induct >> simp[] >> strip_tac >>
+  Cases_on `i <= j /\ ptr_chrono_write ctx x (EL j h)`
+  >- (qexists `j` >> simp[] >> rpt strip_tac >> decide_tac) >>
+  `k < j` by (Cases_on `k = j` >> gvs[]) >>
+  `?w. i <= w /\ w < j /\ ptr_chrono_write ctx x (EL w h) /\
+        (!k. w < k /\ k < j ==> ~ptr_chrono_write ctx x (EL k h))` by
+    metis_tac[] >>
+  qexists `w` >> simp[] >> rpt strip_tac >> Cases_on `k' = j`
+  >- gvs[] >>
+  `k' < j` by decide_tac >> metis_tac[]
+QED
+
+Theorem ptr_chrono_fresh_last_write_index:
+  ptr_chrono_history vs0 ctx h endpoint /\
+  h = pre ++ [a] ++ tail /\ tail <> [] /\
+  a.po_inst.inst_opcode = ALLOCA /\
+  step_inst fuel ctx a.po_inst a.po_state = OK sa' /\
+  x IN new_site_bytes a.po_state sa' /\ x NOTIN endpoint.po_taint.t_mem ==>
+  ?w. LENGTH pre < w /\ w + 1 < LENGTH h /\
+      ptr_chrono_write ctx x (EL w h) /\
+      ptr_observation_reachable vs0 ctx (EL w h) /\
+      (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write ctx x (EL k h))
+Proof
+  strip_tac >> drule_all ptr_chrono_fresh_write_index >> strip_tac >>
+  `k < PRE (LENGTH h)` by decide_tac >>
+  `?w. SUC (LENGTH pre) <= w /\ w < PRE (LENGTH h) /\
+        ptr_chrono_write ctx x (EL w h) /\
+        (!k. w < k /\ k < PRE (LENGTH h) ==> ~ptr_chrono_write ctx x (EL k h))` by
+    (irule ptr_chrono_last_write_index >> qexists `k` >> simp[]) >>
+  qpat_x_assum `h = pre ++ [a] ++ tail` kall_tac >>
+  `w + 1 < LENGTH h /\ w < LENGTH h` by decide_tac >>
+  `ptr_observation_reachable vs0 ctx (EL w h)` by
+    (drule ptr_chrono_history_reachable >> simp[EVERY_EL] >>
+     metis_tac[]) >>
+  qexists `w` >> simp[] >> rpt strip_tac >>
+  first_x_assum irule >> decide_tac
+QED
