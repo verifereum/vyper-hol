@@ -1,6 +1,6 @@
 Theory loadElimStructure
 Ancestors
-  analysisSimDefs passSimulationProps venomWf venomInst list rich_list sorting
+  analysisSimDefs passSimulationProps venomWf venomInst venomExecSemantics list rich_list sorting
 
 (* Insertion at an arbitrary cut: provenance and uniqueness do not depend
    on the cut, nor on the instruction analysis. *)
@@ -128,4 +128,109 @@ Proof
   `ps ++ xs <> []` by simp[] >>
   simp[le_wf_cons, is_terminator_def] >>
   first_x_assum irule >> simp[]
+QED
+
+Theorem le_phi_insert_wf:
+  !xs bb ps.
+    bb_well_formed (bb with bb_instructions := xs) /\
+    EVERY (\i. i.inst_opcode = PHI) ps ==>
+    bb_well_formed (bb with bb_instructions :=
+      TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs)
+Proof
+  Induct_on `xs` >- simp[le_wf_empty] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (Cases_on `xs = []`
+      >- gvs[le_wf_singleton, is_terminator_def] >>
+      gvs[le_wf_cons, phi_prefix_length_def] >>
+      `bb_well_formed (bb with bb_instructions :=
+        TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs)`
+        by (first_x_assum irule >> simp[]) >>
+      `TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs <> []`
+        by (strip_tac >> gvs[le_wf_empty]) >>
+      simp[le_wf_cons, is_terminator_def]) >>
+  simp[phi_prefix_length_def] >>
+  irule le_wf_phi_prefix >> simp[]
+QED
+
+Theorem le_phi_insert_nonempty:
+  !xs bb ps.
+    bb_well_formed (bb with bb_instructions := xs) /\
+    EVERY (\i. i.inst_opcode = PHI) ps ==>
+    TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs <> []
+Proof
+  metis_tac[le_phi_insert_wf, le_wf_empty]
+QED
+
+Theorem le_phi_insert_last:
+  !xs bb ps.
+    bb_well_formed (bb with bb_instructions := xs) /\
+    EVERY (\i. i.inst_opcode = PHI) ps ==>
+    LAST (TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs) =
+    LAST xs
+Proof
+  Induct_on `xs` >- simp[le_wf_empty] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h.inst_opcode = PHI`
+  >- (Cases_on `xs = []`
+      >- gvs[le_wf_singleton, is_terminator_def] >>
+      gvs[le_wf_cons, phi_prefix_length_def] >>
+      `TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs <> []`
+        by metis_tac[le_phi_insert_nonempty] >>
+      simp[LAST_CONS_cond] >> metis_tac[]) >>
+  simp[phi_prefix_length_def, LAST_APPEND, LAST_CONS_cond]
+QED
+
+Theorem le_phi_insert_succs:
+  !xs bb ps.
+    bb_well_formed (bb with bb_instructions := xs) /\
+    EVERY (\i. i.inst_opcode = PHI) ps ==>
+    bb_succs (bb with bb_instructions :=
+      TAKE (phi_prefix_length xs) xs ++ ps ++ DROP (phi_prefix_length xs) xs) =
+    bb_succs (bb with bb_instructions := xs)
+Proof
+  rpt strip_tac >>
+  `xs <> []` by (strip_tac >> gvs[le_wf_empty]) >>
+  drule_all le_phi_insert_nonempty >> strip_tac >>
+  drule_all le_phi_insert_last >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `LAST ys = LAST xs` >>
+  Cases_on `ys` >> Cases_on `xs` >> gvs[bb_succs_def]
+QED
+
+(* The corresponding simulation fact is a non-exported Triviality.
+   Export an update-form boundary for structural consumers. *)
+Theorem le_abtp_eq:
+  !bottom result prepend f bb.
+    analysis_block_transform_prepend bottom result prepend f bb =
+    (analysis_block_transform bottom result f bb) with bb_instructions :=
+      TAKE (phi_prefix_length (analysis_block_transform bottom result f bb).bb_instructions)
+           (analysis_block_transform bottom result f bb).bb_instructions ++
+      prepend bb.bb_label ++
+      DROP (phi_prefix_length (analysis_block_transform bottom result f bb).bb_instructions)
+           (analysis_block_transform bottom result f bb).bb_instructions
+Proof
+  simp[analysis_block_transform_prepend_def, analysis_block_transform_def]
+QED
+
+Theorem le_abtp_wf:
+  !bottom result prepend f bb.
+    bb_well_formed (analysis_block_transform bottom result f bb) /\
+    EVERY (\i. i.inst_opcode = PHI) (prepend bb.bb_label) ==>
+    bb_well_formed (analysis_block_transform_prepend bottom result prepend f bb)
+Proof
+  rpt strip_tac >> rewrite_tac[le_abtp_eq] >>
+  irule le_phi_insert_wf >> simp[]
+QED
+
+Theorem le_abtp_succs:
+  !bottom result prepend f bb.
+    bb_well_formed (analysis_block_transform bottom result f bb) /\
+    EVERY (\i. i.inst_opcode = PHI) (prepend bb.bb_label) ==>
+    bb_succs (analysis_block_transform_prepend bottom result prepend f bb) =
+    bb_succs (analysis_block_transform bottom result f bb)
+Proof
+  rpt strip_tac >> rewrite_tac[le_abtp_eq] >>
+  qmatch_asmsub_abbrev_tac `bb_well_formed bt` >>
+  qspecl_then [`bt.bb_instructions`, `bt`, `prepend bb.bb_label`]
+    mp_tac le_phi_insert_succs >> simp[]
 QED
