@@ -6,6 +6,7 @@ Ancestors
   exprLoweringProps emitHelper venomInst venomState words list rich_list
   compileEnv fragExec exprSim valueEncoding vyperValue vyperAST venomExecSemantics
   loweringSlice exprLowering vyperState freshWrites varsExt integer_word
+  arithmeticProps vyperArith vyperTypeSystem vyperTyping
 
 Theorem body_neg_no_ranges_seq[local]:
   !is s. EVERY (\i. !q. inst_mem_below_frontier i q) is ==>
@@ -235,3 +236,103 @@ val () = List.app (fn th =>
      then print "BODY_NEG_EXECUTION_MEMORY_AUDIT OK\n"
      else raise Fail "Neg execution inherited admission"
   end) [body_neg_result, body_neg_run, body_neg_frag_mem_at];
+
+Theorem body_neg_signed_interval:
+  0 < n ==>
+  (within_int_bound (Signed n) i <=>
+   -&(2 ** (n - 1)) <= i /\ i < &(2 ** (n - 1)))
+Proof
+  strip_tac >> simp[within_int_bound_def] >>
+  Cases_on `i < 0` >> simp[]
+  >- (`0 <= -i` by intLib.ARITH_TAC >>
+      simp[Once (GSYM integerTheory.INT_OF_NUM)] >>
+      `0 <= &(2 ** (n - 1))` by simp[] >>
+      eq_tac >> strip_tac >> intLib.ARITH_TAC) >>
+  `0 <= i` by intLib.ARITH_TAC >>
+  simp[Once (GSYM integerTheory.INT_OF_NUM)] >>
+  `0 <= &(2 ** (n - 1))` by simp[] >>
+  eq_tac >> strip_tac >> intLib.ARITH_TAC
+QED
+
+Theorem body_neg_signed_comparison:
+  0 < n /\ n <= 256 /\ within_int_bound (Signed n) i ==>
+  (word_gt (i2w i : bytes32) (i2w (-&(2 ** (n - 1)))) <=>
+   within_int_bound (Signed n) (-i))
+Proof
+  strip_tac >>
+  `n - 1 <= 255` by decide_tac >>
+  drule w2i_i2w_neg_pow2 >> strip_tac >>
+  drule_all w2i_i2w_within_signed >> strip_tac >>
+  simp[integer_wordTheory.WORD_GTi] >>
+  gvs[body_neg_signed_interval] >> intLib.ARITH_TAC
+QED
+
+Theorem body_neg_source_value:
+  is_numeric_type ann /\ ~is_uint_type ann /\
+  0 < type_bits ann /\ type_bits ann <= 256 /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
+  word_gt (typed_val_to_w256 tv v) (FST (type_bounds ann)) ==>
+  ?out. unop_result cx ann Neg [ann] v es = INL out /\
+        value_has_type tv out /\
+        typed_val_to_w256 tv out = 0w - typed_val_to_w256 tv v
+Proof
+  Cases_on `ann` >> simp[is_numeric_type_def, is_int_type_def, is_uint_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[is_int_type_def, is_uint_type_def] >> rpt strip_tac >>
+  Cases_on `v` >>
+  gvs[type_bits_def, evaluate_type_def, value_has_type_def,
+      type_bounds_def, is_signed_type_def, typed_val_to_w256_def,
+      val_to_w256_def]
+  >- (`0 < n` by decide_tac >>
+      drule_all body_neg_signed_comparison >> strip_tac >> gvs[] >>
+      simp[unop_result_def, vyperContextTheory.evaluate_builtin_def,
+           vyperASTTheory.type_to_int_bound_def,
+           vyperValueOperationTheory.bounded_int_op_def,
+           value_has_type_def, typed_val_to_w256_def, val_to_w256_def,
+           GSYM word_i2w_neg, wordsTheory.WORD_SUB_LZERO]) >>
+  `within_int_bound (Signed 168) (-i)` by
+    (qspec_then `168` mp_tac (GEN_ALL body_neg_signed_comparison) >>
+     simp[] >> disch_then drule >> simp[]) >>
+  simp[unop_result_def, vyperContextTheory.evaluate_builtin_def,
+       vyperASTTheory.type_to_int_bound_def,
+       vyperValueOperationTheory.bounded_int_op_def,
+       vyperValueOperationTheory.bounded_decimal_op_def,
+       decimal_bound_def, value_has_type_def, typed_val_to_w256_def,
+       val_to_w256_def, GSYM word_i2w_neg, wordsTheory.WORD_SUB_LZERO]
+QED
+
+Theorem body_neg_source_abort:
+  is_numeric_type ann /\ ~is_uint_type ann /\
+  0 < type_bits ann /\ type_bits ann <= 256 /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
+  ~word_gt (typed_val_to_w256 tv v) (FST (type_bounds ann)) ==>
+  !q. expr_exit (unop_result cx ann Neg [ann] v es) (Abort Revert_abort q)
+Proof
+  Cases_on `ann` >> simp[is_numeric_type_def, is_int_type_def, is_uint_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[is_int_type_def, is_uint_type_def] >> rpt strip_tac >>
+  Cases_on `v` >>
+  gvs[type_bits_def, evaluate_type_def, value_has_type_def,
+      type_bounds_def, is_signed_type_def, typed_val_to_w256_def,
+      val_to_w256_def]
+  >- (`0 < n` by decide_tac >>
+      drule_all body_neg_signed_comparison >> strip_tac >> gvs[] >>
+      simp[unop_result_def, vyperContextTheory.evaluate_builtin_def,
+           vyperASTTheory.type_to_int_bound_def,
+           vyperValueOperationTheory.bounded_int_op_def, expr_exit_def]) >>
+  `~within_int_bound (Signed 168) (-i)` by
+    (qspec_then `168` mp_tac (GEN_ALL body_neg_signed_comparison) >>
+     simp[] >> disch_then drule >> simp[]) >>
+  simp[unop_result_def, vyperContextTheory.evaluate_builtin_def,
+       vyperValueOperationTheory.bounded_decimal_op_def,
+       decimal_bound_def, expr_exit_def]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_NEG_SOURCE_MEMORY_AUDIT OK\n"
+     else raise Fail "Neg source correspondence inherited admission"
+  end) [body_neg_signed_interval, body_neg_signed_comparison,
+        body_neg_source_value, body_neg_source_abort];
