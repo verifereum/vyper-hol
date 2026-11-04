@@ -1072,3 +1072,69 @@ Resume if_selected_outcome_prefix_mem[cert]:
   Cases_on `b` >> fs[GSYM ignore_bind_def]
 QED
 Finalise if_selected_outcome_prefix_mem
+
+Theorem compile_if_code_layout_frontiers:
+  compile_stmt cenv lctx ty (If c ss1 ss2) sa = ((),sb) /\
+  fn_has_code sa sb func /\
+  (!sx op sy. lower_value compile_expr cenv (BaseT BoolT) c sx = (op,sy) ==>
+    cs_extends sx sy /\ sx.cs_next_var <= sy.cs_next_var) /\
+  cs_mono (stmts_env cenv lctx ty ss1) /\
+  cs_mono (stmts_env cenv lctx ty ss2) ==>
+  ?op cond pre post tl el xl.
+    lower_value compile_expr cenv (BaseT BoolT) c sa = (op,cond) /\
+    fn_has_code sa cond func /\ cs_extends sa cond /\
+    sa.cs_next_var <= cond.cs_next_var /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    pre.cs_current_bb = cond.cs_current_bb /\
+    pre.cs_current_insts = cond.cs_current_insts /\
+    emit_inst JNZ [op; Label tl; Label el] [] pre = ((),post) /\
+    fn_has_code pre post func /\
+    (!b. ?entry last after.
+      compile_stmts cenv lctx ty (if b then ss1 else ss2) entry = ((),last) /\
+      entry.cs_current_bb = (if b then tl else el) /\
+      entry.cs_current_insts = [] /\
+      cs_extends sa entry /\ sa.cs_next_var <= entry.cs_next_var /\
+      cs_extends entry last /\ cs_extends last sb /\
+      last.cs_next_var <= sb.cs_next_var /\
+      fn_has_code entry last func /\ fn_has_code last after func /\
+      (if block_is_terminated last then after = last
+       else emit_inst JMP [Label xl] [] last = ((),after)) /\
+      (~block_is_terminated last ==>
+        sb.cs_current_bb = xl /\ sb.cs_current_insts = []))
+Proof
+  strip_tac >> drule compile_if_parts_all >> strip_tac >>
+  imp_res_tac new_block_props >>
+  imp_res_tac if_branch_compiler_mono >>
+  imp_res_tac if_optional_jump_extends >>
+  imp_res_tac emit_inst_extends >>
+  `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var` by metis_tac[] >>
+  `cs_extends s4 s5` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s5 s6 /\ cs_extends s8 s9` by
+    metis_tac[cs_extends_new_block] >>
+  `cs_extends s11 sb /\ s11.cs_next_var = sb.cs_next_var /\
+   (~block_is_terminated s7 \/ ~block_is_terminated s10 ==>
+    sb.cs_current_bb = exit_lbl /\ sb.cs_current_insts = [])` by
+    (Cases_on `block_is_terminated s7 /\ block_is_terminated s10`
+     >- metis_tac[cs_extends_refl] >>
+     `?x. new_block exit_lbl s11 = (x,sb)` by metis_tac[] >>
+     imp_res_tac new_block_props >> metis_tac[cs_extends_new_block]) >>
+  `sa.cs_next_var <= sb.cs_next_var /\
+   sa.cs_next_var <= s6.cs_next_var /\ sa.cs_next_var <= s9.cs_next_var /\
+   s7.cs_next_var <= sb.cs_next_var /\ s10.cs_next_var <= sb.cs_next_var` by
+    decide_tac >>
+  `!a b. cs_extends sa a /\ cs_extends a b /\ cs_extends b sb ==>
+    fn_has_code a b func` by metis_tac[fn_has_code_mid] >>
+  `cs_extends sa s4 /\ cs_extends sa s6 /\ cs_extends sa s9 /\
+   cs_extends s7 sb /\ cs_extends s10 sb /\ cs_extends s1 sb /\
+   cs_extends s5 sb /\ cs_extends s8 sb /\ cs_extends sa s7 /\
+   cs_extends sa s10` by metis_tac[cs_extends_trans] >>
+  qexistsl_tac [`cond_op`, `s1`, `s4`, `s5`, `then_lbl`, `else_lbl`, `exit_lbl`] >>
+  simp[] >> conj_tac
+  >- metis_tac[cs_extends_refl] >>
+  gen_tac >> Cases_on `b` >> simp[]
+  >- (qexistsl_tac [`s6`, `s7`, `s8`] >> simp[] >>
+      metis_tac[cs_extends_refl]) >>
+  qexistsl_tac [`s9`, `s10`, `s11`] >> simp[] >>
+  metis_tac[cs_extends_refl]
+QED
