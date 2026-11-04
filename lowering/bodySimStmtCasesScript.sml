@@ -3237,6 +3237,102 @@ Proof
        aug_place_name_metadata, aug_place_unwrap_metadata]
 QED
 
+Theorem aug_place_intcall_metadata:
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_call f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty
+    (IntCall id) args dr = compile_call g cenv rt ty (IntCall id) args dr
+Proof
+  strip_tac >> drule aug_place_multi_vvs_metadata >>
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def,
+       aug_place_stage_intcall_metadata]
+QED
+
+Theorem aug_place_extcall_metadata:
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_call f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty
+    (ExtCall static skip sig opts) args dr =
+  compile_call g cenv rt ty (ExtCall static skip sig opts) args dr
+Proof
+  strip_tac >> PairCases_on `sig` >> Cases_on `args`
+  >- simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def] >>
+  rename1 `addr::rest` >>
+  `!ty. f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty addr =
+        g cenv ty addr` by metis_tac[MEM] >>
+  drule aug_place_lower_value_metadata >> strip_tac >>
+  `!e ty. MEM e (TAKE (LENGTH sig1) rest) ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e`
+    by metis_tac[rich_listTheory.MEM_TAKE, MEM] >>
+  drule aug_place_multi_vvs_metadata >> strip_tac >>
+  `!e ty. MEM e (DROP (LENGTH sig1) rest) ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e`
+    by metis_tac[rich_listTheory.MEM_DROP_IMP, MEM] >>
+  drule aug_place_ext_kwargs_metadata >> strip_tac >>
+  `type_memory_bytes (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) =
+   type_memory_bytes cenv` by simp[FUN_EQ_THM, aug_place_memory_bytes_metadata] >>
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def,
+       aug_place_ext_arg_types_metadata, aug_place_abi_enc_metadata,
+       aug_place_abi_dec_metadata, aug_place_external_kwargs_metadata]
+QED
+
+Theorem aug_place_send_metadata:
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_call f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty
+    (Send gas) args dr = compile_call g cenv rt ty (Send gas) args dr
+Proof
+  strip_tac >> Cases_on `args`
+  >- simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def] >>
+  rename1 `addr::rest` >> Cases_on `rest`
+  >- simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def] >>
+  rename1 `addr::value::gas_es` >>
+  `!e ty. MEM e (addr::value::gas_es) ==>
+    lower_value f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e =
+    lower_value g cenv ty e` by
+    (rpt strip_tac >> irule aug_place_lower_value_metadata >> metis_tac[]) >>
+  Cases_on `gas_es` >> simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def] >>
+  rename1 `gas_e::tail` >> Cases_on `tail` >>
+  simp[FUN_EQ_THM, exprLoweringTheory.compile_call_def]
+QED
+
+Theorem aug_place_call_metadata:
+  supported_effect_expr tops (Call rt target args NONE) /\
+  (!e ty. MEM e args ==>
+    f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) ty e = g cenv ty e) ==>
+  compile_call f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) rt ty
+    target args dr = compile_call g cenv rt ty target args dr
+Proof
+  strip_tac >> Cases_on `target`
+  >- (irule aug_place_intcall_metadata >> simp[])
+  >- (irule aug_place_extcall_metadata >> simp[])
+  >- (irule aug_place_send_metadata >> simp[]) >>
+  gvs[supported_effect_expr_def]
+QED
+
+Theorem aug_place_toplevel_ptr_metadata:
+  h nsid = cenv.ce_hashmap_info nsid /\ m nsid = cenv.ce_module_var_type nsid ==>
+  compile_get_target_ptr f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    (TopLevelNameTarget nsid) = compile_get_target_ptr g cenv (TopLevelNameTarget nsid)
+Proof
+  strip_tac >> simp[exprLoweringTheory.compile_get_target_ptr_def]
+QED
+
+Theorem aug_place_pop_ptr_metadata:
+  (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  supported_storage_dynamic_array tops nsid ==>
+  compile_get_target_ptr f (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+    (TopLevelNameTarget nsid) = compile_get_target_ptr g cenv (TopLevelNameTarget nsid)
+Proof
+  strip_tac >> PairCases_on `nsid` >>
+  `nsid0 = NONE` by
+    (Cases_on `supported_variable_decl tops (nsid0,nsid1)`
+     >- gvs[supportedExprFormsTheory.supported_storage_dynamic_array_def] >>
+     drule aug_place_variable_decl_namespace >> simp[]) >>
+  gvs[] >> irule (SRULE [] aug_place_toplevel_ptr_metadata) >> simp[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
