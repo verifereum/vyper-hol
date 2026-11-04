@@ -219,6 +219,51 @@ Definition all_dead_stores_def:
           space fn bb inst_idx
 End
 
+(* ===== Accesses stay in their own alloca ===== *)
+
+(* The access operands that bp_get_write_location and bp_get_read_location
+   build a location from with bp_segment_from_ops, in space sp.  Storage
+   and transient are word-addressed, so their accesses are one slot wide. *)
+Definition bp_access_ops_def:
+  bp_access_ops sp inst ops <=>
+    case sp of
+      AddrSp_Memory =>
+        mem_write_ops inst = SOME ops \/ mem_read_ops inst = SOME ops
+    | AddrSp_Storage =>
+        (?dst v. inst.inst_opcode = SSTORE /\ inst.inst_operands = [dst; v] /\
+                 ops = <| iao_ofst := dst; iao_size := SOME (Lit 1w);
+                          iao_max_size := SOME (Lit 1w) |>) \/
+        (?ofst. inst.inst_opcode = SLOAD /\ inst.inst_operands = [ofst] /\
+                ops = <| iao_ofst := ofst; iao_size := SOME (Lit 1w);
+                         iao_max_size := SOME (Lit 1w) |>)
+    | AddrSp_Transient =>
+        (?dst v. inst.inst_opcode = TSTORE /\ inst.inst_operands = [dst; v] /\
+                 ops = <| iao_ofst := dst; iao_size := SOME (Lit 1w);
+                          iao_max_size := SOME (Lit 1w) |>) \/
+        (?ofst. inst.inst_opcode = TLOAD /\ inst.inst_operands = [ofst] /\
+                ops = <| iao_ofst := ofst; iao_size := SOME (Lit 1w);
+                         iao_max_size := SOME (Lit 1w) |>)
+    | _ => F
+End
+
+(* Every non-empty access of fn through a pointer the base-pointer analysis
+   places in alloca aid stays within aid's region in state s, whether or not
+   the analysis knows the offset.  may_overlap treats locations in different
+   allocas as disjoint, as upstream Vyper does; this is the invariant that
+   makes that sound.  bp_ptrs_bounded only covers memory accesses at a known
+   offset. *)
+Definition bp_accesses_in_own_alloca_def:
+  bp_accesses_in_own_alloca bp fn s <=>
+    !sp inst ops aid off base sz w size_op n.
+      MEM inst (fn_insts fn) /\ bp_access_ops sp inst ops /\
+      bp_ptr_from_op bp ops.iao_ofst = SOME (Ptr (Allocation aid) off) /\
+      FLOOKUP s.vs_allocas aid = SOME (base, sz) /\
+      eval_operand ops.iao_ofst s = SOME w /\
+      ops.iao_max_size = SOME size_op /\
+      eval_operand size_op s = SOME n /\ n <> 0w ==>
+      base <= w2n w /\ w2n w + w2n n <= base + sz
+End
+
 (* ===== Per-instruction transform ===== *)
 
 (* Transform given a set of instruction IDs identified as dead stores.

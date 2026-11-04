@@ -1,9 +1,10 @@
 (*
  * Dead Store Elimination — Correctness Statement
  *
- * Preconditions: wf_function + wf_ssa, and a state invariant safe_inv that holds at
- *   the start, survives every step of fn, and implies alloca safety and
- *   soundness of fn's base-pointer analysis (see deadStoreElimProofsScript)
+ * Preconditions: wf_function + ssa_form, and a state invariant safe_inv that
+ *   holds at the start, survives every step of fn, and implies alloca safety,
+ *   soundness of fn's base-pointer analysis, and accesses staying in their
+ *   own alloca (see deadStoreElimProofsScript)
  * Conclusion includes Error disjunct: original execution may error while
  *   DSE-transformed succeeds (e.g. undefined operand in dead store).
  * See deadStoreElimProofsScript.sml for counterexamples and explanation.
@@ -212,7 +213,7 @@ QED
 
 Theorem dse_function_space_correct:
   !analysis_fn space fuel ctx fn s safe_inv.
-    wf_function fn /\ wf_ssa fn /\
+    wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
     (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
     (!fuel' ctx' inst s0 s1.
@@ -228,7 +229,8 @@ Theorem dse_function_space_correct:
        alloca_safe_access fn (alloca_roots fn) s0 /\
        ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
-       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
+       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
     (!fn'. all_dead_stores (analysis_fn space fn')
              (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
              space fn') ==>
@@ -242,7 +244,7 @@ QED
 
 Theorem dse_function_correct:
   !analysis_fn fuel ctx fn s safe_inv.
-    wf_function fn /\ wf_ssa fn /\
+    wf_function fn /\ ssa_form fn /\
     s.vs_inst_idx = 0 /\ safe_inv s /\
     (!s0 idx. safe_inv (s0 with vs_inst_idx := idx) <=> safe_inv s0) /\
     (!fuel' ctx' inst s0 s1.
@@ -258,7 +260,8 @@ Theorem dse_function_correct:
        alloca_safe_access fn (alloca_roots fn) s0 /\
        ptrs_in_alloca_bounds fn (alloca_roots fn) s0 /\
        bp_ptr_sound (bp_analyze (cfg_analyze fn) fn) s0 /\
-       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0) /\
+       bp_ptrs_bounded (bp_analyze (cfg_analyze fn) fn) fn s0 /\
+       bp_accesses_in_own_alloca (bp_analyze (cfg_analyze fn) fn) fn s0) /\
     (!space fn'.
       all_dead_stores (analysis_fn space fn')
         (cfg_analyze fn') FEMPTY (bp_analyze (cfg_analyze fn') fn')
