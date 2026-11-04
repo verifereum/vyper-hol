@@ -9,7 +9,7 @@ Definition sop_callee_def:
        mk_inst 101 ALLOCA [Lit 32w] ["b"];
        mk_inst 102 MSTORE [Var "p"; Lit 7w] [];
        mk_inst 103 MSTORE [Var "b"; Lit 9w] [];
-       mk_inst 104 RET [] []] |>]
+       mk_inst 104 RET [Lit 0w] []] |>]
 End
 
 Definition sop_caller_def:
