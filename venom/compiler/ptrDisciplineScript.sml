@@ -390,23 +390,30 @@ Definition imm_taint_def:
     else tn.t_imm
 End
 
-(* An oracle call (CALL, STATICCALL) that adopts its outcome's storage
-   replaces it in both runs alike, clearing its taint.  A call that changes
-   nothing keeps it.  DELEGATECALL and CREATE run real code on each run's
-   own storage, so taint_ok requires none to be tainted there. *)
+(* A CALL that adopts its outcome's storage (a non-static call that took
+   a successful outcome from the shared oracle list) replaces storage and
+   transient storage in both runs alike, clearing their taint.  Whether it
+   adopts depends only on the shared outcome, not on either run's own
+   storage.  Any other call keeps them: a static call and a failed one
+   change nothing, and a computed precompile takes no outcome from the
+   list.  DELEGATECALL and CREATE run real code on each run's own storage,
+   so taint_ok requires none to be tainted there. *)
 Definition adopt_reset_def:
-  adopt_reset inst changed (X:'a set) =
-    if (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\ changed
+  adopt_reset inst adopted (X:'a set) =
+    if inst.inst_opcode = CALL /\ adopted
     then {} else X
 End
 
 Definition step_taint_def:
   step_taint inst s s' tn =
+    let adopted = (~s.vs_call_ctx.cc_static /\
+                   s'.vs_outcomes <> s.vs_outcomes /\
+                   (HD s.vs_outcomes).co_success) in
     <| t_mem := mem_taint tn inst s s';
        t_var := set_var_taint tn.t_var inst.inst_outputs (out_taint tn inst s);
-       t_stor := adopt_reset inst (s'.vs_accounts <> s.vs_accounts)
+       t_stor := adopt_reset inst adopted
                    (store_taint SSTORE tn inst s tn.t_stor);
-       t_trans := adopt_reset inst (s'.vs_transient <> s.vs_transient)
+       t_trans := adopt_reset inst adopted
                     (store_taint TSTORE tn inst s tn.t_trans);
        t_imm := imm_taint tn inst s |>
 End
