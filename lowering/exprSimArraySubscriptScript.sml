@@ -3466,3 +3466,26 @@ Proof
        supportedProgramTheory.supported_declaration_body_def] >>
   strip_tac >> drule supported_immutable_array_element_not_array >> simp[]
 QED
+
+(* Completeness, not merely the soundness clauses for global lookup, ties a
+   declared immutable to its semantic type. This rules out changing a flat
+   declaration's runtime type to a nested array in a consistent environment. *)
+Theorem env_consistent_declared_immutable_type:
+  env_consistent env cx es /\
+  get_module_code cx src = SOME tops /\
+  MEM (VariableDecl vis Immutable name ty init) tops /\
+  FLOOKUP (get_source_immutables src
+    (case ALOOKUP es.immutables cx.txn.target of
+       SOME imms => imms | NONE => [])) name = SOME (tv,v) ==>
+  evaluate_type (get_tenv cx) ty = SOME tv
+Proof
+  strip_tac >>
+  fs[vyperTypeInvariantsTheory.env_consistent_def,
+     vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `FLOOKUP env.bare_globals (src,name) = SOME ty` by
+    (fs[vyperTypeInvariantsTheory.bare_globals_complete_def] >>
+     qpat_x_assum `!src ts vis mut id ty init. _` drule >>
+     disch_then drule >> simp[]) >>
+  fs[vyperTypeInvariantsTheory.env_immutables_consistent_def] >>
+  first_x_assum drule_all >> simp[]
+QED
