@@ -228,6 +228,20 @@ Proof
   metis_tac[current_wf_path_annotation_origin]
 QED
 
+Theorem current_wf_entry_unavailable:
+  fn_entry_label fn = SOME l ==> ~current_available fn v l 0
+Proof
+  strip_tac >> simp[current_available_def] >> rpt strip_tac >>
+  qexists_tac `[l]` >> simp[is_fn_path_def]
+QED
+
+Theorem current_wf_entry_undemanded:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_entry_label fn = SOME l ==> ~current_demand fn v l 0
+Proof
+  metis_tac[current_wf_entry_unavailable, current_demand_available]
+QED
+
 Theorem current_wf_path_last_edge[local]:
   !pre p target. is_fn_path fn (pre ++ [p;target]) ==>
     is_fn_path fn (pre ++ [p]) /\ fn_cfg_edge fn p target
