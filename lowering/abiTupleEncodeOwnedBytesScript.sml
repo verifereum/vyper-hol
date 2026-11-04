@@ -25,6 +25,22 @@ Proof
   qexists_tac `typed_val_to_w256 (BaseTV bt) v` >> asm_simp_tac bool_ss []
 QED
 
+(* The zero-width source word has a valid uint256 representative, not a
+   literal ABI bytes0 value.  Its encoding is still one complete word. *)
+Theorem abi_tuple_encode_fixed_zero_source_input:
+  abi_decoder_operand_live next op /\ eval_operand op s = SOME (0w:256 word) ==>
+  abi_tuple_encode_input sf ce (BaseT (BytesT (Fixed 0)))
+    (Uint 256) (NumV 0) op next lo hi s /\
+  enc (Uint 256) (NumV 0) = enc (Bytes (SOME 0)) (contractABI$BytesV [])
+Proof
+  strip_tac >> conj_tac
+  >- (simp[abi_tuple_encode_input_def, is_word_type_def, type_memory_bytes_def,
+           has_type_def, is_dynamic_def, static_length_def, wordsTheory.dimword_def,
+           venomMemPropsTheory.dimindex_256] >> CONV_TAC EVAL)
+  >> CONV_TAC EVAL >> simp[venomMemPropsTheory.dimindex_256] >> CONV_TAC EVAL >>
+  simp[ZERO_SHIFT, w2w_0]
+QED
+
 Theorem abi_tuple_encode_flag_source_input:
   abi_tuple_inputs ce [(op,FlagT nsid)] [FlagTV m] [FlagV k] s lo hi /\
   has_type (Uint 256) (NumV k) /\ abi_decoder_operand_live next op ==>
