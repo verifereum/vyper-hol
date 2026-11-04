@@ -761,7 +761,9 @@ Proof
      gvs[]) >>
   `~MEM y.inst_id (MAP (\i. i.inst_id) prefix) /\
    ~MEM y.inst_id (MAP (\i. i.inst_id) suffix)` by
-    (gvs[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+    (qpat_x_assum `ALL_DISTINCT _` mp_tac >>
+     simp_tac (srw_ss()) [MAP_APPEND, ALL_DISTINCT_APPEND] >>
+     metis_tac[]) >>
   qpat_x_assum `id_before _ _ _` mp_tac >>
   simp[MAP_APPEND, id_before_append_suffix, id_before_cons] >>
   metis_tac[id_before_mem]

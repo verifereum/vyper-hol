@@ -1172,8 +1172,15 @@ Proof
   Cases_on `inst.inst_opcode = INVOKE` >> fs[step_inst_non_invoke]
   >- (
     fs[step_inst_def, eval_ops_inst_idx, setup_callee_def] >>
-    rpt BasicProvers.FULL_CASE_TAC >> fs[] >>
-    gvs[bind_outputs_def]
+    Cases_on `decode_invoke inst` >> gvs[] >>
+    PairCases_on `x` >> gvs[] >>
+    Cases_on `lookup_function x0 ctx.ctx_functions` >> gvs[] >>
+    Cases_on `eval_operands x1 s` >> gvs[] >>
+    Cases_on `NULL x.fn_blocks` >> gvs[] >>
+    qmatch_asmsub_abbrev_tac `run_blocks fuel ctx x cs` >>
+    Cases_on `run_blocks fuel ctx x cs` >> gvs[] >>
+    gvs[bind_outputs_def] >>
+    Cases_on `LENGTH inst.inst_outputs = LENGTH i.iret_values` >> gvs[]
   ) >>
   (* non-INVOKE: step_inst = step_inst_base *)
   Cases_on `is_terminator inst.inst_opcode`

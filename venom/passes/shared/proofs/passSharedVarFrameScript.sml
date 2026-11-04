@@ -151,13 +151,26 @@ Proof
   strip_tac >> gvs[is_terminator_def]
 QED
 
+(* Reduce only the selected opcode equation, not the full dispatch. *)
+val no_intret_opcode_rewrites = map (fn th =>
+  (rhs (fst (dest_imp (snd (strip_forall (concl th))))), th))
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs);
+
+fun no_intret_opcode_rewrite eq = let
+  val (_, th) = valOf (List.find
+    (fn (key, _) => aconv key (rhs (concl eq)))
+    no_intret_opcode_rewrites)
+in PURE_ONCE_REWRITE_TAC [MATCH_MP th eq] end;
+
 Theorem step_inst_base_no_intret[local]:
   !inst s vs s'.
     step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >>
-  gvs[AllCaseEqs(), is_terminator_def]
+  rpt gen_tac >> Cases_on `inst.inst_opcode` >>
+  simp[is_terminator_def] >>
+  qpat_assum `inst.inst_opcode = _` no_intret_opcode_rewrite >>
+  simp[AllCaseEqs()]
 QED
 
 (* ===================================================================== *)

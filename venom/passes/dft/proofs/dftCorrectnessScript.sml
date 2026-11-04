@@ -204,7 +204,9 @@ Triviality step_inst_base_not_halt_intret:
     (!vals v. step_inst_base inst s <> IntRet vals v)
 Proof
   rpt gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[is_terminator_def, step_inst_base_not_halt_intret_combined]
+  simp[is_terminator_def] >> strip_tac >>
+  FIRST (map (fn th => drule th >> simp[])
+    (CONJUNCTS step_inst_base_not_halt_intret_combined))
 QED
 
 (* Abort type is determined by opcode_fail_class for non-term/non-INVOKE *)
@@ -219,7 +221,9 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode` >>
   gvs[opcode_fail_class_def, is_terminator_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()]
+  FIRST (map (fn th => drule th >>
+    disch_then (fn eq => gvs[eq, AllCaseEqs()]))
+    (CONJUNCTS step_inst_base_opcode_eqs))
 QED
 
 (* Two abort_compatible non-term/non-INVOKE instructions that both abort
@@ -268,8 +272,10 @@ Proof
   >- ((* CanExHalt — INVALID, ASSERT_UNREACHABLE, RETURNDATACOPY *)
       Cases_on `inst.inst_opcode` >>
       gvs[opcode_fail_class_def, is_terminator_def, is_ext_call_op_def] >>
-      gvs[step_inst_base_def, AllCaseEqs(),
-          halt_state_def, set_returndata_def])
+      FIRST (map (fn th => drule th >>
+        disch_then (fn eq => gvs[eq, AllCaseEqs(),
+          halt_state_def, set_returndata_def]))
+        (CONJUNCTS step_inst_base_opcode_eqs)))
   >> ((* AnyFail — only INVOKE, excluded *)
       Cases_on `inst.inst_opcode` >>
       gvs[opcode_fail_class_def, is_terminator_def, is_ext_call_op_def])
