@@ -179,7 +179,9 @@ Theorem gen_jmp_frame_sim:
     EVERY (\op. op <> dead_stack_marker /\
       !at. operand_equiv dfg op at ==> at <> dead_stack_marker)
       target_stack /\
-    (!op at. operand_equiv dfg op at ==>
+    (!op at. MEM op target_stack /\
+       (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg op at ==>
        operand_val (frame_view fn ra vs) lo op =
        operand_val (frame_view fn ra vs) lo at) /\
     FLOOKUP lo target = SOME off /\ off < dimword (:256) /\
@@ -237,9 +239,12 @@ Proof
       simp[Abbr`st0`] >> rpt conj_tac
       >- (irule residual_budget_wf_canonical >>
           gvs[generated_plan_state_wf_def])
-      >- (rpt strip_tac >> first_x_assum drule >>
-          simp[Abbr`vsf`, operand_val_def] >>
-          Cases_on `op1` >> Cases_on `at` >> simp[operand_val_def])
+      >- (rpt strip_tac >>
+          rename1 `operand_val vsf lo wanted = operand_val vsf lo candidate` >>
+          `operand_val (frame_view fn ra vs) lo wanted =
+           operand_val (frame_view fn ra vs) lo candidate` by metis_tac[] >>
+          Cases_on `wanted` >> Cases_on `candidate` >>
+          fs[Abbr`vsf`, operand_val_def])
       >> gvs[execute_plan_append, asm_block_at_append]) >>
     strip_tac >> simp[Abbr`n1`] >> simp[Abbr`st0`] >> metis_tac[]) >>
   (* PUSH target; JUMP. *)
@@ -417,8 +422,9 @@ Theorem jnz_reorder_align[local]:
   (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 16) /\
   op <> dead_stack_marker /\
   (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-  (!a at. operand_equiv dfg a at ==>
-    operand_val v lo a = operand_val v lo at) ==>
+  (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val v lo op = operand_val v lo at) ==>
   plan_stack_sem_eq lo v (apply_prefix_ops f lo ops ps).ps_stack
     target.ps_stack /\
   (apply_prefix_ops f lo ops ps).ps_spilled =
@@ -438,7 +444,7 @@ Proof
   mp_tac (Q.SPECL [`dfg`, `[op]`, `0`, `op`, `ps`, `ops`, `ps'`,
                     `lo`, `v`, `d`]
     (Q.INST [`initial_fmp` |-> `f`] reorder_one_shallow_sem_align)) >>
-  simp[stack_get_unfixed_depth_empty_window]
+  simp[stack_get_unfixed_depth_empty_window] >> metis_tac[]
 QED
 
 Theorem jnz_input_align[local]:
@@ -485,8 +491,9 @@ Theorem jnz_prefix_transport[local]:
   prefix_spill_wf f lo iops ps /\
   op <> dead_stack_marker /\
   (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-  (!a at. operand_equiv dfg a at ==>
-    operand_val v lo a = operand_val v lo at) /\
+  (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val v lo op = operand_val v lo at) /\
   venom_asm_rel lo (apply_prefix_ops f lo (iops ++ rops) ps) v st ==>
   venom_asm_rel lo ps2 v st /\
   plan_stack_rel lo v (apply_prefix_ops f lo rops ps1).ps_stack st.as_stack
@@ -494,6 +501,11 @@ Proof
   strip_tac >>
   drule_all jnz_input_align >> simp[] >> strip_tac >>
   drule_all jnz_input_depth >> strip_tac >>
+  `!at. (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val v lo op = operand_val v lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
   drule jnz_reorder_align >>
   disch_then (qspecl_then [`v`, `lo`, `f`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >>
@@ -557,8 +569,9 @@ Theorem jnz_prepare[local]:
   prefix_spill_wf f lo (FRONT ((iops ++ rops) ++ eops)) ps /\
   op <> dead_stack_marker /\
   (!at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
-  (!a at. operand_equiv dfg a at ==>
-    operand_val v lo a = operand_val v lo at) /\
+  (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val v lo op = operand_val v lo at) /\
   venom_asm_rel lo ps v st /\
   asm_block_at prog st.as_pc (execute_plan f ((iops ++ rops) ++ eops)) ==>
   ?mid w tail.
@@ -592,6 +605,11 @@ Proof
      simp[GSYM emit_input_plan_one]) >>
   `mid.as_stack <> []` by
     (gvs[planWfTheory.prefix_end_len_append] >> strip_tac >> gvs[]) >>
+  `!at. (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val v lo op = operand_val v lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_inventory_subset >> simp[] >> metis_tac[]) >>
   `operand_val v lo op = SOME (HD mid.as_stack)` by
     (irule (Q.INST [`initial_fmp` |-> `f`] reorder_single_op_val_on_tos) >>
      metis_tac[]) >>
@@ -732,8 +750,9 @@ Theorem gen_jnz_frame_sim:
       (?d. stack_get_depth cond_op ps.ps_stack = SOME d /\ d <= 15) \/
       IS_SOME (FLOOKUP ps.ps_spilled cond_op)) /\
     eval_operand cond_op vs = operand_val (frame_view fn ra vs) lo cond_op /\
-    (!op at. operand_equiv dfg op at ==>
-       operand_val (frame_view fn ra vs) lo op =
+    (!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg cond_op at ==>
+       operand_val (frame_view fn ra vs) lo cond_op =
        operand_val (frame_view fn ra vs) lo at) /\
     cond_op <> dead_stack_marker /\
     (!at. operand_equiv dfg cond_op at ==> at <> dead_stack_marker) /\
@@ -778,8 +797,9 @@ Proof
       [AsmPushLabel if_nz; AsmOp "JUMPI"; AsmPushLabel if_z; AsmOp "JUMP"] /\
     venom_asm_rel lo ps' v (mid with as_stack := tail)` by
     (`1 <= LENGTH ps1.ps_stack` by fs[] >>
-     `!op at. operand_equiv dfg op at ==>
-       operand_val v lo op = operand_val v lo at` by metis_tac[] >>
+     `!at. (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+       operand_equiv dfg cond_op at ==>
+       operand_val v lo cond_op = operand_val v lo at` by metis_tac[] >>
      mp_tac (Q.INST
        [`f` |-> `cplan.cp_initial_fmp`,
         `eops` |-> `[SOPushLabel if_nz; SOEmit "JUMPI"; SOPushLabel if_z; SOEmit "JUMP"]`,
