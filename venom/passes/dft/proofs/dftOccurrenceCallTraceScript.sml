@@ -2,7 +2,7 @@ Theory dftOccurrenceCallTrace
 Ancestors
   dftOccurrenceCallPosition dftOccurrenceCallClosure dftOccurrenceCallCrossing
   dftOccurrenceCallStack dftOccurrenceSuspended dftOccurrenceGasEdit
-  dftOccurrenceMachine dftOpenMachine dftOpenErase arithmetic list
+  dftOccurrenceMachine dftOccurrenceReplay dftOpenMachine dftOpenErase arithmetic list
 
 Definition dft_mixed_good_def:
   dft_mixed_good bb0 pre gas call post v w l r <=>
@@ -199,4 +199,72 @@ Proof
   qexists_tac `a + m` >>
   `2 * SUC j = 2 + 2*j` by decide_tac >>
   simp[FUNPOW_ADD] >> metis_tac[FUNPOW_COMM]
+QED
+
+Theorem dft_mixed_good_root:
+  dft_mixed_good bb0 pre gas call post v w l r ==>
+  ((?n. l.dft_occ_core = DftOpen (DftDone result) [] n) <=>
+   (?n. r.dft_occ_core = DftOpen (DftDone result) [] n))
+Proof
+  simp[dft_mixed_good_def] >> strip_tac
+  >- (gvs[dft_mixed_sync_def] >>
+      drule dft_mixed_stack_lengths >> strip_tac >>
+      Cases_on `ctl` >> gvs[dft_edit_control_def] >>
+      Cases_on `tL` >> Cases_on `tR` >> gvs[])
+  >- gvs[dft_mixed_discharge_def, dft_suspend_resumed_def] >>
+  gvs[dft_suspend_cleared_def]
+QED
+
+Theorem dft_occ_oracle_root_absorb:
+  (?n. x.dft_occ_core = DftOpen (DftDone result) [] n) ==>
+  !k. ?n. (FUNPOW (dft_occ_oracle_next w C) k x).dft_occ_core =
+    DftOpen (DftDone result) [] n
+Proof
+  strip_tac >> Induct_on `k` >> simp[FUNPOW_SUC] >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+      dft_erase_def, dft_fill_def, dft_fill_control_def, dft_open_next_def,
+      dft_open_return_def] >>
+  Cases_on `result` >> simp[dft_fill_def, dft_fill_control_def]
+QED
+
+Theorem dft_mixed_source_terminal:
+  bb0.bb_instructions = pre ++ [gas;call] ++ post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM v call.inst_outputs /\
+  (!nm ops. decode_invoke call = SOME (nm,ops) ==> ~MEM (Var v) ops) /\
+  dft_mixed_good bb0 pre gas call post v w l r /\
+  (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core =
+    DftOpen (DftDone result) [] nL ==>
+  ?k nR. (FUNPOW (dft_occ_oracle_next w
+    (dft_gas_edit_ctx bb0 pre gas call post C)) k r).dft_occ_core =
+    DftOpen (DftDone result) [] nR
+Proof
+  strip_tac >> drule_all dft_mixed_good_cofinal >>
+  disch_then (qspecl_then [`C`, `j`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `?d. m = d + j` by (qexists_tac `m-j` >> decide_tac) >>
+  `?n. (FUNPOW (dft_occ_oracle_next w C) m l).dft_occ_core =
+     DftOpen (DftDone result) [] n` by
+    (gvs[FUNPOW_ADD] >> irule dft_occ_oracle_root_absorb >> metis_tac[]) >>
+  drule dft_mixed_good_root >> disch_then (qspec_then `result` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dft_mixed_target_terminal:
+  bb0.bb_instructions = pre ++ [gas;call] ++ post /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM v call.inst_outputs /\
+  (!nm ops. decode_invoke call = SOME (nm,ops) ==> ~MEM (Var v) ops) /\
+  dft_mixed_good bb0 pre gas call post v w l r /\
+  (FUNPOW (dft_occ_oracle_next w
+    (dft_gas_edit_ctx bb0 pre gas call post C)) j r).dft_occ_core =
+    DftOpen (DftDone result) [] nR ==>
+  ?k nL. (FUNPOW (dft_occ_oracle_next w C) k l).dft_occ_core =
+    DftOpen (DftDone result) [] nL
+Proof
+  strip_tac >> drule_all dft_mixed_good_prefix >>
+  disch_then (qspecl_then [`C`, `j`] mp_tac) >>
+  simp[] >> strip_tac >>
+  drule dft_mixed_good_root >> disch_then (qspec_then `result` mp_tac) >>
+  simp[] >> metis_tac[]
 QED
