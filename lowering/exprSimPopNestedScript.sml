@@ -1537,8 +1537,9 @@ Finalise pop_nested_storage_pure_sim
    shrink an array the target already points into, so the header the pop
    reads can be dead.  Source and Venom read the same raw slot, but
    stmt_state_rel relates only live storage.  Needs raw agreement on slots
-   made dead by a pop; body_augassign_place_effectful_storage and
-   targetPlaceSimCases' target_subscript_case have the same exposure. *)
+   made dead by a pop.  The AugAssign on a storage place with an
+   effectful index, and targetPlaceSimCases' target_subscript_case, have
+   the same exposure. *)
 Theorem pop_nested_storage_effectful_sim:
   !ctx func cenv cx env ann bt ty es src id ts d.
     pop_target_frag ctx func cenv cx env bt es /\
@@ -1617,12 +1618,14 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-(* RESIDUAL (constructor immutables): pop on a member of an immutable in
-   the constructor.  Python's checker accepts it for a complex immutable
-   (local.py skips the modification count when var_info is None), and the
-   lowering pops at the immutable's deploy-time memory.  Needs the
-   constructor immutable invariant relating that memory to the source's
-   immutables. *)
+(* RESIDUAL (constructor immutables), false as stated: pop on a member of
+   an immutable in the constructor.  Python's checker accepts it for a
+   complex immutable (local.py skips the modification count when var_info
+   is None).  The Pop lowering loads and stores a LocCode target with
+   MLOAD/MSTORE at the bare offset, bypassing ce_imm_alloca, where Python's
+   _lower_dynarray_pop uses location-aware loads and stores (issue #1159).
+   The result judgment also needs to accept a code pointer to the popped
+   element, which is no longer inside the immutable's value. *)
 Theorem pop_nested_immutable_deploy_sim:
   !ctx func cenv cx env ann bt ty es src id.
     cx.in_deploy /\
@@ -1635,11 +1638,13 @@ Proof
   cheat
 QED
 
-(* RESIDUAL (nested length words): pop on an array inside a memory local.
-   The pop writes the array's length word inside the local's region, which
-   locals_kept does not exempt for a nested array, only for a root one.
-   Once it does (local_path_at_dynarray_len_at), the run is
-   compile_pop_name_sim's at the target's pointer. *)
+(* RESIDUAL (nested length words), unprovable under the current frame:
+   pop on an array inside a memory local.  The pop writes the array's
+   length word inside the local's region, which locals_kept exempts only
+   for a root dynamic array, so vv_post's locals_kept fails.  Once
+   locals_kept exempts every length word in a local's declared type
+   (PR #1040), the run is compile_pop_name_sim's at the target's
+   pointer. *)
 Theorem pop_nested_local_sim:
   !ctx func cenv cx env ann bt ty es id.
     pop_target_frag ctx func cenv cx env bt es /\
