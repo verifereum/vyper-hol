@@ -728,7 +728,9 @@ Theorem expr_sim_pre_ifexp:
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
-     byte_widths_expr_def, alloc_limits_expr_def] >> gvs[]
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     supportedExprTraverseTheory.call_operands_effect_root_def] >> gvs[]
 QED
 
 (* A conditional retains a place only for a memory aggregate. *)
@@ -840,6 +842,24 @@ Proof
   gvs[vyperTypeInvariantsTheory.eval_result_typed_def]
 QED
 
+Theorem expr_body_pre_ifexp_retained_nonword[local]:
+  expr_body_pre cenv cx env (IfExp t c a b) es /\
+  eval_expr cx (IfExp t c a b) es = (INL (PlaceR p), es') ==>
+  ~is_word_type t
+Proof
+  rpt strip_tac >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  qpat_x_assum `eval_expr _ (IfExp _ _ _ _) _ = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss())
+      [Once evaluate_def, bind_def, switch_BoolV_def, AllCaseEqs()]) >>
+  imp_res_tac read_result_state >>
+  imp_res_tac vyperStatePreservationTheory.conditional_result_state >> gvs[] >>
+  gvs[expr_type_def] >>
+  `eval_result_typed (env,cx,es') (PlaceR p) (Type t)` by
+    simp[eval_result_typed_def] >>
+  drule_all word_type_conditional_result_value >> simp[]
+QED
+
 (* The operands' internal calls: none if the conditional has none. *)
 Theorem int_calls_ifexp_operands[local]:
   !nocalls t c a b.
@@ -889,7 +909,8 @@ Proof
        expr_sim_case nocalls ctx func cenv cx b` by
         (first_x_assum irule >> metis_tac[]) >>
       conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
-  disch_then irule >> simp[]
+  disch_then irule >> simp[] >>
+  metis_tac[expr_body_pre_ifexp_retained_nonword]
 QED
 
 (* A ternary of an aggregate type, which supported_pure_expr admits for
@@ -928,10 +949,14 @@ Proof
       rpt gen_tac >> strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
       drule eval_expr_read_INL >> strip_tac >>
       `expr_sim_case nocalls ctx func cenv cx a /\
-       expr_sim_case nocalls ctx func cenv cx b` by
+       expr_vv_case nocalls ctx func cenv cx a /\
+       expr_sim_case nocalls ctx func cenv cx b /\
+       expr_vv_case nocalls ctx func cenv cx b` by
         (qpat_x_assum `(?s tv s'. _) ==> _` mp_tac >>
          impl_tac >- metis_tac[] >> simp[]) >>
-      conj_tac >> irule expr_sim_case_apply >> metis_tac[]) >>
+      conj_tac >- (irule expr_sim_case_apply >> metis_tac[]) >>
+      conj_tac >- (irule expr_sim_case_apply >> metis_tac[]) >>
+      metis_tac[expr_vv_case_def]) >>
   disch_then irule >> simp[]
 QED
 
