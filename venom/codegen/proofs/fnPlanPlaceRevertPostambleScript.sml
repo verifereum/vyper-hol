@@ -1,7 +1,7 @@
 Theory fnPlanPlaceRevertPostamble
 Ancestors
   codegen asmSem symbolResolve planExec stackPlanGen list
-  asmToBytecodeProofs codegenEncodingWf words
+  asmToBytecodeProofs codegenEncodingWf words stackOpSim
 
 Theorem distinct_symbols_no_later_write:
   !prog i lbl.
@@ -49,4 +49,25 @@ Proof
   >- (irule offset_to_pc_inverse_proof >>
       simp[symbolResolveTheory.asm_inst_size_def]) >>
   simp[asm_block_at_def, EL_APPEND_EQN]
+QED
+
+Theorem codegen_revert_slice:
+  !rpolicy unit cp prog.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog ==>
+    asm_symbols_ok prog /\
+    ?pre body post.
+      prog = pre ++ (AsmLabel "revert" :: body) ++ post /\
+      execute_plan cp.cp_initial_fmp revert_postamble = AsmLabel "revert" :: body
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `codegen_assembly _ _ = _` mp_tac >>
+  simp[codegen_assembly_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >>
+  qexists `execute_plan cp.cp_initial_fmp
+    (FLAT (MAP (\r. r.sr_plan) cp.cp_regions))` >>
+  qexists `TL (execute_plan cp.cp_initial_fmp revert_postamble)` >>
+  qexists `data_segment_asm unit.cu_data_segment ++ [AsmDataHeader "code_end"]` >>
+  simp[context_plan_ops_def, execute_plan_append, APPEND_ASSOC] >>
+  simp[revert_postamble_def, execute_plan_def, exec_stack_op_def]
 QED
