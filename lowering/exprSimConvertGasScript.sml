@@ -6,10 +6,10 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperAST
 
 Theorem convert_empty_gas_prefix:
-  !ctx func cenv cx ann ty e es sa s1 sb x op s0 marks v ee t.
+  !memory ctx func cenv cx ann ty e es sa s1 sb x op s0 marks v ee t.
     lower_value compile_expr cenv (expr_type e) e sa = (x, s1) /\
     compile_type_convert x (mk_convert_op (expr_type e) ty) s1 = (op, sb) /\
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (bind (eval_expr cx e) (read_result cx))
       (es, s0) marks (INL v) ee (OK t) /\
     expr_post ctx func cenv cx e es sa s1 s0
@@ -18,7 +18,7 @@ Theorem convert_empty_gas_prefix:
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     convert_result cx (expr_type e) ty v =
       INR (Error (RuntimeError "convert empty bytes to signed")) ==>
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (bind (eval_expr cx (TypeBuiltin ann Convert ty [e])) (read_result cx))
       (es, s0) marks
       (INR (Error (RuntimeError "convert empty bytes to signed"))) ee (OK t) /\

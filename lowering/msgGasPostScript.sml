@@ -75,7 +75,7 @@ Theorem compile_msg_gas_post:
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_summary_at (ctx, func) [T]
+    gas_summary_at T (ctx, func) [T]
       (bind (eval_expr cx (Builtin ann (Env MsgGas) args)) (read_result cx))
       (es, s0)
       (\res ee t.
@@ -97,7 +97,8 @@ Proof
     (irule msg_gas_post_frame >> simp[]) >>
   `gas_explicit [T] s0.vs_gas_readings = [w]`
     by simp[gas_explicit_def] >>
-  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  rewrite_tac[gas_summary_at_def, gas_marked_exec_def,
+              fragGasModeTheory.gas_marked_path_def] >>
   qexistsl_tac [`INL (IntV (&w2n w))`, `es`,
     `OK (update_var out w
       (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;

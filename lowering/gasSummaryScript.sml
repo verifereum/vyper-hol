@@ -2,7 +2,7 @@
    The unused source suffix cannot affect the result or its other fields. *)
 Theory gasSummary
 Ancestors
-  fragGasPath fragGasPathMem gasCount gasOracleReplay fragExec venomState
+  fragGasMode fragGasPath fragGasPathMem gasCount gasOracleReplay fragExec venomState
   vyperInterpreter vyperState vyperValue list rich_list pair arithmetic
 
 Definition gas_explicit_def:
@@ -15,18 +15,18 @@ End
 (* Each producer fixes its marks and concrete target segment before an
    enclosing consumer inspects the source result. *)
 Definition gas_marked_exec_def:
-  gas_marked_exec (ctx, func) source (es, s0) marks res es_end r <=>
+  gas_marked_exec memory (ctx, func) source (es, s0) marks res es_end r <=>
     (!tail.
        source (es with gas_obs :=
                  gas_explicit marks s0.vs_gas_readings ++ tail) =
          (res, es_end with gas_obs := tail)) /\
-    gas_path_mem ctx func s0 (LENGTH marks) r
+    gas_marked_path memory ctx func s0 (LENGTH marks) r
 End
 
 Definition gas_summary_at_def:
-  gas_summary_at (ctx, func) marks source (es, s0) Q R <=>
+  gas_summary_at memory (ctx, func) marks source (es, s0) Q R <=>
     ?res es_end r.
-      gas_marked_exec (ctx, func) source (es, s0) marks res es_end r /\
+      gas_marked_exec memory (ctx, func) source (es, s0) marks res es_end r /\
       ((?t. r = OK t /\ Q res (es_end with gas_obs := []) t) \/
        (exit_result r /\ R res (es_end with gas_obs := []) r))
 End
@@ -112,20 +112,37 @@ Proof
 QED
 
 Theorem gas_summary_at_summary:
-  gas_summary_at (ctx, func) marks source (es, s0) Q R ==>
+  gas_summary_at memory (ctx, func) marks source (es, s0) Q R ==>
   gas_summary (ctx, func) source (es, s0) Q R
 Proof
   simp[gas_summary_at_def, gas_marked_exec_def, gas_summary_def] >>
-  metis_tac[gas_path_mem_exec]
+  metis_tac[gas_marked_path_exec]
 QED
 
 (* Generated target reads carry false marks when the source reads no gas. *)
 Theorem gas_marked_exec_no_source_read:
   (!tail. source (es with gas_obs := tail) =
             (res, es_end with gas_obs := tail)) /\
-  gas_path_mem ctx func s0 n r ==>
-  gas_marked_exec (ctx, func) source (es, s0)
+  gas_marked_path memory ctx func s0 n r ==>
+  gas_marked_exec memory (ctx, func) source (es, s0)
     (REPLICATE n F) res es_end r
 Proof
   simp[gas_marked_exec_def]
+QED
+
+Theorem gas_marked_exec_from_mem:
+  gas_marked_exec T p source start marks res fin r ==>
+  gas_marked_exec memory p source start marks res fin r
+Proof
+  PairCases_on `p` >> PairCases_on `start` >>
+  simp[gas_marked_exec_def, gas_marked_path_def] >>
+  metis_tac[gas_path_mem_exec]
+QED
+
+Theorem gas_summary_at_from_mem:
+  gas_summary_at T p marks source start Q R ==>
+  gas_summary_at memory p marks source start Q R
+Proof
+  PairCases_on `p` >> PairCases_on `start` >>
+  simp[gas_summary_at_def] >> metis_tac[gas_marked_exec_from_mem]
 QED

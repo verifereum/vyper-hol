@@ -26,9 +26,9 @@ Proof
 QED
 
 Theorem abi_decode_invalid_gas_prefix:
-  !ctx func cenv cx ann unwrap ty e es sa s1 x s0 marks v ee t.
+  !memory ctx func cenv cx ann unwrap ty e es sa s1 x s0 marks v ee t.
     lower_value compile_expr cenv (expr_type e) e sa = (x, s1) /\
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (bind (eval_expr cx e) (read_result cx))
       (es, s0) marks (INL v) ee (OK t) /\
     expr_post ctx func cenv cx e es sa s1 s0
@@ -37,7 +37,7 @@ Theorem abi_decode_invalid_gas_prefix:
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [v] =
       INR (RuntimeError "abi_decode invalid") ==>
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (bind (eval_expr cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]))
             (read_result cx))
       (es, s0) marks

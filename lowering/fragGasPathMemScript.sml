@@ -263,3 +263,19 @@ Proof
   strip_tac >> drule gas_path_mem_exec >> strip_tac >>
   drule gas_path_suffix >> simp[gas_count_suffix_def]
 QED
+
+Theorem gas_path_mem_then:
+  gas_path_mem ctx fn s n (OK t) /\ gas_path_mem ctx fn t m r ==>
+  gas_path_mem ctx fn s (n + m) r
+Proof
+  `!ctx fn s n res. gas_path_mem ctx fn s n res ==>
+     !t m r. res = OK t /\ gas_path_mem ctx fn t m r ==>
+       gas_path_mem ctx fn s (n + m) r` suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_mem_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >>
+      drule (cj 2 gas_path_mem_rules) >>
+      disch_then drule >> simp[AC ADD_ASSOC ADD_COMM])
+  >> rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+QED

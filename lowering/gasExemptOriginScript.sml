@@ -27,7 +27,7 @@ End
 Theorem gas_exempt_origin_execution:
   gas_exempt_origin memory tops (ctx, func) source (es, s0)
     marks (err, ee) t ==>
-  gas_marked_exec (ctx, func) source (es, s0)
+  gas_marked_exec memory (ctx, func) source (es, s0)
     marks (INR (Error err)) ee (OK t)
 Proof
   rw[gas_exempt_origin_def] >>

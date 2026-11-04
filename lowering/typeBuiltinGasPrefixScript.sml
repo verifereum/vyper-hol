@@ -12,7 +12,7 @@ Theorem type_builtin_error_gas_prefix:
       (sa, sb, op) (es, s0) marks (v, ee, t) /\
     type_builtin_args_length_ok tb 1 /\
     evaluate_type_builtin cx tb ty [expr_type e] [v] = INR err ==>
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (eval_expr cx (TypeBuiltin ann tb ty [e]))
       (es, s0) marks (INR (Error err)) ee (OK t) /\
     gas_value_prefix memory (ctx, func, cenv, cx) (child_ty, e)

@@ -14,7 +14,7 @@ Definition gas_value_prefix_def:
     stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    gas_marked_exec (ctx, func)
+    gas_marked_exec memory (ctx, func)
       (bind (eval_expr cx e) (read_result cx))
       (es, s0) marks (INL v) ee (OK t) /\
     expr_post ctx func cenv cx e es sa sb s0

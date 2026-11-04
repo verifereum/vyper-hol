@@ -2,7 +2,7 @@
    and completed target prefixes, including prefixes inside INVOKE. *)
 Theory gasExemptCert
 Ancestors
-  gasExemptOrigin gasSummary gasSummaryCompose fragGasFocus fragGasPathMem
+  gasExemptOrigin gasSummary gasSummaryCompose fragGasFocus fragGasMode fragGasPathMem
   vyperState vyperInterpreter vyperValue venomState list arithmetic
 
 Inductive gas_exempt_cert:
@@ -16,7 +16,7 @@ Inductive gas_exempt_cert:
 [~bind_unit:]
   (!memory tops ctx func (a : evaluation_state -> (unit) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -34,7 +34,7 @@ Inductive gas_exempt_cert:
 [~bind_bool:]
   (!memory tops ctx func (a : evaluation_state -> (bool) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -52,7 +52,7 @@ Inductive gas_exempt_cert:
 [~bind_result:]
   (!memory tops ctx func (a : evaluation_state -> (eval_result) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -70,7 +70,7 @@ Inductive gas_exempt_cert:
 [~bind_value:]
   (!memory tops ctx func (a : evaluation_state -> (value) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -88,7 +88,7 @@ Inductive gas_exempt_cert:
 [~bind_place:]
   (!memory tops ctx func (a : evaluation_state -> (place) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -106,7 +106,7 @@ Inductive gas_exempt_cert:
 [~bind_values:]
   (!memory tops ctx func (a : evaluation_state -> (value list) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -124,7 +124,7 @@ Inductive gas_exempt_cert:
 [~bind_results:]
   (!memory tops ctx func (a : evaluation_state -> (eval_result list) evaluation_result)
       k es s0 left v mid t right err ee leaf finish.
-     gas_marked_exec (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
+     gas_marked_exec memory (ctx, func) a (es, s0) left (INL v) mid (OK t) /\
      gas_exempt_cert memory tops (ctx, func) (k v)
        (mid with gas_obs := [], t) right (err, ee) (leaf, finish) ==>
      gas_exempt_cert memory tops (ctx, func) (bind a k) (es, s0)
@@ -176,14 +176,14 @@ Theorem gas_exempt_cert_execution:
     (!tail. source
        (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
        (INR (Error err), ee with gas_obs := tail)) /\
-    gas_focus_path (ctx, func) s0 (LENGTH marks) (leaf, finish) /\
+    gas_focus_path memory (ctx, func) s0 (LENGTH marks) (leaf, finish) /\
     unspecified_behaviour_exempt tops err
 Proof
   let
     val normal = rpt gen_tac >> simp[] >> strip_tac >>
       conj_tac
       >- (irule gas_marked_source_bind_normal >>
-          qexistsl_tac [`ctx`, `func`, `mid`, `t`, `v`] >>
+          qexistsl_tac [`ctx`, `func`, `memory`, `mid`, `t`, `v`] >>
           simp[evaluation_state_component_equality]) >>
       simp[LENGTH_APPEND] >>
       metis_tac[gas_marked_exec_def, gas_focus_path_rules]
@@ -196,7 +196,7 @@ Proof
        (!tail. source ((FST start) with gas_obs :=
           gas_explicit marks (SND start).vs_gas_readings ++ tail) =
           (INR (Error (FST out)), (SND out) with gas_obs := tail)) /\
-       gas_focus_path p (SND start) (LENGTH marks) endpoint /\
+       gas_focus_path memory p (SND start) (LENGTH marks) endpoint /\
        unspecified_behaviour_exempt tops (FST out)`
   >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   ho_match_mp_tac gas_exempt_cert_ind >> rpt conj_tac
