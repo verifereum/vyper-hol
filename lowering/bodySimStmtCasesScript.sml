@@ -1861,6 +1861,41 @@ Proof
   metis_tac[]
 QED
 
+(* Every local a tuple assigns to takes memory, whatever its other
+   elements are: the element's type is assignable (atarget_accepts on the
+   tuple), so expr_sim_inv_memory_bytes_pos applies. *)
+Theorem tuple_name_element_bytes_pos[local]:
+  !cenv cx env es ret_ty gs e env' id ty.
+    expr_sim_inv cenv cx env es /\
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    MEM (BaseTarget (NameTarget id)) gs /\
+    FLOOKUP env.var_types id = SOME ty ==>
+    0 < type_memory_bytes cenv ty
+Proof
+  rpt strip_tac >>
+  `?tys. LIST_REL (\tgt ty. atarget_accepts env tgt ty) gs tys /\
+         EVERY (assignable_type env.type_defs) tys` by
+    (gvs[type_stmt_def, AllCaseEqs()] >>
+     qpat_x_assum `atarget_accepts _ _ _` mp_tac >>
+     simp[Once atarget_accepts_def] >> strip_tac >>
+     gvs[assignable_type_def] >> metis_tac[]) >>
+  `?n. n < LENGTH gs /\ EL n gs = BaseTarget (NameTarget id)` by
+    metis_tac[MEM_EL] >>
+  `n < LENGTH tys /\
+   atarget_accepts env (BaseTarget (NameTarget id)) (EL n tys)` by
+    (fs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `assignable_type env.type_defs (EL n tys)` by metis_tac[EVERY_EL] >>
+  drule_all vyperTypeArgFitsTheory.atarget_accepts_well_typed_target >>
+  strip_tac >>
+  `assignable_type env.type_defs ty` by
+    gvs[well_typed_target_def,
+        vyperTypeEnvTheory.type_place_target_NameTarget, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  irule exprSimAggregateLayoutTheory.expr_sim_inv_memory_bytes_pos >>
+  metis_tac[]
+QED
+
 Theorem body_assign_tuple_rhs_pre[local]:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
@@ -2122,9 +2157,6 @@ QED
 
 (* RESIDUAL (#637 tuple assignments): widened leaves or other tuple targets, each with
    an element body_assign_tuple_targets leaves.
-   - A local of size 0 next to a storage element: there is none (a
-     tuple element's type is assignable, assign_tuple_locals_bytes_pos), but
-     the case split doesn't show it yet.
    - A subscript element (a storage array or mapping): its target's place
      needs the subscript step of the target/place judgment
      (targetPlaceSimCases' target_subscript_case), not proved yet.
@@ -2152,8 +2184,7 @@ Theorem body_assign_tuple_other:
             EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids) /\
     ~(well_typed_atarget env (TupleTarget gs) (expr_type e) /\
       EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                         FLOOKUP env.var_types id = SOME ty /\
-                         0 < type_memory_bytes cenv ty) \/
+                         FLOOKUP env.var_types id = SOME ty) \/
                 (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
                         supported_scalar_target tops nsid) \/
                 (?nsid fld fty.
@@ -2188,8 +2219,7 @@ Proof
       irule body_assign_tuple_locals >> metis_tac[]) >>
   Cases_on `well_typed_atarget env (TupleTarget gs) (expr_type e) /\
             EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
-                                FLOOKUP env.var_types id = SOME ty /\
-                                0 < type_memory_bytes cenv ty) \/
+                                FLOOKUP env.var_types id = SOME ty) \/
                        (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
                                supported_scalar_target tops nsid) \/
                        (?nsid fld fty.
@@ -2199,7 +2229,11 @@ Proof
                           type_place_target env
                             (AttributeTarget (TopLevelNameTarget nsid) fld) =
                             SOME (Type fty) /\ is_word_type fty)) gs`
-  >- (irule body_assign_tuple_targets >> metis_tac[]) >>
+  >- (fs[] >> irule body_assign_tuple_targets >>
+      simp[] >> qexistsl [`bindings`, `env`, `env'`, `tops`] >> simp[] >>
+      qpat_x_assum `EVERY _ gs` mp_tac >> rw[EVERY_MEM] >>
+      qpat_x_assum `!g. MEM g gs ==> _` drule >> rw[] >>
+      metis_tac[tuple_name_element_bytes_pos]) >>
   irule body_assign_tuple_other >> metis_tac[]
 QED
 
