@@ -30,21 +30,16 @@ Proof
   EVAL_TAC >> simp[bool_to_word_def, wordsTheory.dimword_def]
 QED
 
-Theorem zero_site_comparison_admissible:
+Theorem zero_site_comparison_excluded:
   let eqi = mk_inst 3 EQ [Var "p"; Var "q"] ["e"] in
   let G = FEMPTY |+ ("p",(0,0)) |+ ("q",(0,0)) in
   let s = update_var "q" 0w (update_var "p" 0w
             (init_venom_state "entry")) in
-  access_ok 0 G fn eqi s /\ ptr_use_ok P {"p";"q"} eqi /\
-  raw_mem_ok ctx fn eqi s
+  ~access_ok 0 G fn eqi s
 Proof
-  simp[access_ok_def, ptr_use_ok_def, raw_mem_ok_def,
-       mk_inst_def, update_var_def, init_venom_state_def,
-       eval_operand_def, lookup_var_def, source_memory_read_ranges_def,
-       source_memory_write_ranges_def, inst_mem_ok_in_fn_def,
-       mem_read_ops_def, mem_write_ops_def, inst_mem_below_frontier_def,
-       wordsTheory.dimword_def] >>
-  EVAL_TAC >> simp[]
+  simp[access_ok_def, mk_inst_def, update_var_def,
+       init_venom_state_def, eval_operand_def, lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem zero_site_prefix_syntax:
