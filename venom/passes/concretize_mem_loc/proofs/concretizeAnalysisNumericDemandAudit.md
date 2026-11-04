@@ -129,14 +129,14 @@ It does not justify `ml_kill_write` by itself, nor is it required there.
 
 | Branch | Source behavior | Required semantic boundary / status |
 |---|---|---|
-| ALLOCA | BP seeds inst_id at SOME 0 (basePtrDefs:89-92,121); origin records Local id | Local base coverage checked. Site size and actual successful ALLOCA shape must link to get_alloca_size/context_alloca_size. Reexecution means concrete instances must not be conflated. |
+| ALLOCA | BP seeds inst_id at SOME 0 (basePtrDefs:89-92,121); origin records Local id | Local base coverage checked. Site size and actual successful ALLOCA shape must link to get_alloca_size/context_alloca_size. Reexecution is cached within a frame (see section 5); distinct INVOKE activations remain separate. |
 | ASSIGN | copies the source list, including empty (174-177) | Origin Local flow checked; any optional numeric proof uses successful operand evaluation, not definedness of every static variable. |
 | PHI | unions old result with all available operand lists, normalizes per base (167-172) | Local membership at production fuel checked, so a reached Local alternative is not omitted under those hypotheses. SOME offset precision does not follow. Static phi_pv_all_var and the write-root disjointness clause must rule out local/incoming mixing for a must-write. |
 | ADD literal | natural addition to offset, either operand order (128-139) | Word-valued equality may be modular; natural equality needs a separate no-wrap fact. Not needed by base-only liveness. |
 | SUB literal | SOME subtraction only if literal <= old offset; otherwise NONE (149-155) | Unknown is conservative for base membership; optional exact numeric theorem needs the left-pointer shape and successful step. |
 | variable ADD/SUB | writes unknown offsets only when exactly one eligible operand is tracked, otherwise leaves old result (140-162) | Existing Local flow descriptor proof uses affine restrictions; cannot reason from an arbitrary partially propagated map. |
 | PARAM | no BP binding; origin uses PG and tags OriginParameter | Incoming demand must be lifted from saved caller. fn_ptr_ok:133-137 excludes a write address statically derived from BOTH Local and incoming roots. Reads/calls can still combine origins and need may-coverage. |
-| loop revisit | BP repeated static scans; runtime SSA names may be assigned on multiple dynamic visits | fn_defs_reach_uses/all_reachable are not a blanket dominance or per-instance uniqueness theorem. A safe-kill theorem must handle old instances with the same aid, or show they cannot carry conflicting future demand; latest vs_allocas alone is insufficient evidence. |
+| loop revisit | BP repeated static scans; runtime SSA names may be assigned on multiple dynamic visits | CORRECTION: exec_alloca caches the site by inst_id within the current frame. A revisit does not create another base/size instance. concretizeAnalysisBoundary already proves exec_alloca_cached_site/frame; concretizeAnalysisInstanceProbe checks a loop admitted by SSA, fn_defs_reach_uses and fn_ptr_ok, with old/new origin agreement. Distinct INVOKE activations still need frame-indexed origin agreement. |
 
 At arbitrary finite fuel, a PHI can have only one discovered alternative and a
 fixed offset despite an undiscovered alternative. The production Local base
@@ -177,3 +177,116 @@ necessity demonstrated before exercising the task's limited allowance. The
 recommended next planning decision is to prioritize the base-only semantic
 safe-kill/instance boundary and liveness fuel, not universal BP exact offsets.
 No new counterexample was constructed or verified by this diagnostic.
+
+## 5. Instance validation follow-up (checked bounded probes)
+
+`concretizeAnalysisInstanceProbeTheory` builds with no cheats (tool output
+TO_concretize_sim-20261104T015749Z_m2134_t001). These are diagnostics, not
+universal safe-kill or stage theorems.
+
+### Same-frame reexecution
+
+`aip_loop` has entry ALLOCA seed, then loop PHI old = [entry:seed, loop:a],
+ALLOCA a, MSTORE a, MLOAD old and a loop/exit branch. `aip_loop_ssa`,
+`aip_loop_definite_assignment` and `aip_loop_ptr_ok` check the exact three
+structural predicates, with P = K {}. Thus those predicates do admit revisits;
+it would be wrong to infer their impossibility from SSA. `aip_loop_bases`
+computes old's production bases as [Allocation 1; Allocation 10]. The store
+through a has singleton [Allocation 1] and satisfies ptr_ml_can_kill with size
+32 (`aip_static_kill`). On a second visit the backedge PHI selects Local 1,
+(256,32) (`aip_loop_old_origin`); the ALLOCA returns 256 again and origin_out
+returns that same site (`aip_second_visit_cached`). `aip_cached_no_fresh_bytes`
+checks no fresh tainted region is introduced. The full MSTORE range is
+[(256,32)] and the old-site word read after that store is 9
+(`aip_cached_write_range`, `aip_old_read_after_full_store`, the latter reusing
+the general mload_mstore_same boundary).
+
+Consequently the proposed *fresh old/new instance on each loop iteration*
+objection is withdrawn. Reexecution preserves the instance; the ALLOCA itself
+neither kills nor freshly taints its existing byte demand. The subsequent
+full write kills its old contents. No allocation-event index is needed to
+distinguish visits to this ALLOCA within one frame. Across INVOKEs retain a
+frame-activation index: setup_callee starts with empty vs_allocas, while the
+caller map is saved/restored. A universal theorem must still show that every
+Local aid provenance in a given frame agrees with that frame's cached site,
+not merely assume equality from its static tag. It must handle Incoming sites
+by resolving saved arguments, not by relabelling them Local.
+
+### Incoming exclusion
+
+`aip_param_has_no_local_base` checks PARAM gives an Incoming origin and no BP
+base. By itself its store cannot kill Allocation 1. `aip_mixed` is a diamond
+merging ALLOCA a with PARAM p at a PHI v. Production BP returns [Allocation 1]
+for v (`aip_mixed_bp`). Nevertheless v belongs to BOTH derived-root sets
+(`aip_mixed_roots`), and `aip_mixed_rejected` proves ~fn_ptr_ok (K {0}) aip_mixed.
+The frozen write-root-disjointness clause is essential, not redundant with
+BP completeness.
+
+The missing universal interface can be stated without inventing BP PARAM
+seeds. Under the actual reachable-frame, parameter-witness, SSA/well-formedness
+hypotheses (to be enumerated/proved, not added to the stage contract):
+
+```
+FLOOKUP om v = SOME (OriginParameter k,site) ==>
+ v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)
+```
+
+A separate *static* analysis-origin boundary is needed:
+
+```
+MEM (Allocation aid) (find_base_allocas bp (Var v)) ==>
+ v IN pointer_derived_vars fn (alloca_roots fn)
+```
+
+For production bp, combining these with fn_ptr_ok and a Var write address
+excludes Incoming provenance whenever the analyzed write set is nonempty.
+Local base coverage alone proves neither implication. Mixed reads remain
+permitted and require may-demand propagation through both local and incoming
+origins. These statements remain proposed interfaces, not checked universal
+results of this diagnostic.
+
+### Opcode/actual-write audit
+
+Sources: memLocDefsScript.sml mem_write_ops (roughly 190-258),
+concretizeMemLocDefsScript.sml inst_write_size (132-140),
+codegenRelScript.sml source_memory_write_ranges (131 onward),
+venomExecSemanticsScript.sml step_inst_base (599-609, 863-893, 935-989).
+`ptr_literal_write_range_size` already proves the generic fact that a reported
+range has the literal write size. It does NOT prove every byte in that range
+is successfully written. Do not duplicate that lemma.
+
+| Opcode | inst_write_size = SOME n | Successful actual effect | Failure/revert qualification |
+|---|---|---|---|
+| MSTORE | n=32, two operands | mstore writes 32 bytes at evaluated dst | Undefined operands/wrong arity give Error, no successful continuation |
+| MSTORE8 | n=1, two operands | mstore8 writes one byte | Same Error cases |
+| MCOPY | third operand Lit n | mcopy reads padded source memory then writes exactly n bytes at dst | Undefined operands/arity Error; reads happen before write; own-base read prevents the static kill |
+| CALLDATACOPY | third operand Lit n | TAKE n of source tail ++ REPLICATE n 0, then write_memory_with_expansion | Error if operand undefined or arity invalid; padded source guarantees n bytes |
+| DLOADBYTES | third operand Lit n | Same padded n-byte write from data section | Same Error cases |
+| CODECOPY | third operand Lit n | Same padded n-byte write from code | Same Error cases |
+| EXTCODECOPY | fourth operand Lit n | Same padded n-byte write from account code | All four operands must evaluate; wrong arity Error |
+| RETURNDATACOPY | third operand Lit n | In-bounds branch writes TAKE n of returndata tail | Out-of-bounds branch is Abort ExHalt_abort, not OK; reported range alone does not imply a write |
+| ISTORE | n=32 | Writes immutable bytes, NOT vs_memory | fn_ptr_ok forbids pointer-derived operands at ISTORE. Must exclude before a memory safe-kill conclusion |
+| CALL/DELEGATECALL/STATICCALL | NONE even with literal return buffer length | Partial return-buffer writes; range is a maximum, not a must-write | Not kill eligible; do not infer full overwrite from source_memory_write_ranges |
+| Other opcodes | NONE | No liveness must-write via this interface | INVOKE handled through summaries/frame simulation, not a local literal write |
+
+Zero size is vacuous byte demand. The revert-forward exemption suppresses
+access_ok confinement even at preceding RETURNDATACOPY, so the ordinary
+confined-write proof must explicitly exclude that branch. A separate terminal
+simulation discharges revert behavior. No successful-write theorem is claimed
+here for all opcodes: the table identifies the exact cases that a future
+semantic boundary must prove.
+
+### Proposed demand bridge after this diagnostic
+
+Index current/saved demand by frame activation plus (tag,base,size) and byte,
+with a future observable untainted read witness before complete overwrite or
+terminal revert. ALLOCA first allocation creates fresh/tainted contents;
+cached ALLOCA revisits preserve existing demand and provenance. Backward
+propagation across successful full writes removes the overwritten byte demand,
+while read demand is recorded before a same-site kill. To connect that model
+to production liveat/used, the outstanding universal steps are: frame-local
+Local-origin/cached-site agreement; Incoming root membership and static
+BP-to-alloca-root membership; actual successful full-write effects (excluding
+ISTORE); CFG backward/forward propagation and fuel; and imported callee
+coverage through saved frames. None is replaced by the bounded computations.
+No stage counterexample has been established, no premises changed.
