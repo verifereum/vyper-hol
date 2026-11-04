@@ -1,6 +1,6 @@
 Theory fnPlanLineagePhiSlots
 Ancestors
-  livenessDefs finite_map stackModel list rich_list stackPlanGen
+  livenessDefs finite_map stackModel list rich_list stackPlanGen fnPlanLineagePhiMaps
 
 (* The trace depends on PHI operand classes, not the selected edge. *)
 Definition phi_slot_step_def:
@@ -250,3 +250,13 @@ QED
    is inferred here. Persistent spills, cleanup windows and allocator framing
    remain outside this local map audit.
 *)
+
+Theorem phi_slot_trace_class_mem:
+  !base. phi_uses_disjoint phis ==>
+  (MEM (INR i) (phi_slot_trace (FST (build_phi_maps p phis)) base) <=>
+   i < LENGTH phis /\ ?v l. MEM v base /\
+     MEM (l,v) (phi_pairs (EL i phis).inst_operands))
+Proof
+  gen_tac >> strip_tac >>
+  simp[phi_slot_trace_inr_mem, build_phi_maps_operand_class] >> metis_tac[]
+QED

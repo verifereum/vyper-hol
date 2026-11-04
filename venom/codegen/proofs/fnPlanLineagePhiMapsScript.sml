@@ -1,6 +1,6 @@
 Theory fnPlanLineagePhiMaps
 Ancestors
-  livenessDefs finite_map list rich_list indexedLists
+  livenessDefs finite_map list rich_list indexedLists stackPlanGen cfgNormSupplyProofs venomInst
 
 Definition phi_operand_map_step_def:
   phi_operand_map_step (m : (string, num) fmap) (i, phi) =
@@ -157,4 +157,71 @@ Proof
   `IS_SOME (FIND (\(l,w). l = p) (phi_pairs (EL i phis).inst_operands))` by
     (first_x_assum irule >> metis_tac[]) >>
   Cases_on `FIND (\(l,w). l = p) (phi_pairs (EL i phis).inst_operands)` >> gvs[]
+QED
+
+Theorem phi_operand_update_lookup[local]:
+  !(pairs : (string # string) list) m (idx:num) v.
+  FLOOKUP (FOLDL (\m (l,w). m |+ (w,idx)) m pairs) v =
+  if (?l. MEM (l,v) pairs) then SOME idx else FLOOKUP m v
+Proof
+  Induct >- simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[FLOOKUP_UPDATE] >> Cases_on `h1 = v` >> gvs[] >>
+  simp[EXISTS_OR_THM]
+QED
+
+Theorem phi_operand_fold_exact[local]:
+  !phis n m v i.
+  phi_uses_disjoint phis ==>
+  (FLOOKUP (FOLDL phi_operand_map_step m
+    (MAPi (\k phi. (n+k,phi)) phis)) v = SOME i <=>
+   (?j l. j < LENGTH phis /\ i = n+j /\
+      MEM (l,v) (phi_pairs (EL j phis).inst_operands)) \/
+   (FLOOKUP m v = SOME i /\
+      !phi. MEM phi phis ==> ~(?l. MEM (l,v) (phi_pairs phi.inst_operands))))
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[phi_uses_disjoint_def] >> strip_tac >>
+  simp[MAPi_def, combinTheory.o_DEF] >>
+  `MAPi (\k phi. (n + SUC k,phi)) phis =
+   MAPi (\k phi. (SUC n + k,phi)) phis` by
+    (irule MAPi_CONG >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  first_x_assum (qspecl_then [`SUC n`, `phi_operand_map_step m (n,h)`, `v`, `i`] mp_tac) >>
+  simp[phi_uses_disjoint_def] >> disch_then SUBST1_TAC >>
+  `(?j l. j < SUC (LENGTH phis) /\ i = j+n /\
+      MEM (l,v) (phi_pairs (EL j (h::phis)).inst_operands)) <=>
+   (i = n /\ ?l. MEM (l,v) (phi_pairs h.inst_operands)) \/
+   (?j l. j < LENGTH phis /\ i = SUC n+j /\
+      MEM (l,v) (phi_pairs (EL j phis).inst_operands))` by
+    (eq_tac >> rpt strip_tac
+     >- (Cases_on `j` >> gvs[arithmeticTheory.ADD_CLAUSES]
+         >- (qexists `l` >> simp[]) >>
+         qexistsl [`n'`, `l`] >> simp[])
+     >- (qexistsl [`0`, `l`] >> simp[])
+     >- (qexistsl [`SUC j`, `l`] >> simp[arithmeticTheory.ADD_CLAUSES])) >>
+  pop_assum (fn th => rewrite_tac[SRULE [] th]) >>
+  `(?l. MEM (l,v) (phi_pairs h.inst_operands)) ==>
+   !phi. MEM phi phis ==> ~(?l. MEM (l,v) (phi_pairs phi.inst_operands))` by
+    (rpt strip_tac >>
+     gvs[EVERY_MEM, inst_uses_def] >>
+     imp_res_tac MEM_phi_pairs_SND_operand_vars >> metis_tac[]) >>
+  simp[phi_operand_map_step_def, phi_operand_update_lookup] >>
+  Cases_on `?l. MEM (l,v) (phi_pairs h.inst_operands)` >>
+  gvs[EXISTS_OR_THM, DISJ_IMP_THM, FORALL_AND_THM] >>
+  qpat_x_assum `EVERY _ phis` kall_tac >>
+  qpat_x_assum `phi_uses_disjoint phis` kall_tac >>
+  IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+(* No opcode or well-formedness premise is needed: pair membership alone
+   implies operand use, even for malformed instructions. *)
+Theorem build_phi_maps_operand_class:
+  phi_uses_disjoint phis ==>
+  (FLOOKUP (FST (build_phi_maps p phis)) v = SOME i <=>
+   i < LENGTH phis /\
+   ?l. MEM (l,v) (phi_pairs (EL i phis).inst_operands))
+Proof
+  strip_tac >>
+  qspecl_then [`phis`, `0`, `FEMPTY`, `v`, `i`] mp_tac phi_operand_fold_exact >>
+  simp[build_phi_maps_split] >> metis_tac[]
 QED
