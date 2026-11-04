@@ -747,7 +747,17 @@ Triviality step_term_selfdestruct:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >>
+  (* static frame: both sides abort once the operands evaluate *)
+  Cases_on `s2.vs_call_ctx.cc_static` >> gvs[] >- (
+    Cases_on `eval_operands inst1.inst_operands s1` >> gvs[] >- (
+      Cases_on `inst1.inst_operands` >> gvs[eval_operands_def] >>
+      Cases_on `t` >> gvs[AllCaseEqs(), eval_operands_def]) >>
+    drule_all eval_operands_renamed >> strip_tac >>
+    imp_res_tac ssa_sim_implies_exec_equiv_UNIV >>
+    gvs[ssa_result_equiv_def, execution_equiv_UNIV, halt_state_def,
+        set_returndata_def]) >>
+  term_resolve_tac
 QED
 
 Triviality step_term_stop:
