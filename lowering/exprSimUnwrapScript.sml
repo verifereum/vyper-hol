@@ -145,16 +145,18 @@ Proof
   metis_tac[compile_ensure_in_memory_extends]
 QED
 
-(* Captured results with the same read have the same compiled-value relation. *)
+(* Reading a captured result preserves its value postcondition, but does not
+   reconstruct the captured place's provenance from that value. *)
 Theorem vv_post_read_result:
   !func cenv cx e es sa sb s0 es' tv v vv s ctx.
     read_result cx tv es' = (INL v, es') ==>
-    (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
+    (vv_post ctx func cenv cx e es sa sb s0 es' tv vv s ==>
      vv_post ctx func cenv cx e es sa sb s0 es' (Value v) vv s)
 Proof
   rpt strip_tac >> Cases_on `vv` >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
-       immutable_holds_def, read_result_def, return_def]
+  gvs[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+      immutable_holds_def, read_result_def, return_def] >>
+  metis_tac[]
 QED
 
 (* ===== unwrap_value's code ===== *)

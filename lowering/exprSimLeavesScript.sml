@@ -181,7 +181,9 @@ Proof
       qexistsl_tac [`id`, `w2n w`, `sz`] >>
       asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
       drule val_footprint_le >> decide_tac) >>
-  rpt strip_tac >> gvs[]
+  rpt strip_tac >> gvs[] >>
+  irule vv_place_ptr_rel_memory_root >> simp[eval_operand_def] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
 
 Theorem compile_name_other_sim:
@@ -492,6 +494,8 @@ Proof
      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>
   gvs[] >>
   drule_all eval_expr_toplevel_storage >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >> lookup_global_tac >>
+  strip_tac >> gvs[] >>
   reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
   >- (irule frag_exec_conseq >>
       qexistsl_tac [`\s. F`, `\s. F`, `expr_exit (INL tv)`] >>
@@ -508,7 +512,7 @@ Proof
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
   simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def,
-       vyperASTTheory.expr_type_def]
+       vyperASTTheory.expr_type_def, vv_place_ptr_rel_storage, placeProvenanceTheory.slot_loc_def]
 QED
 
 (* A storage or transient variable's slot decodes wherever the declared
@@ -624,7 +628,8 @@ Proof
   simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
   strip_tac >> gvs[] >>
   irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
-  simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_place_ptr_rel_immutable,
+       immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def,
        vyperASTTheory.expr_type_def] >>
   qexistsl [`id`, `off`, `tvv0`, `tvv1`, `0`] >>
