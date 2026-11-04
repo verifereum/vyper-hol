@@ -5563,6 +5563,70 @@ Proof
   metis_tac[]
 QED
 
+(* A field or element of a local, or of a storage or transient variable
+   whose indices have no effect (supported_pure_expr): the place's
+   current word is loaded where the target's code left it. *)
+Theorem body_augassign_place_pure:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    ((?id. target_root t = NameTarget id) \/
+     EVERY (supported_pure_expr tops) (target_indices t)) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  cheat
+QED
+
+(* RESIDUAL (captured storage slots): a field or element of a storage or
+   transient variable with an index that has an effect (an internal call
+   or a pop).  The index may pop an array the target already points into
+   (self.a[0][self.g()] += 1 with g popping self.a), so the AugAssign
+   loads the current word, and the inner bounds check the length, from
+   slots that are dead by then.  Neither side zeroes on pop, so the
+   values agree, but stmt_state_rel relates only live storage.  Needs
+   raw agreement on slots made dead by a pop; targetPlaceSimCases'
+   target_subscript_case has the same exposure. *)
+Theorem body_augassign_place_effectful_storage:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es'.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    (!id. target_root t <> NameTarget id) /\
+    ~EVERY (supported_pure_expr tops) (target_indices t) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  cheat
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
@@ -5584,7 +5648,11 @@ Theorem body_augassign_place:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `(?id. target_root t = NameTarget id) \/
+            EVERY (supported_pure_expr tops) (target_indices t)`
+  >- (irule body_augassign_place_pure >> metis_tac[]) >>
+  irule body_augassign_place_effectful_storage >> gvs[] >> metis_tac[]
 QED
 
 (* RESIDUAL (#637 augmented assignment): a top-level target other than a

@@ -9,7 +9,7 @@ Location: lowering/bodySimStmtCasesScript.sml
 ## Theorem Statement (FROZEN)
 
 ```sml
-Theorem body_augassign_place:
+Theorem body_augassign_place_pure:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
@@ -26,7 +26,9 @@ Theorem body_augassign_place:
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok ctx func cx RetQ cenv ret_ty /\
     eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
-    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    ((?id. target_root t = NameTarget id) \/
+     EVERY (supported_pure_expr tops) (target_indices t)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
 ```
@@ -38,11 +40,21 @@ lowering and semantics definitions) are frozen.
 ## Completion Criteria
 
 - `holbuild -j4 build bodySimStmtCasesTheory` succeeds at the default 2.5s tactic timeout,
-  with `body_augassign_place` proved (no `cheat` in it or in any new lemma it uses).
+  with `body_augassign_place_pure` proved (no `cheat` in it or in any new lemma it uses).
+  `body_augassign_place` is now a dispatch over `body_augassign_place_pure` and the residual
+  `body_augassign_place_effectful_storage` (a storage/transient place with an effectful index), which stays cheated.
 - No new admissions or axioms. The other cheats in bodySimStmtCasesScript.sml stay as they are.
-- New helper lemmas go in bodySimStmtCasesScript.sml just above `body_augassign_place`, named with the prefix
+- New helper lemmas go in bodySimStmtCasesScript.sml just above `body_augassign_place_pure`, named with the prefix
   `aug_place_` (other runs edit the same file in parallel), or in a new theory under `lowering/`
   named `bodySimAugPlace*` that bodySimStmtCasesScript.sml imports.
+
+## Operator decision (2026-11-04)
+
+The owner decision the run asked for: option A/B/C are superseded. The frozen statement is narrowed
+to `body_augassign_place_pure`: a memory-rooted place (already proved by the accepted memory branch),
+or a storage/transient place whose indices are all `supported_pure_expr` (no Pop, no Call), so no
+index can make the captured slot dead. The effectful-index storage case is the named residual
+`body_augassign_place_effectful_storage`; do not work on it. No probe, witness or audit theories.
 
 ## Build
 
