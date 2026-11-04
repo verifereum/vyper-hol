@@ -1160,3 +1160,39 @@ Resume evaluate_storage_trace_frame[c63]:
 QED
 
 Finalise evaluate_storage_trace_frame
+
+
+Theorem storage_trace_frame_eval_external_defaults:
+  storage_trace_frame (eval_external_defaults cx es)
+Proof
+  pure_rewrite_tac[eval_external_defaults_def] >>
+  irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_state_reads] >> gen_tac >>
+  irule storage_trace_frame_finally >> conj_tac
+  >- (irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_state_updates, evaluate_storage_trace_frame]) >>
+  simp[storage_trace_frame_state_updates]
+QED
+
+Theorem storage_trace_frame_external_entry:
+  storage_trace_frame
+    (do send_call_value mut cx;
+        dvs <- eval_external_defaults cx es;
+        case bind_arguments tenv args (vals ++ dvs) of
+          NONE => raise (Error (RuntimeError "call bind_arguments"))
+        | SOME env => do
+            set_scopes [env]; lock_if_nr cx nr view; eval_stmts cx stmts
+          od
+     od)
+Proof
+  irule storage_trace_frame_ignore_bind >>
+  simp_tac bool_ss [send_call_value_storage_trace_frame] >>
+  irule storage_trace_frame_bind_all >>
+  simp_tac bool_ss [storage_trace_frame_eval_external_defaults] >> qx_gen_tac `dvs` >>
+  Cases_on `bind_arguments tenv args (vals ++ dvs)` >>
+  simp_tac bool_ss [optionTheory.option_CLAUSES, storage_trace_frame_raise] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp_tac bool_ss [storage_trace_frame_state_updates] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp_tac bool_ss [storage_trace_frame_optional_locks, evaluate_storage_trace_frame]
+QED
