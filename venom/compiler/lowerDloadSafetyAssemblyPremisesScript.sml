@@ -1,7 +1,8 @@
 (* Reachable source obligations exposed to ordinary effect consumers. *)
 Theory lowerDloadSafetyAssemblyPremises
 Ancestors
-  lowerDloadSafetyRelation ptrDiscipline
+  lowerDloadSafetyRelation lowerDloadSafetyValues lowerDloadSafetyAllocBounds
+  lowerDloadSafetyKernel ptrDiscipline finite_map words list pred_set
 
 Theorem ld_sync_access_ok:
   ptr_discipline lo C vs0 /\
@@ -52,3 +53,57 @@ QED
    mask bound required by MSTORE.  taint_within supplies no such bound.
    No width theorem or call-stack induction is asserted in this theory.
 *)
+
+Theorem ld_write_access_cases:
+  access_ok lo (ld_erase A o_f H) fn inst s /\
+  ~in_revert_forward fn s /\ mem_write_ops inst = SOME ops /\
+  MEM (w2n x,n) (source_memory_write_ranges inst s) /\ 0 < n /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!a. op_prov H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y) /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
+  (w2n x+n <= lo /\ y=x) \/
+  (?a b c sz delta. op_prov H ops.iao_ofst = SOME a /\
+    FLOOKUP A a = SOME (b,c,sz) /\ w2n x=b+delta /\
+    w2n y=c+delta /\ delta+n <= sz)
+Proof
+  strip_tac >>
+  qpat_x_assum `access_ok _ _ _ _ _` mp_tac >>
+  simp[access_ok_def] >> strip_tac >>
+  qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges inst s) /\ _ ==> _`
+    (qspecl_then [`w2n x`, `n`] mp_tac) >> simp[] >>
+  Cases_on `op_prov H ops.iao_ofst` >> gvs[]
+  >- (Cases_on `w2n y+n <= lo` >> simp[] >>
+      strip_tac >> Cases_on `ops.iao_ofst` >>
+      gvs[op_prov_def, FLOOKUP_o_f]) >>
+  `?b c sz. FLOOKUP A x' = SOME (b,c,sz)` by
+    metis_tac[ld_wordrel_SOME] >>
+  `op_prov (ld_erase A o_f H) ops.iao_ofst = SOME (b,sz)` by
+    (Cases_on `ops.iao_ofst` >> gvs[op_prov_def, FLOOKUP_o_f, ld_erase_def]) >>
+  simp[] >> strip_tac >>
+  `b <= w2n x /\ w2n x+n <= b+sz` by
+    (gvs[op_prov_def, FLOOKUP_o_f, ld_erase_def]) >>
+  `w2n y = c+(w2n x-b)` by
+    (irule ld_wordrel_site_value >> simp[] >>
+     qexistsl_tac [`A`, `x'`, `sz`] >> simp[] >>
+     metis_tac[]) >>
+  disj2_tac >> qexists_tac `w2n x-b` >>
+  simp[] >> decide_tac
+QED
+
+Theorem ld_alloc_target_no_wrap:
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames /\
+  (HD frames).lf_tgt.vs_alloca_next < dimword (:256) ==>
+  !a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)
+Proof
+  rpt strip_tac >> drule_all ld_slot_source_site >> strip_tac >>
+  `ld_maps A (EL j frames)` by gvs[EVERY_EL] >>
+  `FLOOKUP (EL j frames).lf_src.vs_allocas aid = SOME (b,sz)` by
+    gvs[ld_sites_def] >>
+  `FLOOKUP (EL j frames).lf_tgt.vs_allocas aid = SOME (c,sz)` by
+    (gvs[ld_maps_def] >>
+     qpat_x_assum `!aid b n. FLOOKUP _ aid = SOME (b,n) ==> ?c. _ /\ _` drule >> strip_tac >> gvs[]) >>
+  `(j,aid,c,sz) IN ld_sites frames F` by
+    (simp[ld_sites_def] >> metis_tac[]) >>
+  drule_all ld_global_bounds >> simp[]
+QED
