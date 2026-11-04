@@ -3784,3 +3784,91 @@ Proof
        probe_word_final_call_ctx] >>
   gvs[logs_rel_def]
 QED
+
+(* The actual caller allocates a return buffer even for a single word. *)
+Theorem probe_word_shrink_lower_value:
+  !cenv sa bufsz flags.
+    cenv.ce_func_info "shrink" = (1,bufsz,flags) ==>
+    lower_value compile_expr cenv (BaseT (UintT 256))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) sa =
+    (Var ("%" ++ toString (sa.cs_next_var + 3)),
+     sa with <| cs_next_var := sa.cs_next_var + 4;
+                cs_next_id := sa.cs_next_id + 5;
+                cs_current_insts := sa.cs_current_insts ++
+       [mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+          ["%" ++ toString sa.cs_next_var];
+        mk_inst (sa.cs_next_id + 1) INVOKE
+          [Label (internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+             (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor)]
+          ["%" ++ toString (sa.cs_next_var + 1)];
+        mk_inst (sa.cs_next_id + 2) ADD
+          [Var ("%" ++ toString sa.cs_next_var); Lit 0w]
+          ["%" ++ toString (sa.cs_next_var + 2)];
+        mk_inst (sa.cs_next_id + 3) MSTORE
+          [Var ("%" ++ toString (sa.cs_next_var + 2));
+           Var ("%" ++ toString (sa.cs_next_var + 1))] [];
+        mk_inst (sa.cs_next_id + 4) MLOAD
+          [Var ("%" ++ toString sa.cs_next_var)]
+          ["%" ++ toString (sa.cs_next_var + 3)]] |>)
+Proof
+  rpt strip_tac >>
+  simp[exprLoweringTheory.lower_value_def, comp_bind_def,
+       Once exprLoweringTheory.compile_expr_def,
+       exprLoweringTheory.compile_call_def,
+       exprLoweringTheory.compile_multi_vvs_def, comp_return_def,
+       exprLoweringTheory.compile_stage_intcall_args_def, nsid_to_string_def,
+       contextTheory.compile_alloc_buffer_def, emit_op_def, emit_multi_op_def,
+       emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_ignore_bind_def, contextTheory.base_ptr_def,
+       vyperASTTheory.expr_type_def] >>
+  pure_rewrite_tac[numLib.num_CONV ``1``, fresh_vars_def] >>
+  simp[comp_bind_def, comp_return_def, fresh_var_def,
+       exprLoweringTheory.store_multi_results_def,
+       emit_op_def, emit_void_def, fresh_id_def, emit_def,
+       comp_ignore_bind_def, exprLoweringTheory.unwrap_value_def,
+       contextTheory.mk_ptr_def, is_word_type_def,
+       contextTheory.compile_ptr_load_def] >>
+  rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND]
+QED
+
+(* C0.25 caller-boundary audit (not a simulation certificate).
+   probe_word_shrink_lower_value needs only the function-info arity = 1;
+   the buffer-size and stack flags are irrelevant for the empty argument list.
+   The emitted label must additionally look up probe_word_function in ctx.
+   Its value is internal_fn_label (cenv.ce_func_ids "shrink") "shrink"
+      (cenv.ce_func_param_types "shrink") cenv.ce_is_ctor.
+
+   Let A = s0.vs_alloca_next.  The caller first allocates 32 bytes, so the
+   s supplied to probe_word_invoke is NOT s0: s.vs_alloca_next = A + 32.
+   Its required headroom is consequently A + 160 <= dimword (:256).
+   alloca_room includes pending_alloca_size plus reachable-function budget;
+   stmt_state_rel therefore supplies a route, but the code-membership and
+   reachability arithmetic yielding this concrete 160 bound is still unproved.
+   setup_callee probe_word_function [] s = SOME cs and the emitted-label
+   lookup also remain to be connected to that state.  The donor shape follows
+   from probe_word_pre_shapes and storage_agree as in the accepted INVOKE
+   summary, once the initial ALLOCA is transported through stmt_state_rel.
+
+   Freshness is not a new semantic premise: all four writes use counters
+   sa.cs_next_var + k, k = 0,1,2,3. local_ptrs_reserved_fresh proves each
+   not_local_ptr from local_ptrs_reserved cenv sa. not_fresh_at_def excludes
+   each from the old-register clause of expr_post. The INVOKE-only register
+   equation is probe_word_invoke_caller_frame; frame transport through the
+   ALLOCA, ADD, MSTORE and MLOAD is still required.
+
+   Old allocation separation DOES have an invariant: stmt_state_rel includes
+   alloca_inv, whose alloca_next_valid conjunct says
+     FLOOKUP s0.vs_allocas aid = SOME (off,sz) ==> off + sz <= A.
+   Thus old recorded regions miss BOTH caller buffer [A,A+32) and callee
+   scratch [A+32,A+160). No extra nonlocal-region hypothesis is needed for
+   this numeric separation. Applying the memory frame to all five caller
+   instructions and preserving old allocation entries remains unproved;
+   distinct instruction ids and pending ALLOCA membership must be used.
+   probe_word_invoke_locals_kept and probe_word_invoke_stmt_state_summary
+   cover only INVOKE, not the buffer setup and final load/store wrapper.
+
+   expr_vv_case needs the prefix ending after MSTORE and a LocatedValue
+   witness for the return buffer, whereas expr_sim_case needs all five
+   instructions and the final MLOAD value. Neither universal judgment follows
+   merely from this lowering equation or the conditional INVOKE summaries.
+*)
