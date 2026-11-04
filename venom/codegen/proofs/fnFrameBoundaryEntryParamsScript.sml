@@ -196,3 +196,52 @@ Theorem entry_ret_probe_plan:
 Proof
   rpt strip_tac >> EVAL_TAC >> gvs[operand_to_string_def] >> EVAL_TAC
 QED
+
+Definition entry_bind_pairs_def:
+  entry_bind_pairs pairs s =
+    FOLDL (\st (x,v). update_var x v st) s pairs
+End
+
+Theorem entry_bind_pairs_normal:
+  !pairs s. entry_bind_pairs pairs s =
+    s with vs_vars := FOLDL (\m (x,v). m |+ (x,v)) s.vs_vars pairs
+Proof
+  Induct >- simp[entry_bind_pairs_def] >>
+  Cases >> rpt gen_tac >>
+  simp[entry_bind_pairs_def, update_var_def] >>
+  first_x_assum (qspec_then `s with vs_vars := s.vs_vars |+ (q,r)` mp_tac) >>
+  simp[entry_bind_pairs_def, update_var_def]
+QED
+
+Theorem entry_bind_pairs_lookup:
+  !pairs s x v.
+    ALL_DISTINCT (MAP FST pairs) /\ MEM (x,v) pairs ==>
+    FLOOKUP (entry_bind_pairs pairs s).vs_vars x = SOME v
+Proof
+  rpt strip_tac >>
+  simp[entry_bind_pairs_normal, finite_mapTheory.fupdate_list_foldl,
+       alistTheory.FLOOKUP_FUPDATE_LIST] >>
+  `ALOOKUP (REVERSE pairs) x = SOME v` by
+    (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
+     simp[MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
+  simp[]
+QED
+
+Theorem entry_bind_pairs_preserves:
+  (entry_bind_pairs pairs s).vs_params = s.vs_params /\
+  (entry_bind_pairs pairs s).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[entry_bind_pairs_normal]
+QED
+
+Theorem entry_bind_pairs_empty[simp]:
+  entry_bind_pairs [] s = s
+Proof
+  simp[entry_bind_pairs_def]
+QED
+
+Theorem entry_bind_pairs_singleton[simp]:
+  entry_bind_pairs [(x,v)] s = update_var x v s
+Proof
+  simp[entry_bind_pairs_def]
+QED
