@@ -2382,13 +2382,14 @@ Theorem eval_preserves_tv:
   (!cx g v st res st'. assign_tuple_targets cx g v st = (res,st') ==> preserves_tv cx st st') /\
   (!cx gs vs st res st'. assign_tuple_target_list cx gs vs st = (res,st') ==> preserves_tv cx st st')
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  ACCEPT_TAC (LIST_CONJ
+    (List.take (CONJUNCTS eval_preserves_tv_with_results, 10)))
 QED
 
 Theorem eval_expr_results_preserves_tv:
   eval_expr_results cx es st = (res,st') ==> preserves_tv cx st st'
 Proof
-  metis_tac[eval_preserves_tv_with_results]
+  MATCH_ACCEPT_TAC (cj 11 eval_preserves_tv_with_results)
 QED
 
 Theorem eval_stmt_preserves_tv:
