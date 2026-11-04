@@ -1059,3 +1059,89 @@ Proof
       EVERY_MEM, codegen_ready_inst_def] >>
   metis_tac[]
 QED
+
+Theorem rf_entry_preparation_replay:
+  !fn ra vs lo base ps opc inputs nl input_ops ps1 reorder_ops ps2 initial_fmp.
+    codegen_ready_fn fn /\ generated_plan_state_wf base ps /\
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    reorder_plan (dfg_build_function fn) inputs ps1 = (reorder_ops,ps2) /\
+    opc <> INVOKE /\ LENGTH inputs <= 16 /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    EVERY (\op. ~is_label_operand op) inputs /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (frame_view fn ra vs) lo at =
+      operand_val (frame_view fn ra vs) lo
+        (normalize_operand (dfg_build_function fn) [] at)) /\
+    (!off. ~MEM (SOSpill off) (input_ops ++ reorder_ops) /\
+      ~MEM (SORestore off) (input_ops ++ reorder_ops)) ==>
+    EVERY is_simple_stack_op (input_ops ++ reorder_ops) /\
+    prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) /\
+    plan_stack_sem_eq lo (frame_view fn ra vs)
+      (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops) ps).ps_stack ps2.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule rf_preparation_replay >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac
+  >- (gvs[generated_plan_state_wf_def] >>
+      drule spill_alloc_layout_wf_spilled_separated >> simp[]) >>
+  qexistsl_tac [`dfg_build_function fn`, `frame_view fn ra vs`, `inputs`,
+    `nl`, `opc`, `ps1`] >>
+  asm_rewrite_tac[] >>
+  conj_tac
+  >- (gen_tac >> disch_tac >>
+      Cases_on `is_var_operand at`
+      >- metis_tac[] >>
+      Cases_on `at` >>
+      fs[stackPlanTypesTheory.is_var_operand_def] >>
+      simp[NoAsms, Once normalize_operand_def]) >>
+  fs[EVERY_MEM] >>
+  metis_tac[codegen_normalize_operand_not_dead_marker,
+    dead_stack_marker_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+(* Forwarding use-site audit (C1.3.12).
+   Proposed suffix inventory invariant, with entry fixed throughout:
+     !at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+       operand_val (frame_view fn ra s) lo at =
+       operand_val entry lo (normalize_operand (dfg_build_function fn) [] at).
+   This is separate from rf_value_inv, whose domain is future source uses.
+
+   Initial preparation: rf_entry_preparation_replay checks the inventory
+   premise from the frozen normalization hypothesis, and extends it to inputs
+   by ownership (non-variables normalize identically).  generated_plan_state_wf
+   supplies spill separation.  At the concrete COPY call, inputs are
+   compute_operands inst; its wf arity supplies the bound 16, suffix no-label
+   supplies input no-labelness, and suffix availability specializes at k=i.
+   The block-plan append equation supplies absence of spills/restores in this
+   prefix.  These concrete block-to-call specializations remain integration
+   work; the checked entry theorem does not assume a new inventory invariant.
+
+   Exact remaining transition obligations against generate_regular_inst_plan:
+   - Preparation output ps4: transport the invariant through emit_input_plan
+     inventory subset and reorder's value-preserving equivalent-name swaps.
+     rf_value_inv supplies equations for the current inputs, not stale slots.
+   - COPY success: ps5 = ps4 with stack_pop 3, no outputs.  Source variable
+     valuation is unchanged, so the invariant must survive this subset and
+     release_dead_spills.  No source/assembly memory agreement is used.
+   - ASSIGN [rhs] [x]: ps5 pops one input, ps6 pushes Var x; generated emit
+     code is empty.  The prepared physical TOS must become the value of x.
+     For every retained at, prove the invariant in update_var x v s, including
+     a stale at = Var x.  This special case is not justified by SSA freshness:
+     it needs normalized x = normalized rhs (normalize_operand_codegen_assign)
+     and the input's common-entry equation.  Other operands use
+     operand_val_update_var.  Then transport through popmany, optimistic swap,
+     and release_dead_spills, preserving separation and input availability.
+   - REVERT: inputs are two operands; terminal replay needs the copied interval
+     equality plus input agreement, not a reconstructed fn_frame_inv.
+
+   Dead slots: these three regular branches never invoke clean_stack_plan or
+   its marker-producing maps.  Any initial dead_stack_marker normalizes to
+   itself and evaluates as the same fixed label in both source views.  Root
+   exclusion for searched inputs is codegen_normalize_operand_not_dead_marker;
+   no blanket non-label-root claim is needed.  The retained inventory premise
+   is sufficient for reorder_one's alias check at final_dist; replacing it by
+   a candidate-only premise is not currently necessary, but preservation above
+   is still unproved.  This audit is not terminal-integration evidence.
+*)
