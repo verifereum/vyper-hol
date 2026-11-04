@@ -2,7 +2,7 @@ Theory fnFrameBoundaryEntryParams
 Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
-  arithmetic words
+  arithmetic words unitShapeDefs venomWf
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -124,4 +124,75 @@ Proof
   simp[codegen_ready_fn_def, entry_probe_fn_def, entry_probe_block_def,
        EVERY_APPEND, codegen_ready_inst_def, entry_probe_sink_def,
        mk_inst_def, is_pre_codegen_opcode_def]
+QED
+
+Definition entry_ret_probe_def:
+  entry_ret_probe = (entry_probe_fn 0) with fn_blocks :=
+    [<|bb_label := "entry"; bb_instructions :=
+       [mk_inst 0 PARAM [Lit 0w] ["p"];
+        mk_inst 1 RETPC_PARAM [Lit 1w] ["retpc"];
+        mk_inst 2 RET [Var "p"; Var "retpc"] []]|>]
+End
+
+Theorem entry_ret_probe_opcodes_ready:
+  EVERY codegen_ready_inst
+    (HD entry_ret_probe.fn_blocks).bb_instructions
+Proof
+  EVAL_TAC
+QED
+
+Theorem entry_ret_probe_ready:
+  codegen_ready_fn entry_ret_probe
+Proof
+  simp[codegen_ready_fn_def] >> rpt conj_tac >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> gvs[] >> dsimp[]
+  >- (qexistsl [`0`, `2`] >> simp[] >> qx_gen_tac `path` >>
+      Cases_on `path` >> simp[]) >>
+  qexistsl [`1`, `2`] >> simp[] >> qx_gen_tac `path` >>
+  Cases_on `path` >> simp[]
+QED
+
+Theorem entry_ret_probe_opaque_vars:
+  !x. (retpc_var entry_ret_probe x <=> x = "retpc") /\
+      ~gas_var entry_ret_probe x
+Proof
+  gen_tac >> simp[retpc_var_def, gas_var_def] >>
+  once_rewrite_tac[copy_phi_var_cases] >>
+  simp[entry_ret_probe_def, entry_probe_fn_def, fn_insts_def, fn_insts_blocks_def, mk_inst_def,
+       MEM_FLAT, MEM_MAP] >>
+  dsimp[] >> rpt strip_tac >> disj1_tac >> rpt strip_tac >> gvs[]
+QED
+
+Theorem entry_ret_probe_opaque_ok:
+  opaque_use_ok entry_ret_probe
+Proof
+  simp[opaque_use_ok_def, entry_ret_probe_opaque_vars] >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >>
+  simp[retpc_use_ok_def] >> qexists_tac `[Var "p"]` >> simp[]
+QED
+
+Theorem entry_ret_probe_reachable:
+  reachable_fn entry_ret_probe = entry_ret_probe
+Proof
+  irule reachable_fn_single_block >>
+  simp[entry_ret_probe_def, entry_probe_fn_def, mk_inst_def]
+QED
+
+Theorem entry_ret_probe_retpc_shape:
+  retpc_shape_ok entry_ret_probe
+Proof
+  simp[retpc_shape_ok_def, entry_ret_probe_reachable,
+       entry_ret_probe_opaque_vars] >>
+  EVAL_TAC >> rpt strip_tac >> gvs[] >>
+  qexistsl [`[Var "p"]`, `"retpc"`] >>
+  simp[entry_ret_probe_opaque_vars]
+QED
+
+Theorem entry_ret_probe_plan:
+  !ps. ps.ps_stack = [] ==>
+    prepare_params_plan (liveness_analyze entry_ret_probe) entry_ret_probe ps =
+    ([], ps with ps_stack := [Var "p"; Var "retpc"])
+Proof
+  rpt strip_tac >> EVAL_TAC >> gvs[operand_to_string_def] >> EVAL_TAC
 QED
