@@ -20,7 +20,8 @@ Ancestors
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
   makeSsaCurrentAnalysis dominatorProofs dominatorDefs
   makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
-  makeSsaCurrentTokens
+  makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
+  makeSsaCurrentDemand
 Libs
   rich_listTheory
 
@@ -116,6 +117,36 @@ Theorem current_wf_chain_token_default:
 Proof
   Induct >> simp[current_chain_token_def, current_wf_block_token_default] >>
   metis_tac[]
+QED
+
+Theorem current_wf_demand_live:
+  !fn v l i. current_demand fn v l i ==>
+  wf_function fn /\ all_reachable fn /\
+  (!pb phi. MEM pb fn.fn_blocks /\
+    MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) ==>
+  MEM v (live_vars_at (liveness_analyze fn) l i)
+Proof
+  ntac 2 gen_tac >> ho_match_mp_tac current_demand_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  `MEM l (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `MEM l (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[current_all_labels_dfs_pre]
+  >- (drule live_vars_at_uses >> simp[] >> metis_tac[])
+  >- (fs[MEM_MAP] >> metis_tac[lookup_block_MEM, pairTheory.SND])
+  >- (drule live_vars_at_propagate >> simp[] >> metis_tac[]) >>
+  `MEM l' (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >>
+     metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `MEM l' (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[current_all_labels_dfs_pre] >>
+  `fn_cfg_edge fn l l'` by
+    (simp[fn_cfg_edge_def] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule live_vars_at_cross_block >> simp[] >> disch_then irule >>
+  simp[GSYM current_cfg_edge_succs] >>
+  qexistsl [`sb`, `l'`] >> simp[] >> metis_tac[lookup_block_MEM]
 QED
 
 Theorem current_wf_path_lrc[local]:
