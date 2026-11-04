@@ -1326,7 +1326,58 @@ Definition logs_rel_def:
     EVERY2 (log_entry_equiv cenv addr) vs.logs ss.vs_logs
 End
 
-(* Call context matches *)
+(* The transaction's block context is one an EVM block can have: a block
+   number past genesis and below 2 ** 255, and the hashes of the last
+   MIN 256 block_number blocks.  Under it the source's evaluate_block_hash
+   raises exactly where the lowered blockhash(n) range check reverts, and
+   block.prevhash always has a hash. *)
+Definition tx_env_ok_def:
+  tx_env_ok tx <=>
+    tx.block_number <> 0 /\ tx.block_number < 2 ** 255 /\
+    MIN 256 tx.block_number <= LENGTH tx.block_hashes /\
+    LENGTH tx.block_hashes <= 256
+End
+
+Theorem tx_env_ok_hash_window:
+  tx_env_ok tx ==>
+  (n < tx.block_number /\ tx.block_number - n - 1 < LENGTH tx.block_hashes <=>
+   n < tx.block_number /\ tx.block_number - 256 <= n)
+Proof
+  simp[tx_env_ok_def] >> strip_tac >>
+  Cases_on `tx.block_number <= 256` >>
+  gvs[arithmeticTheory.MIN_DEF] >> decide_tac
+QED
+
+Theorem tx_env_ok_evaluate_block_hash:
+  tx_env_ok tx ==>
+  evaluate_block_hash tx n =
+    if n < tx.block_number /\ tx.block_number - 256 <= n then
+      INL (BytesV (word_to_bytes_be
+        (EL (tx.block_number - n - 1) tx.block_hashes)))
+    else INR (RuntimeError "evaluate_block_hash")
+Proof
+  strip_tac >> drule tx_env_ok_hash_window >>
+  disch_then (qspec_then `n` assume_tac) >>
+  simp[evaluate_block_hash_def] >>
+  `tx.block_number - 1 - n = tx.block_number - n - 1` by decide_tac >>
+  Cases_on `n < tx.block_number /\ tx.block_number - 256 <= n` >>
+  gvs[] >>
+  Cases_on `tx.block_number <= n \/ LENGTH tx.block_hashes <= tx.block_number - (n + 1)` >>
+  gvs[] >> decide_tac
+QED
+
+Theorem tx_env_ok_evaluate_prevhash:
+  tx_env_ok tx ==>
+  evaluate_block_hash tx (tx.block_number - 1) =
+    INL (BytesV (word_to_bytes_be (EL 0 tx.block_hashes)))
+Proof
+  strip_tac >> drule tx_env_ok_evaluate_block_hash >>
+  disch_then (qspec_then `tx.block_number - 1` mp_tac) >>
+  gvs[tx_env_ok_def]
+QED
+
+(* Call context matches.  BLOCKHASH answers from the transaction's block
+   hashes within the last 256 blocks, and 0 elsewhere, as the EVM does. *)
 Definition call_ctx_rel_def:
   call_ctx_rel (txn:call_txn) (cc:call_context) (tc:tx_context) (bc:block_context) =
     (cc.cc_caller = txn.sender ∧
@@ -1343,8 +1394,30 @@ Definition call_ctx_rel_def:
      bc.bc_prevrandao = n2w txn.prev_randao ∧
      bc.bc_gaslimit = n2w txn.gas_limit ∧
      bc.bc_basefee = n2w txn.base_fee ∧
-     bc.bc_blobbasefee = n2w txn.blob_base_fee)
+     bc.bc_blobbasefee = n2w txn.blob_base_fee ∧
+     tx_env_ok txn ∧
+     (∀n. bc.bc_blockhash n =
+          if n < txn.block_number ∧ txn.block_number - 256 ≤ n ∧
+             txn.block_number - n - 1 < LENGTH txn.block_hashes
+          then EL (txn.block_number - n - 1) txn.block_hashes else 0w))
 End
+
+Theorem call_ctx_rel_prevhash:
+  call_ctx_rel tx cc tc bc ==>
+  bc.bc_blockhash (w2n (bc.bc_number - 1w)) = HD tx.block_hashes
+Proof
+  strip_tac >>
+  `0 < tx.block_number /\ tx.block_number < 2 ** 255 /\
+   0 < LENGTH tx.block_hashes` by
+    gvs[call_ctx_rel_def, tx_env_ok_def] >>
+  `bc.bc_number = n2w tx.block_number` by gvs[call_ctx_rel_def] >>
+  `bc.bc_number - 1w = (n2w (tx.block_number - 1) : bytes32)` by
+    simp[wordsTheory.n2w_sub] >>
+  `w2n (bc.bc_number - 1w) = tx.block_number - 1` by
+    (simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def] >>
+     simp_tac (srw_ss() ++ wordsLib.SIZES_ss) [] >> fs[]) >>
+  gvs[call_ctx_rel_def]
+QED
 
 (* Top-level oracle-mode source/Venom state relation for the statement and
    expression simulation, in func, the function running.  It ties together

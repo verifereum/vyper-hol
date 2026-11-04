@@ -67,11 +67,8 @@
  *   - bytes and string literals: a bytesN literal is a Lit of its typed
  *     encoding, a dynamic bytes or string literal a memory buffer;
  *   - locals other than word_value ones (address, bytesN, memory-backed);
- *   - block.prevhash: evaluate_block_hash raises a RuntimeError when the
- *     block number is 0 or the hash list is too short, while Venom's
- *     BLOCKHASH is total, so the lowered code does not abort there; and
- *     call_ctx_rel does not relate bc_blockhash to the transaction's block
- *     hashes.  expr_sim is unprovable for it as things stand;
+ *   - block.prevhash: it reads BLOCKHASH (NUMBER - 1), so its case is
+ *     exprSimLeaves' compile_prevhash_sim, on call_ctx_rel's tx_env_ok;
  *   - msg.gas: the source reads the next of the state's gas readings
  *     (gas_obs), while the lowering emits GAS, and call_ctx_rel does not
  *     relate the two.
@@ -957,8 +954,9 @@ Proof
 QED
 
 (* An environment read (msg.sender, block.timestamp, ...) annotated with
-   its type, but block.prevhash and msg.gas, for which expr_sim does not
-   hold (see the header). *)
+   its type, but block.prevhash, proved in exprSimLeaves'
+   compile_prevhash_sim, and msg.gas, for which expr_sim does not hold
+   (see the header). *)
 Theorem compile_env_sim:
   !ctx func cenv cx ty ann item es.
     item <> PrevHash /\ item <> MsgGas /\ ann = env_item_type item ==>
