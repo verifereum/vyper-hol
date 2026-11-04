@@ -363,3 +363,57 @@ Proof
   simp[tstore_def, dse_pending_keys_filter] >>
   irule dse_transient_normalize_overwrite >> gvs[]
 QED
+
+(* Fixed-state liveness boundaries for outstanding footprints. *)
+Theorem dse_pending_at_member:
+  dse_pending_at cfg bp sp fn bb idx P s /\ MEM (loc,(a,n)) P ==>
+  ml_is_fixed loc /\ loc.ml_size = SOME n /\ 0 < n /\
+  dse_region_matches loc s a n /\
+  dse_suffix_dead cfg FEMPTY bp loc sp fn bb idx
+Proof
+  simp[dse_pending_at_def, EVERY_MEM] >> rpt strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem dse_pending_at_no_read:
+  dse_pending_at cfg bp sp fn bb idx P s /\ MEM (loc,(a,n)) P /\
+  idx < LENGTH bb.bb_instructions ==>
+  ~dse_inst_reads_alias FEMPTY bp sp loc (EL idx bb.bb_instructions)
+Proof
+  rpt strip_tac >> drule_all dse_pending_at_member >> strip_tac >>
+  drule_all dse_suffix_dead_no_read >> simp[]
+QED
+
+Theorem dse_pending_at_step:
+  dse_pending_at cfg bp sp fn bb idx P s /\
+  (!loc a n. MEM (loc,(a,n)) P ==>
+    ~dse_inst_clobbers bp sp loc (EL idx bb.bb_instructions)) ==>
+  dse_pending_at cfg bp sp fn bb (SUC idx) P s
+Proof
+  rewrite_tac[dse_pending_at_def] >> strip_tac >>
+  reverse conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
+  simp[EVERY_MEM] >> qx_gen_tac `entry` >> strip_tac >>
+  PairCases_on `entry` >> gvs[] >>
+  qpat_x_assum `EVERY _ P` mp_tac >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  irule dse_suffix_dead_step >> simp[] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem dse_pending_at_nonalias:
+  dse_pending_at cfg bp sp fn bb idx P s /\ MEM (loc,(a,n)) P /\
+  ~may_overlap loc readloc /\ allocas_non_overlapping s /\
+  dse_region_matches readloc s r m ==>
+  regions_disjoint (a,n) (r,m)
+Proof
+  rpt strip_tac >> drule_all dse_pending_at_member >> strip_tac >>
+  irule dse_region_matches_nonalias >> metis_tac[]
+QED
+
+Theorem dse_pending_at_filter:
+  dse_pending_at cfg bp sp fn bb idx P s ==>
+  dse_pending_at cfg bp sp fn bb idx (FILTER pred P) s
+Proof
+  simp[dse_pending_at_def, key_ok_def, EVERY_MEM, MEM_FILTER] >>
+  metis_tac[]
+QED
