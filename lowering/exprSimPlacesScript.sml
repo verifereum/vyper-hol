@@ -51,8 +51,8 @@
 Theory exprSimPlaces
 Ancestors
   list exprSim exprSimHyps exprSimPop exprSimAttribute exprSimTuple
-  exprSimArrayIndex
-  exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
+  exprSimArrayIndex exprSimArraySubscript
+  exprLowering exprCallbackContracts placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
 
 (* ===== Subscripts ===== *)
 
@@ -177,6 +177,34 @@ Proof
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   Cases_on `vt` >> gvs[value_type_place_def] >>
   Cases_on `expr_type obj` >> gvs[subscript_vtype_def]
+QED
+
+Theorem compile_expr_array_subscript[local]:
+  !cenv ty ann obj idx et bd st vv st'.
+    compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+    place_type cenv obj = ValPT (ArrayT et bd) ==>
+    ?bvv st1 iop st2 p.
+      compile_expr cenv ty obj st = (bvv, st1) /\
+      lower_value compile_expr cenv ty idx st1 = (iop, st2) /\
+      compile_array_subscript (vv_operand bvv) iop
+        (case bd of Fixed n => F | Dynamic n => T)
+        (case bd of Fixed n => n | Dynamic n => 0)
+        (word_scale (vv_loc bvv))
+        (elem_size_in_location cenv (vv_loc bvv) et)
+        (is_signed_type (expr_type idx))
+        (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca (vv_loc bvv))
+        st2 = (p, st') /\
+      vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
+  pure_rewrite_tac[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def] >>
+  simp[SF ETA_ss, compile_subscript_child_calls] >>
+  simp[compile_subscript_def, compileEnvTheory.comp_bind_def, compileEnvTheory.comp_return_def,
+       vyperASTTheory.expr_size_def, vyperASTTheory.expr_type_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[compileEnvTheory.comp_return_def, vv_loc_def] >>
+  Cases_on `bd` >> gvs[]
 QED
 
 (* An element of a static or dynamic array, with the bounds-check abort,
