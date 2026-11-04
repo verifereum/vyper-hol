@@ -20,6 +20,47 @@ Definition phi_slot_realize_def:
   (phi_slot_realize matching (INR i) = THE (FLOOKUP matching i))
 End
 
+Theorem phi_slot_fold_inr_mem[local]:
+  !base acc placed i.
+  MEM (INR i) (FST (FOLDL (phi_slot_step op_map) (acc,placed) base)) <=>
+  MEM (INR i) acc \/
+    (~MEM i placed /\ ?v. MEM v base /\ FLOOKUP op_map v = SOME i)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[phi_slot_step_def] >> Cases_on `FLOOKUP op_map h`
+  >- simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  rename1 `FLOOKUP op_map h = SOME idx` >>
+  Cases_on `MEM idx placed` >> simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  qpat_x_assum `!acc placed i. _` kall_tac >> metis_tac[]
+QED
+
+Theorem phi_slot_fold_inl_mem[local]:
+  !base acc placed v.
+  MEM (INL v) (FST (FOLDL (phi_slot_step op_map) (acc,placed) base)) <=>
+  MEM (INL v) acc \/ (MEM v base /\ FLOOKUP op_map v = NONE)
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[phi_slot_step_def] >> Cases_on `FLOOKUP op_map h`
+  >- (simp[] >> Cases_on `v = h` >> gvs[]) >>
+  rename1 `FLOOKUP op_map h = SOME idx` >>
+  Cases_on `MEM idx placed` >> simp[] >>
+  Cases_on `v = h` >> gvs[]
+QED
+
+Theorem phi_slot_trace_inr_mem:
+  !op_map base i. MEM (INR i) (phi_slot_trace op_map base) <=>
+  ?v. MEM v base /\ FLOOKUP op_map v = SOME i
+Proof
+  simp[phi_slot_trace_def, phi_slot_fold_inr_mem]
+QED
+
+Theorem phi_slot_trace_inl_mem:
+  !op_map base v. MEM (INL v) (phi_slot_trace op_map base) <=>
+  MEM v base /\ FLOOKUP op_map v = NONE
+Proof
+  simp[phi_slot_trace_def, phi_slot_fold_inl_mem]
+QED
+
 Theorem phi_slot_fold_factor:
   !base acc placed.
     (!v i. MEM v base /\ FLOOKUP op_map v = SOME i ==>
