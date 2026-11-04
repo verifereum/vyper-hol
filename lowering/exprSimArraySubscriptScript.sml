@@ -3445,3 +3445,24 @@ Proof
   simp[observer_sanitized_fresh_block,
        observer_sanitized_fixed_function_missing_label]
 QED
+
+(* A call in the proposed nested immutable mutation candidate requires a
+   supported main module. Its immutable declaration already violates that
+   requirement, independently of the choice of Boolean representation values
+   or of any fixed-function operand simulation contract. *)
+Theorem expr_body_pre_called_nested_immutable_rejected:
+  expr_body_pre cenv cx env e es /\
+  MEM (NONE,callee) (int_calls_expr e) /\
+  get_module_code cx NONE = SOME tops /\
+  MEM (VariableDecl Private Immutable name
+    (ArrayT (ArrayT et ib) bd) NONE) tops ==> F
+Proof
+  strip_tac >>
+  fs[expr_body_pre_def, listTheory.EVERY_MEM] >>
+  qpat_x_assum `!c. MEM c _ ==> _` drule >> simp[] >>
+  strip_tac >> gvs[] >>
+  drule_all supportedProgramTheory.supported_program_declaration >>
+  simp[supportedDeclsTheory.supported_declaration_header_def,
+       supportedProgramTheory.supported_declaration_body_def] >>
+  strip_tac >> drule supported_immutable_array_element_not_array >> simp[]
+QED
