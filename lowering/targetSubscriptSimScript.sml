@@ -9,7 +9,7 @@ Ancestors
   vyperTyping valueEncoding arithmetic vyperValueOperation valueEncodingProofs list
   vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
   words finite_map option exprSimArrayIndex valueEncodingProps accountsRelProps
-  venomState venomMemDefs
+  venomState venomMemDefs vyperArith integer integer_word
 Libs
   pairLib
 
@@ -532,4 +532,44 @@ Theorem eval_base_place_memory_live_scopes_frame:
       evaluate_subscripts entry.type entry.value path = INL v
 Proof
   rpt strip_tac >> drule_all eval_base_place_memory_live >> simp[]
+QED
+
+(* Scalar integer representation, as used by expr_val_rel/vv_holds. *)
+Theorem idx_in_range_typed_int:
+  !bt bits i iw n.
+    (bt = IntT bits \/ bt = UintT bits) /\ bits <= 256 /\
+    value_has_type (BaseTV bt) (IntV i) /\
+    iw = typed_val_to_w256 (BaseTV bt) (IntV i) /\
+    n < dimword (:256) ==>
+    (idx_in_range (is_signed_type (BaseT bt)) iw (n2w n) <=>
+     0 <= i /\ Num i < n)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[typed_val_to_w256_def, val_to_w256_def, is_signed_type_def,
+      value_has_type_def]
+  >- (`w2i (i2w i : bytes32) = i` by
+        (irule w2i_i2w_within_signed >> qexists_tac `bits` >> simp[]) >>
+      Cases_on `i < 0`
+      >- simp[idx_in_range_def, WORD_LTi, word_0_w2i,
+              INT_NOT_LE, w2n_n2w] >>
+      gvs[idx_in_range_def, WORD_LTi, word_0_w2i, w2n_n2w] >>
+      `~word_msb (i2w i : bytes32)` by simp[word_msb_neg, GSYM w2i_lt_0] >>
+      gvs[w2i_def] >>
+      `Num i = w2n (i2w i : bytes32)` by metis_tac[NUM_OF_INT] >>
+      simp[GSYM INT_NOT_LT]) >>
+  `Num i < dimword (:256)` by
+    (irule LESS_LESS_EQ_TRANS >> qexists_tac `2 ** bits` >>
+     simp[dimword_def]) >>
+  `i = &Num i` by simp[INT_OF_NUM] >>
+  pop_assum SUBST1_TAC >>
+  simp[idx_in_range_def, i2w_pos, w2n_n2w]
+QED
+
+Theorem array_bounds_capacity:
+  !i len cap.
+    len <= cap ==>
+    ((0 <= i /\ Num i < len) <=>
+     ((0 <= i /\ Num i < cap) /\ Num i < len))
+Proof
+  rpt strip_tac >> eq_tac >> simp[]
 QED
