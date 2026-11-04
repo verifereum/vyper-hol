@@ -2737,3 +2737,168 @@ Proof
        probe_word_entry_observations] >>
   simp[Once jump_to_def, probe_word_load_exit_observations]
 QED
+
+Theorem probe_word_elem_body_scratch_frame:
+  !s i src dst.
+    (probe_word_elem_body_state s i src dst).vs_memory = s.vs_memory /\
+    (probe_word_elem_body_state s i src dst).vs_allocas = s.vs_allocas /\
+    (probe_word_elem_body_state s i src dst).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_elem_body_state s i src dst).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_elem_body_state_def, update_var_def, sstore_def]
+QED
+
+Theorem probe_word_elem_round_scratch_frame:
+  !s i src dst.
+    (probe_word_elem_round s i src dst).vs_memory = s.vs_memory /\
+    (probe_word_elem_round s i src dst).vs_allocas = s.vs_allocas /\
+    (probe_word_elem_round s i src dst).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_elem_round s i src dst).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_elem_round_def, jump_to_def, probe_word_elem_body_scratch_frame,
+       probe_word_elem_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_elems_copied_scratch_frame:
+  !s src dst.
+    (probe_word_elems_copied_state s src dst).vs_memory = s.vs_memory /\
+    (probe_word_elems_copied_state s src dst).vs_allocas = s.vs_allocas /\
+    (probe_word_elems_copied_state s src dst).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_elems_copied_state s src dst).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_elems_copied_state_def, jump_to_def,
+       probe_word_elem_cond_state_def, update_var_def, probe_word_elem_round_scratch_frame]
+QED
+
+Theorem probe_word_copy_body_scratch_frame:
+  !s i b.
+    (probe_word_copy_body_state s i b).vs_memory = s.vs_memory /\
+    (probe_word_copy_body_state s i b).vs_allocas = s.vs_allocas /\
+    (probe_word_copy_body_state s i b).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_copy_body_state s i b).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_copy_body_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_setup_scratch_frame:
+  !s i n b.
+    (probe_word_copy_setup_state s i n b).vs_memory = s.vs_memory /\
+    (probe_word_copy_setup_state s i n b).vs_allocas = s.vs_allocas /\
+    (probe_word_copy_setup_state s i n b).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_copy_setup_state s i n b).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_copy_setup_state_def, jump_to_def, probe_word_copy_body_scratch_frame,
+       probe_word_copy_cond_state_def, update_var_def]
+QED
+
+Theorem probe_word_copy_round_scratch_frame:
+  !s i n b.
+    (probe_word_copy_round s i n b).vs_memory = s.vs_memory /\
+    (probe_word_copy_round s i n b).vs_allocas = s.vs_allocas /\
+    (probe_word_copy_round s i n b).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_copy_round s i n b).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_copy_round_def, jump_to_def, probe_word_elem_exit_state_def,
+       update_var_def, probe_word_elems_copied_scratch_frame,
+       probe_word_copy_setup_scratch_frame]
+QED
+
+Theorem probe_word_copied_scratch_frame:
+  !s n b.
+    (probe_word_copied_state s n b).vs_memory = s.vs_memory /\
+    (probe_word_copied_state s n b).vs_allocas = s.vs_allocas /\
+    (probe_word_copied_state s n b).vs_alloca_next = s.vs_alloca_next /\
+    (probe_word_copied_state s n b).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  rpt gen_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, jump_to_def, probe_word_copy_cond_state_def,
+       update_var_def, probe_word_copy_round_scratch_frame]
+QED
+
+Theorem probe_word_final_allocation_frame:
+  !s.
+    (probe_word_final_state s).vs_alloca_next = s.vs_alloca_next + 128 /\
+    (probe_word_final_state s).vs_allocas = s.vs_allocas |+
+      (1,(s.vs_alloca_next,32)) |+ (2,(s.vs_alloca_next+32,96)) /\
+    (probe_word_final_state s).vs_return_pc_token = s.vs_return_pc_token
+Proof
+  simp[probe_word_final_state_def, sstore_def, probe_word_copied_scratch_frame,
+       jump_to_def, probe_word_load_exit_state_def, update_var_def,
+       probe_word_loaded_allocation_frame, probe_word_entry_observations] >>
+  simp[probe_word_entry_state_def, update_var_def]
+QED
+
+Theorem probe_word_final_memory:
+  !s.
+    (probe_word_final_state s).vs_memory =
+    (probe_word_loaded_state
+      (jump_to "@wcopy_cond_0" (probe_word_entry_state s))
+      (n2w (s.vs_alloca_next + 32))).vs_memory
+Proof
+  simp[probe_word_final_state_def, sstore_def, probe_word_copied_scratch_frame,
+       jump_to_def, probe_word_load_exit_state_def, update_var_def]
+QED
+
+Theorem probe_word_loaded_memory:
+  !s b.
+    (probe_word_loaded_state s b).vs_memory =
+    (mstore (w2n (b+64w)) (sload 5w s)
+      (mstore (w2n (b+32w)) (sload 4w s)
+        (mstore (w2n b) (sload 3w s) s))).vs_memory
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `t = probe_word_load_round s 0w b` >>
+  qabbrev_tac `u = probe_word_load_round t 1w b` >>
+  qabbrev_tac `t' = mstore (w2n b) (sload 3w s) s` >>
+  qabbrev_tac `u' = mstore (w2n (b+32w)) (sload 4w s) t'` >>
+  `contract_storage t = contract_storage s /\
+   contract_storage u = contract_storage s` by
+    simp[Abbr `u`, Abbr `t`, probe_word_load_storage_frame] >>
+  `t.vs_memory = t'.vs_memory` by
+    simp[Abbr `t`, Abbr `t'`, probe_word_load_round_memory,
+         word_mul_n2w, word_add_n2w, WORD_ADD_0] >>
+  `u.vs_memory = (mstore (w2n (b+32w)) (sload 4w s) t).vs_memory` by
+    simp[Abbr `u`, probe_word_load_round_memory, sload_def,
+         word_mul_n2w, word_add_n2w] >>
+  `u.vs_memory = u'.vs_memory` by
+    simp[Abbr `u'`, mstore_def] >>
+  `(probe_word_loaded_state s b).vs_memory =
+    (mstore (w2n (b+64w)) (sload 5w s) u).vs_memory` by
+    simp[probe_word_loaded_state_def, jump_to_def,
+         probe_word_load_cond_state_def, update_var_def,
+         probe_word_load_round_memory, Abbr `u`, Abbr `t`,
+         sload_def, probe_word_load_storage_frame, word_mul_n2w, word_add_n2w] >>
+  `(mstore (w2n (b+64w)) (sload 5w s) u).vs_memory =
+   (mstore (w2n (b+64w)) (sload 5w s) u').vs_memory` by simp[mstore_def] >>
+  metis_tac[]
+QED
+
+Theorem probe_word_final_memory_footprint:
+  !s. s.vs_alloca_next + 128 <= dimword (:256) ==>
+    (probe_word_final_state s).vs_memory =
+    (mstore (s.vs_alloca_next+96) (sload 5w s)
+      (mstore (s.vs_alloca_next+64) (sload 4w s)
+        (mstore (s.vs_alloca_next+32) (sload 3w s) s))).vs_memory
+Proof
+  rpt strip_tac >>
+  `s.vs_alloca_next+32 < dimword (:256) /\
+   s.vs_alloca_next+64 < dimword (:256) /\
+   s.vs_alloca_next+96 < dimword (:256)` by decide_tac >>
+  rewrite_tac[probe_word_final_memory, probe_word_loaded_memory] >>
+  qabbrev_tac `e = jump_to "@wcopy_cond_0" (probe_word_entry_state s)` >>
+  `contract_storage e = contract_storage s /\ e.vs_memory = s.vs_memory` by
+    simp[Abbr `e`, contract_storage_def, jump_to_def,
+         probe_word_entry_state_def, update_var_def] >>
+  simp[word_add_n2w, w2n_n2w, arithmeticTheory.ADD_ASSOC, sload_def] >>
+  qabbrev_tac `t = mstore (s.vs_alloca_next+32)
+    (lookup_storage 3w (contract_storage s)) e` >>
+  qabbrev_tac `t' = mstore (s.vs_alloca_next+32)
+    (lookup_storage 3w (contract_storage s)) s` >>
+  `t.vs_memory = t'.vs_memory` by simp[Abbr `t`, Abbr `t'`, mstore_def] >>
+  qabbrev_tac `u = mstore (s.vs_alloca_next+64)
+    (lookup_storage 4w (contract_storage s)) t` >>
+  qabbrev_tac `u' = mstore (s.vs_alloca_next+64)
+    (lookup_storage 4w (contract_storage s)) t'` >>
+  `u.vs_memory = u'.vs_memory` by simp[Abbr `u`, Abbr `u'`, mstore_def] >>
+  simp[mstore_def]
+QED
