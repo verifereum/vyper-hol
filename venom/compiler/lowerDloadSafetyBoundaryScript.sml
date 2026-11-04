@@ -273,3 +273,358 @@ QED
    active-stack order/charge preservation. No such theorem is asserted by
    this finite phase and arithmetic diagnostic.
 *)
+
+(* C1.11.d SPECIFICATION DRAFT, for architecture review only.
+   Supersedes the schematic C1.10 proposal; NOTHING BELOW IS A DEFINITION.
+
+   Exact types used in this draft (record declarations are proposals only):
+
+   ld_site = num # num
+   ld_alloc = (ld_site, num # num # num) fmap
+   ld_frame = <| lf_serial:num; lf_supply:ir_supply; lf_fn:ir_function;
+                 lf_src:venom_state; lf_tgt:venom_state;
+                 lf_H:(string,ld_site) fmap; lf_Q:ld_site option list;
+                 lf_E:num set; lf_tv:(string,num set) fmap |>
+
+   A frame list F has active frame HD F, then most-recent saved caller.
+   Saved source/target states are PRE-INVOKE snapshots, not copies of current
+   memory. Only the active pair supplies current memory/accounts/taint.
+   N:num is the next activation serial; all lf_serial are <N and distinct.
+   Sigma:string->ir_supply is a fixed function-level supply witness. Its
+   obligation is (!fn. MEM fn C.ctx_functions ==> MEM
+     (FST(lower_dload_function_supply (Sigma fn.fn_name) fn))
+     C'.ctx_functions), with function-name lookup uniqueness and configured
+   freshness additionally established from the stage. This is an explicit
+   outstanding structural obligation, not a consequence of arbitrary Sigma.
+
+   All abbreviations below have equations; HOL type abbreviations and the
+   proposed record above are meta-notation, not changes to existing types.
+
+   erase A k = case FLOOKUP A k of SOME(b,c,n) => (b,n) | NONE => (0,0)
+   charge F = SUM (MAP (\f. CARD f.lf_E) F)
+   image f = FST(lower_dload_function_supply f.lf_supply f.lf_fn)
+
+   envelope u fn s j X p <=>
+     ?bb bi ub ui.
+       bi < LENGTH fn.fn_blocks /\ EL bi fn.fn_blocks = bb /\
+       bb.bb_label = s.vs_current_bb /\ j < LENGTH bb.bb_instructions /\
+       ub = SND(lower_dload_blocks_supply u (TAKE bi fn.fn_blocks)) /\
+       ui = SND(lower_dload_insts_supply ub (TAKE j bb.bb_instructions)) /\
+       X = FST(lower_dload_inst_supply ui (EL j bb.bb_instructions)) /\
+       p = LENGTH(FST(lower_dload_insts_supply ub
+                        (TAKE j bb.bb_instructions)))
+   Here u:ir_supply, fn:ir_function, s:venom_state, j,p:num,
+   X:instruction list. The configured block/inst supplies, not legacy
+   arithmetic ids, define both positions and private sites.
+
+   private f d ai <=>
+     ?bb j bi ub ui inst X.
+       bi < LENGTH f.lf_fn.fn_blocks /\ EL bi f.lf_fn.fn_blocks = bb /\
+       j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst /\
+       inst.inst_id = d /\ inst.inst_opcode = DLOAD /\
+       (?op out. inst.inst_operands=[op] /\ inst.inst_outputs=[out]) /\
+       ub = SND(lower_dload_blocks_supply f.lf_supply
+                                          (TAKE bi f.lf_fn.fn_blocks)) /\
+       ui = SND(lower_dload_insts_supply ub (TAKE j bb.bb_instructions)) /\
+       X = FST(lower_dload_inst_supply ui inst) /\
+       LENGTH X = 4 /\ ai = (HD X).inst_id
+
+   wordrel A k x y <=>
+     case k of NONE => x=y
+       | SOME a => ?b c n. FLOOKUP A a = SOME(b,c,n) /\
+                          y = x + n2w c - n2w b
+   (x,y:bytes32). Absence of identity means scalar for parameters, NOT an
+   arbitrary site. For variables the no-identity case uses their taint.
+
+   vars A f <=>
+     DRESTRICT f.lf_tgt.vs_vars (set(fn_ir_vars f.lf_fn)) =
+       DRESTRICT f.lf_tgt.vs_vars (FDOM f.lf_src.vs_vars) /\
+     FDOM f.lf_src.vs_vars SUBSET set(fn_ir_vars f.lf_fn) /\
+     (!v. v IN set(fn_ir_vars f.lf_fn) ==>
+       (v IN FDOM f.lf_src.vs_vars <=> v IN FDOM f.lf_tgt.vs_vars)) /\
+     FDOM f.lf_H SUBSET FDOM f.lf_src.vs_vars /\
+     (!v x y. FLOOKUP f.lf_src.vs_vars v = SOME x /\
+               FLOOKUP f.lf_tgt.vs_vars v = SOME y ==>
+       if retpc_var f.lf_fn v then T
+       else case FLOOKUP f.lf_H v of
+         SOME a => wordrel A (SOME a) x y
+       | NONE => word_agree_except
+           (case FLOOKUP f.lf_tv v of NONE=>{} | SOME m=>m) x y) /\
+     LENGTH f.lf_src.vs_params = LENGTH f.lf_tgt.vs_params /\
+     (!j. j < LENGTH f.lf_src.vs_params ==>
+       wordrel A (if j < LENGTH f.lf_Q then EL j f.lf_Q else NONE)
+         (EL j f.lf_src.vs_params) (EL j f.lf_tgt.vs_params))
+
+   This chooses opaque priority on the static intersection of retpc_var
+   and pointer variables. No numeric relation is required for a token.
+   H still has to erase to source G even for such a variable. Preservation
+   must prove that no nonopaque consumer can receive an opaque value.
+
+   maps A f <=>
+     FINITE f.lf_E /\
+     (!d. d IN f.lf_E ==> ?ai. private f d ai) /\
+     (!aid b n. FLOOKUP f.lf_src.vs_allocas aid = SOME(b,n) ==>
+       ?c. FLOOKUP A (f.lf_serial,aid) = SOME(b,c,n) /\
+           FLOOKUP f.lf_tgt.vs_allocas aid = SOME(c,n)) /\
+     (!ai c n. FLOOKUP f.lf_tgt.vs_allocas ai = SOME(c,n) ==>
+       (?b. FLOOKUP f.lf_src.vs_allocas ai = SOME(b,n) /\
+             FLOOKUP A (f.lf_serial,ai) = SOME(b,c,n)) \/
+       (n=32 /\ ?d. d IN f.lf_E /\ private f d ai)) /\
+     (!d ai. d IN f.lf_E /\ private f d ai ==>
+       ?c. FLOOKUP f.lf_tgt.vs_allocas ai = SOME(c,32))
+
+   slots A F = {k | ?f aid b c n.
+     MEM f F /\ k=(f.lf_serial,aid) /\
+     FLOOKUP f.lf_src.vs_allocas aid=SOME(b,n) /\
+     FLOOKUP A k=SOME(b,c,n)}
+
+   intervals lo s <=>
+     (!aid b n. FLOOKUP s.vs_allocas aid=SOME(b,n) ==>
+        lo<=b /\ b+n<=s.vs_alloca_next) /\
+     (!a b n a' b' n'.
+       FLOOKUP s.vs_allocas a=SOME(b,n) /\
+       FLOOKUP s.vs_allocas a'=SOME(b',n') /\ a<>a' /\ 0<n /\ 0<n' ==>
+       b+n<=b' \/ b'+n'<=b)
+
+   memory lo A tn s t <=>
+     (!i. i<lo /\ i NOTIN tn.t_mem ==>
+          read_byte i s.vs_memory=read_byte i t.vs_memory) /\
+     (!k b c n j. FLOOKUP A k=SOME(b,c,n) /\ j<n /\
+                    b+j NOTIN tn.t_mem ==>
+          read_byte (b+j) s.vs_memory=read_byte (c+j) t.vs_memory)
+
+   nonghost tn s t <=>
+     s.vs_call_ctx=t.vs_call_ctx /\ s.vs_tx_ctx=t.vs_tx_ctx /\
+     s.vs_block_ctx=t.vs_block_ctx /\ s.vs_returndata=t.vs_returndata /\
+     s.vs_outcomes=t.vs_outcomes /\ s.vs_data_section=t.vs_data_section /\
+     s.vs_labels=t.vs_labels /\ s.vs_code=t.vs_code /\
+     s.vs_fmp=t.vs_fmp /\ s.vs_call_entry_fmp=t.vs_call_entry_fmp /\
+     s.vs_initial_fmp=t.vs_initial_fmp /\ s.vs_prev_hashes=t.vs_prev_hashes /\
+     s.vs_halted=t.vs_halted /\
+     FDOM s.vs_immutables=FDOM t.vs_immutables /\
+     (!k x y. FLOOKUP s.vs_immutables k=SOME x /\
+               FLOOKUP t.vs_immutables k=SOME y ==>
+        word_agree_except (key_taint tn.t_imm k) x y) /\
+     (!a. (s.vs_accounts a with storage := (t.vs_accounts a).storage) =
+            t.vs_accounts a /\
+       storage_agree_except
+         (if a=s.vs_call_ctx.cc_address then tn.t_stor else {})
+         (s.vs_accounts a).storage (t.vs_accounts a).storage) /\
+     (!a. storage_agree_except
+         (if a=s.vs_call_ctx.cc_address then tn.t_trans else {})
+         (s.vs_transient a) (t.vs_transient a))
+
+   No equation for logs/requests/deletions/return_pc_token. This omission
+   is intentional and limited to the consumer inventory at lines 28-84.
+
+   sync lo C vs0 stk PG G tn fn inst s t A F N <=>
+     F<>[] /\ (HD F).lf_fn=fn /\ (HD F).lf_src=s /\
+     (HD F).lf_tgt=t /\ (HD F).lf_tv=tn.t_var /\
+     frame_reachable vs0 C stk PG G tn fn inst s /\
+     active_inst fn inst s /\
+     LENGTH F=SUC(LENGTH stk) /\
+     G=erase A o_f (HD F).lf_H /\
+     PG=MAP (OPTION_MAP (erase A)) (HD F).lf_Q /\
+     ALL_DISTINCT (MAP (\f. f.lf_serial) F) /\
+     EVERY (\f. f.lf_serial<N /\ maps A f /\ vars A f /\
+       intervals lo f.lf_src /\ intervals lo f.lf_tgt /\
+       f.lf_src.vs_prev_bb=f.lf_tgt.vs_prev_bb /\
+       f.lf_src.vs_current_bb=f.lf_tgt.vs_current_bb /\
+       MEM f.lf_fn C.ctx_functions) F /\
+     FDOM A=slots A F /\
+     (!j. j<LENGTH F ==>
+       (EL j F).lf_tgt.vs_alloca_next =
+       (EL j F).lf_src.vs_alloca_next + 32*charge(DROP j F)) /\
+     (!j. j<LENGTH F ==>
+       ?X p. envelope (EL j F).lf_supply (EL j F).lf_fn
+                     (EL j F).lf_src (EL j F).lf_src.vs_inst_idx X p /\
+             (EL j F).lf_tgt.vs_inst_idx=p) /\
+     (!j. j<LENGTH stk ==>
+       (EL j stk).cf_fn=(EL (SUC j) F).lf_fn /\
+       (EL j stk).cf_state=(EL (SUC j) F).lf_src /\
+       (EL j stk).cf_prov=erase A o_f (EL (SUC j) F).lf_H /\
+       (EL j stk).cf_params=
+         MAP (OPTION_MAP (erase A)) (EL (SUC j) F).lf_Q /\
+       (EL j stk).cf_tvar=(EL (SUC j) F).lf_tv) /\
+     charge F<=ctx_dload_count C /\
+     memory lo A tn s t /\ nonghost tn s t
+
+   The continuation below supplies the global interval, phase and coverage
+   clauses. All names above and below are specification-only; no transport
+   theorem is claimed by writing their equations.
+*)
+
+(* C1.11.d continued: exact global and phase equations.
+
+   sites F source = {(j,aid,b,n) | ?f.
+     j<LENGTH F /\ f=EL j F /\
+     FLOOKUP (if source then f.lf_src.vs_allocas else f.lf_tgt.vs_allocas)
+       aid=SOME(b,n)}
+   (source:bool; j,aid,b,n:num).
+
+   global lo A F <=>
+     (!source j aid b n. (j,aid,b,n) IN sites F source ==>
+       lo<=b /\ b+n <=
+         (if source then (HD F).lf_src.vs_alloca_next
+                    else (HD F).lf_tgt.vs_alloca_next)) /\
+     (!source j aid b n j' aid' b' n'.
+       (j,aid,b,n) IN sites F source /\
+       (j',aid',b',n') IN sites F source /\
+       (j,aid)<>(j',aid') /\ 0<n /\ 0<n' ==>
+       b+n<=b' \/ b'+n'<=b) /\
+     (!f a. MEM f F /\
+       (a IN FRANGE f.lf_H \/ MEM (SOME a) f.lf_Q) ==> a IN FDOM A)
+
+   prefix C' fn' X p h t0 t <=>
+     h<LENGTH X /\ ?R.
+       LENGTH R=SUC h /\ HD R=t0 /\ LAST R=t /\
+       (!j. j<h ==> ?u.
+         active_inst fn' (EL j X) (EL j R) /\
+         step_inst 0 C' (EL j X) (EL j R)=OK u /\
+         EL (SUC j) R=(u with vs_inst_idx:=SUC(p+j))) /\
+       active_inst fn' (EL h X) t
+   (X:instruction list; R:venom_state list; p,h:num).
+   Prefix uses fuel 0 only for proper expansion prefixes, which never contain
+   INVOKE. If X=[inst] then h=0 and no step is asserted. Intermediate states
+   are related to the SAME sync pre-state, rather than pretending that the
+   source has already executed DLOAD. This is an explicit finite execution
+   equation, not an uninterpreted phase predicate. In particular it includes
+   the CODECOPY bytes at phase 3 through the actual semantic update.
+
+   pair lo names Sigma C C' vs0 fn' ti t <=>
+     ?stk PG G tn fn inst s t0 A F N X p h.
+       sync lo C vs0 stk PG G tn fn inst s t0 A F N /\
+       global lo A F /\
+       EVERY (\f. f.lf_supply=Sigma f.lf_fn.fn_name) F /\
+       (!j k. j<k /\ k<LENGTH F ==>
+         list_precedes (EL j F).lf_fn.fn_name
+                       (EL k F).lf_fn.fn_name names) /\
+       fn'=image(HD F) /\
+       envelope (HD F).lf_supply fn s s.vs_inst_idx X p /\
+       prefix C' fn' X p h t0 t /\ ti=EL h X
+   Signature: num -> string list -> (string->ir_supply) ->
+     venom_context -> venom_context -> venom_state -> ir_function ->
+     instruction -> venom_state -> bool.
+   This is the proposed safety relation, not a simulation definition added
+   to the project. It existentially carries selected identities, finite
+   expansion history, suspended callers, and a reachable source witness.
+   No output/log/history equality is silently embedded in it.
+
+   Exact phase cases implied by prefix and lower_dload_inst_supply:
+     DLOAD proper envelope: LENGTH X=4, h=0,1,2,3 respectively;
+     DLOADBYTES proper envelope: LENGTH X=2, h=0,1 respectively;
+     unchanged envelope: LENGTH X=1 and h=0.
+   Raw safety is required at EVERY h, not just at the final prefix state.
+   At h=0 the frontier is sync's saved frontier; at h>0 for DLOAD it is
+     t0.next + (if d IN (HD F).lf_E then 0 else 32).
+   The scratch record, computed ADD and copied bytes are specified by prefix,
+   not independent existential guesses. The prefix semantic consequences
+   are still outstanding boundary lemmas, including the displayed frontier
+   equation and its no-wrap conclusion from dload_headroom_ok.
+
+   Ghost transition equations (not extra assumptions on the frozen theorem):
+   - ALLOCA at original aid, successful fresh allocation at b,c,size n:
+       A' = A |+ ((serial,aid),(b,c,n)); E'=E.
+     On reuse A'=A. The exact maps clause decides reuse without inverse lookup.
+   - Complete DLOAD d:
+       E'=E UNION {d}; A'=A.
+     H'=set_prov H inst.inst_outputs NONE; Q'=Q. Other provenance updates
+     use the selected operations given below, never numeric inversion.
+   - PARAM output: set_prov H outs
+       (if w2n idx<LENGTH Q then EL (w2n idx) Q else NONE).
+   - ASSIGN/ADD/SUB output: set_prov H outs (first_prov H operands).
+   - Other non-PHI original outputs, except ALLOCA:
+       set_prov H outs NONE.
+   - New/reused ALLOCA output: set_prov H outs (SOME(serial,aid)).
+   - PHIs: phis_prov prev H0 bb.instructions, with parallel input H0.
+     These existing polymorphism-free num#num functions apply to identities
+     because an identity has exactly the existing provenance pair type.
+   - Call: retain all old A entries; push a new active record with
+       serial=N, H=FEMPTY, Q=MAP(op_prov Hcaller) ops, E={}, tv=FEMPTY,
+       fn=callee, supply=Sigma callee.fn_name,
+       src/tgt=the successful enters_block results of setup_callee.
+     Old active record becomes the saved PRE-INVOKE record, N'=SUC N.
+     Source stk is extended by frame_reachable_call's exact record.
+   - Return: discard HD F, restoring the next frame f. Restrict A to
+       {k | FST k <> (HD F).lf_serial};
+     H'=DRESTRICT f.lf_H (COMPL(set inv.inst_outputs)), Q'=f.lf_Q,
+     E'=f.lf_E, tv'=DRESTRICT f.lf_tv (COMPL(set inv.inst_outputs)).
+     Replace f's src/tgt with the corresponding bind_outputs results after
+     merge_callee_state/adopt_return_fmp and increment each saved PC to its
+     own next original/lowered boundary. No charge subtraction is used:
+     charge(TL F) is exactly the restored saved suffix charge.
+     The memory relation uses current (post-callee) tn.t_mem, not saved tv.
+   These equations describe ghost choices; source step_taint and source
+   frame_reachable remain authoritative for all source masks and witnesses.
+
+   Initialization and consumer proof-obligation table:
+
+   Entry | lower_dload_initial_allocations supplies empty maps, vars, memory;
+     choose A=FEMPTY, H=FEMPTY,Q=[],E={},serial=0,N=1,F=[entry record].
+     Paired enters_block/PHI and configured envelope preservation OUTSTANDING.
+     Source entry raw/headroom and ptr_discipline.lo supply frontier bounds;
+     never infer a frontier bound from o1_run_state_ok alone.
+   Site lookup/zero sites | maps/global plus provenance_*_erasure equations;
+     general selected-identity and disjointness preservation OUTSTANDING.
+   Scalar/address/control consumer | vars and wordrel, taint_ok/access_ok;
+     numerical operand/range transport OUTSTANDING. Word translation and
+     closed-interval comparisons have checked arithmetic helpers. Nonempty
+     comparison sites must be shown to select the same A identity using
+     positive size and global source disjointness, not assumed from e.
+   Opaque operand | shape_retpc_operand_boundary checked; ASSIGN/PHI and
+     token-definedness transport OUTSTANDING. PARAM uses Q, never opacity.
+   Allocation access | maps/global and source raw/headroom; frontier and
+     scratch charge preservation OUTSTANDING. list_precedes transitivity
+     and distinctness checked, full stack membership/order OUTSTANDING.
+   Load/store/copy | memory and source masks; per-op byte/taint transport
+     OUTSTANDING. All live frames use current tn.t_mem. Private scratch is
+     disjoint by global and below the prefix frontier by ALLOCA semantics.
+   External effects | nonghost with source taint_ok excludes tainted call
+     inputs; input equality and oracle-state preservation OUTSTANDING.
+     Historical observation omission has the diagnostic inventory above,
+     not a checked projected-step theorem.
+   Revert-forward | need transformed syntactic revert_forward_at boundary;
+     OUTSTANDING. Do not demand access_ok containment of exempt accesses.
+   Return | exact pop equations above; ordinary return words must agree
+     because ptr_use_ok excludes pointers and taint_ok excludes taint;
+     opaque final token is dropped by FRONT. Full result boundary OUTSTANDING.
+
+   Exact target-prefix theorem requested for this relation:
+     assumptions of lower_dload_stage_mem, a chosen lo from ptr_discipline,
+     and the structural Sigma witness imply
+       !fn' ti t. raw_reachable vs0 C' fn' ti t ==>
+                   pair lo names Sigma C C' vs0 fn' ti t.
+   Follow separately with
+       pair ... fn' ti t ==> raw_mem_ok C' fn' ti t
+   with the same source premises (in particular raw/headroom invariants).
+   Both are OUTSTANDING. The first is TARGET-to-source coverage, including
+   every state before a failing instruction. Source progress is not replaced
+   by an assertion that matching target executions terminate.
+
+   Required induction boundary for atomic INVOKE-next:
+     Given sync at a target INVOKE, if step_inst fuel C' inv t0=OK u,
+     produce a source frame_reachable return witness followed by the source
+     ret rule and a new sync at the incremented caller PCs. The source
+     successful-return witness has the form
+       frame_reachable vs0 C (f::stk) PG G tn fn rinst s /\
+       active_inst fn rinst s /\
+       step_inst fsrc C rinst s=IntRet ret s_end,
+     with ret.iret_values equal to the target internal return values and
+     ret.iret_adopt_fmp related by equality of the optional returned FMP field.
+     Use memory/nonghost on final states and the pop equation to rebuild sync.
+     Prove this with the target run_defs mutual well-founded induction:
+       (fuel,run_blocks), (fuel,exec_block remaining instructions),
+       (fuel,step_inst), as ordered in run_defs's termination proof.
+     Expansion prefixes consume only exec_block instruction rank; nested
+     INVOKE consumes run_blocks fuel; block recurrence decreases fuel.
+     At IntRet, establish the source reachable ret witness rather than
+     demanding source run_blocks with the target's exact fuel.
+     Halt/Abort/Error do not yield an atomic next successor. Their ACTIVE
+     prefixes still require safety; these outcomes must not be skipped by
+     the run-coverage induction. Raw callee-entry rule uses push directly.
+
+   REVIEW GATE: This draft has exact relation equations, but no definition,
+   no typechecked interface, and no preservation proof. In particular the
+   atomic call boundary is a substantial additional induction, not a lemma
+   certified by the previous finite phase diagnostic. C1 remains Risk 3.
+*)
