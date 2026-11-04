@@ -105,7 +105,7 @@ Theorem aggregate_elem_lowered_type[local]:
     lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
-  simp[lowered_value_type_def, expr_type_def, is_bytestring_type_def,
+  simp[lowered_value_type_def, vyperASTTheory.expr_type_def, is_bytestring_type_def,
        vyperTypeSystemTheory.well_typed_expr_def,
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
@@ -204,12 +204,11 @@ Resume aggregate_make_tuple_sim[cons]:
     metis_tac[listTheory.MEM] >>
   `expr_vv_sim ctx func ce cx (expr_type h) h es` by
     (gvs[exprs_case_def, expr_vv_case_def] >> metis_tac[]) >>
-  `lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
-    (irule aggregate_elem_lowered_type >> qexists_tac `env` >>
-     fs[expr_body_pre_def] >> Cases_on `nocalls` >> gvs[] >>
-     metis_tac[listTheory.MEM]) >>
   `compile_store_memory ce op dst (expr_type h) (expr_type h) su = ((),ss)` by
-    metis_tac[aggregate_store_lowered_elem] >>
+    (`well_typed_expr env h` by metis_tac[expr_body_pre_def, listTheory.MEM] >>
+     `lowered_value_type ce h = expr_type h \/ is_bytestring_type (expr_type h)` by
+       (irule aggregate_elem_lowered_type >> metis_tac[listTheory.MEM]) >>
+     metis_tac[aggregate_store_lowered_elem]) >>
   qpat_x_assum `compile_store_memory ce op dst (expr_type h) (lowered_value_type ce h) su = _`
     kall_tac >>
   drule aggregate_eval_exprs_cons >> strip_tac
