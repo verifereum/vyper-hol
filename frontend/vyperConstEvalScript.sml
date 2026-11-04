@@ -32,6 +32,8 @@ Proof
   rw[closed_integer_def] >>
   ONCE_REWRITE_TAC [eval_pure_expr_def] >>
   simp[evaluate_literal_def, builtin_args_length_ok_def] >>
+  Cases_on `eval_pure_exprs cx st [e; e']` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
   rpt CASE_TAC >> simp[]
 QED
 
