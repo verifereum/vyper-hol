@@ -3,7 +3,7 @@ Ancestors
   frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
-  livenessAnalysisProps cfgAnalysisProps
+  livenessAnalysisProps cfgAnalysisProps asmSem planExec
 
 (* Installing the symbolic parameter names emits no code. *)
 Theorem parameter_stack_fold:
@@ -589,8 +589,17 @@ Theorem entry_ret_family_wrapped_read:
       (GENLIST (\i. if i = 0 then 0w else 1w) (SUC (dimword (:256))) :
          256 word list) = 1w
 Proof
-  simp[step_inst_base_def, mk_inst_def, w2n_n2w, EL_GENLIST,
-       param_index_wrap_discriminator]
+  rpt gen_tac >> conj_tac
+  >- (qmatch_goalsub_abbrev_tac `step_inst_base _ t` >>
+      `t.vs_params <> [] /\ HD t.vs_params = 0w` by
+        (unabbrev_all_tac >>
+         pure_rewrite_tac[venom_state_accfupds, combinTheory.K_THM] >>
+         once_rewrite_tac[GENLIST_CONS] >>
+         rewrite_tac[HD, NOT_CONS_NIL] >> BETA_TAC >> rewrite_tac[]) >>
+      drule wrapped_param_reads_first >>
+      disch_then (qspecl_then [`id`, `out`] mp_tac) >>
+      asm_rewrite_tac[]) >>
+  simp[EL_GENLIST, param_index_wrap_discriminator]
 QED
 
 Theorem entry_ret_family_small_plan_ops:
@@ -779,12 +788,17 @@ Theorem entry_ret_family_wrap_param_shape:
     (get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions)
 Proof
   strip_tac >>
-  simp[entry_ret_family_get_params, entry_probe_params_def, EVERY_GENLIST,
-       entry_param_shape_def, mk_inst_def, entry_wrap_inputs_def,
-       w2n_n2w] >>
+  `LENGTH s.vs_params = SUC (dimword (:256))` by
+    (asm_rewrite_tac[entry_wrap_inputs_def] >>
+     rewrite_tac[LENGTH_GENLIST]) >>
+  rewrite_tac[entry_ret_family_get_params, entry_probe_params_def,
+              EVERY_APPEND, EVERY_DEF, EVERY_GENLIST] >>
+  simp[entry_param_shape_def, mk_inst_def, w2n_n2w] >>
   rpt strip_tac >>
   `i MOD dimword (:256) < dimword (:256)` by
-    simp[DIVISION] >> decide_tac
+    simp[DIVISION] >>
+  qpat_x_assum `i MOD _ < _` mp_tac >>
+  CONV_TAC (LAND_CONV EVAL) >> decide_tac
 QED
 
 Definition entry_ret_prefix_state_def:
@@ -839,7 +853,10 @@ Theorem entry_ret_prefix_wrapped_lookup:
     (entry_probe_name (dimword (:256))) = SOME 0w
 Proof
   strip_tac >>
-  simp[entry_ret_prefix_lookup, entry_wrap_inputs_def, EL_GENLIST, GENLIST_CONS]
+  simp[entry_ret_prefix_lookup] >>
+  asm_rewrite_tac[entry_wrap_inputs_def] >>
+  once_rewrite_tac[GENLIST_CONS] >> rewrite_tac[HD] >>
+  BETA_TAC >> rewrite_tac[]
 QED
 
 Theorem entry_ret_prefix_eval:
@@ -879,7 +896,8 @@ Proof
   once_rewrite_tac[exec_block_def] >>
   simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
        entry_ret_prefix_eval, FRONT_APPEND] >>
-  Cases_on `GENLIST (\i. EL (i MOD dimword (:256)) s.vs_params) n` >>
+  qmatch_goalsub_abbrev_tac `vals ++ [_]` >>
+  Cases_on `vals` >>
   simp[FRONT_DEF, GSYM SNOC_APPEND, FRONT_SNOC]
 QED
 
@@ -894,6 +912,14 @@ Theorem entry_ret_family_wrap_exec:
     (entry_ret_prefix_state (SUC (dimword (:256))) s)
 Proof
   strip_tac >>
+  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
+    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
+  `!m. (HD (entry_ret_family m).fn_blocks).bb_instructions =
+     get_params (HD (entry_ret_family m).fn_blocks).bb_instructions ++
+     [mk_inst (SUC m) RET
+       (MAP (\i. Var (entry_probe_name i)) (GENLIST I m) ++ [Var "retpc"]) []]` by
+    (gen_tac >> simp[entry_ret_family_get_params, entry_ret_family_def,
+                     APPEND_ASSOC]) >>
   `exec_block fuel ctx
     (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
     (s with vs_inst_idx := 0) =
@@ -907,10 +933,16 @@ Proof
           (MAP (\i. Var (entry_probe_name i)) (GENLIST I (SUC (dimword (:256)))) ++
            [Var "retpc"]) []]`]
        entry_param_skip_prefix) >>
-     simp[entry_ret_family_wrap_param_shape, entry_ret_family_get_params,
-          entry_ret_prefix_state_def, entry_ret_family_def,
-          entry_probe_params_def, APPEND_ASSOC]) >>
-  simp[entry_ret_prefix_at_ret]
+     `EVERY (entry_param_shape s)
+       (get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions)` by
+       (irule entry_ret_family_wrap_param_shape >> asm_rewrite_tac[]) >>
+     qpat_x_assum `!m. _.bb_instructions = _`
+       (qspec_then `SUC (dimword (:256))` assume_tac) >>
+     disch_then drule_all >>
+     qpat_x_assum `_.bb_instructions = _` kall_tac >>
+     asm_rewrite_tac[entry_ret_prefix_state_def]) >>
+  qpat_x_assum `!m. _.bb_instructions = _` kall_tac >>
+  asm_rewrite_tac[entry_ret_prefix_at_ret]
 QED
 
 Theorem entry_ret_family_ret_result_state:
@@ -950,4 +982,122 @@ Proof
       iret_adopt_fmp := NONE|>
       (entry_ret_prefix_state (SUC (dimword (:256))) s)` by metis_tac[] >>
   drule_all entry_ret_family_ret_result_state >> simp[]
+QED
+
+Definition entry_wrap_source_def:
+  entry_wrap_source = (init_venom_state "entry") with
+    <|vs_params := entry_wrap_inputs; vs_return_pc_token := 0w|>
+End
+
+Definition entry_wrap_region_def:
+  entry_wrap_region = <|sr_fn_name := "entry_test";
+    sr_spill_base := 0; sr_spill_end := 0; sr_plan := []|>
+End
+
+Definition entry_wrap_context_def:
+  entry_wrap_context = <|cp_regions := [entry_wrap_region];
+    cp_max_static_eom := 0; cp_peak_spill_end := 0; cp_initial_fmp := 0|>
+End
+
+Definition entry_wrap_asm_def:
+  entry_wrap_asm = <|
+    as_stack := 0w :: REVERSE entry_wrap_inputs;
+    as_memory := entry_wrap_source.vs_memory;
+    as_accounts := entry_wrap_source.vs_accounts;
+    as_transient := entry_wrap_source.vs_transient;
+    as_returndata := entry_wrap_source.vs_returndata;
+    as_logs := entry_wrap_source.vs_logs; as_pc := 0;
+    as_call_ctx := entry_wrap_source.vs_call_ctx;
+    as_tx_ctx := entry_wrap_source.vs_tx_ctx;
+    as_block_ctx := entry_wrap_source.vs_block_ctx;
+    as_code := entry_wrap_source.vs_code;
+    as_prev_hashes := entry_wrap_source.vs_prev_hashes;
+    as_outcomes := entry_wrap_source.vs_outcomes;
+    as_requests := entry_wrap_source.vs_requests;
+    as_pending_deletions := entry_wrap_source.vs_pending_deletions;
+    as_gas_readings := []|>
+End
+
+Theorem entry_wrap_entry_rel:
+  fn_entry_state_rel entry_wrap_context
+    (entry_ret_family (SUC (dimword (:256))))
+    entry_wrap_source entry_wrap_asm 0w []
+Proof
+  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
+    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
+  `LENGTH entry_wrap_inputs = SUC (dimword (:256))` by
+    rewrite_tac[entry_wrap_inputs_def, LENGTH_GENLIST] >>
+  `!m. (HD (entry_ret_family m).fn_blocks).bb_label = "entry"` by
+    (gen_tac >> simp[entry_ret_family_def]) >>
+  simp[fn_entry_state_rel_def, entry_wrap_context_def,
+       entry_wrap_source_def, entry_wrap_asm_def, entry_ret_family_has_retpc,
+       init_venom_state_def,
+       contextCodegenRelTheory.context_memory_rel_def,
+       shared_state_rel_def, codegenRelTheory.venom_asm_terminal_rel_def] >>
+  simp[entry_ret_family_def]
+QED
+
+Theorem entry_wrap_asm_inversion:
+  asm_steps lo o2pc [AsmLabel "entry"] k entry_wrap_asm = AsmOK t /\
+  t.as_pc = 1 ==>
+  k = 1 /\ t = asm_next entry_wrap_asm
+Proof
+  Cases_on `k`
+  >- simp[asm_steps_def, entry_wrap_asm_def] >>
+  Cases_on `n`
+  >- simp[asm_steps_def, entry_wrap_asm_def, asm_step_def, asm_next_def] >>
+  simp[asm_steps_def, entry_wrap_asm_def, asm_step_def, asm_next_def]
+QED
+
+Definition entry_wrap_plan_def:
+  entry_wrap_plan = (init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+    MAP (\i. Var (entry_probe_name i)) (GENLIST I (SUC (dimword (:256)))) ++
+    [Var "retpc"]
+End
+
+Theorem entry_wrap_frozen_premises:
+  SND (compute_label_offsets [AsmLabel "entry"]) =
+    SND (compute_label_offsets [AsmLabel "entry"]) /\
+  build_offset_to_pc [AsmLabel "entry"] = build_offset_to_pc [AsmLabel "entry"] /\
+  liveness_analyze (entry_ret_family (SUC (dimword (:256)))) =
+    liveness_analyze (entry_ret_family (SUC (dimword (:256)))) /\
+  codegen_ready_fn (entry_ret_family (SUC (dimword (:256)))) /\
+  retpc_shape_ok (entry_ret_family (SUC (dimword (:256)))) /\
+  opaque_use_ok (entry_ret_family (SUC (dimword (:256)))) /\
+  init_cleanup_plan_state NONE [] 0 0 = init_cleanup_plan_state NONE [] 0 0 /\
+  prepare_params_plan (liveness_analyze (entry_ret_family (SUC (dimword (:256)))))
+    (entry_ret_family (SUC (dimword (:256)))) (init_cleanup_plan_state NONE [] 0 0) =
+      ([], entry_wrap_plan) /\
+  MEM entry_wrap_region entry_wrap_context.cp_regions /\
+  entry_wrap_region.sr_fn_name = (entry_ret_family (SUC (dimword (:256)))).fn_name /\
+  entry_wrap_region.sr_spill_base <= 0 /\
+  entry_wrap_plan.ps_alloc.sa_next_offset <= entry_wrap_region.sr_spill_end /\
+  (!off. MEM (SOSpill off) [] ==> off < dimword (:256)) /\
+  fn_entry_state_rel entry_wrap_context (entry_ret_family (SUC (dimword (:256))))
+    entry_wrap_source entry_wrap_asm 0w [] /\
+  asm_block_at [AsmLabel "entry"] entry_wrap_asm.as_pc
+    (execute_plan entry_wrap_context.cp_initial_fmp
+      (SOLabel (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_label :: []))
+Proof
+  rewrite_tac[entry_ret_family_wrapped_contracts, entry_wrap_entry_rel,
+       entry_ret_family_prepare_cleanup, entry_wrap_plan_def] >>
+  pure_rewrite_tac[plan_state_accfupds, combinTheory.K_THM] >>
+  `!m. (HD (entry_ret_family m).fn_blocks).bb_label = "entry" /\
+         (entry_ret_family m).fn_name = "entry_test"` by
+    (gen_tac >> simp[entry_ret_family_def, entry_probe_fn_def]) >>
+  asm_rewrite_tac[] >>
+  simp[entry_wrap_context_def, entry_wrap_region_def,
+       entry_ret_family_def, entry_probe_fn_def,
+       init_cleanup_plan_state_def, init_plan_state_def,
+       entry_wrap_asm_def, execute_plan_def, asm_block_at_def] >>
+  simp[init_spill_alloc_def, exec_stack_op_def]
+QED
+
+Theorem entry_wrap_finite_witness_checks:
+  entry_wrap_context.cp_initial_fmp = 0 /\
+  entry_wrap_region.sr_spill_base = 0 /\
+  entry_wrap_region.sr_spill_end = 0 /\
+  (0w : 256 word) <> 1w
+Proof
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
 QED
