@@ -25,8 +25,10 @@
  *   mem_safe_blocks_all_fuel — a safe non-Error run is safe at every fuel
  *   mem_safe_point        — an instruction state on a run that is safe at
  *                           every fuel
- *   mem_safe_point_closed, mem_safe_point_entry, mem_safe_point_mem
- *                         — mem_safe_point is a reachability invariant
+ *   mem_safe_point_closed, mem_safe_point_entry, mem_safe_point_mem,
+ *   mem_safe_point_dload  — mem_safe_point is a reachability invariant
+ *   inst_dload_in_data    — DLOAD/DLOADBYTES offsets start in the data
+ *                           section
  *   revert_forward_at_opcode — the exemption covers only RETURNDATACOPY
  *                           and REVERT
  *   mem_safe_raw_unit_memory_ok — the bridge to raw_unit_memory_ok
@@ -34,19 +36,42 @@
 
 Theory memSafeRun
 Ancestors
-  list venomExecSemantics venomExecProofs venomInstProofs venomInst
+  list venomExecSemantics venomExecProofs venomInstProofs venomInst venomInstProps
   venomState contextCodegenRel contextCodegenRelProps unitTransformDefs
 
 (* ===== Definitions ===== *)
+
+(* A DLOAD or DLOADBYTES reads immutables starting at a source offset into
+   the data section; the check asks that offset to start within it.  A read
+   running past its end is allowed (the semantics zero-fills).  LowerDload
+   turns the offset into a code offset by adding the code prefix length,
+   which this bound keeps below the code length. *)
+Definition inst_dload_in_data_def:
+  inst_dload_in_data inst s <=>
+    !op off.
+      ((inst.inst_opcode = DLOAD /\ inst.inst_operands = [op]) \/
+       (inst.inst_opcode = DLOADBYTES /\
+        ?dst n. inst.inst_operands = [dst; op; n])) /\
+      eval_operand op s = SOME off ==>
+      w2n off <= LENGTH s.vs_data_section
+End
+
+Theorem inst_dload_in_data_other[simp]:
+  !inst s.
+    inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES ==>
+    inst_dload_in_data inst s
+Proof
+  rw[inst_dload_in_data_def]
+QED
 
 (* The memory check along the runner: mem_safe_step checks an instruction
    and, for INVOKE, the callee's run; mem_safe_block every instruction
    exec_block runs; mem_safe_blocks every block run_blocks enters.  Where
    the run stops (Error, Abort, Halt, IntRet, out of fuel) the check stops
-   too. *)
+   too.  Besides memory, the check covers DLOAD's data-section offsets. *)
 Definition mem_safe_defs:
   (mem_safe_step fuel ctx inst s <=>
-    inst_mem_below_frontier inst s /\
+    inst_mem_below_frontier inst s /\ inst_dload_in_data inst s /\
     if inst.inst_opcode = INVOKE then
       case decode_invoke inst of
         NONE => T
@@ -131,7 +156,8 @@ End
 Theorem mem_safe_step_non_invoke:
   !fuel ctx inst s.
     inst.inst_opcode <> INVOKE ==>
-    (mem_safe_step fuel ctx inst s <=> inst_mem_below_frontier inst s)
+    (mem_safe_step fuel ctx inst s <=>
+     inst_mem_below_frontier inst s /\ inst_dload_in_data inst s)
 Proof
   rw[Once mem_safe_step_def]
 QED
@@ -408,6 +434,19 @@ Proof
   metis_tac[]
 QED
 
+Theorem mem_safe_point_dload:
+  !ctx fn inst s.
+    mem_safe_point ctx fn inst s ==> inst_dload_in_data inst s
+Proof
+  rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac
+  >~ [`mem_safe_step 0 ctx inst s`]
+  >- (pop_assum mp_tac >> simp[Once mem_safe_step_def]) >>
+  drule_all revert_forward_at_opcode >> rw[] >> simp[]
+QED
+
 (* Entering a block on a run that is safe at every fuel. *)
 Theorem mem_safe_enters_block[local]:
   !ctx fn s s1.
@@ -486,6 +525,60 @@ Proof
   metis_tac[mem_safe_point_entry]
 QED
 
+(* ===== The code and the data section are fixed ===== *)
+
+(* No instruction changes the code or the data section. *)
+Theorem step_inst_ok_terminator_code_data[local]:
+  !fuel ctx inst s v.
+    step_inst fuel ctx inst s = OK v /\
+    is_terminator inst.inst_opcode ==>
+    v.vs_code = s.vs_code /\ v.vs_data_section = s.vs_data_section
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode` >> gvs[is_terminator_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = OK _` mp_tac >>
+  simp[Once step_inst_def] >>
+  simp[step_inst_base_opcode_eqs, jump_to_def] >>
+  gvs[AllCaseEqs(), PULL_EXISTS] >>
+  rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
+  rw[] >> gvs[] >> pairarg_tac >> gvs[]
+QED
+
+Theorem step_inst_ok_code_data:
+  !fuel ctx inst s v.
+    step_inst fuel ctx inst s = OK v ==>
+    v.vs_code = s.vs_code /\ v.vs_data_section = s.vs_data_section
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `is_terminator inst.inst_opcode`
+  >- metis_tac[step_inst_ok_terminator_code_data] >>
+  conj_tac
+  >- (irule venomInstPropsTheory.step_preserves_code >>
+      qexistsl [`ctx`, `fuel`, `inst`] >> simp[]) >>
+  irule venomInstPropsTheory.step_preserves_data_section >>
+  qexistsl [`ctx`, `fuel`, `inst`] >> simp[]
+QED
+
+Theorem eval_phis_ok_code_data:
+  !s insts v.
+    eval_phis s insts = OK v ==>
+    v.vs_code = s.vs_code /\ v.vs_data_section = s.vs_data_section
+Proof
+  Induct_on `insts` >> simp[eval_phis_def] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs(), update_var_def] >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem code_data_fixed_closed:
+  !ctx code data.
+    reachability_closed
+      (\c f i s. s.vs_code = code /\ s.vs_data_section = data) ctx
+Proof
+  rw[reachability_closed_def, fn_entry_inv_def, enters_block_def] >>
+  imp_res_tac step_inst_ok_code_data >> imp_res_tac eval_phis_ok_code_data >>
+  gvs[setup_callee_def, AllCaseEqs()]
+QED
+
 (* Every successor the reachability clauses allow is the next state of the
    same deterministic run. *)
 Theorem mem_safe_point_closed:
@@ -530,3 +623,41 @@ Proof
       drule lookup_function_MEM >> fs[EVERY_MEM]) >>
   metis_tac[mem_safe_point_mem]
 QED
+
+(* The bridge for DLOAD offsets: on a memory-safe run, every reachable
+   DLOAD/DLOADBYTES offset starts in the data section, and the code and
+   the data section are those of the initial state. *)
+Theorem mem_safe_dload_in_data:
+  !ctx vs name fn lbl.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    EVERY (\f. ALL_DISTINCT (fn_labels f)) ctx.ctx_functions /\
+    (!fuel. mem_safe_blocks fuel ctx fn
+              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                          vs_inst_idx := 0 |>)) ==>
+    ?Inv. codegen_reachability_package Inv ctx vs /\
+          !c f i s. Inv c f i s ==>
+            inst_dload_in_data i s /\ s.vs_code = vs.vs_code /\
+            s.vs_data_section = vs.vs_data_section
+Proof
+  rw[codegen_reachability_package_def] >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         s.vs_code = vs.vs_code /\
+                         s.vs_data_section = vs.vs_data_section` >>
+  rpt conj_tac
+  >- (qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`, `ctx`]
+        mp_tac reachability_closed_conj >>
+      simp[mem_safe_point_closed, code_data_fixed_closed])
+  >- (`fn_entry_inv mem_safe_point ctx fn
+         (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                     vs_inst_idx := 0 |>)` by
+        (irule mem_safe_point_entry >> simp[] >>
+         drule lookup_function_MEM >> fs[EVERY_MEM]) >>
+      fs[fn_entry_inv_def, enters_block_def] >> rpt strip_tac >>
+      imp_res_tac eval_phis_ok_code_data >> gvs[])
+  >> metis_tac[mem_safe_point_dload]
+QED
+

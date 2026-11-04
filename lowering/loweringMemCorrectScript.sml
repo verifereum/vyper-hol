@@ -280,7 +280,8 @@ QED
 
 (* The run from the unit's entry is memory-safe: every instruction it
    executes, callee frames included, reads and writes memory below the
-   allocation frontier (or is a revert forwarding).  Excluding
+   allocation frontier (or is a revert forwarding), and starts every
+   DLOAD/DLOADBYTES offset within the data section.  Excluding
    source_exempt is essential: dynamic decoding can read unchecked
    offsets. *)
 Theorem lower_vyper_runtime_unit_run_mem_safe:
@@ -438,11 +439,12 @@ Proof
   simp[fixed_region_reserved_def]
 QED
 
-(* ADMITTED, S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES
-   offset, added to the length of the code before the data section, stays
-   below 2^256, so LowerDload's code_end-relative CODECOPY offset does not
-   wrap.  Proof idea: runtime immutable offsets lie inside the immutable
-   section, and code_layout_valid keeps the code within 2^255 bytes. *)
+(* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset, added
+   to the length of the code before the data section, stays below 2^256, so
+   LowerDload's code_end-relative CODECOPY offset does not wrap.  The
+   memory-safe run starts each offset within the data section
+   (mem_safe_dload_in_data), and code_layout_valid puts the data section at
+   the end of a code of at most 2^255 bytes. *)
 Theorem lower_vyper_runtime_unit_dload_offset_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -457,7 +459,28 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  `!fuel. mem_safe_blocks fuel unit.cu_context fn
+            (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                        vs_inst_idx := 0 |>)` by
+    (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
+  drule_all mem_safe_dload_in_data >> strip_tac >>
+  simp[unitMemInvTheory.mem_inv_def] >> qexists_tac `Inv` >> simp[] >>
+  rw[dload_offset_ok_def] >> first_x_assum drule >>
+  simp[inst_dload_in_data_def] >> strip_tac >>
+  gvs[code_layout_valid_def, wordsTheory.dimword_def] >> decide_tac
 QED
 
 (* Every reachable alloca frontier, plus 32 bytes per DLOAD in the unit,

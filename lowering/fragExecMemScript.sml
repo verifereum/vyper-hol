@@ -279,7 +279,7 @@ Theorem frag_exec_mem_step:
     st'.cs_current_insts = st.cs_current_insts ++ [inst] /\
     inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode /\
     (!s. P s ==>
-       inst_mem_below_frontier inst s /\
+       inst_mem_below_frontier inst s /\ inst_dload_in_data inst s /\
        ((?s1. step_inst_base inst s = OK s1 /\
               Q (s1 with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
         (?a s1. step_inst_base inst s = Abort a s1 /\ R (Abort a s1)))) ==>
@@ -595,14 +595,15 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-(* A straight-line prefix of the block whose instructions are below the
-   frontier: a memory-safe run from past it is a memory-safe run from its
-   start, and a run that aborts in it is memory-safe. *)
+(* A straight-line prefix of the block, without DLOADs, whose instructions
+   are below the frontier: a memory-safe run from past it is a memory-safe
+   run from its start, and a run that aborts in it is memory-safe. *)
 Theorem mem_safe_run_inst_seq:
   !is s fuel ctx fn bb.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX is (DROP s.vs_inst_idx bb.bb_instructions) /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) is /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) is /\
     run_inst_seq_mem_ok is s ==>
     (!s'. run_inst_seq is s = OK s' /\
           mem_safe_run fuel ctx fn
@@ -653,14 +654,15 @@ Proof
   metis_tac[step_preserves_halted, step_inst_non_invoke]
 QED
 
-(* frag_exec_run_inst_seq with memory safety: the straight-line fragment
-   is memory-safe when its instructions are below the frontier where they
-   run. *)
+(* frag_exec_run_inst_seq with memory safety: the straight-line fragment,
+   without DLOADs, is memory-safe when its instructions are below the
+   frontier where they run. *)
 Theorem frag_exec_mem_run_inst_seq:
   !ctx st st' P Q R.
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
     isPREFIX st.cs_current_insts st'.cs_current_insts /\
-    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+               i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
       (emitted_insts st st') /\
     (!s. P s ==>
        run_inst_seq_mem_ok (emitted_insts st st') s /\
@@ -686,6 +688,8 @@ Proof
      rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
      metis_tac[]) >>
   qpat_x_assum `emitted_insts st st' = t` (fn th => fs[th]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) t` by
+    fs[EVERY_MEM] >>
   first_x_assum drule >> strip_tac
   >- (disj1_tac >>
       `!fuel. s'.vs_current_bb = s.vs_current_bb /\
