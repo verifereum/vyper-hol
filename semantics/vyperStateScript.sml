@@ -1364,6 +1364,16 @@ Proof
   imp_res_tac read_result_state >> gvs[return_def] >> metis_tac[]
 QED
 
+Theorem get_scopes_read_results:
+  bind get_scopes (\prev. bind (read_results cx results) (\vs. k prev vs)) =
+  bind (read_results cx results) (\vs. bind get_scopes (\prev. k prev vs))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  Cases_on `read_results cx results x` >>
+  drule read_results_state >> strip_tac >> gvs[] >>
+  Cases_on `q` >> simp[bind_def, get_scopes_def, return_def]
+QED
+
 Theorem read_results_length:
   !results st vs st'.
     read_results cx results st = (INL vs,st') ==> LENGTH vs = LENGTH results
