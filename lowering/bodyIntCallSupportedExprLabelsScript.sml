@@ -2,7 +2,7 @@
 Theory bodyIntCallSupportedExprLabels
 Ancestors
   bodyIntCallExprBodyLabels bodyIntCallTypeBuiltinLabels bodyIntCallExprClosure
-  bodyIntCallBuiltinLabels
+  bodyIntCallBuiltinLabels bodyIntCallExprLabels
   exprLowering supportedExprs supportedExprTraverse exprCallBounds
 
 Theorem compile_expr_action[local]:
@@ -201,4 +201,98 @@ Theorem compiler_label_hoare_supported_type_builtin_dispatch:
     (\r out. compiler_label_reservation origin pending out)
 Proof
   metis_tac[cj 3 compiler_label_hoare_supported_mutual]
+QED
+
+(* General reservation closure, including internal-call expressions. *)
+Theorem compiler_label_hoare_supported_mutual_general:
+  (!ce ty e (st:compile_state) tops.
+    (supported_pure_expr tops e \/ supported_place_expr tops e \/
+     supported_effect_expr tops e \/ supported_effect_place_expr tops e) ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_expr ce ty e) (\r out. compiler_label_reservation origin pending out)) /\
+  (!ce ann ty bi args (st:compile_state) tops.
+    supported_builtin_form tops ann bi args /\ supported_pure_exprs tops args ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_builtin_dispatch ce ann ty bi args)
+      (\r out. compiler_label_reservation origin pending out)) /\
+  (!ce ann ty tb rt args (st:compile_state) tops.
+    supported_type_builtin_form tops ann tb rt args /\ supported_pure_exprs tops args ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (compile_type_builtin_dispatch ce ann ty tb rt args)
+      (\r out. compiler_label_reservation origin pending out))
+Proof
+  ho_match_mp_tac compile_expr_ind >> rpt conj_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type_builtin"
+QED
+
+Resume compiler_label_hoare_supported_mutual_general[expr]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  gen_tac >> disch_tac >> rpt gen_tac >>
+  rewrite_tac[compile_expr_action] >>
+  irule compiler_label_hoare_supported_expr_body_general >>
+  simp[] >> qexists_tac `tops` >> simp[] >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  gvs[supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]
+QED
+
+Resume compiler_label_hoare_supported_mutual_general[builtin]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >> rpt gen_tac >>
+  rewrite_tac[compile_builtin_dispatch_action] >>
+  irule compiler_label_hoare_supported_builtin_source >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  rpt strip_tac >> drule expr_list_member_bound >> strip_tac >>
+  `!ce t. expr_child_callback (list_size expr_size args) compile_expr ce t e =
+     compile_expr ce t e` by simp[FUN_EQ_THM, expr_child_callback_def] >>
+  simp[] >> first_x_assum irule >>
+  fs[supported_pure_exprs_every, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Resume compiler_label_hoare_supported_mutual_general[type_builtin]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >> rpt gen_tac >>
+  rewrite_tac[compile_type_builtin_dispatch_action] >>
+  irule compiler_label_hoare_supported_type_builtin >>
+  reverse conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  rpt strip_tac >> drule expr_list_member_bound >> strip_tac >>
+  `!ce t. expr_child_callback (list_size expr_size args) compile_expr ce t e =
+     compile_expr ce t e` by simp[FUN_EQ_THM, expr_child_callback_def] >>
+  simp[] >> first_x_assum irule >>
+  fs[supported_pure_exprs_every, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Finalise compiler_label_hoare_supported_mutual_general
+
+Theorem compiler_label_hoare_supported_expr_general:
+  (supported_pure_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_expr tops e \/ supported_effect_place_expr tops e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_expr ce ty e) (\r out. compiler_label_reservation origin pending out)
+Proof
+  metis_tac[cj 1 compiler_label_hoare_supported_mutual_general]
+QED
+
+Theorem compiler_label_hoare_supported_lower_value_general:
+  (supported_pure_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_expr tops e \/ supported_effect_place_expr tops e) ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (lower_value compile_expr ce ty e)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> irule compiler_label_hoare_lower_value >>
+  irule compiler_label_hoare_supported_expr_general >> metis_tac[]
+QED
+
+Theorem compiler_label_hoare_supported_multi_vvs_general:
+  EVERY (\e. supported_pure_expr tops e \/ supported_place_expr tops e \/
+    supported_effect_expr tops e \/ supported_effect_place_expr tops e) es ==>
+  compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_multi_vvs compile_expr ce es)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  strip_tac >> irule compiler_label_hoare_multi_vvs >>
+  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  irule compiler_label_hoare_supported_expr_general >> metis_tac[]
 QED
