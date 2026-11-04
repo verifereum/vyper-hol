@@ -256,10 +256,11 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem ld_private_states[simp]:
-  ld_private (f with <| lf_src := s; lf_tgt := t |>) d ai <=> ld_private f d ai
+Theorem ld_private_cong:
+  f.lf_supply = g.lf_supply /\ f.lf_fn = g.lf_fn ==>
+  (ld_private f d ai <=> ld_private g d ai)
 Proof
-  simp[ld_private_def]
+  simp[NoAsms, ld_private_def] >> rpt strip_tac >> gvs[]
 QED
 
 Theorem ld_maps_fresh_original:
@@ -275,6 +276,8 @@ Theorem ld_maps_fresh_original:
     (f with <| lf_src := s'; lf_tgt := t' |> )
 Proof
   strip_tac >>
+  `!d ai. ld_private (f with <| lf_src := s'; lf_tgt := t' |>) d ai = ld_private f d ai` by
+    (rpt gen_tac >> irule ld_private_cong >> simp[]) >>
   gvs[exec_alloca_def, update_var_def] >>
   gvs[ld_maps_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
@@ -287,7 +290,85 @@ Theorem ld_maps_cached_original:
   ld_maps A (f with <| lf_src := s'; lf_tgt := t' |>)
 Proof
   strip_tac >> drule_all ld_maps_original >> strip_tac >>
+  `!d ai. ld_private (f with <| lf_src := s'; lf_tgt := t' |>) d ai = ld_private f d ai` by
+    (rpt gen_tac >> irule ld_private_cong >> simp[]) >>
   gvs[exec_alloca_def, AllCaseEqs(), update_var_def] >>
   gvs[ld_maps_def] >> metis_tac[]
 QED
 
+
+(* Pure lookup constructor: neither execution records nor word arithmetic
+   occur in the proof of the map invariant. *)
+Theorem ld_maps_insert_scratch:
+  ld_maps A f /\ g.lf_supply = f.lf_supply /\ g.lf_fn = f.lf_fn /\
+  g.lf_serial = f.lf_serial /\
+  g.lf_src.vs_allocas = f.lf_src.vs_allocas /\
+  g.lf_tgt.vs_allocas = f.lf_tgt.vs_allocas |+ (ai,(c,32)) /\
+  g.lf_E = d INSERT f.lf_E /\
+  ld_private f d ai /\ (!a. ld_private f d a ==> a = ai) /\
+  FLOOKUP f.lf_src.vs_allocas ai = NONE ==>
+  ld_maps A g
+Proof
+  strip_tac >>
+  `!x y. ld_private g x y = ld_private f x y` by
+    (rpt gen_tac >> irule ld_private_cong >> simp[]) >>
+  fs[ld_maps_def] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `aid <> ai` by (strip_tac >> gvs[]) >>
+      simp[FLOOKUP_UPDATE] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[FLOOKUP_UPDATE, AllCaseEqs()] >> rpt strip_tac >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  Cases_on `ai' = ai` >- simp[FLOOKUP_UPDATE] >>
+  simp[FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
+Theorem ld_maps_target:
+  ld_maps A f /\ FLOOKUP f.lf_tgt.vs_allocas ai = SOME (c,n) ==>
+  (?b. FLOOKUP f.lf_src.vs_allocas ai = SOME (b,n) /\
+        FLOOKUP A (f.lf_serial,ai) = SOME (b,c,n)) \/
+  (n = 32 /\ ?d. d IN f.lf_E /\ ld_private f d ai)
+Proof
+  simp[ld_maps_def] >> metis_tac[]
+QED
+
+Theorem ld_maps_scratch:
+  ld_maps A f /\ inst.inst_outputs = [out] /\
+  ld_private f d inst.inst_id /\
+  (!ai. ld_private f d ai ==> ai = inst.inst_id) /\
+  FLOOKUP f.lf_src.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst f.lf_tgt (32w:bytes32) = OK t' ==>
+  ld_maps A (f with <| lf_tgt := t'; lf_E := d INSERT f.lf_E |>)
+Proof
+  strip_tac >>
+  `w2n (32w:bytes32) = 32` by
+    (`dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+     pop_assum (fn th => simp[NoAsms, th, wordsTheory.dimword_def])) >>
+  Cases_on `FLOOKUP f.lf_tgt.vs_allocas inst.inst_id`
+  >- (irule ld_maps_insert_scratch >>
+      qexistsl_tac [`inst.inst_id`, `f.lf_tgt.vs_alloca_next`, `d`, `f`] >>
+      gvs[exec_alloca_def, update_var_def]) >>
+  PairCases_on `x` >>
+  drule_all ld_maps_target >> strip_tac >> gvs[] >>
+  irule ld_maps_insert_scratch >>
+  qexistsl_tac [`inst.inst_id`, `x0`, `d`, `f`] >>
+  gvs[exec_alloca_def, update_var_def] >>
+  sym_tac >> irule finite_mapTheory.FUPDATE_ELIM >>
+  qpat_x_assum `FLOOKUP f.lf_tgt.vs_allocas _ = SOME _` mp_tac >>
+  simp[FLOOKUP_DEF, AllCaseEqs()]
+QED
+
+(* Charge is local to the active frame; saved caller charges are unchanged. *)
+Theorem ld_charge_scratch:
+  ld_maps A f ==>
+  ld_charge ((f with <|lf_tgt := t'; lf_E := d INSERT f.lf_E|>)::frames) =
+  ld_charge (f::frames) + (if d IN f.lf_E then 0 else 1)
+Proof
+  strip_tac >>
+  `FINITE f.lf_E` by fs[ld_maps_def] >>
+  simp[ld_charge_def, CARD_INSERT] >>
+  Cases_on `d IN f.lf_E` >> simp[]
+QED
