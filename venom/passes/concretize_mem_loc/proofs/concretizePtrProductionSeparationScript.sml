@@ -2,7 +2,8 @@ Theory concretizePtrProductionSeparation
 Ancestors
   concretizePtrCandidateSeparation concretizePtrOrdering
   staticLayoutAllocatorProofs concretizeMemLocDefs sorting list finite_map
-  venomInst removeUnusedSsaProofs
+  venomInst removeUnusedSsaProofs ptrDiscipline
+  concretizePtrCompletionSeparation staticLayoutCompletionProofs staticLayoutDefs
 
 Theorem ptr_insert_liveset_perm[local]:
   !xs x. PERM (insert_alloc_liveset_item x xs) (x::xs)
@@ -175,4 +176,100 @@ Proof
      goal_assum (drule_at Any) >>
      qexistsl_tac [`fn`,`inst`,`items`] >> simp[]) >>
   simp[]
+QED
+
+Theorem ptr_empty_forced_positions[local]:
+  !items positions.
+  forced_candidate_positions items FEMPTY positions = positions /\
+  merge_forced_positions items FEMPTY positions = SOME positions
+Proof
+  Induct >> simp[forced_candidate_positions_def, merge_forced_positions_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[forced_candidate_positions_def, merge_forced_positions_def]
+QED
+
+Theorem ptr_static_item_local_key[local]:
+  static_alloca_items fn = SOME items /\ MEM (a,sa) items ==>
+  MEM a (MAP (\i. Allocation i.inst_id)
+    (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))
+Proof
+  strip_tac >> drule static_alloca_items_MEM >>
+  disch_then (fn th => fs[th, MEM_MAP, MEM_FILTER]) >>
+  gvs[exact_static_alloca_def, AllCaseEqs()] >> metis_tac[is_alloca_op_def]
+QED
+
+Theorem ptr_production_completed_local_local:
+  fn_ptr_ok P fn /\ static_alloca_items fn = SOME items /\
+  candidate = compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
+    (forced_candidate_positions items fn.fn_forced_alloc_positions FEMPTY) reserved /\
+  complete_alloc_positions_with_imports items fn.fn_forced_alloc_positions
+    reserved imported fn candidate = SOME completed /\
+  (!c p s. MEM (c,p,s) (imported_mems_used ctx fn) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
+  MEM (a,sa) items /\ MEM (b,sb) items /\ a <> b /\ 0 < sa /\ 0 < sb /\
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) a = SOME la /\
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) b = SOME lb /\
+  MEM addr la /\ MEM addr lb /\
+  FLOOKUP completed a = SOME pa /\ FLOOKUP completed b = SOME pb ==>
+  reserved_intervals_disjoint (pa,sa) (pb,sb)
+Proof
+  strip_tac >>
+  `fn.fn_forced_alloc_positions = FEMPTY` by fs[fn_ptr_ok_def] >>
+  gvs[ptr_empty_forced_positions] >>
+  irule ptr_completion_pair_separation >> simp[] >>
+  goal_assum (drule_at (Pat `complete_alloc_positions_with_imports _ _ _ _ _ _ = SOME _`)) >>
+  qexistsl_tac [`a`,`b`,`compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg FEMPTY reserved`] >>
+  simp[ptr_empty_forced_positions] >>
+  rpt strip_tac >>
+  `get_alloca_size fn a = sa /\ get_alloca_size fn b = sb` by
+    metis_tac[ptr_static_alloca_item_size] >>
+  `MEM a (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn))) /\
+   MEM b (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))` by
+    metis_tac[ptr_static_item_local_key] >>
+  drule_all ptr_production_candidate_local_local >>
+  simp[reserved_intervals_disjoint_def]
+QED
+
+Theorem ptr_production_completed_local_import:
+  fn_ptr_ok P fn /\ static_alloca_items fn = SOME items /\
+  candidate = compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg
+    (forced_candidate_positions items fn.fn_forced_alloc_positions FEMPTY) reserved /\
+  imported = FILTER (\(p,s). p <> 0 \/ s <> 0)
+    (MAP (\(_,p,s). (p,s)) (imported_mems_used ctx fn)) /\
+  complete_alloc_positions_with_imports items fn.fn_forced_alloc_positions
+    reserved imported fn candidate = SOME completed /\
+  (!c p s. MEM (c,p,s) (imported_mems_used ctx fn) ==>
+    ~MEM c (MAP (\i. Allocation i.inst_id)
+      (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))) /\
+  MEM (a,sa) items /\ 0 < sa /\ 0 < sb /\
+  MEM (b,pb,sb) (imported_mems_used ctx fn) /\
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) a = SOME la /\
+  FLOOKUP (context_mem_livesets fuel ctx fn bpr cfg) b = SOME lb /\
+  MEM addr la /\ MEM addr lb /\ FLOOKUP completed a = SOME pa ==>
+  reserved_intervals_disjoint (pa,sa) (pb,sb)
+Proof
+  strip_tac >>
+  `fn.fn_forced_alloc_positions = FEMPTY` by fs[fn_ptr_ok_def] >>
+  `MEM (pb,sb) imported` by
+    (simp[MEM_FILTER, MEM_MAP] >>
+     qexists `(b,pb,sb)` >> simp[]) >>
+  qpat_x_assum `imported = _` kall_tac >>
+  gvs[ptr_empty_forced_positions] >>
+  Cases_on `FLOOKUP (compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg FEMPTY reserved) a`
+  >- (`merge_forced_positions items FEMPTY
+        (compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg FEMPTY reserved) =
+        SOME (compute_alloc_map_fuel_in_context fuel ctx fn bpr cfg FEMPTY reserved)` by
+        simp[ptr_empty_forced_positions] >>
+      drule_all complete_alloc_positions_with_imports_fresh_disjoint >> metis_tac[]) >>
+  `FLOOKUP completed a = SOME x` by
+    (drule_all (cj 1 complete_alloc_positions_with_imports_success) >> simp[]) >>
+  `get_alloca_size fn a = sa` by metis_tac[ptr_static_alloca_item_size] >>
+  `MEM a (MAP (\i. Allocation i.inst_id)
+    (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn)))` by
+    metis_tac[ptr_static_item_local_key] >>
+  drule_all ptr_production_candidate_local_import >>
+  gvs[reserved_intervals_disjoint_def]
 QED
