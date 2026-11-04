@@ -8,8 +8,8 @@
  *
  * TOP-LEVEL:
  *   aggregate_eval_exprs_cons — eval_exprs on e::args
- *   aggregate_eval_struct, aggregate_eval_make_tuple,
- *   aggregate_eval_make_array — a literal's value from its children's
+ *   aggregate_eval_struct, aggregate_eval_make_tuple — a literal's value
+ *     from its children's (array evaluation is in exprSimHyps)
  *   storage_holds_materialised, vv_post_materialises — a child's result
  *     materialises
  *   aggregate_materialised_child_typed, aggregate_materialised_child_wf,
@@ -200,22 +200,6 @@ Theorem aggregate_eval_make_tuple:
   eval_exprs cx args es = (rr,es') ==>
   eval_expr cx (Builtin ann (MakeArray NONE bnd) args) es =
     ((case rr of INL vs => INL (Value (ArrayV (TupleV vs)))
-      | INR exc => INR exc),es')
-Proof
-  strip_tac >>
-  simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def, type_check_def,
-    assert_def, ignore_bind_def, bind_def, return_def] >>
-  Cases_on `rr` >>
-  simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
-    return_def, raise_def, bind_def]
-QED
-
-Theorem aggregate_eval_make_array:
-  compatible_bound bnd (LENGTH args) /\
-  evaluate_type (get_tenv cx) et = SOME tv /\
-  eval_exprs cx args es = (rr,es') ==>
-  eval_expr cx (Builtin ann (MakeArray (SOME et) bnd) args) es =
-    ((case rr of INL vs => INL (Value (ArrayV (make_array_value tv bnd vs)))
       | INR exc => INR exc),es')
 Proof
   strip_tac >>

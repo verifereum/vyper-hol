@@ -521,6 +521,15 @@ Definition expr_post_def:
     locals_kept cenv es s0 s
 End
 
+Theorem expr_post_typed_stack_operand:
+  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+  eval_operand op s = SOME (typed_val_to_w256 tv v)
+Proof
+  simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
+QED
+
 (* The fragment of e lowered as a value of type ty, run from a state
    related at es, the source state where e is evaluated, under the code
    premises of the statement lemmas.  On a value it reaches its end in

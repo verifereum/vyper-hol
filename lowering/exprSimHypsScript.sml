@@ -1493,6 +1493,199 @@ Proof
   Cases_on `expr_int_literal e2` >> gvs[]
 QED
 
+(* Literal membership must include defaults omitted by sparse enumeration. *)
+Theorem enumerate_static_array_membership:
+  !vs k.
+    (MEM v (MAP SND (enumerate_static_array d k vs)) <=>
+       MEM v vs /\ v <> d) /\
+    LENGTH (enumerate_static_array d k vs) <= LENGTH vs /\
+    (LENGTH (enumerate_static_array d k vs) < LENGTH vs <=> MEM d vs)
+Proof
+  Induct_on `vs` >- simp[enumerate_static_array_def] >>
+  rpt gen_tac >> simp[enumerate_static_array_def] >>
+  Cases_on `h = d` >> gvs[] >>
+  first_x_assum (qspec_then `SUC k` strip_assume_tac) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem evaluate_membership_literal_array:
+  !bd vs tv negate v.
+  compatible_bound bd (LENGTH vs) ==>
+  evaluate_membership (ArrayTV tv bd) negate v
+    (ArrayV (make_array_value tv bd vs)) =
+  INL (BoolV (if negate then ~MEM v vs else MEM v vs))
+Proof
+  Cases_on `bd` >>
+  simp[compatible_bound_def, make_array_value_def,
+       vyperValueOperationTheory.evaluate_membership_array,
+       vyperValueOperationTheory.evaluate_in_array_def,
+       enumerate_static_array_membership] >>
+  metis_tac[]
+QED
+
+Theorem expr_body_pre_literal_membership:
+  !cenv cx env ann bop e1 a t bd elems es.
+    expr_body_pre cenv cx env
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t bd) elems]) es /\
+    (bop = In \/ bop = NotIn) ==>
+    ?et. t = SOME et /\ a = ArrayT et bd /\
+      ann = BaseT BoolT /\ expr_type e1 = et /\ is_prim_word_type et /\
+      compatible_bound bd (LENGTH elems) /\
+      EVERY (\e. expr_type e = et) elems
+Proof
+  rpt gen_tac >>
+  simp[expr_body_pre_def, well_typed_expr_def,
+       well_typed_builtin_app_def] >>
+  rpt strip_tac >> Cases_on `t` >>
+  gvs[well_typed_builtin_app_def, well_typed_binop_def, expr_type_def,
+      EVERY_MAP, EVERY_MEM]
+QED
+
+Theorem aggregate_eval_make_array:
+  compatible_bound bnd (LENGTH args) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  eval_exprs cx args es = (rr,es') ==>
+  eval_expr cx (Builtin ann (MakeArray (SOME et) bnd) args) es =
+    ((case rr of INL vs => INL (Value (ArrayV (make_array_value tv bnd vs)))
+      | INR exc => INR exc),es')
+Proof
+  strip_tac >>
+  simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def, type_check_def,
+    assert_def, ignore_bind_def, bind_def, return_def] >>
+  Cases_on `rr` >>
+  simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
+    return_def, raise_def, bind_def]
+QED
+
+Theorem eval_expr_literal_membership:
+  !bop bd elems cx et tv e1 es.
+  (bop = In \/ bop = NotIn) /\ compatible_bound bd (LENGTH elems) /\
+  evaluate_type (get_tenv cx) et = SOME tv /\
+  evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) ==>
+  eval_expr cx (Builtin (BaseT BoolT) (Bop bop)
+    [e1; Builtin (ArrayT et bd) (MakeArray (SOME et) bd) elems]) es =
+  (do r <- eval_expr cx e1;
+      v <- read_result cx r;
+      vs <- eval_exprs cx elems;
+      return (Value (BoolV (if bop = NotIn then ~MEM v vs else MEM v vs)))
+   od) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once evaluate_def, vyperContextTheory.builtin_args_length_ok_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       return_def, bind_def, expr_type_def,
+       lift_option_type_def, lift_option_def] >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_expr cx e1 es` >>
+  rename1 `eval_expr cx e1 es = (r1, s1)` >>
+  Cases_on `r1` >> simp[] >>
+  Cases_on `read_result cx x s1` >>
+  rename1 `read_result cx x s1 = (r2, s2)` >>
+  Cases_on `r2` >> simp[] >>
+  rename1 `read_result cx x s1 = (INL needle, s2)` >>
+  Cases_on `eval_exprs cx elems s2` >>
+  rename1 `eval_exprs cx elems s2 = (rr, s3)` >>
+  qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` kall_tac >>
+  drule_all aggregate_eval_make_array >>
+  disch_then (qspec_then `ArrayT et bd` assume_tac) >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `rr` >> gvs[] >>
+  drule eval_exprs_length >> strip_tac >>
+  `compatible_bound bd (LENGTH x')` by metis_tac[] >>
+  simp[read_result_def, Once evaluate_def, return_def, bind_def,
+       evaluate_membership_literal_array, lift_sum_def]
+QED
+
+(* Argument evaluation forces each head before evaluating the tail. *)
+Theorem eval_exprs_cons_cases:
+  !cx e args es res es'.
+    eval_exprs cx (e::args) es = (res, es') ==>
+    (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
+    ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
+      eval_exprs cx args es1 = (rr, es') /\
+      res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
+Proof
+  rpt gen_tac >> simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e es` >>
+  rename1 `eval_expr cx e es = (rr, es1)` >>
+  Cases_on `rr` >> simp[] >>
+  rename1 `read_result cx tv es1` >>
+  Cases_on `read_result cx tv es1` >>
+  rename1 `read_result cx tv es1 = (rv, es2)` >>
+  Cases_on `rv` >> simp[] >>
+  Cases_on `eval_exprs cx args es2` >>
+  rename1 `eval_exprs cx args es2 = (rr, es3)` >>
+  Cases_on `rr` >> simp[] >> rw[] >> gvs[]
+QED
+
+Theorem eval_exprs_nil:
+  !cx es. eval_exprs cx [] es = (INL [], es)
+Proof
+  simp[Once evaluate_def, return_def]
+QED
+
+Theorem expr_body_pre_read_success:
+  !cenv cx env e st tv v st'.
+    expr_body_pre cenv cx env e st /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+    (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+    value_has_type tv v /\ expr_sim_inv cenv cx env st'
+Proof
+  rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >> simp[] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
+QED
+
+Theorem expr_body_pre_eval_exprs_success:
+  !args cenv cx env st et tv vs st'.
+    expr_sim_inv cenv cx env st /\
+    (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+      expr_body_pre cenv cx env e s) /\
+    EVERY (\e. expr_type e = et) args /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    eval_exprs cx args st = (INL vs,st') ==>
+    EVERY (value_has_type tv) vs /\ expr_sim_inv cenv cx env st'
+Proof
+  Induct >> simp[eval_exprs_nil] >> rpt gen_tac >> strip_tac >>
+  rename1 `eval_exprs cx (e::args) st = _` >>
+  drule eval_exprs_cons_cases >> strip_tac >> gvs[] >>
+  `expr_body_pre cenv cx env e st` by metis_tac[] >>
+  drule_all expr_body_pre_read_success >> strip_tac >>
+  Cases_on `rr` >> gvs[] >>
+  `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+    expr_body_pre cenv cx env e s` by metis_tac[] >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem eval_expr_literal_membership_cons:
+  !bop bd elems cx et tv e1 es.
+    (bop = In \/ bop = NotIn) /\ compatible_bound bd (LENGTH elems) /\
+    evaluate_type (get_tenv cx) et = SOME tv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) ==>
+    eval_expr cx (Builtin (BaseT BoolT) (Bop bop)
+      [e1; Builtin (ArrayT et bd) (MakeArray (SOME et) bd) elems]) es =
+    (do vs <- eval_exprs cx (e1::elems);
+        return (Value (BoolV (if bop = In then MEM (HD vs) (TL vs)
+                             else ~MEM (HD vs) (TL vs)))) od) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all eval_expr_literal_membership >>
+  disch_then (qspecl_then [`e1`,`es`] SUBST1_TAC) >>
+  simp[Once evaluate_def, bind_def, return_def] >>
+  Cases_on `eval_expr cx e1 es` >>
+  rename1 `eval_expr cx e1 es = (rr,s1)` >>
+  Cases_on `rr` >> simp[] >>
+  Cases_on `read_result cx x s1` >>
+  rename1 `read_result cx x s1 = (rv,s2)` >>
+  Cases_on `rv` >> simp[] >>
+  Cases_on `eval_exprs cx elems s2` >>
+  rename1 `eval_exprs cx elems s2 = (rs,s3)` >>
+  Cases_on `rs` >> simp[] >>
+  Cases_on `bop = In` >> gvs[]
+QED
+
 Theorem word_size_monotone:
   !n m. n <= m ==> word_size n <= word_size m
 Proof

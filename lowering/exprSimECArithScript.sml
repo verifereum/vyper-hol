@@ -1964,9 +1964,9 @@ Proof
   `builtin_args_length_ok bt (LENGTH [a;b])` by simp[] >>
   `bt <> Env MsgGas` by (strip_tac >> gvs[builtin_args_length_ok_def]) >>
   drule_all exprSimWordArgsTheory.eval_expr_builtin_cases >> strip_tac >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >> gvs[] >>
-  drule exprSimWordArgsTheory.eval_exprs_cons_cases >> strip_tac >>
-  gvs[exprSimWordArgsTheory.eval_exprs_nil]
+  drule exprSimHypsTheory.eval_exprs_cons_cases >> strip_tac >> gvs[] >>
+  drule exprSimHypsTheory.eval_exprs_cons_cases >> strip_tac >>
+  gvs[exprSimHypsTheory.eval_exprs_nil]
 QED
 
 Theorem ec_binary_call_then[local]:

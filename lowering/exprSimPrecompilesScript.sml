@@ -246,15 +246,6 @@ Proof
   simp[well_typed_builtin_app_def]
 QED
 
-Theorem expr_post_typed_stack_operand:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-  is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
-  eval_operand op s = SOME (typed_val_to_w256 tv v)
-Proof
-  simp[expr_post_def, expr_val_rel_def] >> metis_tac[]
-QED
-
 Theorem expr_post_typed_stack_intro:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -2096,7 +2087,7 @@ Proof
   rpt strip_tac >> drule_all expr_sim_pre_stack_result >> simp[]
 QED
 
-(* typed_args_ready from the operands' shared case judgments. *)
+
 Theorem typed_args_ready_of_case:
   !args nocalls ctx func cenv cx env arg_ty.
     (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
@@ -2445,3 +2436,129 @@ Proof
   gvs[EVERY_MEM]
 QED
 
+
+(* Conditional child cases form the source readiness transition used by
+   encoded argument execution. *)
+Theorem exprs_case_typed_ready_step:
+  !args nocalls ctx func cenv cx env et tv e rest st.
+    (!x s. MEM x args /\ expr_sim_inv cenv cx env s ==>
+      expr_body_pre cenv cx env x s /\
+      (nocalls ==> int_calls_expr x = []) /\ expr_type x = et) /\
+    is_word_type et /\ evaluate_type (get_tenv cx) et = SOME tv /\
+    exprs_case nocalls ctx func cenv cx (e::rest) /\
+    expr_sim_inv cenv cx env st /\ EVERY (\x. MEM x args) (e::rest) ==>
+    expr_sim ctx func cenv cx (expr_type e) e st /\
+    (!res st'. (do r <- eval_expr cx e; read_result cx r od) st = (res,st') ==>
+      expr_res_ok res) /\
+    (!v st'. (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+      (expr_type e = et /\ value_has_type tv v) /\
+      exprs_case nocalls ctx func cenv cx rest /\
+      expr_sim_inv cenv cx env st' /\ EVERY (\x. MEM x args) rest)
+Proof
+  rpt gen_tac >> simp[Once exprs_case_def] >> strip_tac >>
+  `expr_body_pre cenv cx env e st /\
+   (nocalls ==> int_calls_expr e = []) /\ expr_type e = et` by metis_tac[] >>
+  `is_word_type (expr_type e)` by metis_tac[] >>
+  conj_tac >- metis_tac[expr_sim_case_def] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all expr_body_pre_stack_result >> simp[]) >>
+  rpt strip_tac >>
+  drule_all expr_body_pre_stack_result >> strip_tac >>
+  drule eval_expr_read_INL >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+
+Theorem compile_typed_literal_membership_sim:
+  !nocalls ctx func cenv cx env ty bop e1 et bd elems tv es.
+    (bop = In \/ bop = NotIn) /\ is_prim_word_type et /\
+    is_word_type et /\ evaluate_type (get_tenv cx) et = SOME tv /\
+    well_formed_type_value tv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) /\
+    compatible_bound bd (LENGTH elems) /\
+    (!e s. MEM e (e1::elems) /\ expr_sim_inv cenv cx env s ==>
+      expr_body_pre cenv cx env e s /\
+      (nocalls ==> int_calls_expr e = []) /\ expr_type e = et) /\
+    exprs_case nocalls ctx func cenv cx (e1::elems) /\
+    expr_sim_inv cenv cx env es ==>
+    expr_sim ctx func cenv cx ty
+      (Builtin (BaseT BoolT) (Bop bop)
+        [e1; Builtin (ArrayT et bd) (MakeArray (SOME et) bd) elems]) es
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_type e1 = et` by metis_tac[MEM] >>
+  irule compile_encoded_membership_sim >>
+  simp[vyperASTTheory.expr_type_def] >>
+  qexistsl_tac [`\xs s. exprs_case nocalls ctx func cenv cx xs /\
+      expr_sim_inv cenv cx env s /\ EVERY (\e. MEM e (e1::elems)) xs`,
+    `\e v. expr_type e = et /\ value_has_type tv v`,
+    `typed_val_to_w256 tv`, `e1`, `elems`, `bop = In`] >>
+  simp[vyperASTTheory.expr_type_def, EVERY_MEM] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all lower_value_bop_in_literal >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule expr_post_typed_stack_operand >>
+      goal_assum (drule_at Any) >> gvs[]) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `EVERY (\x. MEM x (e1::elems)) (e::rest)` by
+        (simp[EVERY_MEM] >> metis_tac[]) >>
+      drule_all exprs_case_typed_ready_step >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `EVERY (value_has_type tv) vs` by
+        (irule (cj 1 expr_body_pre_eval_exprs_success) >>
+         goal_assum (drule_at Any) >> simp[EVERY_MEM] >>
+         qexistsl_tac [`cenv`, `env`] >> gvs[MEM] >> metis_tac[]) >>
+      Cases_on `vs` >- (drule eval_exprs_length >> simp[]) >>
+      simp[] >> irule exprSimCompareTheory.typed_val_to_w256_prim_MEM >>
+      metis_tac[]) >>
+  conj_tac >- (irule eval_expr_literal_membership_cons >> metis_tac[]) >>
+  irule typed_stack_args_shape >> goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem compile_bop_literal_membership_case:
+  !nocalls ctx func cenv cx ann bop e1 a t bd elems.
+    (bop = In \/ bop = NotIn) /\
+    exprs_case nocalls ctx func cenv cx (e1::elems) ==>
+    expr_sim_case nocalls ctx func cenv cx
+      (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t bd) elems])
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[Once expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_literal_membership >> strip_tac >> gvs[] >>
+  `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+  `!e s. MEM e (e1::elems) /\ expr_sim_inv cenv cx env s ==>
+    expr_body_pre cenv cx env e s /\
+    (nocalls ==> int_calls_expr e = []) /\ expr_type e = expr_type e1` by
+    (rpt gen_tac >> strip_tac >>
+     `expr_body_pre cenv cx env e1 s /\
+      expr_body_pre cenv cx env
+        (Builtin (ArrayT (expr_type e1) bd)
+          (MakeArray (SOME (expr_type e1)) bd) elems) s` by
+       metis_tac[expr_body_pre_builtin_arg, MEM] >>
+     conj_tac
+     >- (gvs[MEM] >> metis_tac[expr_body_pre_builtin_arg]) >>
+     gvs[vyperTypeCallGraphTheory.int_calls_expr_def, EVERY_MEM] >>
+     metis_tac[int_calls_exprs_mem, MEM]) >>
+  `expr_body_pre cenv cx env e1 es` by metis_tac[MEM] >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  `is_word_type (expr_type e1)` by
+    (Cases_on `expr_type e1` >>
+     gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def] >>
+     Cases_on `b` >>
+     gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def] >>
+     Cases_on `b'` >>
+     gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def]) >>
+  irule compile_typed_literal_membership_sim >> simp[] >>
+  (conj_tac
+  >- (`expr_body_pre cenv cx env
+         (Builtin (ArrayT (expr_type e1) bd)
+           (MakeArray (SOME (expr_type e1)) bd) elems) es` by
+        metis_tac[expr_body_pre_builtin_arg, MEM] >>
+      drule_all expr_body_pre_type_evaluates >>
+      simp[expr_type_def, vyperValueTheory.evaluate_type_def] >> strip_tac >>
+      drule (cj 1 evaluate_type_well_formed) >> simp[]) >>
+  qexistsl_tac [`env`, `nocalls`] >> simp[MEM] >> metis_tac[MEM])
+QED

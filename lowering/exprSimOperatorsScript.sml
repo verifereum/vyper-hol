@@ -70,7 +70,7 @@ Ancestors
   allocLimits
   list finite_map
   fragExec exprSim exprSimHyps exprSimOps exprSimIfExp exprSimBinopFrag
-  exprSimUnop exprSimCompare
+  exprSimUnop exprSimCompare exprSimWordArgs
   exprBopLowering exprWordOperand
   loweringSlice
   exprLowering compileEnv
@@ -483,7 +483,98 @@ Theorem compile_bop_in_literal_sim:
     (bop = In \/ bop = NotIn) ==>
     expr_ok cenv (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  cheat
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN assume_tac) >>
+  simp[expr_ok_case] >> rpt gen_tac >> conj_asm1_tac
+  >- (rewrite_tac[expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+      drule expr_body_pre_literal_membership >> simp[] >> strip_tac >> gnvs[] >>
+      `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
+      `!e st. MEM e (e1::elems) /\ expr_sim_inv cenv cx env st ==>
+        expr_body_pre cenv cx env e st` by
+        (qpat_x_assum `bop = In \/ bop = NotIn` kall_tac >>
+         rpt gen_tac >> strip_tac >> gvs[]
+         >- (drule expr_body_pre_builtin_arg >>
+             disch_then (qspecl_then [`e`, `st`] mp_tac) >> simp[]) >>
+         `expr_body_pre cenv cx env
+            (Builtin (ArrayT (expr_type e1) n)
+              (MakeArray (SOME (expr_type e1)) n) elems) st` by
+           (drule expr_body_pre_builtin_arg >>
+            disch_then (qspecl_then
+              [`Builtin (ArrayT (expr_type e1) n) (MakeArray (SOME (expr_type e1)) n) elems`,
+               `st`] mp_tac) >> simp[]) >>
+         drule expr_body_pre_builtin_arg >>
+         disch_then (qspecl_then [`e`, `st`] mp_tac) >> simp[]) >>
+      `expr_body_pre cenv cx env e1 es` by metis_tac[MEM] >>
+      drule_all expr_body_pre_type_evaluates >> strip_tac >>
+      gnvs[optionTheory.IS_SOME_EXISTS] >>
+      qpat_x_assum `?tv. evaluate_type _ _ = SOME tv`
+        (qx_choose_then `tv` assume_tac) >>
+      `is_word_type (expr_type e1)` by
+        (qpat_x_assum `bop = In \/ bop = NotIn` kall_tac >>
+         Cases_on `expr_type e1` >>
+         gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def] >>
+         rename1 `is_word_type (BaseT bt)` >> Cases_on `bt` >>
+         gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def] >>
+         rename1 `is_word_type (BaseT (BytesT bd))` >> Cases_on `bd` >>
+         gvs[vyperTypeSystemTheory.is_prim_word_type_def, is_word_type_def]) >>
+      irule compile_encoded_membership_sim >> simp[vyperASTTheory.expr_type_def] >>
+      qexistsl_tac [`\rest st. expr_sim_inv cenv cx env st /\
+                      EVERY (\e. MEM e (e1::elems)) rest`,
+                    `\e v. value_has_type tv v`, `typed_val_to_w256 tv`,
+                    `e1`, `elems`, `bop = In`] >> simp[] >>
+      conj_tac >- metis_tac[lower_value_bop_in_literal] >>
+      conj_tac >-
+        (rpt gen_tac >> strip_tac >>
+         `expr_type e = expr_type e1` by gvs[EVERY_MEM] >>
+         metis_tac[expr_post_typed_stack_operand]) >>
+      conj_tac >-
+        (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+         `expr_body_pre cenv cx env e st` by metis_tac[] >>
+         conj_tac >-
+           (`expr_ok cenv e` by
+              (qpat_x_assum `expr_sim_below _ _` mp_tac >>
+               simp[expr_sim_below_def] >> disch_then irule >>
+               Cases_on `e = e1` >- simp[] >>
+               `MEM e elems` by metis_tac[] >>
+               drule exprCallBoundsTheory.expr_list_member_bound >> simp[]) >>
+            `int_calls_expr e = []` by
+              (gvs[int_calls_expr_def, EVERY_MEM] >>
+               metis_tac[int_calls_exprs_mem]) >>
+            metis_tac[expr_ok_def, expr_sim_ok_def, expr_sim_pre_body]) >>
+         conj_tac >- metis_tac[expr_body_pre_res_ok] >>
+         `expr_type e = expr_type e1` by gvs[EVERY_MEM] >>
+         metis_tac[expr_body_pre_read_success]) >>
+      conj_tac >-
+        (rpt gen_tac >> strip_tac >>
+         `EVERY (value_has_type tv) vs /\ expr_sim_inv cenv cx env es'` by
+           (irule expr_body_pre_eval_exprs_success >>
+            qexistsl_tac [`e1::elems`, `expr_type e1`, `es`] >>
+            simp[] >> metis_tac[]) >>
+         drule eval_exprs_length >> strip_tac >>
+         Cases_on `vs` >- gvs[] >> simp[] >>
+         irule typed_val_to_w256_prim_MEM >>
+         metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
+      conj_tac >- simp[EVERY_MEM] >>
+      conj_tac >-
+        (irule eval_expr_literal_membership_cons >> simp[] >>
+         `expr_body_pre cenv cx env
+            (Builtin (ArrayT (expr_type e1) n)
+              (MakeArray (SOME (expr_type e1)) n) elems) es` by
+           (drule expr_body_pre_builtin_arg >>
+            disch_then irule >> simp[]) >>
+         drule_all expr_body_pre_type_evaluates >>
+         simp[vyperASTTheory.expr_type_def, optionTheory.IS_SOME_EXISTS,
+              vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+      simp[wb_args_shape_def] >> rpt gen_tac >> strip_tac >>
+      `expr_body_pre cenv cx env e es` by metis_tac[] >>
+      `expr_type e = expr_type e1` by gvs[EVERY_MEM] >>
+      metis_tac[expr_body_pre_lower_value_word_shape]) >>
+  qpat_x_assum `bop = In \/ bop = NotIn` kall_tac >>
+  irule expr_vv_case_stack >> conj_tac
+  >- metis_tac[eval_expr_builtin_value] >>
+  rpt gen_tac >>
+  simp[compile_expr_bop, vyperASTTheory.expr_type_def] >>
+  simp[Once compile_expr_def, LET_THM, as_stack_val_pair,
+       pairTheory.UNCURRY] >> rw[]
 QED
 
 (* ===== All binary operators ===== *)

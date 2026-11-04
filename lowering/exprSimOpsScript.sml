@@ -682,6 +682,263 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* ===== Literal membership fragments ===== *)
+
+Theorem straight_fresh_emit_membership_eqs:
+  !ops needle. straight_fresh (emit_membership_eqs needle ops)
+Proof
+  Induct >> simp[emit_membership_eqs_def, straight_fresh_return] >>
+  rpt gen_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_emit_op, fresh_write_op_def] >>
+  rpt gen_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_return]
+QED
+
+Theorem straight_fresh_fold_membership_or:
+  !ops acc. straight_fresh (fold_membership_or acc ops)
+Proof
+  Induct >> simp[fold_membership_or_def, straight_fresh_return] >>
+  rpt gen_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_emit_op, fresh_write_op_def]
+QED
+
+Theorem straight_fresh_fold_membership_and:
+  !ops acc. straight_fresh (fold_membership_and acc ops)
+Proof
+  Induct >> simp[fold_membership_and_def, straight_fresh_return] >>
+  rpt gen_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_emit_op, fresh_write_op_def] >>
+  rpt gen_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_emit_op, fresh_write_op_def]
+QED
+
+Theorem straight_fresh_compile_list_membership:
+  !needle ops.
+    straight_fresh (compile_list_membership_in needle ops) /\
+    straight_fresh (compile_list_membership_notin needle ops)
+Proof
+  rpt gen_tac >>
+  simp[compile_list_membership_in_def, compile_list_membership_notin_def] >>
+  conj_tac >> irule straight_fresh_bind >>
+  simp[straight_fresh_emit_membership_eqs] >>
+  Cases >> simp[straight_fresh_return, straight_fresh_fold_membership_or] >>
+  irule straight_fresh_bind >>
+  simp[straight_fresh_emit_op, fresh_write_op_def,
+       straight_fresh_fold_membership_and]
+QED
+
+Theorem emit_membership_eqs_correct:
+  !ops ws needle w sa cs sb ss.
+    emit_membership_eqs needle ops sa = (cs,sb) /\
+    MAP (\op. eval_operand op ss) ops = MAP SOME ws /\
+    eval_operand needle ss = SOME w /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      MAP (\op. eval_operand op tt) cs =
+        MAP (\v. SOME (bool_to_word (w = v))) ws /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!op v. eval_operand op ss = SOME v ==> eval_operand op tt = SOME v)
+Proof
+  Induct >- simp[emit_membership_eqs_def, comp_return_def,
+                 emitted_insts_def, run_inst_seq_def] >>
+  rpt gen_tac >> Cases_on `ws` >>
+  simp[emit_membership_eqs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule_all emit_op_EQ_correct >> strip_tac >>
+  `MAP (\op. eval_operand op ss') ops = MAP SOME t` by
+    (fs[MAP_EQ_EVERY2] >> irule LIST_REL_mono >>
+     goal_assum $ drule_at Any >> simp[]) >>
+  qpat_x_assum `!ws needle w sa cs sb ss. _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `t` mp_tac) >>
+  disch_then (qspecl_then [`w`, `ss'`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  imp_res_tac emit_op_extends >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `tt` >> simp[] >> metis_tac[]
+QED
+
+Theorem fold_membership_or_correct:
+  !ops bs acc b sa op sb ss.
+    fold_membership_or acc ops sa = (op,sb) /\
+    MAP (\op. eval_operand op ss) ops =
+      MAP (\b. SOME (bool_to_word b)) bs /\
+    eval_operand acc ss = SOME (bool_to_word b) /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (b \/ EXISTS I bs)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!op v. eval_operand op ss = SOME v ==> eval_operand op tt = SOME v)
+Proof
+  Induct >- simp[fold_membership_or_def, comp_return_def,
+                 emitted_insts_def, run_inst_seq_def] >>
+  rpt gen_tac >> Cases_on `bs` >>
+  simp[fold_membership_or_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule_all emit_op_OR_correct >> strip_tac >>
+  `MAP (\op. eval_operand op ss') ops =
+     MAP (\b. SOME (bool_to_word b)) t` by
+    (fs[MAP_EQ_EVERY2] >> irule LIST_REL_mono >>
+     goal_assum $ drule_at Any >> simp[]) >>
+  `bool_to_word b || bool_to_word h' = bool_to_word (b \/ h')` by
+    (Cases_on `b` >> Cases_on `h'` >> simp[bool_to_word_def, WORD_OR_IDEM, WORD_OR_CLAUSES]) >>
+  qpat_x_assum `!bs acc b sa op sb ss. _` (drule_then mp_tac) >>
+  disch_then (qspecl_then [`t`, `b \/ h'`, `ss'`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  imp_res_tac emit_op_extends >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `tt` >> simp[DISJ_ASSOC] >> metis_tac[]
+QED
+
+Theorem fold_membership_and_correct:
+  !ops bs acc b sa op sb ss.
+    fold_membership_and acc ops sa = (op,sb) /\
+    MAP (\op. eval_operand op ss) ops =
+      MAP (\b. SOME (bool_to_word b)) bs /\
+    eval_operand acc ss = SOME (bool_to_word b) /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (b /\ EVERY ($~) bs)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!op v. eval_operand op ss = SOME v ==> eval_operand op tt = SOME v)
+Proof
+  Induct >- simp[fold_membership_and_def, comp_return_def,
+                 emitted_insts_def, run_inst_seq_def] >>
+  rpt gen_tac >> Cases_on `bs` >>
+  simp[fold_membership_and_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  drule_all emit_op_ISZERO_correct >> strip_tac >>
+  `eval_operand acc ss' = SOME (bool_to_word b)` by metis_tac[] >>
+  drule_all emit_op_AND_correct >> strip_tac >>
+  `MAP (\op. eval_operand op ss'') ops =
+     MAP (\b. SOME (bool_to_word b)) t` by
+    (fs[MAP_EQ_EVERY2] >> irule LIST_REL_mono >>
+     goal_assum $ drule_at Any >> simp[] >> metis_tac[]) >>
+  `bool_to_word b && bool_to_word (bool_to_word h' = 0w) =
+     bool_to_word (b /\ ~h')` by
+    (Cases_on `b` >> Cases_on `h'` >>
+     simp[bool_to_word_def, WORD_AND_IDEM, WORD_AND_CLAUSES]) >>
+  qpat_x_assum `!bs acc b sa op sb ss. _` (drule_then mp_tac) >>
+  disch_then (qspecl_then [`t`, `b /\ ~h'`, `ss''`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  imp_res_tac emit_op_extends >>
+  `run_inst_seq (emitted_insts sa cs'') ss = OK ss'' /\
+   cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by
+    (drule_all run_inst_seq_chain >> simp[]) >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  qexists_tac `tt` >> simp[CONJ_ASSOC] >> metis_tac[]
+QED
+
+Theorem compile_list_membership_in_correct:
+  !needle ops ws w sa op sb ss.
+    compile_list_membership_in needle ops sa = (op,sb) /\
+    MAP (\op. eval_operand op ss) ops = MAP SOME ws /\
+    eval_operand needle ss = SOME w /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (MEM w ws)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!op v. eval_operand op ss = SOME v ==> eval_operand op tt = SOME v)
+Proof
+  rpt gen_tac >>
+  simp[compile_list_membership_in_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all emit_membership_eqs_correct >> strip_tac >>
+  Cases_on `cs` >> Cases_on `ws` >>
+  gvs[comp_return_def, eval_operand_def] >>
+  drule fold_membership_or_correct >>
+  disch_then (qspecl_then [`MAP (\v. w = v) t'`, `w = h'`, `tt`] mp_tac) >>
+  (impl_tac >- simp[MAP_MAP_o, combinTheory.o_DEF]) >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  `EXISTS I (MAP (\v. w = v) t') = MEM w t'` by
+    simp[EXISTS_MAP, EXISTS_MEM] >>
+  qexists_tac `tt'` >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_list_membership_notin_correct:
+  !needle ops ws w sa op sb ss.
+    compile_list_membership_notin needle ops sa = (op,sb) /\
+    MAP (\op. eval_operand op ss) ops = MAP SOME ws /\
+    eval_operand needle ss = SOME w /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (~MEM w ws)) /\
+      fresh_vars_wrt sb tt /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+      (!op v. eval_operand op ss = SOME v ==> eval_operand op tt = SOME v)
+Proof
+  rpt gen_tac >>
+  simp[compile_list_membership_notin_def, comp_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all emit_membership_eqs_correct >> strip_tac >>
+  Cases_on `cs` >> Cases_on `ws` >>
+  gvs[comp_return_def, eval_operand_def] >>
+  qpat_x_assum `(do z <- _; _ od) _ = _` mp_tac >>
+  simp[comp_bind_def] >> pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all emit_op_ISZERO_correct >> strip_tac >>
+  `MAP (\op. eval_operand op ss') t =
+     MAP (\v. SOME (bool_to_word (w = v))) t'` by
+    (fs[MAP_EQ_EVERY2] >> irule LIST_REL_mono >>
+     goal_assum $ drule_at Any >> simp[]) >>
+  drule fold_membership_and_correct >>
+  disch_then (qspecl_then [`MAP (\v. w = v) t'`, `w <> h'`, `ss'`] mp_tac) >>
+  (impl_tac >- simp[MAP_MAP_o, combinTheory.o_DEF]) >> strip_tac >>
+  imp_res_tac emit_op_extends >>
+  `run_inst_seq (emitted_insts sa cs'') ss = OK ss' /\
+   cs''.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa cs''` by
+    (qspecl_then [`sa`, `cs'`, `cs''`, `ss`, `tt`] mp_tac
+       run_inst_seq_chain >> simp[]) >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  `EVERY ($~) (MAP (\v. w = v) t') = ~MEM w t'` by
+    simp[EVERY_MAP, EVERY_MEM] >>
+  qexists_tac `tt'` >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_list_membership_correct:
+  !is_in needle ops ws w sa op sb ss.
+    (if is_in then compile_list_membership_in needle ops
+     else compile_list_membership_notin needle ops) sa = (op,sb) /\
+    MAP (\op. eval_operand op ss) ops = MAP SOME ws /\
+    eval_operand needle ss = SOME w /\ fresh_vars_wrt sa ss ==>
+    ?tt. run_inst_seq (emitted_insts sa sb) ss = OK tt /\
+      eval_operand op tt = SOME (bool_to_word (if is_in then MEM w ws else ~MEM w ws))
+Proof
+  Cases >> simp[] >> rpt strip_tac
+  >- (drule_all compile_list_membership_in_correct >> metis_tac[]) >>
+  drule_all compile_list_membership_notin_correct >> metis_tac[]
+QED
+
+Theorem compile_list_membership_sim:
+  !ctx func cenv cx es is_in needle ops ws w sa op sb s0 R.
+    (if is_in then compile_list_membership_in needle ops
+     else compile_list_membership_notin needle ops) sa = (op,sb) /\
+    local_ptrs_reserved cenv sa /\
+    (!z. needle = Var z ==> not_fresh_at sa z) /\
+    (!z. MEM (Var z) ops ==> not_fresh_at sa z) ==>
+    frag_exec ctx sa sb
+      (\ss. ss = s0 /\ stmt_state_rel ctx func cenv cx es ss /\
+        eval_operand needle ss = SOME w /\
+        MAP (\op. eval_operand op ss) ops = MAP SOME ws)
+      (\ss. stmt_state_rel ctx func cenv cx es ss /\
+        eval_operand op ss = SOME (bool_to_word (if is_in then MEM w ws else ~MEM w ws)) /\
+        (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+          lookup_var x ss = SOME w') /\
+        (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP ss.vs_allocas aid = SOME b) /\
+        ss.vs_memory = s0.vs_memory) R
+Proof
+  rpt strip_tac >> ho_match_mp_tac frag_exec_straight_fresh >>
+  goal_assum $ drule_at (Pat ` _ sa = (op,sb)`) >>
+  qexists_tac `\a. F` >> simp[] >>
+  conj_tac
+  >- (Cases_on `is_in` >> simp[straight_fresh_compile_list_membership]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      simp[eval_operand_drop_fresh] >>
+      qpat_x_assum `MAP _ ops = MAP SOME ws` (SUBST1_TAC o SYM) >>
+      irule MAP_CONG >> simp[] >> rpt strip_tac >>
+      irule eval_operand_drop_fresh >> metis_tac[]) >>
+  rpt strip_tac >> drule_all compile_list_membership_correct >> metis_tac[]
+QED
+
 (* ===== Flag membership ===== *)
 
 Theorem flag_and_zero:

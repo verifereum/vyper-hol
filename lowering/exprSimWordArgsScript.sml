@@ -22,8 +22,8 @@
  *   compile_word_builtin_sim — the composition
  *
  * Helper:
- *   eval_exprs_cons_cases, wb_args_cons_cases — the source's left-to-right
- *                            evaluation of the operands
+ *   wb_args_cons_cases — the source's left-to-right operand evaluation,
+ *                        using exprSimHyps' eval_exprs_cons_cases
  *   forced_eval_expr_preserves_scopes_dom — forced evaluation keeps scope domains
  *   lower_word_args_sim    — the operands' fragments, run in sequence
  *   wb_frame, wb_args_post, wb_args_exit — what holds after them
@@ -37,7 +37,7 @@
 
 Theory exprSimWordArgs
 Ancestors
-  list exprSim exprSimHyps exprSimOps loweringSlice exprLowering
+  list exprSim exprSimHyps exprSimOps exprSimUnop loweringSlice exprLowering
   exprLoweringProps vyperEvalExprPreservesScopesDom vyperInterpreter
   vyperState vyperContext vyperTyping compileEnv freshWrites fragExec varsExt
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
@@ -70,28 +70,6 @@ Proof
   rename1 `evaluate_builtin cx _ ann bt _ vs` >>
   Cases_on `evaluate_builtin cx es1.accounts ann bt (MAP expr_type args) vs` >>
   simp[bind_def, return_def, raise_def, read_result_def] >> rw[] >> gvs[]
-QED
-
-(* Argument evaluation forces each head before evaluating the tail. *)
-Theorem eval_exprs_cons_cases:
-  !cx e args es res es'.
-    eval_exprs cx (e::args) es = (res, es') ==>
-    (?exc. (do r <- eval_expr cx e; read_result cx r od) es = (INR exc, es') /\ res = INR exc) \/
-    ?v es1 rr. (do r <- eval_expr cx e; read_result cx r od) es = (INL v, es1) /\
-      eval_exprs cx args es1 = (rr, es') /\
-      res = (case rr of INL vs => INL (v::vs) | INR exc => INR exc)
-Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def, return_def] >>
-  Cases_on `eval_expr cx e es` >>
-  rename1 `eval_expr cx e es = (rr, es1)` >>
-  Cases_on `rr` >> simp[] >>
-  rename1 `read_result cx tv es1` >>
-  Cases_on `read_result cx tv es1` >>
-  rename1 `read_result cx tv es1 = (rv, es2)` >>
-  Cases_on `rv` >> simp[] >>
-  Cases_on `eval_exprs cx args es2` >>
-  rename1 `eval_exprs cx args es2 = (rr, es3)` >>
-  Cases_on `rr` >> simp[] >> rw[] >> gvs[]
 QED
 
 (* ===== A list-indexed word fragment interface ===== *)
@@ -176,6 +154,13 @@ Definition lower_word_args_def:
      od)
 End
 
+Theorem compile_multi_exprs_lower_word_args:
+  !args cenv. compile_multi_exprs compile_expr cenv args =
+    lower_word_args cenv expr_type args
+Proof
+  Induct >> simp[compile_multi_exprs_def, lower_word_args_def]
+QED
+
 Theorem lower_word_args_nil:
   !cenv arg_ty sa. lower_word_args cenv arg_ty [] sa = ([], sa)
 Proof
@@ -190,6 +175,39 @@ Theorem lower_word_args_cons:
 Proof
   rpt gen_tac >> simp[lower_word_args_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> simp[] >> metis_tac[]
+QED
+
+Theorem lower_value_bop_in_literal:
+  !cenv ty bop e1 et bd elems sa op sb.
+    (bop = In \/ bop = NotIn) /\ expr_type e1 = et /\
+    lower_value compile_expr cenv ty
+      (Builtin (BaseT BoolT) (Bop bop)
+        [e1; Builtin (ArrayT et bd) (MakeArray (SOME et) bd) elems]) sa = (op,sb) ==>
+    ?needle ops sm.
+      lower_word_args cenv expr_type (e1::elems) sa = (needle::ops,sm) /\
+      (if bop = In then compile_list_membership_in needle ops
+       else compile_list_membership_notin needle ops) sm = (op,sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, exprBopLoweringTheory.compile_expr_bop] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, exprBopLoweringTheory.lower_value_child_call] >>
+  simp[vyperASTTheory.expr_type_def] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  qmatch_goalsub_abbrev_tac `compile_multi_exprs (expr_child_callback bound compile_expr) cenv elems` >>
+  `compile_multi_exprs (expr_child_callback bound compile_expr) cenv elems =
+   compile_multi_exprs compile_expr cenv elems` by
+    (irule compile_multi_exprs_callback_cong >> rpt strip_tac >>
+     simp[FUN_EQ_THM, exprCallBoundsTheory.expr_child_callback_def] >>
+     drule exprCallBoundsTheory.expr_list_member_bound >>
+     simp[Abbr `bound`]) >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[exprBopLoweringTheory.as_stack_val_pair, unwrap_value_def, comp_return_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[lower_word_args_cons, GSYM compile_multi_exprs_lower_word_args] >>
+  metis_tac[]
 QED
 
 Theorem lower_word_args_shape:
@@ -370,12 +388,6 @@ Proof
   drule eval_expr_read_INL >> metis_tac[]
 QED
 
-Theorem eval_exprs_nil:
-  !cx es. eval_exprs cx [] es = (INL [], es)
-Proof
-  simp[Once evaluate_def, return_def]
-QED
-
 Theorem wb_args_cons_cases:
   !ctx func cenv cx arg_ty I e args es res es'.
     wb_args_ready ctx func cenv cx arg_ty I (e::args) /\ I es /\
@@ -458,6 +470,30 @@ Proof
   simp[wb_args_post_def, wb_frame_refl] >> metis_tac[]
 QED
 
+Theorem encoded_args_post_cons:
+  !func cenv cx e es sa s1 s0 es1 v x t es' xs vs u ctx W.
+    expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+    stmt_state_rel ctx func cenv cx es' u /\
+    LIST_REL (\x v. eval_operand x u = SOME (W v)) xs vs /\
+    wb_frame cenv es1 s1 t u /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
+    eval_operand x t = SOME (W v) /\
+    (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) ==>
+    stmt_state_rel ctx func cenv cx es' u /\
+    LIST_REL (\x v. eval_operand x u = SOME (W v)) (x::xs) (v::vs) /\
+    wb_frame cenv es sa s0 u
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac >> simp[] >> conj_tac
+  >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[wb_frame_vars]) >>
+  `wb_frame cenv es sa s0 t` by metis_tac[expr_post_frame] >>
+  irule wb_frame_trans >> simp[] >> conj_tac
+  >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
+  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+QED
+
 Theorem wb_args_post_cons:
   !func cenv cx e es sa s1 s0 es1 v x t es' xs vs u ctx.
     expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
@@ -504,22 +540,33 @@ Proof
   drule eval_expr_preserves_scopes_dom >> simp[]
 QED
 
-Theorem lower_word_args_sim:
-  !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
-    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+Theorem lower_word_args_sim_encoded:
+  !args ctx func cenv cx arg_ty Ready V W es sa xs sb rr es' s0.
+    Ready args es /\
+    (!e rest st. Ready (e::rest) st ==>
+      expr_sim ctx func cenv cx (arg_ty e) e st /\
+      (!res st'. (do r <- eval_expr cx e; read_result cx r od) st = (res,st') ==>
+        expr_res_ok res) /\
+      (!v st'. (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+        V e v /\ Ready rest st')) /\
+    (!e st ca cb t0 st' v x u. MEM e args /\ V e v /\
+      expr_post ctx func cenv cx e st ca cb t0 st' v x u ==>
+      eval_operand x u = SOME (W v)) /\
     wb_args_shape cenv arg_ty args /\
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     eval_exprs cx args es = (rr,es') /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
     frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?vs. rr = INL vs /\ wb_args_post ctx func cenv cx es sa s0 es' xs vs s)
+      (\s. ?vs. rr = INL vs /\ stmt_state_rel ctx func cenv cx es' s /\
+        LIST_REL (\x v. eval_operand x s = SOME (W v)) xs vs /\
+        wb_frame cenv es sa s0 s)
       (wb_args_exit rr)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
-      irule lower_word_args_nil_sim) >>
+      irule frag_exec_refl >> simp[wb_frame_refl]) >>
   rpt gen_tac >> strip_tac >>
-  rename1 `wb_args_ready ctx func cenv cx arg_ty Inv (e::args)` >>
+  rename1 `Ready (e::args) es` >>
   reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
@@ -536,31 +583,88 @@ Proof
   drule_all lower_word_args_shape_ready >> strip_tac >>
   `fn_has_code sa s1 func /\ fn_has_code s1 sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  drule_all wb_args_ready_head >> strip_tac >>
-  drule_all wb_args_cons_cases >> strip_tac
+  qpat_assum `!e rest st. Ready (e::rest) st ==> _`
+    (drule_then strip_assume_tac) >>
+  drule eval_exprs_cons_cases >> strip_tac
   >- (gvs[wb_args_exit_def] >>
+      `expr_res_ok (INR exc)` by metis_tac[] >>
       drule_all expr_sim_apply >>
       disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
       irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]) >>
   rename1 `eval_exprs cx args es1 = (rr1, _)` >>
-  `local_ptrs_reserved cenv s1` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `wb_args_ready ctx func cenv cx arg_ty Inv args` by
-    metis_tac[wb_args_ready_tail] >>
+  `V e v /\ Ready args es1` by metis_tac[] >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  `local_ptrs_reserved cenv s1` by metis_tac[local_ptrs_reserved_next_var] >>
   `MAP FDOM es.scopes = MAP FDOM es1.scopes` by
     (drule forced_eval_expr_preserves_scopes_dom >> simp[]) >>
-  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
   `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
   drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
   simp[expr_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
   qx_gen_tac `t` >> strip_tac >>
+  qpat_x_assum `!e' st ca cb t0 st' v x u. _` mp_tac >>
+  pure_rewrite_tac[RIGHT_AND_OVER_OR, DISJ_IMP_THM] >>
+  disch_then (fn th => assume_tac (cj 1 th) >> assume_tac (cj 2 th)) >>
   first_x_assum (drule_all_then (qspec_then `t` mp_tac)) >>
   disch_then (mp_then Any irule frag_exec_weaken) >>
   conj_tac >- (Cases_on `rr1` >> simp[wb_args_exit_def]) >>
   conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[expr_post_state]) >>
   rpt strip_tac >> gvs[] >>
-  irule wb_args_post_cons >> goal_assum (drule_at Any) >> simp[] >>
-  goal_assum (drule_at Any) >> simp[] >> qexists_tac `e` >> simp[]
+  `eval_operand x t = SOME (W' v)` by metis_tac[] >>
+  drule_all encoded_args_post_cons >> simp[]
+QED
+
+Theorem compile_multi_exprs_typed_sim:
+  !args ctx func cenv cx Ready V tv es sa xs sb rr es' s0.
+    Ready args es /\
+    (!e rest st. Ready (e::rest) st ==>
+      expr_sim ctx func cenv cx (expr_type e) e st /\
+      (!res st'. (do r <- eval_expr cx e; read_result cx r od) st = (res,st') ==>
+        expr_res_ok res) /\
+      (!v st'. (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+        V e v /\ Ready rest st')) /\
+    (!e v. MEM e args /\ V e v ==> is_word_type (expr_type e) /\
+      evaluate_type (get_tenv cx) (expr_type e) = SOME tv) /\
+    wb_args_shape cenv expr_type args /\
+    compile_multi_exprs compile_expr cenv args sa = (xs,sb) /\
+    eval_exprs cx args es = (rr,es') /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. ?vs. rr = INL vs /\ stmt_state_rel ctx func cenv cx es' s /\
+        LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) xs vs /\
+        wb_frame cenv es sa s0 s)
+      (wb_args_exit rr)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[compile_multi_exprs_lower_word_args] >>
+  irule lower_word_args_sim_encoded >> simp[] >>
+  qexistsl_tac [`Ready`, `V`, `expr_type`, `args`] >> simp[] >>
+  metis_tac[expr_post_typed_stack_operand]
+QED
+
+Theorem lower_word_args_sim:
+  !args ctx func cenv cx arg_ty I es sa xs sb rr es' s0.
+    wb_args_ready ctx func cenv cx arg_ty I args /\ I es /\
+    wb_args_shape cenv arg_ty args /\
+    lower_word_args cenv arg_ty args sa = (xs,sb) /\
+    eval_exprs cx args es = (rr,es') /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. ?vs. rr = INL vs /\ wb_args_post ctx func cenv cx es sa s0 es' xs vs s)
+      (wb_args_exit rr)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `wb_args_ready ctx func cenv cx arg_ty Inv args` >>
+  rewrite_tac[wb_args_post_def] >>
+  irule lower_word_args_sim_encoded >> simp[] >>
+  qexistsl_tac [
+    `\args es. wb_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es`,
+    `\e v. word_value v /\ is_word_type (expr_type e) /\
+       IS_SOME (evaluate_type (get_tenv cx) (expr_type e))`, `arg_ty`, `args`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all expr_post_word_operand >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all wb_args_ready_head >> strip_tac >> simp[] >>
+  rpt strip_tac >> metis_tac[wb_args_ready_tail]
 QED
 
 Theorem expr_post_word_builtin:
@@ -620,4 +724,70 @@ Proof
   irule expr_post_word_builtin >> goal_assum (drule_at Any) >>
   simp[] >> qexists_tac `sm` >> simp[] >>
   qexistsl_tac [`t`, `vs`, `xs`] >> simp[]
+QED
+
+Theorem compile_encoded_membership_sim:
+  !ctx func cenv cx ty E e1 elems Ready V W es is_in.
+    expr_type E = BaseT BoolT /\ Ready (e1::elems) es /\
+    (!e rest st. Ready (e::rest) st ==>
+      expr_sim ctx func cenv cx (expr_type e) e st /\
+      (!res st'. (do r <- eval_expr cx e; read_result cx r od) st = (res,st') ==>
+        expr_res_ok res) /\
+      (!v st'. (do r <- eval_expr cx e; read_result cx r od) st = (INL v,st') ==>
+        V e v /\ Ready rest st')) /\
+    (!e st ca cb t0 st' v x u. MEM e (e1::elems) /\ V e v /\
+      expr_post ctx func cenv cx e st ca cb t0 st' v x u ==>
+      eval_operand x u = SOME (W v)) /\
+    wb_args_shape cenv expr_type (e1::elems) /\
+    (!sa op sb. lower_value compile_expr cenv ty E sa = (op,sb) ==>
+      ?needle ops sm. lower_word_args cenv expr_type (e1::elems) sa = (needle::ops,sm) /\
+        (if is_in then compile_list_membership_in needle ops
+         else compile_list_membership_notin needle ops) sm = (op,sb)) /\
+    eval_expr cx E es =
+      (do vs <- eval_exprs cx (e1::elems);
+          return (Value (BoolV (if is_in then MEM (HD vs) (TL vs)
+                               else ~MEM (HD vs) (TL vs)))) od) es /\
+    (!vs es'. eval_exprs cx (e1::elems) es = (INL vs,es') ==>
+      (MEM (W (HD vs)) (MAP W (TL vs)) <=> MEM (HD vs) (TL vs))) ==>
+    expr_sim ctx func cenv cx ty E es
+Proof
+  rpt gen_tac >> strip_tac >> rewrite_tac[expr_sim_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!sa op sb. _ ==> _` drule >> strip_tac >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `straight_fresh (if is_in then compile_list_membership_in needle ops
+                   else compile_list_membership_notin needle ops)` by
+    (Cases_on `is_in` >> simp[straight_fresh_compile_list_membership]) >>
+  `cs_extends sm sb` by (drule_all straight_fresh_cs_extends >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  Cases_on `eval_exprs cx (e1::elems) es` >>
+  rename1 `eval_exprs cx (e1::elems) es = (rr,st)` >>
+  Cases_on `rr` >> gvs[bind_def, return_def, read_result_def]
+  >- (rename1 `eval_exprs cx (e1::elems) es = (INL vs,es')` >>
+      `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+      qspec_then `e1::elems` (drule_all o SRULE [bind_def]) lower_word_args_sim_encoded >>
+      disch_then (qspec_then `s0` mp_tac) >>
+      simp[wb_args_exit_def, expr_exit_def] >>
+      disch_then (mp_then Any irule wb_frag_then) >> simp[] >>
+      qx_gen_tac `t` >> strip_tac >>
+      gvs[] >>
+      `!z. MEM (Var z) ops ==> not_fresh_at sm z` by
+        (gvs[EVERY_MEM] >> metis_tac[]) >>
+      `MAP (\x. eval_operand x t) ops = MAP SOME (MAP W' ys)` by
+        (simp[MAP_EQ_LIST_REL, LIST_REL_MAP2] >>
+         metis_tac[LIST_REL_LENGTH]) >>
+      drule_all compile_list_membership_sim >>
+      disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`] mp_tac) >>
+      disch_then (qspecl_then [`MAP W' ys`, `W' v`, `t`, `\r. F`] mp_tac) >>
+      disch_then (mp_then Any irule frag_exec_weaken) >> simp[] >>
+      rpt strip_tac >> irule expr_post_word_intro >> simp[] >>
+      simp[is_word_type_def, word_value_def, valueEncodingTheory.val_to_w256_def,
+           venomExecSemanticsTheory.bool_to_word_def] >>
+      conj_tac
+      >- (Cases_on `if is_in then MEM v ys else ~MEM v ys` >> simp[]) >>
+      irule wb_frame_readonly_tail >> qexistsl_tac [`sm`, `t`] >> simp[]) >>
+  qspec_then `e1::elems` (drule_all o SRULE [bind_def]) lower_word_args_sim_encoded >>
+  disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >> strip_tac >>
+  irule frag_exec_exit_prefix >> goal_assum (drule_at Any) >> simp[]
 QED
