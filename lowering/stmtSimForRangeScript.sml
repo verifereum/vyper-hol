@@ -1192,7 +1192,10 @@ Resume compile_for_range_checked_frag[state]:
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
      qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
      `not_fresh_at s2 q` by
-       (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+       (qpat_assum `local_ptrs_reserved cenv s2`
+          (mp_tac o CONJUNCT2 o REWRITE_RULE [local_ptrs_reserved_def]) >>
+        disch_then (qspecl_then [`nm`, `nm`, `q`, `qsz`, `qsz`] mp_tac) >>
+        simp[]) >>
      qpat_assum `!q. not_fresh_at s2 q ==> _` (drule_then strip_assume_tac) >>
      qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
      fs[lookup_var_def, jump_to_def]) >>
