@@ -611,3 +611,95 @@ Proof
     as_pc := st.as_pc + LENGTH (exec_stack_op initial_fmp h)|>` >>
   gvs[]
 QED
+
+(* Syntax enclosure: spills are allowed here and eliminated by consumers. *)
+Definition simple_or_spill_def:
+  simple_or_spill s <=>
+    is_simple_stack_op s \/ (?off. s = SOSpill off) \/
+    (?off. s = SORestore off)
+End
+
+Theorem simple_or_spill_no_spills:
+  EVERY simple_or_spill ops /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  EVERY is_simple_stack_op ops
+Proof
+  simp[EVERY_MEM, simple_or_spill_def] >> metis_tac[]
+QED
+
+Theorem do_spill_tos_enclosed:
+  EVERY simple_or_spill (FST (do_spill_tos ps))
+Proof
+  simp[stackPlanOpsTheory.do_spill_tos_def] >>
+  pairarg_tac >> simp[simple_or_spill_def]
+QED
+
+Theorem do_spill_at_enclosed:
+  EVERY simple_or_spill (FST (do_spill_at dist ps))
+Proof
+  simp[stackPlanOpsTheory.do_spill_at_def] >>
+  IF_CASES_TAC >- simp[do_spill_tos_enclosed] >>
+  pairarg_tac >> simp[simple_or_spill_def, is_simple_stack_op_def] >>
+  metis_tac[do_spill_tos_enclosed, pairTheory.FST]
+QED
+
+Theorem do_restore_enclosed:
+  EVERY simple_or_spill (FST (do_restore at ps))
+Proof
+  simp[stackPlanOpsTheory.do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled at` >>
+  simp[simple_or_spill_def]
+QED
+
+Theorem spill_fold_enclosed[local]:
+  !items ops offs al.
+    EVERY simple_or_spill ops ==>
+    EVERY simple_or_spill (FST
+      (FOLDL (\(ops, offs, al) item.
+        (ops ++ [SOSpill (FST (alloc_spill_slot al))],
+         SNOC (FST (alloc_spill_slot al)) offs, SND (alloc_spill_slot al)))
+        (ops, offs, al) items))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  simp[simple_or_spill_def]
+QED
+
+Theorem do_swap_enclosed:
+  EVERY simple_or_spill (FST (do_swap dist ps))
+Proof
+  simp[stackPlanOpsTheory.do_swap_def] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- simp[simple_or_spill_def, is_simple_stack_op_def] >>
+  pairarg_tac >> simp[EVERY_MAP, simple_or_spill_def] >>
+  qspecl_then [`top_n (dist + 1) ps.ps_stack`, `[]`, `[]`, `ps.ps_alloc`]
+    mp_tac spill_fold_enclosed >> gvs[LET_THM, pairTheory.UNCURRY]
+QED
+
+Theorem do_dup_enclosed:
+  EVERY simple_or_spill (FST (do_dup dist ps))
+Proof
+  simp[stackPlanOpsTheory.do_dup_def] >>
+  IF_CASES_TAC >- simp[simple_or_spill_def, is_simple_stack_op_def] >>
+  pairarg_tac >>
+  simp[EVERY_FLAT, EVERY_MAP, simple_or_spill_def, is_simple_stack_op_def] >>
+  qspecl_then [`REVERSE (top_n (dist - 15) ps.ps_stack)`, `[]`, `[]`, `ps.ps_alloc`]
+    mp_tac spill_fold_enclosed >> gvs[LET_THM, pairTheory.UNCURRY] >>
+  Cases_on `dist <= 31` >> simp[simple_or_spill_def, is_simple_stack_op_def]
+QED
+
+Theorem reduce_depth_plan_enclosed:
+  !fuel target_ops target_op f target_len ps.
+    EVERY simple_or_spill
+      (FST (reduce_depth_plan fuel target_ops target_op f target_len ps))
+Proof
+  Induct >> simp[stackPlanOpsTheory.reduce_depth_plan_def] >>
+  rpt gen_tac >> IF_CASES_TAC >- simp[] >>
+  Cases_on `stack_get_unfixed_depth target_op f target_len ps.ps_stack`
+  >- simp[] >>
+  simp[] >> IF_CASES_TAC >- simp[] >>
+  Cases_on `select_spill_candidate ps.ps_stack target_ops x target_len`
+  >- simp[] >>
+  simp[] >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  metis_tac[do_spill_at_enclosed, pairTheory.FST]
+QED
