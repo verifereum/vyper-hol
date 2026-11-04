@@ -26,8 +26,9 @@ Ancestors
    between two PHIs.  The block body continues from ps1 with the
    generate_block_insts_plan call the planner makes for the rest.  ps is
    the lineage entry state from pred (the block vs_prev_bb names) with
-   whatever cleanup fields lineage_state_block_plan chose; a PHI block has
-   at least two predecessors, so no clean_stack_plan runs before it.  The
+   whatever cleanup fields lineage_state_block_plan chose; the block does
+   not have exactly one predecessor, so no clean_stack_plan runs before
+   it (generate_block_plan).  The
    region premise is for the block's end state: the allocator only grows
    along the plan (allocMono), so it covers ps1.
 
@@ -49,10 +50,9 @@ Theorem phi_prefix_frame_sim:
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\
     codegen_ready_fn fn /\ retpc_shape_ok fn /\ opaque_use_ok fn /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
     vs.vs_prev_bb = SOME pred /\
     lineage_entry liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)
@@ -62,6 +62,8 @@ Theorem phi_prefix_frame_sim:
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
     ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) ops \/ MEM (SORestore off) ops ==>
+           off < dimword (:256)) /\
     (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
        operand_val (frame_view fn ra vs) lo at =
        operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)) /\
@@ -124,8 +126,6 @@ Theorem revert_forward_frame_sim:
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\
     codegen_ready_fn fn /\ opaque_use_ok fn /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     revert_forward_pair bb i j /\ vs.vs_inst_idx = i /\
     LENGTH (get_params bb.bb_instructions) <= i /\

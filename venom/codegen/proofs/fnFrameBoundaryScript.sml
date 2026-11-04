@@ -100,13 +100,11 @@ QED
    induction's, so the hypothesis is gen_fn_simulation for every function
    at that fuel: the mutual induction hypothesis.  It is stated here
    without the context-level premises gen_fn_simulation shares with this
-   lemma.  The callee premises are what the hypothesis needs about the
-   callee that fn's own premises don't give:
-     - no GAS and no dead_stack_marker operand (gen_fn_frame_simulation
-       assumes these only of fn; for the callee they must come from a
-       context-wide form of those premises);
-     - fn_has_retpc or no parameters: the code pushes the return label
-       above the arguments, which fn_entry_state_rel matches only then.
+   lemma: no GAS anywhere in the context, and every INVOKE target has a
+   return-PC parameter (the code pushes the return label above the
+   arguments, which fn_entry_state_rel matches only then).  The callee's
+   arity matches INVOKE's arguments by invoke_layout_wf, from
+   fmp_lowered_context_wf in codegen_context_obligations.
    Callee placement is fnPlanPlace$fn_region_placed (the entry label is
    the function name, fn_shape_ok).  The remaining premises are
    gen_inst_frame_sim's.
@@ -140,13 +138,14 @@ Theorem gen_invoke_frame_sim:
     Inv ctx fn inst vs /\ active_inst fn inst vs /\
     inst.inst_opcode = INVOKE /\
     inst.inst_operands = Label nm :: arg_ops /\
-    (!callee. lookup_function nm ctx.ctx_functions = SOME callee ==>
-       EVERY (\cbb. EVERY (\ci. ci.inst_opcode <> GAS) cbb.bb_instructions)
-         callee.fn_blocks /\
-       EVERY (\cbb. EVERY (\ci. EVERY (\op. op <> dead_stack_marker)
-         ci.inst_operands) cbb.bb_instructions) callee.fn_blocks /\
-       (fn_has_retpc callee \/
-        get_params (HD callee.fn_blocks).bb_instructions = [])) /\
+    EVERY (\f. EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS)
+      bb.bb_instructions) f.fn_blocks) ctx.ctx_functions /\
+    (!f inst callee_name args callee.
+       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       inst.inst_opcode = INVOKE /\
+       inst.inst_operands = Label callee_name :: args /\
+       lookup_function callee_name ctx.ctx_functions = SOME callee ==>
+       fn_has_retpc callee) /\
     (!j. j < LENGTH ctx.ctx_functions /\ (EL j ctx.ctx_functions).fn_name = nm ==>
        ?off pc. FLOOKUP lo nm = SOME off /\ off < dimword (:256) /\
                 FLOOKUP o2pc off = SOME pc /\
@@ -157,10 +156,6 @@ Theorem gen_invoke_frame_sim:
        j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
        EL j cp.cp_regions = rj /\
        MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
-       EVERY (\cbb. EVERY (\ci. ci.inst_opcode <> GAS) cbb.bb_instructions)
-         callee.fn_blocks /\
-       EVERY (\cbb. EVERY (\ci. EVERY (\op. op <> dead_stack_marker)
-         ci.inst_operands) cbb.bb_instructions) callee.fn_blocks /\
        (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
        fn_entry_inv Inv ctx callee cvs /\
        asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
@@ -250,6 +245,9 @@ QED
    block's run from index 0 is its run from vs_p, past the prefix.  The
    rest of the entry block then runs as any block body does.  The region
    premise is fn_frame_inv's region clause for ps1, as in genFrameSim.
+   With 17 or more parameters popmany_plan and optimistic_swap_plan can
+   spill; the offset bound keeps those pushes from wrapping, as the
+   per-instruction lemmas' SORestore bound does.
 
    Why it should hold: canonical_param_prefix orders the PARAM indices and
    puts RETPC_PARAM last, and fn_entry_state_rel stacks ra above
@@ -271,6 +269,7 @@ Theorem entry_params_frame_sim:
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= spill_base /\
     ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+    (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
     fn_entry_state_rel cp fn vs as ra rest /\
     asm_block_at prog as.as_pc
       (execute_plan cp.cp_initial_fmp

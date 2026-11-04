@@ -46,11 +46,10 @@ Theorem lineage_alias_successor:
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
     retpc_shape_ok fn /\ opaque_use_ok fn /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lineage_state liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps /\
     vs.vs_current_bb = lbl /\
+    (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     lookup_block lbl fn.fn_blocks = SOME bb /\
     generate_block_plan liveness dfg cfg fn bb
       (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =

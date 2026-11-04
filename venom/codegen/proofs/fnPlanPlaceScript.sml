@@ -8,11 +8,9 @@
  * the label's offset in compute_label_offsets is that AsmLabel's, and
  * build_offset_to_pc maps the offset back to its index.
  *
- * Label uniqueness is a premise: codegen_assembly does not check it, and
- * nothing in unit_shape_ok or ctx_wf makes block labels distinct across
- * functions or from the data segment's section names.  Python's assembler
- * panics on a duplicate symbol (resolve_symbols, "duplicate label"), over
- * labels and data headers together, which is what the premise states.
+ * Symbol uniqueness and the program size come from codegen_assembly's
+ * asm_symbols_ok check: every AsmLabel/AsmDataHeader name is distinct, as
+ * Python's assembler requires, and the program fits 2-byte label pushes.
  *
  * TOP-LEVEL (all CHEATED):
  *   dfs_block_code_placed   — a planned block's code sits at its label
@@ -38,11 +36,11 @@ Ancestors
    whatever lbl_ctr is), and a DFS state's block plan is a slice of it, so
    execute_plan_append places block_ops at the sum of the earlier regions'
    and blocks' asm lengths.  The first asm instruction is AsmLabel lbl;
-   with every AsmLabel/AsmDataHeader name distinct it is the only binding
+   with every AsmLabel/AsmDataHeader name distinct (asm_symbols_ok) it is
+   the only binding
    of lbl in compute_label_offsets.  AsmLabel has size 1, so no later
    instruction shares its offset and build_offset_to_pc maps it to its
-   index.  off < dimword (:256) from asm_encoding_wf (symbol_size bytes,
-   codegenEncodingWf$codegen_assembly_asm_encoding_wf). *)
+   index.  off < 65536 < dimword (:256) from asm_symbols_ok's size bound. *)
 Theorem dfs_block_code_placed:
   !rpolicy unit cp prog ctx lo o2pc i fn r liveness dfg cfg ch growth lbl_ctr
    ps_end lbl bb ps_dfs block_ops ps_dfs_after.
@@ -51,10 +49,6 @@ Theorem dfs_block_code_placed:
     o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
-    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
-                                    AsmLabel l => [l]
-                                  | AsmDataHeader l => [l]
-                                  | _ => []) prog)) /\
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
@@ -94,10 +88,6 @@ Theorem fn_region_placed:
     o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
-    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
-                                    AsmLabel l => [l]
-                                  | AsmDataHeader l => [l]
-                                  | _ => []) prog)) /\
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r
     ==>
@@ -115,19 +105,15 @@ QED
    IS_SOME (FLOOKUP lo "revert") premise.
 
    Why it should hold: context_plan_ops ends with revert_postamble, which
-   starts with SOLabel "revert", the only "revert" symbol under the
-   distinctness premise. *)
+   starts with SOLabel "revert", the only "revert" symbol by
+   asm_symbols_ok. *)
 Theorem revert_postamble_placed:
   !rpolicy unit cp prog ctx lo o2pc.
     ctx = unit.cu_context /\
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cp /\
-    codegen_assembly rpolicy unit = SOME prog /\
-    ALL_DISTINCT (FLAT (MAP (\ai. case ai of
-                                    AsmLabel l => [l]
-                                  | AsmDataHeader l => [l]
-                                  | _ => []) prog))
+    codegen_assembly rpolicy unit = SOME prog
     ==>
     ?off pc.
       FLOOKUP lo "revert" = SOME off /\ off < dimword (:256) /\
