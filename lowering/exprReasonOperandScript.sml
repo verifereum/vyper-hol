@@ -383,6 +383,15 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
+Theorem reason_widen_copy_operand[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[reason_alloc_operand]
+QED
+
 Theorem reason_type_builtin_convert[local]:
   (!sa op sb. lower_value f cenv (expr_type (HD args)) (HD args) sa = (op,sb)
                ==> !l. op <> Label l) /\
@@ -393,6 +402,13 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
   >- (strip_tac >> gvs[reason_result_shape_def]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (pop_assum kall_tac >> strip_tac >>
+      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+      Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+      strip_tac >> gvs[reason_result_shape_def] >>
+      metis_tac[reason_widen_copy_operand]) >>
   pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
@@ -742,6 +758,8 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -758,6 +776,15 @@ Resume reason_compile_call[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_external_call_operand]
+QED
+
+Resume reason_compile_call[create]:
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val rt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[reason_result_shape_def] >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
+            safe_operand_def]
 QED
 
 Resume reason_compile_call[send]:

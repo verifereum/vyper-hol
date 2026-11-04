@@ -618,13 +618,13 @@ val builtin_cases = [
        [Name (BaseT (BytesT (Dynamic 32))) "b"]``),
   ("RawCreate", ``Nonpayable``, ``[("b", BaseT (BytesT (Dynamic 100)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate F T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate F T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0)] NONE``),
   ("RawCreate salt", ``Nonpayable``,
    ``[("b", BaseT (BytesT (Dynamic 100))); ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (BytesT (Fixed 32))) "s"] NONE``),
@@ -632,7 +632,7 @@ val builtin_cases = [
    ``[("b", BaseT (BytesT (Dynamic 100))); ("a", BaseT (UintT 256));
       ("s", BaseT (BytesT (Fixed 32)))]``,
    ``BaseT AddressT``,
-   ``Call (BaseT AddressT) (CreateTarget RawCreate T T)
+   ``Call (BaseT AddressT) (CreateTarget RawCreate T T [])
        [Name (BaseT (BytesT (Dynamic 100))) "b";
         Literal (BaseT (UintT 256)) (IntL 0);
         Name (BaseT (UintT 256)) "a";
@@ -1280,7 +1280,7 @@ val () = expr_case "send" ``Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE``
 val () = expr_case "selfdestruct" ``Call NoneT SelfDestructTarget [^arg_a] NONE``
   [``Nonpayable``] [``View``]
 val () = return_case "create_minimal_proxy_to" ``BaseT AddressT``
-  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T)
+  ``Call (BaseT AddressT) (CreateTarget CreateMinimalProxy F T [])
       [^arg_a; ^(uint 0)] NONE``
   [``Nonpayable``] [``View``]
 
@@ -1304,6 +1304,23 @@ val () = return_case "staticcall with default_return_value" u256
 val () = expr_case "void extcall with default_return_value"
   ``Call NoneT (ExtCall F F ("poke", [], NoneT) [EKDefault])
       [^arg_a; Call NoneT SelfDestructTarget [^arg_a] NONE] NONE``
+  [] [``Payable``, ``Nonpayable``]
+val () = return_case "staticcall returning a tuple"
+  ``TupleT [BaseT (UintT 256); BaseT (UintT 256)]``
+  ``Call (TupleT [BaseT (UintT 256); BaseT (UintT 256)])
+      (ExtCall T F ("pair", [BaseT (UintT 256)],
+                    TupleT [BaseT (UintT 256); BaseT (UintT 256)]) [])
+      [^arg_a; ^(uint 1)] NONE``
+  [``Pure``, ``View``] []
+(* Vyper can't name None in a type, so no interface returns or takes a type
+   with None inside. *)
+val () = expr_case "staticcall returning a tuple of None"
+  ``Call (TupleT [NoneT]) (ExtCall T F ("f", [], TupleT [NoneT]) [])
+      [^arg_a] NONE``
+  [] [``Pure``, ``View``, ``Nonpayable``, ``Payable``]
+val () = expr_case "extcall with a None parameter"
+  ``Call NoneT (ExtCall F F ("poke", [NoneT], NoneT) [])
+      [^arg_a; Call NoneT (Send F) [^arg_a; ^(uint 1)] NONE] NONE``
   [] [``Payable``, ``Nonpayable``]
 val () = expr_case "raw_call"
   ``Call NoneT (RawCallTarget ^raw_call_flags)

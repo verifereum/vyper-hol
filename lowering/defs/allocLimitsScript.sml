@@ -38,9 +38,10 @@ End
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
-   is not a word, the output of a calldata slice, and the copy unwrap_value
-   makes of the node's value when it is not in memory, which every node's
-   type_alloc_ok bounds.  The same recursion as byte_widths_expr. *)
+   is not a word, a convert to a bytestring (the copy of a widening cast),
+   the output of a calldata slice, and the copy unwrap_value makes of the
+   node's value when it is not in memory, which every node's type_alloc_ok
+   bounds.  The same recursion as byte_widths_expr. *)
 Definition alloc_limits_expr_def:
   alloc_limits_expr cenv (Name t _) = type_alloc_ok cenv t /\
   alloc_limits_expr cenv (TopLevelName t _) = type_alloc_ok cenv t /\
@@ -72,6 +73,7 @@ Definition alloc_limits_expr_def:
     (type_alloc_ok cenv t /\
      (case tb of
         Empty => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
+      | Convert => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
       | AbiEncode ensure mid =>
           (let single = (LENGTH es = 1 /\ ~ensure) in
            let enc_ty = if single then expr_type (HD es)

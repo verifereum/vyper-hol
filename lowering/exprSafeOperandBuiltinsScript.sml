@@ -21,6 +21,7 @@ Ancestors
   exprLoweringProps freshWrites compileEnv emitHelper context
   exprLowering exprCallBounds vyperTypeSystem vyperValue vyperAST vyperTypeBuiltins
   builtinSimple builtinMath builtinHashing builtinMisc builtinBytes builtinSystem
+  builtinCreate
 
 (* Non-label result origins, also for non-word types. *)
 
@@ -287,18 +288,79 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Theorem membership_primitive_next_var[local]:
+  (!s. s.cs_next_var <= (SND (fresh_var s)).cs_next_var) /\
+  (!p s. s.cs_next_var <= (SND (fresh_label p s)).cs_next_var) /\
+  (!l s. s.cs_next_var <= (SND (new_block l s)).cs_next_var) /\
+  (!opc ops outs s. s.cs_next_var <= (SND (emit_inst opc ops outs s)).cs_next_var) /\
+  (!opc ops s. s.cs_next_var <= (SND (emit_op opc ops s)).cs_next_var)
+Proof
+  rpt conj_tac >> rpt gen_tac
+  >- (mp_tac (Q.SPEC `s` ci_mono_fresh_var) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`p`, `s`] ci_mono_fresh_label) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`l`, `s`] ci_mono_new_block) >> gvs[ci_mono_def])
+  >- (mp_tac (Q.SPECL [`opc`, `ops`, `outs`, `s`] ci_mono_emit_inst) >>
+      gvs[ci_mono_def]) >>
+  mp_tac (Q.SPECL [`opc`, `ops`, `s`] ci_mono_emit_op) >> gvs[ci_mono_def]
+QED
+
+Theorem membership_bind_preserve[local]:
+  (!s. s.cs_next_var <= (SND (f s)).cs_next_var) /\
+  (!x s. safe_operand s op ==>
+     safe_operand (SND (g x s)) (FST (g x s))) ==>
+  !s. safe_operand s op ==>
+    safe_operand (SND (comp_bind f g s)) (FST (comp_bind f g s))
+Proof
+  strip_tac >> gen_tac >> strip_tac >> simp[comp_bind_def] >>
+  Cases_on `f s` >> simp[] >>
+  first_x_assum irule >> irule safe_operand_mono >>
+  qexists_tac `s` >> gvs[] >> metis_tac[pairTheory.SND]
+QED
+
+Theorem membership_ignore_preserve[local]:
+  (!s. s.cs_next_var <= (SND (f s)).cs_next_var) /\
+  (!s. safe_operand s op ==>
+     safe_operand (SND (g s)) (FST (g s))) ==>
+  !s. safe_operand s op ==>
+    safe_operand (SND (comp_ignore_bind f g s))
+                 (FST (comp_ignore_bind f g s))
+Proof
+  strip_tac >> pure_rewrite_tac[comp_ignore_bind_def] >>
+  ho_match_mp_tac membership_bind_preserve >> simp[]
+QED
+
+Theorem membership_fresh_start[local]:
+  (!v s. safe_operand s (Var v) ==>
+    safe_operand (SND (g v s)) (FST (g v s))) ==>
+  !s. safe_operand (SND (comp_bind fresh_var g s))
+                  (FST (comp_bind fresh_var g s))
+Proof
+  strip_tac >> gen_tac >> simp[comp_bind_def] >>
+  Cases_on `fresh_var s` >> simp[] >>
+  first_x_assum irule >> metis_tac[fresh_var_safe_operand]
+QED
+
 Theorem compile_array_membership_loop_safe_operand:
   (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
   compile_array_membership_loop needle arr len sz off loader isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
+  strip_tac >>
+  `!p s. s.cs_next_var <= (SND (loader p s)).cs_next_var` by
+    (rpt gen_tac >> Cases_on `loader p s` >> gvs[] >> metis_tac[]) >>
+  `!s. safe_operand
+      (SND (compile_array_membership_loop needle arr len sz off loader isin s))
+      (FST (compile_array_membership_loop needle arr len sz off loader isin s))` suffices_by
+    (disch_then (qspec_then `sa` mp_tac) >> simp[]) >>
   Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, emit_op_def, emit_inst_def,
-       fresh_label_def, new_block_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
-  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `!p s v t. _` drule_all >>
-  simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
+  pure_rewrite_tac[compile_array_membership_loop_def] >>
+  ho_match_mp_tac membership_fresh_start >>
+  rpt (FIRST [ho_match_mp_tac membership_bind_preserve,
+              ho_match_mp_tac membership_ignore_preserve,
+              gen_tac] >>
+       rpt conj_tac >> BETA_TAC) >>
+  simp[membership_primitive_next_var, comp_return_def] >>
+  metis_tac[emit_op_safe_operand, pairTheory.PAIR]
 QED
 
 Theorem compile_var_array_membership_safe_operand:
@@ -344,6 +406,94 @@ Proof
   strip_tac >> rpt (pairarg_tac >> gvs[])
 QED
 
+(* Creation always hands out a fresh CREATE/CREATE2 result, even when
+   failure checking emits further instructions or starts a new block. *)
+Theorem compile_check_create_result_safe_operand:
+  safe_operand sa addr /\
+  compile_check_create_result addr rof sa = (r,sb) ==> safe_operand sb r
+Proof
+  Cases_on `rof` >>
+  simp[compile_check_create_result_def, compile_alloc_buffer_def,
+       emit_op_def, emit_void_def, emit_inst_def, fresh_label_def,
+       new_block_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  gvs[safe_operand_def, not_fresh_at_def] >>
+  rpt strip_tac >> res_tac >> decide_tac
+QED
+
+Theorem emit_void_preserves_safe_operand:
+  safe_operand sa r /\ emit_void opc ops sa = (u,sb) ==> safe_operand sb r
+Proof
+  simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def] >>
+  strip_tac >> gvs[safe_operand_def, not_fresh_at_def]
+QED
+
+Theorem compile_create_dispatch_safe_operand:
+  compile_create_dispatch code_ptr len value salt rof sa = (r,sb) ==>
+  safe_operand sb r
+Proof
+  Cases_on `salt` >> simp[compile_create_dispatch_def, comp_bind_def] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[compile_check_create_result_safe_operand, emit_op_safe_operand]
+QED
+
+Theorem compile_create_copy_safe_operand:
+  compile_create_copy target value salt rof sa = (r,sb) ==> safe_operand sb r
+Proof
+  Cases_on `salt` >> Cases_on `rof` >>
+  simp[compile_create_copy_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[compile_check_create_result_safe_operand, emit_op_safe_operand,
+            emit_void_preserves_safe_operand]
+QED
+
+Theorem compile_create_blueprint_append_safe_operand:
+  compile_create_blueprint_append target value salt offset code_size code_ptr len rof sa =
+    (r,sb) ==> safe_operand sb r
+Proof
+  Cases_on `salt` >> Cases_on `rof` >>
+  simp[compile_create_blueprint_append_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  metis_tac[compile_check_create_result_safe_operand, emit_op_safe_operand,
+            emit_void_preserves_safe_operand]
+QED
+
+Theorem compile_raw_create_safe_operand:
+  compile_raw_create cfn cenv bytecode value args salt rof sa = (r,sb) ==>
+  safe_operand sb r
+Proof
+  simp[compile_raw_create_def, LET_THM, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  metis_tac[compile_create_dispatch_safe_operand]
+QED
+
+Theorem compile_create_call_safe_operand:
+  compile_create_call cfn cenv ck salted rof args sa = (r,sb) ==>
+  safe_operand sb r
+Proof
+  Cases_on `args`
+  >- (simp[compile_create_call_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def] >>
+      strip_tac >> pairarg_tac >> gvs[]) >>
+  rename1 `target::rest` >> Cases_on `rest`
+  >- (simp[compile_create_call_def, comp_bind_def,
+           comp_ignore_bind_def, comp_return_def] >>
+      strip_tac >> pairarg_tac >> gvs[]) >>
+  simp[compile_create_call_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  IF_CASES_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  Cases_on `ck` >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  strip_tac >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  metis_tac[compile_create_dispatch_safe_operand, compile_create_copy_safe_operand,
+            compile_create_blueprint_append_safe_operand, compile_raw_create_safe_operand]
+QED
+
 (* Both raw_call forms: splitting off a second argument is needed for the
    byte-string form and harmless for the msg.data one. *)
 val word_raw_call_tac =
@@ -368,6 +518,8 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call cfn cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`as_stack_val rt (compile_create_call cfn cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -384,6 +536,11 @@ Resume compile_call_word_result_ok[external]:
   qpat_x_assum `(if _ then _ else _) = (vv,sb)` mp_tac >>
   IF_CASES_TAC >> simp[] >> strip_tac >> gvs[word_result_ok_def] >>
   metis_tac[compile_external_call_zero_safe_operand]
+QED
+
+Resume compile_call_word_result_ok[create]:
+  irule as_stack_val_word_result_ok >>
+  metis_tac[compile_create_call_safe_operand]
 QED
 
 Resume compile_call_word_result_ok[send]:

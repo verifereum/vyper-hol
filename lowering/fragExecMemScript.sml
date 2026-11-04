@@ -548,6 +548,23 @@ Proof
   Cases_on `step_inst_base h s` >> gvs[exec_result_map_def]
 QED
 
+(* Successful prefixes supply exactly the state-dependent checks needed by
+   the recursive straight-line memory-safety predicate. *)
+Theorem run_inst_seq_mem_ok_of_prefix_safe:
+  !xs s.
+    (!pre i post u. xs = pre ++ i::post /\ run_inst_seq pre s = OK u ==>
+      inst_mem_below_frontier i u) ==>
+    run_inst_seq_mem_ok xs s
+Proof
+  Induct >> simp[run_inst_seq_mem_ok_def] >> rpt strip_tac
+  >- (first_x_assum irule >>
+      qexistsl_tac [`xs`, `[]`] >> simp[run_inst_seq_def]) >>
+  Cases_on `step_inst_base h s` >> simp[] >>
+  first_x_assum irule >> rpt strip_tac >>
+  first_x_assum irule >>
+  qexistsl_tac [`post`, `h::pre`] >> simp[run_inst_seq_def]
+QED
+
 Theorem run_inst_seq_mem_ok_every:
   !code s. EVERY (\i. !t. inst_mem_below_frontier i t) code ==>
     run_inst_seq_mem_ok code s
