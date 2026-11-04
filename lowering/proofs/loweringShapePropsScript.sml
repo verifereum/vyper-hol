@@ -13780,3 +13780,19 @@ Proof
        simp[comp_return_labels, emit_op_labels, emit_inst_labels,
             compile_ptr_load_labels, compile_array_membership_loop_labels])
 QED
+
+Theorem compile_uint2str_labels:
+  !v digits size s.
+    cs_extends s (SND (compile_uint2str v digits size s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_uint2str v digits size s)))
+Proof
+  rpt gen_tac >> rewrite_tac[builtinStringsTheory.compile_uint2str_def] >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac, disch_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, compile_alloc_buffer_labels, emit_void_labels,
+            emit_op_labels, emit_inst_labels, fresh_var_action_labels])
+QED
