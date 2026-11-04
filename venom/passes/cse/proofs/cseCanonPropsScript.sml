@@ -487,3 +487,59 @@ Proof
  irule (SRULE [LET_THM] (Q.SPEC `Forward` df_process_deps_complete)) >>
  simp[cfg_edge_symmetry_uncond, cse_avail_meet_opt_absorb]
 QED
+
+Theorem cse_avail_analyze_fixpoint:
+ !fn. wf_function fn ==>
+ is_fixpoint
+   (df_process_block Forward NONE avail_meet_opt avail_transfer_opt
+     avail_edge_transfer (dfg_build_function fn)
+     (OPTION_MAP (\lbl. (lbl, SOME avail_empty)) (fn_entry_label fn))
+     (cfg_analyze fn) fn.fn_blocks)
+   (cfg_analyze fn).cfg_dfs_pre (avail_analyze fn)
+Proof
+ rpt strip_tac >> simp[avail_analyze_def, df_analyze_def] >>
+ irule is_fixpoint_populate >>
+ irule (SRULE [LET_THM] cse_boundary_result_fixpoint) >> simp[]
+QED
+
+Theorem cse_avail_at_intra:
+ !fn lbl bb idx.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ SUC idx <= LENGTH bb.bb_instructions ==>
+ df_at NONE (avail_analyze fn) lbl (SUC idx) =
+ avail_transfer_opt (dfg_build_function fn) (EL idx bb.bb_instructions)
+   (df_at NONE (avail_analyze fn) lbl idx)
+Proof
+ rpt strip_tac >> simp_tac bool_ss [avail_analyze_def, LET_THM] >>
+ irule (SRULE [LET_THM] (Q.SPEC `Forward` df_at_intra_transfer)) >>
+ simp[GSYM (SRULE [LET_THM] avail_analyze_def), cse_avail_analyze_fixpoint]
+QED
+
+Theorem cse_avail_at_entry:
+ !fn lbl bb.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb ==>
+ df_at NONE (avail_analyze fn) lbl 0 =
+ df_joined_val Forward NONE avail_meet_opt avail_edge_transfer
+   (dfg_build_function fn)
+   (OPTION_MAP (\l. (l, SOME avail_empty)) (fn_entry_label fn))
+   (cfg_analyze fn) (avail_analyze fn) lbl
+Proof
+ rpt strip_tac >> simp_tac bool_ss [avail_analyze_def, LET_THM] >>
+ irule (SRULE [LET_THM] (Q.SPEC `Forward` df_at_inter_transfer)) >>
+ simp[GSYM (SRULE [LET_THM] avail_analyze_def), cse_avail_analyze_fixpoint]
+QED
+
+Theorem cse_avail_boundary_absorb:
+ !fn lbl bb.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb ==>
+ df_boundary NONE (avail_analyze fn) lbl =
+ avail_meet_opt (df_boundary NONE (avail_analyze fn) lbl)
+   (df_at NONE (avail_analyze fn) lbl (LENGTH bb.bb_instructions))
+Proof
+ rpt strip_tac >> simp_tac bool_ss [avail_analyze_def, LET_THM] >>
+ irule (SRULE [LET_THM] (Q.SPEC `Forward` df_boundary_fixpoint)) >>
+ simp[GSYM (SRULE [LET_THM] avail_analyze_def), cse_avail_analyze_fixpoint]
+QED

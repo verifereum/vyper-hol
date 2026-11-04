@@ -469,3 +469,17 @@ Theorem df_process_changed_equiv:
 Proof
   ACCEPT_TAC dfAnalyzeProofsTheory.df_process_changed_equiv
 QED
+
+(* Boundary-only processing is stable under instruction-value population. *)
+Theorem is_fixpoint_populate:
+  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls
+   all_lbls st.
+    is_fixpoint (df_process_block dir bottom join transfer edge_transfer
+                   ctx entry_val cfg bbs) all_lbls st ==>
+    is_fixpoint (df_process_block dir bottom join transfer edge_transfer
+                   ctx entry_val cfg bbs) all_lbls
+      (df_populate_inst dir bottom join transfer edge_transfer
+         ctx entry_val cfg bbs lbls st)
+Proof
+  ACCEPT_TAC dfAnalyzeProofsTheory.is_fixpoint_populate
+QED

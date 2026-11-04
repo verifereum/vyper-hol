@@ -259,7 +259,7 @@ Proof
 QED
 
 (* Helper: is_fixpoint passes through df_populate_inst *)
-Theorem is_fixpoint_populate[local]:
+Theorem is_fixpoint_populate:
   !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbls
    all_lbls st.
     is_fixpoint (df_process_block dir bottom join transfer edge_transfer
