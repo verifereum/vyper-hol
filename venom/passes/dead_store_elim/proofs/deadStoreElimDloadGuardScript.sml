@@ -1,7 +1,7 @@
 Theory deadStoreElimDloadGuard
 Ancestors
   deadStoreElimDefs basePtrDefs memLocDefs memAliasDefs venomInst
-  venomEffects finite_map list
+  venomEffects finite_map list memLocProps
 
 Theorem dse_dload_locations:
   inst.inst_opcode = DLOAD ==>
@@ -34,4 +34,28 @@ Theorem dse_dload_successor_live:
 Proof
   strip_tac >> simp[dse_mem_def_live_def] >> disj1_tac >>
   qexists_tac `1` >> simp[dse_dload_reads_zero]
+QED
+
+Theorem dse_dload_clobber_reads_alias:
+  inst.inst_opcode = DLOAD /\ ml_is_fixed loc /\
+  loc.ml_size <> SOME 0 /\ dse_inst_clobbers bp sp loc inst ==>
+  dse_inst_reads_alias FEMPTY bp sp loc inst
+Proof
+  strip_tac >> Cases_on `sp = AddrSp_Memory`
+  >- (gvs[] >> drule dse_dload_locations >> strip_tac >>
+      fs[dse_inst_clobbers_def, dse_inst_reads_alias_def, ma_may_alias_def] >>
+      metis_tac[contains_implies_overlap]) >>
+  Cases_on `sp` >>
+  gvs[dse_inst_clobbers_def, bp_get_write_location_def,
+      is_raw_fmp_opcode_def, completely_contains_def, ml_empty_def,
+      ml_is_fixed_def] >>
+  Cases_on `loc.ml_size` >> gvs[]
+QED
+
+Theorem dse_dload_no_read_no_clobber:
+  inst.inst_opcode = DLOAD /\ ml_is_fixed loc /\ loc.ml_size <> SOME 0 /\
+  ~dse_inst_reads_alias FEMPTY bp sp loc inst ==>
+  ~dse_inst_clobbers bp sp loc inst
+Proof
+  metis_tac[dse_dload_clobber_reads_alias]
 QED
