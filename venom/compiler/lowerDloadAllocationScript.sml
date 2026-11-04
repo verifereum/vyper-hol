@@ -210,3 +210,46 @@ Proof
   strip_tac >> irule ld_alloc_account_transport >>
   qexistsl_tac [`s`, `t`] >> simp[merge_callee_state_def]
 QED
+
+Theorem ld_alloc_account_card_bound:
+  ld_alloc_account keys d0 A s t ==> CARD A <= CARD keys
+Proof
+  strip_tac >> drule ld_alloc_account_capacity >>
+  metis_tac[CARD_SUBSET]
+QED
+
+Theorem ld_scratch_sum_bound:
+  !xs. EVERY (\x. FINITE (caps x) /\ A x SUBSET caps x /\
+                     CARD (caps x) <= w x) xs ==>
+    SUM (MAP (\x. CARD (A x)) xs) <= SUM (MAP w xs)
+Proof
+  Induct >> simp[] >> rpt strip_tac >>
+  `CARD (A h) <= CARD (caps h)` by (irule pred_setTheory.CARD_SUBSET >> simp[]) >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem ld_alloc_stack_budget:
+  callee_first names C.ctx_functions /\ ld_stack_origin vs C stk fn s0 /\
+  EVERY (\g. FINITE (caps g) /\ A g SUBSET caps g /\
+    CARD (caps g) <= LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g)))
+    (fn :: MAP (\f. f.cf_fn) stk) ==>
+  SUM (MAP (\g. CARD (A g)) (fn :: MAP (\f. f.cf_fn) stk)) <=
+    ctx_dload_count C
+Proof
+  strip_tac >>
+  `SUM (MAP (\g. CARD (A g)) (fn :: MAP (\f. f.cf_fn) stk)) <=
+   SUM (MAP (\g. LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g)))
+        (fn :: MAP (\f. f.cf_fn) stk))` by
+    (irule ld_scratch_sum_bound >> qexists_tac `caps` >> gvs[]) >>
+  drule_all ld_stack_dload_count_bound >> decide_tac
+QED
+
+Theorem ld_alloc_account_nowrap:
+  ld_alloc_account keys d0 A s t /\
+  d0 + 32 * CARD A <= 32 * ctx_dload_count C /\
+  dload_headroom_ok C fn inst s ==>
+  t.vs_alloca_next < dimword (:256)
+Proof
+  strip_tac >> drule ld_alloc_account_frontier >>
+  gvs[lowerDloadDefsTheory.dload_headroom_ok_def] >> decide_tac
+QED
