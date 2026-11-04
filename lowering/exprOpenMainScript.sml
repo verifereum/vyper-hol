@@ -14,7 +14,7 @@ Ancestors
   exprSimHypsDefs
   exprOpenDispatch exprOpenFirstOperand exprOpenChild exprOpenCases
   exprOpenPrimitives exprOpenCopies exprOpenTerminals exprOpenBuiltins
-  bodySim exprSimHyps supportedExprs supportedExprForms supportedTypes
+  bodySim  supportedExprs supportedExprForms supportedTypes
   exprLowering exprCallBounds compileEnv vyperAST vyperTypeSystem list
   supportedDecls vyperTypeInvariants
 
@@ -217,3 +217,11 @@ Resume compile_expr_open_general[builtin_dispatch]:
 QED
 
 Finalise compile_expr_open_general
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "EXPRESSION_OPEN_SOURCE_AUDIT OK\n"
+     else raise Fail "source fact inherited admission"
+  end) [supported_immutable_bound, compile_expr_open_general];

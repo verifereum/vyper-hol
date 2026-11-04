@@ -13,7 +13,7 @@ Ancestors
   exprSimHypsDefs
   exprOpenPrimitives exprOpenTerminals exprLowering context compileEnv
   supportedExprForms supportedTypes typedCopyMetadata list rich_list pair alist finite_map venomInst
-  exprSimAggregateLayout exprSimHyps vyperTypeInvariants vyperTypeSystem
+  structFieldsProps  vyperTypeInvariants vyperTypeSystem
 
 Theorem compile_store_memory_open:
   !cenv src dst dty sty sa r sb.
