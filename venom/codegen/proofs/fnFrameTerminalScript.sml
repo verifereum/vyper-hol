@@ -12,7 +12,8 @@
 
 Theory fnFrameTerminal
 Ancestors
-  fnFrameTerminalHalt fnFrameTerminalAbort asmIR blockSimHelpers opcodeClass
+  fnFrameTerminalPrep fnFrameTerminalHalt fnFrameTerminalAbort asmIR
+  blockSimHelpers opcodeClass
   genFrameSim frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
@@ -127,7 +128,7 @@ Resume gen_inst_halt_frame_sim[return]:
        ir_specific_operand_order_def, eval_operands_def]) >>
   `MEM (w2n off, w2n sz) (source_memory_read_ranges inst vs)` by
     simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
-  drule_all context_memory_read_range >> disch_tac >>
+  drule_all context_source_payload_agree >> disch_tac >>
   drule_all terminal_return_payload_step >>
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
   qexistsl_tac [`n + 1`, `st'`] >> conj_tac

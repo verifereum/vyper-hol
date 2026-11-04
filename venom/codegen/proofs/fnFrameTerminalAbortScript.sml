@@ -200,20 +200,6 @@ Proof
   simp[venom_asm_rel_def, venom_asm_terminal_rel_def, frame_view_def]
 QED
 
-(* Any declared source-memory read range, not just REVERT's range. *)
-Theorem context_source_payload_agree:
-  source_memory_reads_disjoint cplan inst vs /\
-  context_memory_rel cplan vs.vs_memory m /\
-  MEM (off,n) (source_memory_read_ranges inst vs) ==>
-  TAKE n (DROP off m ++ REPLICATE n 0w) =
-  TAKE n (DROP off vs.vs_memory ++ REPLICATE n 0w)
-Proof
-  strip_tac >> irule padded_memory_read_cong >> rpt strip_tac >>
-  drule context_reads_agree >> simp[] >> disch_then irule >>
-  simp[source_memory_read_byte_def] >>
-  qexists `(off,n)` >> simp[byte_in_memory_range_def]
-QED
-
 Theorem abort_operands_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode

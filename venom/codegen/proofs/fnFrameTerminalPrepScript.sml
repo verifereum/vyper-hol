@@ -4,7 +4,22 @@ Ancestors
   genFrameSim frameRel contextCodegenRelProps contextCodegenRel codegenRel
   instSimHelpers asmFrame stackPlanTypes stackPlanGen venomInst genBlockSim
   mixedPrefixSim stackModel venomState asmSem planExec unitShapeDefs
-  venomExecSemantics symbolResolve dfgDefs
+  venomExecSemantics symbolResolve dfgDefs frameViewMemory
+
+(* A source read range misses every spill region, so the assembly memory
+   and the source memory agree on it, padded as RETURN and REVERT read. *)
+Theorem context_source_payload_agree:
+  source_memory_reads_disjoint cplan inst vs /\
+  context_memory_rel cplan vs.vs_memory m /\
+  MEM (off,n) (source_memory_read_ranges inst vs) ==>
+  TAKE n (DROP off m ++ REPLICATE n 0w) =
+  TAKE n (DROP off vs.vs_memory ++ REPLICATE n 0w)
+Proof
+  strip_tac >> irule padded_memory_read_cong >> rpt strip_tac >>
+  drule context_reads_agree >> simp[] >> disch_then irule >>
+  simp[source_memory_read_byte_def] >>
+  qexists `(off,n)` >> simp[byte_in_memory_range_def]
+QED
 
 Theorem fn_frame_inv_local_state:
   !ctx cplan lo fn ra rest mem0 ps vs st.

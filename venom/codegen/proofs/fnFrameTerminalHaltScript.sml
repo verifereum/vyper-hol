@@ -43,26 +43,6 @@ Proof
   irule ordinary_operand_not_retpc >> simp[] >> qexists `inst` >> gvs[]
 QED
 
-(* A range may be on either side of any spill region.  This interface
-   deliberately makes no below-spill-base assumption. *)
-Theorem context_memory_read_range:
-  !cp inst vs am off size.
-  source_memory_reads_disjoint cp inst vs /\
-  context_memory_rel cp vs.vs_memory am /\
-  MEM (off, size) (source_memory_read_ranges inst vs) ==>
-  TAKE size (DROP off am ++ REPLICATE size 0w) =
-  TAKE size (DROP off vs.vs_memory ++ REPLICATE size 0w)
-Proof
-  rpt gen_tac >> strip_tac >> irule padded_memory_read_cong >> rpt strip_tac >>
-  fs[context_memory_rel_def] >>
-  first_x_assum (irule o GSYM) >>
-  simp[context_spill_byte_def] >> gen_tac >> CCONTR_TAC >> gvs[] >>
-  qpat_x_assum `source_memory_reads_disjoint _ _ _` mp_tac >>
-  simp[source_memory_reads_disjoint_def, EVERY_MEM] >>
-  rename1 `MEM (off, len) (source_memory_read_ranges inst vs)` >>
-  qexists `(off, len)` >> simp[] >> qexists `r` >> simp[] >> decide_tac
-QED
-
 Theorem frame_terminal_prefix_setup:
   !ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
     base ps vs st ops final r ra rest mem0.
