@@ -3,7 +3,7 @@ Theory lowerDloadCorrectedProbe
 Ancestors
   lowerDloadProgramProbe o1PassContract lowerDloadDefs venomInst
   venomFnScheduleRunner fcgDefs unitShapeDefs venomState unitTransformDefs
-  finite_map vfmState
+  finite_map vfmState ptrDiscipline contextCodegenRel venomExecSemantics
 
 val _ = temp_overload_on ("corrected_helper",
   ``mk_raw_function "f" [<|bb_label := "f"; bb_instructions := [
@@ -110,3 +110,120 @@ Theorem corrected_run_state:
 Proof
   simp[o1_run_state_ok_def, corrected_initial, corrected_code_layout]
 QED
+
+Theorem corrected_entry_reachable:
+  frame_reachable corrected_vs corrected_context [] [] FEMPTY entry_taint
+    corrected_entry (mk_inst 3 INVOKE [Label "f"] []) corrected_vs
+Proof
+  irule frame_reachable_entry >>
+  conj_tac >- (qexists_tac `"entry"` >> EVAL_TAC) >>
+  conj_tac >-
+    simp[active_inst_def, mk_raw_function_def, init_venom_state_def, mk_inst_def] >>
+  qexists_tac `"entry"` >>
+  simp[fn_entry_label_def, entry_block_def, mk_raw_function_def,
+       enters_block_def, init_venom_state_def, lookup_block_def,
+       listTheory.FIND_thm, eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+val _ = temp_overload_on ("corrected_h0",
+  ``corrected_vs with vs_current_bb := "f"``);
+val _ = temp_overload_on ("corrected_stack",
+  ``[<|cf_fn := corrected_entry;
+       cf_inst := mk_inst 3 INVOKE [Label "f"] [];
+       cf_state := corrected_vs; cf_params := [];
+       cf_prov := FEMPTY; cf_tvar := entry_taint.t_var|>]``);
+
+Theorem corrected_helper_entry:
+  frame_reachable corrected_vs corrected_context corrected_stack
+    (MAP (op_prov FEMPTY) []) FEMPTY
+    (entry_taint with t_var := FEMPTY) corrected_helper
+    (mk_inst 0 ALLOCA [Lit 32w] ["p"]) corrected_h0
+Proof
+  irule frame_reachable_call >>
+  simp[corrected_entry_reachable, active_inst_def, mk_raw_function_def,
+       init_venom_state_def, mk_inst_def, decode_invoke_def] >>
+  conj_tac >- EVAL_TAC >>
+  simp[eval_operands_def, setup_callee_def, mk_raw_function_def,
+       enters_block_def, lookup_block_def, listTheory.FIND_thm,
+       eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+val _ = temp_overload_on ("corrected_ha",
+  ``update_var "p" 0w (corrected_h0 with
+      <|vs_allocas := FEMPTY |+ (0,(0,32)); vs_alloca_next := 32|>)``);
+val _ = temp_overload_on ("corrected_h1",
+  ``corrected_ha with vs_inst_idx := SUC corrected_h0.vs_inst_idx``);
+
+Theorem corrected_helper_alloca:
+  !fuel. step_inst fuel corrected_context (mk_inst 0 ALLOCA [Lit 32w] ["p"])
+     corrected_h0 = OK corrected_ha
+Proof
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  simp[exec_alloca_def, init_venom_state_def, wordsTheory.dimword_def] >>
+  CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem corrected_helper_store_reachable:
+  frame_reachable corrected_vs corrected_context corrected_stack
+    (MAP (op_prov FEMPTY) [])
+    (step_prov (MAP (op_prov FEMPTY) []) FEMPTY (mk_inst 0 ALLOCA [Lit 32w] ["p"]) corrected_ha)
+    (step_taint (mk_inst 0 ALLOCA [Lit 32w] ["p"]) corrected_h0 corrected_ha
+      (entry_taint with t_var := FEMPTY)) corrected_helper
+    (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_helper_entry, corrected_helper_alloca, mk_inst_def,
+       is_terminator_def, active_inst_def, mk_raw_function_def,
+       init_venom_state_def, update_var_def]
+QED
+
+val _ = temp_overload_on ("corrected_hs", ``mstore 0 1w corrected_h1``);
+val _ = temp_overload_on ("corrected_h2",
+  ``corrected_hs with vs_inst_idx := SUC corrected_h1.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_G1",
+  ``step_prov (MAP (op_prov FEMPTY) []) FEMPTY
+      (mk_inst 0 ALLOCA [Lit 32w] ["p"]) corrected_ha``);
+val _ = temp_overload_on ("corrected_t1",
+  ``step_taint (mk_inst 0 ALLOCA [Lit 32w] ["p"]) corrected_h0 corrected_ha
+      (entry_taint with t_var := FEMPTY)``);
+
+Theorem corrected_helper_store:
+  !fuel. step_inst fuel corrected_context (mk_inst 1 MSTORE [Var "p"; Lit 1w] [])
+    corrected_h1 = OK corrected_hs
+Proof
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem corrected_helper_ret_reachable:
+  frame_reachable corrected_vs corrected_context corrected_stack
+    (MAP (op_prov FEMPTY) [])
+    (step_prov (MAP (op_prov FEMPTY) []) corrected_G1
+      (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_hs)
+    (step_taint (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1
+      corrected_hs corrected_t1) corrected_helper (mk_inst 2 RET [Lit 0w] []) corrected_h2
+Proof
+  irule frame_reachable_next >>
+  simp[corrected_helper_store_reachable, corrected_helper_store, mk_inst_def,
+       is_terminator_def, active_inst_def, mk_raw_function_def,
+       init_venom_state_def, update_var_def, mstore_def]
+QED
+
+Theorem corrected_helper_ret:
+  !fuel. step_inst fuel corrected_context (mk_inst 2 RET [Lit 0w] []) corrected_h2 =
+    IntRet <|iret_values := []; iret_adopt_fmp := NONE|> corrected_h2
+Proof
+  gen_tac >> simp[Once step_inst_def, mk_inst_def] >>
+  simp[step_inst_base_def, mk_inst_def, eval_operands_def, eval_operand_def]
+QED
+
+val _ = temp_overload_on ("corrected_c0",
+  ``merge_callee_state corrected_vs corrected_h2``);
+val _ = temp_overload_on ("corrected_c1",
+  ``corrected_c0 with vs_inst_idx := SUC corrected_vs.vs_inst_idx``);
+val _ = temp_overload_on ("corrected_t2",
+  ``step_taint (mk_inst 1 MSTORE [Var "p"; Lit 1w] []) corrected_h1
+      corrected_hs corrected_t1``);
+
