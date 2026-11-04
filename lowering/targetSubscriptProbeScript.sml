@@ -3675,3 +3675,112 @@ Proof
   irule probe_word_invoke_local_memory >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem probe_word_invoke_immutables[local]:
+  !ctx func cenv es s args cs out.
+    stmt_state_rel ctx func cenv probe_word_context es s /\
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) ==>
+    immutables_rel cenv probe_word_context.txn.target
+      cenv.ce_module cenv.ce_is_ctor es
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  drule probe_word_setup_observations >> strip_tac >>
+  irule loweringSliceTheory.immutables_rel_mem_agree >>
+  qexists_tac `s` >>
+  simp[update_var_def] >>
+  conj_tac
+  >- (simp[probe_word_final_memory_footprint,
+           immutableMemoryFrameTheory.immutable_mstore_capacity] >>
+      decide_tac) >>
+  reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+  rpt strip_tac >>
+  `off + type_memory_size tv <= s.vs_alloca_next` by
+    (gvs[stmt_state_rel_def, immutable_alloca_sep_def] >> metis_tac[]) >>
+  `mem_bytes_at off (type_memory_size tv) (probe_word_final_state cs).vs_memory =
+   mem_bytes_at off (type_memory_size tv) cs.vs_memory` by
+    (irule probe_word_final_memory_frame >> simp[] >> decide_tac) >>
+  simp[]
+QED
+
+Theorem probe_word_invoke_immutable_sep[local]:
+  !func cenv es s cs out.
+    immutable_alloca_sep func cenv probe_word_context es s /\
+    not_local_ptr cenv es.scopes out ==>
+    immutable_alloca_sep func cenv probe_word_context es
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+  simp[probe_word_invoke_caller_frame] >>
+  rpt strip_tac >> qexists_tac `id` >>
+  gvs[local_region_def, not_local_ptr_def, probe_word_invoke_caller_frame,
+      lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem probe_word_invoke_stmt_state_summary:
+  !ctx func cenv env e0 es s args cs out.
+    expr_body_pre cenv probe_word_context env e0 es /\
+    stmt_state_rel ctx func cenv probe_word_context es s /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    setup_callee probe_word_function args s = SOME cs /\
+    not_local_ptr cenv es.scopes out ==>
+    ?es'. eval_expr probe_word_context
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE) es =
+      (INL (Value (IntV 0)), es') /\ es'.scopes = es.scopes /\
+      stmt_state_rel ctx func cenv probe_word_context es'
+        (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\
+   accounts_rel probe_word_context es s /\
+   s.vs_call_ctx.cc_address = probe_word_context.txn.target /\
+   storage_agree
+     (storage_dead probe_word_context F (get_storage probe_word_context es F))
+     (get_storage probe_word_context es F) (contract_storage s)` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+        storage_rel_def, get_storage_def, lookup_account_def] >>
+  drule_all probe_word_invoke_accounts_summary >> strip_tac >>
+  drule probe_word_pre_shapes >> strip_tac >>
+  qspecl_then [`es`,
+    `w2n (lookup_storage 3w (get_storage probe_word_context es F))`,
+    `w2n (lookup_storage 4w (get_storage probe_word_context es F))`]
+    mp_tac probe_word_copy_symbolic_success >>
+  simp[wordsTheory.n2w_w2n] >>
+  (impl_tac >- metis_tac[wordsTheory.n2w_w2n]) >> strip_tac >>
+  gvs[] >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ (set_storage _ _ F stor)` >>
+  drule_all probe_word_invoke_local_ptrs >> strip_tac >>
+  drule_all probe_word_invoke_immutables >> strip_tac >>
+  `immutable_alloca_sep func cenv probe_word_context es s` by
+    gvs[stmt_state_rel_def] >>
+  drule_all probe_word_invoke_immutable_sep >>
+  disch_then (qspec_then `cs` assume_tac) >>
+  irule stmt_state_rel_allocas_frame >>
+  conj_tac
+  >- (qpat_x_assum `immutable_alloca_sep _ _ _ es (update_var _ _ _)` mp_tac >>
+      simp[immutable_alloca_sep_def, set_storage_def]) >>
+  reverse conj_tac
+  >- (qexistsl_tac [`es`, `s`] >> simp[probe_word_invoke_caller_frame]) >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  qpat_assum `accounts_rel _ (set_storage _ _ _ _) _`
+    (mp_then Any mp_tac accountsRelPropsTheory.accounts_rel_storage_transient) >>
+  simp[probe_word_final_call_ctx] >> strip_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  simp[stmt_state_rel_def, state_rel_def] >> strip_tac >>
+  drule setup_callee_oracle >> strip_tac >>
+  `immutables_rel cenv probe_word_context.txn.target cenv.ce_module cenv.ce_is_ctor
+     (set_storage probe_word_context es F stor)
+     (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))` by
+    (qpat_assum `!out. immutables_rel _ _ _ _ _ _`
+       (qspec_then `out` mp_tac) >> simp[NoAsms, immutables_rel_def, set_storage_def]) >>
+  simp[state_rel_def] >>
+  gvs[storage_rel_def, transient_rel_def, contract_storage_def,
+      contract_transient_def, update_var_def] >>
+  simp[logs_rel_def, set_storage_def, probe_word_final_runtime_frame,
+       probe_word_final_call_ctx] >>
+  gvs[logs_rel_def]
+QED
