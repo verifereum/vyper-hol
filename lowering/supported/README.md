@@ -34,7 +34,7 @@ bounds are not excluded by this whitelist; typing and allocation are separate.
 ### `supportedDeclsTheory`
 
 - `supported_declaration_header tops top`, `supported_declaration_headers tops`:
-  no raw return, no internal-function defaults, value arguments and
+  no raw return, defaults only on external functions, value arguments and
   NoneT/value return (nonreentrant guards and external defaults are admitted;
   `check_contract` separately validates their headers);
   private explicitly slotted storage of storage types; private explicitly slotted
