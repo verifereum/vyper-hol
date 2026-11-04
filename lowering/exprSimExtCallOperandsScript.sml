@@ -323,3 +323,50 @@ Proof
     by decide_tac >>
   metis_tac[]
 QED
+
+Theorem compile_name_typed_capture:
+  expr_body_pre ce cx env (Name ann name) es /\
+  stmt_state_rel ctx func ce cx es s /\
+  local_ptrs_reserved ce hi /\
+  FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) /\
+  compile_expr ce ann (Name ann name) lo = (vv,hi) /\
+  eval_expr cx (Name ann name) es = (INL tv,es1) ==>
+  typed_capture ctx func ce cx env ann tv vv lo hi es1 s
+Proof
+  rpt strip_tac >>
+  gvs[exprLoweringTheory.compile_expr_def] >>
+  drule compile_name_ptr_probe >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once vyperInterpreterTheory.evaluate_def, bind_def, get_scopes_def,
+       return_def, type_check_def, assert_def, check_def, ignore_bind_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  pure_rewrite_tac[typed_capture_def] >> rpt gen_tac >> strip_tac >>
+  `well_typed_expr env (Name ann name)` by gvs[expr_body_pre_def] >>
+  `?entry. lookup_scopes name es'.scopes = SOME entry /\
+       evaluate_type (get_tenv cx) ann = SOME entry.type /\
+       value_has_type entry.type entry.value` by
+    (`env_consistent env cx es' /\ state_well_typed es'` by
+       fs[expr_sim_inv_def] >>
+     drule_all vyperTypeEnvTheory.well_typed_Name_lookup >> strip_tac >>
+     `env.type_defs = get_tenv cx` by
+       fs[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def] >>
+     gvs[] >> goal_assum drule >> simp[]) >>
+  `?w. lookup_var p s' = SOME w /\ type_memory_size entry.type <= sz /\
+       val_wf entry.type entry.value /\
+       val_in_memory entry.type entry.value (w2n w) s'.vs_memory` by
+    (fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> metis_tac[]) >>
+  `ce.ce_var_type name = SOME ann` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeSystemTheory.well_typed_expr_def] >>
+  simp[vv_holds_def, vv_at_def, contextTheory.mk_ptr_def, eval_operand_def] >>
+  gvs[vyperASTTheory.expr_type_def, read_result_def, read_place_def,
+      bind_def, get_scopes_def, lift_option_type_def, lift_sum_def,
+      return_def, read_memory_path_def, evaluate_subscripts_def] >>
+  conj_tac >- metis_tac[val_in_memory_word_type] >>
+  disj2_tac >> disj1_tac >>
+  qexistsl_tac [`name`, `w2n w`, `sz`] >>
+  asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
+  drule val_footprint_le >> decide_tac
+QED
