@@ -17,19 +17,8 @@ Theorem run_lowering_selected_guarded_code[local]:
     compile_guarded_body cenv nr key tr view stmts rt sa = ((),se) /\
     fn_has_code sa se efn /\ fn_inst_ids_distinct efn
 Proof
-  strip_tac >>
-  `fn_inst_ids_distinct efn` by
-    (drule run_lowering_static_integrity >> strip_tac >>
-     drule lookup_function_MEM >> strip_tac >>
-     drule_all ctx_inst_ids_distinct_fn >>
-     simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_flat,
-          MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]) >>
-  drule_all run_lowering_retained_entry >> strip_tac >>
-  drule_all runtime_selected_append_interval >> strip_tac >>
-  gvs[moduleLoweringTheory.compile_internal_fn_bodies_def, comp_return_def] >>
-  qexistsl [`sd`, `cenv`, `sa`, `se'`] >> simp[] >>
-  irule fn_has_code_retained_interval >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  strip_tac >> drule_all run_lowering_selected_entry_code >> strip_tac >>
+  qexistsl [`sk`, `cenv`, `sa`, `sb`] >> simp[]
 QED
 
 Theorem source_selected_guarded_code:
