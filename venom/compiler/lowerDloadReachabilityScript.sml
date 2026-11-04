@@ -5,7 +5,7 @@
 Theory lowerDloadReachability
 Ancestors
   contextRawReachable venomExecSemantics o1PassLift o1PassContract
-  venomWf venomInst list ptrDiscipline
+  venomWf venomInst list ptrDiscipline contextCodegenRel venomExecProofs venomInstProofs
 
 Theorem completed_callee_invoke_ok:
   callinst.inst_opcode = INVOKE /\
@@ -106,4 +106,120 @@ Proof
   >- (irule frame_reach_entry >> metis_tac[])
   >> irule frame_reach_callee >>
   metis_tac[frame_reach_active]
+QED
+
+Theorem ld_suffix_mono:
+  (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb s = IntRet ret t \/
+     ?u. exec_block n C bb s = OK u /\ ~u.vs_halted /\
+         run_blocks n C fn u = IntRet ret t)) /\ n <= m ==>
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block m C bb s = IntRet ret t \/
+     ?u. exec_block m C bb s = OK u /\ ~u.vs_halted /\
+         run_blocks m C fn u = IntRet ret t)
+Proof
+  rpt strip_tac >> qexists_tac `bb` >> simp[]
+  >- (`terminates (exec_block n C bb s)` by simp[terminates_not_error] >>
+      drule_all exec_block_terminates_mono >> simp[])
+  >> `terminates (exec_block n C bb s)` by simp[terminates_not_error] >>
+  `terminates (run_blocks n C fn u)` by simp[terminates_not_error] >>
+  drule_all exec_block_terminates_mono >>
+  drule_all run_blocks_terminates_mono >> simp[]
+QED
+
+Theorem ld_suffix_entry:
+  enters_block fn s0 s /\
+  (?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb s = IntRet ret t \/
+     ?u. exec_block n C bb s = OK u /\ ~u.vs_halted /\
+         run_blocks n C fn u = IntRet ret t)) ==>
+  run_blocks (SUC n) C fn s0 = IntRet ret t
+Proof
+  rpt strip_tac >> fs[enters_block_def] >>
+  drule eval_phis_preserves_current_bb >> strip_tac >>
+  gvs[] >> simp[run_blocks_unfold, run_block_def]
+QED
+
+Theorem ld_suffix_return:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn i s /\ step_inst k C i s = IntRet ret t ==>
+  ?n bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb s = IntRet ret t \/
+     ?u. exec_block n C bb s = OK u /\ ~u.vs_halted /\
+         run_blocks n C fn u = IntRet ret t)
+Proof
+  strip_tac >> fs[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> simp[]) >>
+  qexistsl_tac [`k`, `bb`] >> simp[] >> disj1_tac >>
+  simp[Once exec_block_def, get_instruction_def]
+QED
+
+Theorem ld_suffix_next:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn i s /\ ~is_terminator i.inst_opcode /\
+  step_inst k C i s = OK u /\
+  (?bb. lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb (u with vs_inst_idx := SUC s.vs_inst_idx) = IntRet ret t \/
+     ?v. exec_block n C bb (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v /\
+         ~v.vs_halted /\ run_blocks n C fn v = IntRet ret t)) ==>
+  ?m bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block m C bb s = IntRet ret t \/
+     ?v. exec_block m C bb s = OK v /\ ~v.vs_halted /\
+         run_blocks m C fn v = IntRet ret t)
+Proof
+  strip_tac >> drule_all step_preserves_control_flow >> strip_tac >>
+  fs[active_inst_def] >> gvs[] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'` by
+    (irule MEM_lookup_block >> simp[]) >>
+  gvs[] >>
+  `step_inst (MAX k n) C (EL s.vs_inst_idx bb.bb_instructions) s = OK u` by
+    (`terminates (step_inst k C (EL s.vs_inst_idx bb.bb_instructions) s)` by
+       simp[terminates_not_error] >>
+     drule step_inst_terminates_mono >>
+     disch_then (qspec_then `MAX k n` mp_tac) >> simp[]) >>
+  `exec_block (MAX k n) C bb (u with vs_inst_idx := SUC s.vs_inst_idx) =
+   exec_block n C bb (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule exec_block_terminates_mono >> simp[terminates_not_error]) >>
+  `exec_block (MAX k n) C bb s =
+   exec_block n C bb (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[Once exec_block_def, get_instruction_def]) >>
+  qexists_tac `MAX k n` >> simp[] >>
+  `terminates (run_blocks n C fn v)` by simp[terminates_not_error] >>
+  drule run_blocks_terminates_mono >>
+  disch_then (qspec_then `MAX k n` mp_tac) >> simp[]
+QED
+
+Theorem ld_suffix_block:
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn i s /\ is_terminator i.inst_opcode /\
+  step_inst k C i s = OK u /\ ~u.vs_halted /\ enters_block fn u v /\
+  (?bb. lookup_block v.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block n C bb v = IntRet ret t \/
+     ?w. exec_block n C bb v = OK w /\ ~w.vs_halted /\
+         run_blocks n C fn w = IntRet ret t)) ==>
+  ?m bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    (exec_block m C bb s = IntRet ret t \/
+     ?w. exec_block m C bb s = OK w /\ ~w.vs_halted /\
+         run_blocks m C fn w = IntRet ret t)
+Proof
+  strip_tac >>
+  `run_blocks (SUC n) C fn u = IntRet ret t` by
+    (irule ld_suffix_entry >> qexists_tac `v` >> metis_tac[]) >>
+  qpat_x_assum `enters_block _ _ _` kall_tac >>
+  fs[active_inst_def] >> gvs[] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb'` by
+    (irule MEM_lookup_block >> simp[]) >>
+  `step_inst (MAX k (SUC n)) C (EL s.vs_inst_idx bb'.bb_instructions) s = OK u` by
+    (`terminates (step_inst k C (EL s.vs_inst_idx bb'.bb_instructions) s)` by
+       simp[terminates_not_error] >>
+     drule step_inst_terminates_mono >>
+     disch_then (qspec_then `MAX k (SUC n)` mp_tac) >> simp[]) >>
+  qexistsl_tac [`MAX k (SUC n)`, `bb'`] >> simp[] >> disj2_tac >>
+  qexists_tac `u` >>
+  `exec_block (MAX k (SUC n)) C bb' s = OK u` by
+    simp[Once exec_block_def, get_instruction_def] >> simp[] >>
+  `terminates (run_blocks (SUC n) C fn u)` by simp[terminates_not_error] >>
+  drule run_blocks_terminates_mono >>
+  disch_then (qspec_then `MAX k (SUC n)` mp_tac) >> simp[]
 QED
