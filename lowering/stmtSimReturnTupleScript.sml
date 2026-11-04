@@ -3,13 +3,295 @@ Theory stmtSimReturnTuple
 Ancestors
   stmtSimReturn stmtSimProps stmtSimDefs exprSimProps exprSimDefs loweringPosts
   gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath gasExemptCert
-  list rich_list finite_map fragExec freshWrites vyperTypeABI
+  list rich_list arithmetic finite_map fragExec freshWrites vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs
   vyperInterpreter vyperState vyperValue vyperTyping vyperExprNoControl
   vyperStatePreservation venomExecSemantics venomInst venomState
 Libs
   monadsyntax
+
+Theorem return_forced_admissible[local]:
+  gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `eval_stmt cx (Return (SOME e)) (es with gas_obs := gs) = (INR ex, ee)` by
+    (pure_rewrite_tac[eval_return_forced] >> simp[Once bind_def, SF ETA_ss]) >>
+  drule_all gas_admissible_result >> strip_tac >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def] >> Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
+  imp_res_tac (cj 1 eval_expr_no_control) >>
+  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
+QED
+
+Theorem return_forced_exempt[local]:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (Return (SOME e))) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx (Return (SOME e))) (return ()) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind (raise (ReturnException v)) (return ()))` by
+    (simp[FUN_EQ_THM, ignore_bind_def, eval_return_forced, bind_def] >>
+     gen_tac >> Cases_on `eval_expr cx e x` >>
+     Cases_on `q` >> simp[raise_def] >>
+     rename1 `eval_expr cx e x = (INL raw, est)` >>
+     Cases_on `read_result cx raw est` >> Cases_on `q` >> simp[raise_def]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem return_forced_source_normal[local]:
+  (!tail. bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := xs ++ tail) = (INL v, fin with gas_obs := tail)) ==>
+  !tail. eval_stmt cx (Return (SOME e)) (es with gas_obs := xs ++ tail) =
+    (INR (ReturnException v), fin with gas_obs := tail)
+Proof
+  simp[eval_return_forced, bind_def, raise_def]
+QED
+
+Theorem return_forced_source_exception[local]:
+  (!tail. bind (eval_expr cx e) (read_result cx)
+     (es with gas_obs := xs ++ tail) = (INR ex, fin with gas_obs := tail)) ==>
+  !tail. eval_stmt cx (Return (SOME e)) (es with gas_obs := xs ++ tail) =
+    (INR ex, fin with gas_obs := tail)
+Proof
+  simp[eval_return_forced, bind_def]
+QED
+
+Theorem tuple_straight_line_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  step_inst_base i s = OK u ==>
+  gas_path_edge ctx func s (if i.inst_opcode = GAS then 1 else 0)
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[venomInstProofsTheory.step_preserves_halted] >>
+  simp[gas_path_edge_def] >> qexists_tac `0` >> simp[gas_count_step_def]
+QED
+
+Theorem tuple_run_inst_seq_gas_path[local]:
+  !code s t ctx func bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq code s = OK t ==>
+    gas_path ctx func s
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code))
+Proof
+  Induct >> simp[run_inst_seq_def]
+  >- (rpt strip_tac >> irule (cj 1 gas_path_rules) >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `?rest. DROP s.vs_inst_idx bb.bb_instructions = h :: rest /\
+          isPREFIX code rest` by
+    (Cases_on `DROP s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[LENGTH_DROP]) >>
+  `get_instruction bb s.vs_inst_idx = SOME h` by
+    (simp[venomInstTheory.get_instruction_def] >>
+     qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `HD`) >> simp[HD_DROP]) >>
+  `DROP (SUC s.vs_inst_idx) bb.bb_instructions = rest` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `DROP 1`) >>
+     simp[DROP_DROP, ADD1]) >>
+  `step_inst 0 ctx h s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstProofsTheory.step_preserves_halted,
+              venomInstProofsTheory.step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  `gas_path_edge ctx func s (if h.inst_opcode = GAS then 1 else 0)
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule tuple_straight_line_edge >> metis_tac[]) >>
+  first_x_assum (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  disch_then (qspec_then `t with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >> simp[] >> strip_tac >>
+  Cases_on `h.inst_opcode = GAS` >> gvs[] >>
+  drule (cj 2 gas_path_rules) >> disch_then drule >>
+  rewrite_tac[GSYM ADD1, ADD_CLAUSES, ONE]
+QED
+
+Theorem tuple_load_no_gas[local]:
+  !tys cenv bop off sa elems sb.
+    compile_load_tuple_elements cenv bop tys off sa = (elems,sb) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []
+Proof
+  Induct
+  >- (rw[compile_load_tuple_elements_def, comp_return_def] >>
+      simp[emitted_insts_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_load_tuple_elements _ _ _ _ _ = _` mp_tac >>
+  simp[compile_load_tuple_elements_def, comp_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> simp[]) >> simp[comp_return_def] >> strip_tac >> gvs[] >>
+  rename1 `emit_op ADD _ sa = (pv, sm)` >>
+  rename1 `emit_op MLOAD _ sm = (v, sh)` >>
+  rename1 `compile_load_tuple_elements _ _ _ _ sh = (rest, sf)` >>
+  first_x_assum drule >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >>
+  `emitted_insts sa sf = emitted_insts sa sm ++ emitted_insts sm sh ++
+     emitted_insts sh sf` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_x_assum `sf.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `sh.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `sm.cs_current_insts = _` SUBST1_TAC >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> REFL_TAC) >>
+  simp[FILTER_APPEND, venomInstTheory.mk_inst_def, APPEND_ASSOC]
+QED
+
+Theorem tuple_ret_gas_path[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode = RET /\
+  step_inst_base i s = IntRet ir s ==>
+  gas_path ctx func s 0 (IntRet ir s)
+Proof
+  strip_tac >> irule (cj 3 gas_path_rules) >> simp[exit_result_def] >>
+  simp[gas_path_edge_def] >> qexists_tac `0` >>
+  simp[step_inst_non_invoke, gas_count_step_def, exit_result_def]
+QED
+
+Theorem tuple_load_gas_path[local]:
+  compile_load_tuple_elements cenv bop tys off sa = (elems,sb) /\
+  (!x. bop = Var x ==> not_fresh_at sa x) /\
+  eval_operand bop s = SOME w /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?vs. gas_path ctx func s 0
+         (OK (s with <|vs_vars := vs; vs_inst_idx := LENGTH sb.cs_current_insts|>)) /\
+       (!x. not_fresh_at sa x ==>
+          lookup_var x (s with vs_vars := vs) = lookup_var x s) /\
+       eval_operands elems (s with vs_vars := vs) =
+         SOME (tuple_words cenv w tys off s.vs_memory)
+Proof
+  strip_tac >> drule_all compile_load_tuple_elements_run >> strip_tac >> gvs[] >>
+  drule tuple_load_no_gas >> strip_tac >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all tuple_run_inst_seq_gas_path >>
+  simp[] >> strip_tac >> qexists_tac `vs` >> simp[]
+QED
+
+Theorem tuple_suffix_post:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  cenv.ce_returns_count = LENGTH tys /\ 1 < LENGTH tys /\
+  cenv.ce_return_buf = NONE /\ expr_type e = TupleT tys /\
+  EVERY is_word_type tys /\
+  evaluate_type (get_tenv cx) (TupleT tys) = SOME ret_tv /\
+  value_has_type ret_tv v /\
+  expr_post ctx func cenv cx e es sa s1 s0 ee v op sv /\
+  ret_pc_ok cenv sa s0 /\ sa.cs_next_var <= s1.cs_next_var /\
+  (!x. op = Var x ==> not_fresh_at s1 x) /\
+  compile_load_tuple_elements cenv op tys 0 s1 = (elems,s2) /\
+  emit_inst RET (elems ++ [Var rpc]) [] s2 = ((),s3) /\
+  fn_has_code s1 s2 func /\ fn_has_code s2 s3 func /\
+  ~sv.vs_halted /\ sv.vs_current_bb = s1.cs_current_bb /\
+  sv.vs_inst_idx = LENGTH s1.cs_current_insts ==>
+  ?r. gas_path ctx func sv 0 r /\ exit_result r /\
+      !tail. intret_q func cenv cx ret_tv v
+               ((ee with gas_obs := tail) with scopes := []) r
+Proof
+  strip_tac >> drule_all tuple_type_value >> strip_tac >>
+  gvs[expr_post_def, return_def] >>
+  `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
+  `tuple_in_memory vs tvs (w2n w + 0) sv.vs_memory` by
+    (first_x_assum (qspec_then `TupleTV tvs` mp_tac) >>
+     simp[val_in_memory_def]) >>
+  `w2n w + 0 + 32 * LENGTH tys <= dimword (:256)` by
+    (drule_all expr_val_at_bound >>
+     simp[val_footprint_def, type_memory_size_def] >>
+     drule_all word_tuple_size >> simp[]) >>
+  `tuple_words cenv w tys 0 sv.vs_memory =
+     MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))` by
+    (irule tuple_words_typed >> metis_tac[]) >>
+  drule_all compile_load_tuple_elements_run >> strip_tac >> gvs[] >>
+  suspend "path"
+QED
+
+Resume tuple_suffix_post[path]:
+  qpat_x_assum `!aid off sz. _` kall_tac >>
+  qpat_x_assum `!aid b. FLOOKUP _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `locals_kept _ _ _ _` kall_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_assum `fn_has_code s1 s2 func` (mp_tac o REWRITE_RULE [fn_has_code_def]) >>
+  strip_tac >>
+  `isPREFIX (emitted_insts s1 s2) (DROP sv.vs_inst_idx bb.bb_instructions)` by
+    (fs[IS_PREFIX_APPEND] >> gvs[] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
+  `lookup_block sv.vs_current_bb func.fn_blocks = SOME bb` by gvs[same_blocks_def] >>
+  drule_all tuple_load_gas_path >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `gas_path _ _ sv 0 (OK (sv with <|vs_vars := lvars; vs_inst_idx := _|>))` >>
+  qabbrev_tac `sl = sv with <|vs_vars := lvars; vs_inst_idx := LENGTH s2.cs_current_insts|>` >>
+  qabbrev_tac `words = MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))` >>
+  `?pc. lookup_var rpc sl = SOME pc` by
+    (qpat_x_assum `ret_pc_ok _ _ _` mp_tac >> simp[ret_pc_ok_def] >> strip_tac >>
+     `not_fresh_at s1 rpc` by
+       (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     simp[Abbr `sl`, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
+  `eval_operands elems sl = SOME words` by
+    simp[Abbr `sl`, Abbr `words`, eval_operands_vars_inst_idx] >>
+  drule emit_inst_extends >> strip_tac >>
+  qspecl_then [`s2`, `s3`, `func`,
+               `[mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) []]`]
+    mp_tac fn_has_code_same_block >>
+  impl_tac >- simp[] >> strip_tac >>
+  `get_instruction bb' (LENGTH s2.cs_current_insts) =
+     SOME (mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) [])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `step_inst_base (mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) []) sl =
+     IntRet <| iret_values := words; iret_adopt_fmp := NONE |> sl` by
+    (irule step_ret_values >> metis_tac[]) >>
+  suspend "post"
+QED
+
+Resume tuple_suffix_post[post]:
+  `gas_path ctx func sl 0 (IntRet <|iret_values := words; iret_adopt_fmp := NONE|> sl)` by
+    (irule tuple_ret_gas_path >>
+     conj_tac >- simp[Abbr `sl`] >>
+     qexistsl [`bb'`, `mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) []`] >>
+     gvs[Abbr `sl`, same_blocks_def, venomInstTheory.mk_inst_def]) >>
+  `state_rel func cenv cx (ee with scopes := []) sl` by
+    (`state_rel func cenv cx (ee with scopes := []) sv` by
+       (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
+     irule state_rel_frame >>
+     simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
+     qexistsl [`ee with scopes := []`, `sv`] >> simp[Abbr `sl`] >>
+     qpat_x_assum `state_rel _ _ _ _ sv` mp_tac >>
+     simp[state_rel_def, immutables_rel_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
+    (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
+  qexists_tac `IntRet <|iret_values := words; iret_adopt_fmp := NONE|> sl` >>
+  conj_tac
+  >- (drule gas_path_then >> disch_then drule >> simp[Abbr `sl`]) >>
+  simp[exit_result_def] >> gen_tac >>
+  `((ee with gas_obs := tail) with scopes := []) =
+   ((ee with scopes := []) with gas_obs := tail)` by
+    simp[evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >> rewrite_tac[intret_q_gas_obs] >>
+  simp[intret_q_def, result_rel_def, Abbr `words`] >>
+  irule intret_vals_match_tuple >> simp[]
+QED
+
+Finalise tuple_suffix_post[local]
 
 (* return e of a tuple of words that goes back on the stack
    (ce_returns_count = LENGTH tys > 1, no return buffer): e's fragment,
@@ -36,8 +318,8 @@ Theorem compile_return_tuple_int_frag:
       (stmt_env cenv lctx (TupleT tys) (Return (SOME e)))
       (eval_stmt cx (Return (SOME e))) es
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
   `LENGTH tys <> 1 /\ 0 < LENGTH tys` by decide_tac >>
   `tys <> []` by (strip_tac >> gvs[]) >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
@@ -50,10 +332,6 @@ Proof
   rename1 `_ = (elems, s2)` >> simp[] >>
   Cases_on `emit_inst RET (elems ++ [Var rpc]) [] s2` >>
   rename1 `_ = (u, s3)` >> Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  suspend "code"
-QED
-
-Resume compile_return_tuple_int_frag[code]:
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   `!x. op = Var x ==> not_fresh_at s1 x` by metis_tac[] >>
   drule compile_load_tuple_elements_extends >> strip_tac >>
@@ -63,110 +341,56 @@ Resume compile_return_tuple_int_frag[code]:
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `fn_has_code s1 s2 func /\ fn_has_code s2 s3 func` by
     metis_tac[fn_has_code_split] >>
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  pure_rewrite_tac[eval_return_forced] >>
-  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
-  rename1 `_ = (r1, es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
-  `expr_res_ok r1` by (
-    Cases_on `r1`
-    >- gvs[expr_res_ok_def] >>
-    qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
-    simp[bind_def] >> Cases_on `eval_expr cx e es` >>
-    rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-    imp_res_tac read_result_no_control >>
-    imp_res_tac (cj 1 eval_expr_no_control) >>
-    gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[return_forced_admissible] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
-  impl_tac >- fs[] >>
-  simp[frag_exec_def] >>
-  disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
-  >- suspend "value" >>
-  qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  disch_then drule >> simp[] >> disch_then (qspec_then `s0` mp_tac) >> simp[] >>
+  simp[gas_outcome_def, gas_summary_at_def] >>
+  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gvs[]
+      >- suspend "normal" >>
+      suspend "exception") >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[return_forced_exempt]
 QED
 
-Resume compile_return_tuple_int_frag[value]:
-  rename1 `expr_post ctx func cenv cx e es sa s1 s0 es1 v op sv` >>
+Resume compile_return_tuple_int_frag[normal]:
+  qpat_x_assum `!sa' op' sb'. _` kall_tac >>
+  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def]) >>
   `value_has_type ret_tv v` by
-    (qpat_x_assum `!v es1. _ ==> _` (qspecl_then [`v`, `es1`] mp_tac) >>
-     simp[]) >>
-  drule_all tuple_type_value >> strip_tac >>
-  gvs[expr_post_def, return_def] >>
-  `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
-  qpat_x_assum `expr_val_rel _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
-  `tuple_in_memory vs tvs (w2n w + 0) sv.vs_memory` by
-    (first_x_assum (qspec_then `TupleTV tvs` mp_tac) >>
-     simp[val_in_memory_def]) >>
-  `w2n w + 0 + 32 * LENGTH tys <= dimword (:256)` by
-    (drule_all expr_val_at_bound >>
-     simp[val_footprint_def, type_memory_size_def] >>
-     drule_all word_tuple_size >> simp[]) >>
-  `tuple_words cenv w tys 0 sv.vs_memory =
-     MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))` by
-    (irule tuple_words_typed >> metis_tac[]) >>
-  drule compile_load_tuple_elements_run >>
-  disch_then (qspecl_then [`sv`, `w`] mp_tac) >> simp[] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >>
-  rename1 `run_inst_seq _ sv = OK (sv with vs_vars := lvars)` >>
-  suspend "loads"
+    (first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
+     strip_tac >> first_x_assum irule >>
+     simp[SF ETA_ss] >> metis_tac[]) >>
+  `1 < LENGTH tys` by decide_tac >>
+  `~t.vs_halted` by metis_tac[gas_path_normal] >>
+  drule_all tuple_suffix_post >> strip_tac >>
+  qexistsl_tac [`INR (ReturnException v)`, `es_end`, `r`] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+      conj_tac
+      >- (irule return_forced_source_normal >> first_assum ACCEPT_TAC) >>
+      drule gas_path_then >> disch_then drule >> simp[]) >>
+  disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  gen_tac >> pure_rewrite_tac[stmt_exit_def] >> disj2_tac >>
+  qexists_tac `v` >> simp[NoAsms] >>
+  `((es_end with gas_obs := tail) with scopes := []) =
+   ((es_end with scopes := []) with gas_obs := tail)` by
+    simp[evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >> rewrite_tac[intret_q_gas_obs] >>
+  qpat_x_assum `!tail. intret_q _ _ _ _ _ _ _` (qspec_then `[]` mp_tac) >>
+  simp[] >> strip_tac >>
+  irule (iffLR intret_q_gas_obs) >> qexists_tac `[]` >> simp[]
 QED
 
-Resume compile_return_tuple_int_frag[loads]:
-  qabbrev_tac `words = MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))` >>
-  qabbrev_tac `sl = sv with <| vs_vars := lvars; vs_inst_idx := LENGTH s2.cs_current_insts |>` >>
-  `frag_exec ctx s1 s2 (\x. x = sv) (\x. x = sl) (\r. F)` by
-    (irule frag_exec_run_inst_seq >> fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-     simp[Abbr `sl`]) >>
-  qpat_x_assum `frag_exec ctx s1 s2 _ _ _` (mp_tac o REWRITE_RULE [frag_exec_def]) >>
-  disch_then (qspecl_then [`func`, `sv`] mp_tac) >> simp[] >> strip_tac >>
-  `?pc. lookup_var rpc sl = SOME pc` by
-    (qpat_x_assum `ret_pc_ok _ _ _` mp_tac >> simp[ret_pc_ok_def] >>
-     strip_tac >>
-     `not_fresh_at s1 rpc` by
-       (irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
-     simp[Abbr `sl`, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
-  `eval_operands elems sl = SOME words` by
-    simp[Abbr `sl`, eval_operands_vars_inst_idx] >>
-  qspecl_then [`s2`, `s3`, `func`,
-               `[mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) []]`]
-    mp_tac fn_has_code_same_block >>
-  impl_tac >- simp[] >> strip_tac >>
-  `get_instruction bb (LENGTH s2.cs_current_insts) =
-     SOME (mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) [])` by
-    (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst_base (mk_inst s2.cs_next_id RET (elems ++ [Var rpc]) []) sl =
-     IntRet <| iret_values := words; iret_adopt_fmp := NONE |> sl` by
-    (irule step_ret_values >> metis_tac[]) >>
-  `run_from 0 ctx func sl =
-     IntRet <| iret_values := words; iret_adopt_fmp := NONE |> sl` by
-    (qpat_x_assum `step_inst_base _ sl = _` mp_tac >>
-     qpat_x_assum `get_instruction bb _ = _` mp_tac >>
-     simp[Abbr `sl`, run_from_def, Once exec_block_def, step_inst_non_invoke,
-          venomInstTheory.mk_inst_def] >>
-     rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func sl <> Error e) ==> _`
-    (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `run_from fv ctx func sv = _` >>
-  qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
-    (qspec_then `fv` mp_tac) >> simp[] >> strip_tac >>
-  rename1 `run_from f0 ctx func s0 = _` >>
-  `state_rel func cenv cx (es' with scopes := []) sl` by
-    (`state_rel func cenv cx (es' with scopes := []) sv` by
-       (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
-     irule state_rel_frame >>
-     simp[local_ptrs_rel_def, lookup_scopes_def, local_region_def] >>
-     qexistsl [`es' with scopes := []`, `sv`] >> simp[Abbr `sl`] >>
-     qpat_x_assum `state_rel _ _ _ _ sv` mp_tac >>
-     simp[state_rel_def, immutables_rel_def] >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
-  `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
-    (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
-  qexists_tac `f0` >>
-  simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def,
-       Abbr `words`] >>
-  disj2_tac >> irule intret_vals_match_tuple >> simp[]
+Resume compile_return_tuple_int_frag[exception]:
+  Cases_on `res` >- fs[expr_exit_def] >>
+  qexistsl_tac [`INR y`, `es_end`, `r`] >>
+  conj_tac
+  >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+      simp[gas_marked_exec_def] >> strip_tac >>
+      irule return_forced_source_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
 QED
 
 Finalise compile_return_tuple_int_frag

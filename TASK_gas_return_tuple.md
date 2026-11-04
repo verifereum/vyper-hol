@@ -57,7 +57,7 @@ Independent audit answered PROVABLE for this exact actual-source tuple root, inc
 - lowering/stmtSimDefsScript.sml, lowering/stmtSimPropsScript.sml, lowering/loweringPostsScript.sml: actual statement judgment and full posts.
 - lowering/exprSimDefsScript.sml, lowering/gasOutcomeScript.sml, lowering/gasSummaryScript.sml, lowering/gasSummaryComposeScript.sml: counted expression/source-action boundaries.
 - lowering/gasExemptCertScript.sml, lowering/gasIntCallBodyScript.sml, lowering/gasIntCallArgsScript.sml: existing concrete certificate transport.
-- lowering/fragGasPathScript.sml, lowering/gasCountScript.sml: actual target paths and GAS counts.
+- lowering/fragGasPathScript.sml, venom/proofs/gasCountScript.sml: actual target paths and GAS counts.
 - lowering/exprLoweringPropsScript.sml, lowering/emitHelperPropsScript.sml: compiler and execution facts.
 - lowering/defs/stmtLoweringScript.sml, lowering/defs/compileEnvScript.sml: actual return compiler and result/state relations.
 - semantics/vyperInterpreterScript.sml, semantics/vyperStateScript.sml: actual source actions and monad laws.
