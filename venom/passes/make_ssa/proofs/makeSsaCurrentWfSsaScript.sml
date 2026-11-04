@@ -18,8 +18,54 @@ Ancestors
   makeSsaCurrentAvailability venomExecProofs allocaRemapSSA removeUnusedSsaProofs
   makeSsaCurrentCleanupShape sorting venomFnScheduleRunner
   makeSsaCurrentCleanupBoundary makeSsaCurrentEdgeTrace
+  makeSsaCurrentAnalysis dominatorProofs dominatorDefs
+  makeSsaCurrentPathBridge makeSsaCurrentGraphCut
 Libs
   rich_listTheory
+
+Theorem current_wf_path_lrc[local]:
+  !fn path. path <> [] /\ is_fn_path fn path ==>
+    LRC (fn_cfg_edge fn) (FRONT path) (HD path) (LAST path)
+Proof
+  gen_tac >> Induct_on `path` >> simp[] >>
+  Cases_on `path` >>
+  simp[is_fn_path_def, LRC_def, FRONT_CONS] >>
+  rpt strip_tac >> qexists_tac `h` >> simp[] >>
+  qpat_x_assum `_ ==> LRC _ _ _ _` mp_tac >> simp[]
+QED
+
+Theorem current_wf_analysis_dominates:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM l (fn_labels fn) /\
+  dominates (dom_analyze (cfg_analyze fn) fn) d l ==>
+  fn_dominates fn d l
+Proof
+  strip_tac >> rewrite_tac[fn_dominates_def] >> conj_tac
+  >- metis_tac[current_all_labels_reachable, current_cfg_reachable] >>
+  gen_tac >> strip_tac >>
+  `LRC (fn_cfg_edge fn) (FRONT path) (HD path) (LAST path)` by
+    metis_tac[current_wf_path_lrc] >>
+  ` (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a)) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, current_cfg_edge_succs] >>
+  `HD path = eb.bb_label` by gvs[fn_entry_label_def] >>
+  `d = l \/ MEM d (FRONT path)` by
+    (irule dom_on_every_path >>
+     qexistsl [`eb`, `fn`] >> gvs[dominates_def]) >>
+  metis_tac[MEM_FRONT_NOT_NIL, MEM_LAST_NOT_NIL]
+QED
+
+Theorem current_wf_tree_ancestor_dominates:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM l (fn_labels fn) /\
+  current_tree_ancestor_path (current_dom_tree fn) l path /\ MEM d path ==>
+  fn_dominates fn d l
+Proof
+  strip_tac >> irule current_wf_analysis_dominates >>
+  drule_all current_actual_path_chain >> strip_tac >>
+  `strict_dominates (dom_analyze (cfg_analyze fn) fn) d l` by
+    metis_tac[current_actual_chain_membership, MEM_REVERSE] >>
+  gvs[strict_dominates_def] >> metis_tac[]
+QED
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
