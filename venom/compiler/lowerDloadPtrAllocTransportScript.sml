@@ -1,7 +1,8 @@
 Theory lowerDloadPtrAllocTransport
 Ancestors
   lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrTaint lowerDloadPtrAggregate
-  lowerDloadPtrRel finite_map list pred_set words
+  lowerDloadPtrRel ptrDiscipline venomExecSemantics venomState codegenRel
+  memLocDefs finite_map list pred_set words
 
 Theorem dload_live_site_original_insert:
   FLOOKUP f.dr_source id = NONE /\ FLOOKUP f.dr_target id = NONE /\
@@ -61,4 +62,142 @@ Theorem dload_saved_metadata_head_replace:
     dload_saved_metadata (DROP (SUC k) (g::fs)) (EL k Ws) (EL k cs) (EL k ds))
 Proof
   simp[]
+QED
+
+Theorem alloca_written_taint[local]:
+  inst.inst_opcode = ALLOCA ==> written_taint tn inst s = {}
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[written_taint_def] >>
+  rename1 `h::rest` >> Cases_on `rest` >> simp[written_taint_def] >>
+  rename1 `h::j::rest` >> Cases_on `rest` >> simp[written_taint_def] >>
+  rename1 `h::j::k::rest` >> Cases_on `rest` >> simp[written_taint_def]
+QED
+
+Theorem exec_alloca_memory_taint:
+  inst.inst_opcode = ALLOCA /\ exec_alloca inst s amount = OK s' ==>
+  s'.vs_memory = s.vs_memory /\
+  (step_taint inst s s' tn).t_mem = tn.t_mem UNION new_site_bytes s s'
+Proof
+  strip_tac >>
+  `written_taint tn inst s = {}` by simp[alloca_written_taint] >>
+  qpat_x_assum `exec_alloca inst s amount = OK s'` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  simp[update_var_def, step_taint_def, mem_taint_def,
+       step_writes_def, source_memory_write_ranges_def, range_bytes_def]
+QED
+
+Theorem exec_alloca_fresh_new_bytes:
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s amount = OK s' ==>
+  new_site_bytes s s' =
+    {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next + w2n amount}
+Proof
+  simp[exec_alloca_def] >> strip_tac >> gvs[] >>
+  simp[new_site_bytes_def, update_var_def, EXTENSION, FLOOKUP_UPDATE] >>
+  gen_tac >> eq_tac
+  >- (strip_tac >> Cases_on `inst.inst_id = aid` >> gvs[] >>
+      gvs[FLOOKUP_DEF]) >>
+  strip_tac >> qexists_tac `inst.inst_id` >> simp[] >>
+  gvs[FLOOKUP_DEF]
+QED
+
+Theorem exec_alloca_repeated_new_bytes:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
+  exec_alloca inst s amount = OK s' ==>
+  new_site_bytes s s' = {}
+Proof
+  simp[exec_alloca_def] >> strip_tac >> gvs[] >>
+  simp[new_site_bytes_def, update_var_def, EXTENSION, FLOOKUP_DEF] >>
+  metis_tac[]
+QED
+
+Theorem dload_live_site_original_insert_cases[local]:
+  dload_live_site
+    ((f with <|dr_source := f.dr_source |+ (id,(b,n));
+               dr_target := f.dr_target |+ (id,(c,n))|>)::fs) owner q x y m ==>
+  (owner = 0 /\ q = id /\ x = b /\ y = c /\ m = n) \/
+  dload_live_site (f::fs) owner q x y m
+Proof
+  Cases_on `owner` >> simp[dload_live_site_def, FLOOKUP_UPDATE] >>
+  Cases_on `id = q` >> simp[] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem dload_memory_original_insert[local]:
+  dload_live_layout lo sf tf (f::fs) /\
+  dload_memory_match lo (f::fs) tn un s t /\
+  s'.vs_memory = s.vs_memory /\ t'.vs_memory = t.vs_memory /\
+  tn'.t_mem = tn.t_mem UNION {i | sf <= i /\ i < sf+n} /\
+  un'.t_mem = un.t_mem UNION {i | tf <= i /\ i < tf+n} ==>
+  dload_memory_match lo
+    ((f with <|dr_source := f.dr_source |+ (id,(sf,n));
+               dr_target := f.dr_target |+ (id,(tf,n))|>)::fs)
+    tn' un' s' t'
+Proof
+  strip_tac >>
+  `lo <= sf /\ sf <= tf` by fs[dload_live_layout_def] >>
+  fs[dload_memory_match_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule dload_live_site_original_insert_cases >> strip_tac
+  >- (gvs[] >> simp[]) >>
+  `lo <= b /\ b+n' <= sf /\ lo <= c /\ c+n' <= tf` by
+    (drule_all dload_live_site_bounds >> simp[]) >>
+  `b+k < sf /\ c+k < tf` by decide_tac >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem dload_alloca_fresh_memory:
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
+  dload_live_layout lo s.vs_alloca_next t.vs_alloca_next (f::fs) /\
+  dload_memory_match lo (f::fs) tn un s t ==>
+  dload_memory_match lo
+    ((f with <|dr_source := f.dr_source |+
+                 (inst.inst_id,(s.vs_alloca_next,w2n amount));
+               dr_target := f.dr_target |+
+                 (inst.inst_id,(t.vs_alloca_next,w2n amount))|>)::fs)
+    (step_taint inst s s' tn) (step_taint inst t t' un) s' t'
+Proof
+  strip_tac >>
+  imp_res_tac exec_alloca_memory_taint >>
+  imp_res_tac exec_alloca_fresh_new_bytes >>
+  irule dload_memory_original_insert >> conj_tac >- simp[] >>
+  qexistsl [`s`,`t`,`tn`,`un`] >> simp[]
+QED
+
+Theorem dload_alloca_repeated_memory:
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
+  FLOOKUP t.vs_allocas inst.inst_id = SOME (c,n) /\
+  exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
+  dload_memory_match lo fs tn un s t ==>
+  dload_memory_match lo fs
+    (step_taint inst s s' tn) (step_taint inst t t' un) s' t'
+Proof
+  strip_tac >>
+  imp_res_tac exec_alloca_memory_taint >>
+  imp_res_tac exec_alloca_repeated_new_bytes >>
+  fs[dload_memory_match_def] >> metis_tac[]
+QED
+
+Theorem dload_alloca_fresh_pointer:
+  dload_pointer_word
+    ((f with <|dr_source := f.dr_source |+ (id,(b,n));
+               dr_target := f.dr_target |+ (id,(c,n))|>)::fs)
+    (b,n) (c,n) (n2w b) (n2w c)
+Proof
+  simp[dload_pointer_word_def, WORD_SUB_REFL] >>
+  qexistsl [`0`,`id`] >> simp[dload_live_site_def, FLOOKUP_UPDATE]
+QED
+
+Theorem dload_alloca_repeated_pointer:
+  FLOOKUP f.dr_source id = SOME (b,n) /\
+  FLOOKUP f.dr_target id = SOME (c,n) ==>
+  dload_pointer_word (f::fs) (b,n) (c,n) (n2w b) (n2w c)
+Proof
+  strip_tac >> simp[dload_pointer_word_def, WORD_SUB_REFL] >>
+  qexistsl [`0`,`id`] >> simp[dload_live_site_def]
 QED
