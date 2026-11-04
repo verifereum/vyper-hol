@@ -5,13 +5,14 @@
  * The conclusion is venom_asm_terminal_rel, which reads no stack, so the
  * frame's rest needs no lifting beyond the run on top ++ rest.
  *
- * TOP-LEVEL (all CHEATED):
- *   gen_inst_halt_frame_sim   — an instruction whose step Halts
- *   gen_inst_abort_frame_sim  — an instruction whose step Aborts
+ * TOP-LEVEL:
+ *   gen_inst_halt_frame_sim   — an instruction whose step Halts (pending)
+ *   gen_inst_abort_frame_sim  — an instruction whose step Aborts (proved)
  *)
 
 Theory fnFrameTerminal
 Ancestors
+  fnFrameTerminalAbort opcodeClass
   genFrameSim frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
@@ -167,5 +168,25 @@ Theorem gen_inst_abort_frame_sim:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = REVERT`
+  >- (drule_all gen_inst_revert_frame_sim >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qexistsl_tac [`n`, `out`] >> simp[]) >>
+  Cases_on `inst.inst_opcode = ASSERT`
+  >- (qpat_x_assum `inst.inst_opcode = ASSERT ==> _` drule >> disch_tac >>
+      drule_all gen_inst_assert_frame_sim >> strip_tac >>
+      qexistsl_tac [`n`, `out`] >> simp[]) >>
+  Cases_on `inst.inst_opcode = ASSERT_UNREACHABLE`
+  >- (drule_all gen_inst_assert_unreachable_frame_sim >> strip_tac >>
+      qexistsl_tac [`n`, `out`] >> simp[]) >>
+  Cases_on `inst.inst_opcode = INVALID`
+  >- (drule_all gen_inst_invalid_frame_sim >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qexistsl_tac [`n`, `out`] >> simp[]) >>
+  `MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY]` by
+    (drule step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
+  drule_all gen_inst_ext_fault_frame_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexistsl_tac [`n`, `out`] >> simp[]
 QED
