@@ -2098,3 +2098,25 @@ QED
      read equality is needed in this branch. vv_at/operand-frame integration
      is separate and remains open; no frozen theorem proof follows yet.
 *)
+
+(* A call-free expression may still pop an immutable: no-pop is essential. *)
+Theorem callfree_immutable_pop_mutates_probe[local]:
+  !cx s.
+    s.immutables =
+      [(cx.txn.target, [(NONE, FEMPTY |+
+        ("a", (ArrayTV (BaseTV (UintT 256)) (Dynamic 1),
+               ArrayV (DynArrayV [IntV 7]))))])] ==>
+    ?v t. pop_place cx (ImmutablePlace NONE "a" []) s = (INL v,t) /\
+          t.immutables <> s.immutables
+Proof
+  rpt strip_tac >>
+  simp[pop_place_def, get_immutables_def, get_address_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, set_immutable_def] >>
+  EVAL_TAC >>
+  gvs[raise_def, return_def] >>
+  EVAL_TAC >>
+  strip_tac >>
+  pop_assum (mp_tac o Q.AP_TERM `\fm. FLOOKUP fm "a"`) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
+QED
