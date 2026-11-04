@@ -15,6 +15,7 @@ val send_monad_simps = [vyperStateTheory.bind_def,
   vyperStateTheory.lift_option_type_def, vyperStateTheory.read_result_def,
   dest_AddressV_def, dest_NumV_def, ext_call_kwarg_def,
   byteTheory.word_of_bytes_be_def,
+  EVAL ``empty_evaluation_context.txn.is_static``,
   (byteTheory.word_of_bytes_word_to_bytes |> INST_TYPE [alpha |-> ``:160``]
     |> SRULE [dividesTheory.compute_divides])];
 
