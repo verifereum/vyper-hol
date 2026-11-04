@@ -1,6 +1,6 @@
 Theory abiArgsCompilerImage
 Ancestors
-  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins exprCallBounds
+  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins exprCallBounds fragExec
 
 Theorem abi_image_convert_label:
   compile_type_convert op conv sa = (Label l,sb) ==>
@@ -827,4 +827,29 @@ Theorem abi_image_compile_expr_label:
   sb.cs_blocks = sa.cs_blocks
 Proof
   metis_tac[abi_image_compile_mutual]
+QED
+
+Theorem abi_image_lower_value_label:
+  lower_value compile_expr ce ty e sa = (Label l,sb) ==>
+  sb.cs_blocks = sa.cs_blocks
+Proof
+  simp[lower_value_def, comp_bind_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  drule abi_image_unwrap_label >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_compile_expr_label]
+QED
+
+Theorem abi_image_lower_value_label_emitted:
+  lower_value compile_expr ce ty e sa = (Label l,sb) ==>
+  emitted_blocks sa sb = []
+Proof
+  strip_tac >> drule abi_image_lower_value_label >>
+  simp[emitted_blocks_def]
+QED
+
+Theorem abi_image_lower_value_label_no_collision:
+  lower_value compile_expr ce ty e sa = (Label l,sb) ==>
+  !bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb
+Proof
+  strip_tac >> drule abi_image_lower_value_label_emitted >> simp[]
 QED
