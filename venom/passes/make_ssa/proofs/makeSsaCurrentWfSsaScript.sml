@@ -3776,6 +3776,45 @@ Proof
   metis_tac[current_wf_original_phi_annotation_locality]
 QED
 
+Theorem current_wf_exceptional_inserted_tokens:
+  current_wf_phi_context s fn renamed s' A H events /\
+  entry_block fn = SOME eb /\
+  lookup_block h fn.fn_blocks = SOME old /\ k < LENGTH old.bb_instructions /\
+  (EL k old.bb_instructions).inst_opcode = PHI /\
+  (EL k old.bb_instructions).inst_outputs = [v] /\
+  current_actual_inserted fn v h ==>
+  current_token_name H (CurrentInserted v h) = SOME v /\
+  (!ev. MEM ev events ==>
+    current_event_exit_env ev v = CurrentDefault v \/
+    current_event_exit_env ev v = CurrentOriginal h k 0) /\
+  (?ev. MEM ev events /\ fn_cfg_edge fn (current_event_label ev) h /\
+    current_event_exit_env ev v = CurrentOriginal h k 0)
+Proof
+  strip_tac >>
+  `MEM old fn.fn_blocks /\ old.bb_label = h` by
+    metis_tac[lookup_block_MEM, lookup_block_label] >>
+  `MEM (EL k old.bb_instructions) old.bb_instructions` by simp[EL_MEM] >>
+  conj_tac >- metis_tac[current_wf_exceptional_inserted_spelling, MEM] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all current_wf_original_phi_exit_token >>
+      IF_CASES_TAC >> simp[]) >>
+  `?p. fn_cfg_edge fn p h /\
+    dominates (dom_analyze (cfg_analyze fn) fn) h p` by
+    metis_tac[current_wf_original_phi_inserted_return, MEM] >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ all_reachable fn` by fs[current_wf_phi_context_def] >>
+  `MEM p (MAP (\bb. bb.bb_label) renamed)` by
+    (drule current_wf_precleanup_labels >> disch_then SUBST1_TAC >>
+     fs[fn_cfg_edge_def, MEM_MAP] >> metis_tac[]) >>
+  `?bb. MEM bb renamed /\ bb.bb_label = p` by
+    (fs[MEM_MAP] >> metis_tac[]) >>
+  `?ev. MEM ev events /\ current_event_label ev = p` by
+    metis_tac[current_wf_precleanup_coverage] >>
+  qexists_tac `ev` >> simp[] >>
+  drule_all current_wf_original_phi_exit_token >>
+  simp[strict_dominates_def] >> metis_tac[]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
