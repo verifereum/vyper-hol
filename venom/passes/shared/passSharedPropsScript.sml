@@ -1124,3 +1124,25 @@ Theorem assign_transparent =
 
 Theorem phi_transparent =
   copyFwdEquivTheory.phi_transparent
+
+(* Shared static SSA uniqueness, promoted from removeUnusedProofs. *)
+Theorem all_distinct_flat_map_inj:
+ !f (ls:'b list) (a:'b) (b:'b) (x:'a).
+ ALL_DISTINCT (FLAT (MAP f ls)) /\ MEM a ls /\ MEM b ls /\
+ MEM x (f a) /\ MEM x (f b) ==> a = b
+Proof
+ Induct_on `ls` >> simp[] >> rpt strip_tac >>
+ gvs[ALL_DISTINCT_APPEND, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem ssa_outputs_same_inst:
+ !fn inst1 inst2 v.
+ ssa_form fn /\ MEM inst1 (fn_insts_blocks fn.fn_blocks) /\
+ MEM inst2 (fn_insts_blocks fn.fn_blocks) /\
+ MEM v inst1.inst_outputs /\ MEM v inst2.inst_outputs ==> inst1 = inst2
+Proof
+ rpt strip_tac >>
+ irule (INST_TYPE [``:'a`` |-> ``:string``] all_distinct_flat_map_inj) >>
+ qexistsl [`\i. i.inst_outputs`, `fn_insts_blocks fn.fn_blocks`, `v`] >>
+ gvs[ssa_form_def, fn_insts_def]
+QED

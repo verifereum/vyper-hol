@@ -1489,17 +1489,6 @@ Proof
   fs[lookup_block_def]
 QED
 
-(* If ALL_DISTINCT (FLAT (MAP f ls)) and x in f(a) and x in f(b), then a = b *)
-Theorem all_distinct_flat_map_inj[local]:
-  !f (ls:'b list) (a:'b) (b:'b) (x:'a).
-    ALL_DISTINCT (FLAT (MAP f ls)) /\
-    MEM a ls /\ MEM b ls /\
-    MEM x (f a) /\ MEM x (f b) ==> a = b
-Proof
-  Induct_on `ls` >> simp[] >> rpt strip_tac >>
-  gvs[listTheory.ALL_DISTINCT_APPEND, listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
-  metis_tac[]
-QED
 
 (* fn_insts_blocks = FLAT of per-block instructions *)
 Theorem fn_insts_blocks_flat[local]:
@@ -1522,24 +1511,6 @@ Proof
        listTheory.MAP_MAP_o, combinTheory.o_DEF]
 QED
 
-(* Under ssa_form, v in outputs of two instructions → same instruction *)
-Theorem ssa_outputs_same_inst:
-  !fn inst1 inst2 v.
-    ssa_form fn /\
-    MEM inst1 (fn_insts_blocks fn.fn_blocks) /\
-    MEM inst2 (fn_insts_blocks fn.fn_blocks) /\
-    MEM v inst1.inst_outputs /\ MEM v inst2.inst_outputs ==>
-    inst1 = inst2
-Proof
-  rpt strip_tac >>
-  fs[ssa_form_def, fn_insts_def] >>
-  mp_tac (Q.ISPECL [
-    `\(i:instruction). i.inst_outputs`,
-    `fn_insts_blocks fn.fn_blocks`,
-    `inst1:instruction`, `inst2:instruction`, `v:string`
-  ] all_distinct_flat_map_inj) >>
-  simp[]
-QED
 
 Theorem lookup_block_label[local]:
   !lbl bbs bb. lookup_block lbl bbs = SOME bb ==> bb.bb_label = lbl

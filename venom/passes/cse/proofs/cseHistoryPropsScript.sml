@@ -1322,3 +1322,44 @@ Proof
     first_x_assum (qspecl_then [`bb`, `inst`] mp_tac) >> simp[]) >>
  irule cse_prefix_available_last_write >> metis_tac[]
 QED
+
+Theorem cse_prefix_writing_occurrence:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ MEM ev events /\ cse_event_writes ev v ==>
+ ?bb k inst. MEM bb fn.fn_blocks /\ get_instruction bb k = SOME inst /\
+ MEM v inst.inst_outputs /\ cse_event_covers ev bb k inst
+Proof
+ strip_tac >> drule_all cse_prefix_event_provenance >>
+ Cases_on `ev` >> gvs[cse_event_writes_def, cse_event_covers_def] >> strip_tac
+ >- (rename1 `MEM inst (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions)` >>
+     `?k. k < LENGTH (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) /\
+       EL k (TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions) = inst` by
+       metis_tac[MEM_EL] >>
+     gvs[LENGTH_TAKE, phi_prefix_length_le, EL_TAKE] >>
+     qexistsl [`k`, `EL k bb.bb_instructions`] >>
+     `k < LENGTH bb.bb_instructions` by
+       (mp_tac (Q.SPEC `bb.bb_instructions` phi_prefix_length_le) >> decide_tac) >>
+     simp[get_instruction_def] >> metis_tac[lookup_block_MEM]) >>
+ metis_tac[lookup_block_MEM]
+QED
+
+Theorem cse_prefix_writing_static_definer:
+ wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+ cse_prefix ctx fn fuel0 s0 events phase /\
+ MEM ev events /\ cse_event_writes ev v /\
+ MEM definst (fn_insts fn) /\ MEM v definst.inst_outputs ==>
+ ?bb k. MEM bb fn.fn_blocks /\ get_instruction bb k = SOME definst /\
+ cse_event_covers ev bb k definst
+Proof
+ strip_tac >> drule_all cse_prefix_writing_occurrence >> strip_tac >>
+ `MEM inst (fn_insts_blocks fn.fn_blocks)` by
+   (`MEM inst bb.bb_instructions` by
+      (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+    qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
+    qspec_tac (`fn.fn_blocks`, `bbs`) >>
+    Induct >> simp[fn_insts_blocks_def] >> rpt strip_tac >> gvs[]) >>
+ `inst = definst` by
+   (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[]) >>
+ metis_tac[]
+QED
