@@ -64,3 +64,113 @@ Theorem ld_target_prefix_expansion_bounds[local]:
 Proof
   conj_tac >> strip_tac >> drule ld_target_prefix_bound >> simp[]
 QED
+
+(* Suspended caller facts deliberately contain no saved-memory relation. *)
+Definition ld_saved_locals_def:
+  ld_saved_locals V E keys d A f g <=>
+    f.lf_inst.inst_outputs = g.lf_inst.inst_outputs /\
+    LIST_REL (ld_owned_selection E) f.lf_params g.lf_params /\
+    (!v. ld_owned_selection E (FLOOKUP f.lf_prov v) (FLOOKUP g.lf_prov v)) /\
+    (!id. ld_owned_selection E (FLOOKUP f.lf_local id) (FLOOKUP g.lf_local id)) /\
+    ld_erase f.lf_local = f.lf_state.vs_allocas /\
+    ld_erase g.lf_local = g.lf_state.vs_allocas /\
+    ld_owned_vars V E f.lf_prov g.lf_prov
+      (entry_taint with t_var := f.lf_tvar)
+      (entry_taint with t_var := g.lf_tvar) f.lf_state g.lf_state /\
+    ld_alloc_account keys d A f.lf_state g.lf_state
+End
+
+Theorem ld_saved_locals_params:
+  ld_saved_locals V E keys d A f g ==>
+  LIST_REL (ld_owned_selection E) f.lf_params g.lf_params
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_prov:
+  ld_saved_locals V E keys d A f g ==>
+  !v. ld_owned_selection E (FLOOKUP f.lf_prov v) (FLOOKUP g.lf_prov v)
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_local:
+  ld_saved_locals V E keys d A f g ==>
+  !id. ld_owned_selection E (FLOOKUP f.lf_local id) (FLOOKUP g.lf_local id)
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_erasure:
+  ld_saved_locals V E keys d A f g ==>
+  ld_erase f.lf_local = f.lf_state.vs_allocas /\
+  ld_erase g.lf_local = g.lf_state.vs_allocas
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_vars:
+  ld_saved_locals V E keys d A f g ==>
+  ld_owned_vars V E f.lf_prov g.lf_prov
+    (entry_taint with t_var := f.lf_tvar)
+    (entry_taint with t_var := g.lf_tvar) f.lf_state g.lf_state
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_account:
+  ld_saved_locals V E keys d A f g ==>
+  ld_alloc_account keys d A f.lf_state g.lf_state
+Proof
+  simp[ld_saved_locals_def]
+QED
+
+Theorem ld_saved_locals_return_account:
+  ld_saved_locals V E keys d A f g ==>
+  ld_alloc_account keys d A (merge_callee_state f.lf_state s_end)
+    (merge_callee_state g.lf_state t_end)
+Proof
+  strip_tac >> irule ld_alloc_account_return >>
+  metis_tac[ld_saved_locals_account]
+QED
+
+Theorem ld_merge_lookup_var[simp]:
+  lookup_var v (merge_callee_state s u) = lookup_var v s
+Proof
+  simp[lookup_var_def, merge_callee_state_def]
+QED
+
+Theorem ld_merge_labels[simp]:
+  (merge_callee_state s u).vs_labels = s.vs_labels
+Proof
+  simp[merge_callee_state_def]
+QED
+
+Theorem ld_owned_vars_merge:
+  ld_owned_vars V E AG AH tn un s t ==>
+  ld_owned_vars V E AG AH tn un (merge_callee_state s u) (merge_callee_state t v)
+Proof
+  simp[ld_owned_vars_def]
+QED
+
+Theorem ld_saved_locals_return_vars:
+  ld_saved_locals V E keys d A f g ==>
+  ld_owned_vars V E f.lf_prov g.lf_prov
+    (entry_taint with t_var := f.lf_tvar)
+    (entry_taint with t_var := g.lf_tvar)
+    (merge_callee_state f.lf_state s_end) (merge_callee_state g.lf_state t_end)
+Proof
+  strip_tac >> irule ld_owned_vars_merge >> metis_tac[ld_saved_locals_vars]
+QED
+
+(* Stack certificates carry frame-specific domains and allocation budgets. *)
+Theorem ld_saved_stack_shapes[local]:
+  (LIST_REL (\f g. ?V keys d A. ld_saved_locals V E keys d A f g)
+    [] gs <=> gs = []) /\
+  (LIST_REL (\f g. ?V keys d A. ld_saved_locals V E keys d A f g)
+    (f::fs) (g::gs) <=>
+    (?V keys d A. ld_saved_locals V E keys d A f g) /\
+    LIST_REL (\f g. ?V keys d A. ld_saved_locals V E keys d A f g) fs gs)
+Proof
+  simp[]
+QED
