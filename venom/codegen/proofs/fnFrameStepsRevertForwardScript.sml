@@ -3,6 +3,7 @@ Theory fnFrameStepsRevertForward
 Ancestors
   contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA venomWf
   stackPlanGen venomExecProofs removeUnusedSsaProofs frameRel
+  frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -346,4 +347,53 @@ Proof
   >- (`owned op` by (first_x_assum irule >> metis_tac[]) >> simp[]) >>
   Cases_on `op` >>
   gvs[stackPlanTypesTheory.is_var_operand_def, normalize_operand_def]
+QED
+
+Theorem rf_value_inv_assign:
+  codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+  get_instruction bb k = SOME inst /\ k <= j /\
+  inst.inst_opcode = ASSIGN /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  step_inst fuel ctx inst s = OK s' /\
+  rf_value_inv fn ra bb j lo entry k s ==>
+  rf_value_inv fn ra bb j lo entry (SUC k) s'
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst fuel ctx inst s = OK s'` mp_tac >>
+  simp[Once step_inst_def, Once step_inst_base_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  rename1 `inst.inst_outputs = [x]` >>
+  rename1 `inst.inst_operands = [rhs]` >>
+  rename1 `eval_operand rhs s = SOME v` >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  `normalize_operand (dfg_build_function fn) [] (Var x) =
+   normalize_operand (dfg_build_function fn) [] rhs` by
+    (irule normalize_operand_codegen_assign >> simp[] >> qexists_tac `inst` >>
+     simp[] >> irule dfg_build_function_ssa_def >> simp[] >> metis_tac[]) >>
+  `rf_live_use bb k j rhs` by
+    (irule rf_live_use_current >>
+     simp[compute_operands_def, python_stack_operands_def]) >>
+  `operand_val (frame_view fn ra s) lo rhs =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] rhs)` by
+    metis_tac[rf_value_inv_def] >>
+  `MEM x inst.inst_outputs` by simp[] >>
+  `eval_operand rhs (frame_view fn ra s) =
+   SOME (if retpc_var fn x then ra else v)` by
+    (drule_all assign_eval_frame_view >>
+     disch_then (qspecl_then [`ra`, `s.vs_memory`] mp_tac) >>
+     Cases_on `rhs` >>
+     simp[frame_view_def, venomStateTheory.eval_operand_def,
+          venomStateTheory.lookup_var_def]) >>
+  simp[rf_value_inv_def] >> rpt strip_tac >>
+  Cases_on `op = Var x`
+  >- (gvs[frame_view_update_var, operand_val_update_var_eq] >>
+      metis_tac[operand_val_eq_eval]) >>
+  `rf_live_use bb k j op` by
+    (irule rf_live_use_backward >> simp[] >> metis_tac[]) >>
+  `operand_val (frame_view fn ra s) lo op =
+   operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    metis_tac[rf_value_inv_def] >>
+  simp[frame_view_update_var] >>
+  irule EQ_TRANS >> goal_assum (drule_at Any) >>
+  irule operand_val_update_var >> Cases_on `op` >> gvs[]
 QED
