@@ -3700,7 +3700,7 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-Theorem ci_mono_compile_raw_log[local]:
+Theorem ci_mono_compile_raw_log:
   !cfn cenv ret_ty ty args default_ret sa.
     (!cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ==>
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty RawLog args default_ret sa))
@@ -3924,7 +3924,7 @@ Proof
   irule ci_mono_lower_value_cfn >> simp[]
 QED
 
-Theorem ci_mono_compile_call[local]:
+Theorem ci_mono_compile_call:
   ∀ cfn cenv ret_ty ty target args default_ret sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
     ci_mono sa (SND (compile_call cfn cenv ret_ty ty target args default_ret sa))

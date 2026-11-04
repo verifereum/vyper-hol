@@ -60,7 +60,13 @@ jobs:
           TMPDIR: ${{ runner.temp }}
         run: |
           # The witnesses build in the witnesses jobs; build-rollup adds them.
-          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots)
+          holbuild --verbose -j"$(nproc)" build --skip-checkpoints --skip-proof-steps $(python3 tools/ci_targets.py build-roots) $(cut -d: -f1 .github/raw-system-proof-checks.txt)
+
+      - name: Check raw-system proof dependencies
+        run: |
+          while IFS= read -r target; do
+            holbuild check "$target" </dev/null
+          done < .github/raw-system-proof-checks.txt
 
       - name: Verify no successful-build checkpoints remain
         run: |

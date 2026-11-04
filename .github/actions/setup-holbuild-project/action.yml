@@ -8,7 +8,8 @@ runs:
 
     - uses: ./.github/actions/setup-holbuild
       with:
-        holbuild-ref: v0.13.1
+        # Includes the plain-build fix for `holbuild check` (holbuild#326).
+        holbuild-ref: 0eca1572b837a2c40fa1f450d6a7fec70811c522
 
     - name: Report selected holbuild version
       shell: bash
