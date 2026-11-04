@@ -1,6 +1,7 @@
 Theory concretizePtrParamSupport
 Ancestors concretizePtrRuntimeOrigins concretizeAnalysisRoots ptrDiscipline
   pointerClosure pointerConfinedDefs venomInst venomWf finite_map list pred_set words
+  contextCodegenRel removeUnusedSsaProofs
 
 Definition ptr_params_ok_def:
   ptr_params_ok P fn PG <=>
@@ -83,4 +84,63 @@ Proof
     (fs[fn_ptr_ok_def] >> metis_tac[]) >>
   gvs[ptr_use_ok_def, ptr_params_ok_def] >> rpt strip_tac >> gvs[EL_MAP] >>
   Cases_on `EL k ops` >> gvs[op_prov_def, ptr_static_support_def] >> metis_tac[]
+QED
+
+Theorem ptr_frame_static_invariant:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    !P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+      EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions ==>
+    MEM fn ctx.ctx_functions /\ ptr_params_ok P fn PG /\
+    ptr_static_support P fn G /\
+    EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\
+      ptr_params_ok P f.cf_fn f.cf_params /\
+      ptr_static_support P f.cf_fn f.cf_prov) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[lookup_function_MEM])
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[active_inst_def, fn_insts_def,
+          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[MEM_EL]) >>
+      simp[] >> irule ptr_static_step >> fs[EVERY_MEM] >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+      simp[] >> metis_tac[ptr_static_entry])
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+      `MEM inst (fn_insts fn)` by
+        (gvs[active_inst_def, fn_insts_def,
+          removeUnusedSsaProofsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+         metis_tac[MEM_EL]) >>
+      simp[] >> conj_tac >- metis_tac[lookup_function_MEM] >>
+      irule ptr_static_invoke_params >> fs[EVERY_MEM] >> metis_tac[])
+  >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  simp[] >> metis_tac[ptr_static_restrict]
+QED
+
+Theorem ptr_frame_current_static:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions ==>
+  MEM fn ctx.ctx_functions /\ ptr_params_ok P fn PG /\
+  ptr_static_support P fn G
+Proof metis_tac[ptr_frame_static_invariant]
+QED
+
+Theorem ptr_frame_saved_static:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\
+  EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
+  n < LENGTH stk ==>
+  MEM (EL n stk).cf_fn ctx.ctx_functions /\
+  ptr_params_ok P (EL n stk).cf_fn (EL n stk).cf_params /\
+  ptr_static_support P (EL n stk).cf_fn (EL n stk).cf_prov
+Proof
+  strip_tac >> drule ptr_frame_static_invariant >>
+  disch_then (qspec_then `P` mp_tac) >> simp[] >>
+  simp[EVERY_EL] >> metis_tac[]
 QED
