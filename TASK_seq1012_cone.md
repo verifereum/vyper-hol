@@ -58,8 +58,13 @@ helper that relates `expr_post`/`vv_post` of an arbitrary expression `e` to
 facts at `expr_type e`, in either direction, may gain exactly one new
 hypothesis, `post_value_type cenv e = expr_type e`, and nothing else.
 Instances: `copy_buffer_expr_post` (exprSimCopy), `expr_post_operand_kept_stable`,
-`expr_post_operand_kept`, `expr_post_operand_kept_at` (exprSimOperands), and any
-helper of the same shape. Add the hypothesis, repair the proof, and discharge
+`expr_post_operand_kept`, `expr_post_operand_kept_at` (exprSimOperands),
+`unwrap_copy_sim` and `unwrap_value_sim` (exprSimUnwrap: their memory-size
+premise is at `expr_type e`), the helpers in exprSimAggregateChildren /
+exprSimAggregates that use them for an arbitrary child, and any helper of
+the same shape. Where a consumer already has #992's
+`lowered_value_type cenv e = expr_type e`, discharge with
+`post_value_type_lowered` (exprSim). Add the hypothesis, repair the proof, and discharge
 it at each consumer: from `post_value_type_no_calls`, `post_value_type_word`,
 `post_value_type_bytestring` or `post_value_type_not_int_call`, or from a
 hypothesis already in scope. If a consumer cannot discharge it (its operand

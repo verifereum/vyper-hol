@@ -533,6 +533,16 @@ Proof
   rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[post_value_type_def]
 QED
 
+Theorem post_value_type_lowered:
+  !cenv e. lowered_value_type cenv e = expr_type e ==>
+           post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- gvs[post_value_type_def, vyperASTTheory.expr_type_def] >>
+  irule post_value_type_not_int_call >> metis_tac[]
+QED
+
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
