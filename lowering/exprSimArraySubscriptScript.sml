@@ -3409,3 +3409,39 @@ Proof
   Cases_on `(observer_collision_array_end cenv).cs_current_insts` >>
   gvs[observer_collision_array_end_fields, mk_inst_def]
 QED
+
+Definition observer_sanitized_start_def:
+  observer_sanitized_start = observer_collision_start with cs_current_bb := "@fresh"
+End
+
+Definition observer_sanitized_index_end_def:
+  observer_sanitized_index_end cenv =
+    SND (lower_value compile_expr cenv (BaseT (UintT 256))
+      observer_collision_index observer_sanitized_start)
+End
+
+Theorem observer_sanitized_fresh_block[local]:
+  MEM <| bb_label := "@fresh"; bb_instructions :=
+       [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>
+    (emitted_blocks observer_sanitized_start (observer_sanitized_index_end cenv))
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem observer_sanitized_fixed_function_missing_label:
+  lookup_block "@fresh" (observer_prefilled_array_end cenv).cs_blocks = NONE
+Proof
+  simp[observer_prefilled_fields, lookup_block_def, listTheory.FIND_thm]
+QED
+
+Theorem observer_sanitized_fixed_function_not_contained:
+  ~fn_has_code observer_sanitized_start (observer_sanitized_index_end cenv)
+    (fn with fn_blocks := (observer_prefilled_array_end cenv).cs_blocks)
+Proof
+  rewrite_tac[fn_has_code_def] >> strip_tac >>
+  qpat_x_assum `!bb. _` (qspec_then
+    `<| bb_label := "@fresh"; bb_instructions :=
+       [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>` mp_tac) >>
+  simp[observer_sanitized_fresh_block,
+       observer_sanitized_fixed_function_missing_label]
+QED
