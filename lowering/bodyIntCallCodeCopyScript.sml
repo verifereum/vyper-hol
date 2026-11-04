@@ -2,6 +2,7 @@
 Theory bodyIntCallCodeCopy
 Ancestors
   bodyIntCallCopyContent exprSimUnwrap valueEncoding valueEncodingProps exprSimAttributeFields
+  storageDecodeMemory
   venomState venomExecSemantics venomMemProps venomInst emitHelperProps fragExec exprLoweringProps
   exprSimStorageCopy exprLowering context emitHelper list rich_list loweringSlice compileEnv exprSim valueEncodingTyping
 Libs
@@ -611,7 +612,7 @@ Proof
     decide_tac >>
   `w2n (n2w (off+k):bytes32) = off+k` by simp[wordsTheory.w2n_n2w] >>
   `32*((type_memory_size tv+31) DIV 32) = type_memory_size tv` by
-    simp[slot_count_of_memory_size, type_memory_size_slots] >>
+    simp[slot_count_of_memory_size, storageDecodeMemoryTheory.type_memory_size_slots] >>
   `((type_memory_size tv+31) DIV 32) < dimword (:256)` by decide_tac >>
   `val_wf tv v` by metis_tac[value_has_type_val_wf] >>
   `w2n (n2w (off+k):bytes32) + 32*((type_memory_size tv+31) DIV 32) < dimword (:256) /\
