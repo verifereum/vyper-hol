@@ -7,6 +7,8 @@ version = "0.2.3"
 
 [build]
 roots = ["vyperHolScript.sml",
+         "lowering/abiTypeBoundPropsScript.sml",
+         "tests/vyperExternalHeadersTestScript.sml",
          "tests/vyperRawSystemTypingTestScript.sml",
          "tests/selfdestructReturnDataTestScript.sml",
          "tests/vyperPopTypingTestScript.sml",
@@ -31,6 +33,7 @@ roots = ["vyperHolScript.sml",
          "venom/passes/dft/proofs/dftCallChecksScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiTupleStringScript.sml",
          "lowering/defs/bytecode/eval/evalCompilerAbiCodegenScript.sml",
+         "lowering/defs/bytecode/eval/evalCompilerRangeScript.sml",
          "lowering/abiProofsScript.sml",
          "lowering/supported/supportedTypePropsScript.sml",
          "lowering/supported/supportedNamePropsScript.sml",

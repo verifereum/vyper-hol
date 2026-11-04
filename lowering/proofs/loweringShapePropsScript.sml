@@ -3280,6 +3280,34 @@ Proof
   shape_framed_tac compile_copy_memory_shape
 QED
 
+Theorem compile_bytestring_widen_copy_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_bytestring_widen_copy d v sz) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[compile_bytestring_widen_copy_def] >>
+  `shape_stable (\st. R st /\ plain_operand st v)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\buf st. (R st /\ plain_operand st v) /\
+                         plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
+  qx_gen_tac `buf` >> BETA_TAC >>
+  `shape_stable (\st. R st /\ plain_operand st buf.buf_operand)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[buf.buf_operand]:operand list`
+               shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. R st /\ plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (irule shape_step_frame_from >>
+      irule_at Any compile_copy_memory_shape >>
+      qexists_tac `\st. R st /\ plain_operand st buf.buf_operand` >> simp[]) >>
+  gen_tac >> irule shape_step_return >> simp[]
+QED
+
 Theorem compile_store_memory_shape_framed[local]:
   shape_stable R ==>
   shape_step internal compiler_label
@@ -3538,8 +3566,7 @@ Proof
   >~ [`compile_type_convert v (ConvBytestringToDecimal divisor out_lo out_hi in_n)`]
   >- suspend "bs_decimal"
   >~ [`compile_type_convert v (ConvBytestringToBytesM out_m)`]
-  >- suspend "bs_bytes" >>
-  suspend "fixed_bs"
+  >- suspend "bs_bytes"
 QED
 
 Resume compile_type_convert_shape[int_int]:
@@ -3644,24 +3671,6 @@ QED
 Resume compile_type_convert_shape[bs_bytes]:
   simp[compile_type_convert_def] >> shape_convert_load_word_tac >>
   shape_under_tac shape_step_emit_op_plain `R` >> simp[Abbr `P`] >> shape_opcode_tac
-QED
-
-Resume compile_type_convert_shape[fixed_bs]:
-  simp[compile_type_convert_def] >> match_mp_tac shape_step_bind >>
-  qexists_tac `\buf st. P st /\ plain_operand st buf.buf_operand` >> conj_tac
-  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
-  qx_gen_tac `buf` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `shape_step internal compiler_label G _ _` >>
-  `shape_stable G` by
-    (simp[Abbr `G`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
-     mp_tac (Q.SPEC `[buf.buf_operand]:operand list` shape_stable_plain_operands) >> simp[]) >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `G`] >> shape_opcode_tac) >>
-  gen_tac >> simp[] >>
-  shape_scalar_emit_bind_tac `G` `data_ptr` (simp[Abbr `G`]) >>
-  match_mp_tac shape_step_ignore_bind >> qexists_tac `\u st. G st` >> conj_tac
-  >- (shape_under_tac shape_step_emit_void_plain `G` >> simp[Abbr `G`, Abbr `P`] >> shape_opcode_tac) >>
-  gen_tac >> simp[] >> irule shape_step_return >> simp[Abbr `G`, Abbr `P`]
 QED
 
 Finalise compile_type_convert_shape[local]
@@ -7237,6 +7246,13 @@ Resume compile_type_builtin_dispatch_body_shape[convert]:
              lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
   pop_assum (fn th => REWRITE_TAC [th])
   >- (simp[shape_step_def, shape_extends_refl, value_shape_ok_def] >> shape_opcode_tac) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type ret_ty /\
+            type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
+            type_memory_bytes cenv ret_ty` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_stack_val >>
+      shape_under_tac compile_bytestring_widen_copy_shape `\st. T` >>
+      simp[shape_stable_def]) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]
@@ -9704,6 +9720,60 @@ fun stmt_label (name, sfx) =
      >- simp[shape_step_def]) >> simp[]
   end;
 
+Theorem range_sub_shape[local]:
+  shape_step internal compiler_label
+    (\st. plain_operand st b /\ plain_operand st a)
+    (emit_op SUB [b; a]) (\r st. plain_operand st r)
+Proof
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`,
+    `\st. plain_operand st b /\ plain_operand st a`,
+    `\r st. (plain_operand st b /\ plain_operand st a) /\ plain_operand st r`] >>
+  simp[] >> ho_match_mp_tac stmt_shape_emit_op >>
+  conj_tac
+  >- simp[stmt_shape_stable_plain, shape_stable_conj] >>
+  conj_tac
+  >- simp[label_or_plain_def, plain_operand_def,
+           stackPlanTypesTheory.is_label_operand_def] >>
+  stmt_shape_emit_simp >>
+  simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem range_rounds_shape[local]:
+  shape_step internal compiler_label
+    (\st. plain_operand st b /\ plain_operand st a)
+    (case (e1,e2) of
+       (Literal _ (IntL n1), Literal _ (IntL n2)) =>
+         comp_return (Lit (i2w n2 - i2w n1))
+     | _ => emit_op SUB [b; a])
+    (\r st. plain_operand st r)
+Proof
+  `!w. shape_step internal compiler_label
+    (\st. plain_operand st b /\ plain_operand st a)
+    (comp_return (Lit w)) (\r st. plain_operand st r)` by
+    (gen_tac >> irule shape_step_return >>
+     simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def]) >>
+  Cases_on `e1` >> Cases_on `e2` >> simp[range_sub_shape] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[range_sub_shape]
+QED
+
+Theorem range_checks_shape[local]:
+  shape_step internal compiler_label
+    (\st. plain_operand st a /\ plain_operand st b /\ plain_operand st r)
+    (case (e1,e2) of
+       (Literal _ (IntL _), Literal _ (IntL _)) => comp_return ()
+     | _ => compile_range_bound_checks a b r bound signed)
+    (\u st. T)
+Proof
+  `shape_step internal compiler_label
+    (\st. plain_operand st a /\ plain_operand st b /\ plain_operand st r)
+    (comp_return ()) (\u st. T)` by
+    (irule shape_step_return >> simp[]) >>
+  Cases_on `e1` >> Cases_on `e2` >>
+  simp[compile_range_bound_checks_shape] >>
+  rpt BasicProvers.TOP_CASE_TAC >> simp[compile_range_bound_checks_shape]
+QED
+
 Theorem compile_for_range_shape:
   !cenv lctx ty id fty start_e end_e bound body.
     ~supported_expr_exists expr_shape_root start_e /\
@@ -9789,32 +9859,28 @@ Resume compile_for_range_shape[counter]:
   suspend "body"
 QED
 Resume compile_for_range_shape[rounds]:
-  Cases_on `start_op` >> Cases_on `end_op` >> simp[] >>
-  TRY (irule shape_step_return >>
-    simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def,
-       operand_case_not_label] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `emit_op SUB ops` >>
   ho_match_mp_tac stmt_shape_frame >>
-  qexists_tac `\st. EVERY (plain_operand st) ops` >>
-  simp[Abbr `ops`, Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
-       cenv_shape_ok_stable, stmt_shape_stable_plain] >> stmt_plain_emit
+  qexists_tac `\st. plain_operand st end_op /\ plain_operand st start_op` >>
+  simp[Abbr `ctr_live`, Abbr `live`, shape_stable_conj,
+       cenv_shape_ok_stable, stmt_shape_stable_plain] >>
+  irule (SIMP_RULE (srw_ss()) [] range_rounds_shape)
 QED
 Resume compile_for_range_shape[checks]:
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
     `\st. (plain_operand st rounds /\ ctr_live st) /\ (plain_operand st rounds /\ ctr_live st)`,
     `\u st. (plain_operand st rounds /\ ctr_live st) /\ T`] >>
-  rpt conj_tac >> TRY (simp[] >> NO_TAC) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
   ho_match_mp_tac shape_step_frame >>
   simp[shape_stable_conj, stmt_shape_stable_plain] >>
-  Cases_on `start_op` >> Cases_on `end_op` >> simp[] >>
-  TRY (irule shape_step_return >> simp[] >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `compile_range_bound_checks a b rounds` >>
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`,
-    `\st. plain_operand st a /\ plain_operand st b /\ plain_operand st rounds`,
+    `\st. plain_operand st start_op /\ plain_operand st end_op /\ plain_operand st rounds`,
     `\u st. T`] >>
-  simp[compile_range_bound_checks_shape, Abbr `ctr_live`, Abbr `live`]
+  simp[Abbr `ctr_live`, Abbr `live`] >>
+  irule (SIMP_RULE (srw_ss()) [] range_checks_shape)
 QED
 Resume compile_for_range_shape[body]:
   stmt_sequence `\u st. ctr_live st` (suspend "store") >>

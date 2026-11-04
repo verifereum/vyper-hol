@@ -335,10 +335,25 @@ Proof
   irule simplify_cfg_frame_sim_rf >> gvs[o1_fn_shape_def]
 QED
 
+(* The source rows besides the memory invariant: no layout end, no
+   DALLOCA, the pointer discipline above a reserved fixed region, taint
+   only in the dead bytes D, and no FMP convention or operation.  The
+   pre-walk run keeps them.  Admitted for now. *)
+Theorem simplify_cfg_stage_src_extras:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_src_inv D C vs ==>
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  (?lo. fixed_region_reserved lo C' /\ ptr_discipline lo C' vs) /\
+  taint_within D C' vs /\ fmp_free_ctx C'
+Proof
+  cheat
+QED
+
 (* Pre-walk output: every block reachable, definite assignment kept. *)
 Theorem simplify_cfg_stage_pre_walk:
   !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-           o1_pre_walk_inv o1_walk_src_inv
+           (o1_pre_walk_inv D) (o1_walk_src_inv D)
 Proof
   simp[o1_stage_contract_def, no_pre_def] >> rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
@@ -347,11 +362,14 @@ Proof
      simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
   conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
   simp[o1_walk_src_inv_def] >> conj_tac
-  >- (gvs[o1_pre_walk_inv_def, o1_src_inv_def] >>
+  >- (`o1_src_inv D C vs` by gvs[o1_pre_walk_inv_def] >>
+      drule_all simplify_cfg_stage_src_extras >> strip_tac >>
+      `mem_inv raw_mem_ok C' vs` by
+        (irule simplify_cfg_stage_mem_inv_rf >> gvs[o1_src_inv_def] >>
+         metis_tac[mem_corr_closed_rf_raw_mem_ok]) >>
       `C'.ctx_global_reserved = C.ctx_global_reserved` by
-        gvs[ctx_pass_stage_def] >> simp[] >>
-      irule simplify_cfg_stage_mem_inv_rf >>
-      metis_tac[mem_corr_closed_rf_raw_mem_ok]) >>
+        gvs[ctx_pass_stage_def] >>
+      gvs[o1_src_inv_def] >> metis_tac[]) >>
   drule simplify_cfg_stage_functions >> strip_tac >>
   simp[EVERY_MEM, MEM_MAP] >> rpt gen_tac >> strip_tac >> gvs[] >>
   irule simplify_cfg_pre_walk_structure >>
@@ -388,7 +406,7 @@ QED
 Theorem o1_contract_simplify_cfg_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
   (!view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-            o1_pre_walk_inv o1_walk_src_inv)
+            (o1_pre_walk_inv D) (o1_walk_src_inv D))
 Proof
   simp[simplify_cfg_step_contract, simplify_cfg_stage_pre_walk]
 QED

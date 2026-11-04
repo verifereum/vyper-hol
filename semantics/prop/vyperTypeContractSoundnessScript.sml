@@ -268,7 +268,8 @@ Proof
 QED
 
 Theorem evaluate_module_constants_contains_constant_type[local]:
-  contract_namespaces_ok F mods /\
+  ALL_DISTINCT (MAP FST mods) /\
+  ALL_DISTINCT (contract_keys toplevel_vtype_keys_toplevel mods) /\
   ALOOKUP mods src = SOME ts /\
   MEM (VariableDecl vis (Constant e) id ty init) ts /\
   evaluate_module_constants cx am addr mods = SOME am_c ==>
@@ -284,7 +285,7 @@ Proof
   rw[evaluate_module_constants_def, alistTheory.ALOOKUP_def] >>
   gvs[AllCaseEqs()] >-
     (`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel h0) h1))` by
-       gvs[contract_namespaces_ok_def, contract_keys_def, ALL_DISTINCT_APPEND] >>
+       gvs[contract_keys_def, ALL_DISTINCT_APPEND] >>
      drule constants_env_contains_constant_type >>
      disch_then drule >>
      disch_then drule >>
@@ -292,7 +293,7 @@ Proof
      `FLOOKUP (get_source_immutables h0
         (case ALOOKUP am_c.immutables addr of SOME m => m | NONE => []))
         id = SOME (tv,v)` by
-       (gvs[contract_namespaces_ok_def] >>
+       (gvs[] >>
         drule evaluate_module_constants_preserves_merged_lookup_not_source >>
         disch_then drule >>
         disch_then drule >>
@@ -300,9 +301,7 @@ Proof
      qexistsl [`tv`,`v`] >>
      gvs[set_current_module_def, get_tenv_def]) >>
   first_x_assum irule >>
-  gvs[contract_namespaces_ok_def] >>
-  conj_tac >- metis_tac[] >>
-  gvs[contract_keys_def, ALL_DISTINCT_APPEND]
+  gvs[contract_keys_def, ALL_DISTINCT_APPEND] >> metis_tac[]
 QED
 
 Theorem evaluate_all_constants_contains_constant_type[local]:
@@ -322,6 +321,7 @@ Proof
     (irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >>
      fs[contract_namespaces_ok_def, MEM_constants_order] >>
      metis_tac[alistTheory.ALOOKUP_MEM]) >>
+  gvs[contract_namespaces_ok_def] >>
   drule_all evaluate_module_constants_contains_constant_type >>
   simp[]
 QED

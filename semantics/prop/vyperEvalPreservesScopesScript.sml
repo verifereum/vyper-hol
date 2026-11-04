@@ -1,6 +1,7 @@
 Theory vyperEvalPreservesScopes
 Ancestors
   pair vyperCallFrame vyperCallOutcomeFrame vyperCallOutcome[ignore_grammar]
+  vyperImmutableMetadataFrame
   vyperTypeInvariants
   vyperState vyperCreate vyperCreateFrame vyperInterpreter vyperLookup
   vyperEvalExprPreservesScopesDom vyperScopePreservation
@@ -1409,18 +1410,39 @@ Proof
   rw[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]
 QED
 
+Theorem append_place_fallback_preserves_tv[local]:
+  (do tv <- place_type_value cx p;
+      old <- read_place cx p;
+      updated <- lift_sum (append_element tv old v);
+      write_place cx p updated
+   od) st = (res,st') ==> preserves_tv cx st st'
+Proof
+  simp[bind_def] >>
+  Cases_on `place_type_value cx p st` >>
+  drule place_type_value_state >> strip_tac >> gvs[] >>
+  rename1 `place_type_value _ _ _ = (tv_result,_)` >>
+  Cases_on `tv_result`
+  >- (gvs[] >> rename1 `place_type_value cx p s = (INL tv,s)` >>
+      Cases_on `read_place cx p s` >>
+      drule read_place_state >> strip_tac >> gvs[] >>
+      rename1 `read_place _ _ _ = (place_read_sum,_)` >>
+      Cases_on `place_read_sum`
+      >- (gvs[] >> rename1 `read_place cx p s = (INL old,s)` >>
+          Cases_on `append_element tv old v` >>
+          simp[lift_sum_def, return_def, raise_def, preserves_tv_refl] >>
+          metis_tac[write_place_preserves_tv]) >>
+      simp[raise_def, preserves_tv_refl]) >>
+  simp[raise_def, preserves_tv_refl]
+QED
+
 Theorem append_place_preserves_tv:
   append_place cx p v st = (res,st') ==> preserves_tv cx st st'
 Proof
   Cases_on `p`
   >- (strip_tac >> irule preserves_tv_eq >>
       metis_tac[append_storage_place_scopes_immutables]) >>
-  simp[append_place_def, bind_def, lift_sum_def, return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
-       gvs[bind_def, ignore_bind_def, lift_sum_def, return_def, raise_def]) >>
-  rpt strip_tac >>
-  imp_res_tac place_type_value_state >> imp_res_tac read_place_state >>
-  gvs[] >> metis_tac[write_place_preserves_tv]
+  rewrite_tac[append_place_def] >>
+  MATCH_ACCEPT_TAC append_place_fallback_preserves_tv
 QED
 
 Theorem pop_place_preserves_tv:
@@ -1446,15 +1468,27 @@ Proof
           arithmeticTheory.PRE_SUB1] >>
       `i = LENGTH x0` by decide_tac >>
       gvs[finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
-       get_immutables_def, get_address_immutables_def, set_immutable_def,
-       set_address_immutables_def, return_def, raise_def, AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[bind_def, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[] >>
-  gvs[AllCaseEqs(), return_def, raise_def, preserves_tv_def,
-      get_source_immutables_def, set_source_immutables_def] >>
-  rw[] >> CASE_TAC >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[alistTheory.ALOOKUP_ADELKEY]
+  strip_tac >>
+  drule pop_place_metadata_frame >> strip_tac >>
+  `st'.scopes = st.scopes` by
+    (qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+     simp[pop_place_def, bind_def, ignore_bind_def, lift_option_type_def,
+          lift_sum_def, vyperMiscTheory.option_CASE_rator,
+          vyperMiscTheory.sum_CASE_rator, return_def, raise_def, AllCaseEqs()] >>
+     rpt strip_tac >> imp_res_tac get_immutables_state >> gvs[] >>
+     metis_tac[set_immutable_scopes]) >>
+  gvs[preserves_tv_def] >> rpt strip_tac >>
+  qpat_x_assum `immutable_metadata_frame _ _` mp_tac >>
+  simp[immutable_metadata_frame_def] >> strip_tac >>
+  qpat_x_assum `!addr. IS_SOME _ <=> _`
+    (qspec_then `cx.txn.target` assume_tac) >>
+  Cases_on `ALOOKUP st.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP st'.immutables cx.txn.target` >> gvs[] >>
+  first_x_assum drule >> disch_then drule >>
+  disch_then (qspecl_then [`src`,`id`] mp_tac) >>
+  simp[] >>
+  Cases_on `FLOOKUP (get_source_immutables src x') id` >> simp[] >>
+  PairCases_on `x''` >> simp[]
 QED
 (* TODO(cleanup): this generic handle_function state-frame fact belongs with
    the interpreter/function-call support lemmas once those are split out. *)

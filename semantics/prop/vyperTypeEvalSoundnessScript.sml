@@ -7255,7 +7255,8 @@ Theorem raw_log_well_typed_args:
         bound_at_most bd 4) /\
   (?bd'. EL 1 (MAP expr_type es) = BaseT (BytesT bd'))
 Proof
-  rewrite_tac[Once well_typed_expr_def] >> metis_tac[]
+  rewrite_tac[Once well_typed_expr_def] >> strip_tac >>
+  gvs[bound_at_most_def]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Expr_Call_RawLog]:
@@ -8251,9 +8252,10 @@ Resume eval_scc_type_sound_results_mutual[Trace_IntCall_Operands]:
        return_def, raise_def, get_scopes_def, AllCaseEqs()] >>
   strip_tac >> imp_res_tac lift_option_type_state >> rpt BasicProvers.VAR_EQ_TAC >>
   simp[NoAsms, typed_scope_transition_refl] >>
-  pop_last_assum mp_tac >>
-  simp[NoAsms, type_check_def, assert_def, return_def, raise_def,
-       lift_option_type_INL_eq] >>
+  qpat_x_assum `!s0 x t s1 ts t1 s2 tup t2 mut stup nr stup2 args sstup dflts sstup2 ret body s3 x1 t3. _`
+    mp_tac >>
+  simp_tac std_ss [type_check_def, assert_def, return_def, raise_def,
+    lift_option_type_INL_eq] >>
   imp_res_tac lift_option_type_INL_eq >>
   disch_then drule_all >> strip_tac >>
   `call_evaluation_safe cx (int_calls_exprs es)` by
@@ -9063,7 +9065,7 @@ Resume eval_scc_type_sound_results_mutual[TraceCreateBlueprint]:
   strip_tac >>
   qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
   strip_tac >>
-  Cases_on `prefix_res` >> gvs[]
+  Cases_on `prefix_res` >> simp[] >> rpt BasicProvers.VAR_EQ_TAC
   >- (rename1 `eval_exprs cx (TAKE (if has_salt then 4 else 3) es) st =
         (INL prefix,prefix_st)` >>
       Cases_on `check_create_blueprint has_salt prefix prefix_st` >>
@@ -9261,15 +9263,14 @@ Theorem eval_raw_call_success_value[local]:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
-  simp[eval_raw_call_def, bind_apply, ignore_bind_apply, type_check_def,
-       check_def, assert_def, get_accounts_def, get_transient_storage_def,
-       return_def, raise_def] >>
-  Cases_on `run_raw_call cx flags addr data amount gas st.accounts st.tStorage` >>
-  simp[lift_option_def, bind_apply, ignore_bind_apply, return_def, raise_def,
-       update_accounts_def, update_transient_def, append_logs_def] >>
-  rpt (IF_CASES_TAC >>
-    simp[bind_apply, ignore_bind_apply, return_def, raise_def]) >>
-  rpt strip_tac >> gvs[]
+  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+       check_def, assert_def, return_def, raise_def, get_accounts_def,
+       get_transient_storage_def, lift_option_def, update_accounts_def,
+       update_transient_def, append_logs_def,
+       vyperCallOutcomeTheory.take_call_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_equation, LET_THM, UNCURRY,
+       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
 QED
 
 Resume eval_scc_type_sound_results_mutual[Live_RawCall_Returned_Result]:
