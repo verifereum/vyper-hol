@@ -117,7 +117,11 @@ QED
    premise covers alias-only reorders); both sides copy the same return
    data to the same range, or both fault when it is out of bounds; the
    REVERT's operands resolve to the copy's through the ASSIGNs
-   (revert_forward_pair), so both read the bytes just copied. *)
+   (revert_forward_pair), so both read the bytes just copied.  vs is
+   arbitrary, so the REVERT's operand values equal the copy's through
+   the normalize_operand premise and the ownership premise, not by
+   re-running the block prefix: under SSA, dfg_defs maps each ASSIGN
+   output to its ASSIGN. *)
 Theorem revert_forward_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn bb i j base ps vs as ops
    ps_end ra rest mem0.

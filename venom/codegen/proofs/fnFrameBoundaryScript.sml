@@ -33,7 +33,11 @@ Ancestors
    it among the entry parameters), so fn_has_retpc and the JUMP lands at
    pc_ret; the other operands are ordinary (opaque_use_ok) and are the
    return values; the step changes no Venom state, so the memory, closure
-   and shared fields carry over from fn_frame_inv. *)
+   and shared fields carry over from fn_frame_inv.  RET's code has no
+   SOSpill: a spill needs a planner stack of 17 or more cells, which
+   RET's plan never shrinks below its operand count (no outputs, so no
+   pops), contradicting ps'.ps_stack = [] with at most 16 operands.
+   So no memory is written, and a restore only reads. *)
 Theorem gen_ret_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
    is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0 pc_ret.
