@@ -14906,3 +14906,40 @@ Proof
          compile_default_return_path_labels, compile_return_value_decode_labels,
          compile_abi_decode_labels, comp_return_labels])
 QED
+
+Theorem compile_msg_data_to_memory_labels:
+  !s. cs_extends s (SND (compile_msg_data_to_memory s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_msg_data_to_memory s)))
+Proof
+  gen_tac >> simp[builtinSystemTheory.compile_msg_data_to_memory_def, compile_alloc_dynamic_def] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels, comp_return_labels])
+QED
+
+Theorem compile_raw_call_outbuf_labels:
+  !n s. cs_extends s (SND (compile_raw_call_outbuf n s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_raw_call_outbuf n s)))
+Proof
+  rpt gen_tac >> simp[builtinSystemTheory.compile_raw_call_outbuf_def] >> IF_CASES_TAC >> simp[LET_THM] >>
+  rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+       simp[compile_alloc_buffer_labels, emit_op_labels, comp_return_labels])
+QED
+
+Theorem compile_raw_call_finish_labels:
+  !addr dp dl gas value call_ty n rof out_val out_ptr s.
+    cs_extends s (SND (compile_raw_call_finish addr dp dl gas value call_ty n rof out_val out_ptr s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_raw_call_finish addr dp dl gas value call_ty n rof out_val out_ptr s)))
+Proof
+  rpt gen_tac >> simp[builtinSystemTheory.compile_raw_call_finish_def, LET_THM] >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- (Cases_on `call_ty` >> simp[emit_op_labels]) >>
+  rpt gen_tac >> BETA_TAC >> Cases_on `rof` >> Cases_on `n > 0` >> simp[LET_THM, comp_return_labels] >>
+  rpt (FIRST [irule fresh_label_bind_labels >> rpt gen_tac >> disch_tac,
+              irule comp_bind_labels >> conj_tac >> rpt gen_tac,
+              irule comp_ignore_bind_labels >> conj_tac >> rpt gen_tac] >>
+       BETA_TAC >> simp[emit_op_labels, emit_void_labels, emit_inst_labels,
+         compile_alloc_buffer_labels, compile_select_labels, comp_return_labels]) >>
+  irule new_block_action_labels >> simp[]
+QED
