@@ -201,3 +201,101 @@ val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag mem_path_dynamic_local_frame) 
   if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
   then raise Fail "Dynamic local frame dependency" else ()
 end;
+
+Theorem dynamic_local_header_frame[local]:
+  local_ptrs_rel func cenv scopes s /\
+  local_ptrs_rel func cenv scopes s2 /\
+  lookup_scopes id scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME w /\ lookup_var p s2 = SOME w /\
+  entry.type = ArrayTV et (Dynamic n) /\
+  value_has_type entry.type entry.value ==>
+  mem_bytes_at (w2n w) 32 s2.vs_memory =
+  mem_bytes_at (w2n w) 32 s.vs_memory
+Proof
+  simp[local_ptrs_rel_def] >> rpt strip_tac >>
+  ntac 2 (qpat_x_assum `!name entry p sz. _`
+    (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac)) >>
+  simp[] >> rpt strip_tac >> gvs[] >> Cases_on `entry.value` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
+      valueEncodingProofsTheory.mem_bytes_at_word]
+QED
+
+Theorem local_window_frame:
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_rel func cenv es.scopes s2 /\
+  locals_kept cenv es s s2 /\
+  (!id entry p sz. lookup_scopes id es.scopes = SOME entry /\
+     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+     lookup_var p s2 = lookup_var p s) /\
+  (!id entry. lookup_scopes id es.scopes = SOME entry /\
+     dynarray_local cenv id ==>
+     (?et n. entry.type = ArrayTV et (Dynamic n)) /\
+     value_has_type entry.type entry.value) /\
+  local_region cenv es.scopes s id b sz /\
+  b <= off /\ off + len <= b + sz ==>
+  mem_bytes_at off len s2.vs_memory = mem_bytes_at off len s.vs_memory
+Proof
+  strip_tac >> Cases_on `dynarray_local cenv id`
+  >- (qpat_x_assum `local_region _ _ _ _ _ _` mp_tac >>
+      simp[local_region_def] >> strip_tac >> gvs[] >>
+      `(?et n. entry.type = ArrayTV et (Dynamic n)) /\
+       value_has_type entry.type entry.value` by metis_tac[] >>
+      `lookup_var p s2 = SOME w` by metis_tac[] >>
+      `mem_bytes_at (w2n w) 32 s2.vs_memory =
+       mem_bytes_at (w2n w) 32 s.vs_memory` by
+        (irule dynamic_local_header_frame >> metis_tac[]) >>
+      `32 <= sz` by
+        (fs[local_ptrs_rel_def] >>
+         qpat_x_assum `!name entry p sz. _ ==> ?w. _`
+           (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+         simp[] >> rpt strip_tac >>
+         gvs[type_memory_size_def]) >>
+      `mem_bytes_at (w2n w + 32) (sz - 32) s2.vs_memory =
+       mem_bytes_at (w2n w + 32) (sz - 32) s.vs_memory` by
+        (qpat_x_assum `locals_kept _ _ _ _` mp_tac >>
+         simp[locals_kept_def] >> strip_tac >> first_x_assum irule >>
+         qexistsl_tac [`w2n w`, `id`, `sz`] >>
+         simp[local_region_def] >> metis_tac[]) >>
+      `mem_bytes_at (w2n w) sz s2.vs_memory =
+       mem_bytes_at (w2n w) sz s.vs_memory` by
+        (`sz = 32 + (sz - 32)` by decide_tac >>
+         pop_assum (fn th => GEN_REWRITE_TAC (BINOP_CONV o RATOR_CONV o RAND_CONV) empty_rewrites [th]) >>
+         simp[valueEncodingProofsTheory.mem_bytes_at_split_padded]) >>
+      drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
+      strip_tac >> sym_tac >>
+      qpat_x_assum `!off2 len2. _` irule >> simp[]) >>
+  fs[locals_kept_def] >> first_x_assum irule >>
+  qexistsl_tac [`b`, `id`, `sz`] >> simp[]
+QED
+
+Theorem local_window_frame_well_typed:
+  local_ptrs_rel func cenv es.scopes s /\
+  local_ptrs_rel func cenv es.scopes s2 /\
+  state_well_typed es /\ locals_kept cenv es s s2 /\
+  (!id entry p sz. lookup_scopes id es.scopes = SOME entry /\
+     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) ==>
+     lookup_var p s2 = lookup_var p s) /\
+  (!id entry. lookup_scopes id es.scopes = SOME entry /\
+     dynarray_local cenv id ==> ?et n. entry.type = ArrayTV et (Dynamic n)) /\
+  local_region cenv es.scopes s id b sz /\
+  b <= off /\ off + len <= b + sz ==>
+  mem_bytes_at off len s2.vs_memory = mem_bytes_at off len s.vs_memory
+Proof
+  strip_tac >> irule local_window_frame >>
+  goal_assum (drule_at (Pat `locals_kept _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  qexists_tac `func` >> simp[] >>
+  metis_tac[vyperTypeStatePreservationTheory.lookup_scopes_state_well_typed_value_has_type]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Local window dependency: " ^ name) else ()
+  end)
+  [("dynamic_local_header_frame", dynamic_local_header_frame),
+   ("local_window_frame", local_window_frame),
+   ("local_window_frame_well_typed", local_window_frame_well_typed)];
