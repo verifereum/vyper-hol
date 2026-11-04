@@ -416,3 +416,213 @@ Proof
     (irule sw_rounds_mono >> simp[]) >>
   gvs[sw_le_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem ptr_used_one_pass_seed_records[local]:
+  ml_one_pass bp mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  MEM bb.bb_label cfg.cfg_dfs_pre /\
+  FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb /\
+  i <= j /\ j < LENGTH bb.bb_instructions /\
+  ml_used_gen a bp mems (EL i bb.bb_instructions) ==>
+  MEM a (ml_lookup us' (bb.bb_label,j))
+Proof
+  simp[ml_one_pass_def] >> ntac 2 (pairarg_tac >> simp[]) >>
+  strip_tac >> gvs[] >>
+  `MEM a (ml_lookup
+    (SND (ml_one_pass_used bp mems pallocas cfg fn.fn_blocks cfg.cfg_dfs_pre us))
+    (bb.bb_label,j))` by
+    (irule ptr_used_sweep_seed_records >> simp[] >> metis_tac[]) >> gvs[]
+QED
+
+Theorem ptr_used_fuel_seed_records:
+  !fuel la us.
+  MEM bb.bb_label cfg.cfg_dfs_pre /\
+  FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb /\
+  i <= j /\ j < LENGTH bb.bb_instructions /\
+  ml_used_gen a bp mems (EL i bb.bb_instructions) ==>
+  MEM a (ml_lookup
+    (SND (ml_iterate_fuel (SUC fuel) bp mems sizes pallocas cfg fn la us))
+    (bb.bb_label,j))
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >>
+      pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+      pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+      Cases_on `changed` >> simp[ml_iterate_fuel_def] >>
+      drule_all ptr_used_one_pass_seed_records >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+  Cases_on `changed` >> simp[] >>
+  drule_all ptr_used_one_pass_seed_records >> simp[]
+QED
+
+Theorem ptr_used_sweep_pred_records:
+  !order us X.
+  EVERY (\b. b.bb_instructions <> []) blocks /\
+  EVERY (\d. MEM d ds)
+    (MAP (ml_used_boundary_desc a bp mems pallocas cfg) (ml_scan_blocks blocks order)) /\
+  sw_consistent ds /\ sw_admissible ds X /\
+  (!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=> T IN X lbl) /\
+  FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb /\
+  MEM bb.bb_label order /\
+  FIND (\b. b.bb_label = pred) blocks = SOME pbb /\
+  MEM pred (cfg_preds_of cfg bb.bb_label) /\ T IN X pred /\
+  j < LENGTH bb.bb_instructions ==>
+  MEM a (ml_lookup (SND (ml_one_pass_used bp mems pallocas cfg blocks order us))
+    (bb.bb_label,j))
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `FIND (\b. b.bb_label = h) blocks`
+  >- (gvs[ml_one_pass_used_def, ml_scan_blocks_def] >> first_x_assum irule >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  rename1 `FIND _ blocks = SOME head` >>
+  `head.bb_label = h /\ MEM head blocks` by
+    (qpat_assum `FIND _ blocks = SOME head` (mp_tac o MATCH_MP venomExecProofsTheory.FIND_P) >>
+     qpat_assum `FIND _ blocks = SOME head` (mp_tac o MATCH_MP venomExecProofsTheory.FIND_MEM) >>
+     simp[]) >>
+  `head.bb_instructions <> []` by
+    (qpat_x_assum `EVERY (\b. b.bb_instructions <> []) blocks` mp_tac >>
+     simp[listTheory.EVERY_MEM] >> disch_then drule >> simp[]) >>
+  `FIND (\b. b.bb_label = head.bb_label) blocks = SOME head` by simp[] >>
+  gns[ml_scan_blocks_def] >>
+  qpat_x_assum `MEM _ ds /\ _` strip_assume_tac >>
+  `FIND (\b. b.bb_label = head.bb_label) blocks = SOME head` by simp[] >>
+  Cases_on `ml_used_block bp mems pallocas cfg us head blocks` >>
+  rename1 `ml_used_block bp mems pallocas cfg us head blocks = (ch,mid)` >>
+  `!lbl. MEM a (ml_used_boundary_lookup blocks mid lbl) <=>
+    T IN sw_update (ml_used_boundary_desc a bp mems pallocas cfg head) X lbl` by
+    (drule_all ml_used_block_sw_update >> simp[]) >>
+  `sw_admissible ds (sw_update (ml_used_boundary_desc a bp mems pallocas cfg head) X)` by
+    (irule sw_update_admissible >> simp[]) >>
+  `T IN sw_update (ml_used_boundary_desc a bp mems pallocas cfg head) X pred` by
+    (`sw_le X (sw_update (ml_used_boundary_desc a bp mems pallocas cfg head) X)` by
+      (irule sw_update_grows >> qexists_tac `ds` >> simp[]) >>
+     gvs[sw_le_def, pred_setTheory.SUBSET_DEF]) >>
+  simp[ml_one_pass_used_def] >>
+  Cases_on `MEM bb.bb_label order`
+  >- (first_x_assum (qspecl_then [`mid`,
+        `sw_update (ml_used_boundary_desc a bp mems pallocas cfg head) X`] mp_tac) >>
+      simp[] >> pairarg_tac >> simp[]) >>
+  `head = bb` by gvs[] >> gvs[] >>
+  `MEM a (ml_lookup mid (bb.bb_label,j))` by
+    (`MEM a (ml_lookup us (pbb.bb_label,PRE (LENGTH pbb.bb_instructions)))` by
+      (qpat_x_assum `!lbl. MEM a (ml_used_boundary_lookup blocks us lbl) <=> _`
+         (qspec_then `pred` mp_tac) >> simp[ml_used_boundary_lookup_def]) >>
+     `MEM a (ml_lookup (SND (ml_used_block bp mems pallocas cfg us bb blocks))
+       (bb.bb_label,j))` suffices_by simp[] >>
+     irule ptr_used_block_pred_records >>
+     conj_tac
+     >- (qexistsl_tac [`pbb`, `pred`] >> simp[]) >>
+     qexists_tac `EL j bb.bb_instructions` >>
+     simp[indexedListsTheory.MEM_MAPi]) >>
+  `ml_lookup (SND (ml_one_pass_used bp mems pallocas cfg blocks order mid)) (bb.bb_label,j) =
+    ml_lookup mid (bb.bb_label,j)` by
+    (irule ptr_used_sweep_other_label >> simp[] >> metis_tac[]) >>
+  pairarg_tac >> gvs[]
+QED
+
+Theorem ptr_used_one_pass_pred_records[local]:
+  ml_one_pass bp mems sizes pallocas cfg fn la us = (changed,la',us') /\
+  EVERY (\b. b.bb_instructions <> []) fn.fn_blocks /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks us lbl) <=>
+    T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n lbl) /\
+  FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb /\
+  MEM bb.bb_label cfg.cfg_dfs_pre /\
+  FIND (\b. b.bb_label = pred) fn.fn_blocks = SOME pbb /\
+  MEM pred (cfg_preds_of cfg bb.bb_label) /\
+  T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+    (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n pred /\
+  j < LENGTH bb.bb_instructions ==>
+  MEM a (ml_lookup us' (bb.bb_label,j))
+Proof
+  strip_tac >>
+  `sw_consistent (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+    (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre))` by
+    (irule ml_scan_blocks_consistent >> simp[ml_boundary_desc_out]) >>
+  `MEM a (ml_lookup
+    (SND (ml_one_pass_used bp mems pallocas cfg fn.fn_blocks cfg.cfg_dfs_pre us))
+    (bb.bb_label,j))` by
+    (irule ptr_used_sweep_pred_records >>
+     simp[] >>
+     qexistsl_tac [`sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+         (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n`,
+       `MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+       (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)`, `pbb`, `pred`] >>
+     simp[sw_rounds_admissible, listTheory.EVERY_MEM] >> metis_tac[]) >>
+  gvs[ml_one_pass_def] >> ntac 2 (pairarg_tac >> gvs[])
+QED
+
+Theorem ptr_used_fuel_pred_records:
+  !fuel la us n.
+  EVERY (\b. b.bb_instructions <> []) fn.fn_blocks /\
+  (!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks us lbl) <=>
+    T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n lbl) /\
+  FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb /\
+  MEM bb.bb_label cfg.cfg_dfs_pre /\
+  FIND (\b. b.bb_label = pred) fn.fn_blocks = SOME pbb /\
+  MEM pred (cfg_preds_of cfg bb.bb_label) /\
+  T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+    (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) (n+fuel) pred /\
+  j < LENGTH bb.bb_instructions ==>
+  MEM a (ml_lookup
+    (SND (ml_iterate_fuel (SUC fuel) bp mems sizes pallocas cfg fn la us))
+    (bb.bb_label,j))
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >>
+      pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+      pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+      Cases_on `changed` >> simp[ml_iterate_fuel_def] >>
+      fs[] >> drule_all ptr_used_one_pass_pred_records >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  pure_once_rewrite_tac[ml_iterate_fuel_def] >>
+  pure_rewrite_tac[LET_THM] >> pairarg_tac >> simp[] >>
+  `!lbl. MEM a (ml_used_boundary_lookup fn.fn_blocks used' lbl) <=>
+    T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) (SUC n) lbl` by
+    (simp[Once sw_rounds_def] >> drule_all ptr_used_one_pass_scan >> simp[]) >>
+  Cases_on `changed`
+  >- (simp[] >> first_x_assum (qspecl_then [`liveat'`, `used'`, `SUC n`] mp_tac) >>
+      fs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]) >>
+  simp[] >> drule ml_one_pass_false_boundary >> strip_tac >>
+  `!lbl. T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) (SUC n) lbl <=>
+    T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n lbl` by metis_tac[] >>
+  `T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+      (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) n pred` by
+    (drule ptr_rounds_member_stationary >> metis_tac[]) >>
+  drule_all ptr_used_one_pass_pred_records >> simp[]
+QED
+
+Theorem ptr_used_fuel_path_records:
+  EVERY (\b. b.bb_instructions <> []) fn.fn_blocks /\
+  MEM seed (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre) /\
+  i < LENGTH seed.bb_instructions /\
+  ml_used_gen a bp mems (EL i seed.bb_instructions) /\
+  ptr_used_path cfg seed.bb_label path pred /\
+  (!lbl. MEM lbl path ==> ?b. MEM b (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre) /\
+    b.bb_label = lbl /\ b.bb_instructions <> []) /\
+  SUC (LENGTH path) <= fuel /\
+  FIND (\b. b.bb_label = bb.bb_label) fn.fn_blocks = SOME bb /\
+  MEM bb.bb_label cfg.cfg_dfs_pre /\
+  FIND (\b. b.bb_label = pred) fn.fn_blocks = SOME pbb /\
+  MEM pred (cfg_preds_of cfg bb.bb_label) /\ j < LENGTH bb.bb_instructions ==>
+  MEM a (ml_lookup
+    (SND (ml_iterate_fuel (SUC fuel) bp mems sizes pallocas cfg fn FEMPTY FEMPTY))
+    (bb.bb_label,j))
+Proof
+  strip_tac >>
+  `MEM a (ml_used_boundary_lookup fn.fn_blocks
+    (SND (ml_iterate_fuel fuel bp mems sizes pallocas cfg fn FEMPTY FEMPTY)) pred)` by
+    (irule ptr_used_fuel_endpoint_path_coverage >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `T IN sw_rounds (MAP (ml_used_boundary_desc a bp mems pallocas cfg)
+    (ml_scan_blocks fn.fn_blocks cfg.cfg_dfs_pre)) fuel pred` by
+    (drule ptr_used_fuel_endpoints >> metis_tac[]) >>
+  qspecl_then [`fuel`, `FEMPTY`, `FEMPTY`, `0`] mp_tac ptr_used_fuel_pred_records >>
+  simp[] >> disch_then irule >>
+  simp[sw_rounds_def]
+QED
