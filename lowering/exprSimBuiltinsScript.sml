@@ -69,6 +69,7 @@
 
 Theory exprSimBuiltins
 Ancestors
+  exprSimSource
   exprSimHypsDefs
   exprSimDefs
   loweringPosts

@@ -32,6 +32,7 @@
 
 Theory exprSimConvert
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs exprSimStack

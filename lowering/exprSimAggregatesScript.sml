@@ -63,6 +63,7 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprSimSource
   exprSimProps
   exprSimHypsDefs
   exprSimDefs

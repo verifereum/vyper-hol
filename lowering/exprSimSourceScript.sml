@@ -1,7 +1,8 @@
 (* Source preconditions and invariant preservation for expression evaluation. *)
 Theory exprSimSource
 Ancestors
-  exprSimHypsDefs gasContext list finite_map pair
+  exprSimHypsDefs exprSimDefs loweringSlice allocLimits gasContext list finite_map pair
+  vyperTyping
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
@@ -331,3 +332,122 @@ val () = List.app (fn th =>
         expr_body_pre_eval,
         expr_sim_pre_eval,
         eval_expr_read_INL];
+
+Theorem expr_body_pre_res_ok:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_res_ok res
+Proof
+  rpt strip_tac >> drule_all expr_body_pre_eval >> strip_tac >>
+  Cases_on `res` >> gvs[expr_res_ok_def] >>
+  rename1 `INR exc` >>
+  `no_control_exc exc` by
+    (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
+     simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
+  Cases_on `exc` >> gvs[no_control_exc_def, no_type_error_result_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[]
+QED
+
+Theorem word_value_type_typed:
+  !t tenv tyv x.
+    word_value_type t /\ evaluate_type tenv t = SOME tyv /\
+    value_has_type tyv x ==>
+    word_value x /\ value_has_type tyv x
+Proof
+  rpt strip_tac >>
+  `(?n. t = BaseT (UintT n)) \/ (?n. t = BaseT (IntT n)) \/
+   t = BaseT DecimalT \/ t = BaseT BoolT \/ (?nsid. t = FlagT nsid)` by
+    (Cases_on `t` >> fs[word_value_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `x` >>
+  gvs[vyperTypingTheory.value_has_type_def, word_value_def]
+QED
+
+Theorem expr_body_pre_word_result:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ word_value_type (expr_type e) /\
+    (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
+    expr_sim_inv cenv cx env es' /\ expr_res_ok res /\
+    !tv. res = INL tv ==>
+         ?tyv. word_value tv /\
+                 evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+                 value_has_type tyv tv
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_eval >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  Cases_on `res` >> gvs[]
+  >- (gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
+      drule_all word_value_type_typed >> strip_tac >> gvs[expr_res_ok_def]) >>
+  irule expr_body_pre_res_ok >> simp[] >> metis_tac[]
+QED
+
+Theorem byte_widths_exprs_mem:
+  !args e. byte_widths_exprs args /\ MEM e args ==> byte_widths_expr e
+Proof
+  Induct >> rw[byte_widths_expr_def] >> gvs[]
+QED
+
+Theorem alloc_limits_exprs_mem:
+  !cenv args e. alloc_limits_exprs cenv args /\ MEM e args ==>
+               alloc_limits_expr cenv e
+Proof
+  gen_tac >> Induct >> rw[alloc_limits_expr_def] >> gvs[]
+QED
+
+Theorem well_typed_exprs_member:
+  !args env e. well_typed_exprs env args /\ MEM e args ==> well_typed_expr env e
+Proof
+  Induct >> rw[well_typed_expr_def] >> metis_tac[]
+QED
+
+Theorem call_evaluation_safe_exprs_mem:
+  !args cx e.
+    call_evaluation_safe cx (int_calls_exprs args) /\ MEM e args ==>
+    call_evaluation_safe cx (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >>
+  metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
+            vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right]
+QED
+
+Theorem int_calls_exprs_every_mem:
+  !args e P. EVERY P (int_calls_exprs args) /\ MEM e args ==>
+             EVERY P (int_calls_expr e)
+Proof
+  Induct >> rw[int_calls_expr_def] >> gvs[]
+QED
+
+Theorem expr_body_pre_builtin_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+  imp_res_tac int_calls_exprs_every_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
+  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
+            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "EXPRESSION_OPERAND_SOURCE_AUDIT OK\n"
+     else raise Fail "operand source fact inherited admission"
+  end) [expr_body_pre_res_ok,
+        word_value_type_typed,
+        expr_body_pre_word_result,
+        byte_widths_exprs_mem,
+        alloc_limits_exprs_mem,
+        well_typed_exprs_member,
+        call_evaluation_safe_exprs_mem,
+        int_calls_exprs_every_mem,
+        expr_body_pre_builtin_arg];

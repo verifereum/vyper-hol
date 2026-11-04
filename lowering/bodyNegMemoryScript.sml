@@ -1,6 +1,7 @@
 (* Actual Neg opcode suffix; independent of source numeric correctness. *)
 Theory bodyNegMemory
 Ancestors
+  exprSimSource
   bodyMemoryDefs exprSimUnop bodyFieldMemory emitHelperProps
   fragExecMem instMemFrontier allocaHistoryFragment
   exprLoweringProps emitHelper venomInst venomState words list rich_list
