@@ -157,3 +157,140 @@ Proof
                        comp_ignore_bind_def] >>
   rpt LABEL_BIND >> LABEL_LEAF
 QED
+
+val label_simps = label_simps @ [label_preserving_safe_add_sub,
+  label_preserving_safe_mul, label_preserving_safe_div,
+  label_preserving_safe_decimal_div, label_preserving_safe_mod,
+  label_preserving_safe_pow, label_preserving_wrap_truncate,
+  label_preserving_compare, label_preserving_select];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+val LABEL_IGNORE = ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- LABEL_LEAF;
+
+Theorem label_preserving_binop:
+  !s r t. compile_binop op x y ty bl el s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `op` >>
+  simp_tac (srw_ss()) [compile_binop_def, LET_THM,
+                       comp_ignore_bind_def] >>
+  rpt IF_CASES_TAC >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_bytestring_hash:
+  !s r t. compile_bytestring_hash p s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[compile_bytestring_hash_def] >> ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_list_membership:
+  (!s r t. compile_list_membership_in needle xs s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)) /\
+  (!s r t. compile_list_membership_notin needle xs s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t))
+Proof
+  Induct_on `xs` >> simp_tac (srw_ss())
+    [compile_list_membership_in_def, compile_list_membership_notin_def]
+  >- (conj_tac >> LABEL_LEAF) >>
+  Cases_on `xs` >> simp_tac (srw_ss())
+    [compile_list_membership_in_def, compile_list_membership_notin_def]
+  >- (gen_tac >> conj_tac >> rpt LABEL_BIND >> LABEL_LEAF) >>
+  gen_tac >> conj_tac >> rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_mapping_subscript:
+  !s r t. compile_mapping_subscript slot key s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[compile_mapping_subscript_def] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_abi_alloc_buffer] >> gen_tac >>
+  simp_tac pure_ss [LET_THM] >> LABEL_IGNORE >> LABEL_BIND >>
+  LABEL_IGNORE >> LABEL_LEAF
+QED
+
+Theorem label_preserving_keccak256_key:
+  !s r t. compile_keccak256_key key is_bytes32 s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  rewrite_tac[compile_keccak256_key_def] >> IF_CASES_TAC
+  >- (ho_match_mp_tac label_preserving_bind >> conj_tac
+      >- metis_tac[label_preserving_abi_alloc_buffer] >> gen_tac >>
+      simp_tac pure_ss [LET_THM] >> LABEL_IGNORE >> LABEL_LEAF) >>
+  ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+val label_simps = [label_preserving_return, label_preserving_emit_inst,
+  label_preserving_emit_op, label_preserving_emit_void,
+  label_preserving_fresh_var, label_preserving_new_block,
+  label_preserving_abi_alloc_buffer];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+val LABEL_IGNORE = ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- LABEL_LEAF;
+val LABEL_FRESH = ho_match_mp_tac
+    (Q.ISPEC `jump_label_ok` label_preserving_bind_result) >> conj_tac
+  >- metis_tac[label_preserving_fresh_label] >> gen_tac >> strip_tac;
+
+Theorem label_preserving_array_membership_loop:
+  (!v s r t. loader v s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !s r t. compile_array_membership_loop needle arr len sz off loader isin s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rewrite_tac[compile_array_membership_loop_def] >>
+  LABEL_BIND >> ntac 6 LABEL_FRESH >>
+  rewrite_tac[comp_ignore_bind_def] >> ntac 11 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >>
+  rpt LABEL_BIND >> IF_CASES_TAC >> LABEL_LEAF
+QED
+
+Theorem label_preserving_ptr_load:
+  !s r t. compile_ptr_load ctor imm loc v s = (r,t) ==>
+    cs_extends s t /\ EVERY LP (added_labels s t)
+Proof
+  Cases_on `loc` >> Cases_on `ctor` >> Cases_on `imm` >>
+  simp_tac (srw_ss()) [contextTheory.compile_ptr_load_def,
+                       contextTheory.compile_imm_load_word_def] >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_var_array_membership:
+  !s r t. compile_var_array_membership cenv needle vv ty isin s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_var_array_membership_def] >>
+  simp_tac pure_ss [LET_THM] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC
+      >- metis_tac[label_preserving_ptr_load] >>
+      Cases_on `ty` >> simp_tac (srw_ss()) []
+      >- (pop_assum kall_tac >> rpt strip_tac >>
+          drule label_preserving_return >> simp[])
+      >- (pop_assum kall_tac >> rpt strip_tac >>
+          drule label_preserving_return >> simp[])
+      >- (Cases_on `b` >> simp_tac (srw_ss()) [] >>
+          pop_assum kall_tac >> rpt strip_tac >>
+          drule label_preserving_return >> simp[]) >>
+      pop_assum kall_tac >> rpt strip_tac >>
+          drule label_preserving_return >> simp[]) >>
+  gen_tac >> ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- (IF_CASES_TAC
+      >- (Cases_on `ty` >>
+          CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+            (RATOR_CONV (SIMP_CONV (srw_ss()) [])))))
+          >- (pop_assum kall_tac >> LABEL_LEAF)
+          >- (pop_assum kall_tac >> LABEL_LEAF)
+          >- (Cases_on `b` >>
+              CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+                (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >>
+              pop_assum kall_tac >> rpt LABEL_BIND >> LABEL_LEAF) >>
+          pop_assum kall_tac >> LABEL_LEAF) >> LABEL_LEAF) >>
+  ho_match_mp_tac label_preserving_array_membership_loop >>
+  metis_tac[label_preserving_ptr_load]
+QED

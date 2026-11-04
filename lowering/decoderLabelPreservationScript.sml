@@ -13,7 +13,7 @@ Proof
        DROP_LENGTH_TOO_LONG]
 QED
 
-Theorem label_preserving_fresh_var[local]:
+Theorem label_preserving_fresh_var:
   !s r t. fresh_var s = (r,t) ==>
   cs_extends s t /\ EVERY LP (added_labels s t)
 Proof
