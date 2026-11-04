@@ -1,7 +1,7 @@
 (* External completion observations: no equality of masked requests is required. *)
 Theory lowerDloadExternalBoundary
 Ancestors
-  lowerDloadSafetyKernel lowerDloadSafetyValues ptrDiscipline extCallOracle pair vfmState
+  lowerDloadSafetyKernel lowerDloadSafetyValues ptrDiscipline extCallOracle venomCallOracleDefs venomState pair vfmState
 
 Theorem ld_take_outcome_rest:
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
@@ -65,4 +65,63 @@ Proof
   strip_tac >> fs[ld_nonghost_def] >>
   fs[storage_agree_except_def, key_taint_def, ld_word_agree_empty,
      FUN_EQ_THM]
+QED
+
+Theorem ld_consume_adoption_cases[local]:
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
+  rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  s.vs_outcomes = t.vs_outcomes /\
+  consume_call_outcome rq ro rs s = (w,ss) /\
+  consume_call_outcome rq' ro' rs' t = (w',ts) ==>
+  (ss.vs_accounts = s.vs_accounts /\ ts.vs_accounts = t.vs_accounts /\
+   ss.vs_transient = s.vs_transient /\ ts.vs_transient = t.vs_transient) \/
+  (ss.vs_accounts = ts.vs_accounts /\ ss.vs_transient = ts.vs_transient)
+Proof
+  strip_tac >>
+  `computed_precompile rq = computed_precompile rq'` by
+    simp[computed_precompile_def] >>
+  Cases_on `computed_precompile rq'`
+  >- (Cases_on `precompile_result rq'.cr_target rq'.cr_data` >>
+      fs[computed_precompile_def] >>
+      rename1 `precompile_result _ _ = SOME result` >>
+      Cases_on `result` >> Cases_on `rq'.cr_static` >>
+      gvs[consume_call_outcome_eq, take_outcome_def, computed_precompile_def,
+          failed_outcome_def, adopt_outcome_def]) >>
+  Cases_on `t.vs_outcomes`
+  >- gvs[consume_call_outcome_eq, take_outcome_def,
+         failed_outcome_def, adopt_outcome_def] >>
+  rename1 `t.vs_outcomes = outcome::rest` >>
+  Cases_on `outcome.co_success /\ ~rq'.cr_static` >>
+  gvs[consume_call_outcome_eq, take_outcome_def, adopt_outcome_def]
+QED
+
+Theorem ld_consume_call_nonghost:
+  ld_nonghost tn s t /\
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
+  rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  consume_call_outcome rq ro rs s = (w,ss) /\
+  consume_call_outcome rq' ro' rs' t = (w',ts) /\
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  tn'.t_imm = tn.t_imm /\
+  tn'.t_stor = adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor /\
+  tn'.t_trans = adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans ==>
+  ld_nonghost tn' ss ts
+Proof
+  strip_tac >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
+  `SND (take_outcome rq s.vs_outcomes) =
+   SND (take_outcome rq' t.vs_outcomes)` by
+    (asm_rewrite_tac[] >> irule ld_take_outcome_rest >> simp[]) >>
+  `(FST (take_outcome rq s.vs_outcomes)).co_returnData =
+   (FST (take_outcome rq' t.vs_outcomes)).co_returnData` by
+    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> simp[]) >>
+  drule_all ld_consume_adoption_cases >> strip_tac >>
+  fs[adopt_reset_def] >>
+  gvs[consume_call_outcome_eq] >>
+  gvs[ld_nonghost_def, storage_agree_except_def, word_agree_except_def] >>
+  metis_tac[]
 QED
