@@ -1,5 +1,6 @@
 Theory lowerDloadOracleCallAssembly
 Ancestors
+  lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds venomWf
   lowerDloadExternalCallEffects lowerDloadSafetyWriteAssembly lowerDloadSafetyBytes
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyKernel lowerDloadSafetyRelation ptrDiscipline venomExecSemantics venomCallOracleDefs venomState
@@ -491,4 +492,123 @@ Proof
   qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
   gvs[] >> pure_once_rewrite_tac[step_inst_base_def] >>
   asm_rewrite_tac[opcode_case_def] >> simp[]
+QED
+
+Theorem ld_set_prov_selected:
+  (!a. a IN FRANGE H ==> a IN FDOM A) ==>
+  !a. a IN FRANGE (set_prov H outs NONE) ==> a IN FDOM A
+Proof
+  Cases_on `outs` >>
+  simp[set_prov_def, IN_FRANGE, FDOM_DRESTRICT, DRESTRICT_DEF] >> metis_tac[]
+QED
+
+Theorem ld_oracle_call_provenance:
+  MEM inst.inst_opcode [CALL;STATICCALL] ==>
+  step_prov PG (ld_erase A o_f H) inst ss =
+    ld_erase A o_f set_prov H inst.inst_outputs NONE
+Proof
+  simp[MEM] >> strip_tac >>
+  simp[step_prov_def, out_prov_def, ld_erase_set_prov]
+QED
+
+Theorem ld_sync_ptr_ok:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==> fn_ptr_ok P fn
+Proof
+  strip_tac >> drule ld_sync_active >> strip_tac >>
+  `MEM (HD frames) frames` by (Cases_on `frames` >> gvs[]) >>
+  qhdtm_x_assum `ld_sync` mp_tac >>
+  simp[ld_sync_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ld_sync_slots:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  FDOM A = ld_slots A frames
+Proof
+  simp[ld_sync_def]
+QED
+
+Theorem ld_sync_maps:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  EVERY (ld_maps A) frames
+Proof
+  simp[ld_sync_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ld_active_inst_member:
+  active_inst fn inst s ==> MEM inst (fn_insts fn)
+Proof
+  simp[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+  metis_tac[MEM_EL]
+QED
+
+Theorem ld_sync_oracle_call_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  ptr_discipline lo C vs0 /\ mem_inv dload_headroom_ok C vs0 /\
+  ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] /\
+  step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    step_prov PG G inst ss = ld_erase A o_f H' /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+Proof
+  strip_tac >>
+  `fn_shape_ok fn /\ fn_inst_wf fn` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
+    metis_tac[ld_sync_access_ok, ld_sync_taint_ok] >>
+  `t.vs_alloca_next < dimword(:256)` by metis_tac[ld_sync_ambient_headroom] >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[ld_sync_slots, ld_sync_maps] >>
+  `!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v` by
+    metis_tac[ld_alloc_bounds] >>
+  `!a k u v z b c sz. FLOOKUP A a = SOME (u,v,z) /\
+    FLOOKUP A k = SOME (b,c,sz) /\ a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)` by
+    metis_tac[ld_alloc_separate] >>
+  `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
+    (drule ld_sync_active >> simp[] >> strip_tac >>
+     metis_tac[ld_alloc_target_no_wrap, HD]) >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
+    metis_tac[ld_global_selected, MEM] >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  `inst_wf inst` by
+    (fs[fn_inst_wf_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
+  gvs[step_inst_non_invoke] >>
+  `?g a v ao az ro rz st.
+    (inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+      st = f.lf_tgt.vs_call_ctx.cc_static) \/
+    (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)` by
+    (qpat_x_assum `inst_wf inst` mp_tac >>
+     pure_rewrite_tac[inst_wf_def] >> asm_rewrite_tac[opcode_case_def] >>
+     simp[LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
+  gvs[] >>
+  (Q.SUBGOAL_THEN
+    `((inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+      (if inst.inst_opcode = CALL then f.lf_tgt.vs_call_ctx.cc_static else T) =
+        f.lf_tgt.vs_call_ctx.cc_static) \/
+     (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz] /\
+      (if inst.inst_opcode = CALL then f.lf_tgt.vs_call_ctx.cc_static else T) = T))`
+    assume_tac >- simp[]) >>
+  `tn.t_var = f.lf_tv` by simp[] >>
+  drule_all ld_oracle_call_step >> strip_tac >>
+  qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
+  simp[] >> (conj_tac >- (irule ld_oracle_call_provenance >> simp[])) >>
+  metis_tac[ld_set_prov_selected]
 QED
