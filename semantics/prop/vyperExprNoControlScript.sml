@@ -617,7 +617,7 @@ Theorem eval_send_no_control:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, no_control_exc_def] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        return_def, raise_def, get_accounts_def, get_transient_storage_def,
        lift_option_def, lift_option_type_def, check_def, update_accounts_def,
        update_transient_def, append_logs_def,
@@ -753,7 +753,8 @@ Theorem eval_raw_call_no_control:
   eval_raw_call cx flags target_addr calldata amount gas st = (INR exc, st') ==>
   no_control_exc exc
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def,
+       bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,

@@ -263,8 +263,9 @@ Theorem write_preserves_read_num:
            (SND (write_storage_slot cx b1 (n2w off1) tv1 v st))) =
     FST (read_storage_slot cx b2 (n2w off2) tv2 st)
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >>
   Cases_on `cx.txn.is_static` >- simp[write_storage_slot_eq] >>
+  strip_tac >>
   irule write_storage_preserves_read >>
   qexistsl [`b1`, `n2w off1`, `tv1`, `v`] >>
   simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>
@@ -370,7 +371,7 @@ QED
    lookup_toplevel_name when slots are disjoint. *)
 Theorem lookup_toplevel_name_after_apply_writes:
   ∀cx b slot tv v writes st mid m.
-    encode_value tv v = SOME writes ∧
+    encode_value tv v = SOME writes ∧ value_has_type tv v ∧
     (∀b2 off2 tv2.
        storage_var_info cx mid m = SOME (b2, off2, tv2) ⇒
        b ≠ b2 ∨
@@ -415,7 +416,7 @@ Proof
   simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   Cases_on `cx.txn.is_static` >> simp[write_storage_slot_eq] >>
   drule_then irule lookup_toplevel_name_after_apply_writes >>
-  first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Key helper: update_toplevel_name reduces to write_storage_slot
@@ -471,7 +472,7 @@ Proof
   simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   simp[write_hashmap_def, hashmap_write_def] >>
   drule_then irule lookup_toplevel_name_after_apply_writes >>
-  first_assum ACCEPT_TAC
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* ============================================================
@@ -912,8 +913,9 @@ Theorem nested_hashmap_write_preserves_static_read_chain:
            (SND (write_storage_slot cx b final_slot tv new_val st))) =
     FST (read_storage_slot cx var_b (n2w var_off) var_tv st)
 Proof
-  rpt gen_tac >> strip_tac >> gvs[] >>
+  rpt gen_tac >>
   Cases_on `cx.txn.is_static` >- simp[write_storage_slot_eq] >>
+  strip_tac >> gvs[] >>
   irule write_storage_preserves_read >>
   qexistsl [`b`, `final_slot`, `tv`, `new_val`] >>
   simp[Excl "w2n_n2w", write_storage_slot_succeeds] >>

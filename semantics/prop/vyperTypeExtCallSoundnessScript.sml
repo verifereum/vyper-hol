@@ -479,7 +479,7 @@ Theorem eval_raw_call_result_sound:
     expr_result_typed env e tv)
 Proof
   strip_tac >> qpat_x_assum `eval_raw_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_raw_call_def, type_check_def, assert_def, bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, type_check_def, assert_def, bind_def,
        ignore_bind_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
@@ -1543,7 +1543,7 @@ Proof
   Cases_on `ext_call_kwarg EKValue opts (DROP (LENGTH arg_types) rest)` >> gvs[] >>
   Cases_on `ext_call_precheck_ok skip_check ret_type target_addr st.accounts` >>
   qpat_x_assum `eval_ext_call _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[eval_ext_call_def, bind_apply, ignore_bind_apply, ext_call_checks,
+  simp[eval_ext_call_def, frame_call_value_def, check_def, COND_RATOR, bind_apply, ignore_bind_apply, ext_call_checks,
        lift_option_type_def, return_def, raise_def, get_accounts_def,
        no_type_error_result_def] >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac
@@ -1590,7 +1590,7 @@ Proof
   drule_all send_gas_args_runtime_typed_dest >> strip_tac >>
   gvs[] >>
   qpat_x_assum `eval_send _ _ _ _ = _` mp_tac >>
-  asm_simp_tac (srw_ss()) [eval_send_def, bind_def, ignore_bind_def,
+  asm_simp_tac (srw_ss()) [eval_send_def, frame_call_value_def, COND_RATOR, bind_def, ignore_bind_def,
     type_check_def, assert_def, return_def, lift_option_type_def, LET_THM] >>
   Cases_on `st.outcomes` >>
   asm_simp_tac (srw_ss()) [bind_def, ignore_bind_def, return_def] >> strip_tac

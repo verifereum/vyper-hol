@@ -9185,7 +9185,7 @@ Theorem eval_ext_call_success_value[local]:
   ?v. pv = Value v
 Proof
   PairCases_on `sigt` >> Cases_on `vs` >>
-  simp[eval_ext_call_def, bind_apply, ignore_bind_apply,
+  simp[eval_ext_call_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply,
        lift_option_type_def, type_check_def, check_def, assert_def,
        return_def, raise_def, get_accounts_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
@@ -9245,7 +9245,7 @@ Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>
   Cases_on `t` >- simp[eval_send_def, raise_def] >>
   Cases_on `dest_AddressV h` >> Cases_on `dest_NumV h'` >>
-  simp[eval_send_def, bind_apply, ignore_bind_apply, type_check_def,
+  simp[eval_send_def, frame_call_value_def, COND_RATOR, bind_apply, ignore_bind_apply, type_check_def,
        check_def, assert_def, return_def, raise_def, lift_option_type_def,
        AllCaseEqs()] >>
   rpt strip_tac >> gvs[AllCaseEqs(), return_def, raise_def] >>
@@ -9273,7 +9273,7 @@ Theorem eval_raw_call_success_value[local]:
   eval_raw_call cx flags addr data amount gas st = (INL pv,st') ==>
   ?v. pv = Value v
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        check_def, assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,

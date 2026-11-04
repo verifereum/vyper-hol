@@ -90,7 +90,7 @@ QED
 (* Skip the code guard to isolate the post-adoption decoder. No default is
    supplied: malformed bytes really run the decoder, even on empty data. *)
 val extcall_boundary_simps =
-  [eval_ext_call_def, eval_ext_call_effects_def,
+  [eval_ext_call_def, frame_call_value_def, COND_RATOR, eval_ext_call_effects_def,
    ext_call_opts_ok_def, ext_call_kwarg_def,
    ext_call_precheck_ok_def, bind_def, ignore_bind_def, return_def, raise_def,
    type_check_def, check_def, assert_def, lift_option_type_def,

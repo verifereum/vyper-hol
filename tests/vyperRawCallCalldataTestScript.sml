@@ -282,7 +282,7 @@ Proof
   rpt strip_tac >>
   Cases_on `flags.rcf_revert_on_failure` >> Cases_on `success` >>
   Cases_on `flags.rcf_max_outsize = 0` >>
-  gvs[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def, check_def,
+  gvs[eval_raw_call_def, frame_call_value_def, COND_RATOR, bind_def, ignore_bind_def, type_check_def, check_def,
        assert_def, get_accounts_def, get_transient_storage_def, lift_option_def,
        update_accounts_def, update_transient_def, append_logs_def, return_def, raise_def]
 QED

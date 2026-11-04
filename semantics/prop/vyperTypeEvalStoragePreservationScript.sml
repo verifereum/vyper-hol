@@ -1627,7 +1627,7 @@ Theorem eval_raw_call_preserves_contract_storage:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
        append_logs_def, return_def, raise_def, COND_RATOR,
@@ -2478,7 +2478,7 @@ Theorem eval_send_storage_preserved[local]:
 Proof
   Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
        append_logs_def, return_def, raise_def,
@@ -3290,7 +3290,7 @@ Theorem eval_ext_call_storage_preserved[local]:
 Proof
   PairCases_on `sig` >>
   Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
-  simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_ext_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
        lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,
        update_accounts_def, update_transient_def, append_logs_def,

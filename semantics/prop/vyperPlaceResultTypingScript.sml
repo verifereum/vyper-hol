@@ -1439,6 +1439,12 @@ Proof
     [push_log_scopes, vyperCreateFrameTheory.eval_create_preserves_scopes_immutables])
 QED
 
+Theorem scope_pop_effect_check_not_static[simp]:
+  scope_pop_effect (check_not_static cx)
+Proof
+  simp[check_not_static_def]
+QED
+
 Theorem eval_raw_call_scope_effect[local]:
   scope_pop_effect (eval_exprs cx es) ==>
   scope_pop_effect (eval_expr cx (Call ty (RawCallTarget flags) es drv))
@@ -1482,6 +1488,7 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
+  ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   simp[LET_THM] >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
@@ -1495,6 +1502,7 @@ Proof
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >> gen_tac >>
   simp[LET_THM] >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+  gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 

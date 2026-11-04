@@ -956,7 +956,7 @@ Theorem eval_send_log_extends:
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def, log_extends_refl] >>
   Cases_on `t` >- simp[eval_send_def, raise_def, log_extends_refl] >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, lift_option_type_def,
        check_def, update_accounts_def, update_transient_def, append_logs_def,
@@ -1716,7 +1716,7 @@ Theorem eval_raw_call_log_extends:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   log_extends st st'
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def,
