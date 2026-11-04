@@ -99,3 +99,68 @@ QED
    the exact minimal requirements must be validated, not silently assumed.
    Specialize M=dload_headroom_ok, then use ld_sync_target_headroom.
 *)
+
+(* C1.11.5.49.1 repaired interface audit.
+   Existing venomExecProps.MEM_lookup_block (283-289) is exactly the missing
+   uniqueness bridge. With active_inst_def it gives the proposed boundary:
+     ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+     active_inst fn inst s ==>
+     ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+          s.vs_inst_idx < LENGTH bb.bb_instructions /\
+          EL s.vs_inst_idx bb.bb_instructions = inst.
+   No new definition is needed for this boundary.
+
+   Corrected semantic interfaces (proposed, not yet proved): write U fn for
+   the ALL_DISTINCT expression above only in this comment, not a new predicate.
+   Terminal: U fn /\ active_inst fn inst s /\
+     step_inst k C inst s = IntRet ret e ==> ld_return_suffix C fn s ret e.
+   Entry: U fn /\ enters_block fn cs s ==> ld_return_cont C fn cs s.
+   Sequential: U fn /\ active_inst fn inst s /\
+     ~is_terminator inst.inst_opcode /\ step_inst k C inst s = OK q /\
+     ld_return_suffix C fn (q with vs_inst_idx := SUC s.vs_inst_idx) ret e
+       ==> ld_return_suffix C fn s ret e.
+   Block: U fn /\ active_inst fn inst s /\
+     is_terminator inst.inst_opcode /\ step_inst k C inst s = OK q /\
+     ~q.vs_halted /\ enters_block fn q s1 /\
+     ld_return_suffix C fn s1 ret e ==> ld_return_suffix C fn s ret e.
+   Cont corollaries have the same operational premises, replace the suffix
+   premise by ld_return_cont C fn cs s and conclude cont at the successor.
+   Sequential also needs a checked nonterminator current-bb preservation
+   boundary INCLUDING INVOKE before same-block lookup can be reused.
+   Entry must align eval_phis result current-bb with the input block;
+   uniqueness alone is not a proof of that alignment. The run_defs/fuel
+   composition obligations from the preceding audit remain unproved.
+
+   Membership invariant required for the five-rule induction:
+     MEM fn C.ctx_functions /\ EVERY (\f. MEM f.cf_fn C.ctx_functions) stk.
+   entry: lookup_function_MEM gives current membership, stack is empty.
+   next/block: neither fn nor stk changes, so retain both conjuncts.
+   call: lookup_function_MEM gives callee membership; push the old current
+         membership for the saved caller; retain the old tail invariant.
+   ret: pop current membership from the head of the saved-stack invariant,
+        retain tail. Do not attempt to obtain it from callee membership.
+   The generic o1_fn_shape_components and o1_ctx_shape_def/EVERY_MEM convert
+   this invariant to uniqueness for current and ALL saved callers.
+
+   Saved_calls can retain its original recursive decode/setup/cont fields
+   with an added MEM f.cf_fn C.ctx_functions conjunct at each cons; the
+   strengthened induction also retains current membership. Return boundary
+   needs o1_ctx_shape C, that certificate, current cont, active IntRet step,
+   and the exact bind_outputs/merge equation. It returns atomic step OK q,
+   saved raw caller, tail certificate, caller membership and successor cont.
+   Current uniqueness is derived from current membership; restored caller
+   uniqueness from the certificate. Push requires current membership and
+   lookup callee; new callee cont uses the corrected entry boundary.
+
+   Final proposed signature:
+     o1_ctx_shape C /\ frame_reachable vs0 C stk PG G tn fn inst s
+       ==> raw_reachable vs0 C fn inst s.
+   Strengthened IH must quantify shape and retain membership, raw fact, and
+   existential cs with cont/saved_calls, rather than assume final-only shape.
+   Ambient consumer adds o1_ctx_shape C to the earlier proposed signature.
+   The frozen theorem already supplies it; ld_sync supplies frame_reachable;
+   o1_src_inv supplies the source memory rows. No frozen premise is added.
+   REVIEW NEEDED: corrected suffix proofs are still missing from .49.2's
+   dependency path after replacing the old .49.1 by this audit. They must be
+   authorized and checked before saved-call construction, not skipped.
+*)
