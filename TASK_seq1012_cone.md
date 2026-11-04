@@ -51,7 +51,21 @@ Prove each statement as-is, or produce a counterexample. A helper marked
 fact at `expr_type e` for an operand that may be an internal call with a
 widened aggregate type): stop on that theorem, record the statement and the
 counterexample in LEARNINGS, and go on with the others. Do NOT weaken or
-restate it.
+restate it, except as below.
+
+**Approved exception (the only allowed statement change).** An exported
+helper that relates `expr_post`/`vv_post` of an arbitrary expression `e` to
+facts at `expr_type e`, in either direction, may gain exactly one new
+hypothesis, `post_value_type cenv e = expr_type e`, and nothing else.
+Instances: `copy_buffer_expr_post` (exprSimCopy), `expr_post_operand_kept_stable`,
+`expr_post_operand_kept`, `expr_post_operand_kept_at` (exprSimOperands), and any
+helper of the same shape. Add the hypothesis, repair the proof, and discharge
+it at each consumer: from `post_value_type_no_calls`, `post_value_type_word`,
+`post_value_type_bytestring` or `post_value_type_not_int_call`, or from a
+hypothesis already in scope. If a consumer cannot discharge it (its operand
+may be a widened aggregate internal call), record that consumer in LEARNINGS
+and move on. List every helper you changed this way in LEARNINGS. A
+counterexample to the unmodified statement of such a helper is not needed.
 
 Known in advance: the tuple-base subscript (\`compile_subscript_tuple_sim\`
 and its users in exprSimPlaces / bodySimExprCases' \`body_subscript_case\`)
