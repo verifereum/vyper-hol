@@ -688,7 +688,7 @@ Proof
           drule_all transfer_value_preserves_contract_storage_well_formed >>
           Cases_on `transfer_res` >>
           gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-          rpt strip_tac >> gvs[]) >>
+          rpt strip_tac >> Cases_on `cx.txn.is_static` >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -1076,8 +1076,9 @@ Proof
   Cases_on `args_res` >> gvs[]
   >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
       Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs` >>
-      gvs[lift_option_def, bind_def, return_def, raise_def, push_log_def] >>
-      rpt strip_tac >> gvs[] >>
+      gvs[lift_option_def, bind_def, ignore_bind_def, return_def, raise_def,
+          push_log_def] >>
+      Cases_on `cx.txn.is_static` >> rpt strip_tac >> gvs[] >>
       irule contract_storage_well_formed_backends_frame >>
       qexists_tac `args_st` >> simp[]) >>
   rpt strip_tac >> gvs[]
@@ -1607,8 +1608,9 @@ Theorem body_intcall_lock_storage:
 Proof
   strip_tac >> Cases_on `nr` >> gvs[lock_if_nr_def, return_def]
   >- (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+      gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
       drule_all acquire_nonreentrant_lock_preserves_contract_storage_well_formed >>
-      simp[])
+      Cases_on `is_view` >> gvs[return_def])
 QED
 
 Theorem body_intcall_lock_oracle_entry:
@@ -1625,8 +1627,9 @@ Proof
     (Cases_on `nr` >>
      gvs[lock_if_nr_def, return_def] >>
      Cases_on `cx.nonreentrant_slot` >>
-     gvs[raise_def, acquire_nonreentrant_lock_eq, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[]) >>
+     gvs[raise_def, ignore_bind_def, bind_def, acquire_nonreentrant_lock_eq,
+         AllCaseEqs()] >>
+     gvs[return_def, COND_RATOR, AllCaseEqs()]) >>
   gvs[oracle_storage_ok_payload]
 QED
 
