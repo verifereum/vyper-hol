@@ -43,6 +43,38 @@ Proof
   gvs[SUBSET_DEF, EXTENSION] >> metis_tac[]
 QED
 
+(* Shared physical word-write boundary; immutable bookkeeping is independent. *)
+Theorem ld_memory_mstore:
+  word_agree_except M x y /\ M SUBSET {j | j < 32} /\
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames /\
+  ((d+32 <= lo /\ d'=d) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     d=b+delta /\ d'=c+delta /\ delta+32 <= sz)) /\
+  ld_memory lo A tn s t /\
+  tn'.t_mem = (tn.t_mem DIFF {d+j | j < 32}) UNION
+      {d+j | j < 32 /\ j IN M} ==>
+  ld_memory lo A tn' (mstore d x s) (mstore d' y t)
+Proof
+  strip_tac >>
+  `ld_memory lo A
+    (tn with t_mem := (tn.t_mem DIFF {d+j | j < 32}) UNION
+      {d+j | j < 32 /\ j IN M})
+    (mstore d x s) (mstore d' y t)` suffices_by
+    gvs[ld_memory_def] >>
+  gvs[] >> rewrite_tac[ld_mstore_as_write]
+  >- (irule ld_memory_write_low >>
+      simp[LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+      conj_tac >- metis_tac[ld_alloc_bounds] >>
+      qexistsl_tac [`M`, `tn`] >> gvs[word_agree_except_def]) >>
+  irule ld_memory_write_slot >>
+  simp[LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  conj_tac >- metis_tac[ld_alloc_bounds] >>
+  qexistsl_tac [`M`, `k`, `sz`, `tn`] >>
+  gvs[word_agree_except_def] >> rpt strip_tac >>
+  `0 < sz` by decide_tac >> metis_tac[ld_alloc_separate]
+QED
+
 Theorem ld_mstore_effect:
   ld_vars P A f /\ tn.t_var = f.lf_tv /\
   inst.inst_opcode = MSTORE /\ inst.inst_operands = [a;v] /\
@@ -96,23 +128,11 @@ Proof
   qexists_tac `mstore (w2n dst) x f.lf_src` >> gvs[] >>
   (conj_tac >- gvs[ld_vars_def, mstore_def] >>
    conj_tac >- (
-     rewrite_tac[ld_mstore_as_write] >>
-     FIRST [
-       (qpat_assum `w2n dst + 32 <= lo` kall_tac >>
-        irule ld_memory_write_low),
-       irule ld_memory_write_slot] >>
-     conj_tac >- metis_tac[ld_alloc_bounds] >>
-     FIRST [
-       (qpat_assum `w2n dst + 32 <= lo` kall_tac >>
-        qexistsl_tac [`op_taint tn v`, `32`, `tn`]),
-       qexistsl_tac [`op_taint tn v`, `k`, `32`, `sz`, `tn`]] >>
-     pure_rewrite_tac[ADD_ASSOC] >>
-     simp[LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
-     asm_rewrite_tac[] >>
-     gvs[word_agree_except_def] >>
-     rpt strip_tac >>
-     `0 < sz` by decide_tac >>
-     metis_tac[ld_alloc_separate]) >>
+     irule ld_memory_mstore >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (qexists_tac `frames` >> simp[]) >>
+     qexistsl_tac [`op_taint tn v`, `tn`] >>
+     simp[AC ADD_ASSOC ADD_COMM]) >>
    conj_tac >- gvs[ld_nonghost_def, mstore_def] >>
    simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, mstore_def])
 QED
