@@ -45,3 +45,31 @@ Proof
   gvs[bind_def, return_def, AllCaseEqs()] >>
   metis_tac[supported_pure_eval_expr_state]
 QED
+
+Theorem expr_body_pre_intcall_arg:
+  expr_body_pre cenv cx env (Call ty (IntCall (src,name)) args dflt) ss /\
+  MEM e args /\ expr_sim_inv cenv cx env ss' ==>
+  expr_body_pre cenv cx env e ss'
+Proof
+  rw[exprSimHypsTheory.expr_body_pre_def,
+     vyperTypeSystemTheory.well_typed_expr_def,
+     vyperTypeCallGraphTheory.int_calls_expr_def,
+     exprSimHypsTheory.byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def] >>
+  imp_res_tac exprSimHypsTheory.int_calls_exprs_every_mem >>
+  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, EXISTS_MEM] >>
+  metis_tac[exprSimHypsTheory.well_typed_exprs_member,
+    exprSimHypsTheory.byte_widths_exprs_mem,
+    exprSimHypsTheory.alloc_limits_exprs_mem,
+    exprSimHypsTheory.call_evaluation_safe_exprs_mem,
+    vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono,
+    listTheory.MEM]
+QED
+
+Theorem expr_body_pre_intcall_args:
+  expr_body_pre cenv cx env (Call ty (IntCall (src,name)) args dflt) ss ==>
+  EVERY (\e. expr_body_pre cenv cx env e ss) args
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule expr_body_pre_intcall_arg >> disch_then irule >> simp[] >>
+  gvs[exprSimHypsTheory.expr_body_pre_def]
+QED
