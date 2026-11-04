@@ -8266,9 +8266,10 @@ Proof
   Induct
   >- (rpt gen_tac >> simp[compile_log_store_data_def] >>
       irule shape_step_return >> simp[]) >>
-  rpt gen_tac >> simp[compile_log_store_data_def] >> irule shape_step_bind >>
+  rpt gen_tac >> PairCases_on `h` >> simp[compile_log_store_data_def] >>
+  irule shape_step_bind >>
   qexists_tac `\dst st. plain_operand st dst /\
-    (plain_operand st (FST h) /\
+    (plain_operand st h0 /\
      (EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op))` >>
   conj_tac
   >- (qx_gen_tac `dst_op` >> BETA_TAC >> irule shape_step_ignore_bind >>
@@ -8280,15 +8281,12 @@ Proof
             `\st. EVERY (\p. plain_operand st (FST p)) ops /\ plain_operand st buf_op`,
             `\u st. T`] >> simp[] >> first_x_assum irule) >>
       ho_match_mp_tac stmt_shape_frame >>
-      qexists_tac `\st. plain_operand st dst_op /\ plain_operand st (FST h)` >>
+      qexists_tac `\st. plain_operand st dst_op /\ plain_operand st h0` >>
       simp[stmt_stable_fst_operands, stmt_shape_stable_plain, shape_stable_conj] >>
-      IF_CASES_TAC >- stmt_plain_void_drop >>
-      IF_CASES_TAC
-      >- (irule shape_step_conseq >>
-          qexistsl_tac [`compiler_label`,
-            `\st. plain_operand st (FST h) /\ plain_operand st dst_op`, `\u st. T`] >>
-          simp[compile_store_bytestring_shape]) >>
-      stmt_plain_void_drop) >>
+      irule shape_step_conseq >>
+      qexistsl_tac [`compiler_label`,
+        `\st. plain_operand st dst_op /\ plain_operand st h0`, `\u st. T`] >>
+      simp[compile_store_memory_shape]) >>
   ho_match_mp_tac stmt_shape_frame >> qexists_tac `\st. plain_operand st buf_op` >>
   simp[stmt_stable_fst_operands, stmt_shape_stable_plain, shape_stable_conj] >>
   stmt_plain_emit

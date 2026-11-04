@@ -57,7 +57,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> gvs[oneline lowered_value_type_def]
+  gen_tac >> irule lowered_value_type_env_cong >> simp[]
 QED
 
 Theorem compile_assign_memory_appends:

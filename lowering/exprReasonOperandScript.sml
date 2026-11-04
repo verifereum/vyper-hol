@@ -929,8 +929,9 @@ Resume reason_compile_expr_body[subscript]:
   qpat_x_assum `reason_uniform_shape _ _ _ _`
     (mp_tac o REWRITE_RULE [reason_uniform_shape_def]) >>
   disch_then (qx_choosel_then [`loc`, `bt`] (MAP_EVERY assume_tac o CONJUNCTS)) >>
-  irule reason_uniform_shape_intro >>
-  qexists_tac `loc` >> simp[] >> rpt strip_tac >>
+  simp[reason_uniform_shape_def] >>
+  qexistsl_tac [`loc`, `lowered_value_type cenv (Subscript ann base_e idx_e)`] >>
+  simp[] >> rpt strip_tac >>
   gvs[compile_expr_body_def, expr_type_def] >>
   metis_tac[reason_compile_subscript]
 QED

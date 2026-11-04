@@ -428,31 +428,191 @@ Proof
   rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
 QED
 
+(* Without internal calls, a lowered layout is the annotation, or the
+   produced bound of a bytelike literal or ABI encoding. *)
+Theorem lowered_value_type_no_calls:
+  !cenv e. int_calls_expr e = [] ==>
+    lowered_value_type cenv e = expr_type e \/
+    is_bytestring_type (lowered_value_type cenv e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, int_calls_expr_def, expr_type_def] >>
+  gvs[] >> BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
+QED
+
 (* A call-free expression is described at its annotation. *)
 Theorem post_value_type_no_calls[simp]:
   !cenv e. int_calls_expr e = [] ==> post_value_type cenv e = expr_type e
 Proof
-  rpt strip_tac >> irule post_value_type_not_int_call >> rpt strip_tac >>
+  rpt strip_tac >> Cases_on `?ty base_e idx. e = Subscript ty base_e idx`
+  >- (gvs[post_value_type_def, lowered_value_type_def, int_calls_expr_def,
+          expr_type_def] >>
+      qspecl_then [`cenv`, `base_e`] mp_tac lowered_value_type_no_calls >>
+      simp[] >> strip_tac >>
+      BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]) >>
+  irule post_value_type_not_call_subscript >> rpt strip_tac >>
   gvs[int_calls_expr_def]
 QED
 
+(* arg_types_fit relates lists of one length, pointwise. *)
+Theorem arg_types_fit_EL[local]:
+  !ts us. arg_types_fit ts us ==>
+    LENGTH ts = LENGTH us /\
+    !n. n < LENGTH us ==> arg_type_fits (EL n ts) (EL n us)
+Proof
+  Induct >- (Cases >> simp[arg_type_fits_def]) >>
+  gen_tac >> Cases >> simp[arg_type_fits_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[] >>
+  Cases >> simp[]
+QED
+
+(* A well-typed expression's lowered layout is a type its annotation
+   widens, except for a bytelike literal or ABI encoding, which carries its
+   produced bound.  An internal call's is its callee's return type, which
+   the typing lets the call site widen; a subscript's projects its base's
+   layout, which arg_type_fits relates pointwise. *)
+Theorem lowered_value_type_widens:
+  !cenv e cx env es.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e ==>
+    type_widens_to env.type_defs (lowered_value_type cenv e) (expr_type e) \/
+    is_bytestring_type (lowered_value_type cenv e) /\
+    (!ty f args drv. e <> Call ty (IntCall f) args drv) /\
+    (!ty b i. e <> Subscript ty b i)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac >> rpt gen_tac >>
+  rpt strip_tac
+  >~ [`Call _ (IntCall fid) _ _`]
+  >- (disj1_tac >> PairCases_on `fid` >>
+      gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
+          vyperASTTheory.expr_type_def] >>
+      metis_tac[type_widens_to_def])
+  >~ [`Subscript ty base_e idx`]
+  >- (disj1_tac >> simp[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+      IF_CASES_TAC >- simp[type_widens_to_def] >>
+      qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+      simp[Once well_typed_expr_def] >> strip_tac
+      >- (first_x_assum (drule_all_then strip_assume_tac)
+          >- (gvs[type_widens_to_def] >>
+              Cases_on `expr_type base_e` >> gvs[subscript_type_ok_def] >>
+              Cases_on `lowered_value_type cenv base_e` >>
+              gvs[arg_type_fits_def]
+              >- (drule arg_types_fit_EL >> strip_tac >>
+                  Cases_on `idx` >> gvs[] >> rename1 `Literal _ lit` >>
+                  Cases_on `lit` >> gvs[literal_int_index_def] >>
+                  rename1 `IntL n` >>
+                  `ABS n = n` by simp[integerTheory.INT_ABS_EQ_ID] >>
+                  pop_assum SUBST_ALL_TAC >> gvs[]) >>
+              rename1 `arg_type_fits (ArrayT t1 b1) (ArrayT t2 b2)` >>
+              Cases_on `b1` >> Cases_on `b2` >> gvs[arg_type_fits_def]) >>
+          Cases_on `lowered_value_type cenv base_e` >>
+          gvs[is_bytestring_type_def, type_widens_to_def]) >>
+      drule_then (qspec_then `cenv` assume_tac)
+        placeTypingPropsTheory.type_place_expr_lowered_value_type >>
+      gvs[]) >>
+  simp[lowered_value_type_def, vyperASTTheory.expr_type_def,
+       type_widens_to_def, is_bytestring_type_def, LET_THM]
+QED
+
 (* An expression's value is described at a type its annotation widens: an
-   internal call's at its callee's declared return type, which the typing
-   lets the call site widen (well_typed_expr), and which expr_sim_inv says
-   cenv records. *)
+   internal call's, or an element of one, at the layout lowered_value_type
+   gives it (lowered_value_type_widens). *)
 Theorem post_value_type_widens:
   !cenv cx env es e.
     expr_sim_inv cenv cx env es /\ well_typed_expr env e ==>
     type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)
 Proof
+  rpt strip_tac >> simp[post_value_type_def] >>
+  IF_CASES_TAC >- simp[type_widens_to_def] >>
+  drule_all lowered_value_type_widens >> strip_tac >>
+  BasicProvers.every_case_tac >> gvs[type_widens_to_def]
+QED
+
+(* A well-typed subscript's base whose post type is not its annotation is a
+   tuple or an array: its widening keeps the annotation's shape. *)
+Theorem widened_subscript_base_shape:
+  !cenv cx env es ann e1 e2.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env (Subscript ann e1 e2) /\
+    post_value_type cenv e1 <> expr_type e1 ==>
+    (?tys. post_value_type cenv e1 = TupleT tys) \/
+    (?et bd. post_value_type cenv e1 = ArrayT et bd)
+Proof
   rpt strip_tac >>
-  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
-  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
-      gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
-          vyperASTTheory.expr_type_def] >>
-      metis_tac[type_widens_to_def]) >>
-  `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
-  simp[type_widens_to_def]
+  qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+  simp[Once well_typed_expr_def] >> strip_tac
+  >- (drule_all post_value_type_widens >> simp[type_widens_to_def] >>
+      strip_tac >> Cases_on `expr_type e1` >> gvs[subscript_type_ok_def] >>
+      Cases_on `post_value_type cenv e1` >> gvs[arg_type_fits_def]) >>
+  drule_then (qspec_then `cenv` assume_tac)
+    placeTypingPropsTheory.type_place_expr_lowered_value_type >>
+  qpat_x_assum `post_value_type _ _ <> _` mp_tac >>
+  simp[post_value_type_def] >> BasicProvers.every_case_tac >> gvs[]
+QED
+
+(* Besides an internal call and a subscript, only a bytestring is laid out
+   off its annotation: a literal or abi_encode at its produced bound. *)
+Theorem lowered_other_bytestring:
+  !cenv e env.
+    well_typed_expr env e /\ lowered_value_type cenv e <> expr_type e /\
+    (!ty f args drv. e <> Call ty (IntCall f) args drv) /\
+    (!ty b i. e <> Subscript ty b i) ==>
+    is_bytestring_type (expr_type e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  rw[lowered_value_type_def, is_bytestring_type_def] >>
+  gvs[Once well_typed_expr_def, type_builtin_result_ok_def,
+      is_bytestring_type_def, vyperASTTheory.expr_type_def]
+QED
+
+
+(* A subscript of a base described at its annotation is described at its own
+   annotation. *)
+Theorem post_subscript_annotation:
+  !cenv env ann e1 e2.
+    well_typed_expr env (Subscript ann e1 e2) /\
+    post_value_type cenv e1 = expr_type e1 ==>
+    post_value_type cenv (Subscript ann e1 e2) = ann
+Proof
+  rpt strip_tac >>
+  `lowered_value_type cenv e1 = expr_type e1` suffices_by
+    (strip_tac >>
+     simp[post_value_type_def, lowered_value_type_def,
+          vyperASTTheory.expr_type_def, LET_THM]) >>
+  qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+  simp[Once well_typed_expr_def] >> strip_tac
+  >- (spose_not_then assume_tac >>
+      qspecl_then [`cenv`, `e1`, `env`] mp_tac lowered_other_bytestring >>
+      qpat_x_assum `post_value_type _ _ = _` mp_tac >>
+      Cases_on `expr_type e1` >> gvs[subscript_type_ok_def, is_bytestring_type_def] >>
+      simp[post_value_type_def, is_word_type_def, is_bytestring_type_def] >>
+      BasicProvers.every_case_tac >> gvs[]) >>
+  drule_then (qspec_then `cenv` assume_tac)
+    placeTypingPropsTheory.type_place_expr_lowered_value_type >> simp[]
+QED
+
+Theorem lowered_widened_place_type[local]:
+  !cenv e. lowered_value_type cenv e <> expr_type e ==>
+    place_type cenv e = ValPT (lowered_value_type cenv e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`Subscript ty base_e idx`]
+  >- (rpt strip_tac >>
+      Cases_on `lowered_value_type cenv base_e = expr_type base_e`
+      >- gvs[lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+      gvs[] >> simp[Once place_type_def] >> gvs[]) >>
+  rpt strip_tac >>
+  gvs[lowered_value_type_def, vyperASTTheory.expr_type_def, place_type_def,
+      LET_THM]
+QED
+
+(* A value whose post type is not its annotation is an internal call or an
+   element of one, which the compiler dispatches at that post type. *)
+Theorem post_widened_place_type:
+  !cenv e. post_value_type cenv e <> expr_type e ==>
+    place_type cenv e = ValPT (post_value_type cenv e)
+Proof
+  rpt gen_tac >> simp[post_value_type_def] >> IF_CASES_TAC >> simp[] >>
+  BasicProvers.every_case_tac >> simp[] >> rpt strip_tac >>
+  irule lowered_widened_place_type >> gvs[]
 QED
 
 Theorem type_widens_to_ec_point:
@@ -1258,6 +1418,20 @@ Proof
   metis_tac[]
 QED
 
+(* expr_sim_case_of_vv for an expression described at its annotation
+   whenever it is typed. *)
+Theorem expr_sim_case_of_vv_typed:
+  !nocalls ctx func cenv cx e.
+    (!env es. expr_body_pre cenv cx env e es ==>
+              post_value_type cenv e = expr_type e) /\
+    expr_vv_case nocalls ctx func cenv cx e ==>
+    expr_sim_case nocalls ctx func cenv cx e
+Proof
+  rw[expr_sim_case_def, expr_vv_case_def] >> irule expr_sim_of_vv_sim >>
+  conj_tac >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  metis_tac[]
+QED
+
 (* expr_ok_stack for one ctx, func and cx. *)
 Theorem expr_vv_case_stack:
   !nocalls ctx func cenv cx e.
@@ -1347,4 +1521,127 @@ Theorem eval_expr_read_INL:
     ?tv t. eval_expr cx e es = (INL tv, t) /\ read_result cx tv t = (INL v, es')
 Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+(* Successful aggregate evaluation evaluates every selected member. *)
+Theorem evaluated_array_member[local]:
+  evaluate_type tenv (ArrayT et bd) = SOME tv ==>
+  ?etv. evaluate_type tenv et = SOME etv
+Proof
+  simp[Once evaluate_type_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem evaluated_opt_mmap_member[local]:
+  !ts tvs k f.
+    OPT_MMAP f ts = SOME tvs /\ k < LENGTH ts ==>
+    ?tv. f (EL k ts) = SOME tv
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `f h` >> simp[] >>
+  Cases_on `OPT_MMAP f ts` >> simp[] >>
+  strip_tac >> Cases_on `k` >> gvs[] >> metis_tac[]
+QED
+
+Theorem evaluated_tuple_member[local]:
+  evaluate_type tenv (TupleT ts) = SOME tv /\ k < LENGTH ts ==>
+  ?etv. evaluate_type tenv (EL k ts) = SOME etv
+Proof
+  simp[Once evaluate_type_def, evaluate_types_OPT_MMAP, AllCaseEqs()] >>
+  metis_tac[evaluated_opt_mmap_member]
+QED
+
+Theorem callable_return_evaluates[local]:
+  !cx env src ts fn fm nr args dflts ret body.
+  functions_well_typed cx /\ env_context_consistent env cx /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy fn ts =
+    SOME (fm,nr,args,dflts,ret,body) /\
+  context_function_live cx (src,fn) ==>
+  ?tv. evaluate_type (get_tenv cx) ret = SOME tv
+Proof
+  rw[functions_well_typed_def] >>
+  first_x_assum
+    (qspecl_then [`env.fn_sigs`, `env.bare_globals`,
+                  `env.bare_global_assignable`,
+                  `env.toplevel_vtypes`, `env.flag_members`] mp_tac) >>
+  impl_tac
+  >- (drule vyperTypeInitialStateTheory.env_context_consistent_static_maps_function_side_condition >>
+      strip_tac >> gvs[env_context_consistent_def] >>
+      rw[] >> first_x_assum drule_all >> simp[]) >>
+  rename1 `lookup_callable_function _ _ _ = SOME (_,_,_,_,_,bd)` >>
+  disch_then
+    (qspecl_then [`src`, `fn`, `ts`, `fm`, `nr`, `args`, `dflts`, `ret`, `bd`] mp_tac) >>
+  simp[] >> strip_tac >> goal_assum (drule_at Any)
+QED
+
+Theorem signature_return_evaluates[local]:
+  functions_well_typed cx /\ env_context_consistent env cx /\
+  FLOOKUP env.fn_sigs fid = SOME sig ==>
+  ?tv. evaluate_type (get_tenv cx) sig.ret_ty = SOME tv
+Proof
+  strip_tac >> PairCases_on `fid` >>
+  `fn_sigs_consistent env.fn_sigs cx /\ fn_sigs_live env.fn_sigs cx` by
+    gvs[env_context_consistent_def] >>
+  gvs[fn_sigs_consistent_def, fn_sigs_live_def] >>
+  first_x_assum drule >> strip_tac >>
+  irule callable_return_evaluates >> metis_tac[]
+QED
+
+Theorem expr_body_pre_post_type_evaluates:
+  !cenv cx env e es. expr_body_pre cenv cx env e es ==>
+  ?tv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv
+Proof
+  rpt gen_tac >> qid_spec_tac `es` >> qid_spec_tac `e` >>
+  measureInduct_on `expr_size e` >> rpt strip_tac >>
+  drule expr_body_pre_type_evaluates >> strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, well_typed_expr_def,
+          post_value_type_int_call, lowered_value_type_def, vyperASTTheory.expr_type_def] >>
+      `env_context_consistent env cx` by gvs[env_consistent_def] >>
+      drule_all signature_return_evaluates >> strip_tac >>
+      first_x_assum drule >> disch_then SUBST1_TAC >>
+      IF_CASES_TAC >> simp[] >>
+      Cases_on `evaluate_type (get_tenv cx) ty` >> gvs[]) >>
+  Cases_on `?ann obj idx. e = Subscript ann obj idx`
+  >- (gvs[] >>
+      `well_typed_expr env (Subscript ann obj idx)` by fs[expr_body_pre_def] >>
+      Cases_on `post_value_type cenv obj = expr_type obj`
+      >- (drule_all post_subscript_annotation >>
+          gvs[vyperASTTheory.expr_type_def] >>
+          Cases_on `evaluate_type (get_tenv cx) ann` >> gvs[]) >>
+      `expr_body_pre cenv cx env obj es` by
+        (gvs[expr_body_pre_def, Once well_typed_expr_def,
+            byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
+            supportedExprTraverseTheory.expr_has_evm_run_thm,
+            call_evaluation_safe_def]
+         >- (qexists_tac `edges` >> simp[]) >>
+         drule_then (qspec_then `cenv` assume_tac)
+           placeTypingPropsTheory.type_place_expr_lowered_value_type >>
+         metis_tac[post_value_type_lowered]) >>
+      first_x_assum (qspec_then `obj` mp_tac) >>
+      simp[] >> disch_then drule >> strip_tac >>
+      `lowered_value_type cenv obj = post_value_type cenv obj` by
+        (qpat_x_assum `post_value_type cenv obj <> _` mp_tac >>
+         Cases_on `is_word_type (expr_type obj) \/ is_bytestring_type (expr_type obj)` >>
+         simp[post_value_type_def] >>
+         Cases_on `obj` >> simp[] >>
+         rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> simp[]) >>
+      `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+      drule_all widened_subscript_base_shape >> strip_tac
+      >- (gvs[] >> simp[post_value_type_def, lowered_value_type_def,
+               vyperASTTheory.expr_type_def] >>
+          IF_CASES_TAC
+          >- (Cases_on `evaluate_type (get_tenv cx) ann` >> gvs[vyperASTTheory.expr_type_def]) >>
+          IF_CASES_TAC
+          >- (irule evaluated_tuple_member >> goal_assum (drule_at Any) >> simp[]) >>
+          Cases_on `evaluate_type (get_tenv cx) ann` >> gvs[vyperASTTheory.expr_type_def]) >>
+      gvs[] >> simp[post_value_type_def, lowered_value_type_def,
+           vyperASTTheory.expr_type_def] >>
+      IF_CASES_TAC
+      >- (Cases_on `evaluate_type (get_tenv cx) ann` >> gvs[vyperASTTheory.expr_type_def]) >>
+      irule evaluated_array_member >> goal_assum (drule_at Any)) >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_not_call_subscript] >>
+  Cases_on `evaluate_type (get_tenv cx) (expr_type e)` >> gvs[]
 QED

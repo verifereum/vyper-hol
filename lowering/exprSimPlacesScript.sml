@@ -87,17 +87,26 @@ Proof
 QED
 
 (* The compiler's dispatch type disagrees with the base's type: place_type
-   says ValPT bt with bt not the base's expr_type.  Unreachable: under
-   expr_sim_inv's map table clauses a well-typed base's place_type is its
-   own type, and a place-typed base's is that of its vtype. *)
+   says ValPT bt with bt not the base's expr_type.  Unreachable for a base
+   described at its annotation: under expr_sim_inv's map table clauses a
+   well-typed base's place_type is its lowered layout, which is its own
+   type when the base is call-free or at its post type, and a place-typed
+   base's is that of its vtype.  A widened internal-call base, whose post
+   type is not its annotation, is bodySimExprCases' widened branch. *)
 Theorem compile_subscript_mismatch_case:
   !nocalls ctx func cenv cx ann obj idx bt.
-    place_type cenv obj = ValPT bt /\ bt <> expr_type obj ==>
+    place_type cenv obj = ValPT bt /\ bt <> expr_type obj /\
+    (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rw[expr_vv_case_def, expr_body_pre_def, expr_sim_inv_def] >>
   gvs[Once well_typed_expr_def]
-  >- (drule_all place_type_well_typed_on_defined >> simp[]) >>
+  >- (drule_all place_type_well_typed_on_defined >> strip_tac >> gvs[] >>
+      `post_value_type cenv obj = expr_type obj` by
+        (Cases_on `nocalls` >> gvs[int_calls_expr_def]) >>
+      qspecl_then [`cenv`, `obj`, `env`] mp_tac lowered_other_bytestring >>
+      Cases_on `expr_type obj` >> gvs[subscript_type_ok_def, compileEnvTheory.is_bytestring_type_def] >>
+      strip_tac >> gvs[post_value_type_def, compileEnvTheory.is_word_type_def, compileEnvTheory.is_bytestring_type_def]) >>
   drule_all place_type_checked_place_on_defined >> strip_tac >>
   drule type_place_expr_vtype_annotation >>
   Cases_on `vt` >> gvs[value_type_place_def, vtype_annotation_ok_def]
@@ -137,13 +146,16 @@ QED
    ASSERT, which aborts, is in expr_exit's allowance (exprSimArrayIndex).
    A dynamic array in code (an immutable, LocCode) reads its length with
    compile_ptr_load's compile_imm_load_word (ILOAD or DLOAD), for which
-   exprSimArrayIndex has no array_len_ok lemma yet. *)
+   exprSimArrayIndex has no array_len_ok lemma yet.  The base is described
+   at its post type, which is its annotation except for an element of a
+   widened internal call, read at the callee's layout. *)
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
-    expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) ==>
+    post_value_type cenv obj = ArrayT et bd /\
+    place_type cenv obj = ValPT (ArrayT et bd) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   cheat
@@ -165,8 +177,10 @@ Proof
   >- metis_tac[compile_subscript_map_case] >>
   rename1 `ValPT bt` >>
   Cases_on `bt <> expr_type obj`
-  >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
+  >- (irule compile_subscript_mismatch_case >> fs[]) >>
   gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> gvs[int_calls_expr_def]) >>
   drule_all subscript_base_array_or_tuple >> strip_tac
   >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
         metis_tac[compile_subscript_array_case] >>

@@ -109,7 +109,10 @@ Proof
        vyperTypeSystemTheory.well_typed_expr_def,
        vyperTypeSystemTheory.type_builtin_result_ok_def,
        vyperTypeCallGraphTheory.int_calls_expr_def] >>
-  rpt strip_tac >> gvs[is_bytestring_type_def]
+  rpt strip_tac >> gvs[is_bytestring_type_def] >>
+  qspecl_then [`ce`, `e`] mp_tac lowered_value_type_no_calls >>
+  simp[] >> strip_tac >> simp[] >>
+  Cases_on `lowered_value_type ce e` >> gvs[is_bytestring_type_def]
 QED
 
 Theorem aggregate_store_lowered_elem[local]:

@@ -466,7 +466,9 @@ Proof
   gvs[compile_expr_body_def, expr_type_def, LET_THM]
   >~ [`compile_name_vv _ _ _ _ = _`] >- metis_tac[compile_name_vv_word_result_ok]
   >~ [`compile_literal_vv _ _ _ = _`] >- metis_tac[compile_literal_vv_word_result_ok]
-  >~ [`compile_subscript _ _ _ _ _ _ _ = _`] >- metis_tac[compile_subscript_word_result_ok]
+  >~ [`compile_subscript _ _ _ _ _ _ _ = _`] >-
+    (irule compile_subscript_word_result_ok >> goal_assum (drule_at Any) >>
+     simp[lowered_value_type_def, LET_THM])
   >~ [`compile_attribute _ _ _ _ _ _ _ = _`] >- metis_tac[compile_attribute_word_result_ok]
   >~ [`compile_call _ _ _ _ _ _ _ _ = _`] >- metis_tac[compile_call_word_result_ok]
   >~ [`h cenv _ ty _ _ _ sa = (vv,sb)`] >-
