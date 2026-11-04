@@ -98,6 +98,7 @@ Theorem frame_terminal_prefix_setup:
     venom_to_evm_name inst.inst_opcode = SOME name /\
     context_memory_rel cp vs.vs_memory mid.as_memory /\
     venom_asm_terminal_rel vs mid /\
+    mid.as_call_ctx = vs.vs_call_ctx /\
     (!values. eval_operands (REVERSE (compute_operands inst)) vs = SOME values ==>
       mid.as_stack = values ++ DROP (LENGTH (compute_operands inst)) mid.as_stack)
 Proof
@@ -162,7 +163,7 @@ Resume frame_terminal_prefix_setup[lift]:
      simp[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
      metis_tac[]) >>
   `memory_rel arranged.ps_alloc st.as_memory endpoint.as_memory /\
-   venom_asm_terminal_rel vs endpoint` by
+   venom_asm_terminal_rel vs endpoint /\ endpoint.as_call_ctx = vs.vs_call_ctx` by
     (qpat_x_assum `venom_asm_rel lo arranged _ endpoint` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[venom_asm_rel_def, venom_asm_terminal_rel_def, frame_view_def]) >>
