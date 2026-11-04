@@ -1,6 +1,7 @@
 (* Counted forcing of a value already located in memory. *)
 Theory exprSimMemoryForce
 Ancestors
+  exprSimMemorySource exprSimMemoryPath exprSimMemoryRead
   exprSimUnwrapProps exprSimProps exprSimDefs
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasPath fragGasMode emitHelperProps loweringPosts
@@ -26,38 +27,39 @@ Proof
   simp[] >> strip_tac >>
   qpat_x_assum `!sa vv sm. compile_expr _ _ _ _ = _ ==> _` drule >>
   strip_tac >> gvs[] >>
-  drule unwrap_value_extends >> strip_tac >>
+  drule_all unwrap_memory_extends >> strip_tac >>
   `fn_has_code sa sa func` by
     (irule (cj 1 fn_has_code_split) >> simp[cs_extends_refl] >>
      qexists_tac `sb` >> simp[]) >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
-  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-  simp[bind_def] >> Cases_on `raw`
-  >- (rename1 `eval_expr cx e es = (INL r, est)` >> simp[] >> strip_tac >>
-      drule read_result_state >> strip_tac >> gvs[] >>
-      `expr_vv_res_ok (INL r)` by
-        (Cases_on `r` >> gvs[expr_vv_res_ok_def, read_result_def,
-                             raise_def, expr_res_ok_def]) >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-        (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-      disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INL r`, `es'`, `s0`] mp_tac) >>
-      simp[] >> strip_tac >>
-      irule frag_exec_seq >>
-      qexistsl_tac [`\s. vv_post ctx func cenv cx e es sa sa s0 es' r (LocatedValue t p) s`, `sa`] >>
-      simp[cs_extends_refl] >> conj_tac
-      >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-          simp[FUN_EQ_THM]) >>
-      irule unwrap_memory_read_result_sim >> simp[]) >>
-  rename1 `eval_expr cx e es = (INR exc, est)` >> strip_tac >> gvs[] >>
-  `expr_vv_res_ok (INR exc)` by gvs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [expr_vv_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `INR exc`, `es'`, `s0`] mp_tac) >>
-  simp[] >> strip_tac >>
-  irule frag_exec_seq >> qexistsl_tac [`\s. F`, `sa`] >> simp[cs_extends_refl] >> conj_tac
-  >- (irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
-      simp[expr_exit_exception_transport]) >>
-  simp[fragExecTheory.frag_exec_false_pre]
+  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
+    metis_tac[forced_expr_admissible_raw] >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_vv_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sa`, `LocatedValue t p`, `s0`] mp_tac) >>
+  simp[] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_summary_at_def]
+      >- (`~t'.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          `sa.cs_next_var <= sa.cs_next_var` by simp[] >>
+          drule_all unwrap_memory_marked_read >> simp[] >> strip_tac >>
+          qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u`] >>
+          simp[] >>
+          `marks = marks ++ []` by simp[] >>
+          pop_assum SUBST1_TAC >> irule gas_marked_exec_bind_normal >>
+          goal_assum drule >> simp[]) >>
+      Cases_on `res`
+      >- (Cases_on `r` >> gvs[expr_exit_def]) >>
+      rename1 `expr_exit (INR exc) r` >>
+      `expr_res_ok (INR exc : value + exception)` by
+        (Cases_on `exc` >> Cases_on `r` >>
+         gvs[expr_exit_def, expr_res_ok_def, AllCaseEqs()] >>
+         Cases_on `e'` >> gvs[expr_exit_def, expr_res_ok_def]) >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+      simp[GSYM expr_exit_exception_transport] >>
+      irule gas_marked_exec_bind_exception >> goal_assum drule) >>
+  disj2_tac >> metis_tac[force_exempt_cert]
 QED
 
 val () =
