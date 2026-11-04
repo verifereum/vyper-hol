@@ -12,13 +12,21 @@ Proof
      Cases_on `stack_find p xs` >> gvs[]
 QED
 
+Theorem stack_get_depth_bottom_excluded:
+  !prefix core op. ~MEM op prefix ==>
+    stack_get_depth op (prefix ++ core) = stack_get_depth op core
+Proof
+  rpt strip_tac >>
+  simp[stack_get_depth_def, REVERSE_APPEND,
+       stack_find_append_excluded, EVERY_MEM]
+QED
+
 Theorem stack_get_depth_bottom_dead:
   !op stk n. op <> dead_stack_marker ==>
     stack_get_depth op (REPLICATE n dead_stack_marker ++ stk) =
     stack_get_depth op stk
 Proof
-  simp[stack_get_depth_def, REVERSE_APPEND, REVERSE_REPLICATE,
-       stack_find_append_excluded]
+  rpt strip_tac >> irule stack_get_depth_bottom_excluded >> simp[]
 QED
 
 Theorem stack_swap_bottom_extension:
