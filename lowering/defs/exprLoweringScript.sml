@@ -1865,6 +1865,17 @@ Definition compile_type_convert_def:
   compile_type_convert v ConvIdentity = return v
 End
 
+(* Copy a bytestring of src_size buffer bytes into a new buffer of
+   dst_size bytes and return the new buffer.
+   Mirrors Python: convert.py _bytestring_convert_value (vyperlang/vyper#5338) *)
+Definition compile_bytestring_widen_copy_def:
+  compile_bytestring_widen_copy dst_size v src_size =
+    do buf <- compile_alloc_buffer dst_size;
+       compile_copy_memory buf.buf_operand v src_size;
+       return buf.buf_operand
+    od
+End
+
 (* ===== Unary Negation ===== *)
 
 (* Negate value with overflow check (operand > MIN_INT).
@@ -3280,6 +3291,17 @@ Definition compile_type_builtin_dispatch_body_def:
              (lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) ∨
               lowered_value_type cenv e1 = BaseT (StringT 0))
           then (StackValue vv_ty (Lit 0w), st1)
+          (* Consumers read a bounded bytestring up to its type's size, past
+             a smaller source's buffer: copy the value into a buffer of the
+             target type (vyperlang/vyper#5338).  Python also copies an
+             unbounded source; the frontend has no unbounded bytestring
+             type, so that case can't arise. *)
+          else if is_bytestring_type src_ty ∧ is_bytestring_type ret_ty ∧
+             type_memory_bytes cenv (lowered_value_type cenv e1) <
+             type_memory_bytes cenv ret_ty
+          then as_stack_val vv_ty (compile_bytestring_widen_copy
+                 (type_memory_bytes cenv ret_ty) v
+                 (type_memory_bytes cenv (lowered_value_type cenv e1)) st1)
           else
           case ret_ty of
             FlagT flag_nsid =>

@@ -38,9 +38,8 @@ Proof
   simp[] >> qexists_tac `n` >> simp[]
 QED
 
-(* For over a range whose ends evaluate to integers without changing the
-   state and lower to their words without emitting code (literals,
-   max_value and the like): the loop variable's ALLOCA, the
+(* For over a range whose ends are source integer literals: the loop
+   variable's ALLOCA, the
    entry block, then the loop from the first counter value; on a normal
    finish the code ends at the start of the exit block.  The body's
    judgment is assumed for the environment declare_local gives, at the

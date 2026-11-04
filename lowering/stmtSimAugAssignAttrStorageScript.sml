@@ -375,8 +375,8 @@ Proof
     (irule emit_op_frag >> simp[] >>
      qexistsl_tac [`[Var d]`, `if tr then TLOAD else SLOAD`] >>
      simp[] >> conj_tac >- (Cases_on `tr` >> simp[is_terminator_def]) >>
-     rpt strip_tac >> Cases_on `tr` >>
-     gvs[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
+     rpt strip_tac >> Cases_on `tr` >> fs[] >>
+     simp[step_inst_base_def, exec_read1_def, mk_inst_def]) >>
   pop_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
@@ -513,6 +513,8 @@ Theorem compile_augassign_attr_storage_case:
     cenv.ce_module_var_type (src, id) = SOME (StructT sid) /\
     ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
       fld = SOME (ty, fsz) /\
+    (bop = Exp ==> nonneg_int_literal e) /\
+    (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
     well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty0
@@ -555,6 +557,15 @@ Proof
          simp[] >>
          Cases_on `bop_result cx ty bop [ty; expr_type e] v1 v2 es1` >>
          gvs[expr_res_ok_def, stmt_res_ok_def, bop_result_def, AllCaseEqs()]) >>
+     gvs[] >> drule eval_expr_read_INL >> strip_tac >>
+     `!n. expr_int_literal e = SOME n ==> v2 = IntV n` by
+       metis_tac[eval_expr_int_literal_agrees] >>
+     `(bop = ShL \/ bop = ShR ==> ?i. v2 = IntV i /\ 0 <= i)` by
+       (strip_tac >> irule eval_expr_shift_amount >> metis_tac[]) >>
+     `(bop = Exp ==> ?n. expr_int_literal e = SOME n /\ 0 <= n)` by
+       (strip_tac >> gvs[nonneg_int_literal_def,
+                         GSYM expr_int_literal_value] >>
+        Cases_on `expr_int_literal e` >> gvs[]) >>
      irule binop_frag_word_typed >> simp[] >> metis_tac[]) >>
   `!v2 v. r1 = INL v2 /\
     bop_result cx ty bop [ty; expr_type e] v1 v2 es1 = INL v ==>

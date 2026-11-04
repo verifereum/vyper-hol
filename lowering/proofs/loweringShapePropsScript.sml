@@ -4,8 +4,8 @@
  * Each generator family gets one shape_step fact (loweringShapeDefs); the
  * runtime stream lemma assembles them, package_internal_blocks_segments
  * splits the stream exactly at the internal entry labels, and
- * run_lowering_source_unit_ok reads o1_source_unit_ok off the packaged
- * unit.
+ * run_lowering_source_unit_ok reads o1_source_unit_ok, and that the entry
+ * function has no PARAM, off the packaged unit.
  *
  * TOP-LEVEL:
  *   expr_shape_root            — the source forms whose lowering breaks the
@@ -3280,6 +3280,34 @@ Theorem compile_copy_memory_shape_framed[local]:
     (compile_copy_memory dst src n) (\u st. R st)
 Proof
   shape_framed_tac compile_copy_memory_shape
+QED
+
+Theorem compile_bytestring_widen_copy_shape[local]:
+  shape_stable R ==>
+  shape_step internal compiler_label (\st. R st /\ plain_operand st v)
+    (compile_bytestring_widen_copy d v sz) (\w st. R st /\ plain_operand st w)
+Proof
+  strip_tac >> simp[compile_bytestring_widen_copy_def] >>
+  `shape_stable (\st. R st /\ plain_operand st v)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[v]:operand list` shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\buf st. (R st /\ plain_operand st v) /\
+                         plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
+  qx_gen_tac `buf` >> BETA_TAC >>
+  `shape_stable (\st. R st /\ plain_operand st buf.buf_operand)` by
+    (ho_match_mp_tac shape_stable_conj >> simp[] >>
+     mp_tac (Q.SPEC `[buf.buf_operand]:operand list`
+               shape_stable_plain_operands) >> simp[]) >>
+  match_mp_tac shape_step_ignore_bind >>
+  qexists_tac `\u st. R st /\ plain_operand st buf.buf_operand` >>
+  conj_tac
+  >- (irule shape_step_frame_from >>
+      irule_at Any compile_copy_memory_shape >>
+      qexists_tac `\st. R st /\ plain_operand st buf.buf_operand` >> simp[]) >>
+  gen_tac >> irule shape_step_return >> simp[]
 QED
 
 Theorem compile_store_memory_shape_framed[local]:
@@ -7220,6 +7248,13 @@ Resume compile_type_builtin_dispatch_body_shape[convert]:
              lowered_value_type cenv (HD args) = BaseT (StringT 0))` >>
   pop_assum (fn th => REWRITE_TAC [th])
   >- (simp[shape_step_def, shape_extends_refl, value_shape_ok_def] >> shape_opcode_tac) >>
+  Cases_on `is_bytestring_type (expr_type (HD args)) /\ is_bytestring_type ret_ty /\
+            type_memory_bytes cenv (lowered_value_type cenv (HD args)) <
+            type_memory_bytes cenv ret_ty` >>
+  pop_assum (fn th => REWRITE_TAC [th])
+  >- (CONV_TAC (DEPTH_CONV ETA_CONV) >> irule shape_step_as_stack_val >>
+      shape_under_tac compile_bytestring_widen_copy_shape `\st. T` >>
+      simp[shape_stable_def]) >>
   Cases_on `ret_ty` >> simp[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule shape_step_as_stack_val >>
   shape_under_tac compile_type_convert_shape `\st. T` >> simp[shape_stable_def]
@@ -11989,7 +12024,7 @@ Proof
 
 QED
 
-Theorem shape_state_initial_compile_state[local]:
+Theorem shape_state_initial_compile_state:
   !lbl. shape_state (initial_compile_state lbl)
 Proof
   simp[initial_compile_state_def, shape_state_def, shape_base_state_def,
@@ -11997,7 +12032,7 @@ Proof
        state_insts_def, all_blocks_def]
 QED
 
-Theorem runtime_entry_blocks_shape[local]:
+Theorem runtime_entry_blocks_shape:
   !st. shape_extends F jump_label_ok (initial_compile_state "__entry") st ==>
     all_blocks st <> [] /\
     (HD (all_blocks st)).bb_label = "__entry" /\
@@ -12023,7 +12058,7 @@ Proof
   simp[EVERY_FLAT, EVERY_MAP]
 QED
 
-Theorem runtime_fallback_shape[local]:
+Theorem runtime_fallback_shape:
   !fallback_fn. fallback_shape_ok fallback_fn ==>
     shape_step F jump_label_ok (\st. T)
       (case fallback_fn of
@@ -12054,7 +12089,7 @@ Proof
   simp[jump_label_ok_def]
 QED
 
-Theorem runtime_entry_prefix_shape[local]:
+Theorem runtime_entry_prefix_shape:
   !selectors external_fns fallback_fn.
     EVERY (\(sel, lbl, z). isPREFIX "fn_" lbl) selectors /\
     EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn ==>
@@ -12869,7 +12904,9 @@ Theorem run_lowering_source_unit_ok:
     EVERY internal_fn_shape_ok internal_fns /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
     ALL_DISTINCT (MAP FST (internal_fn_descriptors internal_fns)) ==>
-    o1_source_unit_ok unit
+    o1_source_unit_ok unit /\
+    EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+      (fn_insts (HD unit.cu_context.ctx_functions))
 Proof
   rpt gen_tac >> strip_tac >>
   `lowering_policy_ok rpolicy`
@@ -12881,6 +12918,12 @@ Proof
               entry_info (initial_compile_state "__entry")` >>
   rename1 `_ = (u, st1)` >> Cases_on `u` >>
   drule_all compile_generate_runtime_shape >> strip_tac >>
+  `EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+     (fn_insts (mk_raw_function "__entry" entry_blocks))`
+    by (simp[fn_insts_def, mk_raw_function_fields, EVERY_MEM,
+             MEM_fn_insts_blocks_iff, PULL_EXISTS] >>
+        rpt strip_tac >> gvs[EVERY_MEM] >> res_tac >>
+        gvs[lowered_inst_ok_def]) >>
   `opaque_insts_ok
      (FLAT (MAP (\bb. bb.bb_instructions) (entry_blocks ++ FLAT segs)))`
     by (fs[shape_state_def, shape_base_state_def, state_insts_def]) >>
@@ -12900,7 +12943,8 @@ Proof
   qpat_x_assum `all_blocks st1 = _` (assume_tac o REWRITE_RULE [all_blocks_def]) >>
   gs[run_lowering_def, extract_context_with_internals_def] >>
   strip_tac >> gvs[] >>
-  irule lowered_unit_source_ok >> gs[]
+  conj_tac >- (irule lowered_unit_source_ok >> gs[]) >>
+  simp[mk_venom_context_def]
 QED
 
 (* ===== Source side: selectors and internal names ===== *)
@@ -12984,7 +13028,9 @@ Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
     ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                     (FST (SND (classify_functions tops)))) /\
     immutable_free_program tops ==>
-    o1_source_unit_ok unit
+    o1_source_unit_ok unit /\
+    EVERY (\inst. ~is_param_opcode inst.inst_opcode)
+      (fn_insts (HD unit.cu_context.ctx_functions))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
