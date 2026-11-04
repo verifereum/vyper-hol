@@ -83,3 +83,12 @@ Theorem mixed_restore_prefix_probe[local]:
 Proof
   EVAL_TAC
 QED
+
+(* Shared PHI alternatives do not need to be distinct for slot selection. *)
+Theorem shared_phi_depth_probe[local]:
+  stack_get_phi_depth [Var "a"; Var "a"] [Var "a"] = SOME 0 /\
+  stack_get_phi_depth [Var "a"; Var "a"]
+    [dead_stack_marker; Var "a"] = SOME 0
+Proof
+  EVAL_TAC
+QED
