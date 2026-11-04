@@ -100,3 +100,10 @@ val () = List.app (fn th =>
      then print "BODY_STORAGE_COPY_MEMORY_AUDIT OK\n"
      else raise Fail "storage copy inherited admission"
   end) [body_storage_singleton_mem_ok, body_storage_iteration_mem_ok];
+
+(* Resolve the shared execution interface here, without duplicating it. *)
+val () = (List.app (fn _ => ())
+  [storage_copy_source_run_effect, storage_copy_destination_run_effect,
+   storage_copy_increment_run_effect, storage_copy_body_run,
+   storage_copy_body_run_effect];
+  print "BODY_STORAGE_COPY_EXECUTION_EXPORTS OK\n");
