@@ -203,3 +203,40 @@ Proof
        abi_decoder_child_scratch_def, MEM_MAP] >>
   disj2_tac >> qexists_tac `inst.inst_id` >> simp[MEM_SET_TO_LIST]
 QED
+
+Theorem abi_decoder_sites_subset:
+  first <= a /\ b <= last ==>
+  abi_decoder_sites a b code SUBSET abi_decoder_sites first last code
+Proof
+  simp[SUBSET_DEF] >> rpt strip_tac >> simp[]
+QED
+
+Theorem abi_decoder_sites_outside:
+  id < first \/ last <= id ==> id NOTIN abi_decoder_sites first last code
+Proof
+  simp[] >> metis_tac[NOT_LESS, LESS_EQ_ANTISYM]
+QED
+
+Theorem abi_decoder_site_generated_allocation:
+  abi_decoder_code child child_end /\
+  abi_decoder_code_member inst child_end /\
+  ~abi_decoder_code_member inst child /\ inst.inst_opcode = ALLOCA /\
+  abi_decoder_code_member inst code /\ abi_decoder_site_budget ids cap s /\
+  abi_decoder_sites child.cs_next_id child_end.cs_next_id code SUBSET ids ==>
+  ?out t p base len. inst.inst_outputs = [out] /\
+    inst.inst_operands = [Lit 32w] /\
+    exec_alloca inst s (32w:bytes32) = OK t /\
+    abi_decoder_site_budget ids cap t /\ lookup_var out t = SOME (n2w p) /\
+    FLOOKUP t.vs_allocas inst.inst_id = SOME (p,32) /\
+    MEM (base,len) (abi_decoder_child_scratch
+      (abi_decoder_sites child.cs_next_id child_end.cs_next_id code) 0 cap s) /\
+    base <= p /\ p + 32 <= base + len
+Proof
+  strip_tac >> drule_all abi_decoder_code_alloca >> strip_tac >>
+  `inst.inst_id IN abi_decoder_sites child.cs_next_id child_end.cs_next_id code`
+    by (simp[] >> metis_tac[]) >>
+  qpat_x_assum `abi_decoder_code _ _` kall_tac >>
+  rpt (qpat_x_assum `abi_decoder_code_member _ _` kall_tac) >>
+  qpat_x_assum `~abi_decoder_code_member _ _` kall_tac >>
+  metis_tac[abi_decoder_site_allocation]
+QED
