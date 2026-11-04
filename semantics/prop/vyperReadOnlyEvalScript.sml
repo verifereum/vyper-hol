@@ -561,7 +561,8 @@ Resume evaluate_read_only[intcall_after_defaults]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- suspend "intcall_after_lock" >>
   qpat_x_assum `mut = View \/ mut = Pure` strip_assume_tac >>
-  simp[machine_frame_internal_lock]
+  simp[machine_frame_internal_lock,
+       REWRITE_RULE [ignore_bind_def] machine_frame_internal_lock]
 QED
 
 Resume evaluate_read_only[intcall_after_lock]:

@@ -103,6 +103,32 @@ Proof
                 venom_state_component_equality]
 QED
 
+Theorem ld_ok_call_ctx[local]:
+  !vars s1 s2. ld_ok vars s1 s2 ==> s2.vs_call_ctx = s1.vs_call_ctx
+Proof
+  simp[ld_ok_def, ld_frame_def, venom_state_component_equality]
+QED
+
+Theorem ld_eval_operands_agree[local]:
+  !ops s1 s2 vars.
+    ld_ok vars s1 s2 /\
+    (!x. MEM (Var x) ops ==> x NOTIN vars) ==>
+    eval_operands ops s2 = eval_operands ops s1
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h s1 = eval_operand h s2` by
+    metis_tac[ld_eval_operand_agree] >>
+  `eval_operands ops s2 = eval_operands ops s1` by metis_tac[] >>
+  simp[]
+QED
+
+Theorem static_guard_ok_eq[local]:
+  !b a s x s'.
+    ((if b then Abort a s else x) = OK s') <=> ~b /\ x = OK s'
+Proof
+  rw[]
+QED
+
 Theorem resolve_phi_MEM:
   !prev ops val_op.
     resolve_phi prev ops = SOME val_op ==> MEM val_op ops
@@ -229,6 +255,16 @@ val ld_classify_one_tac =
   ASM_REWRITE_TAC[opcode_case_def] >> strip_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
+  (* Static-frame guard (SSTORE, TSTORE): s1 took the non-static branch,
+     and s2 has the same call context and operand values *)
+  TRY (
+    qpat_x_assum `(if _ then Abort _ _ else _) = OK _`
+      (strip_assume_tac o REWRITE_RULE [static_guard_ok_eq]) >>
+    drule ld_ok_call_ctx >> strip_tac >>
+    drule ld_eval_operands_agree >>
+    disch_then (qspec_then `inst.inst_operands` mp_tac) >>
+    impl_tac >- ASM_REWRITE_TAC [] >> strip_tac >>
+    ASM_REWRITE_TAC []) >>
   (* Fast path: exec_pure helpers (ADD, SUB, MUL, ...) ~45 opcodes *)
   TRY (
     (drule_all exec_pure1_ld_ok ORELSE

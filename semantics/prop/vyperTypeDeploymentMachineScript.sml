@@ -479,9 +479,11 @@ Proof
       (if nr then
          case (initial_evaluation_context sources layouts tx NONE).nonreentrant_slot of
            NONE => raise (Error (TypeError "nonreentrant slot missing"))
-         | SOME slot => acquire_nonreentrant_lock
-             (initial_evaluation_context sources layouts tx NONE).txn.target slot
-             (mut = View \/ mut = Pure)
+         | SOME slot => do
+             acquire_nonreentrant_lock (initial_evaluation_context sources layouts tx NONE).txn.target slot
+             ((mut = View \/ mut = Pure) \/ (initial_evaluation_context sources layouts tx NONE).txn.is_static);
+             if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context sources layouts tx NONE)
+             od
        else return ()) (initial_state am_c [env] with <|outcomes := orc; requests := []; gas_obs := gobs'|>) = (INL (),lock_st) /\
       send_call_value mut
         (initial_evaluation_context sources layouts tx NONE with in_deploy := T)

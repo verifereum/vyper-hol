@@ -869,8 +869,8 @@ Theorem call_lock_action_preserves_tv[local]:
   preserves_tv cx st st'
 Proof
   rw[] >>
-  gvs[return_def, raise_def, preserves_tv_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def, preserves_tv_def] >>
+  gvs[return_def, raise_def, preserves_tv_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs()] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def, preserves_tv_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs()] >>
   imp_res_tac acquire_nonreentrant_lock_scopes >>
   imp_res_tac acquire_nonreentrant_lock_immutables >>
   gvs[preserves_tv_def]
@@ -898,7 +898,7 @@ Proof
   imp_res_tac send_call_value_preserves_tv >>
   imp_res_tac (cj 2 eval_preserves_tv) >>
   `preserves_tv cx st s''` by
-    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def] >>
+    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs()] >>
      imp_res_tac acquire_nonreentrant_lock_scopes >>
      imp_res_tac acquire_nonreentrant_lock_immutables >>
      gvs[preserves_tv_def]) >>
@@ -927,7 +927,7 @@ Proof
   imp_res_tac send_call_value_preserves_tv >>
   imp_res_tac (cj 2 eval_preserves_tv) >>
   `preserves_tv cx st s''` by
-    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def] >>
+    (Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, return_def, preserves_tv_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs()] >>
      imp_res_tac acquire_nonreentrant_lock_scopes >>
      imp_res_tac acquire_nonreentrant_lock_immutables >>
      gvs[preserves_tv_def]) >>
@@ -1013,12 +1013,12 @@ Theorem call_external_function_deploy_normal_success_lookup_transport:
       (get_source_immutables src
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
-  rw[] >>
+  rpt strip_tac >>
+  qpat_x_assum `am_out = _` SUBST_ALL_TAC >>
   `preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) st_body` by
-    metis_tac[call_body_prefix_lock_preserves_tv,
-              call_body_prefix_preserves_tv, return_def, bind_def] >>
+    (drule call_body_prefix_preserves_tv >> simp[]) >>
   `st_unlocked.immutables = st_body.immutables` by
-    (Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+    (Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
      imp_res_tac release_nonreentrant_lock_immutables) >>
   metis_tac[preserves_tv_unlock_abstract_machine_immutables_lookup]
 QED
@@ -1052,12 +1052,12 @@ Theorem call_external_function_deploy_return_success_lookup_transport:
       (get_source_immutables src
         (case ALOOKUP am_out.immutables cx.txn.target of SOME m => m | NONE => [])) id = SOME (tv,y)
 Proof
-  rw[] >>
+  rpt strip_tac >>
+  qpat_x_assum `am_out = _` SUBST_ALL_TAC >>
   `preserves_tv cx (initial_state am_c [env] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) st_body` by
-    metis_tac[call_body_prefix_lock_preserves_tv,
-              call_body_prefix_preserves_tv, return_def, bind_def] >>
+    (drule call_body_prefix_preserves_tv >> simp[]) >>
   `st_unlocked.immutables = st_body.immutables` by
-    (Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+    (Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
      imp_res_tac release_nonreentrant_lock_immutables) >>
   metis_tac[preserves_tv_unlock_abstract_machine_immutables_lookup]
 QED
@@ -1207,7 +1207,7 @@ Theorem call_lock_action_preserves_immutables[local]:
 Proof
   rw[] >>
   gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac acquire_nonreentrant_lock_immutables >>
   gvs[]
 QED
@@ -1299,7 +1299,7 @@ Theorem call_lock_action_preserves_accounts_c53:
   st'.accounts = st.accounts
 Proof
   rw[] >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   qpat_x_assum `acquire_nonreentrant_lock _ _ _ _ = _` mp_tac >>
   rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def, return_def, raise_def,
@@ -1327,7 +1327,7 @@ Theorem call_lock_send_prefix_body_state_ready_c53:
   state_well_typed st
 Proof
   rw[bind_def, ignore_bind_def] >> gvs[AllCaseEqs()] >>
-  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def]) >>
+  TRY (Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def]) >>
   imp_res_tac acquire_nonreentrant_lock_scopes >>
   imp_res_tac acquire_nonreentrant_lock_immutables >>
   imp_res_tac send_call_value_preserves_scopes_c53 >>
@@ -1348,8 +1348,8 @@ Theorem call_lock_action_no_control_c53:
   no_control_exc exc
 Proof
   Cases_on `nr` >> gvs[return_def, raise_def, no_control_exc_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, no_control_exc_def] >>
-  strip_tac >> drule acquire_nonreentrant_lock_no_control >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >>
+  strip_tac >> gvs[no_control_exc_def] >> drule acquire_nonreentrant_lock_no_control >>
   simp[no_control_exc_def]
 QED
 
@@ -1376,7 +1376,7 @@ Proof
   imp_res_tac send_call_value_no_control_c53 >>
   imp_res_tac stmts_no_control_escape_eval_stmts_no_loop_control >>
   gvs[no_control_exc_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def, no_control_exc_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), raise_def, no_control_exc_def] >>
   imp_res_tac acquire_nonreentrant_lock_no_control >>
   gvs[no_control_exc_def]
 QED
@@ -1397,7 +1397,7 @@ Proof
   rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, assert_def, check_def] >>
@@ -1413,7 +1413,7 @@ Theorem unlock_action_no_control_c53:
   no_control_exc exc
 Proof
   rw[] >> gvs[return_def, no_control_exc_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, no_control_exc_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, no_control_exc_def] >>
   qpat_x_assum `release_nonreentrant_lock _ _ _ = _` mp_tac >>
   rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
@@ -1512,7 +1512,7 @@ Proof
   rw[vyperTypeExprSoundnessTheory.no_type_error_eval_def,
      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
   gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
   rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, assert_def, check_def] >>
@@ -1564,9 +1564,11 @@ Proof
   Cases_on `(if nr then
                case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))
-               | SOME slot => acquire_nonreentrant_lock
-                   (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
-                   (mut = View \/ mut = Pure)
+               | SOME slot => do
+                   acquire_nonreentrant_lock (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+                   ((mut = View \/ mut = Pure) \/ (initial_evaluation_context am.sources am.layouts tx src).txn.is_static);
+                   if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src)
+                   od
              else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut (initial_evaluation_context am.sources am.layouts tx src) r` >>
@@ -1575,7 +1577,7 @@ Proof
             (irule call_lock_send_prefix_body_state_ready_c53 >>
              simp[bind_def, ignore_bind_def] >>
              qexistsl [`initial_evaluation_context am.sources am.layouts tx src`, `gobs`, `mut`, `nr`, `orc`, `rqs`] >>
-             simp[]) >>
+             gvs[ignore_bind_def]) >>
           `accounts_well_typed r.accounts` by
             (imp_res_tac call_lock_action_preserves_accounts_c53 >>
              gvs[initial_state_accounts_well_typed_simple]) >>
@@ -1604,9 +1606,11 @@ Proof
      ((if nr then
          case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
            NONE => raise (Error (TypeError "nonreentrant slot missing"))
-         | SOME slot => acquire_nonreentrant_lock
-             (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
-             (mut = View \/ mut = Pure)
+         | SOME slot => do
+             acquire_nonreentrant_lock (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+             ((mut = View \/ mut = Pure) \/ (initial_evaluation_context am.sources am.layouts tx src).txn.is_static);
+             if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src)
+             od
        else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))` by (
     irule call_lock_action_no_type_error_c53 >>
     qpat_assum `nr ==> _` ACCEPT_TAC) >>
@@ -1625,7 +1629,7 @@ Theorem call_lock_send_eval_return_typed_c53[local]:
      (if nr then
         case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
           NONE => raise (Error (TypeError "nonreentrant slot missing"))
-        | SOME slot => acquire_nonreentrant_lock tx.target slot (mut = View \/ mut = Pure)
+        | SOME slot => do acquire_nonreentrant_lock tx.target slot ((mut = View \/ mut = Pure) \/ tx.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src) od
       else return ());
      send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
      eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
@@ -1649,8 +1653,10 @@ Proof
   Cases_on `(if nr then
                case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
                  NONE => raise (Error (TypeError "nonreentrant slot missing"))
-               | SOME slot => acquire_nonreentrant_lock tx.target slot
-                   (mut = View \/ mut = Pure)
+               | SOME slot => do acquire_nonreentrant_lock tx.target slot
+                   ((mut = View \/ mut = Pure) \/ tx.is_static);
+                   if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src)
+                   od
              else return ()) (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>)` >>
   Cases_on `q` >> gvs[]
   >- (Cases_on `send_call_value mut
@@ -1722,9 +1728,11 @@ Proof
         (if nr then
            case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
              NONE => raise (Error (TypeError "nonreentrant slot missing"))
-           | SOME slot => acquire_nonreentrant_lock
-               (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
-               (mut = View \/ mut = Pure)
+           | SOME slot => do
+               acquire_nonreentrant_lock (initial_evaluation_context am.sources am.layouts tx src).txn.target slot
+               ((mut = View \/ mut = Pure) \/ (initial_evaluation_context am.sources am.layouts tx src).txn.is_static);
+               if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src)
+               od
          else return ());
         send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
         eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
@@ -1759,7 +1767,7 @@ Proof
         (if nr then
            case (initial_evaluation_context am.sources am.layouts tx src).nonreentrant_slot of
              NONE => raise (Error (TypeError "nonreentrant slot missing"))
-           | SOME slot => acquire_nonreentrant_lock tx.target slot (mut = View \/ mut = Pure)
+           | SOME slot => do acquire_nonreentrant_lock tx.target slot ((mut = View \/ mut = Pure) \/ tx.is_static); if (mut = View \/ mut = Pure) then return () else check_not_static (initial_evaluation_context am.sources am.layouts tx src) od
          else return ());
         send_call_value mut (initial_evaluation_context am.sources am.layouts tx src);
         eval_stmts (initial_evaluation_context am.sources am.layouts tx src) body
@@ -1896,7 +1904,7 @@ Proof
         (Cases_on `nr` >> gvs[return_def] >>
          Cases_on `mut = View` >> gvs[return_def] >>
          Cases_on `mut = Pure` >> gvs[return_def] >>
-         Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+         Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
          imp_res_tac release_nonreentrant_lock_immutables) >>
       gvs[abstract_machine_from_state_def] >>
       irule preserves_immutables_dom_final_lookup_exists_in_initial >>
@@ -1910,7 +1918,7 @@ Proof
     (Cases_on `nr` >> gvs[return_def] >>
      Cases_on `mut = View` >> gvs[return_def] >>
      Cases_on `mut = Pure` >> gvs[return_def] >>
-     Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
+     Cases_on `cx.nonreentrant_slot` >> gvs[bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
      imp_res_tac release_nonreentrant_lock_immutables) >>
   gvs[abstract_machine_from_state_def] >>
   irule preserves_immutables_dom_final_lookup_exists_in_initial >>

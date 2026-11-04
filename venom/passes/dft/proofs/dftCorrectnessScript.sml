@@ -691,6 +691,8 @@ Proof
     metis_tac[step_inst_preserves_prev_bb, step_inst_non_invoke] >>
   `sx.vs_params = s.vs_params` by
     metis_tac[step_preserves_params, step_inst_non_invoke] >>
+  `sx.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[step_preserves_call_ctx, step_inst_non_invoke] >>
   qspecl_then [`y`,`s`,`sy`,`sx`] mp_tac step_inst_base_ok_transfer >>
   simp[] >> disch_then irule >> conj_tac
   >- (rpt strip_tac >>
@@ -826,6 +828,9 @@ Proof
       `s'.vs_params = s.vs_params` by
         (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
            step_preserves_params >> simp[]) >>
+      `s'.vs_call_ctx = s.vs_call_ctx` by
+        (qspecl_then [`fuel`,`ctx`,`x`,`s`,`s'`] mp_tac
+           step_preserves_call_ctx >> simp[]) >>
       (* Returndata: conditional on i being RETURNDATACOPY *)
       `i.inst_opcode = RETURNDATACOPY ==>
        s'.vs_returndata = s.vs_returndata` by

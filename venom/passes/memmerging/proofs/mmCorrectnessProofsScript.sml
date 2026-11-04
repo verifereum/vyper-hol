@@ -2735,14 +2735,18 @@ Theorem step_inst_base_non_term_no_halt[local]:
   !inst s s'. step_inst_base inst s = Halt s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_halt_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_no_intret[local]:
   !inst s vs s'. step_inst_base inst s = IntRet vs s' ==>
     is_terminator inst.inst_opcode
 Proof
-  rw[step_inst_base_def] >> gvs[AllCaseEqs(), is_terminator_def]
+  rpt strip_tac >>
+  drule opcodeClassTheory.step_inst_base_intret_opcodes >>
+  strip_tac >> gvs[is_terminator_def]
 QED
 
 Theorem step_inst_base_non_term_only_ok_error_abort[local]:
