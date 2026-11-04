@@ -306,6 +306,22 @@ Proof
   simp[]
 QED
 
+Theorem ao_transform_inst_nonempty:
+  inst_wf inst ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst <> []
+Proof
+  strip_tac >> simp[ao_transform_inst_def] >>
+  IF_CASES_TAC >- simp[] >>
+  IF_CASES_TAC >- simp[] >>
+  Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)` >> simp[]
+  >- (irule ao_peephole_inst_nonempty >>
+      simp[ao_pre_flip_inst_structure, ao_pre_flip_inst_arity,
+           ao_resolve_iszero_inst_structure] >>
+      strip_tac >> irule ao_inst_wf_comparator_arity >> simp[]) >>
+  drule ao_opt_producer_structure >>
+  Cases_on `x = []` >> simp[]
+QED
+
 Theorem ao_preserves_wf_function_proof:
   !sup fn fn' sup'.
     wf_function fn /\
