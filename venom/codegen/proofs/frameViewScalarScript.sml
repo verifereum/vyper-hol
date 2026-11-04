@@ -173,6 +173,13 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[] >>
   qpat_assum `inst.inst_opcode = _`
     (fn th => fs[opcode_equation (rhs (concl th))]) >>
+  (* the static-frame guard reads the same on both states *)
+  `eval_operands inst.inst_operands (frame_view fn ra s with vs_memory := m) =
+   eval_operands inst.inst_operands s`
+    by (irule eval_operands_frame_view >> simp[]) >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
+  Cases_on `s.vs_call_ctx.cc_static /\
+            IS_SOME (eval_operands inst.inst_operands s)` >> gvs[] >>
   irule exec_write2_frame_view >>
   simp[frame_view_def, sstore_def, tstore_def]
 QED

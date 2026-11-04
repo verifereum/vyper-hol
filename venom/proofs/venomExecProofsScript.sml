@@ -1136,6 +1136,34 @@ QED
    Operand FDOM Properties
    ========================================================================== *)
 
+(* An operand list evaluates exactly when each operand does. *)
+Theorem eval_operands_IS_SOME_EVERY:
+  !ops s. IS_SOME (eval_operands ops s) <=>
+          EVERY (\op. IS_SOME (eval_operand op s)) ops
+Proof
+  Induct >> simp[eval_operands_def] >> rpt gen_tac >>
+  first_x_assum (qspec_then `s` mp_tac) >>
+  Cases_on `eval_operand h s` >> Cases_on `eval_operands ops s` >> simp[]
+QED
+
+(* LOG reads its offset, size and topics off the reversed operand list, so
+   when they all evaluate, the whole list does. *)
+Theorem log_operands_defined:
+  !rest s off sz topics.
+    eval_operand (HD (REVERSE rest)) s = SOME off /\
+    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
+    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics ==>
+    IS_SOME (eval_operands rest s)
+Proof
+  rpt strip_tac >>
+  `?r. rest = REVERSE r` by (qexists_tac `REVERSE rest` >> simp[]) >>
+  gvs[eval_operands_IS_SOME_EVERY, rich_listTheory.EVERY_REVERSE] >>
+  Cases_on `r` >> gvs[] >> Cases_on `t` >> gvs[] >>
+  `IS_SOME (eval_operands t' s)` by simp[] >>
+  fs[eval_operands_IS_SOME_EVERY]
+QED
+
+
 
 
 (* For non-excluded opcodes with inst_wf:

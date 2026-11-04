@@ -602,11 +602,37 @@ Theorem step_inst_base_abort_opcode_ld[local]:
     ~is_terminator inst.inst_opcode ==>
     inst.inst_opcode = ASSERT \/
     inst.inst_opcode = ASSERT_UNREACHABLE \/
-    inst.inst_opcode = RETURNDATACOPY
+    inst.inst_opcode = RETURNDATACOPY \/
+    (s.vs_call_ctx.cc_static /\
+     (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE \/
+      inst.inst_opcode = LOG \/ inst.inst_opcode = CALL \/
+      inst.inst_opcode = CREATE \/ inst.inst_opcode = CREATE2))
 Proof
   rpt strip_tac >>
   drule step_inst_base_abort_opcodes >> strip_tac >>
   gvs[is_terminator_def]
+QED
+
+(* A static frame aborts at SSTORE/TSTORE on both sides alike. *)
+Theorem step_inst_base_static_write_ld[local]:
+  !inst s1 s2 vars.
+    ld_ok vars s1 s2 /\
+    (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
+    s1.vs_call_ctx.cc_static /\
+    IS_SOME (eval_operands inst.inst_operands s1) /\
+    (!x. MEM (Var x) inst.inst_operands ==> x NOTIN vars) ==>
+    ?a v1 v2. step_inst_base inst s1 = Abort a v1 /\
+              step_inst_base inst s2 = Abort a v2 /\
+              ld_equiv vars v1 v2
+Proof
+  rpt strip_tac >>
+  drule ld_ok_call_ctx >> strip_tac >>
+  drule ld_eval_operands_agree >>
+  disch_then (qspec_then `inst.inst_operands` mp_tac) >>
+  impl_tac >- ASM_REWRITE_TAC [] >> strip_tac >>
+  gvs[] >> ASM_REWRITE_TAC[step_inst_base_def] >> gvs[] >>
+  simp[ld_equiv_def, halt_state_def, set_returndata_def, lookup_var_def] >>
+  gvs[ld_ok_def, lookup_var_def]
 QED
 
 Theorem step_inst_base_not_halt_abort[local]:
@@ -618,7 +644,10 @@ Theorem step_inst_base_not_halt_abort[local]:
     inst.inst_opcode <> ALLOCA /\
     ~reads_memory inst.inst_opcode /\
     inst.inst_opcode <> ASSERT /\
-    inst.inst_opcode <> ASSERT_UNREACHABLE ==>
+    inst.inst_opcode <> ASSERT_UNREACHABLE /\
+    ~((inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
+      s.vs_call_ctx.cc_static /\
+      IS_SOME (eval_operands inst.inst_operands s)) ==>
     (!v. step_inst_base inst s <> Halt v) /\
     (!w v. step_inst_base inst s <> IntRet w v) /\
     (!a v. step_inst_base inst s <> Abort a v)
@@ -628,7 +657,9 @@ Proof
   >- metis_tac[step_inst_base_no_intret_ld] >>
   drule_all step_inst_base_abort_opcode_ld >>
   strip_tac >>
-  gvs[reads_memory_def]
+  gvs[reads_memory_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  ASM_REWRITE_TAC[step_inst_base_def] >> gvs[]
 QED
 
 (* Main full classification: derived from classify + sym + assert + not_halt_abort *)
@@ -654,6 +685,13 @@ Proof
   Cases_on `inst.inst_opcode = ASSERT \/
             inst.inst_opcode = ASSERT_UNREACHABLE`
   >- (drule_all step_inst_base_assert_full >> metis_tac[]) >>
+  Cases_on `(inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
+            s1.vs_call_ctx.cc_static /\
+            IS_SOME (eval_operands inst.inst_operands s1)`
+  >- (rpt disj2_tac >> irule step_inst_base_static_write_ld >> gvs[]) >>
+  `s2.vs_call_ctx = s1.vs_call_ctx` by metis_tac[ld_ok_call_ctx] >>
+  `eval_operands inst.inst_operands s2 = eval_operands inst.inst_operands s1`
+    by metis_tac[ld_eval_operands_agree] >>
   (* For all other "boring" opcodes, only OK or Error possible *)
   `(!v. step_inst_base inst s1 <> Halt v) /\
    (!w v. step_inst_base inst s1 <> IntRet w v) /\
@@ -663,6 +701,8 @@ Proof
    (!w v. step_inst_base inst s2 <> IntRet w v) /\
    (!a v. step_inst_base inst s2 <> Abort a v)` by
     (irule step_inst_base_not_halt_abort >> gvs[]) >>
+  (* the static-write case split is done; keep gvs from splitting it again *)
+  qpat_x_assum `~(_ /\ s1.vs_call_ctx.cc_static /\ _)` kall_tac >>
   Cases_on `step_inst_base inst s1` >> gvs[]
   >- ((* OK s1' — goal is ∃s2'. ... = OK s2' /\ ld_ok ... *)
       drule_all step_inst_base_ld_ok_classify >> metis_tac[])
