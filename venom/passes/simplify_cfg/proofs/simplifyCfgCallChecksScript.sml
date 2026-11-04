@@ -12,7 +12,7 @@
 Theory simplifyCfgCallChecks
 Ancestors
   simplifyCfgDefs simplifyCfgCollapseShape simplifyCfgReferences cfgTransform cfgTransformProps venomExecProps
-  simplifyCfgStruct simplifyCfgLabelProps simplifyCfgInvariant simplifyCfgShape simplifyCfgReachuses
+  simplifyCfgStruct simplifyCfgLabelProps simplifyCfgInvariant simplifyCfgShape simplifyCfgReachuses simplifyCfgLocalShape
   dftCallChecks unitShapeDefs venomWf venomInst list rich_list
 
 Theorem revert_path_fuel_mono:
@@ -836,6 +836,31 @@ Proof
   metis_tac[MEM]
 QED
 
+Theorem calls_flagged_block_environment:
+  bb_well_formed c /\
+  (!i vs. MEM i c.bb_instructions /\ flag_fails src vs i ==> flag_fails dst vs i) /\
+  calls_flagged src c.bb_instructions ==> calls_flagged dst c.bb_instructions
+Proof
+  strip_tac >>
+  `c.bb_instructions <> [] /\ is_terminator (LAST c.bb_instructions).inst_opcode` by
+    gvs[bb_well_formed_def] >>
+  `calls_flagged src (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` by
+    simp[APPEND_FRONT_LAST] >>
+  `calls_flagged dst (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` suffices_by
+    simp[APPEND_FRONT_LAST] >>
+  irule calls_flagged_replace_terminal_selective >>
+  conj_tac
+  >- (Cases_on `(LAST c.bb_instructions).inst_opcode` >>
+      gvs[is_terminator_def, calls_flagged_def]) >>
+  qexistsl_tac [`LAST c.bb_instructions`, `src`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> gvs[] >> first_x_assum irule >>
+      metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >>
+  gen_tac >> simp[flag_path_def] >>
+  qpat_x_assum `!i vs. MEM i c.bb_instructions /\ _ ==> _`
+    (qspec_then `LAST c.bb_instructions` mp_tac) >> simp[LAST_MEM]
+QED
+
 Theorem calls_flagged_chain_merge_other:
   ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
   EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
@@ -844,29 +869,10 @@ Theorem calls_flagged_chain_merge_other:
   MEM c fn.fn_blocks /\ c <> a /\ calls_flagged fn.fn_blocks c.bb_instructions ==>
   calls_flagged raw c.bb_instructions
 Proof
-  strip_tac >>
-  `bb_well_formed c` by gvs[EVERY_MEM] >>
-  `c.bb_instructions <> [] /\ is_terminator (LAST c.bb_instructions).inst_opcode` by
-    gvs[bb_well_formed_def] >>
-  `!i vs. MEM i c.bb_instructions /\ flag_fails fn.fn_blocks vs i ==>
-      flag_fails raw vs i` by
-    (rpt strip_tac >> irule flag_fails_chain_merge_other >> metis_tac[]) >>
-  `calls_flagged fn.fn_blocks (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` by
-    simp[APPEND_FRONT_LAST] >>
-  `calls_flagged raw (FRONT c.bb_instructions ++ [LAST c.bb_instructions])` suffices_by
-    simp[APPEND_FRONT_LAST] >>
-  irule calls_flagged_replace_terminal_selective >>
-  conj_tac
-  >- (Cases_on `(LAST c.bb_instructions).inst_opcode` >>
-      gvs[is_terminator_def, calls_flagged_def]) >>
-  qexistsl_tac [`LAST c.bb_instructions`, `fn.fn_blocks`] >>
-  simp[] >> conj_tac
-  >- (rpt strip_tac >> gvs[] >> first_x_assum irule >>
-      metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL]) >>
-  gen_tac >> simp[flag_path_def] >>
-      qpat_x_assum `!i vs. MEM i c.bb_instructions /\ _ ==> _`
-        (qspec_then `LAST c.bb_instructions` mp_tac) >>
-      simp[LAST_MEM]
+  strip_tac >> irule calls_flagged_block_environment >> conj_tac
+  >- gvs[EVERY_MEM] >>
+  qexists_tac `fn.fn_blocks` >> simp[] >>
+  rpt strip_tac >> irule flag_fails_chain_merge_other >> metis_tac[]
 QED
 
 Theorem flag_path_chain_merge_revert_suffix:
@@ -1274,6 +1280,116 @@ Proof
       qexists_tac `oldbbs` >> simp[]) >>
   gvs[APPEND_FRONT_LAST]
 QED
+
+Theorem flag_fails_bypass_other:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_bypass_jump fn a b /\
+  bb_succs b = [target] /\ do_merge_jump fn a b lm = SOME (fn',lm') /\
+  MEM c fn.fn_blocks /\ c <> a /\ MEM i c.bb_instructions /\
+  flag_fails fn.fn_blocks vs i ==> flag_fails fn'.fn_blocks vs i
+Proof
+  strip_tac >>
+  `bb_well_formed c` by gvs[EVERY_MEM] >>
+  `!l. is_terminator i.inst_opcode /\ MEM (Label l) i.inst_operands ==>
+       l <> b.bb_label` by
+    (rpt strip_tac >> gvs[] >>
+     `MEM b.bb_label (bb_succs c)` by
+       (irule bb_terminator_label_successor >> metis_tac[]) >>
+     drule_all can_bypass_jump_unique_pred >> simp[]) >>
+  qpat_x_assum `flag_fails _ _ _` mp_tac >>
+  rewrite_tac[flag_fails_cases] >> strip_tac >> simp[]
+  >- (irule revert_path_fuel_normalize >>
+      qexists_tac `LENGTH fn.fn_blocks` >>
+      irule revert_path_do_merge_jump_other >>
+      gvs[is_terminator_def] >> metis_tac[MEM]) >>
+  irule revert_path_fuel_normalize >>
+  qexists_tac `LENGTH fn.fn_blocks` >>
+  irule revert_path_do_merge_jump_other >>
+  gvs[is_terminator_def] >> metis_tac[MEM]
+QED
+
+Theorem do_merge_jump_call_checks_ok:
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  call_checks_ok fn /\ MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\
+  can_bypass_jump fn a b /\ do_merge_jump fn a b lm = SOME (fn',lm') ==>
+  call_checks_ok fn'
+Proof
+  strip_tac >>
+  `?target. bb_succs b = [target]` by
+    (gvs[can_bypass_jump_def, num_succs_def] >>
+     Cases_on `bb_succs b` >> gvs[] >> Cases_on `t` >> gvs[]) >>
+  `!l. revert_path fn.fn_blocks (LENGTH fn.fn_blocks) l ==>
+       revert_path fn'.fn_blocks (LENGTH fn'.fn_blocks)
+         (if l = b.bb_label then target else l)` by
+    (rpt strip_tac >> irule revert_path_do_merge_jump >> metis_tac[]) >>
+  `!c. MEM c fn.fn_blocks /\ c <> a ==>
+       calls_flagged fn'.fn_blocks c.bb_instructions` by
+    (rpt strip_tac >> irule calls_flagged_block_environment >> conj_tac
+     >- gvs[EVERY_MEM] >>
+     qexists_tac `fn.fn_blocks` >> conj_tac
+     >- (rpt strip_tac >> irule flag_fails_bypass_other >> metis_tac[]) >>
+     gvs[call_checks_ok_def, EVERY_MEM]) >>
+  qabbrev_tac `newbbs = fn'.fn_blocks` >>
+  qabbrev_tac `src = a with bb_instructions :=
+    MAP (\i. if is_terminator i.inst_opcode then
+       canon_jnz_inst (subst_label_inst b.bb_label target i) else i) a.bb_instructions` >>
+  `bb_well_formed src /\ calls_flagged newbbs src.bb_instructions` by
+    (conj_tac
+     >- (`bb_well_formed a` by (fs[EVERY_MEM] >> metis_tac[]) >>
+         simp[Abbr `src`] >> irule map_bb_well_formed >> simp[] >>
+         rpt strip_tac >> IF_CASES_TAC >>
+         simp[canon_jnz_inst_classification, subst_label_inst_def]) >>
+     simp[Abbr `src`] >> irule calls_flagged_bypass_terminators >> conj_tac
+     >- (fs[EVERY_MEM] >> metis_tac[]) >>
+     qexists_tac `fn.fn_blocks` >> gvs[call_checks_ok_def, EVERY_MEM] >> metis_tac[]) >>
+  suspend "blocks"
+QED
+
+Resume do_merge_jump_call_checks_ok[blocks]:
+  `!c. bb_well_formed c /\ calls_flagged newbbs c.bb_instructions ==>
+       calls_flagged newbbs
+         (MAP (update_phi_bypass a.bb_label b.bb_label) c.bb_instructions)` by
+    (rpt strip_tac >>
+     `calls_flagged newbbs
+         (MAP (update_phi_bypass a.bb_label b.bb_label) c.bb_instructions) <=>
+      calls_flagged newbbs c.bb_instructions` suffices_by simp[] >>
+     irule calls_flagged_block_phi_map >>
+     simp[update_phi_bypass_shape, update_phi_bypass_def]) >>
+  qpat_x_assum `!l. revert_path _ _ _ ==> _` kall_tac >>
+  qpat_x_assum `EVERY (\bb. EVERY label_positions_ok _) _` kall_tac >>
+  qpat_x_assum `can_bypass_jump _ _ _` kall_tac >>
+  qpat_x_assum `call_checks_ok fn` kall_tac >>
+  gvs[do_merge_jump_def, AllCaseEqs()] >>
+  drule lookup_block_member_label >> strip_tac >>
+  simp[call_checks_ok_def, replace_block_def, remove_block_def, EVERY_MAP,
+       EVERY_FILTER, EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `MEM bb newbbs` mp_tac >>
+  qpat_assum `Abbrev (newbbs = _)`
+    (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  disch_then (fn th => CONV_TAC (LAND_CONV (REWRITE_CONV [th]))) >>
+  simp[NoAsms, replace_block_def, remove_block_def, MEM_MAP, MEM_FILTER] >>
+  strip_tac >> gvs[] >> rename1 `c.bb_label <> b.bb_label` >>
+  `calls_flagged newbbs
+    (MAP (update_phi_bypass a.bb_label b.bb_label) src.bb_instructions)` by
+    (first_x_assum irule >> simp[]) >>
+  pop_assum (mk_asm "source_phi") >>
+  `!p (x:instruction) y. (if ~p then x else y) = (if p then y else x)` by
+    (Cases >> simp[]) >>
+  gvs[Abbr `src`] >>
+  Cases_on `c.bb_label = target'.bb_label`
+  >- (gvs[] >> Cases_on `target'.bb_label = a.bb_label` >- (asm "source_phi" mp_tac >> simp[]) >>
+      simp[] >> first_x_assum irule >> conj_tac
+      >- (fs[EVERY_MEM] >> metis_tac[]) >>
+      qpat_x_assum `!c. MEM c _ /\ c <> a ==> _` irule >> simp[] >>
+      metis_tac[]) >>
+  Cases_on `c.bb_label = a.bb_label` >- gvs[] >>
+  simp[] >> qpat_x_assum `!c. MEM c _ /\ c <> a ==> _` irule >> simp[] >>
+  metis_tac[]
+QED
+
+Finalise do_merge_jump_call_checks_ok
 
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
