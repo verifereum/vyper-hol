@@ -23,6 +23,25 @@ Ancestors
 Libs
   rich_listTheory
 
+Theorem current_wf_source_cut_env:
+  current_source_cut A ev n rs E ==>
+  E = FOLDL (\env (t,v). (v =+ t) env) (current_event_entry_env ev)
+    (FLAT (TAKE n (A (current_event_label ev))))
+Proof
+  PairCases_on `ev` >>
+  simp[current_source_cut_def, current_event_entry_env_def,
+       current_event_label_def] >> rpt strip_tac >>
+  qpat_x_assum `current_local_trace aq _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  drule current_local_trace_exit_env >> gvs[TAKE_APPEND]
+QED
+
+Theorem current_wf_source_cut_env_unique:
+  current_source_cut A ev n rs E /\ current_source_cut A ev n rs' E' ==>
+  E = E'
+Proof
+  metis_tac[current_wf_source_cut_env]
+QED
+
 Theorem current_wf_path_lrc[local]:
   !fn path. path <> [] /\ is_fn_path fn path ==>
     LRC (fn_cfg_edge fn) (FRONT path) (HD path) (LAST path)
