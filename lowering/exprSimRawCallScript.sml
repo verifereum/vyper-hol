@@ -29,6 +29,7 @@ Ancestors
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend vyperRawCallDataDomain
+  exprSimHash
 Libs
   pairLib
 
@@ -222,6 +223,35 @@ Proof
   strip_tac >>
   simp[Once step_inst_base_def, mk_inst_def, eval_operand_def,
        wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]
+QED
+
+(* MLOAD/ADD only extend the variable map. Keep their memory and source
+   relation interface explicit before running the keyword expressions. *)
+Theorem raw_call_data_prefix_frame[local]:
+  emit_op MLOAD [ptr_op] sa = (len_op, sl) /\
+  emit_op ADD [ptr_op; Lit 32w] sl = (data_op, sm) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  b < dimword (:256) /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa ==>
+  ?t. run_inst_seq (emitted_insts sa sm) s = OK t /\
+    eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
+    eval_operand data_op t = SOME (n2w (b + 32)) /\
+    mem_bytes_at (b + 32) (LENGTH bs) t.vs_memory = bs /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sm x)
+Proof
+  strip_tac >> drule_all hash_data_prefix_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK t` >>
+  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+  qexists_tac `t` >> simp[wb_frame_def, locals_kept_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 (* TOP-LEVEL *)
