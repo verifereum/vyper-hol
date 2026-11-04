@@ -454,3 +454,77 @@ requesting a universal no-Error theorem. Do not release C3.3 on this audit.
 Evidence: exact totality signatures m4525; production clauses m4521;
 nonempty/precompile/gas-stack interfaces m4529. Temporary DB-print diagnostics
 were removed; only two small theorem applications are retained.
+
+## C3.2.41.5 Structural frame-safety probe
+
+Checked definition `create_frame_safe` deletes exactly the
+`EVERY wf_accounts (all_accounts s)` conjunct from wf_state. Checked
+`create_probe_constructor_frame_safe` initializes it unconditionally for
+make_venom_create_state, with all parameters symbolic. Checked
+`create_probe_refund_bound` exposes the parent refund guard directly from
+`gas_stack_ok_parent_has_child_unused`. No account-validity or arithmetic
+side condition was needed for either result.
+
+Checked `create_probe_run_singleton` is polymorphic in P and retains exactly
+these two semantic hypotheses:
+```
+(!s r t. P s /\ step s = (r,t) ==> P t)
+(!s e t. P s /\ step s = (INR e,t) ==> LENGTH t.contexts = 1)
+```
+Its auxiliary run_tr induction includes the incoming-INR singleton premise;
+it does not claim arbitrary terminal input pairs have singleton stacks.
+`create_probe_frame_safe_extract` specializes P to create_frame_safe and
+uses constructor initialization. It retains **both** hypotheses explicitly;
+neither is asserted or proved here. The consumer now isolates the remaining
+semantic obligation rather than hiding it behind totality.
+
+Imported-interface inspection (qualified theorem names are the available
+source locations; exact signatures recorded by build log m4559):
+- Ordinary same-frame updates: vfmHandleStep.same_frame_rel_preserves_stack_room_ok
+  needs same_frame_rel and stack_room_ok only. Its gas-stack counterpart
+  additionally needs nondecreasing head gasUsed. vfmRunCall's
+  same_frame_rel_preserves_outputTo_consistent_stack needs no wf_accounts.
+  Remaining boundary: from create_frame_safe s and a same-frame step derive
+  EVERY wf_context, length bound, the relation and head gas monotonicity.
+- Child push: vfmRunCall.step_inner_push_structure,
+  inner_push_preserves_stack_room_ok, inner_push_preserves_gas_stack_ok all
+  have wf_state s as a premise. The structure theorem gives length +1,
+  unchanged deeper frames, parent stack room, unchanged parent msgParams,
+  and the bound
+  old_head.gasUsed + child_unused <= new_parent.gasUsed.
+  Remaining boundary: derive these structural facts from create_frame_safe
+  instead of wf_state, including parsed-code equality at constructed child
+  entry. Arbitrary account code is not erased or assumed well formed.
+- Child pop/refund: vfmRunCall.step_pop_structure already only needs
+  nonempty s, outputTo_consistent_stack s, EVERY wf_context and a shrinking
+  step. Its conclusion restores the parent's msgParams and bounds new head
+  gasUsed below by parent.gasUsed - old_child_unused. By contrast
+  step_pop_preserves_gas_stack_ok still asks for wf_state s. Remaining
+  boundary: combine the checked refund guard with structural pop facts to
+  re-establish frame safety, including internal unuse_gas assertions.
+- Handler count: vfmHandleStep.handle_step_not_abort_pops only needs
+  EVERY wf_context, nonfatal e, length >=2 and the handler result; it gives
+  LENGTH t.contexts + 1 = LENGTH s.contexts. It does not itself show a pop
+  returns INL. handle_create_preserves_wf_state still requires full wf_state.
+- Terminal/fatal exits: vfmContextLength.step_ge2_inr_is_abort needs wf_state,
+  outputTo_consistent and nonfatal e to refute a terminal INR with initial
+  length >=2. vfmRunWithinFrame.step_inner_inr_grow_not_abort needs nonempty
+  contexts and outputTo_consistent but no wf_accounts; it covers only the
+  growing-inner-step case, not every fatal route.
+
+The remaining formulas are exactly step closure of create_frame_safe and
+singleton output of terminal step from create_frame_safe, as exposed above.
+They are **not de-risked** by the checked initialization/consumer results.
+In particular create_frame_safe does not restrict msdomain: a global
+terminal-singleton hypothesis for this P includes Enforce inputs, whereas
+the earlier OutsideDomain exclusion applies only to Collect inputs. Before
+attempting to instantiate the conditional consumer, the strategist must
+consider a collecting/reachable specialization rather than treating the
+frame-safe-only terminal hypothesis as automatically true. This interface
+mismatch is not a CREATE-reachable or frozen-task counterexample.
+
+No unconditional CREATE extraction theorem or falsehood is claimed.
+Recommended checkpoint: design the actual collecting structural safety
+preservation/terminal interface (or choose a checked realizable fatal
+probe), without assuming wf_accounts or beginning C3.3. All temporary
+signature-print diagnostics have been removed.

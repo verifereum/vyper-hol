@@ -104,3 +104,79 @@ Theorem create_probe_extract_run_none_iff:
 Proof
   simp[create_probe_extract_none_iff, create_probe_run_not_none]
 QED
+
+Definition create_frame_safe_def:
+  create_frame_safe s <=>
+  s.contexts <> [] /\ LENGTH s.contexts <= SUC context_limit /\
+  EVERY (wf_context o FST) s.contexts /\
+  stack_room_ok s /\ gas_stack_ok s /\ outputTo_consistent_stack s
+End
+
+Theorem create_probe_constructor_frame_safe:
+  create_frame_safe (make_venom_create_state s a gas value code)
+Proof
+  simp[create_frame_safe_def, make_venom_create_state_def,
+       vfmExecutionPropTheory.wf_context_def,
+       vfmExecutionPropTheory.stack_room_ok_def,
+       vfmExecutionPropTheory.gas_stack_ok_def,
+       vfmExecutionPropTheory.outputTo_consistent_stack_def,
+       vfmExecutionPropTheory.outputTo_consistent_ctx_def,
+       make_rollback_def, vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem create_probe_refund_bound:
+  create_frame_safe s /\ LENGTH s.contexts >= 2 ==>
+  (FST (HD s.contexts)).msgParams.gasLimit - (FST (HD s.contexts)).gasUsed <=
+  (FST (EL 1 s.contexts)).gasUsed
+Proof
+  simp[create_frame_safe_def] >> rpt strip_tac >>
+  drule_all vfmHandleStepTheory.gas_stack_ok_parent_has_child_unused >> simp[]
+QED
+
+Theorem create_probe_run_tr_singleton[local]:
+  (!s r t. P s /\ step s = (r,t) ==> P t) /\
+  (!s e t. P s /\ step s = (INR e,t) ==> LENGTH t.contexts = 1) ==>
+  !r s. P s /\ (!e. r = INR e ==> LENGTH s.contexts = 1) ==>
+  LENGTH (SND (vfmDecreasesGas$run_tr (r,s))).contexts = 1
+Proof
+  strip_tac >> recInduct vfmDecreasesGasTheory.run_tr_ind >>
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  Cases_on `r`
+  >- (first_x_assum (qspec_then `x` mp_tac) >> simp[] >>
+      Cases_on `step s` >> simp[] >>
+      `P r /\ (!e. q = INR e ==> LENGTH r.contexts = 1)` by metis_tac[] >>
+      strip_tac >>
+      pure_once_rewrite_tac[vfmDecreasesGasTheory.run_tr_def] >>
+      simp[]) >>
+  pure_once_rewrite_tac[vfmDecreasesGasTheory.run_tr_def] >> gvs[]
+QED
+
+Theorem create_probe_run_singleton:
+  (!s r t. P s /\ step s = (r,t) ==> P t) /\
+  (!s e t. P s /\ step s = (INR e,t) ==> LENGTH t.contexts = 1) /\
+  P es /\ run es = SOME (r,fs) ==> LENGTH fs.contexts = 1
+Proof
+  strip_tac >>
+  `!rr ss. P ss /\ (!e. rr = INR e ==> LENGTH ss.contexts = 1) ==>
+    LENGTH (SND (vfmDecreasesGas$run_tr (rr,ss))).contexts = 1` by
+    (match_mp_tac create_probe_run_tr_singleton >> metis_tac[]) >>
+  first_x_assum (qspecl_then [`FST (step es)`, `SND (step es)`] mp_tac) >>
+  Cases_on `step es` >> gvs[] >>
+  `P r' /\ (!e. q = INR e ==> LENGTH r'.contexts = 1)` by metis_tac[] >>
+  gvs[vfmDecreasesGasTheory.run_eq_tr] >>
+  Cases_on `vfmDecreasesGas$run_tr (q,r')` >> gvs[]
+QED
+
+Theorem create_probe_frame_safe_extract:
+  (!s r t. create_frame_safe s /\ step s = (r,t) ==> create_frame_safe t) /\
+  (!s e t. create_frame_safe s /\ step s = (INR e,t) ==> LENGTH t.contexts = 1) ==>
+  extract_venom_result s output off len
+    (run (make_venom_create_state s a gas value code)) <> NONE
+Proof
+  strip_tac >> simp[create_probe_extract_run_none_iff] >>
+  rpt strip_tac >>
+  `create_frame_safe (make_venom_create_state s a gas value code)` by
+    simp[create_probe_constructor_frame_safe] >>
+  drule_all create_probe_run_singleton >> simp[]
+QED
+
