@@ -5047,6 +5047,38 @@ Proof
   conj_tac >- simp[] >> qexistsl_tac [`Num i`, `elem`] >> gvs[]
 QED
 
+Theorem aug_place_region_storage_dead_stable:
+  storage_place_region cx (StoragePlace tr slot leaf) /\ type_slot_size leaf = 1 ==>
+  !u st. storage_dead cx tr (update_storage slot u st) = storage_dead cx tr st
+Proof
+  simp_tac (srw_ss()) [vyperStoragePlaceProvenanceTheory.storage_place_region_def] >>
+  strip_tac >> rpt gen_tac >>
+  irule accountsRelPropsTheory.storage_dead_update_in_region >>
+  qexistsl_tac [`root`, `mid`, `var_name`, `keys`, `tv`] >> simp[] >>
+  strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `w2n root + delta < dimword (:256)` by decide_tac >>
+  `w2n slot = w2n root + delta` by
+    gvs[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+        arithmeticTheory.LESS_MOD] >>
+  qpat_x_assum `slot = _` (SUBST_ALL_TAC o SYM) >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  irule aug_place_subregion_path_mask >> conj_tac >- simp[] >>
+  qexistsl_tac [`leaf`, `delta`, `path`] >> simp[] >>
+  rpt strip_tac >> eq_tac >> strip_tac >>
+  drule (cj 1 accountsRelPropsTheory.dead_bytes_range) >> simp[]
+QED
+
+Theorem aug_place_target_storage_dead_stable:
+  eval_target_place cx t es = (INL (StoragePlace tr slot leaf),es') /\
+  type_slot_size leaf = 1 ==>
+  !u st. storage_dead cx tr (update_storage slot u st) = storage_dead cx tr st
+Proof
+  strip_tac >> drule vyperStoragePlaceProvenanceTheory.eval_target_place_region >>
+  strip_tac >> irule aug_place_region_storage_dead_stable >>
+  qexists_tac `leaf` >> simp[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
