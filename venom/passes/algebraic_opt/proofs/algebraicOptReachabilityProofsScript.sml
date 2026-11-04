@@ -242,3 +242,23 @@ Proof
   qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
     eval_phis_ok_or_error_defs >> gvs[]
 QED
+
+Theorem ao_eval_phis_value_origin:
+  !s is p x w. eval_phis s is = OK p /\ lookup_var x p = SOME w ==>
+    lookup_var x s = SOME w \/
+    ?i. MEM i is /\ i.inst_opcode = PHI /\
+        eval_one_phi s i = SOME (x,w)
+Proof
+  gen_tac >> Induct_on `is` >- simp[eval_phis_def] >>
+  rpt gen_tac >>
+  simp[eval_phis_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+      AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ao_eval_one_phi_output:
+  !s i x w. eval_one_phi s i = SOME (x,w) ==> MEM x i.inst_outputs
+Proof
+  rpt gen_tac >> simp[eval_one_phi_def, AllCaseEqs()] >>
+  rpt strip_tac >> simp[]
+QED
