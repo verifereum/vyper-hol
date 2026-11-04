@@ -19,8 +19,8 @@
 Theory entryStateRel
 Ancestors
   list rich_list finite_map alist
-  e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
-  compileEnv compileVyper moduleLowering supportedProgram supportedNames
+  placeTypingBuildProps e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
+  compileEnv compileVyper moduleLowering supportedProgram supportedProgramProps supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
@@ -502,7 +502,7 @@ QED
 
 (* ===== The selected function's parameters ===== *)
 
-Theorem source_typing_ok_type_def_keys_distinct[local]:
+Theorem source_typing_ok_type_def_keys_distinct:
   !tops am tx.
     source_typing_ok tops am tx ==>
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
@@ -519,7 +519,7 @@ QED
 
 (* With no public variables, an external function lookup_function selects
    is a declared function, not a getter. *)
-Theorem lookup_function_external_decl[local]:
+Theorem lookup_function_external_decl:
   !tops tops0 name mut nr args dflts ret fbody.
     EVERY (supported_declaration_header tops0) tops /\
     lookup_function NONE name External tops =
@@ -586,6 +586,82 @@ Proof
   rpt strip_tac >> gvs[] >>
   drule (cj 2 compile_register_positional_args_cenv) >>
   disch_then (qspec_then `h0` mp_tac) >> gvs[FLOOKUP_UPDATE]
+QED
+
+Theorem package_external_target_param_memory:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv,pos_args,rest) /\ ALL_DISTINCT (MAP FST fargs) ==>
+  EVERY (\a. ?off sz. FLOOKUP cenv.ce_vars (FST a) =
+                       SOME (MemLoc off sz)) fargs /\
+  MAP FST pos_args = MAP FST fargs
+Proof
+  strip_tac >>
+  Cases_on `package_external_fn tops use_trans nkey_map
+    (mut,nr,rr,fname,fargs,dflts,ret,fbody)` >>
+  PairCases_on `r` >> gvs[set_external_package_target_def] >>
+  drule_all package_external_fn_vars >> strip_tac >>
+  conj_tac
+  >- (gvs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >>
+      metis_tac[]) >>
+  qpat_x_assum `package_external_fn _ _ _ _ = _` mp_tac >>
+  simp[package_external_fn_def] >> strip_tac >>
+  gvs[build_positional_args_names]
+QED
+
+Theorem external_entry_target_param_pointer:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  ALL_DISTINCT (MAP FST fargs) /\ MEM (id,ty) fargs ==>
+  ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)
+Proof
+  strip_tac >> drule_all package_external_target_param_memory >>
+  strip_tac >> gvs[EVERY_MEM] >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  `MEM id (MAP FST pos_args)` by
+    (qpat_x_assum `MAP FST pos_args = _` SUBST1_TAC >>
+     simp[MEM_MAP] >> qexists `(id,ty)` >> simp[]) >>
+  `var_location_memory_size (MemLoc off sz) = SOME sz` by
+    simp[var_location_memory_size_def] >>
+  drule_all compile_register_positional_args_ptrs >> metis_tac[]
+QED
+
+Theorem external_entry_target_param_type:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  supported_function_body tops External fargs fbody /\ MEM (id,ty) fargs ==>
+  cenv.ce_var_type id = SOME ty
+Proof
+  strip_tac >>
+  `~MEM id (MAP FST (collect_locals fbody))` by
+    metis_tac[supported_function_arg_not_collect_locals] >>
+  `ALL_DISTINCT (MAP FST fargs)` by
+    (drule supported_function_body_binding_contract >>
+     simp[supported_function_bindings_def, ALL_DISTINCT_APPEND]) >>
+  `ALOOKUP (REVERSE fargs) id = SOME ty` by
+    (irule ALOOKUP_ALL_DISTINCT_MEM >>
+     simp[MAP_REVERSE, ALL_DISTINCT_REVERSE]) >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  `cenv.ce_var_type = cenv0.ce_var_type` by
+    (qpat_x_assum `cenv = _` SUBST1_TAC >> simp[]) >>
+  qpat_x_assum `cenv.ce_var_type = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `compile_register_positional_args _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `cenv = _` kall_tac >>
+  `ALOOKUP (REVERSE (collect_locals fbody)) id = NONE` by
+    simp[ALOOKUP_NONE, MAP_REVERSE] >>
+  qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+  simp[package_external_fn_def, set_external_package_target_def,
+       update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  Cases_on `ret = NoneT` >> simp[] >> strip_tac >>
+  gvs[build_compile_env_def] >> rpt (pairarg_tac >> gvs[]) >>
+  simp[REVERSE_APPEND, ALOOKUP_APPEND]
 QED
 
 (* Since #733, evaluate_type only accepts whole-byte integer widths. *)
@@ -729,4 +805,21 @@ Proof
                           vs_alloca_next := _; vs_inst_idx := _ |> = s0`
     (strip_assume_tac o SIMP_RULE (srw_ss()) [venom_state_component_equality]) >>
   gvs[initial_evaluation_context_def]
+QED
+
+Theorem external_package_registered_hashmap_info:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,args,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,nr',nkey,ut',iv,fbody',rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  cenv.ce_hashmap_info = build_hashmap_info tops
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  gvs[package_external_fn_def, set_external_package_target_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+      build_compile_env_ce_hashmap_info]
 QED

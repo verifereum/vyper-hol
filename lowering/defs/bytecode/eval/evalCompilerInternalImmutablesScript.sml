@@ -42,3 +42,60 @@ Theorem constructor_internal_local_reads_staged_immutable:
 Proof
   EVAL_TAC
 QED
+
+(* Byte capacities include a length word and word rounding in the HOL layout;
+   record that layout explicitly rather than asserting whole-program acceptance. *)
+Theorem immutable_bytes_threshold_layout:
+  MAP (\n. compute_immutables_len
+    (get_struct_fields (make_struct_fields_map
+      [VariableDecl Private Immutable "b" (BaseT (BytesT (Dynamic n))) NONE]))
+    [VariableDecl Private Immutable "b" (BaseT (BytesT (Dynamic n))) NONE])
+    [24575; 24576; 24577] = [24608; 24608; 24640]
+Proof
+  EVAL_TAC
+QED
+
+Theorem immutable_array_threshold_layout:
+  MAP (\n. compute_immutables_len
+    (get_struct_fields (make_struct_fields_map
+      [VariableDecl Private Immutable "a"
+        (ArrayT (BaseT (UintT 256)) (Fixed n)) NONE]))
+    [VariableDecl Private Immutable "a"
+      (ArrayT (BaseT (UintT 256)) (Fixed n)) NONE])
+    [767; 768] = [24544; 24576] /\
+  compute_immutables_len
+    (get_struct_fields (make_struct_fields_map
+      [VariableDecl Private Immutable "a"
+         (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE;
+       VariableDecl Private Immutable "b"
+         (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE]))
+    [VariableDecl Private Immutable "a"
+       (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE;
+     VariableDecl Private Immutable "b"
+       (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE] = 24576
+Proof
+  EVAL_TAC
+QED
+
+Theorem immutable_threshold_rejection:
+  !tops rpolicy bytes unit.
+    MEM tops
+      [[VariableDecl Private Immutable "b" (BaseT (BytesT (Dynamic 24575))) NONE];
+       [VariableDecl Private Immutable "b" (BaseT (BytesT (Dynamic 24576))) NONE];
+       [VariableDecl Private Immutable "b" (BaseT (BytesT (Dynamic 24577))) NONE];
+       [VariableDecl Private Immutable "a"
+          (ArrayT (BaseT (UintT 256)) (Fixed 768)) NONE];
+       [VariableDecl Private Immutable "a"
+          (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE;
+        VariableDecl Private Immutable "b"
+          (ArrayT (BaseT (UintT 256)) (Fixed 384)) NONE]] ==>
+    lower_vyper_runtime_unit tops rpolicy <> SOME unit /\
+    lower_vyper_deploy_unit tops rpolicy bytes <> SOME unit
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~(compute_immutables_len
+      (get_struct_fields (make_struct_fields_map tops)) tops < 0x6000)` by
+    (fs[listTheory.MEM] >> EVAL_TAC) >>
+  metis_tac[lower_vyper_runtime_unit_immutables_bound,
+            lower_vyper_deploy_unit_immutables_bound]
+QED

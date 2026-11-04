@@ -37,21 +37,23 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness
+  typedCopyProducer
 
 (* ===== The frame ===== *)
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit, cenv is a runtime function's compile env with the program's
-   function ids and parameter types (so compile_call gives an internal
+   function ids, parameter types and calling conventions (so compile_call gives an internal
    call the label package_internal_fn gave the callee:
    compile_call_intcall_label), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
-   has build_compile_env's hashmaps, module variable types and module
-   DynArray capacities, which no declaration changes.  cenv's target is the unit's policy target, as
-   set_*_package_target installs it, which run_lowering requires to have
-   MCOPY (lowering_policy_ok). *)
+   has build_compile_env's hashmaps, module variable types, struct metadata
+   and module DynArray capacities, which no declaration changes. The checked
+   main module gives the struct namespace for layout-converting copies.
+   cenv's target is the unit's policy target, as set_*_package_target installs
+   it, which run_lowering requires to have MCOPY (lowering_policy_ok). *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
@@ -61,7 +63,12 @@ Definition body_inv_def:
     get_module_code cx NONE = SOME tops /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
+    cenv.ce_func_info =
+      build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+    cenv.ce_struct_fields = make_struct_fields_map tops /\
+    (?layouts : (address # (storage_layout # storage_layout)) list. ?addr art.
+       check_contract F layouts addr [(NONE,tops)] = SOME art) /\
     ~cenv.ce_is_ctor /\ cenv.ce_alloca_locals /\
     ALL_DISTINCT
       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
@@ -71,6 +78,14 @@ Definition body_inv_def:
     (!id. cenv.ce_module_var_type (NONE, id) =
           build_var_type_map tops (NONE, id))
 End
+
+Theorem body_inv_struct_metadata_acyclic:
+  body_inv tops ctx cenv cx ==>
+  acyclic_struct_metadata cenv.ce_struct_fields
+Proof
+  rw[body_inv_def] >>
+  drule_all supported_checked_struct_metadata_acyclic >> simp[]
+QED
 
 (* The compile env binds no local the typing does not know: every name
    ce_vars binds is a local of the type environment.  build_compile_env
@@ -265,3 +280,16 @@ Termination
   | INR (_,ts,_) => list_size assignment_target_size ts)` >>
   simp[assignment_target_size_def, list_size_def]
 End
+
+Theorem stmt_exprs_ok_from_traversal_bounds:
+  ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
+  ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
+  alloc_limits_stmts cenv ss ==>
+  EVERY (stmt_exprs_ok cenv) ss
+Proof
+  `!e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e) =
+        (~byte_widths_expr e \/ ~alloc_limits_expr cenv e)` by metis_tac[] >>
+  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmt_expr_exists_disj,
+       supported_stmts_expr_exists_list, EXISTS_MEM] >>
+  Induct_on `ss` >> simp[allocLimitsTheory.alloc_limits_stmt_def] >> metis_tac[]
+QED

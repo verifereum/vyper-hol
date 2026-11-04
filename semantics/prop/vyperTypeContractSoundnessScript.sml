@@ -86,7 +86,7 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem checked_explicit_external_body_call_evaluation_safe[local]:
+Theorem checked_explicit_external_body_call_evaluation_safe:
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
   ALOOKUP mods src = SOME ts /\

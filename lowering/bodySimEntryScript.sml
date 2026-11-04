@@ -21,9 +21,73 @@ Theory bodySimEntry
 Ancestors
   list finite_map bodySim compileEnv compileVyper moduleLowering
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
+  allocLimitsProps supportedProgramProps exprSimHyps
   immutableLocationProps immutableSectionRel immutableRelation option pair
 Libs
   monadsyntax
+
+(* Rebuilding an internal callee's environment uses the same checked
+   module metadata as its caller. *)
+Theorem body_inv_build_internal_env:
+  body_inv tops ctx caller cx ==>
+  body_inv tops ctx
+    ((build_compile_env tops Internal mut fname args ret stmts use_trans)
+       with ce_target := caller.ce_target) cx
+Proof
+  rw[body_inv_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem compile_register_positional_args_body_inv:
+  !args cenv off st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    compile_register_positional_args cenv args off st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[compile_register_positional_args_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once compile_register_positional_args_def] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
+QED
+
+Theorem materialize_internal_params_body_inv[local]:
+  !caps cenv st cenv' st'.
+    body_inv tops ctx cenv cx /\
+    materialize_internal_params cenv caps st = (cenv',st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  Induct >- simp[materialize_internal_params_def, comp_return_def] >>
+  PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
+  Cases_on `h1` >> simp[LET_THM] >>
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[] >>
+  gvs[body_inv_def] >> metis_tac[]
+QED
+
+Theorem compile_internal_prologue_body_inv:
+  !cenv params has_rb ret_type st cenv' rpc st'.
+    body_inv tops ctx cenv cx /\
+    compile_internal_prologue cenv params has_rb ret_type st =
+      ((cenv',rpc),st') ==>
+    body_inv tops ctx cenv' cx
+Proof
+  rpt gen_tac >>
+  simp[compile_internal_prologue_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[] >>
+  drule_at (Pat `materialize_internal_params _ _ _ = _`)
+    materialize_internal_params_body_inv >>
+  disch_then (qspecl_then [`tops`, `cx`, `ctx`] mp_tac) >>
+  (impl_tac >- (gvs[body_inv_def] >> metis_tac[])) >> simp[]
+QED
 
 (* A compile env that binds only parameters, with a type environment that
    has the parameters. *)
@@ -238,4 +302,73 @@ Proof
   `tv = itv` by (res_tac >> gvs[]) >>
   qpat_x_assum `tops = _` kall_tac >>
   gvs[] >> decide_tac
+QED
+
+
+Theorem external_entry_target_declared:
+  !tops use_trans nkey_map mut nr rr fname fargs dflts ret fbody
+   target lbl cenv0 pos_args rest st cenv st' n l.
+    set_external_package_target target
+      (package_external_fn tops use_trans nkey_map
+        (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+      (lbl,cenv0,pos_args,rest) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+    FLOOKUP cenv.ce_vars n = SOME l ==>
+    MEM n (MAP FST fargs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cenv0.ce_vars = (build_compile_env tops External mut fname fargs ret fbody
+                    use_trans).ce_vars` by
+    (gvs[package_external_fn_def, set_external_package_target_def,
+         update_cenv_nonreentrant_def] >> rw[update_cenv_ret_abi_def]) >>
+  drule_all compile_register_positional_args_bound >> strip_tac >>
+  gvs[] >> drule build_compile_env_bound >> simp[]
+QED
+
+
+Theorem external_entry_target_locals_declared:
+  set_external_package_target target
+    (package_external_fn tops use_trans nkey_map
+      (mut,nr,rr,fname,fargs,dflts,ret,fbody)) =
+    (lbl,cenv0,pos_args,rest) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,st') /\
+  (!id ty. MEM (id,ty) fargs ==> FLOOKUP env.var_types id = SOME ty) ==>
+  ce_locals_declared cenv env
+Proof
+  rw[ce_locals_declared_def] >>
+  drule_all external_entry_target_declared >>
+  simp[MEM_MAP, PULL_EXISTS] >> strip_tac >>
+  PairCases_on `y` >> gvs[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[FLOOKUP_DEF] >> metis_tac[]
+QED
+
+
+Theorem external_body_support_bounds:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\
+  MEM (FunctionDecl External mut nr rr name args defaults ret ss) tops /\
+  cenv.ce_struct_fields = make_struct_fields_map tops /\
+  cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+  env_context_consistent env cx /\
+  (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  EVERY (\(n,ty). assignable_type env.type_defs ty) args /\
+  type_stmts env ret ss = SOME env' ==>
+  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  ?bindings. supported_stmts tops bindings ss
+Proof
+  strip_tac >>
+  drule_all supported_external_allocs_ok >> strip_tac >>
+  drule_all fn_allocs_ok_body >> strip_tac >>
+  `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
+    (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
+  `EVERY (stmt_exprs_ok cenv) ss` by
+    (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
+  conj_tac
+  >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
+      `MEM (id,ty) args` by metis_tac[] >>
+      qpat_x_assum `EVERY (\(_,ty). type_memory_bytes cenv ty < _) args` mp_tac >>
+      simp[EVERY_MEM] >>
+      disch_then (qspec_then `(id,ty)` mp_tac) >> simp[]) >>
+  simp[] >> drule_all supported_program_function >>
+  simp[supported_function_body_def] >> metis_tac[]
 QED

@@ -132,7 +132,7 @@ Proof
   gvs[venomInstTheory.mk_inst_def] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,
        IS_PREFIX_APPEND3, run_inst_seq_def, stmt_state_rel_inst_idx,
-       is_terminator_def, step_inst_base_def, Abbr `A`,
+       is_terminator_def, step_inst_base_opcode_eqs, Abbr `A`,
        venomInstTheory.mk_inst_def]
 QED
 

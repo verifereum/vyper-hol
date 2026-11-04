@@ -27,13 +27,12 @@
  *   call_external_selected_body -- the source runs the selected body
  *   type_stmts_none_valued_return -- a body typed at NoneT has no valued
  *     return
+ *   external_body_source_ok -- source typing soundness at body entry
+ *   external_body_frame -- the body judgment's premises at body entry
  *
  * Named admissions (cheats), each a piece S1 rests on:
- *   external_body_source_ok -- the source side (typing soundness)
  *   external_entry_value_revert, external_entry_reaches_body -- the entry
  *     bridge (#639)
- *   external_body_frame -- the body judgment's premises at the body's
- *     start (#637)
  *   external_frame_ret_ok -- the frame's returns (#640)
  *   external_body_revert_data_reverts -- a failed external call reverts:
  *     expr_exit allows any Abort for RevertData, external_call_result_rel
@@ -46,8 +45,14 @@ Theory loweringRuntimeCorrect
 Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
+  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader immutableSectionRel immutableLocationProps
   vyperTypeSelectedEntrySoundness vyperTypeSystem
+  vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
+  placeTypingBuildProps allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
+  vyperTypeContractContext vyperTypeContract
+  vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
+  vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
+  vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants finite_map
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
 
@@ -87,7 +92,209 @@ Proof
   simp[]
 QED
 
-(* ADMITTED (typing soundness): the body of a checked external function
+Theorem external_selected_body_typing:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut, F, args, [], ret, fbody) ==>
+  ?art env_t env'.
+    check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+    checked_contract_runtime_ready art [(NONE,tops)] am tx /\
+    env_t.current_src = NONE /\
+    env_t.type_defs = get_tenv
+      (initial_evaluation_context am.sources am.layouts tx NONE) /\
+    env_t.fn_sigs = art.cta_fn_sigs /\
+    env_t.bare_globals = art.cta_bare_globals /\
+    env_t.bare_global_assignable = art.cta_bare_global_assignable /\
+    env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+    env_t.flag_members = art.cta_flag_members /\
+    type_stmts env_t ret fbody = SOME env' /\
+    (!id ty. MEM (id,ty) args ==>
+      FLOOKUP env_t.var_types id = SOME ty /\
+      IS_SOME (FLOOKUP env_t.var_assignable id)) /\
+    (!n ty. FLOOKUP env_t.var_types n = SOME ty ==>
+      MEM (n,ty) args) /\
+    (!n b. FLOOKUP env_t.var_assignable n = SOME b ==>
+      ?ty. MEM (n,ty) args) /\
+    stmts_no_control_escape fbody /\
+    (ret <> NoneT ==> stmts_no_fallthrough fbody) /\
+    call_evaluation_safe
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (int_calls_stmts fbody)
+Proof
+  strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >>
+     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
+  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `External <> Deploy` by simp[] >>
+  `ALOOKUP [(NONE,tops)] NONE = SOME tops` by simp[] >>
+  drule checked_function_body_typing_package >>
+  simp[] >> disch_then drule >> simp[] >>
+  strip_tac >>
+  qexistsl [`env_body`, `env_after`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+     External mut F args [] ret fbody` by
+    (irule check_contract_runtime_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
+  conj_tac >- gvs[check_function_body_def] >>
+  conj_tac >- gvs[check_function_body_def] >>
+  drule checked_explicit_external_body_call_evaluation_safe >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+Theorem external_send_call_value_frame:
+  send_call_value mut cx st = (res,st') ==>
+  st' with accounts := st.accounts = st
+Proof
+  rw[send_call_value_def, transfer_value_def, bind_def, ignore_bind_def,
+     get_accounts_def, check_def, assert_def, update_accounts_def,
+     return_def, raise_def] >>
+  gvs[AllCaseEqs(), return_def, raise_def]
+QED
+
+Theorem external_body_prefix_state:
+  machine_well_typed am /\
+  bind_arguments tenv args vals = SOME env /\
+  send_call_value mut cx
+    (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
+    (INL (),es0) ==>
+  es0.scopes = [env] /\ es0.immutables = am.immutables /\
+  es0.outcomes = SOME os /\ es0.requests = [] /\
+  state_well_typed es0 /\ accounts_well_typed es0.accounts
+Proof
+  strip_tac >>
+  `scope_well_typed env` by
+    metis_tac[bind_arguments_scope_well_typed_from_success] >>
+  `accounts_well_typed es0.accounts` by
+    (irule send_call_value_accounts_well_typed_c53 >>
+     goal_assum (drule_at Any) >>
+     simp[initial_state_accounts_well_typed_simple]) >>
+  drule external_send_call_value_frame >>
+  simp[evaluation_state_component_equality, initial_state_def] >>
+  strip_tac >> gvs[state_well_typed_def, machine_well_typed_def]
+QED
+
+Theorem external_selected_env_consistent:
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  checked_contract_runtime_ready art [(NONE,tops)] am tx /\
+  env_t.current_src = NONE /\
+  env_t.type_defs = get_tenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  env_t.fn_sigs = art.cta_fn_sigs /\
+  env_t.bare_globals = art.cta_bare_globals /\
+  env_t.bare_global_assignable = art.cta_bare_global_assignable /\
+  env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env_t.flag_members = art.cta_flag_members /\
+  (!id ty. MEM (id,ty) args ==>
+    FLOOKUP env_t.var_types id = SOME ty /\
+    IS_SOME (FLOOKUP env_t.var_assignable id)) /\
+  (!n ty. FLOOKUP env_t.var_types n = SOME ty ==> MEM (n,ty) args) /\
+  (!n b. FLOOKUP env_t.var_assignable n = SOME b ==>
+    ?ty. MEM (n,ty) args) /\
+  bind_arguments (type_env tops) args vals = SOME env /\
+  es0.scopes = [env] /\ es0.immutables = am.immutables ==>
+  env_consistent env_t
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0
+Proof
+  strip_tac >> gvs[checked_contract_runtime_ready_def] >>
+  rw[env_consistent_def]
+  >- (irule env_context_consistent_same_static_maps >>
+      qexists `artifact_env art [(NONE,tops)] NONE` >>
+      rpt (conj_tac >-
+        simp[artifact_env_def, get_tenv_def, initial_evaluation_context_def]) >>
+      irule check_contract_env_context_consistent_initial_src >> simp[])
+  >- (`es0 with scopes := [env] = es0` by
+        gvs[evaluation_state_component_equality] >>
+      pop_assum (SUBST1_TAC o GSYM) >>
+      irule bind_arguments_env_scopes_consistent >>
+      qexistsl [`args`, `type_env tops`, `vals`] >>
+      simp[get_tenv_def, initial_evaluation_context_def,
+           type_env_all_modules_def, type_env_def] >> metis_tac[])
+  >- (gvs[env_immutables_consistent_def] >> rw[] >>
+      qpat_x_assum `immutables_ready _ _ _ _` mp_tac >>
+      simp[immutables_ready_def] >> strip_tac >>
+      first_x_assum drule_all >> simp[] >> strip_tac >>
+      first_x_assum (qspecl_then [`id_str`, `tv`, `v`] mp_tac) >> simp[])
+QED
+
+Theorem external_source_context_typed:
+  source_typing_ok tops am tx ==>
+  context_well_typed
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  functions_well_typed
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+Proof
+  rw[source_typing_ok_def]
+  >- gvs[call_tx_well_typed_def, context_well_typed_def,
+         initial_evaluation_context_def] >>
+  irule check_contract_functions_well_typed_initial >>
+  gvs[checked_contract_runtime_ready_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem external_bind_arguments_popped:
+  !args tenv vals env.
+    bind_arguments tenv args vals = SOME env ==>
+    popped_keys_indexed [env]
+Proof
+  Induct >> simp[Once bind_arguments_def]
+  >- (Cases_on `vals` >>
+      simp[bind_arguments_def, popped_keys_indexed_def]) >>
+  Cases_on `h` >> Cases_on `vals` >>
+  simp[Once bind_arguments_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >> first_x_assum drule >>
+  simp[popped_keys_indexed_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), popped_history_typed_def] >>
+  metis_tac[]
+QED
+
+Theorem external_body_prefix_storage:
+  source_storage_ok tops am tx /\ call_outcomes_ok tops am tx os /\
+  send_call_value mut
+    (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [env] with <|outcomes := SOME os; requests := []|>) =
+    (INL (),es0) ==>
+  contract_storage_well_formed
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
+  storage_layout_safe
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  oracle_storage_ok
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
+  outcomes_accounts_typed es0.outcomes /\ IS_SOME es0.outcomes
+Proof
+  strip_tac >>
+  `es0.outcomes = SOME os` by
+    (drule external_send_call_value_frame >>
+     simp[evaluation_state_component_equality, initial_state_def]) >>
+  `contract_storage_well_formed
+     (initial_evaluation_context am.sources am.layouts tx NONE)
+     (initial_state am [env] with <|outcomes := SOME os; requests := []|>)` by
+    (gvs[source_storage_ok_def] >>
+     irule contract_storage_well_formed_storage_frame >>
+     goal_assum (drule_at Any) >>
+     Cases >> simp[get_storage_def, initial_state_def]) >>
+  reverse conj_tac
+  >- (gvs[source_storage_ok_def, call_outcomes_ok_def,
+           oracle_storage_ok_def, outcomes_accounts_typed_def,
+           EVERY_MEM] >>
+      rpt strip_tac >> first_x_assum drule >> simp[] >> strip_tac >>
+      irule contract_storage_well_formed_storage_frame >>
+      goal_assum (drule_at Any) >>
+      Cases >> simp[get_storage_def, initial_state_def]) >>
+  qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
+  simp[send_call_value_def, vyperStateTheory.assert_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+       vyperStateTheory.raise_def, vyperStateTheory.return_def] >>
+  rpt IF_CASES_TAC >> simp[] >> strip_tac >>
+  gvs[vyperStateTheory.bind_def, vyperStateTheory.assert_def,
+      vyperStateTheory.return_def, vyperStateTheory.raise_def, AllCaseEqs()] >>
+  drule_all transfer_value_preserves_contract_storage_well_formed >> simp[]
+QED
+
+(* Typing soundness: the body of a checked external function
    ends in an outcome the statement judgment speaks of (no type error, no
    break or continue outside a loop), and it falls off its end only when
    the function has no return type (the type checker's
@@ -112,7 +319,23 @@ Theorem external_body_source_ok:
       fbody es0 = (res, es') ==>
     stmt_res_ok NoLoop res /\ (res = INL () ==> ret = NoneT)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_selected_body_typing >> strip_tac >>
+  `machine_well_typed am` by gvs[source_typing_ok_def] >>
+  drule_all external_body_prefix_state >> strip_tac >>
+  drule_all external_selected_env_consistent >> strip_tac >>
+  drule external_source_context_typed >> strip_tac >>
+  drule_all eval_stmts_no_type_error >>
+  simp[no_type_error_eval_def] >> strip_tac >>
+  conj_tac
+  >- (Cases_on `res` >> simp[stmt_res_ok_def] >>
+      drule_all stmts_no_control_escape_eval_stmts_no_loop_control >>
+      strip_tac >> Cases_on `y` >> gvs[stmt_res_ok_def] >>
+      rename1 `Error e` >> Cases_on `e` >>
+      gvs[stmt_res_ok_def, no_type_error_result_def]) >>
+  strip_tac >> Cases_on `ret = NoneT` >> simp[] >>
+  `stmts_no_fallthrough fbody` by simp[] >>
+  drule (cj 2 no_fallthrough_eval_no_success) >> metis_tac[]
 QED
 
 (* ===== The entry (#639) ===== *)
@@ -197,7 +420,224 @@ QED
 
 (* ===== The body's frame (#637) ===== *)
 
-(* ADMITTED (#637): at the start of the selected function's body, the
+Theorem external_selected_args_distinct:
+  supported_program tops /\ source_typing_ok tops am tx /\
+  lookup_function NONE tx.function_name External tops =
+    SOME (mut,F,args,[],ret,fbody) ==>
+  ALL_DISTINCT (MAP FST args)
+Proof
+  strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >>
+     qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
+  gvs[source_typing_ok_def] >>
+  `module_allocated am.layouts tx.target NONE tops` by
+    (drule check_contract_main_module_allocated >> simp[]) >>
+  `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+     External mut F args [] ret fbody` by
+    (irule check_contract_runtime_function_body_MEM >> simp[] >>
+     qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
+  gvs[check_function_body_def, params_ok_def]
+QED
+
+Theorem external_package_body_inv:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target rpolicy.rpol_target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  body_inv tops unit.cu_context cenv
+    (initial_evaluation_context am.sources am.layouts tx NONE) /\
+  cenv.ce_return_pc = NONE
+Proof
+  strip_tac >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  `ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_vtype_keys_distinct] >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  simp[body_inv_def, build_compile_env_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[source_deployment_rel_def, get_module_code_def,
+      initial_evaluation_context_def] >>
+  gvs[source_typing_ok_def] >>
+  metis_tac[]
+QED
+
+Theorem external_package_dec_metadata:
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  dec_cenv_agrees cenv
+    (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
+    by metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST1_TAC >>
+  Cases_on `package_external_fn tops F (assign_nkeys tops 0)
+    (mut,F,rr,tx.function_name,args,[],ret,fbody)` >>
+  PairCases_on `r` >> gvs[set_external_package_target_def] >>
+  drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
+  gvs[dec_cenv_agrees_def, source_deployment_rel_def,
+      get_tenv_def, initial_evaluation_context_def, get_module_code_def,
+      type_env_all_modules_def, type_env_def] >>
+  rpt strip_tac >>
+  irule EQ_TRANS >> irule_at Any type_memory_bytes_struct_fields >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem supported_lookup_flag_none:
+  !ts fid members.
+  EVERY (supported_declaration_header tops) ts ==>
+  lookup_flag fid ts <> SOME members
+Proof
+  Induct >> simp[lookup_flag_def] >>
+  Cases >> simp[lookup_flag_def, supported_flags_rejected] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem external_source_no_flags:
+  supported_program tops /\ source_deployment_rel tops am tx /\
+  get_module_code
+    (initial_evaluation_context am.sources am.layouts tx NONE) src = SOME ts ==>
+  lookup_flag fid ts <> SOME members
+Proof
+  strip_tac >>
+  gvs[source_deployment_rel_def, get_module_code_def,
+      initial_evaluation_context_def, AllCaseEqs()] >>
+  irule supported_lookup_flag_none >>
+  gvs[supported_program_def, supported_declaration_headers_def] >>
+  qexists `tops` >> simp[]
+QED
+
+Theorem external_package_struct_fields:
+  source_typing_ok tops am tx /\
+  source_deployment_rel tops am tx /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+  ALL_DISTINCT (MAP FST fields) /\
+  EVERY (\(fname,fty,sz). !tv.
+    evaluate_type
+      (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+      fty = SOME tv ==> sz = type_memory_size tv) fields
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
+    by metis_tac[source_typing_ok_type_def_keys_distinct] >>
+  `!name args. MEM (StructDecl name args) tops ==>
+     ALL_DISTINCT (MAP FST args)` by
+    (rpt strip_tac >> gvs[source_typing_ok_def] >>
+     drule check_contract_struct_fields_distinct >>
+     simp[] >> disch_then drule >> simp[]) >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  qpat_x_assum `cenv = _` SUBST_ALL_TAC >>
+  gvs[set_external_package_target_def, package_external_fn_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
+      build_compile_env_ce_struct_fields] >>
+  gvs[source_deployment_rel_def, get_tenv_def,
+      initial_evaluation_context_def, get_module_code_def,
+      type_env_all_modules_def, GSYM type_env_def] >>
+  irule make_struct_fields_map_fields >> metis_tac[]
+QED
+
+Theorem external_package_global_maps:
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
+  check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
+  env_t.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env_t.bare_globals = art.cta_bare_globals ==>
+  place_map_tables_agree_on_defined cenv env_t /\
+  (!nsid ty. FLOOKUP env_t.bare_globals nsid = SOME ty ==>
+     cenv.ce_hashmap_info nsid = NONE)
+Proof
+  strip_tac >>
+  drule_all external_package_registered_hashmap_info >> strip_tac >>
+  conj_tac
+  >- (drule checked_single_module_defined_map_agreement >>
+      disch_then irule >> simp[]) >>
+  rpt strip_tac >> gvs[] >>
+  drule_all checked_single_module_bare_global_no_hashmap >> simp[]
+QED
+
+Theorem external_package_bare_globals:
+  lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+  supported_program tops /\ source_deployment_rel tops am tx /\
+  initial_venom_state_rel tops am tx vs /\
+  es0.immutables = am.immutables /\
+  env_consistent env_t
+    (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
+  set_external_package_target target
+    (package_external_fn tops F (assign_nkeys tops 0)
+      (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
+    (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
+  compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
+  !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+    src = cenv.ce_module /\
+    ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+      !tv. evaluate_type (get_tenv
+        (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
+        off + type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >>
+  drule lower_vyper_runtime_unit_immutables_bound >> strip_tac >>
+  `immutables_section_rel tops (account_immutables am tx.target)
+     vs.vs_data_section` by gvs[initial_venom_state_rel_def] >>
+  drule immutables_section_rel_length >> strip_tac >>
+  `LENGTH vs.vs_data_section < dimword (:256)` by
+    (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+     NONE = SOME tops /\
+   (!src ts. get_module_code
+      (initial_evaluation_context am.sources am.layouts tx NONE) src = SOME ts ==>
+      src = NONE)` by
+    (gvs[source_deployment_rel_def, get_module_code_def,
+         initial_evaluation_context_def] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `ALOOKUP am.immutables tx.target`
+  >- (gvs[env_consistent_def, env_immutables_consistent_def,
+          initial_evaluation_context_def, get_source_immutables_def] >>
+      rpt strip_tac >> first_x_assum drule >> simp[]) >>
+  `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+     src = (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module /\
+     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module_vars
+       (src,id) = SOME (ImmutableLoc off) /\
+       !tv. evaluate_type (get_tenv
+         (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
+         off + type_memory_size tv < dimword (:256)` by
+    (drule_at (Pat `supported_program _`) build_compile_env_bare_globals >>
+     simp[] >>
+     disch_then (drule_at (Pat `env_consistent _ _ _`)) >>
+     gvs[account_immutables_def, initial_evaluation_context_def,
+         build_compile_env_module_vars] >>
+     disch_tac >> metis_tac[]) >>
+  drule compile_register_positional_args_cenv >> strip_tac >>
+  gvs[package_external_fn_def, set_external_package_target_def] >>
+  Cases_on `ret = NoneT` >>
+  gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
+  qpat_x_assum `cenv = _` (fn th => once_rewrite_tac [th]) >>
+  simp[] >> metis_tac[]
+QED
+
+(* Body frame (#637): at the start of the selected function's body, the
    premises of body_stmts_sim other than the frame's returns: the frame is
    the lowered program's (body_inv), the body is supported and typed at
    the return type in a type environment env_t of the parameters, which
@@ -245,7 +685,66 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts fbody)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all external_package_body_inv >> strip_tac >> simp[] >>
+  drule_all external_selected_body_typing >> strip_tac >>
+  `machine_well_typed am` by gvs[source_typing_ok_def] >>
+  drule_all external_body_prefix_state >> strip_tac >>
+  drule_all external_selected_env_consistent >> strip_tac >>
+  drule_all external_body_prefix_storage >> strip_tac >>
+  drule external_source_context_typed >> strip_tac >>
+  drule_all external_package_dec_metadata >> strip_tac >>
+  drule_all external_package_global_maps >> strip_tac >>
+  drule external_package_bare_globals >>
+  disch_then (drule_at (Pat `initial_venom_state_rel _ _ _ _`)) >>
+  disch_then (drule_at (Pat `env_consistent _ _ _`)) >>
+  disch_then (drule_at (Pat `set_external_package_target _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_register_positional_args _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
+    (irule lookup_function_external_decl >> simp[] >> qexists `tops` >>
+     gvs[supported_program_def, supported_declaration_headers_def]) >>
+  `supported_function_body tops External args fbody` by
+    (drule_all supported_program_function >> simp[]) >>
+  `ALL_DISTINCT (MAP FST args)` by
+    (drule_all external_selected_args_distinct >> simp[]) >>
+  `EVERY (\(n,ty). assignable_type env_t.type_defs ty) args` by
+    (`module_allocated am.layouts tx.target NONE tops` by
+       (drule check_contract_main_module_allocated >> simp[]) >>
+     `check_function_body am.layouts tx.target [(NONE,tops)] art NONE
+        External mut F args [] ret fbody` by
+       (irule check_contract_runtime_function_body_MEM >> simp[] >>
+        qexistsl [`tx.function_name`, `raw`] >> simp[]) >>
+     gvs[check_function_body_def, params_ok_def, get_tenv_def,
+         checked_contract_runtime_ready_def,
+         initial_evaluation_context_def, type_env_all_modules_def]) >>
+  `cenv.ce_struct_fields = make_struct_fields_map tops /\
+   cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE)` by
+    gvs[body_inv_def] >>
+  `env_context_consistent env_t
+     (initial_evaluation_context am.sources am.layouts tx NONE)` by
+    gvs[env_consistent_def] >>
+  drule_all external_body_support_bounds >> strip_tac >>
+  qexistsl [`bindings`, `env_t`, `env'`] >> simp[] >>
+  reverse conj_tac
+  >- (irule external_entry_target_locals_declared >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[expr_sim_inv_def] >> rpt conj_tac
+  >- (rpt strip_tac >> irule external_entry_target_param_pointer >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >> irule external_entry_target_param_type >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >> drule_all external_source_no_flags >>
+      disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
+  >- gvs[dec_cenv_agrees_def]
+  >- gvs[dec_cenv_agrees_def]
+  >- (rpt strip_tac >>
+      `FLOOKUP cenv.ce_struct_fields name = SOME fields` by simp[] >>
+      drule_all external_package_struct_fields >> simp[])
+  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any)) >>
+  rpt strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
+    drule >> simp[]
 QED
 
 (* ===== The frame's returns (#640) ===== *)
