@@ -32,7 +32,8 @@ Proof
     lookup_var_def, local_backed_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
     venomMemDefsTheory.alloca_next_valid_def,
-    alloca_room_def, pending_alloca_size_def, fmp_room_def] >>
+    alloca_room_def, pending_alloca_size_def, fmp_room_def,
+    immutable_base_zero_alt] >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 

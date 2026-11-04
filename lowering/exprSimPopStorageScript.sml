@@ -221,13 +221,12 @@ Proof
      simp[Abbr `s1`, Abbr `es1`, sstore_def, tstore_def, LET_THM,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
   `immutable_base_zero cenv s1` by
-    (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
-     irule immutable_base_zero_frame >> qexists_tac `s` >>
-     Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
-  irule stmt_state_rel_allocas_frame >>
-  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
-  qexistsl [`s`, `es`] >> simp[] >> Cases_on `tr` >>
-  simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def] >> Cases_on `tr` >>
+     simp[Abbr `s1`, sstore_def, tstore_def, LET_THM, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl [`es`, `s`] >> simp[] >>
+  Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]
 QED
 
 Theorem storage_range_agree_dyn_last:
