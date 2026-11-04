@@ -1334,3 +1334,96 @@ Theorem entry_cleanup_deep_initialized_probe:
 Proof
   EVAL_TAC
 QED
+
+Theorem param_insts_from_entry_shape:
+  !insts k s.
+    param_insts_from k insts /\
+    k + LENGTH insts <= LENGTH s.vs_params /\
+    k + LENGTH insts < dimword (:256) ==>
+    EVERY (entry_param_shape s) insts
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> simp[param_insts_from_def] >> strip_tac >>
+  conj_tac
+  >- (gvs[param_inst_at_def, entry_param_shape_def,
+          is_param_opcode_iff, LENGTH_EQ_NUM_compute] >>
+      simp[w2n_n2w] >> decide_tac) >>
+  first_x_assum irule >> qexists `SUC k` >> simp[] >> decide_tac
+QED
+
+Theorem bounded_entry_param_shape:
+  !fn cplan s st ra rest.
+    codegen_ready_fn fn /\ fn_entry_state_rel cplan fn s st ra rest /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) ==>
+    EVERY (entry_param_shape s) (get_params (HD fn.fn_blocks).bb_instructions)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `canonical_entry_params_from 0 (HD fn.fn_blocks).bb_instructions` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[codegen_ready_fn_def, canonical_param_prefix_def]) >>
+  drule canonical_entry_params_from_sound >> strip_tac >>
+  `get_params (HD fn.fn_blocks).bb_instructions = users ++ fmp ++ retpc` by
+    (asm_rewrite_tac[] >> irule get_params_prefix >>
+     gvs[param_insts_from_append, param_insts_from_def,
+         param_inst_at_def, EVERY_APPEND, EVERY_MEM] >>
+     metis_tac[is_param_opcode_def]) >>
+  `~EXISTS (\inst. inst.inst_opcode = RETPC_PARAM) users` by
+    (gvs[EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  gvs[fn_entry_state_rel_def, fn_has_retpc_def, EXISTS_APPEND,
+      param_insts_from_append, param_insts_from_def] >>
+  `EVERY (entry_param_shape s) users` by
+    (irule param_insts_from_entry_shape >> qexists `0` >> simp[] >> decide_tac) >>
+  simp[] >>
+  gvs[entry_param_shape_def, param_inst_at_def, LENGTH_EQ_NUM_compute] >>
+  simp[w2n_n2w] >> decide_tac
+QED
+
+Theorem get_params_suffix:
+  !insts. ?suffix. insts = get_params insts ++ suffix
+Proof
+  Induct >- simp[get_params_def] >> simp[get_params_def] >>
+  Cases_on `is_param_opcode h.inst_opcode` >> simp[] >> metis_tac[]
+QED
+
+Theorem bounded_entry_param_skip:
+  !fuel ctx fn cplan s st ra rest.
+    codegen_ready_fn fn /\ fn_entry_state_rel cplan fn s st ra rest /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) ==>
+    exec_block fuel ctx (HD fn.fn_blocks) (s with vs_inst_idx := 0) =
+    exec_block fuel ctx (HD fn.fn_blocks)
+      ((entry_bind_pairs
+          (entry_param_pairs s (get_params (HD fn.fn_blocks).bb_instructions)) s)
+        with vs_inst_idx := LENGTH (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  rpt strip_tac >> irule entry_param_skip_prefix >>
+  conj_tac >- metis_tac[get_params_suffix] >>
+  irule bounded_entry_param_shape >> metis_tac[]
+QED
+
+Theorem entry_shape_flat_outputs:
+  !insts s. EVERY (entry_param_shape s) insts ==>
+    FLAT (MAP (\i. i.inst_outputs) insts) =
+    MAP (\i. HD i.inst_outputs) insts
+Proof
+  Induct >> simp[entry_param_shape_def] >> rpt strip_tac >> gvs[] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
+Theorem bounded_entry_param_outputs_distinct:
+  !fn cplan s st ra rest.
+    codegen_ready_fn fn /\ fn_entry_state_rel cplan fn s st ra rest /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) ==>
+    ALL_DISTINCT
+      (MAP (\i. HD i.inst_outputs) (get_params (HD fn.fn_blocks).bb_instructions))
+Proof
+  rpt strip_tac >>
+  `EVERY (entry_param_shape s) (get_params (HD fn.fn_blocks).bb_instructions)` by
+    (irule bounded_entry_param_shape >> metis_tac[]) >>
+  drule entry_shape_flat_outputs >> disch_then (SUBST1_TAC o SYM) >>
+  qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[codegen_ready_fn_def, canonical_param_prefix_def, ssa_form_def,
+      fn_insts_def, fn_insts_blocks_def] >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[MAP_APPEND, FLAT_APPEND, ALL_DISTINCT_APPEND]
+QED
