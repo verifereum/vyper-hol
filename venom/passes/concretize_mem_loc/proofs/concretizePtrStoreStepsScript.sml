@@ -3,15 +3,15 @@ Ancestors
   concretizePtrBytes concretizePtrOperationalBytes venomExecSemantics venomState
   codegenRel mem2varBlockSimHelpers mem2varDefs spillSim list arithmetic
 
-Theorem ptr_mstore_written_bytes[local]:
-  k < 32 ==>
+Theorem ptr_mstore_written_bytes:
+  k < 32 /\ EL k (word_to_bytes v T) = EL k (word_to_bytes vt T) ==>
   read_byte (off + k) (mstore off v s).vs_memory =
-  read_byte (offt + k) (mstore offt v t).vs_memory
+  read_byte (offt + k) (mstore offt vt t).vs_memory
 Proof
   strip_tac >>
   `mem_byte (off + k) (mstore off v s) = EL k (word_to_bytes v T)` by
     (simp[mem_byte_mstore_inside]) >>
-  `mem_byte (offt + k) (mstore offt v t) = EL k (word_to_bytes v T)` by
+  `mem_byte (offt + k) (mstore offt vt t) = EL k (word_to_bytes vt T)` by
     (simp[mem_byte_mstore_inside]) >>
   gvs[mem_byte_def, read_byte_def]
 QED

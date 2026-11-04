@@ -38,6 +38,20 @@ Definition ptr_ledger_next_def:
     obs.po_fn inst (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx)
 End
 
+Theorem ptr_ledger_next_step:
+  active_inst obs.po_fn obs.po_inst obs.po_state /\
+  ~is_terminator obs.po_inst.inst_opcode /\ obs.po_inst.inst_opcode <> INVOKE /\
+  step_inst fuel ctx obs.po_inst obs.po_state = OK post /\
+  active_inst obs.po_fn inst (post with vs_inst_idx := SUC obs.po_state.vs_inst_idx) ==>
+  ptr_chrono_step ctx obs (ptr_ledger_next obs inst post)
+Proof
+  strip_tac >> Cases_on `obs` >>
+  gvs[ptr_ledger_next_def, ptr_observe_def] >>
+  simp[Once ptr_chrono_step_cases, ptr_observe_def,
+    ptr_observation_component_equality] >>
+  qexistsl_tac [`post`,`fuel`] >> simp[]
+QED
+
 Theorem ptr_ledger_next_history[local]:
   ptr_chrono_history initial ctx h obs /\
   active_inst obs.po_fn obs.po_inst obs.po_state /\
@@ -49,10 +63,7 @@ Theorem ptr_ledger_next_history[local]:
 Proof
   strip_tac >> irule (cj 2 ptr_chrono_history_rules) >>
   qexists_tac `obs` >> simp[] >>
-  Cases_on `obs` >> gvs[ptr_ledger_next_def, ptr_observe_def] >>
-  simp[Once ptr_chrono_step_cases, ptr_observe_def,
-    ptr_observation_component_equality] >>
-  qexistsl_tac [`post`,`fuel`] >> simp[]
+  irule ptr_ledger_next_step >> metis_tac[]
 QED
 
 (* A bounded ordinary suffix is computed from successful execution, not
