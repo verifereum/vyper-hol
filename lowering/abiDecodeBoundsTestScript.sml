@@ -32,7 +32,7 @@ Theorem bounded_decode_head_past_end_reverts_before_load:
   case exec_block 1 ARB
     <| bb_label := "entry";
        bb_instructions :=
-         (SND (compile_abi_decode_to_buf (Lit 256w) (Lit 640w) MLOAD
+         (SND (compile_abi_decode_to_buf (Lit 256w) (Lit 640w) MLOAD (Lit 0w)
            (Lit 192w) (DecBytestring 1) abi_decode_bounds_test_state)).cs_current_insts |>
     (init_venom_state "entry") of
     Abort Revert_abort s => s.vs_inst_idx = 6
