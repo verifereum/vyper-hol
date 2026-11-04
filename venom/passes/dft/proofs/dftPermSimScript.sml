@@ -70,7 +70,7 @@ Definition bi_independent_def:
     ~gas_pair i1.inst_opcode i2.inst_opcode
 End
 
-Triviality bi_independent_sym:
+Theorem bi_independent_sym:
   !i1 i2. bi_independent i1 i2 <=> bi_independent i2 i1
 Proof
   rw[bi_independent_def, effects_independent_def, abort_compatible_def,
