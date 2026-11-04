@@ -2620,3 +2620,28 @@ Proof
   simp[Abbr `t`, probe_word_copied_state_def, n2w_11,
        dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
 QED
+
+Theorem probe_word_load_exit_observations:
+  !s bufaddr v.
+    (v <> "%10" /\ v <> "%11" ==>
+      lookup_var v (probe_word_load_exit_state s bufaddr) = lookup_var v s) /\
+    lookup_var "%10" (probe_word_load_exit_state s bufaddr) =
+      SOME (mload (w2n bufaddr) s) /\
+    lookup_var "%11" (probe_word_load_exit_state s bufaddr) = SOME 0w /\
+    (probe_word_load_exit_state s bufaddr).vs_halted = s.vs_halted
+Proof
+  simp[probe_word_load_exit_state_def, lookup_var_update_var]
+QED
+
+Theorem probe_word_copied_observations:
+  !s n bufaddr.
+    lookup_var "%10" s = SOME n ==>
+    lookup_var "%10" (probe_word_copied_state s n bufaddr) = SOME n /\
+    lookup_var "%0" (probe_word_copied_state s n bufaddr) = lookup_var "%0" s /\
+    (probe_word_copied_state s n bufaddr).vs_halted = s.vs_halted /\
+    (probe_word_copied_state s n bufaddr).vs_current_bb = "@dyn_exit_5"
+Proof
+  rpt strip_tac >> Cases_on `n = 0w` >>
+  simp[probe_word_copied_state_def, control_moves_keep_vars,
+       probe_word_copy_cond_observations, probe_word_copy_round_observations]
+QED
