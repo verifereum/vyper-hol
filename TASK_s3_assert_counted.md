@@ -72,5 +72,5 @@ Do not change source semantics, executable lowering or finite-storage policy.
 
 Shared stmtSimProps.emit_abort_zero_path_mem and assert_jnz_zero_path_mem
 are now joined from the independent Raise/If jobs. Owner check of
-stmtSimPropsTheory and stmtRaiseMemoryTheory passed (195.145s), both helper
+stmtSimPropsTheory and stmtRaiseMemoryTheory passed (182.489s), both helper
 exports and the Raise kernel audit checked. Reuse these actual mode-T helpers.
