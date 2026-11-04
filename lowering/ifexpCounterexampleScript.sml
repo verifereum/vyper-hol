@@ -136,3 +136,50 @@ Proof
        exprLoweringTheory.compile_stage_intcall_args_def,
        compileEnvTheory.comp_return_def]
 QED
+
+Definition witness_initial_compile_state_def:
+  witness_initial_compile_state : compile_state =
+    <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+       cs_current_bb := "entry"; cs_current_insts := [];
+       cs_blocks := []; cs_data_sections := [] |>
+End
+
+Definition witness_conditional_def:
+  witness_conditional = IfExp witness_type
+    (Literal (BaseT BoolT) (BoolL T)) witness_call witness_call
+End
+
+Definition witness_compiled_def:
+  witness_compiled ce = compile_expr (witness_compile_env ce) witness_type
+    witness_conditional witness_initial_compile_state
+End
+
+Definition witness_function_def:
+  witness_function ce =
+    let sb = SND (witness_compiled ce) in
+    venomInst$mk_raw_function "main"
+      (REVERSE sb.cs_blocks ++
+       [<| bb_label := sb.cs_current_bb;
+           bb_instructions := sb.cs_current_insts |>])
+End
+
+Definition witness_target_context_def:
+  witness_target_context ce = venomInst$mk_venom_context
+    [witness_function ce; witness_callee] (SOME "main")
+End
+
+Theorem witness_destination_type:
+  evaluate_type (get_tenv witness_context) witness_type =
+    SOME (StructTV [("x", BaseTV (UintT 256))])
+Proof
+  simp[witness_context_def, witness_type_def] >> CONV_TAC EVAL >>
+  simp[FLOOKUP_FUNION, FLOOKUP_UPDATE, DRESTRICT_FUPDATE] >>
+  CONV_TAC EVAL >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem witness_source_value_typed:
+  value_has_type (StructTV [("x", BaseTV (UintT 256))])
+    (StructV [("x", IntV 1)])
+Proof
+  CONV_TAC EVAL >> simp[]
+QED
