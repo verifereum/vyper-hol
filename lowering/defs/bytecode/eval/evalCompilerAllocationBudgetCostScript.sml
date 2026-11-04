@@ -1,6 +1,7 @@
 (* Opt-in kernel-evaluator microbenchmark on actual raw fixture contexts.
    Reports five-run means for the original four conjuncts, the added budget,
-   and the exact strengthened guard. Every guard result must evaluate to T. *)
+   the definite-assignment check, and the exact strengthened guard. Every
+   guard result must evaluate to T. *)
 Theory evalCompilerAllocationBudgetCost
 Ancestors
   evalCompilerBytecodeScalarConvertDecimal
@@ -34,6 +35,8 @@ fun measure name ctx =
        forced_alloc_inputs_check ^ctx``;
    timed_eval true (name ^ " added_budget") ``unit_alloca_budget ^ctx < dimword (:256)``;
    timed_eval false (name ^ " budget_value") ``unit_alloca_budget ^ctx``;
+   timed_eval true (name ^ " defs_reach_check")
+     ``EVERY fn_defs_reach_uses_check (^ctx).ctx_functions``;
    timed_eval true (name ^ " exact_new_guard") ``lowering_context_ok ^ctx``)
 val () = measure "scalar_convert_decimal/runtime" (raw_context
   scalar_convert_decimal_extract_context_eval)
