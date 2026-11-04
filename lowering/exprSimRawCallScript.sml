@@ -702,6 +702,84 @@ QED
 
 Finalise raw_call_addr_data_sim
 
+Theorem raw_call_data_prefix_placement[local]:
+  emit_op MLOAD [data] sd = (len,sl) /\
+  emit_op ADD [data; Lit 32w] sl = (ptr_op,sm) /\
+  (!x. data = Var x ==> not_fresh_at sd x) /\
+  eval_operand data u = SOME (n2w b) /\
+  mem_word_at b u.vs_memory = n2w (LENGTH bs) /\ b < dimword (:256) /\
+  local_ptrs_reserved cenv sd /\
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data u /\
+  run_inst_seq (emitted_insts sd sm) u = OK s ==>
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
+  eval_operand data s = SOME (n2w b)
+Proof
+  strip_tac >> drule_all hash_data_prefix_run >> strip_tac >> gvs[] >>
+  `s.vs_labels = u.vs_labels /\ s.vs_allocas = u.vs_allocas` by
+    (qpat_x_assum `s with vs_vars := _ = _`
+      (mp_tac o Q.AP_TERM `\z. (z.vs_labels,z.vs_allocas)`) >> simp[]) >>
+  `eval_operand data s = SOME (n2w b)` by
+    (Cases_on `data` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  `!n base sz. local_region cenv es.scopes s n base sz <=>
+              local_region cenv es.scopes u n base sz` by
+    (simp[local_region_def] >> rpt gen_tac >>
+     `!p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p s = lookup_var p u` by
+       (rpt strip_tac >> first_x_assum irule >>
+        fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     metis_tac[]) >>
+  conj_tac
+  >- (fs[expr_val_at_def] >> rpt strip_tac >>
+      first_x_assum drule >> simp[]) >>
+  simp[]
+QED
+
+Theorem raw_call_kwargs_payload[local]:
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
+  eval_operand data s = SOME (n2w b) /\ b < dimword (:256) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  sd.cs_next_id <= sk.cs_next_id /\
+  typed_args_post ctx func cenv cx es sk s es' kws xs vs t ==>
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs
+Proof
+  strip_tac >>
+  `wb_frame cenv es sk s t` by fs[typed_args_post_def] >>
+  drule_all raw_call_frame_bytes >> simp[]
+QED
+
+Theorem raw_call_optional_gas_run[local]:
+  (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
+  (!g. go = SOME g ==> ?w. eval_operand g s = SOME w) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  ?t gw. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand gas t = SOME gw /\ stmt_state_rel ctx func cenv cx es t /\
+    wb_frame cenv es sa s t /\ t.vs_memory = s.vs_memory /\
+    t.vs_allocas = s.vs_allocas
+Proof
+  Cases_on `go`
+  >- (simp[] >> strip_tac >>
+      drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+      qabbrev_tac `t = update_var (STRING #"%" (toString sa.cs_next_var))
+        (n2w s.vs_call_ctx.cc_gas) s` >>
+      `run_inst_seq (emitted_insts sa sb) s = OK t` by
+        simp[Abbr `t`, run_inst_seq_def, step_inst_def, step_inst_base_def,
+             mk_inst_def, exec_read0_def] >>
+      `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+        (simp[Abbr `t`, emitHelperPropsTheory.lookup_var_update_var] >>
+         rpt strip_tac >> gvs[not_fresh_at_def]) >>
+      `(t with vs_vars := s.vs_vars) = s` by simp[Abbr `t`, update_var_def] >>
+      `stmt_state_rel ctx func cenv cx es t` by
+        (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+      qexists_tac `t` >> simp[Abbr `t`, update_var_def, eval_operand_def,
+        lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, wb_frame_def,
+        locals_kept_def] >>
+      rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def]) >>
+  simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `s` >> simp[emitted_insts_def, run_inst_seq_def, wb_frame_refl]
+QED
+
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
