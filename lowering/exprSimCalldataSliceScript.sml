@@ -803,6 +803,8 @@ Theorem slice_calldata_vv_post[local]:
     (LocatedValue (expr_type e) p) (t with vs_inst_idx := k)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `LENGTH (TAKE n (DROP a cx.txn.calldata)) = n` by simp[LENGTH_TAKE_EQ] >>
   `n <= 32 * word_size n` by simp[word_size_capacity] >>
   `eval_operand p.ptr_operand (t with vs_inst_idx := k) = SOME w` by

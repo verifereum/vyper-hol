@@ -41,7 +41,7 @@ Ancestors
   loweringSlice fragExec freshWrites venomInst venomExecSemantics venomState
   exprSimCopy exprOperandVar vyperEvalExprPreservesScopesDom
   valueEncoding valueEncodingProofs vyperTypeValues vyperStorage vyperValue
-  vyperLookupStorage
+  vyperLookupStorage valueCopyBytes
 Libs
   pairLib
 
@@ -180,18 +180,19 @@ Theorem expr_post_of_vv_post_memory:
     expr_post ctx func cenv cx e es sa sb s0 es' v p.ptr_operand s
 Proof
   rw[vv_post_def, expr_post_def, vv_holds_def, vv_at_def] >>
-  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def] >>
-  metis_tac[]
+  gvs[read_result_def, return_def, expr_val_rel_def, expr_val_at_def,
+      is_bytestring_word_type] >>
+  first_x_assum irule >> simp[SF SFY_ss]
 QED
 
 (* The end of a one-instruction load of a word: the loaded word in a fresh
    variable, nothing else changed. *)
-Theorem expr_post_of_vv_post_load:
+Theorem expr_post_of_vv_post_load_physical[local]:
   !func cenv cx e es sa sm sb s0 es' v t p op s1 s w ctx.
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s1 /\
-    is_word_type (expr_type e) /\ sa.cs_next_var <= sm.cs_next_var /\
+    is_word_type (post_value_type cenv e) /\ sa.cs_next_var <= sm.cs_next_var /\
     stmt_state_rel ctx func cenv cx es' s /\ eval_operand op s = SOME w /\
-    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+    (!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
            w = typed_val_to_w256 tvt v) /\
     (!x w'. not_fresh_at sm x /\ lookup_var x s1 = SOME w' ==>
             lookup_var x s = SOME w') /\
@@ -211,6 +212,27 @@ Proof
   fs[vv_post_def] >> metis_tac[]
 QED
 
+Theorem expr_post_of_vv_post_load:
+  !func cenv cx e es sa sm sb s0 es' v t p op s1 s w ctx.
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s1 /\
+    is_word_type (expr_type e) /\ sa.cs_next_var <= sm.cs_next_var /\
+    stmt_state_rel ctx func cenv cx es' s /\ eval_operand op s = SOME w /\
+    (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+           w = typed_val_to_w256 tvt v) /\
+    (!x w'. not_fresh_at sm x /\ lookup_var x s1 = SOME w' ==>
+            lookup_var x s = SOME w') /\
+    (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
+             FLOOKUP s.vs_allocas aid = SOME b) /\
+    s.vs_memory = s1.vs_memory ==>
+    expr_post ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  rpt gen_tac >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by simp[] >>
+  qpat_x_assum `post_value_type cenv e = expr_type e`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [GSYM th])) >>
+  drule_all expr_post_of_vv_post_load_physical >> simp[]
+QED
+
 (* A word in memory: an MLOAD. *)
 Theorem unwrap_memory_word_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
@@ -224,12 +246,12 @@ Theorem unwrap_memory_word_sim:
 Proof
   rpt strip_tac >> irule frag_exec_pointwise >> rw[] >>
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+       !tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
              mem_word_at (w2n w) s1.vs_memory = typed_val_to_w256 tvt v` by
-    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def] >>
-     metis_tac[]) >>
+    (gvs[vv_post_def, vv_holds_def, read_result_def, return_def,
+         is_bytestring_word_type] >> metis_tac[]) >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
   drule loweringSliceTheory.emit_op_frag >>
   disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es'`, `s1`,
@@ -242,13 +264,9 @@ Proof
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
-  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
-               `v`, `expr_type e`, `p`, `op`, `s1`, `s`, `mload (w2n w) s1`, `ctx`]
-    mp_tac expr_post_of_vv_post_load >>
-  impl_tac
-  >- (asm_rewrite_tac[] >> rpt strip_tac >>
-      fs[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload]) >>
-  simp[]) >>
+  irule expr_post_of_vv_post_load_physical >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload, SF SFY_ss]) >>
   gvs[vv_post_def]
 QED
 
@@ -324,9 +342,9 @@ Theorem unwrap_runtime_immutable_word_sim:
 Proof
   rpt strip_tac >> irule frag_exec_pointwise >> rw[] >>
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       immutable_holds cenv cx (expr_type e) (Value v) w es' /\
+       immutable_holds cenv cx (post_value_type cenv e) (Value v) w es' /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
@@ -343,14 +361,9 @@ Proof
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
-  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
-               `v`, `expr_type e`, `p`, `op`, `s1`, `s`,
-               `word_of_bytes T (0w:bytes32)
-                  (TAKE 32 (DROP (w2n w) s1.vs_data_section ++
-                            REPLICATE 32 0w))`, `ctx`]
-    mp_tac expr_post_of_vv_post_load >>
-  impl_tac >- (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
-  simp[]) >>
+  irule expr_post_of_vv_post_load_physical >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[SF SFY_ss]) >>
   gvs[]
 QED
 
@@ -455,14 +468,14 @@ Proof
   gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >> (
   irule frag_exec_pointwise >> rw[] >>
   rename1 `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ s1` >>
-  `t = expr_type e /\
+  `t = post_value_type cenv e /\
    ?w. eval_operand p.ptr_operand s1 = SOME w /\
-       storage_holds cx (p.ptr_location = LocTransient) (expr_type e)
+       storage_holds cx (p.ptr_location = LocTransient) (post_value_type cenv e)
          (Value v) w es' /\
        stmt_state_rel ctx func cenv cx es' s1` by
     gvs[vv_post_def, vv_holds_def] >>
   qpat_x_assum `t = _` SUBST_ALL_TAC >>
-  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+  `!tvt. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tvt ==>
          (if p.ptr_location = LocTransient then tload w s1 else sload w s1) =
          typed_val_to_w256 tvt v` by (
     rpt strip_tac >> drule_then drule storage_holds_load >>
@@ -478,13 +491,9 @@ Proof
   strip_tac >> irule frag_exec_conseq >> first_x_assum (irule_at Any) >>
   simp[] >> rpt strip_tac
   >~ [`expr_post`] >- (
-  qspecl_then [`func`, `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`, `es'`,
-               `v`, `expr_type e`, `p`, `op`, `s1`, `s`,
-               `if p.ptr_location = LocTransient then tload w s1
-                else sload w s1`, `ctx`]
-    mp_tac expr_post_of_vv_post_load >>
-  impl_tac >- (asm_rewrite_tac[] >> rpt strip_tac >> gvs[]) >>
-  simp[]) >>
+  irule expr_post_of_vv_post_load_physical >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  gvs[SF SFY_ss]) >>
   gvs[])
 QED
 
@@ -514,6 +523,7 @@ QED
    value's memory size and fits Python's allocation limit. *)
 Theorem unwrap_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
      p.ptr_location = LocCode) /\ ~is_word_type t /\
@@ -554,6 +564,7 @@ QED
 
 Theorem unwrap_value_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v vv op R.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
@@ -655,6 +666,7 @@ QED
 
 Theorem unwrap_read_result_sim[local]:
   !ctx func cenv cx e es sa sm sb s0 es' raw res vv op.
+    post_value_type cenv e = expr_type e /\
     read_result cx raw es' = (res, es') /\
     unwrap_value cenv vv sm = (op, sb) /\
     local_ptrs_reserved cenv sa /\
@@ -690,6 +702,7 @@ QED
    expr_post. *)
 Theorem expr_sim_of_vv_sim:
   !ctx func cenv cx ty e es.
+    post_value_type cenv e = expr_type e /\
     expr_vv_sim ctx func cenv cx ty e es /\
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
            ~is_word_type (expr_type e) ==>

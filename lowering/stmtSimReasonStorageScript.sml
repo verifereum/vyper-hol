@@ -163,7 +163,7 @@ Proof
      gvs[vv_operand_def]) >>
   `?t p. vv = LocatedValue t p` by metis_tac[reason_storage_vv_def] >>
   gvs[] >>
-  irule reason_expr_revert_frag_general >> simp[] >>
+  irule reason_expr_revert_frag_post >> simp[] >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
   qexists_tac `\s. ?w. eval_operand p.ptr_operand s = SOME w` >> simp[] >>

@@ -502,7 +502,7 @@ Proof
   rename1 `expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t` >>
   `stmt_state_rel ctx func cenv cx es1 t /\
    eval_operand x t = SOME (typed_val_to_w256 tv1 v1)` by
-    (fs[expr_post_def] >> irule expr_val_rel_typed >> metis_tac[]) >>
+    (fs[expr_post_def] >> rfs[] >> irule expr_val_rel_typed >> metis_tac[]) >>
   (* the right operand, from t *)
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -520,7 +520,7 @@ Proof
   `stmt_state_rel ctx func cenv cx es' u /\
    eval_operand y u = SOME (typed_val_to_w256 tv2 v2) /\
    eval_operand x u = SOME (typed_val_to_w256 tv1 v1)` by
-    (fs[expr_post_def] >> conj_tac
+    (fs[expr_post_def] >> rfs[] >> conj_tac
      >- (irule expr_val_rel_typed >> metis_tac[]) >>
      irule eval_operand_frame >> metis_tac[]) >>
   (* the operator, from u *)

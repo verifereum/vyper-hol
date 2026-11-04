@@ -269,6 +269,9 @@ Resume aggregate_make_tuple_sim[child_success]:
 QED
 
 Resume aggregate_make_tuple_sim[after_add]:
+  `post_value_type ce h = expr_type h` by
+    (Cases_on `nocalls` >>
+     metis_tac[post_value_type_no_calls, post_value_type_lowered]) >>
   drule_all aggregate_child_metadata_frame >> strip_tac >>
   `(ce.ce_is_ctor ==>
     !name itv iv io.

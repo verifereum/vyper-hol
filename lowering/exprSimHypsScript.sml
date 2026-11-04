@@ -291,7 +291,11 @@ End
    and the outcomes.  Every immutable or constant the source can read by
    name (env.bare_globals) is an immutable of the module being lowered, at
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
-   places a supported program's immutables (immutableLocationProps). *)
+   places a supported program's immutables (immutableLocationProps).
+   Every function signature the typing knows returns the type cenv records
+   for it, as build_compile_env records the declared return types
+   (build_func_return_type), so an internal call's value is described at a
+   type its annotation widens (post_value_type). *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -301,6 +305,8 @@ Definition expr_sim_inv_def:
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              cenv.ce_var_type id = SOME ty) /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+               cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
@@ -426,6 +432,52 @@ Theorem expr_sim_pre_body:
     expr_body_pre cenv cx env e es /\ int_calls_expr e = []
 Proof
   rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
+QED
+
+(* A call-free expression is described at its annotation. *)
+Theorem post_value_type_no_calls[simp]:
+  !cenv e. int_calls_expr e = [] ==> post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >> irule post_value_type_not_int_call >> rpt strip_tac >>
+  gvs[int_calls_expr_def]
+QED
+
+(* An expression's value is described at a type its annotation widens: an
+   internal call's at its callee's declared return type, which the typing
+   lets the call site widen (well_typed_expr), and which expr_sim_inv says
+   cenv records. *)
+Theorem post_value_type_widens:
+  !cenv cx env es e.
+    expr_sim_inv cenv cx env es /\ well_typed_expr env e ==>
+    type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)
+Proof
+  rpt strip_tac >>
+  Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+  >- (gvs[] >> rename1 `IntCall fid` >> PairCases_on `fid` >>
+      gvs[expr_sim_inv_def, well_typed_expr_def, lowered_value_type_def,
+          vyperASTTheory.expr_type_def] >>
+      metis_tac[type_widens_to_def]) >>
+  `post_value_type cenv e = expr_type e` by metis_tac[post_value_type_not_int_call] >>
+  simp[type_widens_to_def]
+QED
+
+Theorem type_widens_to_ec_point:
+  type_widens_to tenv t (ArrayT (BaseT (UintT 256)) (Fixed 2)) ==>
+  t = ArrayT (BaseT (UintT 256)) (Fixed 2)
+Proof
+  Cases_on `t` >> simp[type_widens_to_def, arg_type_fits_def] >>
+  rename1 `arg_type_fits (ArrayT elem bd) _` >>
+  Cases_on `bd` >> simp[arg_type_fits_def] >>
+  Cases_on `elem` >> simp[arg_type_fits_def] >> metis_tac[]
+QED
+
+Theorem post_value_type_ec_point:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
+  post_value_type cenv e = expr_type e
+Proof
+  strip_tac >> drule_all post_value_type_widens >>
+  simp[] >> metis_tac[type_widens_to_ec_point]
 QED
 
 Theorem expr_sim_pre_body_pre:
@@ -1130,10 +1182,14 @@ QED
 Theorem expr_ok_of_vv:
   !cenv e. expr_vv_ok cenv e ==> expr_ok cenv e
 Proof
-  rw[expr_ok_def, expr_sim_ok_def] >> irule expr_sim_of_vv_sim >>
-  rpt strip_tac
-  >~ [`expr_vv_sim`] >- (fs[expr_vv_ok_def] >> metis_tac[]) >>
-  metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
+  rw[expr_ok_def, expr_sim_ok_def] >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[expr_sim_pre_body_pre] >>
+  `post_value_type cenv e = expr_type e` by
+    (fs[expr_sim_pre_def] >> simp[post_value_type_no_calls]) >>
+  irule expr_sim_of_vv_sim >> simp[] >> conj_tac
+  >- (rpt strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+  fs[expr_vv_ok_def] >> metis_tac[]
 QED
 
 (* A form lowered to a StackValue, with only values as results: expr_ok
@@ -1199,6 +1255,7 @@ QED
 (* expr_ok_of_vv for one ctx, func and cx. *)
 Theorem expr_sim_case_of_vv:
   !nocalls ctx func cenv cx e.
+    post_value_type cenv e = expr_type e /\
     expr_vv_case nocalls ctx func cenv cx e ==>
     expr_sim_case nocalls ctx func cenv cx e
 Proof
