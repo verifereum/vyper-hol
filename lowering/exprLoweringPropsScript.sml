@@ -228,6 +228,20 @@ Definition alloca_room_def:
       unit_alloca_frame ctx < dimword (:256)
 End
 
+(* Dynamic scratch starts above the complete reserved static allocation charge.
+   The upper margin covers bounded create scratch on non-aborting paths. *)
+Definition fmp_room_def:
+  fmp_room ctx func (ss:venom_state) <=>
+    (EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) \/
+     (?g f. TC (fn_directly_calls ctx) func.fn_name g /\
+       MEM f ctx.ctx_functions /\ f.fn_name = g /\
+       EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts f))) ==>
+    ss.vs_alloca_next + pending_alloca_size func ss +
+    CARD {g | TC (fn_directly_calls ctx) func.fn_name g} *
+      unit_alloca_frame ctx <= w2n ss.vs_fmp /\
+    w2n ss.vs_fmp + 2 ** 65 < dimword (:256)
+End
+
 (* Initialized constructor immutable capacity regions lie below the bump
    frontier and miss every recorded ALLOCA of this function and every
    live local region, including borrowed locals.  Restricting
@@ -344,6 +358,7 @@ QED
 Definition stmt_state_rel_def:
   stmt_state_rel ctx func cenv cx vs ss ⇔
     state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
+    fmp_room ctx func ss ∧
     immutable_alloca_sep func cenv cx vs ss ∧
     ∀inst n base sz.
       MEM inst (fn_insts func) ∧ inst.inst_opcode = ALLOCA ∧
@@ -361,18 +376,39 @@ Proof
   rw[alloca_room_def, pending_alloca_size_def] >> gvs[]
 QED
 
+Theorem fmp_room_fields:
+  !func ss ss' ctx.
+    fmp_room ctx func ss /\
+    ss'.vs_allocas = ss.vs_allocas /\ ss'.vs_alloca_next = ss.vs_alloca_next /\
+    ss'.vs_fmp = ss.vs_fmp ==>
+    fmp_room ctx func ss'
+Proof
+  rw[fmp_room_def, pending_alloca_size_def] >> gvs[]
+QED
+
+Theorem fmp_room_fields_cong:
+  !ctx func s s'.
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    s'.vs_fmp = s.vs_fmp ==>
+    (fmp_room ctx func s' <=> fmp_room ctx func s)
+Proof
+  metis_tac[fmp_room_fields]
+QED
+
 (* state_rel re-established by a step that keeps the allocations gives
    stmt_state_rel back. *)
 Theorem stmt_state_rel_allocas_frame:
   !func cenv cx es s es' s' ctx.
     stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
-    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next ==>
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    s'.vs_fmp = s.vs_fmp ==>
     stmt_state_rel ctx func cenv cx es' s'
 Proof
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
-  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
+  >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
+  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[]) >>
   gvs[] >> res_tac
 QED
 
@@ -423,6 +459,51 @@ Proof
   fs[alloca_room_def, pending_alloca_size_def]
 QED
 
+
+Theorem exec_alloca_static_charge:
+  !func inst s n t.
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_operands = [Lit n] /\ exec_alloca inst s n = OK t ==>
+    t.vs_alloca_next + pending_alloca_size func t <=
+    s.vs_alloca_next + pending_alloca_size func s
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
+  gvs[update_var_def, pending_alloca_size_def] >>
+  qspecl_then
+    [`alloca_lit_size`,
+     `\i. i.inst_opcode = ALLOCA /\ i.inst_id NOTIN FDOM s.vs_allocas`,
+     `\i. i.inst_opcode = ALLOCA /\
+          i.inst_id NOTIN (inst.inst_id INSERT FDOM s.vs_allocas)`,
+     `inst`, `fn_insts func`] mp_tac SUM_MAP_FILTER_drop >>
+  impl_tac >- gvs[finite_mapTheory.FLOOKUP_DEF] >>
+  simp[alloca_lit_size_def]
+QED
+
+Theorem fmp_room_static_charge:
+  !ctx func s t.
+    fmp_room ctx func s /\
+    t.vs_alloca_next + pending_alloca_size func t <=
+      s.vs_alloca_next + pending_alloca_size func s /\
+    t.vs_fmp = s.vs_fmp ==> fmp_room ctx func t
+Proof
+  rw[fmp_room_def] >> res_tac >> gvs[]
+QED
+
+Theorem fmp_room_exec_alloca:
+  !ctx func s inst n t.
+    fmp_room ctx func s /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+    exec_alloca inst s n = OK t ==> fmp_room ctx func t
+Proof
+  rpt strip_tac >> irule fmp_room_static_charge >>
+  qexists_tac `s` >> simp[] >> conj_tac
+  >- (irule exec_alloca_static_charge >> metis_tac[]) >>
+  qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  simp[exec_alloca_def, AllCaseEqs(), LET_THM] >> rw[] >>
+  simp[update_var_def]
+QED
 
 (* A frame of a function of ctx allocates at most the unit's ALLOCA sizes. *)
 Theorem pending_alloca_size_le_frame:
@@ -702,6 +783,9 @@ Theorem stmt_state_rel_jump_to:
     stmt_state_rel ctx func cenv cx es (jump_to lbl s) <=>
     stmt_state_rel ctx func cenv cx es s
 Proof
+  rpt gen_tac >>
+  `fmp_room ctx func (jump_to lbl s) <=> fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[jump_to_def]) >>
   simp[stmt_state_rel_def, state_rel_jump_to, jump_to_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def,
@@ -713,6 +797,9 @@ Theorem stmt_state_rel_inst_idx:
     stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := n) <=>
     stmt_state_rel ctx func cenv cx es s
 Proof
+  rpt gen_tac >>
+  `fmp_room ctx func (s with vs_inst_idx := n) <=> fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
@@ -841,6 +928,7 @@ Proof
   >- (irule state_rel_update_var_local >> simp[])
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[update_var_def])
+  >- (irule fmp_room_fields >> qexists_tac `s` >> simp[update_var_def])
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[update_var_def] >> rpt strip_tac >> qexists_tac `id` >>
       fs[local_region_def, lookup_var_def, not_local_ptr_def,
@@ -3550,6 +3638,7 @@ Proof
   Cases_on `args` >- simp[compile_call_def, pairTheory.UNCURRY, ci_mono_emit_inst] >>
   Cases_on `rcf.rcf_max_outsize = 0` >>
   simp[compile_call_def, LET_THM, pairTheory.UNCURRY] >>
+  irule ci_mono_trans >> irule_at (Pos last) ci_mono_emit_void >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_finish >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_msg_data_to_memory >>
   irule ci_mono_trans >> irule_at (Pos last) ci_mono_compile_raw_call_outbuf >>

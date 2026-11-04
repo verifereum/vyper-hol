@@ -429,7 +429,11 @@ Proof
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `t`] >> simp[]) >>
+      qexistsl_tac [`es1`, `t`] >> simp[] >>
+      qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
+        vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
+        vs_pending_deletions := _|>`
+        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>

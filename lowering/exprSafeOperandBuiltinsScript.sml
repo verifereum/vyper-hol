@@ -503,7 +503,8 @@ val word_raw_call_tac =
   Cases_on `t` >> simp[compile_call_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   Cases_on `r.rcf_max_outsize = 0` >> gvs[word_result_ok_def] >>
-  metis_tac[compile_raw_call_finish_zero_safe_operand]
+  metis_tac[compile_raw_call_finish_zero_safe_operand,
+            safe_operand_mono, ci_mono_emit_void, ci_mono_def, pairTheory.SND]
 
 Theorem compile_call_word_result_ok:
   is_word_type rt /\ compile_call cfn cenv rt ty target args default_ret sa = (vv,sb) ==>

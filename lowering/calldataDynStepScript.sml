@@ -10,6 +10,27 @@ Ancestors
   abiDecoderStaticLoopSetup abiDecoderDynamicLoopSetup abiDecoderLoopSetup
   abiDecoderArraySetupInputs valueEncodingProps valueEncodingProofs valueEncoding
 
+Theorem calldata_element_setup_opcodes:
+  abi_decode_array_element_setup ip src dst CALLDATALOAD hi di abi_sz mem_sz st =
+    (ops,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES)
+    (emitted_insts st st')
+Proof
+  strip_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `dec_info_needs_offset di` >> Cases_on `hi = Lit 0w` >>
+  asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
+    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+    comp_bind_def, comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+    fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  gvs[emitted_insts_def, mk_inst_def, is_terminator_def] >>
+  pure_rewrite_tac [GSYM APPEND_ASSOC] >>
+  simp_tac bool_ss [DROP_LENGTH_APPEND, APPEND] >>
+  simp[is_terminator_def, mk_inst_def]
+QED
+
 Theorem calldata_header_block_safe:
   s.vs_inst_idx = 0 /\ eval_operand ip s = SOME p /\
   w2n p + 32 <= s.vs_alloca_next ==>
@@ -356,6 +377,7 @@ Proof
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_array_element_setup_shape >> strip_tac >>
   drule_all calldata_element_setup_reentry >> strip_tac >>
+  drule calldata_element_setup_opcodes >> strip_tac >>
   irule safeSequenceTheory.frag_exec_mem_run_inst_seq >> fs[inst_extends_def] >> conj_tac
   >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
       ho_match_mp_tac (GEN_ALL calldata_element_setup_prefix_safe) >>
