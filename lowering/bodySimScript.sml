@@ -34,7 +34,7 @@
 Theory bodySim
 Ancestors
   loweringPosts
-  list exprSim exprSimHyps stmtSim compileEnv compileVyper vyperTypeContract
+  list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness
@@ -64,6 +64,8 @@ Definition body_inv_def:
                     ctx = unit.cu_context /\
                     cenv.ce_target = rpolicy.rpol_target) /\
     get_module_code cx NONE = SOME tops /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env tops) target)) /\
     cenv.ce_func_ids = build_func_ids 0 tops /\
     cenv.ce_func_param_types = build_func_param_types tops /\
     cenv.ce_func_info =
@@ -150,16 +152,15 @@ QED
    RET, for a value of the return type itself). *)
 Definition frame_ret_ok_def:
   frame_ret_ok ctx func cx RetQ cenv ret_ty <=>
-    !cenv' env lctx eo es res es'.
+    !cenv' env lctx eo es.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
               expr_sim ctx func cenv' cx ty e es /\
-              expr_vv_sim ctx func cenv' cx ty e es) /\
-      eval_stmt cx (Return eo) es = (res, es') ==>
+              expr_vv_sim ctx func cenv' cx ty e es) ==>
       stmt_frag ctx func cx lctx RetQ cenv'
-        (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
+        (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End
 
 (* ===== The predicates of the induction ===== *)
@@ -180,31 +181,35 @@ End
    body's bindings. *)
 Definition body_stmt_ok_def:
   body_stmt_ok cx s <=>
-    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      (!target. supported_stmt_expr_exists
+         (expr_abi_decode_target_root target) s ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-      eval_stmt cx s es = (res, es') ==>
+      frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmt_env cenv lctx ret_ty s)
-        es res es'
+        (eval_stmt cx s) es
 End
 
 Definition body_stmts_ok_def:
   body_stmts_ok cx ss <=>
-    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      (!target. supported_stmts_expr_exists
+         (expr_abi_decode_target_root target) ss ==>
+         occurs_abi_decode_target target tops) /\
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok ctx func cx RetQ cenv ret_ty /\
-      eval_stmts cx ss es = (res, es') ==>
+      frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
-        es res es'
+        (eval_stmts cx ss) es
 End
 
 (* The operands of an expression, evaluated and read in order: each

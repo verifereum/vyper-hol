@@ -25,11 +25,10 @@
 
 Theory stmtSimAssignTuple
 Ancestors
-  loweringPosts
-  tupleAssignCode
+  stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclMem
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclMem
   stmtSimAssignStore stmtSimAssign stmtSimReturn exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding

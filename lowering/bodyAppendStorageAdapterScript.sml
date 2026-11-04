@@ -1,6 +1,7 @@
 (* Body-side discharge for primitive storage Append. *)
 Theory bodyAppendStorageAdapter
 Ancestors
+  stmtSimDefs
   bodyAppendStorageFacts bodyExprPreFacts stmtSimAppendStorageCompose
   stmtSimAssignStorage bodySim exprSimHyps supportedStmts supportedStmtTraverse
   vyperStorageLayoutSafety vyperTypeSystem vyperTypeValues compileEnv
@@ -46,12 +47,12 @@ Theorem stmt_frag_storage_rel_discharge[local]:
     stmt_frag ctx func cx lctx RetQ cenv m es res es') ==>
   stmt_frag ctx func cx lctx RetQ cenv m es res es'
 Proof
-  strip_tac >> rewrite_tac[stmtSimTheory.stmt_frag_def] >>
+  strip_tac >> rewrite_tac[stmtSimDefsTheory.stmt_frag_def] >>
   rpt gen_tac >> strip_tac >>
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
   qpat_x_assum `_ ==> stmt_frag _ _ _ _ _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE [stmtSimTheory.stmt_frag_def]) >>
+    (mp_tac o REWRITE_RULE [stmtSimDefsTheory.stmt_frag_def]) >>
   simp[] >> metis_tac[]
 QED
 

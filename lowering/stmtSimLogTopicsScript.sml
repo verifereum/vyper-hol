@@ -1,8 +1,9 @@
 Theory stmtSimLogTopics
 Ancestors
-  loweringPosts
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   stmtSimLogArgs stmtSimLogSource stmtLowering compileEnv context
-  exprSimHash exprSim exprSimWordArgs vyperEvent valueEncoding
+  exprSimHash  exprSimWordArgs vyperEvent valueEncoding
   emitHelper emitHelperProps exprLoweringProps venomExecSemantics venomState
   venomInst freshWrites words string finite_map list ASCIInumbers supportedTypes
   vyperTyping vyperValue exprSimLiteralBuffer byte exprSimOps

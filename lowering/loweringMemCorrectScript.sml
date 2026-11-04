@@ -31,6 +31,7 @@
  *)
 Theory loweringMemCorrect
 Ancestors
+  stmtSimDefs
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
@@ -38,8 +39,7 @@ Ancestors
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem stmtSim bodySim bodySimMain moduleLowering stmtLowering
-  vyperTypeSystem vyperState lowerDloadDefs
+  entryHaltMem bodySim bodySimMain moduleLowering stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
 

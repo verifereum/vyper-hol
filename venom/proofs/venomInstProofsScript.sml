@@ -671,7 +671,6 @@ Proof
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac
   >- effect_free_opcode_tac
-  >- effect_free_opcode_tac
 QED
 
 Theorem step_effect_free_state_equiv:

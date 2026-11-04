@@ -18,8 +18,9 @@
 
 Theory stmtSimReturnWiden
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   list rich_list finite_map
-  fragExec exprSim exprSimAlloc exprSimCopy exprSimStorageCopy loweringPosts
+  fragExec  exprSimAlloc exprSimCopy exprSimStorageCopy
   intCallReturnMem intCallResult typedMemoryCopy valueCopy valueCopyBytes
   loweringSlice localPtrsProps stmtSimReturn
   stmtLowering exprLowering emitHelper exprLoweringProps context compileEnv

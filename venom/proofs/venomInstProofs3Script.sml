@@ -26,6 +26,12 @@ Proof
   rw[exec_read0_def, AllCaseEqs(), update_var_def] >> gvs[]
 QED
 
+Theorem exec_gas_memory_preserves:
+  exec_gas y s = OK s' ==> s'.vs_memory = s.vs_memory
+Proof
+  rw[exec_gas_def, AllCaseEqs(), update_var_def] >> gvs[]
+QED
+
 Theorem exec_read1_memory_preserves:
   exec_read1 x y s = OK s' ==> s'.vs_memory = s.vs_memory
 Proof
@@ -104,6 +110,8 @@ Proof
       imp_res_tac exec_pure1_memory_preserves >> asm_simp_tac bool_ss [],
     drule exec_read0_static_preserves >>
       imp_res_tac exec_read0_memory_preserves >> asm_simp_tac bool_ss [],
+    drule exec_gas_static_preserves >>
+      imp_res_tac exec_gas_memory_preserves >> asm_simp_tac bool_ss [],
     drule exec_read1_static_preserves >>
       imp_res_tac exec_read1_memory_preserves >> asm_simp_tac bool_ss [],
     drule exec_pure2_static_preserves >>

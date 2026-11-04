@@ -48,8 +48,10 @@
 
 Theory exprSimArith
 Ancestors
+  exprBopSimDefs exprBopStraight
+  exprSimDefs
   arithmetic list rich_list bit integer words fcp integer_word int_bitwise
-  intBits fragExec varsExt exprSim freshWrites exprSimOps exprSimCompare
+  intBits fragExec varsExt  freshWrites exprSimOps exprSimCompare
   loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperAST vyperInterpreter vyperContext vyperValue

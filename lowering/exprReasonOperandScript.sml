@@ -22,6 +22,7 @@
 
 Theory exprReasonOperand
 Ancestors
+  exprSimSource
   exprWordOperand exprOperandVar exprSafeOperand stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage exprLowering exprCallBounds compileEnv context vyperTypeSystem vyperAST
 
@@ -1131,7 +1132,7 @@ Resume reason_compile_uniform[builtin_operand_valid]:
   `well_typed_expr env e` by
     (qpat_x_assum `well_typed_expr env _` mp_tac >>
      simp[well_typed_expr_def] >> strip_tac >>
-     irule exprSimHypsTheory.well_typed_exprs_member >> metis_tac[]) >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
   `reason_uniform_shape compile_expr cenv t e` by
     (first_x_assum irule >> simp[] >> qexists_tac `env` >>
      simp[reason_typable_def]) >>
@@ -1152,7 +1153,7 @@ Resume reason_compile_uniform[type_operand_valid]:
   `well_typed_expr env e` by
     (qpat_x_assum `well_typed_expr env _` mp_tac >>
      simp[well_typed_expr_def] >> strip_tac >>
-     irule exprSimHypsTheory.well_typed_exprs_member >> metis_tac[]) >>
+     irule exprSimSourceTheory.well_typed_exprs_member >> metis_tac[]) >>
   `reason_uniform_shape compile_expr cenv t e` by
     (first_x_assum irule >> simp[] >> qexists_tac `env` >>
      simp[reason_typable_def]) >>

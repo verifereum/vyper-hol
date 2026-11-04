@@ -1,8 +1,9 @@
 (* Shared conversion simulation for dynamic Bytes and String results. *)
 Theory exprSimConvertBytes
 Ancestors
-  loweringPosts
-  exprSimConvert exprSimHyps exprSim exprLowering exprLoweringProps compileEnv
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+  exprSimConvert exprSimHyps  exprLowering exprLoweringProps compileEnv
   exprSimAlloc exprSimBuffer exprSimBufferStore exprSimLiteralBuffer exprSimHash
   exprOperandVar valueEncoding valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter
@@ -948,7 +949,7 @@ Theorem convert_wb_frame_trans:
 Proof
   rpt gen_tac >> strip_tac >>
   `locals_kept cenv es s0 s2` by
-    (irule exprSimOpsTheory.locals_kept_trans >>
+    (irule exprBopSimPropsTheory.locals_kept_trans >>
      qexistsl_tac [`es1`, `sa`, `s1`] >>
      gvs[exprSimWordArgsTheory.wb_frame_def]) >>
   gvs[exprSimWordArgsTheory.wb_frame_def] >> conj_tac
@@ -963,7 +964,7 @@ Proof
      off + sz <= b \/ b + sz' <= off` by
     (rpt strip_tac >>
      `local_region cenv es.scopes s0 n b sz'` by
-       (irule exprSimOpsTheory.local_region_frame >>
+       (irule exprSimPropsTheory.local_region_frame >>
         conj_tac >- (qexists_tac `func` >>
           gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
         qexistsl_tac [`sa`, `es1.scopes`, `s1`] >> simp[]) >>
@@ -1044,7 +1045,7 @@ Proof
       qpat_x_assum `!a k'. _` irule >> decide_tac) >>
   irule locals_kept_regions >> rpt strip_tac >>
   `local_region cenv es.scopes u n b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
   qpat_x_assum `!name b len. _` drule >>
   simp[regions_disjoint_def] >> strip_tac >>
@@ -1087,10 +1088,10 @@ Proof
   `!n b sz. local_region cenv es.scopes tt n b sz <=>
              local_region cenv es.scopes s n b sz` by
     (rpt gen_tac >> eq_tac
-     >- (strip_tac >> irule exprSimOpsTheory.local_region_frame >>
+     >- (strip_tac >> irule exprSimPropsTheory.local_region_frame >>
          conj_tac >- (qexists_tac `func` >> simp[]) >>
          qexistsl_tac [`sm`, `es.scopes`, `tt`] >> simp[]) >>
-     strip_tac >> irule exprSimOpsTheory.local_region_frame_fwd >>
+     strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`s`, `sm`, `es.scopes`] >> simp[]) >>
   gvs[expr_val_at_def] >> rpt strip_tac >>
   qpat_x_assum `!tv. _ ==> _` drule_all >> strip_tac >>

@@ -527,7 +527,6 @@ Definition is_effect_free_op_def:
   is_effect_free_op CALLER = T /\
   is_effect_free_op ADDRESS = T /\
   is_effect_free_op CALLVALUE = T /\
-  is_effect_free_op GAS = T /\
   is_effect_free_op ORIGIN = T /\
   is_effect_free_op GASPRICE = T /\
   is_effect_free_op CHAINID = T /\
@@ -561,6 +560,8 @@ Definition is_effect_free_op_def:
   is_effect_free_op BUMP = T /\
   (* No-op (no outputs, no state change, no side effects) *)
   is_effect_free_op NOP = T /\
+  (* GAS pops the next gas reading *)
+  is_effect_free_op GAS = F /\
   (* Reviewed stateful FMP operations *)
   is_effect_free_op DALLOCA = F /\
   is_effect_free_op DRET = F /\

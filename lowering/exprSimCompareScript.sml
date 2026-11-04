@@ -30,8 +30,10 @@
 
 Theory exprSimCompare
 Ancestors
+  exprBopSimDefs exprBopStraight
+  exprSimDefs
   list rich_list
-  fragExec varsExt exprSim freshWrites exprSimOps loweringSlice
+  fragExec varsExt  freshWrites exprSimOps loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps arithmeticProps
   compileEnv vyperInterpreter vyperContext vyperValue vyperValueOperation
   vyperTyping

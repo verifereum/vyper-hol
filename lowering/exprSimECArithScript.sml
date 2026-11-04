@@ -38,6 +38,10 @@
  *)
 Theory exprSimECArith
 Ancestors
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   exprOperandVar exprSafeOperand exprSafeOperandBuiltins
   fragExec exprSimHash exprSimWordBuiltins
@@ -45,7 +49,7 @@ Ancestors
   exprSimLiteralBuffer
   exprSimCalldataSlice entryDecodeStaticProps
   builtinMisc venomInst exprLoweringProps venomExecSemantics
-  venomState vyperTypeSystem vyperContext valueEncoding exprSim
+  venomState vyperTypeSystem vyperContext valueEncoding
   vyperTyping valueEncodingProofs vyperTypeBuiltins vyperValueOperation
   vyperValue vyperAssignPreservesType compileEnv extCallOracle byte
   vfmBuffer venomMemDefs vfmTypes vfmExecution bn254 list rich_list
@@ -430,7 +434,7 @@ Proof
   qexistsl_tac [`b`, `n`, `sz`] >> simp[] >>
   gvs[dynarray_type_def]) >>
   `local_region cenv es'.scopes u n b sz` by
-    (irule exprSimOpsTheory.local_region_frame_fwd >>
+    (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl_tac [`t`, `s1`, `es1.scopes`] >> simp[] >>
      gvs[expr_post_def]) >>
   simp[expr_val_at_def, evaluate_type_def, is_word_type_def,
@@ -749,7 +753,7 @@ Proof
   conj_tac
   >- (disj1_tac >> qexistsl_tac [`aid`, `w2n w`, `64`] >>
       simp[] >> gvs[compileEnvTheory.regions_disjoint_def]) >>
-  gvs[exprSimWordArgsTheory.wb_frame_def] >> metis_tac[]
+  gvs[loweringPostsTheory.wb_frame_def] >> metis_tac[]
 QED
 
 Theorem ec_point_fresh_scratch_disjoint[local]:
@@ -766,7 +770,7 @@ Proof
   qexistsl_tac [`cenv`, `cx`, `es`, `pop`, `s`, `lo`, `sa`, `v`] >> simp[] >>
   conj_tac
   >- (rpt strip_tac >> first_x_assum irule >> qexists_tac `name` >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]) >>
   metis_tac[]
 QED
@@ -1617,7 +1621,7 @@ Proof
       regions_disjoint (w2n wo) 64 b sz` by
     (rpt strip_tac >>
      qpat_x_assum `!name b sz. local_region cenv es.scopes st name b sz ==> _` irule >>
-     qexists `name` >> irule exprSimOpsTheory.local_region_frame >>
+     qexists `name` >> irule exprSimPropsTheory.local_region_frame >>
      simp[] >> conj_tac
      >- (qexists `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl [`sm`,`es.scopes`,`t`] >> simp[]) >>

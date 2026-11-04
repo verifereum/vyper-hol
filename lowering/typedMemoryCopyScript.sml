@@ -4,7 +4,7 @@
    Metadata premises are the field-layout clauses of expr_sim_inv. *)
 Theory typedMemoryCopy
 Ancestors
-  loweringPosts
+  exprSimProps loweringPosts
   context typedCopyDomain compileEnv emitHelper emitHelperProps structFieldsProps valueEncoding valueEncodingProps
   valueEncodingProofs valueCopy fragExec exprLoweringProps exprSimHyps
   vyperTypeSystem vyperTypeArgFits vyperValue vyperTyping
@@ -2759,7 +2759,7 @@ Proof
           qexistsl_tac [`w2n sw + i * type_memory_size tv`,
                         `type_memory_size tv`, `t.vs_memory`] >>
           simp[] >> conj_tac
-          >- metis_tac[exprSimTheory.val_footprint_le] >>
+          >- metis_tac[exprSimPropsTheory.val_footprint_le] >>
           irule valueEncodingProofsTheory.mem_bytes_at_translated_window >>
           qexists_tac `N * type_memory_size tv` >>
           simp[mcopy_mem_bytes_at_same] >>

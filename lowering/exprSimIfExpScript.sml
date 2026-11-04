@@ -21,9 +21,13 @@
 
 Theory exprSimIfExp
 Ancestors
+  exprBopSimProps
+  exprSimUnwrapProps
+  exprSimProps
+  exprSimDefs
   loweringPosts
   list rich_list finite_map marker exprSimHyps
-  fragExec exprSim exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
+  fragExec  exprSimOps exprSimUnwrap freshWrites exprBopLowering loweringSlice
   vyperEvalExprPreservesScopesDom exprLowering emitHelperProps
   exprLoweringProps compileEnv context vyperAST vyperInterpreter vyperState
   vyperValue valueEncoding venomExecSemantics venomExecProofs venomInst

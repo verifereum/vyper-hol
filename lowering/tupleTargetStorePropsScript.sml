@@ -1,9 +1,10 @@
 (* Static interfaces for sequential tuple-target stores. *)
 Theory tupleTargetStoreProps
 Ancestors
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   list rich_list finite_map
   stmtSimAssignStorage stmtSimAssignAttrStorage tupleLocalStoreRun
-  stmtSimAssignTuple stmtSim exprSim vyperExprNoControl
+  stmtSimAssignTuple   vyperExprNoControl
   vyperTypeSystem vyperInterpreter vyperState vyperValue vyperTyping vyperLookup
   stmtLowering exprLowering emitHelper compileEnv
 

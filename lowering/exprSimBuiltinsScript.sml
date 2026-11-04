@@ -67,8 +67,13 @@
 
 Theory exprSimBuiltins
 Ancestors
+  exprUnopSimDefs exprSimUnopCompose
+  exprSimUnopProps
+  exprSimSource
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
-  list rich_list exprSim exprSimHyps vyperAST exprSimWordBuiltins
+  list rich_list  exprSimHyps vyperAST exprSimWordBuiltins
   exprSimWordArgs exprSimHash vyperTypeSystem exprLowering compileEnv
   valueEncoding fragExec freshWrites varsExt builtinProps arithmeticProps emitHelper
   vyperInterpreter vyperState vyperContext

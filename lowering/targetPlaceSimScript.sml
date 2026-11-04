@@ -48,15 +48,26 @@
 
 Theory targetPlaceSim
 Ancestors
+  exprSimFieldLayout
+  targetPlaceSimDefs
+  exprSimHypsDefs
   loweringPosts
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimAttributeFields
+  fragExec  exprSimHyps exprSimAttributeFields
   exprLowering exprLoweringProps compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperPlaceResultTyping
   venomState venomInst
 Libs
   pairLib
+
+(* ===== Offsets in memory ===== *)
+
+(* The byte offset of a field in a struct's memory layout, and its type:
+   the preceding fields' sizes, as struct_field_slot sums slots. *)
+
+(* One step of a path: a field, or an element of an array (past the length
+   word of a DynArray) or a tuple, where subscript_type has it. *)
 
 
 Theorem mem_path_offset_snoc:
@@ -148,32 +159,33 @@ QED
 
 (* ===== The judgment ===== *)
 
+(* The location of a storage or transient place. *)
+
+(* w is where the lowering finds the source place pv of type vt, at
+   location loc, in s (see the header).  A local's place is at its pointer
+   plus the path's offset in its declared type. *)
+
+(* A local's place reads at es: extending it can fail only by a type
+   error.  A place is formed where it reads, but an index evaluated after
+   the base can pop the base's array (x[i][x[i].pop()]). *)
+
+(* After the target's fragment, run from s0 related at es, in s related at
+   es', with the source's place pv of type vt: the pointer r's operand is
+   at pv, and r's place type is vt's.  The operand is not fresh at the
+   fragment's end, so code lowered after it keeps it.  The frame is
+   vv_post's: the variables and allocations from before, the memory of the
+   allocations made before the fragment's start but those holding a local,
+   and the live locals' memory but their root DynArray length words.
+   Nested length words are not exempt: indices that pop nested arrays
+   require a repair of the shared expression/target frame (see
+   target_subscript_case). *)
 
 (* The source results the judgment speaks of: a place or a mapping, an
    error other than a type error, or an assertion. *)
-Definition target_res_ok_def:
-  target_res_ok (res : eval_result + exception) <=>
-    (?pv. res = INL pv) \/ (?m. res = INR (Error (RuntimeError m))) \/
-    (?d. res = INR (Error (RevertData d))) \/
-    (?str. res = INR (AssertException str))
-End
 
 (* The judgment: the target's fragment of bt, typed vt, run from a state
    related at es, reaches its end in target_post on a place, and exits as
    expr_exit allows on an error. *)
-Definition target_sim_def:
-  target_sim ctx func cenv cx env bt es <=>
-    !vt sa sb r res es' s0.
-      type_place_target env bt = SOME vt /\
-      compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      eval_base_place cx bt es = (res, es') /\ target_res_ok res /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?pv. res = INL pv /\
-                  target_post ctx func cenv cx es sa sb s0 es' pv vt r s)
-        (expr_exit res)
-End
 
 (* ===== Premises ===== *)
 

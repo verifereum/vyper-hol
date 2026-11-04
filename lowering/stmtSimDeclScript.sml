@@ -23,9 +23,12 @@
 
 Theory stmtSimDecl
 Ancestors
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice stmtSim stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
   vyperInterpreter vyperState vyperValue vyperValueOperation vyperExprNoControl
@@ -125,10 +128,6 @@ Proof
   drule_all exec_alloca_frames >> strip_tac >>
   qexistsl [`s1 with vs_inst_idx := LENGTH st1.cs_current_insts`, `w`] >>
   gvs[lookup_var_def, wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
-  conj_tac
-  >- (gen_tac >> strip_tac >>
-      qpat_x_assum `!op. op <> Var p ==> _` drule >>
-      Cases_on `op` >> simp[eval_operand_def, lookup_var_def]) >>
   irule frag_exec_run_inst_seq >>
   gvs[venomInstTheory.mk_inst_def] >>
   simp[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND,

@@ -14,12 +14,13 @@
  *)
 Theory exprSimUint2Str
 Ancestors
-  loweringPosts
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
   exprSimHyps allocLimits vyperTypeSystem compileEnv
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words
   builtinStrings emitHelper fragExec exprSimLiteralBuffer immutableMemoryFrame
-  exprSim exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
+   exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
 Libs
   monadsyntax
 
@@ -574,7 +575,7 @@ Proof
      qexistsl [`spre`, `sa`, `es.scopes`] >>
      simp[] >> metis_tac[wb_frame_vars]) >>
   `locals_kept cenv es spre s` by
-    (irule exprSimTheory.locals_kept_regions_tail >> qexists `s0` >>
+    (irule exprSimPropsTheory.locals_kept_regions_tail >> qexists `s0` >>
      reverse conj_tac >- fs[wb_frame_def] >>
      rpt strip_tac >> fs[u2s_frame_def] >> metis_tac[ADD_COMM]) >>
   simp[wb_frame_def] >> conj_tac

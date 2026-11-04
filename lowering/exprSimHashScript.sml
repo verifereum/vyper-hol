@@ -25,13 +25,19 @@
  *)
 Theory exprSimHash
 Ancestors
+  exprBopSimProps
+  exprSimVVFrame
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   exprSimAlloc
   allocLimits
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   builtinHashing exprLoweringProps compileEnv
-  exprSim exprSimHyps exprSimLiteralBuffer exprSimWordArgs
+   exprSimHyps exprSimLiteralBuffer exprSimWordArgs
   vyperTypeSystem valueEncoding valueEncodingProofs extCallOracle
   vyperAST vyperValue exprLowering vyperInterpreter vyperContext
   vyperValueOperation vyperState exprSimWordBuiltins
@@ -384,7 +390,7 @@ Resume hash_alloc_mstore_frame[compose]:
   `!n b sz. local_region cenv es.scopes s n b sz ==>
     mem_bytes_at b sz (mstore (w2n addr) w allocated).vs_memory =
     mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `allocated.vs_memory = s.vs_memory`
@@ -605,6 +611,43 @@ Proof
        alloca_room_def, pending_alloca_size_def]
 QED
 
+Theorem hash_gas_readings_immutable_alloca_sep[local]:
+  immutable_alloca_sep func cenv cx es (s with vs_gas_readings := rs) <=>
+  immutable_alloca_sep func cenv cx es s
+Proof
+  simp[immutable_alloca_sep_def, local_region_def, lookup_var_def]
+QED
+
+Theorem hash_gas_readings_state_rel:
+  stmt_state_rel ctx func cenv cx es (s with vs_gas_readings := rs) <=>
+  stmt_state_rel ctx func cenv cx es s
+Proof
+  `fmp_room ctx func (s with vs_gas_readings := rs) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
+  simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
+       hash_gas_readings_immutable_alloca_sep,
+       local_ptrs_rel_def, local_region_def, local_backed_def,
+       lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
+       logs_rel_def, call_ctx_rel_def, accounts_rel_def,
+       contract_storage_def, contract_transient_def,
+       venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def,
+       alloca_room_def, pending_alloca_size_def]
+QED
+
+(* GAS pops the next reading, or reads 0w once the readings run out. *)
+Theorem step_GAS:
+  step_inst_base (mk_inst iid GAS [] [out]) s =
+  OK (update_var out (HD (s.vs_gas_readings ++ [0w]))
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings))
+Proof
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_gas_def] >>
+  Cases_on `s.vs_gas_readings` >> simp[] >>
+  AP_TERM_TAC >> simp[venom_state_component_equality]
+QED
+
 Theorem step_STATICCALL_sha256:
   eval_operand gas_op s = SOME gas /\
   eval_operand args_op s = SOME args_off /\
@@ -694,33 +737,41 @@ Theorem sha256_tail_run:
     (update_var success_var 1w
       ((write_memory_with_expansion (w2n r)
           (word_to_bytes (SHA_256_bytes bs) T)
-          (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s)) with
+          (update_var gas_var (HD (s.vs_gas_readings ++ [0w]))
+             (s with vs_gas_readings := DROP 1 s.vs_gas_readings))) with
         <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
            vs_outcomes := rest |>)))
 Proof
   strip_tac >>
-  `eval_operand ptr_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME p /\
-   eval_operand len_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME n /\
-   eval_operand ret_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME r` by
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+    simp[Abbr `g`, Abbr `s0`, step_GAS] >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
+  `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
+  `mem_bytes_at (w2n p) (w2n n) s0.vs_memory = bs` by simp[Abbr `s0`] >>
+  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
+   eval_operand len_op (update_var gas_var g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-       exec_read0_def, bind_outputs_def] >>
-  `read_memory (w2n p) (w2n n)
-     (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = bs` by
+  simp[Once run_inst_seq_def] >>
+  `read_memory (w2n p) (w2n n) (update_var gas_var g s0) = bs` by
     simp[read_memory_def, update_var_def, GSYM mem_bytes_at_def] >>
-  `eval_operand (Var gas_var) (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) =
-     SOME (n2w s.vs_call_ctx.cc_gas)` by simp[eval_operand_def, lookup_var_update_var] >>
+  `eval_operand (Var gas_var) (update_var gas_var g s0) = SOME g` by
+    simp[eval_operand_def, lookup_var_update_var] >>
   `step_inst_base
     (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
-      [success_var]) (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) =
+      [success_var]) (update_var gas_var g s0) =
    OK (update_var success_var 1w
      ((write_memory_with_expansion (w2n r) (word_to_bytes (SHA_256_bytes bs) T)
-       (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s)) with
+       (update_var gas_var g s0)) with
        <| vs_returndata := word_to_bytes (SHA_256_bytes bs) T;
           vs_outcomes := rest |>))` by
     (irule step_STATICCALL_sha256 >> simp[] >>
-     goal_assum drule >> simp[update_var_def]) >>
+     goal_assum drule >> simp[Abbr `s0`, update_var_def]) >>
   fs[mk_inst_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
        lookup_var_update_var] >>
@@ -732,7 +783,7 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE]) >>
   `mload (w2n r) final = SHA_256_bytes bs` by
     (simp[Abbr `final`, mload_def, update_var_def] >>
-     mp_tac (Q.SPECL [`w2n (r:bytes32)`, `SHA_256_bytes bs`, `s`]
+     mp_tac (Q.SPECL [`w2n (r:bytes32)`, `SHA_256_bytes bs`, `s0`]
        (Q.GENL [`dst`, `w`, `s`] hash_mload_write_word)) >>
      simp[mload_def, write_memory_with_expansion_def, LET_THM]) >>
   simp[run_inst_seq_def, Once step_inst_base_def, exec_read1_def,
@@ -753,23 +804,30 @@ Theorem sha256_tail_fail:
      mk_inst i3 MLOAD [ret_op] [out]] s = Abort Revert_abort t
 Proof
   strip_tac >>
-  `eval_operand ptr_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME p /\
-   eval_operand len_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME n /\
-   eval_operand ret_op (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) = SOME r` by
+  qabbrev_tac `g = HD (s.vs_gas_readings ++ [0w:bytes32])` >>
+  qabbrev_tac `s0 = s with vs_gas_readings := DROP 1 s.vs_gas_readings` >>
+  `step_inst_base (mk_inst i0 GAS [] [gas_var]) s = OK (update_var gas_var g s0)` by
+    simp[Abbr `g`, Abbr `s0`, step_GAS] >>
+  `!x. eval_operand x s0 = eval_operand x s` by
+    (Cases >> simp[Abbr `s0`, eval_operand_def, lookup_var_def]) >>
+  `!y. lookup_var y s0 = lookup_var y s` by simp[Abbr `s0`, lookup_var_def] >>
+  `s0.vs_labels = s.vs_labels` by simp[Abbr `s0`] >>
+  `eval_operand ptr_op (update_var gas_var g s0) = SOME p /\
+   eval_operand len_op (update_var gas_var g s0) = SOME n /\
+   eval_operand ret_op (update_var gas_var g s0) = SOME r` by
     (rpt conj_tac >> Cases_on `ptr_op` >> Cases_on `len_op` >> Cases_on `ret_op` >>
      gvs[eval_operand_def, lookup_var_update_var]) >>
   `?t. step_inst_base
     (mk_inst i1 STATICCALL [Var gas_var; Lit 2w; ptr_op; len_op; ret_op; Lit 32w]
-      [success_var]) (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s) =
+      [success_var]) (update_var gas_var g s0) =
     OK (update_var success_var 0w t)` by
     (qexists `(write_memory_with_expansion (w2n r) []
-       (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s)) with
-       <| vs_returndata := []; vs_outcomes := DROP 1 (update_var gas_var (n2w s.vs_call_ctx.cc_gas) s).vs_outcomes |>` >>
+       (update_var gas_var g s0)) with
+       <| vs_returndata := []; vs_outcomes := DROP 1 s.vs_outcomes |>` >>
      irule step_STATICCALL_sha256_fail >>
-     simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
-     metis_tac[update_var_def]) >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, mk_inst_def,
-       exec_read0_def, bind_outputs_def] >>
+     simp[eval_operand_def, lookup_var_update_var, Abbr `s0`, update_var_def] >>
+     metis_tac[]) >>
+  simp[Once run_inst_seq_def] >>
   fs[mk_inst_def] >> simp[Once run_inst_seq_def] >>
   simp[Once run_inst_seq_def, Once step_inst_base_def, eval_operand_def,
        lookup_var_update_var]
@@ -827,8 +885,9 @@ Proof
      (s with vs_outcomes := rest)` by
     (drule hash_outcomes_state_rel >> simp[]) >>
   `stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest)
-     (final with vs_returndata := s.vs_returndata)` suffices_by
-    (simp[hash_returndata_state_rel]) >>
+     (final with <| vs_returndata := s.vs_returndata;
+                    vs_gas_readings := s.vs_gas_readings |>)` suffices_by
+    (simp[hash_returndata_state_rel, hash_gas_readings_state_rel]) >>
   irule literal_state_memory_frame >>
   qexists_tac `s with vs_outcomes := rest` >> simp[local_region_def, lookup_var_def] >>
   conj_tac
@@ -1084,7 +1143,7 @@ Resume hash_alloc_sha256_tail_frame[compose]:
     (irule (cj 2 run_inst_seq_chain) >> goal_assum drule >> simp[]) >>
   `!nm b sz. local_region cenv es.scopes s nm b sz ==>
     mem_bytes_at b sz final.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `!b len. _ \/ _ ==> mem_bytes_at b len final.vs_memory = _`
@@ -1265,7 +1324,7 @@ Proof
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `prefix`] >> gvs[] >> metis_tac[]) >>
   qexists_tac `final` >> simp[] >> conj_tac
   >- (rpt strip_tac >>
@@ -1399,7 +1458,7 @@ Resume compile_sha256_bytesm_frame[compose]:
      qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz final.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `staged`] >> simp[] >> metis_tac[]) >>
   qexists_tac `final` >> simp[] >> reverse conj_tac
   >- metis_tac[] >> rpt strip_tac >>
@@ -1686,7 +1745,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
     (simp[] >> irule hash_single_word_buffer_contents >> simp[]) >>
   `!n b sz. local_region cenv es.scopes s n b sz ==>
     mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `allocated`] >> simp[] >>
      rpt strip_tac >>
      qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
@@ -1698,7 +1757,7 @@ Resume hash_alloc_single_word_buffer_frame[compose]:
      regions_disjoint (w2n addr) 64 b sz` by
     (rpt strip_tac >>
      `local_region cenv es.scopes allocated n b sz` by
-       (irule exprSimOpsTheory.local_region_frame >> conj_tac
+       (irule exprSimPropsTheory.local_region_frame >> conj_tac
         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
         qexistsl [`sm`, `es.scopes`, `t`] >> simp[] >> metis_tac[]) >>
      qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _`
@@ -1806,7 +1865,7 @@ Resume method_id_dynamic_suffix_frame[buffer]:
     (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
   `!nm lb sz. local_region cenv es.scopes s nm lb sz ==>
     mem_bytes_at lb sz t.vs_memory = mem_bytes_at lb sz s.vs_memory` by
-    (match_mp_tac exprSimOpsTheory.local_regions_memory_tail >>
+    (match_mp_tac exprBopSimPropsTheory.local_regions_memory_tail >>
      qexistsl [`sa`, `es.scopes`, `masked`] >> gvs[] >> metis_tac[]) >>
   qexistsl_tac [`t`, `p`] >> simp[] >> conj_tac
   >- (rpt strip_tac >>
@@ -2259,7 +2318,7 @@ Proof
       rpt strip_tac >> rename1 `local_region _ _ _ nm lb lsz` >>
       qpat_x_assum `!n b sz. local_region _ _ _ n b sz ==> _` irule >>
       qexists_tac `nm` >>
-      irule exprSimOpsTheory.local_region_frame_fwd >>
+      irule exprSimPropsTheory.local_region_frame_fwd >>
       qexistsl [`s0`, `sa`, `es.scopes`] >> simp[] >> metis_tac[]) >>
   rpt strip_tac >>
   `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
@@ -2551,24 +2610,6 @@ Theorem hash_eval_operand_inst_idx[simp]:
   eval_operand op (s with vs_inst_idx := n) = eval_operand op s
 Proof
   Cases_on `op` >> simp[eval_operand_def, lookup_var_def]
-QED
-
-Theorem storage_holds_inst_idx[local]:
-  storage_holds cx tr t tv w es (s with vs_inst_idx := n) <=>
-  storage_holds cx tr t tv w es s
-Proof
-  simp[storage_holds_def, venomStateTheory.contract_storage_def,
-       venomStateTheory.contract_transient_def]
-QED
-
-Theorem vv_post_inst_idx[simp]:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv (s with vs_inst_idx := n) <=>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
-Proof
-  Cases_on `vv` >>
-  simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
-       expr_val_rel_def, expr_val_at_def, lookup_var_def, local_region_def,
-       storage_holds_inst_idx]
 QED
 
 Theorem hash_buffer_suffix_shape:

@@ -64,6 +64,27 @@ Ancestors
 Libs
   pairLib BasicProvers monadsyntax
 
+
+
+Theorem lower_value_nonword_memory:
+  compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
+  p.ptr_location = LocMemory /\ ~is_word_type t ==>
+  lower_value compile_expr cenv ty e sa = (p.ptr_operand,sm)
+Proof
+  rpt strip_tac >>
+  simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]
+QED
+
+
+Theorem eval_expr_builtin_value:
+  !cx ann bi args es tv es'.
+    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
+Proof
+  rpt gen_tac >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
+  rw[] >> gvs[AllCaseEqs()]
+QED
+
 (* The shared semantic predicate preserves the former ExtCall wrap test. *)
 Theorem needs_external_call_wrap_extcall:
   (if needs_external_call_wrap ty then TupleT [ty] else ty) =
@@ -841,6 +862,22 @@ Proof
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def,
        immutable_base_zero_alt]
+QED
+
+Theorem msg_gas_state_frame:
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
+    (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
+Proof
+  strip_tac >>
+  gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
+       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
+       contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def, alloca_room_def, fmp_room_def,
+       pending_alloca_size_def, immutable_alloca_sep_def, accounts_rel_def, immutable_base_zero_alt] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem stmt_state_rel_push_scope:
@@ -4846,3 +4883,22 @@ val () = List.app
       else raise Fail ("expression lowering proof is not closed: " ^ name)
     end)
   (DB.thms "exprLoweringProps");
+
+Theorem as_stack_val_stack:
+  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
+Proof
+  Cases_on `p` >> simp[as_stack_val_def]
+QED
+
+Theorem compile_literal_bytes_stack:
+  !ty bs st.
+    (!n. ty <> BaseT (BytesT (Dynamic n))) ==>
+    ?op. compile_literal_vv ty (BytesL bs) st = (StackValue ty op, st)
+Proof
+  rpt strip_tac >>
+  Cases_on `ty` >> simp[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BaseT bt` >>
+  Cases_on `bt` >> gvs[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BytesT bound` >>
+  Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
+QED

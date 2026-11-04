@@ -63,10 +63,15 @@
 
 Theory exprSimAggregates
 Ancestors
+  exprWordOperand
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   exprSimAlloc
   allocLimits
-  list exprSim exprSimHyps exprSimConvert exprLowering compileEnv
+  list  exprSimHyps exprSimConvert exprLowering compileEnv
   valueEncoding vyperAST vyperInterpreter vyperState vyperContext
   vyperValueOperation vyperTypeSystem fragExec venomState
   exprSimBuffer exprSimBufferEmptyExec exprSimAggregateLayout
@@ -557,7 +562,7 @@ Proof
   simp[val_footprint_le, valueEncodingProofsTheory.val_wf_default_value_proof] >>
   rpt strip_tac >>
   `local_region cenv es.scopes s n lb lsz` by
-    (irule exprSimOpsTheory.local_region_frame >> conj_tac
+    (irule exprSimPropsTheory.local_region_frame >> conj_tac
      >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
      qexistsl [`sa`, `es.scopes`, `t`] >> simp[]) >>
   qpat_x_assum `!name b len. local_region _ _ s _ _ _ ==> _` drule >>

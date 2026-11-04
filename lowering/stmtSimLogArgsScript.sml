@@ -1,8 +1,9 @@
 (* Frame interfaces for typed log arguments. *)
 Theory stmtSimLogArgs
 Ancestors
-  loweringPosts
-  exprSim exprSimOps exprSimOperands compileEnv venomState stmtLowering
+  exprBopSimProps
+  exprSimDefs exprSimProps exprSimStack loweringPosts
+   exprSimOps exprSimOperands compileEnv venomState stmtLowering
   exprSimWordArgs
 
 (* A captured value in a live local survives a later expression whenever

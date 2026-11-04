@@ -1,6 +1,6 @@
 Theory exprSimPopStorage
 Ancestors
-  loweringPosts
+  exprSimDefs exprSimProps loweringPosts
   exprSimPop exprSimLeaves accountsRelProps
   vyperInterpreter vyperState vyperValueOperation finite_map
   vyperTypeAssignContext vyperPlaceResultTyping vyperTypeEnv vyperTypeInvariants
@@ -594,7 +594,7 @@ Proof
   strip_tac >> drule_all stmt_state_rel_pop_header >> strip_tac >>
   simp[apply_writes_def] >>
   qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule exprSimTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+  irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
   first_x_assum (drule_then mp_tac) >>
   Cases_on `tr` >> gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
@@ -655,7 +655,7 @@ Theorem compile_pop_storage_normalized_sim:
   evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) ==>
   expr_vv_sim ctx func cenv cx ty (Pop ann (TopLevelNameTarget (src,id))) es
 Proof
-  rw[exprSimTheory.expr_vv_sim_def] >>
+  rw[exprSimDefsTheory.expr_vv_sim_def] >>
   reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
   >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
@@ -691,7 +691,7 @@ Proof
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0]` by simp[] >>
   rpt strip_tac >> gvs[] >>
   Cases_on `lookup_storage (n2w slot) (get_storage cx es tr) = 0w` >> gvs[]
-  >- (simp[exprSimTheory.expr_exit_def] >>
+  >- (simp[exprSimDefsTheory.expr_exit_def] >>
       irule dynarray_pop_storage_run_empty >> simp[]) >>
   suspend "positive"
 QED

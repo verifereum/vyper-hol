@@ -10,6 +10,7 @@
 
 Theory bodyStorageCases
 Ancestors
+  vyperCall
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeExprSoundness vyperTypeCallStackSoundness vyperTypeInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation
@@ -1522,13 +1523,6 @@ Proof
   >> rpt strip_tac >> gvs[]
 QED
 
-Theorem body_empty_defaults_finally:
-  finally (do set_scopes scopes; eval_exprs cx [] od)
-    (set_scopes st.scopes) st = (INL [],st)
-Proof
-  simp[Once evaluate_def, finally_def, ignore_bind_apply, set_scopes_def,
-       return_def]
-QED
 
 Theorem body_try_handle_function_predicate:
   (!r s. f st = (r,s) ==> P s) /\
@@ -1637,28 +1631,6 @@ Proof
   gvs[oracle_storage_ok_payload]
 QED
 
-Theorem body_eval_intcall_empty_defaults:
-  ~MEM (NONE,fn) cx.stk /\ get_module_code cx NONE = SOME tops /\
-  lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
-  LENGTH es = LENGTH args ==>
-  eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
-  (do results <- eval_expr_results cx es;
-      prev <- get_scopes;
-      vs <- read_results cx results;
-      call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
-        "IntCall bind_arguments";
-      rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
-      lock_if_nr cx nr (is_view_mut mut);
-      cxf <- push_function (NONE,fn) call_env cx;
-      rv <- finally (try (do eval_stmts cxf ss; return NoneV od) handle_function)
-        (do pop_function prev; unlock_if_nr cx nr (is_view_mut mut) od);
-      crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
-      return (Value crv) od)
-Proof
-  strip_tac >> simp[Once evaluate_def, type_check_def, assert_def,
-    lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
-    get_scopes_def, body_empty_defaults_finally]
-QED
 
 Theorem body_assign_base_consumer:
   (!s0 pv s1. eval_expr cx e s0 = (INL pv,s1) ==>
@@ -3104,5 +3076,5 @@ Proof
   goal_assum $ drule_at Any >>
   qexistsl_tac [`args_st`, `args_st`, `[]`, `args_st`, `args_st`, `args_st`,
                `args_st`, `rtv`, `args_st`] >>
-  simp[body_empty_defaults_finally, lift_option_type_def, return_def]
+  simp[eval_empty_defaults_finally, lift_option_type_def, return_def]
 QED

@@ -66,7 +66,7 @@ Proof
   strip_tac >> gvs[abi_decode_source_opcode_def] >>
   simp[abi_decode_load_def, abi_decode_source_def, step_MLOAD,
        step_CALLDATALOAD] >>
-  simp[Once step_inst_base_def, exec_read1_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def]
 QED
 
 Theorem abi_decode_read:

@@ -23,8 +23,8 @@
 
 Theory exprSimBinopFrag
 Ancestors
-  list finite_map primeFactor
-  fragExec freshWrites exprSim exprSimHyps exprSimOps exprSimCompare exprSimArith
+  exprBopBitwise exprBopFlag exprBopShift exprBopSimDefs exprBopStraight
+  exprSimHypsDefs list finite_map fragExec exprSimHyps exprSimOps exprSimCompare exprSimArith primeFactor freshWrites
   exprBopLowering loweringSlice
   exprLowering compileEnv exprLoweringProps emitHelperProps arithmeticProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph

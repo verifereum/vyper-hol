@@ -23,7 +23,7 @@
 Theory stmtSimLog
 Ancestors
   list rich_list finite_map pred_set
-  fragExec exprSim stmtSim stmtLowering exprLowering compileEnv
+  fragExec   stmtLowering exprLowering compileEnv
   supportedTypes vyperEvent vyperInterpreter vyperState vyperValue
   stmtSimLogCompose
 Libs

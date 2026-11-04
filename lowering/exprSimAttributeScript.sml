@@ -34,10 +34,15 @@
 
 Theory exprSimAttribute
 Ancestors
+  exprSimAttributeProps exprSimFieldLayout exprSimVVFrame
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   allocLimits
   list rich_list finite_map pair
-  fragExec exprSim exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
+  fragExec  exprSimHyps exprSimUnwrap exprSimLen exprSimLeaves
   exprSimBuffer exprSimAggregateChildren exprSimAttributeFields
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv context
   accountsRelProps
@@ -51,20 +56,11 @@ Libs
 (* ===== The lowering ===== *)
 
 (* The location compile_attribute reads the base's pointer in. *)
-Definition vv_loc_def:
-  vv_loc vv = case vv_location vv of SOME l => l | NONE => LocMemory
-End
+
 
 (* The offset compile_attribute adds to the base's pointer: slots in storage
    and transient storage, bytes elsewhere. *)
-Definition attr_offset_def:
-  attr_offset cenv bty loc fld =
-    let fields = get_struct_fields cenv.ce_struct_fields
-                   (case bty of StructT sn => nsid_to_string sn | _ => "") in
-    if (case loc of LocStorage => T | LocTransient => T | _ => F)
-    then struct_field_offset_slots fields fld
-    else struct_field_offset fields fld
-End
+
 
 Theorem compile_expr_attribute[local]:
   !cenv ty ann obj fld st vv st'.
@@ -133,7 +129,7 @@ Proof
   >- (irule vv_post_update_var >> simp[] >> qexists_tac `sm` >>
       simp[not_fresh_at_def, ASCIInumbersTheory.toString_11])
   >- (qpat_x_assum `eval_operand (vv_operand vv) s = _` (SUBST1_TAC o SYM) >>
-      irule exprSimLiteralBufferTheory.literal_operand_frame >>
+      irule exprSimVVFrameTheory.literal_operand_frame >>
       reverse conj_tac >- simp[update_var_def] >>
       qexists_tac `sm` >> simp[] >>
       rw[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -176,24 +172,7 @@ QED
 
 (* ===== The value_vv of the field ===== *)
 
-Theorem stmt_state_rel_region_lt:
-  !func cenv cx es s ctx.
-    stmt_state_rel ctx func cenv cx es s ==>
-    (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-                b + sz < dimword (:256)) /\
-    (!n b sz. local_region cenv es.scopes s n b sz ==>
-              b + sz < dimword (:256))
-Proof
-  rpt gen_tac >> strip_tac >>
-  `s.vs_alloca_next < dimword (:256)` by
-    metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
-  conj_tac
-  >- (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
-      rpt strip_tac >> res_tac >> DECIDE_TAC) >>
-  rw[local_region_def] >>
-  fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
-  res_tac >> gvs[] >> DECIDE_TAC
-QED
+
 
 Theorem struct_value_shape[local]:
   !fs v. value_has_type (StructTV fs) v ==>
@@ -268,14 +247,7 @@ QED
 
 (* A field's pointer does not wrap: the struct's bytes end below 2 ** 256,
    or it has none and the field is at offset 0. *)
-Theorem field_ptr_w2n:
-  !(w:bytes32) off fsz tsz.
-    off + fsz <= tsz /\ (tsz = 0 \/ w2n w + tsz < dimword (:256)) ==>
-    w2n (w + n2w off) = w2n w + off
-Proof
-  rpt strip_tac >- gvs[] >> irule buffer_offset_no_wrap >>
-  qexists_tac `tsz` >> DECIDE_TAC
-QED
+
 
 (* The field's placement in memory, from the base's. *)
 Theorem attr_vv_at_field[local]:

@@ -1,5 +1,6 @@
 Theory convertScalarBytes
 Ancestors
+  exprUnopStraight
   convertScalarBytesRun convertScalarEncoding convertScalarTyping convertScalarProps exprSimConvert exprSimUnop
   valueEncodingProofs exprLowering compileEnv vyperValueOperation valueEncoding
   vyperValue venomExecSemantics list exprLoweringProps

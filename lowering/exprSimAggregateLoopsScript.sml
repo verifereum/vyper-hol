@@ -17,11 +17,16 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprBopSimProps
+  exprSimSource
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
   loweringPosts
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   localPtrsProps compileEnv valueEncoding valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
-  exprSimHyps exprSim fragExec exprSimAggregateChildren exprSimOps
+  exprSimHyps  fragExec exprSimAggregateChildren exprSimOps
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
 
 Theorem aggregate_alloca_slice_excludes_local:

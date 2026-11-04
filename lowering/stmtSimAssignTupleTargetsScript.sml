@@ -1,10 +1,10 @@
 (* General tuple assignment simulation. *)
 Theory stmtSimAssignTupleTargets
 Ancestors
-  loweringPosts
+  exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
   tupleAssignParts tupleTargetStoreRun tupleTargetStoreProps tupleAssignPrefix
-  tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple stmtSim
-  exprSim exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
+  tupleAssignMemory tupleStageProps tupleLocalStoreProps stmtSimReturn stmtSimAssignTuple 
+   exprLowering exprLoweringProps fragExec loweringSlice compileEnv freshWrites
   vyperInterpreter vyperState vyperValue vyperTyping vyperTypeDefaults valueEncoding stmtLowering
   list rich_list finite_map stmtSimDecl stmtSimDeclMem
 Libs
