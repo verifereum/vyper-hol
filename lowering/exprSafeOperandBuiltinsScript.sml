@@ -422,24 +422,91 @@ Theorem compile_array_membership_loop_safe_operand:
   compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
   safe_operand sb r
 Proof
-  Cases_on `bound` >> Cases_on `isin` >> Cases_on `off > 0` >>
-  simp[compile_array_membership_loop_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
   strip_tac >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  ntac 8 (pairarg_tac >> gvs[]) >>
-  rpt (pairarg_tac >> gvs[]) >>
-  qpat_x_assum `!p s v t. _` drule_all >> strip_tac >>
-  imp_res_tac emit_op_safe_operand >>
-  imp_res_tac fresh_var_safe_operand >>
-  imp_res_tac fresh_var_counter_mono >>
-  imp_res_tac fresh_label_counter_mono >>
-  imp_res_tac new_block_counter_mono >>
-  imp_res_tac emit_inst_counter_mono >>
-  imp_res_tac emit_op_counter_mono >>
-  irule safe_operand_mono >>
-  goal_assum (drule_at (Pat `safe_operand _ _`)) >> decide_tac
+  qpat_x_assum `compile_array_membership_loop _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  map_every qid_spec_tac [`sb`, `r`, `sa`] >>
+  pure_rewrite_tac [compile_array_membership_loop_def] >>
+  ho_match_mp_tac membership_fresh_bind_safe >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_label_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule emit_inst_counter_mono >> simp[]) >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule new_block_counter_mono >> simp[]) >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule fresh_var_counter_mono >> simp[]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule emit_inst_counter_mono >> simp[]) >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- (rpt strip_tac >> drule emit_inst_counter_mono >> simp[]) >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- (Cases_on `bound` >> pure_rewrite_tac[optionTheory.option_case_def] >> BETA_TAC
+      >- simp[comp_return_def] >>
+      ho_match_mp_tac membership_bind_counter_mono >> conj_tac
+      >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+      ho_match_mp_tac membership_bind_counter_mono >> conj_tac
+      >- metis_tac[emit_op_counter_mono] >>
+      metis_tac[emit_inst_counter_mono]) >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[new_block_counter_mono] >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[new_block_counter_mono] >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- (Cases_on `off > 0` >> simp[]
+      >- metis_tac[emit_op_counter_mono] >> simp[comp_return_def]) >>
+  gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[] >> gen_tac >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[new_block_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[new_block_counter_mono] >>
+  ho_match_mp_tac membership_bind_safe >> conj_tac
+  >- metis_tac[emit_op_counter_mono] >> gen_tac >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[emit_inst_counter_mono] >>
+  ho_match_mp_tac membership_ignore_bind_safe >> conj_tac
+  >- metis_tac[new_block_counter_mono] >>
+  Cases_on `isin` >> simp[]
+  >- simp[comp_return_def] >> metis_tac[emit_op_safe_operand]
 QED
 
 Theorem compile_var_array_membership_safe_operand:
