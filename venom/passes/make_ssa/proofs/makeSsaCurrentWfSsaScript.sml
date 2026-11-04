@@ -13,7 +13,8 @@ Theory makeSsaCurrentWfSsa
 Ancestors
   makeSsaCurrentDefs makeSsaCurrentProps venomWf cfgWf venomInst irSupply
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
-  makeSsaCurrentSourceCuts
+  makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
+  makeSsaCurrentFinalBlock makeSsaCurrentTreePaths
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
@@ -66,6 +67,57 @@ Proof
   disch_then (qspec_then `v` strip_assume_tac)
   >- simp[] >>
   disj2_tac >> qexists_tac `k` >> simp[EL_APPEND_EQN]
+QED
+
+Theorem current_wf_local_output_name[local]:
+  !annss insts s rs H E insts' s' rs' H' E'.
+  current_local_trace annss insts s rs H E insts' s' rs' H' E' /\
+  current_annotations_ok V H (FLAT annss) ==>
+  !k j. k < LENGTH annss /\ j < LENGTH (EL k annss) ==>
+    k < LENGTH insts' /\ j < LENGTH (EL k insts').inst_outputs /\
+    current_token_name H' (FST (EL j (EL k annss))) =
+      SOME (EL j (EL k insts').inst_outputs)
+Proof
+  Induct >> simp[current_local_trace_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `current_annotations_ok V H h` by
+    metis_tac[current_annotations_split, FLAT] >>
+  rpt gen_tac >> strip_tac >> Cases_on `k`
+  >- (gvs[] >> drule_all current_wf_inst_output_name >>
+      strip_tac >>
+      drule current_local_trace_history >> strip_tac >> gvs[] >>
+      metis_tac[current_token_name_append_stable]) >>
+  `current_annotations_ok V H1 (FLAT annss)` by
+    (gvs[current_inst_trace_def] >>
+     irule current_outputs_trace_remaining >> metis_tac[FLAT]) >>
+  first_x_assum drule >> simp[] >>
+  disch_then (qspecl_then [`n`, `j`] mp_tac) >> gvs[]
+QED
+
+Definition current_wf_output_at_def:
+  current_wf_output_at A H ev k t <=>
+    k < LENGTH (A (current_event_label ev)) /\
+    k < LENGTH (current_event_renamed_block ev).bb_instructions /\
+    ?j. j < LENGTH (EL k (A (current_event_label ev))) /\
+      FST (EL j (EL k (A (current_event_label ev)))) = t /\
+      j < LENGTH (EL k (current_event_renamed_block ev).bb_instructions).inst_outputs /\
+      current_token_name H t = SOME
+        (EL j (EL k (current_event_renamed_block ev).bb_instructions).inst_outputs)
+End
+
+Theorem current_wf_event_output_at[local]:
+  current_event_trace A H ev /\ current_event_valid A V ev /\
+  k < LENGTH (A (current_event_label ev)) /\
+  j < LENGTH (EL k (A (current_event_label ev))) ==>
+  current_wf_output_at A H ev k
+    (FST (EL j (EL k (A (current_event_label ev)))))
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_trace_def, current_event_valid_def,
+    current_event_label_def, current_event_renamed_block_def,
+    current_wf_output_at_def] >> strip_tac >>
+  drule_all current_wf_local_output_name >> strip_tac >> simp[] >>
+  qexists_tac `j` >> simp[] >>
+  metis_tac[current_token_name_append_stable]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
