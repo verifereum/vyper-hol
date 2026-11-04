@@ -14699,3 +14699,53 @@ Proof
        simp[comp_return_labels, lower_value_labels, compile_tuple_subscript_labels,
             compile_array_subscript_labels, compile_ptr_load_labels])
 QED
+
+Theorem compile_get_target_ptr_labels:
+  !cfn bt cenv s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_get_target_ptr cfn cenv bt s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_get_target_ptr cfn cenv bt s)))
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> rpt gen_tac >> disch_tac >>
+  once_rewrite_tac[compile_get_target_ptr_def]
+  >- (rename1 `FLOOKUP cenv.ce_vars id` >>
+      Cases_on `FLOOKUP cenv.ce_vars id` >> simp[comp_return_labels] >>
+      rename1 `FLOOKUP cenv.ce_vars id = SOME loc` >>
+      Cases_on `loc` >> simp[comp_return_labels])
+  >- (simp[LET_THM] >>
+      rename1 `FLOOKUP cenv.ce_module_vars id` >>
+      Cases_on `FLOOKUP cenv.ce_module_vars id` >> simp[comp_return_labels] >>
+      rename1 `FLOOKUP cenv.ce_module_vars id = SOME loc` >>
+      Cases_on `loc` >> simp[comp_return_labels])
+  >- (irule comp_bind_labels >> reverse conj_tac
+      >- (first_x_assum irule >> simp[] ) >>
+      rpt gen_tac >> simp[LET_THM] >>
+      Cases_on `SND (SND x)` >> simp[LET_THM]
+      >- (rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+               simp[lower_value_labels, compile_array_subscript_labels,
+                    compile_ptr_load_labels, comp_return_labels])) >>
+      rename1 `SND (SND x) = SOME pt` >> Cases_on `pt` >> simp[LET_THM] >>
+      rpt (irule comp_bind_labels >> conj_tac >> rpt gen_tac >> BETA_TAC >>
+           simp[lower_value_labels, compile_array_subscript_labels,
+                compile_ptr_load_labels, compile_mapping_subscript_labels,
+                comp_return_labels]) >>
+      IF_CASES_TAC >> simp[compile_keccak256_key_labels, comp_return_labels]) >>
+  irule comp_bind_labels >> reverse conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  rpt gen_tac >> simp[LET_THM] >>
+  irule comp_bind_labels >> simp[emit_op_labels, comp_return_labels]
+QED
+
+Theorem compile_dynarray_pop_labels:
+  !base_op ws es load_opc store_opc s.
+    cs_extends s (SND (compile_dynarray_pop base_op ws es load_opc store_opc s)) /\
+    EVERY (isPREFIX "@")
+      (added_labels s (SND (compile_dynarray_pop base_op ws es load_opc store_opc s)))
+Proof
+  rpt gen_tac >> simp[compile_dynarray_pop_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >> simp[emit_op_labels, emit_void_labels])
+QED
