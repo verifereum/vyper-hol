@@ -103,6 +103,35 @@ Proof
   simp[lower_dload_function_supply_def] >> metis_tac[]
 QED
 
+(* Normalize only bookkeeping history to apply the existing supply
+   contract; no bound on unrelated reservations is needed. *)
+Theorem lower_dload_function_supply_normalized_contract:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  ALL_DISTINCT (fn_ir_inst_ids f) ==>
+  ?u. lower_dload_function_supply
+        (s with irs_used_inst_ids := fn_ir_inst_ids f) f = (g,u) /\
+      ld_ids_supply_ok (s with irs_used_inst_ids := fn_ir_inst_ids f)
+        (fn_ir_inst_ids f) (fn_ir_inst_ids g) u
+Proof
+  strip_tac >>
+  qabbrev_tac `q = s with irs_used_inst_ids := fn_ir_inst_ids f` >>
+  `(s with irs_used_inst_ids := []) = (q with irs_used_inst_ids := [])`
+    by simp[Abbr `q`] >>
+  drule_all lower_dload_function_supply_history >> strip_tac >>
+  qexists_tac `u` >> simp[] >>
+  irule lower_dload_function_supply_contract >>
+  gvs[Abbr `q`, ir_supply_inst_ok_def, ir_supply_covers_fn_def,
+      EVERY_MEM]
+QED
+
+Theorem lower_dload_function_supply_covered_distinct_ids:
+  lower_dload_function_supply s f = (g,t) /\ ir_supply_covers_fn s f /\
+  ALL_DISTINCT (fn_ir_inst_ids f) ==> ALL_DISTINCT (fn_ir_inst_ids g)
+Proof
+  strip_tac >> drule_all lower_dload_function_supply_normalized_contract >>
+  simp[ld_ids_supply_ok_def, PULL_EXISTS]
+QED
+
 Theorem lower_dload_inst_supply_nonempty:
   lower_dload_inst_supply s i = (xs,t) ==> xs <> []
 Proof
