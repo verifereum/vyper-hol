@@ -213,6 +213,7 @@ QED
 
 Theorem array_allocation_safe[local]:
   local_ptrs_reserved bc sa /\
+  bc.ce_imm_alloca = cenv.ce_imm_alloca /\
   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
   (!name. name <> id ==> FLOOKUP bc.ce_vars name = FLOOKUP cenv.ce_vars name) /\
   lookup_scopes id scopes = NONE /\ name <> id /\
@@ -220,6 +221,8 @@ Theorem array_allocation_safe[local]:
   not_local_ptr cenv scopes p /\ (!x. saved_base = Var x ==> x <> p)
 Proof
   strip_tac >> drule_all array_declared_ptr_unique >> strip_tac >>
+  `cenv.ce_imm_alloca <> SOME (Var p)` by
+    (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   conj_tac
   >- (simp[not_local_ptr_def] >> rpt strip_tac >>
       `name' <> id` by (strip_tac >> gvs[]) >> metis_tac[]) >>
@@ -304,6 +307,8 @@ Theorem array_loop_initialize:
        ?fuel'. run_from fuel' ctx func s0 = rr)
 Proof
   strip_tac >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[array_for_code_def, compile_env_component_equality] >>
   dxrule array_code_initialization_fields >> strip_tac >>
   drule_all array_allocation_safe >> strip_tac >>
   drule_all array_allocate_ready >> strip_tac >>
@@ -340,7 +345,10 @@ Theorem array_loop_initialize_framed:
     array_loop_inv ctx func cenv cx P vs id idx saved_base array_base p dst sz
       ainst cond st 0 es s /\ array_run_frame ctx func caller s0 s
 Proof
-  strip_tac >> dxrule array_code_initialization_fields >> strip_tac >>
+  strip_tac >>
+  `bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    fs[array_for_code_def, compile_env_component_equality] >>
+  dxrule array_code_initialization_fields >> strip_tac >>
   drule_all array_allocation_safe >> strip_tac >>
   drule_all array_allocate_ready >> strip_tac >>
   rename1 `exec_alloca ainst s0 (n2w sz : bytes32) = OK s1` >>
@@ -549,11 +557,9 @@ Theorem array_unbound_body_ptr[local]:
   lookup_scopes id scopes = NONE ==>
   not_local_ptr bc (FEMPTY :: scopes) p
 Proof
-  simp[local_ptrs_reserved_def, not_local_ptr_def, vyperStateTheory.lookup_scopes_def] >>
   rpt strip_tac >>
-  qpat_x_assum `!n1 n2 p sz1 sz2. _`
-    (qspecl_then [`id`, `name`] mp_tac) >> simp[] >>
-  qexists_tac `sz'` >> simp[] >> strip_tac >> gvs[]
+  `not_local_ptr bc scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
+  fs[not_local_ptr_def, vyperStateTheory.lookup_scopes_def]
 QED
 
 Theorem array_invariant_layout[local]:

@@ -639,6 +639,7 @@ Proof
   impl_tac >- (
     rpt conj_tac
     >- simp[]
+    >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[]
     >- simp[]
@@ -727,6 +728,7 @@ Proof
     mp_tac compile_unop_sim >>
   impl_tac >- (
     rpt conj_tac
+    >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[is_word_type_def]

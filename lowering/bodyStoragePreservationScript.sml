@@ -708,12 +708,15 @@ Resume body_oracle_storage_mutual[intcall_start]:
   gvs[int_calls_expr_def, EVERY_APPEND, expr_has_evm_run_def,
       supported_expr_exists_def] >>
   Cases_on `MEM (NONE,fn) cx.stk`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
-          ignore_bind_apply] >> metis_tac[runtime_storage_consistent_storage]) >>
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, raise_def,
+          ignore_bind_apply] >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   Cases_on `lookup_callable_function cx.in_deploy fn tops`
-  >- (gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
+  >- (asm_x "intcall_ih1" kall_tac >> asm_x "intcall_ih2" kall_tac >>
+      gvs[Once evaluate_def, type_check_def, assert_def, lift_option_type_def,
           return_def, raise_def, ignore_bind_apply, bind_apply] >>
-      metis_tac[runtime_storage_consistent_storage]) >>
+      drule runtime_storage_consistent_storage >> simp[]) >>
   rename1 `lookup_callable_function cx.in_deploy fn tops = SOME tup` >>
   PairCases_on `tup` >>
   rename1 `lookup_callable_function cx.in_deploy fn tops =

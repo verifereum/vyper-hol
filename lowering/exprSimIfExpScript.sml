@@ -477,17 +477,15 @@ Proof
   rpt strip_tac >> drule_all ifexp_store_bytestring_encoding >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es q` by
     (irule literal_state_memory_frame >> qexists_tac `s` >> simp[] >>
-     conj_tac
-     >- (rpt strip_tac >>
-         qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
-     conj_tac
-     >- (rpt strip_tac >>
-         qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
-         gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-     rpt strip_tac >>
-     qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
-     drule_all ifexp_immutable_destination_sep >>
-     simp[regions_disjoint_def]) >>
+     rpt conj_tac >> rpt strip_tac
+     >~ [`ImmutableLoc _`]
+     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >>
+         drule_all ifexp_immutable_destination_sep >>
+         simp[regions_disjoint_def])
+     >~ [`local_region _ _ _ _ _ _`]
+     >- (qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> metis_tac[]) >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
   qexists_tac `q` >> simp[] >> rpt strip_tac >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ _ = _` irule >> decide_tac
 QED

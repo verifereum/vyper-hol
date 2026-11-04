@@ -1439,3 +1439,442 @@ Resume calldata_members_owned_repeat_intervals[prefix_merge]:
 QED
 
 Finalise calldata_members_owned_repeat_intervals
+
+(* Tail-aware companion: installed suffix code stays in the traversal invariant. *)
+Theorem calldata_members_owned_repeat_intervals_tail:
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs ao0 vo0 st = ((),final) /\
+  fn_has_code st final fn /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  eval_operand src initial = SOME srcword /\ eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
+  (!id q k. st.cs_next_id <= id /\ id < final.cs_next_id /\
+    FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+    k = 32 /\ q < dimword (:256) /\ q+32 <= initial.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+  FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < st.cs_next_id \/ final.cs_next_id <= oid) /\
+  base_addr <= d+vo0 /\
+  d+vo0+SUM (MAP (\(ei,az,mz). mz) xs) <= base_addr+cap /\
+  d+vo0+SUM (MAP (\(ei,az,mz). mz) xs) < dimword (:256) /\
+  (!i. i < LENGTH xs ==> type_memory_size (ty_at i) <= (\(ei,az,mz). mz) (EL i xs)) /\
+  (!ys ao vo a b.
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) ys ao vo a = ((),b) ==>
+    cs_extends a b) /\
+  (!ei ao vo a b.
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+        dp <- emit_op ADD [dst; Lit (n2w vo)];
+        compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),b) ==>
+    cs_extends a b) /\
+  (!i a mid b ep dp ei az mz.
+    i < LENGTH xs /\ EL i xs = (ei,az,mz) /\
+    (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei)
+          (ao0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))) CALLDATALOAD (Lit 0w);
+        dp <- emit_op ADD [dst; Lit (n2w (vo0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs))))];
+        return (ep,dp) od) a = ((ep,dp),mid) /\
+    compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei mid = ((),b) /\
+    cs_extends st a /\ cs_extends b final /\ fn_has_code mid b fn /\
+    ci_mono st a /\ ci_mono b final /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      (DROP (SUC i) xs)
+      (az + (ao0+SUM (MAP (\(ei,az,mz). az) (TAKE i xs))))
+      (mz + (vo0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs)))) b = ((),final) /\
+    fn_has_code b final fn ==>
+    !u w e. ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
+      u.vs_inst_idx = LENGTH mid.cs_current_insts /\
+      eval_operand ep u = SOME w /\ eval_operand dp u = SOME (n2w e) /\
+      alloca_inv u /\ alloca_frontier_inv ctx fn site u /\
+      (!id q k. mid.cs_next_id <= id /\ id < b.cs_next_id /\
+        FLOOKUP u.vs_allocas id = SOME (q,k) ==>
+        k = 32 /\ q < dimword (:256) /\ q+32 <= u.vs_alloca_next /\
+        ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+          ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+      FLOOKUP u.vs_allocas oid = SOME (base_addr,cap) /\
+      base_addr <= e /\ e+type_memory_size (ty_at i) <= base_addr+cap /\
+      e+type_memory_size (ty_at i) < dimword (:256) ==>
+      (?fuel z. run_from fuel ctx fn u = Abort Revert_abort z /\ mem_safe_run fuel ctx fn u) \/
+      ?v x sc. ~v.vs_halted /\ v.vs_current_bb = b.cs_current_bb /\
+        v.vs_inst_idx = LENGTH b.cs_current_insts /\ Pred i x /\ val_wf (ty_at i) x /\
+        val_in_memory (ty_at i) x e v.vs_memory /\
+        (!fuel r. run_from fuel ctx fn v = r /\ (!err. r <> Error err) ==>
+          ?fuel'. run_from fuel' ctx fn u = r /\
+            (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn u)) /\
+        v.vs_call_ctx = u.vs_call_ctx /\ v.vs_data_section = u.vs_data_section /\
+        alloca_inv v /\ alloca_frontier_inv ctx fn site v /\
+        (!id q k. mid.cs_next_id <= id /\ id < b.cs_next_id /\
+          FLOOKUP v.vs_allocas id = SOME (q,k) ==>
+          k = 32 /\ q < dimword (:256) /\ q+32 <= v.vs_alloca_next /\
+          ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+            ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+        u.vs_alloca_next <= v.vs_alloca_next /\
+        (!id q k. FLOOKUP u.vs_allocas id = SOME (q,k) ==>
+          FLOOKUP v.vs_allocas id = SOME (q,k)) /\
+        (!id. id < mid.cs_next_id \/ b.cs_next_id <= id ==>
+          FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
+        (!op. abi_decoder_operand_live mid.cs_next_var op ==>
+          eval_operand op v = eval_operand op u) /\
+        abi_decode_footprint_frame ((e,type_memory_size (ty_at i))::sc) u v /\
+        (!q k. MEM (q,k) sc ==> ?id. mid.cs_next_id <= id /\ id < b.cs_next_id /\
+          FLOOKUP v.vs_allocas id = SOME (q,k))) ==>
+  (?fuel z. run_from fuel ctx fn initial = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn initial) \/
+  ?t vs scratch. ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\ LENGTH vs = LENGTH xs /\
+    (!i. i < LENGTH xs ==> Pred i (EL i vs) /\ val_wf (ty_at i) (EL i vs) /\
+      val_in_memory (ty_at i) (EL i vs)
+        (d+(vo0+SUM (MAP (\(ei,az,mz). mz) (TAKE i xs)))) t.vs_memory) /\
+    (!fuel r. run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
+      ?fuel'. run_from fuel' ctx fn initial = r /\
+        (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn initial)) /\
+    t.vs_call_ctx = initial.vs_call_ctx /\ t.vs_data_section = initial.vs_data_section /\
+    alloca_inv t /\ alloca_frontier_inv ctx fn site t /\
+    (!id q k. st.cs_next_id <= id /\ id < final.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k) ==>
+      k = 32 /\ q < dimword (:256) /\ q+32 <= t.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    initial.vs_alloca_next <= t.vs_alloca_next /\
+    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP t.vs_allocas id = SOME (q,k)) /\
+    (!id. id < st.cs_next_id \/ final.cs_next_id <= id ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op t = eval_operand op initial) /\
+    abi_decode_footprint_frame
+      ((d+vo0,SUM (MAP (\(ei,az,mz). mz) xs))::scratch) initial t /\
+    (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < final.cs_next_id /\
+      FLOOKUP t.vs_allocas id = SOME (q,k))
+Proof
+  qabbrev_tac `Own = \l h s. !id q k.
+    l <= id /\ id < h /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
+    k = 32 /\ q < dimword (:256) /\ q+32 <= s.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` >>
+  qpat_assum `Abbrev (Own = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `Wit = \l h s sc. !q k. MEM (q,k) sc ==>
+    ?id. l <= id /\ id < h /\ FLOOKUP s.vs_allocas id = SOME (q,k)` >>
+  qpat_assum `Abbrev (Wit = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `Back = \u v. !fuel r.
+    run_from fuel ctx fn v = r /\ (!err. r <> Error err) ==>
+    ?fuel'. run_from fuel' ctx fn u = r /\
+      (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn u)` >>
+  qpat_assum `Abbrev (Back = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `Reject = \u. ?fuel z.
+    run_from fuel ctx fn u = Abort Revert_abort z /\ mem_safe_run fuel ctx fn u` >>
+  qpat_assum `Abbrev (Reject = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `Frame = \a b u v e sz sc.
+    v.vs_call_ctx = u.vs_call_ctx /\ v.vs_data_section = u.vs_data_section /\
+    alloca_inv v /\ alloca_frontier_inv ctx fn site v /\
+    Own a.cs_next_id b.cs_next_id v /\ u.vs_alloca_next <= v.vs_alloca_next /\
+    (!id q k. FLOOKUP u.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP v.vs_allocas id = SOME (q,k)) /\
+    (!id. id < a.cs_next_id \/ b.cs_next_id <= id ==>
+      FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
+    (!op. abi_decoder_operand_live a.cs_next_var op ==>
+      eval_operand op v = eval_operand op u) /\
+    abi_decode_footprint_frame ((e,sz)::sc) u v /\
+    Wit a.cs_next_id b.cs_next_id v sc` >>
+  qpat_assum `Abbrev (Frame = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `AZ = \(ys:(abi_dec_info # num # num) list). SUM (MAP (\(ei,az,mz). az) ys)` >>
+  qpat_assum `Abbrev (AZ = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `MZ = \(ys:(abi_dec_info # num # num) list). SUM (MAP (\(ei,az,mz). mz) ys)` >>
+  qpat_assum `Abbrev (MZ = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qabbrev_tac `A = \i. ao0 + AZ (TAKE i xs)` >>
+  qabbrev_tac `V = \i. vo0 + MZ (TAKE i xs)` >>
+  qpat_assum `Abbrev (A = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  qpat_assum `Abbrev (V = _)`
+    (fn th => pure_rewrite_tac [GSYM (BETA_RULE (SIMP_RULE pure_ss
+      [markerTheory.Abbrev_def, FUN_EQ_THM] th))]) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `Inv = \rest ao vo a s. ?n vs scratch.
+    n <= LENGTH xs /\ LENGTH vs = n /\ rest = DROP n xs /\ ao = A n /\ vo = V n /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) rest ao vo a = ((),final) /\
+    fn_has_code a final fn /\
+    cs_extends st a /\ cs_extends a final /\ ci_mono st a /\ ci_mono a final /\
+    eval_operand src s = SOME srcword /\ eval_operand dst s = SOME (n2w d) /\
+    abi_decoder_operand_live a.cs_next_var src /\
+    abi_decoder_operand_live a.cs_next_var dst /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    Frame st final initial s (d+vo0) (MZ xs) scratch /\
+    (!j. j < n ==> Pred j (EL j vs) /\ val_wf (ty_at j) (EL j vs) /\
+      val_in_memory (ty_at j) (EL j vs) (d+V j) s.vs_memory)` >>
+  qspecl_then [`ctx`,`fn`,`dst`,`src`,`Inv`] mp_tac calldata_members_fixed_fn_invariant_rule >>
+  (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+    conj_tac >- first_assum ACCEPT_TAC >> suspend "member_step")) >>
+  disch_then (qspecl_then [`xs`,`ao0`,`vo0`,`st`,`final`,`initial`] mp_tac) >>
+  (impl_tac >- (simp[] >> suspend "initial_invariant")) >>
+  strip_tac
+  >- (disj1_tac >> simp[Abbr `Reject`] >> metis_tac[]) >>
+  disj2_tac >> qpat_x_assum `Inv [] _ _ _ _` mp_tac >>
+  simp_tac bool_ss [Abbr `Inv`] >> strip_tac >>
+  `LENGTH vs = LENGTH xs` by
+    (qpat_x_assum `[] = DROP _ _` (mp_tac o SYM) >>
+     pure_rewrite_tac [DROP_EQ_NIL] >> decide_tac) >>
+  qexistsl_tac [`t`,`vs`,`scratch`] >>
+  simp[Abbr `Back`]
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[initial_invariant]:
+  simp_tac bool_ss [Abbr `Inv`] >>
+  qexistsl_tac [`[]`,`[]`] >>
+  simp[Abbr `A`, Abbr `V`, Abbr `AZ`, Abbr `MZ`,
+       Abbr `Frame`, Abbr `Wit`, cs_extends_refl,
+       abiDecoderFrameTheory.abi_decode_footprint_frame_refl] >>
+  `ci_mono st final` by
+    (mp_tac (cj 2 ci_mono_compile_abi_decode) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`ao0`,`vo0`,`st`] mp_tac) >>
+     simp[]) >>
+  fs[ci_mono_def, ci_mono_refl, cs_extends_refl]
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[member_step]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `Inv _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [Abbr `Inv`] >> strip_tac >>
+  rename1 `LENGTH vs <= LENGTH xs` >>
+  qabbrev_tac `n = LENGTH vs` >>
+  `n < LENGTH xs` by
+    (qpat_x_assum `_::rest = DROP _ _` mp_tac >>
+     Cases_on `n = LENGTH xs` >> fs[Abbr `n`]) >>
+  `EL n xs = (ei,az,mz)` by
+    (drule HD_DROP >>
+     qpat_x_assum `_::rest = DROP _ _` (fn th => rewrite_tac [GSYM th]) >>
+     simp[]) >>
+  `rest = DROP (SUC n) xs` by
+    (qpat_assum `_::rest = DROP _ _` mp_tac >>
+     rewrite_tac [DROP_SUC] >> disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  drule calldata_members_cons_split >> strip_tac >> gnvs[] >>
+  qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _; _ od) _ = ((),_)` mp_tac >>
+  simp_tac (srw_ss() ++ boolSimps.LET_ss) [comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  rename1 `compile_getelemptr_abi src (dec_info_needs_offset ei) (A n) CALLDATALOAD (Lit 0w) a = (ep,c1)` >>
+  rename1 `emit_op ADD [dst; Lit (n2w (V n))] c1 = (dp,addr)` >>
+  `(do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) (A n) CALLDATALOAD (Lit 0w);
+       dp <- emit_op ADD [dst; Lit (n2w (V n))]; return (ep,dp) od) a = ((ep,dp),addr)` by
+    simp[comp_bind_def, comp_return_def] >>
+  drule calldata_member_address_shape >> strip_tac >>
+  `cs_extends a addr` by
+    (irule cs_extends_same_block >> fs[inst_extends_def]) >>
+  `cs_extends addr b` by (drule cs_extends_abi_decode >> simp[]) >>
+  `fn_has_code a addr fn /\ fn_has_code addr b fn` by
+    (irule fn_has_code_split >> goal_assum (drule_at Any) >> simp[]) >>
+  drule_all calldata_member_address_repeat_frag_mem >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  simp_tac bool_ss [frag_exec_mem_def] >>
+  disch_then (qspec_then `fn` mp_tac) >>
+  (impl_tac >- simp[]) >>
+  simp_tac bool_ss [combinTheory.K_THM] >> strip_tac >>
+  qmatch_asmsub_rename_tac `eval_operand dp u = SOME (n2w d + n2w (V n))` >>
+  `alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
+   Own st.cs_next_id final.cs_next_id s` by
+    fs[Abbr `Frame`] >>
+  `alloca_inv u /\ alloca_frontier_inv ctx fn site u` by
+    (drule_all calldata_alloca_invariants_fields >> simp[]) >>
+  `cs_extends st addr /\ cs_extends b final` by
+    (conj_tac >- metis_tac[cs_extends_trans] >>
+     qpat_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ b = _`
+       mp_tac >> metis_tac[]) >>
+  `fn_has_code b final fn` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `a.cs_next_id <= addr.cs_next_id /\ a.cs_next_var <= addr.cs_next_var` by
+    (qpat_x_assum `(do ep <- compile_getelemptr_abi _ _ _ _ _; _ od) a = ((ep,dp),addr)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     Cases_on `dec_info_needs_offset ei` >>
+     simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def,
+          comp_ignore_bind_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `ci_mono addr b /\ ci_mono b final` by
+    (conj_tac
+     >- (mp_tac (cj 1 ci_mono_compile_abi_decode) >>
+         disch_then (qspecl_then [`dp`,`ep`,`CALLDATALOAD`,`Lit 0w`,`ei`,`addr`] mp_tac) >> simp[]) >>
+     mp_tac (cj 2 ci_mono_compile_abi_decode) >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`DROP (SUC n) xs`,`az + A n`,`mz + V n`,`b`] mp_tac) >> simp[]) >>
+  `st.cs_next_id <= addr.cs_next_id /\ b.cs_next_id <= final.cs_next_id` by
+    (fs[ci_mono_def] >> decide_tac) >>
+  `Own addr.cs_next_id b.cs_next_id u` by
+    (qpat_x_assum `Own st.cs_next_id final.cs_next_id s` mp_tac >>
+     qpat_x_assum `st.cs_next_id <= addr.cs_next_id` mp_tac >>
+     qpat_x_assum `b.cs_next_id <= final.cs_next_id` mp_tac >>
+     qpat_x_assum `u.vs_allocas = s.vs_allocas` mp_tac >>
+     qpat_x_assum `u.vs_alloca_next = s.vs_alloca_next` mp_tac >>
+     qpat_x_assum `Abbrev (Own = _)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     pure_rewrite_tac [markerTheory.Abbrev_def] >>
+     disch_then SUBST1_TAC >>
+     BETA_TAC >> rpt strip_tac >> rule_assum_tac BETA_RULE >>
+     `st.cs_next_id <= id /\ id < final.cs_next_id` by decide_tac >>
+     first_x_assum (qspecl_then [`id`,`q`,`k`] mp_tac) >>
+     asm_rewrite_tac [] >> metis_tac[]) >>
+  `type_memory_size (ty_at n) <= mz` by
+    (qpat_x_assum `!i. i < LENGTH xs ==> type_memory_size _ <= _`
+       (qspec_then `n` mp_tac) >> simp[]) >>
+  `V n + mz <= vo0 + MZ xs /\ vo0 <= V n` by
+    (`xs = TAKE n xs ++ (ei,az,mz)::DROP (SUC n) xs` by metis_tac[TAKE_DROP] >>
+     qpat_x_assum `xs = TAKE n xs ++ _` mp_tac >>
+     simp_tac bool_ss [Abbr `V`, Abbr `MZ`] >>
+     disch_then (fn th => once_rewrite_tac [th]) >>
+     simp[MAP_APPEND, SUM_APPEND]) >>
+  `base_addr <= d + V n /\
+   d + V n + type_memory_size (ty_at n) <= base_addr + cap /\
+   d + V n + type_memory_size (ty_at n) < dimword(:256)` by decide_tac >>
+  `eval_operand dp u = SOME (n2w (d + V n))` by simp[word_add_n2w] >>
+  `FLOOKUP u.vs_allocas oid = SOME (base_addr,cap)` by simp[] >>
+  qpat_x_assum `!i a mid b ep dp ei az mz. _` drule_all >>
+  `Back s u` by simp[Abbr `Back`] >>
+  strip_tac
+  >- (disj1_tac >>
+      qpat_x_assum `Reject u` mp_tac >>
+      simp_tac bool_ss [Abbr `Reject`] >> strip_tac >>
+      qpat_x_assum `Back s u` mp_tac >>
+      simp_tac bool_ss [Abbr `Back`] >>
+      disch_then (qspec_then `fuel` mp_tac) >>
+      simp[] >>
+      qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >>
+      simp[] >> strip_tac >>
+      qexistsl_tac [`fuel'`,`z`] >> simp[]) >>
+  `Back s v` by
+    (qpat_x_assum `Back s u` mp_tac >>
+     qpat_x_assum `Back u v` mp_tac >>
+     simp_tac bool_ss [Abbr `Back`] >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `cs_extends st b /\ ci_mono st b` by
+    (fs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `A (SUC n) = az + A n /\ V (SUC n) = mz + V n` by
+    (simp[Abbr `A`, Abbr `V`, Abbr `AZ`, Abbr `MZ`, TAKE_SUC, EL_TAKE,
+          SUM_APPEND] >> decide_tac) >>
+  `Frame st final initial v (d+vo0) (MZ xs) (scratch++sc)` by
+    suspend "frame_merge" >>
+  `!j. j < n ==> Pred j (EL j vs) /\ val_wf (ty_at j) (EL j vs) /\
+    val_in_memory (ty_at j) (EL j vs) (d+V j) v.vs_memory` by
+    suspend "prefix_merge" >>
+  `eval_operand src v = SOME srcword /\ eval_operand dst v = SOME (n2w d) /\
+   abi_decoder_operand_live b.cs_next_var src /\ abi_decoder_operand_live b.cs_next_var dst /\
+   FLOOKUP v.vs_allocas oid = SOME (base_addr,cap)` by
+    suspend "entry_merge" >>
+  disj2_tac >> qexists_tac `v` >> simp[] >>
+  qexistsl_tac [`vs++[x]`,`scratch++sc`] >>
+  simp[LENGTH_APPEND, GSYM ADD1, Abbr `n`] >>
+  qx_gen_tac `j` >> strip_tac >> Cases_on `j < LENGTH vs`
+  >- simp[EL_APPEND1] >>
+  `j = LENGTH vs` by decide_tac >> simp[EL_APPEND2]
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[entry_merge]:
+  qpat_x_assum `Frame addr b u v _ _ _` mp_tac >>
+  simp_tac bool_ss [Abbr `Frame`] >> strip_tac >>
+  `a.cs_next_var <= b.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
+  `abi_decoder_operand_live addr.cs_next_var src /\
+   abi_decoder_operand_live addr.cs_next_var dst` by metis_tac[abi_decoder_operand_live_mono] >>
+  `oid < addr.cs_next_id \/ b.cs_next_id <= oid` by decide_tac >>
+  simp[] >> metis_tac[abi_decoder_operand_live_mono]
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[frame_merge]:
+  qpat_x_assum `Frame st final initial s _ _ _` mp_tac >>
+  qpat_x_assum `Frame addr b u v _ _ _` mp_tac >>
+  simp_tac bool_ss [Abbr `Frame`] >> ntac 2 strip_tac >>
+  `Own st.cs_next_id final.cs_next_id v` by
+    (qpat_x_assum `Own st.cs_next_id final.cs_next_id s` mp_tac >>
+     qpat_x_assum `Own addr.cs_next_id b.cs_next_id v` mp_tac >>
+     qpat_x_assum `Abbrev (Own = _)` mp_tac >>
+     pure_rewrite_tac [markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >>
+     BETA_TAC >> ntac 2 strip_tac >>
+     ho_match_mp_tac (GEN_ALL calldata_owned_interval_replace) >>
+     qexistsl_tac [`s`,`b.cs_next_id`,`addr.cs_next_id`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- (qpat_assum `ci_mono addr b` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >> simp[ci_mono_def]) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- decide_tac >>
+     qpat_x_assum `!id. id < addr.cs_next_id \/ _ ==> _` mp_tac >>
+     qpat_x_assum `u.vs_allocas = s.vs_allocas` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `id < addr.cs_next_id \/ b.cs_next_id <= id` by decide_tac >>
+      simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live a.cs_next_var op /\
+       abi_decoder_operand_live addr.cs_next_var op` by
+        (fs[ci_mono_def] >> metis_tac[abi_decoder_operand_live_mono]) >>
+      metis_tac[]) >>
+  conj_tac >- suspend "footprint_merge" >>
+  qpat_x_assum `Wit st.cs_next_id final.cs_next_id s scratch` mp_tac >>
+  qpat_x_assum `Wit addr.cs_next_id b.cs_next_id v sc` mp_tac >>
+  qpat_x_assum `!id q k. FLOOKUP u.vs_allocas id = _ ==> _` mp_tac >>
+  qpat_x_assum `u.vs_allocas = s.vs_allocas` mp_tac >>
+  qpat_x_assum `st.cs_next_id <= addr.cs_next_id` mp_tac >>
+  qpat_x_assum `b.cs_next_id <= final.cs_next_id` mp_tac >>
+  qpat_x_assum `Abbrev (Wit = _)` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  pure_rewrite_tac [markerTheory.Abbrev_def] >> disch_then SUBST1_TAC >>
+  BETA_TAC >> simp_tac bool_ss [MEM_APPEND] >> rpt strip_tac >>
+  metis_tac[LESS_EQ_TRANS, LESS_LESS_EQ_TRANS]
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[footprint_merge]:
+  `abi_decode_footprint_frame ((d+vo0,MZ xs)::scratch) initial u` by
+    (qpat_x_assum `abi_decode_footprint_frame _ initial s` mp_tac >>
+     simp[abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
+  irule calldata_footprint_accumulate >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> decide_tac
+QED
+
+Resume calldata_members_owned_repeat_intervals_tail[prefix_merge]:
+  qx_gen_tac `j` >> strip_tac >>
+  `j < LENGTH xs /\ SUC j <= n` by decide_tac >>
+  `type_memory_size (ty_at j) <= (\(ei,az,mz). mz) (EL j xs)` by
+    (qpat_x_assum `!i. i < LENGTH xs ==> type_memory_size _ <= _`
+       (qspec_then `j` mp_tac) >> simp[]) >>
+  `!i ys. MZ (TAKE i ys) <= MZ ys` by
+    (rpt gen_tac >>
+     simp_tac bool_ss [Abbr `MZ`] >>
+     POP_ASSUM_LIST (K all_tac) >>
+     CONV_TAC (RAND_CONV (ONCE_DEPTH_CONV
+       (REWR_CONV (GSYM (Q.SPECL [`i`,`ys`] TAKE_DROP))))) >>
+     simp[MAP_APPEND, SUM_APPEND, MAP_TAKE]) >>
+  `MZ (TAKE (SUC j) xs) <= MZ (TAKE n xs)` by
+    (first_x_assum (qspecl_then [`SUC j`,`TAKE n xs`] mp_tac) >>
+     simp[TAKE_TAKE, MIN_DEF]) >>
+  `V j + type_memory_size (ty_at j) <= V n /\ vo0 <= V j` by
+    (qpat_x_assum `MZ (TAKE (SUC j) xs) <= _` mp_tac >>
+     simp[Abbr `V`, Abbr `MZ`, TAKE_SUC, EL_TAKE, SUM_APPEND] >> decide_tac) >>
+  qpat_x_assum `!j. j < n ==> Pred j _ /\ _`
+    (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  simp[] >>
+  qpat_x_assum `Frame addr b u v _ _ _` mp_tac >>
+  simp_tac bool_ss [Abbr `Frame`, Abbr `Wit`] >> strip_tac >>
+  irule calldata_member_value_preserved >>
+  simp_tac bool_ss [] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_assum `abi_decode_footprint_frame _ u v` (irule_at Any) >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`oid`,`cap`,`base_addr`] >> simp[] >>
+  qpat_x_assum `!id. id < addr.cs_next_id \/ _ ==> _` mp_tac >>
+  qpat_x_assum `u.vs_allocas = s.vs_allocas` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >> simp[]
+QED
+
+Finalise calldata_members_owned_repeat_intervals_tail

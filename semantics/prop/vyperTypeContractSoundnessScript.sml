@@ -7,6 +7,7 @@
 
 Theory vyperTypeContractSoundness
 Ancestors
+  vyperGetter
   list rich_list arithmetic finite_map alist option pair
   vyperAST vyperValue vyperMisc vyperContext vyperState vyperInterpreter
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
@@ -3278,6 +3279,67 @@ Proof
   simp[]
 QED
 
+Theorem checked_selected_getter_lock_slot:
+  check_contract F layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  module_allocated layouts addr src ts /\ MEM decl ts /\
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) /\ nr ==>
+  lookup_nonreentrant_slot layouts addr = SOME 0
+Proof
+  strip_tac >>
+  Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >- (Cases_on `v` >> gvs[] >> Cases_on `is_ArrayT t` >> gvs[]
+      >- (drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+          metis_tac[check_contract_public_variable_lock_slot]) >>
+      gvs[external_getter_tuple_def] >>
+      metis_tac[check_contract_public_variable_lock_slot]) >>
+  Cases_on `v` >> gvs[is_public_getter_decl_def] >>
+  drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+  metis_tac[check_contract_public_hashmap_lock_slot]
+QED
+
+Theorem view_lock_prefix_execution:
+  (nr ==> cx.nonreentrant_slot <> NONE) ==>
+  (do lock_if_nr cx nr T; action od) st = action st \/
+  ?msg. (do lock_if_nr cx nr T; action od) st =
+          (INR (Error (RuntimeError msg)),st)
+Proof
+  strip_tac >> Cases_on `cx.nonreentrant_slot` >> Cases_on `nr` >>
+  gvs[lock_if_nr_def, bind_def, ignore_bind_def, return_def, raise_def] >>
+  rw[acquire_nonreentrant_lock_def, get_transient_storage_def,
+     bind_def, ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem call_external_function_view_success_without_lock:
+  (nr ==> cx.nonreentrant_slot <> NONE) /\
+  call_external_function orc gobs am cx nr View ts mods args dflts vals body ret =
+    (INL v,am',rqs) ==>
+  call_external_function orc gobs am cx F View ts mods args dflts vals body ret =
+    (INL v,am',rqs)
+Proof
+  strip_tac >>
+  drule call_external_function_success_phases >> strip_tac >>
+  `((do lock_if_nr cx nr T; eval_stmts cx body od)
+      (s2 with scopes := [env])) = (res,st_body)` by
+    gvs[lock_if_nr_def] >>
+  `(do lock_if_nr cx nr T; eval_stmts cx body od)
+      (s2 with scopes := [env]) = eval_stmts cx body (s2 with scopes := [env]) \/
+   ?msg. (do lock_if_nr cx nr T; eval_stmts cx body od)
+      (s2 with scopes := [env]) =
+        (INR (Error (RuntimeError msg)),s2 with scopes := [env])` by
+    (irule view_lock_prefix_execution >> simp[]) >>
+  gvs[Excl "lock_if_nr_def"] >>
+  rule_assum_tac (REWRITE_RULE [ignore_bind_def, bind_def, lock_if_nr_def, return_def]) >>
+  qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [call_external_function_def, LET_THM, is_view_mut_def,
+       unlock_if_nr_def, return_def] >>
+  simp_tac (srw_ss()) [ignore_bind_def, bind_def] >>
+  asm_simp_tac (srw_ss()) [] >>
+  asm_simp_tac (srw_ss()) [set_scopes_def, bind_def, ignore_bind_def,
+                       lock_if_nr_def, return_def]
+QED
+
 Theorem call_external_function_exact_selected_getter_no_type_error_c53[local]:
   check_contract F am.layouts tx.target mods = SOME art /\
   checked_contract_runtime_ready art mods am tx /\
@@ -3302,7 +3364,12 @@ Proof
                   checked_public_getter_initial_body_execution_selected) >>
      disch_then (qspecl_then [`orc`, `gobs`] mp_tac) >>
      simp[initial_state_def]) >>
-  `nr = F /\ mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
+  `(nr ==> cx.nonreentrant_slot <> NONE)` by
+    (strip_tac >>
+     `lookup_nonreentrant_slot am.layouts tx.target = SOME 0` by
+       (drule_all checked_selected_getter_lock_slot >> simp[]) >>
+     simp[initial_evaluation_context_def]) >>
+  `mut = View /\ dflts = [] /\ ?exp. body = [Return (SOME exp)]` by
     (Cases_on `decl` >> gvs[is_public_getter_decl_def, external_getter_tuple_def]
      >- (Cases_on `v` >> gvs[] >> Cases_on `is_ArrayT t` >> gvs[]
          >- (drule_all array_public_getter_tuple_shape >> metis_tac[]) >>
@@ -3311,38 +3378,34 @@ Proof
      drule_all hashmap_public_getter_tuple_shape >> metis_tac[]) >>
   gvs[] >>
   drule call_external_function_exact_args_rewrites_c53 >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `no_type_error_eval (eval_stmts ctx _ st0)` >>
+  `(do lock_if_nr ctx nr T; eval_stmts ctx [Return (SOME exp)] od) st0 =
+       eval_stmts ctx [Return (SOME exp)] st0 \/
+   ?msg. (do lock_if_nr ctx nr T; eval_stmts ctx [Return (SOME exp)] od) st0 =
+           (INR (Error (RuntimeError msg)),st0)` by
+    (irule view_lock_prefix_execution >> gvs[Abbr `ctx`]) >>
+  `~ctx.in_deploy` by simp[Abbr `ctx`, initial_evaluation_context_def] >>
+  gvs[Abbr `st0`, lock_if_nr_def] >>
+  rule_assum_tac (REWRITE_RULE [ignore_bind_def, bind_def, initial_state_def]) >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[call_external_function_def,
-       initial_evaluation_context_def,
-       vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-  gvs[bind_def, ignore_bind_def, return_def, raise_def] >>
-  Cases_on `send_call_value View (initial_evaluation_context am.sources am.layouts tx src)
-              (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-  Cases_on `q` >> gvs[return_def, raise_def]
-  >- (`r = initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>` by
-        (qpat_x_assum `send_call_value View _ _ = _` mp_tac >>
-         rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
-            assert_def, return_def, raise_def] >>
-         gvs[AllCaseEqs(), return_def, raise_def]) >>
-      gvs[set_scopes_def, return_def, initial_state_def] >>
-      strip_tac >>
-      Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx src)
-                  [Return (SOME exp)] (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
-      Cases_on `q` >>
-      gvs[initial_evaluation_context_def, initial_state_def,
-          vyperTypeExprSoundnessTheory.no_type_error_eval_def,
-          vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
-      Cases_on `y` >>
-      gvs[initial_evaluation_context_def, return_def, raise_def,
-          vyperTypeExprSoundnessTheory.no_type_error_eval_def,
-          vyperTypeExprSoundnessTheory.no_type_error_result_def,
-          vyperTypingTheory.safe_cast_well_typed] >>
-      rpt strip_tac >> gvs[vyperTypingTheory.safe_cast_well_typed]) >>
-  qpat_x_assum `send_call_value View _ _ = _` mp_tac >>
-  rw[send_call_value_def, bind_def, ignore_bind_def, check_def,
-     assert_def, return_def, raise_def] >>
-  gvs[AllCaseEqs(), initial_evaluation_context_def, return_def, raise_def,
-      vyperTypeExprSoundnessTheory.no_type_error_result_def]
+  Cases_on `ctx.txn.value = 0` >>
+  simp[call_external_function_def, send_call_value_def, check_def, assert_def,
+       unlock_if_nr_def, is_view_mut_def, bind_def, ignore_bind_def,
+       eval_external_defaults_nil, set_scopes_def, initial_state_def,
+       vyperTypeExprSoundnessTheory.no_type_error_result_def,
+       return_def, raise_def] >>
+  strip_tac >> gvs[] >>
+  Cases_on `eval_stmts ctx [Return (SOME exp)]
+    (initial_state am [scope] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
+  Cases_on `q` >>
+  gvs[initial_state_def, vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def] >>
+  Cases_on `y` >>
+  gvs[return_def, raise_def,
+      vyperTypeExprSoundnessTheory.no_type_error_eval_def,
+      vyperTypeExprSoundnessTheory.no_type_error_result_def,
+      vyperTypingTheory.safe_cast_well_typed] >>
+  rpt strip_tac >> gvs[vyperTypingTheory.safe_cast_well_typed]
 QED
 
 Theorem checked_explicit_external_body_no_control_escape_selected:

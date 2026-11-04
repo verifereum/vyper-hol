@@ -260,9 +260,11 @@ Definition retpc_shape_ok_def:
 End
 
 (* Label operands sit only where the codegen expects them: jump targets,
-   PHI sources, the INVOKE target, and the second operand of LowerDload's
-   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same),
-   and the source of the deploy code's CODECOPY of the runtime. *)
+   PHI sources, the INVOKE target, the second operand of LowerDload's
+   ADD [ptr; Label "code_end"] (Python's lower_dload.py emits the same), and
+   the source operand of the constructor's CODECOPY [dst; Label "runtime_begin"; sz].
+   Fixed labels are equations rather than literal patterns, so the case
+   doesn't split on the label's characters. *)
 Definition label_positions_ok_def:
   label_positions_ok inst <=>
     case (inst.inst_opcode, inst.inst_operands) of
@@ -271,8 +273,8 @@ Definition label_positions_ok_def:
     | (PHI, ops) => T
     | (INVOKE, Label l :: args) => EVERY (\op. ~is_label_operand op) args
     | (ADD, [op; Label l]) => l = "code_end" /\ ~is_label_operand op
-    | (CODECOPY, [dst; Label "runtime_begin"; sz]) =>
-        ~is_label_operand dst /\ ~is_label_operand sz
+    | (CODECOPY, [dst; Label l; sz]) =>
+        l = "runtime_begin" /\ ~is_label_operand dst /\ ~is_label_operand sz
     | (_, ops) => EVERY (\op. ~is_label_operand op) ops
 End
 
@@ -439,7 +441,7 @@ End
 
 Definition raw_opcode_ok_def:
   raw_opcode_ok op <=>
-    ~MEM op [PHI; ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET;
+    ~MEM op [PHI; ASSERT_UNREACHABLE; DALLOCA; DRET;
              GETFMP; SETFMP; RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP]
 End
 

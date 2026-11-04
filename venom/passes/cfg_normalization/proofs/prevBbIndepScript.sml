@@ -339,7 +339,8 @@ Theorem exec_create_prev_bb[local]:
     exec_result_map_prev_bb (\s'. s' with vs_prev_bb := p)
       (exec_create inst s value offset sz salt_opt)
 Proof
-  rpt gen_tac >> prev_bb_cases_tac ext_call_prev_bb_ss
+  rpt gen_tac >> prev_bb_cases_tac ext_call_prev_bb_ss >>
+  simp[halt_state_prev_bb, set_returndata_prev_bb]
 QED
 
 (* ================================================================

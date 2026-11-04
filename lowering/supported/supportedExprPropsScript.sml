@@ -122,7 +122,7 @@ Theorem supported_bad_storage_declarations_excluded:
     [VariableDecl Private (Constant expr_test_uint) "a" (BaseT (UintT 256)) (SOME 0)]
     (NONE,"a") (BaseT (UintT 256)) /\
   ~supported_storage_scalar
-    [VariableDecl Public Storage "a" (BaseT (UintT 256)) (SOME 0)]
+    [VariableDecl (Public F) Storage "a" (BaseT (UintT 256)) (SOME 0)]
     (NONE,"a") (BaseT (UintT 256))
 Proof
   EVAL_TAC

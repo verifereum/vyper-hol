@@ -181,10 +181,15 @@ Proof
          allocLimitsTheory.log_alloc_ok_def] >>
      conj_tac >> irule arithmeticTheory.LESS_LESS_EQ_TRANS >>
      qexists_tac `2 ** 64` >> gvs[wordsTheory.dimword_def]) >>
+  `well_typed_exprs env es /\
+   !id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    gvs[type_stmt_def, expr_sim_inv_def, AllCaseEqs()] >>
   irule compile_log_stmt_frag >> simp[] >>
   conj_tac
   >- (qpat_x_assum `MAP expr_type _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
       simp[]) >>
+  conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `\s. expr_sim_inv cenv cx env s` >> simp[] >>
   irule body_log_args_ready >>
   gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,

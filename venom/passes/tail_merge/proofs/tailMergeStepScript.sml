@@ -714,8 +714,10 @@ Proof
   Cases_on `inst1.inst_outputs` >> Cases_on `inst2.inst_outputs` >>
   gvs[exec_create_def] >>
   Cases_on `t` >> Cases_on `t'` >> gvs[] >>
+  Cases_on `w2n sz > 2 * max_code_size` >>
   simp[venom_create_request_def, consume_create_outcome_eq,
-       read_memory_def, execution_equiv_def, update_var_def]
+       read_memory_def, execution_equiv_def, update_var_def,
+       halt_state_def, set_returndata_def]
 QED
 
 (* Flat-form extraction lemmas: exec result equations in hypotheses.

@@ -423,6 +423,12 @@ Resume assign_tuple_locals_success_run[loads]:
      qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
      irule environment_var_not_fresh >> metis_tac[]) >>
+  `!p. cenv.ce_imm_alloca = SOME (Var p) ==>
+     lookup_var p (sv with vs_vars := lvars) = lookup_var p sv` by
+    (rpt strip_tac >>
+     qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+     irule local_ptrs_reserved_imm_base >> metis_tac[]) >>
   `stmt_state_rel ctx func cenv cx es1 sl` by
     (simp[Abbr `sl`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_inst_idx] >>

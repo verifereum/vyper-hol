@@ -11,7 +11,7 @@
  * ecrecover are proved; the rest are cheated, for the later #636 PRs.  Each #636 Builtins row is:
  *   1 len, len(msg.data), msg.data slices: compile_len_case (by
  *     exprSimLen's compile_len_vv_case, and compile_len_ctor_code_case for
- *     an immutable in the constructor, unprovable for now, below),
+ *     an immutable in the constructor),
  *     compile_calldata_len_case (by exprSimCalldata's
  *     compile_calldatasize_sim), and exprSimCalldataSlice's
  *     compile_calldata_slice_call_case
@@ -40,9 +40,9 @@
  *
  * Unprovable as the definitions stand, to be fixed in the lowering or in
  * state_rel before their PRs:
- *   - compile_len_ctor_code_case, len of an immutable in the constructor:
- *     nothing says the immutables buffer's base variable is 0, as
- *     unwrap_ctor_immutable_word_sim (exprSimUnwrap).
+ *   - compile_blockhash_case: the source raises a RuntimeError where
+ *     BLOCKHASH returns 0 (#671), and call_ctx_rel does not relate the block
+ *     hashes.
  *   - compile_acc_code_case, a bare .code: the lowering emits INVALID, as
  *     Python's codegen refuses it; the supported subset leaves it out.
  *
@@ -79,13 +79,9 @@ Ancestors
 (* ===== Lengths and calldata ===== *)
 
 (* len of an operand in code, an immutable, in the constructor: the
-   lowering loads the immutable's length word with an MLOAD at the
-   immutables buffer's base variable plus the offset.  The constructor's
-   prologue sets that variable to 0, but stmt_state_rel says nothing of it
-   (immutable_base_zero is not one of its conjuncts), so this does not hold
-   as the definitions stand; unwrap_ctor_immutable_word_sim (exprSimUnwrap)
-   is cheated for the same reason.  (At runtime it is exprSimLen's
-   compile_len_vv_case.) *)
+   lowering loads the length word from the staged immutables with ILOAD,
+   where immutables_rel lays the value out as in memory; exprSimLen's
+   compile_len_vv_case covers it. *)
 Theorem compile_len_ctor_code_case:
   !nocalls ctx func cenv cx ann args.
     exprs_case nocalls ctx func cenv cx args /\ cenv.ce_is_ctor /\
@@ -93,7 +89,7 @@ Theorem compile_len_ctor_code_case:
              SOME LocCode) ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann Len args)
 Proof
-  cheat
+  rpt strip_tac >> irule compile_len_vv_case >> simp[]
 QED
 
 Theorem compile_len_case:
@@ -458,6 +454,7 @@ Proof
   impl_tac >- (
     rpt conj_tac
     >- simp[]
+    >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[is_word_type_def]
     >- simp[is_word_type_def]
@@ -574,6 +571,7 @@ Proof
     mp_tac compile_unop_sim >>
   impl_tac >- (
     rpt conj_tac
+    >- simp[]
     >- simp[]
     >- simp[builtin_args_length_ok_def]
     >- simp[is_word_type_def]

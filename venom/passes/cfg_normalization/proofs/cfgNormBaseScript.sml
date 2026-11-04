@@ -25,6 +25,8 @@ Ancestors
   stateEquivProps venomExecSemantics execEquivProofs venomWf venomExecProps
   venomInstProps venomInst venomState venomExecProofs prevBbIndep
   finite_map
+Libs
+  stepInstBaseLib
 
 (* ================================================================
    Section 1: Counterexample -- block label collision
@@ -2765,21 +2767,21 @@ Proof
   simp[]
 QED
 
-val nonjump_term_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
-       eval_operands_prev_bb, halt_state_def, revert_state_def,
-       set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
+val nonjump_term_prev_bb_tac = stepInstBaseLib.with_opcode_clause (fn c =>
+  simp(c @ [eval_operand_prev_bb,
+            eval_operands_prev_bb, halt_state_def, revert_state_def,
+            set_returndata_def, exec_result_map_prev_bb_def,
+            read_memory_def])) >>
   BasicProvers.EVERY_CASE_TAC >>
   simp[exec_result_map_prev_bb_def,
        venomStateTheory.venom_state_component_equality];
 
 
 val dret_prev_bb_tac =
-  simp[step_inst_base_def, eval_operand_prev_bb,
+  simp[stepInstBaseLib.opcode_clause ``DRET``, eval_operand_prev_bb,
        eval_operands_prev_bb, halt_state_def, revert_state_def,
        set_returndata_def, exec_result_map_prev_bb_def,
-       read_memory_def] >>
+       read_memory_def, pack_dret_dynamic_prev_bb_eq] >>
   BasicProvers.EVERY_CASE_TAC >>
   gvs[pack_dret_dynamic_prev_bb_eq, exec_result_map_prev_bb_def,
       venomStateTheory.venom_state_component_equality];
@@ -2793,17 +2795,9 @@ Triviality step_inst_base_non_jump_terminator_prev_bb:
       (step_inst_base inst s)
 Proof
   rpt strip_tac >>
-  Cases_on `inst.inst_opcode` >> fs[is_terminator_def] >>
-  TRY (rename1 `inst.inst_opcode = DRET` >> dret_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RET` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETFMP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = RETURN` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = REVERT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = STOP` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SINK` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = SELFDESTRUCT` >> nonjump_term_prev_bb_tac) >>
-  TRY (rename1 `inst.inst_opcode = INVALID` >> nonjump_term_prev_bb_tac) >>
-  dret_prev_bb_tac
+  Cases_on `inst.inst_opcode` >> fs[is_terminator_def]
+  >~ [`inst.inst_opcode = DRET`] >- dret_prev_bb_tac
+  >> nonjump_term_prev_bb_tac
 QED
 
 (* For non-PHI, non-JMP/JNZ/DJMP opcodes, step_inst_base commutes with
@@ -3251,10 +3245,10 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[]
 QED
 
-val subst_label_nonjump_tac =
-  gvs[step_inst_base_def, subst_label_inst_def,
-      eval_operands_subst_label, eval_operand_subst_label,
-      parse_dret_shape_subst_label] >>
+val subst_label_nonjump_tac = stepInstBaseLib.with_opcode_clause (fn c =>
+  gvs(c @ [subst_label_inst_def,
+           eval_operands_subst_label, eval_operand_subst_label,
+           parse_dret_shape_subst_label])) >>
   BasicProvers.every_case_tac >>
   gvs[eval_operand_subst_label, parse_dret_shape_subst_label];
 
@@ -3297,7 +3291,7 @@ Theorem step_inst_base_subst_label_JMP_full[local]:
      | Error v6 => Error v6)
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, subst_label_inst_def] >>
+  simp[stepInstBaseLib.opcode_clause ``JMP``, subst_label_inst_def] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `h` >> simp[subst_label_op_def, jump_to_def] >>
@@ -3321,7 +3315,7 @@ Theorem step_inst_base_subst_label_JNZ_full[local]:
      | Error v6 => Error v6)
 Proof
   rpt strip_tac >>
-  simp[step_inst_base_def, subst_label_inst_def] >>
+  simp[stepInstBaseLib.opcode_clause ``JNZ``, subst_label_inst_def] >>
   Cases_on `inst.inst_operands` >> simp[] >>
   Cases_on `t` >> simp[] >>
   Cases_on `h'` >> simp[subst_label_op_def] >>
@@ -3364,7 +3358,7 @@ Theorem step_inst_base_subst_label_DJMP_full[local]:
      | Error v6 => Error v6)
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, subst_label_inst_def,
+  gvs[stepInstBaseLib.opcode_clause ``DJMP``, subst_label_inst_def,
       eval_operand_subst_label] >>
   Cases_on `inst.inst_operands` >> gvs[] >>
   simp[eval_operand_subst_label] >>

@@ -498,8 +498,9 @@ QED
 
 Resume evaluate_read_only[builtin_other]:
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
-  >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
-      simp[machine_frame_def, machine_frame_reads, machine_frame_primitives]) >>
+  >- rpt (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
+          simp[machine_frame_def, machine_frame_reads, machine_frame_primitives,
+               machine_frame_precompile_call_success]) >>
   gvs[SF ETA_ss] >> metis_tac[]
 QED
 
