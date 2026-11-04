@@ -35,7 +35,8 @@ Ancestors
 
 (* ===== Side conditions ===== *)
 
-(* The raw O1 source-shape theorem excludes DLOAD. This source-side
+(* S2's body-shape proof covers only static variable locations
+   (cenv_static_ok), and immutables are not static. This source-side
    packaging condition does not restrict the runtime immutable compiler. *)
 Definition immutable_free_program_def:
   immutable_free_program tops <=>
@@ -79,7 +80,8 @@ Definition expr_shape_root_def:
                        LENGTH es < type_builtin_arity tb)
 End
 
-(* No ImmutableLoc: its LocCode reads lower to DLOAD. *)
+(* No ImmutableLoc yet: the shape lemmas have no case for immutable reads
+   and writes (LocCode values). *)
 Definition loc_shape_ok_def:
   loc_shape_ok st (PtrVar op sz) = plain_operand st op /\
   loc_shape_ok st (ImmutableLoc n) = F /\
@@ -13189,9 +13191,9 @@ QED
 (* S2's statement, proved from the generator and source lemmas above.
    package_internal_blocks splits the block stream at each internal entry
    label; internal_descriptors_ok keeps those labels apart from
-   each other and from every other label. The raw O1 theorem excludes
-   DLOAD, hence the explicit immutable-free source-side hypothesis; runtime
-   immutable compilation itself remains unrestricted. *)
+   each other and from every other label. The body-shape lemmas need
+   static variable locations, hence the explicit immutable-free source-side
+   hypothesis; runtime immutable compilation itself remains unrestricted. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
