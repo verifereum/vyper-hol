@@ -3224,3 +3224,99 @@ Proof
   `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
   gvs[] >> drule_all frag_exec_return_observer_witness >> simp[]
 QED
+
+(* A concrete non-well-formed initial label: the IfExp exit is also the
+   initial block label.  This tests a containment inference, not simulation. *)
+Definition observer_collision_start_def:
+  observer_collision_start =
+    <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+       cs_current_bb := "@exit_2"; cs_current_insts := [];
+       cs_blocks := []; cs_data_sections := [] |>
+End
+
+Definition observer_collision_index_def:
+  observer_collision_index =
+    IfExp (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))
+      (Literal (BaseT (UintT 256)) (IntL 0))
+      (Literal (BaseT (UintT 256)) (IntL 1))
+End
+
+Theorem observer_collision_compile[local]:
+  lower_value compile_expr cenv (BaseT (UintT 256)) observer_collision_index
+    observer_collision_start =
+  (Var "%0",
+    <| cs_next_var := 1; cs_next_label := 3; cs_next_id := 5;
+       cs_current_bb := "@exit_2"; cs_current_insts := [];
+       cs_blocks :=
+         [<| bb_label := "@else_1"; bb_instructions :=
+             [mk_inst 3 ASSIGN [Lit 1w] ["%0"];
+              mk_inst 4 JMP [Label "@exit_2"] []] |>;
+          <| bb_label := "@then_0"; bb_instructions :=
+             [mk_inst 1 ASSIGN [Lit 0w] ["%0"];
+              mk_inst 2 JMP [Label "@exit_2"] []] |>;
+          <| bb_label := "@exit_2"; bb_instructions :=
+             [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>];
+       cs_data_sections := [] |>)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem observer_collision_containment_probe:
+  let (op,sb) = lower_value compile_expr cenv (BaseT (UintT 256))
+                 observer_collision_index observer_collision_start in
+    fn_has_code observer_collision_start sb (fn with fn_blocks := sb.cs_blocks) /\
+    fn_inst_ids_distinct (fn with fn_blocks := sb.cs_blocks) /\
+    ?bb. MEM bb (emitted_blocks observer_collision_start sb) /\
+         bb.bb_label = sb.cs_current_bb
+Proof
+  simp[observer_collision_compile] >>
+  conj_tac
+  >- (simp[fn_has_code_def, emitted_blocks_def, observer_collision_start_def,
+           lookup_block_def, listTheory.FIND_thm] >>
+      rpt strip_tac >> gvs[]) >>
+  conj_tac >- EVAL_TAC >>
+  simp[emitted_blocks_def, observer_collision_start_def] >>
+  qexists `<| bb_label := "@exit_2"; bb_instructions :=
+    [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>` >>
+  simp[]
+QED
+
+(* The actual unsigned static-array suffix adds instructions at the colliding
+   exit label.  Whole-fragment containment therefore excludes this fixture. *)
+Definition observer_collision_array_end_def:
+  observer_collision_array_end cenv =
+    let (op,sb) = lower_value compile_expr cenv (BaseT (UintT 256))
+                   observer_collision_index observer_collision_start in
+    SND (compile_array_subscript (Lit 0w) op F 2 32 32 F
+           (\p. emit_op MLOAD [p]) sb)
+End
+
+Theorem observer_collision_array_end_fields[local]:
+  (observer_collision_array_end cenv).cs_blocks =
+    (SND (lower_value compile_expr cenv (BaseT (UintT 256))
+       observer_collision_index observer_collision_start)).cs_blocks /\
+  (observer_collision_array_end cenv).cs_current_bb = "@exit_2" /\
+  HD (observer_collision_array_end cenv).cs_current_insts =
+    mk_inst 5 LT [Var "%0"; Lit 2w] ["%1"] /\
+  (observer_collision_array_end cenv).cs_current_insts <> []
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem observer_collision_array_containment_impossible:
+  ~fn_has_code observer_collision_start (observer_collision_array_end cenv) fn
+Proof
+  rewrite_tac[fn_has_code_def] >> strip_tac >>
+  qpat_x_assum `!bb. _` (qspec_then
+    `<| bb_label := "@exit_2"; bb_instructions :=
+      [mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []] |>` mp_tac) >>
+  simp[emitted_blocks_def, observer_collision_start_def,
+       observer_collision_array_end_fields, observer_collision_compile] >>
+  strip_tac >> gvs[observer_collision_array_end_fields] >>
+  qpat_x_assum `_ ≼ _` mp_tac >>
+  simp[listTheory.isPREFIX_CONSR, observer_collision_array_end_fields] >>
+  strip_tac >>
+  `HD (observer_collision_array_end cenv).cs_current_insts =
+   mk_inst 0 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []` by simp[] >>
+  gvs[observer_collision_array_end_fields, mk_inst_def]
+QED
