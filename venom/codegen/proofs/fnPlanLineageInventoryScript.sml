@@ -1474,3 +1474,49 @@ Resume clean_stack_plan_active_prefix_replay[popped]:
 QED
 
 Finalise clean_stack_plan_active_prefix_replay
+
+
+Theorem clean_stack_plan_prefix_replay:
+  !liveness cfg fn bb ps qs m n core.
+    lineage_core m core ps /\ lineage_core n core qs /\
+    ALL_DISTINCT core /\ EVERY is_var_operand core /\ ps.ps_alloc = qs.ps_alloc /\
+    (!pred_lbl pred_bb.
+      cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+      1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+      lookup_block pred_lbl fn.fn_blocks = SOME pred_bb ==>
+      set core SUBSET
+        set (MAP Var (input_vars_from pred_lbl bb.bb_instructions
+          (live_vars_at liveness bb.bb_label 0))) UNION
+        set (MAP Var (live_vars_at liveness pred_lbl (LENGTH pred_bb.bb_instructions)))) ==>
+    ?choice ops core' m' n' al pref pcand.
+      clean_stack_plan liveness cfg fn bb ps =
+        (ops, ps with <|ps_stack := REPLICATE m' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_promised := pref|>) /\
+      clean_stack_plan liveness cfg fn bb
+        (qs with <|ps_cleanup_height := NONE; ps_cleanup_promised := choice|>) =
+        (ops, qs with <|ps_stack := REPLICATE n' dead_stack_marker ++ core';
+                       ps_alloc := al; ps_cleanup_height := NONE;
+                       ps_cleanup_promised := pcand|>) /\
+      ALL_DISTINCT core' /\ EVERY is_var_operand core'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?pred_lbl pred_bb.
+    cfg_preds_of cfg bb.bb_label = [pred_lbl] /\
+    1 < LENGTH (cfg_succs_of cfg pred_lbl) /\
+    lookup_block pred_lbl fn.fn_blocks = SOME pred_bb`
+  >- (pop_assum strip_assume_tac >>
+      irule clean_stack_plan_active_prefix_replay >>
+      rpt (goal_assum (drule_at Any)) >>
+      simp[] >> metis_tac[]) >>
+  `!s. clean_stack_plan liveness cfg fn bb s = ([], s)` by
+    (gen_tac >>
+     Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[clean_stack_plan_def] >>
+     Cases_on `t` >> simp[clean_stack_plan_def] >>
+     Cases_on `LENGTH (cfg_succs_of cfg h) <= 1` >> simp[] >>
+     Cases_on `lookup_block h fn.fn_blocks` >> simp[] >>
+     metis_tac[arithmeticTheory.NOT_LESS_EQUAL]) >>
+  qexistsl_tac [`F`, `[]`, `core`, `m`, `n`, `ps.ps_alloc`,
+                `ps.ps_cleanup_promised`, `F`] >>
+  simp[] >>
+  gvs[lineage_core_def, stackPlanTypesTheory.plan_state_component_equality]
+QED
