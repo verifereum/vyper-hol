@@ -1,9 +1,9 @@
 (* Reachability predicates for the additive memory body induction. *)
 Theory bodyMemoryPreds
 Ancestors
-  stmtSimZero stmtSimPass stmtSimSeqMem stmtSimJumpMem
-  bodyMemoryDefs bodyExprMemory stmtMemory stmtControlMemory stmtSimDefs
-  bodySim bodySimStmtCases exprSimHyps supportedExprTraverse supportedStmtTraverse
+  stmtSimZero stmtSimPass stmtSimJumpMem gasContext
+  bodyMemoryDefs bodyExprMemory stmtSimDefs
+  bodySim exprSimHypsDefs supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
@@ -129,7 +129,6 @@ Theorem body_pass_mem_ok:
   !cx. body_stmt_mem_ok cx Pass
 Proof
   rw[body_stmt_mem_ok_def] >>
-  gvs[Once evaluate_def, return_def] >>
   irule compile_pass_frag_mem
 QED
 
@@ -137,7 +136,6 @@ Theorem body_nil_mem_ok:
   !cx. body_stmts_mem_ok cx []
 Proof
   rw[body_stmts_mem_ok_def] >>
-  gvs[Once evaluate_def, return_def] >>
   irule stmt_frag_nil_mem
 QED
 
@@ -145,9 +143,9 @@ Theorem body_break_mem_ok:
   !cx. body_stmt_mem_ok cx Break
 Proof
   rw[body_stmt_mem_ok_def] >>
-  gvs[Once evaluate_def, raise_def] >>
   Cases_on `lctx`
-  >- simp[stmt_frag_mem_def, stmt_res_ok_def] >>
+  >- simp[stmt_frag_mem_def, gas_admissible_def,
+          Once evaluate_def, raise_def, stmt_res_ok_def] >>
   irule compile_break_frag_mem
 QED
 
@@ -155,9 +153,9 @@ Theorem body_continue_mem_ok:
   !cx. body_stmt_mem_ok cx Continue
 Proof
   rw[body_stmt_mem_ok_def] >>
-  gvs[Once evaluate_def, raise_def] >>
   Cases_on `lctx`
-  >- simp[stmt_frag_mem_def, stmt_res_ok_def] >>
+  >- simp[stmt_frag_mem_def, gas_admissible_def,
+          Once evaluate_def, raise_def, stmt_res_ok_def] >>
   irule compile_continue_frag_mem
 QED
 
@@ -167,23 +165,6 @@ Proof
   rw[body_stmt_mem_ok_def, frame_ret_ok_mem_def] >>
   first_x_assum irule >> simp[same_frame_refl] >>
   qexists_tac `env` >> simp[]
-QED
-
-Theorem body_return_mem_ok:
-  !cx e. body_expr_mem_ok cx e ==> body_stmt_mem_ok cx (Return (SOME e))
-Proof
-  rw[body_stmt_mem_ok_def, frame_ret_ok_mem_def] >>
-  `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
-  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
-    gvs[body_inv_def] >>
-  `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
-     gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-         supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
-     qexists_tac `[]` >> simp[]) >>
-  first_x_assum irule >> fs[body_expr_mem_ok_def] >>
-  conj_tac >- metis_tac[] >> qexists_tac `env` >> simp[]
 QED
 
 (* Do not mistake these base cases and projection for the mutual theorem:
@@ -196,5 +177,5 @@ val () = List.app (fn th =>
      else raise Fail "body memory predicate inherited admission"
   end) [body_bool_literal_mem_ok, body_stmts_mem_projection,
         body_pass_mem_ok, body_nil_mem_ok, body_break_mem_ok,
-        body_continue_mem_ok, body_return_none_mem_ok, body_return_mem_ok];
+        body_continue_mem_ok, body_return_none_mem_ok];
 
