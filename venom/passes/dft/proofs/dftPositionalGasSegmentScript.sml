@@ -345,3 +345,239 @@ Resume dft_pos_gas_done_next[restored]:
   fs[dft_pos_gas_phase_def] >> metis_tac[]
 QED
 Finalise dft_pos_gas_done_next
+
+Theorem dft_pos_gas_at_outside_next:
+  D = dft_pos_edit_ctx fi bi pre x y post C /\
+  dft_pos_runtime_ready C fi bi pre x y post /\
+  dft_pos_gas_phase C D fi bi pre l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls n /\
+  r.dft_occ_core = DftOpen (DftAt g 0 b' s) rs n /\
+  dft_pos_slot C D j k f g b b' /\
+  (j <> fi \/ k <> bi \/
+    (s.vs_inst_idx <> LENGTH pre /\ s.vs_inst_idx <> SUC (LENGTH pre))) ==>
+  dft_pos_gas_phase C D fi bi pre
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `get_instruction b s.vs_inst_idx = get_instruction b' s.vs_inst_idx` by
+    metis_tac[dftPositionalStepTheory.dft_pos_slot_instruction_outside] >>
+  `LIST_REL (dft_pos_gas_frame C D) ls rs /\
+   l.dft_occ_saved = r.dft_occ_saved /\ LENGTH l.dft_occ_saved = LENGTH ls /\
+   l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit` by
+    (fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  drule dft_pos_gas_stack_zero >> strip_tac >>
+  Cases_on `get_instruction b' s.vs_inst_idx`
+  >- suspend "missing" >>
+  rename1 `get_instruction b' s.vs_inst_idx = SOME inst` >>
+  Cases_on `inst.inst_opcode = INVOKE`
+  >- suspend "invoke" >>
+  Cases_on `inst.inst_opcode = GAS`
+  >- suspend "gas" >>
+  suspend "ordinary"
+QED
+
+Resume dft_pos_gas_at_outside_next[missing]:
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_erase_def, dft_occ_update_def] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+
+Resume dft_pos_gas_at_outside_next[ordinary]:
+  `dft_pos_functions C D f g` by
+    (fs[dft_pos_slot_def, dft_pos_functions_def] >> metis_tac[]) >>
+  Cases_on `step_inst_base inst s`
+  >- (Cases_on `is_terminator inst.inst_opcode`
+      >- (Cases_on `v.vs_halted` >>
+          gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+            dft_fill_def, dft_fill_control_def, dft_open_next_def,
+            dft_open_deliver_def, dft_open_continue_def, dft_erase_def,
+            MAP_MAP_o, combinTheory.o_DEF, dft_occ_update_def, SF ETA_ss] >>
+          simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+          Cases_on `ls` >> Cases_on `rs` >> gvs[] >>
+          fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+      gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+        dft_fill_def, dft_fill_control_def, dft_open_next_def,
+        dft_open_deliver_def, dft_open_continue_def, dft_erase_def,
+        MAP_MAP_o, combinTheory.o_DEF, dft_occ_update_def, SF ETA_ss] >>
+      simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+      Cases_on `ls` >> Cases_on `rs` >> gvs[] >>
+      fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_deliver_def, dft_erase_def,
+    MAP_MAP_o, combinTheory.o_DEF, dft_occ_update_def, SF ETA_ss] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  Cases_on `ls` >> Cases_on `rs` >> gvs[] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+
+Resume dft_pos_gas_at_outside_next[gas]:
+  Cases_on `inst.inst_outputs` >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_erase_def, dft_occ_update_def, dft_occ_address_def]
+  >- (simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+      fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  Cases_on `t` >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_deliver_def, dft_open_continue_def, is_terminator_def,
+    dft_erase_def, MAP_MAP_o, combinTheory.o_DEF, dft_occ_update_def,
+    dft_occ_address_def, SF ETA_ss]
+  >- (simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+      Cases_on `ls` >> Cases_on `rs` >> gvs[] >>
+      fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+
+Resume dft_pos_gas_at_outside_next[invoke]:
+  `dftRelationalEdit$dft_rel_interface C D (dft_pos_functions C D) (dft_pos_blocks C D)` by
+    metis_tac[dft_pos_runtime_ready_interface] >>
+  Cases_on `decode_invoke inst`
+  >- suspend "bad_decode" >>
+  PairCases_on `x'` >>
+  `OPTREL (dft_pos_functions C D)
+    (lookup_function x'0 C.ctx_functions) (lookup_function x'0 D.ctx_functions)` by
+    fs[dftRelationalEditTheory.dft_rel_interface_def] >>
+  Cases_on `lookup_function x'0 C.ctx_functions`
+  >- suspend "bad_lookup" >>
+  fs[optionTheory.OPTREL_def] >>
+  rename1 `lookup_function x'0 C.ctx_functions = SOME callee` >>
+  rename1 `lookup_function x'0 D.ctx_functions = SOME callee'` >>
+  `!args. setup_callee callee args s = setup_callee callee' args s` by
+    metis_tac[dftRelationalEditTheory.dft_rel_interface_def] >>
+  Cases_on `eval_operands x'1 s`
+  >- suspend "bad_args" >>
+  rename1 `eval_operands x'1 s = SOME args` >>
+  Cases_on `setup_callee callee' args s`
+  >- suspend "bad_setup" >>
+  `dft_pos_gas_frame C D (DftCaller f 0 b inst s) (DftCaller g 0 b' inst s)` by
+    (simp[dft_pos_gas_frame_def] >> metis_tac[]) >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_invoke_def, dft_erase_def, MAP_MAP_o, combinTheory.o_DEF,
+    dft_fill_frame_def, dft_occ_update_def, SF ETA_ss] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+
+Resume dft_pos_gas_at_outside_next[bad_decode]:
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_invoke_def, dft_erase_def, dft_occ_update_def] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Resume dft_pos_gas_at_outside_next[bad_lookup]:
+  fs[optionTheory.OPTREL_def] >>
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_invoke_def, dft_erase_def, dft_occ_update_def] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Resume dft_pos_gas_at_outside_next[bad_args]:
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_invoke_def, dft_erase_def, dft_occ_update_def] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Resume dft_pos_gas_at_outside_next[bad_setup]:
+  gvs[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_open_invoke_def, dft_erase_def, dft_occ_update_def] >>
+  simp[dft_pos_gas_phase_def, dft_pos_control_def] >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Finalise dft_pos_gas_at_outside_next
+
+Theorem dft_pos_gas_selected_blocks:
+  D = dft_pos_edit_ctx fi bi pre x y post C /\
+  dft_pos_runtime_ready C fi bi pre x y post /\
+  dft_pos_slot C D fi bi f g bb bb' ==>
+  bb.bb_instructions = pre ++ [x;y] ++ post /\
+  bb'.bb_instructions = pre ++ [y;x] ++ post
+Proof
+  simp[dft_pos_runtime_ready_def, dft_pos_slot_def] >> rpt strip_tac >>
+  gvs[dft_pos_edit_ctx_def, dft_pos_edit_fn_def, dft_pos_replace_el]
+QED
+
+
+Theorem dft_pos_gas_segment_next:
+  D = dft_pos_edit_ctx fi bi pre x y post C /\
+  dft_pos_runtime_ready C fi bi pre x y post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\ u <> v /\
+  dft_pos_gas_phase C D fi bi pre l r ==>
+  ?a. (a = 1 \/ a = 2) /\
+    dft_pos_gas_phase C D fi bi pre
+      (FUNPOW (dft_occ_oracle_next w C) a l)
+      (FUNPOW (dft_occ_oracle_next w D) a r) /\
+    dft_pos_segment_account C D w a a l r
+Proof
+  strip_tac >>
+  `?ctl ctl' ls rs n.
+    l.dft_occ_core = DftOpen ctl ls n /\ r.dft_occ_core = DftOpen ctl' rs n /\
+    dft_pos_control C D fi bi pre ctl ctl'` by
+    (fs[dft_pos_gas_phase_def] >> metis_tac[]) >>
+  qpat_x_assum `dft_pos_control _ _ _ _ _ _ _` mp_tac >>
+  simp[dft_pos_control_def] >> strip_tac
+  >- suspend "enter"
+  >- suspend "at" >>
+  suspend "done"
+QED
+
+Resume dft_pos_gas_segment_next[enter]:
+  gvs[] >> qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> simp[] >>
+  conj_tac
+  >- (irule dft_pos_gas_enter_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[dft_pos_enter_account]
+QED
+Resume dft_pos_gas_segment_next[done]:
+  gvs[] >> qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> simp[] >>
+  conj_tac
+  >- (irule dft_pos_gas_done_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  metis_tac[dft_pos_done_one_account]
+QED
+Resume dft_pos_gas_segment_next[at]:
+  gvs[] >> Cases_on `j = fi /\ k = bi /\ s.vs_inst_idx = LENGTH pre`
+  >- suspend "pair" >>
+  qexists `1` >> pure_rewrite_tac[FUNPOW_1] >> simp[] >> conj_tac
+  >- (irule dft_pos_gas_at_outside_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  irule dftPositionalSegmentTheory.dft_pos_at_outside_account >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[]
+QED
+Resume dft_pos_gas_segment_next[pair]:
+  gvs[] >>
+  `b.bb_instructions = pre ++ [x;y] ++ post /\
+   b'.bb_instructions = pre ++ [y;x] ++ post` by
+    metis_tac[dft_pos_gas_selected_blocks] >>
+  qexists `2` >> simp[] >> conj_tac
+  >- (irule dft_pos_gas_pair_phase >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[dft_pos_gas_pair_account]
+QED
+Finalise dft_pos_gas_segment_next
+
+Theorem dft_pos_gas_pair_segment:
+  dft_pos_gas_phase C D fi bi pre l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls n /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs n /\
+  dft_pos_slot C D fi bi f g bb bb' /\
+  bb.bb_instructions = pre ++ [x;y] ++ post /\
+  bb'.bb_instructions = pre ++ [y;x] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\ u <> v /\
+  s.vs_inst_idx = LENGTH pre ==>
+  dft_pos_gas_phase C D fi bi pre
+    (FUNPOW (dft_occ_oracle_next w C) 2 l)
+    (FUNPOW (dft_occ_oracle_next w D) 2 r) /\
+  dft_pos_segment_account C D w 2 2 l r
+Proof
+  strip_tac >> conj_tac
+  >- (irule dft_pos_gas_pair_phase >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  fs[dft_pos_gas_phase_def] >> metis_tac[dft_pos_gas_pair_account]
+QED
