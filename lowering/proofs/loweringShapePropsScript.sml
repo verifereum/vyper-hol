@@ -13741,3 +13741,25 @@ Proof
   drule fresh_var_labels >> simp[]
 QED
 
+
+Theorem compile_array_membership_loop_labels:
+  !needle arr len size offset loader is_in s.
+    (!op st. cs_extends st (SND (loader op st)) /\
+      EVERY (isPREFIX "@") (added_labels st (SND (loader op st)))) ==>
+    cs_extends s
+      (SND (compile_array_membership_loop needle arr len size offset loader is_in s)) /\
+    EVERY (isPREFIX "@") (added_labels s
+      (SND (compile_array_membership_loop needle arr len size offset loader is_in s)))
+Proof
+  rpt gen_tac >> disch_tac >>
+  rewrite_tac[compile_array_membership_loop_def, LET_THM] >>
+  rpt (FIRST [irule fresh_label_bind_labels,
+              irule new_block_action_labels >>
+                rename1 `isPREFIX "@" lab` >> Cases_on `lab` >> gvs[],
+              irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac,
+              disch_tac, IF_CASES_TAC] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_void_labels, emit_op_labels,
+            emit_inst_labels, fresh_var_action_labels])
+QED
