@@ -1,7 +1,7 @@
 (* Minimal safety-only relocation kernel. No paired execution is asserted. *)
 Theory lowerDloadSafetyKernel
 Ancestors
-  lowerDloadSafetyBoundary ptrDiscipline finite_map
+  lowerDloadSafetyBoundary ptrDiscipline finite_map pred_set
 
 Type ld_site = ``:num # num``;
 Type ld_alloc = ``:(ld_site, num # num # num) fmap``;
@@ -83,4 +83,39 @@ Theorem ld_nonghost_refl[simp]:
 Proof
   simp[ld_nonghost_def, storage_agree_except_def, word_agree_except_def] >>
   rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_wordrel_restrict:
+  ld_wordrel A k x y /\ (!a. k = SOME a ==> a IN keep) ==>
+  ld_wordrel (DRESTRICT A keep) k x y
+Proof
+  Cases_on `k` >> simp[ld_wordrel_SOME, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem ld_memory_restrict:
+  ld_memory lo A tn s t ==> ld_memory lo (DRESTRICT A keep) tn s t
+Proof
+  simp[ld_memory_def, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem ld_erase_restrict_compose:
+  FRANGE H SUBSET keep ==>
+  ld_erase (DRESTRICT A keep) o_f H = ld_erase A o_f H
+Proof
+  strip_tac >> simp[fmap_eq_flookup, FLOOKUP_o_f] >> gen_tac >>
+  Cases_on `FLOOKUP H x` >> simp[] >>
+  `x' IN keep` by metis_tac[SUBSET_DEF, FRANGE_FLOOKUP] >>
+  simp[ld_erase_def, FLOOKUP_DRESTRICT]
+QED
+
+Theorem ld_wordrel_fresh_update:
+  k NOTIN FDOM A /\ ld_wordrel A q x y ==>
+  ld_wordrel (A |+ (k,v)) q x y
+Proof
+  Cases_on `q` >> simp[ld_wordrel_SOME, FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `x' <> k` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
+  simp[] >> metis_tac[]
 QED
