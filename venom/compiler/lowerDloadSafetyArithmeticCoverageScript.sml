@@ -85,3 +85,27 @@ Proof
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
   simp[] >> metis_tac[ld_set_prov_selected]))
 QED
+
+Theorem ld_sync_arithmetic_coverage:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  MEM inst.inst_opcode
+    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+     ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET;
+     ADD; SUB; SHL; SHR; SAR] /\
+  inst.inst_opcode <> DLOAD /\ inst.inst_opcode <> DLOADBYTES /\
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+  step_inst fuel C' inst t = OK ts /\
+  active_inst (ld_image f) ti (ts with vs_inst_idx := SUC t.vs_inst_idx) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) ==>
+  ld_pair lo P names Sigma C C' vs0 (ld_image f) ti
+    (ts with vs_inst_idx := SUC t.vs_inst_idx)
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all ld_sync_arithmetic_effect >> strip_tac >>
+  irule ld_sync_ordinary_coverage >> metis_tac[]
+QED
