@@ -40,6 +40,12 @@ Proof
   rpt gen_tac \\ Cases_on `b` \\ simp[get_storage_def]
 QED
 
+Theorem get_storage_storage_trace[simp]:
+  get_storage cx (st with storage_trace := observations) b = get_storage cx st b
+Proof
+  Cases_on `b` >> simp[get_storage_def]
+QED
+
 Theorem set_storage_scopes[simp]:
   ∀cx st b s'. (set_storage cx st b s').scopes = st.scopes
 Proof
