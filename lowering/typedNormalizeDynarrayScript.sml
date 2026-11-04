@@ -1,6 +1,6 @@
 Theory typedNormalizeDynarray
 Ancestors
-  typedNormalizeFrame typedNormalizeLoop typedBytesArrayMem memContinuation allocaFootprint instMemFrontier
+  exprSimBufferStore typedNormalizeFrame typedNormalizeLoop typedBytesArrayMem memContinuation allocaFootprint instMemFrontier
   fragExec fragExecMem emitHelperProps exprLoweringProps venomExecSemantics venomExecProofs venomState venomInst
   context compileEnv emitHelper valueEncoding valueEncodingProps words arithmetic list rich_list
 
@@ -125,7 +125,7 @@ Theorem typed_dynarray_equal_suffix_run[local]:
     OK (mcopy (w2n d) (w2n p) (l * stride)
           (update_var sz (n2w (l * stride)) s))
 Proof
-  strip_tac >> Cases_on `length_op` >> Cases_on `src` >> Cases_on `dst` >>
+  strip_tac >> Cases_on `src` >> Cases_on `dst` >>
   gvs[eval_operand_def, lookup_var_def] >>
   simp[run_inst_seq_def, run_inst_seq_mem_ok_cons, run_inst_seq_mem_ok_last,
        below_frontier_no_ranges, below_frontier_MCOPY,
@@ -306,4 +306,91 @@ Proof
   qexists_tac `u` >> reverse conj_tac >- simp[] >>
   irule typed_bytes_child_seq_cont >> simp[] >>
   qexists_tac `sa` >> simp[IS_PREFIX_APPEND, mk_inst_def, is_terminator_def]
+QED
+
+(* The header and data writes together affect only the live destination. *)
+Theorem typed_dynarray_equal_exterior[local]:
+  !s d p l stride a k.
+    a+k <= d \/ d+32+l*stride <= a ==>
+    mem_bytes_at a k
+      (mcopy (d+32) (p+32) (l*stride) (mstore d (n2w l) s)).vs_memory =
+    mem_bytes_at a k s.vs_memory
+Proof
+  rpt strip_tac >>
+  `mem_bytes_at a k
+    (mcopy (d+32) (p+32) (l*stride) (mstore d (n2w l) s)).vs_memory =
+   mem_bytes_at a k (mstore d (n2w l) s).vs_memory` by
+    (irule buffer_mcopy_exterior >> decide_tac) >>
+  simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem typed_dynarray_equal_window[local]:
+  !s d p l stride src_size.
+    mload p s = n2w l /\ 32+l*stride <= src_size /\
+    (p+src_size <= d \/ d+32+l*stride <= p) ==>
+    mem_bytes_at d (32+l*stride)
+      (mcopy (d+32) (p+32) (l*stride) (mstore d (n2w l) s)).vs_memory =
+    mem_bytes_at p (32+l*stride) s.vs_memory
+Proof
+  rpt strip_tac >>
+  rewrite_tac[valueEncodingProofsTheory.mem_bytes_at_split_padded] >>
+  `mem_bytes_at d 32
+     (mcopy (d+32) (p+32) (l*stride) (mstore d (n2w l) s)).vs_memory =
+   mem_bytes_at d 32 (mstore d (n2w l) s).vs_memory` by
+    (irule buffer_mcopy_exterior >> simp[]) >>
+  `mem_bytes_at d 32 (mstore d (n2w l) s).vs_memory =
+   mem_bytes_at p 32 s.vs_memory` by
+    (irule mload_eq_mem_bytes_at_eq >> simp[mstore_mem_word_at_same,
+      GSYM mem_word_at_eq_mload]) >>
+  `mem_bytes_at (d+32) (l*stride)
+    (mcopy (d+32) (p+32) (l*stride) (mstore d (n2w l) s)).vs_memory =
+   mem_bytes_at (p+32) (l*stride) (mstore d (n2w l) s).vs_memory` by
+    simp[mem_bytes_at_def, venomMemPropsTheory.mcopy_padded_read] >>
+  simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem normalize_dynarray_equal_window_cont:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  mload (w2n p) s = n2w l /\ l <= cap /\ cap < dimword(:256) /\
+  l * type_memory_bytes ce ty < dimword(:256) /\
+  w2n p + 32 < dimword(:256) /\ w2n d + 32 < dimword(:256) /\
+  32 + l * type_memory_bytes ce ty <= src_size /\
+  w2n p + src_size <= s.vs_alloca_next /\
+  w2n d + 32 + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+  (w2n p + src_size <= w2n d \/
+   w2n d + 32 + l * type_memory_bytes ce ty <= w2n p) /\
+  val_in_memory tv v (w2n p) s.vs_memory /\ val_wf tv v /\
+  val_footprint tv v <= 32 + l * type_memory_bytes ce ty /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. mem_cont_sim ctx fn s (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    val_in_memory tv v (w2n d) u.vs_memory /\
+    mem_bytes_at (w2n p) src_size u.vs_memory =
+      mem_bytes_at (w2n p) src_size s.vs_memory /\
+    (!a k. a+k <= w2n d \/ w2n d+32+l*type_memory_bytes ce ty <= a ==>
+      mem_bytes_at a k u.vs_memory = mem_bytes_at a k s.vs_memory) /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `w2n (p+32w) = w2n p+32 /\ w2n (d+32w) = w2n d+32` by
+    simp[w2n_add_2] >>
+  `w2n p + 32 <= s.vs_alloca_next /\
+   w2n d + 32 <= s.vs_alloca_next /\
+   w2n (p+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next /\
+   w2n (d+32w) + l * type_memory_bytes ce ty <= s.vs_alloca_next` by decide_tac >>
+  drule_all typed_dynarray_equal_cont >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >> qexists_tac `u` >> simp[] >>
+  conj_tac
+  >- (irule valueCopyTheory.val_in_memory_relocate >> conj_tac >- simp[] >>
+      qexistsl_tac [`w2n p`, `32+l*type_memory_bytes ce ty`, `s.vs_memory`] >>
+      simp[] >>
+      pure_rewrite_tac [Q.SPECL [`l*type_memory_bytes ce ty`, `32`] ADD_COMM] >>
+      irule typed_dynarray_equal_window >> metis_tac[]) >>
+  conj_tac
+  >- (irule typed_dynarray_equal_exterior >> decide_tac) >>
+  rpt strip_tac >> irule typed_dynarray_equal_exterior >> simp[]
 QED
