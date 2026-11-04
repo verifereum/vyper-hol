@@ -14,6 +14,7 @@ Ancestors
   venomCompilerTypes irSupply venomPassDispatcher venomInst
   o1LowerDloadPairedAllocation o1LowerDloadAddressArithmetic
   o1LowerDloadFreshNext o1LowerDloadRepeatedNext o1LowerDloadJointParam
+  o1LowerDloadJointTernary
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
