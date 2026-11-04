@@ -570,15 +570,18 @@ Proof
 QED
 
 Theorem current_wf_keyed_outputs_transport:
-  !ys. ALL_DISTINCT (MAP k xs) /\ ALL_DISTINCT (MAP j ys) /\
-  ALL_DISTINCT (FLAT (MAP f xs)) /\
+  !xs k f. ALL_DISTINCT (MAP k xs) /\ ALL_DISTINCT (FLAT (MAP f xs)) ==>
+  !ys j G. ALL_DISTINCT (MAP j ys) /\
   (!y. MEM y ys ==> ?x. MEM x xs /\ k x = j y /\ ALL_DISTINCT (G y) /\
     (!v. MEM v (G y) ==> MEM v (f x))) ==>
   ALL_DISTINCT (FLAT (MAP G ys))
 Proof
-  Induct >> simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >>
+  rpt gen_tac >> strip_tac >> Induct >>
+  simp[ALL_DISTINCT_APPEND] >> rpt strip_tac >>
   `?x. MEM x xs /\ k x = j h /\ ALL_DISTINCT (G h) /\
     (!v. MEM v (G h) ==> MEM v (f x))` by metis_tac[] >>
+  `ALL_DISTINCT (FLAT (MAP G ys))` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
   simp[] >> rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >>
   `?z. MEM z xs /\ k z = j y /\ ALL_DISTINCT (G y) /\
     (!v. MEM v (G y) ==> MEM v (f z))` by metis_tac[] >>
@@ -812,6 +815,35 @@ Proof
   metis_tac[current_wf_certificate_block_outputs]
 QED
 
+Theorem current_wf_certificate_ssa_form:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ALL_DISTINCT (FLAT (MAP (\ev. FLAT (MAP instruction_inst_outputs
+    (current_event_renamed_block ev).bb_instructions)) events)) ==>
+  ssa_form fn'
+Proof
+  strip_tac >>
+  drule_all current_wf_certificate_labels >> strip_tac >>
+  `!b. MEM b fn'.fn_blocks ==> ?ev. MEM ev events /\
+    current_event_label ev = b.bb_label /\
+    ALL_DISTINCT (FLAT (MAP instruction_inst_outputs b.bb_instructions)) /\
+    (!v. MEM v (FLAT (MAP instruction_inst_outputs b.bb_instructions)) ==>
+      MEM v (FLAT (MAP instruction_inst_outputs
+        (current_event_renamed_block ev).bb_instructions)))` by
+    metis_tac[current_wf_certificate_output_coverage] >>
+  simp[ssa_form_def, fn_insts_def, fn_insts_blocks_flat,
+    MAP_FLAT, FLAT_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
+  qspecl_then [`events`, `current_event_label`,
+    `\ev. FLAT (MAP instruction_inst_outputs
+      (current_event_renamed_block ev).bb_instructions)`]
+    mp_tac (INST_TYPE [``:'d`` |-> ``:basic_block``]
+      current_wf_keyed_outputs_transport) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qspecl_then [`fn'.fn_blocks`, `\b. b.bb_label`,
+    `\b. FLAT (MAP instruction_inst_outputs b.bb_instructions)`] mp_tac) >>
+  simp[SF ETA_ss]
+QED
+
 Theorem current_wf_named_structural_certificate:
   wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -858,6 +890,22 @@ Proof
   >- (simp[current_structural_certificate_def] >> metis_tac[]) >>
   rpt strip_tac >> irule current_wf_event_output_at >>
   fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_wf_run_ssa_form:
+  wf_function fn /\ all_reachable fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==> ssa_form fn'
+Proof
+  strip_tac >> Cases_on `entry_block fn`
+  >- (gvs[entry_block_def, fn_entry_label_def, make_ssa_current_fn_def,
+        ssa_form_def, fn_insts_def, fn_insts_blocks_flat, NULL_EQ]) >>
+  drule_all current_wf_named_structural_certificate >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (\ev. FLAT (MAP instruction_inst_outputs
+    (current_event_renamed_block ev).bb_instructions)) events))` by
+    (irule (SRULE [SF ETA_ss] current_wf_events_outputs_distinct) >>
+     metis_tac[]) >>
+  irule current_wf_certificate_ssa_form >> metis_tac[]
 QED
 
 Theorem current_wf_path_annotation_origin:
