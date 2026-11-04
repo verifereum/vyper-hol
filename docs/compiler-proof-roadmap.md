@@ -181,7 +181,7 @@ gas positions. Oracle calls evaluate but ignore that operand's value; assembly
 GAS consumes actual EVM readings (zero on exhaustion). No equality of Venom
 GAS with EVM readings, `msg.gas`/`gas=` guarantee or sufficient-gas existential
 is claimed. The conclusion is actual `run_call` and frame OutOfGas /
-StackOverflow, valid computed-precompile failure, or `call_result_rel`.
+StackOverflow, or `call_result_rel`.
 
 On success the result relates canonical wrapped return bytes, accounts,
 transient storage, ordered concrete logs and the **entire request sequence**.
@@ -232,7 +232,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D25 | Exact External call/count/binding; no fallback/defaults | `valid_vyper_call` implemented via real lookup; no general producer. Fallback invocation remains deferred. | 7 |
 | D26 | Initial and successful-outcome storage validity | `source_storage_ok` + `call_outcomes_ok` use actual context/storage invariants. Account/code guard alone is insufficient; no producer from arbitrary EVM callees. | 7 |
 | D27 | Preserve/re-prove existing true claims | Completed retirement ledger preserves proof text/Git identities and four structural APIs. **Clarification:** D30's unused false claims retire without same-name replacements; meaningful deployment is a new admission, not a proof upgrade of old T. | every proof owner |
-| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness/uninstalled source target. Computed source SHA256 allowed. | 6 item7 |
+| D28 | Meaningful single-frame deployment, not nested creation | `e2e_deploy_correctness` ADMITTED; **implementation boundary refinement:** `constructor_call_free`, canonical args, actual pre-constant deployment readiness/uninstalled source target. The precompile builtins are excluded, since the constructor runs without the oracle. | 6 item7 |
 | D29 | Retire unused codegen_fn_correct; frame-aware gen_fn_simulation | Actual entry/IntRet/return relations and concrete maps; separate ADMITTED off-path target. This intentionally differs from old roadmap “restate codegen_fn_correct”. | 4.2 |
 | D30 | Fresh output labels proved; unused false local claims retired | `fresh_label_output_inj` / output-state `fresh_label_produces_external` proved. Assign/zero-pad/generate-runtime correctness claims retired with provenance, not rewritten under the same names; Assign belongs to statement induction, runtime to S1. | 6 |
 | D31 | Do not claim call_state_rel satisfiable in Milestone1 | No general producer or satisfiability theorem; focused checks are not a compiled-program witness. Top-level transaction construction is explicitly future work. | 7 |
@@ -629,7 +629,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    - argument decoding establishes `local_ptrs_rel` in `state_rel`;
    - `lower_vyper_runtime_unit_correct`.
 6. **Builtins.** Only the actual whitelist: Send/ExtCall use the complete
-   outcome oracle; computed precompiles use pure results. `raw_call` and
+   outcome oracle; computed precompiles take their success from it and
+   their data from pure results. `raw_call` and
    `raw_create` are excluded, not future missing cases of S1. Wire conversion
    proofs into the actual lowering rollup without inventing gas-number reads.
 7. **H6-deploy / owner Milestone 6 item7:** prove actual separately ADMITTED
