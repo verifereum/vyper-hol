@@ -483,3 +483,173 @@ E0060 success/definedness, but still needs tracked-input closure, paired
 control setup and assembly of untouched memory/frame fields. Calls/returns,
 allocation, external effects, forwarding and saved suffix transport remain
 unproved central obligations.
+
+## C1.12.11: producer audit after scalar transport (2026-11-04)
+
+Verification: standard holbuild of lowerDloadPtrScalarTheory and
+lowerDloadPtrOrdinaryTheory passed (TO_ld_ptr_v2-20261104T033958Z_m2119_t001).
+Reviewed scalar consumers committed as d06e556a1. No semantic source changed
+in this audit. This is a candidate invariant, NOT a checked simulation theorem.
+
+### Existing consumer interfaces and premise origins
+
+ScalarScript:98-182 exports dload_boundary_core_scalar and _index.
+OrdinaryScript exports dload_boundary_core_compare and _index. Both take
+opcode membership, MEM i (fn_insts f), fn_ptr_ok P f,
+FDOM G SUBSET fn_pv P f, access_ok lo G f i s, taint_ok f tn i s,
+equal labels, Var operand membership in V and U, U-definedness agreement,
+boundary_core and target OK. They produce source OK, updated definedness,
+step_prov/step_taint boundary_core and variable-only state equalities.
+Index wrappers do not assert equal source/target indices.
+
+| Premise | Producer / precise missing obligation | Constructor |
+|---|---|---|
+| fn_ptr_ok, source safety | Unfold source ptr_discipline (PtrDiscipline:612-621), specialize its P and source frame_reachable witness | all boundaries |
+| Source instruction membership | active_inst at the source witness; existing EVERY_active_inst boundary | all boundaries |
+| Source G and PG support, saved support | frame_reachable_prov_supported in SupportTheory; requires EVERY fn_ptr_ok and source reachability, not target core | all boundaries |
+| Var membership in U | Choose U(f)={v | ?i. MEM i (fn_insts f) /\ (MEM v i.inst_outputs \/ MEM (Var v) i.inst_operands)} | static |
+| Var membership in V | Choose V(f)=U(f) DIFF {v | retpc_var f v}. opaque_use_ok_retpc_use plus retpc_use_ok_def (UnitShapeDefs:73-99) excludes opaque operands for scalar/compare/ADD/SUB/memory/INVOKE. PHI and ASSIGN require output-sensitive copy closure instead; RET's last token is deliberately excluded | static family-specific discharge still unproved |
+| U-definedness | Entry starts with same original vars; checked PHI, entry, ASSIGN, scalar and compare consumers preserve it. Missing for remaining opcodes and saved return/bind_outputs | entry, next, block, call, ret |
+| Equal labels/environment | dload_boundary_environment; dload_equal_environment_code. Actual block-entry theorem still takes matching control/labels explicitly | next/control/call/ret preservation missing |
+| Input supply covers original fn | fn_pass_step_input_covers_fn, lower_dload_stage_every_covered (Static:24-45). Must retain an actual per-function supply witness from stage, not an arbitrary supply | entry/call lookup |
+| Generated output freshness | Static lower_dload_function_supply_fresh_output_unique, reserved_output, scratch_fresh. Must specialize actual covered supply witness. These do not assert runtime ghost-map support | expansion |
+| Generated ID disjointness and scratch capacity | Missing explicit runtime subset/injection below. Covering supply alone is not a runtime table-domain invariant | fresh/reused scratch, call/ret |
+| Live tables/layout | boundary_core (Aggregate:8-20) supplies current tables and current frontier layout. AllocTheory supplies table fresh/repeated/push/pop and layout insert/push lemmas | allocation/call/ret |
+| Saved suffix layout | NOT in core. Carry exact formula below; saved_layout_push/head_replace/restore/pop (Alloc:303-355) already checked | call, allocation, ret |
+| Saved metadata | core supplies dload_saved_metadata at DROP (SUC k) fs; only vars and params, NOT current memory/environment nor saved control/definedness | call/ret strengthened clauses missing |
+| Source raw bounds and headroom | o1_src_frame_raw_mem_ok and o1_src_frame_dload_headroom_ok (SourceInv:13-35) from actual source reachability | source boundary; completion post-state requires renewed reachability |
+| Backward success | Existing consumers assume target OK, derive source OK. Do not assume successful source evaluation to start full induction | next/control/call/ret |
+| Phase anchoring | dload_phase_core stores boundary at t0, prefix replay to t. It says nothing about allocation/memory relation at t itself (Aggregate:24-32) | proper expansion prefix |
+
+### Exact candidate joint boundary proposition (notation only)
+
+Use the actual target frame_reachable judgment as induction antecedent. For a
+boundary target judgment frame_reachable vs C' ds PH H un gn j t, existentially
+choose cs,PG,G,tn,fn,i,s,fs,Ws,supply,emitted,ks and saved supplies so that:
+
+1. frame_reachable vs C cs PG G tn fn i s /\ active_inst fn i s;
+   lower_dload_function_supply supply fn=(gn,supply_end) /\
+   ir_supply_covers_fn supply fn /\
+   dload_control_match supply fn gn s t i emitted 0.
+2. dload_boundary_core lo fs (V fn) Ws PG PH G H tn un s t cs ds.
+3. !v. v IN U fn ==> (lookup_var v s=NONE <=> lookup_var v t=NONE).
+4. FDOM G SUBSET fn_pv P fn /\
+   (!k. k<LENGTH PG /\ EL k PG<>NONE ==> k IN P fn.fn_name).
+   Saved versions are obtained from frame_reachable_prov_supported, not postulated
+   as conclusions of core.
+5. !k. k<LENGTH cs ==> dload_live_layout lo
+   (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
+   (DROP (SUC k) fs).
+6. LENGTH ks=LENGTH fs /\ ALL_DISTINCT ks /\
+   EVERY (\k. k<LENGTH C.ctx_functions) ks /\
+   !a. a<LENGTH fs ==> FINITE (EL a fs).dr_scratch /\
+     CARD (EL a fs).dr_scratch <=
+       LENGTH (FILTER (\i. i.inst_opcode=DLOAD)
+         (fn_insts (EL (EL a ks) C.ctx_functions))).
+   Each ks position names the corresponding active/saved source fn; actual
+   saved frame equality and supply witness is retained at each position.
+7. For each frame f with its actual function supply q: every original runtime
+   table id is an original ALLOCA id of f, and every scratch id is the ALLOCA
+   emitted for a DLOAD occurrence of f under q. Concretely the latter set is
+   {id | ?bb n u i tail q1 ys q2. MEM bb f.fn_blocks /\
+     bb.bb_instructions=TAKE n bb.bb_instructions ++ i::tail /\
+     lower_dload_insts_supply u (TAKE n bb.bb_instructions)=(ys,q1) /\
+     i.inst_opcode=DLOAD /\
+     ?as q3. lower_dload_inst_supply q1 i=(as,q3) /\
+       as<>[] /\ (HD as).inst_opcode=ALLOCA /\ (HD as).inst_id=id}.
+   IMPORTANT: u must be the actual block-input supply obtained by threading q
+   through preceding blocks, not arbitrary u. This is a witness constraint;
+   its extraction and occurrence injection are MISSING, not checked facts.
+   Original-ID/scratch-ID disjointness must hold for the whole frame, including
+   original instructions not yet executed. This is stronger than frame_sites.
+8. !k. k<LENGTH cs ==> Ws[k]=V ((EL k cs).cf_fn) and, writing c=EL k cs,
+   d=EL k ds, retain their actual supply/function correspondence,
+   dload_control_match q c.cf_fn d.cf_fn c.cf_state d.cf_state
+     c.cf_inst [c.cf_inst] 0 for unchanged INVOKE sites (or its actual singleton
+   emission), and !v. v IN U c.cf_fn ==>
+     (lookup_var v c.cf_state=NONE <=> lookup_var v d.cf_state=NONE).
+   Control matching also carries the actual instruction index mapping; raw
+   equality of indices is NOT a substitute.
+
+At proper prefixes retain ALL these anchor witnesses at t0, together with
+0<phase /\ phase<LENGTH emitted and dload_phase_core ... . A terminal forwarding
+alternative remains separate; neither a successful complete expansion nor its
+memory relation is implicit in this candidate.
+
+### Allocation obligations (next substantive family recommendation)
+
+Prefer original ALLOCA integration BEFORE ADD/SUB: the existing layout/table
+kernels make the semantic gap explicit and allocation produces the very site
+relations consumed by pointer arithmetic. No new opcode-only conditional lemma
+should hide the following obligations.
+
+* Original fresh id: core tables identify HD fs with s/t.vs_allocas. Domain
+  equality and whole-function ID disjointness must give target NONE from source
+  NONE. Both evaluate the same size (source ptr_use_ok excludes pointer size;
+  taint_ok excludes masked size; original definedness gives source evaluation).
+  New fs replaces head source/target maps by (sf,n)/(tf,n), no scratch insertion.
+  Prove layout with extended frontiers, old vars/params/saved metadata monotone
+  under this extension, and new output pointer relation. Memory is not cleared:
+  new bytes must be tainted in BOTH ghosts, including reused old callee garbage.
+  Need post-frontier <dimword, not just pre-frontier <dimword.
+* Original repeated id: frame_sites gives corresponding SOME (c,n) from source
+  SOME (b,n); amount may differ from stored n but exec_alloca ignores it on both
+  sides (semantics:535-552). Preserve fs/frontiers/memory and write related bases;
+  out_prov/step_taint must use stored size/site, not current operand size.
+* Zero n: same fresh/repeated split; no positive-site uniqueness can be used.
+  Layout separation is vacuous for empty intervals, pointer translation still
+  needs the actual owner/id witness. Zero-size reused bases are not evidence of
+  site identity. No counterexample claimed; positive comparisons exclude it.
+* Fresh scratch: source state stutters; head target map gains (tf,32), scratch
+  set gains id. Actual emitted-ID injection bounds CARD scratch; distinct live
+  source function indices plus headroom bound total scratch over ALL frames.
+  Scratch write/taint is phase-local until full DLOAD completion. Repeated scratch
+  keeps frontier/set unchanged and reuses the stored 32-byte buffer.
+* Table kernels already checked: Alloc:47-98 dload_table_original_fresh,
+  _original_repeated, _scratch_fresh, _scratch_repeated. They are not whole-core
+  allocation transport. saved_layout_head_replace protects suffix formulas;
+  current-frame growth must not rewrite saved frontiers.
+
+### Constructor tests of candidate (paper checks; no proof claims)
+
+Entry: boundary_initial supplies empty table relation only before PHIs; source
+entry success and actual function lookup/control still need assembly. Support
+empty, U-definedness reflexive, saved clauses vacuous, ks singleton. Initial
+source table emptiness follows run-state hypothesis; do not assume arbitrary vs.
+
+Next: checked variable families preserve fields. Site-extending next needs the
+allocation obligations above and ghost-relation monotonicity for saved suffixes.
+Each source successful next plus matched active successor reconstructs source
+frame_reachable; conditional source step success alone does not do that.
+
+Block: checked enters_boundary handles PHIs after matching successful source
+terminator. Branch equality, predecessor/current-block matching and jump success
+remain producers. Membership V uses opaque-use for branch conditions.
+
+INVOKE: opaque_use rules exclude retpc-derived arguments; taint_ok gives empty
+operand masks (Call:221), so params get dload_param_values through evaluated
+args. Recover actual callee supply via stage lookup. setup_callee gives empty
+vars/allocas, same inherited frontiers. Push empty relocation frame via
+layout_call_push/table_call_push; save caller definedness/control and current
+layout via saved_layout_push. Must prove no live duplicate function index using
+callee_first and actual call edges. Callee entry PHIs read fresh variable maps;
+param ghosts are MAP op_prov, not PG=[]; keep token opaque. These paired setup
+and call-reachability conclusions are still MISSING.
+
+Return: IntRet value list must have backward successful source execution and
+appropriate value/definedness relation; RETPC token need not be equal. Pop
+callee relocation frame; merge restores saved caller allocation frontier/table
+but adopts callee memory/shared effects (semantics:1409-1421). Use saved_layout_restore,
+NOT current layout with the smaller restored frontier. Restrict memory relation
+to remaining live sites; preserve fixed region. Use saved_metadata for caller
+vars/params, saved U-definedness and actual control/supply witnesses for resumed
+instruction. bind_outputs overwrites return values, and G/t_var are DRESTRICTed
+by output names (ptrDiscipline:486-499); prove resulting output relation rather
+than treating saved metadata alone as return transport. Actual source ret rule
+then reconstructs source reachability. All these semantic return producers
+remain MISSING.
+
+Review question: authorize a real original-ALLOCA core transport leaf only after
+separately checking site-extension monotonicity and post-allocation bounds.
+The scratch runtime occurrence injection and callee-first live index certificate
+are independent unresolved integration producers, not consequences of core.
