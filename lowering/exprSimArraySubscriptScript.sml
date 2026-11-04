@@ -1860,3 +1860,63 @@ QED
    the same type/geometry but no readable captured path. Neither compilation
    equations nor frag_exec's continuation inclusion establish that premise.
 *)
+
+Theorem nested_immutable_mutation_call_probe[local]:
+  !cx es body.
+    body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"a")))
+         (Builtin (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1))
+           (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Dynamic 1)) []);
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] /\
+    ~MEM (NONE,"f") cx.stk /\
+    get_module_code cx NONE = SOME
+      [VariableDecl Private Immutable "a"
+         (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1)) NONE;
+       FunctionDecl Internal Nonpayable F F "f" [] []
+         (BaseT (UintT 256)) body] ==>
+    eval_expr cx (Call (BaseT (UintT 256)) (IntCall (NONE,"f")) [] NONE)
+      (es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Dynamic 1),
+            ArrayV (DynArrayV [ArrayV (SArrayV [(0,IntV 0)])]))))])]) =
+    (INL (Value (IntV 0)),
+      es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Dynamic 1),
+            ArrayV (DynArrayV []))))])])
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  simp[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  fs[vyperContextTheory.get_module_code_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem nested_immutable_mutation_body_unsupported_probe[local]:
+  !body.
+    body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"a")))
+         (Builtin (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1))
+           (MakeArray (SOME (ArrayT (BaseT (UintT 256)) (Fixed 1))) (Dynamic 1)) []);
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] ==>
+    ~supported_stmts
+      [VariableDecl Private Immutable "a"
+         (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1)) NONE;
+       FunctionDecl Internal Nonpayable F F "f" [] []
+         (BaseT (UintT 256)) body] [] body
+Proof
+  gen_tac >> disch_then SUBST1_TAC >> EVAL_TAC
+QED
+
+
+(* Nested array immutables are rejected by the supported-value boundary,
+   even though the evaluator itself permits the replacement. *)
+Theorem nested_immutable_type_unsupported_probe[local]:
+  !tops.
+    ~supported_value_type tops
+      (ArrayT (ArrayT (BaseT (UintT 256)) (Fixed 1)) (Dynamic 1))
+Proof
+  gen_tac >> EVAL_TAC
+QED
