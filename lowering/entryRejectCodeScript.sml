@@ -143,7 +143,7 @@ Theorem runtime_selected_entry_code[local]:
     compile_entry_checks mc pay sc = ((),sk) /\
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
     sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
-    fn_has_code sf sd efn /\ fn_has_code sc sk efn
+    fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc
 Proof
   strip_tac >> drule compile_runtime_entry_intervals >> strip_tac >>
   gvs[compile_internal_fn_bodies_def, comp_return_def] >>
@@ -175,7 +175,7 @@ Theorem run_lowering_selected_entry_code:
     compile_entry_checks mc pay sc = ((),sk) /\
     sc.cs_current_bb = lbl /\ sc.cs_current_insts = [] /\
     sf.cs_current_bb = "__entry" /\ sf.cs_current_insts = [] /\
-    fn_has_code sf sd efn /\ fn_has_code sc sk efn
+    fn_has_code sf sd efn /\ fn_has_code sc sk efn /\ cs_extends sd sc
 Proof
   strip_tac >> drule_all run_lowering_retained_entry >> strip_tac >>
   drule_all runtime_selected_entry_code >> strip_tac >>
