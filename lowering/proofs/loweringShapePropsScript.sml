@@ -15542,3 +15542,36 @@ Proof
   >- simp[compile_dynarray_pop_labels] >>
   simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
 QED
+
+Theorem compile_addmod_names_labels[local]:
+  cs_extends st (SND (compile_addmod_names ce rt at a bt b mt m st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_addmod_names ce rt at a bt b mt m st)))
+Proof
+  once_rewrite_tac[compile_addmod_names_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_name_vv_labels, unwrap_value_labels]) >>
+  irule as_stack_val_labels >> simp[compile_addmod_labels]
+QED
+
+Theorem compile_mulmod_names_labels[local]:
+  cs_extends st (SND (compile_mulmod_names ce rt at a bt b mt m st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_mulmod_names ce rt at a bt b mt m st)))
+Proof
+  once_rewrite_tac[compile_mulmod_names_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_name_vv_labels, unwrap_value_labels]) >>
+  irule as_stack_val_labels >> simp[compile_mulmod_labels]
+QED
+
+Theorem compile_powmod256_names_labels[local]:
+  cs_extends st (SND (compile_powmod256_names ce rt at a bt b st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_powmod256_names ce rt at a bt b st)))
+Proof
+  once_rewrite_tac[compile_powmod256_names_def] >> simp[LET_THM] >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >> rpt gen_tac >>
+       simp[compile_name_vv_labels, unwrap_value_labels]) >>
+  irule as_stack_val_labels >> simp[compile_pow_mod256_labels]
+QED
