@@ -89,10 +89,7 @@ Theorem abi_create_labels[local]:
   abi_result_labels s.vs_labels (exec_create inst s value offset sz salt_opt)
 Proof
   simp[exec_create_def] >>
-  BasicProvers.TOP_CASE_TAC >- simp[abi_result_labels_def] >>
-  PairCases_on `x` >>
-  drule abi_extract_labels >> strip_tac >>
-  abi_result_shape_simp >> simp[] >> abi_result_shape_simp
+  Cases_on `inst.inst_outputs` >> abi_result_shape_simp
 QED
 
 Theorem abi_step_base_labels:

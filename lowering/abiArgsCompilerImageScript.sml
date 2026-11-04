@@ -241,13 +241,21 @@ Theorem abi_image_call_not_label:
 Proof
   Cases_on `target`
   >~ [`RawCallTarget`] >- suspend "raw"
-  >~ [`RawCallCalldataTarget`] >- suspend "rawdata" >>
+  >~ [`RawCallCalldataTarget`] >- suspend "rawdata"
+  >~ [`CreateTarget _ _ _ _`] >- suspend "create" >>
   simp[compile_call_def, LET_THM] >>
   strip_tac >> rpt (pairarg_tac >> gvs[]) >> gvs[vv_operand_def]
   >~ [`ce.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f ce rt ty (ExtCall b b0 p l') args default_ret sa = _`]
     >- suspend "external" >>
   suspend "send"
+QED
+
+Resume abi_image_call_not_label[create]:
+  simp[compile_call_def] >>
+  Cases_on `compile_create_call f ce c b b0 args sa` >>
+  simp[as_stack_val_def] >> strip_tac >> gvs[vv_operand_def] >>
+  drule compile_create_call_safe_operand >> simp[safe_operand_def]
 QED
 
 Resume abi_image_call_not_label[raw]:
@@ -648,6 +656,15 @@ Proof
   metis_tac[abi_image_abi_encode_not_label, abi_image_abi_decode_not_label]
 QED
 
+Theorem abi_image_widen_copy_not_label[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[abi_image_alloc_not_label]
+QED
+
 Theorem abi_image_type_builtin_convert_label:
   compile_type_builtin_dispatch_body f ce vt ty Convert rt args sa = (vv,sb) /\
   vv_operand vv = Label l ==>
@@ -656,12 +673,12 @@ Theorem abi_image_type_builtin_convert_label:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `rt` >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  gvs[AllCaseEqs(), vv_operand_def] >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
   Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
   strip_tac >> gvs[vv_operand_def] >>
-  metis_tac[abi_image_convert_label]
+  metis_tac[abi_image_convert_label, abi_image_widen_copy_not_label]
 QED
 
 Theorem abi_image_type_builtin_label:

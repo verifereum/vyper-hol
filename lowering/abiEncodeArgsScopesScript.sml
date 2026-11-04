@@ -184,8 +184,10 @@ Resume eval_no_mutation_scopes[Builtin]:
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, AllCaseEqs()] >>
       imp_res_tac result_array_length_state >> imp_res_tac next_gas_reading_state >>
-      imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >> gvs[] >>
-      Cases_on `es` >> gvs[expr_can_mutate_def, builtin_args_length_ok_def] >> metis_tac[])
+      imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      Cases_on `es` >> gvs[expr_can_mutate_def, builtin_args_length_ok_def] >>
+      first_x_assum drule_all >> simp[])
   >> simp[Once evaluate_def, type_check_def, assert_def, bind_def, ignore_bind_def, raise_def]
 QED
 
