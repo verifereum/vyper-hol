@@ -27,7 +27,8 @@ Theory venomToAsmProps
 Ancestors
   frameRel codegenRel contextCodegenRelProps fnPlanDecomp blockSimHelpers
   cleanOpsSim genBlockSim codegen symbolResolve venomExecSemantics venomState
-  venomInst fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage list rich_list
+  venomInst fcgDefs livenessDefs dfgDefs cfgDefs fnPlanLineage venomCompilerWf
+  list rich_list
   finite_map
 
 (* ===== Function boundary (PLAN 5.9) ===== *)
@@ -89,26 +90,26 @@ End
 
    fn is reachable in the call graph: the planner's acyclicity check covers
    only reachable functions, so this rules out unreachable recursion.  No
-   instruction of fn is GAS, an interim premise while the assembly's gas
-   readings are unconstrained.  No operand of fn is a dead_stack_marker, as
-   gen_fn_frame_simulation and lineage_state_block_plan assume.  vs_labels
-   agrees with the assembly label offsets, so Label operands have the same
-   value in Venom and in the assembly. *)
+   instruction of the context is GAS, an interim premise while the
+   assembly's gas readings are unconstrained; it covers the callees an
+   INVOKE runs.  Block labels are distinct across the unit's functions, as
+   they are emitted unqualified into one program.  vs_labels agrees with
+   the assembly label offsets, so Label operands have the same value in
+   Venom and in the assembly. *)
 Theorem gen_fn_simulation:
-  !fuel rpolicy unit cp prog i r fn vs as Inv ra pc_ret rest.
-    let ctx = unit.cu_context;
-        lo = SND (compute_label_offsets prog);
-        o2pc = build_offset_to_pc prog in
+  !fuel rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
+    ctx = unit.cu_context /\
+    lo = SND (compute_label_offsets prog) /\
+    o2pc = build_offset_to_pc prog /\
     generate_context_plan ctx = SOME cp /\
     codegen_assembly rpolicy unit = SOME prog /\
     unit_shape_ok unit /\
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
-    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS) bb.bb_instructions)
-      fn.fn_blocks /\
-    EVERY (\bb. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb.bb_instructions) fn.fn_blocks /\
+    EVERY (\f. EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS)
+      bb.bb_instructions) f.fn_blocks) ctx.ctx_functions /\
+    ALL_DISTINCT (unit_label_namespace unit) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
@@ -147,9 +148,9 @@ QED
    stated as a lineage_entry from pred, the block vs_prev_bb names, so the
    planner state matches the edge whose PHI values the block reads.  That a
    lineage state regenerates the block's DFS code is the successor-transfer
-   obligation lineage_state_block_plan; its premise that no operand of fn
-   is a dead_stack_marker is not implied by the others here, so it is
-   assumed.  All the function-level premises stay fixed along the block
+   obligation lineage_state_block_plan, whose premise that no operand of
+   fn is a dead_stack_marker follows from codegen_ready_fn.  All the
+   function-level premises stay fixed along the block
    induction; each step re-establishes the lineage, DFS and reachability
    premises at the successor.
 
@@ -161,8 +162,10 @@ QED
 
    fn is reachable in the call graph: the planner's acyclicity check covers
    only reachable functions, so this rules out unreachable recursion.  No
-   instruction of fn is GAS, an interim premise while the assembly's gas
-   readings are unconstrained.  vs_labels agrees with the assembly label
+   instruction of the context is GAS, an interim premise while the
+   assembly's gas readings are unconstrained; it covers the callees an
+   INVOKE runs.  Block labels are distinct across the unit's functions, as
+   they are emitted unqualified into one program.  vs_labels agrees with the assembly label
    offsets, so Label operands have the same value in Venom and in the
    assembly.  DFG alias soundness: every operand on ps's stack or in its
    spill map has the value of its ASSIGN-chain root (normalize_operand),
@@ -182,8 +185,9 @@ Theorem gen_fn_frame_simulation:
     i < LENGTH ctx.ctx_functions /\
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
-    EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS) bb.bb_instructions)
-      fn.fn_blocks /\
+    EVERY (\f. EVERY (\bb. EVERY (\inst. inst.inst_opcode <> GAS)
+      bb.bb_instructions) f.fn_blocks) ctx.ctx_functions /\
+    ALL_DISTINCT (unit_label_namespace unit) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
@@ -196,8 +200,6 @@ Theorem gen_fn_frame_simulation:
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
       spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
     fn_ops = r.sr_plan /\
-    EVERY (\bb'. EVERY (\inst. EVERY (\op. op <> dead_stack_marker)
-      inst.inst_operands) bb'.bb_instructions) fn.fn_blocks /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     bb <> HD fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
     lineage_entry liveness dfg cfg fn
