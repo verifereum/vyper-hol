@@ -84,11 +84,11 @@ Theorem ctor_actual_array_observation_ranges:
     tv vs slot_id slot initial prefix cursor s /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
   abi_decoder_operand_live next hi /\
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz b cap initial ==>
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz b cap s
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz b cap initial ==>
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz b cap s
 Proof
   strip_tac >>
-  fs[abi_decoder_ranges_def] >> rpt conj_tac >>
+  fs[abi_decoder_ranges_def] >> simp[eval_operand_def] >> rpt conj_tac >>
   metis_tac[ctor_actual_array_observation_operand]
 QED
 
@@ -128,7 +128,7 @@ Theorem ctor_actual_array_child_inputs_at_index:
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\ j < LENGTH vs /\
-  abi_decoder_ranges DLOAD hi src dst sb
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
@@ -181,7 +181,7 @@ Proof
   asm_simp_tac bool_ss [] >>
   conj_tac >- decide_tac >> conj_tac >- decide_tac >>
   Cases_on `hi = Lit 0w` >- simp[] >>
-  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   qpat_x_assum `hi = Lit 0w \/ _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>

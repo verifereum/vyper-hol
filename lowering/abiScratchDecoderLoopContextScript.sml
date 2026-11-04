@@ -10,8 +10,8 @@ Ancestors
   words list arithmetic
 
 Definition abi_scratch_decoder_loop_data_def:
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-      sb d slot first last b cap next initial <=>
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc base_op hi_op ip src dst
+      B sb d slot first last b cap next initial <=>
     abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
     abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
       (type_to_abi_dec_info ce.ce_struct_fields ce (ArrayT ty (Dynamic maxn)))
@@ -19,17 +19,18 @@ Definition abi_scratch_decoder_loop_data_def:
     vyper_decode_valid_enc (Array NONE (vyper_to_abi_type env ty)) bs /\
     (is_dynamic (vyper_to_abi_type env ty) ==>
       !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
-    abi_scratch_decoder_ranges opc hi_op src dst sb
+    abi_scratch_decoder_ranges opc base_op hi_op src dst B sb
       (LENGTH bs)
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) first last b cap initial /\
     abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-    abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
+    abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\
+    abi_decoder_operand_live next ip /\
     eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256)
 End
 
 Theorem abi_scratch_decoder_loop_data_facts:
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-    sb d slot first last b cap next initial ==>
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc base_op hi_op ip src dst
+    B sb d slot first last b cap next initial ==>
   32 <= LENGTH bs /\ abi_head_word bs = LENGTH vs /\ all_have_type tv vs /\ LENGTH vs <= maxn /\
   LENGTH vs < dimword (:256) /\ type_memory_size tv = type_memory_bytes ce ty /\
   type_memory_bytes ce (ArrayT ty (Dynamic maxn)) = 32 + maxn * type_memory_size tv
@@ -43,19 +44,19 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_loop_slot_separation:
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-    sb d slot first last b cap next initial /\
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc base_op hi_op ip src dst
+    B sb d slot first last b cap next initial /\
   abi_scratch_effect first last lo hi next limit_st
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial s /\
   first <= lo /\ hi <= last /\ first <= site /\ site < last /\
   FLOOKUP s.vs_allocas site = SOME (slot,32) ==>
   (slot + 32 <= d \/ d + 32 + LENGTH vs * type_memory_size tv <= slot) /\
-  (opc = MLOAD ==> sb + LENGTH bs <= slot \/
-    slot + 32 <= sb)
+  (opc = MLOAD ==> B + sb + LENGTH bs <= slot \/
+    slot + 32 <= B + sb)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule abi_scratch_decoder_loop_data_facts >> strip_tac >>
-  qpat_assum `abi_scratch_decoder_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qhdtm_assum `abi_scratch_decoder_loop_data`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_data_def]) >>
   drule_all abi_scratch_decoder_ranges_effect >> strip_tac >>
   drule_all abi_scratch_decoder_slot_separation >> strip_tac >>

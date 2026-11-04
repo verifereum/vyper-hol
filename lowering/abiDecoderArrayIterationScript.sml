@@ -8,34 +8,36 @@ Ancestors
   vyperABI vyperTyping venomState contractABI words list rich_list arithmetic
 
 Theorem abi_decoder_array_memory_inst_idx[simp]:
-  abi_decoder_array_memory opc aty avs tv vs sb d j (s with vs_inst_idx := ix) <=>
-  abi_decoder_array_memory opc aty avs tv vs sb d j s
+  abi_decoder_array_memory opc aty avs tv vs (B + sb) d j (s with vs_inst_idx := ix) <=>
+  abi_decoder_array_memory opc aty avs tv vs (B + sb) d j s
 Proof
   simp[abi_decoder_array_memory_def, abi_decode_source_def, Excl "enc_def"]
 QED
 
 Theorem abi_decoder_primitive_array_iteration:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d j initial /\
+  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d j initial /\
   j < LENGTH vs /\ abi_decode_source_opcode opc /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
-  (opc = MLOAD ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= d \/
-    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= sb) /\
+  (opc = MLOAD ==> B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= d \/
+    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= B + sb) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var ip /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   ?actual. run_inst_seq (emitted_insts st st') initial = OK actual /\
-    abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d (SUC j) actual /\
+    abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d (SUC j) actual /\
     eval_operand (FST ops) actual = SOME (n2w j) /\ eval_operand ip actual = SOME p /\
     fresh_vars_wrt limit_st actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
@@ -68,9 +70,9 @@ Proof
   `d + 32 + j * 32 + 32 <= d + (32 + maxn * 32)` by
     (mp_tac (Q.SPECL [`j`, `LENGTH (vs:vyperValue$value list)`, `maxn`, `d`]
        abi_decoder_array_cell_bound) >> asm_simp_tac bool_ss []) >>
-  `abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d (SUC j) actual` by
+  `abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d (SUC j) actual` by
     (mp_tac (Q.INST [`before` |-> `initial:venom_state`, `after` |-> `actual:venom_state`,
-       `aty` |-> `vyper_to_abi_type env ty`,
+       `aty` |-> `vyper_to_abi_type env ty`, `sb` |-> `B + sb`,
        `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]
        abi_decoder_array_memory_advance) >>
      impl_tac >- gvs[Excl "enc_def"] >> simp[]) >>
@@ -79,27 +81,29 @@ Proof
 QED
 
 Theorem abi_decoder_primitive_array_iteration_from_state:
-  abi_decode_array_element_setup ip src dst opc hi (DecPrimWord clamp) 32 32
+  abi_decode_array_element_setup ip src dst opc base_op hi (DecPrimWord clamp) 32 32
     st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi (DecPrimWord clamp)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi (DecPrimWord clamp)
     middle = ((),st') /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
-  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d j initial /\
+  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d j initial /\
   j < LENGTH vs /\ abi_decode_source_opcode opc /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
-  sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
+  eval_operand base_op initial = SOME (n2w B) /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) < dimword (:256) /\
   d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) < dimword (:256) /\
-  (opc = MLOAD ==> sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= d \/
-    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= sb) /\
+  (opc = MLOAD ==> B + sb + LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)) <= d \/
+    d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= B + sb) /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var ip /\
   st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial ==>
   frag_exec ctx st st' (\s. s = initial)
-    (\actual. abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d (SUC j) actual /\
+    (\actual. abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B + sb) d (SUC j) actual /\
       eval_operand (FST ops) actual = SOME (n2w j) /\ eval_operand ip actual = SOME p /\
       fresh_vars_wrt limit_st actual /\
       (!op w. abi_decoder_operand_live st.cs_next_var op /\

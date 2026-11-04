@@ -394,7 +394,7 @@ QED
 (* A word: compile_abi_decode_static with CALLDATALOAD. *)
 Theorem decode_prim_buf_run:
   !dst src c st st' s p a.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord c) st =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord c) st =
       ((), st') /\
     eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
     fresh_vars_wrt st s ==>
@@ -402,7 +402,8 @@ Theorem decode_prim_buf_run:
     dec_run st st' s (w2n p) (w2n a) 32
       (dec_ok (DecPrimWord c) s.vs_call_ctx.cc_calldata (w2n a))
 Proof
-  rpt gen_tac >> strip_tac >> fs[compile_abi_decode_to_buf_def] >>
+  rpt gen_tac >> strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+        comp_bind_def, comp_return_def] >>
   conj_tac
   >- (drule dec_straight_decode_static >> simp[is_terminator_def]) >>
   drule compile_abi_decode_static_run >>
@@ -425,8 +426,8 @@ Proof
 QED
 
 Theorem getelemptr_static_emit:
-  !src k opc hi st es st1.
-    compile_getelemptr_abi src F k opc hi st = (es, st1) ==>
+  !src k opc base hi st es st1.
+    compile_getelemptr_abi src F k opc base hi st = (es, st1) ==>
     emit_op ADD [src; Lit (n2w k)] st = (es, st1)
 Proof
   simp[compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
@@ -436,7 +437,7 @@ QED
 (* The element pointers of a static element at head offset k. *)
 Theorem decode_elem_ptrs:
   !src dst k st es st1 ed st2 s a p.
-    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
+    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) (Lit 0w) st = (es, st1) /\
     emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
     eval_operand src s = SOME a /\ eval_operand dst s = SOME p /\
     fresh_vars_wrt st s ==>
@@ -481,15 +482,15 @@ QED
    then the remaining elements. *)
 Theorem decode_elems_cons_phases:
   !ei m elems dst src k st st'.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       ((ei, m, m)::elems) k k st = ((), st') /\
     static_dec ei m ==>
     ?es st1 ed st2 st3.
-      compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
+      compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) (Lit 0w) st = (es, st1) /\
       emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
-      compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) ei st2 =
+      compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) (Lit 0w) ei st2 =
         ((), st3) /\
-      compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+      compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
         elems (k + m) (k + m) st3 = ((), st')
 Proof
   rpt gen_tac >> strip_tac >> drule static_dec_shape >> strip_tac >> gvs[] >>
@@ -502,17 +503,19 @@ QED
 Theorem static_dec_straight:
   (!info n. static_dec info n ==>
      !dst src st st'.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
          ((), st') ==> dec_straight st st') /\
   (!elems n. static_decs elems n ==>
      !dst src k st st'.
-       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
          elems k k st = ((), st') ==> dec_straight st st')
 Proof
   ho_match_mp_tac static_dec_strongind >> rpt conj_tac
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >>
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+        comp_bind_def, comp_return_def] >>
       drule dec_straight_decode_static >> simp[is_terminator_def])
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >> metis_tac[])
+  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def,
+        comp_bind_def, comp_return_def] >> metis_tac[])
   >- (rpt strip_tac >>
       fs[compile_abi_decode_to_buf_def, comp_return_def, dec_straight_def,
          inst_extends_def, exprLoweringPropsTheory.emitted_insts_def]) >>
@@ -529,12 +532,12 @@ QED
 Theorem decode_elem_step:
   !ei m es st1 ed st2 st3 src dst k st s p a.
     static_dec ei m /\
-    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) st = (es, st1) /\
+    compile_getelemptr_abi src F k CALLDATALOAD (Lit 0w) (Lit 0w) st = (es, st1) /\
     emit_op ADD [dst; Lit (n2w k)] st1 = (ed, st2) /\
-    compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) ei st2 =
+    compile_abi_decode_to_buf ed es CALLDATALOAD (Lit 0w) (Lit 0w) ei st2 =
       ((), st3) /\
     (!dst src st st' s p a.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) ei st =
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) ei st =
          ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -574,10 +577,10 @@ QED
 Theorem decode_elems_cons_run:
   !ei m elems n dst src k st st' s p a.
     static_dec ei m /\ static_decs elems n /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       ((ei, m, m)::elems) k k st = ((), st') /\
     (!dst src st st' s p a.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) ei st =
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) ei st =
          ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -585,7 +588,7 @@ Theorem decode_elems_cons_run:
        dec_run st st' s (w2n p) (w2n a) m
          (dec_ok ei s.vs_call_ctx.cc_calldata (w2n a))) /\
     (!dst src k st st' s p a.
-       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
          elems k k st = ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -640,7 +643,7 @@ QED
 Theorem decode_static_buf_run:
   (!info n. static_dec info n ==>
      !dst src st st' s p a.
-       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+       compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
          ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -649,7 +652,7 @@ Theorem decode_static_buf_run:
          (dec_ok info s.vs_call_ctx.cc_calldata (w2n a))) /\
   (!elems n. static_decs elems n ==>
      !dst src k st st' s p a.
-       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+       compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
          elems k k st = ((), st') /\
        eval_operand dst s = SOME p /\ eval_operand src s = SOME a /\
        fresh_vars_wrt st s /\
@@ -684,7 +687,7 @@ QED
 Theorem compile_abi_decode_static_buf_frag:
   !info n dst src st st' ctx s0 p a.
     static_dec info n /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info st =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info st =
       ((), st') /\
     eval_operand dst s0 = SOME p /\ eval_operand src s0 = SOME a /\
     fresh_vars_wrt st s0 /\

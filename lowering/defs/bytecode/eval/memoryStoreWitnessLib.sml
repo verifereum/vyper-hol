@@ -62,6 +62,22 @@ in
      evalCompilerBytecodeLib.hex_bytes_tm (value "runtime"))
 end
 
+(* Bounded memory decoding deliberately differs from VYPER_PIN: it checks
+   relative positions before forming pointers and copies bytestrings by their
+   runtime length (vyperlang/vyper#5333). Keep the independent pinned oracle. *)
+fun check_decoder_divergence root name {term, evaluation} = let
+  val tops = List.last (#2 (strip_comb term))
+  val supported = EVAL ``supported_program ^tops``
+  val compiled = prove (``IS_SOME ^term``,
+    CONV_TAC (RAND_CONV (K evaluation)) >> EVAL_TAC)
+  val expected = oracle root name
+  val differs = prove (``^term <> SOME ^expected``,
+    CONV_TAC (RAND_CONV (LAND_CONV (K evaluation))) >> EVAL_TAC)
+  val _ = save_thm (name ^ "_supported_status", supported)
+  val _ = save_thm (name ^ "_compiles", compiled)
+  val _ = save_thm (name ^ "_differs_from_pinned_decoder", differs)
+in () end
+
 fun hex_byte term = let
   val value = Arbnum.mod (wordsSyntax.dest_word_literal term, Arbnum.fromInt 256)
   val text = Int.fmt StringCvt.HEX (Arbnum.toInt value)

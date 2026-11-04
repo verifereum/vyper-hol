@@ -17,20 +17,12 @@ val () = computeLib.upd_compset (computeLib.add_thms
 val fixture_root = "../external-calls/oracle"
 
 val e40_extcall_gas = memoryStoreWitnessLib.evaluate fixture_root "e40_extcall_gas"
-Theorem e40_extcall_gas_matches_python_oracle:
-  ^(#term e40_extcall_gas) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e40_extcall_gas")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e40_extcall_gas))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e40_extcall_gas" e40_extcall_gas
 
 val e43_extcall_all_kwargs = memoryStoreWitnessLib.evaluate fixture_root "e43_extcall_all_kwargs"
-Theorem e43_extcall_all_kwargs_matches_python_oracle:
-  ^(#term e43_extcall_all_kwargs) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e43_extcall_all_kwargs")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e43_extcall_all_kwargs))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e43_extcall_all_kwargs" e43_extcall_all_kwargs
 
 val e44_skip_contract_check = memoryStoreWitnessLib.evaluate fixture_root "e44_skip_contract_check"
 Theorem e44_skip_contract_check_matches_python_oracle:
@@ -49,9 +41,5 @@ Proof
 QED
 
 val e29_default_ret_skip = memoryStoreWitnessLib.evaluate fixture_root "e29_default_ret_skip"
-Theorem e29_default_ret_skip_matches_python_oracle:
-  ^(#term e29_default_ret_skip) =
-    SOME ^(memoryStoreWitnessLib.oracle fixture_root "e29_default_ret_skip")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation e29_default_ret_skip))) >> EVAL_TAC
-QED
+val () = memoryStoreWitnessLib.check_decoder_divergence fixture_root
+  "e29_default_ret_skip" e29_default_ret_skip

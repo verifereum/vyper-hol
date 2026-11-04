@@ -33,7 +33,7 @@ Theorem ctor_actual_array_setup_ranges:
     sb + len <= h /\ h < dimword (:256)) /\
   0 < outsz /\ D <= d /\ d + outsz <= D+N /\ unit_alloca_budget ctx < dimword (:256) /\
   slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_ranges DLOAD hi src dst sb len d outsz slot 32 prepared /\
+  abi_decoder_ranges DLOAD (Lit 0w) hi src dst 0 sb len d outsz slot 32 prepared /\
   slot < dimword (:256) /\ venomMemDefs$regions_disjoint (slot,32) (d,outsz)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -60,7 +60,7 @@ Proof
   `d + outsz < dimword (:256)` by
     (drule_all alloca_frontier_inv_bound >> strip_tac >>
      metis_tac[LESS_EQ_TRANS, LESS_EQ_LESS_TRANS]) >>
-  asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
+  asm_simp_tac (srw_ss()) [abi_decoder_ranges_def, abi_decode_source_opcode_def, eval_operand_def] >>
   gvs[venomMemDefsTheory.regions_disjoint_def] >>
   disj2_tac >> qexists `h` >> simp[]
 QED
@@ -86,8 +86,8 @@ Theorem ctor_actual_array_setup_context:
     h < dimword (:256)) /\
   D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
   unit_alloca_budget ctx < dimword (:256) /\ slot_id IN ctor_actual_sites func ids ==>
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD hi ip src dst
-    sb d slot slot 32 loop_st.cs_next_var prepared /\
+  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) hi ip src dst
+    0 sb d slot slot 32 loop_st.cs_next_var prepared /\
   mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     prepared.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
   ctor_actual_array_observation ctx func site ids D N d
@@ -113,5 +113,5 @@ Proof
     (irule ctor_actual_array_observation_self >>
      goal_assum (drule_at Any)) >>
   fs[ctor_actual_array_observation_def, abi_decoder_recursive_loop_data_def,
-     Excl "enc_def"]
+     abi_decoder_operand_live_def, Excl "enc_def"]
 QED

@@ -1,5 +1,5 @@
-(* Exact pinned-Python parity for the remaining required issue #551 fixtures.
-   Checker acceptance and supported_program are recorded separately. *)
+(* Pinned-Python parity for issue #551, with explicit bounded-memory-decoder
+   divergences. Checker acceptance and supported_program are also checked. *)
 Theory evalCompilerAbiCodegen
 Ancestors
   compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
@@ -20,14 +20,19 @@ fun check_fixture name = let
   val root = "../abi-codegen/oracle"
   val tops = memoryStoreWitnessLib.program root name
   val () = print ("ABI_CODEGEN_CHECKER_ACCEPT " ^ name ^ " deployment runtime\n")
-  val supported = EVAL ``supported_program ^tops``
-  val _ = save_thm (name ^ "_supported_status", supported)
   val term = memoryStoreWitnessLib.compile_term tops
   val evaluation = EVAL term
   val expected = memoryStoreWitnessLib.oracle root name
-  val parity = prove (``^term = SOME ^expected``,
-    CONV_TAC (LAND_CONV (K evaluation)) >> EVAL_TAC)
-  val _ = save_thm (name ^ "_matches_python_oracle", parity)
+  val _ =
+    if List.exists (fn n => n = name) ["dec_bytes_unwrapT", "dec_uint_unwrapT"]
+    then memoryStoreWitnessLib.check_decoder_divergence root name
+      {term = term, evaluation = evaluation}
+    else let
+      val supported = EVAL ``supported_program ^tops``
+      val _ = save_thm (name ^ "_supported_status", supported)
+      val parity = prove (``^term = SOME ^expected``,
+        CONV_TAC (LAND_CONV (K evaluation)) >> EVAL_TAC)
+    in ignore (save_thm (name ^ "_matches_python_oracle", parity)) end
 in () end
 
 val () = List.app check_fixture

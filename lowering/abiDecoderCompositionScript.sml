@@ -184,3 +184,17 @@ QED
    continuation simulation, NOT an equality at the same fuel. Our finite
    probes assume fuel-independent run_block behavior only for the isolated
    body; they do not assert this for arbitrary recursive children. *)
+
+Theorem abi_decode_fragment_shape_trans:
+  mid.cs_blocks = st.cs_blocks /\ mid.cs_current_bb = st.cs_current_bb /\
+  EVERY P (emitted_insts st mid) /\ inst_extends st mid /\
+  fin.cs_blocks = mid.cs_blocks /\ fin.cs_current_bb = mid.cs_current_bb /\
+  EVERY P (emitted_insts mid fin) /\ inst_extends mid fin ==>
+  fin.cs_blocks = st.cs_blocks /\ fin.cs_current_bb = st.cs_current_bb /\
+  EVERY P (emitted_insts st fin) /\ inst_extends st fin
+Proof
+  strip_tac >>
+  `emitted_insts st fin = emitted_insts st mid ++ emitted_insts mid fin` by
+    (irule emitted_insts_append >> gvs[inst_extends_def]) >>
+  imp_res_tac inst_extends_trans >> simp[]
+QED

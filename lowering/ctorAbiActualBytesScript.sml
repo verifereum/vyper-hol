@@ -2,14 +2,14 @@ Theory ctorAbiActualBytes
 Ancestors
   ctorAbiActualReentry ctorAbiActualWorld ctorAbiActualNarrow
   abiDecoderBytes abiDecoderBytesTyped abiDecoderBytesFrame abiCanonicalBytes
-  abiDecoderString abiDecoderBytestring vyperABI vyperTyping
+  abiDecoderString abiDecoderBytestring abiDecoderBytestringCases vyperABI vyperTyping
   abiDecoderReentryPointer abiDecoderReentry abiDecoderVarExtend
   abiDecoderContract abiDecoderTypedContract abiEncoder compileEnv abiEncoderRegisteredEffect
   valueEncoding valueEncodingProps vyperValue contractABI venomState
   venomExecSemantics venomInst words list arithmetic finite_map
 
 Theorem ctor_actual_bytes_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   LENGTH bs <= n /\ sb < dimword (:256) /\ d < dimword (:256) /\
   abi_decode_bytes_copy_size n < dimword (:256) /\
@@ -35,8 +35,9 @@ Proof
     (irule canonical_bytes_count_load >> simp[]) >>
   `32 + LENGTH bs <= LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))` by
     simp[canonical_bytes_payload_length] >>
-  mp_tac (Q.INST [`opc` |-> `DLOAD`, `cnt` |-> `LENGTH (bs:word8 list)`]
-    abi_decode_bytes_sequence) >>
+  mp_tac (Q.INST [`opc` |-> `DLOAD`, `c` |-> `LENGTH (bs:word8 list)`,
+    `pos` |-> `src:operand`, `p` |-> `sb:num`]
+    abi_decode_bytes_zero_base_sequence) >>
   impl_tac >-
     (asm_simp_tac bool_ss [] >> Cases_on `hi = Lit 0w` >- simp[] >>
      disj2_tac >> qpat_x_assum `hi = Lit 0w \/ _` mp_tac >> asm_rewrite_tac[] >>
@@ -65,7 +66,7 @@ Proof
 QED
 
 Theorem ctor_actual_bytes_ceiling_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
   LENGTH bs <= n /\ sb < dimword (:256) /\ d < dimword (:256) /\
   abi_decode_bytes_copy_size n < dimword (:256) /\
@@ -127,7 +128,7 @@ Proof
 QED
 
 Theorem ctor_actual_bytestring_ceiling_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecBytestring n) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecBytestring n) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecBytestring n /\
   abi_decoder_metadata ce env ty tv root_di av v /\

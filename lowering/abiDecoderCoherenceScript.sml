@@ -121,18 +121,18 @@ QED
 (* Strong recursive precondition; the older candidate remains unchanged. *)
 Definition abi_decoder_recursive_pre_def:
   abi_decoder_recursive_pre ce env sf ty tv di av v st last
-      src dst opc hi sb d b cap s <=>
+      src dst opc base_op hi src_base sb d b cap s <=>
     abi_decoder_coherent ce env sf ty tv /\
     di = type_to_abi_dec_info sf ce ty /\
     abi_decoder_pre ce env ty tv
       (type_to_abi_dec_info ce.ce_struct_fields ce ty) av v st last
-      src dst opc hi sb d b cap s
+      src dst opc base_op hi src_base sb d b cap s
 End
 
 Theorem abi_decoder_recursive_pre_root:
   abi_decoder_recursive_pre ce env ce.ce_struct_fields ty tv di av v
-    st last src dst opc hi sb d b cap s ==>
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap s
+    st last src dst opc base_op hi src_base sb d b cap s ==>
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap s
 Proof
   simp[abi_decoder_recursive_pre_def]
 QED

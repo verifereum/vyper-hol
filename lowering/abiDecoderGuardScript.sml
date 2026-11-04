@@ -1,6 +1,6 @@
 Theory abiDecoderGuard
 Ancestors
-  abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper venomExecSemantics
+  abiDecoderRange abiDecoderGuards emitHelperProps exprLoweringProps compileEnv emitHelper venomExecSemantics
   venomState words
 
 (* ===== Lower Bound ===== *)

@@ -7,7 +7,8 @@ Ancestors
   abiDecoderFixedMemory abiDecoderMemberInfos abiDecoderEffect abiDecoderReentry fragExec
   valueEncodingTyping abiDecoderStruct pair abiStaticDynarrayLayout valueEncodingProps
   vyperTyping abiScratchEncoderContract abiDecoderOffsetHead abiDecoderReadableTypes
-  abiScratchDecoderArray abiDecoderLoop abiEncoder venomExecSemantics
+  abiScratchDecoderArray abiDecoderLoop abiEncoder venomExecSemantics exprLowering
+  abiDecoderCorrectPrimitiveArray abiDecoderRecursiveArray
 
 (* ===== Inputs ===== *)
 
@@ -15,17 +16,18 @@ Ancestors
 
 Theorem abi_scratch_decoder_fixed_array_inputs:
   abi_scratch_decoder_input ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
-    bs v st src dst opc hi sb d first last b cap initial ==>
+    bs v st src dst opc base_op hi B sb d first last b cap initial ==>
   ?vs. v = ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs)) /\ LENGTH vs = n /\
     abi_decoder_members ce env sf (REPLICATE n ty) (REPLICATE n tv)
       (abi_decode_members (MAP (vyper_to_abi_type env) (REPLICATE n ty)) bs bs) vs /\
     vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) (REPLICATE n ty)) bs bs /\
     type_memory_bytes ce (ArrayT ty (Fixed n)) = SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) /\
-    abi_scratch_decoder_ranges opc hi src dst sb (LENGTH bs)
+    abi_scratch_decoder_ranges opc base_op hi src dst B sb (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) (REPLICATE n ty))) first last b cap initial /\
-    mem_bytes_at sb (LENGTH bs) (abi_decode_source opc initial) = bs /\
+    mem_bytes_at (B + sb) (LENGTH bs) (abi_decode_source opc initial) = bs /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-    abi_decoder_operand_live st.cs_next_var hi
+    abi_decoder_operand_live st.cs_next_var hi /\
+    abi_decoder_operand_live st.cs_next_var base_op
 Proof
   simp_tac bool_ss [abi_scratch_decoder_input_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -52,23 +54,26 @@ Theorem abi_scratch_decoder_fixed_array:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> simp_tac bool_ss [abi_scratch_decoder_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
+  qpat_x_assum `LENGTH vs = n` (SUBST_ALL_TAC o SYM) >>
+  full_simp_tac bool_ss [] >>
   (`LIST_REL (abi_scratch_decoder ce env sf) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)`
     by simp[LIST_REL_REPLICATE_same] >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _`
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
     (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
+  qmatch_asmsub_rename_tac `abi_scratch_decoder_ranges opc base_op hi src dst B sb` >>
   mp_tac (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
     (Q.INST [`st` |-> `start`, `final` |-> `end_st`, `tys` |-> `REPLICATE (LENGTH vs) ty`,
       `tvs` |-> `REPLICATE (LENGTH vs) tv`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`]
       abi_scratch_decoder_complex_execute)) >>
   impl_tac >- (asm_simp_tac (srw_ss()) [EVERY_MEM, MEM_REPLICATE,
     Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
-    Cases_on `vs` >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]) >> strip_tac >>
+    Cases_on `vs` >> gvs[arithmeticTheory.MULT_CLAUSES, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"]) >> strip_tac >>
   rename1 `tuple_in_memory vs (REPLICATE (LENGTH vs) tv) d actual.vs_memory` >>
   `val_in_memory (ArrayTV tv (Fixed (LENGTH vs)))
     (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs))) d actual.vs_memory`
     by (irule abi_decoder_fixed_array_memory >> asm_simp_tac bool_ss []) >>
-  qexists_tac `actual` >> asm_simp_tac bool_ss [])
+  qexists_tac `actual` >> asm_simp_tac bool_ss [map_replicate, SUM_REPLICATE])
 QED
 
 (* ===== Inputs ===== *)
@@ -78,7 +83,7 @@ QED
 Theorem abi_scratch_decoder_struct_inputs:
   FLOOKUP env nsid = SOME (StructArgs args) /\ LENGTH tvs = LENGTH args /\
   abi_scratch_decoder_input ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs)))
-    bs v st src dst opc hi sb d first last b cap initial ==>
+    bs v st src dst opc base_op hi B sb d first last b cap initial ==>
   ?cfields fields.
     FLOOKUP sf (nsid_to_string nsid) = SOME cfields /\
     MAP (FST o SND) cfields = MAP SND args /\
@@ -90,15 +95,16 @@ Theorem abi_scratch_decoder_struct_inputs:
       (MAP SND fields) /\
     vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type (env \\ nsid)) (MAP SND args)) bs bs /\
     type_memory_bytes ce (StructT nsid) = SUM (MAP (type_memory_bytes ce) (MAP SND args)) /\
-    abi_scratch_decoder_ranges opc hi src dst sb
+    abi_scratch_decoder_ranges opc base_op hi src dst B sb
       (LENGTH bs)
       d (SUM (MAP (type_memory_bytes ce) (MAP SND args))) first last b cap initial /\
-    mem_bytes_at sb
+    mem_bytes_at (B + sb)
       (LENGTH bs)
       (abi_decode_source opc initial) =
         bs /\
     abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-    abi_decoder_operand_live st.cs_next_var hi
+    abi_decoder_operand_live st.cs_next_var hi /\
+    abi_decoder_operand_live st.cs_next_var base_op
 Proof
   simp_tac bool_ss [abi_scratch_decoder_input_def] >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -138,9 +144,10 @@ Proof
   `LENGTH tvs = LENGTH args` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
   simp_tac bool_ss [abi_scratch_decoder_def] >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_scratch_decoder_struct_inputs >> strip_tac >> gvs[Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+  drule_all abi_scratch_decoder_struct_inputs >> strip_tac >> full_simp_tac bool_ss [] >>
+  qmatch_asmsub_rename_tac `abi_scratch_decoder_ranges opc base_op hi src dst B sb` >>
   (drule abi_decoder_struct_infos >> strip_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   mp_tac (Q.INST [`st` |-> `start`, `final` |-> `end_st`,
     `env` |-> `env \\ nsid`, `sf` |-> `sf \\ nsid_to_string nsid`,
@@ -234,13 +241,14 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_decode:
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_scratch_decoder_input ce env sf ty tv bs v start src dst opc hi sb d first last b cap initial /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_scratch_decoder_input ce env sf ty tv bs v start src dst opc base_op hi B sb d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
@@ -255,8 +263,192 @@ Proof
   `abi_decoder_coherent ce env sf ty tv` by fs[abi_scratch_decoder_input_def] >>
   `abi_scratch_decoder ce env sf ty tv` by
     (drule_all abi_scratch_decoder_coherent_correct >> simp[]) >>
-  qhdtm_x_assum `abi_scratch_decoder` (mp_tac o PURE_REWRITE_RULE [abi_scratch_decoder_def]) >>
-  disch_then (qspecl_then [`dst`, `src`, `opc`, `hi`, `start`, `end_st`, `func`, `ctx`,
-    `first`, `last`, `b`, `cap`, `limit_st`, `initial`, `bs`, `v`, `sb`, `d`] mp_tac) >>
-  asm_simp_tac bool_ss []
+  qhdtm_x_assum `abi_scratch_decoder`
+    (drule_all o PURE_REWRITE_RULE [abi_scratch_decoder_def]) >>
+  simp_tac bool_ss []
 QED
+
+Theorem abi_scratch_decoder_fixed_array_with_frame:
+  abi_scratch_decoder ce env sf ty tv /\
+  (0 < n /\ is_dynamic (vyper_to_abi_type env ty) ==>
+    !elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce (ArrayT ty (Fixed n))) start = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\ fn_has_code start end_st func /\
+  (start.cs_blocks = end_st.cs_blocks \/
+    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_scratch_decoder_input ce env sf (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n)) bs v start src dst opc base_op hi B sb d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  ?actual. val_in_memory (ArrayTV tv (Fixed n)) v d actual.vs_memory /\
+    abi_scratch_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+      limit_st d (type_memory_bytes ce (ArrayT ty (Fixed n))) b cap initial actual /\
+    abi_decode_footprint_frame
+      ((d,type_memory_bytes ce (ArrayT ty (Fixed n)))::abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)
+      initial actual /\
+    actual.vs_current_bb = end_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+    abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_scratch_decoder_fixed_array_inputs >> strip_tac >>
+  qpat_x_assum `LENGTH vs = n` (SUBST_ALL_TAC o SYM) >>
+  full_simp_tac bool_ss [] >>
+  (`LIST_REL (abi_scratch_decoder ce env sf) (REPLICATE (LENGTH vs) ty) (REPLICATE (LENGTH vs) tv)`
+    by simp[LIST_REL_REPLICATE_same] >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (assume_tac o PURE_REWRITE_RULE [abi_decoder_fixed_array_infos]) >>
+  mp_tac (SIMP_RULE bool_ss [map_replicate, SUM_REPLICATE]
+    (Q.INST [`st` |-> `start`, `final` |-> `end_st`, `tys` |-> `REPLICATE (LENGTH vs) ty`,
+      `tvs` |-> `REPLICATE (LENGTH vs) tv`, `dyn` |-> `is_abi_dynamic ce.ce_struct_fields ty`]
+      abi_scratch_decoder_complex_execute_with_frame)) >>
+  (impl_tac >- (asm_simp_tac (srw_ss()) [EVERY_MEM, MEM_REPLICATE,
+    Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"] >>
+    Cases_on `vs` >> gvs[arithmeticTheory.MULT_CLAUSES, Excl "enc_def", Excl "dec_def", Excl "vyper_decode_valid_enc_def"])) >> strip_tac >>
+  rename1 `tuple_in_memory vs (REPLICATE (LENGTH vs) tv) d actual.vs_memory` >>
+  `val_in_memory (ArrayTV tv (Fixed (LENGTH vs)))
+    (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs))) d actual.vs_memory`
+    by (irule abi_decoder_fixed_array_memory >> asm_simp_tac bool_ss []) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss [map_replicate, SUM_REPLICATE])
+QED
+
+Theorem abi_scratch_decoder_struct_with_frame:
+  FLOOKUP env nsid = SOME (StructArgs args) /\
+  LIST_REL (abi_scratch_decoder ce (env \\ nsid) (sf \\ nsid_to_string nsid)) (MAP SND args) tvs /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce (StructT nsid)) start = ((),end_st) /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\ fn_has_code start end_st func /\
+  (start.cs_blocks = end_st.cs_blocks \/
+    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_scratch_decoder_input ce env sf (StructT nsid) (StructTV (ZIP (MAP FST args,tvs))) bs v start src dst opc base_op hi B sb d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  ?actual. val_in_memory (StructTV (ZIP (MAP FST args,tvs))) v d actual.vs_memory /\
+    abi_scratch_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+      limit_st d (type_memory_bytes ce (StructT nsid)) b cap initial actual /\
+    abi_decode_footprint_frame
+      ((d,type_memory_bytes ce (StructT nsid))::abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)
+      initial actual /\
+    actual.vs_current_bb = end_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+    abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `LENGTH tvs = LENGTH args` by metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
+  drule_all abi_scratch_decoder_struct_inputs >> strip_tac >> full_simp_tac bool_ss [] >>
+  (drule abi_decoder_struct_infos >> strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [] >> strip_tac >>
+  mp_tac (Q.INST [`st` |-> `start`, `final` |-> `end_st`,
+    `env` |-> `env \\ nsid`, `sf` |-> `sf \\ nsid_to_string nsid`,
+    `tys` |-> `MAP SND (args:(string # vyperAST$type) list)`,
+    `vs` |-> `MAP SND (fields:(string # value) list)`,
+    `dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields)
+      (MAP SND (args:(string # vyperAST$type) list))`]
+    abi_scratch_decoder_complex_execute_with_frame) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> strip_tac >>
+  rename1 `tuple_in_memory (MAP SND fields) tvs d actual.vs_memory` >>
+  `fields_in_memory fields (ZIP (MAP FST args,tvs)) d actual.vs_memory` by
+    (irule static_fields_memory_zip >> fs[Once value_has_type_def]) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss [val_in_memory_struct])
+QED
+
+Theorem abi_scratch_decoder_decode_with_frame:
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  fn_has_code start end_st func /\
+  (start.cs_blocks = end_st.cs_blocks \/
+    !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_scratch_decoder_input ce env sf ty tv bs v start src dst opc base_op hi B sb d first last b cap initial /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
+  ?actual. val_in_memory tv v d actual.vs_memory /\
+    abi_scratch_effect first last start.cs_next_id end_st.cs_next_id start.cs_next_var
+      limit_st d (type_memory_bytes ce ty) b cap initial actual /\
+    abi_decode_footprint_frame
+      ((d,type_memory_bytes ce ty)::abi_decoder_child_scratch (abi_decoder_ids first last) b cap initial)
+      initial actual /\
+    actual.vs_current_bb = end_st.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH end_st.cs_current_insts /\ ~actual.vs_halted /\
+    abi_decode_sim ctx func initial actual
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_decoder_coherent ce env sf ty tv` by fs[abi_scratch_decoder_input_def] >>
+  Cases_on `ty`
+  >- (rename1 `BaseT bt` >>
+      mp_tac (Q.SPEC `bt` abi_scratch_decoder_base_shape) >>
+      disch_then (DISJ_CASES_THEN2 (qx_choose_then `clamp` assume_tac)
+        (qx_choose_then `n` assume_tac))
+      >- (irule abi_scratch_decoder_word_with_frame >>
+          asm_simp_tac bool_ss [] >> metis_tac[]) >>
+      irule abi_scratch_decoder_bytestring_with_frame >>
+      asm_simp_tac bool_ss [] >> metis_tac[])
+  >- (drule (iffLR abi_decoder_coherent_tuple_iff) >> strip_tac >> full_simp_tac bool_ss [] >>
+      `LIST_REL (abi_scratch_decoder ce env sf) l tvs` by
+        (irule LIST_REL_mono >> qexists_tac `abi_decoder_coherent ce env sf` >>
+         asm_simp_tac bool_ss [] >> metis_tac[abi_scratch_decoder_coherent_correct]) >>
+      irule abi_scratch_decoder_tuple_with_frame >>
+      asm_simp_tac bool_ss [] >> metis_tac[])
+  >- suspend "array"
+  >- (rename1 `StructT nsid` >>
+      drule (iffLR abi_decoder_coherent_struct_iff) >> strip_tac >> full_simp_tac bool_ss [] >>
+      `LIST_REL (abi_scratch_decoder ce (env \\ nsid) (sf \\ nsid_to_string nsid)) (MAP SND args) tvs` by
+        (irule LIST_REL_mono >>
+         qexists_tac `abi_decoder_coherent ce (env \\ nsid) (sf \\ nsid_to_string nsid)` >>
+         asm_simp_tac bool_ss [] >> metis_tac[abi_scratch_decoder_coherent_correct]) >>
+      irule abi_scratch_decoder_struct_with_frame >>
+      asm_simp_tac bool_ss [] >> metis_tac[])
+  >- (rename1 `FlagT nsid` >>
+      `?clamp. type_to_abi_dec_info sf ce (FlagT nsid) = DecPrimWord clamp` by
+        simp[type_to_abi_dec_info_def] >>
+      irule abi_scratch_decoder_word_with_frame >>
+      asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  fs[Once abi_decoder_coherent_cases]
+QED
+
+Resume abi_scratch_decoder_decode_with_frame[array]:
+  rename1 `ArrayT elem bound` >>
+  drule (iffLR abi_decoder_coherent_array_iff) >> strip_tac >> gnvs[] >>
+  `abi_scratch_decoder ce env sf elem tv'` by
+    (drule_all abi_scratch_decoder_coherent_correct >> simp[]) >>
+  `evaluate_type env (ArrayT elem bound) = SOME (ArrayTV tv' bound)` by
+    fs[abi_decoder_header_def] >>
+  drule abi_decoder_evaluated_array_head >> disch_tac >>
+  Cases_on `bound`
+  >- (irule abi_scratch_decoder_fixed_array_with_frame >>
+      asm_simp_tac bool_ss [] >> metis_tac[]) >>
+  qmatch_asmsub_rename_tac `ArrayT elem (Dynamic maxn)` >>
+  qhdtm_assum `abi_scratch_decoder_input`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_input_def]) >>
+  drule abi_decoder_dynarray_metadata_shape >> strip_tac >> gnvs[] >>
+  `abi_decode_source_opcode opc` by fs[abi_scratch_decoder_ranges_def] >>
+  Cases_on `is_abi_dynamic ce.ce_struct_fields elem \/ dec_info_needs_clamp (type_to_abi_dec_info sf ce elem)`
+  >- suspend "dynamic_loop" >>
+  gvs[] >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (assume_tac o SIMP_RULE bool_ss [Once type_to_abi_dec_info_def]) >>
+  gnvs[] >>
+  irule abi_scratch_decoder_array_bulk_with_frame >>
+  asm_simp_tac bool_ss [] >> metis_tac[]
+QED
+
+Resume abi_scratch_decoder_decode_with_frame[dynamic_loop]:
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`
+    (assume_tac o PURE_REWRITE_RULE [cj 3 type_to_abi_dec_info_def]) >>
+  drule abi_decoder_recursive_array_adds_blocks >>
+  disch_then (qspec_then `func` mp_tac) >>
+  (impl_tac >- asm_simp_tac bool_ss []) >> disch_tac >>
+  `!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
+    phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
+  irule abi_scratch_decoder_array_execute_with_frame >>
+  asm_simp_tac bool_ss [] >> metis_tac[]
+QED
+
+Finalise abi_scratch_decoder_decode_with_frame
