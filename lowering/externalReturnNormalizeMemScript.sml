@@ -289,7 +289,7 @@ Proof
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 
-Theorem normalize_word_copy_run[local]:
+Theorem normalize_word_copy_run:
   is_word_type dst_ty /\
   compile_store_memory_typed cenv dst dst_ty src src_ty sa = ((),sb) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
