@@ -48,10 +48,12 @@ Definition send_snapshot_def:
     lookup_storage 1w (lookup_account 11w st.accounts).storage = persistent /\
     lookup_storage 1w (vfmExecution$lookup_transient_storage 11w st.tStorage) = transient /\
     st.logs = logs /\ st.scopes = [FEMPTY] /\ st.immutables = [(11w,[])] /\
+    st.pending_deletions = [] /\
     send_request_fields st = rqs /\
     OPTION_MAP (MAP (λco. (co.co_success,co.co_returnData,
       (lookup_account 11w co.co_accounts).balance,
-      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),co.co_logs)))
+      lookup_storage 1w (vfmExecution$lookup_transient_storage 11w co.co_tStorage),
+      co.co_logs, co.co_toDelete)))
       st.outcomes = rest
 End
 val () = cv_auto_trans send_snapshot_def;
@@ -220,6 +222,13 @@ val () = cv_auto_trans send_bad_code_observe_def;
 
 Theorem send_cps_invalid_code_consumes_before_guard_error:
   send_bad_code_observe
+Proof
+  CONV_TAC cv_eval
+QED
+
+Theorem send_cps_NONE_zero_transfer_unchanged:
+  send_observe 42w 0 NONE (INL (Value NoneV)) 3 0 [] 2w 4w cpscv_initial_logs
+    send_initial_requests NONE
 Proof
   CONV_TAC cv_eval
 QED

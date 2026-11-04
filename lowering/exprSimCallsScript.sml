@@ -35,10 +35,6 @@
  *     stmt_state_rel does not relate to the ALLOCA allocations, so
  *     expr_post's memory frame does not follow (#668, #636 Infrastructure
  *     row 2).
- *   - compile_create_sim, once the create lowerings are wired in, for a
- *     second reason: a create stores its run's pending deletions in the
- *     source (eval_create), which state_rel's accounts_rel requires empty,
- *     while Venom's create result (extract_venom_result) drops them.
  *
  * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
  * since the source runs them on the EVM even with the outcome oracle, so

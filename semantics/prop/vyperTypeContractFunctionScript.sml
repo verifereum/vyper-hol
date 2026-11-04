@@ -13,7 +13,7 @@ Ancestors
   vyperTypeSystem vyperTypeContract vyperTypeInvariants vyperTypeValues vyperTypeBindArguments
   vyperTypeStmtSoundness vyperTypeInitialState vyperPureExpr vyperEvalPreservesScopes vyperEvalExprPreservesScopesDom
   vyperEvalPreservesImmutablesDom vyperScopePreservation vyperStatePreservation
-  vyperTypeContractStaticMaps vyperTypeContractContext
+  vyperTypeContractStaticMaps vyperTypeContractContext vyperSourceSupplyFields
 Libs
   wordsLib
 
@@ -923,7 +923,7 @@ Theorem checked_explicit_external_post_prefix_body_return_typed_selected:
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
   call_evaluation_safe cx (int_calls_stmts body) /\
   eval_stmts cx body st = (INR (ReturnException v),st') ==>
   ?ret_tv. evaluate_type (type_env_all_modules mods) ret = SOME ret_tv /\
@@ -1023,7 +1023,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
   MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts /\
   context_well_typed
     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
-  machine_well_typed am /\
+  machine_well_typed am /\ machine_supply am orc /\
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes
     ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
     am.immutables /\
@@ -1040,7 +1040,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
 Proof
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,
-    eval_stmts_no_type_error]
+    machine_supply_initial_state, eval_stmts_no_type_error]
 QED
 
 Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:
@@ -1054,7 +1054,7 @@ Theorem checked_explicit_external_post_prefix_body_no_type_error_selected:
   immutables_ready art.cta_bare_globals art.cta_toplevel_vtypes cx am.immutables /\
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   st.scopes = [scope] /\ st.immutables = am.immutables /\
-  state_well_typed st /\ accounts_well_typed st.accounts /\
+  state_well_typed st /\ accounts_well_typed st.accounts /\ source_supply st /\
   call_evaluation_safe cx (int_calls_stmts body) ==>
   no_type_error_eval (eval_stmts cx body st)
 Proof
