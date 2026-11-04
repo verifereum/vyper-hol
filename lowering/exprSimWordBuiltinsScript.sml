@@ -381,7 +381,8 @@ Proof
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[Once run_inst_seq_def] >>
-  simp[Once step_inst_base_def, mk_inst_def] >>
+  pure_rewrite_tac[Once step_inst_base_def, mk_inst_def] >>
+  simp_tac (srw_ss()) [] >> simp[] >>
   conj_tac >> strip_tac >> simp[] >>
   simp[Once run_inst_seq_def] >>
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure3_def] >>

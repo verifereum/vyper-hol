@@ -300,6 +300,18 @@ Proof
   rw[step_inst_base_def, exec_read1_def]
 QED
 
+Theorem step_TLOAD:
+  !op1 v1 id out ss.
+    eval_operand op1 ss = SOME v1 ==>
+    step_inst_base (mk_inst id TLOAD [op1] [out]) ss =
+      OK (update_var out (tload v1 ss) ss)
+Proof
+  rpt strip_tac >>
+  pure_rewrite_tac[step_inst_base_def, mk_inst_def] >>
+  simp_tac (srw_ss()) [] >>
+  asm_simp_tac (srw_ss()) [exec_read1_def]
+QED
+
 Theorem step_MSTORE:
   ∀ op1 op2 v1 v2 id ss.
     eval_operand op1 ss = SOME v1 ∧

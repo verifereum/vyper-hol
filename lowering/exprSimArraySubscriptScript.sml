@@ -6,7 +6,7 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
-  exprSimForeignImmutableFrame
+  exprSimForeignImmutableFrame emitHelperProps ASCIInumbers
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -4372,4 +4372,92 @@ Proof
   `expr_body_pre cenv cx env obj es` by
     (drule_all expr_body_pre_subscript_array_base >> simp[]) >>
   irule expr_body_pre_after_eval >> goal_assum (drule_at Any) >> simp[]
+QED
+
+(* A read instruction changes only its fresh destination.  Keep the full
+   value/place postcondition, not merely the raw operand execution fact. *)
+Theorem array_read_emit_vv_post:
+  emit_op opc args sm = (dst,sn) /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  step_inst_base (mk_inst sm.cs_next_id opc args
+    [STRING #"%" (toString sm.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s) ==>
+  ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
+    vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+    eval_operand dst q = SOME w /\
+    (q with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var)) w s` >>
+  conj_tac >- simp[run_inst_seq_def] >>
+  conj_tac
+  >- (irule exprSimAggregateChildrenTheory.vv_post_update_var >>
+      simp[] >> qexists_tac `sm` >> simp[not_fresh_at_def, toString_11] >>
+      gvs[cs_extends_def]) >>
+  simp[eval_operand_def, lookup_var_update_var, update_var_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE, toString_11]
+QED
+
+Theorem array_read_emit_frag:
+  emit_op opc args sm = (dst,sn) /\
+  opc <> INVOKE /\ ~is_terminator opc /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!s. P s ==> step_inst_base (mk_inst sm.cs_next_id opc args
+    [STRING #"%" (toString sm.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s)) ==>
+  frag_exec ctx sm sn
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\ P s)
+    (\q. vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+      eval_operand dst q = SOME w /\
+      ?s. P s /\
+        (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)) R
+Proof
+  strip_tac >> irule frag_exec_run_inst_seq >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_extends >> strip_tac >>
+  gvs[cs_extends_def, same_blocks_def, mk_inst_def] >>
+  rpt strip_tac >> disj1_tac >>
+  `step_inst_base (mk_inst sm.cs_next_id opc args
+    [STRING #"%" (toString sm.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s)` by
+    simp[mk_inst_def] >>
+  drule_all array_read_emit_vv_post >> strip_tac >>
+  qexists_tac `q` >> conj_tac >- metis_tac[] >> simp[] >>
+  qexists_tac `s` >> simp[lookup_var_def] >> gvs[lookup_var_def]
+QED
+
+(* The four array length loaders are concrete read-only instructions. *)
+Theorem array_ptr_load_frag:
+  compile_ptr_load ctor imm loc addr sm = (dst,sn) /\
+  (~ctor \/ loc <> LocCode) /\
+  MEM loc [LocMemory; LocStorage; LocTransient; LocCode] /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!s. P s ==> eval_operand addr s = SOME b /\
+    ((loc = LocMemory /\ mload (w2n b) s = w) \/
+     (loc = LocStorage /\ sload b s = w) \/
+     (loc = LocTransient /\ tload b s = w) \/
+     (loc = LocCode /\ word_of_bytes T (0w:bytes32)
+       (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w)) = w))) ==>
+  frag_exec ctx sm sn
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\ P s)
+    (\q. vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+      eval_operand dst q = SOME w /\
+      ?s. P s /\
+        (!x. not_fresh_at sm x ==> lookup_var x q = lookup_var x s)) R
+Proof
+  strip_tac >> gvs[listTheory.MEM] >>
+  gvs[contextTheory.compile_ptr_load_def,
+      contextTheory.compile_imm_load_word_runtime] >>
+  irule array_read_emit_frag >> simp[] >>
+  goal_assum (drule_at Any) >> simp[is_terminator_def] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[] >>
+  simp[step_MLOAD, step_SLOAD, step_TLOAD, exprSimUnwrapTheory.step_DLOAD]
 QED
