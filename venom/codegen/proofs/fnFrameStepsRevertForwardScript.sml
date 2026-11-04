@@ -1,7 +1,7 @@
 (* Structural boundaries for revert forwarding. *)
 Theory fnFrameStepsRevertForward
 Ancestors
-  contextCodegenRel dfgDefs list
+  contextCodegenRel dfgDefs list dfgAnalysisProps allocaRemapSSA
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -53,4 +53,16 @@ Proof
         (first_x_assum irule >> qexistsl_tac [`rank y`, `rank`] >> simp[]) >>
       simp[]) >>
   simp[normalize_operand_def]
+QED
+
+Theorem dfg_build_function_ssa_def:
+  !fn inst v.
+    ssa_form fn /\ MEM inst (fn_insts fn) /\ MEM v inst.inst_outputs ==>
+    dfg_get_def (dfg_build_function fn) v = SOME inst
+Proof
+  rpt strip_tac >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst' = inst` by (irule ssa_unique_output >> metis_tac[]) >>
+  gvs[]
 QED
