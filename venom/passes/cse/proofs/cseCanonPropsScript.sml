@@ -543,3 +543,122 @@ Proof
  irule (SRULE [LET_THM] (Q.SPEC `Forward` df_boundary_fixpoint)) >>
  simp[GSYM (SRULE [LET_THM] avail_analyze_def), cse_avail_analyze_fixpoint]
 QED
+
+(* A materialized operand of meet bounds all members of its result. *)
+Theorem cse_avail_meet_some_left[local]:
+ !a v. ?b. avail_meet_opt (SOME a) v = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt gen_tac >> Cases_on `v` >> simp[avail_meet_opt_def] >>
+ metis_tac[avail_meet_two_source_member]
+QED
+
+Theorem cse_avail_meet_some_right[local]:
+ !v a. ?b. avail_meet_opt v (SOME a) = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt gen_tac >> Cases_on `v` >> simp[avail_meet_opt_def] >>
+ metis_tac[avail_meet_two_source_member]
+QED
+
+Theorem cse_avail_fold_some[local]:
+ !vals a. ?b. FOLDL avail_meet_opt (SOME a) vals = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ Induct >- (simp[] >> metis_tac[]) >> simp_tac bool_ss [listTheory.FOLDL] >> rpt gen_tac >>
+ qspecl_then [`a`, `h`] strip_assume_tac cse_avail_meet_some_left >>
+ simp[] >> first_x_assum (qspec_then `b` strip_assume_tac) >>
+ metis_tac[]
+QED
+
+Theorem cse_avail_fold_member:
+ !vals a. MEM (SOME a) vals ==>
+ ?b. FOLDL avail_meet_opt NONE vals = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt strip_tac >> drule (iffLR listTheory.MEM_SPLIT) >> strip_tac >> gvs[rich_listTheory.FOLDL_APPEND] >>
+ qmatch_goalsub_abbrev_tac `avail_meet_opt acc (SOME a)` >>
+ qspecl_then [`acc`, `a`] strip_assume_tac cse_avail_meet_some_right >>
+ simp[] >> qspecl_then [`l2`, `b`] strip_assume_tac cse_avail_fold_some >>
+ metis_tac[]
+QED
+
+Theorem cse_avail_joined_predecessor:
+ !d entry cfg st lbl pred a.
+ MEM pred (cfg_preds_of cfg lbl) /\ df_boundary NONE st pred = SOME a ==>
+ ?b. df_joined_val Forward NONE avail_meet_opt avail_edge_transfer d
+       (OPTION_MAP (\l. (l,SOME avail_empty)) entry) cfg st lbl = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt strip_tac >>
+ `MEM (SOME a) (MAP (\p. df_boundary NONE st p) (cfg_preds_of cfg lbl))`
+   by (simp[listTheory.MEM_MAP] >> metis_tac[]) >>
+ drule cse_avail_fold_member >> strip_tac >>
+ simp[df_joined_val_def, avail_edge_transfer_def] >>
+ qmatch_goalsub_abbrev_tac `case vals of [] => NONE | _ => _` >>
+ `vals <> []` by (strip_tac >> gvs[Abbr `vals`]) >>
+ Cases_on `vals` >> gvs[] >>
+ Cases_on `entry` >> simp[] >> IF_CASES_TAC >> gvs[] >>
+ qspecl_then [`SOME avail_empty`, `b`] strip_assume_tac
+   cse_avail_meet_some_right >> metis_tac[]
+QED
+
+Theorem cse_avail_joined_entry_empty[local]:
+ !d cfg st lbl.
+ ?a. df_joined_val Forward NONE avail_meet_opt avail_edge_transfer d
+       (SOME (lbl,SOME avail_empty)) cfg st lbl = SOME a /\
+ (!e src. ~(?xs. FLOOKUP a e = SOME xs /\ MEM src xs))
+Proof
+ rpt gen_tac >> simp[df_joined_val_def] >>
+ qmatch_goalsub_abbrev_tac `avail_meet_opt (SOME avail_empty) v` >>
+ qspecl_then [`avail_empty`, `v`] strip_assume_tac cse_avail_meet_some_left >>
+ qexists_tac `b` >> simp[] >>
+ gvs[avail_empty_def, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem cse_avail_entry_empty:
+ !fn lbl bb.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\ fn_entry_label fn = SOME lbl ==>
+ ?a. df_at NONE (avail_analyze fn) lbl 0 = SOME a /\
+ (!e src. ~(?xs. FLOOKUP a e = SOME xs /\ MEM src xs))
+Proof
+ rpt strip_tac >> drule_all cse_avail_at_entry >> simp[] >>
+ strip_tac >>
+ qspecl_then [`dfg_build_function fn`, `cfg_analyze fn`, `avail_analyze fn`, `lbl`]
+   mp_tac cse_avail_joined_entry_empty >> simp[]
+QED
+
+Theorem cse_avail_boundary_member:
+ !fn lbl bb a.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ df_at NONE (avail_analyze fn) lbl (LENGTH bb.bb_instructions) = SOME a ==>
+ ?b. df_boundary NONE (avail_analyze fn) lbl = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt strip_tac >> drule_all cse_avail_boundary_absorb >> simp[] >>
+ qspecl_then [`df_boundary NONE (avail_analyze fn) lbl`, `a`]
+   strip_assume_tac cse_avail_meet_some_right >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_avail_entry_predecessor:
+ !fn lbl bb pred a.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ MEM pred (cfg_preds_of (cfg_analyze fn) lbl) /\
+ df_boundary NONE (avail_analyze fn) pred = SOME a ==>
+ ?b. df_at NONE (avail_analyze fn) lbl 0 = SOME b /\
+ (!e src. (?xs. FLOOKUP b e = SOME xs /\ MEM src xs) ==>
+          ?xs. FLOOKUP a e = SOME xs /\ MEM src xs)
+Proof
+ rpt strip_tac >> drule_all cse_avail_at_entry >> strip_tac >>
+ simp[] >> irule cse_avail_joined_predecessor >> simp[] >>
+ qexists_tac `pred` >> simp[]
+QED
