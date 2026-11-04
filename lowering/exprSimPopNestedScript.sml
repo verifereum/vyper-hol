@@ -249,6 +249,19 @@ Proof
   res_tac >> gvs[]
 QED
 
+Theorem target_root_untyped[local]:
+  !env bt. type_place_target env (target_root bt) = NONE ==>
+    type_place_target env bt = NONE
+Proof
+  gen_tac >> measureInduct_on `base_assignment_target_size bt` >>
+  Cases_on `bt` >> simp[target_root_def] >> rpt strip_tac >>
+  first_x_assum (drule_at Any) >> simp[] >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `type_place_target env tgt` >>
+  Cases_on `type_place_target env tgt` >> simp[] >>
+  gvs[Abbr `tgt`, type_place_target_AttributeTarget,
+      type_place_target_SubscriptTarget]
+QED
+
 Theorem pop_nested_immutable_runtime_sim:
   !ctx func cenv cx env ann bt ty es src id.
     ~cx.in_deploy /\
