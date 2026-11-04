@@ -112,3 +112,13 @@ Proof
   simp[allocation_free_opcode_def] >>
   fs[fn_ptr_ok_def, EVERY_EL] >> metis_tac[MEM_EL]
 QED
+
+Theorem concretize_stage_output_taint:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  ptr_discipline lo C vs /\ ~ctx_has_dalloca C /\ o1_run_state_ok vs ==>
+  taint_within D C' vs
+Proof
+  strip_tac >> irule allocation_free_taint_within >> conj_tac
+  >- gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  irule concretize_stage_allocation_free >> metis_tac[]
+QED
