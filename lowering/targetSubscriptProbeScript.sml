@@ -4109,3 +4109,75 @@ Proof
   simp[venomInstTheory.mk_inst_def] >> goal_assum (drule_at Any) >>
   simp[venomInstTheory.mk_inst_def]
 QED
+
+Theorem probe_word_setup_pending_alloca:
+  !args s cs nm.
+    setup_callee probe_word_function args s = SOME cs ==>
+    pending_alloca_size (probe_word_function with fn_name := nm) cs = 128
+Proof
+  rpt strip_tac >> drule probe_word_setup_observations >> strip_tac >>
+  simp[pending_alloca_size_def, venomInstTheory.fn_insts_def,
+       probe_word_function_blocks] >>
+  rewrite_tac[probe_word_compiled_entry,
+       probe_word_compiled_load_cond, probe_word_compiled_load_body,
+       probe_word_compiled_load_exit, probe_word_compiled_copy_cond,
+       probe_word_compiled_copy_body, probe_word_compiled_elem_cond,
+       probe_word_compiled_elem_body, probe_word_compiled_elem_exit,
+       venomInstTheory.mk_inst_def, alloca_lit_size_def,
+       wordsTheory.dimword_def] >> EVAL_TAC >>
+  simp[wordsTheory.word_extract_def, wordsTheory.dimword_def,
+       fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
+Theorem probe_word_invoke_prepare:
+  !ctx func cenv es s nm id r.
+    stmt_state_rel ctx func cenv probe_word_context es s /\
+    MEM (mk_inst id INVOKE [Label nm] [r]) (fn_insts func) /\
+    lookup_function nm ctx.ctx_functions =
+      SOME (probe_word_function with fn_name := nm) ==>
+    ?cs. setup_callee probe_word_function [] s = SOME cs /\
+         s.vs_alloca_next + 128 <= dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `[]` (qspec_then `s` strip_assume_tac) probe_word_setup_exists >>
+  qexists_tac `cs` >> simp[] >>
+  `alloca_room ctx func s` by fs[stmt_state_rel_def] >>
+  `fn_directly_calls ctx func.fn_name nm` by
+    (simp[fcgDefsTheory.fn_directly_calls_def] >>
+     qexistsl_tac [`func`,`mk_inst id INVOKE [Label nm] [r]`,`[]`] >>
+     fs[alloca_room_def, venomInstTheory.mk_inst_def]) >>
+  `alloca_room ctx (probe_word_function with fn_name := nm) cs` by
+    (irule alloca_room_callee >> simp[] >> qexistsl_tac [`func`,`s`] >>
+     simp[] >> drule probe_word_setup_observations >> simp[]) >>
+  drule probe_word_setup_pending_alloca >>
+  disch_then (qspec_then `nm` assume_tac) >>
+  drule probe_word_setup_observations >> strip_tac >>
+  fs[alloca_room_def] >> decide_tac
+QED
+
+Theorem probe_word_invoke_wb_frame:
+  !ctx func cenv es s args cs out sa.
+    stmt_state_rel ctx func cenv probe_word_context es s /\
+    setup_callee probe_word_function args s = SOME cs /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    (!x. not_fresh_at sa x ==> x <> out) ==>
+    wb_frame cenv es sa s
+      (update_var out 0w (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all probe_word_invoke_locals_kept >>
+  disch_then (qspec_then `out` assume_tac) >>
+  drule setup_callee_shared_fields >> strip_tac >>
+  drule probe_word_setup_observations >> strip_tac >>
+  simp[wb_frame_def, probe_word_invoke_caller_frame,
+       lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `off + sz <= s.vs_alloca_next` by
+    (fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+        venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  `mem_bytes_at off sz (probe_word_final_state cs).vs_memory =
+   mem_bytes_at off sz cs.vs_memory` suffices_by simp[] >>
+  irule probe_word_final_memory_frame >> simp[] >> decide_tac
+QED
+
