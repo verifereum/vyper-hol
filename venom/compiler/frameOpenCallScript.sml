@@ -231,3 +231,50 @@ Proof
        (qspec_then `n` mp_tac) >> simp[activation_depth_def]) >>
   gvs[activation_cache_def, activation_depth_def]
 QED
+
+Theorem joint_activation_cache_open_call:
+  joint_trace vs0 ctx q0 es qs q /\ n <= LENGTH es /\
+  activation_depth q0 <= d /\ d < activation_depth (EL n (q0::qs)) /\
+  activation_cache (EL n (q0::qs)) d owner aid site ==>
+  ?c stk PG G tn invoke s oms om hs h.
+    c < n /\ LENGTH stk = d /\ EL c es = NONE /\
+    EL c (q0::qs) = JointConfig stk PG G tn owner invoke s oms om hs h /\
+    joint_transition ctx (EL c (q0::qs)) NONE (EL (SUC c) (q0::qs)) /\
+    activation_cache (EL c (q0::qs)) d owner aid site /\
+    invoke.inst_opcode = INVOKE /\
+    (!k. c < k /\ k <= n ==> d < activation_depth (EL k (q0::qs)))
+Proof
+  strip_tac >>
+  `?c. 0 <= c /\ c <= n /\ activation_depth (EL c (q0::qs)) <= d /\
+    (!k. c < k /\ k <= n ==> ~(activation_depth (EL k (q0::qs)) <= d))` by
+    (ho_match_mp_tac last_index_in_interval >> simp[]) >>
+  `c < n /\ c < LENGTH es /\ SUC c <= n` by
+    (Cases_on `c = n` >> gvs[] >> decide_tac) >>
+  `!k. c < k /\ k <= n ==> d < activation_depth (EL k (q0::qs))` by
+    metis_tac[NOT_LESS_EQUAL] >>
+  `joint_transition ctx (EL c (q0::qs)) (EL c es) (EL (SUC c) (q0::qs))` by
+    metis_tac[joint_trace_edge_at] >>
+  `activation_depth (EL (SUC c) (q0::qs)) <= SUC (activation_depth (EL c (q0::qs)))` by
+    metis_tac[joint_depth_step_bound] >>
+  `d < activation_depth (EL (SUC c) (q0::qs))` by
+    (first_x_assum irule >> simp[]) >>
+  `activation_depth (EL c (q0::qs)) = d` by decide_tac >>
+  `EL c es = NONE` by (irule joint_depth_increase_call >> metis_tac[]) >>
+  Cases_on `EL c (q0::qs)` >>
+  rename1 `EL c (q0::qs) = JointConfig stkC pgC gC tnC fnC instC sC omsC omC hsC hC` >>
+  Cases_on `EL n (q0::qs)` >>
+  rename1 `EL n (q0::qs) = JointConfig stkN pgN gN tnN fnN instN sN omsN omN hsN hN` >>
+  `LENGTH stkC = d /\ d < LENGTH stkN` by gvs[activation_depth_def] >>
+  `(EL (LENGTH stkN - SUC d) stkN).cf_fn = fnC /\
+   (EL (LENGTH stkN - SUC d) stkN).cf_inst = instC /\
+   (EL (LENGTH stkN - SUC d) stkN).cf_state = sC /\ instC.inst_opcode = INVOKE` by
+    (irule joint_open_call_saved_at >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `EL _ _ = JointConfig stkC _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `EL _ _ = JointConfig stkN _ _ _ _ _ _ _ _ _ _`)) >>
+     gvs[]) >>
+  gvs[activation_cache_def, activation_depth_def] >>
+  qexists_tac `c` >>
+  goal_assum (drule_at (Pat `EL _ _ = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[activation_cache_def, activation_depth_def]
+QED
