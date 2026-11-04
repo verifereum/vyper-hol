@@ -698,6 +698,12 @@ Theorem storage_copy_control_frame[local]:
                 vs_inst_idx := ix; vs_prev_bb := prev|>) =
     stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
 Proof
+  rpt gen_tac >>
+  `fmp_room ctx func
+     (s with <|vs_vars := V; vs_current_bb := bb;
+               vs_inst_idx := ix; vs_prev_bb := prev|>) =
+   fmp_room ctx func (s with vs_vars := V)` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,

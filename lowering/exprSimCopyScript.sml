@@ -139,6 +139,9 @@ Proof
   conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   conj_tac >- (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
   conj_tac
+  >- (irule fmp_room_fields >> qexists_tac `s` >>
+      simp[] >> gvs[copy_static_def, venom_state_component_equality]) >>
+  conj_tac
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >> simp[] >>
       metis_tac[copy_buffer_local_region_frame]) >>
