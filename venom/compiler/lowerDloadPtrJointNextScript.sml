@@ -27,7 +27,7 @@ Proof
   simp[EL_APPEND_EQN]
 QED
 
-Theorem dload_blocks_supply_el[local]:
+Theorem dload_blocks_supply_el:
   !bs n q cs q'. lower_dload_blocks_supply q bs = (cs,q') /\ n < LENGTH bs ==>
   ?u. n < LENGTH cs /\ lower_dload_block_supply
     (SND (lower_dload_blocks_supply q (TAKE n bs))) (EL n bs) = (EL n cs,u)
