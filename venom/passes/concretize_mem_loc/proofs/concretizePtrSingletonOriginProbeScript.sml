@@ -285,3 +285,29 @@ Proof
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_tr``, ``sop_ctx``]) >>
   simp[finite_mapTheory.FUPDATE_EQ]
 QED
+
+Definition sop_cs2_def:
+  sop_cs2 = THE (setup_callee sop_callee [256w] sop_s3)
+End
+Definition sop_frame2_def:
+  sop_frame2 = <|cf_fn := sop_caller;
+    cf_inst := EL 3 (HD sop_caller.fn_blocks).bb_instructions;
+    cf_state := sop_s3; cf_params := []; cf_prov := sop_g1;
+    cf_tvar := sop_t3.t_var|>
+End
+
+Theorem sop_in_second_callee:
+  origin_frame_reachable sop_initial sop_ctx [sop_frame2] sop_pg
+    FEMPTY (sop_t3 with t_var := FEMPTY) sop_callee
+    (HD (HD sop_callee.fn_blocks).bb_instructions) sop_cs2 [sop_o1] FEMPTY
+Proof
+  assume_tac sop_second_call >> drule origin_frame_reachable_call >>
+  disch_then (qspecl_then [`"leaf"`, `[Var "a"]`, `sop_callee`] mp_tac) >>
+  disch_then (qspecl_then [`[256w]`, `sop_cs2`, `sop_cs2`,
+    `HD (HD sop_callee.fn_blocks).bb_instructions`] mp_tac) >>
+  simp[sop_frame2_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``sop_t3``]) >>
+  simp[venomExecSemanticsTheory.eval_phis_def,
+    venomExecSemanticsTheory.phi_prefix_length_def]
+QED
+
