@@ -357,3 +357,65 @@ Proof
   irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
 QED
+
+Theorem abi_args_post_cons_uncaptured:
+  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
+  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sb.cs_next_id /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) ==>
+  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+Proof
+  strip_tac >>
+  `expr_val_rel cx (expr_type e) v op t /\
+   expr_val_at ce cx (expr_type e) sa sm es1 v op t /\
+   stmt_state_rel ctx func ce cx es1 t` by gvs[expr_post_def] >>
+  `wb_frame ce es1 sm t u /\ stmt_state_rel ctx func ce cx es' u` by
+    gvs[abi_args_post_def] >>
+  `expr_val_at ce cx (expr_type e) sa sb es' v op u` by
+    (irule abi_args_location_end_mono >> qexists `sm` >> simp[] >>
+     irule abi_args_location_kept >> metis_tac[]) >>
+  `expr_val_rel cx (expr_type e) v op u` by
+    (Cases_on `is_word_type (expr_type e)`
+     >- (gvs[expr_val_rel_def] >> qexists `w` >> simp[] >>
+         irule abi_args_operand_kept >> metis_tac[]) >>
+     irule abi_args_value_kept >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  irule abi_args_post_cons_frame >> metis_tac[]
+QED
+
+Theorem abi_args_post_cons_captured:
+  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce sm /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sb.cs_next_id /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ val_wf tv v /\
+  eval_operand op t = SOME w /\
+  FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ aid < sm.cs_next_id /\
+  b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
+  (!n lb lsz. local_region ce es1.scopes t n lb lsz ==>
+              b + sz <= lb \/ lb + lsz <= b) ==>
+  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+Proof
+  strip_tac >>
+  `expr_val_rel cx (expr_type e) v op t /\
+   expr_val_at ce cx (expr_type e) sa sm es1 v op t /\
+   stmt_state_rel ctx func ce cx es1 t` by gvs[expr_post_def] >>
+  `wb_frame ce es1 sm t u` by gvs[abi_args_post_def] >>
+  `expr_val_at ce cx (expr_type e) sa sb es' v op u` by
+    (irule abi_args_location_end_mono >> qexists `sm` >> simp[] >>
+     irule abi_args_location_kept >> metis_tac[]) >>
+  `expr_val_rel cx (expr_type e) v op u` by
+    (irule abi_args_captured_value_kept >> metis_tac[]) >>
+  irule abi_args_post_cons_frame >> metis_tac[]
+QED
