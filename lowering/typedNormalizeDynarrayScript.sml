@@ -395,7 +395,7 @@ Proof
   rpt strip_tac >> irule typed_dynarray_equal_exterior >> simp[]
 QED
 
-Theorem dyn_prefix_bind_op[local]:
+Theorem dyn_prefix_bind_op:
   comp_bind (emit_op opc ops) k sa =
   k (Var ("%" ++ toString sa.cs_next_var))
     (sa with <|cs_next_var := sa.cs_next_var+1;
@@ -407,7 +407,7 @@ Proof
        emit_def, comp_ignore_bind_def, comp_return_def]
 QED
 
-Theorem dyn_prefix_bind_void[local]:
+Theorem dyn_prefix_bind_void:
   comp_ignore_bind (emit_void opc ops) k sa =
   k (sa with <|cs_next_id := sa.cs_next_id+1;
                cs_current_insts := sa.cs_current_insts ++
