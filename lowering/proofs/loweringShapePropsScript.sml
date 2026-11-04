@@ -13891,3 +13891,43 @@ Proof
   rename1 `p.ptr_location` >> Cases_on `p.ptr_location` >>
   simp[LET_THM, comp_return_labels, compile_ensure_in_memory_labels]
 QED
+
+Theorem compile_store_bytestring_labels:
+  !v dst s P.
+    cs_extends s (SND (compile_store_bytestring v dst s)) /\
+    EVERY P (added_labels s (SND (compile_store_bytestring v dst s)))
+Proof
+  rpt gen_tac >>
+  simp[contextTheory.compile_store_bytestring_def,
+       contextTheory.compile_bytestring_copy_len_def, LET_THM] >>
+  rpt (FIRST [irule comp_bind_labels >> conj_tac,
+              irule comp_ignore_bind_labels >> conj_tac] >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[comp_return_labels, emit_op_labels, emit_void_labels])
+QED
+
+Theorem compile_copy_memory_labels:
+  !dst src sz s P.
+    cs_extends s (SND (compile_copy_memory dst src sz s)) /\
+    EVERY P (added_labels s (SND (compile_copy_memory dst src sz s)))
+Proof
+  rpt gen_tac >> Cases_on `sz` >>
+  simp[contextTheory.compile_copy_memory_def, comp_return_labels, emit_void_labels]
+QED
+
+Theorem compile_copy_memory_dynamic_labels:
+  !dst src len s P.
+    cs_extends s (SND (compile_copy_memory_dynamic dst src len s)) /\
+    EVERY P (added_labels s (SND (compile_copy_memory_dynamic dst src len s)))
+Proof
+  simp[contextTheory.compile_copy_memory_dynamic_def, emit_void_labels]
+QED
+
+Theorem compile_with_byte_offset_labels:
+  !base off s P.
+    cs_extends s (SND (compile_with_byte_offset base off s)) /\
+    EVERY P (added_labels s (SND (compile_with_byte_offset base off s)))
+Proof
+  rpt gen_tac >> rewrite_tac[contextTheory.compile_with_byte_offset_def] >>
+  IF_CASES_TAC >> simp[comp_return_labels, emit_op_labels]
+QED
