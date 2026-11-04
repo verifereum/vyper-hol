@@ -3,28 +3,9 @@ Ancestors
   o1LowerDloadJointRelation o1LowerDloadJointFrontier
   o1LowerDloadJointAllocation o1LowerDloadScratchCount
   o1LowerDloadOccurrenceHeadroom o1LowerDloadPairedAllocation
-  o1LowerDloadEnvironment o1LowerDloadMapEvolution
+  o1LowerDloadEnvironment o1LowerDloadMapEvolution o1LowerDloadJointGeometry
+  o1LowerDloadOccurrence
   finite_map words list pred_set
-
-Theorem ld_geometry_fresh_site[local]:
-  ld_joint_geometry sites X lo owners /\ MEM (FST key) owners /\
-  lo <= b /\ lo <= c /\ b+z < dimword (:256) /\ c+z < dimword (:256) /\
-  (!id d e w. FLOOKUP sites id = SOME (d,e,w) ==> d+w <= b /\ e+w <= c) /\
-  (!id aid e. FLOOKUP X id = SOME (aid,e) ==> e+32 <= c) ==>
-  ld_joint_geometry (sites |+ (key,(b,c,z))) X lo owners
-Proof
-  rewrite_tac[ld_joint_geometry_def] >> strip_tac >> rpt conj_tac
-  >- (simp[FDOM_FUPDATE] >> metis_tac[])
-  >- (simp[FLOOKUP_UPDATE] >> rpt gen_tac >>
-      Cases_on `key = id` >> simp[] >> metis_tac[])
-  >- metis_tac[]
-  >- (simp[FLOOKUP_UPDATE] >> rpt gen_tac >>
-      Cases_on `key = id` >> Cases_on `key = jd` >>
-      simp[] >> rpt strip_tac >> gvs[] >> metis_tac[])
-  >- (simp[FLOOKUP_UPDATE] >> rpt gen_tac >>
-      Cases_on `key = id` >> simp[] >> rpt strip_tac >> gvs[] >> metis_tac[])
-  >> metis_tac[]
-QED
 
 Theorem ld_allocas_fresh_site[local]:
   ld_joint_allocas sites X a fn t /\ MEM aid (fn_ir_inst_ids fn) /\
@@ -74,6 +55,10 @@ Proof
     metis_tac[lower_dload_step_alloca] >>
   qhdtm_x_assum `ld_joint_boundary` mp_tac >>
   simp_tac bool_ss [ld_joint_boundary_def, ld_joint_frame_def] >> strip_tac >>
+  `(a,inst.inst_id) NOTIN FDOM sites` by
+    (`FLOOKUP B (a,inst.inst_id) = NONE` by
+       (fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def]) >>
+     fs[ld_joint_erasure_def, FLOOKUP_DEF]) >>
   drule_all lower_dload_paired_alloca_fresh >>
   disch_then (mp_tac o Q.ISPEC `amount:bytes32`) >> strip_tac >>
   gvs[] >>
@@ -82,10 +67,9 @@ Proof
   >- metis_tac[lower_dload_step_alloca]
   >- (gvs[ld_joint_erasure_def, FLOOKUP_UPDATE] >>
       rpt gen_tac >> Cases_on `(a,inst.inst_id) = id` >> simp[] >> metis_tac[])
-  >- (irule ld_geometry_fresh_site >> simp[] >>
-      qpat_x_assum `ld_joint_geometry _ _ _ _` mp_tac >>
-      simp_tac bool_ss [ld_joint_geometry_def] >> strip_tac >>
-      rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC) >> decide_tac)
+  >- (`lo <= t.vs_alloca_next /\
+       s.vs_alloca_next + w2n amount < dimword (:256)` by decide_tac >>
+      irule ld_joint_geometry_extend_frontiers >> simp[] >> metis_tac[])
   >- (irule ld_allocas_fresh_site >> metis_tac[])
   >> simp[]
 QED
