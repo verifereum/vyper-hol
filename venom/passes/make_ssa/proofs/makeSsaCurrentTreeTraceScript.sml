@@ -956,3 +956,57 @@ Proof
      qexistsl_tac [`fn`, `ZIP (olds,bbs)`] >> simp[]) >>
   drule_all current_annotated_tree_names >> simp[]
 QED
+
+Theorem current_initial_counter:
+  !defs v. current_counter (init_current_rename_state defs) v = 0
+Proof
+  Induct >> simp[init_current_rename_state_def, current_counter_def] >>
+  rpt gen_tac >> Cases_on `FST h = v` >> simp[] >>
+  fs[init_current_rename_state_def, current_counter_def, latest_current_name_def]
+QED
+
+Theorem current_initial_latest:
+  !defs v. latest_current_name (init_current_rename_state defs) v = v
+Proof
+  Induct >> simp[init_current_rename_state_def, latest_current_name_def] >>
+  rpt gen_tac >> Cases_on `FST h = v` >> simp[] >>
+  fs[init_current_rename_state_def, current_counter_def, latest_current_name_def]
+QED
+
+Theorem current_initial_state_valid:
+  ssa_vars_covered s V /\ ssa_vars_covered s (MAP FST defs) ==>
+  current_allocation_consistent V ([] : (current_token # string # string) list)
+    s (init_current_rename_state defs) /\
+  current_env_realizes ([] : (current_token # string # string) list)
+    CurrentDefault (init_current_rename_state defs) V
+Proof
+  simp[current_allocation_consistent_def, current_history_valid_def,
+    current_initial_counter, current_owner_count_def, current_env_realizes_def,
+    current_initial_latest, init_current_rename_state_def,
+    ssa_stacks_covered_def, ssa_vars_covered_def, EVERY_MEM, MEM_MAP] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_provenance_initial_tree_names:
+  LENGTH olds = LENGTH bbs /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,bbs)) annsss /\
+  ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) /\
+  ssa_vars_covered s (FLAT (MAP block_ir_vars bbs)) /\
+  ssa_vars_covered s (MAP FST defs) /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  current_tree_trace (current_annotation_map bbs annsss) sm tree
+    s (init_current_rename_state defs) bbs [] CurrentDefault []
+    ctrs' s' bbs' H' visited' events ==>
+  current_allocation_consistent (FLAT (MAP block_ir_vars bbs)) H' s'
+    (ctrs',SND (init_current_rename_state defs)) /\
+  EVERY (current_event_names H' (FLAT (MAP block_ir_vars bbs))) events
+Proof
+  strip_tac >>
+  `current_allocation_consistent (FLAT (MAP block_ir_vars bbs))
+      ([] : (current_token # string # string) list) s (init_current_rename_state defs) /\
+    current_env_realizes ([] : (current_token # string # string) list)
+      CurrentDefault (init_current_rename_state defs) (FLAT (MAP block_ir_vars bbs))` by
+    (irule current_initial_state_valid >> simp[]) >>
+  drule_all current_provenance_tree_names >> simp[]
+QED
