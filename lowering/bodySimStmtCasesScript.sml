@@ -5784,6 +5784,84 @@ Proof
             raise_def]
 QED
 
+Theorem aug_place_mapping_extend_live[local]:
+  vyperStoragePlaceProvenance$storage_mapping_region cx tr slot (HashMapT kt vt) /\
+  extend_place cx (HashMapRef tr slot kt vt) sb s =
+    (INL (PlaceR (StoragePlace tr' child leaf)),s') ==>
+  storage_read_live cx tr' (get_storage cx s' tr') child leaf
+Proof
+  Cases_on `sb` >> Cases_on `vt` >>
+  simp[extend_place_def, raise_def, bind_def, lift_option_type_def,
+       vyperMiscTheory.option_CASE_rator, return_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  drule vyperStoragePlaceProvenanceTheory.storage_mapping_region_step >>
+  disch_then (qspec_then `v` mp_tac) >>
+  simp_tac (srw_ss()) [vyperStoragePlaceProvenanceTheory.storage_mapping_region_def] >>
+  strip_tac >>
+  qpat_x_assum `!subs leaf_slot leaf_tv. _`
+    (qspecl_then [`[]`, `hashmap_slot slot (encode_hashmap_key kt v)`, `leaf`] mp_tac) >>
+  simp[vyperStorageLayoutSafetyTheory.resolve_hashmap_leaf_def] >>
+  strip_tac >>
+  irule accountsRelPropsTheory.declared_storage_region_read_live >>
+  goal_assum (drule_at Any)
+QED
+
+Theorem aug_place_pure_base_storage_live:
+  !t tops cx s tr slot tv s'.
+    EVERY (supported_pure_expr tops) (target_indices t) /\
+    eval_base_place cx t s = (INL (PlaceR (StoragePlace tr slot tv)),s') ==>
+    storage_read_live cx tr (get_storage cx s' tr) slot tv
+Proof
+  measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
+  rpt gen_tac >> TRY (PairCases_on `p`) >>
+  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+       return_def, raise_def] >> rpt strip_tac >> gvs[]
+  >- (drule vyperStoragePlaceProvenanceTheory.lookup_global_storage_region >>
+      strip_tac >>
+      irule accountsRelPropsTheory.declared_storage_region_read_live >>
+      goal_assum (drule_at Any)) >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[expr_size_def] >> strip_tac
+  >- (rename1 `eval_expr cx e s'' = (INL result,s3)` >>
+      `s3 = s''` by metis_tac[aug_place_pure_eval_state] >>
+      gvs[] >> drule read_result_state >> strip_tac >> gvs[] >>
+      drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
+      Cases_on `pv`
+      >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+          simp[extend_place_def, raise_def])
+      >- (Cases_on `p` >>
+          gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+              extend_memory_place_def, AllCaseEqs()] >>
+          first_x_assum drule_all >> strip_tac >>
+          drule_all aug_place_storage_extend_live_all >> simp[]) >>
+      gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
+      irule aug_place_mapping_extend_live >>
+      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  drule vyperStoragePlaceProvenanceTheory.eval_base_place_region >> strip_tac >>
+  (Cases_on `pv`
+  >- (qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+      simp[extend_place_def, raise_def])
+  >- (Cases_on `p` >>
+      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+          extend_memory_place_def, AllCaseEqs()]
+      >> first_x_assum drule_all >> strip_tac >>
+      drule_all aug_place_storage_extend_live_all >> simp[]) >>
+  gvs[vyperStoragePlaceProvenanceTheory.storage_result_region_def] >>
+  irule aug_place_mapping_extend_live >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any))
+QED
+
+Theorem aug_place_pure_target_storage_live:
+  EVERY (supported_pure_expr tops) (target_indices t) /\
+  eval_target_place cx t s = (INL (StoragePlace tr slot tv),s') ==>
+  storage_read_live cx tr (get_storage cx s' tr) slot tv
+Proof
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `pv` >> gvs[get_place_def, return_def, raise_def] >>
+  drule_all aug_place_pure_base_storage_live >> simp[]
+QED
+
 (* A field or element of a local, or of a storage or transient variable
    whose indices have no effect (supported_pure_expr): the place's
    current word is loaded where the target's code left it. *)
