@@ -175,3 +175,70 @@ Proof
   drule_all ao_exec_block_prefix >> strip_tac >>
   simp[Once run_blocks_def]
 QED
+
+Theorem ao_exec_block_terminal_prefix:
+  !ctx fn s0 n k s bb r.
+    ao_source_prefix ctx fn s0 n k F s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    exec_block k ctx bb s = r /\
+    (!t. r <> OK t) /\ (!e. r <> Error e) ==>
+    ?u inst. ao_source_prefix ctx fn s0 n k F u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME inst /\
+      (step_inst k ctx inst u = r \/
+       ?t. step_inst k ctx inst u = OK t /\
+           is_terminator inst.inst_opcode /\ t.vs_halted /\ r = Halt t)
+Proof
+  rpt gen_tac >> qid_spec_tac `r` >> qid_spec_tac `s` >>
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  simp[Once exec_block_def, AllCaseEqs()] >> rpt strip_tac
+  >~ [`is_terminator inst.inst_opcode`, `Halt t = r`]
+  >- (qexistsl [`s`, `inst`] >> metis_tac[])
+  >~ [`step_inst k ctx inst s = Halt t`]
+  >- (qexistsl [`s`, `inst`] >> simp[])
+  >~ [`step_inst k ctx inst s = Abort a t`]
+  >- (qexistsl [`s`, `inst`] >> simp[])
+  >~ [`step_inst k ctx inst s = IntRet a t`]
+  >- (qexistsl [`s`, `inst`] >> simp[]) >>
+  `s''.vs_current_bb = s.vs_current_bb` by
+    metis_tac[venomInstPropsTheory.step_preserves_control_flow] >>
+  `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def, AllCaseEqs()] >>
+  `ao_source_prefix ctx fn s0 n k F
+     (s'' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule (cj 3 ao_source_prefix_rules) >> metis_tac[]) >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then (qspec_then
+    `s'' with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[]
+QED
+
+Theorem ao_run_blocks_terminal_prefix:
+  !ctx fn s0 n k s r.
+    ao_source_prefix ctx fn s0 n k T s /\
+    run_blocks k ctx fn s = r /\
+    (!t. r <> OK t) /\ (!e. r <> Error e) ==>
+    ?j u bb inst. ao_source_prefix ctx fn s0 n j F u /\
+      lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb u.vs_inst_idx = SOME inst /\
+      (step_inst j ctx inst u = r \/
+       ?t. step_inst j ctx inst u = OK t /\
+           is_terminator inst.inst_opcode /\ t.vs_halted /\ r = Halt t)
+Proof
+  rpt gen_tac >> qid_spec_tac `r` >> qid_spec_tac `s` >>
+  Induct_on `k` >- simp[run_blocks_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `run_blocks _ _ _ _ = _` mp_tac >>
+  simp[Once run_blocks_def, AllCaseEqs()] >> rpt strip_tac
+  >> gvs[exec_block_OK_not_halted]
+  >>~- ([`eval_phis s bb.bb_instructions = OK p`],
+    drule_all ao_source_prefix_phi_handoff >> strip_tac
+    >>~- ([`exec_block k ctx bb z = OK t`],
+      drule_all ao_exec_block_prefix >> strip_tac >> gvs[] >>
+      first_x_assum irule >> simp[]) >>
+    metis_tac[ao_exec_block_terminal_prefix]) >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    eval_phis_ok_or_error_defs >> gvs[]
+QED
