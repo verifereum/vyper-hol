@@ -374,6 +374,11 @@ Proof
   `alloca_room ctx func t` by
     (irule exprLoweringPropsTheory.alloca_room_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule exprLoweringPropsTheory.fmp_room_fields >> qexists_tac `s` >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule immutables_rel_mem_agree >> qexists_tac `s` >>
      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`

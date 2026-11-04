@@ -569,7 +569,9 @@ Proof
   >- (irule state_rel_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`es`, `s0`] >> simp[]) >>
-  simp[]
+  simp[] >>
+  qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>`
+    (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem pop_stmt_state_rel_scopes:

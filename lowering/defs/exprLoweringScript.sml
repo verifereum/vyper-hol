@@ -1721,10 +1721,12 @@ Definition compile_type_convert_def:
        else return v);
        emit_op SHL [Lit (n2w shift); clamped]
     od) ∧
-  (* Integer→decimal: clamp to pre-scaled bounds then multiply by divisor *)
+  (* Integer→decimal: clamp to pre-scaled bounds then multiply by divisor.
+     The pre-scaled bounds round toward zero (vyperlang/vyper#5298), so the
+     least admitted input times the divisor is still within out_lo. *)
   compile_type_convert v (ConvIntToDecimal in_s in_b divisor out_lo out_hi) =
-    (let pre_lo = out_lo / &divisor in
-    let pre_hi = out_hi / &divisor in
+    (let pre_lo = out_lo quot &divisor in
+    let pre_hi = out_hi quot &divisor in
     let in_lo = if in_s then - &(2 ** (in_b - 1)) else 0 in
     let in_hi = if in_s then &(2 ** (in_b - 1) - 1) else &(2 ** in_b - 1) in
     do (if in_lo < pre_lo then
@@ -2755,8 +2757,9 @@ Definition compile_call_def:
          let (result_op, st6) = compile_raw_call_finish addr_op data_ptr data_len
            gas_op value_op call_ty rcf.rcf_max_outsize rcf.rcf_revert_on_failure
            out_val out_ptr st5 in
-         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st6)
-         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st6)
+         let (_, st7) = emit_void SETFMP [data_ptr] st6 in
+         if rcf.rcf_max_outsize = 0 then (StackValue ret_ty result_op, st7)
+         else (LocatedValue ret_ty (mk_ptr result_op LocMemory), st7)
      | _ => let (_, st') = emit_inst INVALID [] [] st in
             (StackValue ret_ty (Lit 0w), st')) ∧
   compile_call cfn cenv ret_ty ty RawLog args default_ret st =

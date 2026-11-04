@@ -517,6 +517,9 @@ Theorem hash_returndata_state_rel:
   stmt_state_rel ctx func cenv cx es (s with vs_returndata := data) <=>
   stmt_state_rel ctx func cenv cx es s
 Proof
+  `fmp_room ctx func (s with vs_returndata := data) <=>
+   fmp_room ctx func s` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   simp[stmt_state_rel_def, state_rel_def,
        hash_returndata_immutable_alloca_sep,
        local_ptrs_rel_def, local_region_def, local_backed_def,
