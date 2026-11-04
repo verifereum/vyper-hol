@@ -3,6 +3,7 @@ Theory bodyExprClosureMemory
 Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
+  bodyLiteralMemory bodyAllocMemory vyperTypeCallGraph
 
 Theorem body_ifexp_word_mem_case:
   !cx t c a b. is_word_type t /\
@@ -47,3 +48,34 @@ val () =
      then print "BODY_IFEXP_WORD_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "ifexp word closure memory inherited admission"
   end;
+
+Theorem body_literal_word_mem_case:
+  !cx ann l. is_word_type ann ==> body_expr_mem_ok cx (Literal ann l)
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env (Literal ann l) es` by
+    simp[expr_sim_pre_body, int_calls_expr_def] >>
+  metis_tac[compile_literal_word_body_sim_mem,
+            compile_literal_word_body_vv_sim_mem]
+QED
+
+Theorem body_name_mem_case:
+  !cx ann id. (word_value_type ann \/ ~is_word_type ann) ==>
+    body_expr_mem_ok cx (Name ann id)
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env (Name ann id) es` by
+    simp[expr_sim_pre_body, int_calls_expr_def] >>
+  metis_tac[compile_name_word_body_sim_mem, compile_name_nonword_body_sim_mem,
+            compile_name_body_vv_sim_mem]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_LEAF_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "leaf closure memory inherited admission"
+  end) [body_literal_word_mem_case, body_name_mem_case];
