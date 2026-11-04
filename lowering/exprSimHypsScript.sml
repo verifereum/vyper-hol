@@ -285,7 +285,11 @@ End
    and the outcomes.  Every immutable or constant the source can read by
    name (env.bare_globals) is an immutable of the module being lowered, at
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
-   places a supported program's immutables (immutableLocationProps). *)
+   places a supported program's immutables (immutableLocationProps).
+   Every function signature the typing knows returns the type cenv records
+   for it, as build_compile_env records the declared return types
+   (build_func_return_type), so an internal call's value is described at a
+   type its annotation widens (post_value_type). *)
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -295,6 +299,8 @@ Definition expr_sim_inv_def:
              ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
     (!id ty. FLOOKUP env.var_types id = SOME ty ==>
              cenv.ce_var_type id = SOME ty) /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+               cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     (!src fid ts ls mid i.
        get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
        INDEX_OF mid ls = SOME i ==>
@@ -420,6 +426,14 @@ Theorem expr_sim_pre_body:
     expr_body_pre cenv cx env e es /\ int_calls_expr e = []
 Proof
   rw[expr_sim_pre_def, expr_body_pre_def, EQ_IMP_THM] >> gvs[]
+QED
+
+(* A call-free expression is described at its annotation. *)
+Theorem post_value_type_no_calls[simp]:
+  !cenv e. int_calls_expr e = [] ==> post_value_type cenv e = expr_type e
+Proof
+  rpt strip_tac >> irule post_value_type_not_int_call >> rpt strip_tac >>
+  gvs[int_calls_expr_def]
 QED
 
 Theorem expr_sim_pre_body_pre:
