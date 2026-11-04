@@ -100,8 +100,8 @@ not to already-proved instantiations of them.
 | LOG (998–1023) | OK(s with vs_logs := s.vs_logs ++ [ev]), memory-read slice, clean topics and size, possibly relocated memory address | Proved normal successor: o1LowerDloadJointInternalEffectsTheory.ld_joint_internal_effect_next transports clean payload slices and exact topics/size, appends identical events, and preserves the whole joint boundary. Offset may relocate; zero-size and zero-topic cases included. |
 | CALL, STATICCALL, DELEGATECALL (1053–1086) | exec_ext_call/exec_delegatecall; may update variable, memory, returndata, accounts, logs, outcomes, requests etc.; consumes a call outcome | Missing external-effect successor/terminal cases, not an INVOKE. Address of memory buffer can relocate while call request data must agree. Taint semantics truncates written range to returned bytes; delegatecall requires clean storage/transient. None of three simple update interfaces applies directly. Family must be assigned by strategist, not silently delegated as an internal call. |
 | CREATE, CREATE2 (1088–1106) | exec_create; clean value/salt, reads initcode slice, external outcome effects, one result variable | Missing external-effect successor/terminal cases; taint_ok requires clean storage/transient. Same combined-update issue as external calls. |
-| DLOAD (944–948) | source exec_read1 yields clean scalar word, no source memory write; target ALLOCA32; ADD code_end; CODECOPY32; MLOAD | Missing full scratch-aware segment successor (fresh and repeated generated scratch site). Must update X, target frontier credit/partition/geometry, preserve all source-visible memory outside scratch, assign original output, source ghosts, supplied PC. Original ALLOCA next is not this theorem; single-instruction update interfaces exclude DLOAD. |
-| DLOADBYTES (950–961) | source write_memory_with_expansion dst padded data slice; target ADD code_end then CODECOPY | Missing segment successor, equal data/code slice using layout/no-wrap offset, relocated destination and source taint-kill, generated temp variable freshness, supplied PC. No new scratch ALLOCA; cannot use memory update interface directly because it excludes this opcode and PC advance is two target instructions. |
+| DLOAD (944–948) | source exec_read1 yields clean scalar word, no source memory write; target ALLOCA32; ADD code_end; CODECOPY32; MLOAD | Proved by `ld_joint_dload_next` in SuppliedSegmentNext:178–201, including fresh/repeated scratch, whole boundary, source successor annotation and four actual supplied microsteps. Exact interface recorded below; not an ordinary one-step NEXT. |
+| DLOADBYTES (950–961) | source write_memory_with_expansion dst padded data slice; target ADD code_end then CODECOPY | Proved normal segment by `ld_joint_dloadbytes_next` in SuppliedSegmentNext:40–57, with two actual supplied microsteps and whole boundary. No new scratch ALLOCA; X unchanged. Exact interface recorded below; Revert forwarding remains separate. |
 
 ### Excluded ordinary cases and default
 
@@ -246,3 +246,39 @@ normal-path (`~in_revert_forward`) hypotheses; this is not Revert-suffix
 coverage. The scalar SHA3 length proof excludes pointer provenance by the
 source pointer-use discipline, including address/length operand aliasing.
 No whole-run or final `ctx_sim` claim follows from these local successors.
+
+## Supplied segment successor audit (C1.4.1.16.4.4)
+
+Both public consumers in `o1LowerDloadSuppliedSegmentNextScript.sml` now
+construct full successor boundaries, not conditional transport packets.
+Using J/Q/P/A/S/R/G1/H1/T1 above:
+
+- `ld_joint_dloadbytes_next` requires J /\ Q /\ P /\ A /\ R /\ S /\
+  o1_run_state_ok vs /\ mem_inv dload_offset_ok C vs /\ opcode=DLOADBYTES.
+  It existentially returns inst2, es, t2, t3, fn', bb'; lookup_function and
+  lookup_block identify the supplied block, TAKE 2 (DROP t.vs_inst_idx
+  bb'.bb_instructions)=es, LENGTH es=2 and the slice is in bounds.
+  Its actual equations are step_inst fuel C' (EL 0 es) t=OK t2 and
+  step_inst fuel C' (EL 1 es) t2=OK t3. Its whole boundary has source PC
+  SUC s.vs_inst_idx and target PC t.vs_inst_idx+2, updated G1/T1/H1 and
+  unchanged n/a/U/B/HP/sites/X/ts.
+- `ld_joint_dload_next` requires J /\ Q /\ P /\ A /\ S /\
+  o1_run_state_ok vs /\ mem_inv dload_offset_ok C vs /\
+  mem_inv dload_headroom_ok C vs /\ callee_first names C.ctx_functions /\
+  opcode=DLOAD. It returns inst2, es, t1,t2,t3,t4,fn',bb',X1 and the
+  analogous in-bounds TAKE-4 slice. Four step_inst fuel C' equations execute
+  EL 0 through EL 3 in order from t to t4. When the scratch key
+  (a,inst.inst_id) is absent, X1 extends X with
+  ((EL 0 es).inst_id,t.vs_alloca_next); otherwise X1=X.
+  Its whole boundary has updated G1/T1/H1, source PC SUC s.vs_inst_idx,
+  target PC t.vs_inst_idx+4, scratch X1 and unchanged remaining witnesses.
+
+Neither requires successor reachability, annotation, geometry, offset numeric
+bounds, generated-variable freshness or scratch credit as a premise. These
+are derived inside Resources/Next using the original boundary and initial
+invariants. Neither is a block-entry/terminal or whole-run theorem.
+No new definitions or duplicate exported helpers were introduced by this
+assembly. Resources and Next contain no cheat or deliberate failure tactic.
+Validation: holbuild Resources, Next and Sim passed together
+(tool_output:TO_ld_sim_v2-20261104T173029Z_m5475_t001). This does not certify
+completion of the frozen theorem, which remains open.
