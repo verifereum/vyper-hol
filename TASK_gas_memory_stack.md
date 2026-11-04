@@ -51,4 +51,4 @@ Only the stack-adapter proof and necessary reusable helpers are in scope. Do not
 
 ## Notes
 
-Build 66798 parsed this root, then its retained uncounted proof failed at Cases_on `res`: the counted judgment no longer binds a predetermined result. A fresh independent definition audit answered PROVABLE with the complete memory post and certificate intact. The premise amendment is awaiting confirmation before launch. No proof strategy is prescribed.
+Build 66798 parsed this root, then its retained uncounted proof failed at Cases_on `res`: the counted judgment no longer binds a predetermined result. A fresh independent definition audit answered PROVABLE with the complete memory post and certificate intact. The internal premise amendment was confirmed before launch. No proof strategy is prescribed.
