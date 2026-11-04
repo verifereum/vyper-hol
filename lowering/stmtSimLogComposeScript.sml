@@ -111,7 +111,7 @@ Theorem compile_log_ready_stmt_frag:
       R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) /\
   R args es /\ eval_stmt cx (Log id args) es = (res,es') /\
-  well_typed_exprs env args /\
+  expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
      ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
   cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\

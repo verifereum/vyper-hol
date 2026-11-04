@@ -176,8 +176,10 @@ Proof
   >- metis_tac[val_in_memory_word_type]
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`id`, `w2n w`, `sz`] >>
-      asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
-      drule val_footprint_le >> decide_tac) >>
+      asm_simp_tac (srw_ss()) [local_region_def] >>
+      drule val_footprint_le >> strip_tac >>
+      conj_tac >- decide_tac >>
+      irule local_path_at_val_at >> irule local_path_at_root >> simp[]) >>
   rpt strip_tac >> gvs[]
 QED
 

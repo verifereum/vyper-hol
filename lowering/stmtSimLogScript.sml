@@ -86,7 +86,7 @@ Theorem compile_log_stmt_frag:
     abi_size_bound cenv.ce_struct_fields
       (TupleT (log_non_indexed_types flags tys)) < dimword (:256) /\
     log_args_ready ctx func cenv cx Inv args /\ Inv es /\
-    well_typed_exprs env args /\
+    expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) ==>
     stmt_frag ctx func cx lctx RetQ cenv
