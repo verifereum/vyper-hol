@@ -1,6 +1,7 @@
 Theory makeSsaCurrentReinsertionNames
 Ancestors
-  makeSsaCurrentReinsertionTokens makeSsaCurrentOutputNames
+  makeSsaCurrentReinsertionTokens makeSsaCurrentOutputNames makeSsaCurrentSourceCuts
+  makeSsaCurrentTraceCertificate makeSsaCurrentTreePaths
   makeSsaCurrentAllocation makeSsaCurrentRenameTrace makeSsaCurrentTreeTrace
   makeSsaCurrentTokens makeSsaCurrentInduct makeSsaCurrentCertificate makeSsaDefs
   makeSsaCurrentPhiLocality makeSsaCurrentPlacementCut venomWf venomInst venomExecProps cfgWf list pair
@@ -311,4 +312,118 @@ Proof
     (drule current_local_inserted_first_name >>
      disch_then (qspecl_then [`v`, `V`] mp_tac) >> gvs[]) >>
   metis_tac[current_token_name_append_stable]
+QED
+
+Theorem current_prefix_relation_lookup:
+  !olds news old l.
+  LIST_REL R olds news /\
+  (!a b. R a b ==> a.bb_label = b.bb_label) /\
+  lookup_block l olds = SOME old ==>
+  ?new. lookup_block l news = SOME new /\ R old new
+Proof
+  Induct >> Cases_on `news` >> simp[lookup_block_def, FIND_thm] >>
+  rpt strip_tac >> rename1 `R src dst` >>
+  `src.bb_label = dst.bb_label` by metis_tac[] >>
+  Cases_on `src.bb_label = l` >> gvs[lookup_block_def] >> metis_tac[]
+QED
+
+Theorem current_certificate_inserted_prefix:
+  current_structural_certificate s fn fn' s' A H events /\
+  lookup_block h fn.fn_blocks = SOME old /\
+  current_actual_inserted fn v h ==>
+  ?pre.
+    A h = current_block_annotations old pre /\
+    ALL_DISTINCT (FLAT (MAP (\inst. inst.inst_outputs) pre)) /\
+    MEM v (FLAT (MAP (\inst. inst.inst_outputs) pre))
+Proof
+  simp[current_structural_certificate_def] >> rpt strip_tac >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by
+    (drule current_add_phi_nodes_unique_prefix >> metis_tac[LIST_REL_LENGTH]) >>
+  drule_all current_provenance_annotation_lookup >> strip_tac >>
+  drule current_add_phi_nodes_unique_prefix >> strip_tac >>
+  drule current_prefix_relation_lookup >>
+  disch_then (qspecl_then [`old`, `h`] mp_tac) >>
+  simp[current_unique_prefix_def] >>
+  (impl_tac >- (rpt strip_tac >> gvs[])) >> strip_tac >>
+  drule current_actual_insertion_prefix >> strip_tac >>
+  drule current_prefix_relation_lookup >>
+  disch_then (qspecl_then [`old`, `h`] mp_tac) >>
+  simp[] >> (impl_tac >- (rpt strip_tac >> gvs[])) >> strip_tac >>
+  qpat_x_assum `old with bb_instructions := pre ++ _ = _`
+    (mp_tac o Q.AP_TERM `\bb. bb.bb_instructions`) >> simp[] >> strip_tac >>
+  qpat_x_assum `old with bb_instructions := pre' ++ _ = _`
+    (mp_tac o Q.AP_TERM `\bb. bb.bb_instructions`) >> simp[] >> strip_tac >>
+  `old.bb_label = h` by metis_tac[lookup_block_label] >>
+  qexists_tac `pre` >> gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem current_certificate_events_valid:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s ==>
+  ?V. EVERY (current_event_valid A V) events
+Proof
+  simp[current_structural_certificate_def] >> rpt strip_tac >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks /\
+    ssa_vars_covered si (FLAT (MAP block_ir_vars ins)) /\
+    ssa_vars_covered si (MAP FST (compute_defs (MAP THE (FILTER IS_SOME
+      (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))))` by
+    (irule current_insertion_initial_supply >> metis_tac[]) >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by metis_tac[LENGTH_MAP] >>
+  `LENGTH ins = LENGTH annsss` by (drule LIST_REL_LENGTH >> simp[]) >>
+  `LIST_REL (\old anns. ?new. current_block_provenance fn old new anns)
+    fn.fn_blocks annsss` by
+    (fs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+     first_x_assum drule >> simp[EL_ZIP] >> metis_tac[]) >>
+  `ALL_DISTINCT (MAP FST (FLAT (FLAT annsss)))` by
+    (irule current_provenance_global_distinct >>
+     qexistsl_tac [`fn`, `fn.fn_blocks`] >> fs[wf_function_def, fn_labels_def]) >>
+  drule_all current_provenance_tree_annotations_ok >> strip_tac >>
+  `current_allocation_consistent (FLAT (MAP block_ir_vars ins))
+      ([] : (current_token # string # string) list) si
+      (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+        (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn)))))) /\
+    current_env_realizes ([] : (current_token # string # string) list)
+      CurrentDefault (init_current_rename_state (compute_defs (MAP THE (FILTER IS_SOME
+        (MAP (\lbl. lookup_block lbl fn.fn_blocks) (current_dom_postorder fn))))))
+      (FLAT (MAP block_ir_vars ins))` by
+    (irule current_initial_state_valid >> simp[]) >>
+  `ALL_DISTINCT (dom_tree_labels (current_dom_tree fn))` by
+    metis_tac[current_actual_tree_labels_distinct] >>
+  qexists_tac `FLAT (MAP block_ir_vars ins)` >>
+  gvs[] >> drule_all current_annotated_tree_events_valid >> simp[]
+QED
+
+Theorem current_certificate_reinserted_first_name:
+  current_structural_certificate s fn fn' s' A H events /\
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  all_reachable fn /\ first_block_no_preds fn /\ entry_block fn = SOME eb /\
+  fn_phi_outputs_single_def fn /\ blocks_have_leading_phi fn.fn_blocks /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  lookup_block h fn.fn_blocks = SOME old /\ i < LENGTH old.bb_instructions /\
+  (EL i old.bb_instructions).inst_opcode = PHI /\
+  (EL i old.bb_instructions).inst_outputs = [v] /\ current_actual_inserted fn v h ==>
+  current_token_name H (CurrentInserted v h) = SOME v
+Proof
+  strip_tac >>
+  drule_all current_certificate_inserted_prefix >> strip_tac >>
+  drule_all current_certificate_events_valid >> strip_tac >>
+  qpat_x_assum `current_structural_certificate _ _ _ _ _ _ _` mp_tac >>
+  simp[current_structural_certificate_def] >> rpt strip_tac >> gvs[] >>
+  `LENGTH fn.fn_blocks = LENGTH ins` by
+    (drule current_add_phi_nodes_unique_prefix >> metis_tac[LIST_REL_LENGTH]) >>
+  `!t l. MEM (t,v) (FLAT (current_annotation_map ins annsss l)) ==> l = h` by
+    (rpt strip_tac >> irule current_actual_phi_annotation_owner_local >> metis_tac[]) >>
+  `MAP (\b. b.bb_label) ins = MAP (\b. b.bb_label) fn.fn_blocks` by
+    (irule (cj 1 current_insertion_initial_supply) >> metis_tac[]) >>
+  `!l. MEM l (dom_tree_labels (current_dom_tree fn)) ==> IS_SOME (lookup_block l ins)` by
+    metis_tac[current_actual_tree_lookup_coverage] >>
+  `MEM h (dom_tree_labels (current_dom_tree fn))` by
+    (drule_all current_actual_tree_label_member >>
+     simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule_all current_tree_trace_event_coverage >> strip_tac >>
+  PairCases_on `ev` >> gvs[current_event_label_def] >>
+  rename1 `lookup_block h fn.fn_blocks = SOME old` >>
+  `old.bb_label = h` by metis_tac[lookup_block_label] >>
+  drule_all current_tree_event_inserted_first_name >> simp[]
 QED
