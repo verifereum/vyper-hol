@@ -1,6 +1,7 @@
 Theory fnPlanLineageResidualProbe
 Ancestors
-  fnPlanLineageStageAudit codegenReadyCompute
+  fnPlanLineageStageAudit codegenReadyCompute fnPlanLineageStages
+  stackPlanGen stackPlanOps stackPlanTypes stackModel venomInst cfgTransform
 
 Theorem residual_empty_list[compute]:
   SET_TO_LIST (EMPTY : operand set) = []
@@ -286,3 +287,271 @@ QED
    bottom cells. In particular neither diamond nor loop justifies erasing
    r, replacing it by dead_stack_marker, or assuming residual distinctness.
 *)
+
+
+(* Closed queries: do not expand whole analyses in symbolic stage proofs. *)
+Theorem residual_loop_header_queries:
+  lookup_block "H" residual_loop_fn.fn_blocks =
+    SOME <|bb_label := "H"; bb_instructions :=
+      [mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []]|> /\
+  (<|bb_label := "H"; bb_instructions :=
+      [mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []]|> <>
+    HD residual_loop_fn.fn_blocks) /\
+  cfg_preds_of (cfg_analyze residual_loop_fn) "H" = ["E"; "B"] /\
+  live_vars_at (liveness_analyze residual_loop_fn) "H" 1 = ["c"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_header_base:
+  residual_loop_step "H" residual_loop_entry = SOME
+    ([SOLabel "H"; SODup 1; SOPushLabel "B"; SOEmit "JUMPI";
+      SOPushLabel "X"; SOEmit "JUMP"], residual_loop_entry)
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_header_inst:
+  (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []).inst_opcode = JNZ /\
+  (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []).inst_operands =
+    [Var "c"; Label "B"; Label "X"] /\
+  (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []).inst_outputs = []
+Proof
+  EVAL_TAC
+QED
+
+Definition residual_loop_state_def:
+  residual_loop_state n = residual_loop_entry with
+    ps_stack := REPLICATE n (Var "r") ++ [Var "c"]
+End
+
+Theorem residual_loop_entry_fields:
+  residual_loop_entry.ps_spilled = FEMPTY /\
+  residual_loop_entry.ps_cleanup_height = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_input_symbolic:
+  emit_input_plan JNZ [Var "c"] ["c"] (residual_loop_state n) =
+    ([SODup 1], residual_loop_state n with ps_stack :=
+      REPLICATE n (Var "r") ++ [Var "c"; Var "c"])
+Proof
+  simp[emit_input_plan_one, emit_one_input_def, residual_loop_state_def,
+    residual_loop_entry_fields, is_var_operand_def, stack_get_depth_def,
+    listTheory.REVERSE_APPEND, stack_find_def, do_dup_def,
+    stack_dup_def, stack_peek_def, stack_push_def,
+    listTheory.EL_APPEND_EQN, listTheory.SNOC_APPEND,
+    listTheory.APPEND_ASSOC] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> REFL_TAC
+QED
+
+Theorem residual_loop_pre_codegen:
+  ~is_pre_codegen_opcode JNZ
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_header_operands:
+  get_non_label_operands (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []) =
+    [Var "c"] /\ ~is_commutative JNZ
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_header_reorder:
+  reorder_plan dfg [Var "c"]
+    (residual_loop_state n with ps_stack := REPLICATE n (Var "r") ++
+      [Var "c"; Var "c"]) =
+    ([], residual_loop_state n with ps_stack := REPLICATE n (Var "r") ++
+      [Var "c"; Var "c"])
+Proof
+  simp[reorder_plan_def, reorder_one_def,
+    stack_get_unfixed_depth_def, stack_get_depth_def,
+    listTheory.REVERSE_APPEND, stack_find_def]
+QED
+
+Theorem residual_loop_header_emit:
+  generate_emit_ops (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []) 0 ps =
+    ([SOPushLabel "B"; SOEmit "JUMPI"; SOPushLabel "X"; SOEmit "JUMP"], ps)
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_regular_header:
+  generate_regular_inst_plan (liveness_analyze residual_loop_fn)
+    (dfg_build_function residual_loop_fn) (cfg_analyze residual_loop_fn)
+    residual_loop_fn (mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] [])
+    ["c"] F F "H" (residual_loop_state n) =
+  ([SODup 1; SOPushLabel "B"; SOEmit "JUMPI"; SOPushLabel "X"; SOEmit "JUMP"],
+    residual_loop_state n)
+Proof
+  simp[generate_regular_inst_plan_def, residual_loop_header_inst,
+    compute_operands_def, residual_loop_header_operands,
+    residual_loop_input_symbolic, residual_loop_header_reorder] >>
+  simp[residual_loop_header_emit, stack_pop_def,
+    release_dead_spills_def, residual_loop_state_def, residual_loop_entry_fields] >>
+  simp[listTheory.TAKE_APPEND2]
+QED
+
+Theorem residual_loop_header_symbolic:
+  residual_loop_step "H" (residual_loop_state n) =
+    SOME (FST (THE (residual_loop_step "H" residual_loop_entry)),
+      residual_loop_state n)
+Proof
+  rewrite_tac[residual_loop_header_base] >>
+  rewrite_tac[residual_loop_step_def, residual_matrix_step_def,
+    residual_loop_header_queries, generate_block_plan_def] >>
+  simp[residual_loop_header_queries, non_param_insts_def, get_params_def,
+    bb_is_halting_def, is_halting_opcode_def, is_param_opcode_def,
+    residual_loop_header_inst] >>
+  simp[Once generate_block_insts_plan_def] >>
+  simp[generate_inst_plan_def, residual_loop_header_queries,
+    residual_loop_header_inst, residual_loop_pre_codegen, is_param_opcode_def,
+    residual_loop_regular_header, Once generate_block_insts_plan_def]
+QED
+
+Theorem residual_loop_body_queries:
+  lookup_block "B" residual_loop_fn.fn_blocks =
+    SOME <|bb_label := "B"; bb_instructions :=
+      [mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"];
+       mk_inst 4 JMP [Label "H"] []]|> /\
+  (<|bb_label := "B"; bb_instructions :=
+      [mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"];
+       mk_inst 4 JMP [Label "H"] []]|> <> HD residual_loop_fn.fn_blocks) /\
+  cfg_preds_of (cfg_analyze residual_loop_fn) "B" = ["H"] /\
+  live_vars_at (liveness_analyze residual_loop_fn) "B" 1 = ["c"] /\
+  live_vars_at (liveness_analyze residual_loop_fn) "B" 2 = ["c"] /\
+  join_target_ops (liveness_analyze residual_loop_fn) residual_loop_fn "B"
+    (mk_inst 4 JMP [Label "H"] []) = SOME [Var "c"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_cleanup_queries:
+  lookup_block "H" residual_loop_fn.fn_blocks =
+    SOME <|bb_label := "H"; bb_instructions :=
+      [mk_inst 2 JNZ [Var "c"; Label "B"; Label "X"] []]|> /\
+  live_vars_at (liveness_analyze residual_loop_fn) "B" 0 = ["c"] /\
+  input_vars_from "H"
+    [mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"];
+     mk_inst 4 JMP [Label "H"] []] ["c"] = ["c"] /\
+  cfg_succs_of (cfg_analyze residual_loop_fn) "H" = ["X"; "B"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_body_cleanup:
+  clean_stack_plan (liveness_analyze residual_loop_fn) (cfg_analyze residual_loop_fn)
+    residual_loop_fn <|bb_label := "B"; bb_instructions :=
+      [mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"];
+       mk_inst 4 JMP [Label "H"] []]|> (residual_loop_state n) =
+    ([], residual_loop_state n)
+Proof
+  simp[clean_stack_plan_def, residual_loop_body_queries,
+    residual_loop_cleanup_queries, residual_loop_header_queries,
+    residual_loop_state_def, residual_loop_entry_fields] >>
+  simp[residual_loop_cleanup_spills, popmany_plan_def]
+QED
+
+Theorem residual_loop_body_inst:
+  (mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"]).inst_opcode = OFFSET /\
+  (mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"]).inst_operands = [Lit 0w; Label "H"] /\
+  (mk_inst 3 OFFSET [Lit 0w; Label "H"] ["r"]).inst_outputs = ["r"] /\
+  (mk_inst 4 JMP [Label "H"] []).inst_opcode = JMP /\
+  (mk_inst 4 JMP [Label "H"] []).inst_operands = [Label "H"] /\
+  (mk_inst 4 JMP [Label "H"] []).inst_outputs = [] /\
+  ~is_pre_codegen_opcode OFFSET /\ ~is_pre_codegen_opcode JMP
+Proof
+  EVAL_TAC
+QED
+
+
+Theorem residual_loop_jmp_queries:
+  get_non_label_operands (mk_inst 4 JMP [Label "H"] []) = [] /\
+  ~is_commutative JMP /\
+  ~operand_equiv (dfg_build_function residual_loop_fn) (Var "c") (Var "r") /\
+  generate_emit_ops (mk_inst 4 JMP [Label "H"] []) 0 ps =
+    ([SOPushLabel "H"; SOEmit "JUMP"], ps)
+Proof
+  EVAL_TAC
+QED
+
+Theorem residual_loop_regular_jmp:
+  generate_regular_inst_plan (liveness_analyze residual_loop_fn)
+    (dfg_build_function residual_loop_fn) (cfg_analyze residual_loop_fn)
+    residual_loop_fn (mk_inst 4 JMP [Label "H"] []) ["c"] F F "B"
+    (residual_loop_state n with ps_stack :=
+      (residual_loop_state n).ps_stack ++ [Var "r"]) =
+    ([SOSwap 1; SOPushLabel "H"; SOEmit "JUMP"], residual_loop_state (SUC n))
+Proof
+  simp[generate_regular_inst_plan_def, residual_loop_body_inst,
+    compute_operands_def,
+    residual_loop_jmp_queries, emit_input_plan_def, residual_loop_body_queries] >>
+  simp[restore_spilled_plan_def, do_restore_def,
+    residual_loop_state_def, residual_loop_entry_fields] >>
+  simp[reorder_plan_def, reorder_one_def, stack_get_unfixed_depth_def,
+    stack_get_depth_def, listTheory.REVERSE_APPEND, stack_find_def,
+    stack_peek_def, listTheory.EL_APPEND_EQN, residual_loop_jmp_queries,
+    do_swap_def] >>
+  simp[release_dead_spills_def, residual_loop_entry_fields, stack_pop_def,
+    stack_swap_def, listTheory.EL_APPEND_EQN, rich_listTheory.LUPDATE_APPEND2] >>
+  simp[listTheory.LUPDATE_def, rich_listTheory.LUPDATE_APPEND2,
+    rich_listTheory.LUPDATE_APPEND1, listTheory.TAKE_APPEND2] >>
+  simp[GSYM listTheory.SNOC_APPEND, rich_listTheory.SNOC_REPLICATE]
+QED
+
+Theorem residual_loop_body_symbolic:
+  residual_loop_step "B" (residual_loop_state n) =
+    SOME ([SOLabel "B"; SOPushOfst "H" 0; SOSwap 1;
+      SOPushLabel "H"; SOEmit "JUMP"], residual_loop_state (SUC n))
+Proof
+  rewrite_tac[residual_loop_step_def, residual_matrix_step_def,
+    residual_loop_body_queries, generate_block_plan_def] >>
+  simp[residual_loop_body_queries, non_param_insts_def, get_params_def,
+    bb_is_halting_def, residual_loop_body_inst, is_halting_opcode_def,
+    is_param_opcode_def, residual_loop_body_cleanup] >>
+  simp[Once generate_block_insts_plan_def, generate_inst_plan_def,
+    residual_loop_body_inst] >>
+  simp[generate_offset_plan_def, residual_loop_body_inst,
+    stack_push_def, listTheory.SNOC_APPEND] >>
+  simp[Once generate_block_insts_plan_def, generate_inst_plan_def,
+    residual_loop_body_inst, residual_loop_body_queries,
+    is_param_opcode_def, residual_loop_regular_jmp] >>
+  simp[join_reached_def, residual_loop_body_queries, residual_loop_state_def,
+    listTheory.DROP_APPEND, Once generate_block_insts_plan_def] >>
+  simp[stack_pop_def, listTheory.TAKE_APPEND2, listTheory.TAKE_APPEND1]
+QED
+
+Theorem residual_loop_state_zero:
+  residual_loop_state 0 = residual_loop_entry
+Proof
+  simp[residual_loop_state_def] >>
+  once_rewrite_tac[GSYM (cj 1 residual_loop_laps)] >> simp[]
+QED
+
+Theorem residual_loop_lap_symbolic:
+  residual_loop_lap (residual_loop_state n) = residual_loop_state (SUC n)
+Proof
+  simp[residual_loop_lap_def, residual_loop_header_symbolic,
+    residual_loop_body_symbolic]
+QED
+
+Theorem residual_loop_unbounded:
+  FUNPOW residual_loop_lap n residual_loop_entry = residual_loop_state n
+Proof
+  Induct_on `n` >> simp[arithmeticTheory.FUNPOW_SUC,
+    residual_loop_state_zero, residual_loop_lap_symbolic]
+QED
+
+Theorem residual_loop_splice:
+  residual_loop_state m with
+    <|ps_stack := (residual_loop_state n).ps_stack;
+      ps_spilled := (residual_loop_state n).ps_spilled|> = residual_loop_state n
+Proof
+  simp[residual_loop_state_def]
+QED
+
+(* These universal equations validate physical residual introduction and replay
+   for this no-spill loop only. They do not establish frozen lineage/DFS
+   reachability or general cleanup, PHI, temporal coverage or spill producers. *)

@@ -24,8 +24,10 @@ QED
 
    Query shielding means every search used at the next stage is either a
    common hit within K or an agreed miss in BOTH full stacks and spill maps.
-   PHI needs the first PRESENT alternative to agree, not just each live
-   variable's membership. Length-sensitive swaps/dups additionally need the
+   PHI searches the physical stack top-first for membership in its operand
+   alternatives, NOT the alternatives in operand order. It needs equal
+   selected depths and matching renamed suffixes, not equality of incoming
+   names or just each live variable's membership. Length-sensitive swaps/dups additionally need the
    touched window to lie within K (or a separate saturation equivalence).
    Persistent spills must agree on all future-observable variables and their
    slots; scratch spilling must return equal allocator effects and preserve
@@ -46,8 +48,8 @@ QED
    Shared live query hit / liveness transfer + previous certificate /
      MISSING global producer: live membership alone does not locate a hit
      in the common suffix, nor rule out stale PHI alternatives.
-   PHI choice agreement / phi_operands_ready + edge certificate /
-     MISSING: readiness is syntactic, not physical first-present agreement.
+   PHI depth/rename agreement / phi_operands_ready + edge certificate /
+     MISSING: readiness is syntactic, not top-first physical search shielding.
    Matching cleanup lists / previous certificate + cleanup partition /
      existing Inventory clean_stack_plan_prefix_replay handles marker
      prefixes only; MISSING arbitrary-variable-prefix producer.
@@ -67,6 +69,12 @@ QED
    These are open producer obligations, NOT extra hypotheses allowed on the
    frozen theorem. The bounded ready, whole-plan-SOME tests in ResidualProbe
    validate only the frame and local reset behavior. They do not establish
-   this certificate or refute lineage_state_block_plan. Review this interface
-   before any global preservation proof is attempted.
+   this certificate or refute lineage_state_block_plan. The universal
+   residual_loop_header_symbolic/body_symbolic equations and
+   residual_loop_unbounded recurrence now validate arbitrarily many laps
+   with exact full-record frames. residual_loop_splice checks the syntactic
+   stack/spill splice. This loop still has empty spills and trivial cleanup;
+   it supplies none of the missing general producers above, and does not
+   prove frozen-predicate reachability. Review this interface before any
+   global preservation proof is attempted.
 *)
