@@ -1425,3 +1425,76 @@ Proof
  simp[APPEND_ASSOC, EVERY_APPEND, cse_event_writes_def, lookup_var_def] >>
  gvs[lookup_var_def]
 QED
+
+Theorem cse_path_prefix_projection[local]:
+ !left a tail. is_fn_path fn ((left ++ [a]) ++ tail) ==>
+ is_fn_path fn (left ++ [a])
+Proof
+ Induct >- simp[is_fn_path_def] >> rpt gen_tac >>
+ Cases_on `left` >> simp[is_fn_path_def] >> rpt strip_tac >>
+ fs[APPEND] >> first_x_assum irule >> qexists_tac `tail` >> simp[]
+QED
+
+Theorem cse_first_dominator_excludes[local]:
+ fn_dominates fn d a /\ d <> a /\
+ is_fn_path fn (pre ++ [d]) /\
+ fn_entry_label fn = SOME (HD (pre ++ [d])) /\ ~MEM d pre ==>
+ ~MEM a pre
+Proof
+ rpt strip_tac >>
+ imp_res_tac MEM_SPLIT >>
+ rename1 `pre = left ++ a::right` >>
+ `is_fn_path fn (left ++ [a])` by
+   (irule cse_path_prefix_projection >>
+    qexists_tac `right ++ [d]` >> fs[APPEND_ASSOC, APPEND]) >>
+ `fn_entry_label fn = SOME (HD (left ++ [a]))` by
+   (Cases_on `left` >> fs[]) >>
+ fs[fn_dominates_def] >>
+ first_x_assum (qspec_then `left ++ [a]` mp_tac) >>
+ simp[] >> fs[]
+QED
+
+Theorem cse_mem_first_split[local]:
+ !xs d. MEM d xs ==> ?pre post. xs = pre ++ d::post /\ ~MEM d pre
+Proof
+ Induct >- simp[] >> qx_gen_tac `h` >> qx_gen_tac `d` >>
+ Cases_on `h = d`
+ >- (strip_tac >> qexistsl [`[]`, `xs`] >> simp[]) >>
+ simp[] >> strip_tac >> first_x_assum drule >> strip_tac >>
+ qexistsl [`h::pre`, `post`] >> simp[]
+QED
+
+Theorem cse_path_splice[local]:
+ !pre d tail. is_fn_path fn (pre ++ [d]) /\ is_fn_path fn (d::tail) ==>
+ is_fn_path fn (pre ++ d::tail)
+Proof
+ Induct >- simp[] >> rpt gen_tac >>
+ Cases_on `pre` >> simp[is_fn_path_def] >> rpt strip_tac >>
+ fs[APPEND] >> first_x_assum irule >> simp[]
+QED
+
+Theorem cse_strict_dominator_suffix_crossing:
+ fn_dominates fn d a /\ d <> a /\ fn_dominates fn a c /\
+ is_fn_path fn (d::tail) /\ LAST (d::tail) = c ==>
+ MEM a (d::tail)
+Proof
+ rpt strip_tac >>
+ `fn_reachable fn d` by metis_tac[fn_dominates_dom_reachable] >>
+ fs[fn_reachable_def] >> drule rtc_to_fn_path >> strip_tac >>
+ `MEM d path` by (Cases_on `path` >> gvs[rich_listTheory.MEM_LAST]) >>
+ drule cse_mem_first_split >> strip_tac >>
+ `is_fn_path fn (pre ++ [d])` by
+   (irule cse_path_prefix_projection >> qexists_tac `post` >> fs[APPEND_ASSOC]) >>
+ `fn_entry_label fn = SOME (HD (pre ++ [d]))` by
+   (Cases_on `pre` >> gvs[]) >>
+ `~MEM a pre` by metis_tac[cse_first_dominator_excludes] >>
+ `is_fn_path fn (pre ++ d::tail)` by metis_tac[cse_path_splice] >>
+ `fn_entry_label fn = SOME (HD (pre ++ d::tail))` by
+   (Cases_on `pre` >> gvs[]) >>
+ `LAST (pre ++ d::tail) = c` by
+   (metis_tac[rich_listTheory.LAST_APPEND_NOT_NIL, NOT_CONS_NIL]) >>
+ qpat_x_assum `fn_dominates fn a c` mp_tac >>
+ simp[fn_dominates_def] >> strip_tac >>
+ first_x_assum (qspec_then `pre ++ d::tail` mp_tac) >>
+ fs[APPEND]
+QED
