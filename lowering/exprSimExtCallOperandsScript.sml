@@ -756,3 +756,32 @@ val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag vv_at_effect_free_frame) in
   if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
   then raise Fail "Operand placement dependency" else ()
 end;
+
+Theorem compile_expr_operand_frame:
+  compile_expr ce ty e lo = (vv,hi) /\ local_ptrs_reserved ce lo /\
+  operand_frame ce es s hi es2 s2 /\ s2.vs_labels = s.vs_labels /\
+  eval_operand (vv_operand vv) s = SOME w ==>
+  eval_operand (vv_operand vv) s2 = SOME w
+Proof
+  strip_tac >>
+  `!x. vv_operand vv = Var x ==> not_fresh_at hi x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  Cases_on `vv_operand vv` >> gvs[eval_operand_def] >>
+  fs[operand_frame_def] >> metis_tac[]
+QED
+
+Theorem vv_holds_operand_defined:
+  vv_holds ce cx ty tv vv es s ==>
+  ?w. eval_operand (vv_operand vv) s = SOME w
+Proof
+  Cases_on `vv` >> simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >>
+  metis_tac[]
+QED
+
+val _ = List.app (fn (n,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Operand execution boundary dependency: " ^ n) else ()
+  end)
+  [("compile_expr_operand_frame", compile_expr_operand_frame),
+   ("vv_holds_operand_defined", vv_holds_operand_defined)];
