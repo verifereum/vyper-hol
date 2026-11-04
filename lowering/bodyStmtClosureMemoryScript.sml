@@ -1,7 +1,7 @@
 Theory bodyStmtClosureMemory
 Ancestors
-  stmtSimSeqMem
-  bodyMemoryPreds bodyLiteralMemory bodySimStmtCases bodySim
+  stmtSimSeqMem stmtIfMemory
+  bodyMemoryPreds bodyLiteralMemory bodyLiteralForceMemory bodySimStmtCases bodySim
   bodyMemoryDefs stmtMemory stmtControlMemory exprSimHyps
   exprLoweringProps stmtLoweringProps supportedExprTraverse supportedStmtTraverse
   supportedStmts vyperTypeCallGraph vyperInterpreter vyperTypeSystem

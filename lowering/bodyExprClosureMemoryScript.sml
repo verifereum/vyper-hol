@@ -3,7 +3,7 @@ Theory bodyExprClosureMemory
 Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
-  bodyLiteralMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
+  bodyLiteralMemory bodyLiteralForceMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
   bodyUnopMemory bodyNegMemory bodyCalldataMemory bodyEnvMemory bodyFlagMemberMemory
   vyperTyping vyperValue vyperAST vyperTypeSystem
 
