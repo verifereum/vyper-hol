@@ -2853,3 +2853,156 @@ QED
      discharge array_len_ok or the other array-operation premises.
    No endpoint equality or theorem falsehood is asserted here.
 *)
+
+(* Supported immutable writes have only scalar proper descendants. *)
+Theorem supported_scalar_evaluate_type_base:
+  !ty tenv tv.
+    supported_scalar_type ty /\ evaluate_type tenv ty = SOME tv ==>
+    ?bt. tv = BaseTV bt
+Proof
+  Cases_on `ty` >> simp[supportedTypesTheory.supported_scalar_type_def,
+    supportedTypesTheory.supported_word_type_def,
+    supportedTypesTheory.supported_string_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem subscripts_type_base_not_array:
+  !path bt et bd. subscripts_type (BaseTV bt) path <> SOME (ArrayTV et bd)
+Proof
+  Cases_on `path` >> simp[subscripts_type_def] >> rpt gen_tac >>
+  rename1 `subscript_type (BaseTV bt) sb` >>
+  Cases_on `sb` >> simp[subscript_type_def] >>
+  rename1 `ValueSubscript v` >> Cases_on `v` >> simp[subscript_type_def]
+QED
+
+Theorem supported_scalars_evaluate_types_base:
+  !ts tenv tvs.
+    EVERY supported_scalar_type ts /\ evaluate_types tenv ts [] = SOME tvs ==>
+    EVERY (\tv. ?bt. tv = BaseTV bt) tvs
+Proof
+  simp[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  rpt strip_tac >>
+  gvs[vyperMiscTheory.OPT_MMAP_SOME_IFF] >>
+  simp[listTheory.EVERY_MAP, listTheory.EVERY_MEM] >> rpt strip_tac >>
+  `IS_SOME (evaluate_type tenv x)` by
+    (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> metis_tac[]) >>
+  irule supported_scalar_evaluate_type_base >>
+  qexistsl [`tenv`, `x`] >> Cases_on `evaluate_type tenv x` >>
+  gvs[listTheory.EVERY_MEM]
+QED
+
+Theorem subscripts_type_flat_not_array:
+  !tv sb path et bd.
+    (!child. subscript_type tv sb = SOME child ==> ?bt. child = BaseTV bt) ==>
+    subscripts_type tv (sb::path) <> SOME (ArrayTV et bd)
+Proof
+  rpt strip_tac >>
+  gvs[subscripts_type_def, AllCaseEqs(), subscripts_type_base_not_array]
+QED
+
+Theorem supported_value_type_proper_array_path:
+  !tops ty tv path et bd.
+    supported_value_type tops ty /\
+    evaluate_type (type_env tops) ty = SOME tv /\ path <> [] ==>
+    subscripts_type tv path <> SOME (ArrayTV et bd)
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `path` >> gvs[] >>
+  irule subscripts_type_flat_not_array >>
+  rename1 `subscript_type tv sb` >> rpt strip_tac >>
+  Cases_on `ty` >>
+  gvs[supportedTypesTheory.supported_value_type_def,
+      supportedTypesTheory.supported_scalar_type_def,
+      supportedTypesTheory.supported_word_type_def,
+      supportedTypesTheory.supported_string_type_def]
+  >>~- ([`evaluate_type _ (BaseT bt) = SOME tv`],
+    Cases_on `bt` >> gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+    Cases_on `sb` >> gvs[subscript_type_def] >>
+    rename1 `ValueSubscript v` >> Cases_on `v` >> gvs[subscript_type_def])
+  >~ [`evaluate_type _ (TupleT ts) = SOME tv`] >-
+    (gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+     drule_all supported_scalars_evaluate_types_base >> strip_tac >>
+     Cases_on `sb` >> gvs[subscript_type_def] >>
+     rename1 `ValueSubscript v` >> Cases_on `v` >>
+     gvs[subscript_type_def, AllCaseEqs(), listTheory.EVERY_EL])
+  >~ [`evaluate_type _ (ArrayT elem bound) = SOME tv`] >-
+    (Cases_on `bound` >> gvs[] >>
+     `supported_scalar_type elem` by
+       simp[supportedTypesTheory.supported_scalar_type_def] >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+     drule_all supported_scalar_evaluate_type_base >> strip_tac >> gvs[] >>
+     Cases_on `sb` >> gvs[subscript_type_def] >>
+     rename1 `ValueSubscript v` >> Cases_on `v` >>
+     gvs[subscript_type_def, AllCaseEqs()]) >>
+  rename1 `supported_struct_fields tops ns` >>
+  Cases_on `supported_struct_fields tops ns` >> gvs[] >>
+  rename1 `supported_struct_fields tops ns = SOME fields` >>
+  drule retAbiPlanPropsTheory.supported_struct_fields_type_env >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  `EVERY supported_scalar_type (MAP SND fields)` by
+    (gvs[listTheory.EVERY_MAP, listTheory.EVERY_MEM,
+         supportedTypesTheory.supported_scalar_type_def] >> metis_tac[]) >>
+  drule_all supported_scalars_evaluate_types_base >> strip_tac >>
+  Cases_on `sb`
+  >- (rename1 `ValueSubscript v` >> Cases_on `v` >> gvs[subscript_type_def]) >>
+  gvs[subscript_type_def] >>
+  `LENGTH tvs = LENGTH fields` by
+    (gvs[vyperValueTheory.evaluate_types_OPT_MMAP,
+         vyperMiscTheory.OPT_MMAP_SOME_IFF]) >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  gvs[listTheory.MEM_ZIP, listTheory.EVERY_EL] >> metis_tac[]
+QED
+
+(* A frame for the captured entry is not a frame for its layout witness. *)
+Theorem immutable_selected_entry_frame_obstruction[local]:
+  !cenv cx es.
+    cenv.ce_module = NONE /\
+    cenv.ce_module_vars = FEMPTY |+ ((NONE,"b"),ImmutableLoc 0) ==>
+    let av = ArrayV (SArrayV []);
+        aty = ArrayTV (BaseTV BoolT) (Fixed 1);
+        am = (ArrayTV aty (Fixed 1),ArrayV (SArrayV [(0,av)]));
+        s = es with immutables := [(cx.txn.target,[(NONE,
+          FEMPTY |+ ("a",am) |+ ("b",(aty,av)))])];
+        t = es with immutables := [(cx.txn.target,[(NONE,
+          FEMPTY |+ ("a",am) |+
+            ("b",(aty,ArrayV (SArrayV [(0,BoolV T)]))))])];
+        p = PlaceR (ImmutablePlace NONE "a" [ValueSubscript (IntV 0)])
+    in
+      FLOOKUP (get_source_immutables NONE
+        (THE (ALOOKUP s.immutables cx.txn.target))) "a" =
+      FLOOKUP (get_source_immutables NONE
+        (THE (ALOOKUP t.immutables cx.txn.target))) "a" /\
+      [ValueSubscript (IntV 0)] <> [] /\
+      read_result cx p s = (INL av,s) /\
+      read_result cx p t = (INL av,t) /\
+      immutable_holds cenv cx (ArrayT (BaseT BoolT) (Fixed 1)) p 0w s /\
+      ~immutable_holds cenv cx (ArrayT (BaseT BoolT) (Fixed 1)) p 0w t
+Proof
+  rpt strip_tac >> simp[LET_THM] >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, get_source_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, evaluate_subscripts_def, subscript_type_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueOperationTheory.array_index_def] >>
+  simp[return_def] >>
+  simp[immutable_holds_def, get_source_immutables_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueTheory.evaluate_type_def,
+       valueEncodingTheory.type_memory_size_def] >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, get_source_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, evaluate_subscripts_def, subscript_type_def,
+       finite_mapTheory.FLOOKUP_UPDATE, vyperValueOperationTheory.array_index_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def] >>
+  conj_tac
+  >- (qexists `0` >>
+      simp[sub_layout_def] >> EVAL_TAC) >>
+  simp[sub_layout_def, valueEncodingTheory.type_memory_size_def,
+       vyperTypingTheory.value_has_type_def] >>
+  rpt strip_tac >> Cases_on `k = 0` >> simp[] >>
+  qexistsl [`0`, `REPLICATE 31 (0w:8 word) ++ [1w]`] >>
+  simp[valueEncodingTheory.val_in_memory_def,
+       vyperValueTheory.default_value_def] >> EVAL_TAC >>
+  simp[wordsTheory.word_0_n2w, wordsTheory.w2n_n2w]
+QED
