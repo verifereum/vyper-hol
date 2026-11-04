@@ -612,6 +612,30 @@ QED
 
 Finalise chain_merge_revert_step
 
+Theorem revert_path_chain_merge_base:
+  !n fn a b bbs l.
+  ALL_DISTINCT (fn_labels fn) /\ EVERY bb_well_formed fn.fn_blocks /\
+  EVERY (\bb. EVERY label_positions_ok bb.bb_instructions) fn.fn_blocks /\
+  MEM a fn.fn_blocks /\ MEM b fn.fn_blocks /\ can_merge_blocks fn a b /\
+  bbs = replace_block a.bb_label (merge_blocks a b)
+    (remove_block b.bb_label fn.fn_blocks) /\
+  l <> b.bb_label /\ revert_path fn.fn_blocks n l ==>
+  ?k. revert_path bbs k l
+Proof
+  completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  drule_all chain_merge_revert_step >> strip_tac
+  >- (qexists_tac `SUC 0` >>
+      pure_rewrite_tac[revert_path_def, EXISTS_MEM] >>
+      qexists_tac `c` >> metis_tac[]) >>
+  `?k. revert_path bbs k t` by
+    (first_x_assum (qspec_then `m` mp_tac) >> simp[] >>
+     disch_then irule >> metis_tac[]) >>
+  qexists_tac `SUC k` >>
+  pure_once_rewrite_tac[revert_path_def] >>
+  pure_rewrite_tac[EXISTS_MEM] >> qexists_tac `c` >>
+  qpat_x_assum `bbs = _` kall_tac >> simp[]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
