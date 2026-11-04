@@ -30,7 +30,7 @@
 Theory exprSimPopNested
 Ancestors
   list fragExec exprSim exprSimHyps exprSimPop exprSimPopStorage
-  targetPlaceSim targetPlaceSimCases
+  targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants
   exprLowering vyperAST vyperInterpreter vyperState vyperContext
   vyperTypeSystem vyperTypeCallGraph vyperCompiler stmtLowering
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
@@ -233,6 +233,22 @@ QED
    empty outside the constructor (bare_global_assignable_complete), so the
    root names a bare global, which type_place_target rejects, and the pop
    does not type. *)
+Theorem no_storage_root_untyped_runtime[local]:
+  !env cx src id.
+    env_context_consistent env cx /\ ~cx.in_deploy /\
+    (!ts. get_module_code cx src = SOME ts ==>
+          find_var_decl_by_name id ts = NONE) ==>
+    type_place_target env (TopLevelNameTarget (src,id)) = NONE
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >> simp[] >>
+  gvs[type_place_target_TopLevelNameTarget,
+      env_context_consistent_def, bare_global_assignable_complete_def] >>
+  Cases_on `x` >> gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  res_tac >> gvs[]
+QED
+
 Theorem pop_nested_immutable_runtime_sim:
   !ctx func cenv cx env ann bt ty es src id.
     ~cx.in_deploy /\
