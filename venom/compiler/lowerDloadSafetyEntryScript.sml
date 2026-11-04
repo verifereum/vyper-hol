@@ -38,7 +38,7 @@ Theorem ld_sync_entry:
   enters_block fn
     (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) s /\
   active_inst fn inst s /\ EVERY (fn_ptr_ok P) C.ctx_functions ==>
-  ?f. f.lf_fn = fn /\ f.lf_supply = u /\
+  ?f. f.lf_fn = fn /\ f.lf_supply = u /\ f.lf_Q = [] /\
     ld_sync lo P C vs0 [] [] FEMPTY entry_taint fn inst s s FEMPTY [f] 1 /\
     ld_global lo FEMPTY [f]
 Proof
@@ -71,7 +71,7 @@ Theorem ld_sync_source_entry:
   active_inst fn inst s ==>
   ?lo P f. fixed_region_reserved lo C /\
     ptr_discipline lo C vs0 /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
-    f.lf_fn = fn /\ f.lf_supply = u /\
+    f.lf_fn = fn /\ f.lf_supply = u /\ f.lf_Q = [] /\
     ld_sync lo P C vs0 [] [] FEMPTY entry_taint fn inst s s FEMPTY [f] 1 /\
     ld_global lo FEMPTY [f]
 Proof

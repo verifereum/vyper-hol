@@ -4,16 +4,12 @@ Ancestors
   lowerDloadSafetyLocations lowerDloadSafetyWriteAdvance lowerDloadSafetyAmbient
   lowerDloadSafetyRelation lowerDloadSafetyKernel ptrDiscipline list
 
-Theorem ld_pair_zero:
+Theorem ld_pair_zero_witness:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\
-  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
-  (!j k. j < k /\ k < LENGTH (f::fs) ==>
-     list_precedes (EL j (f::fs)).lf_fn.fn_name
-                   (EL k (f::fs)).lf_fn.fn_name names) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
   fn' = ld_image f /\ active_inst fn' ti t ==>
-  ld_pair lo P names Sigma C C' vs0 fn' ti t
+  ?X p. ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p 0 t t /\ ti = EL 0 X
 Proof
   strip_tac >>
   `f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn` by
@@ -30,9 +26,26 @@ Proof
   `active_inst (FST (lower_dload_function_supply f.lf_supply fn)) ti t` by
     gvs[ld_image_def] >>
   drule_all ld_envelope_active_head >> strip_tac >>
+  qexistsl_tac [`X`,`p`] >>
+  simp[ld_prefix_zero] >> Cases_on `X` >> gvs[]
+QED
+
+Theorem ld_pair_zero:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+     list_precedes (EL j (f::fs)).lf_fn.fn_name
+                   (EL k (f::fs)).lf_fn.fn_name names) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  fn' = ld_image f /\ active_inst fn' ti t ==>
+  ld_pair lo P names Sigma C C' vs0 fn' ti t
+Proof
+  strip_tac >> drule_all ld_pair_zero_witness >>
+  disch_then (qspec_then `C'` strip_assume_tac) >>
   simp[ld_pair_def] >>
   qexistsl_tac [`stk`,`PG`,`G`,`tn`,`fn`,`inst`,`s`,`t`,`A`,`f::fs`,`N`,`X`,`p`,`0`] >>
-  simp[ld_prefix_zero] >> Cases_on `X` >> gvs[]
+  gvs[]
 QED
 
 Theorem ld_sync_memory_write_coverage:
