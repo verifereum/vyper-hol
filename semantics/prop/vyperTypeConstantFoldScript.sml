@@ -113,7 +113,7 @@ Proof
   `read_place cx (ImmutablePlace src id path) st = (INL v,st)` by
     gvs[read_result_def] >>
   conj_tac
-  >- simp[select_result_def, extend_place_def, bind_def, ignore_bind_def,
+  >- simp[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def,
           lift_sum_def, return_def, extend_memory_place_def] >>
   `well_formed_type_value etv` by
     metis_tac[evaluate_type_well_formed_type_value] >>
@@ -180,7 +180,7 @@ Proof
          bind_def, lift_option_type_def, lift_sum_def, return_def,
          option_CASE_rator, sum_CASE_rator, raise_def, AllCaseEqs()] >>
   gvs[eval_result_typed_def, runtime_place_typed_def] >>
-  gvs[select_result_def, extend_place_def, extend_memory_place_def,
+  gvs[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, extend_memory_place_def,
       bind_def, ignore_bind_def, lift_sum_def, return_def,
       sum_CASE_rator, AllCaseEqs()] >>
   gvs[place_type_value_def, read_result_def, read_place_def,
@@ -203,7 +203,7 @@ Proof
   >- gvs[select_result_def, read_result_def, constant_result_shape_def,
          bind_def, lift_option_type_def, lift_sum_def, return_def,
          option_CASE_rator, sum_CASE_rator, raise_def, AllCaseEqs()] >>
-  gvs[select_result_def, extend_place_def, extend_memory_place_def,
+  gvs[select_result_def, extend_place_def, ignore_bind_def, record_storage_event_def, extend_memory_place_def,
       bind_def, ignore_bind_def, lift_sum_def, return_def,
       sum_CASE_rator, AllCaseEqs()] >>
   drule place_type_value_state >>
@@ -247,7 +247,7 @@ Proof
    value_has_type z0 z1` by
     (gvs[deployment_constant_cells_typed_def] >> metis_tac[]) >>
   qexists `PlaceR (ImmutablePlace src id [])` >>
-  simp[Once evaluate_def, lookup_global_def, get_module_code_def,
+  simp[Once evaluate_def, lookup_global_def, ignore_bind_def, record_storage_event_def, get_module_code_def,
        get_tenv_def, get_immutables_def, get_address_immutables_def,
        bind_def, return_def, lift_option_type_def, initial_state_def,
        eval_result_typed_def, runtime_place_typed_def, place_type_value_def,
@@ -1124,7 +1124,7 @@ Theorem constants_fold_module_constants_env:
     constant_fmap_declared_typed (type_env_all_modules mods) full cenv
 Proof
   ho_match_mp_tac constants_fold_module_ind >>
-  rw[constants_fold_module_def, constants_env_def] >>
+  rw[constants_fold_module_def, constants_env_def, constants_env_trace_def] >>
   gvs[AllCaseEqs()]
   >>~- ([`constant_value mods (merge_constant_imms src acc imms) e = SOME v`],
     drule_all checked_constant_decl_typed >> strip_tac >>
@@ -1146,7 +1146,9 @@ Proof
       (irule constant_fmap_declared_typed_update >> metis_tac[]) >>
     first_x_assum (qspecl_then [`cx`,`am`] mp_tac) >>
     simp[] >> disch_then drule_all >> strip_tac >>
-    simp[get_tenv_def, bind_def]) >>
+    simp[Once constants_env_trace_def, get_tenv_def, bind_def] >>
+    Cases_on `constants_env_trace cx am cx.txn.target src ts (acc |+ (id,(tv,v)))` >>
+    gvs[]) >>
   metis_tac[]
 QED
 
@@ -1166,7 +1168,8 @@ Theorem constants_fold_evaluate_module_constants:
       ALOOKUP am_c.immutables cx.txn.target = SOME imms' /\
       deployment_constant_cells_typed (type_env_all_modules mods) cx.txn.target mods am_c
 Proof
-  Induct >- simp[constants_fold_def, evaluate_module_constants_def] >>
+  Induct >- simp[constants_fold_def, evaluate_module_constants_def,
+                evaluate_module_constants_trace_def] >>
   rpt gen_tac >> PairCases_on `h` >>
   rw[constants_fold_def, evaluate_module_constants_def] >> gvs[AllCaseEqs()] >>
   `contract_namespaces_ok F mods` by metis_tac[check_contract_runtime_namespaces] >>
@@ -1182,7 +1185,14 @@ Proof
     (irule merge_constants_preserves_constant_cells_typed >> metis_tac[]) >>
   `ALOOKUP (merge_constants cx.txn.target h0 cenv am).immutables cx.txn.target =
      SOME (merge_constant_imms h0 cenv imms)` by simp[merge_constants_immutables] >>
-  simp[] >> first_x_assum drule_all >> simp[]
+  simp[] >> first_x_assum drule_all >> strip_tac >>
+  qexists `am_c` >> simp[] >>
+  qpat_x_assum `constants_env _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `evaluate_module_constants _ _ _ _ = _` mp_tac >>
+  simp[constants_env_def, evaluate_module_constants_def] >>
+  Cases_on `constants_env_trace (set_current_module cx h0) am cx.txn.target h0 h1 FEMPTY` >>
+  Cases_on `evaluate_module_constants_trace cx (merge_constants cx.txn.target h0 cenv am) cx.txn.target rest` >>
+  simp[Once evaluate_module_constants_trace_def] >> rpt strip_tac >> gvs[]
 QED
 
 (* TOP-LEVEL: for a checked contract the deployment constants fold succeeds

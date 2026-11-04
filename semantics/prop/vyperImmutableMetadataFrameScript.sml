@@ -179,7 +179,7 @@ Theorem metadata_frame_reads[local]:
   state_rel_frame immutable_metadata_frame (extend_place cx pv sb) /\
   state_rel_frame immutable_metadata_frame (resolve_array_element cx b slot ty subs)
 Proof
-  rpt conj_tac >> irule metadata_frame_state >> rpt strip_tac >>
+  rpt conj_tac >> irule metadata_frame_eq_op >> rpt strip_tac >>
   FIRST [drule_all read_result_state, drule_all read_results_state,
     drule_all select_result_state,
     drule_all conditional_result_state,
@@ -189,7 +189,8 @@ Proof
     drule_all get_immutables_state, drule_all get_place_state,
     drule_all read_place_state, drule_all place_type_value_state,
     drule_all extend_place_state,
-    drule_all resolve_array_element_state] >> simp[]
+    drule_all resolve_array_element_state] >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem metadata_frame_next_gas_reading[local]:
@@ -231,6 +232,7 @@ Proof
     get_pending_deletions_def, update_pending_deletions_def,
     transfer_value_def, get_accounts_def, update_accounts_def,
     acquire_nonreentrant_lock_def, release_nonreentrant_lock_def,
+    record_storage_event_def, record_storage_backend_def,
     get_transient_storage_def, update_transient_def,
     push_function_def, pop_function_def, bind_def, ignore_bind_def,
     return_def, raise_def, lift_option_type_def, type_check_def,

@@ -148,10 +148,11 @@ Theorem checked_call_outcome_success_frame:
   rq.cr_accounts = st.accounts /\ rq.cr_tStorage = st.tStorage /\
   st2 = st with <|accounts := st2.accounts; tStorage := st2.tStorage;
                  logs := st2.logs; outcomes := st2.outcomes;
-                 requests := st2.requests; pending_deletions := st2.pending_deletions|>
+                 requests := st2.requests; pending_deletions := st2.pending_deletions;
+                 storage_trace := st2.storage_trace|>
 Proof
-  rpt strip_tac >> drule take_call_outcome_success >> strip_tac >>
-  Cases_on `outcome.co_success` >>
-  gvs[call_outcome_request_def, adopt_call_outcome_equation] >>
-  IF_CASES_TAC >> simp[evaluation_state_component_equality]
+  strip_tac >>
+  drule take_call_outcome_success >> strip_tac >>
+  drule adopt_call_outcome_frame >> strip_tac >>
+  gvs[call_outcome_request_def, evaluation_state_component_equality]
 QED

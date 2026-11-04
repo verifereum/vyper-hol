@@ -68,12 +68,41 @@ Definition eval_integer_constant_def:
     else NONE
 End
 
+Theorem closed_integer_eval_exact[local]:
+  !e. closed_integer e ==>
+    !cx st v. eval_pure_expr cx st e = SOME (Value v) ==>
+      eval_expr cx e st = (INL (Value v), st)
+Proof
+  ho_match_mp_tac closed_integer_ind >>
+  rw[closed_integer_def] >>
+  imp_res_tac closed_integer_value >>
+  gvs[eval_pure_expr_def, builtin_args_length_ok_def, AllCaseEqs()] >>
+  simp[Once vyperInterpreterTheory.evaluate_def,
+       vyperStateTheory.return_def] >>
+  qpat_x_assum `!st cx. eval_pure_expr cx st e = _ \/ _`
+    (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+  qpat_x_assum `!st cx. eval_pure_expr cx st e' = _ \/ _`
+    (qspecl_then [`st`, `cx`] strip_assume_tac) >>
+  gvs[read_result_def, vyperStateTheory.return_def] >>
+  first_x_assum (drule_then assume_tac) >>
+  first_x_assum (drule_then assume_tac) >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  simp[Once vyperInterpreterTheory.evaluate_def] >>
+  simp[vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.return_def, vyperStateTheory.type_check_def,
+       vyperStateTheory.assert_def, builtin_args_length_ok_def,
+       vyperStateTheory.get_accounts_def, vyperStateTheory.lift_sum_def,
+       read_result_def]
+QED
+
 Theorem eval_integer_constant_sound:
   eval_integer_constant e = SOME i ==>
   eval_expr cx e st = (INL (Value (IntV i)), st)
 Proof
   rw[eval_integer_constant_def, AllCaseEqs()] >>
-  irule eval_pure_expr_to_eval_expr_some >>
+  irule closed_integer_eval_exact >>
+  simp[] >>
   drule closed_integer_context_independent >>
   metis_tac[]
 QED
