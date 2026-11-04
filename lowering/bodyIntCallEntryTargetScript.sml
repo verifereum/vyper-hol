@@ -1,7 +1,7 @@
 (* Target-only entry facts: the return token and memory-return buffer. *)
 Theory bodyIntCallEntryTarget
 Ancestors
-  bodyIntCallEntryEnv intCallCallee stmtSim context compileEnv
+  bodyIntCallEntryEnv bodyIntCallHeadroomProbe intCallCallee stmtSim context compileEnv
   venomState words
 
 Theorem compile_internal_prologue_return_fields:
