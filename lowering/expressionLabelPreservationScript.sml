@@ -2122,3 +2122,188 @@ Proof
   rewrite_tac[builtinSimpleTheory.compile_builtin_len_def] >>
   metis_tac[label_preserving_ptr_load]
 QED
+
+fun STACK_FINISH th =
+  qmatch_goalsub_abbrev_tac `as_stack_val result_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  first_x_assum (fn eth => mp_then Any strip_assume_tac
+    (Q.INST [`LP` |-> `jump_label_ok`] th) (SYM eth)) >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans];
+
+Theorem label_preserving_builtin_body[local]:
+  (!c ty e s r t. cfn c ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !cenv ret_ty ty bi args s r t.
+    compile_builtin_dispatch_body cfn cenv ret_ty ty bi args s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> rpt gen_tac >> Cases_on `bi`
+  >~ [`compile_builtin_dispatch_body _ _ _ _ (Bop _) _ _`] >-
+      metis_tac[label_preserving_builtin_bop] >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM]
+  >~ [`compile_invert`] >- suspend "not"
+  >~ [`compile_neg`] >- (CALL_VALUE >> STACK_FINISH label_preserving_neg)
+  >~ [`compile_builtin_abs`] >- (CALL_VALUE >> STACK_FINISH label_preserving_builtin_abs)
+  >~ [`compile_env_var`] >- suspend "env"
+  >~ [`compile_acc`] >- suspend "acc"
+  >~ [`compile_keccak256_bytes`] >- suspend "keccak"
+  >~ [`compile_sha256_bytes`] >- suspend "sha"
+  >~ [`compile_builtin_calldatasize`] >- suspend "cdsize"
+  >~ [`compile_slice_calldata`] >- suspend "cdslice"
+  >~ [`compile_builtin_len`] >- suspend "len"
+  >~ [`compile_blockhash`] >- (CALL_VALUE >> STACK_FINISH label_preserving_blockhash)
+  >~ [`compile_blobhash`] >- (CALL_VALUE >> STACK_FINISH label_preserving_blobhash)
+  >~ [`compile_addmod`] >- (ntac 3 CALL_VALUE >> STACK_FINISH label_preserving_addmod)
+  >~ [`compile_mulmod`] >- (ntac 3 CALL_VALUE >> STACK_FINISH label_preserving_mulmod)
+  >~ [`compile_ceil`] >- (CALL_VALUE >> STACK_FINISH label_preserving_ceil)
+  >~ [`compile_floor`] >- (CALL_VALUE >> STACK_FINISH label_preserving_floor)
+  >~ [`compile_pow_mod256`] >- (ntac 2 CALL_VALUE >> STACK_FINISH label_preserving_pow_mod256)
+  >~ [`compile_ecrecover`] >- (ntac 4 CALL_VALUE >> STACK_FINISH label_preserving_ecrecover)
+  >~ [`compile_ecadd_points`] >- suspend "ecadd"
+  >~ [`compile_ecmul_point`] >- suspend "ecmul"
+  >~ [`compile_concat`] >- suspend "concat"
+  >~ [`compile_slice_code`] >- suspend "slice"
+  >~ [`compile_uint2str`] >- suspend "uint2str"
+  >~ [`compile_as_wei_value_int`] >- suspend "wei"
+  >~ [`compile_method_id_runtime`] >- suspend "method"
+  >> suspend "array"
+QED
+
+Resume label_preserving_builtin_body[not]:
+  CALL_VALUE >> IF_CASES_TAC
+  >- STACK_FINISH label_preserving_emit_op >>
+  STACK_FINISH label_preserving_invert
+QED
+
+Resume label_preserving_builtin_body[env]:
+  STACK_FINISH label_preserving_env_var
+QED
+
+Resume label_preserving_builtin_body[acc]:
+  qmatch_goalsub_abbrev_tac `as_stack_val ret_ty action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_stack_val_def] >>
+  qpat_x_assum `(_,_) = compile_acc _ _ _ _ _` (assume_tac o SYM) >>
+  drule_all label_preserving_acc >> strip_tac >> strip_tac >> gvs[]
+QED
+
+Resume label_preserving_builtin_body[cdsize]:
+  STACK_FINISH label_preserving_builtin_calldatasize
+QED
+
+fun PTR_FINISH th =
+  qmatch_goalsub_abbrev_tac `as_ptr_val ret_ty LocMemory action` >>
+  Cases_on `action` >> gvs[markerTheory.Abbrev_def, as_ptr_val_def] >>
+  first_x_assum (fn eth => mp_then Any strip_assume_tac
+    (Q.INST [`LP` |-> `jump_label_ok`] th) (SYM eth)) >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans];
+
+Resume label_preserving_builtin_body[cdslice]:
+  CALL_VALUE >> PTR_FINISH label_preserving_slice_calldata
+QED
+
+Resume label_preserving_builtin_body[uint2str]:
+  CALL_VALUE >> PTR_FINISH label_preserving_uint2str
+QED
+
+Resume label_preserving_builtin_body[wei]:
+  CALL_VALUE >> IF_CASES_TAC
+  >- STACK_FINISH label_preserving_as_wei_value_decimal >>
+  STACK_FINISH label_preserving_as_wei_value_int
+QED
+
+Resume label_preserving_builtin_body[len]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  STACK_FINISH label_preserving_builtin_len
+QED
+
+Resume label_preserving_builtin_body[ecadd]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_unwrap_value >>
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_unwrap_value >>
+  PTR_FINISH label_preserving_ecadd_points
+QED
+
+Resume label_preserving_builtin_body[ecmul]:
+  pairarg_tac >> asm_rewrite_tac[] >>
+  CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV) >>
+  first_assum (drule_then strip_assume_tac) >>
+  CALL_PAIR label_preserving_unwrap_value >> CALL_VALUE >>
+  PTR_FINISH label_preserving_ecmul_point
+QED
+
+Resume label_preserving_builtin_body[keccak]:
+  IF_CASES_TAC
+  >- (CALL_VALUE >> STACK_FINISH label_preserving_keccak256_bytes) >>
+  Cases_on `expr_type (HD args)` >> simp_tac (srw_ss()) []
+  >~ [`BaseT b`] >- (Cases_on `b` >> simp_tac (srw_ss()) []
+      >~ [`BytesT bound`] >- (Cases_on `bound` >> simp_tac (srw_ss()) []
+          >~ [`compile_keccak256_bytesm`] >-
+            (CALL_VALUE >> STACK_FINISH label_preserving_keccak256_bytesm) >>
+          CALL_VALUE >> STACK_FINISH label_preserving_keccak256_word) >>
+      CALL_VALUE >> STACK_FINISH label_preserving_keccak256_word) >>
+  CALL_VALUE >> STACK_FINISH label_preserving_keccak256_word
+QED
+
+Resume label_preserving_builtin_body[sha]:
+  IF_CASES_TAC
+  >- (CALL_VALUE >> STACK_FINISH label_preserving_sha256_bytes) >>
+  Cases_on `expr_type (HD args)` >> simp_tac (srw_ss()) []
+  >~ [`BaseT b`] >- (Cases_on `b` >> simp_tac (srw_ss()) []
+      >~ [`BytesT bound`] >- (Cases_on `bound` >> simp_tac (srw_ss()) []
+          >~ [`compile_sha256_bytesm`] >-
+            (CALL_VALUE >> STACK_FINISH label_preserving_sha256_bytesm) >>
+          CALL_VALUE >> STACK_FINISH label_preserving_sha256_word) >>
+      CALL_VALUE >> STACK_FINISH label_preserving_sha256_word) >>
+  CALL_VALUE >> STACK_FINISH label_preserving_sha256_word
+QED
+
+Resume label_preserving_builtin_body[method]:
+  Cases_on `method_id_literal (HD args)` >> simp_tac (srw_ss()) []
+  >- (CALL_VALUE >> IF_CASES_TAC
+      >- STACK_FINISH label_preserving_method_id_runtime >>
+      PTR_FINISH label_preserving_method_id_runtime) >>
+  strip_tac >> drule label_preserving_literal_vv >> simp[]
+QED
+
+Resume label_preserving_builtin_body[array]:
+  Cases_on `o'` >> simp_tac (srw_ss()) [] >>
+  CALL_PAIR label_preserving_abi_alloc_buffer
+  >- PTR_FINISH label_preserving_make_tuple >>
+  PTR_FINISH label_preserving_make_array
+QED
+
+Resume label_preserving_builtin_body[concat]:
+  CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_emit_void >>
+  CALL_PAIR label_preserving_concat >>
+  CALL_PAIR label_preserving_emit_op >>
+  CALL_PAIR label_preserving_emit_void >>
+  strip_tac >> gvs[] >> metis_tac[label_extends_trans]
+QED
+
+Resume label_preserving_builtin_body[slice]:
+  IF_CASES_TAC
+  >- (ntac 2 CALL_VALUE >> PTR_FINISH label_preserving_slice_calldata) >>
+  IF_CASES_TAC
+  >- (ntac 2 CALL_VALUE >> PTR_FINISH label_preserving_slice_code) >>
+  IF_CASES_TAC
+  >- (ntac 2 CALL_VALUE >> CALL_PAIR label_preserving_slice_out_buf >>
+      CALL_VALUE >> PTR_FINISH label_preserving_slice_extcode) >>
+  CALL_VALUE >> IF_CASES_TAC
+  >- (CALL_PAIR label_preserving_bytestring_src >> ntac 2 CALL_VALUE >>
+      PTR_FINISH label_preserving_slice_data) >>
+  CALL_PAIR label_preserving_abi_alloc_buffer >>
+  CALL_PAIR label_preserving_emit_void >> ntac 2 CALL_VALUE >>
+  PTR_FINISH label_preserving_slice_data
+QED
+
+Finalise label_preserving_builtin_body
