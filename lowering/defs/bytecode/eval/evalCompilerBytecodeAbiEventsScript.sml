@@ -179,6 +179,8 @@ val mixed_event_types_context_safe_eval = EVAL
 val mixed_event_types_assembly_safe_eval = EVAL
   ``assembly_target_safe (^mixed_event_types_rpolicy).rpol_target
       ^mixed_event_types_raw_asm``
+val mixed_event_types_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^mixed_event_types_raw_asm``
 val mixed_event_types_codegen_step1 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    mixed_event_types_target_wf_eval,
@@ -192,7 +194,8 @@ val mixed_event_types_codegen_step2 = SIMP_CONV pure_ss
   [mixed_event_types_execute_context_eval,
    mixed_event_types_data_asm_eval,
    mixed_event_types_raw_asm_eval,
-   mixed_event_types_assembly_safe_eval]
+   mixed_event_types_assembly_safe_eval,
+   mixed_event_types_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl mixed_event_types_codegen_step1))
 val mixed_event_types_codegen_step3 =
   EVAL (rhs (concl mixed_event_types_codegen_step2))

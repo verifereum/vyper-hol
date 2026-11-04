@@ -19,6 +19,9 @@
  *   frame_view          — Venom state with return-PC variables read as ra
  *   closure_spill_byte  — spill byte of a function reachable from name
  *   fn_frame_inv        — the running frame invariant
+ *   fn_has_retpc, shared_state_rel, fn_entry_state_rel,
+ *   fn_return_state_rel — function boundary relations, used by
+ *                         venomToAsmProps's function simulation
  *)
 
 Theory frameRel
@@ -79,4 +82,48 @@ Definition fn_frame_inv_def:
     (?r. MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
          r.sr_spill_base <= ps.ps_alloc.sa_spill_base /\
          ps.ps_alloc.sa_next_offset <= r.sr_spill_end)
+End
+
+(* ===== Function boundary (PLAN 5.9) ===== *)
+
+Definition fn_has_retpc_def:
+  fn_has_retpc fn <=>
+    EXISTS (\inst. inst.inst_opcode = RETPC_PARAM)
+      (get_params (HD fn.fn_blocks).bb_instructions)
+End
+
+(* Leftover outcomes are a running/function-return contract ONLY.
+   terminal_rel still observes requests but not leftover outcomes or GAS. *)
+Definition shared_state_rel_def:
+  shared_state_rel vs as <=>
+    venom_asm_terminal_rel vs as /\ as.as_outcomes = vs.vs_outcomes /\
+    as.as_call_ctx = vs.vs_call_ctx /\ as.as_tx_ctx = vs.vs_tx_ctx /\
+    as.as_block_ctx = vs.vs_block_ctx /\ as.as_code = vs.vs_code /\
+    as.as_prev_hashes = vs.vs_prev_hashes
+End
+
+(* Fresh source variables need no stack-value relation at callee entry.
+   ra is an opaque assembly address, not vs_return_pc_token; rest is caller-owned. *)
+Definition fn_entry_state_rel_def:
+  fn_entry_state_rel cp fn vs as ra rest <=>
+    vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\ ~vs.vs_halted /\
+    vs.vs_vars = FEMPTY /\
+    LENGTH vs.vs_params + (if fn_has_retpc fn then 1 else 0) =
+      LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+    as.as_stack =
+      (if fn_has_retpc fn then [ra] else []) ++ REVERSE vs.vs_params ++ rest /\
+    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
+    context_memory_rel cp vs.vs_memory as.as_memory /\
+    shared_state_rel vs as
+End
+
+Definition fn_return_state_rel_def:
+  fn_return_state_rel ctx cp fn vs' as as' <=>
+    context_memory_rel cp vs'.vs_memory as'.as_memory /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+         read_byte b as'.as_memory = read_byte b as.as_memory) /\
+    venom_asm_terminal_rel vs' as' /\ as'.as_outcomes = vs'.vs_outcomes /\
+    as'.as_call_ctx = as.as_call_ctx /\ as'.as_tx_ctx = as.as_tx_ctx /\
+    as'.as_block_ctx = as.as_block_ctx /\ as'.as_code = as.as_code /\
+    as'.as_prev_hashes = as.as_prev_hashes
 End

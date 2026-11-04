@@ -11,6 +11,25 @@ Ancestors
   asmTargetSafety
   assemblyFinalizer
 
+(* The assembler's symbol checks.  Every AsmLabel and AsmDataHeader defines
+   a symbol, and a name defined twice is an error, as in Python's
+   _add_to_symbol_map (vyper/evm/assembler/symbols.py), which rejects a
+   duplicate among labels, data headers and code_end; compute_label_offsets
+   would otherwise let the later definition overwrite the earlier.  The
+   program must also fit the 2-byte label pushes (SYMBOL_SIZE = 2), so every
+   offset compute_label_offsets assigns is below 65536. *)
+Definition asm_defined_symbols_def:
+  asm_defined_symbols (AsmLabel l) = [l] /\
+  asm_defined_symbols (AsmDataHeader l) = [l] /\
+  asm_defined_symbols _ = []
+End
+
+Definition asm_symbols_ok_def:
+  asm_symbols_ok asm <=>
+    ALL_DISTINCT (FLAT (MAP asm_defined_symbols asm)) /\
+    SUM (MAP asm_inst_size asm) < 65536
+End
+
 Definition codegen_assembly_def:
   codegen_assembly (rpolicy : resolved_compiler_policy)
                    (unit : compilation_unit) : asm_inst list option =
@@ -25,7 +44,8 @@ Definition codegen_assembly_def:
             data_segment_asm unit.cu_data_segment ++
             [AsmDataHeader "code_end"]
           in
-            if assembly_target_safe rpolicy.rpol_target asm
+            if assembly_target_safe rpolicy.rpol_target asm /\
+               asm_symbols_ok asm
             then SOME asm
             else NONE
 End
@@ -44,7 +64,8 @@ Definition codegen_assembly_fuel_def:
             data_segment_asm unit.cu_data_segment ++
             [AsmDataHeader "code_end"]
           in
-            if assembly_target_safe rpolicy.rpol_target asm
+            if assembly_target_safe rpolicy.rpol_target asm /\
+               asm_symbols_ok asm
             then SOME asm
             else NONE
 End
