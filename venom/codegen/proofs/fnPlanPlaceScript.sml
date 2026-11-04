@@ -12,7 +12,7 @@
  * asm_symbols_ok check: every AsmLabel/AsmDataHeader name is distinct, as
  * Python's assembler requires, and the program fits 2-byte label pushes.
  *
- * TOP-LEVEL (all CHEATED):
+ * TOP-LEVEL:
  *   dfs_block_code_placed   — a planned block's code sits at its label
  *   fn_region_placed        — a function's whole plan sits at its entry label
  *   revert_postamble_placed — the shared revert postamble sits at "revert"
@@ -78,7 +78,7 @@ Proof
   `MEM r plan.cp_regions` by metis_tac[listTheory.MEM_EL] >>
   drule_all dfs_block_plan_contained >> strip_tac >>
   drule_all codegen_region_subplan_contained >> strip_tac >>
-  drule_all generate_block_plan_leading_label >> strip_tac >>
+  drule_all lookup_block_plan_leading_label >> strip_tac >>
   drule codegen_assembly_symbols_ok >> strip_tac >>
   qpat_x_assum `block_ops = _` SUBST_ALL_TAC >>
   fs[execute_plan_def, exec_stack_op_def] >>

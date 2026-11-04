@@ -1,7 +1,7 @@
 Theory fnPlanPlaceDfsBlock
 Ancestors
   fnPlanLineage stackPlanGen venomExecProps stackOpSim asmSem codegen asmToBytecodeProofs codegenEncodingWf
-  list rich_list arithmetic
+  list rich_list arithmetic fnPlanPlaceRevertPostamble fnPlanPlaceFnRegion
 
 Theorem generate_context_regions_length:
   !fns acc acc'.
@@ -33,16 +33,13 @@ Proof
   metis_tac[generate_context_plan_with_regions_length]
 QED
 
-Theorem generate_block_plan_leading_label:
+Theorem lookup_block_plan_leading_label:
   lookup_block lbl fn.fn_blocks = SOME bb /\
   generate_block_plan lv dfg cfg fn bb ps = SOME (ops, ps') ==>
   ?tail. ops = SOLabel lbl :: tail
 Proof
-  strip_tac >> drule lookup_block_label >> strip_tac >>
-  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_block_plan_def] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  simp[AllCaseEqs()] >> strip_tac >> gvs[]
+  strip_tac >> drule lookup_block_label >>
+  drule generate_block_plan_leading_label >> rpt strip_tac >> gvs[]
 QED
 
 Theorem dfs_calls_entry_exists:
@@ -222,21 +219,6 @@ Proof
   >> irule offset_to_pc_inverse_proof >> simp[symbolResolveTheory.asm_inst_size_def]
 QED
 
-Theorem labelled_asm_slice_placed:
-  !prog pre body post lbl.
-    prog = pre ++ (AsmLabel lbl :: body) ++ post /\ asm_symbols_ok prog ==>
-    ?off. FLOOKUP (SND (compute_label_offsets prog)) lbl = SOME off /\
-          off < dimword (:256) /\
-          FLOOKUP (build_offset_to_pc prog) off = SOME (LENGTH pre) /\
-          asm_block_at prog (LENGTH pre) (AsmLabel lbl :: body)
-Proof
-  rpt strip_tac >>
-  `LENGTH pre < LENGTH prog /\ EL (LENGTH pre) prog = AsmLabel lbl` by
-    simp[EL_APPEND] >>
-  drule_all asm_symbols_ok_label_index >> strip_tac >>
-  qexists_tac `off` >> simp[] >>
-  simp[asm_block_at_def, EL_APPEND, EL_CONS]
-QED
 
 Theorem asm_slice_internal_labels:
   !prog pre code post.
