@@ -354,3 +354,32 @@ This kernel deliberately does not transport readiness of saved frames for
 edits containing INVOKE and does not cross the swapped pair. GAS/INVOKE
 residual phases, general independent diamonds and full scheduling composition
 remain open, as do both frozen task obligations.
+
+## Same-context suspended GAS/INVOKE transport
+
+`dftOccurrenceSuspendedTheory` now supplies an actual-transition boundary
+for one distinguished caller pair with a pending GAS. `dft_suspended`
+keeps arbitrary fixed caller/ghost tails and an identical, arbitrarily deep
+nested prefix; the active control and address agree, but counters need not.
+`dft_suspended_next` covers Enter, At (including nested INVOKE and GAS), and
+Done (including nested pops, distinguished return, and stack-clearing
+failures). `dft_suspended_prefix_observations` transports every finite
+prefix up to a first distinguished exit, including identical active
+instruction/state observations. It assumes neither callee termination nor
+a common endpoint, and makes no assertion after that exit.
+
+`dft_suspend_crossing_entry` constructs this relation from two actual
+GAS-first steps versus one actual call-first step on adjacent reordered
+caller blocks. `dft_suspend_call_failure` separately synchronizes malformed,
+missing, undefined-argument, and empty-callee setup failures; successful
+setup is not a global simulation premise. `dft_suspend_return_discharge`
+performs the pending GAS after successful restoration and proves equal
+caller states at the exact common next index. These boundaries require
+zero erased budgets and preserve independently specified tails. Where an
+empty stack is used before/after the crossing, its saved occurrence stack
+must also be empty (the machine clears stale saved ghosts on such steps).
+
+This remains **same-context** callee transport only. Recursively edited
+callee contexts, general independent effectful edits, intermediate schedule
+readiness, schedule composition, and the frozen context/block obligations
+are not established by this theory.
