@@ -9,7 +9,8 @@ Ancestors
 
 Theorem tuple_targets_typing:
   !env ret_ty gs e env'.
-    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' ==>
+    type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+    well_typed_atarget env (TupleTarget gs) (expr_type e) ==>
     ?tys. expr_type e = TupleT tys /\ well_typed_expr env e /\
           assignable_type env.type_defs (TupleT tys) /\
           LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\ env' = env

@@ -171,15 +171,15 @@ Proof
   drule_all write_place_popped_keys_indexed >> simp[]
 QED
 
-Theorem assign_tuple_popped_keys_indexed:
+Theorem assign_tuple_acceptance_popped_keys_indexed:
   (!cx g v env ty st res st'.
-    well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
+    atarget_accepts env g ty /\ value_runtime_typed env ty v /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     assign_tuple_targets cx g v st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
   (!cx gs vs env tys st res st'.
-    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    LIST_REL (\g ty. atarget_accepts env g ty) gs tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
@@ -195,13 +195,13 @@ Proof
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
    (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
    (!cx g v env ty st res st'.
-    well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
+    atarget_accepts env g ty /\ value_runtime_typed env ty v /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     assign_tuple_targets cx g v st = (res,st') /\
     popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
    (!cx gs vs env tys st res st'.
-    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    LIST_REL (\g ty. atarget_accepts env g ty) gs tys /\
     LIST_REL (value_runtime_typed env) tys vs /\
     runtime_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
@@ -218,7 +218,7 @@ Proof
   >- (rpt gen_tac >> strip_tac >> Cases_on `v` >>
       simp[Once evaluate_def, raise_def] >>
       Cases_on `a` >> gvs[Once evaluate_def, raise_def] >>
-      rpt strip_tac >> gvs[well_typed_atarget_def, int_calls_atarget_def] >>
+      rpt strip_tac >> gvs[atarget_accepts_def, int_calls_atarget_def] >>
       drule value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
       first_x_assum drule_all >> simp[])
   >- (rpt strip_tac >> gvs[Once evaluate_def, return_def, raise_def, AllCaseEqs()]) >>
@@ -233,9 +233,34 @@ Proof
   `popped_keys_indexed s''.scopes` by (first_x_assum drule_all >> simp[]) >>
   `runtime_consistent env cx s''` by
     (fs[runtime_consistent_def] >>
-     drule_all (cj 9 eval_scc_type_sound_mutual) >> simp[]) >>
+     drule_all (cj 9 eval_scc_acceptance_type_sound_results_mutual) >> simp[]) >>
   qpat_x_assum `!s t. assign_tuple_targets _ _ _ _ = _ ==> _` drule >>
   disch_then drule_all >> simp[]
+QED
+
+Theorem assign_tuple_popped_keys_indexed:
+  (!cx g v env ty st res st'.
+    well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
+    runtime_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget g) /\
+    assign_tuple_targets cx g v st = (res,st') /\
+    popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes) /\
+  (!cx gs vs env tys st res st'.
+    LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+    LIST_REL (value_runtime_typed env) tys vs /\
+    runtime_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets gs) /\
+    assign_tuple_target_list cx gs vs st = (res,st') /\
+    popped_keys_indexed st.scopes ==> popped_keys_indexed st'.scopes)
+Proof
+  conj_tac >> rpt gen_tac >> strip_tac
+  >- (drule vyperTypeArgFitsTheory.well_typed_atarget_accepts >>
+      strip_tac >> drule_all (cj 1 assign_tuple_acceptance_popped_keys_indexed) >>
+      simp[]) >>
+  `LIST_REL (\g ty. atarget_accepts env g ty) gs tys` by
+    (gvs[LIST_REL_EL_EQN] >>
+     metis_tac[vyperTypeArgFitsTheory.well_typed_atarget_accepts]) >>
+  drule_all (cj 2 assign_tuple_acceptance_popped_keys_indexed) >> simp[]
 QED
 
 Theorem stmt_return_popped_keys_indexed:
@@ -425,9 +450,9 @@ Proof
     simp[bind_def] >>
   drule_all eval_expr_read_type_sound >> strip_tac >> gvs[] >>
   drule_all (cj 1 (cj 5 eval_scc_type_sound_mutual)) >> strip_tac >> gvs[] >>
-  irule (cj 1 assign_tuple_popped_keys_indexed) >>
+  irule (cj 1 assign_tuple_acceptance_popped_keys_indexed) >>
   goal_assum (drule_at (Pat `assign_tuple_targets _ _ _ _ = _`)) >>
-  simp[runtime_consistent_def] >> metis_tac[]
+  simp[runtime_consistent_def, atarget_accepts_def] >> metis_tac[]
 QED
 
 

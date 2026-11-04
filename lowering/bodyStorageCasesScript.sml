@@ -1515,6 +1515,34 @@ Proof
   >> rpt strip_tac >> gvs[]
 QED
 
+Theorem body_assign_tuple_cons_storage_accepts:
+  (!r s. assign_tuple_targets cx g v st = (r,s) ==>
+    contract_storage_well_formed cx s) /\
+  (!s r s'. assign_tuple_targets cx g v st = (INL (),s) /\
+    runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
+    oracle_storage_ok cx s /\ assign_tuple_target_list cx gs vs s = (r,s') ==>
+    contract_storage_well_formed cx s') /\
+  atarget_accepts env g ty /\ value_runtime_typed env ty v /\
+  runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+  call_evaluation_safe cx (int_calls_atarget g) /\
+  IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+  assign_tuple_target_list cx (g::gs) (v::vs) st = (res,st') ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >> qpat_x_assum `assign_tuple_target_list _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [Once evaluate_def, ignore_bind_apply] >>
+  Cases_on `assign_tuple_targets cx g v st` >>
+  rename1 `assign_tuple_targets cx g v st = (head_res,head_st)` >>
+  `contract_storage_well_formed cx head_st` by metis_tac[] >>
+  `runtime_consistent env cx head_st` by
+    (fs[runtime_consistent_def, runtime_storage_consistent_def] >>
+     metis_tac[cj 9 vyperTypeEvalSoundnessTheory.eval_scc_acceptance_type_sound_results_mutual]) >>
+  `outcome_suffix st.outcomes head_st.outcomes` by
+    (drule (cj 9 eval_outcome_suffix_mutual) >> simp[]) >>
+  drule_all body_oracle_storage_entry_transfer >> strip_tac >>
+  Cases_on `head_res` >> gvs[] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem body_empty_defaults_finally:
   finally (do set_scopes scopes; eval_exprs cx [] od)
     (set_scopes st.scopes) st = (INL [],st)
@@ -2959,11 +2987,119 @@ Proof
   qpat_x_assum `!s0 s1. assign_tuple_targets _ _ _ _ = _ ==> _` drule_all >> simp[]
 QED
 
-Theorem body_assign_tuple_consumer:
+Theorem body_tuple_base_consumer_accepts:
+  (!tops env ty st res st'.
+    well_typed_target env bt ty /\ supported_program tops /\
+    get_module_code cx NONE = SOME tops /\
+    ~supported_target_exists expr_evm_run_root bt /\
+    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_target bt) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    eval_target_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') ==>
+  !tops env ty st res st'.
+    atarget_accepts env (BaseTarget bt) ty /\ value_runtime_typed env ty v /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignment_exists expr_evm_run_root (BaseTarget bt) /\
+    EVERY (\c. FST c = NONE) (int_calls_atarget (BaseTarget bt)) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget (BaseTarget bt)) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_targets cx (BaseTarget bt) v st = (res,st') ==>
+    contract_storage_well_formed cx st'
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  drule_all vyperTypeEvalSoundnessTheory.atarget_accepts_base_runtime_typed >>
+  strip_tac >>
+  gvs[supported_assignment_exists_def, int_calls_atarget_def] >>
+  qpat_assum `assign_tuple_targets _ _ _ _ = _`
+    (mp_then (Pos last) mp_tac body_assign_tuple_base_storage) >>
+  disch_then irule >> simp[] >> reverse conj_tac
+  >- (qexistsl_tac [`env`, `dst`] >> simp[]) >>
+  rpt strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem body_tuple_nested_consumer_accepts:
+  (!vs. v = ArrayV (TupleV vs) ==> !tops env tys st res st'.
+    LIST_REL (\t ty. atarget_accepts env t ty) gs tys /\
+    LIST_REL (value_runtime_typed env) tys vs /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignments_exists expr_evm_run_root gs /\
+    EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets gs) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_target_list cx gs vs st = (res,st') ==> contract_storage_well_formed cx st') ==>
+  !tops env ty st res st'.
+    atarget_accepts env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
+    EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_targets cx (TupleTarget gs) v st = (res,st') ==>
+    contract_storage_well_formed cx st'
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  gvs[atarget_accepts_def, supported_assignment_exists_def, int_calls_atarget_def, ETA_THM] >>
+  drule vyperTypeEvalSoundnessTheory.value_runtime_typed_tuple_components >> strip_tac >> gvs[] >>
+  qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >> strip_tac >> first_x_assum drule_all >> simp[]
+QED
+
+Theorem body_tuple_list_cons_consumer_accepts:
+  (!s0 s1. assign_tuple_targets cx g v s0 = (INL (),s1) ==>
+    !tops env tys st res st'.
+      LIST_REL (\t ty. atarget_accepts env t ty) gs tys /\
+      LIST_REL (value_runtime_typed env) tys vs /\
+      supported_program tops /\ get_module_code cx NONE = SOME tops /\
+      ~supported_assignments_exists expr_evm_run_root gs /\
+      EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
+      runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+      call_evaluation_safe cx (int_calls_atargets gs) /\
+      IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+      assign_tuple_target_list cx gs vs st = (res,st') ==> contract_storage_well_formed cx st') /\
+  (!tops env ty st res st'.
+    atarget_accepts env g ty /\ value_runtime_typed env ty v /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignment_exists expr_evm_run_root g /\
+    EVERY (\c. FST c = NONE) (int_calls_atarget g) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atarget g) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_targets cx g v st = (res,st') ==> contract_storage_well_formed cx st') ==>
+  !tops env tys st res st'.
+    LIST_REL (\t ty. atarget_accepts env t ty) (g::gs) tys /\
+    LIST_REL (value_runtime_typed env) tys (v::vs) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    ~supported_assignments_exists expr_evm_run_root (g::gs) /\
+    EVERY (\c. FST c = NONE) (int_calls_atargets (g::gs)) /\
+    runtime_storage_consistent env cx st /\ functions_well_typed cx /\
+    call_evaluation_safe cx (int_calls_atargets (g::gs)) /\
+    IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
+    assign_tuple_target_list cx (g::gs) (v::vs) st = (res,st') ==>
+    contract_storage_well_formed cx st'
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `tys` >- gvs[] >>
+  rename1 `LIST_REL _ (g::gs) (ty::tys)` >>
+  gvs[LIST_REL_CONS1, supported_assignment_exists_def, int_calls_atarget_def] >>
+  drule call_evaluation_safe_append_left >> strip_tac >>
+  drule call_evaluation_safe_append_right >> strip_tac >>
+  qpat_assum `assign_tuple_target_list _ _ _ _ = _`
+    (mp_then (Pos last) mp_tac body_assign_tuple_cons_storage_accepts) >>
+  disch_then irule >> simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
+  qexistsl_tac [`env`, `ty`] >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!s0 s1. assign_tuple_targets _ _ _ _ = _ ==> _` drule_all >> simp[]
+QED
+
+Theorem body_assign_tuple_consumer_accepts:
   (!s0 tv s1 sread v s2.
     eval_expr cx e s0 = (INL tv,s1) /\ read_result cx tv sread = (INL v,s2) ==>
     !tops env ty st res st'.
-      well_typed_atarget env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
+      atarget_accepts env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
       EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
@@ -3002,10 +3138,13 @@ Proof
   disch_then irule >> simp[] >> conj_tac
   >- (rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
   qexists_tac `env` >> simp[] >> rpt strip_tac >>
-  `well_typed_atarget env (TupleTarget gs) (expr_type e)` by
-    gvs[atarget_accepts_def, well_typed_atarget_def] >>
+  `atarget_accepts env (TupleTarget gs) (expr_type e)` by
+    simp[atarget_accepts_def] >>
   qpat_x_assum `!s0 tv s1 sread v s2. _` drule_all >> simp[]
 QED
+
+(* body_assign_tuple_consumer's exact-target interface is recovered in
+   bodyStoragePreservation after the stronger mutual theorem. *)
 
 
 Theorem body_intcall_runtime_frame:

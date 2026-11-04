@@ -753,15 +753,14 @@ Proof
   `run_inst_seq (emitted_insts st0 st3) ss0 = OK ss3`
     by (`inst_extends st0 st2` by metis_tac[inst_extends_trans] >>
         imp_res_tac run_inst_seq_emit_extend >> gvs[]) >>
+  (* Compose the prefix without normalizing the comparison predicate. *)
+  `inst_extends st0 st3` by metis_tac[inst_extends_trans] >>
+  `run_inst_seq (emitted_insts st0 st4) ss0 =
+   run_inst_seq (emitted_insts st3 st4) ss3` by
+    (irule run_inst_seq_emit_extend >> metis_tac[]) >>
   (* Step 4: ASSERT → OK or Abort *)
   drule emit_void_ASSERT_ok_or_revert >> disch_then drule >>
-  (impl_tac >- gvs[]) >> strip_tac >> gvs[]
-  (* OK case *)
-  >- (`inst_extends st0 st3` by metis_tac[inst_extends_trans] >>
-      imp_res_tac run_inst_seq_emit_extend >> gvs[] >> metis_tac[])
-  (* Abort case *)
-  >> (`inst_extends st0 st3` by metis_tac[inst_extends_trans] >>
-      imp_res_tac run_inst_seq_emit_extend >> gvs[])
+  (impl_tac >- gvs[]) >> strip_tac >> metis_tac[]
 QED
 
 (* Helper: the payable sub-check (3 instructions: CALLVALUE, ISZERO, ASSERT).
@@ -1058,9 +1057,8 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   qexists_tac `ss'` >> asm_rewrite_tac[] >>
   qpat_x_assum `run_inst_seq _ _ = OK ss'` mp_tac >>
-  asm_rewrite_tac[run_inst_seq_def, step_inst_base_def, mk_inst_def,
-                  exec_alloca_def] >>
-  simp[] >> disch_then (SUBST_ALL_TAC o SYM) >>
+  simp[run_inst_seq_def, mk_inst_def, step_inst_base_opcode_eqs,
+       exec_alloca_def] >> disch_then (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `eval_operand v _ = _` mp_tac >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
