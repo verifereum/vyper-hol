@@ -1629,3 +1629,61 @@ Proof
   gvs[venomStateTheory.eval_operand_def] >>
   fs[expr_post_def] >> first_x_assum irule >> metis_tac[]
 QED
+
+(* Sparse/default representations differ, but give the same observation. *)
+Theorem sparse_default_code_observation_probe[local]:
+  !b mem.
+    val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (ArrayV (SArrayV [])) b mem =
+    val_in_memory (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (ArrayV (SArrayV [(0,IntV 0)])) b mem
+Proof
+  simp[valueEncodingTheory.val_in_memory_def,
+       vyperValueTheory.default_value_def] 
+QED
+
+Theorem sparse_default_code_layout_probe[local]:
+  !k tvt v.
+    sub_layout (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (ArrayV (SArrayV [])) k tvt v =
+    sub_layout (ArrayTV (BaseTV (UintT 256)) (Fixed 1))
+      (ArrayV (SArrayV [(0,IntV 0)])) k tvt v
+Proof
+  simp[sub_layout_def, sparse_default_code_observation_probe]
+QED
+
+Theorem dynamic_sparse_code_observation_probe[local]:
+  !b mem.
+    val_in_memory
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Dynamic 1))
+      (ArrayV (DynArrayV [ArrayV (SArrayV [])])) b mem =
+    val_in_memory
+      (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Fixed 1)) (Dynamic 1))
+      (ArrayV (DynArrayV [ArrayV (SArrayV [(0,IntV 0)])])) b mem
+Proof
+  simp[Once valueEncodingTheory.val_in_memory_def] >>
+  simp[valueEncodingTheory.val_in_memory_def,
+       vyperValueTheory.default_value_def]
+QED
+
+(* Successful typed reads do not identify the existential layout's path. *)
+Theorem captured_read_provenance_probe[local]:
+  sub_layout (ArrayTV (BaseTV BoolT) (Fixed 1))
+    (ArrayV (SArrayV [(0,BoolV F)])) 0 (BaseTV BoolT) (BoolV F) /\
+  value_has_type (BaseTV BoolT) (BoolV T) /\
+  evaluate_subscripts (ArrayTV (BaseTV BoolT) (Fixed 1))
+    (ArrayV (SArrayV [(0,BoolV T)])) [ValueSubscript (IntV 0)] =
+      INL (BoolV T) /\
+  ~sub_layout (ArrayTV (BaseTV BoolT) (Fixed 1))
+    (ArrayV (SArrayV [(0,BoolV F)])) 0 (BaseTV BoolT) (BoolV T)
+Proof
+  conj_tac
+  >- simp[sub_layout_def, valueEncodingTheory.val_in_memory_def,
+          valueEncodingTheory.type_memory_size_def] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  simp[sub_layout_def, valueEncodingTheory.type_memory_size_def] >>
+  qexistsl [`0`, `REPLICATE 32 (0w:8 word)`] >>
+  simp[valueEncodingTheory.val_in_memory_def,
+       vyperValueTheory.default_value_def] >> EVAL_TAC >> simp[]
+QED
