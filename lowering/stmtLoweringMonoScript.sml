@@ -156,7 +156,10 @@ Proof
       ci_mono_chain_tac ci_mono_stmt_rws)
   >- (simp[compile_iter_elem_copy_def] >> ci_mono_chain_tac ci_mono_stmt_rws)
   >- (simp[declare_local_def] >> ci_mono_chain_tac ci_mono_stmt_rws)
-  >- (simp[emit_local_alloca_def] >> ci_mono_chain_tac ci_mono_stmt_rws)
+  >- (simp[emit_local_alloca_def] >>
+      Cases_on `FLOOKUP cenv.ce_vars id` >> simp[ci_mono_comp_return] >>
+      Cases_on `x` >> simp[ci_mono_comp_return] >>
+      Cases_on `o'` >> simp[ci_mono_comp_return, ci_mono_emit_inst])
   >- (Cases_on `s` >> simp[declare_stmt_local_def, declare_local_def] >>
       ci_mono_chain_tac ci_mono_stmt_rws) >>
   simp[emit_jmp_if_not_terminated_def] >> ci_mono_chain_tac ci_mono_stmt_rws
@@ -193,6 +196,21 @@ Proof
   ci_mono_chain_tac ci_mono_stmt_rws
 QED
 
+Theorem ci_mono_internal_return[local]:
+  !cenv v pc n rt st ets rb sa.
+    ci_mono sa (SND (compile_internal_return cenv v pc n rt st ets rb sa))
+Proof
+  rpt gen_tac >> simp[compile_internal_return_def] >>
+  Cases_on `n > 0`
+  >- (Cases_on `v` >> simp[ci_mono_emit_inst] >>
+      Cases_on `ets = []` >> simp[ci_mono_emit_inst] >>
+      irule ci_mono_bind >> simp[ci_mono_list_helpers, ci_mono_emit_inst]) >>
+  Cases_on `rb` >> simp[ci_mono_emit_inst] >>
+  Cases_on `v` >> simp[ci_mono_emit_inst] >>
+  irule ci_mono_ignore_bind >>
+  simp[ci_mono_compile_store_memory, ci_mono_emit_inst]
+QED
+
 Theorem ci_mono_return_helpers:
   (!cenv v pc n rt st ets rb sa.
      ci_mono sa (SND (compile_internal_return cenv v pc n rt st ets rb sa))) /\
@@ -203,11 +221,42 @@ Theorem ci_mono_return_helpers:
   (!cenv t m tgs s sa.
      ci_mono sa (SND (compile_tuple_unpack cenv t m tgs s sa)))
 Proof
-  rpt conj_tac >> rpt gen_tac >>
-  simp[compile_internal_return_def, compile_internal_return_from_env_def,
-       compile_external_return_def, compile_tuple_unpack_def] >>
-  ci_mono_chain_tac
-    (ci_mono_list_helpers :: ci_mono_stmt_helpers :: ci_mono_stmt_rws)
+  rpt conj_tac
+  >- simp[ci_mono_internal_return]
+  >- (rpt gen_tac >> simp[compile_internal_return_from_env_def] >>
+      match_mp_tac ci_mono_bind >> conj_tac
+      >- (Cases_on `cenv.ce_return_buf` >> simp[ci_mono_comp_return] >>
+          Cases_on `x` >> simp[ci_mono_comp_return] >>
+          irule ci_mono_bind >> simp[ci_mono_emit_op, ci_mono_comp_return]) >>
+      rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+      simp[ci_mono_comp_return, ci_mono_internal_return])
+  >- (rpt gen_tac >> simp[compile_external_return_def] >>
+      irule ci_mono_ignore_bind >> conj_tac
+      >- (rpt gen_tac >> Cases_on `n` >>
+          simp[ci_mono_comp_return, ci_mono_context_helpers]) >>
+      rpt gen_tac >> Cases_on `v` >> simp[ci_mono_emit_inst] >>
+      Cases_on `r` >> simp[]
+      >- (irule ci_mono_bind >> simp[ci_mono_emit_op] >>
+          rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+          simp[ci_mono_emit_op, ci_mono_emit_inst]) >>
+      Cases_on `p` >> simp[] >>
+      irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+      rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+      simp[ci_mono_comp_return] >> rpt gen_tac >> BETA_TAC
+      >- (irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_emit_inst]) >>
+      irule ci_mono_bind >> simp[ci_mono_compile_abi_encode, ci_mono_emit_inst]) >>
+  rpt gen_tac >> simp[compile_tuple_unpack_def] >>
+  qmatch_goalsub_abbrev_tac `compile_tuple_load_all cenv _ tys 0` >>
+  IF_CASES_TAC >- simp[ci_mono_emit_inst] >>
+  match_mp_tac ci_mono_bind >> conj_tac
+  >- (rpt gen_tac >> IF_CASES_TAC >- (
+        irule ci_mono_bind >> simp[ci_mono_compile_alloc_buffer] >>
+        rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+        simp[ci_mono_comp_return] >> rpt gen_tac >> BETA_TAC >>
+        irule ci_mono_ignore_bind >> simp[ci_mono_emit_void, ci_mono_comp_return]) >>
+      simp[ci_mono_comp_return]) >>
+  rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >>
+  simp[ci_mono_list_helpers]
 QED
 
 (* ===== compile_stmt ===== *)
@@ -235,8 +284,8 @@ val range_ci_step =
       val close = FIRST (map MATCH_ACCEPT_TAC
         (List.concat (map BODY_CONJUNCTS (ci_mono_comp_return :: rws))))
   in
-    FIRST [MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
-           close, FIRST_ASSUM MATCH_ACCEPT_TAC,
+    FIRST [close, FIRST_ASSUM MATCH_ACCEPT_TAC,
+           MATCH_MP_TAC ci_mono_bind, MATCH_MP_TAC ci_mono_ignore_bind,
            IF_CASES_TAC, BasicProvers.TOP_CASE_TAC] >>
     rpt conj_tac >> rpt gen_tac >> PURE_REWRITE_TAC[LET_THM] >> BETA_TAC
   end;

@@ -74,6 +74,7 @@ Proof
   simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
        exec_pure2_def, exec_write2_def, eval_operand_def, bind_outputs_def,
        lookup_var_update_var] >>
+  simp[run_inst_seq_def] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >>
   gvs[not_fresh_at_def]
 QED

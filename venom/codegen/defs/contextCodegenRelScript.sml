@@ -205,10 +205,16 @@ Definition source_memory_read_byte_def:
             byte_in_memory_range range i
 End
 
+(* Every source read range avoids every context-owned spill region, in the
+   same endpoint form as the writes below: a range may not straddle even an
+   empty region, which the planner's spill interval can sit on. *)
 Definition source_memory_reads_disjoint_def:
   source_memory_reads_disjoint cp inst vs <=>
-    !i. source_memory_read_byte inst vs i ==>
-        ~context_spill_byte cp i
+    EVERY (\(off,len).
+      len = 0 \/
+      !r. MEM r cp.cp_regions ==>
+          off + len <= r.sr_spill_base \/ r.sr_spill_end <= off)
+      (source_memory_read_ranges inst vs)
 End
 
 (* Every source write range avoids every context-owned spill region.  Keeping

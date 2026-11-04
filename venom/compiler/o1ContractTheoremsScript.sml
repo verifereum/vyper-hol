@@ -4,11 +4,11 @@
  * S4 and S6.
  *
  * The pre-walk runs of SimplifyCFG and DretDesugar map a pass over every
- * function of the source unit and keep its invariant (o1_src_inv); the
- * nine walk runs are indexed by their stage k: their step contract takes
- * function row k to row k+1 (o1_step_contract_at) and their stage contract
- * row k of o1_inv to row k+1 (o1_run_contract).  MakeSSA runs twice and
- * gets one theorem per run.
+ * function of the source unit, taking o1_pre_walk_inv to the walk's input
+ * (o1_walk_src_inv); the nine walk runs are indexed by their stage k:
+ * their step contract takes function row k to row k+1
+ * (o1_step_contract_at) and their stage contract row k of o1_inv to row
+ * k+1 (o1_run_contract).  MakeSSA runs twice and gets one theorem per run.
  *
  * A pass task proves its theorem in its own theory, under the same
  * statement, and the admission here becomes an alias of that proof
@@ -23,16 +23,14 @@ Theory o1ContractTheorems
 Ancestors
   o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
   venomPassSchedule venomCompilerTypes o1ContractLowerDloadStage
+  o1ContractSimplifyCfg
 
 (* ===== The pre-walk runs ===== *)
 
-Theorem o1_contract_simplify_cfg_pre_walk:
-  o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
-  (!view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-            (o1_src_inv D) (o1_src_inv D))
-Proof
-  cheat
-QED
+(* SimplifyCFG's pre-walk takes the lowering's output (no PHI, definite
+   assignment) to the walk's input (row 0). *)
+Theorem o1_contract_simplify_cfg_pre_walk =
+  o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg_pre_walk
 
 (* DretDesugar's run keeps every invariant I: it is the identity on
    DRET-free stage contexts. *)
@@ -72,12 +70,8 @@ Proof
   cheat
 QED
 
-Theorem o1_contract_simplify_cfg:
-  o1_step_contract_at 5 rpolicy (CFP_Simple VP_SimplifyCFG) /\
-  o1_run_contract rpolicy D 5
-Proof
-  cheat
-QED
+Theorem o1_contract_simplify_cfg =
+  o1ContractSimplifyCfgTheory.o1_contract_simplify_cfg
 
 Theorem o1_contract_sue:
   o1_step_contract_at 6 rpolicy (CFP_Simple VP_SingleUseExpansion) /\

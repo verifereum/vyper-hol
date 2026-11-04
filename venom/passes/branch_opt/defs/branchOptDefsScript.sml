@@ -20,6 +20,7 @@
  *   branch_opt_inst          — per-instruction transform
  *   branch_opt_block         — block-level transform
  *   branch_opt_function      — function-level transform
+ *   branch_opt_function_supply — the same, drawing fresh names from a supply
  *
  * Helper:
  *   bo_fresh_var             — fresh variable for inserted ISZERO
@@ -29,7 +30,7 @@
 
 Theory branchOptDefs
 Ancestors
-  passSimulationDefs dfgDefs venomExecSemantics venomInst
+  passSimulationDefs dfgDefs venomExecSemantics venomInst irSupply
 
 (* ===== Comparator Opcodes ===== *)
 
@@ -137,6 +138,68 @@ Definition branch_opt_function_def:
     let dfg = dfg_build_function fn in
     fn with fn_blocks :=
       MAP (branch_opt_block dfg live_at) fn.fn_blocks
+End
+
+(* ===== Supply-Aware Transform ===== *)
+
+(*
+ * The same transform, except that the ISZERO inserted in case 2 takes its
+ * output variable and instruction id from the unit-wide supply, as Python's
+ * InstUpdater.add_before makes a new instruction with a fresh variable.
+ * branch_opt_block above names both after the JNZ, which need not be
+ * fresh; it stays as the model the simulation proof is about.
+ *)
+Definition branch_opt_block_supply_def:
+  branch_opt_block_supply dfg (live_at : string -> num) s bb =
+    if NULL bb.bb_instructions then (bb,s)
+    else
+      let term = LAST bb.bb_instructions in
+        if term.inst_opcode <> JNZ then (bb,s)
+        else case term.inst_operands of
+          [cond_op; Label fst_lbl; Label snd_lbl] =>
+            let cost_a = live_at snd_lbl in
+            let cost_b = live_at fst_lbl in
+            (case cond_op of
+               Var v =>
+                 (case dfg_get_def dfg v of
+                    SOME prev_inst =>
+                      if cost_a >= cost_b /\ prev_inst.inst_opcode = ISZERO then
+                        let new_cond = HD prev_inst.inst_operands in
+                        let new_term = term with inst_operands :=
+                          [new_cond; Label snd_lbl; Label fst_lbl] in
+                        (bb with bb_instructions :=
+                           FRONT bb.bb_instructions ++ [new_term], s)
+                      else if cost_a > cost_b \/
+                              (cost_a >= cost_b /\ prefer_iszero_op prev_inst) then
+                        (case fresh_ir_var s of (tmp,s1) =>
+                         case fresh_inst_id s1 of (id,s2) =>
+                           let iz = <| inst_id := id;
+                                       inst_opcode := ISZERO;
+                                       inst_operands := [cond_op];
+                                       inst_outputs := [tmp] |> in
+                           let new_term = term with inst_operands :=
+                             [Var tmp; Label snd_lbl; Label fst_lbl] in
+                           (bb with bb_instructions :=
+                              FRONT bb.bb_instructions ++ [iz; new_term], s2))
+                      else (bb,s)
+                  | NONE => (bb,s))
+             | _ => (bb,s))
+        | _ => (bb,s)
+End
+
+Definition branch_opt_blocks_supply_def:
+  branch_opt_blocks_supply dfg live_at s [] = ([],s) /\
+  branch_opt_blocks_supply dfg live_at s (bb::bbs) =
+    case branch_opt_block_supply dfg live_at s bb of (bb',s1) =>
+    case branch_opt_blocks_supply dfg live_at s1 bbs of (bbs',s2) =>
+      (bb'::bbs',s2)
+End
+
+Definition branch_opt_function_supply_def:
+  branch_opt_function_supply (live_at : string -> num) s fn =
+    let dfg = dfg_build_function fn in
+    case branch_opt_blocks_supply dfg live_at s fn.fn_blocks of (bbs,s1) =>
+      (fn with fn_blocks := bbs,s1)
 End
 
 (* ===== Fresh Variable Tracking ===== *)
