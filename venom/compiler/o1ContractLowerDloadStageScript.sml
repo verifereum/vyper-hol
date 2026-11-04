@@ -10,18 +10,24 @@
  * moves the later sites of a frame.
  *
  * TOP-LEVEL:
- *   lower_dload_stage_dload_ok   - the DLOAD offset bound, vacuous after
- *   lower_dload_stage_headroom   - the DLOAD headroom bound, raw_mem_ok's
- *                                  frontier bound after
- *   lower_dload_stage_sim        - the runs match, up to the dead bytes D
- *   lower_dload_stage_mem        - raw memory of the output
- *   o1_contract_lower_dload      - the contract theorem
+ *   lower_dload_stage_shape        - no eom and no DALLOCA kept
+ *   lower_dload_stage_fmp_free     - no FMP signature or raw FMP op kept
+ *   lower_dload_stage_callee_first - the callee-first order kept
+ *   lower_dload_stage_dload_ok     - the DLOAD offset bound, vacuous after
+ *   lower_dload_stage_headroom     - the DLOAD headroom bound, raw_mem_ok's
+ *                                    frontier bound after
+ *   lower_dload_stage_sim          - the runs match, up to the dead bytes D
+ *   lower_dload_stage_mem          - raw memory of the output
+ *   lower_dload_stage_ptr          - pointer discipline of the output
+ *   lower_dload_stage_taint        - taint of the output within D
+ *   o1_contract_lower_dload        - the contract theorem
  *)
 Theory o1ContractLowerDloadStage
 Ancestors
-  o1ContractLowerDload o1PassContract unitMemInv lowerDloadDefs
-  venomPassSchedule list venomInst venomWf contextRawReachable
-  contextCodegenRel
+  o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
+  lowerDloadDefs venomPassSchedule list venomInst venomWf
+  contextRawReachable contextCodegenRel fcgDefs fcgBridge
+  venomFnScheduleRunner
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -137,16 +143,111 @@ Proof
   simp[raw_mem_ok_def, dload_headroom_ok_def]
 QED
 
+(* ===== The cheap rows ===== *)
+
+Theorem lower_dload_inst_supply_no_dalloca[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ i.inst_opcode <> DALLOCA ==>
+  EVERY (\j. j.inst_opcode <> DALLOCA) xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+Theorem lower_dload_inst_supply_no_raw_fmp[local]:
+  lower_dload_inst_supply s i = (xs,t) /\ ~is_raw_fmp_opcode i.inst_opcode ==>
+  EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) xs
+Proof
+  Cases_on `i.inst_opcode = DLOAD`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[is_raw_fmp_opcode_def]) >>
+  Cases_on `i.inst_opcode = DLOADBYTES`
+  >- (gvs[lower_dload_inst_supply_def, AllCaseEqs()] >> rpt strip_tac >>
+      gvs[is_raw_fmp_opcode_def]) >>
+  rw[lower_dload_inst_supply_def] >> gvs[]
+QED
+
+(* The expansion keeps an unset layout end and adds no DALLOCA. *)
+Theorem lower_dload_stage_shape:
+  !rpolicy view C C'.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C ==>
+    EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C'
+Proof
+  rpt strip_tac
+  >- (rw[EVERY_MEM] >> drule_all lower_dload_stage_fn >> strip_tac >>
+      fs[EVERY_MEM] >> first_x_assum drule >>
+      gvs[lower_dload_function_supply_def, AllCaseEqs()] >> rw[]) >>
+  fs[ctx_has_dalloca_def, EXISTS_MEM] >> rpt strip_tac >>
+  drule_all lower_dload_stage_fn >> strip_tac >>
+  drule_all lower_dload_function_supply_member >> strip_tac >>
+  `i.inst_opcode <> DALLOCA` by metis_tac[] >>
+  `EVERY (\j. j.inst_opcode <> DALLOCA) ys` by
+    metis_tac[lower_dload_inst_supply_no_dalloca] >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+(* The expansion keeps the FMP signature and adds no raw FMP opcode. *)
+Theorem lower_dload_stage_fmp_free:
+  !rpolicy view C C'.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    fmp_free_ctx C ==> fmp_free_ctx C'
+Proof
+  rw[fmp_free_ctx_def, EVERY_MEM] >>
+  drule_all lower_dload_stage_fn >> strip_tac >>
+  first_x_assum drule >> strip_tac
+  >- gvs[lower_dload_function_supply_def, AllCaseEqs()] >>
+  fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
+  drule_all lower_dload_function_supply_member >> strip_tac >>
+  `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
+    metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+(* Every INVOKE of an output function is one of its input's, so the
+   output's call edges are among the input's. *)
+Theorem lower_dload_function_supply_invoke_targets[local]:
+  lower_dload_function_supply s f = (g,t) /\
+  MEM n (fn_invoke_targets g) ==> MEM n (fn_invoke_targets f)
+Proof
+  rw[fn_invoke_targets_def, fcg_scan_function_def, mem_get_invoke_targets] >>
+  `MEM inst (fn_insts f)` by
+    (irule lower_dload_function_supply_control >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem lower_dload_stage_callee_first:
+  !rpolicy view C C' names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    callee_first names C.ctx_functions ==>
+    callee_first names C'.ctx_functions
+Proof
+  rw[callee_first_def] >>
+  drule_all lower_dload_stage_fn >> strip_tac >>
+  drule lower_dload_function_supply_labels >> strip_tac >>
+  drule_all lower_dload_function_supply_invoke_targets >> strip_tac >>
+  metis_tac[]
+QED
+
+(* ===== The reachable-state rows and the simulation ===== *)
+
 (* The simulation: every terminating run of C is matched by a run of C'
    up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
    the code_end-relative CODECOPY offset from wrapping; code_layout_valid
    (in o1_run_state_ok) binds "code_end" to the code/data boundary; the
-   headroom bound (in o1_src_inv) keeps the shifted alloca sites from
-   wrapping. *)
+   headroom bound (in o1_src_inv) and the callee-first order keep the
+   shifted alloca sites from wrapping; the pointer discipline and the
+   taint bound (in o1_src_inv) keep the shifted alloca addresses out of
+   what the run observes. *)
 Theorem lower_dload_stage_sim:
-  !rpolicy D view C C' vs.
+  !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv C vs ==>
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_sim D C C' vs vs
 Proof
   cheat
@@ -154,10 +255,34 @@ QED
 
 (* The output's reachable states keep raw memory safety. *)
 Theorem lower_dload_stage_mem:
-  !rpolicy view C C' vs.
+  !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv C vs ==>
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     mem_inv raw_mem_ok C' vs
+Proof
+  cheat
+QED
+
+(* The output keeps the pointer discipline above the same fixed region. *)
+Theorem lower_dload_stage_ptr:
+  !rpolicy D view C C' vs names lo.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
+    fixed_region_reserved lo C /\ ptr_discipline lo C vs ==>
+    ptr_discipline lo C' vs
+Proof
+  cheat
+QED
+
+(* The output's taint reaches only the dead bytes D. *)
+Theorem lower_dload_stage_taint:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    taint_within D C' vs
 Proof
   cheat
 QED
@@ -171,12 +296,23 @@ Proof
   rpt gen_tac >> strip_tac >>
   `ctx_sim D C C' vs vs` by metis_tac[lower_dload_stage_sim] >>
   `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
+  `taint_within D C' vs` by metis_tac[lower_dload_stage_taint] >>
   `mem_inv dload_offset_ok C' vs` by
     (irule lower_dload_stage_dload_ok >> fs[o1_src_inv_def] >>
      metis_tac[]) >>
   `mem_inv dload_headroom_ok C' vs` by
     metis_tac[lower_dload_stage_headroom] >>
-  fs[o1_src_inv_def, ctx_pass_stage_def]
+  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C'` by
+    (irule lower_dload_stage_shape >> fs[o1_src_inv_def] >> metis_tac[]) >>
+  `fmp_free_ctx C'` by
+    (irule lower_dload_stage_fmp_free >> fs[o1_src_inv_def] >> metis_tac[]) >>
+  `callee_first names C'.ctx_functions` by
+    metis_tac[lower_dload_stage_callee_first] >>
+  fs[o1_src_inv_def] >>
+  `ptr_discipline lo C' vs` by
+    (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
+  `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
+  fs[fixed_region_reserved_def] >> metis_tac[]
 QED
 
 Theorem o1_contract_lower_dload:

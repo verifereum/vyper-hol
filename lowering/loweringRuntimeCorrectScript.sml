@@ -46,7 +46,7 @@ Theory loweringRuntimeCorrect
 Ancestors
   list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
-  e2eDefs supportedProgram vyperLoweringCorrect
+  e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperInterpreter vyperState vyperContext
   venomState venomExecSemantics venomWf
@@ -331,6 +331,7 @@ QED
 Theorem external_fallthrough_result_rel_any:
   !ctx cenv cenv' nkey ut iv stmts st x st' sb func cx es tops tx srcs exps
      layouts Q.
+    ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
     compile_guarded_body cenv F nkey ut iv stmts NONE st = (x, st') /\
     compile_stmts cenv NoLoop (BaseT BoolT) stmts st = ((), sb) /\
@@ -351,7 +352,7 @@ Proof
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[vyperStateTheory.return_def] >>
-  strip_tac >> gvs[external_call_result_rel_def, return_bytes_def,
+  strip_tac >> gvs[external_call_result_rel_def, tx_return_bytes_def, return_bytes_def,
                   abstract_machine_from_state_def]
 QED
 
@@ -571,6 +572,8 @@ Proof
   simp[source_unit_execution_correct_def] >> strip_tac
   >- ((* the body falls off its end *)
       `res = INL ()` by gvs[stmt_lands_def] >> gvs[] >>
+      `~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops` by
+        (irule source_typing_none_return_plain >> metis_tac[]) >>
       `state_rel func cenv' cx es' s` by fs[stmt_state_rel_def] >>
       qspecl_then [`unit.cu_context`, `cenv`, `cenv'`, `nkey`, `ut'`, `iv`,
                    `fbody`, `sa`, `()`, `st'`, `sb`, `func`, `cx`, `es'`,

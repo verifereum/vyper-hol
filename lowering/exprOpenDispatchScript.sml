@@ -129,7 +129,9 @@ Theorem compile_type_dispatch_convert_open:
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> simp[compile_type_builtin_dispatch_body_def] >>
-  pairarg_tac >> simp[] >> Cases_on `rty` >>
+  pairarg_tac >> simp[] >> IF_CASES_TAC
+  >- (rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
+  Cases_on `rty` >>
   simp[oneline as_stack_val_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all compile_type_convert_open >> simp[]
 QED
