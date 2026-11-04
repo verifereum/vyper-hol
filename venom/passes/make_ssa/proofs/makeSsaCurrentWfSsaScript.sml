@@ -22,6 +22,7 @@ Ancestors
   makeSsaCurrentPathBridge makeSsaCurrentGraphCut makeSsaCurrentCertificate
   makeSsaCurrentTokens makeSsaCurrentLiveTransport livenessAnalysisProps
   makeSsaCurrentDemand makeSsaCurrentDemandDominance makeSsaCurrentDominanceBridge
+  makeSsaCurrentDemandedCut makeSsaCurrentTokenGraph makeSsaCurrentLastSite
 Libs
   rich_listTheory
 
@@ -193,6 +194,86 @@ Proof
     (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
   qpat_x_assum `!l. MEM l path ==> _` (qspec_then `db.bb_label` mp_tac) >>
   simp[current_wf_block_token_default, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_wf_live_default_edge[local]:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ fn_cfg_edge fn a b /\
+  (!pb phi. MEM pb fn.fn_blocks /\ MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) /\
+  ~current_actual_inserted fn v b /\ current_phi_cut_clear fn v b /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) b = SOME vs /\ MEM v vs) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+  current_inherited_token fn (current_actual_inserted fn) v (REVERSE qs) =
+    CurrentDefault v ==>
+  ~current_actual_inserted fn v a /\ current_phi_cut_clear fn v a /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) a = SOME vs /\ MEM v vs) /\
+  ?ps. current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+    current_inherited_token fn (current_actual_inserted fn) v (REVERSE ps) =
+      CurrentDefault v
+Proof
+  strip_tac >>
+  `?ab bb. lookup_block a fn.fn_blocks = SOME ab /\
+           lookup_block b fn.fn_blocks = SOME bb` by
+    (gvs[fn_cfg_edge_def, wf_function_def, fn_succs_closed_def,
+         fn_labels_def, MEM_MAP] >> metis_tac[MEM_lookup_block]) >>
+  `MEM a (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule_all current_actual_token_chain >> strip_tac >>
+  `current_block_token fn (current_actual_inserted fn) v a
+     (current_inherited_token fn (current_actual_inserted fn) v (REVERSE ps)) =
+     CurrentDefault v` by
+    (irule EQ_TRANS >> qexists `current_inherited_token fn
+       (current_actual_inserted fn) v (REVERSE qs)` >> conj_tac
+     >- (irule current_actual_demanded_cut_tokens >> simp[] >> metis_tac[]) >>
+     simp[]) >>
+  `~current_actual_inserted fn v a /\
+   EVERY (\inst. ~MEM v inst.inst_outputs) ab.bb_instructions /\
+   current_inherited_token fn (current_actual_inserted fn) v (REVERSE ps) =
+      CurrentDefault v` by
+    (gvs[current_wf_block_token_default] >> metis_tac[]) >>
+  `!k. k < LENGTH ab.bb_instructions ==>
+    ~MEM v (inst_defs (EL k ab.bb_instructions))` by
+    (fs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]) >>
+  `current_phi_cut_clear fn v a` by
+    (simp[current_phi_cut_clear_def] >> rpt strip_tac >> gvs[] >>
+     metis_tac[current_collect_phis_length, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) a = SOME vs /\ MEM v vs` by
+    (irule current_selected_live_edge >> simp[] >>
+     qexistsl [`b`, `bb`] >> simp[] >>
+     metis_tac[current_phi_cut_clear_def, lookup_block_MEM]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem current_wf_live_default_route[local]:
+  !ls a b. wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  entry_block fn = SOME eb /\ LRC (fn_cfg_edge fn) ls a b /\
+  (!pb phi. MEM pb fn.fn_blocks /\ MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) /\
+  ~current_actual_inserted fn v b /\ current_phi_cut_clear fn v b /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) b = SOME vs /\ MEM v vs) /\
+  (?qs. current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label qs b /\
+    current_inherited_token fn (current_actual_inserted fn) v (REVERSE qs) =
+      CurrentDefault v) ==>
+  ~current_actual_inserted fn v a /\ current_phi_cut_clear fn v a /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) a = SOME vs /\ MEM v vs) /\
+  ?ps. current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+    current_inherited_token fn (current_actual_inserted fn) v (REVERSE ps) =
+      CurrentDefault v
+Proof
+  Induct
+  >- (pure_rewrite_tac[LRC_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  pure_rewrite_tac[LRC_def] >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`z`, `b`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  irule current_wf_live_default_edge >> simp[] >> metis_tac[]
 QED
 
 Theorem current_wf_path_lrc[local]:
@@ -451,6 +532,53 @@ Theorem current_wf_entry_unavailable:
 Proof
   strip_tac >> simp[current_available_def] >> rpt strip_tac >>
   qexists_tac `[l]` >> simp[is_fn_path_def]
+QED
+
+Theorem current_wf_selected_live_nondefault:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  current_tree_ancestor_path (current_dom_tree fn) l path /\
+  (!pb phi. MEM pb fn.fn_blocks /\ MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))) /\
+  ~current_actual_inserted fn v l /\ current_phi_cut_clear fn v l /\
+  (?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) l = SOME vs /\ MEM v vs) ==>
+  current_inherited_token fn (current_actual_inserted fn) v path <> CurrentDefault v
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `MEM l (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  drule_all current_actual_path_chain >> strip_tac >>
+  `fn_reachable fn l` by
+    (gvs[all_reachable_def, fn_labels_def, MEM_MAP] >> metis_tac[]) >>
+  `fn_entry_label fn = SOME eb.bb_label` by simp[fn_entry_label_def] >>
+  `?route. is_fn_path fn route /\ route <> [] /\
+     HD route = eb.bb_label /\ LAST route = l` by
+    (gvs[fn_reachable_def] >> metis_tac[rtc_to_fn_path]) >>
+  `LRC (fn_cfg_edge fn) (FRONT route) eb.bb_label l` by
+    metis_tac[current_wf_path_lrc] >>
+  `?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) eb.bb_label = SOME vs /\ MEM v vs` by
+    (mp_tac current_wf_live_default_route >>
+     disch_then (qspecl_then [`FRONT route`, `eb.bb_label`, `l`] mp_tac) >>
+     simp[] >> (impl_tac >- (conj_tac >- metis_tac[] >>
+       qexists `REVERSE path` >> simp[])) >> metis_tac[]) >>
+  `lookup_block eb.bb_label fn.fn_blocks = SOME eb` by
+    (irule MEM_lookup_block >>
+     gvs[entry_block_def, wf_function_def, fn_labels_def] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `collect_phis eb.bb_instructions = []` by
+    (gvs[first_block_no_phi_def, entry_block_def] >>
+     Cases_on `fn.fn_blocks` >> gvs[] >>
+     rename1 `EVERY _ hb.bb_instructions` >>
+     Cases_on `hb.bb_instructions` >> gvs[livenessDefsTheory.collect_phis_def]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) eb.bb_label 0)` by
+    metis_tac[current_selected_live_iff, listTheory.LENGTH] >>
+  `current_available fn v eb.bb_label 0` by
+    (irule current_live_post_phi_available >> simp[] >> metis_tac[]) >>
+  metis_tac[current_wf_entry_unavailable]
 QED
 
 Theorem current_wf_entry_undemanded:
