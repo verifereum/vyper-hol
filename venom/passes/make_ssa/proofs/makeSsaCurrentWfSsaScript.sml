@@ -734,6 +734,8 @@ Theorem current_wf_named_structural_certificate:
   make_ssa_current_fn s fn = (fn',s') ==>
   ?A H events V.
     current_structural_certificate s fn fn' s' A H events /\
+    current_history_valid V H /\ current_annotation_separation A /\
+    ALL_DISTINCT (MAP current_event_label events) /\
     EVERY (current_event_valid A V) events /\
     EVERY (current_event_names H V) events /\
     EVERY (current_event_trace A H) events /\
@@ -758,6 +760,13 @@ Proof
     (FLAT (MAP block_ir_vars ins))) events` by
     (drule_all current_wf_provenance_valid_events >> simp[]) >>
   drule_all current_provenance_initial_tree_names >> strip_tac >>
+  `current_history_valid (FLAT (MAP block_ir_vars ins)) H'` by
+    fs[current_allocation_consistent_def] >>
+  `current_annotation_separation (current_annotation_map ins annsss)` by
+    (irule current_annotation_map_separation >>
+     metis_tac[LIST_REL_LENGTH, LENGTH_ZIP]) >>
+  `ALL_DISTINCT (MAP current_event_label events)` by
+    metis_tac[cj 1 current_trace_event_labels_distinct] >>
   `EVERY (current_event_trace (current_annotation_map ins annsss) H') events` by
     metis_tac[cj 1 current_tree_trace_events] >>
   qexistsl_tac [`current_annotation_map ins annsss`, `H'`, `events`,
