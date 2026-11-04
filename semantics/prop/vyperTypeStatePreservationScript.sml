@@ -388,10 +388,12 @@ Theorem write_storage_slot_preserves_env_consistent:
   env_consistent env cx st'
 Proof
   rpt strip_tac >>
-  Cases_on `encode_value tv v` >>
-  gvs[write_storage_slot_eq, set_storage_def, env_consistent_def,
-      env_scopes_consistent_def, env_immutables_consistent_def] >>
-  rw[] >> metis_tac[]
+  `st'.scopes = st.scopes` by (drule write_storage_slot_scopes >> simp[]) >>
+  `st'.immutables = st.immutables` by
+    (drule write_storage_slot_immutables >> simp[]) >>
+  gvs[env_consistent_def, env_scopes_consistent_def,
+      env_immutables_consistent_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem imms_well_typed_set_source_immutables_update:

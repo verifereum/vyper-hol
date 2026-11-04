@@ -404,7 +404,9 @@ Resume aggregate_make_tuple_sim[slice_join]:
       b + asz <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       gvs[stmt_state_rel_def, state_rel_def] >>
+       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def]) >>
   `mem_bytes_at b asz r.vs_memory = mem_bytes_at b asz s0.vs_memory` by
@@ -415,7 +417,9 @@ Resume aggregate_make_tuple_sim[slice_join]:
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es1.scopes x` by simp[] >>
      `alloca_inv r /\ local_ptrs_rel func ce es1.scopes r` by
-       gvs[stmt_state_rel_def, state_rel_def] >>
+       (qpat_assum `stmt_state_rel ctx func ce cx es1 r` mp_tac >>
+        simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
+        strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
   `mem_bytes_at p n s.vs_memory = mem_bytes_at p n t'.vs_memory` by
@@ -829,6 +833,7 @@ Resume aggregate_make_array_sim[header_suffix]:
            fs[stmt_state_rel_def, state_rel_def] >>
          drule_all local_ptrs_rel_alloca_disjoint >>
          simp[regions_disjoint_def] >> decide_tac)
+     >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
      >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity]
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def, LET_THM]

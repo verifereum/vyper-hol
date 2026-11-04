@@ -392,7 +392,8 @@ Theorem frag_exec_weaken:
       (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
       frag_exec ctx st st' P' Q' R'
 Proof
-  metis_tac[frag_exec_conseq]
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
 QED
 
 Theorem frag_exec_pre_exit:
@@ -983,7 +984,7 @@ Theorem frag_outcome_jmp[local]:
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
   conj_tac >- simp[] >>
-  qexistsl_tac [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
+  qexistsl [`bb`, `mk_inst id JMP [Label lbl] []`, `lbl`] >>
   simp[mk_inst_def, is_terminator_def, Once step_inst_base_def]
 QED
 
@@ -999,11 +1000,14 @@ Theorem frag_outcome_jnz[local]:
   frag_outcome ctx fn s sb Q R
 Proof
   rpt strip_tac >> irule frag_outcome_jump >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body'] []`,
-            `if w = 0w then body' else exit`] >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
-  Cases_on `w = 0w` >> gvs[]
+  conj_tac >- simp[] >>
+  rename1 `eval_operand cnd s = SOME w` >>
+  rename1 `frag_outcome ctx fn (jump_to (if w = 0w then body_lbl else exit) s) sb Q R` >>
+  qexistsl [`bb`, `mk_inst id JNZ [cnd; Label exit; Label body_lbl] []`,
+             `if w = 0w then body_lbl else exit`] >>
+  Cases_on `w = 0w` >>
+  simp[mk_inst_def, is_terminator_def] >>
+  simp[step_inst_base_opcode_eqs]
 QED
 
 Theorem frag_outcome_loop_cond[local]:

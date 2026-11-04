@@ -18,7 +18,7 @@
  *     other than NoneT and an empty struct is assignable, as the two above
  *     assume
  * Helpers:
- *   vyper_to_abi_type_submap -- evaluation and ABI type in a larger env
+ *   vyper_to_abi_type_submap (abiTypeBoundProps) -- evaluation and ABI type in a larger env
  *   sfields_tenv_consistent_domsub -- struct map and env drop a struct
  *   abi_props_vyper -- compile-side ABI sizes and flags are the source's
  *   abi_elem_props -- the same for a type in a smaller env than the map's
@@ -33,7 +33,7 @@
 
 Theory retAbiPlanProps
 Ancestors
-  compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
+  abiTypeBoundProps compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin

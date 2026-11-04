@@ -45,26 +45,3 @@ Theorem reachable_preserves_safety:
 Proof
   ACCEPT_TAC loweringMemSafetyProofsTheory.reachable_preserves_safety
 QED
-
-(* ===== TOP-LEVEL THEOREM ===== *)
-
-Theorem lowering_memory_safe:
-  ∀selectors ext_fns int_fns fb_fn (dispatch:dispatch_strategy)
-    bucket_count fn_meta_bytes dense_buckets entry_info entry_label
-    fn cenv s0 s.
-    MEM fn (FST (run_lowering_pair_compat selectors ext_fns int_fns fb_fn
-                   dispatch bucket_count fn_meta_bytes
-                   dense_buckets entry_info entry_label)).ctx_functions ∧
-    cenv_matches_fn cenv fn ∧
-    alloca_inv s0 ∧
-    state_matches_fn fn s0 ∧
-    well_typed_lowering cenv ∧
-    (∀aid off asz.
-       FLOOKUP s0.vs_allocas aid = SOME (off,asz) ⇒
-       off + asz ≤ LENGTH s0.vs_memory ∧ off + asz < dimword (:256)) ∧
-    reachable_by_execution fn s0 s
-    ⇒ ptrs_in_alloca_bounds fn (alloca_roots fn) s ∧
-      alloca_safe_access fn (alloca_roots fn) s
-Proof
-  ACCEPT_TAC loweringMemSafetyProofsTheory.lowering_memory_safe
-QED

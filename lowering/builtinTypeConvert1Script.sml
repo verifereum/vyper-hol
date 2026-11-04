@@ -131,6 +131,21 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `b` >> simp[] >> metis_tac[]
 QED
 
+(* Reduces the OK-or-revert goal to a case on a single run_inst_seq term,
+   so stepping the sequence doesn't leave a second copy to re-step. *)
+Theorem conversion_seq_outcome[local]:
+  !r P.
+    (case r of
+       OK s => ?w. P s w
+     | Halt _ => F
+     | Abort a _ => a = Revert_abort
+     | IntRet _ _ => F
+     | Error _ => F) ==>
+    ?s w. (r = OK s /\ P s w) \/ r = Abort Revert_abort s
+Proof
+  Cases >> simp[]
+QED
+
 Theorem compile_type_convert_2:
   ∀ v a b c d w ss st op st'.
     compile_type_convert v (ConvIntToInt a b c d) st = (op, st') ∧
@@ -215,18 +230,14 @@ val decimal_input_tac =
   simp[] >> disch_tac >> Cases_on `v` >> gvs[eval_operand_def] >>
   TRY (rename1 `lookup_var input_name ss = SOME value` >>
        `!n. st.cs_next_var <= n ==> input_name <> STRING #"%" (toString n)` by
-         (rpt strip_tac >> first_x_assum drule >> simp[]));
+         (rpt strip_tac >> first_x_assum drule >> simp[])) >>
+  ho_match_mp_tac conversion_seq_outcome;
 
 val decimal_bound_tac =
   weak_spec_step_tac >> weak_spec_step_tac >> weak_spec_step_tac >>
   TRY (IF_CASES_TAC >> simp[]);
 
-val decimal_scale_tac =
-  weak_spec_step_tac >> weak_spec_step_tac >>
-  rewrite_tac[GSYM mk_inst_def] >>
-  simp[run_inst_seq_def, conversion_step_equations, clamp_step_equations,
-       clamp_assert_step, exec_pure2_def, exec_pure1_def, mk_inst_def,
-       eval_operand_def, lookup_var_update_var, fresh_var_name_eq, SF SFY_ss];
+val decimal_scale_tac = weak_spec_step_tac >> weak_spec_step_tac;
 
 Theorem compile_type_convert_5:
   ∀ v a b c d e w ss st op st'.

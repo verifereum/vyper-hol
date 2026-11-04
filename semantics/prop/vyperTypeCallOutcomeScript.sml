@@ -19,7 +19,7 @@ Theorem runtime_consistent_call_frame:
   runtime_consistent env cx st /\
   st' = st with <|accounts := st'.accounts; tStorage := st'.tStorage;
                   logs := st'.logs; outcomes := st'.outcomes;
-                  requests := st'.requests|> /\
+                  requests := st'.requests; pending_deletions := st'.pending_deletions|> /\
   accounts_well_typed st'.accounts ==>
   runtime_consistent env cx st'
 Proof

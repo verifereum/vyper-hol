@@ -14,10 +14,11 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
+  vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  loweringShapeProps loweringShapeSource vfmExecution
   venomPipelineCorrect
   passSimulationDefs
-  codegenCorrectness
+  codegenCorrectness immutableCodeLayout
   stateEquiv stateEquivProps
   venomExecSemantics
   vyperABI
@@ -204,7 +205,9 @@ End
 
 (* The stages are explicit premises, not appeals to admitted S1-S7.
    Source exemption is handled before the conditional stages are opened.
-   Totality supplies an actual EVM run even when neither stage applies. *)
+   Totality supplies an actual EVM run even when neither stage applies.
+   The middle stage matches runs up to the source result's dead bytes
+   (external_call_dead), which the source relation ignores. *)
 Theorem e2e_vyper_to_evm:
   !tops ret am tx ctx ctx' vs es.
     vs.vs_outcomes = MAP SND (call_trace es) /\
@@ -212,30 +215,35 @@ Theorem e2e_vyper_to_evm:
               (call_external (SOME vs.vs_outcomes) [] am tx)
               (run_context fuel ctx vs)) /\
     (~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) ==>
-       ctx_transform_correct ctx ctx' vs /\
+       ctx_sim (external_call_dead tx
+                  (call_external (SOME vs.vs_outcomes) [] am tx))
+         ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
           venom_frame_rel es r es' (run_context fuel ctx' vs)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
              call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
   qspec_then `es` strip_assume_tac run_call_total >>
   qexistsl_tac [`r`, `es'`] >> simp[] >>
   Cases_on `source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)`
-  >- (disj2_tac >> disj2_tac >>
-      irule source_exempt_call_result_rel >> gvs[]) >>
+  >- (disj2_tac >> irule source_exempt_call_result_rel >> gvs[]) >>
   gvs[] >>
   drule_all external_call_result_rel_terminates >> strip_tac >>
-  drule_all ctx_transform_correct_forward >> strip_tac >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  `terminates (run_context fuel' ctx' vs)` by
+    metis_tac[dead_result_rel_terminates] >>
   (* gvs identifies every stage-3 witness with the actual run by uniqueness. *)
   qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
-    (qspec_then `fuel'` strip_assume_tac) >>
+    (qspec_then `fuel'` strip_assume_tac)
+  >- gvs[] >>
   gvs[] >>
-  drule_all external_call_result_rel_unit_transport >> strip_tac >>
+  drule_all external_call_result_rel_dead_transport >> strip_tac >>
   drule_all external_call_result_rel_frame >> simp[]
 QED
 
@@ -723,8 +731,8 @@ QED
 *)
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
-(* Runtime immutable compilation remains available, but the raw O1 shape
-   theorem excludes DLOAD and therefore requires immutable_free_program. *)
+(* The raw O1 shape theorems no longer need immutable_free_program; it
+   remains in this statement, which is unchanged. *)
 
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx ret es.
@@ -734,20 +742,23 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok tops am tx (MAP SND (call_trace es))
+    call_outcomes_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       precompile_call_starved es \/
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -755,13 +766,15 @@ Proof
   disch_then (qspec_then `cplan` assume_tac) >>
   qspecl_then [`prog`, `cplan`, `es`] assume_tac
     entry_venom_state_o1_initial_state_ok >>
+  drule_all generated_entry_code_layout_shape >>
+  disch_then (qspec_then `cplan` assume_tac) >>
   qabbrev_tac `vs = entry_venom_state prog cplan es` >>
   `vs.vs_outcomes = MAP SND (call_trace es) /\
    vs.vs_initial_fmp = n2w cplan.cp_initial_fmp /\
    vs.vs_call_ctx.cc_calldata = buffer_to_list (FST (HD es.contexts)).msgParams.data` by
     simp[Abbr`vs`, entry_venom_state_def] >>
   `valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
-   call_outcomes_ok tops am tx vs.vs_outcomes` by simp[] >>
+   call_outcomes_ok am tx vs.vs_outcomes` by simp[] >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
   `source_unit_execution_correct tops ret am tx unit vs` by
     (irule lower_vyper_runtime_unit_correct >> simp[] >>
@@ -773,16 +786,19 @@ Proof
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
+  drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
   `o1_run_state_ok vs` by
     (fs[o1_run_state_ok_def] >> simp[Abbr`vs`, entry_venom_state_def]) >>
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  `dead_wf (external_call_dead tx
+              (call_external (SOME vs.vs_outcomes) [] am tx))` by
+    simp[external_call_dead_wf] >>
   drule_all run_venom_pipeline_correct >> strip_tac >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
-  conj_tac
-  >- gvs[checked_unit_transform_correct_def] >>
+  conj_tac >- gvs[] >>
   gen_tac >> irule codegen_correct >> simp[] >>
   qexistsl_tac [`Inv`, `prog`, `rpolicy`] >> simp[]
 QED
@@ -852,15 +868,15 @@ QED
  * Proof idea (deferred): relate the constructor's CODECOPY-decoded canonical
  * ABI tail to source binding, simulate its Call-free body and runtime-return
  * epilogue, then apply Verifereum handle_create/handle_exception in the SINGLE
- * fresh creation frame. Deposit gas/size failures are resource starvation;
- * valid-input computed precompile failures have their own alternative. Exclude
- * the 0xEF runtime prefix. Match installed runtime code and all remaining
+ * fresh creation frame. Deposit gas/size failures are resource starvation.
+ * Exclude the 0xEF runtime prefix. Match installed runtime code and all remaining
  * account fields, transient storage and logs; use explicit source failure
  * cases, exempting only the existing exact dynamic ABI strictness predicate.
  *
  * load_contract NONE [] is deliberate: constructor_call_free excludes EVERY Call
- * (including internal calls and Send), while checked constant initializers are
- * pure. No oracle/callee is needed. The theorem does not claim agreement for
+ * (including internal calls and Send) and the precompile builtins, whose
+ * STATICCALL the EVM can fail for lack of gas, while checked constant
+ * initializers are pure. No oracle/callee is needed. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
  *)
@@ -874,7 +890,7 @@ Theorem e2e_deploy_correctness:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/ precompile_call_starved es \/
+      (frame_resource_starved es r es' \/
        case load_contract NONE [] am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
             ?section lgs.
@@ -919,7 +935,7 @@ val _ =
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/ precompile_call_starved es \/
+        (frame_resource_starved es r es' \/
          deploy_result_rel tops runtime_bc tx es r es'
            (load_contract NONE [] am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));

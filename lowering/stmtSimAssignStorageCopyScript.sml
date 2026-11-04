@@ -276,10 +276,9 @@ Theorem storage_copy_dyn_live_word[local]:
     w2n (lookup_storage (n2w base) st) = len /\
     i < 1 + word_size cap /\ b < 32 /\
     ~dyn_bytes_dead st base cap (base + i) b ==>
-    32 * i < 32 + 32 * word_size len
+    32 * i < 32 + len
 Proof
   rpt gen_tac >> strip_tac >>
-  `len <= 32 * word_size len` by simp[le_word_size_mul] >>
   fs[dyn_bytes_dead_def] >> decide_tac
 QED
 
@@ -440,7 +439,7 @@ Theorem storage_copy_dyn_footprint[local]:
     k < dimword (:256) /\ LENGTH bs < dimword (:256) /\
     i < 1 + word_size cap /\ b < 32 /\
     ~dyn_bytes_dead (apply_writes (n2w k) writes st) k cap (k+i) b ==>
-    32*i < 32 + 32 * word_size (LENGTH bs)
+    32*i < 32 + LENGTH bs
 Proof
   rpt gen_tac >> strip_tac >>
   `w2n (lookup_storage (n2w k) (apply_writes (n2w k) writes st)) = LENGTH bs` by
@@ -624,8 +623,13 @@ Proof
      simp[] >> Cases_on `tr` >>
      simp[Abbr `s1`, Abbr `es1`, storage_copy_backend_fold,
           set_storage_def, local_region_def, lookup_var_def] >> metis_tac[]) >>
-  irule stmt_state_rel_allocas_frame >> simp[] >>
-  qexistsl_tac [`es`, `s`] >> simp[] >> Cases_on `tr` >>
+  `immutable_base_zero cenv s1` by
+    (`immutable_base_zero cenv s` by fs[stmt_state_rel_def] >>
+     irule immutable_base_zero_frame >> qexists_tac `s` >>
+     Cases_on `tr` >> simp[Abbr `s1`, storage_copy_backend_fold, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >>
+  qpat_assum `immutable_base_zero cenv _` (irule_at Any) >> simp[] >>
+  qexistsl_tac [`s`, `es`] >> simp[] >> Cases_on `tr` >>
   simp[Abbr `s1`, storage_copy_backend_fold]
 QED
 
@@ -699,8 +703,15 @@ Theorem storage_copy_control_frame[local]:
                 vs_inst_idx := ix; vs_prev_bb := prev|>) =
     stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
 Proof
+  rpt gen_tac >>
+  `fmp_room ctx func
+     (s with <|vs_vars := V; vs_current_bb := bb;
+               vs_inst_idx := ix; vs_prev_bb := prev|>) =
+   fmp_room ctx func (s with vs_vars := V)` by
+    (irule fmp_room_fields_cong >> simp[]) >>
   simp[stmt_state_rel_def, state_rel_def, accounts_rel_def, local_ptrs_rel_def,
-       local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
+       local_region_def, local_backed_def, immutable_base_zero_alt,
+       lookup_var_def, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
        contract_storage_def, contract_transient_def, venomMemDefsTheory.alloca_inv_def,
        venomMemDefsTheory.allocas_non_overlapping_def,
@@ -826,7 +837,7 @@ Proof
           ((if tr then tstore else sstore) k (mload (w2n b) s) s))` by
        (irule stmt_state_rel_update_var >> simp[]) >>
      Cases_on `tr` >>
-     simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
+     simp[run_inst_seq_def, step_inst_base_opcode_eqs, exec_write2_def,
           mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
           FLOOKUP_UPDATE, stmt_state_rel_inst_idx] >>
      qpat_x_assum `stmt_state_rel _ _ _ _ _ (update_var _ _ _)` mp_tac >>
