@@ -55,7 +55,10 @@ Ancestors
    that labels are distinct and the program fits 2-byte label pushes, so
    no premise carries those.  vs_labels agrees with the assembly label
    offsets, so Label operands have the same value in
-   Venom and in the assembly. *)
+   Venom and in the assembly.  The entry block has fewer than 2^256
+   parameters, so PARAM's word ordinal doesn't wrap; an interim premise
+   until the stack-height bound supplies it, as every parameter is on the
+   entry stack. *)
 Theorem gen_fn_simulation:
   !fuel rpolicy unit cp prog ctx lo o2pc i r fn vs as Inv ra pc_ret rest.
     ctx = unit.cu_context /\
@@ -79,6 +82,7 @@ Theorem gen_fn_simulation:
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\ fn_entry_inv Inv ctx fn vs /\
     asm_block_at prog as.as_pc (execute_plan cp.cp_initial_fmp r.sr_plan) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
     fn_entry_state_rel cp fn vs as ra rest /\
     (fn_has_retpc fn ==> FLOOKUP o2pc (w2n ra) = SOME pc_ret)
     ==>

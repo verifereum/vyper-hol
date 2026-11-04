@@ -245,7 +245,12 @@ QED
    premise is fn_frame_inv's region clause for ps1, as in genFrameSim.
    With 17 or more parameters popmany_plan and optimistic_swap_plan can
    spill; the offset bound keeps those pushes from wrapping, as the
-   per-instruction lemmas' SORestore bound does.
+   per-instruction lemmas' SORestore bound does.  The parameter-count
+   bound keeps PARAM's word ordinal from wrapping: without it, a function
+   with more than 2^256 parameters is a counterexample
+   (fnFrameBoundaryEntryParams$entry_params_frame_sim_counterexample).
+   Every parameter is on the entry stack, so the stack-height bound
+   discharges it.
 
    Why it should hold: canonical_param_prefix orders the PARAM indices and
    puts RETPC_PARAM last, and fn_entry_state_rel stacks ra above
@@ -268,6 +273,7 @@ Theorem entry_params_frame_sim:
     r.sr_spill_base <= spill_base /\
     ps1.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     (!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)) /\
+    LENGTH (get_params (HD fn.fn_blocks).bb_instructions) < dimword (:256) /\
     fn_entry_state_rel cp fn vs as ra rest /\
     asm_block_at prog as.as_pc
       (execute_plan cp.cp_initial_fmp
