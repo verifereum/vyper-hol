@@ -399,6 +399,139 @@ Proof
   simp[EVERY_MEM] >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
+(* Scratch IDs are counted as sites, not dynamic executions. *)
+Theorem lower_dload_inst_supply_scratch:
+  lower_dload_inst_supply s i = (outs,s') /\
+  i.inst_id < lo /\ lo <= s.irs_next_inst ==>
+  ALL_DISTINCT (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id) outs)) /\
+  LENGTH (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id) outs) <=
+    (if i.inst_opcode = DLOAD then 1 else 0) /\
+  EVERY (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id ==>
+    s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst /\
+    j.inst_operands = [Lit 32w] /\ LENGTH j.inst_outputs = 1) outs
+Proof
+  gvs[lower_dload_inst_supply_def, AllCaseEqs(),
+      irSupplyTheory.fresh_inst_id_def] >>
+  rpt strip_tac >>
+  imp_res_tac irSupplyTheory.fresh_ir_var_contract >> gvs[]
+QED
+
+Theorem lower_dload_insts_supply_scratch:
+  !s outs s' lo. lower_dload_insts_supply s insts = (outs,s') /\
+  EVERY (\i. i.inst_id < lo) insts /\ lo <= s.irs_next_inst ==>
+  ALL_DISTINCT (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id) outs)) /\
+  LENGTH (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id) outs) <=
+    LENGTH (FILTER (\i. i.inst_opcode = DLOAD) insts) /\
+  EVERY (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id ==>
+    s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst /\
+    j.inst_operands = [Lit 32w] /\ LENGTH j.inst_outputs = 1) outs
+Proof
+  Induct_on `insts`
+  >- simp[lower_dload_insts_supply_def] >>
+  simp[Once lower_dload_insts_supply_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all lower_dload_inst_supply_scratch >> strip_tac >>
+  drule lower_dload_inst_supply_interval >> strip_tac >>
+  first_x_assum drule >> disch_then (qspec_then `lo` mp_tac) >>
+  impl_tac >- (simp[] >> decide_tac) >> strip_tac >>
+  drule lower_dload_insts_supply_interval >> strip_tac >>
+  gvs[FILTER_APPEND_DISTRIB, MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  conj_tac
+  >- (gvs[EVERY_MEM, MEM_MAP, MEM_FILTER] >> rpt strip_tac >>
+      res_tac >> gvs[] >> strip_tac >>
+      `lo <= j'.inst_id` by decide_tac >>
+      res_tac >> gvs[] >> decide_tac) >>
+  conj_tac
+  >- (Cases_on `h.inst_opcode = DLOAD` >> gvs[] >> decide_tac) >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
+            arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem lower_dload_blocks_supply_scratch:
+  !s bs s' lo. lower_dload_blocks_supply s bbs = (bs,s') /\
+  EVERY (\i. i.inst_id < lo) (fn_insts_blocks bbs) /\
+  lo <= s.irs_next_inst ==>
+  ALL_DISTINCT (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id)
+      (fn_insts_blocks bs))) /\
+  LENGTH (FILTER (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id)
+      (fn_insts_blocks bs)) <=
+    LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts_blocks bbs)) /\
+  EVERY (\j. j.inst_opcode = ALLOCA /\ lo <= j.inst_id ==>
+    s.irs_next_inst <= j.inst_id /\ j.inst_id < s'.irs_next_inst /\
+    j.inst_operands = [Lit 32w] /\ LENGTH j.inst_outputs = 1)
+    (fn_insts_blocks bs)
+Proof
+  Induct_on `bbs`
+  >- simp[lower_dload_blocks_supply_def, venomInstTheory.fn_insts_blocks_def] >>
+  simp[Once lower_dload_blocks_supply_def, lower_dload_block_supply_def,
+       AllCaseEqs(), venomInstTheory.fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all lower_dload_insts_supply_scratch >> strip_tac >>
+  drule lower_dload_insts_supply_interval >> strip_tac >>
+  first_x_assum drule >> disch_then (qspec_then `lo` mp_tac) >>
+  impl_tac >- (simp[] >> decide_tac) >> strip_tac >>
+  drule lower_dload_blocks_supply_interval >> strip_tac >>
+  gvs[venomInstTheory.fn_insts_blocks_def, FILTER_APPEND_DISTRIB,
+      MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  conj_tac
+  >- (gvs[EVERY_MEM, MEM_MAP, MEM_FILTER] >> rpt strip_tac >>
+      metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+                arithmeticTheory.LESS_LESS_EQ_TRANS,
+                prim_recTheory.LESS_REFL]) >>
+  gvs[EVERY_MEM] >> rpt strip_tac >>
+  metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
+            arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem lower_dload_function_supply_scratch:
+  lower_dload_function_supply s f = (g,s') /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts f) ==>
+  ALL_DISTINCT (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ s.irs_next_inst <= j.inst_id)
+      (fn_insts g))) /\
+  LENGTH (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ s.irs_next_inst <= j.inst_id)
+      (fn_insts g))) <=
+    LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts f)) /\
+  EVERY (\j. j.inst_opcode = ALLOCA /\ s.irs_next_inst <= j.inst_id ==>
+    j.inst_operands = [Lit 32w] /\ LENGTH j.inst_outputs = 1) (fn_insts g)
+Proof
+  simp[lower_dload_function_supply_def, AllCaseEqs()] >> strip_tac >>
+  drule lower_dload_blocks_supply_scratch >>
+  disch_then (qspec_then `s.irs_next_inst` mp_tac) >>
+  gvs[venomInstTheory.fn_insts_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_dload_function_supply_scratch_separation:
+  lower_dload_function_supply s f = (g,s') /\
+  EVERY (\i. i.inst_id < s.irs_next_inst) (fn_insts f) /\
+  MEM i (fn_insts f) ==>
+  ~MEM i.inst_id (MAP (\j. j.inst_id)
+    (FILTER (\j. j.inst_opcode = ALLOCA /\ s.irs_next_inst <= j.inst_id)
+      (fn_insts g)))
+Proof
+  simp[EVERY_MEM, MEM_MAP, MEM_FILTER] >> rpt strip_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >> simp[] >> decide_tac
+QED
+
+Theorem lower_dload_function_supply_alloca_origin:
+  lower_dload_function_supply s f = (g,s') /\
+  MEM j (fn_insts g) /\ j.inst_opcode = ALLOCA ==>
+  MEM j (fn_insts f) \/
+  MEM j.inst_id (MAP (\i. i.inst_id)
+    (FILTER (\i. i.inst_opcode = ALLOCA /\ s.irs_next_inst <= i.inst_id)
+      (fn_insts g)))
+Proof
+  strip_tac >> drule lower_dload_function_supply_interval >>
+  simp[EVERY_MEM] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> simp[MEM_MAP, MEM_FILTER] >>
+  metis_tac[]
+QED
+
 Theorem exec_alloca_fresh_projections:
   inst.inst_outputs = [out] /\
   FLOOKUP s.vs_allocas inst.inst_id = NONE /\
