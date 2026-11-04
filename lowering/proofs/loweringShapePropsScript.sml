@@ -35,7 +35,8 @@ Ancestors
 
 (* ===== Side conditions ===== *)
 
-(* The raw O1 source-shape theorem excludes DLOAD. This source-side
+(* S2's body-shape proof covers only static variable locations
+   (cenv_static_ok), and immutables are not static. This source-side
    packaging condition does not restrict the runtime immutable compiler. *)
 Definition immutable_free_program_def:
   immutable_free_program tops <=>
@@ -79,7 +80,8 @@ Definition expr_shape_root_def:
                        LENGTH es < type_builtin_arity tb)
 End
 
-(* No ImmutableLoc: its LocCode reads lower to DLOAD. *)
+(* No ImmutableLoc yet: the shape lemmas have no case for immutable reads
+   and writes (LocCode values). *)
 Definition loc_shape_ok_def:
   loc_shape_ok st (PtrVar op sz) = plain_operand st op /\
   loc_shape_ok st (ImmutableLoc n) = F /\
@@ -883,6 +885,13 @@ Proof
   BasicProvers.TOP_CASE_TAC >> simp[] >>
   rename1 `FLOOKUP _ _ = SOME loc` >> Cases_on `loc` >>
   gvs[loc_shape_ok_def] >> metis_tac[loc_shape_ok_def]
+QED
+
+Theorem value_shape_ok_location_not_code[local]:
+  !st vv. value_shape_ok st vv ==>
+    (case vv_location vv of SOME l => l | NONE => LocMemory) <> LocCode
+Proof
+  Cases_on `vv` >> simp[value_shape_ok_def, vv_location_def]
 QED
 
 Theorem value_shape_ok_operand[local]:
@@ -9583,11 +9592,7 @@ Theorem compile_iter_elem_copy_shape[local]:
 Proof
   rpt strip_tac >> simp[compile_iter_elem_copy_def] >>
   Cases_on `slots` >> simp[]
-  >- (IF_CASES_TAC
-      >- (Cases_on `loc` >> gvs[compile_ptr_load_def] >>
-          stmt_bind `\v st. plain_operand st v /\ plain_operand st dst` `value_op`
-            (stmt_frame_emit `\st. plain_operand st src`) >> stmt_plain_void_drop) >>
-      stmt_sequence `\u st. T` (irule compile_slot_to_memory_shape >> simp[]) >>
+  >- (stmt_sequence `\u st. T` (irule compile_slot_to_memory_shape >> simp[]) >>
       irule shape_step_return >> simp[]) >>
   IF_CASES_TAC
   >- (IF_CASES_TAC
@@ -9944,8 +9949,7 @@ Proof
   qmatch_goalsub_abbrev_tac `compile_ptr_load _ _ loc` >>
   reverse (Cases_on `loc <> LocCode`)
   >- (simp[shape_step_def] >> rpt strip_tac >>
-      drule infer_array_location_not_code >> simp[Abbr `loc`] >>
-      disch_then (qspec_then `arr_e` mp_tac) >> simp[]) >>
+      drule value_shape_ok_location_not_code >> simp[Abbr `loc`]) >>
   stmt_bind `\v st. plain_operand st v /\
        (plain_operand st (vv_operand arr_vv) /\ cenv_shape_ok st cenv)` `len_op`
     (suspend "length") >>
@@ -9984,7 +9988,6 @@ Resume compile_for_array_shape[labels]:
        `\u st. live st /\ cenv_shape_ok st body_cenv`] >>
      rpt conj_tac >> TRY (simp[Abbr `live`] >> NO_TAC) >>
      ho_match_mp_tac shape_step_frame >> simp[emit_local_alloca_shape]) >>
-  stmt_sequence `\u st. live st` (suspend "check") >>
   map_every stmt_label
     [(`entry_lbl`, "iter_entry"), (`cond_lbl`, "iter_cond"), (`body_lbl`, "iter_body"),
      (`incr_lbl`, "iter_incr"), (`exit_lbl`, "iter_exit")] >>
@@ -9997,18 +10000,6 @@ Resume compile_for_array_shape[labels]:
     (ho_match_mp_tac shape_step_fresh_var >> simp[SF ETA_ss]) >>
   suspend "index"
 QED
-Resume compile_for_array_shape[check]:
-  irule shape_step_conseq >>
-  qexistsl_tac [`compiler_label`, `\st. live st /\ plain_operand st len_op`,
-    `\u st. live st /\ T`] >>
-  rpt conj_tac >> TRY (simp[Abbr `live`] >> NO_TAC) >>
-  ho_match_mp_tac shape_step_frame >> simp[] >>
-  IF_CASES_TAC
-  >- (stmt_bind `\v st. plain_operand st v` `invalid` stmt_plain_emit >>
-      stmt_bind `\v st. plain_operand st v` `valid` stmt_plain_emit >>
-      stmt_plain_void_drop) >>
-  irule shape_step_return >> simp[]
-QED
 Resume compile_for_array_shape[index]:
   qabbrev_tac `idx_live = \st. live st /\ plain_operand st (Var idx_var)` >>
   `shape_stable idx_live` by
@@ -10018,6 +10009,7 @@ Resume compile_for_array_shape[index]:
      stmt_shape_emit_simp >> simp[label_or_plain_def, plain_operand_def,
        stackPlanTypesTheory.is_label_operand_def] >>
      simp[Abbr `idx_live`, plain_operand_def]) >>
+  stmt_sequence `\u st. idx_live st` (suspend "check") >>
   stmt_sequence `\u st. idx_live st`
     (ho_match_mp_tac stmt_shape_jmp >> simp[SF ETA_ss]) >>
   stmt_sequence `\u st. idx_live st`
@@ -10047,6 +10039,18 @@ Resume compile_for_array_shape[index]:
      simp[Abbr `idx_live`, Abbr `live`, shape_stable_conj,
           cenv_shape_ok_stable, stmt_shape_stable_plain] >> stmt_plain_emit) >>
   suspend "body"
+QED
+Resume compile_for_array_shape[check]:
+  irule shape_step_conseq >>
+  qexistsl_tac [`compiler_label`, `\st. idx_live st /\ plain_operand st len_op`,
+    `\u st. idx_live st /\ T`] >>
+  rpt conj_tac >> TRY (simp[Abbr `idx_live`, Abbr `live`] >> NO_TAC) >>
+  ho_match_mp_tac shape_step_frame >> simp[] >>
+  IF_CASES_TAC
+  >- (stmt_bind `\v st. plain_operand st v` `invalid` stmt_plain_emit >>
+      stmt_bind `\v st. plain_operand st v` `valid` stmt_plain_emit >>
+      stmt_plain_void_drop) >>
+  irule shape_step_return >> simp[]
 QED
 Resume compile_for_array_shape[body]:
   stmt_sequence `\u st. idx_live st` (suspend "copy") >>
@@ -13189,9 +13193,9 @@ QED
 (* S2's statement, proved from the generator and source lemmas above.
    package_internal_blocks splits the block stream at each internal entry
    label; internal_descriptors_ok keeps those labels apart from
-   each other and from every other label. The raw O1 theorem excludes
-   DLOAD, hence the explicit immutable-free source-side hypothesis; runtime
-   immutable compilation itself remains unrestricted. *)
+   each other and from every other label. The body-shape lemmas need
+   static variable locations, hence the explicit immutable-free source-side
+   hypothesis; runtime immutable compilation itself remains unrestricted. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_shape:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\

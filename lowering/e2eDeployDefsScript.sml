@@ -26,13 +26,20 @@ Definition constructor_args_encode_def:
                (ListV abi_vals)
 End
 
-(* All Call constructors, not just external calls or effectful roots. The
- * existing total traversal inspects nested statements, assignment indices,
- * assert/raise reasons and expression children, even in unsupported syntax.
- * Pop and computed builtins are not Call and remain admitted by this test.
+(* All Call constructors, not just external calls or effectful roots, and the
+ * precompile builtins (sha256, ecrecover, ecadd, ecmul): the constructor
+ * source runs without the call oracle, while the EVM can fail their
+ * STATICCALL for lack of gas. The existing total traversal inspects nested
+ * statements, assignment indices, assert/raise reasons and expression
+ * children, even in unsupported syntax. Pop and the other builtins remain
+ * admitted by this test.
  *)
 Definition constructor_call_root_def:
-  constructor_call_root e <=> case e of Call ty target args default => T | _ => F
+  constructor_call_root e <=>
+    case e of
+      Call ty target args default => T
+    | Builtin ty bt args => precompile_builtin bt
+    | _ => F
 End
 
 Definition constructor_call_free_def:

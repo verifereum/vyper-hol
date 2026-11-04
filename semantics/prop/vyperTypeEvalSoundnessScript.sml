@@ -5125,28 +5125,28 @@ Resume eval_scc_type_sound_results_mutual[Expr_Builtin]:
       (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]) >>
     `?ret_tv. evaluate_type (get_tenv cx) ty = SOME ret_tv` by
       (gvs[well_formed_type_def, IS_SOME_EXISTS]) >>
-    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
-    rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = builtin_res` >>
-    Cases_on `builtin_res` >>
-    FIRST [
-      rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
-      strip_tac >>
-      gvs[nested_return_value_case, no_type_error_result_def] >>
-      gvs[expr_result_typed_def, expr_runtime_typed_def, expr_type_def,
-          value_result_typed_Value] >>
-      mp_tac (Q.INST [`blt` |-> `bt`, `ts` |-> `MAP expr_type es`,
-                       `acc` |-> `(args_st:evaluation_state).accounts`,
-                       `tv` |-> `ret_tv`, `v` |-> `builtin_v`,
-                       `cx` |-> `cx`, `tvs` |-> `tvs`, `vs` |-> `vs`,
-                       `ty` |-> `ty`]
-                well_typed_builtin_app_success_type) >>
-      simp[],
-      strip_tac >>
-      gvs[nested_raise_error_case, no_type_error_result_def] >>
-      strip_tac >> spose_not_then assume_tac >> gvs[] >>
-      `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
-      drule_all well_typed_builtin_app_no_type_error >>
-      disch_then (qspec_then `msg` mp_tac) >> gvs[]]) >>
+    Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs`
+    >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs = INL builtin_v` >>
+        `value_has_type ret_tv builtin_v` by
+          (drule_all well_typed_builtin_app_success_type >> simp[]) >>
+        asm_rewrite_tac[] >> simp_tac(srw_ss())[return_def] >>
+        Cases_on `precompile_call_success bt args_st` >>
+        rename1 `precompile_call_success bt args_st = (pc_res,pc_st)` >>
+        drule precompile_call_success_state >> strip_tac >>
+        Cases_on `pc_res`
+        >- (asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+            gvs[no_type_error_result_def, expr_result_typed_def,
+                expr_runtime_typed_def, expr_type_def,
+                value_result_typed_Value]) >>
+        drule precompile_call_success_exception >> strip_tac >>
+        asm_rewrite_tac[] >> simp_tac(srw_ss())[] >> strip_tac >>
+        gvs[no_type_error_result_def]) >>
+    simp_tac(srw_ss())[raise_def] >> strip_tac >>
+    gvs[no_type_error_result_def] >>
+    strip_tac >> spose_not_then assume_tac >> gvs[] >>
+    `!item. bt = Env item ==> item <> MsgGas` by (rpt strip_tac >> gvs[]) >>
+    drule_all well_typed_builtin_app_no_type_error >>
+    disch_then (qspec_then `msg` mp_tac) >> gvs[]) >>
   strip_tac >> gvs[eval_exprs_failure_builtin_case, no_type_error_result_def]
 QED
 
@@ -8211,7 +8211,10 @@ Resume eval_scc_type_sound_results_mutual[Trace_Builtin_Body]:
   asm_rewrite_tac[] >>
   qpat_x_assum `get_accounts _ = _` mp_tac >>
   simp[NoAsms, get_accounts_def, return_def] >> strip_tac >>
-  rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC
+  rpt BasicProvers.VAR_EQ_TAC >>
+  imp_res_tac precompile_call_success_state >>
+  gvs[typed_scope_transition_def] >>
+  qexists_tac `events` >> simp[]
 QED
 Resume eval_scc_type_sound_results_mutual[Trace_Expr_Attribute]:
   RESUME_TAC >> trace_result_tac "Trace_Expr_Attribute"

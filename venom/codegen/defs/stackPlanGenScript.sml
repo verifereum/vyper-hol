@@ -353,11 +353,20 @@ End
    These are what the caller (pipeline proof) must discharge.
    ========================================================================= *)
 
-(* Per-instruction: no pre-codegen opcodes *)
+(* There is no runtime operation for Python's _DeadStackItem.  Label operands
+   are never looked up on the existing stack, so this private marker gives the
+   plan model the same non-aliasing behaviour without emitting bytecode. *)
+Definition dead_stack_marker_def:
+  dead_stack_marker = Label ""
+End
+
+(* Per-instruction: no pre-codegen opcodes, and no operand the planner could
+   mistake for its dead_stack_marker *)
 Definition codegen_ready_inst_def:
   codegen_ready_inst inst ⇔
     ¬ is_pre_codegen_opcode inst.inst_opcode ∧
-    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst)
+    (inst.inst_opcode = INVOKE ==> invoke_operands_wf inst) ∧
+    ¬MEM dead_stack_marker inst.inst_operands
 End
 
 (* A block's PHI prefix keeps each PHI operand to its own PHI: no variable
@@ -663,13 +672,6 @@ End
 Definition cleanup_elision_safe_def:
   cleanup_elision_safe ch growth cfg fn bb h <=>
     cleanup_height_safe ch growth cfg fn bb h
-End
-
-(* There is no runtime operation for Python's _DeadStackItem.  Label operands
-   are never looked up on the existing stack, so this private marker gives the
-   plan model the same non-aliasing behaviour without emitting bytecode. *)
-Definition dead_stack_marker_def:
-  dead_stack_marker = Label ""
 End
 
 Definition below_all_live_def:

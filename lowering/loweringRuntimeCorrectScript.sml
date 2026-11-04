@@ -49,7 +49,8 @@ Ancestors
   vyperTypeSelectedEntrySoundness vyperTypeSystem
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
   placeTypingBuildProps allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
-  vyperTypeContractContext vyperTypeContract
+  vyperTypeContractContext vyperTypeContract vyperTypeExternalDefaults
+  bodySimStmtCases
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
   vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants finite_map
@@ -60,19 +61,52 @@ val _ = Parse.hide "body";
 
 (* ===== The source side (#639) ===== *)
 
-(* The call valid_vyper_call selects runs call_external_body from the
-   bound arguments, with pending deletions finalised on success. *)
+(* send_call_value reads and writes only accounts, so it runs the same
+   under any scopes. *)
+Theorem send_call_value_with_scopes:
+  !mut cx s r s'.
+    send_call_value mut cx s = (r, s') ==>
+    s'.scopes = s.scopes /\
+    !sc. send_call_value mut cx (s with scopes := sc) =
+         (r, s' with scopes := sc)
+Proof
+  rw[send_call_value_def, transfer_value_def, vyperStateTheory.bind_def,
+     vyperStateTheory.ignore_bind_def, vyperStateTheory.check_def,
+     vyperStateTheory.assert_def, vyperStateTheory.return_def,
+     vyperStateTheory.raise_def, vyperStateTheory.get_accounts_def,
+     vyperStateTheory.update_accounts_def] >>
+  gvs[AllCaseEqs()]
+QED
+
+(* call_external_body sets the scopes before it reads them. *)
+Theorem call_external_body_scopes[local]:
+  !am cx nr mut tenv s sc env body ret.
+    call_external_body am cx nr mut tenv (s with scopes := sc) env body ret =
+    call_external_body am cx nr mut tenv s env body ret
+Proof
+  simp[call_external_body_def, vyperStateTheory.bind_def,
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.set_scopes_def]
+QED
+
+(* The call valid_vyper_call selects sends the call value and then runs
+   call_external_body from the bound arguments, with pending deletions
+   finalised on success.  es0 is the state after the value moved, as
+   external_entry_reaches_body starts the body from it. *)
 Theorem call_external_selected_body:
-  !tops am tx ret mut args fbody env orc.
+  !tops am tx ret mut args fbody env orc es0.
     source_deployment_rel tops am tx /\
     lookup_function NONE tx.function_name External tops =
       SOME (mut, F, args, [], ret, fbody) /\
     LENGTH tx.args = LENGTH args /\
-    bind_arguments (type_env tops) args tx.args = SOME env ==>
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) ==>
     call_external orc [] am tx =
-      case call_external_body orc [] am
+      case call_external_body am
              (initial_evaluation_context am.sources am.layouts tx NONE)
-             F mut (type_env tops) env fbody ret of
+             F mut (type_env tops) es0 env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
@@ -83,13 +117,31 @@ Proof
        lookup_exported_function_def, get_self_code_def, get_module_code_def,
        initial_evaluation_context_def] >>
   qmatch_goalsub_abbrev_tac `call_external_function orc [] am cx` >>
+  `send_call_value mut cx
+     (initial_state am [FEMPTY] with
+        <| outcomes := orc; requests := []; gas_obs := [] |>) =
+   (INL (), es0 with scopes := [FEMPTY])` by
+    (`initial_state am [FEMPTY] with
+        <| outcomes := orc; requests := []; gas_obs := [] |> =
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>)
+        with scopes := [FEMPTY]` by simp[initial_state_def] >>
+     pop_assum SUBST1_TAC >>
+     qpat_x_assum `send_call_value _ _ _ = _` mp_tac >>
+     simp[Abbr `cx`, initial_evaluation_context_def] >> strip_tac >>
+     drule send_call_value_with_scopes >> simp[]) >>
+  `eval_external_defaults cx [] (es0 with scopes := [FEMPTY]) =
+   (INL [], es0 with scopes := [FEMPTY])` by
+    simp[eval_external_defaults_def, evaluate_def, vyperStateTheory.bind_def,
+         vyperStateTheory.ignore_bind_def, vyperStateTheory.get_scopes_def,
+         vyperStateTheory.set_scopes_def, vyperStateTheory.finally_def,
+         vyperStateTheory.return_def] >>
   `call_external_function orc [] am cx F mut tops [(NONE, tops)] args []
      tx.args fbody ret =
-   call_external_body orc [] am cx F mut (type_env tops) env fbody ret` by
+   call_external_body am cx F mut (type_env tops) (es0 with scopes := [FEMPTY])
+     env fbody ret` by
     (qpat_assum `_ = type_env tops` (SUBST1_TAC o SYM) >>
-     irule call_external_function_body >>
-     simp[evaluate_defaults_def, Abbr `cx`]) >>
-  simp[]
+     irule call_external_function_body >> gvs[Abbr `cx`]) >>
+  gvs[call_external_body_scopes]
 QED
 
 Theorem external_selected_body_typing:
@@ -643,7 +695,9 @@ QED
    the return type in a type environment env_t of the parameters, which
    the compile env and the source state agree with and whose locals fit
    the allocation limit, and the external frame has no return PC and no
-   lock. *)
+   lock. expr_sim_inv's storage-variable clause (each storage variable has
+   its declared module type and no hash-map info) follows from body_inv
+   and the single-module fact via body_inv_storage_var_types. *)
 Theorem external_body_frame:
   !tops rpolicy unit am tx ret vs mut args fbody env es0 lbl cenv0 pos_args
    min_cds is_payable nkey ut' iv rt st cenv sa.
@@ -741,6 +795,10 @@ Proof
   >- (rpt strip_tac >>
       `FLOOKUP cenv.ce_struct_fields name = SOME fields` by simp[] >>
       drule_all external_package_struct_fields >> simp[])
+  >- (irule body_inv_storage_var_types >>
+      goal_assum (drule_at Any) >>
+      gvs[source_deployment_rel_def, get_module_code_def,
+          initial_evaluation_context_def])
   >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any)) >>
   rpt strip_tac >>
   qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
@@ -904,12 +962,12 @@ Theorem call_external_body_run[local]:
       (INL (), es0) /\
     eval_stmts cx fbody es0 = (res, es') ==>
     (res = INL () ==>
-     call_external_body orc [] am cx F mut tenv env fbody ret =
+     call_external_body am cx F mut tenv es0 env fbody ret =
        (INL NoneV,
         abstract_machine_from_state am.sources am.exports am.layouts es',
         es'.requests)) /\
     (!v. res = INR (ReturnException v) ==>
-     call_external_body orc [] am cx F mut tenv env fbody ret =
+     call_external_body am cx F mut tenv es0 env fbody ret =
        case evaluate_type tenv ret of
          NONE => (INR (Error (TypeError "eval ret")), am, es'.requests)
        | SOME tv =>
@@ -921,16 +979,17 @@ Theorem call_external_body_run[local]:
                 abstract_machine_from_state am.sources am.exports am.layouts
                   es', es'.requests)) /\
     (!e. res = INR e /\ (!v. e <> ReturnException v) ==>
-     call_external_body orc [] am cx F mut tenv env fbody ret =
+     call_external_body am cx F mut tenv es0 env fbody ret =
        (INR e, am, es'.requests))
 Proof
   rpt gen_tac >> strip_tac >>
-  `initial_state am [env] with
-     <| outcomes := orc; requests := []; gas_obs := [] |> =
-   initial_state am [env] with <| outcomes := orc; requests := [] |>` by
-    simp[initial_state_def] >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
+  `es0 with scopes := [env] = es0` by
+    simp[vyperStateTheory.evaluation_state_component_equality] >>
   simp[call_external_body_def, vyperStateTheory.bind_def,
-       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def] >>
+       vyperStateTheory.ignore_bind_def, vyperStateTheory.return_def,
+       vyperStateTheory.set_scopes_def] >>
   rpt strip_tac >> gvs[]
   >- (BasicProvers.EVERY_CASE_TAC >> gvs[])
   >> Cases_on `e` >> gvs[]
@@ -1045,8 +1104,7 @@ Proof
   Cases_on `eval_stmts (initial_evaluation_context am.sources am.layouts tx
                           NONE) fbody es0` >> rename1 `_ = (res, es')` >>
   drule_all external_body_source_ok >> strip_tac >>
-  drule_all call_external_selected_body >>
-  disch_then (qspec_then `SOME vs.vs_outcomes` assume_tac) >>
+  drule_all call_external_selected_body >> strip_tac >>
   qabbrev_tac `cx = initial_evaluation_context am.sources am.layouts tx NONE` >>
   `rt = if ret = NoneT then NONE else SOME ret` by
     gvs[package_external_fn_def, set_external_package_target_def] >>

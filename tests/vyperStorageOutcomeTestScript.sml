@@ -99,14 +99,16 @@ Proof
   strip_tac >> drule_all take_call_outcome_storage_suffix >> simp[]
 QED
 
-(* Actual computed calls skip both oracle consumption and request recording. *)
+(* Actual computed calls consume one outcome but record no request. *)
 Theorem computed_outcome_suffix_client:
   take_call_outcome target data value st = (res,st') /\
   st.outcomes = SOME os /\
   computed_precompile (call_outcome_request target data value st) ==>
-  st'.outcomes = st.outcomes /\ st'.requests = st.requests
+  st'.outcomes = SOME (DROP 1 os) /\ st'.requests = st.requests
 Proof
-  strip_tac >> drule_all take_call_outcome_suffix >> rw[]
+  strip_tac >> drule_all take_call_outcome_suffix >> strip_tac >>
+  gvs[take_call_outcome_def] >> pairarg_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[take_outcome_rest, SND]
 QED
 
 Theorem successful_adoption_storage_client:
@@ -154,10 +156,12 @@ QED
 Theorem focused_computed_exhausted_snapshots:
   outcome_test_take_adopt 9w [] (SOME 0) [] 3 4w 1 2 0 /\
   outcome_test_take_adopt 2w [] (SOME 0)
-    [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 1 /\
+    [outcome_test_outcome F (2 ** 256)] 3 4w 1 1 0 /\
+  outcome_test_take_adopt 2w [] (SOME 0)
+    [outcome_test_outcome T 17; outcome_test_outcome T 17] 3 4w 1 1 1 /\
   outcome_test_take_adopt 1w [] NONE [] 3 4w 1 1 0 /\
   outcome_test_take_adopt 6w (REPLICATE 63 0w ++ [1w]) (SOME 0)
-    [outcome_test_outcome T 17] 3 4w 1 1 1
+    [outcome_test_outcome T 17] 3 4w 1 1 0
 Proof
   ACCEPT_TAC outcome_exhausted_computed_cv
 QED

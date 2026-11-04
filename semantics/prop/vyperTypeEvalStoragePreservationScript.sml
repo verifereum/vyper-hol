@@ -2415,7 +2415,13 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Builtin]:
   Cases_on `args_res` >> gvs[bind_def, return_def, raise_def,
     get_accounts_def, lift_sum_def]
   >- (Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) x` >>
-      gvs[return_def, raise_def] >> rpt strip_tac >> gvs[]) >>
+      gvs[return_def, raise_def] >>
+      Cases_on `precompile_call_success bt args_st` >>
+      imp_res_tac precompile_call_success_state >> gvs[] >>
+      rename1 `precompile_call_success bt args_st = (pres,_)` >>
+      Cases_on `pres` >> gvs[return_def, raise_def] >> rpt strip_tac >>
+      gvs[] >> irule contract_storage_well_formed_accounts_transient_frame >>
+      qexists_tac `args_st` >> simp[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -3290,6 +3296,7 @@ Theorem eval_ext_call_storage_preserved[local]:
 Proof
   PairCases_on `sig` >>
   Cases_on `vs` >- (simp[eval_ext_call_def, raise_def] >> rw[] >> gvs[]) >>
+  rename1 `head::tail` >>
   simp[eval_ext_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, check_def, lift_option_type_def, lift_option_def,
        lift_sum_runtime_def, get_accounts_def, get_transient_storage_def,

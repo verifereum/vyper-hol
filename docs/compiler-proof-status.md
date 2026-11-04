@@ -26,7 +26,8 @@ Current integration boundary:
   is wider than the shape needs. The public `vyper_call_correct` theorem still
   carries `supported_program`, which implies `raw_shape_free_program`.
   Immutable compilation and its encoding/deployment proofs remain available;
-  the raw O1 shape contract excludes `DLOAD` and `DLOADBYTES`, so this proof
+  the raw O1 shape contract admits `DLOAD` and `DLOADBYTES`, but the
+  body-shape proof has no case for immutable locations yet, so this proof
   does not yet cover runtime immutable reads. The dated audit's exact public
   call schema predates this explicit restriction.
 

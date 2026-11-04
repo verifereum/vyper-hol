@@ -1,0 +1,12 @@
+f01_for_calldata_dynarray
+f03_for_storage_dynarray
+f04_for_storage_fixed
+f05_for_literal_list
+f06_for_calldata_fixed
+f20_for_list_of_vars
+f23_for_local_fixed
+f24_for_local_dynarray
+f38_for_storage_struct_field_arr_set
+f50_for_subscript_row
+g8_a_iter_struct_elem
+g8_a_iter_transient

@@ -6,7 +6,9 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["vyperHolScript.sml",
+roots = ["tests/createSizeBoundaryTestScript.sml",
+  "tests/createSizeClassificationCounterexampleScript.sml",
+  "vyperHolScript.sml",
          "lowering/calldataFiniteTypedScript.sml",
          "lowering/calldataAggregateTypedScript.sml",
          "lowering/actualDecoderPackagingScript.sml",
@@ -18,6 +20,7 @@ roots = ["vyperHolScript.sml",
          "lowering/exprSimConvertFromBytesScript.sml",
          "lowering/exprSimConvertBytesScript.sml",
          "tests/vyperExternalHeadersTestScript.sml",
+         "tests/vyperExternalDefaultsTestScript.sml",
          "tests/vyperRawSystemTypingTestScript.sml",
          "tests/selfdestructReturnDataTestScript.sml",
          "tests/vyperPopTypingTestScript.sml",

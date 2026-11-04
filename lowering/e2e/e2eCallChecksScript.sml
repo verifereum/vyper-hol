@@ -1,6 +1,7 @@
 (* TASK056 public schema and saved-kernel/classification gate.
  * Raw O1 call correctness is restricted to immutable-free programs because
- * its source-shape invariant excludes DLOAD; immutable compilation is unchanged.
+ * the source-shape proof covers only static variable locations; immutable
+ * compilation is unchanged.
  * Not a stage producer, definitionless rollup, or full-project audit.
  * Substantive grouped boundary consumer below needs no stage admission.
  *)
@@ -44,8 +45,6 @@ val expected_top = ``
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       (precompile_call_starved es /\
-        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
        call_result_rel tops ret am tx es r es')``;
 val saved_top = DB.fetch "e2eCorrectness" "vyper_call_correct";
 val () = if aconv expected_top (Thm.concl saved_top) then

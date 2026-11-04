@@ -317,6 +317,14 @@ Definition expr_sim_inv_def:
     IS_SOME es.outcomes /\
     contract_storage_well_formed cx es /\ storage_layout_safe cx /\
     oracle_storage_ok cx es /\
+    (* A storage or transient variable has its declared type in
+       ce_module_var_type, where the lowering reads a pop's element type,
+       and is not a mapping (build_var_type_map, build_hashmap_info). *)
+    (!src id ts tr typ id_str.
+       get_module_code cx src = SOME ts /\
+       find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) ==>
+       cenv.ce_hashmap_info (src,id) = NONE /\
+       cenv.ce_module_var_type (src,id) = SOME typ) /\
     popped_keys_indexed es.scopes /\
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
@@ -1793,6 +1801,16 @@ Proof
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
 QED
 
+(* The premises eval_expr_read_type_sound needs, from expr_body_pre. *)
+Theorem expr_body_pre_read_type_sound_pre[local]:
+  expr_body_pre cenv cx env e es ==>
+  well_typed_expr env e /\ env_consistent env cx es /\ state_well_typed es /\
+  context_well_typed cx /\ accounts_well_typed es.accounts /\
+  functions_well_typed cx /\ call_evaluation_safe cx (int_calls_expr e)
+Proof
+  simp[expr_body_pre_def, expr_sim_inv_def]
+QED
+
 Theorem lowered_zero_bytestring_read_empty:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
@@ -1828,9 +1846,9 @@ Proof
       gvs[expr_body_pre_def] >> goal_assum drule >> simp[] >>
       metis_tac[])
   >> (strip_tac >>
+      drule expr_body_pre_read_type_sound_pre >> strip_tac >>
       drule_at (Pat `bind _ _ _ = _`) eval_expr_read_type_sound >>
-      disch_then (qspec_then `env` mp_tac) >>
-      gvs[expr_body_pre_def, expr_sim_inv_def] >> strip_tac >>
+      disch_then (qspec_then `env` mp_tac) >> simp[] >> strip_tac >>
       irule value_runtime_typed_zero_bytestring_empty >>
       qexists_tac `env` >>
       gvs[lowered_value_type_def, expr_type_def] >> metis_tac[])
