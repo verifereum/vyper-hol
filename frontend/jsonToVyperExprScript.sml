@@ -1148,11 +1148,16 @@ Definition translate_iter_def:
   (translate_iter ctx var_ty (JIter_Range [] _ _) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
           (Literal var_ty (IntL (integer$int_of_num 0)))) /\
-  (translate_iter ctx var_ty (JIter_Range [e] _ _) =
+  (translate_iter ctx var_ty (JIter_Range [e] fvs bound) =
     Range (Literal var_ty (IntL (integer$int_of_num 0)))
-          (translate_expr ctx e)) /\
-  (translate_iter ctx var_ty (JIter_Range (s::e::_) _ _) =
-    Range (translate_expr ctx s) (translate_expr ctx e)) /\
+          (case (bound,fvs) of
+             (NONE,[SOME n]) => Literal var_ty (IntL n)
+           | _ => translate_expr ctx e)) /\
+  (translate_iter ctx var_ty (JIter_Range (s::e::_) fvs bound) =
+    case (bound,fvs) of
+      (NONE,SOME lo::SOME hi::_) =>
+        Range (Literal var_ty (IntL lo)) (Literal var_ty (IntL hi))
+    | _ => Range (translate_expr ctx s) (translate_expr ctx e)) /\
   (translate_iter ctx var_ty (JIter_Array e _) =
     Array (translate_expr ctx e))
 End

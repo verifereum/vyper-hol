@@ -192,9 +192,39 @@ Proof
   >~ [`eval_expr _ (Literal _ _)`] >- suspend "literal_expr"
   >~ [`eval_expr _ (IfExp _ _ _ _)`] >- suspend "if_expr"
   >~ [`eval_expr _ (Call _ (RawCallTarget _) _ _)`] >-
-    (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
+         int_calls_expr_def] >>
+     reverse conj_tac
+     >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+     strip_tac >>
+     qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+       (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+     irule exprOracleStorageInterfacesTheory.eval_raw_call_expr_oracle_storage >>
+     rpt (goal_assum (drule_at Any)) >>
+     reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+     rpt strip_tac
+     >~ [`eval_exprs _ _ _ = _`]
+     >- (first_x_assum irule >> qexists_tac `env` >>
+         first_assum (irule_at Any) >> fs[]) >>
+     metis_tac[runtime_storage_consistent_storage])
   >~ [`eval_expr _ (Call _ (RawCallCalldataTarget _) _ _)`] >-
-    (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
+    (strip_tac >> rpt gen_tac >> strip_tac >>
+     gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
+         int_calls_expr_def] >>
+     reverse conj_tac
+     >- (rpt strip_tac >> gvs[Once well_typed_expr_def]) >>
+     strip_tac >>
+     qpat_x_assum `well_typed_expr env (Call _ _ _ _)`
+       (strip_assume_tac o SRULE [Once well_typed_expr_def]) >>
+     irule exprOracleStorageInterfacesTheory.eval_raw_call_calldata_expr_oracle_storage >>
+     rpt (goal_assum (drule_at Any)) >>
+     reverse conj_tac >- metis_tac[runtime_storage_consistent_storage] >>
+     rpt strip_tac
+     >~ [`eval_exprs _ _ _ = _`]
+     >- (first_x_assum irule >> qexists_tac `env` >>
+         first_assum (irule_at Any) >> fs[]) >>
+     metis_tac[runtime_storage_consistent_storage])
   >~ [`eval_expr _ (Call _ (CreateTarget _ _ _) _ _)`] >-
     (rpt strip_tac >> gvs[expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def])
   >~ [`eval_exprs _ []`] >-

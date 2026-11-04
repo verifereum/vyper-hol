@@ -70,7 +70,21 @@ Definition alloc_limits_expr_def:
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (TypeBuiltin t tb ty es) =
     (type_alloc_ok cenv t /\
-     (tb = Empty /\ ~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64) /\
+     (case tb of
+        Empty => (~is_word_type ty ==> type_memory_bytes cenv ty < 2 ** 64)
+      | AbiEncode ensure mid =>
+          (let single = (LENGTH es = 1 /\ ~ensure) in
+           let enc_ty = if single then expr_type (HD es)
+                        else TupleT (MAP expr_type es) in
+           let mid_size = case mid of NONE => 0 | SOME _ => 4 in
+           32 + 32 * word_size
+             (abi_size_bound cenv.ce_struct_fields enc_ty + mid_size) < 2 ** 64 /\
+           (~single ==> type_memory_bytes cenv enc_ty < 2 ** 64))
+      | AbiDecode unwrap =>
+          type_memory_bytes cenv
+            (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) <
+          2 ** 64
+      | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
     (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
@@ -213,3 +227,43 @@ Termination
     INL (_,s) => stmt_size s | INR (_,ss) => list_size stmt_size ss)` >>
   simp[stmt_size_def, list_size_def]
 End
+
+(* ABI allocations are physical capacities, not just used byte counts. *)
+Theorem alloc_limits_abi_encode_output:
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) ==>
+  32 + 32 * word_size
+    (abi_size_bound ce.ce_struct_fields
+      (if LENGTH es = 1 /\ ~ensure then expr_type (HD es)
+       else TupleT (MAP expr_type es)) +
+     (case mid of NONE => 0 | SOME _ => 4)) < 2 ** 64
+Proof
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+Theorem alloc_limits_abi_encode_staging:
+  alloc_limits_expr ce (TypeBuiltin t (AbiEncode ensure mid) ty es) /\
+  ~(LENGTH es = 1 /\ ~ensure) ==>
+  type_memory_bytes ce (TupleT (MAP expr_type es)) < 2 ** 64
+Proof
+  Cases_on `LENGTH es = 1 /\ ~ensure` >>
+  simp[Once alloc_limits_expr_def, LET_THM]
+QED
+
+Theorem alloc_limits_abi_decode_output:
+  alloc_limits_expr ce (TypeBuiltin t (AbiDecode unwrap) ty es) ==>
+  type_memory_bytes ce
+    (if unwrap /\ needs_external_call_wrap ty then TupleT [ty] else ty) < 2 ** 64
+Proof
+  simp[Once alloc_limits_expr_def]
+QED
+
+Theorem alloc_limits_abi_rounded_regressions:
+  32 + 32 * word_size (32+4) = 96 /\
+  32 + 32 * word_size (32+4) <> 68 /\
+  32 + 32 * word_size 32 = 64 /\
+  EVERY (\n. n <= 32 * word_size n) [0;1;31;32;33;36] /\
+  32 + 32 * word_size (2 ** 64 - 64) < 2 ** 64 /\
+  ~(32 + 32 * word_size (2 ** 64 - 63) < 2 ** 64)
+Proof
+  EVAL_TAC
+QED

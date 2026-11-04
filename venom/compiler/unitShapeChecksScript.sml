@@ -84,7 +84,16 @@ Theorem excluded_opcode_checks:
   EVERY (\op. inst_shape_ok (mk_inst 0 op [] []))
     [ASSERT_UNREACHABLE; DLOAD; DLOADBYTES; DALLOCA; DRET; GETFMP; SETFMP;
      RETFMP; INITIAL_FMP; BUMP; FMP_PARAM; MEMTOP; RET] /\
-  raw_opcode_ok RET
+  raw_opcode_ok RET /\
+  ~raw_opcode_ok PHI
+Proof
+  EVAL_TAC
+QED
+
+(* A PHI needs at least two incoming (label, value) pairs. *)
+Theorem phi_arity_checks:
+  ~inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
+  inst_shape_ok (mk_inst 0 PHI [Label "p"; Var "x"; Label "q"; Var "z"] ["y"])
 Proof
   EVAL_TAC
 QED
@@ -95,6 +104,7 @@ Theorem label_position_checks:
   label_positions_ok (mk_inst 0 JMP [Label "target"] []) /\
   label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "f"] []) /\
   ~label_positions_ok (mk_inst 0 JNZ [Label "c"; Label "t"; Label "f"] []) /\
+  ~label_positions_ok (mk_inst 0 JNZ [Var "c"; Label "t"; Label "t"] []) /\
   label_positions_ok (mk_inst 0 PHI [Label "p"; Var "x"] ["y"]) /\
   label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Var "arg"] []) /\
   ~label_positions_ok (mk_inst 0 INVOKE [Label "callee"; Label "arg"] []) /\
@@ -329,6 +339,41 @@ Theorem first_block_predecessor_checks:
   ~first_block_no_preds (mk_raw_function "entry"
     [<| bb_label := "entry"; bb_instructions := [mk_inst 0 JMP [Label "b"] []] |>;
      <| bb_label := "b"; bb_instructions := [mk_inst 1 JMP [Label "entry"] []] |>])
+Proof
+  EVAL_TAC
+QED
+
+(* ===== Call success checks ===== *)
+
+(* An entry block holding insts, beside a block "fail" that reverts. *)
+Definition call_probe_fn_def:
+  call_probe_fn insts = mk_raw_function "entry"
+    [<| bb_label := "entry"; bb_instructions := insts |>;
+     <| bb_label := "fail";
+        bb_instructions := [mk_inst 9 REVERT [Lit 0w; Lit 0w] []] |>]
+End
+
+Definition probe_call_def:
+  probe_call = mk_inst 0 CALL (REPLICATE 7 (Lit 0w)) ["s"]
+End
+
+Theorem call_check_checks:
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSERT [Var "s"] []; mk_inst 2 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 ASSIGN [Var "s"] ["t"];
+     mk_inst 2 ASSERT [Var "t"] []; mk_inst 3 STOP [] []]) /\
+  call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "ok"; Label "fail"] []]) /\
+  ~call_checks_ok (call_probe_fn [probe_call; mk_inst 1 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 MSTORE [Lit 0w; Lit 0w] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 INVOKE [Label "f"] [];
+     mk_inst 2 ASSERT [Var "s"] []; mk_inst 3 STOP [] []]) /\
+  ~call_checks_ok (call_probe_fn
+    [probe_call; mk_inst 1 JNZ [Var "s"; Label "fail"; Label "ok"] []])
 Proof
   EVAL_TAC
 QED

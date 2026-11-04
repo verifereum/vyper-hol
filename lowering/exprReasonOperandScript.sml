@@ -391,7 +391,9 @@ Theorem reason_type_builtin_convert[local]:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `rt` >> gvs[] >>
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[reason_result_shape_def]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>

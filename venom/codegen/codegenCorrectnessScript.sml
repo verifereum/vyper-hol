@@ -382,7 +382,8 @@ Theorem codegen_correct:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/
-             precompile_call_starved es \/
+             (precompile_call_starved es /\
+              ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
              venom_frame_rel es r es' (run_context fuel unit.cu_context vs))
 Proof
   cheat

@@ -23,13 +23,26 @@ Theorem abi_decoder_sign_extend_cast_bit:
     if word_msb w then 1w else 0w
 Proof
   strip_tac >>
-  `8 * n + 7 = dimindex (:'a) - 1 /\ dimindex (:'a) <= 256` by decide_tac >>
-  Cases_on `word_msb w` >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_lsr_def, sw2sw, word_msb_def, word_index, word_0,
-     dimindex_256, abi_signed_bit_one] >>
-  Cases_on `i = 0` >> gvs[sw2sw, word_msb_def] >>
-  `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >> asm_rewrite_tac[]
+  `8 * n + 7 = dimindex (:'a) - 1` by decide_tac >>
+  `8 * n + 7 < dimindex (:'a)` by decide_tac >>
+  `8 * n + 7 < 256` by decide_tac >>
+  Cases_on `word_msb w` >> (
+  asm_simp_tac bool_ss [] >>
+  rewrite_tac [fcpTheory.CART_EQ] >>
+  qx_gen_tac `i` >> strip_tac >>
+  Cases_on `i = 0`
+  >- (asm_simp_tac std_ss
+        [word_and_def, fcpTheory.FCP_BETA, word_index, word_0,
+         abi_signed_bit_one] >>
+      asm_simp_tac std_ss [word_lsr_def, fcpTheory.FCP_BETA, dimindex_256] >>
+      asm_simp_tac arith_ss [sw2sw, dimindex_256] >>
+      `8 * (n + 1) - 1 = dimindex (:'a) - 1` by decide_tac >>
+      qpat_x_assum `8 * (n + 1) - 1 = _` (fn th => pure_rewrite_tac [th]) >>
+      full_simp_tac bool_ss [word_msb_def] >>
+      simp_tac std_ss [word_index, dimindex_256, abi_signed_bit_one]) >>
+  asm_simp_tac std_ss
+    [word_and_def, fcpTheory.FCP_BETA, word_index, word_0,
+     abi_signed_bit_one])
 QED
 
 Theorem abi_decoder_sign_extend_cast_mask:
@@ -38,12 +51,16 @@ Theorem abi_decoder_sign_extend_cast_mask:
      (sw2sw w : bytes32) || ~(1w << dimindex (:'a) - 1w)
    else (sw2sw w : bytes32) && (1w << dimindex (:'a) - 1w)) = sw2sw w
 Proof
-  strip_tac >> Cases_on `word_msb w` >>
-  simp_tac bool_ss [] >>
-  rw_tac (std_ss ++ fcpLib.FCP_ss ++ numSimps.ARITH_ss)
-    [word_and_def, word_or_def, word_1comp_def, sw2sw, SHIFT_1_SUB_1,
-     dimindex_256] >>
-  Cases_on `i < dimindex (:'a)` >> gvs[]
+  strip_tac >> Cases_on `word_msb w` >> (
+  asm_simp_tac bool_ss [] >>
+  rewrite_tac [fcpTheory.CART_EQ] >>
+  qx_gen_tac `i` >> strip_tac >>
+  asm_simp_tac std_ss
+    [word_and_def, word_or_def, word_1comp_def, fcpTheory.FCP_BETA] >>
+  asm_simp_tac std_ss [SHIFT_1_SUB_1] >>
+  Cases_on `i < dimindex (:'a)`
+  >- asm_simp_tac bool_ss [] >>
+  asm_simp_tac arith_ss [sw2sw, dimindex_256])
 QED
 
 Theorem abi_decoder_sign_extend_cast:

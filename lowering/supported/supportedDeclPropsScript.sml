@@ -29,11 +29,11 @@ Proof
   EVAL_TAC
 QED
 
-Theorem supported_function_flags_defaults_reject:
+Theorem supported_function_flags_defaults:
   ~supported_declaration_header []
     (FunctionDecl External View T F "f" [] [] NoneT []) /\
-  ~supported_declaration_header []
-    (FunctionDecl Internal Pure F T "f" [] [] NoneT []) /\
+  supported_declaration_header []
+    (FunctionDecl External Pure F T "f" [] [] (BaseT (BytesT (Dynamic 8))) []) /\
   ~supported_declaration_header []
     (FunctionDecl External View F F "f" [("x", BaseT BoolT)]
       [Literal (BaseT BoolT) (BoolL T)] NoneT [])

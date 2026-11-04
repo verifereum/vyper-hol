@@ -20,10 +20,8 @@
  *     compile_call lowers RawLog, SelfDestructTarget and CreateTarget to
  *     INVALID (builtinCreate's compile_create_* are not called yet), where
  *     the source can succeed.
- *   - compile_raw_call_sim and compile_raw_call_calldata_sim: the source
- *     raw_call runs the callee on the EVM even with the outcome oracle,
- *     where the lowered CALL/STATICCALL consumes an oracle outcome. With
- *     is_delegate_call both sides run the EVM, but differently: the source
+ *   - compile_raw_call_sim and compile_raw_call_calldata_sim with
+ *     is_delegate_call: both sides run the EVM, but differently: the source
  *     (run_delegate_call) dispatches a precompile address to
  *     dispatch_precompiles and fails unless ext_call_success_accounts_ok,
  *     while Venom's DELEGATECALL (exec_delegatecall) runs the target's
@@ -40,11 +38,13 @@
  *     source (eval_create), which state_rel's accounts_rel requires empty,
  *     while Venom's create result (extract_venom_result) drops them.
  *
- * expr_sim_pre excludes raw_call and the creates (~expr_has_evm_run e),
- * since the source runs them on the EVM even with the outcome oracle, so
- * compile_raw_call_sim, compile_raw_call_calldata_sim and
- * compile_create_sim hold vacuously for now; they stay cheated until that
- * exclusion is lifted.
+ * A call or staticcall raw_call takes its outcome from the oracle, as the
+ * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
+ * and the creates (~expr_has_evm_run e), since the source runs them on the
+ * EVM even with the outcome oracle, so those cases hold vacuously.  It also
+ * excludes raw_calls without revert_on_failure: a computed precompile is
+ * answered as a success without the oracle on both sides, while the EVM
+ * call can fail for lack of gas and such a raw_call returns the failure.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

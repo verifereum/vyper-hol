@@ -101,7 +101,9 @@ The entire public theorem is:
   call_outcomes_ok tops am tx (MAP SND (call_trace es))
   ==>
   ?r es'. run_call es = SOME (r, es') /\
-    (frame_resource_starved es r es' \/ precompile_call_starved es \/
+    (frame_resource_starved es r es' \/
+     (precompile_call_starved es /\
+      ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
      call_result_rel tops ret am tx es r es')
 ```
 
@@ -200,8 +202,10 @@ gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
 - Resource alternatives are genuine frame OutOfGas/StackOverflow, or a failed
-  value-zero computed precompile whose pure input was valid. Invalid ecadd/ecmul
-  input is not precompile starvation. There is no existential sufficient-gas
+  value-zero computed precompile whose pure input was valid, and then only when
+  the frame itself ends in an exception: a starved call never lets the frame
+  finish normally or commit other effects. Invalid ecadd/ecmul input is not
+  precompile starvation. There is no existential sufficient-gas
   loophole, gas bound or guarantee of success regardless of resources.
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
