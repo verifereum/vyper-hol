@@ -223,6 +223,49 @@ Proof
   irule dead_ret_taint_transport >> goal_assum drule >> metis_tac[]
 QED
 
+Theorem related_taint_overwrite:
+  (!x y. R x y /\ y IN Mt ==> x IN Ms) /\
+  (!x y. R x y /\ y IN Nt ==> x IN Ns) /\
+  (!x y. R x y /\ x IN Ws ==> y IN Wt) ==>
+  !x y. R x y /\ y IN ((Mt UNION Nt) DIFF Wt) ==>
+        x IN ((Ms UNION Ns) DIFF Ws)
+Proof
+  simp[pred_setTheory.IN_UNION, pred_setTheory.IN_DIFF] >> metis_tac[]
+QED
+
+Theorem translated_range_member:
+  (b + k IN {i:num | b + off <= i /\ i < b + off + len}) <=>
+  (b' + k IN {i:num | b' + off <= i /\ i < b' + off + len})
+Proof
+  simp_tac std_ss [pred_setTheory.GSPECIFICATION] >> decide_tac
+QED
+
+Theorem data_copy_taint_related:
+  si.inst_opcode = DLOADBYTES /\ ti.inst_opcode = CODECOPY /\
+  si.inst_operands = [sd; ss; sn] /\ ti.inst_operands = [td; ts; tnop] /\
+  eval_operand sd s = SOME sw /\ eval_operand ss s = SOME sr /\
+  eval_operand sn s = SOME nw /\
+  eval_operand td t = SOME tw /\ eval_operand ts t = SOME tr /\
+  eval_operand tnop t = SOME nw /\
+  (!x y. Rel x y /\ y IN tt.t_mem ==> x IN st.t_mem) /\
+  (!x y. Rel x y /\ y IN new_site_bytes t t' ==> x IN new_site_bytes s s') /\
+  (!x y. Rel x y /\ w2n sw <= x /\ x < w2n sw + w2n nw ==>
+         w2n tw <= y /\ y < w2n tw + w2n nw) ==>
+  !x y. Rel x y /\ y IN mem_taint tt ti t t' ==> x IN mem_taint st si s s'
+Proof
+  strip_tac >>
+  `mem_taint st si s s' =
+     (st.t_mem UNION new_site_bytes s s') DIFF
+       {i | w2n sw <= i /\ i < w2n sw + w2n nw}` by
+    (irule data_copy_taint >> metis_tac[]) >>
+  `mem_taint tt ti t t' =
+     (tt.t_mem UNION new_site_bytes t t') DIFF
+       {i | w2n tw <= i /\ i < w2n tw + w2n nw}` by
+    (irule data_copy_taint >> metis_tac[]) >>
+  asm_rewrite_tac[] >> ho_match_mp_tac related_taint_overwrite >>
+  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
