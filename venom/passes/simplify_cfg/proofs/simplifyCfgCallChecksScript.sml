@@ -1391,9 +1391,103 @@ QED
 
 Finalise do_merge_jump_call_checks_ok
 
+val collapse_shape = ``\e f.
+  ALL_DISTINCT (fn_labels f) /\ f.fn_blocks <> [] /\
+  EVERY bb_well_formed f.fn_blocks /\
+  EVERY inst_wf (fn_insts f) /\ EVERY label_positions_ok (fn_insts f) /\
+  first_block_no_preds f /\ fn_succs_closed f /\
+  (!bb i l. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions /\
+    i.inst_opcode = PHI /\ MEM (Label l) i.inst_operands ==>
+    MEM l (pred_labels f bb.bb_label)) /\
+  (HD f.fn_blocks).bb_label = e``;
+
+val structural_shape = ``\e f.
+  ALL_DISTINCT (fn_labels f) /\ f.fn_blocks <> [] /\
+  EVERY bb_well_formed f.fn_blocks /\
+  EVERY inst_wf (fn_insts f) /\ EVERY label_positions_ok (fn_insts f) /\
+  first_block_no_preds f /\ fn_succs_closed f /\
+  (HD f.fn_blocks).bb_label = e``;
+
+Theorem collapse_dfs_call_checks_ok:
+  !f lm vis lbl. ^collapse_shape e f /\ call_checks_ok f ==>
+    ^collapse_shape e (FST (collapse_dfs f lm vis lbl)) /\
+    call_checks_ok (FST (collapse_dfs f lm vis lbl))
+Proof
+  ho_match_mp_tac collapse_dfs_preserves_predicate >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> conj_tac
+      >- (irule do_merge_jump_collapse_shape >> metis_tac[]) >>
+      irule do_merge_jump_call_checks_ok >>
+      gvs[fn_insts_def, EVERY_MEM, fn_insts_blocks_mem] >>
+      metis_tac[lookup_block_member_label]) >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (irule chain_merge_collapse_shape >> metis_tac[]) >>
+  `a.bb_label = lbl /\ b.bb_label = next` by
+    metis_tac[lookup_block_member_label] >>
+  irule chain_merge_call_checks_ok >>
+  gvs[fn_insts_def, EVERY_MEM, fn_insts_blocks_mem] >>
+  metis_tac[lookup_block_member_label]
+QED
+
+Theorem simplify_cfg_round_call_checks_ok:
+  ^structural_shape e f /\ call_checks_ok f ==>
+  ^structural_shape e (FST (simplify_cfg_round_with_labels f)) /\
+  call_checks_ok (FST (simplify_cfg_round_with_labels f))
+Proof
+  strip_tac >> fs[] >>
+  `^structural_shape e (remove_unreachable_blocks f)` by
+    (irule remove_unreachable_blocks_structural_shape >> fs[]) >>
+  `call_checks_ok (remove_unreachable_blocks f)` by
+    (irule remove_unreachable_call_checks_ok >> fs[]) >>
+  `^collapse_shape e (fix_all_phis (remove_unreachable_blocks f))` by
+    (irule fix_all_phis_collapse_shape >> simp[]) >>
+  `call_checks_ok (fix_all_phis (remove_unreachable_blocks f))` by
+    (irule fix_all_phis_call_checks_ok >> fs[]) >>
+  Cases_on `fn_entry_label f`
+  >- (Cases_on `f.fn_blocks` >> gvs[fn_entry_label_def, entry_block_def]) >>
+  qabbrev_tac `a = fix_all_phis (remove_unreachable_blocks f)` >>
+  Cases_on `collapse_dfs a [] [] x` >> PairCases_on `r` >>
+  `^collapse_shape e q /\ call_checks_ok q` by
+    (drule_all collapse_dfs_call_checks_ok >>
+     disch_then (qspecl_then [`[]`, `[]`, `x`] mp_tac) >> simp[] >> metis_tac[]) >>
+  `subst_block_labels_fn r0 q = q` by
+    (irule collapse_dfs_empty_log_subst_identity >> metis_tac[]) >>
+  `^structural_shape e (remove_unreachable_blocks q)` by
+    (irule remove_unreachable_blocks_structural_shape >> fs[]) >>
+  `call_checks_ok (remove_unreachable_blocks q)` by
+    (irule remove_unreachable_call_checks_ok >> fs[]) >>
+  `^collapse_shape e (fix_all_phis (remove_unreachable_blocks q))` by
+    (irule fix_all_phis_collapse_shape >> simp[]) >>
+  `call_checks_ok (fix_all_phis (remove_unreachable_blocks q))` by
+    (irule fix_all_phis_call_checks_ok >> fs[]) >>
+  simp[simplify_cfg_round_with_labels_def, Abbr `a`] >>
+  Cases_on `r0 = []` >> simp[] >> metis_tac[]
+QED
+
+Theorem simplify_cfg_iter_call_checks_ok:
+  !n f. ^structural_shape e f /\ call_checks_ok f ==>
+    ^structural_shape e (FST (simplify_cfg_iter_with_labels n f)) /\
+    call_checks_ok (FST (simplify_cfg_iter_with_labels n f))
+Proof
+  Induct_on `n` >- simp[simplify_cfg_iter_with_labels_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all simplify_cfg_round_call_checks_ok >> strip_tac >>
+  Cases_on `simplify_cfg_round_with_labels f` >> fs[] >>
+  pure_once_rewrite_tac[simplify_cfg_iter_with_labels_def] >> simp[] >>
+  Cases_on `q.fn_blocks = f.fn_blocks` >- simp[] >>
+  first_x_assum drule >>
+  Cases_on `simplify_cfg_iter_with_labels n q` >> simp[] >> metis_tac[]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
 Proof
-  cheat
+  strip_tac >>
+  `^structural_shape (HD fn.fn_blocks).bb_label fn /\ call_checks_ok fn` by
+    (fs[wf_function_def, fn_inst_wf_def, fn_shape_ok_def,
+        fn_has_entry_def, EVERY_MEM, inst_shape_ok_def,
+        fn_insts_def, fn_insts_blocks_mem] >> metis_tac[]) >>
+  drule_all simplify_cfg_iter_call_checks_ok >>
+  disch_then (qspec_then `LENGTH fn.fn_blocks` mp_tac) >>
+  simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def]
 QED
