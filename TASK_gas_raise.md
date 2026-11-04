@@ -43,7 +43,7 @@ Independent statement audit answered PROVABLE for this exact root under current 
 - lowering/stmtSimRaiseScript.sml: exact assigned root and retained proof.
 - lowering/stmtSimDefsScript.sml, lowering/stmtSimPropsScript.sml, lowering/loweringPostsScript.sml: actual statement judgment, post and common emitted-abort fact.
 - lowering/emitHelperPropsScript.sml: existing primitive zero-revert and invalid facts, exported without restatement.
-- lowering/fragGasPathScript.sml, lowering/gasCountScript.sml: actual target paths and GAS counts.
+- lowering/fragGasPathScript.sml, venom/proofs/gasCountScript.sml: actual target paths and GAS counts.
 - lowering/gasOutcomeScript.sml, lowering/gasSummaryScript.sml, lowering/gasContextScript.sml: strict source-action and terminal summary.
 - lowering/defs/stmtLoweringScript.sml, lowering/defs/emitHelperScript.sml, lowering/defs/compileEnvScript.sml: actual compiler and entries.
 - semantics/vyperInterpreterScript.sml, semantics/vyperStateScript.sml: actual source evaluation.
