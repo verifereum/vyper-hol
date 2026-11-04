@@ -67,24 +67,6 @@ Libs
 
 (* ===== Helpers ===== *)
 
-(* An expression with no internal call in it has no internal calls to
-   make.  Reasons and conditions are pure (supported_pure_no_internal_call). *)
-Theorem no_internal_call_int_calls:
-  (!e. ~supported_expr_exists expr_internal_call_root e ==>
-       int_calls_expr e = []) /\
-  (!t. ~supported_target_exists expr_internal_call_root t ==>
-       int_calls_target t = []) /\
-  (!es. ~supported_exprs_exists expr_internal_call_root es ==>
-        int_calls_exprs es = []) /\
-  (!eo. ~supported_opt_exists expr_internal_call_root eo ==>
-        int_calls_opt eo = []) /\
-  (!kes. ~supported_fields_exists expr_internal_call_root kes ==>
-         int_calls_named_exprs kes = [])
-Proof
-  ho_match_mp_tac int_calls_expr_ind >>
-  rw[int_calls_expr_def, supported_expr_exists_def,
-     expr_internal_call_root_def]
-QED
 
 Theorem supported_pure_int_calls:
   !tops e. supported_pure_expr tops e ==> int_calls_expr e = []
@@ -102,20 +84,6 @@ Proof
   Cases_on `id0` >> simp[]
 QED
 
-(* An expression with no effect in it has no internal calls to make. *)
-Theorem no_effect_int_calls[local]:
-  (!e. ~supported_expr_exists expr_effect_root e ==> int_calls_expr e = []) /\
-  (!es. ~supported_exprs_exists expr_effect_root es ==>
-        int_calls_exprs es = [])
-Proof
-  `!x. expr_internal_call_root x ==> expr_effect_root x` by
-    (Cases >> simp[expr_internal_call_root_def, expr_effect_root_def]) >>
-  conj_tac >> rpt strip_tac
-  >- (irule (cj 1 no_internal_call_int_calls) >>
-      metis_tac[supported_expr_exists_mono]) >>
-  irule (cj 3 no_internal_call_int_calls) >>
-  metis_tac[supported_expr_exists_mono]
-QED
 
 Theorem supported_pure_forms_int_calls[local]:
   (!tops e. supported_pure_expr tops e ==> int_calls_expr e = []) /\

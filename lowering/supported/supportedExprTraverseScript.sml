@@ -6,7 +6,7 @@
    expr_has_dynamic_decode, target_has_dynamic_decode, expr_has_evm_run. *)
 Theory supportedExprTraverse
 Ancestors
-  supportedExprs vyperAST vyperABI vyperContext list pair
+  supportedExprs vyperAST vyperABI vyperContext list pair vyperTypeCallGraph
 
 Definition supported_expr_exists_def:
   supported_expr_exists p (Name ty name) = p (Name ty name) /\
@@ -292,4 +292,42 @@ Theorem supported_expr_no_evm_run:
 Proof
   rw[supported_expr_def, expr_has_evm_run_def] >>
   metis_tac[supported_pure_no_evm_run, supported_effect_no_evm_run]
+QED
+
+(* Syntactic absence of calls, shared by expression and body simulations. *)
+Theorem no_internal_call_int_calls:
+  (!e. ~supported_expr_exists expr_internal_call_root e ==>
+       int_calls_expr e = []) /\
+  (!t. ~supported_target_exists expr_internal_call_root t ==>
+       int_calls_target t = []) /\
+  (!es. ~supported_exprs_exists expr_internal_call_root es ==>
+        int_calls_exprs es = []) /\
+  (!eo. ~supported_opt_exists expr_internal_call_root eo ==>
+        int_calls_opt eo = []) /\
+  (!kes. ~supported_fields_exists expr_internal_call_root kes ==>
+         int_calls_named_exprs kes = [])
+Proof
+  ho_match_mp_tac int_calls_expr_ind >>
+  rw[int_calls_expr_def, supported_expr_exists_def,
+     expr_internal_call_root_def]
+QED
+
+Theorem no_effect_int_calls:
+  (!e. ~supported_expr_exists expr_effect_root e ==> int_calls_expr e = []) /\
+  (!es. ~supported_exprs_exists expr_effect_root es ==>
+        int_calls_exprs es = [])
+Proof
+  `!x. expr_internal_call_root x ==> expr_effect_root x` by
+    (Cases >> simp[expr_internal_call_root_def, expr_effect_root_def]) >>
+  conj_tac >> rpt strip_tac
+  >- (irule (cj 1 no_internal_call_int_calls) >>
+      metis_tac[supported_expr_exists_mono]) >>
+  irule (cj 3 no_internal_call_int_calls) >>
+  metis_tac[supported_expr_exists_mono]
+QED
+
+Theorem expr_no_effect_int_calls:
+  ~expr_has_effect e ==> int_calls_expr e = []
+Proof
+  simp[expr_has_effect_def, cj 1 no_effect_int_calls]
 QED
