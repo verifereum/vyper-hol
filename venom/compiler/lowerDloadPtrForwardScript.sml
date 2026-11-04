@@ -1,6 +1,7 @@
 Theory lowerDloadPtrForward
 Ancestors
-  contextCodegenRel venomExecSemantics list rich_list pred_set
+  contextCodegenRel venomExecSemantics ptrDiscipline venomState
+  list rich_list pred_set finite_map
 
 (* Interval membership is deliberately distinct from revert_forward_at:
    the latter marks only the two endpoints. *)
@@ -104,4 +105,59 @@ Proof
   asm_rewrite_tac[] >> Cases_on `op` >>
   simp[resolve_block_assigns_def, resolve_block_assigns_nonvar] >>
   Cases_on `MEM s x.inst_outputs` >> simp[]
+QED
+
+(* A definition-interface probe: ASSIGN out_taint tests definedness before
+   copying operand taint. Equal variable taints alone do not suffice. *)
+Theorem forwarding_taint_definedness_probe:
+  !i s.
+  let inst = i with <| inst_opcode := ASSIGN;
+                       inst_operands := [Var "x"]; inst_outputs := ["y"] |>;
+      tn = entry_taint with t_var := FEMPTY |+ ("x", {0});
+      a = s with vs_vars := FEMPTY |+ ("x", 0w);
+      b = s with vs_vars := FEMPTY
+  in
+    (!v. op_taint tn (Var v) = op_taint tn (Var v)) /\
+    op_taint (step_taint inst a a tn) (Var "y") = {0} /\
+    op_taint (step_taint inst b b tn) (Var "y") = {} /\
+    op_taint (step_taint inst a a tn) (Var "y") <>
+      op_taint (step_taint inst b b tn) (Var "y")
+Proof
+  simp[step_taint_def, out_taint_def, op_taint_def,
+       set_var_taint_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
+QED
+
+Theorem forwarding_step_var_taint:
+  (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = RETURNDATACOPY) /\
+  (!v. v IN V ==> op_taint tn (Var v) = op_taint un (Var v)) /\
+  (!v. MEM (Var v) inst.inst_operands ==> v IN V) /\
+  (!op. MEM op inst.inst_operands ==>
+    (eval_operand op s = NONE <=> eval_operand op t = NONE)) ==>
+  !v. v IN V ==>
+    op_taint (step_taint inst s s' tn) (Var v) =
+    op_taint (step_taint inst t t' un) (Var v)
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> op_taint tn op = op_taint un op` by
+    (Cases >> simp[op_taint_def] >> metis_tac[op_taint_def]) >>
+  `out_taint tn inst s = out_taint un inst t` by
+    (Cases_on `inst.inst_operands` >- simp[out_taint_def] >>
+     rename1 `inst.inst_operands = a::rest` >>
+     Cases_on `rest`
+     >- (simp[out_taint_def] >>
+         Cases_on `eval_operand a s` >>
+         Cases_on `eval_operand a t` >> gvs[] >> metis_tac[]) >>
+     rename1 `inst.inst_operands = a::b::rest` >>
+     Cases_on `rest` >> simp[out_taint_def] >>
+     Cases_on `eval_operand a s` >>
+     Cases_on `eval_operand a t` >> gvs[]) >>
+  (rpt strip_tac >>
+  `op_taint tn (Var v) = op_taint un (Var v)` by metis_tac[] >>
+  fs[op_taint_def] >>
+  simp[step_taint_def, op_taint_def, set_var_taint_def] >>
+  Cases_on `inst.inst_outputs`
+  >- simp[FLOOKUP_DRESTRICT] >>
+  rename1 `inst.inst_outputs = dst::outs` >>
+  Cases_on `outs` >> simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt IF_CASES_TAC >> simp[])
 QED
