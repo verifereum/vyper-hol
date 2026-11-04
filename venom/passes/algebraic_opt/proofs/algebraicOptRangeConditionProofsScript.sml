@@ -135,3 +135,115 @@ Proof
   drule_all ao_assign_step_value >>
   gvs[eval_operand_def, lookup_var_def]
 QED
+
+Theorem ao_pure2_step_value[local]:
+  !f inst u w lhs rhs x.
+    inst.inst_operands = [lhs;rhs] /\ inst.inst_outputs = [x] /\
+    exec_pure2 f inst u = OK w ==>
+    ?a b. eval_operand lhs u = SOME a /\ eval_operand rhs u = SOME b /\
+          lookup_var x w = SOME (f a b)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[exec_pure2_def, AllCaseEqs()] >>
+  simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+
+
+
+Theorem ao_source_trace_eq_refine_sound:
+  !ctx fn trace bp r prod x lhs rhs target use_opt h t value rs b.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\ prod.inst_opcode = EQ /\
+    prod.inst_outputs = [x] /\ prod.inst_operands = [lhs;rhs] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) /\
+    in_range_state rs t.vs_vars /\ (b <=> value <> 0w) ==>
+    in_range_state (range_apply_eq lhs rhs b rs) t.vs_vars
+Proof
+  rpt gen_tac >> strip_tac >>
+  `prod.inst_opcode <> PHI /\ ~is_terminator prod.inst_opcode /\
+   MEM x prod.inst_outputs` by simp[is_terminator_def] >>
+  drule_all ao_source_trace_last_producer_operands >> strip_tac >>
+  `exec_pure2 (\a b. bool_to_word (a = b)) prod u = OK w` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[Once step_inst_def, step_inst_base_def]) >>
+  drule_all ao_pure2_step_value >> strip_tac >>
+  `eval_operand lhs t = SOME a /\ eval_operand rhs t = SOME b'` by
+    metis_tac[listTheory.MEM] >>
+  qpat_x_assum `!op. _` kall_tac >>
+  Cases_on `a = b'` >>
+  gvs[lookup_var_def, venomExecSemanticsTheory.bool_to_word_def] >>
+  irule range_apply_eq_sound >> simp[] >>
+  rpt strip_tac >> gvs[eval_operand_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem ao_compare_step_value[local]:
+  !q ctx inst u w lhs rhs x.
+    (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/
+     inst.inst_opcode = SLT \/ inst.inst_opcode = SGT) /\
+    inst.inst_operands = [lhs;rhs] /\ inst.inst_outputs = [x] /\
+    step_inst q ctx inst u = OK w ==>
+    ?a b. eval_operand lhs u = SOME a /\ eval_operand rhs u = SOME b /\
+      lookup_var x w = SOME (bool_to_word
+        (if inst.inst_opcode = LT then w2n a < w2n b
+         else if inst.inst_opcode = GT then w2n a > w2n b
+         else if inst.inst_opcode = SLT then w2i a < w2i b
+         else w2i a > w2i b))
+Proof
+  rpt gen_tac >> strip_tac >> simp[] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def] >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  pure_asm_rewrite_tac[opcode_case_def] >> strip_tac >>
+  drule_all ao_pure2_step_value >>
+  simp[integer_wordTheory.WORD_LTi, integer_wordTheory.WORD_GTi]
+QED
+
+Theorem ao_source_trace_compare_refine_sound:
+  !ctx fn trace bp r prod x lhs rhs target use_opt h t value rs b.
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\ trace <> [] /\
+    ao_source_trace ctx fn trace /\ LAST trace = (h,F,t) /\
+    lookup_var x (SND (SND (HD trace))) = NONE /\
+    lookup_var x t = SOME value /\ MEM bp fn.fn_blocks /\
+    get_instruction bp r = SOME prod /\
+    (prod.inst_opcode = LT \/ prod.inst_opcode = GT \/
+     prod.inst_opcode = SLT \/ prod.inst_opcode = SGT) /\
+    prod.inst_outputs = [x] /\ prod.inst_operands = [lhs;rhs] /\
+    phi_prefix_length bp.bb_instructions <= r /\
+    lookup_block t.vs_current_bb fn.fn_blocks = SOME target /\
+    def_available_at fn target use_opt x /\
+    (case use_opt of
+       SOME use => get_instruction target t.vs_inst_idx = SOME use /\
+                   use.inst_opcode <> PHI
+     | NONE => ?term. get_instruction target t.vs_inst_idx = SOME term /\
+                      is_terminator term.inst_opcode) /\
+    in_range_state rs t.vs_vars /\ (b <=> value <> 0w) ==>
+    in_range_state (range_apply_compare prod.inst_opcode lhs rhs b rs) t.vs_vars
+Proof
+  rpt gen_tac >> disch_tac >>
+  `prod.inst_opcode <> PHI /\ ~is_terminator prod.inst_opcode /\
+   MEM x prod.inst_outputs` by
+    (fs[is_terminator_def] >> metis_tac[]) >>
+  (* Each opcode case consumes the same generic event and operand boundary. *)
+  fs[SF CONJ_ss] >>
+  drule_all ao_source_trace_last_producer_operands >> strip_tac >>
+  drule_at (Pat `step_inst _ _ _ _ = _`) ao_compare_step_value >>
+  simp[] >> strip_tac >>
+  `eval_operand lhs t = SOME a /\ eval_operand rhs t = SOME b'` by
+    metis_tac[listTheory.MEM] >>
+  qpat_x_assum `!op. _` kall_tac >>
+  irule range_apply_compare_sound >> simp[] >>
+  rpt strip_tac >>
+  gvs[eval_operand_def, lookup_var_def] >>
+  qmatch_goalsub_abbrev_tac `bool_to_word test` >>
+  Cases_on `test` >> simp[venomExecSemanticsTheory.bool_to_word_def]
+QED
