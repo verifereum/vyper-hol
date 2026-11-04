@@ -6,7 +6,7 @@ Ancestors
   exprLoweringProps accountsRelProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTyping
   vyperValueOperation vyperStorageLayoutSafety vyperLookupStorage
-  vyperTypeGlobalLookupSoundness
+  vyperTypeGlobalLookupSoundness vyperTypeInvariants vyperTypeEnv list
 
 Theorem compile_toplevel_storage_vv_sim_mem:
   !ctx func cenv cx env ty ann src id es ts tr typ id_str slot tvt v.
@@ -67,6 +67,92 @@ Proof
   drule_all toplevel_storage_read_decodes >> metis_tac[]
 QED
 
+Theorem compile_toplevel_immutable_sim_mem:
+  !ctx func cenv cx env ty ann src id es ts.
+    expr_sim_pre cenv cx env (TopLevelName ann (src, id)) es /\
+    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE ==>
+    expr_vv_sim_mem ctx func cenv cx ty (TopLevelName ann (src, id)) es
+Proof
+  rw[expr_vv_sim_mem_def] >>
+  `env_consistent env cx es /\ state_well_typed es /\
+   well_typed_expr env (TopLevelName ann (src,id))` by
+    fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_find_NONE_bare_global >> strip_tac >>
+  `src = cenv.ce_module /\
+   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+         !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
+              off + type_memory_size tv < dimword (:256)` by
+    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, LET_THM] >>
+  simp[get_immutables_def, get_address_immutables_def, lift_option_type_def,
+       bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> simp[return_def, raise_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables cenv.ce_module imms) id` >>
+  simp[return_def, raise_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  rename1 `FLOOKUP _ id = SOME tvv` >> PairCases_on `tvv` >>
+  strip_tac >> gvs[] >>
+  `evaluate_type (get_tenv cx) ann = SOME tvv0` by
+    (fs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `value_has_type tvv0 tvv1` by
+    (fs[state_well_typed_def, EVERY_MEM] >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >> first_x_assum drule >>
+     simp[imms_well_typed_def] >>
+     qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
+     simp[get_source_immutables_def] >> CASE_TAC >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_def, expr_type_def] >> strip_tac >> gvs[] >>
+  irule frag_exec_mem_refl >> rpt strip_tac >> gvs[] >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
+       contextTheory.mk_ptr_def, eval_operand_def, expr_type_def] >>
+  qexistsl [`id`, `off`, `tvv0`, `tvv1`, `0`] >>
+  simp[sub_layout_def, read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, lift_option_type_def, bind_def,
+       return_def, evaluate_subscripts_def, lift_sum_def]
+QED
+
+Theorem compile_toplevel_no_module_sim_mem:
+  !ctx func cenv cx ty ann src id es.
+    get_module_code cx src = NONE ==>
+    expr_vv_sim_mem ctx func cenv cx ty (TopLevelName ann (src, id)) es
+Proof
+  rw[expr_vv_sim_mem_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+       return_def, raise_def, LET_THM] >>
+  strip_tac >> gvs[expr_vv_res_ok_def, expr_res_ok_def]
+QED
+
+Theorem compile_toplevel_name_vv_sim_mem:
+  !ctx func cenv cx env ty ann nsid es.
+    expr_sim_pre cenv cx env (TopLevelName ann nsid) es ==>
+    expr_vv_sim_mem ctx func cenv cx ty (TopLevelName ann nsid) es
+Proof
+  rpt strip_tac >> PairCases_on `nsid` >>
+  rename1 `TopLevelName ann (src, id)` >>
+  Cases_on `get_module_code cx src`
+  >- simp[compile_toplevel_no_module_sim_mem] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `find_var_decl_by_name id ts`
+  >- (irule compile_toplevel_immutable_sim_mem >> metis_tac[]) >>
+  rename1 `find_var_decl_by_name id ts = SOME di` >>
+  PairCases_on `di` >> Cases_on `di0`
+  >~ [`HashMapVarDecl`]
+  >- (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+      metis_tac[TopLevelName_Type_HashMapVarDecl_impossible]) >>
+  rename1 `StorageVarDecl tr typ` >>
+  Cases_on `?slot tvt v. lookup_var_slot_from_layout cx tr src di1 = SOME slot /\
+                         evaluate_type (get_tenv cx) typ = SOME tvt /\
+                         read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)`
+  >- (gvs[] >> irule compile_toplevel_storage_vv_sim_mem >> metis_tac[]) >>
+  irule compile_toplevel_storage_undecodable_sim_mem >> metis_tac[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in if null axioms andalso null (Thm.hyp th) andalso
@@ -74,4 +160,6 @@ val () = List.app (fn th =>
      then print "BODY_TOPLEVEL_MEMORY_AUDIT OK\n"
      else raise Fail "toplevel memory inherited admission"
   end) [compile_toplevel_storage_vv_sim_mem,
-        compile_toplevel_storage_undecodable_sim_mem];
+        compile_toplevel_storage_undecodable_sim_mem,
+        compile_toplevel_immutable_sim_mem, compile_toplevel_no_module_sim_mem,
+        compile_toplevel_name_vv_sim_mem];
