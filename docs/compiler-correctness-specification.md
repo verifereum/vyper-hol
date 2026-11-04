@@ -203,11 +203,10 @@ gas oracle**, source `msg.gas` guarantee or `gas=` keyword guarantee. The old
   Callee-return rejection can be exempt only when it produces that same message
   in such a program. Exempt runs still have an actual EVM run but no result/effect
   correspondence obligation.
-- Resource alternatives are genuine frame OutOfGas/StackOverflow, or a failed
-  value-zero computed precompile whose pure input was valid, and then only when
-  the frame itself ends in an exception: a starved call never lets the frame
-  finish normally or commit other effects. Invalid ecadd/ecmul input is not
-  precompile starvation. There is no existential sufficient-gas
+- The resource alternative is genuine frame OutOfGas/StackOverflow. A
+  value-zero computed precompile that the EVM fails for lack of gas is not an
+  alternative: its failure is the call's oracle outcome, which the source and
+  Venom both take. There is no existential sufficient-gas
   loophole, gas bound or guarantee of success regardless of resources.
 - Static entry, runtime immutables, msg.gas/gas=, fallback invocation and
   arbitrary unsupported programs are outside this runtime contract. Outgoing
