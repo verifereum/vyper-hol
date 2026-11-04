@@ -1,7 +1,8 @@
 Theory dftPositionalReturn
 Ancestors
   dftPositionalPhase dftRecursiveReturnPhase dftRecursiveCallProvenance
-  dftOriginalRuntime dftOccurrenceMachine dftOpenMachine dftOpenErase
+  dftOriginalRuntime dftOccurrenceMachine dftOccurrenceReplay dftOccurrenceReturn
+  dftOccurrenceSuspended dftOpenMachine dftOpenErase
   venomExecSemantics venomState list arithmetic
 
 Theorem dft_pos_stack_cons[simp]:
@@ -99,4 +100,103 @@ Proof
   asm_rewrite_tac[] >> simp[dft_pos_phase_def] >> qexists `certs` >>
   fs[dft_pos_frame_def, dft_pos_certificate_def] >>
   simp[dft_pos_control_def] >> metis_tac[]
+QED
+
+Theorem dft_pos_return_clear[local]:
+  c.dft_occ_core = DftOpen (DftDone result) stack n /\
+  dft_open_return result (MAP (dft_fill_frame 1) stack) n =
+    DftOpen (DftDone out) [] n ==>
+  dft_occ_oracle_next w C c = c with
+    <|dft_occ_core := DftOpen (DftDone out) [] n; dft_occ_saved := []|>
+Proof
+  simp[dft_occ_oracle_next_def, dft_occ_next_def, dft_next_inf_def,
+    dft_fill_def, dft_fill_control_def, dft_open_next_def,
+    dft_erase_def, dft_occ_update_def]
+QED
+
+Theorem dft_pos_cleared_phase[local]:
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftDone out) [] nL; dft_occ_saved := []|> /\
+  dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftDone out) [] nR; dft_occ_saved := []|> ==>
+  dft_pos_phase C D fi bi pre x call post
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)
+Proof
+  strip_tac >>
+  `dft_original_ready l /\ dft_original_ready r` by fs[dft_pos_phase_def] >>
+  `dft_original_ready (dft_occ_oracle_next w C l) /\
+   dft_original_ready (dft_occ_oracle_next w D r)` by
+    metis_tac[dft_original_runtime_next] >>
+  asm_rewrite_tac[] >> simp[dft_pos_phase_def] >>
+  fs[dft_pos_phase_def, dft_pos_stack_def, dft_pos_control_def] >> metis_tac[]
+QED
+
+Theorem dft_pos_pending_failure[local]:
+  dft_pos_frame C D fi bi pre x call post (SOME z) lf rf /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (rf::rs) nR /\
+  dft_restore z.dft_cert_call.inst_outputs ret cs z.dft_cert_start = NONE ==>
+  dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftDone (Error "invoke: return arity mismatch")) [] nL;
+      dft_occ_saved := []|> /\
+  dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftDone (Error "invoke: return arity mismatch")) [] nR;
+      dft_occ_saved := []|>
+Proof
+  strip_tac >>
+  `z.dft_cert_forward` by fs[dft_pos_frame_def, dft_pos_certificate_def] >>
+  `dft_restore z.dft_cert_call.inst_outputs ret cs
+    (z.dft_cert_result with vs_inst_idx := SUC z.dft_cert_start.vs_inst_idx) = NONE` by
+    metis_tac[dft_restore_pair_failure] >>
+  fs[dft_pos_frame_def, dft_certificate_saved_def] >> gvs[] >>
+  conj_tac >> irule dft_pos_return_clear >> simp[] >>
+  simp[dft_open_return_def, dft_fill_frame_def, GSYM dft_restore_def]
+QED
+
+Theorem dft_pos_nonreturn_clear[local]:
+  c.dft_occ_core = DftOpen (DftDone result) stack n /\
+  (!ret cs. result <> IntRet ret cs) ==>
+  dft_occ_oracle_next w C c = c with
+    <|dft_occ_core := DftOpen (DftDone result) [] n; dft_occ_saved := []|>
+Proof
+  strip_tac >> irule dft_pos_return_clear >> simp[] >>
+  Cases_on `result` >> gvs[dft_open_return_def]
+QED
+
+Theorem dft_pos_pending_return:
+  dft_pos_phase C D fi bi pre x call post l r /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  l.dft_occ_core = DftOpen (DftDone result) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone result) (rf::rs) nR /\
+  dft_pos_frame C D fi bi pre x call post (SOME z) lf rf /\
+  dft_pos_stack C D fi bi pre x call post (SOME z::certs) (lf::ls) (rf::rs) /\
+  LENGTH l.dft_occ_saved = SUC (LENGTH certs) ==>
+  ?b. (b = 1 \/ b = 2) /\
+    dft_pos_phase C D fi bi pre x call post
+      (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) b r)
+Proof
+  strip_tac >> Cases_on `?ret cs. result = IntRet ret cs`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      Cases_on `dft_restore z.dft_cert_call.inst_outputs ret cs z.dft_cert_start`
+      >- (drule_all dft_pos_pending_failure >> strip_tac >>
+          qexists `1` >> pure_rewrite_tac[FUNPOW_1] >>
+          conj_tac >- simp[] >> irule dft_pos_cleared_phase >>
+          goal_assum (drule_at Any) >> metis_tac[]) >>
+      `?a. dft_restore z.dft_cert_call.inst_outputs ret cs
+        (z.dft_cert_result with vs_inst_idx := SUC z.dft_cert_start.vs_inst_idx) = SOME a` by
+        metis_tac[dft_restore_pair_failure, optionTheory.option_CASES, optionTheory.NOT_NONE_SOME] >>
+      qexists `2` >> simp[] >> irule dft_pos_pending_return_success >>
+      goal_assum (drule_at Any) >> metis_tac[dft_pos_stack_cons]) >>
+  `!ret cs. result <> IntRet ret cs` by metis_tac[] >>
+  `dft_occ_oracle_next w C l = l with
+    <|dft_occ_core := DftOpen (DftDone result) [] nL; dft_occ_saved := []|>` by
+    (irule dft_pos_nonreturn_clear >> simp[]) >>
+  `dft_occ_oracle_next w D r = r with
+    <|dft_occ_core := DftOpen (DftDone result) [] nR; dft_occ_saved := []|>` by
+    (irule dft_pos_nonreturn_clear >> simp[]) >>
+  qexists `1` >> pure_rewrite_tac[FUNPOW_1] >>
+          conj_tac >- simp[] >> irule dft_pos_cleared_phase >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
