@@ -316,12 +316,11 @@ Proof
   Cases_on `x = []` >> simp[]
 QED
 
-Theorem ao_singleton_ids[local]:
-  LENGTH xs = 1 /\ EVERY (\i. i.inst_id = n /\ P i) xs ==>
-  MAP (\i. i.inst_id) xs = [n]
+Theorem ao_singleton_projection[local]:
+  LENGTH xs = 1 ==>
+  (MAP f xs = [a] <=> EVERY (\x. f x = a) xs)
 Proof
-  Cases_on `xs` >> simp[] >> rename1 `LENGTH tail = 0` >>
-  Cases_on `tail` >> simp[]
+  Cases_on `xs` >> simp[] >> metis_tac[]
 QED
 
 Theorem ao_peephole_inst_ids:
@@ -333,23 +332,52 @@ Theorem ao_peephole_inst_ids:
      [FST (fr "not"); FST (fr "iz"); inst.inst_id];
      [FST (fr "xor"); FST (fr "iz"); inst.inst_id]]
 Proof
-  strip_tac >> simp[ao_peephole_inst_def] >>
+  strip_tac >> pure_rewrite_tac [ao_peephole_inst_def, LET_THM, listTheory.MEM] >>
+  BETA_TAC >>
   IF_CASES_TAC >- simp[] >>
   IF_CASES_TAC >- simp[] >>
-  IF_CASES_TAC >- (mp_tac ao_opt_shift_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_signextend_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_exp_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_addsub_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_and_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_muldiv_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
-  IF_CASES_TAC >- (mp_tac ao_opt_or_structure >>
-    disch_then (drule_then assume_tac ao_singleton_ids) >> simp[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_shift_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_signextend_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_exp_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_addsub_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_and_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_muldiv_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  IF_CASES_TAC >- (mp_tac ao_opt_or_structure >> strip_tac >>
+    drule ao_singleton_projection >>
+    disch_then (mp_tac o Q.ISPECL [`(\i. i.inst_id)`, `inst.inst_id`]) >>
+    disch_tac >> disj1_tac >>
+    asm_simp_tac (srw_ss()) [] >>
+    gvs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   IF_CASES_TAC >- (mp_tac ao_opt_eq_structure >>
     simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
   IF_CASES_TAC >- (`LENGTH inst.inst_operands = 2` by gvs[] >>
@@ -390,6 +418,35 @@ Proof
     disch_then (qspecl_then [`ra`, `lbl`, `idx`, `fr`, `dfg`] mp_tac) >>
     simp[] >> rpt strip_tac >> gvs[listTheory.MAP_EQ_CONS, listTheory.MAP_EQ_NIL]) >>
   simp[]
+QED
+
+Theorem ao_transform_inst_ids:
+  inst_wf inst ==>
+  MEM (MAP (\i. i.inst_id) (ao_transform_inst dfg ra lbl idx targets fr inst))
+    [[inst.inst_id]; [FST (fr "not"); inst.inst_id];
+     [FST (fr "xor"); inst.inst_id]; [FST (fr "iz"); inst.inst_id];
+     [FST (fr "not"); FST (fr "iz"); inst.inst_id];
+     [FST (fr "xor"); FST (fr "iz"); inst.inst_id]]
+Proof
+  strip_tac >> simp[ao_transform_inst_def] >>
+  IF_CASES_TAC >- simp[ao_resolve_iszero_inst_structure] >>
+  IF_CASES_TAC >- simp[ao_resolve_iszero_inst_structure] >>
+  Cases_on `ao_opt_producer dfg (ao_resolve_iszero_inst targets inst)` >> simp[]
+  >- (`MEM (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)).inst_opcode
+          [GT; LT; SGT; SLT] ==>
+        LENGTH (ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)).inst_operands = 2`
+        by (simp[ao_pre_flip_inst_structure, ao_pre_flip_inst_arity,
+                 ao_resolve_iszero_inst_structure] >>
+            strip_tac >> irule ao_inst_wf_comparator_arity >> simp[]) >>
+      mp_tac (Q.INST [`inst` |-> `ao_pre_flip_inst (ao_resolve_iszero_inst targets inst)`]
+        ao_peephole_inst_ids) >>
+      simp[listTheory.MAP_MAP_o, combinTheory.o_DEF,
+           ao_post_flip_inst_structure, ao_pre_flip_inst_structure,
+           ao_resolve_iszero_inst_structure] >>
+      rpt strip_tac >> gvs[ao_post_flip_inst_structure]) >>
+  drule ao_opt_producer_structure >> strip_tac >>
+  Cases_on `x` >> gvs[] >>
+  gvs[ao_post_flip_inst_structure, ao_resolve_iszero_inst_structure]
 QED
 
 Theorem ao_transform_inst_classification:
