@@ -870,3 +870,88 @@ Proof
   >- simp[current_result_agree_def] >>
   simp[] >> irule current_single_output_agree >> metis_tac[]
 QED
+
+Theorem current_extract_result_agree:
+  execution_frame st = execution_frame st' ==>
+  (extract_venom_result st value off sz result = NONE <=>
+   extract_venom_result st' value off sz result = NONE) /\
+  (!w t. extract_venom_result st value off sz result = SOME (w,t) ==>
+    ?t'. extract_venom_result st' value off sz result = SOME (w,t') /\
+      execution_frame t = execution_frame t' /\
+      t.vs_vars = st.vs_vars /\ t'.vs_vars = st'.vs_vars /\
+      t.vs_current_bb = st.vs_current_bb /\ t'.vs_current_bb = st'.vs_current_bb /\
+      t.vs_prev_bb = st.vs_prev_bb /\ t'.vs_prev_bb = st'.vs_prev_bb)
+Proof
+  strip_tac >> Cases_on `result` >> simp[extract_venom_result_def] >>
+  PairCases_on `x` >> simp[] >>
+  Cases_on `x1.contexts` >> simp[] >>
+  Cases_on `t` >> simp[] >>
+  PairCases_on `h` >> simp[] >>
+  Cases_on `x0` >> simp[] >>
+  gvs[execution_frame_def, venom_state_component_equality,
+      write_memory_with_expansion_def] >>
+  Cases_on `y` >> simp[] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem current_concrete_call_inputs_agree:
+  execution_frame st = execution_frame st' ==>
+  read_memory off sz st = read_memory off sz st' /\
+  st.vs_accounts = st'.vs_accounts /\ st.vs_call_ctx = st'.vs_call_ctx /\
+  make_venom_delegatecall_state st target gas calldata code static =
+    make_venom_delegatecall_state st' target gas calldata code static /\
+  make_venom_create_state st addr gas value code =
+    make_venom_create_state st' addr gas value code
+Proof
+  simp[execution_frame_def, venom_state_component_equality] >> strip_tac >>
+  simp[read_memory_def, make_venom_delegatecall_state_def,
+       make_venom_create_state_def, venom_to_tx_params_def]
+QED
+
+Theorem current_exec_delegatecall_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand
+    (exec_delegatecall inst st gas addr ao az ro rz)
+    (exec_delegatecall inst' st' gas addr ao az ro rz)
+Proof
+  strip_tac >> drule current_concrete_call_inputs_agree >> strip_tac >>
+  asm_simp_tac (srw_ss()) [exec_delegatecall_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result st 1w _ _ result` >>
+  `extract_venom_result st 1w (w2n ro) (w2n rz) result = NONE <=>
+   extract_venom_result st' 1w (w2n ro) (w2n rz) result = NONE`
+    by metis_tac[current_extract_result_agree] >>
+  Cases_on `extract_venom_result st 1w (w2n ro) (w2n rz) result`
+  >- (gvs[] >> simp[current_result_agree_def]) >>
+  PairCases_on `x` >>
+  drule_all (cj 2 current_extract_result_agree) >> strip_tac >> simp[] >>
+  irule current_single_output_agree >> simp[] >>
+  qexists_tac `rs` >>
+  gvs[current_name_agree_def, lookup_var_def]
+QED
+
+Theorem current_exec_create_agree:
+  execution_frame st = execution_frame st' /\
+  st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
+  current_outputs_compatible rs inst.inst_outputs rt inst'.inst_outputs demand /\
+  current_name_agree rs (current_before_outputs inst.inst_outputs demand) st st' ==>
+  current_result_agree rt demand
+    (exec_create inst st value off sz salt)
+    (exec_create inst' st' value off sz salt)
+Proof
+  strip_tac >> drule current_concrete_call_inputs_agree >> strip_tac >>
+  asm_simp_tac (srw_ss()) [exec_create_def, LET_THM] >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result st output 0 0 result` >>
+  `extract_venom_result st output 0 0 result = NONE <=>
+   extract_venom_result st' output 0 0 result = NONE`
+    by metis_tac[current_extract_result_agree] >>
+  Cases_on `extract_venom_result st output 0 0 result`
+  >- (gvs[] >> simp[current_result_agree_def]) >>
+  PairCases_on `x` >>
+  drule_all (cj 2 current_extract_result_agree) >> strip_tac >> simp[] >>
+  irule current_single_output_agree >> simp[] >>
+  qexists_tac `rs` >>
+  gvs[current_name_agree_def, lookup_var_def]
+QED
