@@ -12534,8 +12534,9 @@ Proof
   ho_match_mp_tac supportedExprsTheory.supported_effect_expr_ind >>
   rw[supportedExprsTheory.supported_effect_expr_def,
      supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def,
-            expr_shape_root_def]
+  (* Each goal follows from the pure result or an induction hypothesis. *)
+  imp_res_tac supported_pure_shape >> res_tac >>
+  gvs[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_expr_shape[local]:
@@ -12609,7 +12610,8 @@ Proof
   Cases_on `e` >>
   simp[supportedStmtsTheory.supported_string_reason_def,
        supported_expr_exists_def, expr_shape_root_def] >>
-  metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]
+  rpt strip_tac >> imp_res_tac supported_pure_shape >>
+  gvs[supported_expr_exists_def, expr_shape_root_def]
 QED
 
 Theorem supported_assert_reason_shape[local]:
@@ -12651,8 +12653,9 @@ Proof
       qmatch_goalsub_rename_tac `supported_expr_exists expr_shape_root finish_expr` >>
       Cases_on `finish_expr` >>
       simp[supported_expr_exists_def, expr_shape_root_def] >>
-      metis_tac[supported_pure_shape, supported_expr_exists_def, expr_shape_root_def]) >>
-  metis_tac[supported_pure_shape]
+      rpt strip_tac >> imp_res_tac supported_pure_shape >>
+      gvs[supported_expr_exists_def, expr_shape_root_def]) >>
+  rpt strip_tac >> imp_res_tac supported_pure_shape >> gvs[]
 QED
 
 Theorem supported_stmts_shape[local]:
