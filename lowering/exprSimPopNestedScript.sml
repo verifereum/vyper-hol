@@ -391,6 +391,106 @@ Proof
   simp[compile_array_subscript_def]
 QED
 
+(* Concrete source fixture for the retained-place audit.
+   The checked support and expression-typing facts below do NOT establish
+   expr_body_pre or a counterexample to either frozen theorem.
+   Remaining body-pre obligations:
+   - env_context_consistent (function liveness, declaration completeness,
+     storage layout, and well-formed vtypes); scopes/immutables consistency;
+   - state/accounts/context/functions well-typed; outcomes typed;
+   - contract_storage_well_formed, storage_layout_safe, oracle_storage_ok;
+   - compile-env flag/struct/module/place-map agreement and popped-key indexing;
+   - call_evaluation_safe, using owner (NONE,"caller") and edge to shrink.
+   context_well_typed only bounds transaction fields; call_stack_follows
+   accepts a singleton stack without requiring a declared caller.
+   build_compile_env supplies internal function IDs/info/parameter tables.
+   A full compiled witness must package shrink via package_internal_fn and
+   install its compiled function in the execution context. The arbitrary
+   caller func must contain the target/Pop fragment (fn_has_code) with distinct
+   instruction IDs. Neither that execution context nor the universal
+   pop_target_frag premise is certified by these syntax checks. *)
+Definition nested_counterexample_program_def[local]:
+  nested_counterexample_program =
+    [VariableDecl Private Storage "a" nested_inner_shrink_ast_type (SOME 0);
+     FunctionDecl Internal Nonpayable F F "shrink" [] [] (BaseT (UintT 256))
+       [Assign (BaseTarget (TopLevelNameTarget (NONE,"a")))
+          (Builtin nested_inner_shrink_ast_type
+            (MakeArray (SOME (ArrayT (ArrayT
+              (ArrayT (BaseT (UintT 256)) (Dynamic 1)) (Fixed 1)) (Dynamic 1)))
+              (Dynamic 1))
+            [Builtin (ArrayT (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+                         (Fixed 1)) (Dynamic 1))
+               (MakeArray (SOME (ArrayT (ArrayT (BaseT (UintT 256)) (Dynamic 1))
+                                 (Fixed 1))) (Dynamic 1)) []]);
+        Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))]]
+End
+
+Definition nested_counterexample_target_def[local]:
+  nested_counterexample_target =
+    SubscriptTarget
+      (SubscriptTarget
+        (SubscriptTarget (TopLevelNameTarget (NONE,"a"))
+          (Literal (BaseT (UintT 256)) (IntL 0)))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE)
+End
+
+Definition nested_counterexample_context_def[local]:
+  nested_counterexample_context = empty_evaluation_context with
+    <| stk := [(NONE,"caller")];
+       sources := [(0w, [(NONE,nested_counterexample_program)])];
+       layouts := [(0w, ([((NONE,"a"),0)], []))] |>
+End
+
+Definition nested_counterexample_env_def[local]:
+  nested_counterexample_env =
+    <| current_src := NONE; var_types := FEMPTY; var_assignable := FEMPTY;
+       bare_globals := FEMPTY; bare_global_assignable := FEMPTY;
+       toplevel_vtypes := FEMPTY |+ ((NONE,"a"),Type nested_inner_shrink_ast_type);
+       type_defs := FEMPTY;
+       fn_sigs := FEMPTY |+ ((NONE,"shrink"),
+         <| param_types := []; num_defaults := 0; ret_ty := BaseT (UintT 256) |>);
+       flag_members := FEMPTY; event_fields := FEMPTY |>
+End
+
+Definition nested_counterexample_cenv_def[local]:
+  nested_counterexample_cenv =
+    build_compile_env nested_counterexample_program External Nonpayable "caller"
+      [] (BaseT (UintT 256)) [] T
+End
+
+Definition nested_counterexample_state_def[local]:
+  nested_counterexample_state =
+    SND (set_storage_backend nested_counterexample_context F
+      (update_storage 3w 7w (update_storage 2w 1w
+        (update_storage 1w 1w (update_storage 0w 1w empty_storage))))
+      (empty_state with <| scopes := [FEMPTY]; outcomes := SOME [] |>))
+End
+
+Theorem nested_counterexample_typed_probe[local]:
+  well_typed_expr nested_counterexample_env
+    (Pop (BaseT (UintT 256)) nested_counterexample_target)
+Proof
+  EVAL_TAC >> simp[subscript_vtype_def] >> EVAL_TAC
+QED
+
+Theorem nested_counterexample_syntax_probe[local]:
+  int_calls_expr (Pop (BaseT (UintT 256)) nested_counterexample_target) =
+    [(NONE,"shrink")] /\
+  byte_widths_expr (Pop (BaseT (UintT 256)) nested_counterexample_target) /\
+  ~expr_has_evm_run (Pop (BaseT (UintT 256)) nested_counterexample_target) /\
+  alloc_limits_expr nested_counterexample_cenv
+    (Pop (BaseT (UintT 256)) nested_counterexample_target)
+Proof
+  EVAL_TAC
+QED
+
+Theorem nested_counterexample_supported_probe[local]:
+  supported_program nested_counterexample_program
+Proof
+  EVAL_TAC
+QED
+
 (* A storage or transient root.  compile_get_target_ptr hands out the
    array's header slot with location storage (transient), and the source's
    pop_place pops the StoragePlace there, so the run is
