@@ -65,3 +65,28 @@ Proof
   pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, LAST_APPEND] >>
   simp[LAST_DEF]
 QED
+
+Theorem ao_fn_dominates_trans:
+  !fn a b c.
+    fn_dominates fn a b /\ fn_dominates fn b c ==> fn_dominates fn a c
+Proof
+  rpt gen_tac >> rewrite_tac[fn_dominates_def] >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  `MEM b path` by metis_tac[] >>
+  qpat_x_assum `MEM b path`
+    (qx_choose_then `front` (qx_choose_then `back` assume_tac) o
+     REWRITE_RULE [MEM_SPLIT]) >>
+  `is_fn_path fn (front ++ [b])` by metis_tac[ao_fn_path_split] >>
+  `MEM a (front ++ [b])` by
+    (first_x_assum irule >> simp[] >> Cases_on `front` >> gvs[]) >>
+  gvs[]
+QED
+
+Theorem ao_fn_dominates_antisym:
+  !fn a b.
+    fn_dominates fn a b /\ fn_dominates fn b a ==> a = b
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  drule_all ao_dominator_avoiding_prefix >> strip_tac >>
+  fs[fn_dominates_def] >> metis_tac[]
+QED

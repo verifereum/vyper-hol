@@ -666,3 +666,44 @@ Proof
   qpat_x_assum `front ++ [(a0,F,a2)] = _` (fn th => rewrite_tac[GSYM th]) >>
   simp[]
 QED
+
+Theorem ao_available_through_producer:
+  !fn bp prod x z target use_opt.
+    wf_function fn /\ wf_ssa fn /\
+    MEM bp fn.fn_blocks /\ MEM prod bp.bb_instructions /\
+    MEM x prod.inst_outputs /\
+    def_available_at fn bp (SOME prod) z /\
+    def_available_at fn target use_opt x ==>
+    def_available_at fn target use_opt z
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `MEM prod bp.bb_instructions`
+    (qx_choose_then `r` strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  qpat_x_assum `def_available_at fn target use_opt x` mp_tac >>
+  rewrite_tac[def_available_at_def] >> strip_tac >>
+  qpat_assum `MEM def_inst def_bb.bb_instructions`
+    (qx_choose_then `d` strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  `get_instruction bp r = SOME prod /\
+   get_instruction def_bb d = SOME def_inst` by simp[get_instruction_def] >>
+  `def_bb = bp /\ d = r /\ def_inst = prod` by
+    metis_tac[ao_ssa_output_occurrence] >>
+  qpat_x_assum `def_bb = bp` SUBST_ALL_TAC >>
+  qpat_x_assum `def_inst = prod` SUBST_ALL_TAC >>
+  qpat_x_assum `def_available_at fn bp (SOME prod) z` mp_tac >>
+  rewrite_tac[def_available_at_def] >> strip_tac >>
+  rename1 `MEM z zi.inst_outputs` >> rename1 `MEM zi zb.bb_instructions` >>
+  qexistsl [`zb`,`zi`] >> simp[] >>
+  conj_tac >- metis_tac[ao_fn_dominates_trans] >>
+  strip_tac >>
+  `bp.bb_label = zb.bb_label` by metis_tac[ao_fn_dominates_antisym] >>
+  `bp = zb` by
+    (`lookup_block bp.bb_label fn.fn_blocks = SOME bp /\
+      lookup_block zb.bb_label fn.fn_blocks = SOME zb` by
+       (conj_tac >> irule venomExecPropsTheory.MEM_lookup_block >>
+        gvs[wf_function_def, fn_labels_def]) >> gvs[]) >>
+  gvs[] >> Cases_on `use_opt` >- simp[] >> gvs[] >>
+  `j = d /\ i' = d` by
+    (conj_tac >> irule ao_wf_instruction_index >>
+     qexistsl [`bp`,`fn`] >> simp[]) >>
+  qexistsl [`i`,`j'`] >> simp[] >> decide_tac
+QED
