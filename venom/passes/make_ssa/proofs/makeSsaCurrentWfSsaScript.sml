@@ -15,6 +15,7 @@ Ancestors
   unitShapeDefs o1PassContract makeSsaCurrentRenameTrace list
   makeSsaCurrentSourceCuts makeSsaCurrentAllocation makeSsaCurrentTreeTrace
   makeSsaCurrentFinalBlock makeSsaCurrentTreePaths makeSsaCurrentTraceCertificate
+  makeSsaCurrentAvailability venomExecProofs
 
 (* Consumer probe: the annotation at an output position names exactly the
    concrete output at that position.  Defaults cannot be substituted here. *)
@@ -197,6 +198,31 @@ Proof
   >- (simp[current_structural_certificate_def] >> metis_tac[]) >>
   rpt strip_tac >> irule current_wf_event_output_at >>
   fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_wf_path_last_edge[local]:
+  !pre p target. is_fn_path fn (pre ++ [p;target]) ==>
+    is_fn_path fn (pre ++ [p]) /\ fn_cfg_edge fn p target
+Proof
+  Induct >> simp[is_fn_path_def] >> rpt gen_tac >>
+  Cases_on `pre` >> gvs[is_fn_path_def] >> metis_tac[]
+QED
+
+Theorem current_wf_first_entry_path:
+  fn_reachable fn target /\ fn_entry_label fn = SOME entry /\ entry <> target ==>
+  ?path pred. is_fn_path fn path /\ path <> [] /\
+    HD path = entry /\ LAST path = pred /\
+    fn_cfg_edge fn pred target /\ ~MEM target path
+Proof
+  simp[fn_reachable_def] >> strip_tac >>
+  drule rtc_to_fn_path >> strip_tac >>
+  drule_all current_path_first_target >> strip_tac >>
+  `pre <> []` by (Cases_on `pre` >> gvs[]) >>
+  Cases_on `pre` using SNOC_CASES >> gvs[SNOC_APPEND] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  drule current_wf_path_last_edge >> strip_tac >>
+  qexists_tac `l ++ [x]` >> simp[] >>
+  Cases_on `l` >> gvs[]
 QED
 
 Theorem make_ssa_current_fn_wf_ssa:
