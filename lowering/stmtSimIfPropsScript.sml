@@ -1,6 +1,7 @@
 (* Pure source forcing and compiler decomposition for conditional statements. *)
 Theory stmtSimIfProps
 Ancestors
+  gasExemptCert gasSummary gasSummaryCompose gasOutcome gasContext fragGasPath gasCount
   stmtSimDefs stmtSimProps exprSimDefs loweringPosts list rich_list finite_map pred_set
   fragExec localPtrsProps loweringSlice
   stmtLowering exprLowering compileEnv emitHelper emitHelperProps exprLoweringProps
@@ -9,6 +10,71 @@ Ancestors
   venomExecSemantics venomExecProofs venomInst venomState integer_word
 Libs
   monadsyntax intLib
+
+Theorem eval_expr_switch_forced:
+  !cx e es kt kf.
+    bind (eval_expr cx e) (\raw. switch_BoolV cx raw kt kf) es =
+    (case (do raw <- eval_expr cx e; read_result cx raw od) es of
+       (INR ex, s) => (INR ex, s)
+     | (INL v, s) => if v = BoolV T then kt s
+                    else if v = BoolV F then kf s
+                    else raise (Error (TypeError "not BoolV")) s)
+Proof
+  rpt gen_tac >> simp[switch_BoolV_def, bind_def] >>
+  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw, est)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `eval_expr cx e es = (INL captured, est)` >>
+  Cases_on `read_result cx captured est` >> rename1 `_ = (forced, esf)` >>
+  Cases_on `forced` >> simp[] >> rpt IF_CASES_TAC >> simp[]
+QED
+
+Theorem eval_assert_forced_parts:
+  !cx e ak es res es'.
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
+    eval_stmt cx (Assert e ak) es = (res, es') ==>
+    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
+      (case r of INR ex => (INR ex,s)
+       | INL v => if v = BoolV T then (INL (),s)
+                  else if v = BoolV F then
+                    (INR (AssertException
+                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
+                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, eval_expr_switch_forced] >>
+  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
+  rename1 `_ = (forced,sf)` >>
+  simp[return_def, raise_def] >> Cases_on `forced` >> simp[]
+QED
+
+Theorem eval_assert_forced_ok:
+  !cx e ak es res es' lctx.
+    (ak = AssertBare \/ ak = AssertUnreachable) /\
+    eval_stmt cx (Assert e ak) es = (res, es') /\
+    stmt_res_ok lctx res ==>
+    ?r s. (do raw <- eval_expr cx e; read_result cx raw od) es = (r,s) /\
+      expr_res_ok r /\ (!v. r = INL v ==> ?b. v = BoolV b) /\
+      (case r of INR ex => (INR ex,s)
+       | INL v => if v = BoolV T then (INL (),s)
+                  else if v = BoolV F then
+                    (INR (AssertException
+                      (if ak = AssertBare then "" else "UNREACHABLE")),s)
+                  else (INR (Error (TypeError "not BoolV")),s)) = (res,es')
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at Any eval_assert_forced_parts >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `!exc. r = INR exc ==> no_control_exc exc` by
+    (rpt strip_tac >> gvs[] >>
+     qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
+     simp[bind_def] >> Cases_on `eval_expr cx e es` >>
+     rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[read_result_no_control, cj 1 eval_expr_no_control]) >>
+  qexistsl_tac [`r`,`s`] >> simp[] >>
+  Cases_on `r` >> gvs[expr_res_ok_def, AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> gvs[stmt_res_ok_def, no_control_exc_def] >> metis_tac[]
+QED
 
 Theorem eval_expr_switch_forced:
   !cx e es kt kf.
@@ -125,6 +191,210 @@ Proof
   strip_tac >> disj1_tac >> gvs[] >> metis_tac[]) >>
   simp[switch_BoolV_def, bind_def, read_result_empty_scope,
        raise_def, pop_scope_def, return_def]
+QED
+
+(* Force the captured condition before entering the fresh lexical frame. *)
+Theorem eval_stmt_if_forced:
+  eval_stmt cx (If c ss1 ss2) =
+  bind (bind (eval_expr cx c) (read_result cx))
+    (\v. if v = BoolV T then
+           ignore_bind push_scope (finally (eval_stmts cx ss1) pop_scope)
+         else if v = BoolV F then
+           ignore_bind push_scope (finally (eval_stmts cx ss2) pop_scope)
+         else raise (Error (TypeError "not BoolV")))
+Proof
+  simp[FUN_EQ_THM] >> gen_tac >>
+  `!st. st with scopes updated_by CONS FEMPTY =
+        st with scopes := FEMPTY :: st.scopes` by
+    simp[evaluation_state_component_equality] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, push_scope_def,
+       return_def] >>
+  Cases_on `eval_expr cx c x` >> rename1 `_ = (raw, st)` >>
+  Cases_on `raw` >> simp[] >>
+  rename1 `switch_BoolV cx captured` >>
+  Cases_on `read_result cx captured st` >> rename1 `_ = (forced, sf)` >>
+  `sf = st` by metis_tac[read_result_state] >> gvs[] >>
+  simp[switch_BoolV_def, bind_def, read_result_empty_scope,
+       finally_def, pop_scope_def, return_def] >>
+  Cases_on `forced` >> simp[raise_def] >>
+  rpt IF_CASES_TAC >>
+  simp[ignore_bind_def, bind_def, push_scope_def, return_def, finally_def,
+       read_result_empty_scope, raise_def, pop_scope_def]
+QED
+
+Theorem eval_stmt_if_condition_cert:
+  !memory tops ctx func cx c ss1 ss2 es s0 marks err ee leaf finish.
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx c) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finish) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (If c ss1 ss2)) (return ()))
+    (es,s0) marks (err,ee) (leaf,finish)
+Proof
+  rpt strip_tac >> rewrite_tac[eval_stmt_if_forced] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem if_push_scope_marked:
+  ~s0.vs_halted ==>
+  gas_marked_exec memory (ctx,func) push_scope (es,s0) [] (INL ())
+    (es with scopes := FEMPTY :: es.scopes) (OK s0)
+Proof
+  strip_tac >> simp[gas_marked_exec_def, push_scope_def, return_def,
+                    evaluation_state_component_equality] >>
+  irule fragGasModeTheory.gas_marked_path_from_mem >>
+  simp[fragGasPathMemTheory.gas_path_mem_rules]
+QED
+
+Theorem eval_stmt_if_scoped_cert:
+  !memory tops ctx func cx ss es s0 marks err ee leaf finish top rest.
+  gas_marked_exec memory (ctx,func) push_scope
+    (es,s0) [] (INL ()) (es with scopes := FEMPTY :: es.scopes) (OK s0) /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmts cx ss) (return ()))
+    ((es with scopes := FEMPTY :: es.scopes) with gas_obs := [],s0)
+    marks (err,ee) (leaf,finish) /\
+  ee.scopes = top :: rest ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (ignore_bind push_scope
+       (finally (eval_stmts cx ss) pop_scope)) (return ()))
+    (es,s0) marks (err,ee with scopes := rest) (leaf,finish)
+Proof
+  rpt strip_tac >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  drule gas_exempt_cert_bind_unit >> simp[] >>
+  disch_then irule >>
+  rewrite_tac[GSYM ignore_bind_def, ignore_bind_finally_unit] >>
+  irule gas_exempt_cert_cleanup >> qexists_tac `ee` >>
+  simp[pop_scope_def, return_def] >>
+  gvs[evaluation_state_component_equality]
+QED
+
+Theorem if_branch_cert_scopes:
+  !memory tops ctx func cx ss es s0 marks err ee leaf finish.
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmts cx ss) (return ()))
+    (es with scopes := FEMPTY :: es.scopes,s0)
+    marks (err,ee) (leaf,finish) ==>
+  ?top rest. ee.scopes = top :: rest
+Proof
+  rpt strip_tac >> drule gas_exempt_cert_execution >> strip_tac >>
+  first_x_assum (qspec_then `[]` mp_tac) >>
+  simp[ignore_bind_def, bind_def] >>
+  Cases_on `eval_stmts cx ss
+    ((es with scopes := FEMPTY :: es.scopes) with gas_obs :=
+       gas_explicit marks s0.vs_gas_readings)` >>
+  rename1 `_ = (res,st)` >> Cases_on `res` >>
+  simp[return_def] >> strip_tac >> gvs[] >>
+  drule eval_stmts_preserves_scopes_dom >>
+  simp[preserves_scopes_dom_def] >>
+  Cases_on `ee.scopes` >> simp[]
+QED
+
+Theorem eval_stmt_if_branch_cert:
+  !memory tops ctx func cx c ss1 ss2 es s0 left b mid t right err ee
+     leaf finish top rest.
+  gas_marked_exec memory (ctx,func)
+    (bind (eval_expr cx c) (read_result cx))
+    (es,s0) left (INL (BoolV b)) mid (OK t) /\
+  ~t.vs_halted /\
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmts cx (if b then ss1 else ss2)) (return ()))
+    ((mid with scopes := FEMPTY :: mid.scopes) with gas_obs := [],t)
+    right (err,ee) (leaf,finish) /\
+  ee.scopes = top :: rest ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (If c ss1 ss2)) (return ()))
+    (es,s0) (left ++ right) (err,ee with scopes := rest) (leaf,finish)
+Proof
+  rpt strip_tac >> rewrite_tac[eval_stmt_if_forced] >>
+  pure_once_rewrite_tac[ignore_bind_def] >>
+  pure_once_rewrite_tac[vyperStateTheory.bind_assoc] >>
+  drule gas_exempt_cert_bind_value >>
+  disch_then irule >>
+  Cases_on `b` >> simp[GSYM ignore_bind_def] >>
+  irule eval_stmt_if_scoped_cert >>
+  simp[if_push_scope_marked] >>
+  gvs[evaluation_state_component_equality]
+QED
+
+Theorem if_condition_admissible:
+  gas_admissible (eval_stmt cx (If c ss1 ss2)) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `no_control_exc ex` by
+    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[bind_def] >>
+     Cases_on `eval_expr cx c (es with gas_obs := gs)` >>
+     rename1 `_ = (raw,st)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+     metis_tac[cj 1 eval_expr_no_control, read_result_no_control]) >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >>
+  simp[eval_stmt_if_forced, bind_def] >>
+  fs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def] >>
+  metis_tac[]
+QED
+
+Theorem eval_stmt_if_selected:
+  bind (eval_expr cx c) (read_result cx) es = (INL (BoolV b),mid) /\
+  eval_stmts cx (if b then ss1 else ss2)
+    (mid with scopes := FEMPTY :: mid.scopes) = (res,ee) ==>
+  eval_stmt cx (If c ss1 ss2) es =
+    (res,ee with scopes := TL ee.scopes)
+Proof
+  strip_tac >>
+  `ee.scopes <> []` by
+    (drule eval_stmts_preserves_scopes_dom >>
+     simp[preserves_scopes_dom_def]) >>
+  simp[eval_stmt_if_forced, bind_def] >>
+  Cases_on `b` >>
+  fs[ignore_bind_def, push_scope_def, return_def, bind_def, finally_def] >>
+  `!st. st with scopes updated_by CONS FEMPTY =
+        st with scopes := FEMPTY :: st.scopes` by
+    simp[evaluation_state_component_equality] >>
+  simp[] >> Cases_on `res` >> Cases_on `ee.scopes` >>
+  gvs[pop_scope_def, return_def, raise_def]
+QED
+
+Theorem if_branch_admissible:
+  gas_admissible (eval_stmt cx (If c ss1 ss2)) (stmt_res_ok lctx) es /\
+  (!tail. bind (eval_expr cx c) (read_result cx)
+    (es with gas_obs := xs ++ tail) = (INL (BoolV b),mid with gas_obs := tail)) ==>
+  gas_admissible (eval_stmts cx (if b then ss1 else ss2)) (stmt_res_ok lctx)
+    (mid with scopes := FEMPTY :: mid.scopes)
+Proof
+  rewrite_tac[gas_admissible_def] >> strip_tac >>
+  rpt gen_tac >> disch_tac >>
+  qpat_x_assum `!gs res ee. _` (qspec_then `xs ++ gs` mp_tac) >>
+  `eval_stmt cx (If c ss1 ss2) (es with gas_obs := xs ++ gs) =
+     (res,ee with scopes := TL ee.scopes)` by
+    (irule eval_stmt_if_selected >> qexistsl_tac [`b`, `mid with gas_obs := gs`] >>
+     simp[] >> gvs[evaluation_state_component_equality]) >>
+  metis_tac[]
+QED
+
+Theorem eval_stmt_if_selected_tails:
+  (!tail. bind (eval_expr cx c) (read_result cx)
+     (es with gas_obs := xs ++ tail) =
+     (INL (BoolV b),mid with gas_obs := tail)) /\
+  (!tail. eval_stmts cx (if b then ss1 else ss2)
+     ((mid with scopes := FEMPTY :: mid.scopes) with gas_obs := ys ++ tail) =
+     (res,ee with gas_obs := tail)) ==>
+  !tail. eval_stmt cx (If c ss1 ss2)
+    (es with gas_obs := (xs ++ ys) ++ tail) =
+    (res,(ee with scopes := TL ee.scopes) with gas_obs := tail)
+Proof
+  strip_tac >> gen_tac >>
+  qpat_x_assum `!tail. bind _ _ _ = _`
+    (qspec_then `ys ++ tail` assume_tac) >>
+  drule eval_stmt_if_selected >>
+  disch_then (qspecl_then [`ss2`, `ss1`, `res`, `ee with gas_obs := tail`] mp_tac) >>
+  simp[APPEND_ASSOC] >>
+  gvs[evaluation_state_component_equality]
 QED
 
 Theorem compile_if_parts_all:
