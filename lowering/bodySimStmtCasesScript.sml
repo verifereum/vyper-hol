@@ -4734,6 +4734,59 @@ Proof
   gvs[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 
+Theorem aug_place_storage_bop_frag:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur,s1) /\
+  eval_operand dst s0 = SOME slot /\
+  storage_holds cx tr ty (Value v1) slot es /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ word_value v1 /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
+  cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+  (!z. cur = Var z ==> not_fresh_at s1 z) /\ (!l. cur <> Label l) /\
+  lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
+  compile_binop bop cur rhs ty NONE el s2 = (res_op,s3) /\
+  cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
+  (!z. rhs = Var z ==> not_fresh_at s2 z) /\ (!l. rhs <> Label l) /\
+  fn_has_code sa s3 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ expr_sim ctx func cenv cx ty e es /\
+  (do result <- eval_expr cx e; read_result cx result od) es = (r1,es1) /\
+  expr_res_ok r1 /\
+  (!v2. r1 = INL v2 ==>
+    word_value v2 /\ is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+    expr_res_ok (bop_result cx ty bop [ty;expr_type e] v1 v2 es1) /\
+    binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] v1 v2 es1) ==>
+  frag_exec ctx sa s3 (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. ?v2 v. r1 = INL v2 /\
+      bop_result cx ty bop [ty;expr_type e] v1 v2 es1 = INL v /\
+      word_value v /\ stmt_state_rel ctx func cenv cx es1 s /\
+      eval_operand res_op s = SOME (val_to_w256 v) /\
+      eval_operand dst s = SOME slot /\
+      (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+             lookup_var x s = SOME u) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP s.vs_allocas aid = SOME b))
+    (expr_exit (case r1 of
+      INL v2 => bop_result cx ty bop [ty;expr_type e] v1 v2 es1
+    | INR ex => INR ex))
+Proof
+  rpt strip_tac >>
+  `!R. frag_exec ctx sa s1
+      (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\
+           eval_operand dst s = SOME slot /\
+           eval_operand cur s = SOME (val_to_w256 v1) /\
+           (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
+                  lookup_var x s = SOME u) /\
+           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                    FLOOKUP s.vs_allocas aid = SOME b)) R` by
+    (gen_tac >> drule_all aug_place_storage_load_frag >>
+     disch_then (qspecl_then [`func`, `ctx`, `R`] mp_tac) >>
+     disch_then (mp_then Any irule frag_exec_weaken) >> simp[]) >>
+  `!z. dst = Var z ==> not_fresh_at s1 z` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  drule_all stmtSimAugAssignAttrTheory.augassign_load_bop_frag >> simp[]
+QED
+
 Theorem aug_place_storage_store_frag:
   emit_void (if tr then TSTORE else SSTORE) [dst; result] sa = ((),sf) /\
   eval_operand dst s0 = SOME slot /\ eval_operand result s0 = SOME w /\
