@@ -66,7 +66,7 @@ Ancestors
   stmtSimAssignStorageCopy
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
-  memoryLocalRhsProps stmtPoppedKeys exprOpenMain
+  memoryLocalRhsProps stmtPoppedKeys exprOpenMain targetPlaceSim targetPlaceSimCases
 Libs
   monadsyntax
 
@@ -2308,6 +2308,133 @@ Proof
   simp[] >>
   Cases_on `emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE | _ => MSTORE) [FST ptr_result; result] cstore` >>
   simp[oneTheory.one]
+QED
+
+Theorem aug_place_body_target_idx[local]:
+  !t cx tops ctx func cenv.
+    body_base_target_ok cx t /\ body_inv tops ctx cenv cx ==>
+    target_idx_case F ctx func cenv cx t
+Proof
+  `(!e:expr. T) /\ !t cx tops ctx func cenv.
+     body_base_target_ok cx t /\ body_inv tops ctx cenv cx ==>
+     target_idx_case F ctx func cenv cx t` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[body_base_target_ok_def, target_idx_case_def] >>
+  metis_tac[body_expr_ok_case]
+QED
+
+Theorem aug_place_body_target_sim[local]:
+  !t cx tops ctx func cenv env es.
+    body_base_target_ok cx t /\ body_inv tops ctx cenv cx /\
+    target_pre cenv cx env t es ==>
+    target_sim ctx func cenv cx env t es
+Proof
+  rpt strip_tac >>
+  `target_idx_case F ctx func cenv cx t` by
+    metis_tac[aug_place_body_target_idx] >>
+  drule target_case_all >> simp[target_case_def] >>
+  disch_then irule >> simp[]
+QED
+
+Theorem aug_place_main_storage_metadata[local]:
+  !tops ctx cenv cx id tr ty id_str.
+    body_inv tops ctx cenv cx /\
+    find_var_decl_by_name id tops = SOME (StorageVarDecl tr ty,id_str) ==>
+    cenv.ce_hashmap_info (NONE,id) = NONE /\
+    cenv.ce_module_var_type (NONE,id) = SOME ty
+Proof
+  rpt strip_tac >> drule find_var_decl_storage_mem >> strip_tac >>
+  gvs[body_inv_def] >> metis_tac[build_maps_variable]
+QED
+
+Theorem aug_place_main_map_metadata[local]:
+  !tops id tr kt vt id_str.
+    find_var_decl_by_name id tops = SOME (HashMapVarDecl tr kt vt,id_str) ==>
+    build_hashmap_info tops (NONE,id) = SOME (tr,kt,vt)
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >> Cases >>
+  simp[find_var_decl_by_name_def, build_hashmap_info_def] >>
+  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem aug_place_defined_metadata[local]:
+  !env cx cenv src id ts d id_str vt.
+    env_context_consistent env cx /\
+    place_map_tables_agree_on_defined cenv env /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (d,id_str) /\
+    FLOOKUP env.toplevel_vtypes (src,id) = SOME vt ==>
+    (!tr ty. d = StorageVarDecl tr ty ==>
+      cenv.ce_hashmap_info (src,id) = NONE) /\
+    (!tr kt vty. d = HashMapVarDecl tr kt vty ==>
+      ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vty))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `OPTION_MAP (\(tr,kt,vty). (kt,vty)) (cenv.ce_hashmap_info (src,id)) =
+    (case vt of HashMapT kt vty => SOME (kt,vty) | _ => NONE)` by
+    metis_tac[placeTypingPropsTheory.place_map_tables_agree_on_defined_def] >>
+  Cases_on `vt`
+  >- (fs[env_context_consistent_def] >>
+      Cases_on `FLOOKUP env.bare_globals (src,id)`
+      >- (qpat_x_assum `!s i ty. FLOOKUP env.toplevel_vtypes _ = SOME (Type ty) /\ _ ==> _`
+            drule_all >> strip_tac >> gvs[]) >>
+      qpat_x_assum `!s i ty. FLOOKUP env.bare_globals _ = SOME ty ==> _`
+        drule >> strip_tac >> gvs[]) >>
+  Cases_on `cenv.ce_hashmap_info (src,id)` >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  fs[env_context_consistent_def] >>
+  qpat_x_assum `!s i kt vt. FLOOKUP env.toplevel_vtypes _ = SOME (HashMapT kt vt) ==> _`
+    drule >> strip_tac >> gvs[]
+QED
+
+Theorem aug_place_metadata_completion[local]:
+  !tops ctx cenv cx env es.
+    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es ==>
+    ?cenv'. target_env_ok cenv' cx /\
+      (!id. cenv'.ce_hashmap_info (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+      (!id. cenv'.ce_module_var_type (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+      (!nsid vt. FLOOKUP env.toplevel_vtypes nsid = SOME vt ==>
+        cenv'.ce_hashmap_info nsid = cenv.ce_hashmap_info nsid) /\
+      cenv' = cenv with <| ce_hashmap_info := cenv'.ce_hashmap_info;
+                          ce_module_var_type := cenv'.ce_module_var_type |>
+Proof
+  rpt strip_tac >>
+  qabbrev_tac `h = \nsid.
+    if FST nsid = NONE \/ IS_SOME (FLOOKUP env.toplevel_vtypes nsid)
+    then cenv.ce_hashmap_info nsid
+    else case get_module_code cx (FST nsid) of
+      NONE => NONE
+    | SOME ts => case find_var_decl_by_name (SND nsid) ts of
+        SOME (HashMapVarDecl tr kt vt,id_str) => SOME (tr,kt,vt)
+      | _ => NONE` >>
+  qabbrev_tac `m = \nsid.
+    if FST nsid = NONE then cenv.ce_module_var_type nsid
+    else case get_module_code cx (FST nsid) of
+      NONE => NONE
+    | SOME ts => case find_var_decl_by_name (SND nsid) ts of
+        SOME (StorageVarDecl tr ty,id_str) => SOME ty
+      | _ => NONE` >>
+  qexists_tac `cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>` >>
+  simp[] >> conj_tac
+  >- (simp[target_env_ok_def] >> rpt strip_tac >> gvs[] >>
+      rename1 `get_module_code cx src = SOME ts` >>
+      (Cases_on `src`
+      >- (`ts = tops` by fs[body_inv_def] >> gvs[] >>
+          simp[Abbr `h`, Abbr `m`] >>
+          metis_tac[aug_place_main_storage_metadata,
+                    aug_place_main_map_metadata, body_inv_def]) >>
+      rename1 `get_module_code cx (SOME mid) = SOME ts` >>
+      rename1 `find_var_decl_by_name id ts = SOME _` >>
+      Cases_on `FLOOKUP env.toplevel_vtypes (SOME mid,id)`
+      >- simp[Abbr `h`, Abbr `m`] >>
+      `env_context_consistent env cx /\ place_map_tables_agree_on_defined cenv env` by
+        fs[expr_sim_inv_def, env_consistent_def] >>
+      simp[Abbr `h`, Abbr `m`] >>
+      qpat_x_assum `body_inv _ _ _ _` kall_tac >>
+      qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
+      drule_then strip_assume_tac aug_place_defined_metadata >>
+      gvs[] >> metis_tac[])) >>
+  simp[Abbr `h`, Abbr `m`]
 QED
 
 Theorem body_augassign_place:
