@@ -2825,6 +2825,73 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> qexists_tac `m` >> simp[]
 QED
 
+Theorem aug_place_variable_decl_namespace:
+  !tops src id d. supported_variable_decl tops (src,id) = SOME d ==> src = NONE
+Proof
+  Cases >> simp[supportedDeclsTheory.supported_variable_decl_def] >>
+  rpt gen_tac >> Cases_on `src` >> simp[supportedDeclsTheory.supported_variable_decl_def]
+QED
+
+Theorem aug_place_toplevel_expr_namespace:
+  supportedExprs$supported_expr tops (TopLevelName ty (src,id)) \/
+  supported_place_expr tops (TopLevelName ty (src,id)) \/
+  supported_effect_place_expr tops (TopLevelName ty (src,id)) ==>
+  src = NONE
+Proof
+  Cases_on `src` >- simp[] >>
+  `supported_variable_decl tops (SOME x,id) = NONE` by
+    (Cases_on `tops` >> simp[supportedDeclsTheory.supported_variable_decl_def]) >>
+  simp[supportedExprsTheory.supported_expr_def,
+       supportedExprsTheory.supported_pure_expr_def,
+       supportedExprsTheory.supported_effect_expr_def,
+       supportedExprFormsTheory.supported_storage_value_def,
+       supportedDeclsTheory.supported_immutable_type_def] >>
+  strip_tac >> drule aug_place_supported_root_namespace >> simp[]
+QED
+
+Theorem aug_place_place_type_metadata:
+  !cenv e.
+    (!id. h (NONE,id) = cenv.ce_hashmap_info (NONE,id)) /\
+    (supportedExprs$supported_expr tops e \/ supported_place_expr tops e \/
+     supported_effect_place_expr tops e) ==>
+    place_type (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    place_type cenv e
+Proof
+  recInduct exprLoweringTheory.place_type_ind >> rpt strip_tac >>~-
+    ([`place_type _ (TopLevelName ty nsid)`],
+     PairCases_on `nsid` >>
+     `nsid0 = NONE` by metis_tac[aug_place_toplevel_expr_namespace] >>
+     gvs[exprLoweringTheory.place_type_def]) >>
+  simp[exprLoweringTheory.place_type_def] >>
+  gvs[supportedExprsTheory.supported_expr_def,
+      supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def] >>
+  metis_tac[]
+QED
+
+Theorem aug_place_array_dynamic_metadata:
+  (!id. m (NONE,id) = cenv.ce_module_var_type (NONE,id)) /\
+  (supportedExprs$supported_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_place_expr tops e) ==>
+  infer_array_is_dynamic
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+  infer_array_is_dynamic cenv e
+Proof
+  strip_tac >> Cases_on `e` >>
+  simp[exprLoweringTheory.infer_array_is_dynamic_def] >>
+  rename1 `TopLevelName ty nsid` >> PairCases_on `nsid` >>
+  `nsid0 = NONE` by metis_tac[aug_place_toplevel_expr_namespace] >>
+  gvs[]
+QED
+
+Theorem aug_place_array_location_metadata:
+  !e. infer_array_location
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) e =
+    infer_array_location cenv e
+Proof
+  Cases >> simp[exprLoweringTheory.infer_array_location_def]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
