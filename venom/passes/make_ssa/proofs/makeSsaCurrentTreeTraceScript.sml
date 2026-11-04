@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentCertificate makeSsaCurrentAllocation makeSsaCurrentRenameTrace
   makeSsaCurrentEdgeTrace makeSsaCurrentInduct makeSsaCurrentDefs
   makeSsaCurrentProps makeSsaDefs cfgTransform cfgTransformProps makeSsaHelper
-  makeSsaCurrentAnalysis venomInst venomWf list pair sorting
+  makeSsaCurrentAnalysis venomInst venomWf irSupply list pair sorting
 
 (* Sibling calls retain global counters/history but restore the lexical
    stacks and environment of their parent. These boundaries do not equate
@@ -670,4 +670,289 @@ Proof
     (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited1)` by
     (fs[ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
   first_x_assum drule_all >> simp[]
+QED
+
+Definition current_event_valid_def:
+  current_event_valid (A : string -> (current_token # string) list list) V
+    (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,
+      (bbs1 : basic_block list),(bbs2 : basic_block list)) <=>
+    current_annotations_ok V H (FLAT (A l)) /\
+    current_allocation_consistent V H s rs /\ current_env_realizes H E rs V
+End
+
+Theorem current_tree_trace_events_valid:
+  (!tree A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_tree_trace A sm tree s rs bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (dom_tree_labels tree) /\
+    (!l. MEM l (dom_tree_labels tree) ==> ~MEM l visited) /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A /\
+    current_allocation_consistent V H s rs /\ current_env_realizes H E rs V ==>
+    EVERY (current_event_valid A V) events) /\
+  (!trees A sm s ctrs stacks bbs H E visited ctrs' s' bbs' H' visited' events V.
+    current_children_trace A sm trees s ctrs stacks bbs H E visited
+      ctrs' s' bbs' H' visited' events /\
+    ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited) /\
+    current_pending_annotations V A H visited /\ current_annotation_separation A /\
+    current_allocation_consistent V H s (ctrs,stacks) /\
+    current_env_realizes H E (ctrs,stacks) V ==>
+    EVERY (current_event_valid A V) events)
+Proof
+  ho_match_mp_tac current_dom_tree_induction >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      Cases_on `lookup_block lbl bbs`
+      >- gvs[current_tree_trace_def] >>
+      gvs[current_tree_trace_def] >>
+      `current_annotations_ok V H (FLAT (A lbl))` by
+        (fs[current_pending_annotations_def, dom_tree_labels_def] >> metis_tac[]) >>
+      `current_allocation_consistent V H1 s1 rs1 /\ current_env_realizes H1 E1 rs1 V` by
+        (irule current_local_trace_preserves >> metis_tac[]) >>
+      `current_pending_annotations V A H1 (lbl::visited)` by
+        (drule current_local_trace_keys >> strip_tac >>
+         irule current_pending_annotations_visit >> simp[] >>
+         qexists_tac `H` >> simp[]) >>
+      `ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+        (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l (lbl::visited))` by
+        (fs[dom_tree_labels_def, EVERY_MEM] >> metis_tac[]) >>
+      simp[current_event_valid_def] >>
+      Cases_on `rs1` >> gvs[] >> first_x_assum drule >> simp[])
+  >- simp[current_tree_trace_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[current_tree_trace_def] >>
+  `ALL_DISTINCT (dom_tree_labels tree) /\
+    (!l. MEM l (dom_tree_labels tree) ==> ~MEM l visited)` by
+    fs[ALL_DISTINCT_APPEND, EVERY_MEM] >>
+  `current_allocation_consistent V H1 s1 (ctrs1,stacks) /\
+    current_env_realizes H1 E (ctrs1,stacks) V` by
+    (drule (cj 1 current_tree_trace_preserves) >> simp[]) >>
+  `current_pending_annotations V A H1 visited1` by
+    metis_tac[cj 1 current_tree_trace_pending] >>
+  `!l. MEM l visited1 ==> MEM l visited \/ MEM l (dom_tree_labels tree)` by
+    metis_tac[cj 1 current_tree_trace_visited] >>
+  `ALL_DISTINCT (FLAT (MAP dom_tree_labels trees)) /\
+    (!l. MEM l (FLAT (MAP dom_tree_labels trees)) ==> ~MEM l visited1)` by
+    (fs[ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  simp[EVERY_APPEND] >> conj_tac
+  >- (qpat_x_assum `!A sm s rs bbs H E visited ctrs' s' bbs' H' visited' events V. _ ==> EVERY _ _`
+        drule >> simp[]) >>
+  first_x_assum drule >> simp[]
+QED
+
+Definition current_event_names_def:
+  current_event_names finalH V
+    (l,bb,s,rs,H,E,insts1,s1,rs1,H1,E1,
+      (bbs1 : basic_block list),(bbs2 : basic_block list)) <=>
+    !v. MEM v V ==>
+      current_token_name finalH (E v) = SOME (latest_current_name rs v) /\
+      current_token_name finalH (E1 v) = SOME (latest_current_name rs1 v)
+End
+
+Theorem current_event_names_valid:
+  current_event_valid A V ev /\ current_event_trace A finalH ev ==>
+  current_event_names finalH V ev
+Proof
+  PairCases_on `ev` >>
+  simp[current_event_valid_def, current_event_trace_def, current_event_names_def] >>
+  rpt gen_tac >> strip_tac >>
+  `current_allocation_consistent V ev11 ev8 (ev9,ev10) /\
+    current_env_realizes ev11 ev12 (ev9,ev10) V` by
+    (irule current_local_trace_preserves >> metis_tac[]) >>
+  drule current_local_trace_history >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
+  `current_token_name ev5 (ev6 v) = SOME (latest_current_name (ev3,ev4) v)` by
+    fs[current_env_realizes_def] >>
+  `current_token_name (ev5 ++ tail') (ev12 v) = SOME (latest_current_name (ev9,ev10) v)` by
+    fs[current_env_realizes_def] >>
+  metis_tac[current_token_name_append_stable, APPEND_ASSOC]
+QED
+
+Theorem current_events_names_valid:
+  EVERY (current_event_valid A V) events /\
+  EVERY (current_event_trace A finalH) events ==>
+  EVERY (current_event_names finalH V) events
+Proof
+  simp[EVERY_MEM] >> metis_tac[current_event_names_valid]
+QED
+
+Theorem current_annotation_map_keys_bound:
+  !bbs annsss l t.
+    LENGTH bbs = LENGTH annsss /\
+    MEM t (MAP FST (FLAT (current_annotation_map bbs annsss l))) ==>
+    MEM t (MAP FST (FLAT (FLAT annsss)))
+Proof
+  Induct >> Cases_on `annsss` >>
+  simp[current_annotation_map_def, MAP_APPEND] >> rpt gen_tac >> strip_tac >>
+  Cases_on `h'.bb_label = l` >> gvs[] >>
+  disj2_tac >> first_x_assum irule >> simp[] >>
+  qexists_tac `l` >> simp[current_annotation_map_def]
+QED
+
+Theorem current_annotation_map_separation:
+  !bbs annsss.
+    LENGTH bbs = LENGTH annsss /\
+    ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) ==>
+    current_annotation_separation (current_annotation_map bbs annsss)
+Proof
+  Induct >> Cases_on `annsss` >>
+  simp[current_annotation_map_def, current_annotation_separation_def, MAP_APPEND,
+    ALL_DISTINCT_APPEND] >> rpt gen_tac >> strip_tac >>
+  `current_annotation_separation (current_annotation_map bbs t)` by
+    (first_x_assum irule >> simp[]) >>
+  qspecl_then [`bbs`, `t`] mp_tac current_annotation_map_keys_bound >>
+  simp[current_annotation_map_def] >> strip_tac >>
+  rpt gen_tac >>
+  Cases_on `h'.bb_label = l` >> Cases_on `h'.bb_label = k` >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  fs[current_annotation_map_def, current_annotation_separation_def] >> metis_tac[]
+QED
+
+Theorem current_annotation_map_ok:
+  !bbs annsss V H.
+    LENGTH bbs = LENGTH annsss /\
+    current_annotations_ok V H (FLAT (FLAT annsss)) ==>
+    !l. current_annotations_ok V H (FLAT (current_annotation_map bbs annsss l))
+Proof
+  Induct >> Cases_on `annsss` >> simp[current_annotation_map_def,
+    current_annotations_ok_def, MAP_APPEND, ALL_DISTINCT_APPEND] >>
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  Cases_on `h'.bb_label = l` >> gvs[] >>
+  first_x_assum (qspecl_then [`t`, `V`, `H`] mp_tac) >>
+  simp[current_annotation_map_def, current_annotations_ok_def] >>
+  disch_then (qspec_then `l` ACCEPT_TAC)
+QED
+
+Theorem current_annotation_map_pending:
+  LENGTH bbs = LENGTH annsss /\
+  current_annotations_ok V H (FLAT (FLAT annsss)) ==>
+  current_pending_annotations V (current_annotation_map bbs annsss) H visited
+Proof
+  simp[current_pending_annotations_def] >> metis_tac[current_annotation_map_ok]
+QED
+
+(* An initially empty allocation history gives valid final-history names at
+   every local entry and exit, including across restored sibling stacks. *)
+Theorem current_annotated_tree_names:
+  LENGTH bbs = LENGTH annsss /\
+  current_annotations_ok V ([] : (current_token # string # string) list)
+    (FLAT (FLAT annsss)) /\
+  current_allocation_consistent V [] s rs /\
+  current_env_realizes ([] : (current_token # string # string) list) E rs V /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  current_tree_trace (current_annotation_map bbs annsss) sm tree
+    s rs bbs [] E [] ctrs' s' bbs' H' visited' events ==>
+  current_allocation_consistent V H' s' (ctrs',SND rs) /\
+  EVERY (current_event_names H' V) events
+Proof
+  strip_tac >>
+  `current_pending_annotations V (current_annotation_map bbs annsss) [] []` by
+    metis_tac[current_annotation_map_pending] >>
+  `current_annotation_separation (current_annotation_map bbs annsss)` by
+    (irule current_annotation_map_separation >>
+     fs[current_annotations_ok_def]) >>
+  conj_tac
+  >- (drule (cj 1 current_tree_trace_preserves) >> simp[] >>
+      disch_then (qspec_then `V` mp_tac) >> simp[]) >>
+  irule current_events_names_valid >>
+  qexists_tac `current_annotation_map bbs annsss` >> conj_tac
+  >- (drule (cj 1 current_tree_trace_events) >> simp[]) >>
+  drule (cj 1 current_tree_trace_events_valid) >> simp[] >>
+  disch_then (qspec_then `V` mp_tac) >> simp[]
+QED
+
+Theorem current_provenance_annotations_nondefault:
+  !pairs annsss.
+    LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+      pairs annsss ==>
+    !t. MEM t (MAP FST (FLAT (FLAT annsss))) ==> !v. t <> CurrentDefault v
+Proof
+  Induct >> Cases_on `annsss` >> simp[] >> rpt strip_tac >>
+  gvs[MAP_APPEND]
+  >- metis_tac[current_block_provenance_nondefault] >>
+  first_x_assum drule >> disch_then drule >> simp[]
+QED
+
+Theorem current_provenance_annotations_ok:
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    pairs annsss /\ ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) /\
+  (!v. MEM v (MAP SND (FLAT (FLAT annsss))) ==> MEM v V) ==>
+  current_annotations_ok V ([] : (current_token # string # string) list)
+    (FLAT (FLAT annsss))
+Proof
+  strip_tac >> simp[current_annotations_ok_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
+  rpt strip_tac
+  >- (drule current_provenance_annotations_nondefault >>
+      disch_then (qspec_then `CurrentDefault w` mp_tac) >>
+      simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  first_x_assum irule >> simp[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]
+QED
+
+Theorem current_instruction_annotations_erase:
+  !insts annss.
+    LIST_REL (\anns inst. MAP SND anns = inst.inst_outputs) annss insts ==>
+    MAP SND (FLAT annss) = FLAT (MAP (\inst. inst.inst_outputs) insts)
+Proof
+  Induct >> Cases_on `annss` >> simp[] >> rpt strip_tac >>
+  first_x_assum drule >> simp[MAP_APPEND]
+QED
+
+Theorem current_block_annotations_erase:
+  !bbs annsss.
+    LIST_REL (\bb anns.
+      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+      bbs annsss ==>
+    MAP SND (FLAT (FLAT annsss)) =
+      FLAT (MAP (\bb. FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions)) bbs)
+Proof
+  Induct >> Cases_on `annsss` >> simp[] >> rpt strip_tac >>
+  drule current_instruction_annotations_erase >> strip_tac >>
+  first_x_assum drule >> simp[MAP_APPEND]
+QED
+
+Theorem current_annotation_owners_in_vars:
+  LIST_REL (\bb anns.
+    LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+    bbs annsss ==>
+  !v. MEM v (MAP SND (FLAT (FLAT annsss))) ==>
+    MEM v (FLAT (MAP block_ir_vars bbs))
+Proof
+  strip_tac >> drule current_block_annotations_erase >> strip_tac >>
+  simp[] >> rw[MEM_FLAT, MEM_MAP, block_ir_vars_def] >>
+  gvs[MEM_FLAT, MEM_MAP] >>
+  qexists_tac `FLAT (MAP inst_ir_vars bb.bb_instructions)` >> conj_tac
+  >- (qexists_tac `bb` >> simp[]) >>
+  simp[MEM_FLAT, MEM_MAP] >>
+  qexists_tac `inst_ir_vars inst` >> conj_tac
+  >- (qexists_tac `inst` >> simp[]) >>
+  simp[inst_ir_vars_def]
+QED
+
+Theorem current_provenance_tree_names:
+  LENGTH olds = LENGTH bbs /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,bbs)) annsss /\
+  ALL_DISTINCT (MAP FST (FLAT (FLAT annsss))) /\
+  current_allocation_consistent (FLAT (MAP block_ir_vars bbs)) [] s rs /\
+  current_env_realizes ([] : (current_token # string # string) list) E rs
+    (FLAT (MAP block_ir_vars bbs)) /\
+  ALL_DISTINCT (dom_tree_labels tree) /\
+  current_tree_trace (current_annotation_map bbs annsss) sm tree s rs bbs
+    [] E [] ctrs' s' bbs' H' visited' events ==>
+  current_allocation_consistent (FLAT (MAP block_ir_vars bbs)) H' s'
+    (ctrs',SND rs) /\
+  EVERY (current_event_names H' (FLAT (MAP block_ir_vars bbs))) events
+Proof
+  strip_tac >>
+  `LENGTH bbs = LENGTH annsss` by
+    (drule LIST_REL_LENGTH >> simp[]) >>
+  `LIST_REL (\bb anns.
+      LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns bb.bb_instructions)
+      bbs annsss` by
+    (irule current_provenance_map_owners >> metis_tac[]) >>
+  `current_annotations_ok (FLAT (MAP block_ir_vars bbs))
+    ([] : (current_token # string # string) list) (FLAT (FLAT annsss))` by
+    (irule current_provenance_annotations_ok >> simp[] >> conj_tac
+     >- (drule current_annotation_owners_in_vars >> simp[]) >>
+     qexistsl_tac [`fn`, `ZIP (olds,bbs)`] >> simp[]) >>
+  drule_all current_annotated_tree_names >> simp[]
 QED
