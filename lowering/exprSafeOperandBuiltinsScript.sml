@@ -407,16 +407,6 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
-Theorem membership_ignore_bind_counter_mono[local]:
-  ((!s v t. m s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
-   (!s r t. k s = (r,t) ==> s.cs_next_var <= t.cs_next_var)) ==>
-  !s r t. comp_ignore_bind m k s = (r,t) ==>
-    s.cs_next_var <= t.cs_next_var
-Proof
-  rpt strip_tac >> gvs[comp_ignore_bind_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
-QED
-
 Theorem compile_array_membership_loop_safe_operand:
   (!p s v t. loader p s = (v,t) ==> s.cs_next_var <= t.cs_next_var) /\
   compile_array_membership_loop needle arr len sz off loader bound isin sa = (r,sb) ==>
