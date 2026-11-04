@@ -287,3 +287,69 @@ Proof
     dload_selected_insert_separated)) >> simp[] >>
   rpt conj_tac >- (rpt strip_tac >> res_tac) >> first_assum MATCH_ACCEPT_TAC
 QED
+
+(* Saved suffix layouts are carried alongside the boundary core. *)
+Theorem dload_saved_layout_initial:
+  LENGTH ([]:call_frame list) = LENGTH ([]:call_frame list) /\
+  (!k. k < LENGTH ([]:call_frame list) ==>
+    dload_live_layout lo
+      (EL k ([]:call_frame list)).cf_state.vs_alloca_next
+      (EL k ([]:call_frame list)).cf_state.vs_alloca_next
+      (DROP (SUC k) [f]))
+Proof
+  simp[]
+QED
+
+Theorem dload_saved_layout_push:
+  dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
+  LENGTH cs = LENGTH ds /\
+  (!k. k < LENGTH cs ==> dload_live_layout lo
+    (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
+    (DROP (SUC k) fs)) /\ c.cf_state = s /\ d.cf_state = t ==>
+  LENGTH (c::cs) = LENGTH (d::ds) /\
+  (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
+    (EL k (c::cs)).cf_state.vs_alloca_next (EL k (d::ds)).cf_state.vs_alloca_next
+    (DROP (SUC k) (e::fs)))
+Proof
+  strip_tac >> simp[] >> Cases >> simp[]
+QED
+
+Theorem dload_saved_layout_head_replace:
+  LENGTH cs = LENGTH ds /\
+  (!k. k < LENGTH cs ==> dload_live_layout lo
+    (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
+    (DROP (SUC k) (f::fs))) ==>
+  LENGTH cs = LENGTH ds /\
+  (!k. k < LENGTH cs ==> dload_live_layout lo
+    (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
+    (DROP (SUC k) (g::fs)))
+Proof
+  simp[]
+QED
+
+Theorem dload_saved_layout_restore:
+  LENGTH (c::cs) = LENGTH (d::ds) /\
+  (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
+    (EL k (c::cs)).cf_state.vs_alloca_next (EL k (d::ds)).cf_state.vs_alloca_next
+    (DROP (SUC k) (f::g::fs))) ==>
+  dload_live_layout lo
+    (merge_callee_state c.cf_state u).vs_alloca_next
+    (merge_callee_state d.cf_state v).vs_alloca_next (g::fs)
+Proof
+  strip_tac >> simp[merge_callee_state_def] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem dload_saved_layout_pop:
+  LENGTH (c::cs) = LENGTH (d::ds) /\
+  (!k. k < LENGTH (c::cs) ==> dload_live_layout lo
+    (EL k (c::cs)).cf_state.vs_alloca_next (EL k (d::ds)).cf_state.vs_alloca_next
+    (DROP (SUC k) (f::g::fs))) ==>
+  LENGTH cs = LENGTH ds /\
+  (!k. k < LENGTH cs ==> dload_live_layout lo
+    (EL k cs).cf_state.vs_alloca_next (EL k ds).cf_state.vs_alloca_next
+    (DROP (SUC k) (g::fs)))
+Proof
+  strip_tac >> gvs[] >> gen_tac >>
+  first_x_assum (qspec_then `SUC k` mp_tac) >> simp[]
+QED
