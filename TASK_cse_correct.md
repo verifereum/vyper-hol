@@ -74,4 +74,4 @@ The theorem says the transformed function simulates the original from the functi
 
 ## Notes
 
-The statement builds with `cheat`. Its premises were checked by an independent statement review before launch; that review found the ALLOCA case, now excluded by a premise.
+The statement builds with `cheat`. Its premises were checked by an independent statement review before launch; that review found the ALLOCA case, now excluded by a premise. A previous run found a counterexample through a two-output INVOKE (the analysis skipped write-effect invalidation for multi-output instructions); `avail_transfer_inst` has since been fixed to match upstream, so that counterexample no longer applies.
