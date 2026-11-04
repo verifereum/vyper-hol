@@ -20,7 +20,7 @@
 
 Theory exprSimRawCall
 Ancestors
-  allocLimits freshWrites builtinSimple
+  allocLimits freshWrites builtinSimple builtinProps
   list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
@@ -1338,6 +1338,117 @@ Proof
       rpt strip_tac >> gvs[update_var_def]) >>
   drule_all step_fresh_write_op >> strip_tac >>
   qpat_x_assum `_ = _ with vs_vars := _` SUBST1_TAC >> simp[]
+QED
+
+Theorem raw_call_size_run[local]:
+  emit_op RETURNDATASIZE [] sa = (v,sb) /\ fresh_vars_wrt sa s ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand v t = SOME (n2w (LENGTH s.vs_returndata)) /\
+    same_blocks sa sb /\ fresh_vars_wrt sb t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w)
+Proof
+  strip_tac >>
+  mp_tac (Q.ISPECL [`RETURNDATASIZE`,
+    `\s:venom_state. n2w (LENGTH s.vs_returndata):bytes32`]
+    emit_op_read0_correct) >>
+  disch_then drule >> disch_then (qspec_then `s` mp_tac) >> simp[] >>
+  impl_tac
+  >- simp[Once step_inst_base_def, mk_inst_def, exec_read0_def, bind_outputs_def] >>
+  metis_tac[]
+QED
+
+Theorem raw_call_length_prefix_run[local]:
+  (do len <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [len;Lit (n2w cap)];
+      compile_select cmp len (Lit (n2w cap)) od) sa = (capped,sb) /\
+  fresh_vars_wrt sa s /\ cap < dimword (:256) /\
+  LENGTH s.vs_returndata < dimword (:256) ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand capped t = SOME (n2w (MIN (LENGTH s.vs_returndata) cap)) /\
+    fresh_vars_wrt sb t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t with vs_vars := FEMPTY = s with vs_vars := FEMPTY
+Proof
+  strip_tac >>
+  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
+  simp[comp_bind_def] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  rename1 `emit_op RETURNDATASIZE [] sa = (len,sc1)` >>
+  rename1 `emit_op LT [len;Lit (n2w cap)] sc1 = (cmp,sc2)` >>
+  drule_all raw_call_size_run >> strip_tac >>
+  drule emit_op_LT_correct_mem >>
+  disch_then drule >>
+  simp[eval_operand_def] >>
+  strip_tac >>
+  drule compile_select_correct >>
+  disch_then drule >>
+  simp[eval_operand_def] >>
+  disch_then (qspecl_then [`n2w (LENGTH s.vs_returndata):bytes32`,
+    `LENGTH s.vs_returndata < cap`] mp_tac) >>
+  impl_tac >- (simp[] >> first_x_assum irule >> simp[]) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  `run_inst_seq (emitted_insts sa sb) s = OK u` by
+    (irule run_emitted_compose3 >>
+     qexistsl_tac [`t`,`ss'`,`sc1`,`sc2`] >> simp[] >>
+     imp_res_tac emit_op_extends >>
+     imp_res_tac compile_select_extends >> gvs[]) >>
+  qexists_tac `u` >> simp[] >> conj_tac
+  >- (Cases_on `LENGTH s.vs_returndata < cap` >> simp[arithmeticTheory.MIN_DEF]) >>
+  irule raw_call_length_prefix_frame >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`cap`,`capped`] >> simp[comp_bind_def]
+QED
+
+Theorem raw_call_success_run[local]:
+  (do len <- emit_op RETURNDATASIZE [];
+      cmp <- emit_op LT [len;Lit (n2w cap)];
+      capped <- compile_select cmp len (Lit (n2w cap));
+      emit_void MSTORE [ov;capped]; return ov od) sa = (result,sb) /\
+  fresh_vars_wrt sa s /\ eval_operand ov s = SOME addr /\
+  cap < dimword (:256) /\ LENGTH s.vs_returndata < dimword (:256) ==>
+  ?t u. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    result = ov /\ eval_operand result t = SOME addr /\
+    fresh_vars_wrt sb t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    t = mstore (w2n addr) (n2w (MIN (LENGTH s.vs_returndata) cap)) u /\
+    u with vs_vars := FEMPTY = s with vs_vars := FEMPTY
+Proof
+  strip_tac >>
+  qpat_x_assum `comp_bind _ _ _ = _` mp_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  rename1 `emit_op RETURNDATASIZE [] sa = (len,sc1)` >>
+  rename1 `emit_op LT [len;Lit (n2w cap)] sc1 = (cmp,sc2)` >>
+  rename1 `compile_select cmp len (Lit (n2w cap)) sc2 = (capped,sc3)` >>
+  ` (do len <- emit_op RETURNDATASIZE [];
+        cmp <- emit_op LT [len;Lit (n2w cap)];
+        compile_select cmp len (Lit (n2w cap)) od) sa = (capped,sc3)` by
+    simp[comp_bind_def] >>
+  drule_all raw_call_length_prefix_run >> strip_tac >>
+  `eval_operand ov t = SOME addr` by (first_x_assum irule >> simp[]) >>
+  drule emit_void_MSTORE_correct >>
+  disch_then (qspecl_then [`addr`,
+    `n2w (MIN (LENGTH s.vs_returndata) cap):bytes32`,`t`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists_tac `t` >> simp[] >>
+  irule run_emitted_compose2 >> qexistsl_tac [`t`,`sc3`] >> simp[] >>
+  imp_res_tac emit_op_extends >> imp_res_tac compile_select_extends >>
+  imp_res_tac emit_void_extends >>
+  `sc2.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sc2` by
+    (irule emit_extends_trans >> qexists_tac `sc1` >> simp[]) >>
+  conj_tac
+  >- (irule emit_extends_trans >> qexists_tac `sc2` >> simp[]) >>
+  simp[]
+QED
+
+Theorem raw_call_zero_success_run[local]:
+  comp_return (Lit 0w) sa = (result,sb) ==>
+  result = Lit 0w /\ sb = sa /\
+  run_inst_seq (emitted_insts sa sb) s = OK s /\
+  eval_operand result s = SOME 0w
+Proof
+  simp[comp_return_def] >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def, run_inst_seq_def, eval_operand_def]
 QED
 
 (* TOP-LEVEL *)
