@@ -661,3 +661,125 @@ Resume normalize_tuple_fields_run[tuple_runtime]:
 QED
 
 Finalise normalize_tuple_fields_run
+
+(* Nominal lookup plus stored-size agreement reduces the struct traversal to
+   the same-type field traversal; names are justified, never erased by size. *)
+Theorem normalize_struct_as_fields[local]:
+  !fields doff soff.
+    (!name ty sz. MEM (name,ty,sz) fields ==>
+      ALOOKUP src_fields name = SOME (ty,sz) /\ sz = type_memory_bytes ce ty) ==>
+    compile_struct_typed_copy ce dst src fields src_fields doff soff =
+      compile_typed_copy_fields ce dst src (MAP (FST o SND) fields)
+        (MAP (FST o SND) fields) doff soff
+Proof
+  Induct_on `fields`
+  >- (simp[Once compile_store_memory_typed_def] >>
+      simp[Once compile_store_memory_typed_def]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  `ALOOKUP src_fields h0 = SOME (h1,h2) /\ h2 = type_memory_bytes ce h1` by
+    metis_tac[listTheory.MEM] >>
+  `!doff soff. compile_struct_typed_copy ce dst src fields src_fields doff soff =
+    compile_typed_copy_fields ce dst src (MAP (FST o SND) fields)
+      (MAP (FST o SND) fields) doff soff` by
+    (rpt gen_tac >> first_x_assum irule >> metis_tac[listTheory.MEM]) >>
+  simp_tac (srw_ss()) [listTheory.MAP, combinTheory.o_THM] >>
+  pure_once_rewrite_tac[compile_store_memory_typed_def] >>
+  asm_simp_tac (srw_ss()) [LET_THM]
+QED
+
+Theorem normalize_struct_prefix_sizes[local]:
+  !fields i.
+    (!name ty sz. MEM (name,ty,sz) fields ==> sz = type_memory_bytes ce ty) ==>
+    SUM (MAP (SND o SND) (TAKE i fields)) =
+      SUM (MAP (type_memory_bytes ce) (TAKE i (MAP (FST o SND) fields)))
+Proof
+  Induct_on `fields` >- simp[] >> gen_tac >> PairCases_on `h` >>
+  Cases_on `i` >- simp[] >>
+  simp_tac (srw_ss()) [listTheory.TAKE_def, listTheory.MAP,
+    listTheory.SUM, combinTheory.o_THM] >> strip_tac >>
+  `h2 = type_memory_bytes ce h1` by metis_tac[listTheory.MEM] >>
+  asm_rewrite_tac[] >> AP_TERM_TAC >> first_x_assum irule >>
+  metis_tac[listTheory.MEM]
+QED
+
+Theorem normalize_nominal_struct_fields_run[local]:
+  DT = MAP (FST o SND) fields /\ LENGTH fields = N /\
+  (!name ty sz. MEM (name,ty,sz) fields ==>
+    ALOOKUP src_fields name = SOME (ty,sz) /\ sz = type_memory_bytes ce ty) /\
+  (!i. d i = b + d0 + SUM (MAP (SND o SND) (TAKE i fields))) /\
+  (!i. h i = a + s0 + SUM (MAP (SND o SND) (TAKE i fields))) /\
+  abi_footprint_disjoint (h 0) (h N - h 0) [(d 0,d N - d 0)] /\
+  d N <= s.vs_alloca_next /\ h N <= s.vs_alloca_next /\
+  d N < dimword (:256) /\ h N < dimword (:256) /\
+  (!i m m'. i < N /\
+    mem_bytes_at (h i) (h (SUC i) - h i) m' =
+      mem_bytes_at (h i) (h (SUC i) - h i) m /\ Src i m ==> Src i m') /\
+  (!i m m'. i < N /\
+    mem_bytes_at (d i) (d (SUC i) - d i) m' =
+      mem_bytes_at (d i) (d (SUC i) - d i) m /\ Dst i m ==> Dst i m') /\
+  (!i. i < N ==> Src i s.vs_memory) /\
+  (!i sd se dp sp u.
+    i < N /\
+    compile_store_memory_typed ce dp (EL i DT) sp (EL i DT) sd = ((),se) /\
+    eval_operand dp u = SOME (n2w (d i)) /\
+    eval_operand sp u = SOME (n2w (h i)) /\
+    (!x. dp = Var x \/ sp = Var x ==> not_fresh_at sd x) /\
+    fn_has_code sd se fn /\ ~u.vs_halted /\
+    u.vs_current_bb = sd.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
+    Src i u.vs_memory ==>
+    ?v. mem_cont_sim ctx fn u v /\ Dst i v.vs_memory /\
+      ~v.vs_halted /\ v.vs_current_bb = se.cs_current_bb /\
+      v.vs_inst_idx = LENGTH se.cs_current_insts /\
+      abi_decode_footprint_frame [(d i,type_memory_bytes ce (EL i DT))] u v /\
+      (!x. not_fresh_at sd x ==> lookup_var x v = lookup_var x u) /\
+      sd.cs_next_var <= se.cs_next_var /\
+      (v with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
+        vs_current_bb := u.vs_current_bb; vs_inst_idx := u.vs_inst_idx;
+        vs_prev_bb := u.vs_prev_bb|>) = u) /\
+  compile_struct_typed_copy ce dst src fields src_fields d0 s0 sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand dst s = SOME (n2w b) /\ eval_operand src s = SOME (n2w a) /\
+  (!x. dst = Var x \/ src = Var x ==> not_fresh_at sa x) ==>
+  ?t. mem_cont_sim ctx fn s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!i. i < N ==> Dst i t.vs_memory) /\
+    abi_decode_footprint_frame [(d 0,d N - d 0)] s t /\
+    mem_bytes_at (h 0) (h N - h 0) t.vs_memory =
+      mem_bytes_at (h 0) (h N - h 0) s.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    sa.cs_next_var <= sb.cs_next_var /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+      vs_current_bb := s.vs_current_bb; vs_inst_idx := s.vs_inst_idx;
+      vs_prev_bb := s.vs_prev_bb|>) = s
+Proof
+  strip_tac >>
+  `!doff soff. compile_struct_typed_copy ce dst src fields src_fields doff soff =
+    compile_typed_copy_fields ce dst src DT DT doff soff` by
+    (rpt gen_tac >> qpat_assum `DT = _` (fn th => pure_rewrite_tac[th]) >>
+     irule normalize_struct_as_fields >> first_assum ACCEPT_TAC) >>
+  `!i. SUM (MAP (SND o SND) (TAKE i fields)) =
+    SUM (MAP (type_memory_bytes ce) (TAKE i DT))` by
+    (gen_tac >> qpat_assum `DT = _` (fn th => pure_rewrite_tac[th]) >>
+     irule normalize_struct_prefix_sizes >> metis_tac[]) >>
+  `compile_typed_copy_fields ce dst src DT DT d0 s0 sa = ((),sb)` by
+    metis_tac[] >>
+  `LENGTH DT = N` by simp[] >>
+  `(!i. d i = b + d0 + SUM (MAP (type_memory_bytes ce) (TAKE i DT))) /\
+   (!i. h i = a + s0 + SUM (MAP (type_memory_bytes ce) (TAKE i DT)))` by
+    (qpat_assum `!i. SUM (MAP (SND o SND) _) = _`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  irule normalize_tuple_fields_run >>
+  ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
+  reverse conj_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+  goal_assum (drule_at (Pat `compile_typed_copy_fields _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_operand _ _ = _`)) >>
+  qexists_tac `Src` >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
