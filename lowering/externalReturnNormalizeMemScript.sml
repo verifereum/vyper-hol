@@ -189,9 +189,38 @@ Proof
   strip_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def] >> strip_tac >>
-  first_x_assum drule_all >> strip_tac >> gvs[]
+  gvs[]
   >- (`alloca_inv s` by fs[stmt_state_rel_def] >>
       `aid <> inst.inst_id` by decide_tac >>
       drule_all abi_caller_allocation_separate >> decide_tac) >>
   drule_all alloca_clear_of_locals >> decide_tac
+QED
+
+(* The widened bytes child has a 96-byte destination stride, while the
+   next source word starts at offset 64. *)
+Theorem normalized_bytes_first_preserves_word[local]:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  mload (w2n p) s = n2w len /\ len <= 1 /\
+  32 + 32 * word_size len < dimword (:256) /\
+  w2n p + 96 <= s.vs_alloca_next /\
+  w2n d + 128 <= s.vs_alloca_next /\
+  (w2n p + 96 <= w2n d \/ w2n d + 128 <= w2n p) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      mem_bytes_at (w2n p + 64) 32 q.vs_memory =
+        mem_bytes_at (w2n p + 64) 32 s.vs_memory /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `32 + 32 * word_size len <= 64` by
+    (`len = 0 \/ len = 1` by decide_tac >> gvs[word_size_def]) >>
+  conj_tac
+  >- (drule store_bytestring_mem_ok >> disch_then irule >>
+      goal_assum (drule_at Any) >> simp[] >> qexists_tac `len` >>
+      simp[] >> decide_tac) >>
+  drule_all buffer_store_bytestring_run >> strip_tac >>
+  qexists_tac `q` >> simp[] >>
+  irule buffer_mcopy_exterior >> decide_tac
 QED
