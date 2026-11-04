@@ -29,7 +29,8 @@
 Theory bodySimDeclCases
 Ancestors
   vyperTypeStoragePreservation
-  list finite_map bodySim bodySimStmtCases allocLimits exprSim exprSimHyps
+  list finite_map bodySim bodySimStmtCases bodyExprPreFacts bodyAppendStorageFacts
+  allocLimits exprSim exprSimHyps
   exprLoweringProps stmtSim stmtSimDecl stmtSimReturn stmtSimAssign
   stmtSimDeclMem stmtSimDeclEmpty memoryLocalRhsProps
   stmtSimFor stmtSimForParts stmtSimForRange stmtLowering stmtLoweringMono
