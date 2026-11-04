@@ -4822,6 +4822,70 @@ Proof
        venomStateTheory.tstore_def, LET_THM]
 QED
 
+Theorem aug_place_storage_continue_ready:
+  emit_op (if tr then TLOAD else SLOAD) [dst] sa = (cur_op,s1) /\
+  eval_operand dst s0 = SOME slot /\
+  storage_holds cx tr ty (Value cur) slot st /\ is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ word_value cur /\
+  (!z. dst = Var z ==> not_fresh_at sa z) /\ (!l. dst <> Label l) /\
+  cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
+  (!z. cur_op = Var z ==> not_fresh_at s1 z) /\ (!l. cur_op <> Label l) /\
+  lower_value compile_expr cenv ty e s1 = (rhs_op,s2) /\
+  compile_binop bop cur_op rhs_op ty NONE el s2 = (res_op,s3) /\
+  cs_extends s1 s2 /\ s1.cs_next_var <= s2.cs_next_var /\
+  (!z. rhs_op = Var z ==> not_fresh_at s2 z) /\ (!l. rhs_op <> Label l) /\
+  fn_has_code sa s3 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ expr_sim ctx func cenv cx ty e st /\
+  (do result <- eval_expr cx e; read_result cx result od) st = (r1,st1) /\
+  expr_res_ok r1 /\
+  (!rhs. r1 = INL rhs ==>
+    word_value rhs /\ is_word_type (expr_type e) /\
+    IS_SOME (evaluate_type (get_tenv cx) (expr_type e)) /\
+    expr_res_ok (bop_result cx ty bop [ty;expr_type e] cur rhs st1) /\
+    binop_frag ctx func cenv cx bop ty ty NONE el [ty;expr_type e] cur rhs st1) /\
+  cs_extends sa s3 /\ cs_extends s3 sf /\
+  emit_void (if tr then TSTORE else SSTORE) [dst;res_op] s3 = ((),sf) /\
+  (!u st0. storage_dead cx tr (update_storage slot u st0) = storage_dead cx tr st0) /\
+  (!rhs v. r1 = INL rhs /\
+    bop_result cx ty bop [ty;expr_type e] cur rhs st1 = INL v ==>
+    encode_value tv v = SOME [(0,val_to_w256 v)]) /\
+  (case r1 of INR ex => res = INR ex /\ es' = st1
+   | INL rhs => case bop_result cx ty bop [ty;expr_type e] cur rhs st1 of
+       INR ex => res = INR ex /\ es' = st1
+     | INL v => write_place cx (StoragePlace tr slot tv) v st1 = (res,es')) ==>
+  frag_exec ctx sa sf (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
+    (\s. res = INL () /\ stmt_state_rel ctx func cenv cx es' s /\
+      (!x a. not_fresh_at sa x /\ lookup_var x s0 = SOME a ==>
+             lookup_var x s = SOME a) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP s.vs_allocas aid = SOME b))
+    (expr_exit (case r1 of
+      INL rhs => bop_result cx ty bop [ty;expr_type e] cur rhs st1
+    | INR ex => INR ex))
+Proof
+  strip_tac >>
+  `!rhs v. r1 = INL rhs /\
+     bop_result cx ty bop [ty;expr_type e] cur rhs st1 = INL v ==>
+     write_storage_slot cx tr slot tv v st1 = (res,es')` by
+    (rpt strip_tac >> gvs[write_place_def]) >>
+  drule_all aug_place_storage_bop_frag >> strip_tac >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _`
+    (mp_then Any irule fragExecTheory.frag_exec_then) >>
+  simp[] >> rpt strip_tac >>
+  `write_storage_slot cx tr slot tv v st1 = (res,es')` by metis_tac[] >>
+  `encode_value tv v = SOME [(0,val_to_w256 v)]` by metis_tac[] >>
+  `frag_exec ctx s3 sf (\s. s = t /\ stmt_state_rel ctx func cenv cx st1 s)
+    (\s. res = INL () /\ stmt_state_rel ctx func cenv cx es' s /\
+         (!x. lookup_var x s = lookup_var x t) /\
+         s.vs_allocas = t.vs_allocas /\ s.vs_memory = t.vs_memory)
+    (expr_exit (case r1 of
+      INL rhs => bop_result cx ty bop [ty;expr_type e] cur rhs st1
+    | INR ex => INR ex))` by
+    (drule_all aug_place_storage_store_frag >> simp[]) >>
+  first_x_assum (mp_then Any irule frag_exec_weaken) >> simp[] >>
+  metis_tac[]
+QED
+
 Theorem aug_place_storage_query_metadata:
   place_ptr_rel cenv cx s (PlaceR (StoragePlace tr slot tv)) w loc (Type ty) /\
   read_place cx (StoragePlace tr slot tv) st = (INL cur,stc) /\
