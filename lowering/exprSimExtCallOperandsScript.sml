@@ -2,7 +2,7 @@
 Theory exprSimExtCallOperands
 Ancestors
   exprSim exprSimHyps compileEnv context finite_map list arithmetic
-  venomState vyperState vyperValueOperation exprSimOps freshWrites
+  venomState vyperState vyperValueOperation exprSimOps freshWrites exprSimPop
 
 Definition operand_frame_def:
   operand_frame cenv es s cut es' s' <=>
@@ -370,3 +370,95 @@ Proof
   asm_simp_tac (srw_ss()) [local_region_def, dynarray_local_def] >>
   drule val_footprint_le >> decide_tac
 QED
+
+(* Bounded diagnostic: the retained path survives a Pop in source history.
+   This does not claim that an arbitrary related heap is reachable. *)
+Theorem retained_subscript_before_pop[local]:
+  lookup_scopes a es.scopes = SOME entry /\
+  entry.type = ArrayTV (BaseTV (UintT 256)) (Dynamic 1) /\
+  entry.value = ArrayV (DynArrayV [IntV 7]) ==>
+  select_result cx ty (PlaceR (MemoryPlace a []))
+    (ValueSubscript (IntV 0)) es =
+    (INL (PlaceR (MemoryPlace a [ValueSubscript (IntV 0)])), es)
+Proof
+  rpt strip_tac >>
+  simp[select_result_def, extend_place_def, place_type_value_def,
+       read_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, lift_sum_def, return_def,
+       read_memory_path_def, evaluate_subscripts_def, array_index_def,
+       extend_memory_place_def, subscripts_type_def,
+       listTheory.oEL_THM, vyperASTTheory.bound_length_def]
+QED
+
+Theorem retained_subscript_pop_trace[local]:
+  find_containing_scope a es.scopes = SOME (pre, sc, entry, rest) /\
+  entry.assignable /\
+  entry.type = ArrayTV (BaseTV (UintT 256)) (Dynamic 1) /\
+  entry.value = ArrayV (DynArrayV [IntV 7]) ==>
+  pop_place cx (MemoryPlace a []) es =
+    (INL (PlaceR (MemoryPlace a [ValueSubscript (IntV 0)])),
+     es with scopes := pre ++ sc |+ (a, pop_name_entry entry [IntV 7]) :: rest)
+Proof
+  rpt strip_tac >>
+  simp[pop_place_def, bind_def, ignore_bind_def, get_scopes_def,
+       lift_option_type_def, type_check_def, assert_def, return_def,
+       lift_sum_def, read_memory_path_def, evaluate_subscripts_def,
+       check_def, popped_value_def, pop_element_def, assign_subscripts_def,
+       set_scopes_def, record_pop_def, pop_name_entry_def]
+QED
+
+Theorem retained_subscript_history_read[local]:
+  read_memory_path
+    (entry with <|type := ArrayTV (BaseTV (UintT 256)) (Dynamic 1);
+                  value := ArrayV (DynArrayV []);
+                  popped := [([ValueSubscript (IntV 0)], IntV 7)]|>)
+    [ValueSubscript (IntV 0)] = INL (IntV 7)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+(* The live-array clause of local_ptrs_rel sees just the length when empty.
+   In particular it does not constrain mem_word_at (b+32) mem. *)
+Theorem empty_array_representation_projection[local]:
+  val_in_memory (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))
+    (ArrayV (DynArrayV [])) b mem <=> mem_word_at b mem = 0w
+Proof
+  simp[valueEncodingTheory.val_in_memory_def]
+QED
+
+(* Crucially operand_frame includes locals_kept: even dead tail words are
+   protected.  An arbitrary heap changing the removed element is therefore
+   NOT a countermodel to typed_capture's premises. *)
+Theorem retained_subscript_frame_bytes[local]:
+  operand_frame ce es s cut es' s' /\
+  local_region ce es.scopes s a b sz /\ 64 <= sz ==>
+  mem_bytes_at (b + 32) 32 s'.vs_memory =
+  mem_bytes_at (b + 32) 32 s.vs_memory
+Proof
+  simp[operand_frame_def] >> rpt strip_tac >>
+  fs[locals_kept_def] >> first_x_assum irule >>
+  qexistsl_tac [`b`, `a`, `sz`] >> simp[]
+QED
+
+(* Diagnostic staging sequent (not a new theorem assumption):
+   expr_body_pre ce cx env e es0, stmt_state_rel ... es0 s0,
+   compile_expr ce ty e lo = (vv,hi), eval_expr cx e es0 = (INL tv,es1),
+   capture fragment executes s0 -> s1,
+   suffix fragment executes s1 -> s2 matching suffix source es1 -> es2,
+   read_result cx tv es2 = (INL v,es2)
+   must imply vv_holds ce cx ty tv vv es2 s2 and vv_at ... lo hi2 es2 tv vv s2.
+
+   results_case supplies expr_vv_case for e (and subsequent operands after
+   successful evaluation); exprs_case supplies the keyword judgments.
+   Their successful vv_post supplies operand_frame, and the existing frame
+   composition/rebase laws transport a capture ONCE PRODUCED.  The final
+   expr_sim_inv is supplied by successful operand postconditions.
+   The missing general theorem is initial typed_capture production for actual
+   compile/eval of e, including frozen selection indices/branch provenance.
+   The concrete Pop trace above does NOT refute that theorem: although the
+   final live-array relation ignores the removed word, operand_frame's
+   locals_kept conjunct preserves that entire word (frame_bytes above).
+   This protection is stronger than preservation of only live elements.
+   General source mutation/history compatibility and recursive production
+   dependency closure are still unproved; do not infer either from this test.
+*)
