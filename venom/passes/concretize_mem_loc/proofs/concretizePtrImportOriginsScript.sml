@@ -97,7 +97,7 @@ Proof
   Induct >> Cases_on `ys` >> simp[] >> metis_tac[]
 QED
 
-Theorem ptr_stage_names[local]:
+Theorem ptr_stage_names:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' ==>
   ctx_fn_names C = ctx_fn_names C'
 Proof
