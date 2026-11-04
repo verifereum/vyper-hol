@@ -67,6 +67,7 @@ Ancestors
   stmtSimAugAssignAttr stmtSimAssignAttrStorage stmtSimAugAssignStorage
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain targetPlaceSim targetPlaceSimCases
+  bodySimAugPlaceLoad bodySimAugPlaceLive
 Libs
   monadsyntax
 
@@ -4275,6 +4276,58 @@ Proof
   Cases_on `evaluate_binop
     (case type_to_int_bound ty of SOME u => u | NONE => Unsigned 0)
     ptv bop cur rhs` >> gvs[expr_res_ok_def, stmt_res_ok_def]
+QED
+
+Theorem aug_place_memory_read_typed:
+  expr_sim_inv cenv cx env es /\
+  supported_target_info tops bindings t = SOME info /\
+  eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
+  read_place cx (MemoryPlace id path) st = (INL cur,st') /\
+  stmt_state_rel ctx func cenv cx st s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+  is_word_type ty ==>
+  ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur
+Proof
+  strip_tac >> drule_all aug_place_target_memory_live >> strip_tac >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    metis_tac[aug_place_target_entry_typed] >>
+  `st.scopes = es.scopes` by metis_tac[aug_place_target_scopes] >>
+  gvs[place_ptr_rel_def] >>
+  `tv0 = entry.type` by metis_tac[aug_place_entry_type_agrees, optionTheory.SOME_11] >>
+  gvs[] >>
+  `cur = v` by
+    gvs[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
+        lift_sum_def, return_def, read_memory_path_def] >>
+  gvs[] >> drule mem_path_offset_sound >> strip_tac >>
+  irule vyperPlaceStatePreservationTheory.evaluate_subscripts_type >>
+  goal_assum (drule_at Any) >> simp[] >> qexists_tac `entry.value` >> simp[]
+QED
+
+Theorem aug_place_memory_access_ready:
+  expr_sim_inv cenv cx env es /\ body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt key. t = SubscriptTarget bt key)) /\
+  type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+  eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
+  read_place cx (MemoryPlace id path) st = (INL cur,stc) /\
+  place_type_value cx (MemoryPlace id path) stc = (INL ptv,stt) /\
+  stmt_state_rel ctx func cenv cx st s /\
+  place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) ==>
+  stc = st /\ stt = st /\ type_bits ty MOD 8 = 0 /\
+  ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv cur /\
+       mload (w2n w) s = typed_val_to_w256 tv cur
+Proof
+  strip_tac >>
+  `?info. supported_target_info tops bindings t = SOME info` by
+    metis_tac[aug_place_supported_stmt_target_info] >>
+  drule aug_place_typing >> strip_tac >>
+  `is_word_type ty` by metis_tac[exprSimOperatorsTheory.word_value_type_word] >>
+  drule_all aug_place_memory_read_typed >> strip_tac >>
+  drule_all aug_place_memory_load >> strip_tac >> gvs[] >>
+  `type_bits ty MOD 8 = 0` by
+    (irule well_formed_type_bits >> qexists_tac `get_tenv cx` >>
+     simp[well_formed_type_def] >> metis_tac[]) >>
+  metis_tac[read_place_state, place_type_value_state]
 QED
 
 Theorem body_augassign_place:
