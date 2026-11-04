@@ -513,3 +513,19 @@ Proof
   `LAST (cur::h::t) = LAST (h::t)` by simp[LAST_CONS_cond] >>
   metis_tac[]
 QED
+
+Theorem runtime_fallback_segment_head:
+  new_block label before = (old,entry) /\
+  (case fb of
+     NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+   | SOME (ce, pay, nr, key, trans, view, stmts, ret) =>
+       compile_fallback_body ce pay nr key trans view stmts ret)
+    entry = (r,final) ==>
+  ?seg. all_blocks final = all_blocks before ++ seg /\
+        seg <> [] /\ (HD seg).bb_label = label
+Proof
+  strip_tac >> irule new_block_cs_extends_segment_head >>
+  goal_assum (drule_at Any) >>
+  mp_tac compile_runtime_fallback_cs_appends >>
+  rewrite_tac[cs_appends_def] >> disch_then drule >> simp[]
+QED
