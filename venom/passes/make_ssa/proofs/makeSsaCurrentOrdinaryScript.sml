@@ -932,6 +932,28 @@ Proof
   gvs[current_name_agree_def, lookup_var_def]
 QED
 
+Theorem current_create_request_agree:
+  execution_frame st = execution_frame st' ==>
+  venom_create_request st value off sz salt =
+    venom_create_request st' value off sz salt
+Proof
+  simp[execution_frame_def, venom_state_component_equality] >> strip_tac >>
+  simp[venom_create_request_def, read_memory_def]
+QED
+
+Theorem current_consume_create_agree:
+  execution_frame st = execution_frame st' /\
+  consume_create_outcome rq st = (w,t) /\
+  consume_create_outcome rq st' = (w',t') ==>
+  w = w' /\ execution_frame t = execution_frame t' /\
+  t.vs_vars = st.vs_vars /\ t'.vs_vars = st'.vs_vars /\
+  t.vs_current_bb = st.vs_current_bb /\ t'.vs_current_bb = st'.vs_current_bb /\
+  t.vs_prev_bb = st.vs_prev_bb /\ t'.vs_prev_bb = st'.vs_prev_bb
+Proof
+  simp[consume_create_outcome_eq, execution_frame_def,
+       venom_state_component_equality] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem current_exec_create_agree:
   execution_frame st = execution_frame st' /\
   st.vs_current_bb = st'.vs_current_bb /\ st.vs_prev_bb = st'.vs_prev_bb /\
@@ -941,16 +963,22 @@ Theorem current_exec_create_agree:
     (exec_create inst st value off sz salt)
     (exec_create inst' st' value off sz salt)
 Proof
-  strip_tac >> drule current_concrete_call_inputs_agree >> strip_tac >>
-  asm_simp_tac (srw_ss()) [exec_create_def, LET_THM] >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result st output 0 0 result` >>
-  `extract_venom_result st output 0 0 result = NONE <=>
-   extract_venom_result st' output 0 0 result = NONE`
-    by metis_tac[current_extract_result_agree] >>
-  Cases_on `extract_venom_result st output 0 0 result`
-  >- (gvs[] >> simp[current_result_agree_def]) >>
-  PairCases_on `x` >>
-  drule_all (cj 2 current_extract_result_agree) >> strip_tac >> simp[] >>
+  strip_tac >>
+  drule current_create_request_agree >> strip_tac >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (drule current_outputs_compatible_length >> strip_tac >>
+      Cases_on `inst.inst_outputs` >> Cases_on `inst'.inst_outputs` >>
+      gvs[exec_create_def, current_result_agree_def] >>
+      rename1 `LENGTH xs = LENGTH ys` >>
+      Cases_on `xs` >> Cases_on `ys` >>
+      gvs[exec_create_def, current_result_agree_def, halt_state_def,
+          set_returndata_def, execution_frame_def,
+          venom_state_component_equality, current_name_agree_def, lookup_var_def]) >>
+  Cases_on `consume_create_outcome (venom_create_request st value off sz salt) st` >>
+  Cases_on `consume_create_outcome (venom_create_request st value off sz salt) st'` >>
+  drule_all current_consume_create_agree >> strip_tac >>
+  gvs[Excl "consume_create_outcome_eq"] >>
+  simp[exec_create_def, Excl "consume_create_outcome_eq"] >>
   irule current_single_output_agree >> simp[] >>
   qexists_tac `rs` >>
   gvs[current_name_agree_def, lookup_var_def]
@@ -1252,7 +1280,7 @@ Proof
   Cases_on `eval_operand a st` >- simp[current_result_agree_def] >>
   simp[current_result_agree_def, halt_state_def, execution_frame_def] >>
   qpat_x_assum `execution_frame _ = _` mp_tac >>
-  simp[execution_frame_def, venom_state_component_equality]
+  simp[execution_frame_def, venom_state_component_equality, set_returndata_def]
 QED
 
 Theorem current_result_error_agree[simp]:
