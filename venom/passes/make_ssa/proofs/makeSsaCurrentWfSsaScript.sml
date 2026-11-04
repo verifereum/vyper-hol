@@ -3718,6 +3718,25 @@ Proof
   drule_all current_wf_outputs_first_owner >> simp[]
 QED
 
+Theorem current_wf_event_first_owner:
+  current_event_valid A V ev /\ current_event_trace A H ev /\
+  current_wf_event_history_provenance A ev /\
+  (!l u. MEM (u,v) (FLAT (A l)) ==> l = current_event_label ev) /\
+  FLAT (A (current_event_label ev)) = pre ++ (t,v)::post /\
+  EVERY (\a. SND a <> v) pre ==>
+  current_token_name H t = SOME v
+Proof
+  PairCases_on `ev` >>
+  pure_rewrite_tac[current_event_valid_def, current_event_trace_def, current_event_label_def] >>
+  strip_tac >>
+  `current_owner_count ev5 v = 0` by
+    (drule current_wf_event_single_owner_absent >>
+     disch_then (qspec_then `v` mp_tac) >> metis_tac[]) >>
+  drule current_wf_local_outputs_trace >> strip_tac >>
+  qpat_x_assum `FLAT (A ev0) = _` SUBST_ALL_TAC >>
+  drule_all current_wf_outputs_first_owner >> gvs[]
+QED
+
 Theorem current_wf_precleanup_ordinary_available:
   current_wf_precleanup_certificate s fn renamed s' A H events /\
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
