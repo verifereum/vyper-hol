@@ -315,3 +315,117 @@ QED
    This interface closes actual variable/provenance/variable-taint matching
    only.  Layout, saved metadata, other environment fields and full boundary
    reconstruction still need separate integration. *)
+
+Theorem alloca_unchanged_components[local]:
+  dload_equal_environment s t /\ dload_shared_store tn un s t /\
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 ==>
+  s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
+  dload_equal_environment s1 t1 /\
+  dload_shared_store (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\ 
+  (!U. (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) ==>
+       !v. v IN U ==> (lookup_var v s1 = NONE <=> lookup_var v t1 = NONE))
+Proof
+  strip_tac >>
+  gvs[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  gvs[dload_equal_environment_def, venom_state_component_equality,
+       dload_shared_store_def, step_taint_def, adopt_reset_def,
+       store_taint_def, imm_taint_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `v = out` >> gvs[]
+QED
+
+Theorem dload_boundary_alloca_assemble[local]:
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
+  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_live_layout lo s1.vs_alloca_next t1.vs_alloca_next (r1::rs) /\
+  dload_table_stack (r1::rs) (s1::MAP (\c. c.cf_state) cs)
+    (t1::MAP (\d. d.cf_state) ds) /\
+  dload_memory_match lo (r1::rs)
+    (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
+  (!owner id b c n. dload_live_site (r::rs) owner id b c n ==>
+                   dload_live_site (r1::rs) owner id b c n) /\
+  FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) /\
+  FLOOKUP t1.vs_allocas i.inst_id = SOME (c,n) /\
+  dload_live_site (r1::rs) owner i.inst_id b c n ==>
+  dload_boundary_core lo (r1::rs) V Ws PG PH
+    (step_prov PG G i s1) (step_prov PH H i t1)
+    (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds
+Proof
+  strip_tac >>
+  `dload_vars_match (r::rs) V G H tn un s t` by
+    (drule dload_boundary_vars >> simp[]) >>
+  `dload_vars_match (r1::rs) V (step_prov PG G i s1) (step_prov PH H i t1)
+    (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
+    (drule_all dload_alloca_vars_transport >> simp[]) >>
+  `dload_param_values (r1::rs) PG PH s.vs_params t.vs_params` by
+    (irule dload_param_values_sites_mono >>
+     qexists_tac `r::rs` >> simp[] >> drule dload_boundary_params >> simp[]) >>
+  drule dload_boundary_environment >> strip_tac >>
+  drule dload_boundary_shared_store >> strip_tac >>
+  drule_all alloca_unchanged_components >> strip_tac >>
+  gvs[dload_boundary_core_def]
+QED
+
+Theorem dload_boundary_core_alloca:
+  i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
+  i.inst_id NOTIN r.dr_scratch /\
+  exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
+  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  t1.vs_alloca_next < dimword (:256) ==>
+  ?r1. r1 = (if FLOOKUP s.vs_allocas i.inst_id = NONE then
+    r with <|dr_source := r.dr_source |+ (i.inst_id,(s.vs_alloca_next,w2n amount));
+             dr_target := r.dr_target |+ (i.inst_id,(t.vs_alloca_next,w2n amount))|>
+    else r) /\
+    dload_boundary_core lo (r1::rs) V Ws PG PH
+      (step_prov PG G i s1) (step_prov PH H i t1)
+      (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds
+Proof
+  strip_tac >>
+  drule dload_boundary_layout >> strip_tac >>
+  drule dload_boundary_tables >> strip_tac >>
+  drule dload_boundary_memory >> strip_tac >>
+  `r.dr_source = s.vs_allocas /\ r.dr_target = t.vs_allocas` by
+    fs[dload_table_stack_cons] >>
+  `dload_frame_sites r` by fs[dload_live_layout_def] >>
+  Cases_on `FLOOKUP s.vs_allocas i.inst_id`
+  >- (`FLOOKUP t.vs_allocas i.inst_id = NONE` by
+        (fs[dload_frame_sites_def, FLOOKUP_DEF] >> ASM_SET_TAC[]) >>
+      `s1.vs_allocas = s.vs_allocas |+ (i.inst_id,(s.vs_alloca_next,w2n amount)) /\
+       t1.vs_allocas = t.vs_allocas |+ (i.inst_id,(t.vs_alloca_next,w2n amount)) /\
+       s1.vs_alloca_next = s.vs_alloca_next + w2n amount /\
+       t1.vs_alloca_next = t.vs_alloca_next + w2n amount` by
+        (gvs[exec_alloca_def, update_var_def]) >>
+      simp[] >> irule dload_boundary_alloca_assemble >>
+      simp[] >> conj_tac >- (qexists_tac `amount` >> simp[]) >>
+      conj_tac
+      >- (drule_all (SRULE [] (Q.INST [`j` |-> `i`] dload_table_original_fresh)) >> simp[]) >>
+      conj_tac
+      >- (qpat_assum `r.dr_source = _` (fn th => once_rewrite_tac[GSYM th]) >>
+          qpat_assum `r.dr_target = _` (fn th => once_rewrite_tac[GSYM th]) >>
+          irule dload_layout_original_insert >> simp[]) >>
+      conj_tac
+      >- (qexistsl [`s.vs_alloca_next`,`t.vs_alloca_next`,`w2n amount`,`0`] >>
+          simp[FLOOKUP_UPDATE, dload_live_site_def]) >>
+      conj_tac
+      >- (drule_all dload_alloca_fresh_memory >> simp[]) >>
+      qexists_tac `r` >> simp[] >> rpt strip_tac >>
+      qpat_assum `r.dr_source = _` (fn th => once_rewrite_tac[GSYM th]) >>
+      qpat_assum `r.dr_target = _` (fn th => once_rewrite_tac[GSYM th]) >>
+      irule dload_live_site_original_insert >> simp[]) >>
+  PairCases_on `x` >>
+  `?c. FLOOKUP t.vs_allocas i.inst_id = SOME (c,x1)` by
+    (fs[dload_frame_sites_def] >> metis_tac[]) >>
+  `s1.vs_allocas = s.vs_allocas /\ t1.vs_allocas = t.vs_allocas /\
+   s1.vs_alloca_next = s.vs_alloca_next /\ t1.vs_alloca_next = t.vs_alloca_next` by
+    (gvs[exec_alloca_def, update_var_def]) >>
+  simp[] >> irule dload_boundary_alloca_assemble >>
+      simp[] >> conj_tac >- (qexists_tac `amount` >> simp[]) >>
+  conj_tac
+  >- (drule_all (Q.INST [`j` |-> `i`] dload_table_original_repeated) >> simp[]) >>
+  conj_tac
+  >- (qexists_tac `0` >> simp[dload_live_site_def]) >>
+  conj_tac
+  >- (drule_all dload_alloca_repeated_memory >> simp[]) >>
+  qexists_tac `r` >> simp[]
+QED
