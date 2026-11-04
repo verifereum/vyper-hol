@@ -61,6 +61,15 @@ Libs
 
 
 
+Theorem lower_value_nonword_memory:
+  compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
+  p.ptr_location = LocMemory /\ ~is_word_type t ==>
+  lower_value compile_expr cenv ty e sa = (p.ptr_operand,sm)
+Proof
+  rpt strip_tac >>
+  simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def]
+QED
+
 
 Theorem eval_expr_builtin_value:
   !cx ann bi args es tv es'.
