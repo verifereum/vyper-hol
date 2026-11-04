@@ -15,7 +15,8 @@
  *   lower_vyper_runtime_unit_run_mem_safe -- the memory-safe run
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
- * Named admissions (cheats), each a memory twin of a piece S1 rests on:
+ * Named admissions (cheats); all but the last are memory twins of pieces
+ * S1 rests on:
  *   body_stmts_sim_mem -- body_stmts_sim with memory (#641's body
  *     footprint)
  *   external_entry_value_revert_mem, external_entry_reaches_body_mem --
@@ -400,8 +401,8 @@ QED
    wrap; and every reachable alloca frontier, plus 32 bytes per DLOAD in
    the unit, stays below 2^256, so LowerDload's scratch sites do not wrap.
    Proof idea: runtime immutable offsets lie inside the immutable section,
-   and the runtime code is far shorter than 2^255; the frontier is a sum of
-   static buffer sizes along an acyclic call chain. *)
+   and code_layout_valid keeps the code within 2^255 bytes; the frontier
+   is a sum of static buffer sizes along an acyclic call chain. *)
 Theorem lower_vyper_runtime_unit_dload_offset_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -412,6 +413,7 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok tops am tx vs.vs_outcomes /\
+    code_layout_valid vs /\
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> mem_inv dload_offset_ok unit.cu_context vs /\
         mem_inv dload_headroom_ok unit.cu_context vs
