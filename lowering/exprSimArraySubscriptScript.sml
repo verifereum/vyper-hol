@@ -859,6 +859,39 @@ Proof
   irule sub_layout_representation_transport >> goal_assum drule >> simp[]
 QED
 
+Theorem read_result_immutable_source_map:
+  (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
+     | SOME imms => get_source_immutables md imms) =
+  (case ALOOKUP s.immutables cx.txn.target of NONE => FEMPTY
+     | SOME imms => get_source_immutables md imms) ==>
+  (read_result cx (PlaceR (ImmutablePlace md name path)) t = (INL v,t) <=>
+   read_result cx (PlaceR (ImmutablePlace md name path)) s = (INL v,s))
+Proof
+  Cases_on `ALOOKUP t.immutables cx.txn.target` >>
+  Cases_on `ALOOKUP s.immutables cx.txn.target` >>
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, bind_def, return_def,
+       lift_option_type_def, lift_option_def, lift_sum_def, raise_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  rename1 `FLOOKUP (get_source_immutables md imms) name` >>
+  Cases_on `FLOOKUP (get_source_immutables md imms) name` >>
+  simp[return_def, raise_def] >>
+  rename1 `evaluate_subscripts (FST tvv) (SND tvv) path` >>
+  Cases_on `evaluate_subscripts (FST tvv) (SND tvv) path` >>
+  simp[return_def, raise_def]
+QED
+
+Theorem expr_body_pre_foreign_immutable_read:
+  expr_body_pre cenv cx env e s /\ ~expr_has_pop e /\
+  eval_expr cx e s = (res,t) /\ md <> NONE ==>
+  (read_result cx (PlaceR (ImmutablePlace md name path)) t = (INL v,t) <=>
+   read_result cx (PlaceR (ImmutablePlace md name path)) s = (INL v,s))
+Proof
+  rpt strip_tac >> irule read_result_immutable_source_map >>
+  drule_all expr_body_pre_foreign_immutable_frame >> simp[]
+QED
+
 Theorem immutable_holds_source_frame:
   (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
      | SOME imms => get_source_immutables cenv.ce_module imms) =
