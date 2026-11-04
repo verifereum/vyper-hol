@@ -805,3 +805,33 @@ val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag compile_expr_operand_frame_no_
   if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
   then raise Fail "Non-label operand frame dependency" else ()
 end;
+
+Theorem expr_sim_inv_typed_local_no_label:
+  expr_sim_inv ce cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
+  ~(?l sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Label l) sz))
+Proof
+  strip_tac >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    (fs[expr_sim_inv_def] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem compile_name_vv_typed_no_label:
+  expr_sim_inv ce cx env es /\ well_typed_expr env (Name ann id) /\
+  compile_name_vv ce ty id lo = (vv,hi) ==>
+  ~is_label_operand (vv_operand vv)
+Proof
+  strip_tac >>
+  `?p sz. FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    (fs[vyperTypeSystemTheory.well_typed_expr_def, expr_sim_inv_def] >> metis_tac[]) >>
+  gvs[exprLoweringTheory.compile_name_vv_def, comp_return_def, vv_operand_def, mk_ptr_def,
+      stackPlanTypesTheory.is_label_operand_def]
+QED
+
+val _ = List.app (fn (n,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Typed operand label exclusion dependency: " ^ n) else ()
+  end)
+  [("expr_sim_inv_typed_local_no_label", expr_sim_inv_typed_local_no_label),
+   ("compile_name_vv_typed_no_label", compile_name_vv_typed_no_label)];
