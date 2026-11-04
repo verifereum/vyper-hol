@@ -281,3 +281,23 @@ Proof
   simp[le_global_insert_distinct, ALL_DISTINCT_APPEND]
 QED
 
+Theorem le_abtp_global_distinct:
+  !bs bottom result prepend f (g:instruction -> 'b list).
+    ALL_DISTINCT (FLAT (MAP (\bb. FLAT (MAP g
+      (analysis_block_transform_prepend bottom result prepend f bb).bb_instructions)) bs)) <=>
+    ALL_DISTINCT
+      (FLAT (MAP (\bb. FLAT (MAP g
+        (analysis_block_transform bottom result f bb).bb_instructions)) bs) ++
+       FLAT (MAP (\bb. FLAT (MAP g (prepend bb.bb_label))) bs))
+Proof
+  rpt gen_tac >>
+  pure_rewrite_tac[le_abtp_eq, basic_block_accfupds, combinTheory.K_THM] >>
+  qspecl_then [`bs`,
+    `\bb. (analysis_block_transform bottom result f bb).bb_instructions`,
+    `\bb. prepend bb.bb_label`,
+    `\bb. phi_prefix_length
+      (analysis_block_transform bottom result f bb).bb_instructions`] mp_tac
+    (INST_TYPE [alpha |-> ``:basic_block``, beta |-> ``:instruction``,
+                gamma |-> beta] le_global_insert_distinct) >>
+  disch_then (qspec_then `g` mp_tac) >> simp[]
+QED
