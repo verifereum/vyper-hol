@@ -149,3 +149,65 @@ QED
    be silently postulated at the frozen call site.  Full implementation
    requires a strategist-owned decomposition beyond this diagnostic.
 *)
+
+(* Runtime code-copy diagnostic (C1.6.2.12.6; contracts NOT yet proved).
+
+   Proposed compile_code_to_memory_content_frag:
+     compile_code_to_memory src dst n sa = (u,sb) /\
+     (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+     eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME b /\
+     n < dimword (:256) /\ w2n a + 32*n < dimword (:256) /\
+     w2n b + 32*n < dimword (:256)
+   ==> frag_exec ctx sa sb (\s. s = sbase)
+     (\s. mem_bytes_at (w2n b) (32*n) s.vs_memory =
+             mem_bytes_at (w2n a) (32*n) sbase.vs_data_section /\
+       (!off len. off+len <= w2n b \/ w2n b+32*n <= off ==>
+         mem_bytes_at off len s.vs_memory =
+           mem_bytes_at off len sbase.vs_memory) /\
+       (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+       s with <|vs_memory := sbase.vs_memory; vs_vars := sbase.vs_vars;
+         vs_prev_bb := sbase.vs_prev_bb; vs_current_bb := sbase.vs_current_bb;
+         vs_inst_idx := sbase.vs_inst_idx|> = sbase) R.
+
+   The n=0 branch is compiler return (), not a generated counted loop.
+   For n>0 the source and destination scales are BOTH 32. DLOAD reads
+   TAKE 32 (DROP (w2n (a+n2w (32*j))) data ++ REPLICATE 32 0w).
+   Source bound above turns this into the natural byte window at
+   w2n a+32*j; no requirement that data actually has that many bytes is
+   needed for padded contents. Destination bound makes each MSTORE
+   natural and disjoint from the previously copied prefix. Prefix word
+   equalities must still be assembled into the displayed byte equality.
+   The complete data section is preserved by the record-restoration clause.
+
+   No new general relocation theorem is needed: use the EXISTING
+   valueEncodingPropsTheory.val_in_memory_relocate, whose premises are
+     val_in_memory tv v src mem /\ val_wf tv v /\
+     type_memory_size tv <= n /\
+     mem_bytes_at src n mem = mem_bytes_at dst n mem'.
+   valueCopyTheory.val_in_memory_relocate instead uses val_footprint and
+   reversed window equality; exprSimMemoryTransport has a footprint-only
+   equality interface too. Do not duplicate any of these.
+
+   Actual runtime instantiation: immutable_holds gives off,itv,iv,k,tvt,v
+   with a=n2w(off+k), off+type_memory_size itv < dimword(:256),
+   evaluate_type (get_tenv cx) ty = SOME tvt, sub_layout itv iv k tvt v,
+   value_has_type tvt v, and the immutable lookup. immutables_rel at
+   cenv.ce_module, cx.txn.target and is_ctor=F gives
+     val_in_memory itv iv off sbase.vs_data_section
+   plus off+type_memory_size itv <= LENGTH sbase.vs_data_section.
+   sub_layout then yields val_in_memory tvt v (off+k) data and
+   k+type_memory_size tvt <= type_memory_size itv. Obtain val_wf from
+   value_has_type, and apply relocation directly to this SUBVALUE, not to
+   the enclosing immutable. No sub_layout relocation theorem is required.
+
+   expr_sim_inv_memory_size gives mem_bytes=type_memory_size tvt;
+   type_memory_size_slots gives type_memory_size tvt=32*type_slot_size tvt.
+   Hence n=(mem_bytes+31) DIV 32=type_slot_size tvt and 32*n=mem_bytes:
+   copying does not extend beyond the enclosing immutable even at its
+   last sub-layout. Thus off+k+32*n < dimword(:256), w2n a=off+k,
+   and n<dimword(:256). Destination bound remains the allocation consumer's
+   obligation; it does NOT follow from immutable_holds or sub_layout.
+   Runtime immutables_rel must be extracted from stmt_state_rel with the
+   actual compile environment; constructor memory is not a data section.
+   This diagnostic neither proves the DLOAD loop nor allocation framing.
+*)
