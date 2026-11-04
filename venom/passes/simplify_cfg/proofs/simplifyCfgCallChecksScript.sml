@@ -1143,6 +1143,46 @@ Proof
   irule revert_path_do_merge_jump_other >> metis_tac[]
 QED
 
+Theorem flag_fails_cases:
+  flag_fails bbs vs i <=>
+    (i.inst_opcode = ASSERT /\ ?x. i.inst_operands = [Var x] /\ MEM x vs) \/
+    (i.inst_opcode = JNZ /\ ?x ok fail.
+      i.inst_operands = [Var x; Label ok; Label fail] /\ MEM x vs /\
+      revert_path bbs (LENGTH bbs) fail) \/
+    (i.inst_opcode = JMP /\ ?l. i.inst_operands = [Label l] /\
+      revert_path bbs (LENGTH bbs) l) \/
+    i.inst_opcode = REVERT
+Proof
+  Cases_on `i.inst_opcode` >> simp[flag_fails_def] >>
+  eq_tac >> rw[AllCaseEqs()] >> gvs[] >>
+  BasicProvers.every_case_tac >> gvs[]
+QED
+
+Theorem flag_fails_bypass_terminator:
+  (!l. revert_path oldbbs (LENGTH oldbbs) l ==>
+       revert_path newbbs (LENGTH newbbs) (if l = old then target else l)) ==>
+  flag_fails oldbbs vs i ==>
+  flag_fails newbbs vs
+    (if is_terminator i.inst_opcode then
+       canon_jnz_inst (subst_label_inst old target i) else i)
+Proof
+  disch_tac >> rewrite_tac[Once flag_fails_cases] >> strip_tac
+  >- simp[is_terminator_def, flag_fails_def]
+  >- (first_x_assum drule >> strip_tac >>
+      simp[is_terminator_def, subst_label_inst_def, subst_label_op_def,
+           canon_jnz_inst_def] >>
+      rpt IF_CASES_TAC >> gvs[flag_fails_def])
+  >- (first_x_assum drule >> strip_tac >>
+      simp[is_terminator_def, subst_label_inst_def, subst_label_op_def,
+           canon_jnz_inst_def] >>
+      rpt IF_CASES_TAC >> gvs[flag_fails_def]) >>
+  `canon_jnz_inst (subst_label_inst old target i) =
+    subst_label_inst old target i` by
+    (spose_not_then assume_tac >> drule canon_jnz_inst_changed >>
+     simp[subst_label_inst_def]) >>
+  simp[is_terminator_def, subst_label_inst_def, flag_fails_def]
+QED
+
 Theorem simplify_cfg_call_checks_ok:
   wf_function fn /\ fn_inst_wf fn /\ fn_shape_ok fn /\ first_block_no_preds fn ==>
   call_checks_ok (simplify_cfg_fn fn)
