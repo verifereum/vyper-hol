@@ -2,7 +2,7 @@ Theory typedNormalizeContinuation
 Ancestors
   fragExec loweringHalt exprLoweringProps stmtLowering emitHelper
   venomExecSemantics compileEnv context venomInst exprLowering
-  typedArrayLoopControlMem
+  typedArrayLoopControlMem abiDecoderPhi
 
 Theorem normalize_alloc_continuation_entry[local]:
   compile_alloc_buffer n sa = (buf,sc) /\ cs_extends sc sb /\
@@ -72,7 +72,7 @@ QED
 (* Zero offsets emit no instruction: use the enclosing continuation certificate. *)
 Theorem normalize_field_offset_entry:
   compile_with_byte_offset op off sa = (out,sb) /\
-  fn_has_code sa sb fn /\ sa.cs_current_insts = [] /\
+  fn_has_code sa sb fn /\ phi_prefix_length sa.cs_current_insts = 0 /\
   (off = 0 ==> ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
     phi_prefix_length bb.bb_instructions = 0) ==>
   ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
@@ -84,7 +84,9 @@ Proof
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_id_def, fresh_var_def, emit_def] >>
   strip_tac >> gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  simp[phi_prefix_length_def, mk_inst_def]
+  Cases_on `sa.cs_current_insts` >>
+  gvs[phi_prefix_length_def, mk_inst_def] >>
+  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def]
 QED
 
 Theorem normalize_array_backedge_entry:
@@ -98,4 +100,202 @@ Proof
   Cases_on `ec.cs_current_insts` >>
   gvs[typed_sa_backedge_insts_def, phi_prefix_length_def, mk_inst_def] >>
   Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def]
+QED
+
+(* Reuse the decoder's generic PHI-free compiler-state invariant.  In
+   particular it tracks newly closed blocks as well as the current prefix. *)
+Theorem normalize_phi_fresh_var[local]:
+  abi_decoder_phi sa (SND (fresh_var sa))
+Proof
+  simp[fresh_var_def, abi_decoder_phi_def, abi_decoder_phi_safe_def]
+QED
+
+Theorem normalize_phi_copy[local]:
+  (!dst src sz sa. abi_decoder_phi sa (SND (compile_copy_memory dst src sz sa))) /\
+  (!dst src len sa. abi_decoder_phi sa (SND (compile_copy_memory_dynamic dst src len sa))) /\
+  (!op off sa. abi_decoder_phi sa (SND (compile_with_byte_offset op off sa)))
+Proof
+  rpt conj_tac
+  >- (rpt gen_tac >> Cases_on `sz` >>
+      simp[compile_copy_memory_def, abi_decoder_phi_return, abi_decoder_phi_emit_void])
+  >- simp[compile_copy_memory_dynamic_def, abi_decoder_phi_emit_void] >>
+  rpt gen_tac >> simp[compile_with_byte_offset_def] >>
+  IF_CASES_TAC >> simp[abi_decoder_phi_return, abi_decoder_phi_emit_op]
+QED
+
+Theorem normalize_phi_bytes[local]:
+  !src dst sa. abi_decoder_phi sa (SND (compile_store_bytestring src dst sa))
+Proof
+  simp[compile_store_bytestring_def, compile_bytestring_copy_len_def, LET_THM] >>
+  rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+  >- (rpt gen_tac >>
+      ntac 3 (ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+        >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac) >>
+      simp[abi_decoder_phi_emit_op]) >>
+  simp[abi_decoder_phi_emit_void]
+QED
+
+Theorem normalize_phi_typed_family:
+  (!cenv dst dt src st sa.
+    abi_decoder_phi sa (SND (compile_store_memory_typed cenv dst dt src st sa))) /\
+  (!cenv dst src dts sts doff soff sa.
+    abi_decoder_phi sa (SND (compile_typed_copy_fields cenv dst src dts sts doff soff sa))) /\
+  (!cenv dst dt src st count sa.
+    abi_decoder_phi sa (SND (compile_copy_sarray_typed cenv dst dt src st count sa))) /\
+  (!cenv dst dt cap src st sa.
+    abi_decoder_phi sa (SND (compile_copy_dynarray_typed cenv dst dt cap src st sa))) /\
+  (!cenv dst src dfs sfs doff soff sa.
+    abi_decoder_phi sa (SND (compile_struct_typed_copy cenv dst src dfs sfs doff soff sa)))
+Proof
+  ho_match_mp_tac compile_store_memory_typed_ind >> rpt conj_tac
+  >- suspend "dispatch"
+  >- suspend "fields_nil"
+  >- suspend "fields_mismatch"
+  >- suspend "fields_cons"
+  >- suspend "sarray"
+  >- suspend "dynarray"
+  >- suspend "struct_nil"
+  >> suspend "struct_cons"
+QED
+
+Resume normalize_phi_typed_family[dispatch]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type dt`
+  >- (simp[Once compile_store_memory_typed_def] >>
+      irule abi_decoder_phi_bind >>
+      simp[abi_decoder_phi_emit_op, abi_decoder_phi_emit_void]) >>
+  Cases_on `is_bytestring_type dt /\ is_bytestring_type st`
+  >- simp[Once compile_store_memory_typed_def, normalize_phi_bytes] >>
+  Cases_on `acyclic_struct_metadata cenv.ce_struct_fields`
+  >- (Cases_on `dt` >> Cases_on `st`
+      >~ [`compile_store_memory_typed cenv dst (ArrayT a b) src (ArrayT c d)`]
+      >- (Cases_on `b` >> Cases_on `d` >> gvs[] >>
+           simp[Once compile_store_memory_typed_def, LET_THM, normalize_phi_copy] >>
+           metis_tac[]) >>
+      gvs[] >>
+      simp[Once compile_store_memory_typed_def, LET_THM, normalize_phi_copy] >>
+      metis_tac[]) >>
+  simp[Once compile_store_memory_typed_def, abi_decoder_phi_emit_void]
+QED
+
+Resume normalize_phi_typed_family[fields_nil]:
+  simp[Once compile_store_memory_typed_def, abi_decoder_phi_return]
+QED
+Resume normalize_phi_typed_family[fields_mismatch]:
+  simp[Once compile_store_memory_typed_def, abi_decoder_phi_return]
+QED
+Resume normalize_phi_typed_family[fields_cons]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+  >- simp[normalize_phi_copy] >>
+  rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+  >- simp[normalize_phi_copy] >>
+  rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_ignore_bind >> simp[]
+QED
+
+Resume normalize_phi_typed_family[sarray]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  IF_CASES_TAC >- simp[normalize_phi_copy] >>
+  gvs[] >>
+  rpt (FIRST [ho_match_mp_tac abi_decoder_phi_bind,
+              ho_match_mp_tac abi_decoder_phi_ignore_bind,
+              conj_tac >- simp[abi_decoder_phi_fresh_label, normalize_phi_fresh_var,
+                abi_decoder_phi_emit_inst, abi_decoder_phi_new_block,
+                abi_decoder_phi_emit_op, abi_decoder_phi_return], gen_tac]) >>
+  simp[abi_decoder_phi_return]
+QED
+
+Resume normalize_phi_typed_family[dynarray]:
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_store_memory_typed_def, LET_THM] >>
+  rpt (FIRST [ho_match_mp_tac abi_decoder_phi_bind,
+              ho_match_mp_tac abi_decoder_phi_ignore_bind,
+              conj_tac >- simp[abi_decoder_phi_emit_op, abi_decoder_phi_emit_void], gen_tac]) >>
+  IF_CASES_TAC
+  >- (ho_match_mp_tac abi_decoder_phi_bind >>
+      simp[abi_decoder_phi_emit_op, normalize_phi_copy]) >>
+  gvs[] >>
+  rpt (FIRST [ho_match_mp_tac abi_decoder_phi_bind,
+              ho_match_mp_tac abi_decoder_phi_ignore_bind,
+              conj_tac >- simp[abi_decoder_phi_fresh_label, normalize_phi_fresh_var,
+                abi_decoder_phi_emit_inst, abi_decoder_phi_new_block,
+                abi_decoder_phi_emit_op, abi_decoder_phi_return], gen_tac]) >>
+  simp[abi_decoder_phi_return]
+QED
+
+Resume normalize_phi_typed_family[struct_nil]:
+  simp[Once compile_store_memory_typed_def, abi_decoder_phi_return]
+QED
+Resume normalize_phi_typed_family[struct_cons]:
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ALOOKUP sfs name`
+  >- (gvs[] >> simp[Once compile_store_memory_typed_def, LET_THM] >>
+      gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+      >- simp[normalize_phi_copy] >>
+      rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+      >- simp[normalize_phi_copy] >>
+      rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_ignore_bind >> simp[]) >>
+  rename1 `SOME p` >> PairCases_on `p` >> gvs[] >>
+  (simp[Once compile_store_memory_typed_def, LET_THM] >>
+   gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+   >- simp[normalize_phi_copy] >>
+   rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
+   >- simp[normalize_phi_copy] >>
+   rpt gen_tac >> ho_match_mp_tac abi_decoder_phi_ignore_bind >> simp[])
+QED
+Finalise normalize_phi_typed_family
+
+Theorem normalize_typed_prefix_zero:
+  compile_store_memory_typed cenv dst dt src st sa = (x,sb) /\
+  phi_prefix_length sa.cs_current_insts = 0 ==>
+  phi_prefix_length sb.cs_current_insts = 0
+Proof
+  strip_tac >>
+  mp_tac (cj 1 normalize_phi_typed_family) >>
+  disch_then (qspecl_then [`cenv`, `dst`, `dt`, `src`, `st`, `sa`] mp_tac) >>
+  simp[abi_decoder_phi_def] >> strip_tac >>
+  irule abi_decoder_phi_safe_head >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem normalize_fields_prefix_zero:
+  compile_typed_copy_fields cenv dst src dts sts doff soff sa = (x,sb) /\
+  phi_prefix_length sa.cs_current_insts = 0 ==>
+  phi_prefix_length sb.cs_current_insts = 0
+Proof
+  strip_tac >>
+  mp_tac (cj 2 normalize_phi_typed_family) >>
+  disch_then (qspecl_then [`cenv`, `dst`, `src`, `dts`, `sts`, `doff`, `soff`, `sa`] mp_tac) >>
+  simp[abi_decoder_phi_def] >> strip_tac >>
+  irule abi_decoder_phi_safe_head >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem normalize_typed_backedge_entry:
+  compile_store_memory_typed cenv dst dt src st sa = (x,ec) /\
+  phi_prefix_length sa.cs_current_insts = 0 /\
+  lookup_block ec.cs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = ec.cs_current_insts ++ typed_sa_backedge_insts id ctr nv hdr ==>
+  ?entry. lookup_block ec.cs_current_bb fn.fn_blocks = SOME entry /\
+    phi_prefix_length entry.bb_instructions = 0
+Proof
+  strip_tac >> drule_all normalize_typed_prefix_zero >> strip_tac >>
+  metis_tac[normalize_array_backedge_entry]
+QED
+
+(* A zero-code field offset needs the enclosing suffix's real entry block.
+   Nonzero offsets provide their own non-PHI instruction, even after a child
+   that left a nonempty prefix. *)
+Theorem normalize_typed_field_offset_entry:
+  compile_store_memory_typed cenv dst dt src st sa = (x,ec) /\
+  phi_prefix_length sa.cs_current_insts = 0 /\
+  compile_with_byte_offset op off ec = (out,sb) /\
+  fn_has_code ec sb fn /\
+  (off = 0 ==> ?bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0) ==>
+  ?bb. lookup_block ec.cs_current_bb fn.fn_blocks = SOME bb /\
+    phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule_all normalize_typed_prefix_zero >> strip_tac >>
+  drule_all normalize_field_offset_entry >> simp[]
 QED
