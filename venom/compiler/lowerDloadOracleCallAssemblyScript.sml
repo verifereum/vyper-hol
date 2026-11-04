@@ -433,3 +433,62 @@ Proof
   conj_tac >- (qexists_tac `w` >> simp[]) >>
   irule ld_inst_output_ir >> qexists_tac `inst` >> simp[]
 QED
+
+Theorem ld_oracle_call_step:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
+  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  ~in_revert_forward f.lf_fn f.lf_src /\
+  ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a k u v z b c sz.
+    FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
+    a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) /\
+  ((inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
+    st = f.lf_tgt.vs_call_ctx.cc_static) \/
+   (inst.inst_opcode = STATICCALL /\ inst.inst_operands = [g;a;ao;az;ro;rz] /\ st = T)) /\
+  step_inst_base inst f.lf_tgt = OK ts ==>
+  ?ss. step_inst_base inst f.lf_src = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+      lf_H := set_prov f.lf_H inst.inst_outputs NONE;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
+    ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
+    ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
+    ss.vs_prev_bb = f.lf_src.vs_prev_bb /\ ts.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+    ss.vs_inst_idx = f.lf_src.vs_inst_idx /\ ts.vs_inst_idx = f.lf_tgt.vs_inst_idx
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all ld_oracle_call_operands >> strip_tac >>
+  rename1 `eval_operand az f.lf_src = SOME n` >>
+  `read_memory (w2n x) (w2n n) f.lf_src = read_memory (w2n y) (w2n n) f.lf_tgt /\
+   (w2n rsize = 0 \/ (w2n r = w2n q /\ w2n r + w2n rsize <= lo) \/
+    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz))` by
+    (irule ld_oracle_call_ranges >>
+     qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `taint_ok _ _ _ _` (irule_at Any) >>
+     simp[] >> qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[] >> metis_tac[]) >>
+  `3 < LENGTH inst.inst_operands /\
+   source_memory_write_ranges inst f.lf_src = [(w2n r,w2n rsize)]` by
+    (qpat_x_assum `_ \/ _` strip_assume_tac >>
+     simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+          memory_range_of_operands_def]) >>
+  qpat_assum `exec_ext_call inst f.lf_tgt _ _ _ _ _ _ _ _ = _`
+    (mp_then Any mp_tac ld_oracle_call_observed_effect) >>
+  disch_then (qspecl_then [`tn`,`r`,`lo`,`x`,`P`,`A`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >>
+    qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
+    simp[] >> metis_tac[wordsTheory.w2n_eq_0])) >>
+  strip_tac >> qexists_tac `ss` >> simp[] >>
+  `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by
+    fs[ld_nonghost_def] >>
+  qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
+  gvs[] >> pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >> simp[]
+QED
