@@ -1,7 +1,7 @@
 Theory frameRawReachable
 Ancestors
   contextRawReachable ptrDiscipline venomExecSemantics venomInst contextCodegenRel
-  crossBlockSimProps passSimulationDefs venomExecProofs
+  crossBlockSimProps passSimulationDefs venomExecProofs o1PassContract venomWf list
 
 Theorem raw_reachable_completed_invoke:
   !vs ctx caller callinst s nm ops callee args cs fuel ret se sr inst'.
@@ -217,4 +217,29 @@ Proof
   rewrite_tac[frame_prefix_def] >> disch_then irule >>
   simp[frame_tail_returns_def] >> disj2_tac >>
   qexistsl [`k`,`t`,`h`] >> simp[Once exec_block_def]
+QED
+
+(* active_inst uses membership; distinct labels identify the selected block. *)
+Theorem active_inst_block_lookup:
+  ALL_DISTINCT (fn_labels fn) /\ active_inst fn inst s ==>
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s.vs_inst_idx = SOME inst
+Proof
+  rw[active_inst_def, fn_labels_def] >> qexists_tac `bb` >>
+  simp[get_instruction_def] >> irule MEM_lookup_block >> simp[]
+QED
+
+Theorem o1_ctx_shape_function_wf:
+  o1_ctx_shape ctx /\ MEM fn ctx.ctx_functions ==> wf_function fn
+Proof
+  simp[o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >> metis_tac[]
+QED
+
+Theorem o1_ctx_shape_active_lookup:
+  o1_ctx_shape ctx /\ MEM fn ctx.ctx_functions /\ active_inst fn inst s ==>
+  ?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb s.vs_inst_idx = SOME inst
+Proof
+  rpt strip_tac >> irule active_inst_block_lookup >> simp[] >>
+  drule_all o1_ctx_shape_function_wf >> simp[wf_function_def]
 QED
