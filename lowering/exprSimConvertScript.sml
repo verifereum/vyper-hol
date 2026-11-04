@@ -667,8 +667,10 @@ Proof
      well_typed_type_builtin_args_def] >>
   Cases_on `args` >> gvs[] >> rename1 `h::tl` >> Cases_on `tl` >>
   gvs[well_typed_expr_def, int_calls_expr_def,
-      supportedExprTraverseTheory.expr_has_evm_run_thm, byte_widths_expr_def,
-      alloc_limits_expr_def] >>
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.supported_exprs_exists_every,
+      byte_widths_expr_def, alloc_limits_expr_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             listTheory.APPEND_ASSOC]
 QED
