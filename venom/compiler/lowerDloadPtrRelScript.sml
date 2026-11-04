@@ -177,16 +177,20 @@ Definition dload_memory_match_def:
 End
 
 Theorem dload_vars_match_empty_provenance:
-  dload_vars_match [] V FEMPTY FEMPTY tn tn s s
+  dload_vars_match fs V FEMPTY FEMPTY tn tn s s
 Proof
   simp[dload_vars_match_def, dload_value_word_def, word_agree_except_def] >>
   rpt strip_tac >> gvs[]
 QED
 
 Theorem dload_memory_match_empty:
-  dload_memory_match lo [] tn tn s s
+  (!f. MEM f fs ==> f.dr_source = FEMPTY) ==>
+  dload_memory_match lo fs tn tn s s
 Proof
-  simp[dload_memory_match_def, dload_live_site_def]
+  simp[dload_memory_match_def, dload_live_site_def] >>
+  rpt strip_tac >>
+  `MEM (EL owner fs) fs` by simp[EL_MEM] >>
+  first_x_assum drule >> strip_tac >> gvs[]
 QED
 
 Theorem dload_matched_operand:
@@ -345,8 +349,12 @@ Theorem dload_initial_components:
   dload_table_stack
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     [vs] [vs] /\
-  dload_vars_match [] V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
-  dload_memory_match lo [] entry_taint entry_taint vs vs
+  dload_vars_match
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
+  dload_memory_match lo
+    [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
+    entry_taint entry_taint vs vs
 Proof
   strip_tac >>
   `vs.vs_allocas = FEMPTY` by
