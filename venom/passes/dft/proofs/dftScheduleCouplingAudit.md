@@ -308,3 +308,30 @@ actual saved INVOKE slots and the PHI-entry bound. No callee termination or
 simulation hypothesis occurs in these proofs. This is recursive one-step
 closure for this single fixed GAS/GAS edit only; trajectory/observation
 corollaries and the general effectful/GAS-INVOKE extension remain distinct.
+
+## Recursive GAS/GAS trajectory checkpoint (C3.2.12)
+
+`dftOccurrenceGasEditTraceTheory` now checks:
+- `dft_gas_edit_rel_iterate`: arbitrary finite FUNPOW prefixes preserve the
+  relation under a fixed address oracle, with no call-depth bound.
+- `dft_gas_edit_rel_terminal`: related configurations have exactly the same
+  empty-stack Done result and occurrence count, in both directions.
+- `dft_gas_edit_rel_observe`: every target nonempty direct-range observation
+  has a source observation with the **identical instruction and state**
+  (only function syntax may differ).
+- `dft_gas_edit_init_iterate` and `dft_gas_edit_containing_init`: initial
+  trajectories are related; the latter explicitly includes bb0 in the initial
+  function and that function in the context, leaving other blocks/callees free.
+
+These conclusions compose directly: apply init_iterate at j, then
+rel_terminal or rel_observe. The proof excludes generated middle phases using
+`dft_gas_edit_middle_active`, whose fetched instructions are GAS, and treats
+synchronized observations using the checked outside-pair fetch boundary.
+Quantifying over each finite prefix includes observations during divergent
+recursive runs and does not require successful returns.
+
+Restriction: one fixed adjacent GAS/GAS replacement with singleton distinct
+outputs, no operands, and distinct instruction IDs. This does NOT establish
+effectful adjacent edits, GAS/INVOKE saved residual phases, intermediate
+schedule readiness, full DFT composition, finite gas-list realization,
+`dft_run_block_gas`, or `dft_ctx_sim_gas`.

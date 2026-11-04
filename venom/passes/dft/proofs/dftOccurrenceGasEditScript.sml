@@ -846,3 +846,31 @@ Proof
   disj1_tac >>
   simp[dft_gas_edit_middle_join, dft_gas_edit_middle_safe_cut, dft_gas_edit_safe_next]
 QED
+
+Definition dft_edit_gas_cut_def:
+  dft_edit_gas_cut core <=>
+    ?fn b bb s stack n inst.
+      core = DftOpen (DftAt fn b bb s) stack n /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode = GAS
+End
+
+Theorem dft_gas_edit_middle_active:
+  bb0.bb_instructions = pre ++ [x;y] ++ post /\
+  x.inst_opcode = GAS /\ y.inst_opcode = GAS /\
+  x.inst_outputs = [u] /\ y.inst_outputs = [v] /\
+  x.inst_operands = [] /\ y.inst_operands = [] /\
+  dft_edit_before bb0 (LENGTH pre) c ==>
+  dft_edit_gas_cut (dft_occ_oracle_next w C c).dft_occ_core /\
+  dft_edit_gas_cut
+    (dft_occ_oracle_next w (dft_gas_edit_ctx bb0 pre x y post C)
+      (dft_edit_occ (dft_gas_edit_fn bb0 pre x y post)
+        (dft_gas_edit_block bb0 pre x y post) c)).dft_occ_core
+Proof
+  simp[dft_edit_before_def] >> rpt strip_tac >> Cases_on `c` >> gvs[] >>
+  simp[dft_edit_gas_cut_def, dft_edit_occ_def, dft_edit_core_def, dft_edit_control_def,
+       dft_occ_oracle_next_def, dft_occ_next_def, dft_occ_address_def,
+       dft_next_inf_def, dft_fill_def, dft_fill_control_def, dft_erase_def,
+       dft_open_next_def, dft_open_deliver_def, dft_open_continue_def,
+       get_instruction_def, dft_gas_edit_block_def, EL_APPEND_EQN,
+       is_terminator_def, update_var_def, ADD1]
+QED
