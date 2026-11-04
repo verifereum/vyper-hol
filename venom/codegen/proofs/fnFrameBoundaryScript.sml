@@ -1,13 +1,7 @@
 (*
  * Function-boundary steps of the frame-aware simulation: RET, INVOKE and
  * the entry block's parameter prefix, against frameRel$fn_frame_inv and
- * the boundary relations of venomToAsmProps.
- *
- * This theory imports venomToAsmProps for fn_has_retpc, shared_state_rel,
- * fn_entry_state_rel and fn_return_state_rel.  To use these lemmas in the
- * proofs of gen_fn_frame_simulation and gen_fn_simulation, those four
- * definitions have to move (unchanged) to frameRel, and venomToAsmProps
- * then imports this theory.
+ * frameRel's function boundary relations.
  *
  * TOP-LEVEL (all CHEATED):
  *   gen_ret_frame_sim     — RET: jump to the return address
@@ -18,7 +12,7 @@
 
 Theory fnFrameBoundary
 Ancestors
-  venomToAsmProps genFrameSim frameRel contextCodegenRel codegenRel
+  genFrameSim frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
 
