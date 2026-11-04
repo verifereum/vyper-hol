@@ -89,6 +89,66 @@ Proof
   disch_then SUBST1_TAC >> simp[get_successors_subst_block_labels]
 QED
 
+Theorem subst_block_labels_inst_inst_id[local,simp]:
+  !m i. (subst_block_labels_inst m i).inst_id = i.inst_id
+Proof
+  rw[subst_block_labels_inst_def, subst_label_map_inst_def]
+QED
+
+Theorem labels_filter_subst[local]:
+  !bbs m removed.
+    MAP (\bb. bb.bb_label)
+      (FILTER (\bb. ~MEM bb.bb_label removed)
+        (MAP (subst_block_labels_block m) bbs)) =
+    MAP (\bb. bb.bb_label) (FILTER (\bb. ~MEM bb.bb_label removed) bbs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem labels_filter_distinct[local]:
+  !bbs removed.
+    ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) ==>
+    ALL_DISTINCT (MAP (\bb. bb.bb_label)
+      (FILTER (\bb. ~MEM bb.bb_label removed) bbs))
+Proof
+  Induct >> simp[] >> rpt strip_tac >> IF_CASES_TAC >>
+  gvs[listTheory.MEM_MAP, listTheory.MEM_FILTER] >> metis_tac[]
+QED
+
+Theorem ids_filter_subst[local]:
+  !P m bbs.
+    ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)) ==>
+    ALL_DISTINCT (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+      (FILTER P (MAP (subst_block_labels_block m) bbs)))) /\
+    !x. MEM x (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+      (FILTER P (MAP (subst_block_labels_block m) bbs)))) ==>
+    MEM x (FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs))
+Proof
+  gen_tac >> gen_tac >> Induct >> simp[] >>
+  rpt gen_tac >> strip_tac >> gvs[listTheory.ALL_DISTINCT_APPEND] >>
+  IF_CASES_TAC >>
+  gvs[subst_block_labels_block_def, listTheory.MAP_MAP_o,
+      combinTheory.o_DEF, listTheory.ALL_DISTINCT_APPEND] >> metis_tac[]
+QED
+
+Theorem wf_blocks_filter_subst[local]:
+  !bbs m P. EVERY bb_well_formed bbs ==>
+    EVERY bb_well_formed (FILTER P (MAP (subst_block_labels_block m) bbs))
+Proof
+  simp[listTheory.EVERY_MEM, listTheory.MEM_FILTER, listTheory.MEM_MAP] >>
+  metis_tac[bb_well_formed_subst_block_labels]
+QED
+
+Theorem entry_filter_subst_nonempty[local]:
+  !func entry removed m.
+    fn_entry_label func = SOME entry /\ ~MEM entry removed ==>
+    FILTER (\bb. ~MEM bb.bb_label removed)
+      (MAP (subst_block_labels_block m) func.fn_blocks) <> []
+Proof
+  rpt gen_tac >> Cases_on `func.fn_blocks` >>
+  simp[fn_entry_label_def, entry_block_def] >> rpt strip_tac >> simp[]
+QED
+
 Theorem tail_merge_fn_wf_function:
   !func. wf_function func ==> wf_function (tail_merge_fn func)
 Proof
