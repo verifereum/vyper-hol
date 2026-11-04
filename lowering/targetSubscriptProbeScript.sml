@@ -5656,12 +5656,158 @@ QED
    Entry ledger for the new empty-donor calculation: the shared deep
      context's supported code, function/body typing and layout-safety facts
      remain proved. The new state's contract_storage_well_formed is checked
-     above. Full target_pre/expr_sim_inv, target_indices_pre and the universal
-     target_case for the effectful base have NOT been constructed here.
-     Consequently this is a checked evaluation/liveness diagnostic, not a
-     refutation of a theorem with target_pre as antecedent.
+     above. The entry lemmas below establish expr_sim_inv and full target_pre
+     with the concrete probe_deep_cenv, including target_indices_pre uniformly
+     at every invariant state. The universal target_case for the effectful
+     base has NOT been constructed here. Consequently this is an admitted
+     entry/evaluation/liveness diagnostic, not a task-level refutation.
    Machine ledger: no new compiled execution is claimed. The existing
      deep-copy footprint summary is conditional on its actual writes.
      Post-call storage agreement alone does not determine slot 2 after the
      root becomes empty. Whether the actual base execution retains the
      same header is a distinct execution-aware obligation. *)
+
+Definition probe_deep_cenv_def:
+  probe_deep_cenv = build_compile_env probe_deep_code
+    Internal Nonpayable "shrink" [] (BaseT (UintT 256)) [] F
+End
+
+Theorem probe_deep_empty_donor_env_consistent:
+  env_consistent probe_deep_env probe_deep_context probe_deep_empty_donor_state
+Proof
+  simp[vyperTypeInvariantsTheory.env_consistent_def, probe_deep_env_context] >>
+  conj_tac
+  >- (simp[vyperTypeInvariantsTheory.env_scopes_consistent_def,
+           probe_deep_env_def, probe_deep_empty_donor_state_def,
+           set_storage_def, probe_deep_source_state_def,
+           set_storage_backend_def, bind_def, get_accounts_def,
+           update_accounts_def, empty_state_def, lookup_scopes_def]) >>
+  rw[vyperTypeInvariantsTheory.env_immutables_consistent_def,
+     probe_deep_env_def, FLOOKUP_UPDATE, probe_deep_module_code] >>
+  gvs[AllCaseEqs()] >>
+  gvs[probe_deep_code_def, find_var_decl_by_name_def] >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_deep_empty_donor_inv:
+  expr_sim_inv probe_deep_cenv probe_deep_context
+    probe_deep_env probe_deep_empty_donor_state
+Proof
+  simp[expr_sim_inv_def, probe_deep_empty_donor_env_consistent,
+       probe_deep_context_typed, probe_deep_functions_typed,
+       probe_deep_empty_donor_storage_well_formed, probe_deep_layout_safe,
+       probe_deep_env_def, probe_deep_module_code] >>
+  conj_tac
+  >- (simp[vyperTypeInvariantsTheory.state_well_typed_def,
+           vyperTypeInvariantsTheory.scope_well_typed_def,
+           probe_deep_empty_donor_state_def, set_storage_def,
+           probe_deep_source_state_def, set_storage_backend_def,
+           bind_def, return_def, get_accounts_def, update_accounts_def,
+           empty_state_def]) >>
+  conj_tac
+  >- (rw[vyperTypeInvariantsTheory.accounts_well_typed_def,
+         vyperTypeInvariantsTheory.account_well_typed_def] >>
+      CONV_TAC (computeLib.RESTR_EVAL_CONV [``update_storage``]) >>
+      Cases_on `addr = 0w` >> simp[]) >>
+  conj_tac
+  >- (CONV_TAC (computeLib.RESTR_EVAL_CONV [``probe_deep_cenv``]) >> simp[]) >>
+  conj_tac
+  >- (CONV_TAC (computeLib.RESTR_EVAL_CONV [``probe_deep_cenv``]) >> simp[]) >>
+  conj_tac
+  >- (simp[probe_deep_cenv_def, compileVyperTheory.build_compile_env_ce_struct_fields,
+           sfields_tenv_consistent_def] >> EVAL_TAC >> simp[]) >>
+  conj_tac
+  >- (simp[probe_deep_cenv_def, compileVyperTheory.build_compile_env_ce_struct_fields] >>
+      EVAL_TAC >> simp[]) >>
+  conj_tac
+  >- (simp[outcomes_accounts_typed_def, probe_deep_empty_donor_state_def,
+           set_storage_def, probe_deep_source_state_def,
+           set_storage_backend_def, bind_def, return_def, get_accounts_def,
+           update_accounts_def, empty_state_def]) >>
+  conj_tac
+  >- (simp[probe_deep_empty_donor_state_def, set_storage_def,
+           probe_deep_source_state_def, set_storage_backend_def,
+           bind_def, return_def, get_accounts_def, update_accounts_def,
+           empty_state_def]) >>
+  conj_tac
+  >- (simp[vyperTypeStoragePreservationTheory.oracle_storage_ok_def,
+           probe_deep_empty_donor_state_def, set_storage_def,
+           probe_deep_source_state_def, set_storage_backend_def,
+           bind_def, return_def, get_accounts_def, update_accounts_def,
+           empty_state_def]) >>
+  conj_tac
+  >- (simp[popped_keys_indexed_def, probe_deep_empty_donor_state_def,
+           set_storage_def, probe_deep_source_state_def,
+           set_storage_backend_def, bind_def, return_def, get_accounts_def,
+           update_accounts_def, empty_state_def]) >>
+  rw[placeTypingPropsTheory.place_map_tables_agree_on_defined_def, FLOOKUP_UPDATE] >>
+  gvs[AllCaseEqs()] >>
+  EVAL_TAC
+QED
+
+Theorem probe_deep_call_safe:
+  call_evaluation_safe probe_deep_context [(NONE,"shrink")]
+Proof
+  rw[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+  qexistsl_tac [`[((NONE,"caller"),(NONE,"shrink"))]`,
+                `(NONE,"caller")`, `[]`] >>
+  simp[probe_deep_context_def, empty_evaluation_context_def,
+       vyperTypeCallStackSoundnessTheory.call_stack_follows_def,
+       vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_def,
+       vyperTypeCallGraphSoundnessTheory.call_edge_rel_def] >>
+  conj_tac
+  >- (qspecl_then [`[(NONE,"caller");(NONE,"shrink")] : nsid list`,
+                    `[((NONE,"caller"),(NONE,"shrink"))]`] mp_tac
+        (GEN_ALL vyperTypeCallGraphSoundnessTheory.call_graph_acyclic_correct) >>
+      EVAL_TAC >> simp[]) >>
+  rw[vyperTypeCallStackSoundnessTheory.functions_follow_call_graph_def,
+     get_module_code_def] >>
+  gvs[AllCaseEqs()] >>
+  EVAL_TAC >> simp[] >>
+  gvs[vyperInterpreterTheory.lookup_callable_function_def,
+      probe_deep_code_def, vyperInterpreterTheory.lookup_function_def,
+      AllCaseEqs()] >> EVAL_TAC
+QED
+
+Theorem probe_deep_nested_indices_pre:
+  target_indices_pre probe_deep_cenv probe_deep_context probe_deep_env
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+Proof
+  simp[targetPlaceSimTheory.target_indices_pre_def, expr_body_pre_def] >>
+  `call_evaluation_safe probe_deep_context []` by
+    (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
+     qexists_tac `[(NONE,"shrink")]` >> simp[probe_deep_call_safe]) >>
+  simp[supportedExprTraverseTheory.expr_has_evm_run_thm,
+       supportedExprTraverseTheory.expr_evm_run_root_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def, probe_deep_call_safe, probe_deep_module_code,
+       probe_deep_supported] >>
+  conj_tac
+  >- (rpt strip_tac >> EVAL_TAC >> simp[]) >>
+  rpt strip_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem probe_deep_target_env_ok:
+  target_env_ok probe_deep_cenv probe_deep_context
+Proof
+  rw[targetPlaceSimTheory.target_env_ok_def, probe_deep_module_code] >>
+  gvs[AllCaseEqs()] >>
+  gvs[probe_deep_code_def, find_var_decl_by_name_def, AllCaseEqs()] >>
+  EVAL_TAC
+QED
+
+Theorem probe_deep_nested_target_pre:
+  target_pre probe_deep_cenv probe_deep_context probe_deep_env
+    (SubscriptTarget
+      (SubscriptTarget (TopLevelNameTarget (NONE,"outer"))
+        (Literal (BaseT (UintT 256)) (IntL 0)))
+      (Call (BaseT (UintT 256)) (IntCall (NONE,"shrink")) [] NONE))
+    probe_deep_empty_donor_state
+Proof
+  simp[targetPlaceSimTheory.target_pre_def, probe_deep_empty_donor_inv,
+       probe_deep_target_env_ok, probe_deep_nested_indices_pre,
+       targetPlaceSimTheory.immutable_root_def,
+       targetPlaceSimTheory.target_root_def, probe_deep_module_code] >>
+  EVAL_TAC
+QED
