@@ -37,16 +37,8 @@ Theorem ptr_chrono_write_step_success[local]:
     !n. inst_write_size a.po_inst = SOME n ==>
       ?fuel s'. step_inst fuel C a.po_inst a.po_state = OK s'
 Proof
-  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac >>
-  simp[ptr_observe_def] >> rpt strip_tac
-  >- metis_tac[]
-  >- metis_tac[]
-  >- gvs[inst_write_size_def, memLocDefsTheory.mem_write_ops_def] >>
-  Cases_on `rinst.inst_opcode = INVOKE`
-  >- gvs[inst_write_size_def, memLocDefsTheory.mem_write_ops_def] >>
-  gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
-  drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >>
-  gvs[inst_write_size_def, memLocDefsTheory.mem_write_ops_def]
+  rpt strip_tac >> drule ptr_write_size_ordinary >> strip_tac >>
+  drule_all ptr_chrono_ordinary_step_success >> simp[]
 QED
 
 Theorem ptr_owner_interval_no_kill[local]:
@@ -57,8 +49,9 @@ Theorem ptr_owner_interval_no_kill[local]:
   FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
   b <= byte /\ byte < b + sz /\
   (!k. i <= k /\ k < j ==>
-    ~in_revert_forward fn (EL k h).po_state /\
-    (!off len. MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
+      MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
   o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
@@ -133,8 +126,9 @@ Theorem ptr_stage_owner_interval_no_kill:
   FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
   b <= byte /\ byte < b + sz /\
   (!k. i <= k /\ k < j ==>
-    ~in_revert_forward fn (EL k h).po_state /\
-    (!off len. MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
+      MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
   o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\

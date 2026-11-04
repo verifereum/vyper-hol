@@ -453,8 +453,9 @@ Theorem ptr_stage_owner_interval_liveat:
   FLOOKUP (ptr_owner_view d (EL i h)).cf_state.vs_allocas aid = SOME (b,sz) /\
   b <= byte /\ byte < b + sz /\
   (!k. i <= k /\ k < j ==>
-    ~in_revert_forward fn (EL k h).po_state /\
-    (!off len. MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
+    ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
+    (!n off len. inst_write_size (EL k h).po_inst = SOME n /\
+      MEM (off,len) (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state) ==>
       ~(off <= byte /\ byte < off + len))) /\
   o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\

@@ -1,7 +1,7 @@
 Theory concretizePtrChronologicalHistory
 Ancestors
   concretizePtrHistoryDemand frameExecutionHistory ptrDiscipline venomExecSemantics venomInst list rich_list
-  pred_set codegenRel memLocDefs
+  pred_set codegenRel memLocDefs opcodeClass concretizeMemLocDefs
 
 (* Full observations, including completed activations, never popped on return. *)
 Datatype:
@@ -135,6 +135,36 @@ Definition ptr_chrono_write_def:
     (?fuel s'. step_inst fuel ctx obs.po_inst obs.po_state = OK s') /\
     x IN range_bytes (source_memory_write_ranges obs.po_inst obs.po_state)
 End
+
+Theorem ptr_chrono_ordinary_step_success:
+  !C a z. ptr_chrono_step C a z ==>
+    ~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE ==>
+    ?fuel s'. step_inst fuel C a.po_inst a.po_state = OK s'
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac >>
+  simp[ptr_observe_def] >> rpt strip_tac
+  >- metis_tac[] >>
+  gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem ptr_write_size_ordinary:
+  inst_write_size inst = SOME n ==>
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE
+Proof
+  Cases_on `inst.inst_opcode` >>
+  simp[inst_write_size_def, mem_write_ops_def, is_terminator_def]
+QED
+
+Theorem ptr_chrono_range_write:
+  ptr_chrono_step C a z /\ inst_write_size a.po_inst = SOME n /\
+  x IN range_bytes (source_memory_write_ranges a.po_inst a.po_state) ==>
+  ptr_chrono_write C x a
+Proof
+  strip_tac >> drule ptr_write_size_ordinary >> strip_tac >>
+  drule_all ptr_chrono_ordinary_step_success >>
+  simp[ptr_chrono_write_def]
+QED
 
 Theorem ptr_chrono_step_mem:
   !ctx a b. ptr_chrono_step ctx a b ==>
