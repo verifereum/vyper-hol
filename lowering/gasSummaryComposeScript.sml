@@ -37,6 +37,40 @@ Proof
   simp[bind_def]
 QED
 
+Theorem gas_source_ignore_return_exception_bind:
+  (!tail. ignore_bind source (return ()) (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)) ==>
+  !tail. bind source next (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)
+Proof
+  strip_tac >> gen_tac >> first_x_assum (qspec_then `tail` mp_tac) >>
+  Cases_on `source (es with gas_obs := xs ++ tail)` >> Cases_on `q` >>
+  simp[ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem gas_source_finally_exception:
+  (!tail. source (es with gas_obs := xs ++ tail) =
+     (INR exc, mid with gas_obs := tail)) /\
+  (!tail. cleanup ((mid with gas_obs := []) with gas_obs := tail) =
+     (INL (), fin with gas_obs := tail)) ==>
+  !tail. finally source cleanup (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)
+Proof
+  simp[evaluation_state_component_equality] >> strip_tac >>
+  simp[finally_def, ignore_bind_def, bind_def, raise_def]
+QED
+
+Theorem gas_source_try_exception:
+  (!tail. source (es with gas_obs := xs ++ tail) =
+     (INR exc, mid with gas_obs := tail)) /\
+  (!tail. handler exc ((mid with gas_obs := []) with gas_obs := tail) =
+     (INR exc, fin with gas_obs := tail)) ==>
+  !tail. try source handler (es with gas_obs := xs ++ tail) =
+     (INR exc, fin with gas_obs := tail)
+Proof
+  simp[evaluation_state_component_equality] >> strip_tac >> simp[try_def]
+QED
+
 Theorem gas_summary_bind:
   gas_summary (ctx, func) source (es, s0)
     (\res es_mid t.
