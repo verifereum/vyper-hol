@@ -49,3 +49,14 @@ Proof
     gvs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all toplevel_storage_read_decodes >> metis_tac[]
 QED
+
+val () =
+  let val (oracles, axioms) =
+        Tag.dest_tag (Thm.tag compile_toplevel_storage_undecodable_sim)
+  in
+    if null axioms andalso
+       null (Thm.hyp compile_toplevel_storage_undecodable_sim) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print "TOPLEVEL_UNDECODABLE_AUDIT compile_toplevel_storage_undecodable_sim OK\n"
+    else raise Fail "compile_toplevel_storage_undecodable_sim: admitted proof dependency"
+  end;
