@@ -3841,12 +3841,14 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
        (lock_st with scopes := [call_env])` by (
       simp[runtime_consistent_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
-    Cases_on
-      `push_function (env_body.current_src,fn) call_env cx lock_st` >>
-    rename1 `_ lock_st = (push_res,push_st)` >>
-    Cases_on `push_res` >>
-    gvs[ignore_bind_apply, bind_apply, push_function_def,
-        return_def, raise_def] >>
+    `push_function (env_body.current_src,fn) call_env cx lock_st =
+       (INL (cx with stk updated_by CONS (env_body.current_src,fn)),
+        lock_st with scopes := [call_env])` by
+      simp[push_function_def, return_def] >>
+    qpat_x_assum `_ = (res,st')`
+      (mp_tac o REWRITE_RULE [push_function_def, return_def,
+                             ignore_bind_apply, bind_apply]) >>
+    disch_tac >>
     `runtime_storage_consistent env_body
        (cx with stk updated_by CONS (env_body.current_src,fn))
        (lock_st with scopes := [call_env])` by
@@ -3867,6 +3869,7 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
       asm_x "body_ih" irule >>
       asm_x "actual_ih" kall_tac >> asm_x "default_ih" kall_tac >>
       asm "bind_call_env" assume_tac >>
+      qpat_x_assum `_ = (res,st')` kall_tac >>
       gvs[type_check_def, assert_def, get_scopes_def, set_scopes_def,
           lift_option_type_def, push_function_def, return_def,
           protected_storage_creates_preserve_stk, AllCaseEqs()] >>
@@ -3888,7 +3891,7 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
           (qpat_assum `storage_layout_safe cx` ACCEPT_TAC) >>
         conj_tac >-
           simp[contract_storage_well_formed_stk] >>
-        asm "suffix_eq" mp_tac >> simp[])) >>
+        asm "suffix_eq" mp_tac >> simp[NoAsms])) >>
      simp[])) >>
   strip_tac >> gvs[] >> first_assum ACCEPT_TAC
 QED
