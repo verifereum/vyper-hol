@@ -1,0 +1,293 @@
+(* Selected allocation identities for safety-only target-prefix coverage. *)
+Theory lowerDloadSafetyRelation
+Ancestors
+  lowerDloadSafetyKernel lowerDloadLiveAllocation lowerDloadScratchSafety
+  lowerDloadConfiguredOrigins ptrDiscipline unitShapeDefs finite_map pred_set
+  list rich_list venomExecSemantics venomState
+
+Datatype:
+  ld_frame = <| lf_serial : num; lf_supply : ir_supply; lf_fn : ir_function;
+                lf_src : venom_state; lf_tgt : venom_state;
+                lf_H : (string, ld_site) fmap; lf_Q : ld_site option list;
+                lf_E : num set; lf_tv : (string, num set) fmap |>
+End
+
+Definition ld_charge_def:
+  ld_charge frames = SUM (MAP (\f. CARD f.lf_E) frames)
+End
+
+Definition ld_image_def:
+  ld_image f = FST (lower_dload_function_supply f.lf_supply f.lf_fn)
+End
+
+Definition ld_envelope_def:
+  ld_envelope u fn s j X p <=>
+    ?bb bi ub ui.
+      bi < LENGTH fn.fn_blocks /\ EL bi fn.fn_blocks = bb /\
+      bb.bb_label = s.vs_current_bb /\ j < LENGTH bb.bb_instructions /\
+      ub = SND (lower_dload_blocks_supply u (TAKE bi fn.fn_blocks)) /\
+      ui = SND (lower_dload_insts_supply ub (TAKE j bb.bb_instructions)) /\
+      X = FST (lower_dload_inst_supply ui (EL j bb.bb_instructions)) /\
+      p = LENGTH (FST (lower_dload_insts_supply ub (TAKE j bb.bb_instructions)))
+End
+
+Definition ld_private_def:
+  ld_private f d ai <=>
+    ?bb j bi ub ui inst X.
+      bi < LENGTH f.lf_fn.fn_blocks /\ EL bi f.lf_fn.fn_blocks = bb /\
+      j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = inst /\
+      inst.inst_id = d /\ inst.inst_opcode = DLOAD /\
+      (?op out. inst.inst_operands = [op] /\ inst.inst_outputs = [out]) /\
+      ub = SND (lower_dload_blocks_supply f.lf_supply (TAKE bi f.lf_fn.fn_blocks)) /\
+      ui = SND (lower_dload_insts_supply ub (TAKE j bb.bb_instructions)) /\
+      X = FST (lower_dload_inst_supply ui inst) /\
+      LENGTH X = 4 /\ ai = (HD X).inst_id
+End
+
+Definition ld_vars_def:
+  ld_vars P A f <=>
+    DRESTRICT f.lf_tgt.vs_vars (set (fn_ir_vars f.lf_fn)) =
+      DRESTRICT f.lf_tgt.vs_vars (FDOM f.lf_src.vs_vars) /\
+    FDOM f.lf_src.vs_vars SUBSET set (fn_ir_vars f.lf_fn) /\
+    (!v. v IN set (fn_ir_vars f.lf_fn) ==>
+      (v IN FDOM f.lf_src.vs_vars <=> v IN FDOM f.lf_tgt.vs_vars)) /\
+    FDOM f.lf_H SUBSET FDOM f.lf_src.vs_vars /\
+    FDOM f.lf_H SUBSET fn_pv P f.lf_fn /\
+    (!v x y. FLOOKUP f.lf_src.vs_vars v = SOME x /\
+              FLOOKUP f.lf_tgt.vs_vars v = SOME y ==>
+      if retpc_var f.lf_fn v then T
+      else case FLOOKUP f.lf_H v of
+        SOME a => ld_wordrel A (SOME a) x y
+      | NONE => word_agree_except
+          (case FLOOKUP f.lf_tv v of NONE => {} | SOME m => m) x y) /\
+    LENGTH f.lf_src.vs_params = LENGTH f.lf_tgt.vs_params /\
+    (!j. j < LENGTH f.lf_src.vs_params ==>
+      ld_wordrel A (if j < LENGTH f.lf_Q then EL j f.lf_Q else NONE)
+        (EL j f.lf_src.vs_params) (EL j f.lf_tgt.vs_params))
+End
+
+Definition ld_maps_def:
+  ld_maps A f <=>
+    FINITE f.lf_E /\
+    (!d. d IN f.lf_E ==> ?ai. ld_private f d ai) /\
+    (!aid b n. FLOOKUP f.lf_src.vs_allocas aid = SOME (b,n) ==>
+      ?c. FLOOKUP A (f.lf_serial,aid) = SOME (b,c,n) /\
+          FLOOKUP f.lf_tgt.vs_allocas aid = SOME (c,n)) /\
+    (!ai c n. FLOOKUP f.lf_tgt.vs_allocas ai = SOME (c,n) ==>
+      (?b. FLOOKUP f.lf_src.vs_allocas ai = SOME (b,n) /\
+            FLOOKUP A (f.lf_serial,ai) = SOME (b,c,n)) \/
+      (n = 32 /\ ?d. d IN f.lf_E /\ ld_private f d ai)) /\
+    (!d ai. d IN f.lf_E /\ ld_private f d ai ==>
+      ?c. FLOOKUP f.lf_tgt.vs_allocas ai = SOME (c,32))
+End
+
+Definition ld_slots_def:
+  ld_slots (A:ld_alloc) frames = {k | ?f aid b c n.
+    MEM f frames /\ k = (f.lf_serial,aid) /\
+    FLOOKUP f.lf_src.vs_allocas aid = SOME (b,n) /\
+    FLOOKUP A k = SOME (b,c,n)}
+End
+
+Definition ld_intervals_def:
+  ld_intervals lo s <=>
+    (!aid b n. FLOOKUP s.vs_allocas aid = SOME (b,n) ==>
+      lo <= b /\ b+n <= s.vs_alloca_next) /\
+    (!a b n a' b' n'.
+      FLOOKUP s.vs_allocas a = SOME (b,n) /\
+      FLOOKUP s.vs_allocas a' = SOME (b',n') /\ a <> a' /\ 0 < n /\ 0 < n' ==>
+      b+n <= b' \/ b'+n' <= b)
+End
+
+Definition ld_sites_def:
+  ld_sites frames source = {(j,aid,b,n) | ?f.
+    j < LENGTH frames /\ f = EL j frames /\
+    FLOOKUP (if source then f.lf_src.vs_allocas else f.lf_tgt.vs_allocas)
+      aid = SOME (b,n)}
+End
+
+Definition ld_global_def:
+  ld_global lo (A:ld_alloc) frames <=>
+    (!source j aid b n. (j,aid,b,n) IN ld_sites frames source ==>
+      lo <= b /\ b+n <=
+        (if source then (HD frames).lf_src.vs_alloca_next
+                   else (HD frames).lf_tgt.vs_alloca_next)) /\
+    (!source j aid b n j' aid' b' n'.
+      (j,aid,b,n) IN ld_sites frames source /\
+      (j',aid',b',n') IN ld_sites frames source /\
+      (j,aid) <> (j',aid') /\ 0 < n /\ 0 < n' ==>
+      b+n <= b' \/ b'+n' <= b) /\
+    (!f a. MEM f frames /\
+      (a IN FRANGE f.lf_H \/ MEM (SOME a) f.lf_Q) ==> a IN FDOM A)
+End
+
+Definition ld_sync_def:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N <=>
+    frames <> [] /\ (HD frames).lf_fn = fn /\ (HD frames).lf_src = s /\
+    (HD frames).lf_tgt = t /\ (HD frames).lf_tv = tn.t_var /\
+    frame_reachable vs0 C stk PG G tn fn inst s /\ active_inst fn inst s /\
+    EVERY (fn_ptr_ok P) C.ctx_functions /\
+    LENGTH frames = SUC (LENGTH stk) /\
+    G = ld_erase A o_f (HD frames).lf_H /\
+    PG = MAP (OPTION_MAP (ld_erase A)) (HD frames).lf_Q /\
+    ALL_DISTINCT (MAP (\f. f.lf_serial) frames) /\
+    EVERY (\f. f.lf_serial < N /\ ld_maps A f /\ ld_vars P A f /\
+      ld_intervals lo f.lf_src /\ ld_intervals lo f.lf_tgt /\
+      f.lf_src.vs_prev_bb = f.lf_tgt.vs_prev_bb /\
+      f.lf_src.vs_current_bb = f.lf_tgt.vs_current_bb /\
+      MEM f.lf_fn C.ctx_functions) frames /\
+    FDOM A = ld_slots A frames /\
+    (!j. j < LENGTH frames ==>
+      (EL j frames).lf_tgt.vs_alloca_next =
+      (EL j frames).lf_src.vs_alloca_next + 32 * ld_charge (DROP j frames)) /\
+    (!j. j < LENGTH frames ==>
+      ?X p. ld_envelope (EL j frames).lf_supply (EL j frames).lf_fn
+                (EL j frames).lf_src (EL j frames).lf_src.vs_inst_idx X p /\
+            (EL j frames).lf_tgt.vs_inst_idx = p) /\
+    (!j. j < LENGTH stk ==>
+      (EL j stk).cf_fn = (EL (SUC j) frames).lf_fn /\
+      (EL j stk).cf_state = (EL (SUC j) frames).lf_src /\
+      (EL j stk).cf_prov = ld_erase A o_f (EL (SUC j) frames).lf_H /\
+      (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL (SUC j) frames).lf_Q /\
+      (EL j stk).cf_tvar = (EL (SUC j) frames).lf_tv) /\
+    ld_charge frames <= ctx_dload_count C /\
+    ld_memory lo A tn s t /\ ld_nonghost tn s t
+End
+
+Definition ld_pair_def:
+  ld_pair lo P names Sigma C C' vs0 fn' ti t <=>
+    ?stk PG G tn fn inst s t0 A frames N X p h.
+      ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+      ld_global lo A frames /\
+      EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
+      (!j k. j < k /\ k < LENGTH frames ==>
+        list_precedes (EL j frames).lf_fn.fn_name
+                      (EL k frames).lf_fn.fn_name names) /\
+      fn' = ld_image (HD frames) /\
+      ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+      ld_prefix C' fn' X p h t0 t /\ ti = EL h X
+End
+
+Theorem ld_sync_source:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  frame_reachable vs0 C stk PG G tn fn inst s /\ active_inst fn inst s
+Proof
+  simp[ld_sync_def]
+QED
+
+Theorem ld_sync_active:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  frames <> [] /\ (HD frames).lf_fn = fn /\ (HD frames).lf_src = s /\
+  (HD frames).lf_tgt = t /\ (HD frames).lf_tv = tn.t_var /\
+  ld_maps A (HD frames) /\ ld_vars P A (HD frames) /\
+  ld_intervals lo s /\ ld_intervals lo t
+Proof
+  simp[ld_sync_def, EVERY_MEM] >> rpt strip_tac >>
+  `MEM (HD frames) frames` by (Cases_on `frames` >> gvs[]) >>
+  metis_tac[]
+QED
+
+Theorem ld_sync_ghosts:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  G = ld_erase A o_f (HD frames).lf_H /\
+  PG = MAP (OPTION_MAP (ld_erase A)) (HD frames).lf_Q /\
+  (!j. j < LENGTH stk ==>
+    (EL j stk).cf_fn = (EL (SUC j) frames).lf_fn /\
+    (EL j stk).cf_state = (EL (SUC j) frames).lf_src /\
+    (EL j stk).cf_prov = ld_erase A o_f (EL (SUC j) frames).lf_H /\
+    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL (SUC j) frames).lf_Q /\
+    (EL j stk).cf_tvar = (EL (SUC j) frames).lf_tv)
+Proof
+  simp[ld_sync_def]
+QED
+
+Theorem ld_sync_memory:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  ld_memory lo A tn s t /\ ld_nonghost tn s t
+Proof
+  simp[ld_sync_def]
+QED
+
+Theorem ld_sync_frontier:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  ld_charge frames <= ctx_dload_count C /\
+  t.vs_alloca_next = s.vs_alloca_next + 32 * ld_charge frames
+Proof
+  simp[ld_sync_def] >> rpt strip_tac >>
+  qpat_x_assum `!j. j < LENGTH frames ==> _ = _`
+    (qspec_then `0` mp_tac) >>
+  Cases_on `frames` >> gvs[]
+QED
+
+Theorem ld_maps_original:
+  ld_maps A f /\ FLOOKUP f.lf_src.vs_allocas aid = SOME (b,n) ==>
+  ?c. FLOOKUP A (f.lf_serial,aid) = SOME (b,c,n) /\
+      FLOOKUP f.lf_tgt.vs_allocas aid = SOME (c,n)
+Proof
+  simp[ld_maps_def]
+QED
+
+Theorem ld_maps_private:
+  ld_maps A f /\ d IN f.lf_E /\ ld_private f d ai ==>
+  ?c. FLOOKUP f.lf_tgt.vs_allocas ai = SOME (c,32)
+Proof
+  simp[ld_maps_def] >> metis_tac[]
+QED
+
+Theorem ld_intervals_exec_alloca:
+  ld_intervals lo s /\ lo <= s.vs_alloca_next /\
+  exec_alloca inst s sz = OK t ==> ld_intervals lo t
+Proof
+  simp[exec_alloca_def, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[update_var_def, ld_intervals_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  qpat_assum `!aid b n. FLOOKUP _ aid = SOME (b,n) ==> _ /\ _`
+    (fn th => imp_res_tac th) >>
+  simp[] >> metis_tac[]
+QED
+
+(* A newly introduced slot requires no comparison of stale bytes: every
+   source byte of that slot must already be covered by the new taint mask. *)
+Theorem ld_memory_new_slot:
+  ld_memory lo A tn s t /\ tn.t_mem SUBSET tn'.t_mem /\
+  (!j. j < n ==> b+j IN tn'.t_mem) ==>
+  ld_memory lo (A |+ (k,(b,c,n))) tn' s t
+Proof
+  simp[ld_memory_def, FLOOKUP_UPDATE, pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_private_states[simp]:
+  ld_private (f with <| lf_src := s; lf_tgt := t |>) d ai <=> ld_private f d ai
+Proof
+  simp[ld_private_def]
+QED
+
+Theorem ld_maps_fresh_original:
+  ld_maps A f /\ inst.inst_outputs = [out] /\
+  FLOOKUP f.lf_src.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP f.lf_tgt.vs_allocas inst.inst_id = NONE /\
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  (!d. ~ld_private f d inst.inst_id) /\
+  exec_alloca inst f.lf_src sz = OK s' /\
+  exec_alloca inst f.lf_tgt sz = OK t' ==>
+  ld_maps (A |+ ((f.lf_serial,inst.inst_id),
+    (f.lf_src.vs_alloca_next,f.lf_tgt.vs_alloca_next,w2n sz)))
+    (f with <| lf_src := s'; lf_tgt := t' |> )
+Proof
+  strip_tac >>
+  gvs[exec_alloca_def, update_var_def] >>
+  gvs[ld_maps_def, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem ld_maps_cached_original:
+  ld_maps A f /\ FLOOKUP f.lf_src.vs_allocas inst.inst_id = SOME (b,n) /\
+  exec_alloca inst f.lf_src sz = OK s' /\
+  exec_alloca inst f.lf_tgt sz = OK t' ==>
+  ld_maps A (f with <| lf_src := s'; lf_tgt := t' |>)
+Proof
+  strip_tac >> drule_all ld_maps_original >> strip_tac >>
+  gvs[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  gvs[ld_maps_def] >> metis_tac[]
+QED
+
