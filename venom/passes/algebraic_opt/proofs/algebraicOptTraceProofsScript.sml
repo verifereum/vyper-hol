@@ -664,3 +664,41 @@ Proof
   qpat_x_assum `front ++ [_] = (front' ++ _) ++ _` mp_tac >>
   gvs[APPEND_ASSOC]
 QED
+
+Theorem ao_source_trace_sequential_bounds:
+  !trace ctx fn a.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    EVERY (\v. ~FST (SND v)) trace /\ MEM a trace ==>
+    (SND (SND a)).vs_current_bb =
+      (SND (SND (HD trace))).vs_current_bb /\
+    (SND (SND (HD trace))).vs_inst_idx <= (SND (SND a)).vs_inst_idx /\
+    (SND (SND a)).vs_inst_idx <= (SND (SND (LAST trace))).vs_inst_idx
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`trace`, `ctx`, `fn`] mp_tac
+    ao_source_trace_sequential_positions >> simp[] >> disch_tac >>
+  fs[MEM_EL] >>
+  first_assum (qspec_then `n` mp_tac) >> simp[] >>
+  first_x_assum (qspec_then `PRE (LENGTH trace)` mp_tac) >>
+  simp[LAST_EL] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ao_source_trace_sequential_edge_bound:
+  !trace ctx fn front a b back.
+    ao_source_trace ctx fn trace /\
+    EVERY (\v. ~FST (SND v)) trace /\
+    trace = front ++ a::b::back ==>
+    (SND (SND a)).vs_inst_idx <
+      (SND (SND (LAST trace))).vs_inst_idx
+Proof
+  rpt gen_tac >> strip_tac >>
+  `trace <> [] /\ LENGTH front < LENGTH trace /\
+   EL (LENGTH front) trace = a` by simp[EL_APPEND_EQN] >>
+  qspecl_then [`trace`, `ctx`, `fn`] mp_tac
+    ao_source_trace_sequential_positions >> simp[] >> disch_tac >>
+  first_assum (qspec_then `LENGTH front` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  first_x_assum (qspec_then `LENGTH front + SUC (LENGTH back)` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  gvs[LAST_EL, EL_APPEND_EQN]
+QED
