@@ -15,7 +15,7 @@ Proof
   qpat_x_assum `!x. MEM x mods ==> check_module _ _ _ _ _ _ x` drule >>
   simp[check_module_def, listTheory.EVERY_MEM] >> strip_tac >>
   qpat_x_assum `!x. MEM x tls ==> check_toplevel_decl _ _ _ x` drule >>
-  simp[check_toplevel_decl_def]
+  simp[check_toplevel_decl_def, function_header_ok_def]
 QED
 
 Theorem supported_lookup_none_raw[local]:
