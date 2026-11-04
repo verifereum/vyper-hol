@@ -119,3 +119,36 @@ Proof
   `x' <> k` by (strip_tac >> gvs[FLOOKUP_DEF]) >>
   simp[] >> metis_tac[]
 QED
+
+Definition ld_prefix_def:
+  ld_prefix C fn X p h t0 t <=>
+    h < LENGTH X /\ ?R.
+      LENGTH R = SUC h /\ HD R = t0 /\ LAST R = t /\
+      (!j. j < h ==> ?u.
+        active_inst fn (EL j X) (EL j R) /\
+        step_inst 0 C (EL j X) (EL j R) = OK u /\
+        EL (SUC j) R = (u with vs_inst_idx := SUC (p+j))) /\
+      active_inst fn (EL h X) t
+End
+
+Theorem ld_prefix_zero:
+  ld_prefix C fn X p 0 t0 t <=>
+  0 < LENGTH X /\ t = t0 /\ active_inst fn (EL 0 X) t0
+Proof
+  simp[ld_prefix_def] >> eq_tac
+  >- (rpt strip_tac >>
+      Cases_on `R` >> gvs[] >> Cases_on `t'` >> gvs[]) >>
+  strip_tac >> gvs[] >> qexists_tac `[t]` >> simp[]
+QED
+
+Theorem ld_prefix_bound:
+  ld_prefix C fn X p h t0 t ==> h < LENGTH X
+Proof
+  simp[ld_prefix_def]
+QED
+
+Theorem ld_prefix_active:
+  ld_prefix C fn X p h t0 t ==> active_inst fn (EL h X) t
+Proof
+  simp[ld_prefix_def] >> metis_tac[]
+QED
