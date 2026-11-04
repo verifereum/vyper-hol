@@ -63,6 +63,25 @@ Proof
   gvs[return_def, raise_def, Abbr `ac`, Abbr `ts`, Abbr `vs`]
 QED
 
+(* Source action boundary for the three recursive numeric/Boolean builtins. *)
+Theorem eval_expr_unop_action:
+  (bi = Not \/ bi = Abs \/ bi = Neg) ==>
+  (bind (eval_expr cx (Builtin ann bi [e])) (read_result cx) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v es. (unop_result cx ann bi [expr_type e] v es, es)))
+Proof
+  cheat
+QED
+
+val () =
+  let val th = eval_expr_unop_action
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "UNARY_ACTION_AUDIT OK\n"
+     else raise Fail "unary source action inherited admission"
+  end;
+
 (* ===== The composition ===== *)
 
 Theorem expr_post_unop:

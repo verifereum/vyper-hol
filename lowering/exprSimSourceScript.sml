@@ -545,3 +545,21 @@ val () = List.app (fn th =>
      then print "UNARY_SOURCE_AUDIT OK\n"
      else raise Fail "unary property inherited admission"
   end) [env_consistent_var_type_evaluates, expr_body_pre_var_types_well_formed, expr_body_pre_word_value, expr_body_pre_lower_value_word_shape];
+
+
+Theorem expr_body_pre_gas_admissible:
+  expr_body_pre cenv cx env e es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]
+QED
+
+val () =
+  let val th = expr_body_pre_gas_admissible
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "SOURCE_GAS_ADMISSIBLE_AUDIT OK\n"
+     else raise Fail "source gas admissibility inherited admission"
+  end;
