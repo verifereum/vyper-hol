@@ -67,3 +67,47 @@ Proof
          fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
   irule ld_ret_operands_equal >> metis_tac[]
 QED
+
+Theorem ld_fold_bind_lookup[local]:
+  !kvs s t v.
+    (MEM v (MAP FST kvs) ==>
+      lookup_var v (FOLDL (\st (k,w). update_var k w st) s kvs) =
+      lookup_var v (FOLDL (\st (k,w). update_var k w st) t kvs)) /\
+    (~MEM v (MAP FST kvs) ==>
+      lookup_var v (FOLDL (\st (k,w). update_var k w st) s kvs) = lookup_var v s)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  Cases_on `MEM v (MAP FST kvs)` >> simp[] >>
+  Cases_on `v = h0` >> simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem ld_owned_bind_outputs:
+  ld_owned_vars V E AG BH tn un s t /\
+  bind_outputs outs vals s = SOME s' /\ bind_outputs outs vals t = SOME t' ==>
+  ld_owned_vars V E
+    (DRESTRICT AG (COMPL (set outs))) (DRESTRICT BH (COMPL (set outs)))
+    (tn with t_var := DRESTRICT tn.t_var (COMPL (set outs)))
+    (un with t_var := DRESTRICT un.t_var (COMPL (set outs))) s' t'
+Proof
+  strip_tac >>
+  `s'.vs_labels = s.vs_labels /\ t'.vs_labels = t.vs_labels` by
+    (conj_tac >> irule venomInstProofs1Theory.bind_outputs_preserves >>
+     simp[update_var_def] >> metis_tac[]) >>
+  gvs[bind_outputs_def, ld_owned_vars_def] >> rpt strip_tac >>
+  `MAP FST (ZIP (outs,vals)) = outs` by simp[MAP_ZIP] >>
+  qspecl_then [`ZIP (outs,vals)`,`s`,`t`,`v`] strip_assume_tac ld_fold_bind_lookup >>
+  qspecl_then [`ZIP (outs,vals)`,`t`,`s`,`v`] strip_assume_tac ld_fold_bind_lookup >>
+  Cases_on `MEM v outs`
+  >- (fs[MAP_ZIP] >>
+      simp[FLOOKUP_DRESTRICT, op_taint_def, ld_owned_value_def,
+           lowerDloadOperandTheory.ld_mask_word_def]) >>
+  fs[MAP_ZIP, op_taint_def] >>
+  simp[FLOOKUP_DRESTRICT, op_taint_def] >> metis_tac[]
+QED
+
+Theorem ld_bind_outputs_target_exists:
+  bind_outputs outs vals t = SOME t' ==> ?s'. bind_outputs outs vals s = SOME s'
+Proof
+  simp[bind_outputs_def, AllCaseEqs()]
+QED
