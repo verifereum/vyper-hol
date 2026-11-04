@@ -2,7 +2,8 @@ Theory dftRecursiveOrbitReadiness
 Ancestors
   dftOriginalRuntime dftRecursiveFixedOrbit dftRecursiveActivePhase
   dftOriginalScheduleRuntime dftProtectedRuntime dftOccurrenceOrdinaryClosure
-  o1PassContract venomExecSemantics venomInst list finite_map pred_set
+  o1PassContract venomExecSemantics venomInst venomWf dftOriginalCutLifecycle
+  list finite_map pred_set
 
 Theorem dft_original_recursive_orbit_ready:
   dft_original_context Corig C /\ dft_original_label_ready C L c /\
@@ -52,4 +53,19 @@ Theorem dft_original_fixed_orbit_ready:
 Proof
   strip_tac >> simp[dft_fixed_orbit_ready_def] >>
   metis_tac[dft_original_recursive_orbit_ready]
+QED
+
+Theorem dft_original_label_entry_root:
+  dft_original_function f fn /\ MEM fn C.ctx_functions /\
+  fn_entry_label fn = SOME s.vs_current_bb /\ s.vs_labels = L ==>
+  dft_original_label_ready C L
+    (dft_occ_init (DftOpen (DftEnter fn 0 s) [] n))
+Proof
+  strip_tac >>
+  `fn_entry_label f = SOME s.vs_current_bb` by
+    metis_tac[dft_original_function_entry] >>
+  `fn_reachable f s.vs_current_bb` by
+    (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
+  `strict_dom_vars_defined f s` by metis_tac[dft_original_root_dom] >>
+  irule dft_original_label_root >> simp[] >> qexists `f` >> simp[]
 QED
