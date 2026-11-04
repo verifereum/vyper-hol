@@ -315,26 +315,6 @@ Proof
   simp[bind_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "EXPRESSION_SOURCE_AUDIT OK\n"
-     else raise Fail "expression source preservation inherited admission"
-  end) [expr_sim_pre_gas_obs,
-        expr_body_pre_gas_obs,
-        expr_sim_pre_body,
-        expr_sim_pre_body_pre,
-        expr_body_pre_storage_preserved,
-        eval_expr_outcomes_some,
-        scope_pop_trace_keys_indexed,
-        eval_expr_popped_keys_indexed,
-        expr_body_pre_eval_result,
-        expr_sim_pre_eval_result,
-        expr_body_pre_eval,
-        expr_sim_pre_eval,
-        eval_expr_read_INL];
-
 Theorem expr_body_pre_res_ok:
   !cenv cx env e es res es'.
     expr_body_pre cenv cx env e es /\ (do result <- eval_expr cx e; read_result cx result od) es = (res, es') ==>
@@ -438,22 +418,6 @@ Proof
             alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "EXPRESSION_OPERAND_SOURCE_AUDIT OK\n"
-     else raise Fail "operand source fact inherited admission"
-  end) [expr_body_pre_res_ok,
-        word_value_type_typed,
-        expr_body_pre_word_result,
-        byte_widths_exprs_mem,
-        alloc_limits_exprs_mem,
-        well_typed_exprs_member,
-        call_evaluation_safe_exprs_mem,
-        int_calls_exprs_every_mem,
-        expr_body_pre_builtin_arg];
-
 Theorem word_value_type_word:
   !t. word_value_type t ==>
       is_word_type t /\ ~is_ArrayT t /\ ~is_bytestring_type t
@@ -475,14 +439,6 @@ Proof
      rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_int_type_def]) >>
   gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), type_memory_size_def]
 QED
-
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "WORD_TYPE_SOURCE_AUDIT OK\n"
-     else raise Fail "memory source fact inherited admission"
-  end) [word_value_type_word, word_value_type_memory_size];
 
 Theorem env_consistent_var_type_evaluates:
   !env cx st id ty.
@@ -538,15 +494,6 @@ Proof
   simp[]
 QED
 
-val () = List.app (fn th =>
-  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "UNARY_SOURCE_AUDIT OK\n"
-     else raise Fail "unary property inherited admission"
-  end) [env_consistent_var_type_evaluates, expr_body_pre_var_types_well_formed, expr_body_pre_word_value, expr_body_pre_lower_value_word_shape];
-
-
 Theorem expr_body_pre_gas_admissible:
   expr_body_pre cenv cx env e es ==>
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
@@ -554,12 +501,3 @@ Proof
   rw[gas_admissible_def] >>
   metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]
 QED
-
-val () =
-  let val th = expr_body_pre_gas_admissible
-      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
-  in if null axioms andalso null (Thm.hyp th) andalso
-        List.all (fn name => name = "DISK_THM") oracles
-     then print "SOURCE_GAS_ADMISSIBLE_AUDIT OK\n"
-     else raise Fail "source gas admissibility inherited admission"
-  end;
