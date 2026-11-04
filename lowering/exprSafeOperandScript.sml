@@ -5,7 +5,10 @@
  * more code has run, so it must be a literal or a variable already handed
  * out (not_fresh_at), never a label: safe_operand.  word_result_ok is the
  * same for a value_vv: a StackValue's operand is safe, and a LocatedValue
- * has a word type, so unwrap_value loads it into a fresh variable.  This
+ * has a word type, so unwrap_value loads it into a fresh variable, or is a
+ * memory pointer whose operand is safe, which unwrap_value returns (an
+ * internal call's result is typed at the callee's return type, which
+ * nothing here ties to the call site's word type).  This
  * theory proves safe_operand of the result of each helper compile_expr
  * uses for operators, conversions and arithmetic; exprSafeOperandBuiltins
  * does the builtins, calls and names, and exprWordOperand the induction.
@@ -39,7 +42,9 @@ End
 
 Definition word_result_ok_def:
   word_result_ok st (StackValue ty op) = safe_operand st op /\
-  word_result_ok st (LocatedValue ty p) = is_word_type ty
+  word_result_ok st (LocatedValue ty p) =
+    (is_word_type ty \/
+     p.ptr_location = LocMemory /\ safe_operand st p.ptr_operand)
 End
 
 Theorem safe_operand_Lit[simp]:
@@ -83,9 +88,13 @@ Theorem unwrap_value_safe_operand:
   word_result_ok sa vv /\ unwrap_value cenv vv sa = (op,sb) ==>
   safe_operand sb op
 Proof
-  Cases_on `vv` >> simp[word_result_ok_def, unwrap_value_def,
-                          comp_return_def] >>
-  metis_tac[compile_ptr_load_safe_operand]
+  Cases_on `vv`
+  >- (simp[word_result_ok_def, unwrap_value_def, comp_return_def] >>
+      metis_tac[]) >>
+  rename1 `LocatedValue ty p` >> Cases_on `is_word_type ty` >>
+  simp[word_result_ok_def, unwrap_value_def, comp_return_def]
+  >- metis_tac[compile_ptr_load_safe_operand] >>
+  rpt strip_tac >> gvs[comp_return_def]
 QED
 
 (* Pointer-valued results need only exclude labels, independently of
@@ -97,6 +106,14 @@ Proof
   simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
   drule emit_op_safe_operand >> simp[safe_operand_def]
+QED
+
+Theorem alloc_buffer_safe_operand:
+  compile_alloc_buffer bytes sa = (buf,sb) ==> safe_operand sb buf.buf_operand
+Proof
+  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >> strip_tac >> gvs[] >>
+  metis_tac[emit_op_safe_operand]
 QED
 
 Theorem ensure_memory_not_label:

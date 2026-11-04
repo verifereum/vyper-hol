@@ -50,7 +50,7 @@ Ancestors
   vyperTypeStmtSoundness vyperTypeEvalSoundness vyperTypeExprSoundness
   placeTypingBuildProps allocLimitsProps entryDecodePlanProps structFieldsProps entryStateRel bodySimEntry supportedDecls vyperTypeContractFunction vyperTypeContractSoundness
   vyperTypeContractContext vyperTypeContract vyperTypeExternalDefaults
-  bodySimStmtCases
+  bodySimStmtCases typedCopyProducer
   vyperTypeInitialState vyperTypeBindArguments vyperTypeInvariants
   vyperTypeEvalStoragePreservation vyperTypeStoragePreservation exprSimHyps
   vyperStorageLayoutSafety vyperStorageBackend vyperPlaceInvariants finite_map
@@ -506,6 +506,9 @@ Theorem external_package_body_inv:
   cenv.ce_return_pc = NONE
 Proof
   strip_tac >>
+  `acyclic_struct_metadata (make_struct_fields_map tops)` by
+    (irule supported_checked_struct_metadata_acyclic >>
+     gvs[source_typing_ok_def] >> metis_tac[]) >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
   `ALL_DISTINCT

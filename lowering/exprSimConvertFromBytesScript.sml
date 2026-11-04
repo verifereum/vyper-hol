@@ -2256,6 +2256,8 @@ QED
 Theorem dynamic_convert_lower_case:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
   is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
+  (!a f args d. e1 = Call a (IntCall f) args d ==>
+     lowered_value_type cenv e1 = expr_type e1) /\
   expr_sim ctx func cenv cx (expr_type e1) e1 es /\
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert t [e1]) sa = (op,sb) /\
   (do raw <- eval_expr cx (TypeBuiltin ann Convert t [e1]);
@@ -2347,7 +2349,9 @@ Finalise dynamic_convert_lower_case
 Theorem compile_convert_from_bytestring_case:
   !nocalls ctx func cenv cx ann t e1.
     exprs_case nocalls ctx func cenv cx [e1] /\
-    is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t ==>
+    is_bytestring_type (expr_type e1) /\ ~is_bytestring_type t /\
+    (!a f args d. e1 = Call a (IntCall f) args d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     !env ty es sa sb vv res es' s0.
       expr_body_pre cenv cx env (TypeBuiltin ann Convert t [e1]) es /\
       (nocalls ==> int_calls_expr (TypeBuiltin ann Convert t [e1]) = []) /\
