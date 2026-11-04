@@ -71,13 +71,16 @@ Theorem state_rel_frame_locals_primitives:
   state_rel_frame R (update_transient upd_t) /\
   state_rel_frame R (λs. vyperState$return () (s with logs updated_by logs_upd)) /\
   state_rel_frame R (λs. vyperState$return () (s with logs := s.logs ++ logs)) /\
-  state_rel_frame R (adopt_call_outcome rq co)
+  state_rel_frame R (adopt_call_outcome rq co) /\
+  state_rel_frame R (record_storage_event observation) /\
+  state_rel_frame R record_storage_backend
 Proof
   strip_tac >>
   simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, adopt_call_outcome_equation] >>
+       update_transient_def, adopt_call_outcome_equation,
+       record_storage_event_def, record_storage_backend_def] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
 QED
 
