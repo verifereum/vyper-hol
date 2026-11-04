@@ -1,6 +1,6 @@
 Theory cseCanonProps
 Ancestors cseDefs availExprDefs availExprAnalysisProps dfAnalyzeDefs dfAnalyzeProps
-          worklistProps cfgAnalysisProps
+          worklistProps cfgAnalysisProps venomExecProofs analysisSimProofsBase
 
 (* These are syntactic matching facts, not runtime value equalities. *)
 Theorem operand_ids_match_length:
@@ -661,4 +661,79 @@ Proof
  rpt strip_tac >> drule_all cse_avail_at_entry >> strip_tac >>
  simp[] >> irule cse_avail_joined_predecessor >> simp[] >>
  qexists_tac `pred` >> simp[]
+QED
+
+Theorem cse_phi_transfer_some:
+ !d inst ae. inst.inst_opcode = PHI ==>
+ avail_transfer_opt d inst (SOME ae) = SOME ae
+Proof
+ simp[avail_transfer_opt_def, avail_transfer_inst_def,
+      venomInstTheory.is_pseudo_def]
+QED
+
+Theorem cse_phi_transfer_unwrap:
+ !d inst v. inst.inst_opcode = PHI ==>
+ avail_unwrap (avail_transfer_opt d inst v) = avail_unwrap v
+Proof
+ rpt gen_tac >> Cases_on `v` >>
+ simp[avail_transfer_opt_def, avail_transfer_inst_def, avail_unwrap_def,
+      venomInstTheory.is_pseudo_def]
+QED
+
+Theorem cse_avail_phi_prefix_unwrap:
+ !k fn lbl bb.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ k <= LENGTH bb.bb_instructions /\
+ (!j. j < k ==> (EL j bb.bb_instructions).inst_opcode = PHI) ==>
+ ae_lookup_inst fn lbl k = ae_lookup_inst fn lbl 0
+Proof
+ Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+ `ae_lookup_inst fn lbl k = ae_lookup_inst fn lbl 0` by
+   (first_x_assum irule >> simp[] ) >>
+ drule_all cse_avail_at_intra >> strip_tac >>
+ `((EL k bb.bb_instructions).inst_opcode = PHI)` by simp[] >>
+ simp[ae_lookup_inst_def, cse_phi_transfer_unwrap] >>
+ gvs[ae_lookup_inst_def]
+QED
+
+Theorem cse_avail_phi_prefix_some:
+ !k fn lbl bb ae.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ k <= LENGTH bb.bb_instructions /\
+ (!j. j < k ==> (EL j bb.bb_instructions).inst_opcode = PHI) /\
+ df_at NONE (avail_analyze fn) lbl 0 = SOME ae ==>
+ df_at NONE (avail_analyze fn) lbl k = SOME ae
+Proof
+ Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+ `df_at NONE (avail_analyze fn) lbl k = SOME ae` by
+   (first_x_assum irule >> simp[]) >>
+ drule_all cse_avail_at_intra >> simp[cse_phi_transfer_some]
+QED
+
+Theorem cse_avail_atomic_phi_unwrap:
+ !fn lbl bb.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb ==>
+ ae_lookup_inst fn lbl (phi_prefix_length bb.bb_instructions) =
+ ae_lookup_inst fn lbl 0
+Proof
+ rpt strip_tac >> irule cse_avail_phi_prefix_unwrap >>
+ simp[phi_prefix_length_le] >>
+ mp_tac (Q.SPEC `bb.bb_instructions` phi_prefix_all_phi) >>
+ simp[listTheory.EVERY_EL, listTheory.EL_TAKE, phi_prefix_length_le]
+QED
+
+Theorem cse_avail_atomic_phi_some:
+ !fn lbl bb ae.
+ wf_function fn /\ MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+ lookup_block lbl fn.fn_blocks = SOME bb /\
+ df_at NONE (avail_analyze fn) lbl 0 = SOME ae ==>
+ df_at NONE (avail_analyze fn) lbl (phi_prefix_length bb.bb_instructions) = SOME ae
+Proof
+ rpt strip_tac >> irule cse_avail_phi_prefix_some >>
+ simp[phi_prefix_length_le] >>
+ mp_tac (Q.SPEC `bb.bb_instructions` phi_prefix_all_phi) >>
+ simp[listTheory.EVERY_EL, listTheory.EL_TAKE, phi_prefix_length_le]
 QED
