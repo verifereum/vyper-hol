@@ -812,3 +812,36 @@ Proof
   irule bound_labels_bind >> simp[comp_return_def, bound_labels_unwrap_value]
 QED
 
+
+Theorem bound_labels_intcall[local]:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty (IntCall fid) args default_ret s))))
+Proof
+  strip_tac >> Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
+  rename1 `ce.ce_func_info (nsid_to_string fid) = (num_ret, meta_pair)` >>
+  PairCases_on `meta_pair` >> simp[compile_call_def] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_multi_vvs >> simp[]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (rpt IF_CASES_TAC >> simp[] >>
+      irule pair_let_snd_preserves >>
+      simp[bound_labels_alloc_buffer]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_stage_intcall_args] >>
+  rpt strip_tac >> simp[] >> IF_CASES_TAC >> CASE_TAC >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_op, bound_labels_emit_multi_op,
+          bound_labels_emit_void] >>
+  rpt strip_tac >>
+  simp[bound_labels_emit_op, bound_labels_emit_multi_op,
+       bound_labels_emit_void] >>
+  irule pair_let_snd_preserves >>
+  simp[bound_labels_store_multi_results]
+QED
