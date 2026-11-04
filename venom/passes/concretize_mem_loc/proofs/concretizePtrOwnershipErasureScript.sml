@@ -34,7 +34,7 @@ Proof
   simp[]
 QED
 
-Theorem ptr_owner_set_projection[local]:
+Theorem ptr_owner_set_projection:
   ptr_ledger_erases births tagged numerical /\
   (!owner. p = SOME owner ==> owner IN FDOM births) ==>
   ptr_ledger_erases births (set_prov tagged outs p)

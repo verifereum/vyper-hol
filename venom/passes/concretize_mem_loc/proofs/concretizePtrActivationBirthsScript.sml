@@ -105,7 +105,7 @@ Proof
   rpt strip_tac >> gvs[] >> first_x_assum drule >> decide_tac
 QED
 
-Theorem ptr_birth_reachable_no_dalloca[local]:
+Theorem ptr_birth_reachable_no_dalloca:
   ptr_chrono_history vs0 C h a /\
   EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
   a.po_inst.inst_opcode <> DALLOCA
