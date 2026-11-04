@@ -1,6 +1,6 @@
 Theory abiArgsCompilerImage
 Ancestors
-  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins
+  exprLowering context compileEnv emitHelper vyperAST exprWordOperand exprSafeOperand exprOperandVar exprSafeOperandBuiltins exprCallBounds
 
 Theorem abi_image_convert_label:
   compile_type_convert op conv sa = (Label l,sb) ==>
@@ -674,4 +674,157 @@ Proof
   Cases_on `tb = Convert` >> strip_tac >> gvs[]
   >- metis_tac[abi_image_type_builtin_convert_label] >>
   metis_tac[abi_image_type_builtin_nonconvert_not_label]
+QED
+
+Theorem abi_image_expr_builtin_label:
+  compile_expr_body f g h ce ty (Builtin ann bi args) sa = (vv,sb) ==>
+  vv_operand vv = Label l ==>
+  g ce ann ty bi args sa = (vv,sb)
+Proof
+  Cases_on `bi = AddMod` >- (gvs[] >> suspend "add") >>
+  Cases_on `bi = MulMod` >- (gvs[] >> suspend "mul") >>
+  Cases_on `bi = PowMod256` >- (gvs[] >> suspend "pow") >>
+  Cases_on `bi` >> gvs[] >>
+  simp[compile_expr_body_def, expr_type_def,
+       word_list_result_elim, word_expr_result_elim]
+QED
+
+Resume abi_image_expr_builtin_label[add]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >>
+  simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[] >>
+  rename1 `Name _ _::Name _ _::m::rest` >>
+  Cases_on `m` >> simp[] >> Cases_on `rest` >> simp[] >>
+  metis_tac[abi_image_named_modular_not_label]
+QED
+
+Resume abi_image_expr_builtin_label[mul]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >>
+  simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[] >>
+  rename1 `Name _ _::Name _ _::m::rest` >>
+  Cases_on `m` >> simp[] >> Cases_on `rest` >> simp[] >>
+  metis_tac[abi_image_named_modular_not_label]
+QED
+
+Resume abi_image_expr_builtin_label[pow]:
+  Cases_on `args` >- simp[compile_expr_body_def, expr_type_def] >>
+  rename1 `a::rest` >> Cases_on `a` >>
+  simp[compile_expr_body_def, expr_type_def] >>
+  Cases_on `rest` >> simp[] >> rename1 `Name _ _::b::rest` >>
+  Cases_on `b` >> simp[] >> Cases_on `rest` >> simp[]
+  >- metis_tac[abi_image_named_modular_not_label] >>
+  simp[word_expr_result_elim, word_list_result_elim]
+QED
+
+Finalise abi_image_expr_builtin_label
+
+Theorem abi_image_expr_body_label:
+  (!ann bi args s vv s'.
+    g ce ann ty bi args s = (vv,s') /\ vv_operand vv = Label l ==>
+    s'.cs_blocks = s.cs_blocks) /\
+  (!ann tb rt args s vv s'.
+    h ce ann ty tb rt args s = (vv,s') /\ vv_operand vv = Label l ==>
+    s'.cs_blocks = s.cs_blocks) /\
+  compile_expr_body f g h ce ty e sa = (vv,sb) /\ vv_operand vv = Label l ==>
+  sb.cs_blocks = sa.cs_blocks
+Proof
+  Cases_on `e` >> rpt strip_tac
+  >~ [`compile_expr_body _ _ _ _ _ (Builtin _ _ _) _ = _`] >-
+    (drule_all abi_image_expr_builtin_label >> metis_tac[])
+  >~ [`compile_expr_body _ _ _ _ _ (TopLevelName _ _) _ = _`] >-
+    metis_tac[abi_image_toplevel_not_label]
+  >~ [`compile_expr_body _ _ _ _ _ (Pop _ _) _ = _`] >-
+    metis_tac[abi_image_pop_not_label]
+  >~ [`compile_expr_body _ _ _ _ _ (StructLit _ _ _) _ = _`] >-
+    metis_tac[abi_image_struct_not_label]
+  >~ [`compile_expr_body _ _ _ _ _ (IfExp _ _ _ _) _ = _`] >-
+    metis_tac[abi_image_ifexp_not_label]
+  >~ [`compile_expr_body _ _ _ _ _ (FlagMember _ _ _) _ = _`] >-
+    metis_tac[abi_image_flag_not_label] >>
+  gvs[compile_expr_body_def, expr_type_def, LET_THM] >>
+  metis_tac[abi_image_name_label, abi_image_literal_not_label,
+            abi_image_subscript_not_label, abi_image_attribute_not_label,
+            abi_image_call_not_label]
+QED
+
+Theorem abi_image_child_lower_label:
+  (!e ce ty s vv s'. expr_size e < bound /\
+    f ce ty e s = (vv,s') /\ vv_operand vv = Label l ==>
+    s'.cs_blocks = s.cs_blocks) /\
+  lower_value (expr_child_callback bound f) ce ty e sa = (Label l,sb) ==>
+  sb.cs_blocks = sa.cs_blocks
+Proof
+  Cases_on `expr_size e < bound` >>
+  simp[lower_value_def, comp_bind_def, expr_child_callback_def,
+       invalid_expr_call_def, unwrap_value_def, comp_return_def, LET_THM] >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[])
+  >- (drule abi_image_unwrap_label >> strip_tac >> gvs[] >> metis_tac[]) >>
+  gvs[unwrap_value_def, comp_return_def]
+QED
+
+Theorem abi_image_compile_mutual:
+  (!ce ty e sa vv sb l.
+    compile_expr ce ty e sa = (vv,sb) /\ vv_operand vv = Label l ==>
+    sb.cs_blocks = sa.cs_blocks) /\
+  (!ce ann ty bi args sa vv sb l.
+    compile_builtin_dispatch ce ann ty bi args sa = (vv,sb) /\
+    vv_operand vv = Label l ==> sb.cs_blocks = sa.cs_blocks) /\
+  (!ce ann ty tb rt args sa vv sb l.
+    compile_type_builtin_dispatch ce ann ty tb rt args sa = (vv,sb) /\
+    vv_operand vv = Label l ==> sb.cs_blocks = sa.cs_blocks)
+Proof
+  ho_match_mp_tac compile_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "expr"
+  >- suspend "builtin"
+  >> suspend "type_builtin"
+QED
+
+Resume abi_image_compile_mutual[expr]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  irule abi_image_expr_body_label >>
+  goal_assum (drule_at (Pat `compile_expr_body`)) >>
+  qexists_tac `l` >> simp[] >> conj_tac
+  >- (rpt gen_tac >> simp[builtin_child_callback_def] >>
+      Cases_on `list_size expr_size args < expr_size e` >> simp[]
+      >- metis_tac[] >>
+      simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+      rpt (pairarg_tac >> gvs[vv_operand_def])) >>
+  rpt gen_tac >> simp[type_child_callback_def] >>
+  Cases_on `list_size expr_size args < expr_size e` >> simp[]
+  >- metis_tac[] >>
+  simp[invalid_expr_call_def, LET_THM] >> strip_tac >>
+  rpt (pairarg_tac >> gvs[vv_operand_def])
+QED
+
+Resume abi_image_compile_mutual[builtin]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  drule_all abi_image_builtin_label >> strip_tac >>
+  drule_at (Pat `lower_value`) abi_image_child_lower_label >>
+  (impl_tac >- metis_tac[]) >> simp[]
+QED
+
+Resume abi_image_compile_mutual[type_builtin]:
+  rpt gen_tac >> simp[Once compile_expr_raw_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
+  drule_all abi_image_type_builtin_label >> strip_tac >>
+  `sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[] >>
+  drule_at (Pat `lower_value`) abi_image_child_lower_label >>
+  (impl_tac >- metis_tac[]) >> simp[]
+QED
+
+Finalise abi_image_compile_mutual
+
+Theorem abi_image_compile_expr_label:
+  compile_expr ce ty e sa = (vv,sb) /\ vv_operand vv = Label l ==>
+  sb.cs_blocks = sa.cs_blocks
+Proof
+  metis_tac[abi_image_compile_mutual]
 QED
