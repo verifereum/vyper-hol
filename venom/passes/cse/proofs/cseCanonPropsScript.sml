@@ -60,3 +60,44 @@ Proof
  Cases_on `operand_producer d {} (EL n i.inst_operands)` >>
  Cases_on `operand_producer d {} (EL n s.inst_operands)` >> simp[]
 QED
+
+Theorem operand_producer_terminal:
+ !d seen op k. operand_producer d seen op = SOME k ==>
+ ?v inst. FLOOKUP d.dfg_defs v = SOME inst /\ inst.inst_id = k /\
+ (inst.inst_opcode <> ASSIGN \/ ~(?arg. inst.inst_operands = [arg]))
+Proof
+ recInduct operand_producer_ind >> rpt strip_tac >>
+ gvs[Once operand_producer_def, AllCaseEqs()] >>
+ metis_tac[listTheory.NOT_CONS_NIL, listTheory.CONS_11]
+QED
+
+Theorem operand_producer_none_leaf_aux[local]:
+ !d visited op. !seen.
+ set seen = visited /\ operand_producer d visited op = NONE ==>
+ (?w. mk_operand_expr d seen op = ExprLit w) \/
+ (?v. mk_operand_expr d seen op = ExprVar v)
+Proof
+ recInduct operand_producer_ind >> rpt strip_tac >>
+ gvs[Once operand_producer_def, AllCaseEqs()] >>
+ simp[availExprDefsTheory.mk_operand_expr_def,
+      dfgDefsTheory.dfg_get_def_def] >>
+ Cases_on `is_pseudo ASSIGN` >> simp[] >>
+ first_x_assum (qspec_then `v::seen` mp_tac) >> simp[]
+QED
+
+Theorem operand_producer_none_leaf:
+ !d seen op. operand_producer d (set seen) op = NONE ==>
+ (?w. mk_operand_expr d seen op = ExprLit w) \/
+ (?v. mk_operand_expr d seen op = ExprVar v)
+Proof
+ metis_tac[operand_producer_none_leaf_aux]
+QED
+
+Theorem operand_producer_none_leaf_empty:
+ !d op. operand_producer d {} op = NONE ==>
+ (?w. mk_operand_expr d [] op = ExprLit w) \/
+ (?v. mk_operand_expr d [] op = ExprVar v)
+Proof
+ rpt strip_tac >>
+ qspecl_then [`d`, `[]`, `op`] mp_tac operand_producer_none_leaf >> simp[]
+QED
