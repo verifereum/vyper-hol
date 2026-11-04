@@ -11,7 +11,7 @@ Ancestors
 Libs
   monadsyntax intLib
 
-Theorem eval_expr_stmt_success[local]:
+Theorem eval_expr_stmt_success:
   eval_expr cx e s = (INL tv, ee) /\ ~is_HashMapRef tv ==>
   eval_stmt cx (Expr e) s = (INL (), ee)
 Proof
@@ -19,14 +19,14 @@ Proof
        return_def]
 QED
 
-Theorem eval_expr_stmt_exception[local]:
+Theorem eval_expr_stmt_exception:
   eval_expr cx e s = (INR ex, ee) ==>
   eval_stmt cx (Expr e) s = (INR ex, ee)
 Proof
   simp[Once evaluate_def, bind_def]
 QED
 
-Theorem expr_stmt_not_hashmap[local]:
+Theorem expr_stmt_not_hashmap:
   gas_admissible (eval_stmt cx (Expr e)) (stmt_res_ok lctx) es /\
   eval_expr cx e (es with gas_obs := gs) = (INL tv, ee) ==>
   ~is_HashMapRef tv
@@ -39,7 +39,7 @@ Proof
        raise_def, stmt_res_ok_def]
 QED
 
-Theorem expr_stmt_admissible[local]:
+Theorem expr_stmt_admissible:
   gas_admissible (eval_stmt cx (Expr e)) (stmt_res_ok lctx) es ==>
   gas_admissible (eval_expr cx e) expr_vv_res_ok es
 Proof
@@ -56,7 +56,7 @@ Proof
   gvs[no_control_exc_def, stmt_res_ok_def, expr_vv_res_ok_def]
 QED
 
-Theorem expr_stmt_exempt[local]:
+Theorem expr_stmt_exempt:
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (eval_expr cx e) (return ())) (es,s0)
     marks (err,ee) (leaf,fin) ==>
