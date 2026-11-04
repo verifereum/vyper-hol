@@ -2,7 +2,8 @@ Theory lowerDloadPtrAllocTransport
 Ancestors
   lowerDloadPtrAlloc lowerDloadPtrCall lowerDloadPtrTaint lowerDloadPtrAggregate
   lowerDloadPtrRel ptrDiscipline venomExecSemantics venomState codegenRel
-  memLocDefs finite_map list pred_set words
+  memLocDefs lowerDloadPtrSourceInv o1PassContract lowerDloadDefs
+  finite_map list pred_set words
 
 Theorem dload_live_site_original_insert:
   FLOOKUP f.dr_source id = NONE /\ FLOOKUP f.dr_target id = NONE /\
@@ -189,7 +190,7 @@ Theorem dload_alloca_fresh_pointer:
                dr_target := f.dr_target |+ (id,(c,n))|>)::fs)
     (b,n) (c,n) (n2w b) (n2w c)
 Proof
-  simp[dload_pointer_word_def, WORD_SUB_REFL] >>
+  simp[dload_pointer_word_def, WORD_SUB_REFL, WORD_ADD_0] >>
   qexistsl [`0`,`id`] >> simp[dload_live_site_def, FLOOKUP_UPDATE]
 QED
 
@@ -198,6 +199,45 @@ Theorem dload_alloca_repeated_pointer:
   FLOOKUP f.dr_target id = SOME (c,n) ==>
   dload_pointer_word (f::fs) (b,n) (c,n) (n2w b) (n2w c)
 Proof
-  strip_tac >> simp[dload_pointer_word_def, WORD_SUB_REFL] >>
+  strip_tac >> simp[dload_pointer_word_def, WORD_SUB_REFL, WORD_ADD_0] >>
   qexistsl [`0`,`id`] >> simp[dload_live_site_def]
+QED
+
+Theorem dload_alloca_successor_headroom:
+  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode = ALLOCA /\ step_inst fuel C inst s = OK s' /\
+  active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  s'.vs_alloca_next + 32 * ctx_dload_count C < dimword (:256)
+Proof
+  strip_tac >>
+  `frame_reachable vs C stk PG (step_prov PG G inst s')
+    (step_taint inst s s' tn) fn inst'
+    (s' with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule frame_reachable_next >>
+     simp[venomInstTheory.is_terminator_def] >> metis_tac[]) >>
+  drule_all o1_src_frame_dload_headroom_ok >>
+  simp[dload_headroom_ok_def]
+QED
+
+Theorem dload_alloca_fresh_post_bound:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
+  dload_table_stack (f::fs) (s::ss) (t::ts) /\
+  SUM (MAP (\f. CARD f.dr_scratch) (f::fs)) <= ctx_dload_count C /\
+  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  inst.inst_opcode = ALLOCA /\ step_inst fuel C inst s = OK s' /\
+  active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  t'.vs_alloca_next < dimword (:256) /\
+  t.vs_alloca_next + w2n amount < dimword (:256)
+Proof
+  strip_tac >> drule_all dload_alloca_successor_headroom >> strip_tac >>
+  drule dload_table_stack_current >> strip_tac >>
+  qpat_x_assum `exec_alloca inst s amount = OK s'` mp_tac >>
+  qpat_x_assum `exec_alloca inst t amount = OK t'` mp_tac >>
+  simp[exec_alloca_def, update_var_def] >> rpt strip_tac >> gvs[] >>
+  decide_tac
 QED
