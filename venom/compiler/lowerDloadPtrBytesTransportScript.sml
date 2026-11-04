@@ -1,7 +1,8 @@
 Theory lowerDloadPtrBytesTransport
 Ancestors
   lowerDloadPtrMemoryWrite lowerDloadPtrRel lowerDloadPtrExpansionTransport
-  codegenRel memLocDefs ptrDiscipline
+  lowerDloadPtrAggregate lowerDloadPtrCall
+  venomExecSemantics venomState codegenRel memLocDefs ptrDiscipline
   pointerConfinedDefs list pred_set words arithmetic finite_map
 
 Theorem dloadbytes_destination_region:
@@ -126,4 +127,79 @@ Theorem dloadbytes_common_payload:
 Proof
   strip_tac >> drule_all dloadbytes_scalar_equal >> strip_tac >>
   gvs[] >> drule_all dload_code_data_padded_slice >> simp[]
+QED
+
+Theorem dloadbytes_state_ghost:
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
+  i.inst_outputs = [] /\ eval_operand dst s = SOME x /\
+  eval_operand off s = SOME a /\ eval_operand sz s = SOME z ==>
+  step_inst_base i s = OK (write_memory_with_expansion (w2n x)
+    (TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w)) s) /\
+  step_prov PG G i (write_memory_with_expansion (w2n x)
+    (TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w)) s) = G /\
+  step_taint i s (write_memory_with_expansion (w2n x)
+    (TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w)) s) tn =
+    tn with t_mem := tn.t_mem DIFF {j | w2n x <= j /\ j < w2n x + w2n z}
+Proof
+  strip_tac >>
+  simp[step_inst_base_def, step_prov_def, set_prov_def, DRESTRICT_UNIV] >>
+  simp[step_taint_def, set_var_taint_def, store_taint_def,
+       adopt_reset_def, imm_taint_def, mem_taint_def, new_site_bytes_def,
+       step_writes_def, range_bytes_def, source_memory_write_ranges_def,
+       sized_source_write_range_def, mem_write_ops_def, written_taint_def,
+       FLOOKUP_DEF, write_memory_with_expansion_def,
+       taint_component_equality] >>
+  simp[DRESTRICT_UNIV, EXTENSION] >> metis_tac[]
+QED
+
+Theorem dloadbytes_codecopy_boundary:
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
+  i.inst_outputs = [] /\ eval_operand dst s = SOME x /\
+  eval_operand off s = SOME a /\ eval_operand sz s = SOME z /\
+  access_ok lo G fn i s /\ ~in_revert_forward fn s /\
+  c.inst_opcode = CODECOPY /\ c.inst_operands = [tdst;src;tsz] /\
+  c.inst_outputs = [] /\ eval_operand tdst t = SOME y /\
+  eval_operand src t = SOME b /\ eval_operand tsz t = SOME z /\
+  step_inst_base c t = OK t1 /\
+  dload_value_word fs {} (op_prov G dst) (op_prov H tdst) x y /\
+  bs = TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w) /\
+  bs = TAKE (w2n z) (DROP (w2n b) t.vs_code ++ REPLICATE (w2n z) 0w) ==>
+  ?s1. step_inst_base i s = OK s1 /\
+    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1)
+      (step_prov PH H c t1) (step_taint i s s1 tn)
+      (step_taint c t t1 un) s1 t1 cs ds
+Proof
+  strip_tac >> drule_all dloadbytes_state_ghost >>
+  disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >>
+  drule_all dload_codecopy_state_ghost >>
+  disch_then (qspecl_then [`un`,`PH`,`H`] strip_assume_tac) >>
+  qexists_tac `write_memory_with_expansion (w2n x) bs s` >>
+  conj_tac >- metis_tac[] >>
+  `LENGTH bs = w2n z` by simp[LENGTH_TAKE_EQ] >>
+  `dload_memory_match lo fs
+    (tn with t_mem := tn.t_mem DIFF {p | w2n x <= p /\ p < w2n x + LENGTH bs})
+    (un with t_mem := un.t_mem DIFF {p | w2n y <= p /\ p < w2n y + LENGTH bs})
+    (write_memory_with_expansion (w2n x) bs s)
+    (write_memory_with_expansion (w2n y) bs t)` by
+    (irule dloadbytes_memory_match_clean_write >>
+     conj_tac >- metis_tac[dload_boundary_layout] >>
+     conj_tac >- metis_tac[dload_boundary_memory] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_memory_match _ _ _ _ (write_memory_with_expansion _ _ _) _` mp_tac >>
+  rpt (pop_assum kall_tac) >> strip_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n x) payload s` >>
+  fs[dload_boundary_core_def] >>
+  conj_tac
+  >- (gvs[dload_table_stack_def] >> gen_tac >> Cases_on `k`
+      >- (qpat_x_assum `!k. k < _ ==> _ /\ _ /\ _` (qspec_then `0` mp_tac) >>
+          simp[write_memory_with_expansion_def]) >>
+      qpat_x_assum `!k. k < _ ==> _ /\ _ /\ _` (qspec_then `SUC n` mp_tac) >>
+      simp[write_memory_with_expansion_def]) >>
+  fs[write_memory_with_expansion_def, dload_vars_match_def, lookup_var_def,
+     dload_shared_store_def, dload_equal_environment_def,
+     venom_state_component_equality, op_taint_def] >>
+  metis_tac[]
 QED
