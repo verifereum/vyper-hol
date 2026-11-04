@@ -22,6 +22,7 @@
 Theory o1ContractTheorems
 Ancestors
   o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
+  o1ContractCfgNorm
   venomPassSchedule venomCompilerTypes o1ContractSimplifyCfg
 
 (* ===== The pre-walk runs ===== *)
@@ -91,9 +92,5 @@ Proof
   cheat
 QED
 
-Theorem o1_contract_cfg_normalization:
-  o1_step_contract_at 8 rpolicy (CFP_Simple VP_CFGNormalization) /\
-  o1_run_contract rpolicy D 8
-Proof
-  cheat
-QED
+Theorem o1_contract_cfg_normalization =
+  o1ContractCfgNormTheory.o1_contract_cfg_normalization
