@@ -462,7 +462,7 @@ Resume eval_expr_oracle_storage_mutual[Expr_Call_SelfDestructTarget]:
               drule_all transfer_value_preserves_contract_storage_well_formed >>
               Cases_on `transfer_res` >>
               gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-              rpt strip_tac >> gvs[]) >>
+              rpt strip_tac >> Cases_on `cx.txn.is_static` >> gvs[]) >>
           rpt strip_tac >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
