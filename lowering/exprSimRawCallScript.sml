@@ -29,7 +29,7 @@ Ancestors
   vyperTypeSystem vyperTypeCallGraph vyperCallOutcome extCallOracle
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend vyperRawCallDataDomain
-  exprSimHash
+  exprSimHash exprSimAlloc exprSimBuffer builtinSystem
 Libs
   pairLib
 
@@ -253,6 +253,175 @@ Proof
   qexists_tac `t` >> simp[wb_frame_def, locals_kept_def] >>
   first_assum ACCEPT_TAC
 QED
+
+Theorem raw_call_outbuf_capacity[local]:
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es /\
+  0 < flags.rcf_max_outsize ==>
+  ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32 < dimword (:256)
+Proof
+  strip_tac >> drule raw_call_pre_flags >> strip_tac >>
+  `type_alloc_ok cenv ann` by
+    fs[expr_body_pre_def, alloc_limits_expr_def] >>
+  gvs[raw_call_return_type_def, type_alloc_ok_def, is_word_type_def,
+      type_memory_bytes_def] >>
+  `2 ** 64 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  fs[] >> decide_tac
+QED
+
+Theorem raw_call_outbuf_zero_run[local]:
+  compile_raw_call_outbuf 0 sa = ((ov,op),sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
+  ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ ov = op /\
+    eval_operand ov t = SOME w /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,0) /\
+    w2n w < dimword (:256) /\ t.vs_memory = s.vs_memory /\
+    wb_frame cenv es sa s t /\
+    (!x. ov = Var x ==> not_fresh_at sb x)
+Proof
+  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  `0 < dimword (:256)` by simp[] >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  qexistsl_tac [`t`, `w`] >> simp[wb_frame_def, locals_kept_def] >>
+  metis_tac[]
+QED
+
+Theorem raw_call_outbuf_steps[local]:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) ==>
+  ?buf sm.
+    compile_alloc_buffer (((cap + 31) DIV 32) * 32 + 32) sa = (buf,sm) /\
+    ov = buf.buf_operand /\ emit_op ADD [ov; Lit 32w] sm = (op,sb)
+Proof
+  strip_tac >> qpat_x_assum `compile_raw_call_outbuf _ _ = _` mp_tac >>
+  simp[compile_raw_call_outbuf_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem raw_call_outbuf_add_frame[local]:
+  emit_op ADD [ov; Lit 32w] sa = (op,sb) /\
+  eval_operand ov s = SOME w /\
+  (!x. ov = Var x ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand ov t = SOME w /\ eval_operand op t = SOME (w + 32w) /\
+    stmt_state_rel ctx func cenv cx es t /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    wb_frame cenv es sa s t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!x. ov = Var x \/ op = Var x ==> not_fresh_at sb x)
+Proof
+  strip_tac >>
+  `run_inst_seq (emitted_insts sa sb) s =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var)) (w + 32w) s)` by
+    (irule buffer_emit_add_run >> simp[] >> metis_tac[]) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq _ s = OK t` >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by
+    (simp[Abbr `t`, emitHelperPropsTheory.lookup_var_update_var] >>
+     rpt strip_tac >> gvs[not_fresh_at_def]) >>
+  `(t with vs_vars := s.vs_vars) = s` by simp[Abbr `t`, update_var_def] >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+  qexists_tac `t` >>
+  simp[Abbr `t`, update_var_def, wb_frame_def, locals_kept_def,
+       eval_operand_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  conj_tac
+  >- (Cases_on `ov` >> gvs[eval_operand_def, lookup_var_def,
+                          emitHelperPropsTheory.lookup_var_update_var, not_fresh_at_def] >>
+      first_x_assum (qspec_then `sa.cs_next_var` assume_tac) >>
+      gvs[finite_mapTheory.FLOOKUP_UPDATE]) >>
+  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+QED
+
+Theorem raw_call_outbuf_positive_run[local]:
+  0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
+  ((cap + 31) DIV 32) * 32 + 32 < dimword (:256) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
+  ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand ov t = SOME w /\ eval_operand op t = SOME (w + 32w) /\
+    w2n (w + 32w) = w2n w + 32 /\
+    FLOOKUP t.vs_allocas sa.cs_next_id =
+      SOME (w2n w, ((cap + 31) DIV 32) * 32 + 32) /\
+    w2n w + (((cap + 31) DIV 32) * 32 + 32) < dimword (:256) /\
+    stmt_state_rel ctx func cenv cx es t /\ t.vs_memory = s.vs_memory /\
+    wb_frame cenv es sa s t /\
+    (!name b len. local_region cenv es.scopes t name b len ==>
+      regions_disjoint (w2n w) (((cap + 31) DIV 32) * 32 + 32) b len) /\
+    (cenv.ce_is_ctor ==> !name tv v off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
+        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
+      regions_disjoint off (type_memory_size tv) (w2n w)
+        (((cap + 31) DIV 32) * 32 + 32)) /\
+    (!x. ov = Var x \/ op = Var x ==> not_fresh_at sb x)
+Proof
+  strip_tac >> drule_all raw_call_outbuf_steps >> strip_tac >> gvs[] >>
+  `cs_extends sa sm /\ cs_extends sm sb` by
+    (fs[ci_mono_def] >> metis_tac[ci_mono_compile_alloc_buffer,
+       ci_mono_emit_op, pairTheory.SND, ci_mono_def]) >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK allocated` >>
+  `sm.cs_next_var = sa.cs_next_var + 1 /\
+   sm.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sm` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[contextTheory.compile_alloc_buffer_def, emit_op_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+          emit_def, emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+     strip_tac >> gvs[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `local_ptrs_reserved cenv sm` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `!x. buf.buf_operand = Var x ==> not_fresh_at sm x` by
+    (asm_rewrite_tac[] >> simp[]) >>
+  drule_all raw_call_outbuf_add_frame >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sb) allocated = OK final` >>
+  `sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb` by
+    (drule emitHelperPropsTheory.emitted_insts_emit_op >> simp[]) >>
+  `run_inst_seq (emitted_insts sa sb) s =
+   run_inst_seq (emitted_insts sm sb) allocated` by
+    (irule (cj 1 run_inst_seq_chain) >> simp[]) >>
+  `w2n (w + 32w) = w2n w + 32` by
+    (irule buffer_offset_no_wrap >> goal_assum drule >> simp[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x final = lookup_var x s` by
+    (rpt strip_tac >>
+     `not_fresh_at sm x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+     qpat_x_assum `!x. not_fresh_at sm x ==> _` drule >> simp[]) >>
+  `!name b len. local_region cenv es.scopes final name b len ==>
+     regions_disjoint (w2n w) (32 * ((cap + 31) DIV 32) + 32) b len` by
+    (rpt strip_tac >> simp[] >>
+     qpat_x_assum `!name b len. local_region _ _ allocated _ _ _ ==> _` irule >>
+     qexists_tac `name` >> irule exprSimOpsTheory.local_region_frame >>
+     conj_tac >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
+     qexistsl_tac [`sm`, `es.scopes`, `final`] >> simp[]) >>
+  qexistsl_tac [`final`, `w`] >> simp[] >> conj_tac
+  >- (simp[wb_frame_def, locals_kept_def] >> rpt strip_tac >> simp[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- suspend "immutable" >>
+  qpat_x_assum `!x. buf.buf_operand = Var x \/ op = Var x ==> _` mp_tac >>
+  asm_rewrite_tac[] >> simp[]
+QED
+
+Resume raw_call_outbuf_positive_run[immutable]:
+  rpt strip_tac >>
+  qpat_assum `stmt_state_rel ctx func cenv cx es final` mp_tac >>
+  pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+  disch_then drule_all >> strip_tac >>
+  qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _`
+    (qspec_then `mk_inst sa.cs_next_id ALLOCA
+      [Lit (n2w (((cap + 31) DIV 32) * 32 + 32))]
+      [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
+  fs[mk_inst_def]
+QED
+
+Finalise raw_call_outbuf_positive_run
 
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
