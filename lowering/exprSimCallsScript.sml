@@ -34,10 +34,8 @@
  *
  * A call or staticcall raw_call takes its outcome from the oracle, as the
  * lowered CALL/STATICCALL does.  expr_sim_pre excludes delegate raw_calls
- * and the creates (~expr_has_evm_run e), so those cases hold vacuously.  It also
- * excludes raw_calls without revert_on_failure: a computed precompile is
- * answered as a success without the oracle on both sides, while the EVM
- * call can fail for lack of gas and such a raw_call returns the failure.
+ * and the creates (~expr_has_evm_run e), since the source runs them on the
+ * EVM even with the outcome oracle, so those cases hold vacuously.
  *
  * Internal calls (row 6) have no lemma: expr_sim_pre excludes them
  * (int_calls_expr e = []) until #638 states the INVOKE hypothesis.

@@ -14,6 +14,8 @@
  *     mem_safe_raw_unit_memory_ok, and from the pointer discipline and
  *     taint bound
  *   lower_vyper_runtime_unit_run_mem_safe -- the memory-safe run
+ *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
+ *     DLOAD/DLOADBYTES offsets, from the memory-safe run's DLOAD check
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
  * Named admissions (cheats); all but the last are memory twins of pieces
@@ -26,8 +28,6 @@
  *     from entryHaltMem's return leaves
  *   lower_vyper_runtime_unit_ptr_taint -- S3's pointer discipline and
  *     taint bound
- *   lower_vyper_runtime_unit_dload_offset_ok -- S3's no-wrap bound on
- *     DLOAD/DLOADBYTES offsets, which LowerDload's expansion needs
  *)
 Theory loweringMemCorrect
 Ancestors
@@ -236,15 +236,14 @@ Theorem external_body_not_empty_bytes_error:
     res <> INR (Error (RuntimeError "convert empty bytes to signed"))
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
-  drule_all call_external_selected_body >>
-  disch_then (qspec_then `orc` assume_tac) >>
-  `initial_state am [env] with
-     <| outcomes := orc; requests := []; gas_obs := [] |> =
-   initial_state am [env] with <| outcomes := orc; requests := [] |>` by
-    simp[initial_state_def] >>
+  drule_all call_external_selected_body >> strip_tac >>
+  `es0.scopes = [env]` by
+    (drule send_call_value_with_scopes >> simp[initial_state_def]) >>
+  `es0 with scopes := [env] = es0` by
+    (qpat_assum `es0.scopes = [env]` (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[vyperTypeSelectedEntrySoundnessTheory.call_external_body_def,
       vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
-      vyperStateTheory.return_def, source_exempt_def,
+      vyperStateTheory.return_def, vyperStateTheory.set_scopes_def, source_exempt_def,
       unspecified_behaviour_exempt_def]
 QED
 
@@ -438,11 +437,13 @@ Proof
   simp[fixed_region_reserved_def]
 QED
 
-(* ADMITTED, S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES
-   offset, added to the length of the code before the data section, stays
-   below 2^256, so LowerDload's code_end-relative CODECOPY offset does not
-   wrap.  Proof idea: runtime immutable offsets lie inside the immutable
-   section, and code_layout_valid keeps the code within 2^255 bytes. *)
+(* S3's twin for LowerDload: every reachable DLOAD/DLOADBYTES offset,
+   added to the length of the code before the data section, stays below
+   2^256, so LowerDload's code_end-relative CODECOPY offset does not wrap.
+   The memory-safe run checks that each offset is at most the data
+   section's length (inst_dload_in_section); the code and the data section
+   never change, and code_layout_valid keeps the code within 2^255
+   bytes. *)
 Theorem lower_vyper_runtime_unit_dload_offset_ok:
   !tops rpolicy unit am tx ret vs.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -457,5 +458,52 @@ Theorem lower_vyper_runtime_unit_dload_offset_ok:
     ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)
     ==> mem_inv dload_offset_ok unit.cu_context vs
 Proof
-  cheat
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> strip_tac >>
+  drule run_lowering_entry >> strip_tac >>
+  drule lowering_context_ok_bridge >> strip_tac >>
+  `MEM fn unit.cu_context.ctx_functions /\ fn.fn_name = "__entry"` by
+    metis_tac[lookup_function_MEM, lookup_function_result_name] >>
+  `ALL_DISTINCT (fn_labels fn) /\ fn_has_entry fn` by fs[listTheory.EVERY_MEM] >>
+  `?lbl. fn_entry_label fn = SOME lbl` by
+    (Cases_on `fn.fn_blocks` >>
+     gvs[fn_has_entry_def, fn_entry_label_def, entry_block_def]) >>
+  `EVERY (\f. ALL_DISTINCT (fn_labels f)) unit.cu_context.ctx_functions` by
+    fs[listTheory.EVERY_MEM] >>
+  `!fuel. mem_safe_blocks fuel unit.cu_context fn
+            (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                        vs_inst_idx := 0 |>)` by
+    (drule_all lower_vyper_runtime_unit_run_mem_safe >> simp[]) >>
+  rewrite_tac[unitMemInvTheory.mem_inv_def, codegen_reachability_package_def] >>
+  qexists_tac `\c f i s. mem_safe_point c f i s /\
+                         s.vs_code = vs.vs_code /\
+                         s.vs_data_section = vs.vs_data_section` >>
+  rpt conj_tac
+  >- (qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`] mp_tac
+        contextCodegenRelPropsTheory.reachability_closed_conj >>
+      simp[mem_safe_point_closed, code_data_closed])
+  >- (qexistsl_tac [`"__entry"`, `fn`, `lbl`] >> simp[] >>
+      qspecl_then [`mem_safe_point`,
+        `\c f i s. s.vs_code = vs.vs_code /\
+                   s.vs_data_section = vs.vs_data_section`,
+        `unit.cu_context`, `fn`,
+        `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                    vs_inst_idx := 0 |>`] mp_tac
+        contextCodegenRelPropsTheory.fn_entry_inv_conj >>
+      impl_tac >- (
+        conj_tac >- (irule mem_safe_point_entry >> simp[]) >>
+        qspecl_then [`unit.cu_context`, `fn`,
+          `vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
+                      vs_inst_idx := 0 |>`] mp_tac code_data_entry >>
+        simp[]) >>
+      simp[]) >>
+  rw[dload_offset_ok_def] >>
+  `inst_dload_in_section inst s` by metis_tac[mem_safe_point_dload] >>
+  `w2n off <= LENGTH s.vs_data_section` by
+    (fs[inst_dload_in_section_def] >> metis_tac[]) >>
+  gvs[code_layout_valid_def, wordsTheory.dimword_def]
 QED

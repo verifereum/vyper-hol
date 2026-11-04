@@ -418,7 +418,8 @@ Theorem exec_create_jump[local]:
       (exec_create inst s value offset sz salt_opt)
 Proof
   rpt gen_tac >>
-  simp([exec_create_def, venom_create_request_def] @ ext_call_rw) >>
+  simp([exec_create_def, venom_create_request_def, halt_state_def,
+        set_returndata_def] @ ext_call_rw) >>
   EVERY_CASE_TAC >>
   simp[instIdxIndepTheory.exec_result_map_def, update_var_def, update_var_jump,
        venom_state_component_equality]

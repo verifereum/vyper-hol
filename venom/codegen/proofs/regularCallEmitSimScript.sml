@@ -426,7 +426,9 @@ Theorem create_emit_venom_asm_rel:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `exec_create _ _ _ _ _ _ = _` mp_tac >>
-  simp_tac std_ss [exec_create_def, LET_THM] >> pairarg_tac >>
+  simp_tac std_ss [exec_create_def, LET_THM] >>
+  Cases_on `w2n sz > 2 * max_code_size` >- simp[] >>
+  asm_simp_tac std_ss [] >> pairarg_tac >>
   pure_asm_rewrite_tac[] >> strip_tac >>
   rename1 `consume_create_outcome _ _ = (output, vb)` >>
   `asm_create_request st value (w2n off) (w2n sz) salt_opt =

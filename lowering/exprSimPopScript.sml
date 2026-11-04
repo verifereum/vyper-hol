@@ -224,7 +224,7 @@ Proof
   irule step_MLOAD >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ISZERO[local]:
+Theorem pop_step_ISZERO:
   !id x out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id ISZERO [Var x] [out]) s =
@@ -234,7 +234,7 @@ Proof
   irule step_ISZERO >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ASSERT[local]:
+Theorem pop_step_ASSERT:
   !id x s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id ASSERT [Var x] []) s =
@@ -247,7 +247,7 @@ Proof
   irule step_ASSERT_ok >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_SUB_lit[local]:
+Theorem pop_step_SUB_lit:
   !id x c out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id SUB [Var x; Lit c] [out]) s =
@@ -267,7 +267,7 @@ Proof
   irule step_ADD >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_MUL_lit[local]:
+Theorem pop_step_MUL_lit:
   !id x c out s.
     IS_SOME (lookup_var x s) ==>
     step_inst_base (mk_inst id MUL [Var x; Lit c] [out]) s =
@@ -277,7 +277,7 @@ Proof
   irule step_MUL >> simp[eval_operand_def]
 QED
 
-Theorem pop_step_ADD_var[local]:
+Theorem pop_step_ADD_var:
   !id x y out s.
     IS_SOME (lookup_var x s) /\ IS_SOME (lookup_var y s) ==>
     step_inst_base (mk_inst id ADD [Var x; Var y] [out]) s =
@@ -569,7 +569,9 @@ Proof
   >- (irule state_rel_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`es`, `s0`] >> simp[]) >>
-  simp[]
+  simp[] >>
+  qpat_x_assum `u = _ with <|vs_vars := _; vs_memory := _|>`
+    (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem pop_stmt_state_rel_scopes:

@@ -155,7 +155,7 @@ val computed_defs =
    consume_call_outcome_def, take_outcome_def,
    record_request_def, computed_precompile_def, adopt_outcome_def,
    adopt_outcome_deletions_def,
-   failed_outcome_def, write_memory_with_expansion_def,
+   failed_outcome_def, write_memory_with_expansion_def, call_probe_outcome_def,
    lookup_var_def, update_var_def, w2w_n2w,
    precompile_result_empty_ecrecover, precompile_result_empty_ec,
    precompile_result_invalid_ec, byteTheory.LENGTH_word_to_bytes,
@@ -171,7 +171,7 @@ Theorem activated_computed_ecrecover:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
     vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 1w 0w) s =
-    OK (update_var "result" 1w (s with vs_returndata := []))
+    OK (update_var "result" 1w (s with <|vs_returndata := []; vs_outcomes := []|>))
 Proof
   simp computed_defs
 QED
@@ -181,7 +181,7 @@ Theorem activated_computed_sha256:
     vs_requests := [call_probe_request] |>
   in ?t. step_inst_base (probe_computed 2w 0w) s = OK t /\
     lookup_var "result" t = SOME 1w /\ LENGTH t.vs_returndata = 32 /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
+    t.vs_outcomes = [] /\ t.vs_requests = s.vs_requests /\
     t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
     t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
@@ -192,9 +192,11 @@ Theorem activated_computed_empty_ec:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
     vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 6w 0w) s =
-       OK (update_var "result" 1w (s with vs_returndata := REPLICATE 64 0w)) /\
+       OK (update_var "result" 1w
+         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>)) /\
      step_inst_base (probe_computed 7w 0w) s =
-       OK (update_var "result" 1w (s with vs_returndata := REPLICATE 64 0w))
+       OK (update_var "result" 1w
+         (s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>))
 Proof
   mp_tac consume_computed_empty_ec >>
   simp[Excl "consume_call_outcome_eq", LET_THM] >> strip_tac >>
@@ -206,9 +208,9 @@ Theorem consume_invalid_ec_zero_output[local]:
         vs_memory := REPLICATE 63 0w ++ [1w];
         vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |> ==>
   consume_call_outcome (venom_call_request s 6w 0w 0w 64w F) 1 0 s =
-       (0w, s with vs_returndata := []) /\
+       (0w, s with <|vs_returndata := []; vs_outcomes := []|>) /\
      consume_call_outcome (venom_call_request s 7w 0w 0w 64w F) 1 0 s =
-       (0w, s with vs_returndata := [])
+       (0w, s with <|vs_returndata := []; vs_outcomes := []|>)
 Proof
   disch_then SUBST1_TAC >>
   mp_tac (SIMP_RULE bool_ss [LET_THM] consume_computed_invalid_ec) >>
@@ -223,9 +225,11 @@ Theorem activated_computed_invalid_ec:
     vs_memory := REPLICATE 63 0w ++ [1w];
     vs_outcomes := [call_probe_outcome]; vs_requests := [call_probe_request] |>
   in step_inst_base (probe_computed 6w 64w) s =
-       OK (update_var "result" 0w (s with vs_returndata := [])) /\
+       OK (update_var "result" 0w
+         (s with <|vs_returndata := []; vs_outcomes := []|>)) /\
      step_inst_base (probe_computed 7w 64w) s =
-       OK (update_var "result" 0w (s with vs_returndata := []))
+       OK (update_var "result" 0w
+         (s with <|vs_returndata := []; vs_outcomes := []|>))
 Proof
   mp_tac consume_computed_invalid_ec >>
   pure_rewrite_tac [LET_THM] >> BETA_TAC >> strip_tac >>

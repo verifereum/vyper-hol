@@ -173,20 +173,22 @@ QED
 
 (* The precompile contracts are already kernel-proved in extCallOracle.
  * These probes check the actual Venom completion, using arbitrary nonempty
- * oracle/trace payloads: computed calls consume/record neither one.
+ * oracle/trace payloads: computed calls consume one outcome for their
+ * success bit and record no request.
  *)
 Theorem consume_computed_ecrecover:
   let s = call_probe_state with <| vs_outcomes := [call_probe_outcome];
                                   vs_requests := [call_probe_request] |>;
       rq = venom_call_request s 1w 0w 0w 0w F;
       (word, t) = consume_call_outcome rq 1 3 s
-  in word = 1w /\ t.vs_outcomes = s.vs_outcomes /\
+  in word = 1w /\ t.vs_outcomes = [] /\
      t.vs_requests = s.vs_requests /\ t.vs_returndata = [] /\
      t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
      t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
+       call_probe_outcome_def,
        precompile_result_empty_ecrecover, failed_outcome_def,
        adopt_outcome_def, adopt_outcome_deletions_def,
        write_memory_with_expansion_def,
@@ -199,13 +201,14 @@ Theorem consume_computed_sha256:
                                   vs_requests := [call_probe_request] |>;
       rq = venom_call_request s 2w 0w 0w 0w F;
       (word, t) = consume_call_outcome rq 1 0 s
-  in word = 1w /\ t.vs_outcomes = s.vs_outcomes /\
+  in word = 1w /\ t.vs_outcomes = [] /\
      t.vs_requests = s.vs_requests /\ LENGTH t.vs_returndata = 32 /\
      t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
      t.vs_transient = s.vs_transient /\ t.vs_logs = s.vs_logs
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
+       call_probe_outcome_def,
        failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
        write_memory_with_expansion_def,
        call_probe_state_def, init_venom_state_def, empty_call_context_def,
@@ -218,12 +221,13 @@ Theorem consume_computed_empty_ec:
       rq6 = venom_call_request s 6w 0w 0w 0w F;
       rq7 = venom_call_request s 7w 0w 0w 0w F
   in consume_call_outcome rq6 1 0 s =
-       (1w, s with vs_returndata := REPLICATE 64 0w) /\
+       (1w, s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>) /\
      consume_call_outcome rq7 1 0 s =
-       (1w, s with vs_returndata := REPLICATE 64 0w)
+       (1w, s with <|vs_returndata := REPLICATE 64 0w; vs_outcomes := []|>)
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
+       call_probe_outcome_def,
        precompile_result_empty_ec, failed_outcome_def, adopt_outcome_def,
        adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
@@ -237,16 +241,40 @@ Theorem consume_computed_invalid_ec:
         vs_requests := [call_probe_request] |>;
       rq6 = venom_call_request s 6w 0w 0w 64w F;
       rq7 = venom_call_request s 7w 0w 0w 64w F
-  in consume_call_outcome rq6 1 3 s = (0w, s with vs_returndata := []) /\
-     consume_call_outcome rq7 1 3 s = (0w, s with vs_returndata := [])
+  in consume_call_outcome rq6 1 3 s =
+       (0w, s with <|vs_returndata := []; vs_outcomes := []|>) /\
+     consume_call_outcome rq7 1 3 s =
+       (0w, s with <|vs_returndata := []; vs_outcomes := []|>)
 Proof
   simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
        take_outcome_def, record_request_def, computed_precompile_def,
+       call_probe_outcome_def,
        precompile_result_invalid_ec, failed_outcome_def, adopt_outcome_def,
        adopt_outcome_deletions_def,
        write_memory_with_expansion_def, call_probe_state_def,
        init_venom_state_def, empty_call_context_def, w2w_n2w,
        TAKE_APPEND1, TAKE_APPEND2] >> EVAL_TAC
+QED
+
+(* A failed outcome fails a computed call with valid input: the EVM can
+ * starve it of gas. *)
+Theorem consume_computed_starved_sha256:
+  let s = call_probe_state with <|
+        vs_outcomes := [call_probe_outcome with co_success := F];
+        vs_requests := [call_probe_request] |>;
+      rq = venom_call_request s 2w 0w 0w 0w F;
+      (word, t) = consume_call_outcome rq 1 0 s
+  in word = 0w /\ t.vs_outcomes = [] /\
+     t.vs_requests = s.vs_requests /\ t.vs_returndata = [] /\
+     t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts
+Proof
+  simp[venom_call_request_def, read_memory_def, consume_call_outcome_def,
+       take_outcome_def, record_request_def, computed_precompile_def,
+       call_probe_outcome_def,
+       failed_outcome_def, adopt_outcome_def, adopt_outcome_deletions_def,
+       write_memory_with_expansion_def,
+       call_probe_state_def, init_venom_state_def, empty_call_context_def,
+       call_probe_outcome_def, w2w_n2w]
 QED
 
 (* Nonzero value to a precompile is an ordinary oracle call. Also exercise
@@ -265,18 +293,16 @@ Proof
   simp probe_defs >> EVAL_TAC
 QED
 
-(* A computed CALL cannot discard deletions scheduled by an earlier call. *)
+(* A successful computed CALL cannot discard deletions scheduled by an
+   earlier call. *)
 Theorem computed_call_preserves_pending_deletions:
+  let s = call_probe_state with <| vs_pending_deletions := [8w];
+                                   vs_outcomes := [call_probe_outcome] |> in
+  (FST (consume_call_outcome (venom_call_request s 2w 0w 0w 0w F) 0 0 s) = 1w) /\
   (SND (consume_call_outcome
-    (venom_call_request (call_probe_state with vs_pending_deletions := [8w])
-      2w 0w 0w 0w F) 0 0
-    (call_probe_state with vs_pending_deletions := [8w]))).vs_pending_deletions = [8w]
+    (venom_call_request s 2w 0w 0w 0w F) 0 0 s)).vs_pending_deletions = [8w]
 Proof
-  simp[consume_call_outcome_eq, venom_call_request_def,
-       adopt_outcome_deletions_def, computed_precompile_def,
-       take_outcome_def, failed_outcome_def,
-       call_probe_state_def, init_venom_state_def, empty_call_context_def,
-       read_memory_def, w2w_n2w]
+  simp probe_defs >> EVAL_TAC
 QED
 
 (* A successful non-static outcome prepends its deletion delta to the queue;

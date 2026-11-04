@@ -336,7 +336,8 @@ Theorem exec_create_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
       (exec_create inst s value offset sz salt_opt)
 Proof
-  rpt gen_tac >> idx_cases_tac ext_call_idx_ss
+  rpt gen_tac >> idx_cases_tac ext_call_idx_ss >>
+  simp[halt_state_def, set_returndata_def]
 QED
 
 (* ================================================================

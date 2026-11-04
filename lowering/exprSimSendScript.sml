@@ -203,8 +203,9 @@ Proof
   simp[take_call_outcome_def] >> Cases_on `st.outcomes` >> simp[] >>
   pairarg_tac >> simp[] >> rw[] >>
   gvs[outcomes_accounts_typed_def, take_outcome_def] >>
-  BasicProvers.every_case_tac >>
-  gvs[failed_outcome_def, call_outcome_request_def]
+  Cases_on `x` >> gvs[failed_outcome_def] >>
+  Cases_on `computed_precompile (call_outcome_request target cd vo st)` >>
+  gvs[AllCaseEqs(), failed_outcome_def, call_outcome_request_def]
 QED
 
 Theorem eval_send_outcome_typed:
@@ -429,7 +430,11 @@ Proof
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `t`] >> simp[]) >>
+      qexistsl_tac [`es1`, `t`] >> simp[] >>
+      qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
+        vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
+        vs_pending_deletions := _|>`
+        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   irule wb_frame_readonly_tail >>
   qexists_tac `sm` >>
   qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>

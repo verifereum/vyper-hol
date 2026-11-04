@@ -696,7 +696,15 @@ Triviality step_term_return:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >>
+  namedCases_on `inst1.inst_operands` ["", "off_op ops"] >> gvs[] >>
+  namedCases_on `ops` ["", "sz_op tail_ops"] >> gvs[] >>
+  Cases_on `tail_ops` >> gvs[] >>
+  Cases_on `eval_operand off_op s1` >> gvs[] >>
+  Cases_on `eval_operand sz_op s1` >> gvs[] >>
+  imp_res_tac eval_operand_renamed >>
+  gvs[ssa_result_equiv_def, execution_equiv_UNIV,
+      halt_state_def, set_returndata_def, ssa_sim_def]
 QED
 
 Triviality step_term_revert:
@@ -794,7 +802,7 @@ Proof
   gvs[dretShapeDefsTheory.parse_dret_shape_def, renamed_operand_def]
 QED
 
-Triviality step_term_dret:
+Theorem step_term_dret[local]:
   !sigma inst1 inst2 s1 s2.
     ssa_sim sigma s1 s2 /\ inst_renamed sigma inst1 inst2 /\
     inst1.inst_opcode = DRET /\
@@ -804,8 +812,17 @@ Proof
   term_setup_tac >>
   `parse_dret_shape inst2 = parse_dret_shape inst1` by
     metis_tac[parse_dret_shape_renamed] >>
-  gvs step_base_reduces >> term_resolve_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
+  gvs step_base_reduces >>
+  Cases_on `inst1.inst_outputs = []` >> gvs[] >>
+  `inst2.inst_outputs = []` by (Cases_on `inst2.inst_outputs` >> gvs[]) >>
+  gvs[] >>
+  Cases_on `parse_dret_shape inst1` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  Cases_on `eval_operands inst1.inst_operands s1` >> gvs[] >>
+  drule_all eval_operands_renamed >> strip_tac >> gvs[] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))` >> gvs[] >>
+  `s1.vs_call_entry_fmp = s2.vs_call_entry_fmp` by gvs[ssa_sim_def] >>
+  gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   `ssa_sim sigma s1 s2` by gvs[ssa_sim_def] >>
   drule_all pack_dret_dynamic_ssa_sim >> strip_tac >>
   gvs[ssa_result_equiv_def, execution_equiv_UNIV, ssa_sim_def]
@@ -883,11 +900,12 @@ Proof
   gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
   gvs step_base_reduces >>
-  gvs[exec_write2_def, AllCaseEqs(), LET_THM, renamed_operand_def] >>
-  TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
-  TRY (imp_res_tac eval_operands_renamed >> gvs[]) >>
-  irule ssa_sim_implies_exec_equiv_UNIV >>
-  gvs[ssa_sim_def, halt_state_def, revert_state_def, set_returndata_def,
-      lookup_var_def] >>
-  metis_tac[]
+  gvs[exec_write2_def, AllCaseEqs(), LET_THM, exec_create_abort_iff] >>
+  imp_res_tac eval_operand_renamed >>
+  imp_res_tac eval_operands_renamed >>
+  gvs[exec_create_abort_iff, AllCaseEqs()] >>
+  gvs[execution_equiv_UNIV, halt_state_def, revert_state_def,
+      set_returndata_def, ssa_sim_def] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
 QED

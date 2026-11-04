@@ -780,6 +780,7 @@ Proof
   disch_then kall_tac >>
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
+  simp_tac (srw_ss()) [mk_inst_def] >>
   simp[step_inst_base_def, is_terminator_def, jump_to_def]
 QED
 
@@ -2579,4 +2580,77 @@ Theorem label_external_mono:
 Proof
   rw[label_external_def] >>
   metis_tac[compiler_labels_future_antimono, SUBSET_DEF]
+QED
+
+(* Successful pure steps update only their declared output variable. *)
+Theorem exec_pure_ok_update:
+  (!f inst s t. exec_pure1 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
+  (!f inst s t. exec_pure2 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s) /\
+  (!f inst s t. exec_pure3 f inst s = OK t ==>
+     ?out v. inst.inst_outputs = [out] /\ t = update_var out v s)
+Proof
+  rpt conj_tac >> rpt gen_tac >> strip_tac >>
+  gvs[exec_pure1_def, exec_pure2_def, exec_pure3_def, AllCaseEqs()] >>
+  metis_tac[]
+QED
+
+Theorem step_pure_opcode_frame:
+  !inst ss tt.
+    MEM inst.inst_opcode
+      [ADD; SUB; MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+       EQ; LT; GT; SLT; SGT; ISZERO; AND; OR; XOR; NOT;
+       SHL; SHR; SAR; SIGNEXTEND; BYTE; ASSERT; ASSERT_UNREACHABLE] /\
+    step_inst_base inst ss = OK tt ==>
+    tt = ss with vs_vars := tt.vs_vars /\
+    !x. ~MEM x inst.inst_outputs ==>
+        FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x
+Proof
+  rpt gen_tac >> simp[] >> strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >> strip_tac
+  >>~- ([`exec_pure1 _ _ _ = OK _`],
+        drule (cj 1 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+            venom_state_component_equality])
+  >>~- ([`exec_pure2 _ _ _ = OK _`],
+        drule (cj 2 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+            venom_state_component_equality])
+  >>~- ([`exec_pure3 _ _ _ = OK _`],
+        drule (cj 3 exec_pure_ok_update) >> strip_tac >>
+        gvs[update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+            venom_state_component_equality]) >>
+  gvs[AllCaseEqs()] >> simp[venom_state_component_equality]
+QED
+
+Theorem run_inst_seq_protected_frame:
+  !is P ss tt.
+    (!i s t. MEM i is /\ step_inst_base i s = OK t ==>
+       t = s with vs_vars := t.vs_vars /\
+       (!x. P x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)) /\
+    run_inst_seq is ss = OK tt ==>
+    tt = ss with vs_vars := tt.vs_vars /\
+    (!x. P x ==> FLOOKUP tt.vs_vars x = FLOOKUP ss.vs_vars x)
+Proof
+  Induct >- simp[run_inst_seq_def, venom_state_component_equality] >>
+  qx_gen_tac `inst` >> rpt gen_tac >>
+  simp[run_inst_seq_def] >> strip_tac >>
+  Cases_on `step_inst_base inst ss` >> gvs[] >>
+  rename1 `step_inst_base inst ss = OK s1` >>
+  `s1 = ss with vs_vars := s1.vs_vars /\
+   (!x. P x ==> FLOOKUP s1.vs_vars x = FLOOKUP ss.vs_vars x)` by
+    (qpat_assum `!i s t. _` (qspecl_then [`inst`, `ss`, `s1`] mp_tac) >>
+     simp[]) >>
+  `tt = s1 with vs_vars := tt.vs_vars /\
+   (!x. P x ==> FLOOKUP tt.vs_vars x = FLOOKUP s1.vs_vars x)` by
+    (qpat_x_assum `!Q s t. _ /\ run_inst_seq is s = OK t ==> _` irule >>
+     simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `_ = _ with vs_vars := _` mp_tac >>
+      qpat_x_assum `_ = _ with vs_vars := _` mp_tac >>
+      rpt (pop_assum kall_tac) >>
+      simp[venom_state_component_equality]) >>
+  metis_tac[]
 QED
