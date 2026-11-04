@@ -805,7 +805,10 @@ Proof
 QED
 
 Theorem immutable_holds_source_frame:
-  t.immutables = s.immutables /\
+  (case ALOOKUP t.immutables cx.txn.target of NONE => FEMPTY
+     | SOME imms => get_source_immutables cenv.ce_module imms) =
+  (case ALOOKUP s.immutables cx.txn.target of NONE => FEMPTY
+     | SOME imms => get_source_immutables cenv.ce_module imms) /\
   (!v. read_result cx tv t = (INL v, t) <=>
        read_result cx tv s = (INL v, s)) /\
   immutable_holds cenv cx ty tv w s ==>
