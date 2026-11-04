@@ -251,7 +251,7 @@ Proof
 QED
 
 
-Theorem normalize_byte_offset_run[local]:
+Theorem normalize_byte_offset_run:
   compile_with_byte_offset op off sa = (out,sb) /\
   eval_operand op s = SOME a /\
   (!x. op = Var x ==> not_fresh_at sa x) ==>
@@ -276,7 +276,7 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def]
 QED
 
-Theorem normalize_byte_offset_mem_ok[local]:
+Theorem normalize_byte_offset_mem_ok:
   compile_with_byte_offset op off sa = (out,sb) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
