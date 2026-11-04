@@ -52,3 +52,21 @@ Theorem generate_phi_plan_rename_only:
 Proof
   rpt strip_tac >> simp[generate_phi_plan_def]
 QED
+
+Theorem release_dead_spills_live_domain:
+  !next ps.
+    (!op. op IN FDOM ps.ps_spilled ==> ?v. op = Var v /\ MEM v next) ==>
+    release_dead_spills next ps = ps
+Proof
+  rpt strip_tac >>
+  simp[stackPlanOpsTheory.release_dead_spills_def] >>
+  `FILTER (\(op,off). case op of Var v => ~MEM v next | _ => T)
+     (alist$fmap_to_alist ps.ps_spilled) = []` suffices_by simp[] >>
+  simp[FILTER_EQ_NIL, EVERY_MEM] >>
+  Cases >> simp[] >> rpt strip_tac >>
+  rename1 `FLOOKUP ps.ps_spilled op = SOME off` >>
+  `op IN FDOM ps.ps_spilled` by
+    (qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
+     simp[finite_mapTheory.FLOOKUP_DEF] >> IF_CASES_TAC >> simp[]) >>
+  first_x_assum drule >> strip_tac >> gvs[]
+QED
