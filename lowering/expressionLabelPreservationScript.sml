@@ -2,7 +2,7 @@
 Theory expressionLabelPreservation
 Ancestors
   decoderLabelPreservation entryLabelPreservation exprLowering compileEnv
-  loweringShapeDefs emitHelper list
+  loweringShapeDefs emitHelper list abiEncoder
 
 val label_simps = [label_preserving_return, label_preserving_emit_inst,
   label_preserving_emit_op, label_preserving_emit_void];
@@ -522,4 +522,211 @@ Proof
   rpt IF_CASES_TAC >> rpt strip_tac >>
   metis_tac[label_preserving_emit_void, label_preserving_store_bytestring,
     label_preserving_typed_copy_mutual, label_preserving_copy_memory]
+QED
+
+val label_simps = label_simps @ [label_preserving_store_memory,
+  label_preserving_extcodesize_check, label_preserving_return_value_decode,
+  label_preserving_abi_decode, label_preserving_ensure_in_memory,
+  label_preserving_ptr_load];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+val LABEL_IGNORE = ho_match_mp_tac label_preserving_ignore_bind >> conj_tac
+  >- LABEL_LEAF;
+
+Theorem label_preserving_default_return_path:
+  !s r t. compile_default_return_path cenv rt dt buf res def addr skip lo hi info s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_default_return_path_def] >>
+  ntac 2 LABEL_BIND >> ntac 3 LABEL_FRESH >>
+  rewrite_tac[comp_ignore_bind_def] >> ntac 3 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (rpt gen_tac >> Cases_on `r` >> metis_tac[label_preserving_abi_decode]) >>
+  gen_tac >> LABEL_BIND >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_unwrap_value:
+  !s r t. unwrap_value cenv vv s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `vv` >> rewrite_tac[unwrap_value_def] >- LABEL_LEAF >>
+  IF_CASES_TAC >- LABEL_LEAF >> Cases_on `p.ptr_location` >>
+  CONV_TAC (STRIP_QUANT_CONV (LAND_CONV (LAND_CONV
+    (RATOR_CONV (SIMP_CONV (srw_ss()) []))))) >>
+  simp_tac pure_ss [LET_THM] >>
+  rpt strip_tac >> metis_tac[label_preserving_return,
+    label_preserving_ensure_in_memory]
+QED
+
+Theorem label_preserving_extcall_store_values:
+  !vals buf off s r t.
+    compile_extcall_store_values cenv vals buf off s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Induct_on `vals` >- (rewrite_tac[compile_extcall_store_values_def] >> LABEL_LEAF) >>
+  gen_tac >> PairCases_on `h` >> ntac 2 gen_tac >>
+  rewrite_tac[compile_extcall_store_values_def, comp_ignore_bind_def] >>
+  simp_tac pure_ss [LET_THM] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- metis_tac[label_preserving_unwrap_value] >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (rpt IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >> LABEL_LEAF
+QED
+
+Theorem label_preserving_multi_vvs:
+  (!env ty e s r t. cfn env ty e s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) ==>
+  !es s r t. compile_multi_vvs cfn cenv es s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  strip_tac >> Induct_on `es` >> rewrite_tac[compile_multi_vvs_def]
+  >- LABEL_LEAF >> gen_tac >> LABEL_BIND >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_abi_encode_static:
+  !s r t. compile_abi_encode_static dst src s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_abi_encode_static_def, comp_ignore_bind_def] >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_abi_encode_static_info:
+  !s r t. compile_abi_encode_static_info dst src info s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  Cases_on `info` >> rewrite_tac[compile_abi_encode_static_info_def]
+  >- metis_tac[label_preserving_abi_encode_static]
+  >- LABEL_LEAF
+  >- (rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >> LABEL_LEAF)
+  >- LABEL_LEAF
+  >- LABEL_LEAF
+QED
+
+val label_simps = label_simps @ [label_preserving_abi_encode_static,
+  label_preserving_abi_encode_static_info, label_preserving_abi_alloc_buffer];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+
+Theorem label_preserving_abi_encode_dyn_static_loop:
+  !s r t. compile_abi_encode_dyn_static_loop dst src info asz msz len s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_abi_encode_dyn_static_loop_def] >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >> ntac 3 LABEL_FRESH >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >>
+  LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >> LABEL_BIND >>
+  LABEL_BIND >> LABEL_LEAF
+QED
+
+Theorem label_preserving_abi_encode_mutual:
+  (!dst cp ci dyn off dp s r t.
+    compile_abi_encode_child dst cp ci dyn off dp s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!dst src info s r t.
+    compile_abi_encode_to_buf dst src info s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!dst src elems so ho dp s r t.
+    compile_abi_encode_complex_elems dst src elems so ho dp s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)) /\
+  (!dst src info asz msz len s r t.
+    compile_abi_encode_dyn_loop dst src info asz msz len s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t))
+Proof
+  ho_match_mp_tac compile_abi_encode_child_ind >>
+  conj_tac >- suspend "child" >>
+  conj_tac >- (ntac 2 gen_tac >> rewrite_tac[Once compile_abi_encode_child_def] >> LABEL_LEAF) >>
+  conj_tac >- (ntac 3 gen_tac >> rewrite_tac[Once compile_abi_encode_child_def,
+    comp_ignore_bind_def] >> ntac 9 LABEL_BIND >> LABEL_LEAF) >>
+  conj_tac >- (ntac 3 gen_tac >> rewrite_tac[Once compile_abi_encode_child_def,
+    comp_ignore_bind_def] >> LABEL_BIND >> LABEL_LEAF) >>
+  conj_tac >- suspend "array" >>
+  conj_tac >- (rpt gen_tac >> rewrite_tac[Once compile_abi_encode_child_def] >> LABEL_LEAF) >>
+  conj_tac >- suspend "complex" >>
+  conj_tac >- (rpt gen_tac >> rewrite_tac[Once compile_abi_encode_child_def] >> LABEL_LEAF) >>
+  conj_tac >- suspend "elems" >> suspend "loop"
+QED
+
+Resume label_preserving_abi_encode_mutual[child]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
+  LABEL_BIND >> IF_CASES_TAC >- LABEL_LEAF >>
+  rpt LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_abi_encode_mutual[array]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >> ntac 3 LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> rpt strip_tac >>
+      metis_tac[label_preserving_abi_encode_dyn_static_loop]) >>
+  gen_tac >> ntac 3 LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_abi_encode_mutual[complex]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  simp_tac pure_ss [LET_THM] >> IF_CASES_TAC
+  >- (LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      rewrite_tac[comp_ignore_bind_def] >> ntac 2 LABEL_BIND >> LABEL_LEAF) >>
+  rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_abi_encode_mutual[elems]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_abi_encode_child_def, comp_ignore_bind_def] >>
+  ntac 2 LABEL_BIND >> LABEL_LEAF
+QED
+
+Resume label_preserving_abi_encode_mutual[loop]:
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[Once compile_abi_encode_child_def] >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >>
+  simp_tac pure_ss [LET_THM] >> ntac 3 LABEL_BIND >> ntac 3 LABEL_FRESH >>
+  ntac 10 LABEL_BIND >> ntac 10 LABEL_BIND >> ntac 6 LABEL_BIND >> LABEL_LEAF
+QED
+Finalise label_preserving_abi_encode_mutual
+
+val label_simps = label_simps @ [label_preserving_abi_encode_mutual,
+  label_preserving_default_return_path, label_preserving_extcall_store_values];
+val LABEL_LEAF = rpt strip_tac >> metis_tac label_simps;
+val LABEL_BIND = ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- LABEL_LEAF >> gen_tac;
+
+Theorem label_preserving_external_call_kwargs:
+  !s r t. compile_external_call_kwargs cenv addr vals tys memsz abisz mid
+    retsz minsz retmem static value gas skip def dop rt dt enc_info dec_info s = (r,t) ==>
+    cs_extends s t /\ EVERY jump_label_ok (added_labels s t)
+Proof
+  rewrite_tac[compile_external_call_kwargs_def] >> simp_tac pure_ss [LET_THM] >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  rewrite_tac[comp_ignore_bind_def] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >- LABEL_LEAF >>
+      LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+      ntac 3 LABEL_BIND >> LABEL_LEAF) >> gen_tac >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (IF_CASES_TAC >> LABEL_LEAF) >> gen_tac >> ntac 2 LABEL_FRESH >>
+  ntac 3 LABEL_BIND >> LABEL_BIND >> simp_tac pure_ss [LET_THM] >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (LABEL_BIND >> LABEL_LEAF) >> gen_tac >>
+  LABEL_BIND >> IF_CASES_TAC >- LABEL_LEAF >>
+  IF_CASES_TAC
+  >- (LABEL_BIND >> simp_tac pure_ss [LET_THM] >> LABEL_LEAF) >>
+  LABEL_BIND >> simp_tac pure_ss [LET_THM] >> LABEL_BIND >>
+  ho_match_mp_tac label_preserving_bind >> conj_tac
+  >- (rpt gen_tac >> Cases_on `r` >> metis_tac[label_preserving_abi_decode]) >>
+  gen_tac >> LABEL_LEAF
 QED
