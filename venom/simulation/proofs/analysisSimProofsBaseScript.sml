@@ -1171,9 +1171,9 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = INVOKE` >> fs[step_inst_non_invoke]
   >- (
-    fs[step_inst_def, eval_ops_inst_idx, setup_callee_def] >>
-    rpt BasicProvers.FULL_CASE_TAC >> fs[] >>
-    gvs[bind_outputs_def]
+    fs[step_inst_def, eval_ops_inst_idx, setup_callee_def,
+       bind_outputs_def] >>
+    gvs[AllCaseEqs()]
   ) >>
   (* non-INVOKE: step_inst = step_inst_base *)
   Cases_on `is_terminator inst.inst_opcode`
