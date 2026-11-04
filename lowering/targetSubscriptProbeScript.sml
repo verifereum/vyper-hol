@@ -2645,3 +2645,21 @@ Proof
   simp[probe_word_copied_state_def, control_moves_keep_vars,
        probe_word_copy_cond_observations, probe_word_copy_round_observations]
 QED
+
+Theorem probe_word_run_copy_return:
+  !s n bufaddr retpc fuel ctx.
+    lookup_var "%11" s = SOME 0w /\ lookup_var "%10" s = SOME n /\
+    lookup_var "%2" s = SOME bufaddr /\ lookup_var "%0" s = SOME retpc /\
+    ~s.vs_halted /\ s.vs_current_bb = "@dyn_cond_3" /\
+    (n = 0w \/ n = 1w) ==>
+    run_blocks ((if n = 0w then 1 else 9) + SUC fuel)
+      ctx probe_word_function s =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (sstore 0w n ((probe_word_copied_state s n bufaddr) with vs_inst_idx := 1))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all probe_word_run_copy_loop >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  irule probe_word_run_return >>
+  simp[probe_word_copied_observations]
+QED
