@@ -845,3 +845,170 @@ Proof
   irule pair_let_snd_preserves >>
   simp[bound_labels_store_multi_results]
 QED
+
+Theorem bound_labels_call_send[local]:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty (Send has_gas) args default_ret s))))
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e rest_es"] >>
+  simp[compile_call_def]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  Cases_on `rest_es` >> simp[compile_call_def]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  IF_CASES_TAC >> simp[]
+  >- (irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+      rpt strip_tac >> simp[] >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+      rpt strip_tac >> simp[] >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (rpt CASE_TAC >> simp[] >> irule bound_labels_lower_value >>
+          simp[] >> metis_tac[listTheory.MEM]) >>
+      rpt strip_tac >> simp[] >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- simp[bound_labels_emit_op] >>
+      rpt strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+      simp[bound_labels_emit_void]) >>
+  irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]
+QED
+
+Theorem bound_labels_call_raw_calldata[local]:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty (RawCallCalldataTarget rcf)
+                      args default_ret s))))
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e kw_es"] >>
+  simp[compile_call_def]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_ext_call_kwargs >> simp[] >> metis_tac[listTheory.MEM]) >>
+  qx_gen_tac `kvs` >> qx_gen_tac `st1` >> strip_tac >>
+  PairCases_on `kvs` >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (CASE_TAC >> simp[bound_labels_emit_op]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_raw_call_outbuf] >>
+  qx_gen_tac `outs` >> qx_gen_tac `st2` >> strip_tac >>
+  PairCases_on `outs` >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_msg_data_to_memory] >>
+  qx_gen_tac `data_ops` >> qx_gen_tac `st3` >> strip_tac >>
+  PairCases_on `data_ops` >> simp[] >>
+  irule pair_let_snd_preserves >>
+  simp[bound_labels_raw_call_finish] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem bound_labels_call_raw[local]:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty (RawCallTarget rcf) args default_ret s))))
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e rest_es"] >>
+  simp[compile_call_def]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  namedCases_on `rest_es` ["", "data_e kw_es"] >> simp[]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_op] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_emit_op] >> rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_ext_call_kwargs >> simp[] >> metis_tac[listTheory.MEM]) >>
+  qx_gen_tac `kvs` >> qx_gen_tac `st1` >> strip_tac >>
+  PairCases_on `kvs` >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (CASE_TAC >> simp[bound_labels_emit_op]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- simp[bound_labels_raw_call_outbuf] >>
+  qx_gen_tac `outs` >> qx_gen_tac `st2` >> strip_tac >>
+  PairCases_on `outs` >> simp[] >>
+  irule pair_let_snd_preserves >>
+  simp[bound_labels_raw_call_finish] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem bound_labels_call_external[local]:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty
+      (ExtCall stat skip (fname, arg_types, return_type) opts) args default_ret s))))
+Proof
+  strip_tac >> namedCases_on `args` ["", "addr_e rest_es"] >>
+  simp[compile_call_def]
+  >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_multi_vvs >> simp[] >>
+      metis_tac[listTheory.MEM, rich_listTheory.MEM_TAKE]) >>
+  rpt strip_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (irule bound_labels_ext_call_kwargs >> simp[] >>
+      metis_tac[listTheory.MEM, rich_listTheory.MEM_DROP_IMP]) >>
+  qx_gen_tac `kvs` >> qx_gen_tac `st1` >> strip_tac >>
+  PairCases_on `kvs` >> simp[] >>
+  Cases_on `kvs2` >> simp[]
+  >- (irule pair_let_snd_preserves >> reverse conj_tac
+      >- (CASE_TAC >> simp[bound_labels_emit_op]) >>
+      rpt strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+      simp[bound_labels_external_call_kwargs] >> rpt strip_tac >>
+      IF_CASES_TAC >> simp[]) >>
+  pairarg_tac >> simp[] >>
+  irule pair_let_snd_preserves >> reverse conj_tac
+  >- (CASE_TAC >> simp[bound_labels_emit_op]) >>
+  rpt strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+  simp[bound_labels_external_call_kwargs] >> rpt strip_tac >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem bound_labels_call:
+  (!ty e t. MEM e args /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_call cfn ce ret_ty ty ct args default_ret s))))
+Proof
+  strip_tac >> Cases_on `ct`
+  >- (irule bound_labels_intcall >> simp[])
+  >- (rename1 `ExtCall b b0 sig_tuple opts` >> PairCases_on `sig_tuple` >>
+      irule bound_labels_call_external >> simp[])
+  >- (irule bound_labels_call_send >> simp[])
+  >- (irule bound_labels_call_raw >> simp[])
+  >- (irule bound_labels_call_raw_calldata >> simp[]) >>
+  simp[compile_call_def] >> irule pair_let_snd_preserves >>
+  simp[bound_labels_emit_inst]
+QED
