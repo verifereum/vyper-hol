@@ -2,7 +2,7 @@
 Theory exprSimArraySubscript
 Ancestors
   compileEnv exprLoweringProps exprOperandVar exprSim exprSimNoPop exprSimArrayIndex vyperPlaceResultTyping vyperState
-  vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse exprSimAttribute
+  vyperTypeEnv vyperTypeInvariants exprSimHyps supportedExprTraverse supportedStmts exprSimAttribute
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
 
 (* A current-value path takes priority over every historical snapshot. *)
@@ -1689,4 +1689,99 @@ Proof
   qexistsl [`0`, `REPLICATE 32 (0w:8 word)`] >>
   simp[valueEncodingTheory.val_in_memory_def,
        vyperValueTheory.default_value_def] >> EVAL_TAC >> simp[]
+QED
+
+(* A captured immutable root reads the replacement, not its old snapshot. *)
+Theorem immutable_root_replacement_read_probe[local]:
+  !cx es.
+    read_result cx (PlaceR (ImmutablePlace NONE "a" []))
+      (es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+            ArrayV (SArrayV [(0,IntV 1)]))))])]) =
+    (INL (ArrayV (SArrayV [(0,IntV 1)])),
+      es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+            ArrayV (SArrayV [(0,IntV 1)]))))])])
+Proof
+  simp[read_result_def, read_place_def, get_immutables_def,
+       get_address_immutables_def, get_source_immutables_def,
+       bind_def, return_def, lift_option_type_def, lift_option_def,
+       lift_sum_def, evaluate_subscripts_def, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Reconstruct the root's current layout using the new value. *)
+Theorem immutable_root_replacement_holds_probe[local]:
+  !cenv cx es off.
+    cenv.ce_module = NONE /\
+    FLOOKUP cenv.ce_module_vars (NONE,"a") = SOME (ImmutableLoc off) /\
+    off + 32 < dimword (:256) ==>
+    immutable_holds cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 1))
+      (PlaceR (ImmutablePlace NONE "a" [])) (n2w off)
+      (es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+            ArrayV (SArrayV [(0,IntV 1)]))))])])
+Proof
+  rpt strip_tac >> simp[immutable_holds_def] >>
+  qexistsl [`"a"`, `off`, `ArrayTV (BaseTV (UintT 256)) (Fixed 1)`,
+            `ArrayV (SArrayV [(0,IntV 1)])`, `0`,
+            `ArrayTV (BaseTV (UintT 256)) (Fixed 1)`,
+            `ArrayV (SArrayV [(0,IntV 1)])`] >>
+  simp[get_source_immutables_def, finite_mapTheory.FLOOKUP_UPDATE,
+       valueEncodingTheory.type_memory_size_def, vyperValueTheory.evaluate_type_def,
+       sub_layout_def, immutable_root_replacement_read_probe] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def]
+QED
+
+Theorem immutable_mutation_call_probe[local]:
+  !cx es body.
+    body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"a")))
+         (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+           (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+           [Literal (BaseT (UintT 256)) (IntL 1)]);
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] /\
+    ~MEM (NONE,"f") cx.stk /\
+    get_module_code cx NONE = SOME
+      [VariableDecl Private Immutable "a"
+         (ArrayT (BaseT (UintT 256)) (Fixed 1)) NONE;
+       FunctionDecl Internal Nonpayable F F "f" [] []
+         (BaseT (UintT 256)) body] ==>
+    eval_expr cx (Call (BaseT (UintT 256)) (IntCall (NONE,"f")) [] NONE)
+      (es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+            ArrayV (SArrayV [(0,IntV 0)]))))])]) =
+    (INL (Value (IntV 0)),
+      es with immutables :=
+        [(cx.txn.target, [(NONE,
+          FEMPTY |+ ("a", (ArrayTV (BaseTV (UintT 256)) (Fixed 1),
+            ArrayV (SArrayV [(0,IntV 1)]))))])])
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  simp[] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  fs[vyperContextTheory.get_module_code_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``get_module_code``, ``get_tenv``]) >>
+  simp[] >> EVAL_TAC >> simp[]
+QED
+
+Theorem immutable_mutation_body_supported_probe[local]:
+  !body.
+    body =
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"a")))
+         (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 1))
+           (MakeArray (SOME (BaseT (UintT 256))) (Fixed 1))
+           [Literal (BaseT (UintT 256)) (IntL 1)]);
+       Return (SOME (Literal (BaseT (UintT 256)) (IntL 0)))] ==>
+    supported_stmts
+      [VariableDecl Private Immutable "a"
+         (ArrayT (BaseT (UintT 256)) (Fixed 1)) NONE;
+       FunctionDecl Internal Nonpayable F F "f" [] []
+         (BaseT (UintT 256)) body] [] body
+Proof
+  rpt strip_tac >> gvs[] >> EVAL_TAC
 QED
