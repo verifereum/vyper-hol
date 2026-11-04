@@ -168,7 +168,7 @@ Proof
   rewrite_tac[gas_path_mem_edge_def] >>
   conj_tac >- asm_rewrite_tac[] >>
   qexistsl_tac [`fuel`, `bb'`, `inst`, `middle`] >>
-  gvs[]
+  gvs[is_terminator_def]
 QED
 
 Theorem compile_msg_gas_mem_path:
