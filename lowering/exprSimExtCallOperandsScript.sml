@@ -3,6 +3,7 @@ Theory exprSimExtCallOperands
 Ancestors
   exprSim exprSimHyps compileEnv context finite_map list arithmetic
   venomState vyperState vyperValueOperation exprSimOps freshWrites exprSimPop
+  exprPlaceTransport
 
 Definition operand_frame_def:
   operand_frame cenv es s cut es' s' <=>
@@ -512,3 +513,92 @@ val _ = List.app (fn (name,th) =>
   end)
   [("operand_frame_footprint", operand_frame_footprint),
    ("vv_at_nondynamic_memory_frame", vv_at_nondynamic_memory_frame)];
+
+Theorem inv_dynamic_local_type[local]:
+  expr_sim_inv cenv cx env es /\
+  lookup_scopes id es.scopes = SOME entry /\ dynarray_local cenv id ==>
+  ?et n. entry.type = ArrayTV et (Dynamic n)
+Proof
+  strip_tac >>
+  `env_scopes_consistent env cx es` by
+    fs[expr_sim_inv_def, vyperTypeInvariantsTheory.env_consistent_def] >>
+  `?ty. FLOOKUP env.var_types id = SOME ty /\
+        evaluate_type (get_tenv cx) ty = SOME entry.type` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` kall_tac >>
+     fs[vyperTypeInvariantsTheory.env_scopes_consistent_def] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >>
+     strip_tac >> Cases_on `FLOOKUP env.var_types id` >> gvs[] >>
+     qpat_x_assum `!id ty entry. _` drule >>
+     disch_then drule >> simp[]) >>
+  `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
+  gvs[dynarray_local_def, dynarray_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem operand_local_window_frame[local]:
+  expr_sim_inv cenv cx env es /\
+  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es2 s2 /\
+  es2.scopes = es.scopes /\ local_ptrs_reserved cenv hi /\
+  operand_frame cenv es s hi es2 s2 /\
+  local_region cenv es.scopes s id b sz /\
+  b <= off /\ off + len <= b + sz ==>
+  mem_bytes_at off len s2.vs_memory = mem_bytes_at off len s.vs_memory
+Proof
+  strip_tac >>
+  `local_ptrs_rel func cenv es.scopes s /\
+   local_ptrs_rel func cenv es.scopes s2` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  irule local_window_frame_well_typed >>
+  goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+  qexists_tac `func` >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `?w. lookup_var p s = SOME w` by
+        (fs[local_ptrs_rel_def] >>
+         qpat_x_assum `!name entry p sz. _ ==> ?w. _`
+           (qspecl_then [`id'`, `entry`, `p`, `sz'`] mp_tac) >>
+         simp[] >> metis_tac[]) >>
+      `not_fresh_at hi p` by metis_tac[local_ptrs_reserved_def] >>
+      fs[operand_frame_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[inv_dynamic_local_type] >>
+  conj_tac >- fs[expr_sim_inv_def] >> fs[operand_frame_def]
+QED
+
+Theorem vv_at_memory_frame:
+  vv_at cenv cx t lo hi es tv (LocatedValue t' p) s /\
+  p.ptr_location = LocMemory /\
+  operand_frame cenv es s hi es2 s2 /\
+  lo.cs_next_id <= hi.cs_next_id /\
+  expr_sim_inv cenv cx env es /\
+  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es2 s2 /\
+  es2.scopes = es.scopes /\
+  local_ptrs_reserved cenv hi /\
+  read_result cx tv es = (INL v,es) /\
+  evaluate_type (get_tenv cx) t = SOME tvt /\
+  eval_operand p.ptr_operand s = SOME w ==>
+  mem_bytes_at (w2n w) (val_footprint tvt v) s2.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint tvt v) s.vs_memory
+Proof
+  simp[vv_at_def] >> rpt strip_tac >> gvs[]
+  >- (irule operand_frame_footprint >>
+      qexistsl_tac [`cenv`, `es`, `ARB`, `hi`, `lo`] >>
+      conj_tac >- decide_tac >>
+      conj_tac >- (disj1_tac >> metis_tac[]) >>
+      fs[operand_frame_def] >> metis_tac[])
+  >- (irule operand_local_window_frame >>
+      goal_assum (drule_at (Pat `operand_frame _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+      metis_tac[]) >>
+  simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Operand memory integration dependency: " ^ name) else ()
+  end)
+  [("inv_dynamic_local_type", inv_dynamic_local_type),
+   ("operand_local_window_frame", operand_local_window_frame),
+   ("vv_at_memory_frame", vv_at_memory_frame)];
