@@ -581,6 +581,52 @@ Proof
   metis_tac[current_wf_entry_unavailable]
 QED
 
+Theorem current_wf_demanded_cut_nondefault:
+  wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+  fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+  first_block_no_phi fn /\ entry_block fn = SOME eb /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  current_tree_ancestor_path (current_dom_tree fn) l path /\
+  LENGTH (collect_phis bb.bb_instructions) <= i /\
+  i <= LENGTH bb.bb_instructions /\ current_demand fn v l i ==>
+  current_original_scan v l 0 (TAKE i bb.bb_instructions)
+    (if current_actual_inserted fn v l then CurrentInserted v l
+     else current_inherited_token fn (current_actual_inserted fn) v path)
+    <> CurrentDefault v
+Proof
+  strip_tac >>
+  Cases_on `?pb phi. MEM pb fn.fn_blocks /\
+    MEM phi (collect_phis pb.bb_instructions) /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands))`
+  >- (irule current_wf_single_available_nondefault >> simp[] >>
+      metis_tac[current_phi_operand_single_bound, current_demand_available]) >>
+  `!pb phi. MEM pb fn.fn_blocks /\ MEM phi (collect_phis pb.bb_instructions) ==>
+    ~MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
+  spose_not_then assume_tac >>
+  gvs[current_wf_original_scan_default] >>
+  Cases_on `current_actual_inserted fn v l` >> gvs[] >>
+  `!k. k < i ==> ~MEM v (inst_defs (EL k bb.bb_instructions))` by
+    (fs[EVERY_MEM, inst_defs_def] >> rpt strip_tac >>
+     `MEM (EL k bb.bb_instructions) (TAKE i bb.bb_instructions)` by
+       (simp[MEM_EL] >> qexists `k` >> simp[EL_TAKE]) >> metis_tac[]) >>
+  `current_phi_cut_clear fn v l` by
+    (simp[current_phi_cut_clear_def] >> rpt strip_tac >> gvs[] >>
+     metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `MEM v (live_vars_at (liveness_analyze fn) l i)` by
+    metis_tac[current_wf_demand_live] >>
+  `MEM l (fn_labels fn)` by
+    (simp[fn_labels_def, MEM_MAP] >> metis_tac[lookup_block_MEM, lookup_block_label]) >>
+  `MEM l (cfg_analyze fn).cfg_dfs_pre` by metis_tac[current_all_labels_dfs_pre] >>
+  `MEM v (live_vars_at (liveness_analyze fn) l
+    (LENGTH (collect_phis bb.bb_instructions)))` by
+    (drule live_vars_at_propagate_range >> simp[] >> disch_then irule >>
+     simp[] >> qexists `i` >> simp[]) >>
+  `?vs. ALOOKUP (select_current_live_in (blocks_have_leading_phi fn.fn_blocks)
+    (liveness_analyze fn) fn) l = SOME vs /\ MEM v vs` by
+    metis_tac[current_selected_live_iff] >>
+  metis_tac[current_wf_selected_live_nondefault]
+QED
+
 Theorem current_wf_entry_undemanded:
   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
   fn_entry_label fn = SOME l ==> ~current_demand fn v l 0
