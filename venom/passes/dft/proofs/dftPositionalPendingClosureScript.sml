@@ -4,7 +4,7 @@ Ancestors
   dftPositionalReturn dftOccurrenceMachine dftOccurrenceReplay
   dftOpenMachine dftOpenErase dftOriginalRuntime dftPositionalPhase
   dftOccurrenceSuspended dftPositionalEdit dftPositionalRuntime
-  dftPositionalGasSegment
+  dftPositionalGasSegment dftPositionalGasCall dftPositionalGasReturn
   contextRawReachable venomExecSemantics venomInst venomState list arithmetic
 
 Definition dft_pending_segment_hits_def:
@@ -527,4 +527,203 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   irule dft_pending_at_outside_account >>
   conj_tac >- simp[dft_pos_pending_gas_events_def] >> metis_tac[]
+QED
+
+Theorem dft_pending_phase_count_balance:
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs' H'
+    (FUNPOW (dft_occ_oracle_next w C) a l)
+    (FUNPOW (dft_occ_oracle_next w D) b r) ==>
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C) a l) +
+    dft_occ_count r + LENGTH (dft_pos_pending_gas_events zs ++ H) =
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w D) b r) +
+    dft_occ_count l + LENGTH (dft_pos_pending_gas_events zs' ++ H')
+Proof
+  strip_tac >>
+  `dft_occ_count l = dft_occ_count r +
+      LENGTH (dft_pos_pending_gas_events zs ++ H) /\
+   dft_occ_count (FUNPOW (dft_occ_oracle_next w C) a l) =
+     dft_occ_count (FUNPOW (dft_occ_oracle_next w D) b r) +
+      LENGTH (dft_pos_pending_gas_events zs' ++ H')` by
+    (fs[dft_pos_pending_aligned_phase_def] >>
+     every_drule dft_pos_pending_gas_phase_count >> simp[]) >>
+  decide_tac
+QED
+
+Theorem dft_pending_gas_event_unique:
+  dft_occ_gas_event gas addr c ==>
+  (dft_occ_gas_event inst addr' c <=> inst = gas /\ addr' = addr)
+Proof
+  simp[dft_occ_gas_event_def] >>
+  metis_tac[dft_occ_event_deterministic]
+QED
+
+Theorem dft_pending_event_no_memory:
+  dft_occ_event inst addr c /\
+  (inst.inst_opcode = GAS \/ inst.inst_opcode = INVOKE) ==>
+  !f x s. dft_open_observe f x s c.dft_occ_core ==> inst_mem_ranges x s = []
+Proof
+  simp[dft_occ_event_def, dft_open_observe_def] >> rpt strip_tac >> gvs[] >>
+  simp[unitMemInvTheory.inst_mem_ranges_def,
+    contextCodegenRelTheory.source_memory_read_ranges_def,
+    codegenRelTheory.source_memory_write_ranges_def]
+QED
+
+Theorem dft_pending_call_event_not_gas:
+  dft_occ_event call addr c /\ call.inst_opcode = INVOKE ==>
+  ~dft_occ_gas_event inst addr' c
+Proof
+  simp[dft_occ_gas_event_def, dft_occ_event_def] >> rpt strip_tac >> gvs[] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem dft_pending_entry_event_account:
+  dft_occ_gas_event gas addr l /\
+  dft_occ_event call ca (dft_occ_oracle_next w C l) /\
+  dft_occ_event call ca r /\ call.inst_opcode = INVOKE /\
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 l) +
+    dft_occ_count r + LENGTH B =
+  dft_occ_count (dft_occ_oracle_next w D r) + dft_occ_count l + LENGTH ((gas,addr)::B) ==>
+  pending_segment_account C D w 2 1 l r B ((gas,addr)::B)
+Proof
+  strip_tac >>
+  `!inst ad. dft_occ_gas_event inst ad l <=> inst = gas /\ ad = addr` by
+    metis_tac[dft_pending_gas_event_unique] >>
+  `!inst ad. ~dft_occ_gas_event inst ad (dft_occ_oracle_next w C l) /\
+             ~dft_occ_gas_event inst ad r` by
+    metis_tac[dft_pending_call_event_not_gas] >>
+  `!f x s. dft_open_observe f x s l.dft_occ_core ==> inst_mem_ranges x s = []` by
+    (fs[dft_occ_gas_event_def] >> metis_tac[dft_pending_event_no_memory]) >>
+  `!f x s. dft_open_observe f x s (dft_occ_oracle_next w C l).dft_occ_core ==>
+      inst_mem_ranges x s = []` by
+    (metis_tac[dft_pending_event_no_memory]) >>
+  `!f x s. dft_open_observe f x s r.dft_occ_core ==> inst_mem_ranges x s = []` by
+    (metis_tac[dft_pending_event_no_memory]) >>
+  simp[pending_segment_account_def] >> conj_tac
+  >- (simp[EQ_SYM_EQ]) >>
+  conj_tac
+  >- (rpt strip_tac >> `j = 0 \/ j = 1` by decide_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[]
+QED
+
+Theorem dft_pending_crossing_enter:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_slot C D fi bi f g b b' /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  call.inst_opcode = INVOKE /\ ~MEM (Var v) call.inst_operands /\
+  ~MEM v call.inst_outputs /\ s.vs_inst_idx = LENGTH pre /\
+  l.dft_occ_core = DftOpen (DftAt f 0 b s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 b' s) rs nR /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  decode_invoke call = SOME (nm,ops) /\
+  lookup_function nm D.ctx_functions = SOME calleeR /\
+  eval_operands ops s = SOME args /\ setup_callee calleeR args s = SOME cs ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (SOME (gas,l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)])::zs) H
+    (FUNPOW (dft_occ_oracle_next w C) 2 l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 2 1 l r (dft_pos_pending_gas_events zs ++ H)
+    (dft_pos_pending_gas_events
+      (SOME (gas,l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)])::zs) ++ H)
+Proof
+  strip_tac >>
+  `dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (SOME (gas,l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)])::zs) H
+    (FUNPOW (dft_occ_oracle_next w C) 2 l) (dft_occ_oracle_next w D r)` by
+    (irule dft_pos_pending_aligned_enter >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `b.bb_instructions = pre ++ [gas;call] ++ post /\
+   b'.bb_instructions = pre ++ [call;gas] ++ post` by
+    metis_tac[dft_pos_gas_selected_blocks] >>
+  `l.dft_occ_path = r.dft_occ_path /\ l.dft_occ_visit = r.dft_occ_visit` by
+    (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >> gvs[]) >>
+  `dft_occ_gas_event gas (l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]) l /\
+   dft_occ_event call (l.dft_occ_path ++ [(l.dft_occ_visit,call.inst_id)])
+     (dft_occ_oracle_next w C l) /\
+   dft_occ_event call (l.dft_occ_path ++ [(l.dft_occ_visit,call.inst_id)]) r` by
+    (irule dft_pos_gas_call_events >> metis_tac[]) >>
+  `dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 2 l) +
+    dft_occ_count r + LENGTH (dft_pos_pending_gas_events zs ++ H) =
+   dft_occ_count (dft_occ_oracle_next w D r) + dft_occ_count l +
+    LENGTH (dft_pos_pending_gas_events
+      (SOME (gas,l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)])::zs) ++ H)` by
+    (fs[dft_pos_pending_aligned_phase_def] >>
+     every_drule dft_pos_pending_gas_phase_count >> simp[] >> decide_tac) >>
+  simp[dft_pos_pending_gas_events_def] >>
+  irule dft_pending_entry_event_account >>
+  fs[dft_pos_pending_gas_events_def] >> metis_tac[]
+QED
+
+Theorem dft_pending_return_event_account:
+  l.dft_occ_core = DftOpen (DftDone result) ls nL /\
+  r.dft_occ_core = DftOpen (DftDone result) rs nR /\
+  dft_occ_gas_event gas addr (dft_occ_oracle_next w D r) /\
+  dft_occ_count (dft_occ_oracle_next w C l) +
+    dft_occ_count r + LENGTH ((gas,addr)::B) =
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w D) 2 r) + dft_occ_count l + LENGTH B ==>
+  pending_segment_account C D w 1 2 l r ((gas,addr)::B) B
+Proof
+  strip_tac >>
+  `!inst ad. dft_occ_gas_event inst ad (dft_occ_oracle_next w D r) <=>
+    inst = gas /\ ad = addr` by
+    metis_tac[dft_pending_gas_event_unique] >>
+  `!f x s. dft_open_observe f x s (dft_occ_oracle_next w D r).dft_occ_core ==>
+    inst_mem_ranges x s = []` by
+    (fs[dft_occ_gas_event_def] >> metis_tac[dft_pending_event_no_memory]) >>
+  `!inst ad. ~dft_occ_gas_event inst ad l /\ ~dft_occ_gas_event inst ad r` by
+    simp[dft_occ_gas_event_def, dft_occ_event_def] >>
+  simp[pending_segment_account_def] >> conj_tac
+  >- simp[EQ_SYM_EQ] >> conj_tac
+  >- (fs[] >> decide_tac) >> conj_tac
+  >- simp[dft_open_observe_def] >>
+  rpt strip_tac >> `k = 0 \/ k = 1` by decide_tac >> gvs[] >>
+  fs[dft_open_observe_def] >> metis_tac[]
+QED
+
+Theorem dft_pending_crossing_return:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
+    (DftCaller g 0 b' call s::rs) nR /\
+  l.dft_occ_saved = (path,visit)::saved /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (SOME (gas,addr)::zs) H l r /\
+  dft_restore call.inst_outputs ret cs s = SOME a ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) 2 r) /\
+  pending_segment_account C D w 1 2 l r
+    (dft_pos_pending_gas_events (SOME (gas,addr)::zs) ++ H)
+    (dft_pos_pending_gas_events zs ++ H)
+Proof
+  strip_tac >>
+  `dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (FUNPOW (dft_occ_oracle_next w D) 2 r)` by
+    (irule dft_pos_pending_aligned_return >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  `dft_occ_gas_event gas addr (dft_occ_oracle_next w D r)` by
+    (`addr = path ++ [(visit,gas.inst_id)] /\
+      dft_pos_pending_gas_frame w C D fi bi pre gas call post
+        (SOME (gas,addr)) lf (DftCaller g 0 b' call s) /\
+      dft_pos_pending_gas_stack w C D fi bi pre gas call post zs ls rs /\
+      r.dft_occ_saved = (path,visit)::saved /\ LENGTH saved = LENGTH zs` by
+       (fs[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def,
+           dft_pos_pending_gas_stack_def] >> gvs[]) >>
+     `MAP (dft_fill_frame 0) ls = ls /\ MAP (dft_fill_frame 0) rs = rs` by
+       metis_tac[dft_pos_pending_gas_stack_fill] >>
+     `(ls = [] ==> saved = []) /\ (rs = [] ==> saved = [])` by
+       metis_tac[dft_pos_pending_gas_stack_length, LENGTH_NIL] >>
+     fs[dft_pos_pending_gas_frame_def] >> gvs[] >>
+     qpat_assum `s.vs_inst_idx = LENGTH pre`
+       (fn th => drule_all (REWRITE_RULE [th] dft_pos_gas_call_return_success)) >>
+     disch_then (qspecl_then [`D`,`C`] mp_tac) >> simp[]) >>
+  `dft_occ_count (dft_occ_oracle_next w C l) + dft_occ_count r +
+    LENGTH (dft_pos_pending_gas_events (SOME (gas,addr)::zs) ++ H) =
+   dft_occ_count (FUNPOW (dft_occ_oracle_next w D) 2 r) + dft_occ_count l +
+    LENGTH (dft_pos_pending_gas_events zs ++ H)` by
+    (fs[dft_pos_pending_aligned_phase_def] >>
+     every_drule dft_pos_pending_gas_phase_count >> simp[] >> decide_tac) >>
+  simp[dft_pos_pending_gas_events_def] >>
+  irule dft_pending_return_event_account >>
+  fs[dft_pos_pending_gas_events_def] >> metis_tac[]
 QED
