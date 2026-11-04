@@ -102,3 +102,19 @@ Proof
   rpt strip_tac >> irule dfg_ordinary_use_available >>
   gvs[codegen_ready_fn_def] >> metis_tac[MEM]
 QED
+
+Theorem is_fn_path_proper_prefix:
+  !fn path d. is_fn_path fn path /\ MEM d path /\ d <> LAST path ==>
+    ?pre. is_fn_path fn pre /\ pre <> [] /\ HD pre = HD path /\
+      LAST pre = d /\ LENGTH pre < LENGTH path
+Proof
+  Induct_on `path` >- simp[] >>
+  rpt gen_tac >> Cases_on `path` >- simp[] >>
+  rename1 `h :: x :: xs` >>
+  Cases_on `d = h`
+  >- (strip_tac >> qexists_tac `[h]` >> simp[is_fn_path_def]) >>
+  simp[is_fn_path_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`fn`, `d`] mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `h :: pre` >>
+  Cases_on `pre` >> gvs[is_fn_path_def]
+QED
