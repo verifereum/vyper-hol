@@ -288,7 +288,7 @@ Theorem log_args_post_cons:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) /\
-  ~dynarray_type (expr_type e) /\
+  ~dynarray_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx e es sa sm s0 es1 v x t /\
   log_args_post ctx func cenv cx es1 sm sb t es' ys vs u ==>
   log_args_post ctx func cenv cx es sa sb s0 es'

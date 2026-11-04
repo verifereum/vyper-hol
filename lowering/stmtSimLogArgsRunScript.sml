@@ -13,6 +13,25 @@ Proof
     supported_string_type_def, dynarray_type_def]
 QED
 
+Theorem log_scalar_word_or_bytestring[local]:
+  !ty. supported_scalar_type ty ==> is_word_type ty \/ is_bytestring_type ty
+Proof
+  Cases >> simp[supported_scalar_type_def, supported_word_type_def,
+    supported_string_type_def] >>
+  rename1 `BaseT b` >> Cases_on `b` >>
+  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
+    is_bytestring_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[supported_word_type_def, supported_string_type_def, is_word_type_def,
+    is_bytestring_type_def]
+QED
+
+Theorem log_scalar_post_value_type[local]:
+  supported_scalar_type (expr_type e) ==> post_value_type cenv e = expr_type e
+Proof
+  strip_tac >> drule log_scalar_word_or_bytestring >> strip_tac >> simp[]
+QED
+
 Theorem compile_log_eval_all_nil_sim:
   frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
     (\s. log_args_post ctx func cenv cx es sa sa s0 es [] [] s)
@@ -103,6 +122,8 @@ Resume compile_log_eval_all_safe_sim[head_value]:
   `MAP FDOM es1.scopes = MAP FDOM es'.scopes` by
     (drule eval_exprs_preserves_scopes_dom >> simp[]) >>
   `~dynarray_type (expr_type e)` by (drule_all log_scalar_not_dynarray >> simp[]) >>
+  `post_value_type cenv e = expr_type e` by
+    (drule_all log_scalar_post_value_type >> simp[]) >>
   `(case tail_res of INL vs => T | INR exc => expr_res_ok (INR exc : value + exception))` by
     (Cases_on `tail_res` >> gvs[]) >>
   `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
