@@ -50,7 +50,7 @@ Independent exact statement audit answered PROVABLE. The uniform If branch premi
 - lowering/exprSimDefsScript.sml, lowering/exprSimPropsScript.sml: counted expression boundary.
 - lowering/gasOutcomeScript.sml, lowering/gasSummaryScript.sml, lowering/gasSummaryComposeScript.sml: strict source-action composition.
 - lowering/gasExemptCertScript.sml, lowering/gasContextScript.sml: concrete certificates and universal admissibility.
-- lowering/fragGasPathScript.sml, lowering/gasCountScript.sml: actual target paths and counts.
+- lowering/fragGasPathScript.sml, venom/proofs/gasCountScript.sml: actual target paths and counts.
 - lowering/defs/stmtLoweringScript.sml, lowering/defs/exprLoweringScript.sml, lowering/emitHelperPropsScript.sml: actual compiler and execution helpers.
 - semantics/vyperInterpreterScript.sml, semantics/vyperStateScript.sml: actual source evaluation and cleanup.
 - lowering/stmtSimIfScript.sml: original unported intermediate proof text for reference only; it is not an ancestor of the new root.
