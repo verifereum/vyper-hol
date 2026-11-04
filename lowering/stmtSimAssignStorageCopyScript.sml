@@ -1049,7 +1049,8 @@ Theorem compile_assign_storage_copy_stmt_frag:
     get_module_code cx src = SOME ts /\
     find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ, id_str) /\
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
-    expr_type e = typ /\ ~is_word_type typ /\
+    expr_type e = typ /\ lowered_value_type cenv e = expr_type e /\
+    ~is_word_type typ /\
     (!elem n. typ <> ArrayT elem (Dynamic n)) /\
     (!ann t args. e = TypeBuiltin ann Empty t args ==> t = typ) /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
