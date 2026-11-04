@@ -2540,6 +2540,94 @@ Proof
   fs[] >> simp[Ntimes exprLoweringTheory.compile_get_target_ptr_def 2]
 QED
 
+Theorem aug_place_supported_root:
+  !t pt nsid.
+    supported_target_info tops bindings t = SOME pt /\
+    target_root t = TopLevelNameTarget nsid ==>
+    supported_place_root tops nsid
+Proof
+  `(!e:expr. T) /\ (!t. !pt nsid.
+    supported_target_info tops bindings t = SOME pt /\
+    target_root t = TopLevelNameTarget nsid ==>
+    supported_place_root tops nsid)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_root_def, supportedTargetsTheory.supported_target_info_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem aug_place_supported_root_namespace:
+  supported_place_root tops (src,id) ==> src = NONE
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  drule supportedDeclsTheory.supported_lookup_other_module >>
+  strip_tac >> gvs[supportedExprFormsTheory.supported_place_root_def]
+QED
+
+Theorem aug_place_supported_root_metadata:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings t = SOME pt /\
+  target_root t = TopLevelNameTarget (src,id) /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (d,id_str) ==>
+  (!tr typ. d = StorageVarDecl tr typ ==>
+    cenv.ce_hashmap_info (src,id) = NONE /\
+    cenv.ce_module_var_type (src,id) = SOME typ) /\
+  (!tr kt vt. d = HashMapVarDecl tr kt vt ==>
+    ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt))
+Proof
+  strip_tac >>
+  `supported_place_root tops (src,id)` by
+    (metis_tac[aug_place_supported_root]) >>
+  drule aug_place_supported_root_namespace >> strip_tac >> gvs[] >>
+  `ts = tops` by gvs[body_inv_def, vyperContextTheory.get_module_code_def] >> gvs[] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> metis_tac[aug_place_main_storage_metadata]) >>
+  rpt strip_tac >> gvs[] >> drule aug_place_main_map_metadata >>
+  gvs[body_inv_def]
+QED
+
+Theorem aug_place_supported_root_decl:
+  !tops id.
+    ((?vis mut ty slot.
+       supported_variable_decl tops (NONE,id) = SOME (vis,mut,ty,slot) /\
+       (mut = Storage \/ mut = Transient)) \/
+     (?vis tr kt vt slot.
+       supported_hashmap_decl tops (NONE,id) = SOME (vis,tr,kt,vt,slot))) ==>
+    IS_SOME (find_var_decl_by_name id tops)
+Proof
+  Induct >> simp[supportedDeclsTheory.supported_variable_decl_def,
+    supportedDeclsTheory.supported_hashmap_decl_def] >>
+  Cases_on `h` >>
+  simp[find_var_decl_by_name_def,
+    supportedDeclsTheory.supported_variable_decl_def,
+    supportedDeclsTheory.supported_hashmap_decl_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_supported_root_not_immutable:
+  body_inv tops ctx cenv cx /\
+  supported_target_info tops bindings t = SOME pt ==>
+  ~immutable_root cx t
+Proof
+  strip_tac >> simp[immutable_root_def] >> rpt strip_tac >>
+  `supported_place_root tops (src,id)` by metis_tac[aug_place_supported_root] >>
+  drule aug_place_supported_root_namespace >> strip_tac >> gvs[] >>
+  `ts = tops` by gvs[body_inv_def, vyperContextTheory.get_module_code_def] >>
+  gvs[] >>
+  `IS_SOME (find_var_decl_by_name id tops)` suffices_by simp[] >>
+  irule aug_place_supported_root_decl >>
+  gvs[supportedExprFormsTheory.supported_place_root_def] >>
+  Cases_on `supported_variable_decl tops (NONE,id)`
+  >- (gvs[] >> Cases_on `supported_hashmap_decl tops (NONE,id)` >> gvs[] >>
+      rename1 `supported_hashmap_decl tops (NONE,id) = SOME mdecl` >>
+      PairCases_on `mdecl` >> simp[]) >>
+  rename1 `supported_variable_decl tops (NONE,id) = SOME vdecl` >>
+  PairCases_on `vdecl` >> gvs[] >>
+  Cases_on `vdecl1` >> Cases_on `vdecl3` >> gvs[] >>
+  Cases_on `vdecl0` >> gvs[] >> metis_tac[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
