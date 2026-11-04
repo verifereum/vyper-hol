@@ -293,12 +293,14 @@ Proof
   simp probe_defs >> EVAL_TAC
 QED
 
-(* A computed CALL cannot discard deletions scheduled by an earlier call. *)
+(* A successful computed CALL cannot discard deletions scheduled by an
+   earlier call. *)
 Theorem computed_call_preserves_pending_deletions:
+  let s = call_probe_state with <| vs_pending_deletions := [8w];
+                                   vs_outcomes := [call_probe_outcome] |> in
+  (FST (consume_call_outcome (venom_call_request s 2w 0w 0w 0w F) 0 0 s) = 1w) /\
   (SND (consume_call_outcome
-    (venom_call_request (call_probe_state with vs_pending_deletions := [8w])
-      2w 0w 0w 0w F) 0 0
-    (call_probe_state with vs_pending_deletions := [8w]))).vs_pending_deletions = [8w]
+    (venom_call_request s 2w 0w 0w 0w F) 0 0 s)).vs_pending_deletions = [8w]
 Proof
   simp probe_defs >> EVAL_TAC
 QED

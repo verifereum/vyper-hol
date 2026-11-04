@@ -873,8 +873,9 @@ QED
  * cases, exempting only the existing exact dynamic ABI strictness predicate.
  *
  * load_contract NONE [] is deliberate: constructor_call_free excludes EVERY Call
- * (including internal calls and Send), while checked constant initializers are
- * pure. No oracle/callee is needed. The theorem does not claim agreement for
+ * (including internal calls and Send) and the precompile builtins, whose
+ * STATICCALL the EVM can fail for lack of gas, while checked constant
+ * initializers are pure. No oracle/callee is needed. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
  *)

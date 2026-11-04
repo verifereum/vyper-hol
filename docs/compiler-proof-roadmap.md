@@ -637,10 +637,11 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    [e2eDeployDefs](../lowering/e2eDeployDefsScript.sml): `constructor_args_encode`,
    `constructor_call_free`, `deploy_typing_ok`, `deploy_storage_ok`,
    `deploy_state_rel`, `deploy_result_rel`. Constructor is source-Call-free,
-   including internal Call/Send/nested reasons; **computed source SHA256 is
-   allowed**. Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
+   including internal Call/Send/nested reasons, and free of the precompile
+   builtins (sha256/ecrecover/ecadd/ecmul), since it runs without the oracle.
+   Existing [e2eDeployChecks](../lowering/e2e/e2eDeployChecksScript.sml)
    `constructor_call_exclusion` is a named negative boundary check;
-   `constructor_computed_builtin_not_call` checks the SHA256 positive case.
+   `constructor_precompile_builtin_excluded` checks SHA256 excluded, Keccak256 not.
    Neither proves constructor/deployment simulation.
 
    Inputs are canonical tuple ABI argument bytes (no selector), actual checked

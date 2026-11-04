@@ -155,8 +155,12 @@ concrete calls and the two-argument initializer still starts with NONE/empty
 requests. Arbitrary source SOME lists use this **same evaluator**, not a second
 source semantics.
 
-Computed value-zero precompiles1/2/6/7 are computed from pure input, consume no
-outcome and record no request; they are filtered out of `call_trace`. Other
+Computed value-zero precompiles 1/2/6/7 take their success from the next
+outcome (the EVM can fail them for lack of gas) and, on success, their return
+data from pure input. They record no request: `call_trace` keeps them and
+`call_requests` filters them out. The source's sha256/ecrecover/ecadd/ecmul
+builtins take that outcome too; constructors, which run without the oracle,
+exclude them (`constructor_call_free`). Other
 calls, including nonzero-value precompile calls, remain ordinary oracle calls.
 Verifereum still executes callees and any reentrant calls; the oracle abstracts
 that whole execution into an outcome. Re-applying a frame theorem to an inner

@@ -253,6 +253,30 @@ Proof
   CONV_TAC cv_eval
 QED
 
+(* The sha256 builtin takes its success from the head outcome too: a
+   successful head gives the computed hash, a failed or missing one raises. *)
+Definition integration_sha256_observe_def:
+  integration_sha256_observe os =
+    let r = cpscv_run (Builtin (BaseT (BytesT (Fixed 32))) Sha256
+              [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])
+              (send_state with outcomes := os) in
+      (ISL (FST r), FST r, OPTION_MAP LENGTH (SND r).outcomes)
+End
+val () = cv_auto_trans integration_sha256_observe_def;
+
+Theorem Sha256_builtin_takes_outcome:
+  FST (integration_sha256_observe
+    (SOME [send_outcome T [] 0; send_outcome F [] 0])) /\
+  SND (SND (integration_sha256_observe
+    (SOME [send_outcome T [] 0; send_outcome F [] 0]))) = SOME 1 /\
+  SND (integration_sha256_observe (SOME [send_outcome F [] 0])) =
+    (INR (Error (RuntimeError "precompile failed")), SOME 0) /\
+  SND (integration_sha256_observe (SOME [])) =
+    (INR (Error (RuntimeError "precompile failed")), SOME 0)
+Proof
+  CONV_TAC cv_eval
+QED
+
 (* The complete rollback equality is certified separately from computable
    snapshots; CV does not decide equality of function-valued account maps. *)
 Theorem public_failure_whole_machine_rollback:
