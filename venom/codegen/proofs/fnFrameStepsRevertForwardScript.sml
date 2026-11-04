@@ -276,3 +276,21 @@ Proof
   irule dfg_build_function_ssa_def >>
   gvs[codegen_ready_fn_def, EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem owned_operand_resolved_value:
+  !fn insts op root s lo owned.
+    codegen_ready_fn fn /\ EVERY (\inst. MEM inst (fn_insts fn)) insts /\
+    resolve_block_assigns insts op = root /\
+    (is_var_operand op ==> owned op) /\
+    (!at. owned at ==> operand_val s lo at =
+      operand_val s lo (normalize_operand (dfg_build_function fn) [] at)) ==>
+    operand_val s lo op =
+    operand_val s lo (normalize_operand (dfg_build_function fn) [] root)
+Proof
+  rpt strip_tac >>
+  `normalize_operand (dfg_build_function fn) [] root =
+   normalize_operand (dfg_build_function fn) [] op` by
+    metis_tac[normalize_operand_resolve_block_assigns] >>
+  simp[] >> Cases_on `op` >>
+  gvs[stackPlanTypesTheory.is_var_operand_def, normalize_operand_def]
+QED
