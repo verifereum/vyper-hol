@@ -1,6 +1,6 @@
 Theory fnPlanLineageInventory
 Ancestors
-  fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
+  fnPlanLineageSort fnPlanLineageReplay reorderSim doSwapSim stackPlanGen stackModel list rich_list
 Libs
   pred_setTheory finite_mapTheory stackPlanOpsTheory
 
@@ -1122,3 +1122,130 @@ Proof
   simp[] >> first_x_assum irule >> gvs[DISJOINT_ALT]
 QED
 
+
+Theorem popmany_individual_prefix_replay:
+  !b c p q core al requests.
+    ALL_DISTINCT core /\ DISJOINT (set p) (set requests) /\
+    DISJOINT (set q) (set requests) ==>
+    ?ops core' al'.
+      popmany_individual requests
+        (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+        (ops, b with <|ps_stack := p ++ core'; ps_alloc := al'|>) /\
+      popmany_individual requests
+        (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+        (ops, c with <|ps_stack := q ++ core'; ps_alloc := al'|>) /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set requests
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v requests ==>
+    stack_get_depth v (p ++ core) = stack_get_depth v core /\
+    stack_get_depth v (q ++ core) = stack_get_depth v core` by
+    (rpt strip_tac >> irule stack_get_depth_bottom_excluded >>
+     gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  simp[popmany_individual_def, LET_THM, pairTheory.pair_CASE_def,
+       pairTheory.UNCURRY] >>
+  qmatch_goalsub_abbrev_tac `QSORT cmp1 requests` >>
+  qabbrev_tac `cmp2 = (\a b. case (stack_get_depth a (q ++ core),
+      stack_get_depth b (q ++ core)) of
+      (SOME da, SOME db) => da <= db | _ => T)` >>
+  `QSORT cmp1 requests = QSORT cmp2 requests` by
+    (irule qsort_relation_on >> simp[Abbr `cmp1`, Abbr `cmp2`]) >>
+  `!d ps. (if d = 0 then ([], ps) else do_swap d ps) = do_swap d ps` by
+    (rpt gen_tac >> Cases_on `d = 0` >> simp[do_swap_def]) >>
+  simp[] >>
+  qspec_then `b` mp_tac popmany_fold_prefix_replay >>
+  disch_then (qspecl_then [`c`, `p`, `q`, `QSORT cmp2 requests`] mp_tac) >>
+  simp[sortingTheory.QSORT_MEM, EXTENSION] >>
+  disch_then (qspecl_then [`core`, `al`, `[]`] mp_tac) >>
+  simp[DISJOINT_ALT, sortingTheory.QSORT_MEM, Abbr `cmp2`,
+       pairTheory.pair_CASE_def, pairTheory.UNCURRY] >>
+  gvs[DISJOINT_ALT]
+QED
+
+Theorem popmany_plan_prefix_replay:
+  !requests b c p q core al.
+    ALL_DISTINCT core /\ DISJOINT (set p) (set requests) /\
+    DISJOINT (set q) (set requests) ==>
+    ?ops core' al'.
+      popmany_plan requests
+        (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+        (ops, b with <|ps_stack := p ++ core'; ps_alloc := al'|>) /\
+      popmany_plan requests
+        (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+        (ops, c with <|ps_stack := q ++ core'; ps_alloc := al'|>) /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set requests
+Proof
+  Cases
+  >- (rpt strip_tac >> qexistsl_tac [`[]`, `core`, `al`] >> simp[popmany_plan_def]) >>
+  rpt gen_tac >> strip_tac >>
+  `!v. MEM v (h::t) ==>
+    stack_get_depth v (p ++ core) = stack_get_depth v core /\
+    stack_get_depth v (q ++ core) = stack_get_depth v core` by
+    (rpt strip_tac >> irule stack_get_depth_bottom_excluded >>
+     gvs[DISJOINT_ALT] >> metis_tac[]) >>
+  `MAP (\v. stack_get_depth v (p ++ core)) (h::t) =
+   MAP (\v. stack_get_depth v core) (h::t) /\
+   MAP (\v. stack_get_depth v (q ++ core)) (h::t) =
+   MAP (\v. stack_get_depth v core) (h::t)` by
+    (conj_tac >> irule MAP_CONG >> simp[]) >>
+  gvs[] >> simp[popmany_plan_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (IF_CASES_TAC
+      >- (`set (h::t) SUBSET set core` by
+            (rewrite_tac[SUBSET_DEF, LIST_TO_SET] >> gen_tac >> disch_tac >>
+             `IS_SOME (stack_get_depth x core)` by
+               (gvs[EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+             Cases_on `stack_get_depth x core` >- gvs[] >>
+             drule stackModelTheory.stack_get_depth_props >> strip_tac >>
+             qpat_x_assum `stack_peek _ _ = x` (SUBST1_TAC o SYM) >>
+             simp[stack_peek_def] >> irule EL_MEM >> simp[]) >>
+          `LENGTH (h::t) < LENGTH core` by
+            (irule (cj 1 contiguous_depths_core) >> simp[] >>
+             qexistsl_tac [`[]`, `b with ps_stack := core`] >> simp[]) >>
+          gvs[] >>
+          `?core'. stack_pop (LENGTH (h::t)) (stack_swap (LENGTH (h::t)) core) = core' /\
+            ALL_DISTINCT core' /\ set core' = set core DIFF set (h::t)` by
+            (mp_tac popmany_contiguous_core >>
+             disch_then (qspecl_then [`h::t`, `[]`, `core`, `b with ps_stack := core`] mp_tac) >>
+             simp[do_swap_stack_result]) >>
+          `?ops al'.
+            do_swap (LENGTH (h::t)) (b with <|ps_stack := p ++ core; ps_alloc := al|>) =
+              (ops, b with <|ps_stack := p ++ stack_swap (LENGTH (h::t)) core; ps_alloc := al'|>) /\
+            do_swap (LENGTH (h::t)) (c with <|ps_stack := q ++ core; ps_alloc := al|>) =
+              (ops, c with <|ps_stack := q ++ stack_swap (LENGTH (h::t)) core; ps_alloc := al'|>)` by
+            (drule do_swap_prefix_replay >>
+             disch_then (qspecl_then
+               [`b with <|ps_stack := p ++ core; ps_alloc := al|>`,
+                `c with <|ps_stack := q ++ core; ps_alloc := al|>`, `p`, `q`] mp_tac) >> simp[]) >>
+          `!r. stack_pop (LENGTH (h::t)) (r ++ stack_swap (LENGTH (h::t)) core) =
+               r ++ core'` by
+            (gen_tac >> qpat_x_assum `stack_pop _ _ = core'` (SUBST1_TAC o SYM) >>
+             simp[stack_pop_def, TAKE_APPEND, stack_swap_def, LENGTH_TAKE]) >>
+          qexistsl_tac [`ops ++ [SOPop (LENGTH (h::t))]`, `core'`, `al'`] >> gvs[]) >>
+      simp[] >> once_rewrite_tac[GSYM LIST_TO_SET_THM] >>
+      irule popmany_individual_prefix_replay >> simp[]) >>
+  simp[] >> once_rewrite_tac[GSYM LIST_TO_SET_THM] >>
+      irule popmany_individual_prefix_replay >> simp[]
+QED
+
+Theorem popmany_plan_prefix_frame:
+  !requests ps qs p q core.
+    ALL_DISTINCT core /\ DISJOINT (set p) (set requests) /\
+    DISJOINT (set q) (set requests) /\
+    ps.ps_stack = p ++ core /\ qs.ps_stack = q ++ core /\
+    ps.ps_alloc = qs.ps_alloc ==>
+    ?ops core' al.
+      popmany_plan requests ps =
+        (ops, ps with <|ps_stack := p ++ core'; ps_alloc := al|>) /\
+      popmany_plan requests qs =
+        (ops, qs with <|ps_stack := q ++ core'; ps_alloc := al|>) /\
+      ALL_DISTINCT core' /\ set core' = set core DIFF set requests
+Proof
+  rpt gen_tac >> strip_tac >>
+  qspec_then `requests` mp_tac popmany_plan_prefix_replay >>
+  disch_then (qspecl_then [`ps`, `qs`, `p`, `q`] mp_tac) >>
+  disch_then (qspecl_then [`core`, `ps.ps_alloc`] mp_tac) >>
+  simp[] >>
+  qpat_x_assum `ps.ps_stack = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `qs.ps_stack = _` (SUBST1_TAC o SYM) >> simp[]
+QED
