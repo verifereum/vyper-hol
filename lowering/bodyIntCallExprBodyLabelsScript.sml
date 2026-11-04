@@ -966,3 +966,116 @@ Resume compiler_label_hoare_supported_expr_body[send_h]:
 QED
 
 Finalise compiler_label_hoare_supported_expr_body
+
+Theorem compiler_label_hoare_supported_expr_body_general:
+  (!ce ty child. expr_size child < expr_size e /\
+    (supported_pure_expr tops child \/ supported_place_expr tops child \/
+     supported_effect_expr tops child \/ supported_effect_place_expr tops child) ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (cfn ce ty child) (\r out. compiler_label_reservation origin pending out)) /\
+  (!ce ann ty bi args. list_size expr_size args < expr_size e /\
+    (supported_pure_expr tops (Builtin ann bi args) \/
+     supported_place_expr tops (Builtin ann bi args) \/
+     supported_effect_expr tops (Builtin ann bi args) \/
+     supported_effect_place_expr tops (Builtin ann bi args)) ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (bfn ce ann ty bi args) (\r out. compiler_label_reservation origin pending out)) /\
+  (!ce ann ty tb rt args. list_size expr_size args < expr_size e /\
+    (supported_pure_expr tops (TypeBuiltin ann tb rt args) \/
+     supported_place_expr tops (TypeBuiltin ann tb rt args) \/
+     supported_effect_expr tops (TypeBuiltin ann tb rt args) \/
+     supported_effect_place_expr tops (TypeBuiltin ann tb rt args)) ==>
+    !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+      (tfn ce ann ty tb rt args) (\r out. compiler_label_reservation origin pending out)) /\
+  (supported_pure_expr tops e \/ supported_place_expr tops e \/
+   supported_effect_expr tops e \/ supported_effect_place_expr tops e) ==>
+  !origin pending. compiler_label_hoare (compiler_label_reservation origin pending)
+    (compile_expr_body (expr_child_callback (expr_size e) cfn)
+      (builtin_child_callback (expr_size e) bfn)
+      (type_child_callback (expr_size e) tfn) ce ty e)
+    (\r out. compiler_label_reservation origin pending out)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
+  Cases_on `expr_has_internal_call e`
+  >- suspend "has_call" >>
+  irule compiler_label_hoare_supported_expr_body >> simp[] >>
+  qexists_tac `tops` >> simp[] >> metis_tac[]
+QED
+
+Resume compiler_label_hoare_supported_expr_body_general[has_call]:
+  `~supported_pure_expr tops e` by
+    metis_tac[supportedExprTraverseTheory.supported_pure_no_internal_call] >>
+  Cases_on `e`
+  >~ [`Subscript _ _ _`] >- suspend "general_subscript"
+  >~ [`Attribute _ _ _`] >- suspend "general_attribute"
+  >~ [`Call _ _ _ _`] >- suspend "general_call"
+  >~ [`Pop _ _`] >- simp[compiler_label_hoare_pop_body] >>
+  gvs[supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def,
+      supportedExprTraverseTheory.expr_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.expr_internal_call_root_def] >>
+  drule supportedExprTraverseTheory.supported_pure_no_internal_call >>
+  simp[supportedExprTraverseTheory.expr_has_internal_call_def]
+QED
+
+Resume compiler_label_hoare_supported_expr_body_general[general_subscript]:
+  rewrite_tac[lambdify compile_expr_body_def] >> simp[] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  irule compiler_label_hoare_subscript >>
+  simp[expr_child_callback_eq, vyperASTTheory.expr_size_def] >>
+  rpt strip_tac >> first_x_assum irule >>
+  simp[vyperASTTheory.expr_size_def] >>
+  gvs[supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]
+QED
+
+Resume compiler_label_hoare_supported_expr_body_general[general_attribute]:
+  rewrite_tac[lambdify compile_expr_body_def] >> simp[] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  irule compiler_label_hoare_attribute >>
+  simp[expr_child_callback_eq, vyperASTTheory.expr_size_def] >>
+  first_x_assum irule >> simp[vyperASTTheory.expr_size_def] >>
+  gvs[supportedExprsTheory.supported_pure_expr_def,
+      supportedExprsTheory.supported_effect_expr_def] >> metis_tac[]
+QED
+
+Resume compiler_label_hoare_supported_expr_body_general[general_call]:
+  rename1 `Call ann target args dflt` >>
+  Cases_on `dflt` >> Cases_on `target` >>
+  gvs[supportedExprsTheory.supported_effect_expr_def,
+      supportedExprsTheory.supported_pure_expr_def,
+      supportedExprTraverseTheory.expr_has_internal_call_def,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.expr_internal_call_root_def]
+  >~ [`IntCall _`] >- suspend "general_intcall"
+  >~ [`ExtCall _ _ _ _`] >-
+    (rename1 `ExtCall static skip sig opts` >> PairCases_on `sig` >>
+     gvs[supportedExprsTheory.supported_effect_expr_def,
+         supportedExprsTheory.supported_pure_exprs_every,
+         supportedExprTraverseTheory.supported_exprs_exists_every,
+         listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+     metis_tac[supportedExprTraverseTheory.supported_pure_no_internal_call,
+               supportedExprTraverseTheory.expr_has_internal_call_def]) >>
+  drule supported_send_pure_args >> strip_tac >>
+  fs[supportedExprsTheory.supported_pure_exprs_every,
+     supportedExprTraverseTheory.supported_exprs_exists_every,
+     listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
+  metis_tac[supportedExprTraverseTheory.supported_pure_no_internal_call,
+            supportedExprTraverseTheory.expr_has_internal_call_def]
+QED
+
+Resume compiler_label_hoare_supported_expr_body_general[general_intcall]:
+  rewrite_tac[lambdify compile_expr_body_def] >> simp[] >>
+  CONV_TAC (RATOR_CONV (RAND_CONV (DEPTH_CONV ETA_CONV))) >>
+  irule compiler_label_hoare_intcall >>
+  irule compiler_label_hoare_multi_vvs >>
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  drule exprCallBoundsTheory.expr_call_arg_bound >>
+  disch_then (qspecl_then [`IntCall p`,`NONE`,`ann`] assume_tac) >>
+  fs[vyperASTTheory.expr_size_def, expr_child_callback_eq] >>
+  first_x_assum irule >> simp[] >>
+  fs[supportedExprsTheory.supported_pure_exprs_every, listTheory.EVERY_MEM] >>
+  metis_tac[]
+QED
+Finalise compiler_label_hoare_supported_expr_body_general
