@@ -59,8 +59,8 @@ Proof
     metis_tac[ptr_frame_current_table_support] >>
   drule_all ptr_selected_origin >> strip_tac
   >- (disj1_tac >> qexists `aid` >> simp[] >>
-      irule ptr_production_write_used_seed >> simp[] >>
-      metis_tac[bp_scan_production_complete]) >>
+      irule ptr_production_operand_used_seed >> simp[] >>
+      metis_tac[bp_scan_production_complete, ptr_write_op_operand]) >>
   disj2_tac >> metis_tac[]
 QED
 

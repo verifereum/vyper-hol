@@ -7,10 +7,17 @@ Ancestors
   basePtrDefs memLocDefs venomWf venomInst list pred_set
   concretizePtrSingletonOriginProbe
 
-Theorem ptr_production_write_used_seed:
+Theorem ptr_write_op_operand:
+  inst_write_op inst = SOME op ==> MEM op inst.inst_operands
+Proof
+  simp[inst_write_op_def, mem_write_ops_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[MEM_REVERSE, MEM]
+QED
+
+Theorem ptr_production_operand_used_seed:
   fn_ptr_ok P fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
   (!i. MEM i (fn_insts fn) ==> MEM i (bp_scan_insts fn cfg.cfg_dfs_pre)) /\
-  MEM inst (fn_insts fn) /\ inst_write_op inst = SOME (Var v) /\
+  MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands /\
   v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid) ==>
   ml_used_gen (Allocation aid)
     (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) mems inst
@@ -20,10 +27,6 @@ Proof
      (find_base_allocas (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) (Var v))` by
     (simp[GSYM bp_bases_find_base_allocas, bp_bases_def, MEM_MAP] >>
      metis_tac[ptr_base_def]) >>
-  `MEM (Var v) inst.inst_operands` by
-    (qpat_x_assum `inst_write_op inst = _` mp_tac >>
-     simp[inst_write_op_def, mem_write_ops_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[] >> metis_tac[MEM_REVERSE, MEM]) >>
   simp[ml_used_gen_def, ml_operand_gen_def] >> metis_tac[]
 QED
 
@@ -44,8 +47,8 @@ Proof
   drule_all ptr_history_cfg_analyze_ok >> strip_tac >>
   simp[] >> first_assum (irule_at (Pos last)) >> simp[] >>
   goal_assum (drule_at Any) >>
-  irule ptr_production_write_used_seed >> simp[] >>
-  metis_tac[bp_scan_production_complete]
+  irule ptr_production_operand_used_seed >> simp[] >>
+  metis_tac[bp_scan_production_complete, ptr_write_op_operand]
 QED
 
 (* Reuse the checked two-call PARAM-store fixture, rather than duplicating it.
@@ -68,7 +71,7 @@ QED
    The ordinary-write branch of ptr_history_fresh_untainted_witness gives
    only byte containment in source_memory_write_ranges. It does not select
    an address operand's provenance, or identify the allocation id owning x.
-   ptr_production_write_used_seed therefore still requires the derivation
+   ptr_production_operand_used_seed therefore still requires the derivation
    witness explicitly. Production BP coverage supplies its static base;
    bp_scan_production_complete supplies its scan premise under wf_function
    and all_reachable. Instruction membership and well-formedness must be
