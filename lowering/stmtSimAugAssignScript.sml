@@ -280,6 +280,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
       vyperASTTheory.expr_type_def] >>
   metis_tac[]
 QED
@@ -302,6 +304,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       builtin_operands_ok_def, int_literal_value_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.supported_expr_exists_def,
+      supportedExprTraverseTheory.call_operands_effect_root_def,
       vyperASTTheory.expr_type_def] >>
   metis_tac[]
 QED
@@ -499,3 +503,11 @@ val () = List.app (fn th =>
      else raise Fail "augmented assignment inherited admission"
   end) [eval_augassign_local_bop, augassign_local_code_bop,
         expr_sim_pre_augassign, expr_body_pre_augassign, expr_sim_inv_local, assign_local_store_run];
+
+val _ = List.app (fn (name,th) =>
+  let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
+    if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+    then raise Fail ("Augassign judgment dependency: " ^ name) else ()
+  end)
+  [("expr_sim_pre_augassign", expr_sim_pre_augassign),
+   ("expr_body_pre_augassign", expr_body_pre_augassign)];

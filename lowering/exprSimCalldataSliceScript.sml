@@ -890,7 +890,13 @@ Theorem vv_post_prefix_frame:
 Proof
   simp[vv_post_def, GSYM wb_frame_def] >> rpt strip_tac
   >- metis_tac[vv_at_start_mono] >>
-  metis_tac[wb_frame_trans]
+  irule wb_frame_trans >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (qexistsl_tac [`es1`, `sm`, `t`] >>
+      asm_simp_tac bool_ss [] >>
+      simp[wb_frame_def] >> first_assum ACCEPT_TAC) >>
+  metis_tac[]
 QED
 
 Theorem slice_calldata_uint_compose[local]:
@@ -1016,3 +1022,8 @@ Proof
   conj_tac >- fs[type_memory_bytes_def, vfmConstantsTheory.word_size_def] >>
   qexists_tac `env` >> simp[]
 QED
+
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag vv_post_prefix_frame) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "vv_post_prefix_frame dependency" else ()
+end;

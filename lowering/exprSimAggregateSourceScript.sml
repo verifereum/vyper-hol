@@ -157,13 +157,16 @@ Proof
   rpt gen_tac >>
   simp[expr_body_pre_def, well_typed_expr_def, byte_widths_expr_def,
        alloc_limits_expr_def, int_calls_expr_def,
-       supportedExprTraverseTheory.expr_has_evm_run_thm] >>
+       supportedExprTraverseTheory.expr_has_evm_run_thm,
+       supportedExprTraverseTheory.supported_expr_exists_def,
+       supportedExprTraverseTheory.supported_fields_exists_every] >>
   strip_tac >> drule_all aggregate_named_child_body_syntax >> strip_tac >>
   `~expr_has_evm_run e` by
     (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >> res_tac >> gvs[]) >>
   simp[] >> rpt conj_tac
   >- (irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
       metis_tac[])
+  >- (gvs[listTheory.MEM_MAP, listTheory.EVERY_MEM] >> metis_tac[])
   >- (fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
   strip_tac >> gvs[] >> Cases_on `int_calls_expr e` >> gvs[] >>
   metis_tac[MEM]
@@ -225,3 +228,9 @@ Proof
   simp[get_accounts_def, lift_sum_def, vyperContextTheory.evaluate_builtin_def,
     return_def, raise_def, bind_def]
 QED
+
+(* Judgment propagation must not acquire an admission dependency. *)
+val _ = let val (ors,axs) = Tag.dest_tag (Thm.tag expr_body_pre_struct_field) in
+  if List.exists (fn s => s <> "DISK_THM") ors orelse not (null axs)
+  then raise Fail "expr_body_pre_struct_field dependency" else ()
+end;
