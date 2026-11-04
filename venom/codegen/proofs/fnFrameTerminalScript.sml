@@ -19,7 +19,7 @@ Ancestors
 (* Used for an instruction whose step Halts (STOP, RETURN, SELFDESTRUCT)
    in the block induction: gen_fn_frame_simulation's Halt clause.  The
    premises are gen_inst_frame_sim's minus those only an OK result uses
-   (SSA freshness, PHI soundness, the output state's region), as the
+   (SSA freshness, PHI soundness), as the
    block induction supplies them for every instruction.  INVOKE's Halt is
    gen_invoke_frame_sim's.
 
@@ -32,13 +32,22 @@ Ancestors
    Operands are never return-PC variables (opaque_use_ok). *)
 Theorem gen_inst_halt_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
-   is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0.
+   is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
     source_memory_reads_disjoint cp inst vs /\
     opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
+    (* The invariant's region clause for the output planner state, as in
+       gen_inst_frame_sim: the prefix's transient spills lie below
+       ps'.ps_alloc.sa_next_offset, so this keeps them inside the region
+       whose bytes source_memory_reads_disjoint keeps the payload out of.
+       fn_frame_inv bounds only ps at entry, which isn't enough
+       (fnFrameTerminalPrep$terminal_escape_halt_counterexample). *)
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     generated_plan_state_wf base ps /\
     codegen_ready_fn fn /\
     MEM inst (fn_insts fn) /\
@@ -95,13 +104,22 @@ QED
    region. *)
 Theorem gen_inst_abort_frame_sim:
   !fuel ctx cp lo o2pc prog liveness dfg cfg fn inst next_liveness
-   is_halting next_is_term bb_label base ps vs as ops ps' ra rest mem0.
+   is_halting next_is_term bb_label base ps vs as ops ps' r ra rest mem0.
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
     source_memory_reads_disjoint cp inst vs /\
     opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
+    (* The invariant's region clause for the output planner state, as in
+       gen_inst_frame_sim: the prefix's transient spills lie below
+       ps'.ps_alloc.sa_next_offset, so this keeps them inside the region
+       whose bytes source_memory_reads_disjoint keeps the payload out of.
+       fn_frame_inv bounds only ps at entry, which isn't enough
+       (fnFrameTerminalPrep$terminal_escape_halt_counterexample). *)
+    MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     generated_plan_state_wf base ps /\
     codegen_ready_fn fn /\
     MEM inst (fn_insts fn) /\
