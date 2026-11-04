@@ -22,7 +22,7 @@ Ancestors
   list finite_map bodySim compileEnv compileVyper moduleLowering
   intCallCallee supportedDecls supportedProgram vyperTypeInvariants
   allocLimitsProps supportedProgramProps exprSimHyps
-  immutableLocationProps immutableSectionRel immutableRelation option pair
+  immutableLocationProps immutableSectionRel immutableRelation option pair e2eDefs
 Libs
   monadsyntax supportedEvalLib
 
@@ -490,4 +490,74 @@ Proof
   qmatch_goalsub_abbrev_tac `lowering_context_ok ctx` >>
   `lowering_context_ok ctx` by (simp[Abbr `ctx`] >> CONV_TAC EVAL) >>
   simp[]
+QED
+
+Theorem immutable_sparse_value_probe[local]:
+  value_has_type
+    (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)))
+    (ArrayV (SArrayV [])) /\
+  well_formed_type_value
+    (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251))) /\
+  imms_well_typed
+    [(NONE, FEMPTY |+ ("large",
+      (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
+       ArrayV (SArrayV []))))]
+Proof
+  simp[vyperTypeInvariantsTheory.imms_well_typed_def,
+       vyperTypingTheory.value_has_type_def,
+       vyperTypingTheory.well_formed_type_value_def,
+       vyperValueTheory.type_slot_size_def,
+       wordsTheory.dimword_def] >>
+  rpt gen_tac >> simp[FLOOKUP_UPDATE] >>
+  strip_tac >> gvs[] >>
+  simp[vyperTypingTheory.value_has_type_def,
+       vyperTypingTheory.well_formed_type_value_def,
+       vyperValueTheory.type_slot_size_def, wordsTheory.dimword_def]
+QED
+
+Theorem immutable_semantic_readiness_probe[local]:
+  ?am tx.
+    tx.target = 0w /\ tx.function_name = "foo" /\ tx.args = [] /\ tx.value = 0 /\
+    source_typing_ok
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx /\
+    source_deployment_rel
+      [VariableDecl Private Immutable "large"
+         (ArrayT (BaseT (UintT 256)) (Fixed (2 ** 251))) NONE;
+       FunctionDecl External Nonpayable F F "foo" [] [] NoneT [Pass]] am tx
+Proof
+  qmatch_goalsub_abbrev_tac `source_typing_ok tops` >>
+  qexistsl [
+    `initial_machine_state with
+      <|sources := [(0w,[(NONE,tops)])]; layouts := [(0w,([],[]))];
+        immutables := [(0w,[(NONE,FEMPTY |+ ("large",
+          (ArrayTV (BaseTV (UintT 256)) (Fixed (2 ** 251)),
+           ArrayV (SArrayV []))))])]|>`,
+    `empty_call_txn with <|target := 0w; function_name := "foo"|>`] >>
+  simp[source_typing_ok_def, source_deployment_rel_def,
+       vyperInterpreterTheory.initial_machine_state_def,
+       vyperContextTheory.empty_call_txn_def,
+       vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       vyperTypeInitialStateTheory.machine_well_typed_def,
+       immutable_sparse_value_probe] >>
+  reverse conj_tac
+  >- (simp[layouts_agree_def, Abbr `tops`]) >>
+  mp_tac immutable_sparse_value_probe >> strip_tac >> fs[] >>
+  simp[vyperTypeInvariantsTheory.accounts_well_typed_def,
+       vyperTypeInvariantsTheory.account_well_typed_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def] >>
+  simp[Abbr `tops`] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``vyperTypeContractSoundness$checked_contract_runtime_ready``]) >>
+  simp[vyperTypeContractSoundnessTheory.checked_contract_runtime_ready_def,
+       vyperTypeInitialStateTheory.immutables_ready_def,
+       vyperInterpreterTheory.initial_evaluation_context_def] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[FLOOKUP_UPDATE] >>
+  CONV_TAC EVAL >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  CONV_TAC EVAL >> simp[FLOOKUP_UPDATE]
 QED
