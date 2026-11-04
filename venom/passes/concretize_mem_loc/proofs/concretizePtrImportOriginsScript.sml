@@ -11,6 +11,17 @@ Proof
   ho_match_mp_tac unique_mems_used_ind >> simp[unique_mems_used_def] >>
   rpt strip_tac >> gvs[] >> metis_tac[MEM_FILTER]
 QED
+Theorem ptr_unique_mems_functional:
+  !xs a p sz q n.
+    MEM (a,p,sz) (unique_mems_used xs) /\
+    MEM (a,q,n) (unique_mems_used xs) ==> p = q /\ sz = n
+Proof
+  ho_match_mp_tac unique_mems_used_ind >>
+  simp[unique_mems_used_def] >> rpt strip_tac >>
+  imp_res_tac ptr_unique_mems_subset >>
+  fs[MEM_FILTER] >> metis_tac[]
+QED
+
 
 Theorem ptr_import_mems_origin:
   MEM item (imported_mems_used ctx fn) ==>
@@ -137,6 +148,49 @@ Proof
             `observed.cu_context.ctx_global_reserved`] >> simp[]
 QED
 
+Theorem ptr_stage_mems_canonical:
+  !n name g a p sz.
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  callee_first names C.ctx_functions /\
+  list_index name names = SOME n /\
+  lookup_function name C'.ctx_functions = SOME g /\
+  MEM (a,p,sz) g.fn_mems_used ==>
+  ?owner i owner_out. MEM owner C.ctx_functions /\ MEM i (fn_insts owner) /\
+    i.inst_opcode = ALLOCA /\ a = Allocation i.inst_id /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME owner_out /\
+    MEM (a,p,sz) owner_out.fn_mems_used /\
+    fcg_path C name owner.fn_name /\
+    (owner.fn_name = name \/ list_precedes owner.fn_name name names)
+Proof
+  completeInduct_on `n` >> rpt strip_tac >>
+  drule_all ptr_stage_lookup_origin >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `fn.fn_name = name` by metis_tac[ptr_lookup_name] >>
+  `fn.fn_eom = NONE` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
+     disch_then drule >> simp[]) >>
+  qpat_x_assum `out.fpo_function = g` (SUBST_ALL_TAC o SYM) >>
+  drule_all ptr_step_mems_origin >> strip_tac
+  >- (qexistsl [`fn`,`i`,`out.fpo_function`] >>
+      simp[fcg_path_def, relationTheory.RTC_REFL]) >>
+  drule_all ptr_stage_import_lookup >> strip_tac >>
+  rename1 `lookup_function callee C'.ctx_functions = SOME g'` >>
+  `list_precedes callee name names` by
+    (gvs[callee_first_def] >> metis_tac[]) >>
+  gvs[list_precedes_iff] >>
+  qpat_x_assum `!m. m < n ==> _` (qspec_then `i` mp_tac) >> simp[] >>
+  disch_then drule_all >> strip_tac >>
+  `fn_directly_calls C fn.fn_name callee` by
+    (simp[fn_directly_calls_scan, GSYM fn_invoke_targets_def] >>
+     qexists `fn` >> simp[]) >>
+  `fcg_path C fn.fn_name owner.fn_name` by
+    (gvs[fcg_path_def] >> metis_tac[relationTheory.RTC_RULES]) >>
+  qexistsl [`owner`,`i'`,`owner_out`] >> simp[] >>
+  metis_tac[arithmeticTheory.LESS_TRANS]
+QED
+
 Theorem ptr_stage_mems_source:
   !n name g a p sz.
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -151,29 +205,7 @@ Theorem ptr_stage_mems_source:
     fcg_path C name owner.fn_name /\
     (owner.fn_name = name \/ list_precedes owner.fn_name name names)
 Proof
-  completeInduct_on `n` >> rpt strip_tac >>
-  drule_all ptr_stage_lookup_origin >> strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `fn.fn_name = name` by metis_tac[ptr_lookup_name] >>
-  `fn.fn_eom = NONE` by
-    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM] >>
-     disch_then drule >> simp[]) >>
-  qpat_x_assum `out.fpo_function = g` (SUBST_ALL_TAC o SYM) >>
-  drule_all ptr_step_mems_origin >> strip_tac
-  >- (qexistsl [`fn`,`i`] >> simp[fcg_path_def, relationTheory.RTC_REFL]) >>
-  drule_all ptr_stage_import_lookup >> strip_tac >>
-  rename1 `lookup_function callee C'.ctx_functions = SOME g'` >>
-  `list_precedes callee name names` by
-    (gvs[callee_first_def] >> metis_tac[]) >>
-  gvs[list_precedes_iff] >>
-  qpat_x_assum `!m. m < n ==> _` (qspec_then `i` mp_tac) >> simp[] >>
-  disch_then drule_all >> strip_tac >>
-  `fn_directly_calls C fn.fn_name callee` by
-    (simp[fn_directly_calls_scan, GSYM fn_invoke_targets_def] >>
-     qexists `fn` >> simp[]) >>
-  `fcg_path C fn.fn_name owner.fn_name` by
-    (gvs[fcg_path_def] >> metis_tac[relationTheory.RTC_RULES]) >>
-  qexistsl [`owner`,`i'`] >> simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]
+  metis_tac[ptr_stage_mems_canonical]
 QED
 
 Theorem ptr_stage_import_source:
@@ -244,4 +276,17 @@ Proof
      conj_tac >- (qexistsl [`i`,`i'`] >> simp[]) >>
      qexists `C` >> simp[]) >>
   gvs[list_precedes_iff]
+QED
+
+Theorem ptr_step_mems_functional:
+  fn.fn_eom = NONE /\
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  MEM (a,p,sz) out.fpo_function.fn_mems_used /\
+  MEM (a,q,n) out.fpo_function.fn_mems_used ==> p = q /\ sz = n
+Proof
+  simp[fn_pass_step_def, execute_configured_fn_pass_concretize,
+       AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  gvs[concretize_function_fuel_in_context_def, fn_has_static_layout_def,
+      AllCaseEqs(), apply_context_concretize_layout_def] >>
+  metis_tac[ptr_unique_mems_functional]
 QED
