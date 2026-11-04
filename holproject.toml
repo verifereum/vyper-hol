@@ -66,6 +66,8 @@ roots = ["vyperHolScript.sml",
          "venom/codegen/proofs/contextReachabilityChecksScript.sml",
          "venom/codegen/proofs/genFrameSimScript.sml",
          "venom/codegen/proofs/fnPlanLineageScript.sml",
+         "venom/codegen/proofs/fnPlanLineageReplayScript.sml",
+         "venom/codegen/proofs/fnPlanLineageReplayChecksScript.sml",
          "venom/compiler/o1PassLiftScript.sml",
          "tests/vyperPlaceProbesTestScript.sml",
          "tests/vyperPlaceSanityTestScript.sml"]
