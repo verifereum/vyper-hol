@@ -103,7 +103,7 @@ Definition ptr_history_cfg_ok_def:
       MEM y (cfg_succs_of cfg x) /\ MEM x (cfg_preds_of cfg y))
 End
 
-Theorem ptr_history_scan_member[local]:
+Theorem ptr_history_scan_member:
   !lbls. FIND (\b. b.bb_label = bb.bb_label) blocks = SOME bb /\
     MEM bb.bb_label lbls ==> MEM bb (ml_scan_blocks blocks lbls)
 Proof
