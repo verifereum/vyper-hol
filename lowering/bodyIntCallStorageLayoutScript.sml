@@ -269,3 +269,249 @@ Proof
   drule storage_read_live_byte_agreement >>
   disch_then (qspecl_then [`a`, `tv`, `j-w2n a`, `b`] mp_tac) >> simp[]
 QED
+
+Theorem decode_storage_live_agree:
+  (!st off tv st'.
+    (!j b. off <= j /\ j < off + type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st off tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_value st' off tv = decode_value st off tv) /\
+  (!st off tvs st'.
+    (!j b. off <= j /\ j < off + type_slot_size_list tvs /\ b < 32 /\
+      ~dead_bytes_list st off tvs j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_tuple st' off tvs = decode_tuple st off tvs) /\
+  (!st off tv n st'.
+    (!i. i < n ==> !j b.
+      off+i*type_slot_size tv <= j /\
+      j < off+i*type_slot_size tv+type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st (off+i*type_slot_size tv) tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_static_array st' off tv n = decode_static_array st off tv n) /\
+  (!st off tv n st'.
+    (!i. i < n ==> !j b.
+      off+i*type_slot_size tv <= j /\
+      j < off+i*type_slot_size tv+type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st (off+i*type_slot_size tv) tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_dyn_array st' off tv n = decode_dyn_array st off tv n) /\
+  (!st off fields st'.
+    (!j b. off <= j /\ j < off + type_slot_size_fields fields /\ b < 32 /\
+      ~dead_bytes_fields st off fields j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_struct st' off fields = decode_struct st off fields)
+Proof
+  ho_match_mp_tac decode_value_ind >> rpt conj_tac >> rpt gen_tac >>
+  strip_tac
+  >~ [`decode_value st' off (BaseTV (BytesT (Dynamic max)))`]
+  >- (`decode_dyn_bytes st' off max = decode_dyn_bytes st off max` by
+       (irule decode_dyn_bytes_live_agree >> rpt strip_tac >>
+        first_x_assum irule >>
+        gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def]) >>
+     simp[decode_value_def])
+  >~ [`decode_value st' off (BaseTV (StringT max))`]
+  >- (`decode_dyn_bytes st' off max = decode_dyn_bytes st off max` by
+       (irule decode_dyn_bytes_live_agree >> rpt strip_tac >>
+        first_x_assum irule >>
+        gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def]) >>
+     simp[decode_value_def])
+  >> simp[decode_value_def, read_slot_def]
+  >>~- ([`decode_base_from_slot`],
+    qmatch_asmsub_abbrev_tac `type_slot_size ty` >>
+    `lookup_storage (n2w off) st' = lookup_storage (n2w off) st` by
+      (irule storage_live_value_head >> qexists `ty` >>
+       simp[Abbr `ty`, vyperValueTheory.type_slot_size_def]) >> simp[])
+  >> rpt strip_tac
+  >~ [`type_slot_size (TupleTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def] >>
+      first_x_assum drule >> simp[])
+  >~ [`type_slot_size (StructTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def] >>
+      first_x_assum drule >> simp[])
+  >~ [`type_slot_size (ArrayTV _ (Fixed _))`]
+  >- (`decode_static_array st' off tv n = decode_static_array st off tv n` by
+        (first_x_assum irule >> metis_tac[storage_live_fixed_element]) >> simp[])
+  >~ [`type_slot_size (ArrayTV _ (Dynamic _))`]
+  >- suspend "dynamic_array"
+  >~ [`type_slot_size_list (_::_)`]
+  >- suspend "tuple_cons"
+  >~ [`type_slot_size_fields (_::_)`]
+  >- (`decode_value st' off tv = decode_value st off tv` by
+        (qpat_x_assum `!st'. _ ==> decode_value _ _ _ = _` irule >>
+         metis_tac[storage_live_fields_head]) >> simp[] >>
+      Cases_on `decode_value st off tv` >> simp[] >>
+      gvs[] >> qpat_x_assum `!st'. _ ==> decode_struct _ _ _ = _`
+        (qspec_then `st'` mp_tac) >>
+      (impl_tac >- (drule storage_live_fields_tail >> simp[])) >> simp[])
+  >> qpat_assum `!i. i < SUC n ==> _` (qspec_then `0` mp_tac) >>
+  simp[] >> disch_tac >>
+  `decode_value st' off tv = decode_value st off tv` by
+    (qpat_x_assum `!st'. _ ==> decode_value _ _ _ = _` irule >> simp[]) >>
+  simp[] >> Cases_on `decode_value st off tv` >> simp[] >> gvs[] >>
+  qpat_x_assum `!st'. (!i. i < n ==> _) ==> _`
+    (qspec_then `st'` mp_tac) >>
+  (impl_tac >-
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. i < SUC n ==> _` (qspec_then `SUC i` mp_tac) >>
+     simp[arithmeticTheory.MULT_CLAUSES])) >> simp[]
+QED
+
+Resume decode_storage_live_agree[dynamic_array]:
+  `lookup_storage (n2w off) st' = lookup_storage (n2w off) st` by
+    (irule storage_live_value_head >>
+     qexists `ArrayTV tv (Dynamic max)` >>
+     simp[vyperValueTheory.type_slot_size_def]) >> simp[] >>
+  Cases_on `w2n (lookup_storage (n2w off) st) <= max` >> simp[] >>
+  `decode_dyn_array st' (off+1) tv (MIN (w2n (lookup_storage (n2w off) st)) max) =
+   decode_dyn_array st (off+1) tv (MIN (w2n (lookup_storage (n2w off) st)) max)` by
+    (first_x_assum irule >> simp[read_slot_def] >> rpt strip_tac >>
+     `i < max /\ i < w2n (lookup_storage (n2w off) st)` by decide_tac >>
+     irule storage_live_dynamic_element >> simp[] >>
+     qexistsl [`max`, `i`, `off`, `tv`] >> simp[]) >> simp[]
+QED
+
+Resume decode_storage_live_agree[tuple_cons]:
+  `decode_value st' off tv = decode_value st off tv` by
+    (qpat_x_assum `!st'. _ ==> decode_value _ _ _ = _` irule >>
+     metis_tac[storage_live_tuple_head]) >> simp[] >>
+  Cases_on `decode_value st off tv` >> simp[] >>
+  gvs[] >> qpat_x_assum `!st'. _ ==> decode_tuple _ _ _ = _`
+    (qspec_then `st'` mp_tac) >>
+  (impl_tac >- (drule storage_live_tuple_tail >> simp[])) >> simp[]
+QED
+
+Finalise decode_storage_live_agree
+
+Theorem slots_storage_live_agree:
+  (!st off tv st'.
+    (!j b. off <= j /\ j < off + type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st off tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (slots_in_range st' off tv <=> slots_in_range st off tv)) /\
+  (!st off tvs st'.
+    (!j b. off <= j /\ j < off + type_slot_size_list tvs /\ b < 32 /\
+      ~dead_bytes_list st off tvs j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (tuple_slots_in_range st' off tvs <=> tuple_slots_in_range st off tvs)) /\
+  (!st off tv n st'.
+    (!i. i < n ==> !j b.
+      off+i*type_slot_size tv <= j /\
+      j < off+i*type_slot_size tv+type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st (off+i*type_slot_size tv) tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (static_slots_in_range st' off tv n <=> static_slots_in_range st off tv n)) /\
+  (!st off tv n st'.
+    (!i. i < n ==> !j b.
+      off+i*type_slot_size tv <= j /\
+      j < off+i*type_slot_size tv+type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st (off+i*type_slot_size tv) tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (dyn_slots_in_range st' off tv n <=> dyn_slots_in_range st off tv n)) /\
+  (!st off fields st'.
+    (!j b. off <= j /\ j < off + type_slot_size_fields fields /\ b < 32 /\
+      ~dead_bytes_fields st off fields j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (struct_slots_in_range st' off fields <=> struct_slots_in_range st off fields))
+Proof
+  ho_match_mp_tac slots_in_range_ind >> rpt conj_tac >> rpt gen_tac >>
+  strip_tac
+  >>~- ([`type_slot_size (BaseTV _)`],
+    qmatch_asmsub_abbrev_tac `type_slot_size ty` >>
+    `lookup_storage (n2w off) st' = lookup_storage (n2w off) st` by
+      (irule storage_live_value_head >> qexists `ty` >>
+       simp[Abbr `ty`, vyperValueTheory.type_slot_size_def]) >>
+    simp[Abbr `ty`, slots_in_range_def, read_slot_def])
+  >~ [`type_slot_size (FlagTV _)`]
+  >- (qmatch_asmsub_abbrev_tac `type_slot_size ty` >>
+      `lookup_storage (n2w off) st' = lookup_storage (n2w off) st` by
+        (irule storage_live_value_head >> qexists `ty` >>
+         simp[Abbr `ty`, vyperValueTheory.type_slot_size_def]) >>
+      simp[Abbr `ty`, slots_in_range_def, read_slot_def])
+  >> simp[slots_in_range_def, read_slot_def] >> rpt strip_tac
+  >~ [`type_slot_size (TupleTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def] >>
+      first_x_assum irule >> simp[])
+  >~ [`type_slot_size (StructTV _)`]
+  >- (gvs[vyperValueTheory.type_slot_size_def, dead_bytes_def] >>
+      first_x_assum irule >> simp[])
+  >~ [`type_slot_size (ArrayTV _ (Fixed _))`]
+  >- (first_x_assum irule >> metis_tac[storage_live_fixed_element])
+  >~ [`type_slot_size (ArrayTV _ (Dynamic _))`]
+  >- (`lookup_storage (n2w off) st' = lookup_storage (n2w off) st` by
+        (irule storage_live_value_head >>
+         qexists `ArrayTV tv (Dynamic max)` >>
+         simp[vyperValueTheory.type_slot_size_def]) >> simp[] >>
+      Cases_on `w2n (lookup_storage (n2w off) st) <= max` >> simp[] >>
+      first_x_assum irule >> simp[read_slot_def] >> rpt strip_tac >>
+      `i < max /\ i < w2n (lookup_storage (n2w off) st)` by decide_tac >>
+      irule storage_live_dynamic_element >> simp[] >>
+      qexistsl [`max`, `i`, `off`, `tv`] >> simp[])
+  >~ [`type_slot_size_list (_::_)`]
+  >- (drule storage_live_tuple_head >> disch_tac >>
+      drule storage_live_tuple_tail >> disch_tac >> gvs[] >> metis_tac[])
+  >~ [`type_slot_size_fields (_::_)`]
+  >- (drule storage_live_fields_head >> disch_tac >>
+      drule storage_live_fields_tail >> disch_tac >> gvs[] >> metis_tac[])
+  >> qpat_assum `!i. i < SUC n ==> _` (qspec_then `0` mp_tac) >>
+  simp[] >> disch_tac >>
+  `(slots_in_range st' off tv <=> slots_in_range st off tv)` by
+    (qpat_x_assum `!st'. _ ==> (slots_in_range _ _ _ <=> _)` irule >> simp[]) >>
+  simp[] >> qpat_x_assum `!st'. (!i. i < n ==> _) ==> _`
+    (qspec_then `st'` mp_tac) >>
+  (impl_tac >-
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. i < SUC n ==> _` (qspec_then `SUC i` mp_tac) >>
+     simp[arithmeticTheory.MULT_CLAUSES])) >> simp[]
+QED
+
+Theorem decode_value_storage_live_agree:
+  !st st' off tv.
+    (!j b. off <= j /\ j < off + type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st off tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    decode_value st' off tv = decode_value st off tv
+Proof
+  metis_tac[cj 1 decode_storage_live_agree]
+QED
+
+Theorem slots_in_range_storage_live_agree:
+  !st st' off tv.
+    (!j b. off <= j /\ j < off + type_slot_size tv /\ b < 32 /\
+      ~dead_bytes st off tv j b ==>
+      EL b (word_to_bytes (lookup_storage (n2w j) st) T) =
+      EL b (word_to_bytes (lookup_storage (n2w j) st') T)) ==>
+    (slots_in_range st' off tv <=> slots_in_range st off tv)
+Proof
+  metis_tac[cj 1 slots_storage_live_agree]
+QED
+
+Theorem decode_value_storage_read_live:
+  !cx tr st st' a tv.
+    storage_agree (storage_dead cx tr st) st st' /\
+    storage_read_live cx tr st a tv ==>
+    decode_value st' (w2n a) tv = decode_value st (w2n a) tv
+Proof
+  rpt strip_tac >> irule decode_value_storage_live_agree >>
+  metis_tac[storage_read_live_window]
+QED
+
+Theorem slots_in_range_storage_read_live:
+  !cx tr st st' a tv.
+    storage_agree (storage_dead cx tr st) st st' /\
+    storage_read_live cx tr st a tv ==>
+    (slots_in_range st' (w2n a) tv <=> slots_in_range st (w2n a) tv)
+Proof
+  rpt strip_tac >> irule slots_in_range_storage_live_agree >>
+  metis_tac[storage_read_live_window]
+QED
