@@ -646,3 +646,104 @@ Proof
   conj_tac >- ASM_SET_TAC[] >>
   ASM_SET_TAC[]
 QED
+
+Theorem stack_find_append_miss:
+  !xs ys p. EVERY (\x. ~p x) xs ==>
+    stack_find p (xs ++ ys) =
+      OPTION_MAP (\d. LENGTH xs + d) (stack_find p ys)
+Proof
+  Induct >> simp[stack_find_def] >> rpt strip_tac >>
+  simp[] >> Cases_on `stack_find p ys` >> simp[]
+QED
+
+Theorem stack_get_depth_cons_other:
+  !op h core. op <> h ==>
+    stack_get_depth op (h::core) = stack_get_depth op core
+Proof
+  simp[stack_get_depth_def, REVERSE_DEF, stack_find_append_excluded]
+QED
+
+Theorem stack_get_depth_cons_head:
+  !h core. ~MEM h core ==>
+    stack_get_depth h (h::core) = SOME (LENGTH core)
+Proof
+  simp[stack_get_depth_def, REVERSE_DEF, stack_find_append_miss,
+       EVERY_MEM, stack_find_def]
+QED
+
+Theorem below_all_live_cons_other:
+  !op h core inputs.
+    op <> h /\ ~MEM h (MAP Var inputs) ==>
+    below_all_live op inputs (h::core) = below_all_live op inputs core
+Proof
+  rpt strip_tac >>
+  `!v. MEM v inputs ==> Var v <> h` by (fs[MEM_MAP] >> metis_tac[]) >>
+  simp[below_all_live_def, stack_get_depth_cons_other] >>
+  Cases_on `stack_get_depth op core` >> simp[EVERY_MEM] >>
+  metis_tac[stack_get_depth_cons_other]
+QED
+
+Theorem below_all_live_cons_head:
+  !h core inputs. ~MEM h core /\ ~MEM h (MAP Var inputs) ==>
+    below_all_live h inputs (h::core)
+Proof
+  rpt strip_tac >> simp[below_all_live_def, stack_get_depth_cons_head, EVERY_MEM] >>
+  rpt strip_tac >>
+  `Var v <> h` by (fs[MEM_MAP] >> metis_tac[]) >>
+  simp[stack_get_depth_cons_other] >>
+  Cases_on `stack_get_depth (Var v) core` >> simp[] >>
+  metis_tac[stack_get_depth_props]
+QED
+
+Theorem below_all_live_cons_input:
+  !h core inputs op.
+    ~MEM h core /\ MEM h (MAP Var inputs) /\ MEM op core ==>
+    ~below_all_live op inputs (h::core)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `op <> h` by metis_tac[] >>
+  drule stack_get_depth_core >> disch_then (qspec_then `[]` strip_assume_tac) >>
+  gvs[] >> simp[below_all_live_def, stack_get_depth_cons_other, EVERY_MEM] >>
+  fs[MEM_MAP] >> qexists_tac `y` >>
+  gvs[stack_get_depth_cons_head]
+QED
+
+Theorem below_all_live_prefix:
+  !core inputs. ALL_DISTINCT core ==>
+    ?pre tail. core = pre ++ tail /\
+      DISJOINT (set pre) (set (MAP Var inputs)) /\
+      (!op. MEM op core /\ ~MEM op (MAP Var inputs) ==>
+        (below_all_live op inputs core <=> MEM op pre))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `MEM h (MAP Var inputs)`
+  >- (qexistsl_tac [`[]`, `h::core`] >> simp[] >>
+      rpt strip_tac >> gvs[] >>
+      metis_tac[below_all_live_cons_input]) >>
+  first_x_assum drule >> disch_then (qspec_then `inputs` strip_assume_tac) >>
+  qexistsl_tac [`h::pre`, `tail`] >>
+  simp[] >>
+  rpt strip_tac >> Cases_on `op = h`
+  >- (gvs[] >> irule below_all_live_cons_head >> simp[]) >>
+  simp[below_all_live_cons_other] >> gvs[] >> metis_tac[]
+QED
+
+Theorem below_all_live_core_prefix:
+  !m core inputs. ALL_DISTINCT core /\ EVERY is_var_operand core ==>
+    ?pre tail. core = pre ++ tail /\
+      DISJOINT (set pre) (set (MAP Var inputs)) /\
+      (!op. MEM op core /\ ~MEM op (MAP Var inputs) ==>
+        (below_all_live op inputs (REPLICATE m dead_stack_marker ++ core) <=>
+         MEM op pre))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~is_var_operand dead_stack_marker` by
+    simp[stackPlanTypesTheory.is_var_operand_def, dead_stack_marker_def] >>
+  `~MEM dead_stack_marker core` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `bottom_dead_equiv (REPLICATE m dead_stack_marker ++ core) core` by
+    (simp[bottom_dead_equiv_def] >> qexistsl_tac [`m`, `0`, `core`] >> simp[]) >>
+  drule below_all_live_prefix >> disch_then (qspec_then `inputs` strip_assume_tac) >>
+  qexistsl_tac [`pre`, `tail`] >> simp[] >> rpt strip_tac >>
+  `op <> dead_stack_marker` by (gvs[] >> metis_tac[]) >>
+  drule_all bottom_dead_equiv_below_all_live >> simp[] >> gvs[] >> metis_tac[]
+QED
