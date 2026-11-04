@@ -32,6 +32,94 @@ Ancestors
 Libs
   pairLib
 
+Theorem compile_expr_raw_call_steps[local]:
+  compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa =
+    (vv,sb) ==>
+  ?addr data len ptr vo go ignored gas ov op result s1 s2 s3 s4 s5 s6 s7.
+    lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+    lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+    emit_op MLOAD [data] s2 = (len,s3) /\
+    emit_op ADD [data; Lit 32w] s3 = (ptr,s4) /\
+    compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws s4 =
+      ((vo,go,ignored),s5) /\
+    (case go of SOME g => (g,s5) | NONE => emit_op GAS [] s5) = (gas,s6) /\
+    compile_raw_call_outbuf flags.rcf_max_outsize s6 = ((ov,op),s7) /\
+    compile_raw_call_finish addr ptr len gas
+      (case vo of SOME v => v | NONE => Lit 0w)
+      (if flags.rcf_is_delegate then DelegateCall
+       else if flags.rcf_is_static then StaticCall else RegularCall)
+      flags.rcf_max_outsize flags.rcf_revert_on_failure ov op s7 = (result,sb) /\
+    vv = (if flags.rcf_max_outsize = 0 then StackValue ann result
+          else LocatedValue ann (mk_ptr result LocMemory))
+Proof
+  simp[compile_expr_call, compile_call_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  Cases_on `flags.rcf_max_outsize = 0` >> gvs[]
+QED
+
+Theorem raw_call_kwargs_types[local]:
+  raw_call_kws_ok flags es ==>
+  EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws /\
+  EVERY (\e. expr_type e = BaseT (UintT 256)) es
+Proof
+  simp[raw_call_kws_ok_def] >> strip_tac >>
+  `EVERY (\k. k = EKValue \/ k = EKGas) flags.rcf_kws` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     Cases_on `k` >> gvs[]) >>
+  simp[] >>
+  `EVERY (\t. t = BaseT (UintT 256)) (MAP expr_type es)` suffices_by
+    simp[EVERY_MAP] >>
+  asm_rewrite_tac[] >> simp[EVERY_MAP, EVERY_MEM] >>
+  rpt strip_tac >> rename1 `MEM k flags.rcf_kws` >>
+  `k = EKValue \/ k = EKGas` by
+    (qpat_x_assum `EVERY _ _` mp_tac >> simp[EVERY_MEM]) >>
+  gvs[ext_call_kw_type_def]
+QED
+
+(* Only the keyword suffix is all-word. Its compiler is the standard ordered
+   word-argument runner followed by selection of value= and gas=. *)
+Theorem raw_call_kwargs_word_args[local]:
+  !ks es sa vo go d sb.
+    EVERY (\k. k = EKValue \/ k = EKGas) ks /\
+    LENGTH es = LENGTH ks /\
+    compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) ==>
+    ?xs. lower_word_args cenv (K (BaseT (UintT 256))) es sa = (xs,sb) /\
+         vo = ext_call_kwarg EKValue ks xs /\
+         go = ext_call_kwarg EKGas ks xs /\ d = NONE
+Proof
+  Induct >- simp[compile_ext_call_kwargs_def, lower_word_args_def,
+                comp_return_def, ext_call_kwarg_def] >>
+  rpt gen_tac >> Cases_on `es` >>
+  simp[compile_ext_call_kwargs_def, lower_word_args_def, comp_return_def] >>
+  strip_tac >>
+  gvs[compile_ext_call_kwarg_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[comp_bind_def, comp_return_def]) >>
+  first_x_assum drule_all >> strip_tac >>
+  gvs[ext_call_kwarg_def]
+QED
+
+Theorem raw_call_kwargs_sim[local]:
+  EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH es = LENGTH ks /\
+  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256))) Inv es /\ Inv st /\
+  wb_args_shape cenv (K (BaseT (UintT 256))) es /\
+  compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) /\
+  eval_exprs cx es st = (rr,st') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
+    (\s. ?xs vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx st sa s0 st' es xs vs s /\
+       vo = ext_call_kwarg EKValue ks xs /\
+       go = ext_call_kwarg EKGas ks xs /\ d = NONE)
+    (wb_args_exit rr)
+Proof
+  strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
+  drule_all lower_typed_args_sim >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  strip_tac >> irule frag_exec_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
 Theorem eval_expr_raw_call_operands[local]:
   eval_exprs cx args es = (INL (addr_v::data_v::kvs), es1) /\
   dest_AddressV addr_v = SOME target /\ dest_BytesV data_v = SOME data /\
