@@ -1,10 +1,11 @@
 Theory bodyLiteralForceMemory
 Ancestors
-  bodyLiteralMemory exprSimMemoryValues exprSimMemDefs exprSimHypsDefs exprSimProps
+  bodyMemoryPreds bodyLiteralMemory exprSimMemoryValues exprSimMemDefs exprSimHypsDefs exprSimProps
   exprLowering exprLoweringProps fragExecMem
   vyperAST vyperInterpreter vyperTyping valueEncoding
   vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice
+  vyperTypeCallGraph
 
 (* Prior successful uncounted proof and private tactic, retained for reference.
 val literal_word_mem_tac =
@@ -54,4 +55,23 @@ val () =
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_WORD_LITERAL_FORCE_AUDIT OK\n"
      else raise Fail "word literal forcing inherited admission"
+  end;
+
+Theorem body_literal_word_mem_case:
+  !cx ann l. is_word_type ann ==> body_expr_mem_ok cx (Literal ann l)
+Proof
+  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  `expr_sim_pre cenv cx env (Literal ann l) es` by
+    gvs[expr_sim_pre_def, expr_body_pre_def, int_calls_expr_def] >>
+  metis_tac[compile_literal_word_body_sim_mem,
+            compile_literal_word_body_vv_sim_mem]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag body_literal_word_mem_case)
+  in if null axioms andalso null (Thm.hyp body_literal_word_mem_case) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_WORD_LITERAL_CLOSURE_AUDIT OK\n"
+     else raise Fail "word literal closure inherited admission"
   end;

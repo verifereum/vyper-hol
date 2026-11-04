@@ -120,21 +120,12 @@ Proof
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Theorem body_word_literal_mem_ok:
-  !cx ann l. is_word_type ann ==> body_expr_mem_ok cx (Literal ann l)
-Proof
-  rw[body_expr_mem_ok_def] >>
-  `expr_sim_pre cenv cx env (Literal ann l) es` by
-    gvs[expr_sim_pre_body, int_calls_expr_def] >>
-  metis_tac[compile_literal_word_body_sim_mem, compile_literal_word_body_vv_sim_mem]
-QED
-
 Theorem body_word_literal_stmts_mem_ok:
   !cx ann l. is_word_type ann ==> body_stmts_mem_ok cx [Expr (Literal ann l)]
 Proof
   rpt strip_tac >> irule body_stmts_cons_mem_case >>
   simp[body_nil_mem_ok] >> irule body_expr_stmt_mem_case >>
-  simp[body_word_literal_mem_ok]
+  simp[body_literal_word_mem_case]
 QED
 
 (* Clean additive execution/transport outputs.  The general Expr closure is
@@ -151,7 +142,7 @@ val () = List.app (fn th =>
      then print "BODY_STMT_CLOSURE_MEMORY_CLEAN OK\n"
      else raise Fail "unexpected admission in clean statement closure"
   end) [frame_ret_ok_mem_same_frame, body_if_mem_case,
-        body_stmts_cons_mem_case, body_word_literal_mem_ok,
+        body_stmts_cons_mem_case, body_literal_word_mem_case,
         stmt_expr_body_pre, supported_expr_body_calls, expr_body_pre_eval,
         expr_sim_inv_push_scope, expr_sim_inv_stmt, ce_locals_declared_stmt,
         locals_alloc_ok_stmt, compile_expr_stmt_frag_ok_mem,

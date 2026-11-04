@@ -51,17 +51,6 @@ val () =
      else raise Fail "ifexp word closure memory inherited admission"
   end;
 
-Theorem body_literal_word_mem_case:
-  !cx ann l. is_word_type ann ==> body_expr_mem_ok cx (Literal ann l)
-Proof
-  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
-  rpt gen_tac >> strip_tac >>
-  `expr_sim_pre cenv cx env (Literal ann l) es` by
-    simp[expr_sim_pre_body, int_calls_expr_def] >>
-  metis_tac[compile_literal_word_body_sim_mem,
-            compile_literal_word_body_vv_sim_mem]
-QED
-
 Theorem body_name_mem_case:
   !cx ann id. (word_value_type ann \/ ~is_word_type ann) ==>
     body_expr_mem_ok cx (Name ann id)
@@ -80,7 +69,7 @@ val () = List.app (fn th =>
         List.all (fn name => name = "DISK_THM") oracles
      then print "BODY_LEAF_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "leaf closure memory inherited admission"
-  end) [body_literal_word_mem_case, body_name_mem_case];
+  end) [body_name_mem_case];
 
 Theorem body_attribute_name_mem_case:
   !cx ann sid id fld.
