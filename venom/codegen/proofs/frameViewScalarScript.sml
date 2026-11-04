@@ -160,6 +160,17 @@ Proof
        contract_transient_def]
 QED
 
+Triviality eval_operands_frame_view:
+  !ops. (!x. MEM (Var x) ops ==> ~retpc_var fn x) ==>
+        eval_operands ops (frame_view fn ra s with vs_memory := m) =
+        eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def] >> rpt strip_tac >>
+  `eval_operand h (frame_view fn ra s with vs_memory := m) = eval_operand h s`
+    by (irule eval_operand_frame_view >> rw[] >> fs[]) >>
+  simp[]
+QED
+
 Theorem storage_base_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode [SSTORE; TSTORE] /\ step_inst_base inst s = OK s' ==>
@@ -173,6 +184,13 @@ Proof
   Cases_on `inst.inst_opcode` >> gvs[] >>
   qpat_assum `inst.inst_opcode = _`
     (fn th => fs[opcode_equation (rhs (concl th))]) >>
+  (* the static-frame guard reads the same on both states *)
+  `eval_operands inst.inst_operands (frame_view fn ra s with vs_memory := m) =
+   eval_operands inst.inst_operands s`
+    by (irule eval_operands_frame_view >> simp[]) >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
+  Cases_on `s.vs_call_ctx.cc_static /\
+            IS_SOME (eval_operands inst.inst_operands s)` >> gvs[] >>
   irule exec_write2_frame_view >>
   simp[frame_view_def, sstore_def, tstore_def]
 QED
