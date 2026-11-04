@@ -1107,7 +1107,10 @@ Proof
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
   simp[run_inst_seq_def, step_SHR, step_SHL,
        eval_operand_def, lookup_var_update_var, bind_outputs_def] >>
-  simp[step_inst_base_def, exec_pure2_def, eval_operand_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``SHR``, mk_inst_def,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
+  simp[stepInstBaseLib.simp_opcode_clause ``SHL``, mk_inst_def,
+       exec_pure2_def, eval_operand_def,
        bind_outputs_def, lookup_var_update_var] >>
   simp[dimword_def, update_var_def] >> rpt strip_tac >>
   gvs[not_fresh_at_def] >>
@@ -1153,14 +1156,14 @@ Proof
   simp[emitted_insts_def] >>
   CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
   simp[rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
-       eval_operand_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       mk_inst_def, eval_operand_def] >>
   `b < dimword (:256)` by decide_tac >>
   simp[exec_write2_def, eval_operand_def, w2n_n2w] >>
   `eval_operand ptr_op (mstore b (n2w n) s) = SOME (n2w b)` by
     (Cases_on `ptr_op` >> gvs[eval_operand_def, mstore_def, lookup_var_def]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
-       eval_operand_def, bind_outputs_def] >>
+  simp[Once run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``ADD``,
+       exec_pure2_def, eval_operand_def, bind_outputs_def] >>
   `eval_operand val_op
      (update_var (STRING #"%" (toString sa.cs_next_var)) (n2w b + 32w)
        (mstore b (n2w n) s)) = SOME v` by
@@ -1168,8 +1171,8 @@ Proof
      gvs[eval_operand_def, lookup_var_update_var, not_fresh_at_def,
          mstore_def, lookup_var_def]) >>
   fs[word_add_n2w] >>
-  simp[run_inst_seq_def, step_inst_base_def, exec_write2_def,
-       eval_operand_def, lookup_var_update_var, w2n_n2w] >>
+  simp[run_inst_seq_def, stepInstBaseLib.simp_opcode_clause ``MSTORE``,
+       exec_write2_def, eval_operand_def, lookup_var_update_var, w2n_n2w] >>
   simp_tac (srw_ss()) [mstore_def, update_var_def, LET_THM] >>
   rpt strip_tac >>
   gvs[not_fresh_at_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>

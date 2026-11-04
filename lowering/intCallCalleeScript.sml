@@ -344,8 +344,8 @@ Proof
   `step_inst_base (mk_inst id PARAM [Lit (n2w idx)]
                      [STRING #"%" (toString nv)]) s =
    OK (update_var (STRING #"%" (toString nv)) (EL idx s.vs_params) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, wordsTheory.w2n_n2w]) >>
+    (simp[Once step_inst_base_def, mk_inst_def] >>
+     simp[wordsTheory.w2n_n2w]) >>
   last_x_assum (qspecl_then [`id + 1`, `idx + 1`, `nv + 1`,
     `update_var (STRING #"%" (toString nv)) (EL idx s.vs_params) s`]
     mp_tac) >>
