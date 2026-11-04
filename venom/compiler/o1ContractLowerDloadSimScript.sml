@@ -12,6 +12,7 @@ Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list venomFnScheduleRunner
   venomCompilerTypes irSupply venomPassDispatcher venomInst
+  o1LowerDloadPairedAllocation
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
@@ -70,34 +71,6 @@ Proof
   first_x_assum (qspecl_then [`u`, `w`] mp_tac) >> simp[]
 QED
 
-(* Allocation boundary equations: no memory is initialized by ALLOCA. *)
-Theorem lower_dload_alloca_fresh:
-  inst.inst_outputs = [out] /\
-  FLOOKUP s.vs_allocas inst.inst_id = NONE ==>
-  exec_alloca inst s amount =
-    OK (update_var out (n2w s.vs_alloca_next)
-      (s with <|vs_allocas := s.vs_allocas |+
-                    (inst.inst_id, (s.vs_alloca_next, w2n amount));
-                vs_alloca_next := s.vs_alloca_next + w2n amount|>))
-Proof
-  simp[venomExecSemanticsTheory.exec_alloca_def]
-QED
-
-Theorem lower_dload_alloca_repeated:
-  inst.inst_outputs = [out] /\
-  FLOOKUP s.vs_allocas inst.inst_id = SOME (addr,sz) ==>
-  exec_alloca inst s amount = OK (update_var out (n2w addr) s)
-Proof
-  simp[venomExecSemanticsTheory.exec_alloca_def]
-QED
-
-Theorem lower_dload_merge_allocation_memory:
-  (merge_callee_state caller callee).vs_allocas = caller.vs_allocas /\
-  (merge_callee_state caller callee).vs_alloca_next = caller.vs_alloca_next /\
-  (merge_callee_state caller callee).vs_memory = callee.vs_memory
-Proof
-  simp[venomExecSemanticsTheory.merge_callee_state_def]
-QED
 
 Theorem lower_dload_translate_add:
   !x z b c. ((x:bytes32) + n2w c - n2w b) + z =
@@ -162,72 +135,6 @@ Proof
   asm_rewrite_tac[] >> decide_tac
 QED
 
-Theorem lower_dload_frontier_credit_bound:
-  !n m k q. m = n + 32*k /\ k <= q /\
-    n + 32*q < dimword (:256) ==> m < dimword (:256)
-Proof
-  rpt strip_tac >> decide_tac
-QED
-
-Theorem lower_dload_frontier_credit_step:
-  !n m k a:num. m = n + 32*k ==>
-    m+a = (n+a) + 32*k /\ m+32 = n + 32*(k+1)
-Proof
-  rpt strip_tac >> decide_tac
-QED
-
-(* One effect equation covers fresh, repeated and target-only scratch sites. *)
-Theorem lower_dload_alloca_frontier:
-  exec_alloca inst s amount = OK t ==>
-  t.vs_alloca_next = s.vs_alloca_next +
-    (if FLOOKUP s.vs_allocas inst.inst_id = NONE then w2n amount else 0)
-Proof
-  Cases_on `inst.inst_outputs` >>
-  simp[venomExecSemanticsTheory.exec_alloca_def] >>
-  rename1 `inst.inst_outputs = out::outs` >>
-  Cases_on `outs` >> simp[] >>
-  Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-  >- (simp[venomStateTheory.update_var_def] >> strip_tac >> gvs[]) >>
-  PairCases_on `x` >> simp[venomStateTheory.update_var_def] >>
-  strip_tac >> gvs[]
-QED
-
-Theorem lower_dload_alloca_credit:
-  exec_alloca i s (amount:bytes32) = OK t /\
-  exec_alloca j s' amount = OK t' /\
-  (FLOOKUP s.vs_allocas i.inst_id = NONE <=>
-   FLOOKUP s'.vs_allocas j.inst_id = NONE) /\
-  s'.vs_alloca_next = s.vs_alloca_next + 32*k ==>
-  t'.vs_alloca_next = t.vs_alloca_next + 32*k
-Proof
-  strip_tac >>
-  qpat_x_assum `exec_alloca i _ _ = _`
-    (mp_then Any assume_tac lower_dload_alloca_frontier) >>
-  qpat_x_assum `exec_alloca j _ _ = _`
-    (mp_then Any assume_tac lower_dload_alloca_frontier) >>
-  Cases_on `FLOOKUP s.vs_allocas i.inst_id = NONE` >> gvs[] >> decide_tac
-QED
-
-Theorem lower_dload_scratch_credit:
-  exec_alloca i s' (32w:bytes32) = OK t' /\
-  FLOOKUP s'.vs_allocas i.inst_id = NONE /\
-  s'.vs_alloca_next = s.vs_alloca_next + 32*k ==>
-  t'.vs_alloca_next = s.vs_alloca_next + 32*(k+1)
-Proof
-  strip_tac >> drule lower_dload_alloca_frontier >>
-  simp[] >> strip_tac >> decide_tac
-QED
-
-Theorem lower_dload_merge_credit:
-  caller'.vs_alloca_next = caller.vs_alloca_next + 32*k /\
-  R caller.vs_allocas caller'.vs_allocas ==>
-  (merge_callee_state caller' callee').vs_alloca_next =
-    (merge_callee_state caller callee).vs_alloca_next + 32*k /\
-  R (merge_callee_state caller callee).vs_allocas
-    (merge_callee_state caller' callee').vs_allocas
-Proof
-  simp[lower_dload_merge_allocation_memory]
-QED
 
 (* The simulation: every terminating run of C is matched by a run of C'
    up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
