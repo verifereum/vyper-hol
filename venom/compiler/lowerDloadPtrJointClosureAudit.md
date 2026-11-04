@@ -163,7 +163,7 @@ arguments into Q; no completed-call induction is being used.
   none follows merely from boundary_core. It returns source reachability,
   pop boundary, resumed control, Defs and suffix layouts. Still reconstruct
   Cover, Support and Stack after pop. Terminal ASSIGN cannot yield IntRet;
-  terminal REVERT yields Halt rather than IntRet. Need step_inst result
+  terminal REVERT yields Abort Revert_abort rather than IntRet (or an Error on malformed/undefined operands). Need step_inst result
   inversion for both, not the successful-exec_block exclusion.
 
 ## 3. Concrete consumer-interface failure
@@ -286,3 +286,105 @@ source safety, or scratch headroom. No Support/Stack/Saved/Cover propagation or
 terminal closure was established by these interface checks. The old forward
 DLOAD consumer in ExpansionNext retains its independent clean-offset boundary
 interface; this repair does not require an import cycle from it to BackwardNext.
+
+## 7. Terminal semantic boundary experiment (C1.12.67)
+
+Checked interfaces are in lowerDloadPtrJointClosureProbeScript.sml. These
+are semantic probes, not a proof that section 1's Q is closed.
+
+* `forwarding_copy_success_reflect` allows distinct destination values. Target
+  success forces three defined operands and the returndata source-range check.
+  Source success additionally needs defined source destination, equal evaluated
+  offset and size, and equal returndata lengths. There is no destination bound
+  or equality check in step_inst RETURNDATACOPY. The source poststate preserves
+  vars, labels, allocation table and frontier. No memory agreement is concluded.
+* `terminal_assign_success_reflect` proves source success, paired original-var
+  definedness and variable-taint equality, and unchanged tables/frontiers/labels.
+  It requires all-operand definedness equivalence, NOT equal operand values.
+  This is stronger evidence than conditional forwarding_step_var_taint alone.
+* `revert_no_reachable_successor_result` excludes both OK and IntRet, for every
+  operand shape. `assign_no_terminal_constructor` excludes is_terminator,
+  INVOKE, and IntRet for ASSIGN. Thus interior ASSIGN excludes block, call and
+  return rules separately. Endpoint REVERT excludes next by the nonterminator
+  condition, block by OK inversion, call by opcode, and return by IntRet inversion.
+  No successful-exec_block lemma is used for these exclusions.
+
+### Literal instantiations and residual origins
+
+For entry section 4.2, instantiate the copy lemma with source i,s, target j=t's
+active instruction (after singleton control establishes j=i), and Ct=C'. Target
+R_next gives its OK premise. N's boundary equal-environment supplies returndata
+length and labels at phase zero. Definedness for the destination comes from
+Defs(U f) plus equal labels (case analysis on the operand); variable membership
+comes from active source instruction membership in fn_insts. To apply
+`scalar_operand_equal` for off and sz one still must explicitly derive:
+
+```
+ !v. off = Var v ==> v IN V f
+ !v. sz  = Var v ==> v IN V f
+ op_prov G off = NONE /\ op_prov G sz = NONE
+ op_taint tn off = {} /\ op_taint tn sz = {}
+```
+
+These are not new external assumptions: intended producers are source
+fn_ptr_ok/ptr_use_ok for non-pointer scalar positions and source taint_ok for
+RETURNDATACOPY (it is neither ASSIGN, shift nor store). Support connects G to
+the static witness. Their combined extraction from A/N, especially the opaque
+retpc exclusion, has NOT been proved by this experiment. Generic copy success
+therefore does not yet instantiate the complete forwarding-entry contract.
+
+For section 4.3 instantiate the ASSIGN lemma with current source/target i and
+states s,t, U=U f, tn,un. T already has its variable-definedness and taint
+premises. Operand membership follows from active_inst and fn_ir_vars. The
+remaining exact premise is
+
+```
+ !op. MEM op i.inst_operands ==>
+   (eval_operand op s = NONE <=> eval_operand op t = NONE).
+```
+
+T's Defs handles Var, and Lit is total. For Label l this requires equivalence
+of FLOOKUP s.vs_labels l and FLOOKUP t.vs_labels l being NONE. The checked
+`terminal_variable_definedness_does_not_cover_labels` isolates why Defs alone
+does not imply it. It is NOT a counterexample to T with its reachability and
+control fields, nor to the TASK. Equal labels holds at N's boundary and both
+copy/ASSIGN preserve labels; retaining this fact in a revised terminal formula
+would avoid reconstructing it from two independent frame_reachable derivations.
+Current T does not retain it. No such revision has been made here.
+
+To advance interval witnesses in T after this semantic step one must also prove
+`k<z <=> kt<zz` and corresponding endpoint alignment from actual transformed
+prefix lengths. Control match at the current instruction alone has not been
+shown to produce this endpoint correspondence. Forward:384-486 transports a
+SOURCE pair to a target pair at LENGTH transformed prefixes; entry instead
+starts with an arbitrary TARGET pair. Required origin formula is:
+
+```
+ Cover q f g /\ current singleton control /\ target pair(tb,aa,zz)
+ /\ target index=aa ==>
+ ?bb a z preA preZ. source pair(bb,a,z) /\ source index=a /\
+   aa=LENGTH preA /\ zz=LENGTH preZ /\
+   preA/preZ are the actual transformed source prefixes.
+```
+
+The forward pair theorem does not prove this converse. In particular resolver
+preservation and unchanged ASSIGN intervals must be used in the reverse
+origin argument, rather than renaming its existential prefixes.
+
+Finally about_to_revert at a copy supplies only an active REVERT at the next
+index. It supplies neither the pair's resolved src=Lit 0w condition nor the
+resolved destination/size equalities. Thus section 4.2's pair premise cannot
+be inferred merely by unfolding about_to_revert. For this case a separate
+immediate-endpoint alternative is needed unless a different transport retains
+the normal relation. Its next target instruction is REVERT; checked inversion
+then excludes all successor constructors, but operand-taint safety at that
+endpoint still requires a ghost relation and source reachability. Existing T
+specifically requires two forwarding pairs, so it cannot be asserted as the
+output of this entry without the missing origin proof.
+
+Outcome: semantic success reflection is possible without equal pointer values;
+the current Q experiment still has explicit scalar-origin, label-definedness,
+pair-converse/endpoint alignment, and about_to_revert-only entry residuals.
+No frozen-contract falsehood, complete terminal closure, or global induction
+has been established. This is a terminal diagnostic deliverable for strategist
+review, not authorization to add further isolated opcode inventory.
