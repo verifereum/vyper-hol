@@ -158,6 +158,13 @@ Inductive gas_exempt_cert:
      gas_exempt_cert memory tops (ctx, func) (try source handler)
        (es, s0) marks (err, ee) (leaf, finish))
 
+[~get_scopes:]
+  (!memory tops ctx func k es s0 marks err ee leaf finish.
+     gas_exempt_cert memory tops (ctx, func) (k es.scopes) (es, s0)
+       marks (err, ee) (leaf, finish) ==>
+     gas_exempt_cert memory tops (ctx, func) (bind get_scopes k) (es, s0)
+       marks (err, ee) (leaf, finish))
+
 [~invoke:]
   (!memory tops ctx func s callee entered source es marks err ee leaf finish.
      gas_invoke_entry (ctx, func) s callee entered /\
@@ -224,6 +231,7 @@ Proof
   >- (rpt gen_tac >> simp[] >> strip_tac >>
       irule gas_source_try_exception >> qexists_tac `mid` >>
       simp[evaluation_state_component_equality])
+  >- (rpt gen_tac >> simp[get_scopes_def, bind_def, return_def])
   >> rpt gen_tac >> simp[] >> strip_tac >>
   drule gas_invoke_entry_readings >> strip_tac >>
   conj_tac >- gvs[] >> metis_tac[gas_focus_path_rules]
