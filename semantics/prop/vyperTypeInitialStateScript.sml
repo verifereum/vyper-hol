@@ -858,11 +858,11 @@ Theorem functions_well_typed_callable_body_env_base:
     type_stmts env_body ret body = SOME env_after /\
     (!id typ. MEM (id,typ) args ==>
        FLOOKUP env_body.var_types id = SOME typ /\
-       FLOOKUP env_body.var_assignable id = SOME T) /\
+       IS_SOME (FLOOKUP env_body.var_assignable id)) /\
     (!n ty. FLOOKUP env_body.var_types n = SOME ty ==>
        ?id. MEM (id,ty) args /\ n = id) /\
     (!n b. FLOOKUP env_body.var_assignable n = SOME b ==>
-       ?id typ. MEM (id,typ) args /\ n = id /\ b = T)
+       ?id typ. MEM (id,typ) args /\ n = id)
 Proof
   rw[functions_well_typed_def] >>
   first_x_assum

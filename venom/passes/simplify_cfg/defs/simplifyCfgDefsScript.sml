@@ -169,8 +169,22 @@ Definition update_phi_bypass_def:
                     | _ => op) inst.inst_operands
 End
 
+(* A JNZ whose two targets are the same becomes a JMP.  Python: the
+   canonicalization in _merge_jump, so that later consumers see a JNZ only
+   with two successors. *)
+Definition canon_jnz_inst_def:
+  canon_jnz_inst inst =
+    case inst.inst_operands of
+      [c; t; f] =>
+        if inst.inst_opcode = JNZ /\ t = f then
+          inst with <| inst_opcode := JMP; inst_operands := [t] |>
+        else inst
+    | _ => inst
+End
+
 (* Perform the jump bypass: update A's terminator, update target PHIs,
-   remove b. Accumulates label replacement in label_map.
+   remove b. Accumulates label replacement in label_map.  When the target
+   is A itself, A gets both updates (Python updates one block in place).
    Returns (updated_fn, updated_label_map) or NONE on failure. *)
 Definition do_merge_jump_def:
   do_merge_jump func a b label_map =
@@ -179,11 +193,15 @@ Definition do_merge_jump_def:
         (case lookup_block target_lbl func.fn_blocks of
            SOME target =>
              (* Update A's terminator: b → target *)
-             let a' = a with bb_instructions :=
-               MAP (λinst.
+             let insts = MAP (λinst.
                  if ¬is_terminator inst.inst_opcode then inst
-                 else subst_label_inst b.bb_label target_lbl inst)
+                 else canon_jnz_inst
+                        (subst_label_inst b.bb_label target_lbl inst))
                a.bb_instructions in
+             let a' = a with bb_instructions :=
+               (if target_lbl = a.bb_label then
+                  MAP (update_phi_bypass a.bb_label b.bb_label) insts
+                else insts) in
              (* Update target's PHIs *)
              let target' = target with bb_instructions :=
                MAP (update_phi_bypass a.bb_label b.bb_label)

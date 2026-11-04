@@ -227,6 +227,37 @@ val () = List.app (fn in_deploy =>
    List.app (fn bd => assert_none (check_address_bytes bd in_deploy))
      [``Fixed 19``, ``Dynamic 20``, ``Dynamic 32``])) [false, true]
 
+(* An immutable is assignable only in the constructor (Vyper's
+   "Immutable value cannot be written to", local.py): the runtime check
+   rejects a write to it from a nonpayable external function, as an
+   assignment or an augmented assignment, and accepts the constructor's
+   write with a runtime read.  (A view function would be rejected for its
+   mutability whatever the immutable's assignability.) *)
+fun immutable_write_modules writes =
+  ``[(NONE,
+      [VariableDecl Private Immutable "imm" (BaseT (UintT 256)) NONE;
+       FunctionDecl Deploy Nonpayable F F "__init__" [] [] NoneT
+         [Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+            (Literal (BaseT (UintT 256)) (IntL 1))];
+       FunctionDecl External Nonpayable F F "f" [] [] (BaseT (UintT 256))
+         (^writes ++
+          [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE, "imm")))])])]
+    : (num option # toplevel list) list``
+
+fun immutable_write_check in_deploy writes =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^empty_layouts
+        ^zero_address ^(immutable_write_modules writes)``
+
+val () = assert_some (immutable_write_check false ``[] : stmt list``)
+val () = assert_some (immutable_write_check true ``[] : stmt list``)
+val () = assert_none (immutable_write_check false
+  ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "imm")))
+       (Literal (BaseT (UintT 256)) (IntL 2))]``)
+val () = assert_none (immutable_write_check false
+  ``[AugAssign (BaseT (UintT 256)) (TopLevelNameTarget (NONE, "imm")) Add
+       (Literal (BaseT (UintT 256)) (IntL 3))]``)
+
 (* Basic API and ML-Boolean construction. *)
 val empty_check = vyperCheckContractLib.check_contract
   {in_deploy = false, layouts = empty_layouts,
@@ -748,6 +779,39 @@ val () = List.app (assert_some o check_constants)
     tdecl ``BaseT BoolT`` "E"
       ``Builtin (BaseT BoolT) (Bop Eq) [^(tname b32 "K"); ^(tname b32 "K")]``]]
 
+(* a13-08 p15x: retain the exact p03 uint8 conversion/store and getter, then
+   mutate only the constructor's defaults. Both baseline modes must accept. *)
+val p03_constructor =
+  ``FunctionDecl Deploy Nonpayable F F "__init__"
+      [("a",BaseT (UintT 8))] [] NoneT
+      [Assign (BaseTarget (TopLevelNameTarget (NONE,"x")))
+        (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+          [Name (BaseT (UintT 8)) "a"]) ]``;
+val p03_constructor_modules =
+  ``[(NONE,
+      [VariableDecl Private Storage "x" (BaseT (UintT 256)) (SOME 0);
+       ^p03_constructor;
+       FunctionDecl External Nonpayable F F "get" [] [] (BaseT (UintT 256))
+         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"x")))]])]
+    : (num option # toplevel list) list``;
+val p03_constructor_layouts =
+  ``[(0w : address,
+      ([((NONE,"x"),0)] : storage_layout, [] : storage_layout))]``;
+val p15x_constructor_modules = let
+  val (head,fields) = strip_comb p03_constructor
+  val changed = List.take (fields,6) @
+    [``[Literal (BaseT (UintT 8)) (IntL 5)]``] @ List.drop (fields,7)
+in subst [p03_constructor |-> list_mk_comb (head,changed)]
+     p03_constructor_modules end;
+val () = List.app (fn in_deploy => let
+  fun check modules = vyperCheckContractLib.check_contract_conv
+    (vyperCheckContractLib.mk_check_contract
+      {in_deploy = in_deploy, layouts = p03_constructor_layouts,
+       address = zero_address, modules = modules})
+in assert_some (check p03_constructor_modules);
+   assert_none (check p15x_constructor_modules)
+end) [false,true];
+
 (* Event declaration regressions: indexed aggregates and duplicate event names
    are rejected; field-name duplication and four indexed fields remain legal. *)
 Theorem event_declaration_regressions:
@@ -1191,7 +1255,8 @@ val () = body_case "transient write" ``NoneT``
   ``[Assign (BaseTarget (TopLevelNameTarget (NONE, "t"))) ^(uint 1)]``
   [``Nonpayable``] [``View``]
 val () = body_case "write inside a tuple target" ``NoneT``
-  ``[Assign (TupleTarget [BaseTarget (NameTarget "a");
+  ``[AnnAssign "y" (BaseT AddressT) ^arg_a;
+     Assign (TupleTarget [BaseTarget (NameTarget "y");
                           BaseTarget (TopLevelNameTarget (NONE, "x"))])
        (Builtin (TupleT [BaseT AddressT; BaseT (UintT 256)])
           (MakeArray NONE (Fixed 2)) [^arg_a; ^(uint 1)])]``
@@ -1296,6 +1361,20 @@ val () = mutability_case ("constructor", ``Deploy``, ``F``, no_dflts, ``NoneT``,
   ``[Pass]``, [``Nonpayable``, ``Payable``], [``View``, ``Pure``])
 val () = mutability_case ("nonreentrant", ``External``, ``T``, no_dflts,
   ``NoneT``, ``[Pass]``, [``View``], [``Pure``])
+
+(* Arguments of external functions are calldata: no write to one
+   type-checks.  Internal-function arguments are writable.  These checks run
+   in runtime mode, which skips the constructor body; vyperArgWriteTypingTest
+   covers constructor arguments. *)
+val arg_n_write = ``[Assign (BaseTarget (NameTarget "n")) ^(uint 1)]``
+val () = mutability_case ("external argument write", ``External``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [], [``Nonpayable``, ``Payable``])
+val () = mutability_case ("external argument augmented assignment",
+  ``External``, ``F``, no_dflts, ``NoneT``,
+  ``[AugAssign (BaseT (UintT 256)) (NameTarget "n") Add ^(uint 1)]``,
+  [], [``Nonpayable``])
+val () = mutability_case ("internal argument write", ``Internal``, ``F``,
+  no_dflts, ``NoneT``, arg_n_write, [``Pure``, ``Nonpayable``], [])
 
 (* A module that nothing initializes has no storage in the layout.  Its
    functions that no live function calls are not checked, so get_x and the
@@ -1512,6 +1591,39 @@ val () = List.app assert_some
    aug_function bool_ty bool_ty ``vyperAST$And`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$Or`` (op_name bool_ty "y"),
    aug_function bool_ty bool_ty ``vyperAST$XOr`` (op_name bool_ty "y")]
+
+(* Each collision has an accepted control differing only in its getter name
+   or omitted-default prefix. Check the full checker in both modes. *)
+fun check_selector_decls in_deploy layouts decls =
+  vyperCheckContractLib.check_contract_conv
+    ``check_contract ^(if in_deploy then T else F) ^layouts ^zero_address
+        [(NONE, ^decls)]``
+
+val () = List.app (fn in_deploy =>
+  (List.app (fn (name, expect) => let
+     val layouts =
+       ``([((0w : address),
+            ([((NONE, ^name), 0)] : storage_layout, [] : storage_layout))]
+           : (address # (storage_layout # storage_layout)) list)``
+     val decls =
+       ``[FunctionDecl External Nonpayable F F "burn"
+            [("a", BaseT (UintT 256))] [] NoneT [];
+          HashMapDecl Public F ^name (BaseT (BytesT (Fixed 16)))
+            (Type (BaseT (UintT 256))) (SOME 0)]``
+   in
+     expect (check_selector_decls in_deploy layouts decls)
+   end)
+   [(``"collate_propagate_storage"``, assert_none),
+    (``"stored"``, assert_some)];
+   List.app (fn (dflts, expect) =>
+     expect (check_selector_decls in_deploy empty_layouts
+       ``[FunctionDecl External Nonpayable F F "burn"
+            [("a", BaseT (UintT 256)); ("b", BaseT (UintT 256))]
+            ^dflts NoneT [];
+          FunctionDecl External Nonpayable F F "collate_propagate_storage"
+            [("a", BaseT (BytesT (Fixed 16)))] [] NoneT []]``))
+   [(``[Literal (BaseT (UintT 256)) (IntL 0)]``, assert_none),
+    (``([] : expr list)``, assert_some)])) [false, true]
 
 (* Like Vyper (ImmutableViolation "Cannot modify loop variable"), a loop
    body may not write the array it iterates over: the evaluator iterates

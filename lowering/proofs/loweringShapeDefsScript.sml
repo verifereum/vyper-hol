@@ -16,6 +16,8 @@
  *   compiler_label, jump_label_ok, inst_jump_labels_ok
  *                                — labels a terminator may jump to: compiler
  *                                  labels or "fn_" function entries
+ *   label_sfx                    — the fresh_label suffix a label was made
+ *                                  with; different suffixes, different labels
  *   lowered_inst_ok              — the per-instruction shape; `internal`
  *                                  selects internal-function or entry code
  *   shape_state, shape_extends   — the state invariant and the append step
@@ -101,6 +103,12 @@ End
 (* Labels made by fresh_label. *)
 Definition compiler_label_def:
   compiler_label l <=> l IN compiler_labels_future 0
+End
+
+(* Labels made by fresh_label with suffix sfx; two different suffixes never
+   give the same label, which is how a JNZ's two targets differ. *)
+Definition label_sfx_def:
+  label_sfx sfx l <=> ?k. l = fresh_label_output sfx k
 End
 
 (* Compiler-generated labels and external entry labels ("fn_" ++ name). *)

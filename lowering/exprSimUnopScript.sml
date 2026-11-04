@@ -35,10 +35,10 @@ Ancestors
   fragExec varsExt exprSim freshWrites
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
-  builtinSimple builtinProps
+  builtinSimple builtinProps arithmeticProps vyperArith
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
   vyperValueOperation valueEncoding venomExecSemantics venomInst venomState
-  vyperTyping
+  vyperTyping vyperTypeSystem
 Libs
   intLib pairLib
 
@@ -365,6 +365,224 @@ Proof
   simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
        compile_builtin_dispatch_body_def] >>
   simp[as_stack_val_pair, pairTheory.UNCURRY] >> rw[]
+QED
+
+(* Neg dispatch and lowering boundaries. *)
+Theorem compile_expr_body_neg:
+  !f g h cenv ty ann args st.
+    compile_expr_body f g h cenv ty (Builtin ann Neg args) st =
+    g cenv (expr_type (Builtin ann Neg args)) ty Neg args st
+Proof
+  rpt gen_tac >> simp[compile_expr_body_def] >>
+  Cases_on `args` >> simp[] >> rename1 `Builtin _ _ (a1::r1)` >>
+  Cases_on `a1` >> simp[] >> Cases_on `r1` >> simp[] >>
+  rename1 `Builtin _ _ (_::a2::r2)` >>
+  Cases_on `a2` >> simp[] >> Cases_on `r2` >> simp[] >>
+  rename1 `Builtin _ _ (_::_::a3::r3)` >>
+  Cases_on `a3` >> simp[] >> Cases_on `r3` >> simp[]
+QED
+
+Theorem compile_expr_neg:
+  !cenv ty ann args st.
+    compile_expr cenv ty (Builtin ann Neg args) st =
+    compile_builtin_dispatch cenv (expr_type (Builtin ann Neg args)) ty Neg
+      args st
+Proof
+  rpt gen_tac >>
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_neg] >>
+  simp expr_sizes
+QED
+
+Theorem lower_value_neg:
+  !cenv ty ann e1 sa op sb.
+    lower_value compile_expr cenv ty (Builtin ann Neg [e1]) sa = (op,sb) ==>
+    ?x s1. lower_value compile_expr cenv (expr_type e1) e1 sa = (x,s1) /\
+      compile_neg x (expr_type e1) s1 = (op,sb)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+  simp[Once lower_value_def, comp_bind_def, compile_expr_neg] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def, lower_value_child_call] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rw[] >> gvs[as_stack_val_pair, unwrap_value_def, comp_return_def] >>
+  RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >>
+  qexistsl [`v`, `st1`] >> simp[]
+QED
+
+Theorem compile_neg_stack:
+  !cenv ty ann args sa.
+    ?t op sb. compile_expr cenv ty (Builtin ann Neg args) sa =
+      (StackValue t op,sb)
+Proof
+  rpt gen_tac >> simp[compile_expr_neg] >>
+  simp[Once (CONJUNCT1 (CONJUNCT2 compile_expr_raw_def)),
+       compile_builtin_dispatch_body_def] >>
+  simp[as_stack_val_pair, pairTheory.UNCURRY]
+QED
+
+Theorem straight_fresh_neg:
+  !x ty. straight_fresh (\s. compile_neg x ty s)
+Proof
+  rpt gen_tac >> Cases_on `type_bounds ty` >>
+  simp[compile_neg_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule straight_fresh_bind >> reverse conj_tac
+  >- (irule straight_fresh_emit_op >> simp[fresh_write_op_def]) >>
+  gen_tac >> BETA_TAC >> irule straight_fresh_ignore_bind >> conj_tac
+  >- (irule straight_fresh_emit_void >> simp[fresh_write_op_def]) >>
+  irule straight_fresh_emit_op >> simp[fresh_write_op_def]
+QED
+
+(* Negation fits a signed interval except at its minimum. *)
+Theorem signed_neg_bound:
+  !n i. 0 < n /\ within_int_bound (Signed n) i ==>
+    (within_int_bound (Signed n) (-i) <=> -&(2 ** (n-1)) < i)
+Proof
+  rpt gen_tac >> simp[within_int_bound_def] >>
+  rpt strip_tac >> Cases_on `i < 0` >>
+  Cases_on `0 < i` >> gvs[] >> intLib.ARITH_TAC
+QED
+
+Theorem signed_neg_word_test:
+  !n i. 0 < n /\ n <= 256 /\ within_int_bound (Signed n) i ==>
+    (w2i (i2w (-&(2 ** (n-1))) : bytes32) <
+       w2i (i2w i : bytes32) <=> within_int_bound (Signed n) (-i))
+Proof
+  rpt strip_tac >>
+  `w2i (i2w i : bytes32) = i` by
+    (irule w2i_i2w_within_signed >> metis_tac[]) >>
+  `n - 1 <= 255` by decide_tac >>
+  drule w2i_i2w_neg_pow2 >>
+  drule_all signed_neg_bound >> simp[]
+QED
+
+Theorem neg_int_source:
+  !cx n i es.
+    0 < n /\ within_int_bound (Signed n) i ==>
+    unop_result cx (BaseT (IntT n)) Neg [BaseT (IntT n)] (IntV i) es =
+      if -&(2 ** (n-1)) < i then INL (IntV (-i))
+      else INR (Error (RuntimeError "bounded_int_op bound"))
+Proof
+  rpt strip_tac >> drule_all signed_neg_bound >> strip_tac >>
+  simp[unop_result_def, evaluate_builtin_def,
+       vyperASTTheory.type_to_int_bound_def, bounded_int_op_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem neg_decimal_source:
+  !cx i es.
+    within_int_bound (Signed 168) i ==>
+    unop_result cx (BaseT DecimalT) Neg [BaseT DecimalT] (DecimalV i) es =
+      if -&(2 ** 167) < i then INL (DecimalV (-i))
+      else INR (Error (RuntimeError "bounded_decimal_op"))
+Proof
+  rpt strip_tac >>
+  `within_int_bound (Signed 168) (-i) <=> -&(2 ** 167) < i` by
+    (qspec_then `168` mp_tac signed_neg_bound >> simp[]) >>
+  simp[unop_result_def, evaluate_builtin_def, bounded_decimal_op_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem neg_typed_source:
+  !cx t tv v es.
+    is_numeric_type t /\ ~is_uint_type t /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v ==>
+    (if w2i (FST (type_bounds t)) < w2i (typed_val_to_w256 tv v) then
+       ?v'. unop_result cx t Neg [t] v es = INL v' /\
+         typed_val_to_w256 tv v' = 0w - typed_val_to_w256 tv v
+     else ?m. unop_result cx t Neg [t] v es =
+                INR (Error (RuntimeError m)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(?n. t = BaseT (IntT n)) \/ t = BaseT DecimalT` by
+    (Cases_on `t` >> gvs[is_numeric_type_def] >>
+     rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >> gvs[]) >>
+  gvs[evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  simp[type_bounds_def, type_bits_def, is_signed_type_def,
+       typed_val_to_w256_def, val_to_w256_def]
+  >- (`0 < n` by decide_tac >>
+      drule_all neg_int_source >> strip_tac >>
+      drule_all signed_neg_word_test >>
+      drule_all signed_neg_bound >> rpt strip_tac >>
+      simp[] >> strip_tac >>
+      simp[typed_val_to_w256_def, val_to_w256_def,
+           GSYM integer_wordTheory.MULT_MINUS_ONE, WORD_SUB_LZERO,
+           WORD_SUB_INTRO]) >>
+  drule neg_decimal_source >> strip_tac >>
+  `w2i (i2w i : bytes32) = i` by
+    (irule w2i_i2w_within_signed >> qexists `168` >> simp[]) >>
+  qspec_then `167` mp_tac w2i_i2w_neg_pow2 >> simp[] >> strip_tac >>
+  simp[] >> strip_tac >>
+  simp[typed_val_to_w256_def, val_to_w256_def,
+       GSYM integer_wordTheory.MULT_MINUS_ONE, WORD_SUB_LZERO,
+       WORD_SUB_INTRO]
+QED
+
+Theorem compile_neg_run:
+  !x ty sa op sb ss w.
+    compile_neg x ty sa = (op, sb) /\ fresh_vars_wrt sa ss /\
+    eval_operand x ss = SOME w ==>
+    (w2i (FST (type_bounds ty)) < w2i w ==>
+     ?ss'. run_inst_seq (emitted_insts sa sb) ss = OK ss' /\
+           eval_operand op ss' = SOME (0w - w)) /\
+    (~(w2i (FST (type_bounds ty)) < w2i w) ==>
+     ?ss'. run_inst_seq (emitted_insts sa sb) ss = Abort Revert_abort ss')
+Proof
+  rpt gen_tac >>
+  simp[compile_neg_def, LET_THM] >>
+  pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >>
+  drule emit_op_SGT_correct >>
+  disch_then drule >> simp[eval_operand_def] >>
+  strip_tac >>
+  `eval_operand x ss' = SOME w` by metis_tac[] >>
+  imp_res_tac emit_op_extends >>
+  imp_res_tac emit_void_extends >>
+  conj_tac
+  >- (strip_tac >>
+      `eval_operand ok ss' = SOME 1w` by
+        gvs[integer_wordTheory.WORD_GTi, integerTheory.int_gt, bool_to_word_def] >>
+      `(1w : bytes32) <> 0w` by simp[] >>
+      drule_all emit_void_ASSERT_ok >> strip_tac >>
+      imp_res_tac fresh_vars_wrt_emit_void >>
+      drule emit_op_SUB_correct >> simp[eval_operand_def] >>
+      disch_then drule >> disch_then drule >> strip_tac >>
+      qspecl_then [`cs'`, `cs''`, `sb`] mp_tac run_inst_seq_chain >>
+      simp[] >> disch_then drule >> strip_tac >>
+      qspecl_then [`sa`, `cs'`, `sb`] mp_tac run_inst_seq_chain >>
+      simp[] >> disch_then drule >> strip_tac >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >>
+  `eval_operand ok ss' = SOME 0w` by
+    gvs[integer_wordTheory.WORD_GTi, integerTheory.int_gt, bool_to_word_def] >>
+  drule_all emit_void_ASSERT_revert >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >>
+  `!s. run_inst_seq (emitted_insts sa cs'') ss <> OK s` by simp[] >>
+  drule_all run_inst_seq_chain_err >> strip_tac >>
+  qexists `ss''` >> simp[]
+QED
+
+Theorem compile_neg_frag:
+  !ctx func cenv cx t tv v es.
+    is_numeric_type t /\ ~is_uint_type t /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v ==>
+    unop_frag ctx func cenv cx (\x. compile_neg x t)
+      (typed_val_to_w256 tv v) t (unop_result cx t Neg [t] v es) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all neg_typed_source >> disch_then (qspec_then `es` assume_tac) >>
+  irule unop_frag_straight >>
+  (conj_tac >- (gen_tac >> BETA_TAC >>
+    irule (CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg))) >>
+  (conj_tac >- (Cases_on `t` >>
+    gvs[is_numeric_type_def, is_int_type_def, is_word_type_def] >>
+    rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def])) >>
+  disch_then kall_tac >>
+  Cases_on `w2i (FST (type_bounds t)) < w2i (typed_val_to_w256 tv v)` >>
+  gvs[] >> rpt strip_tac >> drule_all compile_neg_run >> simp[]
 QED
 
 (* ===== not ===== *)

@@ -596,13 +596,13 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
   simp[Once run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_read1_def,
+  simp[Once run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_read1_def,
        bind_outputs_def, eval_operand_def,
        emitHelperPropsTheory.lookup_var_update_var,
        valueEncodingPropsTheory.mem_word_at_eq_mload] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_pure2_def,
+  simp[Once run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def,
        bind_outputs_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+  simp[Once run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
   simp[run_inst_seq_def] >>
   qpat_x_assum `!q k z t. _` kall_tac >>
@@ -988,9 +988,9 @@ Proof
   simp[rich_listTheory.DROP_APPEND1] >> rewrite_tac[GSYM APPEND_ASSOC] >>
   qpat_assum `run_inst_seq (emitted_insts sa sc) s = _`
     (fn th => rewrite_tac[MATCH_MP run_inst_seq_append th]) >>
-  simp[Once run_inst_seq_def, step_inst_base_def, mk_inst_def,
+  simp[Once run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
        exec_pure2_def, bind_outputs_def, eval_operand_def] >>
-  simp[Once run_inst_seq_def, step_inst_base_def, exec_write2_def,
+  simp[Once run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def,
        eval_operand_def, emitHelperPropsTheory.lookup_var_update_var] >>
   simp[run_inst_seq_def] >>
   `w2n (bw+64w) = w2n bw+64` by

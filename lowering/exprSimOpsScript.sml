@@ -591,24 +591,19 @@ QED
 
 (* ===== Bitwise operators ===== *)
 
-(* proves bop_result_bitwise for one of the operations *)
-fun bop_bitwise_tac g =
-  (fs[bop_result_def, evaluate_builtin_def] >>
-   Cases_on `v1` >> Cases_on `v2` >>
-   gvs[evaluate_binop_def, expr_res_ok_def, bounded_int_op_def,
-       val_to_w256_def, i2w_int_and, i2w_int_or, i2w_int_xor,
-       word_value_def] >>
-   FIRST [
-     (* flags *)
-     qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
-     `~(z < 0)` by
-       simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
-     `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
-     pop_assum SUBST1_TAC >>
-     simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos],
-     (* booleans *)
-     rpt (IF_CASES_TAC >> gvs[]) >>
-     simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]]) g;
+Theorem bop_result_bitwise_pairs[local]:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  expr_res_ok (bop_result cx ann bop tys v1 v2 es) ==>
+  ((?i1 i2. v1 = IntV i1 /\ v2 = IntV i2) \/
+   (?b1 b2. v1 = BoolV b1 /\ v2 = BoolV b2) \/
+   (?n1 n2. v1 = FlagV n1 /\ v2 = FlagV n2))
+Proof
+  strip_tac >> gvs[] >>
+  fs[bop_result_def, evaluate_builtin_def] >>
+  Cases_on `v1` >> gvs[evaluate_binop_def, expr_res_ok_def] >>
+  gvs[AllCaseEqs()]
+QED
+
 
 (* And, Or and XOr on two values give the word operation on their words.
    On integers the source checks the result against the type's bound;
@@ -629,6 +624,11 @@ Theorem bop_result_bitwise:
            else word_xor) (val_to_w256 v1) (val_to_w256 v2)
 Proof
   rpt gen_tac >> strip_tac >>
+  `(?i1 i2. v1 = IntV i1 /\ v2 = IntV i2) \/
+   (?b1 b2. v1 = BoolV b1 /\ v2 = BoolV b2) \/
+   (?n1 n2. v1 = FlagV n1 /\ v2 = FlagV n2)` by
+    (irule bop_result_bitwise_pairs >> simp[] >> metis_tac[]) >>
+  gvs[] >>
   qabbrev_tac
     `u = case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0` >>
   `!i1 i2. within_int_bound u i1 /\ within_int_bound u i2 ==>
@@ -636,10 +636,20 @@ Proof
      within_int_bound u (int_xor i1 i2)` by
     simp[int_and_def, int_or_def, int_xor_def, within_int_bound_int_bitwise] >>
   (* one operation at a time, each unfolding a third of the value pairs *)
-  gvs[]
-  >>~- ([`bop_result _ _ And tys _ _ _`], bop_bitwise_tac)
-  >>~- ([`bop_result _ _ Or tys _ _ _`], bop_bitwise_tac) >>
-  bop_bitwise_tac
+  gvs[] >>
+  fs[bop_result_def, evaluate_builtin_def] >>
+  gvs[evaluate_binop_def, expr_res_ok_def] >>
+  gvs[bounded_int_op_def, val_to_w256_def, word_value_def,
+      i2w_int_and, i2w_int_or, i2w_int_xor]
+  >>~- ([`(if _ then 1w else 0w) = _`],
+         rpt IF_CASES_TAC >> gvs[] >>
+         simp[WORD_AND_CLAUSES, WORD_OR_CLAUSES, WORD_XOR_CLAUSES]) >>
+  qmatch_goalsub_abbrev_tac `n2w (Num z)` >>
+  `~(z < 0)` by
+    simp[Abbr `z`, int_and_def, int_or_def, int_xor_def, int_bitwise_neg] >>
+  `(n2w (Num z) : bytes32) = i2w z` by simp[i2w_def] >>
+  pop_assum SUBST1_TAC >>
+  simp[Abbr `z`, i2w_int_and, i2w_int_or, i2w_int_xor, i2w_pos]
 QED
 
 (* The lowering emits the word operation, one instruction. *)

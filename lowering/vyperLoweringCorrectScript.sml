@@ -56,7 +56,7 @@ Ancestors
   venomExecSemantics
   venomState
   compileEnv e2eDefs supportedProgram compileVyper immutableSectionRel
-  unitTransformDefs unitShapeDefs o1PassContract
+  unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
 
@@ -912,14 +912,14 @@ QED
 (* S2b: planned admission, Milestone 5. The lowering's PHI-free code
    refers to labels only in jumps to blocks of the same function, in
    reserved labels, and in INVOKE targets; its entry function reads
-   calldata, never a PARAM; and, having no PHI at all, no first block has
-   one. *)
+   calldata, never a PARAM; having no PHI at all, no first block has
+   one; and it leaves every FMP convention unset (mk_raw_function). *)
 Theorem lower_vyper_runtime_unit_o1_shape_extras:
   !tops rpolicy unit.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
     immutable_free_program tops
     ==> unit_label_refs_ok unit /\ unit_entry_no_params unit /\
-        unit_first_block_no_phi unit
+        unit_first_block_no_phi unit /\ unit_fmp_unsealed unit
 Proof
   cheat
 QED
@@ -937,6 +937,22 @@ QED
 
 (* ===== S3: memory safety ===== *)
 
+(* run_lowering builds every function with mk_raw_function, which leaves
+   fn_eom unset. *)
+Theorem run_lowering_eom_none:
+  run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+    bucket_count fn_metadata_bytes dense_buckets entry_info entry_label =
+      SOME u ==>
+  EVERY (\fn. fn.fn_eom = NONE) u.cu_context.ctx_functions
+Proof
+  simp[run_lowering_def, extract_context_with_internals_def,
+       mk_venom_context_def] >>
+  pairarg_tac >> gvs[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[mk_raw_function_def] >>
+  drule package_internal_blocks_raw_defaults >>
+  simp[listTheory.EVERY_MEM, function_raw_metadata_defaults_def]
+QED
+
 (* A unit that lowers comes from run_lowering with the entry label
    "__entry". *)
 Theorem lower_vyper_runtime_unit_run_lowering:
@@ -950,6 +966,25 @@ Proof
   Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
   strip_tac >> metis_tac[]
 QED
+
+(* The dead bytes of a source call's result: those storage_dead gives in
+   the running contract's storage and transient storage, by the layout the
+   success case of external_call_result_rel compares with.  The pipeline
+   may change them (o1PassContract's dead_result_rel), and the source
+   relation already ignores them.  S3 bounds by them what a call request
+   or the result may read from moved memory (taint_within). *)
+Definition external_call_dead_def:
+  external_call_dead tx ((res : value + exception), am',
+                      (rqs : call_request list)) =
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    <| d_stor := (\a st. if a = tx.target
+                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         else {});
+       d_trans := (\a st. if a = tx.target
+                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          else {});
+       d_imm := K {}; d_ret := K {} |>
+End
 
 (* ===== Superseded admission provenance ===== *)
 (* TASK051 full-token consumer audit found no source consumer of

@@ -679,13 +679,6 @@ Proof
   simp[mstore_def, write_memory_with_expansion_def, length_w2b_256]
 QED
 
-Theorem mstore8_eq_wmwe[local]:
-  mstore8 offset value s =
-  write_memory_with_expansion offset [w2w value] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def]
-QED
-
 (* Generic: writing same bytes at corresponding alloca offsets via
    write_memory_with_expansion preserves alloca_remap_rel.
    Combines splice_preserves_remap_mem + alloca_remap_rel_mem_update. *)
@@ -2706,7 +2699,7 @@ Resume remap_preserved_mem_ops[mstore8]:
   qpat_x_assum `w1 = addr` (SUBST_ALL_TAC o SYM) >>
   fs[] >>
   (* Rewrite to wmwe and apply write_at_pv_preserves_remap *)
-  simp[mstore8_eq_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   (* Safe access bound: w2n w1 + 1 <= orig_off + asz *)
   safe_access_bound_tac
     `<| iao_ofst := Var v; iao_size := SOME (Lit 1w);
@@ -5091,7 +5084,7 @@ Proof
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
     gvs[update_var_def] >>
     (* All results use mstore/mstore8/mcopy → wmwe → monotone *)
-    simp[mstore_eq_wmwe, mstore8_eq_wmwe, mcopy_def] >>
+    simp[mstore_eq_wmwe, venomMemPropsTheory.mstore8_eq_write_mem, mcopy_def] >>
     irule wmwe_mem_length_mono)
 QED
 

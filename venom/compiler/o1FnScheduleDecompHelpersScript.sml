@@ -174,7 +174,8 @@ Theorem o1_fn_shape_label_operand:
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = INVOKE`
   >- (fs[o1_fn_shape_def, fn_invoke_ok_def, fn_shape_ok_def, EVERY_MEM] >>
-      first_x_assum drule >> simp[] >> strip_tac >>
+      qpat_x_assum `!inst. _ /\ inst.inst_opcode = INVOKE ==> _` drule >>
+      simp[] >> strip_tac >>
       `label_positions_ok inst` by metis_tac[inst_shape_ok_def] >>
       drule_all invoke_label_operand_target >> strip_tac >> gvs[]) >>
   fs[o1_fn_shape_def, fn_label_refs_ok_def] >> metis_tac[]
@@ -297,7 +298,7 @@ Proof
    label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
    ir_supply_inst_ok out.fpo_supply`
     by metis_tac[o1_step_contract_def] >>
-  gvs[o1_fn_shape_def]
+  gvs[o1_fn_shape_def] >> metis_tac[]
 QED
 
 Theorem observed_step_contract_at:
@@ -324,7 +325,7 @@ Proof
    label_map_sources_ok fn out.fpo_function out.fpo_label_map /\
    ir_supply_inst_ok out.fpo_supply /\ o1_fn_row (SUC k) out.fpo_function`
     by metis_tac[o1_step_contract_at_def] >>
-  gvs[o1_fn_shape_def]
+  gvs[o1_fn_shape_def] >> metis_tac[]
 QED
 
 Theorem contracted_fold_invariant:

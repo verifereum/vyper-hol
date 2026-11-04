@@ -1611,7 +1611,6 @@ Datatype:
   | ConvBytestringToDecimal num int int num (* divisor, out_lo, out_hi, in_maxlen *)
   | ConvBytestringToBytesM num       (* out_m *)
   | ConvBytestringCast num num       (* out_maxlen, in_maxlen *)
-  | ConvFixedToBytestring num       (* m: bytesM → Bytes[N] allocation *)
   | ConvIdentity
 End
 
@@ -1862,18 +1861,6 @@ Definition compile_type_convert_def:
           return v
        od
      else return v) ∧
-  (* Fixed bytes to bytestring: allocate length-prefixed buffer.
-     bytesM (word value) → Bytes[N] (memory pointer to [length][data]).
-     Mirrors Python: convert.py _to_Bytes for BytesM source *)
-  compile_type_convert v (ConvFixedToBytestring m) =
-    do buf_alloc <- compile_alloc_buffer 64;
-       let buf = buf_alloc.buf_operand in
-       do emit_void MSTORE [buf; Lit (n2w m)];
-          data_ptr <- emit_op ADD [buf; Lit 32w];
-          emit_void MSTORE [data_ptr; v];
-          return buf
-       od
-    od ∧
   (* Identity: no-op *)
   compile_type_convert v ConvIdentity = return v
 End
@@ -1982,16 +1969,10 @@ Definition mk_convert_op_def:
          | BaseT (BytesT (Fixed in_m)) => ConvBytesMToBytesM in_m m
          | FlagT _ => ConvIntToBytesM F 256 m
          | _ => ConvIdentity)
-    (* Bytestring/BytesM → Bytes[N]/String[N]:
-       - Bytestring source (is_bs=T): downcast length check only.
-       - BytesM source (is_bs=F): allocate length-prefixed buffer.
-       Mirrors Python: convert.py _to_Bytes, _to_String *)
-    | BaseT (BytesT (Dynamic out_n)) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
-    | BaseT (StringT out_n) =>
-        (if is_bs then ConvBytestringCast out_n in_n
-         else ConvFixedToBytestring (fixed_bytes_size src_ty))
+    (* Bytes[N]/String[N] targets take only bytestring sources.
+       Mirrors Python: convert.py to_bytes, to_string *)
+    | BaseT (BytesT (Dynamic out_n)) => ConvBytestringCast out_n in_n
+    | BaseT (StringT out_n) => ConvBytestringCast out_n in_n
     | _ => ConvIdentity
 End
 

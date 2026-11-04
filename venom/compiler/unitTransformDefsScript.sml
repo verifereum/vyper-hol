@@ -2,8 +2,7 @@
  * Venom unit-transform boundary (PLAN §5.8, D17-D20).
  * TOP-LEVEL: unit_result_rel, ctx_transform_correct,
  *   checked_unit_transform_correct, o1_initial_state_ok,
- *   inst_mem_below_frontier, revert_forward, inst_mem_ok_in_fn,
- *   raw_unit_memory_ok.
+ *   inst_mem_below_frontier, inst_mem_ok_in_fn, raw_unit_memory_ok.
  * Forward simulation only, from ONE initial state; no GAS-reading list.
  * Successful runs compare observable_equiv, including executed requests.
  * Aborts compare neither states nor requests: REVERT alone must stay REVERT.
@@ -94,40 +93,18 @@ QED
 
 (* ===== Initial allocation frontier and raw-run memory ===== *)
 
+(* The allocation frontier is free: a deploy unit's raw run starts it at
+ * the end of its reserved immutables region, a runtime unit's at 0. *)
 Definition o1_initial_state_ok_def:
   o1_initial_state_ok vs <=>
     vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
-    vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0
+    vs.vs_allocas = FEMPTY
 End
 
 Definition inst_mem_below_frontier_def:
   inst_mem_below_frontier inst s <=>
     EVERY (\(off,len). len = 0 \/ off + len <= s.vs_alloca_next)
       (source_memory_read_ranges inst s ++ source_memory_write_ranges inst s)
-End
-
-(* Revert forwarding: RETURNDATACOPY [p; 0; rds] immediately followed by
-   REVERT [p; rds].  After a failed call, the lowering copies the callee's
-   revert data to p (a zero-size ALLOCA or address 0) and reverts with it
-   (extcall_fail, raw_call's call_failed, create_fail), as Python does.
-   Both instructions touch [p, p + rds), past the frontier when rds > 0;
-   the REVERT discards memory, so that write is never read by anything
-   but the REVERT itself. *)
-Definition revert_forward_def:
-  revert_forward bb i <=>
-    ?inst1 inst2 p rds.
-      get_instruction bb i = SOME inst1 /\
-      get_instruction bb (SUC i) = SOME inst2 /\
-      inst1.inst_opcode = RETURNDATACOPY /\
-      inst1.inst_operands = [p; Lit 0w; rds] /\
-      inst2.inst_opcode = REVERT /\
-      inst2.inst_operands = [p; rds]
-End
-
-(* Index i is one of the two instructions of a revert forwarding. *)
-Definition revert_forward_at_def:
-  revert_forward_at bb i <=>
-    revert_forward bb i \/ (0 < i /\ revert_forward bb (i - 1))
 End
 
 (* The raw memory check at an instruction state of fn: below the frontier,
