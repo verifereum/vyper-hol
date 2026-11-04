@@ -1714,6 +1714,41 @@ Proof
             loweringHaltTheory.emit_inst_metadata, cs_extends_trans]
 QED
 
+(* The success length store is separated from every older allocation and local. *)
+Theorem raw_call_success_frame[local]:
+  wb_frame cenv es st0 s0 s /\
+  (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+  t = mstore (w2n addr) len u /\
+  u with vs_vars := FEMPTY = s with vs_vars := FEMPTY /\
+  (!aid b sz. aid < st0.cs_next_id /\
+    FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
+    regions_disjoint (w2n addr) 32 b sz) /\
+  (!name b sz. local_region cenv es.scopes s0 name b sz ==>
+    regions_disjoint (w2n addr) 32 b sz) ==>
+  wb_frame cenv es st0 s0 t
+Proof
+  strip_tac >>
+  `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `_ with vs_vars := _ = _` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `!b sz. regions_disjoint (w2n addr) 32 b sz ==>
+    mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s.vs_memory` by
+    (rpt strip_tac >>
+     qpat_assum `t = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `u.vs_memory = s.vs_memory` (fn th => pure_rewrite_tac[GSYM th]) >>
+     irule mstore_region_frame >> qexistsl_tac [`w2n addr`,`32`] >> simp[]) >>
+  fs[wb_frame_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `lookup_var x s = SOME w` by metis_tac[] >>
+      qpat_x_assum `!op w. _ ==> _` (qspecl_then [`Var x`,`w`] mp_tac) >>
+      simp[eval_operand_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `FLOOKUP s.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      metis_tac[]) >>
+  irule locals_kept_regions_tail >> qexists_tac `s` >> simp[] >>
+  metis_tac[]
+QED
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
   !nocalls ctx func cenv cx ann flags args dflt.
