@@ -181,3 +181,34 @@ closure and terminal/observation projections; fixed-w finite schedule
 composition; native consumer and finite-list realization. The semantic closure
 leaves are not yet de-risked by this audit. No global simulation has been
 inferred from local receipts or successful finite commutation.
+
+## Protected-edge consumer map (C3.2.8)
+
+`inv_edit_schedule_edges` and `inv_edit_rtc_schedule_edges` now prove that an
+edge relation preserved by the final destination remains preserved after each
+original-direction inversion, provided the destination IDs are distinct.
+`inv_edit_rtc_perm` and `inv_edit_rtc_distinct` give the static projections.
+These are checked list facts, not dynamic readiness facts.
+
+To apply them to an instruction list, recover the original instruction at
+each unique ID and instantiate the protected relation with the relevant
+union of:
+
+* original within-block def-to-use edges (`dft_must_order`'s first disjunct);
+* original read/write-effect conflicts and no-output empty-effect root edges;
+* edges from original instructions to the original terminator;
+* original incompatible-failure edges supplied by `dft_fallible_order_kept`.
+
+The final DFT block relation supplies the first three; the fallible-order
+premise supplies the fourth. Pseudo instructions should be kept as a fixed
+prefix, not placed into the body inversion chain. Endpoint distinctness and
+PERM provide ID membership and static identity, but instruction reconstruction
+and legal operand flips are still separate interfaces.
+
+What this does NOT establish: availability of strict-dominator variables at a
+particular runtime state, availability of same-block variables after prior
+steps, labels in FDOM, correct PHI entry operands, valid external request
+state, or absence of native fuel exhaustion. Reverse def/use and def/def
+independence of a crossed pair still require source SSA and unique definitions;
+they do not follow by silently extending `dft_must_order`. Such static bridges
+and dynamic preservation lemmas remain separate semantic obligations.

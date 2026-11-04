@@ -139,3 +139,60 @@ Theorem inv_edit_factor:
 Proof
   strip_tac >> irule inv_edit_factor_embedded >> simp[]
 QED
+
+Definition schedule_edges_def:
+  schedule_edges orig R xs <=>
+    !a b. id_before orig a b /\ R a b ==> id_before xs a b
+End
+
+Theorem schedule_before_nil[local,simp]:
+  ~id_before [] a b
+Proof
+  simp[id_before_def]
+QED
+
+Theorem schedule_before_adjacent[local]:
+  id_before (p ++ [x;y] ++ q) a b /\ ~(a = x /\ b = y) ==>
+  id_before (p ++ [y;x] ++ q) a b
+Proof
+  simp[schedule_before_append, id_before_cons] >> metis_tac[]
+QED
+
+Theorem inv_edit_schedule_edges:
+  ALL_DISTINCT dest /\ schedule_edges orig R dest /\
+  schedule_edges orig R u /\ inv_edit orig dest u v ==>
+  schedule_edges orig R v
+Proof
+  simp[schedule_edges_def] >> rpt strip_tac >>
+  drule_all inv_edit_provenance >> strip_tac >> gvs[] >>
+  irule schedule_before_adjacent >>
+  conj_tac >- metis_tac[] >> metis_tac[]
+QED
+
+Theorem inv_edit_rtc_schedule_edges:
+  ALL_DISTINCT dest /\ schedule_edges orig R dest /\
+  schedule_edges orig R u /\ RTC (inv_edit orig dest) u v ==>
+  schedule_edges orig R v
+Proof
+  `ALL_DISTINCT dest /\ schedule_edges orig R dest ==>
+   !u v. RTC (inv_edit orig dest) u v ==>
+     schedule_edges orig R u ==> schedule_edges orig R v` suffices_by metis_tac[] >>
+  strip_tac >> ho_match_mp_tac RTC_INDUCT_RIGHT1 >>
+  rpt strip_tac >>
+  `schedule_edges orig R v` by metis_tac[] >>
+  drule_all inv_edit_schedule_edges >> simp[]
+QED
+
+Theorem inv_edit_rtc_perm:
+  !u v. RTC (inv_edit orig dest) u v ==> PERM u v
+Proof
+  ho_match_mp_tac RTC_INDUCT >> rpt strip_tac
+  >- simp[] >> metis_tac[inv_edit_perm, PERM_TRANS]
+QED
+
+Theorem inv_edit_rtc_distinct:
+  ALL_DISTINCT orig /\ RTC (inv_edit orig dest) orig u ==>
+  ALL_DISTINCT u
+Proof
+  metis_tac[inv_edit_rtc_perm, ALL_DISTINCT_PERM]
+QED
