@@ -4,7 +4,7 @@ Ancestors
   venomExecSemantics venomState venomInst exprLoweringProps words exprSim
   vfmConstants externalReturnBounds valueEncoding vyperTypeSystem vyperValue
   exprSimBufferStore exprSimLiteralBuffer allocaFootprint
-  exprSimOperands abiCallerAllocation
+  exprSimOperands abiCallerAllocation exprSimBuffer emitHelperProps
 
 Theorem typed_copy_word_mem_ok:
   is_word_type dst_ty /\
@@ -209,6 +209,7 @@ Theorem normalized_bytes_first_preserves_word[local]:
   (w2n p + 96 <= w2n d \/ w2n d + 128 <= w2n p) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
       mem_bytes_at (w2n p + 64) 32 q.vs_memory =
         mem_bytes_at (w2n p + 64) 32 s.vs_memory /\
       (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
@@ -248,3 +249,81 @@ Proof
   gvs[compile_with_byte_offset_def]
 QED
 
+
+Theorem normalize_byte_offset_run[local]:
+  compile_with_byte_offset op off sa = (out,sb) /\
+  eval_operand op s = SOME a /\
+  (!x. op = Var x ==> not_fresh_at sa x) ==>
+  sa.cs_next_var <= sb.cs_next_var /\
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  (!x. out = Var x ==> not_fresh_at sb x) /\
+  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      eval_operand out q = SOME (a + n2w off) /\
+      (q with vs_vars := s.vs_vars) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+Proof
+  Cases_on `off = 0`
+  >- (simp[compile_with_byte_offset_def, comp_return_def,
+           emitted_insts_def, run_inst_seq_def] >> strip_tac >>
+      gvs[WORD_ADD_0]) >>
+  simp[compile_with_byte_offset_def] >> strip_tac >>
+  drule_all buffer_emit_add_run >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  simp[] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[not_fresh_at_def]
+QED
+
+Theorem normalize_byte_offset_mem_ok[local]:
+  compile_with_byte_offset op off sa = (out,sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  Cases_on `off = 0`
+  >- simp[compile_with_byte_offset_def, comp_return_def,
+          emitted_insts_def, run_inst_seq_mem_ok_def] >>
+  simp[compile_with_byte_offset_def] >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  simp[run_inst_seq_mem_ok_last] >>
+  irule below_frontier_no_ranges >> simp[mk_inst_def]
+QED
+
+Theorem normalize_word_copy_run[local]:
+  is_word_type dst_ty /\
+  compile_store_memory_typed cenv dst dst_ty src src_ty sa = ((),sb) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  (!x. dst = Var x ==> not_fresh_at sa x) ==>
+  sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+  sa.cs_next_var <= sb.cs_next_var /\
+  ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+      q.vs_memory = (mstore (w2n d) (mload (w2n p) s) s).vs_memory /\
+      (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_store_memory_typed_word, emit_op_def, emit_void_def,
+       emit_inst_def, fresh_id_def, fresh_var_def, emit_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >> strip_tac >>
+  gvs[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
+  qabbrev_tac `q = update_var (STRING #"%" (toString sa.cs_next_var))
+    (mload (w2n p) s) s` >>
+  `step_inst_base (mk_inst sa.cs_next_id MLOAD [src]
+      [STRING #"%" (toString sa.cs_next_var)]) s = OK q` by
+    (simp[Abbr `q`] >> irule step_MLOAD >> simp[]) >>
+  `eval_operand dst q = SOME d` by
+    (Cases_on `dst` >> gvs[Abbr `q`, eval_operand_def, lookup_var_def,
+      update_var_def, finite_mapTheory.FLOOKUP_UPDATE, not_fresh_at_def]) >>
+  `eval_operand (Var (STRING #"%" (toString sa.cs_next_var))) q =
+      SOME (mload (w2n p) s)` by
+    simp[Abbr `q`, eval_operand_def, lookup_var_def, update_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `step_inst_base (mk_inst (sa.cs_next_id + 1) MSTORE
+    [dst; Var (STRING #"%" (toString sa.cs_next_var))] []) q =
+      OK (mstore (w2n d) (mload (w2n p) s) q)` by
+    (irule step_MSTORE >> simp[]) >>
+  simp[run_inst_seq_def] >>
+  simp[Abbr `q`, mstore_def, write_memory_with_expansion_def,
+       update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[not_fresh_at_def]
+QED
