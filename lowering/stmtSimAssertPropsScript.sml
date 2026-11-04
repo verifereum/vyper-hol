@@ -4,7 +4,7 @@ Ancestors
   stmtSimIfProps stmtSimDefs exprSimDefs vyperInterpreter vyperState
   gasContext gasExemptCert stmtSimProps fragGasPath gasCount
   emitHelperProps compileEnv venomExecSemantics venomExecProofs venomInst
-  venomState fragExec loweringPosts stmtLowering exprLowering emitHelper
+  venomState fragExec loweringPosts stmtLowering exprLowering emitHelper exprLoweringProps
 Libs
   monadsyntax
 
@@ -140,4 +140,16 @@ Proof
   simp[] >>
   metis_tac[fn_has_code_split, fn_has_code_mid, cs_extends_trans,
             cs_extends_refl]
+QED
+
+Theorem assert_success_post:
+  expr_post ctx func cenv cx e es sa s1 s0 ee (BoolV T) op t /\
+  ~t.vs_halted /\ sb.cs_current_insts = [] ==>
+  stmt_post ctx func cx lctx cenv cenv sa sb s0 (INL ()) ee
+    (jump_to sb.cs_current_bb t)
+Proof
+  strip_tac >> gvs[expr_post_def, stmt_post_def] >>
+  simp[stmt_lands_def, stmt_state_rel_jump_to, block_is_terminated_def,
+       cenv_top_ext_refl] >>
+  gvs[jump_to_def, lookup_var_def]
 QED
