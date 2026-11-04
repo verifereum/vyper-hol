@@ -336,15 +336,6 @@ Proof
   qpat_x_assum `!l v. _` (drule_then assume_tac) >> simp[]
 QED
 
-Theorem phi_well_formed_var_pair[local]:
-  !ops v.
-    phi_well_formed ops /\ MEM (Var v) ops ==>
-    ?lbl. MEM (lbl,v) (phi_pairs ops)
-Proof
-  ho_match_mp_tac phi_pairs_ind >>
-  rw[phi_pairs_def, phi_well_formed_def] >> gvs[] >> metis_tac[]
-QED
-
 (* fn_cfg_edge → cfg_succs_of (bridge from path-level to analysis-level) *)
 Theorem fn_cfg_edge_succs[local]:
   !fn a b. wf_function fn /\ fn_cfg_edge fn a b ==>
