@@ -231,6 +231,7 @@
 
 Theory exprSimHyps
 Ancestors
+  gasContext supportedProgram
   list finite_map
   exprSim exprCallBounds exprBopLowering exprLowering compileEnv
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -395,7 +396,11 @@ Definition expr_sim_pre_def:
     expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
-    ~expr_has_evm_run e
+    ~expr_has_evm_run e /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 End
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
@@ -411,7 +416,11 @@ Definition expr_body_pre_def:
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
                       get_module_code cx NONE = SOME tops)
-          (int_calls_expr e)
+          (int_calls_expr e) /\
+    (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
+              occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+              is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target))
 End
 
 Theorem expr_sim_pre_body:
@@ -929,7 +938,8 @@ Theorem expr_sim_pre_builtin_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
+     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
   drule_all alloc_limits_exprs_mem >>
   gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
@@ -971,7 +981,8 @@ Theorem expr_body_pre_builtin_arg:
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
