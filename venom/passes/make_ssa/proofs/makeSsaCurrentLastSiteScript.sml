@@ -3,7 +3,7 @@ Ancestors
   makeSsaCurrentGraphCut makeSsaCurrentLiveTransport makeSsaCurrentFrontier
   makeSsaCurrentAnalysis makeSsaCurrentSelectedLive makeSsaCurrentDefs
   venomInst venomWf venomExecProps cfgAnalysisProps dominatorDefs
-  list rich_list alist arithmetic makeSsaCurrentDemandDominance
+  list rich_list alist arithmetic makeSsaCurrentDemandDominance dominatorProofs cfgDefs relation
 
 Definition current_changing_site_def:
   current_changing_site fn ins v l <=> ins v l \/
@@ -109,4 +109,140 @@ Proof
     gvs[ALOOKUP_current_frontier_map] >>
   `ins v y` by metis_tac[] >>
   Cases_on `post` >> gvs[LRC_def, current_changing_site_def]
+QED
+
+Theorem current_list_last_site:
+  !ls. EVERY (\l. ~P l) ls \/
+    ?pre d post. ls = pre ++ d::post /\ P d /\ EVERY (\l. ~P l) post
+Proof
+  Induct >- simp[] >> gen_tac >>
+  Cases_on `EVERY (\l. ~P l) ls`
+  >- (Cases_on `P h` >> gvs[] >>
+      qexistsl_tac [`[]`, `h`, `ls`] >> simp[]) >>
+  gvs[] >> qexistsl_tac [`h::pre`, `d`, `post`] >> simp[]
+QED
+
+Theorem current_dominates_route_backwards:
+  !ls a b. wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  LRC (fn_cfg_edge fn) ls a b /\
+  dominates (dom_analyze (cfg_analyze fn) fn) e b /\
+  ~MEM e (TL ls ++ [b]) ==>
+  dominates (dom_analyze (cfg_analyze fn) fn) e a
+Proof
+  Induct >> simp[LRC_def] >> rpt strip_tac >> gvs[] >>
+  `e <> z` by (Cases_on `ls` >> gvs[LRC_def]) >>
+  `~MEM e (TL ls)` by (Cases_on `ls` >> gvs[]) >>
+  `dominates (dom_analyze (cfg_analyze fn) fn) e z` by metis_tac[] >>
+  `cfg_reachable_of (cfg_analyze fn) h /\
+   cfg_reachable_of (cfg_analyze fn) z` by
+    metis_tac[current_all_labels_reachable, current_cfg_edge_succs,
+      current_cfg_edge_preds, cfg_analyze_succ_labels, cfg_analyze_pred_labels] >>
+  metis_tac[dom_dominates_pred, current_cfg_edge_preds]
+QED
+
+Theorem current_lrc_append:
+  !xs ys a c. LRC R (xs ++ ys) a c <=>
+    ?b. LRC R xs a b /\ LRC R ys b c
+Proof
+  Induct >> simp[LRC_def] >> metis_tac[]
+QED
+
+Theorem current_route_last_site:
+  LRC R ls root b ==>
+  EVERY (\l. ~P l) ls \/
+  ?pre d post. ls = pre ++ d::post /\ P d /\ EVERY (\l. ~P l) post /\
+    LRC R pre root d /\ LRC R (d::post) d b
+Proof
+  strip_tac >>
+  Cases_on `EVERY (\l. ~P l) ls` >> simp[] >>
+  `?pre d post. ls = pre ++ d::post /\ P d /\ EVERY (\l. ~P l) post` by
+    metis_tac[current_list_last_site] >>
+  qexistsl_tac [`pre`, `d`, `post`] >> gvs[current_lrc_append, LRC_def] >> metis_tac[]
+QED
+
+Theorem current_reachable_cfg_route:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) ==>
+  ?ls. LRC (fn_cfg_edge fn) ls eb.bb_label a
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) a` by
+    metis_tac[current_all_labels_reachable] >>
+  drule_all cfg_analyze_semantic_reachability >> strip_tac >>
+  ` (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a)) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, current_cfg_edge_succs] >>
+  gvs[cfg_path_def, RTC_eq_NRC, NRC_LRC] >> metis_tac[]
+QED
+
+Theorem current_strict_dom_cfg_pred:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  fn_cfg_edge fn a b /\
+  strict_dominates (dom_analyze (cfg_analyze fn) fn) d b ==>
+  dominates (dom_analyze (cfg_analyze fn) fn) d a
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) a /\
+   cfg_reachable_of (cfg_analyze fn) b` by
+    metis_tac[current_all_labels_reachable, current_cfg_edge_succs,
+      current_cfg_edge_preds, cfg_analyze_succ_labels, cfg_analyze_pred_labels] >>
+  metis_tac[dom_dominates_pred, current_cfg_edge_preds, strict_dominates_def]
+QED
+
+Theorem current_site_route_nearest:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  LRC (fn_cfg_edge fn) ls d b /\
+  EVERY (\l. ~current_changing_site fn ins v l) (TL ls) /\
+  current_changing_site fn ins v e /\
+  strict_dominates (dom_analyze (cfg_analyze fn) fn) e b ==>
+  dominates (dom_analyze (cfg_analyze fn) fn) e d
+Proof
+  strip_tac >> irule current_dominates_route_backwards >> simp[] >>
+  qexistsl_tac [`b`, `ls`] >>
+  gvs[EVERY_MEM, strict_dominates_def] >> metis_tac[]
+QED
+
+Theorem current_cfg_path_last_site:
+  !ls root a. LRC R ls root a ==>
+  EVERY (\l. ~P l) (ls ++ [a]) \/
+  ?pre d post. ls = pre ++ post /\ LRC R pre root d /\
+    LRC R post d a /\ P d /\ EVERY (\l. ~P l) (TL (post ++ [a]))
+Proof
+  Induct
+  >- (simp[LRC_def] >> rpt strip_tac >> Cases_on `P a` >> simp[] >>
+      qexistsl_tac [`[]`, `a`, `[]`] >> simp[LRC_def]) >>
+  simp[LRC_def] >> rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> strip_tac
+  >- (Cases_on `P h` >> simp[] >>
+      qexistsl_tac [`[]`, `h`, `h::ls`] >> simp[LRC_def] >>
+      qexists_tac `z` >> simp[]) >>
+  disj2_tac >> qexistsl_tac [`h::pre`, `d`, `post`] >> simp[LRC_def] >>
+  qexists_tac `z` >> simp[]
+QED
+
+Theorem current_site_path_nearest:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  LRC (fn_cfg_edge fn) post d a /\
+  EVERY (\l. ~current_changing_site fn ins v l) (TL (post ++ [a])) /\
+  current_changing_site fn ins v e /\
+  dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+  dominates (dom_analyze (cfg_analyze fn) fn) e d
+Proof
+  strip_tac >> Cases_on `post` >- gvs[LRC_def] >>
+  irule current_dominates_route_backwards >> simp[] >>
+  qexistsl_tac [`a`, `h::t`] >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem current_cfg_path_dom_member:
+  wf_function fn /\ entry_block fn = SOME eb /\
+  LRC (fn_cfg_edge fn) ls eb.bb_label a /\
+  dominates (dom_analyze (cfg_analyze fn) fn) e a ==>
+  MEM e (ls ++ [a])
+Proof
+  strip_tac >>
+  ` (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a)) = fn_cfg_edge fn` by
+    simp[FUN_EQ_THM, current_cfg_edge_succs] >>
+  drule dom_on_every_path >>
+  disch_then (qspecl_then [`eb`, `ls`, `a`] mp_tac) >>
+  gvs[dominates_def] >> metis_tac[]
 QED
