@@ -246,3 +246,38 @@ Proof
   disch_then (qspec_then `x` mp_tac) >> simp[] >>
   metis_tac[HD, LAST_DEF, NOT_CONS_NIL]
 QED
+
+Theorem ao_source_step_sequential:
+  !ctx fn k s j t. ao_source_step ctx fn (k,F,s) (j,F,t) ==>
+    j = k /\ t.vs_current_bb = s.vs_current_bb /\
+    t.vs_inst_idx = SUC s.vs_inst_idx /\
+    ?bb inst u. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      ~is_terminator inst.inst_opcode /\ step_inst k ctx inst s = OK u /\
+      t = u with vs_inst_idx := SUC s.vs_inst_idx
+Proof
+  rpt gen_tac >> simp[Once ao_source_step_cases] >> rpt strip_tac >>
+  gvs[] >> drule_all venomInstPropsTheory.step_preserves_control_flow >>
+  strip_tac >> simp[] >> metis_tac[]
+QED
+
+Theorem ao_source_trace_sequential_positions:
+  !trace ctx fn.
+    trace <> [] /\ ao_source_trace ctx fn trace /\
+    EVERY (\a. ~FST (SND a)) trace ==>
+    !i. i < LENGTH trace ==>
+      FST (EL i trace) = FST (HD trace) /\
+      (SND (SND (EL i trace))).vs_current_bb =
+        (SND (SND (HD trace))).vs_current_bb /\
+      (SND (SND (EL i trace))).vs_inst_idx =
+        (SND (SND (HD trace))).vs_inst_idx + i
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  Cases_on `trace` >- simp[] >>
+  simp[ao_source_trace_def] >> rpt strip_tac >>
+  PairCases_on `h` >> PairCases_on `h'` >> gvs[] >>
+  drule ao_source_step_sequential >> strip_tac >>
+  Cases_on `i` >- simp[] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  simp[] >> strip_tac >> gvs[]
+QED
