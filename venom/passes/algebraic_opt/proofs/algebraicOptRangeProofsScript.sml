@@ -1,6 +1,7 @@
 Theory algebraicOptRangeProofs
 Ancestors
   rangeAnalysisDefs rangeAnalysisProofs algebraicOptDefs venomExecSemantics unitShapeDefs
+  dfgAnalysisProps
 
 (* Coincident JNZ targets select the true-edge refinement.  This is a
    computation boundary only, not a reachable-state soundness assertion. *)
@@ -735,4 +736,169 @@ Proof
   `v IN FDOM rs` by metis_tac[finite_mapTheory.FLOOKUP_DEF,optionTheory.NOT_SOME_NONE] >>
   fs[pred_setTheory.SUBSET_DEF,ao_range_outputs_def,venomStateTheory.lookup_var_def] >>
   metis_tac[optionTheory.NOT_SOME_NONE]
+QED
+
+Definition ao_range_opt_support_def:
+  (ao_range_opt_support outputs NONE = T) /\
+  (ao_range_opt_support outputs (SOME rs) = (FDOM rs SUBSET outputs))
+End
+
+Theorem ao_range_write_support:
+  FDOM rs SUBSET outputs /\ v IN outputs ==>
+  FDOM (rs_write rs v r) SUBSET outputs
+Proof
+  rw[rangeEvalDefsTheory.rs_write_def] >>
+  simp[finite_mapTheory.FDOM_DOMSUB,finite_mapTheory.FDOM_FUPDATE] >>
+  ASM_SET_TAC[]
+QED
+
+Theorem ao_range_normalize_support:
+  FDOM rs SUBSET outputs ==> FDOM (range_normalize rs) SUBSET outputs
+Proof
+  simp[range_normalize_def,finite_mapTheory.FDOM_DRESTRICT] >> SET_TAC[]
+QED
+
+Theorem ao_range_join_support:
+  ao_range_opt_support outputs a /\ ao_range_opt_support outputs b ==>
+  ao_range_opt_support outputs (range_join_opt a b)
+Proof
+  Cases_on `a` >> Cases_on `b` >>
+  simp[ao_range_opt_support_def,range_join_opt_def] >>
+  rpt strip_tac >> irule ao_range_normalize_support >>
+  simp[range_join_two_def,finite_mapTheory.FDOM_FMAP] >> ASM_SET_TAC[]
+QED
+
+Theorem ao_range_widen_support:
+  ao_range_opt_support outputs a /\ ao_range_opt_support outputs b ==>
+  ao_range_opt_support outputs (range_widen_opt a b)
+Proof
+  Cases_on `a` >> Cases_on `b` >>
+  simp[ao_range_opt_support_def,range_widen_opt_def] >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[ao_range_opt_support_def]
+QED
+
+Theorem ao_range_evaluate_support:
+  MEM inst (fn_insts fn) /\ FDOM rs SUBSET ao_range_outputs fn ==>
+  FDOM (range_evaluate_inst dfg inst rs) SUBSET ao_range_outputs fn
+Proof
+  strip_tac >> simp[range_evaluate_inst_def] >>
+  Cases_on `inst.inst_outputs` >> simp[]
+  >- (IF_CASES_TAC >> simp[]) >>
+  rename1 `inst.inst_outputs = out::rest` >>
+  Cases_on `rest` >> simp[] >>
+  IF_CASES_TAC >> simp[finite_mapTheory.FDOM_DOMSUB]
+  >- ASM_SET_TAC[] >>
+  irule ao_range_write_support >> simp[] >>
+  simp[ao_range_outputs_def] >> metis_tac[listTheory.MEM]
+QED
+
+Theorem ao_range_transfer_support:
+  MEM inst (fn_insts fn) /\ ao_range_opt_support (ao_range_outputs fn) a ==>
+  ao_range_opt_support (ao_range_outputs fn) (range_transfer_opt (dfg,bbs) inst a)
+Proof
+  Cases_on `a` >> simp[range_transfer_opt_def,ao_range_opt_support_def] >>
+  metis_tac[ao_range_evaluate_support,finite_mapTheory.FDOM_FEMPTY,pred_setTheory.EMPTY_SUBSET]
+QED
+
+Theorem ao_range_iszero_support:
+  FDOM rs SUBSET outputs /\ v IN outputs ==>
+  FDOM (range_apply_iszero v truth rs) SUBSET outputs
+Proof
+  strip_tac >> simp[range_apply_iszero_def] >>
+  Cases_on `truth` >> simp[ao_range_write_support] >>
+  Cases_on `rs_lookup rs v` >> simp[] >>
+  rpt IF_CASES_TAC >> simp[ao_range_write_support]
+QED
+
+Theorem ao_range_narrow_support:
+  FDOM rs SUBSET outputs /\ v IN outputs ==>
+  FDOM (range_narrow_var rs v bound op truth lo hi side) SUBSET outputs
+Proof
+  strip_tac >> simp[range_narrow_var_def] >>
+  rpt IF_CASES_TAC >> simp[ao_range_write_support]
+QED
+
+Theorem ao_range_eq_support:
+  FDOM rs SUBSET outputs /\
+  (!v. (lhs = Var v \/ rhs = Var v) ==> v IN outputs) ==>
+  FDOM (range_apply_eq lhs rhs truth rs) SUBSET outputs
+Proof
+  strip_tac >> Cases_on `truth` >> simp[range_apply_eq_def] >>
+  Cases_on `lhs` >> Cases_on `rhs` >> simp[] >>
+  rpt (irule ao_range_write_support >> simp[]) >> metis_tac[]
+QED
+
+Theorem ao_range_compare_support:
+  FDOM rs SUBSET outputs /\
+  (!v. (lhs = Var v \/ rhs = Var v) ==> v IN outputs) ==>
+  FDOM (range_apply_compare op lhs rhs truth rs) SUBSET outputs
+Proof
+  strip_tac >> Cases_on `lhs` >> Cases_on `rhs` >>
+  simp[range_apply_compare_def] >> rpt IF_CASES_TAC >>
+  metis_tac[ao_range_narrow_support]
+QED
+
+Theorem ao_range_condition_support:
+  !fuel op truth rs.
+  wf_ssa fn /\ FDOM rs SUBSET ao_range_outputs fn ==>
+  FDOM (range_apply_condition (dfg_build_function fn) fuel op truth rs)
+    SUBSET ao_range_outputs fn
+Proof
+  Induct_on `fuel` >- simp[range_apply_condition_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  simp[range_apply_condition_def] >>
+  rename1 `dfg_get_def (dfg_build_function fn) v` >>
+  Cases_on `dfg_get_def (dfg_build_function fn) v` >> simp[] >>
+  rename1 `dfg_get_def (dfg_build_function fn) v = SOME inst` >>
+  drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+  IF_CASES_TAC
+  >- (Cases_on `inst.inst_operands` >> simp[] >>
+      rename1 `inst.inst_operands = inner::rest` >> Cases_on `rest` >> simp[]) >>
+  IF_CASES_TAC
+  >- (Cases_on `inst.inst_operands` >> simp[] >>
+      rename1 `inst.inst_operands = inner::rest` >> Cases_on `rest` >> simp[] >>
+      Cases_on `inner` >> simp[] >> irule ao_range_iszero_support >>
+      simp[] >> irule ao_range_operand_output >>
+      simp[] >> qexists `inst` >> simp[]) >>
+  IF_CASES_TAC
+  >- (Cases_on `inst.inst_operands` >> simp[] >>
+      rename1 `inst.inst_operands = lhs::rest` >> Cases_on `rest` >> simp[] >>
+      rename1 `inst.inst_operands = lhs::rhs::rest` >> Cases_on `rest` >> simp[] >>
+      irule ao_range_eq_support >> simp[] >> rpt strip_tac >>
+      irule ao_range_operand_output >> simp[] >> qexists `inst` >> simp[]) >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  rename1 `inst.inst_operands = lhs::rest` >> Cases_on `rest` >> simp[] >>
+  rename1 `inst.inst_operands = lhs::rhs::rest` >> Cases_on `rest` >> simp[] >>
+  irule ao_range_compare_support >> simp[] >> rpt strip_tac >>
+  irule ao_range_operand_output >> simp[] >> qexists `inst` >> simp[] >>
+  gvs[]
+QED
+
+Theorem ao_range_branch_support:
+  wf_ssa fn /\ FDOM rs SUBSET ao_range_outputs fn ==>
+  FDOM (range_branch_refine (dfg_build_function fn) bbs pred succ rs)
+    SUBSET ao_range_outputs fn
+Proof
+  strip_tac >> simp[range_branch_refine_def] >>
+  Cases_on `lookup_block pred bbs` >> simp[] >>
+  IF_CASES_TAC >> simp[] >> IF_CASES_TAC >> simp[] >>
+  rename1 `LAST bb.bb_instructions` >>
+  Cases_on `(LAST bb.bb_instructions).inst_operands` >> simp[] >>
+  rename1 `(LAST bb.bb_instructions).inst_operands = cond::rest` >>
+  Cases_on `rest` >> simp[] >>
+  rename1 `(LAST bb.bb_instructions).inst_operands = cond::yes::rest` >>
+  Cases_on `rest` >- (Cases_on `yes` >> simp[]) >> simp[] >>
+  rename1 `(LAST bb.bb_instructions).inst_operands = cond::yes::no::rest` >>
+  Cases_on `rest` >> simp[] >> Cases_on `yes` >> Cases_on `no` >> simp[] >>
+  rpt IF_CASES_TAC >> metis_tac[ao_range_condition_support]
+QED
+
+Theorem ao_range_edge_support:
+  wf_ssa fn /\ ao_range_opt_support (ao_range_outputs fn) a ==>
+  ao_range_opt_support (ao_range_outputs fn)
+    (range_edge_transfer_opt (dfg_build_function fn,bbs) pred succ a)
+Proof
+  Cases_on `a` >> simp[range_edge_transfer_opt_def,ao_range_opt_support_def] >>
+  metis_tac[ao_range_branch_support]
 QED
