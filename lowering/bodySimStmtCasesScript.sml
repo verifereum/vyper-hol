@@ -3890,6 +3890,248 @@ Proof
     SRULE [] aug_place_local_ptrs_reserved_metadata]
 QED
 
+Theorem aug_place_target_indices_pre:
+  !t.
+    IS_SOME (type_place_target env t) /\
+    IS_SOME (supported_target_info tops bindings t) /\
+    ~supported_target_exists
+      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+    call_evaluation_safe cx (int_calls_target t) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    target_indices_pre cenv cx env t
+Proof
+  `(!e:expr. T) /\ (!t.
+    IS_SOME (type_place_target env t) /\
+    IS_SOME (supported_target_info tops bindings t) /\
+    ~supported_target_exists
+      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+    call_evaluation_safe cx (int_calls_target t) /\
+    supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+    target_indices_pre cenv cx env t)` suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def] >>
+  rpt conj_tac >> rpt gen_tac
+  >~ [`IS_SOME (type_place_target env (SubscriptTarget t e))`]
+    >- suspend "subscript"
+  >> suspend "attribute"
+QED
+
+Resume aug_place_target_indices_pre[attribute]:
+  simp[Once well_typed_expr_def, supportedTargetsTheory.supported_target_info_def] >>
+  Cases_on `type_place_target env t` >> simp[] >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
+QED
+
+Resume aug_place_target_indices_pre[subscript]:
+  simp[Once well_typed_expr_def, supportedTargetsTheory.supported_target_info_def] >>
+  Cases_on `well_typed_expr env e` >> simp[] >>
+  Cases_on `type_place_target env t` >> simp[] >>
+  Cases_on `supportedExprs$supported_expr tops e` >> simp[] >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac
+  >- (first_x_assum irule >> simp[] >>
+      metis_tac[call_evaluation_safe_append_left]) >>
+  irule stmt_expr_body_pre >>
+  drule supported_expr_body_calls >> strip_tac >>
+  simp[] >> metis_tac[call_evaluation_safe_append_right, APPEND_NIL]
+QED
+
+Finalise aug_place_target_indices_pre
+
+Theorem aug_place_supported_indices:
+  !t. IS_SOME (supported_target_info tops bindings t) ==>
+    !e. MEM e (target_indices t) ==> supportedExprs$supported_expr tops e
+Proof
+  `(!e:expr. T) /\ (!t.
+    IS_SOME (supported_target_info tops bindings t) ==>
+    !e. MEM e (target_indices t) ==> supportedExprs$supported_expr tops e)`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[target_indices_def, supportedTargetsTheory.supported_target_info_def] >>
+  rpt conj_tac >> rpt gen_tac >>
+  Cases_on `supported_target_info tops bindings t` >> simp[] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `supportedExprs$supported_expr tops e` >> gvs[] >> metis_tac[]
+QED
+
+Theorem aug_place_target_sim:
+  body_base_target_ok cx t /\ body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx env es /\
+  IS_SOME (type_place_target env t) /\
+  supported_target_info tops bindings t = SOME pt /\
+  ~supported_target_exists
+    (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+  call_evaluation_safe cx (int_calls_target t) ==>
+  target_sim ctx func cenv cx env t es
+Proof
+  strip_tac >>
+  drule_all aug_place_metadata_completion >>
+  disch_then (qx_choose_then `c1` strip_assume_tac) >>
+  qabbrev_tac `h = c1.ce_hashmap_info` >>
+  qabbrev_tac `m = c1.ce_module_var_type` >>
+  `env_context_consistent env cx` by
+    gvs[expr_sim_inv_def, env_consistent_def] >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `(expr_sim_inv (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+     cx env es <=> expr_sim_inv cenv cx env es)` by
+    (irule aug_place_uniform_inv_metadata >> simp[] >> qexists_tac `env` >> simp[]) >>
+  `expr_sim_inv (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>)
+     cx env es` by metis_tac[] >>
+  `target_idx_case F ctx func
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx t` by
+    (irule aug_place_target_idx_metadata >> simp[] >>
+     conj_tac >- (qexists_tac `env` >> simp[]) >>
+     qexistsl_tac [`bindings`, `tops`] >> simp[]) >>
+  `target_indices_pre
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env t` by
+    (irule aug_place_target_indices_pre >>
+     gvs[aug_place_alloc_limits_metadata] >> qexists_tac `bindings` >> simp[]) >>
+  `~immutable_root cx t` by metis_tac[aug_place_supported_root_not_immutable] >>
+  `target_sim ctx func
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env t es` by
+    (drule target_case_all >> simp[target_case_def, target_pre_def] >>
+     disch_then irule >> gvs[]) >>
+  `compile_get_target_ptr compile_expr
+     (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) t =
+   compile_get_target_ptr compile_expr cenv t` by
+    (irule aug_place_compile_target_metadata >> reverse conj_tac
+     >- (rpt strip_tac >>
+         `supported_place_root tops nsid` by metis_tac[aug_place_supported_root] >>
+         Cases_on `nsid` >> drule aug_place_supported_root_namespace >>
+         strip_tac >> gvs[]) >>
+     rpt strip_tac >>
+     `supportedExprs$supported_expr tops e` by metis_tac[aug_place_supported_indices, optionTheory.IS_SOME_EXISTS] >>
+     irule aug_place_lower_value_metadata >>
+     irule aug_place_compile_supported_expr_metadata >> metis_tac[]) >>
+  metis_tac[aug_place_target_sim_metadata]
+QED
+
+Theorem aug_place_hashmap_build:
+  !tops src id vis tr kt vt slot.
+    supported_hashmap_decl tops (src,id) = SOME (vis,tr,kt,vt,slot) ==>
+    src = NONE /\ build_hashmap_info tops (src,id) = SOME (tr,kt,vt)
+Proof
+  Induct >> simp[supported_hashmap_decl_def] >> Cases >>
+  rw[supported_hashmap_decl_def, build_hashmap_info_def] >> metis_tac[]
+QED
+
+Theorem aug_place_variable_excludes_hashmap:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_variable_decl tops nsid = SOME (vis,mut,ty,slot) ==>
+  supported_hashmap_decl tops nsid = NONE
+Proof
+  Cases_on `nsid` >> strip_tac >>
+  drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  drule_all build_maps_variable >> strip_tac >>
+  Cases_on `supported_hashmap_decl tops (NONE,r)` >> simp[] >>
+  rename1 `supported_hashmap_decl tops (NONE,r) = SOME d` >>
+  PairCases_on `d` >> drule aug_place_hashmap_build >> simp[]
+QED
+
+Theorem aug_place_legacy_field_info:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supported_storage_field_write tops id fld ==>
+  IS_SOME (supported_target_info tops bindings
+    (AttributeTarget (TopLevelNameTarget id) fld))
+Proof
+  simp[supported_storage_field_write_def, supportedExprFormsTheory.supported_storage_fields_def] >>
+  Cases_on `supported_variable_decl tops id` >> simp[] >>
+  rename1 `supported_variable_decl tops id = SOME d` >> PairCases_on `d` >>
+  Cases_on `d0` >> Cases_on `d1` >> Cases_on `d2` >> Cases_on `d3` >>
+  simp[] >> rpt strip_tac >>
+  `supported_hashmap_decl tops id = NONE` by
+    metis_tac[aug_place_variable_excludes_hashmap] >>
+  gvs[supportedTargetsTheory.supported_target_info_def,
+      supportedExprFormsTheory.supported_place_root_def, AllCaseEqs()] >>
+  Cases_on `supported_storage_type tops (StructT p)` >> gvs[] >>
+  Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  Cases_on `ALOOKUP x' fld` >> gvs[alistTheory.ALOOKUP_NONE]
+QED
+
+Theorem aug_place_legacy_subscript_info:
+  ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\
+  supportedExprForms$supported_subscript_base tops id /\
+  supportedExprs$supported_expr tops key ==>
+  IS_SOME (supported_target_info tops bindings
+    (SubscriptTarget (TopLevelNameTarget id) key))
+Proof
+  simp[supportedExprFormsTheory.supported_subscript_base_def] >>
+  strip_tac
+  >- suspend "array"
+  >> suspend "map"
+QED
+
+Resume aug_place_legacy_subscript_info[array]:
+  qpat_x_assum `supported_storage_array _ _` mp_tac >>
+  simp[supportedExprFormsTheory.supported_storage_array_def] >>
+  Cases_on `supported_variable_decl tops id` >> simp[] >>
+  rename1 `supported_variable_decl tops id = SOME d` >> PairCases_on `d` >>
+  Cases_on `d0` >> Cases_on `d1` >> Cases_on `d2` >> Cases_on `d3` >>
+  simp[] >> strip_tac >>
+  `supported_hashmap_decl tops id = NONE` by
+    metis_tac[aug_place_variable_excludes_hashmap] >>
+  simp[supportedTargetsTheory.supported_target_info_def,
+       supportedExprFormsTheory.supported_place_root_def]
+QED
+
+Resume aug_place_legacy_subscript_info[map]:
+  Cases_on `supported_hashmap_decl tops id` >> gvs[] >>
+  rename1 `supported_hashmap_decl tops id = SOME d` >> PairCases_on `d` >>
+  Cases_on `d0` >> Cases_on `d4` >> gvs[] >>
+  `supported_variable_decl tops id = NONE` by
+    (Cases_on `supported_variable_decl tops id` >> simp[] >>
+     rename1 `supported_variable_decl tops id = SOME v` >> PairCases_on `v` >>
+     metis_tac[aug_place_variable_excludes_hashmap, optionTheory.NOT_SOME_NONE]) >>
+  simp[supportedTargetsTheory.supported_target_info_def,
+       supportedExprFormsTheory.supported_place_root_def]
+QED
+
+Finalise aug_place_legacy_subscript_info
+
+Theorem aug_place_supported_stmt_target_info:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+  ?pt. supported_target_info tops bindings t = SOME pt
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def] >>
+  `IS_SOME (supported_target_info tops bindings t)` suffices_by
+    metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  qpat_x_assum `supported_stmt _ _ _` mp_tac >>
+  simp[supportedStmtsTheory.supported_stmt_def] >> strip_tac
+  >- (gvs[supportedStmtsTheory.supported_target_def] >>
+      Cases_on `bt` >> gvs[] >>
+      metis_tac[aug_place_legacy_field_info, aug_place_legacy_subscript_info])
+  >- (Cases_on `supported_target_info tops bindings (AttributeTarget bt fld)` >>
+      gvs[supported_aug_target_def] >> pairarg_tac >> gvs[])
+  >- (gvs[supportedStmtsTheory.supported_target_def] >>
+      Cases_on `bt` >> gvs[] >>
+      metis_tac[aug_place_legacy_subscript_info])
+  >> Cases_on `supported_target_info tops bindings (SubscriptTarget bt k)` >>
+     gvs[supported_aug_target_def] >> pairarg_tac >> gvs[]
+QED
+
+Theorem aug_place_stmt_target_sim:
+  body_base_target_ok cx t /\ body_inv tops ctx cenv cx /\
+  expr_sim_inv cenv cx env es /\
+  supported_stmt tops bindings (AugAssign ty t bop e) /\
+  IS_SOME (type_place_target env t) /\
+  ~supported_target_exists
+    (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+  call_evaluation_safe cx (int_calls_target t) /\
+  ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) ==>
+  target_sim ctx func cenv cx env t es
+Proof
+  strip_tac >>
+  `?pt. supported_target_info tops bindings t = SOME pt` by
+    metis_tac[aug_place_supported_stmt_target_info] >>
+  irule aug_place_target_sim >> simp[] >> metis_tac[]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
