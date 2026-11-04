@@ -179,3 +179,78 @@ Proof
   once_rewrite_tac[GSYM w2n_11] >>
   asm_rewrite_tac[] >> decide_tac
 QED
+
+Theorem ld_vars_operand_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  op_prov f.lf_H op = NONE /\
+  (!v. op = Var v ==> MEM v (fn_ir_vars f.lf_fn) /\
+    ~retpc_var f.lf_fn v /\
+    (case FLOOKUP f.lf_tv v of NONE => {} | SOME m => m) = {}) ==>
+  eval_operand op f.lf_src = eval_operand op f.lf_tgt
+Proof
+  strip_tac >>
+  `IS_SOME (eval_operand op f.lf_src) <=> IS_SOME (eval_operand op f.lf_tgt)` by
+    (irule ld_vars_operand_defined >> metis_tac[]) >>
+  Cases_on `eval_operand op f.lf_src` >> Cases_on `eval_operand op f.lf_tgt` >>
+  gvs[] >> metis_tac[ld_vars_operand_scalar]
+QED
+
+Theorem ld_vars_operands_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  (!op. MEM op ops ==> op_prov f.lf_H op = NONE /\
+    (!v. op = Var v ==> MEM v (fn_ir_vars f.lf_fn) /\
+      ~retpc_var f.lf_fn v /\
+      (case FLOOKUP f.lf_tv v of NONE => {} | SOME m => m) = {})) ==>
+  eval_operands ops f.lf_src = eval_operands ops f.lf_tgt
+Proof
+  Induct_on `ops` >- simp[eval_operands_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `!op. MEM op (h::ops) ==> _` mp_tac >>
+  simp[] >> strip_tac >>
+  `eval_operand h f.lf_src = eval_operand h f.lf_tgt` by
+    (irule ld_vars_operand_equal >> metis_tac[]) >>
+  `eval_operands ops f.lf_src = eval_operands ops f.lf_tgt` by metis_tac[] >>
+  simp[eval_operands_def]
+QED
+
+Theorem ld_vars_nonpointer_provenance:
+  ld_vars P A f /\ (!v. op = Var v ==> v NOTIN fn_pv P f.lf_fn) ==>
+  op_prov f.lf_H op = NONE
+Proof
+  Cases_on `op` >> simp[op_prov_def] >>
+  simp[ld_vars_def, SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem ld_ptr_use_scalar:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  inst.inst_opcode <> INVOKE /\
+  ~is_pointer_preserving_op inst.inst_opcode /\
+  ~MEM inst.inst_opcode [LT; GT; EQ] /\
+  mem_write_ops inst = NONE /\ mem_read_ops inst = NONE /\
+  MEM (Var v) inst.inst_operands ==>
+  v NOTIN fn_pv P fn
+Proof
+  simp[fn_ptr_ok_def, ptr_use_ok_def] >> metis_tac[optionTheory.NOT_NONE_SOME]
+QED
+
+Theorem ld_vars_numeric_operands_equal:
+  ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
+  fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
+  taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
+  ~MEM inst.inst_opcode
+    [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+  (!v. MEM (Var v) inst.inst_operands ==>
+    MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn) ==>
+  eval_operands inst.inst_operands f.lf_src =
+  eval_operands inst.inst_operands f.lf_tgt
+Proof
+  strip_tac >> irule ld_vars_operands_equal >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qx_gen_tac `op` >> strip_tac >> conj_tac
+  >- (irule ld_vars_nonpointer_provenance >> metis_tac[]) >>
+  qx_gen_tac `v` >> strip_tac >> gvs[] >>
+  `op_taint tn (Var v) = {}` by
+    (irule ld_numeric_operand_untainted >> simp[] >> metis_tac[]) >>
+  gvs[op_taint_def] >>
+  irule ld_numeric_operand_nonopaque >> simp[] >> metis_tac[]
+QED
