@@ -44,13 +44,13 @@ Proof
     conj_tac, IF_CASES_TAC])
 QED
 
-Theorem cs_appends_comp_get[local]:
+Theorem cs_appends_comp_get:
   cs_appends comp_get
 Proof
   simp[cs_appends_def, comp_get_def, cs_extends_refl]
 QED
 
-Theorem cs_appends_stmts[local]:
+Theorem cs_appends_stmts:
   cs_appends (compile_stmts ce lc ty stmts)
 Proof
   metis_tac[cs_appends_def, cs_mono_def, cj 2 compile_stmt_cs_mono]
