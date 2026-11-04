@@ -1,6 +1,7 @@
 Theory lowerDloadScratchBudget
 Ancestors
   lowerDloadAllocation lowerDloadControlPosition lowerDloadDefs irSupply
+  lowerDloadStackBound
   venomInst contextCodegenRel list rich_list pred_set
 
 Theorem ld_inst_scratch_cap_bound[local]:
@@ -99,4 +100,25 @@ Proof
   simp[active_inst_def, fn_insts_def, MEM_MAP, MEM_FILTER, MEM_FLAT] >>
   rpt strip_tac >> gvs[] >>
   metis_tac[EL_MEM, o1PassContractTheory.fn_insts_blocks_MEM]
+QED
+
+Theorem ld_aligned_card_sum_bound:
+  !w xs ys. LIST_REL (\A g. FINITE A /\ CARD A <= w g) xs ys ==>
+    SUM (MAP CARD xs) <= SUM (MAP w ys)
+Proof
+  gen_tac >> Induct >> Cases_on `ys` >> simp[] >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
+QED
+
+Theorem ld_stack_scratch_budget:
+  callee_first names C.ctx_functions /\ ld_stack_origin vs C stk fn s0 /\
+  LIST_REL (\A g. FINITE A /\
+    CARD A <= LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g)))
+    sets (fn :: MAP (\f. f.cf_fn) stk) ==>
+  SUM (MAP CARD sets) <= ctx_dload_count C
+Proof
+  strip_tac >>
+  drule (BETA_RULE (Q.ISPEC `\g. LENGTH (FILTER (\i. i.inst_opcode = DLOAD) (fn_insts g))`
+    ld_aligned_card_sum_bound)) >> strip_tac >>
+  drule_all ld_stack_dload_count_bound >> decide_tac
 QED
