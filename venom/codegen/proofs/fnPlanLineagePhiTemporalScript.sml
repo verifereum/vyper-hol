@@ -85,10 +85,10 @@ QED
    subsequent popmany query is on its resulting stack, not the entry stack.
 
    The phi_origin_cell representation and its write/pop projections below
-   retain unequal Original cells and Common written cells. Still to connect:
-   a synchronized prefix trace. The phase/singleton-pop stack bridges below
-   handle opaque lower residuals; independent phi_paired_run projections
-   alone are not an origin-preserving execution trace.
+   retain unequal Original cells and Common written cells. The guarded
+   phi_origin_trace below now composes their synchronized physical edits.
+   Phase/singleton-pop stack bridges handle opaque lower residuals;
+   independent phi_paired_run projections alone would not suffice.
 
    Initialization producer: transfer-generated input_vars_from entry slots,
    edge coverage, disjoint incoming classes, and explicit class emission.
@@ -433,6 +433,231 @@ QED
    coverage, terminal incoming absence, entry emission) have not yet been
    shown to produce this conjunct, nor the next stage's incoming conjunct.
    Arbitrary lower residuals p and q are still explicit in all three guards.
-   To complete the origin-trace output of this probe, compose physical edits
-   under these guards and prove projection to phi_schedule_run by induction;
-   existence of that guarded trace must remain separate from its soundness. *)
+   Below, physical edits are composed and projected to phi_schedule_run by
+   induction. Existence from static analyzed inputs remains separate from
+   that conditional soundness; see the final producer ledger. *)
+
+
+(* A physical stage has explicit witnesses for both searches.  The pop
+   witness lies in the written suffix, so the opaque residual is untouched.
+   Existence of these witnesses is a producer obligation, not a conclusion
+   of the projection theorem. *)
+Definition phi_origin_stage_def:
+  phi_origin_stage inst next halting p q cells cells' <=>
+    ?d keep written.
+      phi_origin_incoming inst p q cells d /\
+      phi_origin_selected next p q cells d keep /\
+      written = phi_origin_write keep d (Var (HD inst.inst_outputs)) cells /\
+      if ~halting /\ ~MEM (HD inst.inst_outputs) next then
+        ?e. e < LENGTH written /\
+          stack_get_depth (Var (HD inst.inst_outputs))
+            (p ++ MAP (phi_cell_value T) written) = SOME e /\
+          stack_get_depth (Var (HD inst.inst_outputs))
+            (q ++ MAP (phi_cell_value F) written) = SOME e /\
+          cells' = phi_origin_pop e written
+      else cells' = written
+End
+
+Theorem phi_origin_stage_stack_projection:
+  !inst next halting p q cells cells' left ps.
+    phi_origin_stage inst next halting p q cells cells' /\
+    ps.ps_stack = (if left then p else q) ++ MAP (phi_cell_value left) cells ==>
+    (SND (generate_phi_plan inst next halting ps)).ps_stack =
+      (if left then p else q) ++ MAP (phi_cell_value left) cells'
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `phi_origin_stage _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[phi_origin_stage_def, phi_origin_incoming_def, phi_origin_selected_def] >>
+  strip_tac >>
+  `stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d /\
+   keep = MEM (operand_to_string (stack_peek d ps.ps_stack)) next` by
+    (Cases_on `left` >> gvs[]) >>
+  drule_all phi_write_phase_stack_projection >>
+  disch_then (qspec_then `inst` assume_tac) >>
+  drule generate_phi_plan_write_phase >>
+  disch_then (qspecl_then [`next`, `halting`] assume_tac) >>
+  reverse (Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) next`)
+  >- (gvs[] >> rpt (pairarg_tac >> gvs[])) >>
+  gvs[] >>
+  `stack_get_depth (Var (HD inst.inst_outputs))
+      (SND (phi_write_phase inst next d ps)).ps_stack = SOME e` by
+    (Cases_on `left` >> gvs[]) >>
+  drule popmany_singleton_stack_projection >>
+  simp[phi_origin_pop_suffix_projection] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem phi_origin_stage_ready:
+  !inst next halting p q cells cells'.
+    phi_origin_stage inst next halting p q cells cells' ==>
+    ?d keep. phi_origin_stage_ready inst next halting p q cells d keep
+Proof
+  rpt gen_tac >> rewrite_tac[phi_origin_stage_def] >> strip_tac >>
+  qexistsl [`d`, `keep`] >>
+  simp[phi_origin_stage_ready_def] >> strip_tac >>
+  gvs[phi_origin_output_def]
+QED
+
+(* A guarded trace carries the actual intermediate states AND the physical
+   origin list.  No emitted-code equality is part of its guard. *)
+Definition phi_origin_trace_def:
+  (phi_origin_trace [] p q cells ps qs cells_end result_p result_q <=>
+    cells_end = cells /\ result_p = ([],ps) /\ result_q = ([],qs) /\
+    ps.ps_stack = p ++ MAP (phi_cell_value T) cells /\
+    qs.ps_stack = q ++ MAP (phi_cell_value F) cells) /\
+  (phi_origin_trace ((inst,next,halting)::steps) p q cells ps qs
+    cells_end result_p result_q <=>
+    ps.ps_stack = p ++ MAP (phi_cell_value T) cells /\
+    qs.ps_stack = q ++ MAP (phi_cell_value F) cells /\
+    ?cells1 ops_p ps1 ops_q qs1 rest_p ps2 rest_q qs2.
+      phi_origin_stage inst next halting p q cells cells1 /\
+      generate_phi_plan inst next halting ps = (ops_p,ps1) /\
+      generate_phi_plan inst next halting qs = (ops_q,qs1) /\
+      phi_origin_trace steps p q cells1 ps1 qs1 cells_end
+        (rest_p,ps2) (rest_q,qs2) /\
+      result_p = (ops_p ++ rest_p,ps2) /\
+      result_q = (ops_q ++ rest_q,qs2))
+End
+
+Theorem phi_origin_trace_projections:
+  !steps p q cells ps qs cells_end result_p result_q.
+    phi_origin_trace steps p q cells ps qs cells_end result_p result_q ==>
+    result_p = phi_schedule_run steps ps /\
+    result_q = phi_schedule_run steps qs
+Proof
+  Induct
+  >- simp[phi_origin_trace_def, phi_schedule_run_def] >>
+  Cases_on `h` >> Cases_on `r` >>
+  rpt gen_tac >> simp[phi_origin_trace_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[phi_schedule_run_def] >> rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem phi_origin_trace_final_stacks:
+  !steps p q cells ps qs cells_end result_p result_q.
+    phi_origin_trace steps p q cells ps qs cells_end result_p result_q ==>
+    (SND result_p).ps_stack = p ++ MAP (phi_cell_value T) cells_end /\
+    (SND result_q).ps_stack = q ++ MAP (phi_cell_value F) cells_end
+Proof
+  Induct
+  >- simp[phi_origin_trace_def] >>
+  Cases_on `h` >> Cases_on `r` >>
+  rpt gen_tac >> simp[phi_origin_trace_def] >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem phi_origin_trace_observations:
+  !steps p q cells ps qs cells_end result_p result_q.
+    phi_origin_trace steps p q cells ps qs cells_end result_p result_q /\
+    ps.ps_alloc = qs.ps_alloc ==>
+    FST result_p = FST result_q /\
+    (SND result_p).ps_alloc = (SND result_q).ps_alloc
+Proof
+  Induct
+  >- simp[phi_origin_trace_def] >>
+  Cases_on `h` >> Cases_on `r` >>
+  rpt gen_tac >> simp[phi_origin_trace_def] >> strip_tac >>
+  drule phi_origin_stage_ready >> strip_tac >>
+  drule_all phi_origin_stage_observations >> simp[] >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
+
+(* Pure ghost feasibility is separate from real execution and never mentions
+   emitted operations or allocator equality.  Establishing this predicate
+   from transfer-generated entry slots is the missing universal producer. *)
+Definition phi_origin_schedule_ready_def:
+  (phi_origin_schedule_ready [] p q cells cells_end <=> cells_end = cells) /\
+  (phi_origin_schedule_ready ((inst,next,halting)::steps) p q cells cells_end <=>
+    ?cells1. phi_origin_stage inst next halting p q cells cells1 /\
+      phi_origin_schedule_ready steps p q cells1 cells_end)
+End
+
+Theorem phi_origin_schedule_trace:
+  !steps p q cells cells_end ps qs.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    ps.ps_stack = p ++ MAP (phi_cell_value T) cells /\
+    qs.ps_stack = q ++ MAP (phi_cell_value F) cells ==>
+    phi_origin_trace steps p q cells ps qs cells_end
+      (phi_schedule_run steps ps) (phi_schedule_run steps qs)
+Proof
+  Induct
+  >- simp[phi_origin_schedule_ready_def, phi_origin_trace_def, phi_schedule_run_def] >>
+  Cases_on `h` >> Cases_on `r` >> rpt gen_tac >>
+  simp[phi_origin_schedule_ready_def] >> strip_tac >>
+  rename1 `phi_origin_stage inst next halting lower_p lower_q cells cells1` >>
+  `!left st.
+     st.ps_stack = (if left then lower_p else lower_q) ++ MAP (phi_cell_value left) cells ==>
+     (SND (generate_phi_plan inst next halting st)).ps_stack =
+       (if left then lower_p else lower_q) ++ MAP (phi_cell_value left) cells1` by
+    (rpt strip_tac >> irule phi_origin_stage_stack_projection >>
+     goal_assum drule >> simp[]) >>
+  pop_assum (mk_asm "stage_projection") >>
+  simp[phi_origin_trace_def, phi_schedule_run_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  qexists `cells1` >> simp[] >>
+  `ps1.ps_stack = lower_p ++ MAP (phi_cell_value T) cells1` by
+    (asm "stage_projection" (qspecl_then [`T`, `ps`] mp_tac) >> simp[]) >>
+  `ps1'.ps_stack = lower_q ++ MAP (phi_cell_value F) cells1` by
+    (asm "stage_projection" (qspecl_then [`F`, `qs`] mp_tac) >> simp[]) >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`ps1`, `ps1'`] mp_tac) >> simp[]
+QED
+
+Theorem phi_origin_schedule_replay:
+  !steps p q cells cells_end ps qs.
+    phi_origin_schedule_ready steps p q cells cells_end /\
+    ps.ps_stack = p ++ MAP (phi_cell_value T) cells /\
+    qs.ps_stack = q ++ MAP (phi_cell_value F) cells /\
+    ps.ps_alloc = qs.ps_alloc ==>
+    FST (phi_schedule_run steps ps) = FST (phi_schedule_run steps qs) /\
+    (SND (phi_schedule_run steps ps)).ps_alloc =
+      (SND (phi_schedule_run steps qs)).ps_alloc
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all phi_origin_schedule_trace >> strip_tac >>
+  drule_all phi_origin_trace_observations >> simp[]
+QED
+
+(* Universal producer / preservation ledger, after the checked composition.
+
+   The operational experiment is now complete: phi_origin_stage edits the
+   physical suffix, phi_origin_stage_stack_projection realizes those edits,
+   and phi_origin_schedule_trace connects arbitrary feasible ghost prefixes
+   to both real executions.  Trace observations are proved consequences,
+   never feasibility premises.  Original cells are not retired on death.
+
+   Exact outstanding producer target:
+     for transfer-generated entry slots cells0 and the analyzed schedule,
+     establish ?cells_end.
+       phi_origin_schedule_ready steps p q cells0 cells_end.
+   This is NOT asserted as a theorem here.  Its base case is trivial; its
+   step requires witnesses cells1 for phi_origin_stage and feasibility of
+   the tail.  Schedule feasibility is a consumer, not an ordering invariant.
+
+   Initialization obligations:
+   - realize the two input_vars_from lists by common indexed Original cells;
+   - derive incoming first hits within this suffix from entry class emission,
+     coverage and disjoint incoming classes (not from arbitrary residuals);
+   - derive selected-next-live agreement from temporal incoming death (or
+     equality of selected common values).  SSA uniqueness is not freshness
+     of dynamic occurrences, including occurrences in residuals.
+
+   Exact extra physical output obligation in a popping stage:
+     with written = phi_origin_write keep d ret cells, find e such that
+       e < LENGTH written and BOTH realized stack_get_depth ret = SOME e.
+   The previous phi_origin_stage_ready only demanded equality of queries.
+   Physical origin preservation additionally needs the hit inside written.
+   A new ret was physically written there, but an older ret above it may
+   be an unequal Original cell.  Transfer order / remaining-use liveness
+   must exclude such asymmetric earlier hits or prove they are common.
+   This is the smallest unresolved output-ordering implication, not a fact
+   proved by incoming-depth agreement or terminal absence alone.
+
+   Preservation obligations after the actual write and optional swap/pop:
+   - keep every surviving unequal Original cell at its actual position;
+   - re-establish the next incoming first hits and selected-live agreement;
+   - preserve the output-ordering property just described for future ret.
+   No predicate here supplies these producers.  Their universal derivation
+   remains open; this local experiment does not establish cleanup, persistent
+   spills, JMP reset, DFS splicing, or the frozen lineage theorem.
+*)
