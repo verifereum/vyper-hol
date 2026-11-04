@@ -3,7 +3,7 @@ Theory bodyExprClosureMemory
 Ancestors
   bodyMemoryPreds bodyMemoryDefs bodyIfExpMemory exprSimOperators exprSimHyps
   exprLoweringProps vyperInterpreter vyperState
-  bodyLiteralMemory bodyAllocMemory vyperTypeCallGraph
+  bodyLiteralMemory bodyAllocMemory bodyFieldMemory vyperTypeCallGraph
 
 Theorem body_ifexp_word_mem_case:
   !cx t c a b. is_word_type t /\
@@ -79,3 +79,21 @@ val () = List.app (fn th =>
      then print "BODY_LEAF_CLOSURE_MEMORY_AUDIT OK\n"
      else raise Fail "leaf closure memory inherited admission"
   end) [body_literal_word_mem_case, body_name_mem_case];
+
+Theorem body_attribute_name_mem_case:
+  !cx ann sid id fld.
+    body_expr_mem_ok cx (Attribute ann (Name (StructT sid) id) fld)
+Proof
+  pure_rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  metis_tac[compile_attribute_name_body_sim_mem,
+            compile_attribute_name_body_vv_sim_mem]
+QED
+
+val () =
+  let val th = body_attribute_name_mem_case
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in if null axioms andalso null (Thm.hyp th) andalso
+        List.all (fn name => name = "DISK_THM") oracles
+     then print "BODY_ATTRIBUTE_NAME_CLOSURE_MEMORY_AUDIT OK\n"
+     else raise Fail "attribute name closure memory inherited admission"
+  end;
