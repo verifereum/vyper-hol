@@ -27,6 +27,8 @@
  *                           every fuel
  *   mem_safe_point_closed, mem_safe_point_entry, mem_safe_point_mem
  *                         — mem_safe_point is a reachability invariant
+ *   revert_forward_at_opcode — the exemption covers only RETURNDATACOPY
+ *                           and REVERT
  *   mem_safe_raw_unit_memory_ok — the bridge to raw_unit_memory_ok
  *)
 
@@ -64,7 +66,7 @@ Definition mem_safe_defs:
     case get_instruction bb s.vs_inst_idx of
       NONE => T
     | SOME inst =>
-        mem_safe_step fuel ctx inst s /\
+        (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
         case step_inst fuel ctx inst s of
           OK s' =>
             if is_terminator inst.inst_opcode then T
@@ -152,7 +154,7 @@ Theorem mem_safe_block_step:
     get_instruction bb s.vs_inst_idx = SOME inst /\
     step_inst fuel ctx inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     (mem_safe_block fuel ctx bb s <=>
-     mem_safe_step fuel ctx inst s /\
+     (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
      mem_safe_block fuel ctx bb (s' with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rw[Once mem_safe_block_def]
@@ -165,7 +167,7 @@ Theorem mem_safe_run_step:
     get_instruction bb s.vs_inst_idx = SOME inst /\
     step_inst fuel ctx inst s = OK s' /\ ~is_terminator inst.inst_opcode ==>
     (mem_safe_run fuel ctx fn s <=>
-     mem_safe_step fuel ctx inst s /\
+     (revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s) /\
      mem_safe_run fuel ctx fn (s' with vs_inst_idx := SUC s.vs_inst_idx))
 Proof
   rpt strip_tac >>
@@ -183,7 +185,7 @@ Theorem mem_safe_run_head:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME inst /\
     mem_safe_run fuel ctx fn s ==>
-    mem_safe_step fuel ctx inst s
+    revert_forward_at bb s.vs_inst_idx \/ mem_safe_step fuel ctx inst s
 Proof
   rw[mem_safe_run_def] >> pop_assum mp_tac >>
   simp[Once mem_safe_block_def]
@@ -241,7 +243,7 @@ Proof
       ONCE_REWRITE_TAC[mem_safe_block_def] >>
       Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
       rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
-      strip_tac >> conj_tac >- metis_tac[] >>
+      disch_then (CONJUNCTS_THEN ASSUME_TAC) >> conj_tac >- metis_tac[] >>
       Cases_on `step_inst n ctx inst s` >> simp[] >>
       rename1 `step_inst n ctx inst s = OK s1` >>
       `step_inst m ctx inst s = OK s1` by
@@ -309,7 +311,7 @@ Proof
       ONCE_REWRITE_TAC[mem_safe_block_def, exec_block_def] >>
       Cases_on `get_instruction bb s.vs_inst_idx` >> simp[] >>
       rename1 `get_instruction bb s.vs_inst_idx = SOME inst` >>
-      strip_tac >>
+      disch_then (CONJUNCTS_THEN ASSUME_TAC) >>
       `!e. step_inst n ctx inst s <> Error e` by
         (rpt strip_tac >> gvs[]) >>
       `step_inst m ctx inst s = step_inst n ctx inst s` by
@@ -384,13 +386,26 @@ Proof
   simp[get_instruction_def] >> irule MEM_lookup_block >> simp[]
 QED
 
+(* Only the two forwarding instructions are exempt. *)
+Theorem revert_forward_at_opcode:
+  !bb i inst.
+    get_instruction bb i = SOME inst /\ revert_forward_at bb i ==>
+    inst.inst_opcode = RETURNDATACOPY \/ inst.inst_opcode = REVERT
+Proof
+  rw[revert_forward_at_def, revert_forward_pair_def] >> gvs[]
+QED
+
 Theorem mem_safe_point_mem:
   !ctx fn inst s.
-    mem_safe_point ctx fn inst s ==> inst_mem_below_frontier inst s
+    mem_safe_point ctx fn inst s ==> inst_mem_ok_in_fn fn inst s
 Proof
   rw[mem_safe_point_def] >> drule_all active_inst_lookup >> strip_tac >>
-  `mem_safe_step 0 ctx inst s` by metis_tac[mem_safe_run_head] >>
-  pop_assum mp_tac >> simp[Once mem_safe_step_def]
+  `revert_forward_at bb s.vs_inst_idx \/ mem_safe_step 0 ctx inst s` by
+    metis_tac[mem_safe_run_head] >>
+  pop_assum strip_assume_tac >> simp[inst_mem_ok_in_fn_def]
+  >~ [`mem_safe_step 0 ctx inst s`]
+  >- (pop_assum mp_tac >> simp[Once mem_safe_step_def]) >>
+  metis_tac[]
 QED
 
 (* Entering a block on a run that is safe at every fuel. *)
@@ -462,8 +477,12 @@ Proof
   `ALL_DISTINCT (fn_labels callee)` by
     (drule lookup_function_MEM >> fs[EVERY_MEM]) >>
   drule_all active_inst_lookup >> strip_tac >>
+  rename1 `get_instruction bb s.vs_inst_idx = SOME ivk` >>
+  `~revert_forward_at bb s.vs_inst_idx` by
+    (strip_tac >> drule_all revert_forward_at_opcode >> simp[]) >>
+  `!fuel. mem_safe_step fuel ctx ivk s` by metis_tac[mem_safe_run_head] >>
   `!fuel. mem_safe_blocks fuel ctx callee cs` by
-    metis_tac[mem_safe_run_head, mem_safe_step_invoke] >>
+    metis_tac[mem_safe_step_invoke] >>
   metis_tac[mem_safe_point_entry]
 QED
 

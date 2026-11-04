@@ -139,12 +139,12 @@ Proof
   simp[emitted_insts_def, same_blocks_def, DROP_APPEND1,
        not_fresh_at_def] >>
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
-  >- (simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+  >- (simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_alloca_def,
            exec_write2_def, eval_operand_def, lookup_var_update_var] >>
       rpt strip_tac >> simp[lookup_var_def, update_var_def, mstore_def,
                            FLOOKUP_UPDATE] >> metis_tac[]) >>
   rename1 `FLOOKUP s.vs_allocas sa.cs_next_id = SOME alloc` >> PairCases_on `alloc` >>
-  simp[run_inst_seq_def, step_inst_base_def, venomInstTheory.mk_inst_def, exec_alloca_def,
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_alloca_def,
        exec_write2_def, eval_operand_def, lookup_var_update_var] >>
   rpt strip_tac >> simp[lookup_var_mstore, lookup_var_update_var] >> metis_tac[]
 QED

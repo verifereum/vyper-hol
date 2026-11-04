@@ -105,11 +105,15 @@ val expected_composition = ``
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
+          (precompile_call_starved es /\
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
           venom_frame_rel es r es' (run_context fuel ctx' vs)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
+             (precompile_call_starved es /\
+              ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
              call_result_rel tops ret am tx es r es')``;
 val saved_composition = DB.fetch "e2eCorrectness" "e2e_vyper_to_evm";
 val () = if Term.aconv expected_composition (Thm.concl saved_composition)

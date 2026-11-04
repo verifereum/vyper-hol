@@ -59,6 +59,21 @@ Proof
   imp_res_tac step_inst_base_oracle >> gvs[]
 QED
 
+Theorem remap_step_pending_deletions[local]:
+  alloca_remap_rel fn roots remap s1 s2 /\
+  inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+  step_inst_base inst s1 = OK v1 /\ step_inst_base inst s2 = OK v2 ==>
+  v1.vs_pending_deletions = v2.vs_pending_deletions
+Proof
+  rpt strip_tac >>
+  `alloca_remap_frame s1 = alloca_remap_frame s2` by
+    fs[alloca_remap_rel_def] >>
+  qpat_x_assum `alloca_remap_frame _ = _`
+    (mp_tac o AP_TERM ``venom_state_vs_pending_deletions``) >>
+  simp[alloca_remap_frame_def] >> strip_tac >>
+  imp_res_tac step_inst_base_oracle >> gvs[]
+QED
+
 (* ===== Operand Agreement ===== *)
 
 (* Non-pointer operands evaluate identically under alloca_remap_rel. *)
@@ -674,13 +689,6 @@ Theorem mstore_eq_wmwe[local]:
   write_memory_with_expansion offset (word_to_bytes value T) s
 Proof
   simp[mstore_def, write_memory_with_expansion_def, length_w2b_256]
-QED
-
-Theorem mstore8_eq_wmwe[local]:
-  mstore8 offset value s =
-  write_memory_with_expansion offset [w2w value] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def]
 QED
 
 (* Generic: writing same bytes at corresponding alloca offsets via
@@ -2691,8 +2699,9 @@ Theorem mem_ops_opcode_support[local]:
        CODECOPY; RETURNDATACOPY; EXTCODECOPY; CALL; DELEGATECALL;
        STATICCALL; MLOAD; ILOAD; RETURN; CREATE; CREATE2; SHA3; LOG; REVERT]
 Proof
-  gen_tac >> Cases_on `inst.inst_opcode` >>
-  simp[mem_write_ops_def, mem_read_ops_def]
+  gen_tac >> Cases_on `inst.inst_opcode` >> simp[] >>
+  asm_rewrite_tac[mem_write_ops_def, mem_read_ops_def, opcode_case_def] >>
+  simp[]
 QED
 
 Theorem remap_preserved_mem_ops[local]:
@@ -2791,7 +2800,7 @@ Resume remap_preserved_mem_ops[mstore8]:
   qpat_x_assum `w1 = addr` (SUBST_ALL_TAC o SYM) >>
   fs[] >>
   (* Rewrite to wmwe and apply write_at_pv_preserves_remap *)
-  simp[mstore8_eq_wmwe] >>
+  simp[venomMemPropsTheory.mstore8_eq_write_mem] >>
   (* Safe access bound: w2n w1 + 1 <= orig_off + asz *)
   safe_access_bound_tac
     `<| iao_ofst := Var v; iao_size := SOME (Lit 1w);
@@ -4382,7 +4391,16 @@ Resume step_inst_base_error_transfer[CALLDATACOPY]:
   Cases_on `eval_operand src_op s2` >> simp[]
 QED
 Resume step_inst_base_error_transfer[CODECOPY]:
-  error_inline_tac
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  rename1 `inst.inst_operands = a::b::c::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  gvs[AllCaseEqs()] >>
+  first_assum drule >> simp[] >>
+  rpt case_eval_in_goal >> simp[]
 QED
 Resume step_inst_base_error_transfer[DALLOCA]:
   error_inline_tac
@@ -5012,7 +5030,8 @@ Proof
   >- (term_op_agree >>
       BasicProvers.every_case_tac >>
       gvs[lift_result_def] >>
-      irule alloca_remap_rel_halt_accounts >> simp[])
+      irule alloca_remap_rel_halt_returndata >>
+      irule alloca_remap_rel_accounts_update >> simp[])
   (* INVALID *)
   >> (irule alloca_remap_rel_halt_returndata >> simp[])
 QED
@@ -5433,9 +5452,9 @@ Resume step_preserves_ptrs_in_alloca_bounds[alloca_case]:
                 s.vs_alloca_next + w2n alloc_size < dimword (:256)` by
     simp[] >>
   `u = HD inst.inst_outputs` by (gvs[] >> Cases_on `inst.inst_outputs` >> gvs[]) >>
-  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
-  simp[step_inst_base_def] >>
   Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_opcode_eqs] >>
   simp[exec_alloca_def] >>
   rpt (BasicProvers.FULL_CASE_TAC >> gvs[]) >>
   strip_tac >> gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -5524,7 +5543,7 @@ Proof
     rpt (CHANGED_TAC (rpt (pairarg_tac >> gvs[]))) >>
     gvs[update_var_def] >>
     (* All results use mstore/mstore8/mcopy → wmwe → monotone *)
-    simp[mstore_eq_wmwe, mstore8_eq_wmwe, mcopy_def] >>
+    simp[mstore_eq_wmwe, venomMemPropsTheory.mstore8_eq_write_mem, mcopy_def] >>
     irule wmwe_mem_length_mono)
 QED
 

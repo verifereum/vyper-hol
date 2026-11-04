@@ -202,7 +202,7 @@ Proof
 QED
 
 Theorem checked_constant_declared_type:
-  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), 'checker_slot) alist # ((num option # string), 'checker_slot) alist) alist) checker_addr mods = SOME artifact /\
+  check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   MEM (src,ts) mods /\
   MEM (VariableDecl vis (Constant e) id ty init) ts /\

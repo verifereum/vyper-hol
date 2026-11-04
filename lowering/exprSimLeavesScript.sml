@@ -317,8 +317,12 @@ Theorem compile_literal_bytes_stack:
     (!n. ty <> BaseT (BytesT (Dynamic n))) ==>
     ?op. compile_literal_vv ty (BytesL bs) st = (StackValue ty op, st)
 Proof
-  rw[compile_literal_vv_def, comp_return_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[comp_return_def])
+  rpt strip_tac >>
+  Cases_on `ty` >> simp[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BaseT bt` >>
+  Cases_on `bt` >> gvs[compile_literal_vv_def, comp_return_def] >>
+  rename1 `BytesT bound` >>
+  Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
 QED
 
 Theorem compile_literal_case_sim:

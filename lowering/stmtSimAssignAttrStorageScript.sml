@@ -289,8 +289,9 @@ Proof
                         [Var d; op] []) s1 =
         OK (if tr then tstore a w s1 else sstore a w s1)` by
        (Cases_on `tr` >>
-        simp[step_inst_base_def, exec_write2_def, mk_inst_def,
-             eval_operand_def]) >>
+        simp_tac bool_ss [COND_CLAUSES] >>
+        rewrite_tac[step_inst_base_def, mk_inst_def] >>
+        simp[exec_write2_def, eval_operand_def]) >>
      Cases_on `tr` >> gvs[] >>
      simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
      gvs[lookup_var_def, sstore_def, tstore_def, LET_THM]) >>

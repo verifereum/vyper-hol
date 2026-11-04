@@ -21,25 +21,23 @@
  *)
 Theory o1ContractTheorems
 Ancestors
-  o1PassContract unitMemInv venomPassSchedule venomCompilerTypes
+  o1PassContract o1DretDesugarContract o1ContractFmpLowering unitMemInv
+  venomPassSchedule venomCompilerTypes
 
 (* ===== The pre-walk runs ===== *)
 
 Theorem o1_contract_simplify_cfg_pre_walk:
   o1_step_contract rpolicy (CFP_Simple VP_SimplifyCFG) /\
   (!view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
-            o1_src_inv o1_src_inv)
+            (o1_src_inv D) (o1_src_inv D))
 Proof
   cheat
 QED
 
-Theorem o1_contract_dret_desugar_pre_walk:
-  o1_step_contract rpolicy (CFP_Simple VP_DretDesugar) /\
-  (!view. o1_stage_contract rpolicy D (CFP_Simple VP_DretDesugar) view no_pre
-            o1_src_inv o1_src_inv)
-Proof
-  cheat
-QED
+(* DretDesugar's run keeps every invariant I: it is the identity on
+   DRET-free stage contexts. *)
+Theorem o1_contract_dret_desugar_pre_walk =
+  o1DretDesugarContractTheory.o1_contract_dret_desugar_pre_walk
 
 (* ===== The walk runs, by stage ===== *)
 
@@ -68,12 +66,8 @@ QED
 
 (* FmpLowering reads callee signatures (the walk view): the static
    invariant becomes the lowered one. *)
-Theorem o1_contract_fmp_lowering:
-  o1_step_contract_at 3 rpolicy (CFP_Simple VP_FmpLowering) /\
-  o1_run_contract rpolicy D 3
-Proof
-  cheat
-QED
+Theorem o1_contract_fmp_lowering =
+  o1ContractFmpLoweringTheory.o1_contract_fmp_lowering
 
 Theorem o1_contract_make_ssa_2:
   o1_step_contract_at 4 rpolicy (CFP_Simple VP_MakeSSA) /\

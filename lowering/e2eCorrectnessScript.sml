@@ -14,7 +14,8 @@ Theory e2eCorrectness
 Ancestors
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel
-  vyperLoweringCorrect loweringRuntimeCorrect loweringShapeProps vfmExecution
+  vyperLoweringCorrect loweringRuntimeCorrect loweringMemCorrect
+  loweringShapeProps loweringShapeSource vfmExecution
   venomPipelineCorrect
   passSimulationDefs
   codegenCorrectness
@@ -221,11 +222,15 @@ Theorem e2e_vyper_to_evm_states:
          ctx ctx' vs_in vs_out /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
+          (precompile_call_starved es /\
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
           venom_frame_rel es r es' (run_context fuel ctx' vs_out)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
+             (precompile_call_starved es /\
+              ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
              call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
@@ -241,7 +246,9 @@ Proof
   `terminates (run_context fuel' ctx' vs_out)` by
     metis_tac[dead_result_rel_terminates] >>
   qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
-    (qspec_then `fuel'` strip_assume_tac) >>
+    (qspec_then `fuel'` strip_assume_tac)
+  >- gvs[]
+  >- (gvs[] >> metis_tac[]) >>
   gvs[] >>
   drule_all external_call_result_rel_dead_transport >> strip_tac >>
   drule_all external_call_result_rel_frame >> simp[]
@@ -259,11 +266,15 @@ Theorem e2e_vyper_to_evm:
          ctx ctx' vs vs /\
        !fuel. ?r es'.
          run_call es = SOME (r, es') /\
-         (frame_resource_starved es r es' \/ precompile_call_starved es \/
+         (frame_resource_starved es r es' \/
+          (precompile_call_starved es /\
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
           venom_frame_rel es r es' (run_context fuel ctx' vs)))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-            (frame_resource_starved es r es' \/ precompile_call_starved es \/
+            (frame_resource_starved es r es' \/
+             (precompile_call_starved es /\
+              ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
              call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
@@ -280,7 +291,9 @@ Proof
     metis_tac[dead_result_rel_terminates] >>
   (* gvs identifies every stage-3 witness with the actual run by uniqueness. *)
   qpat_x_assum `!fuel. frame_resource_starved es r es' \/ _`
-    (qspec_then `fuel'` strip_assume_tac) >>
+    (qspec_then `fuel'` strip_assume_tac)
+  >- gvs[]
+  >- (gvs[] >> metis_tac[]) >>
   gvs[] >>
   drule_all external_call_result_rel_dead_transport >> strip_tac >>
   drule_all external_call_result_rel_frame >> simp[]
@@ -807,13 +820,17 @@ Theorem vyper_call_correct:
     ?r es'.
       run_call es = SOME (r, es') /\
       (frame_resource_starved es r es' \/
-       precompile_call_starved es \/
+       (precompile_call_starved es /\
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
+  drule supported_program_raw_shape_free_program >> strip_tac >>
+  `?art. check_contract F am.layouts tx.target [(NONE, tops)] = SOME art` by
+    metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
@@ -836,10 +853,20 @@ Proof
   `reserved_intervals_wf unit.cu_context.ctx_global_reserved` by
     (drule lower_vyper_runtime_unit_global_reserved >>
      simp[staticLayoutDefsTheory.reserved_intervals_wf_def]) >>
+  `EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions` by
+    (drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+     drule run_lowering_eom_none >> simp[]) >>
+  `fixed_region_reserved 0 unit.cu_context` by
+    simp[ptrDisciplineTheory.fixed_region_reserved_def] >>
   `dead_wf (external_call_dead tx
               (call_external (SOME vs.vs_outcomes) [] am tx))` by
     simp[external_call_dead_wf] >>
-  drule_all run_venom_pipeline_correct >> strip_tac >>
+  mp_tac (Q.SPECL
+    [`external_call_dead tx
+        (call_external (SOME vs.vs_outcomes) [] am tx)`,
+     `0`, `rpolicy`, `unit`, `out`, `vs`]
+    run_venom_pipeline_correct) >> simp[] >>
+  disch_then (qx_choose_then `vs_in` strip_assume_tac) >>
   `initial_venom_state_rel tops am tx vs_in` by
     (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
   `vs_in.vs_outcomes = vs.vs_outcomes` by
@@ -856,13 +883,13 @@ Proof
   simp[] >> conj_tac
   >- (fs[source_unit_execution_correct_def] >>
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
-  `raw_unit_memory_ok unit.cu_context vs_in` by
-    (irule lower_vyper_runtime_unit_memory_ok >> simp[] >>
-     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> simp[]) >>
-  `raw_unit_memory_ok unit.cu_context vs` by
-    (irule lower_vyper_runtime_unit_memory_ok >> simp[] >>
-     qexistsl_tac [`am`, `ret`, `rpolicy`, `tops`, `tx`] >> simp[]) >>
-  drule_all o1_pipeline_memory_obligations >> strip_tac >>
+  mp_tac (Q.SPECL [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs_in`]
+    lower_vyper_runtime_unit_memory_ok) >> simp[] >> strip_tac >>
+  `ctx_sim (external_call_dead tx
+      (call_external (SOME vs.vs_outcomes) [] am tx))
+      unit.cu_context out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  drule_all o1_lowered_codegen_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   conj_tac >- gvs[] >>
   gen_tac >> irule codegen_correct >> simp[] >>
@@ -956,7 +983,9 @@ Theorem e2e_deploy_correctness:
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/ precompile_call_starved es \/
+      (frame_resource_starved es r es' \/
+       (precompile_call_starved es /\
+        ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
        case load_contract NONE [] am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
             ?section lgs.
@@ -1001,7 +1030,9 @@ val _ =
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>
       ?r es'. run_call es = SOME (r,es') /\
-        (frame_resource_starved es r es' \/ precompile_call_starved es \/
+        (frame_resource_starved es r es' \/
+         (precompile_call_starved es /\
+          ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs) \/
          deploy_result_rel tops runtime_bc tx es r es'
            (load_contract NONE [] am tx [(NONE,tops)] []))``;
     val expanded = concl (REWRITE_RULE [deploy_result_rel_def] (ASSUME expected));

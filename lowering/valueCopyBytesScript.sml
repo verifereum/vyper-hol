@@ -4,8 +4,9 @@
  *
  * TOP-LEVEL:
  *   compile_store_memory_bytestring_src — the copy at the destination type
- *   bytestring_val_in_memory_transfer, bytestring_val_footprint_eq — layout
- *     and footprint agree across bytestring types
+ *   bytestring_val_in_memory_transfer, bytestring_val_footprint_eq,
+ *   bytestring_val_store_size_eq — layout, footprint and store size agree
+ *     across bytestring types
  *   bytestring_type_value, is_bytestring_word_type — bytestring types
  *)
 Theory valueCopyBytes
@@ -67,4 +68,18 @@ Proof
   qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
   simp[] >> rpt strip_tac >>
   Cases_on `v` >> gvs[value_has_type_def, val_footprint_def]
+QED
+
+Theorem bytestring_val_store_size_eq:
+  !tenv t1 t2 tv1 tv2 v.
+    is_bytestring_type t1 /\ is_bytestring_type t2 /\
+    evaluate_type tenv t1 = SOME tv1 /\ evaluate_type tenv t2 = SOME tv2 /\
+    value_has_type tv1 v /\ value_has_type tv2 v ==>
+    val_store_size tv1 v = val_store_size tv2 v
+Proof
+  rpt strip_tac >>
+  qspecl_then [`tenv`, `t1`, `tv1`] mp_tac bytestring_type_value >>
+  qspecl_then [`tenv`, `t2`, `tv2`] mp_tac bytestring_type_value >>
+  simp[] >> rpt strip_tac >>
+  Cases_on `v` >> gvs[value_has_type_def, val_store_size_def]
 QED

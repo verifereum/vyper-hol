@@ -93,8 +93,11 @@ Proof
         drule (cj 3 exec_pure_ok_update) >> strip_tac >>
         gvs[update_var_def, FLOOKUP_UPDATE, venom_state_component_equality]) >>
   (* the assertions *)
-  pop_assum mp_tac >> rpt (CASE_TAC >> simp[]) >> rw[update_var_def] >>
-  simp[FLOOKUP_UPDATE, venom_state_component_equality]
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `op::ops` >> Cases_on `ops` >> gvs[] >>
+  Cases_on `eval_operand op ss` >> gvs[] >>
+  rename1 `SOME cond` >> Cases_on `cond = 0w` >>
+  gvs[venom_state_component_equality]
 QED
 
 (* ===== The run ===== *)

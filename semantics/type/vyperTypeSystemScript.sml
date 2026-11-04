@@ -463,7 +463,8 @@ Datatype:
     toplevel_vtypes         : (nsid |-> value_type);
     type_defs       : (nsid |-> type_args);
     fn_sigs         : (nsid |-> fn_sig);
-    flag_members    : (nsid |-> string list)
+    flag_members    : (nsid |-> string list);
+    event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -477,8 +478,29 @@ Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
 
+Definition event_arg_compatible_def:
+  event_arg_compatible (BaseT (StringT n)) (BaseT (StringT m)) = (m <= n) /\
+  event_arg_compatible (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) = (m <= n) /\
+  event_arg_compatible (ArrayT ft (Dynamic n)) (ArrayT at (Dynamic m)) =
+    (m <= n /\ event_arg_compatible ft at) /\
+  event_arg_compatible (ArrayT ft (Fixed n)) (ArrayT at (Fixed m)) =
+    (m = n /\ event_arg_compatible ft at) /\
+  event_arg_compatible (TupleT fts) (TupleT ats) =
+    (LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats) /\
+  event_arg_compatible fty aty = (aty = fty) /\
+  event_arg_compatible_list [] [] = T /\
+  event_arg_compatible_list (f::fs) (a::rest) =
+    (event_arg_compatible f a /\ event_arg_compatible_list fs rest) /\
+  event_arg_compatible_list _ _ = F
+End
+
 (* ===== Type builtin/conversion checks ===== *)
 
+(* Bytes[N]/String[N] targets accept only Bytes/String sources
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
+   conversion takes a source that is a subtype of its target: same-class
+   bytestrings must narrow, bytesM must change width
+   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -486,10 +508,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
-  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = (k < n) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
@@ -514,12 +535,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
   valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
   valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
   valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (StringT k)) = (k < n) /\
   valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
   valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
@@ -740,6 +758,9 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\ ext_call_opts_ok is_static opts /\
+     (* Vyper rejects default_return_value on a call that returns nothing
+        (semantics/types/function.py). *)
+     (ret_ty = NoneT ==> ~MEM EKDefault opts) /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
@@ -769,12 +790,16 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
-     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-           bound_at_most bd 4) /\
-     (?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd'))) /\
+     (?n. EL 0 (MAP expr_type args) =
+            ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n) /\ n <= 4) /\
+     (case EL 0 args of
+        Builtin _ (MakeArray _ _) topics => LENGTH topics <= 4
+      | _ => F) /\
+     (EL 1 (MAP expr_type args) = BaseT (BytesT (Fixed 32)) \/
+      ?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
-     (?bd. HD (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. HD (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
@@ -893,6 +918,136 @@ Definition well_typed_custom_error_def:
 End
 
 
+(* ===== Writes to a for loop's iterated array ===== *)
+
+(* Vyper rejects a for loop whose body writes to the place it iterates over
+   (ImmutableViolation "Cannot modify loop variable" in
+   vyper/semantics/analysis/local.py).  The evaluator iterates over a copy
+   of the array but the compiled loop reads it in place, so the two agree
+   only on programs Vyper accepts.
+
+   A place is compared by VarAccess (base.py): its variable and its
+   attribute path up to the first subscript, which is an analysis barrier.
+   place_access tgt [] gives both. *)
+Definition place_access_def:
+  place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
+  place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\
+  place_access (SubscriptTarget tgt _) attrs = place_access tgt [] /\
+  place_access (AttributeTarget tgt a) attrs = place_access tgt (a::attrs)
+End
+
+(* VarAccess.contains: writing w may change place p. *)
+Definition place_contains_def:
+  place_contains w p <=>
+    FST (place_access w []) = FST (place_access p []) /\
+    isPREFIX (SND (place_access w [])) (SND (place_access p []))
+End
+
+(* _get_variable_access on an iterator: NONE for anything but a variable
+   seen through attributes and subscripts. *)
+Definition expr_place_def:
+  expr_place (Name _ id) = SOME (NameTarget id) /\
+  expr_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
+  expr_place (Subscript _ e i) =
+    OPTION_MAP (\tgt. SubscriptTarget tgt i) (expr_place e) /\
+  expr_place (Attribute _ e a) =
+    OPTION_MAP (\tgt. AttributeTarget tgt a) (expr_place e) /\
+  expr_place _ = NONE
+End
+
+(* ok holds of every place written by pop() in an expression.  The
+   evaluator ignores a Call's last field. *)
+Definition expr_writes_ok_def:
+  expr_writes_ok ok (Name _ _) = T /\
+  expr_writes_ok ok (TopLevelName _ _) = T /\
+  expr_writes_ok ok (FlagMember _ _ _) = T /\
+  expr_writes_ok ok (IfExp _ c x y) =
+    (expr_writes_ok ok c /\ expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+  expr_writes_ok ok (Literal _ _) = T /\
+  expr_writes_ok ok (StructLit _ _ kes) =
+    EVERY (expr_writes_ok ok) (MAP SND kes) /\
+  expr_writes_ok ok (Subscript _ x y) =
+    (expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+  expr_writes_ok ok (Attribute _ x _) = expr_writes_ok ok x /\
+  expr_writes_ok ok (Builtin _ _ es) = EVERY (expr_writes_ok ok) es /\
+  expr_writes_ok ok (TypeBuiltin _ _ _ es) = EVERY (expr_writes_ok ok) es /\
+  expr_writes_ok ok (Pop _ tgt) = (ok tgt /\ target_writes_ok ok tgt) /\
+  expr_writes_ok ok (Call _ _ es _) = EVERY (expr_writes_ok ok) es /\
+  target_writes_ok ok (NameTarget _) = T /\
+  target_writes_ok ok (TopLevelNameTarget _) = T /\
+  target_writes_ok ok (SubscriptTarget tgt e) =
+    (target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  target_writes_ok ok (AttributeTarget tgt _) = target_writes_ok ok tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,e) => expr_size e
+    | INR (_,tgt) => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  Induct_on `es` >> rw[] >> res_tac >> simp[]
+End
+
+Definition atarget_writes_ok_def:
+  atarget_writes_ok ok (BaseTarget tgt) = (ok tgt /\ target_writes_ok ok tgt) /\
+  atarget_writes_ok ok (TupleTarget tgts) = EVERY (atarget_writes_ok ok) tgts
+Termination
+  WF_REL_TAC `measure (\(_,tgt). assignment_target_size tgt)` >>
+  rw[] >> Induct_on `tgts` >> rw[] >> res_tac >> simp[]
+End
+
+(* ok holds of every place a statement writes: assignment targets, append()
+   and pop() targets, in nested statements and expressions too. *)
+Definition stmt_writes_ok_def:
+  stmt_writes_ok ok Pass = T /\
+  stmt_writes_ok ok Continue = T /\
+  stmt_writes_ok ok Break = T /\
+  stmt_writes_ok ok (Expr e) = expr_writes_ok ok e /\
+  stmt_writes_ok ok (For _ _ it _ body) =
+    ((case it of
+      | Array e => expr_writes_ok ok e
+      | Range x y => expr_writes_ok ok x /\ expr_writes_ok ok y) /\
+     stmts_writes_ok ok body) /\
+  stmt_writes_ok ok (If e yes no) =
+    (expr_writes_ok ok e /\ stmts_writes_ok ok yes /\ stmts_writes_ok ok no) /\
+  stmt_writes_ok ok (Assert e reason) =
+    (expr_writes_ok ok e /\
+     case reason of
+     | AssertReason r => expr_writes_ok ok r
+     | AssertCustomError err => EVERY (expr_writes_ok ok) (custom_error_exprs err)
+     | _ => T) /\
+  stmt_writes_ok ok (Log _ es) = EVERY (expr_writes_ok ok) es /\
+  stmt_writes_ok ok (Raise reason) =
+    (case reason of
+     | RaiseReason r => expr_writes_ok ok r
+     | RaiseCustomError err => EVERY (expr_writes_ok ok) (custom_error_exprs err)
+     | _ => T) /\
+  stmt_writes_ok ok (Return NONE) = T /\
+  stmt_writes_ok ok (Return (SOME e)) = expr_writes_ok ok e /\
+  stmt_writes_ok ok (Assign tgt e) =
+    (atarget_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (AugAssign _ tgt _ e) =
+    (ok tgt /\ target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (Append tgt e) =
+    (ok tgt /\ target_writes_ok ok tgt /\ expr_writes_ok ok e) /\
+  stmt_writes_ok ok (AnnAssign _ _ e) = expr_writes_ok ok e /\
+  stmts_writes_ok ok [] = T /\
+  stmts_writes_ok ok (s::ss) = (stmt_writes_ok ok s /\ stmts_writes_ok ok ss)
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL (_,s) => stmt_size s
+    | INR (_,ss) => list_size stmt_size ss)` >>
+  simp[]
+End
+
+Definition iterator_unmodified_def:
+  iterator_unmodified (Range _ _) body = T /\
+  iterator_unmodified (Array e) body =
+    case expr_place e of
+    | NONE => T
+    | SOME p => stmts_writes_ok (\w. ~place_contains w p) body
+End
+
 (* ===== Executable statement typing ===== *)
 
 Definition type_stmt_def:
@@ -923,7 +1078,12 @@ Definition type_stmt_def:
     (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
         well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
-    (if well_typed_exprs env es then SOME env else NONE) /\
+    (case FLOOKUP env.event_fields id of
+       NONE => NONE
+     | SOME fields =>
+         if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
+            LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+         then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
         type_widens_to env.type_defs (expr_type e) typ /\ id NOTIN FDOM env.var_types
@@ -956,7 +1116,11 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
-        id NOTIN FDOM env.var_types /\
+        (case it of
+           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+         | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
+         | Array _ => T) /\
+        id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\
   type_stmts env ret_ty [] = SOME env /\

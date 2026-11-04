@@ -6,7 +6,8 @@
    allocates each, and for its parameters, which an external function
    decodes into such a variable, for its return type, as a caller stages
    an internal call's result in a temporary, and for the staging buffer of
-   a tuple assignment from a memory view.
+   a tuple assignment from a memory view, and for a log's data and ABI
+   buffers.
    TOP-LEVEL: allocation_limit_return_rejected,
               allocation_limit_raise_return_buffer_ok,
               allocation_limit_boundary_ok,
@@ -16,7 +17,9 @@
               allocation_limit_local_boundary_rejected,
               allocation_limit_param_rejected,
               allocation_limit_internal_return_rejected,
-              allocation_limit_tuple_stage_rejected. *)
+              allocation_limit_tuple_stage_rejected,
+              allocation_limit_log_rejected,
+              allocation_limit_log_accepted. *)
 Theory evalCompilerAllocationLimit
 Ancestors compileVyper
 
@@ -233,4 +236,52 @@ Theorem allocation_limit_tuple_stage_accepted:
                        BaseT (UintT 256)]) "x")])
 Proof
   ACCEPT_TAC (EQT_ELIM allocation_limit_tuple_stage_accepted_eval)
+QED
+
+(* event Big:
+       x: Bytes[n]
+       y: Bytes[n]
+   def f(x: Bytes[n], y: Bytes[n]):
+       log Big(x, y)
+   Python's lower_Log allocates the data buffer, 2 * (32 + ceil32(n))
+   bytes, and the ABI buffer, 64 more.  n = 2**63 - 32 makes the data
+   buffer 2**64 bytes, while each argument fits. *)
+Definition allocation_limit_log_tops_def:
+  allocation_limit_log_tops n =
+    [EventDecl "Big"
+       [(("x", BaseT (BytesT (Dynamic n))), F);
+        (("y", BaseT (BytesT (Dynamic n))), F)]]
+End
+
+Definition allocation_limit_log_fn_def:
+  allocation_limit_log_fn n =
+    (Nonpayable, F, F, "f",
+     [("x", BaseT (BytesT (Dynamic n))); ("y", BaseT (BytesT (Dynamic n)))],
+     [] : expr list, NoneT,
+     [Log (NONE, "Big")
+        [Name (BaseT (BytesT (Dynamic n))) "x";
+         Name (BaseT (BytesT (Dynamic n))) "y"]])
+End
+
+val allocation_limit_log_rejected_eval =
+  EVAL ``fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 32))
+           (allocation_limit_log_fn (2 ** 63 - 32))``
+
+Theorem allocation_limit_log_rejected:
+  ¬fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 32))
+     (allocation_limit_log_fn (2 ** 63 - 32))
+Proof
+  ACCEPT_TAC (EQF_ELIM allocation_limit_log_rejected_eval)
+QED
+
+(* n = 2**63 - 96: the ABI buffer, the larger, takes 2**64 - 64 bytes. *)
+val allocation_limit_log_accepted_eval =
+  EVAL ``fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 96))
+           (allocation_limit_log_fn (2 ** 63 - 96))``
+
+Theorem allocation_limit_log_accepted:
+  fn_allocs_ok (allocation_limit_log_tops (2 ** 63 - 96))
+    (allocation_limit_log_fn (2 ** 63 - 96))
+Proof
+  ACCEPT_TAC (EQT_ELIM allocation_limit_log_accepted_eval)
 QED
