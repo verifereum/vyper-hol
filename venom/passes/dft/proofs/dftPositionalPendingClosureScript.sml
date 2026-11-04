@@ -449,3 +449,82 @@ Proof
   conj_tac >- (irule dft_pending_enter_success >> metis_tac[]) >>
   irule dft_pending_enter_account >> metis_tac[]
 QED
+
+Theorem dft_pending_plain_return:
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H l r /\
+  l.dft_occ_core = DftOpen (DftDone (IntRet ret cs)) (lf::ls) nL /\
+  r.dft_occ_core = DftOpen (DftDone (IntRet ret cs))
+    (DftCaller g 0 bb' inst s::rs) nR /\
+  dft_restore inst.inst_outputs ret cs s = SOME a ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events (NONE::zs) ++ H)
+    (dft_pos_pending_gas_events zs ++ H)
+Proof
+  strip_tac >> conj_tac
+  >- (irule dft_pending_plain_return_success >> metis_tac[]) >>
+  simp[dft_pos_pending_gas_events_def] >>
+  irule dft_pending_done_account >> metis_tac[]
+QED
+
+Theorem dft_pending_at_outside_instruction:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  (j <> fi \/ k <> bi \/
+    (s.vs_inst_idx <> LENGTH pre /\ s.vs_inst_idx <> SUC (LENGTH pre))) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode <> INVOKE /\
+  (inst.inst_opcode = GAS ==> ?u. inst.inst_outputs = [u]) ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events zs ++ H) (dft_pos_pending_gas_events zs ++ H)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `get_instruction bb' s.vs_inst_idx = SOME inst` by
+    metis_tac[dft_pos_slot_instruction_outside] >>
+  `dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)` by
+    (Cases_on `inst.inst_opcode = GAS`
+     >- (irule dft_pending_at_gas >> simp[] >> metis_tac[]) >>
+     irule dft_pending_at_ordinary >> metis_tac[]) >>
+  simp[] >> irule dft_pending_at_outside_account >> metis_tac[]
+QED
+
+Theorem dft_pending_at_outside_call:
+  D = dft_pos_edit_ctx fi bi pre gas call post C /\
+  dft_pos_runtime_ready C fi bi pre gas call post /\
+  dft_original_context Corig C /\ dft_original_context Dorig D /\
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls nL /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs nR /\
+  dft_pos_slot C D j k f g bb bb' /\
+  (j <> fi \/ k <> bi \/
+    (s.vs_inst_idx <> LENGTH pre /\ s.vs_inst_idx <> SUC (LENGTH pre))) /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs ==>
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r) /\
+  pending_segment_account C D w 1 1 l r
+    (dft_pos_pending_gas_events zs ++ H)
+    (dft_pos_pending_gas_events (NONE::zs) ++ H)
+Proof
+  rpt gen_tac >> disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  `get_instruction bb' s.vs_inst_idx = SOME inst` by
+    metis_tac[dft_pos_slot_instruction_outside] >>
+  `dft_pos_pending_aligned_phase w C D fi bi pre gas call post (NONE::zs) H
+    (dft_occ_oracle_next w C l) (dft_occ_oracle_next w D r)` by
+    (irule dft_pending_plain_call_runtime >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule dft_pending_at_outside_account >>
+  conj_tac >- simp[dft_pos_pending_gas_events_def] >> metis_tac[]
+QED
