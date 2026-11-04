@@ -354,7 +354,7 @@ Definition venom_frame_rel_def:
         es'.rollback.accounts = vs'.vs_accounts /\
         es'.rollback.toDelete = vs'.vs_pending_deletions /\
         es'.rollback.tStorage = vs'.vs_transient /\
-        vs'.vs_requests = MAP FST (call_trace es)
+        vs'.vs_requests = call_requests es
     | Abort Revert_abort vs' =>
         ?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs
     | Abort ExHalt_abort vs' =>
@@ -369,8 +369,8 @@ End
    Venom starts with the frame's GAS readings (gas_readings es); generated
    assembly pops the same list in the same order.
    Actual reachability supplies memory obligations and shape excludes opaque
-   GAS misuse/forbidden opcodes/label collisions. Resource and valid-computed-
-   precompile starvation are explicit disjuncts. No sufficient-gas existential,
+   GAS misuse/forbidden opcodes/label collisions. Resource starvation is an
+   explicit disjunct; a starved computed precompile is an oracle outcome. No sufficient-gas existential,
    arbitrary label maps, or positional entry parameter is in this API.
    The current non-GAS EVM lemmas do not yet prove this trace-aware statement. *)
 Theorem codegen_correct:
@@ -384,7 +384,6 @@ Theorem codegen_correct:
     ==>
     ?r es'. run_call es = SOME (r, es') /\
             (frame_resource_starved es r es' \/
-             precompile_call_starved es \/
              venom_frame_rel es r es' (run_context fuel unit.cu_context vs))
 Proof
   cheat

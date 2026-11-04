@@ -175,3 +175,67 @@ val () = List.app (fn (name,th) =>
   in if List.all (fn s => s = "DISK_THM") oracles then ()
      else raise Fail ("Immutable-domain oracle debt: " ^ name)
   end) (DB.thms "vyperEvalPreservesImmutablesDom");
+
+Theorem preserves_immutables_dom_refl[local]:
+  ∀cx st. preserves_immutables_dom cx st st
+Proof
+  rw[preserves_immutables_dom_def] >> gvs[]
+QED
+
+Theorem preserves_immutables_dom_trans[local]:
+  ∀cx st1 st2 st3.
+    preserves_immutables_dom cx st1 st2 ∧
+    preserves_immutables_dom cx st2 st3 ⇒
+    preserves_immutables_dom cx st1 st3
+Proof
+  rw[preserves_immutables_dom_def] >>
+  gvs[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem preserves_immutables_dom_eq[local]:
+  ∀cx st st'.
+    st'.immutables = st.immutables ⇒ preserves_immutables_dom cx st st'
+Proof
+  rw[preserves_immutables_dom_def] >> gvs[]
+QED
+
+Theorem ExtCall_outcome_preserves_immutables_dom:
+  (!bs s res t. k bs s = (res,t) ==> preserves_immutables_dom cx s t) /\
+  (do
+    accounts <- get_accounts;
+    (if ret_type = NoneT then
+       check (~NULL (lookup_account target accounts).code) "ExtCall target has no code"
+     else return ());
+    (rq,outcome) <- take_call_outcome target calldata value_opt;
+    check outcome.co_success "ExtCall reverted";
+    adopt_call_outcome rq outcome;
+    k outcome.co_returnData
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  rpt strip_tac >>
+  `!s t u. preserves_immutables_dom cx s t /\ preserves_immutables_dom cx t u ==>
+            preserves_immutables_dom cx s u` by
+    metis_tac[preserves_immutables_dom_trans] >>
+  `!s os rqs. preserves_immutables_dom cx s
+      (s with <|outcomes := os; requests := rqs|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s accounts transient logs pending. preserves_immutables_dom cx s
+      (s with <|accounts := accounts; tStorage := transient;
+                logs := s.logs ++ logs; pending_deletions := pending|>)` by
+    (rpt gen_tac >> irule preserves_immutables_dom_eq >> simp[]) >>
+  `!s. preserves_immutables_dom cx s s` by simp[preserves_immutables_dom_refl] >>
+  drule_all (ExtCall_outcome_transport |> Q.INST
+    [`R` |-> `preserves_immutables_dom cx`]) >> simp[]
+QED
+
+Theorem Send_outcome_preserves_immutables_dom:
+  (do
+    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    check outcome.co_success "send failed";
+    adopt_call_outcome rq outcome;
+    return (Value NoneV)
+  od) st = (res,st') ==> preserves_immutables_dom cx st st'
+Proof
+  strip_tac >> drule Send_outcome_preserves_locals >> strip_tac >>
+  irule preserves_immutables_dom_eq >> simp[]
+QED

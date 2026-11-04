@@ -181,7 +181,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >> res_tac >> gvs[]
 QED
 
-Theorem reason_compile_pop[local]:
+Theorem reason_compile_pop:
   ?loc. (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient \/ loc = LocCode) /\
     !sa vv sb. compile_expr_body f g h cenv ty (Pop t target) sa = (vv,sb) ==>
       reason_result_shape t loc vv
@@ -214,7 +214,7 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
-Theorem reason_compile_literal[local]:
+Theorem reason_compile_literal:
   compile_literal_vv t lit sa = (vv,sb) ==>
   reason_result_shape t LocMemory vv
 Proof
@@ -238,7 +238,7 @@ Proof
   metis_tac[reason_bytelike_operand]
 QED
 
-Theorem reason_compile_ifexp[local]:
+Theorem reason_compile_ifexp:
   compile_expr_body f g h cenv ty (IfExp t cond_e then_e else_e) sa = (vv,sb) ==>
   reason_result_shape t LocMemory vv
 Proof
@@ -247,7 +247,7 @@ Proof
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def]
 QED
 
-Theorem reason_compile_structlit[local]:
+Theorem reason_compile_structlit:
   compile_expr_body f g h cenv ty (StructLit t nm fields) sa = (vv,sb) ==>
   reason_result_shape t LocMemory vv
 Proof
@@ -265,7 +265,7 @@ Proof
   gvs[word_result_ok_def, reason_result_shape_def, safe_operand_def]
 QED
 
-Theorem reason_builtin_scalar[local]:
+Theorem reason_builtin_scalar:
   (bi = Not \/ bi = Neg \/ bi = Abs \/ bi = BlockHash \/ bi = BlobHash \/
    bi = Ceil \/ bi = Floor \/ bi = AddMod \/ bi = MulMod \/ bi = PowMod256 \/
    bi = ECRecover \/ bi = CalldataLen \/ (?item. bi = Env item)) /\
@@ -281,7 +281,7 @@ Proof
   metis_tac[reason_stack_result]
 QED
 
-Theorem reason_builtin_hash[local]:
+Theorem reason_builtin_hash:
   (bi = Keccak256 \/ bi = Sha256) /\
   compile_builtin_dispatch_body f cenv vt ty bi args sa = (vv,sb) ==>
   reason_result_shape vt LocMemory vv
@@ -295,7 +295,7 @@ Proof
   metis_tac[reason_stack_result]
 QED
 
-Theorem reason_builtin_len[local]:
+Theorem reason_builtin_len:
   compile_builtin_dispatch_body f cenv vt ty Len args sa = (vv,sb) ==>
   reason_result_shape vt LocMemory vv
 Proof
@@ -307,7 +307,7 @@ Proof
   metis_tac[reason_stack_result]
 QED
 
-Theorem reason_builtin_bop[local]:
+Theorem reason_builtin_bop:
   compile_builtin_dispatch_body f cenv vt ty (Bop bop) args sa = (vv,sb) ==>
   reason_result_shape vt LocMemory vv
 Proof
@@ -384,6 +384,15 @@ Proof
   metis_tac[reason_alloc_operand]
 QED
 
+Theorem reason_widen_copy_operand[local]:
+  compile_bytestring_widen_copy d v sz sa = (op,sb) ==> !l. op <> Label l
+Proof
+  simp[compile_bytestring_widen_copy_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[reason_alloc_operand]
+QED
+
 Theorem reason_type_builtin_convert[local]:
   (!sa op sb. lower_value f cenv (expr_type (HD args)) (HD args) sa = (op,sb)
                ==> !l. op <> Label l) /\
@@ -392,7 +401,16 @@ Theorem reason_type_builtin_convert[local]:
 Proof
   simp[compile_type_builtin_dispatch_body_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `rt` >> gvs[] >>
+  qpat_x_assum `COND _ _ _ = _` mp_tac >> IF_CASES_TAC
+  >- (strip_tac >> gvs[reason_result_shape_def]) >>
+  pop_assum kall_tac >> IF_CASES_TAC
+  >- (pop_assum kall_tac >> strip_tac >>
+      qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
+      Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+      strip_tac >> gvs[reason_result_shape_def] >>
+      metis_tac[reason_widen_copy_operand]) >>
+  pop_assum kall_tac >> strip_tac >> Cases_on `rt` >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val vt res` >>
@@ -483,7 +501,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[]
 QED
 
-Theorem reason_builtin_fresh[local]:
+Theorem reason_builtin_fresh:
   ((?n. bi = CalldataSlice n) \/ bi = ECAdd \/ bi = ECMul \/
    (?n. bi = Concat n) \/ (?n. bi = Slice n) \/ (?n. bi = Uint2Str n)) /\
   compile_builtin_dispatch_body f cenv vt ty bi args sa = (vv,sb) ==>
@@ -502,7 +520,7 @@ Proof
             reason_ec_points, reason_uint2str]
 QED
 
-Theorem reason_builtin_makearray[local]:
+Theorem reason_builtin_makearray:
   compile_builtin_dispatch_body f cenv vt ty (MakeArray et bd) args sa = (vv,sb) ==>
   reason_result_shape vt LocMemory vv
 Proof
@@ -583,7 +601,7 @@ Proof
   metis_tac[reason_wei_operand]
 QED
 
-Theorem reason_builtin_method_id[local]:
+Theorem reason_builtin_method_id:
   compile_builtin_dispatch_body f cenv vt ty MethodId args sa = (vv,sb) ==>
   reason_result_shape vt LocMemory vv
 Proof
@@ -615,7 +633,7 @@ Proof
   strip_tac >> gvs[] >> metis_tac[reason_alloc_operand]
 QED
 
-Theorem reason_abi_encode_operand[local]:
+Theorem reason_abi_encode_operand:
   lower_abi_encode ensure mid src info maxlen sa = (op,sb) ==> !l. op <> Label l
 Proof
   simp[builtinAbiTheory.lower_abi_encode_def, LET_THM,
@@ -728,7 +746,7 @@ val reason_raw_call_tac =
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_raw_call_finish_operand, reason_raw_call_outbuf_operand]
 
-Theorem reason_compile_call[local]:
+Theorem reason_compile_call:
   compile_call f cenv rt ty target args default_ret sa = (vv,sb) ==>
   reason_result_shape rt LocMemory vv
 Proof
@@ -741,6 +759,8 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
+    >- suspend "create"
   >> suspend "send"
 QED
 
@@ -757,6 +777,15 @@ Resume reason_compile_call[external]:
   rpt (pairarg_tac >> gvs[]) >>
   gvs[AllCaseEqs(), reason_result_shape_def, mk_ptr_def] >>
   metis_tac[reason_external_call_operand]
+QED
+
+Resume reason_compile_call[create]:
+  qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
+  qmatch_goalsub_abbrev_tac `as_stack_val rt res` >>
+  Cases_on `res` >> gvs[as_stack_val_def, markerTheory.Abbrev_def] >>
+  strip_tac >> gvs[reason_result_shape_def] >>
+  metis_tac[exprSafeOperandBuiltinsTheory.compile_create_call_safe_operand,
+            safe_operand_def]
 QED
 
 Resume reason_compile_call[send]:
@@ -931,7 +960,7 @@ Resume reason_compile_expr_body[attribute]:
   metis_tac[reason_compile_attribute]
 QED
 
-Theorem reason_compile_expr_builtin_shape_classify[local]:
+Theorem reason_compile_expr_builtin_shape_classify:
   compile_expr_body f g h cenv ty (Builtin ann bi args) sa = (vv,sb) ==>
   g cenv ann ty bi args sa = (vv,sb) \/ reason_result_shape ann LocMemory vv
 Proof

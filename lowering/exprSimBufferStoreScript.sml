@@ -26,6 +26,7 @@ Ancestors
   exprLoweringProps context venomExecSemantics venomState compileEnv
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
   exprSimMemoryTransport valueEncodingProps entryDecodeProps entryDecodeStaticProps
+  loweringSlice intCallResult valueCopy localPtrsProps fragExec
 Libs
   wordsLib
 
@@ -513,7 +514,96 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
       gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all local_ptrs_reserved_imm_base >> strip_tac >>
+      qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
+      first_assum ACCEPT_TAC) >>
   rpt strip_tac >>
   qpat_x_assum `!a k. _ ==> mem_bytes_at a k _ = _` irule >>
   gvs[regions_disjoint_def] >> metis_tac[]
+QED
+
+(* A short copy into a non-live allocation preserves live local and immutable
+   memory. The allocation can be larger than the copied prefix. *)
+Theorem stmt_state_rel_mcopy_alloca:
+  !func cenv cx es s inst p dst src sz alloc_sz ctx.
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    not_local_ptr cenv es.scopes p /\ sz <= alloc_sz /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, alloc_sz) ==>
+    stmt_state_rel ctx func cenv cx es (mcopy dst src sz s)
+Proof
+  rpt strip_tac >>
+  `(mcopy dst src sz s with <|vs_vars := s.vs_vars;
+                             vs_memory := s.vs_memory|>) = s` by
+    simp[mcopy_def, write_memory_with_expansion_def, LET_THM] >>
+  `!q. lookup_var q (mcopy dst src sz s) = lookup_var q s` by
+    simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es
+     (mcopy dst src sz s)` by
+    (irule immutables_rel_mem_agree >> qexists_tac `s` >>
+     conj_tac
+     >- simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+             arithmeticTheory.MAX_DEF] >>
+     conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
+     reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
+     rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
+     qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
+     strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
+     disch_then drule_all >> strip_tac >>
+     qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  irule result_state_memory_frame >> reverse conj_tac
+  >- (qexists_tac `s` >> simp[] >>
+      rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
+      `regions_disjoint dst alloc_sz b sz'` by
+        (irule local_ptrs_rel_alloca_disjoint >>
+         qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
+         fs[stmt_state_rel_def, state_rel_def]) >>
+      fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
+QED
+
+Theorem mcopy_alloca_framed_frag:
+  !ctx func cenv cx es sa sb s inst p dw sw src sz alloc_sz tv v.
+    emit_void MCOPY [Var p; src; Lit (n2w sz)] sa = ((), sb) /\
+    lookup_var p s = SOME dw /\ eval_operand src s = SOME sw /\
+    sz < dimword (:256) /\ sz <= alloc_sz /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+    not_local_ptr cenv es.scopes p /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw, alloc_sz) /\
+    val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
+    val_footprint tv v <= sz ==>
+    frag_exec ctx sa sb (\t. t = s)
+      (\t. stmt_state_rel ctx func cenv cx es t /\
+           val_in_memory tv v (w2n dw) t.vs_memory /\
+           (!q. lookup_var q t = lookup_var q s) /\
+           t.vs_allocas = s.vs_allocas /\
+           LENGTH s.vs_memory <= LENGTH t.vs_memory /\
+           (!a k. a + k <= w2n dw \/ w2n dw + sz <= a ==>
+                mem_bytes_at a k t.vs_memory = mem_bytes_at a k s.vs_memory)) (\r. F)
+Proof
+  rpt strip_tac >>
+  `eval_operand (Var p) s = SOME dw` by simp[eval_operand_def] >>
+  drule_all emit_mcopy_run >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
+    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
+     qexistsl_tac [`alloc_sz`, `inst`, `p`] >> simp[]) >>
+  `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
+    (irule mcopy_val_in_memory >> simp[]) >>
+  `LENGTH s.vs_memory <=
+   LENGTH (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
+    simp[mcopy_def, immutableMemoryFrameTheory.immutable_write_memory_capacity,
+         arithmeticTheory.MAX_DEF] >>
+  `!a k. a + k <= w2n dw \/ w2n dw + sz <= a ==>
+     mem_bytes_at a k (mcopy (w2n dw) (w2n sw) sz s).vs_memory =
+     mem_bytes_at a k s.vs_memory` by
+    metis_tac[mem_bytes_at_mcopy_disjoint] >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+  simp[stmt_state_rel_inst_idx] >>
+  conj_tac
+  >- simp[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
+  first_assum ACCEPT_TAC
 QED

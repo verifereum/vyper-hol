@@ -48,105 +48,11 @@ Ancestors
   unitTransformDefs unitShapeDefs unitMemInv venomPipelineDriver
   venomPassSchedule venomFnScheduleRunner venomPassDispatcher venomWf
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
-  staticLayoutDefs venomState stateEquiv passSimulationDefs vfmState extCallOracle
-  finite_map list
+  lowerDloadDefs ptrDiscipline staticLayoutDefs venomState stateEquiv
+  passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
+  fcgDefs list
 
 (* ===== Equivalence up to dead bytes ===== *)
-
-(* The bytes nothing reads, as functions of where they are: each
-   account's storage and transient storage, the immutables, and the
-   return data.  A stage may change them (ConcretizeMemLoc: the unwritten
-   capacity of a stored buffer).  The end-to-end theorem takes them from
-   the source program's layout (storage_dead), at the running contract
-   only. *)
-Datatype:
-  dead = <| d_stor : address -> storage -> (bytes32 # num) set;
-            d_trans : address -> storage -> (bytes32 # num) set;
-            d_imm : (num |-> bytes32) -> (num # num) set;
-            d_ret : word8 list -> num set |>
-End
-
-(* The bytes of a storage word at key in a set of (key, byte) pairs.
-   Bytes are numbered as word_to_bytes w T numbers them: byte 0 is the most
-   significant. *)
-Definition key_taint_def:
-  key_taint X key = {k:num | k < 32 /\ (key,k) IN X}
-End
-
-Definition word_agree_except_def:
-  word_agree_except m (w1:bytes32) w2 <=>
-    !b. b < 32 /\ b NOTIN m ==>
-        EL b (word_to_bytes w1 T) = EL b (word_to_bytes w2 T)
-End
-
-Definition storage_agree_except_def:
-  storage_agree_except X (st1:storage) st2 <=>
-    !k. word_agree_except (key_taint X k) (st1 k) (st2 k)
-End
-
-(* Accounts equal but for their storage, which agrees outside the dead
-   bytes of the first. *)
-Definition accounts_agree_except_def:
-  accounts_agree_except D (a1:evm_accounts) a2 <=>
-    !a. (a1 a with storage := (a2 a).storage) = a2 a /\
-        storage_agree_except (D.d_stor a (a1 a).storage)
-          (a1 a).storage (a2 a).storage
-End
-
-Definition transient_agree_except_def:
-  transient_agree_except D (t1:transient_storage) t2 <=>
-    !a. storage_agree_except (D.d_trans a (t1 a)) (t1 a) (t2 a)
-End
-
-Definition imms_agree_except_def:
-  imms_agree_except D (i1:num |-> bytes32) i2 <=>
-    FDOM i1 = FDOM i2 /\
-    !k. k IN FDOM i1 ==>
-        word_agree_except {b | (k,b) IN D.d_imm i1} (i1 ' k) (i2 ' k)
-End
-
-Definition request_agree_except_def:
-  request_agree_except D (r1:call_request) r2 <=>
-    r1 with <| cr_accounts := r2.cr_accounts;
-               cr_tStorage := r2.cr_tStorage |> = r2 /\
-    accounts_agree_except D r1.cr_accounts r2.cr_accounts /\
-    transient_agree_except D r1.cr_tStorage r2.cr_tStorage
-End
-
-(* unit_result_rel, but at a halt the runs may differ at the dead bytes of
-   the first run's state: in storage and transient storage (at the end and
-   in each request's snapshot), the immutables and the return data. *)
-Definition dead_result_rel_def:
-  dead_result_rel D res res' <=>
-    case (res, res') of
-      (Halt s, Halt s') =>
-        accounts_agree_except D s.vs_accounts s'.vs_accounts /\
-        transient_agree_except D s.vs_transient s'.vs_transient /\
-        imms_agree_except D s.vs_immutables s'.vs_immutables /\
-        LENGTH s.vs_returndata = LENGTH s'.vs_returndata /\
-        (!i. i < LENGTH s.vs_returndata /\ i NOTIN D.d_ret s.vs_returndata ==>
-             EL i s.vs_returndata = EL i s'.vs_returndata) /\
-        s.vs_halted = s'.vs_halted /\ s.vs_logs = s'.vs_logs /\
-        s.vs_pending_deletions = s'.vs_pending_deletions /\
-        LIST_REL (request_agree_except D) s.vs_requests s'.vs_requests
-    | (Abort a s, Abort a' s') => (a = Revert_abort ==> a' = Revert_abort)
-    | _ => F
-End
-
-(* The dead bytes are fixed by the bytes that aren't: two states that agree
-   outside the first's dead bytes have the same dead bytes.  It makes
-   dead_result_rel transitive (dead_result_rel_trans). *)
-Definition dead_wf_def:
-  dead_wf D <=>
-    (!a st1 st2. storage_agree_except (D.d_stor a st1) st1 st2 ==>
-                 D.d_stor a st2 = D.d_stor a st1) /\
-    (!a st1 st2. storage_agree_except (D.d_trans a st1) st1 st2 ==>
-                 D.d_trans a st2 = D.d_trans a st1) /\
-    (!i1 i2. imms_agree_except D i1 i2 ==> D.d_imm i2 = D.d_imm i1) /\
-    (!r1 r2. LENGTH r1 = LENGTH r2 /\
-             (!i. i < LENGTH r1 /\ i NOTIN D.d_ret r1 ==> EL i r1 = EL i r2) ==>
-             D.d_ret r2 = D.d_ret r1)
-End
 
 (* An exact match is a match up to any dead bytes. *)
 Theorem unit_result_rel_dead_result_rel:
@@ -414,6 +320,21 @@ Definition unit_first_block_no_phi_def:
     EVERY first_block_no_phi unit.cu_context.ctx_functions
 End
 
+(* Definite assignment of the source: every variable a use reads is
+   written on every path to it.  SimplifyCFG's pre-walk needs it, and S3
+   owes it (S2b). *)
+Definition unit_defs_reach_uses_def:
+  unit_defs_reach_uses unit <=>
+    EVERY fn_defs_reach_uses unit.cu_context.ctx_functions
+End
+
+(* The lowering leaves every function's FMP convention unset; only
+   FmpLowering sets it. *)
+Definition unit_fmp_unsealed_def:
+  unit_fmp_unsealed unit <=>
+    EVERY (\fn. fn.fn_fmp_signature = NONE) unit.cu_context.ctx_functions
+End
+
 (* The unit's entry function has no parameter instruction (the lowering's
    entry function reads calldata, never PARAMs). *)
 Definition unit_entry_no_params_def:
@@ -424,13 +345,20 @@ Definition unit_entry_no_params_def:
 End
 
 (* The per-function shape facts of o1_source_unit_ok that every pass keeps,
-   with the well-formedness every pass keeps.  The raw-opcode restriction
-   is not among them: the passes introduce the opcodes it excludes. *)
+   with the well-formedness every pass keeps.  Of the raw-opcode
+   restriction only no DRET is kept, which no pass introduces (the source
+   never has one, so DretDesugar is the identity); the passes introduce
+   the other opcodes it excludes.  No DALLOCA result is a gas or return-pc
+   value: FmpLowering copies a DALLOCA result into its pointer variable,
+   which opaque_use_ok would then forbid it to use. *)
 Definition o1_fn_shape_def:
   o1_fn_shape ctx fn <=>
     wf_function fn /\ fn_inst_wf fn /\
     fn_shape_ok fn /\ first_block_no_preds fn /\ first_block_no_phi fn /\
     fn_invoke_ok (ctx_fn_names ctx) fn /\ fn_label_refs_ok fn /\
+    no_dret fn /\
+    (!inst x. MEM inst (fn_insts fn) /\ inst.inst_opcode = DALLOCA /\
+              MEM x inst.inst_outputs ==> ~gas_var fn x /\ ~retpc_var fn x) /\
     (ctx.ctx_entry = SOME fn.fn_name ==>
        entry_fn_no_return fn /\ entry_fn_no_params fn) /\
     (ctx.ctx_entry <> SOME fn.fn_name ==>
@@ -542,23 +470,13 @@ QED
 (* The initial state of a stage run: the pipeline's initial state, with
    the dynamic-memory pointer at the run's initial free-memory pointer,
    as the entry state has it (FmpLowering seeds its pointer variable from
-   vs_initial_fmp). *)
+   vs_initial_fmp), and "code_end" bound to the code/data boundary
+   (code_layout_valid), which LowerDload's ADD [_; Label "code_end"]
+   reads. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
-    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp
-End
-
-(* The memory facts of unitMemInv depend on a state only through the
-   alloca frame and, range by range, the instruction's access ranges; so a
-   pass that splits or copies an access, or adds one without ranges,
-   keeps them. *)
-Definition rangewise_mem_fact_def:
-  rangewise_mem_fact M <=>
-    ?Q R. !ctx fn inst s.
-      M ctx fn inst s <=>
-      Q s.vs_alloca_next s.vs_allocas s.vs_initial_fmp /\
-      EVERY (\r. R r s.vs_alloca_next s.vs_allocas s.vs_initial_fmp)
-        (inst_mem_ranges inst s)
+    o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
+    code_layout_valid vs
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
@@ -624,14 +542,60 @@ End
 
 (* ===== The stage invariants ===== *)
 
+(* Until FmpLowering, no function has its FMP convention set or an FMP
+   operation: the source has none (raw_opcode_ok, unit_fmp_unsealed) and
+   no earlier pass adds one.  FmpLowering then only seals. *)
+Definition fmp_free_ctx_def:
+  fmp_free_ctx C <=>
+    EVERY (\fn. fn.fn_fmp_signature = NONE /\ no_raw_fmp_ops fn)
+      C.ctx_functions
+End
+
+(* Every function comes after its callees in names: the walk's order. *)
+Definition callee_first_def:
+  callee_first names fns <=>
+    !g callee. MEM g fns /\ MEM callee (fn_invoke_targets g) ==>
+      list_precedes callee g.fn_name names
+End
+
 (* Before ConcretizeMemLoc: the raw phase of the shared memory invariant,
-   S3's conclusion, and well-formed global reservations, which
-   max_live_eom (row 3 on) requires and the walk never changes; the
-   lowering reserves nothing in the runtime unit and one interval in the
-   deploy unit. *)
+   and what ConcretizeMemLoc needs of its input: no static layout yet, no
+   DALLOCA, the pointer discipline above a reserved fixed region, and
+   taint reaching only the dead bytes D.  S3's conclusion, with
+   well-formed global reservations, which max_live_eom (row 3 on)
+   requires and the walk never changes; the lowering reserves nothing in
+   the runtime unit and one interval in the deploy unit.  Also the no-wrap
+   bound on DLOAD/DLOADBYTES source offsets that LowerDload's expansion
+   needs (dload_offset_ok). *)
 Definition o1_src_inv_def:
-  o1_src_inv C vs <=>
-    reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs
+  o1_src_inv D C vs <=>
+    reserved_intervals_wf C.ctx_global_reserved /\ mem_inv raw_mem_ok C vs /\
+    EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
+    (?lo. fixed_region_reserved lo C /\ ptr_discipline lo C vs) /\
+    taint_within D C vs /\ fmp_free_ctx C /\ mem_inv dload_offset_ok C vs
+End
+
+(* The pre-walk's input, the lowering's output: no PHI, and every variable
+   a use reads is written on every path to it (S3 owes the latter; the
+   source shape gives the former).  SimplifyCFG needs both: they make its
+   PHI fix-up and its dropped JNZ conditions invisible. *)
+Definition o1_pre_walk_inv_def:
+  o1_pre_walk_inv D C vs <=>
+    o1_src_inv D C vs /\
+    EVERY (\fn. fn_defs_reach_uses fn /\
+                EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
+      C.ctx_functions
+End
+
+(* The walk's input (row 0), SimplifyCFG's pre-walk output: every block
+   reachable, definite assignment, and no PHI reading a variable written
+   twice (vacuous here, with no PHI yet), which MakeSSA needs. *)
+Definition o1_walk_src_inv_def:
+  o1_walk_src_inv D C vs <=>
+    o1_src_inv D C vs /\
+    EVERY (\fn. all_reachable fn /\ fn_defs_reach_uses fn /\
+                fn_phi_operands_single_def fn /\ fn_phis_cover_preds fn)
+      C.ctx_functions
 End
 
 (* After ConcretizeMemLoc: every access below the context's layout end,
@@ -641,7 +605,8 @@ End
    eom. *)
 Definition o1_static_inv_def:
   o1_static_inv C vs <=>
-    ?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs
+    (?eom. max_live_eom C = SOME eom /\ mem_inv (static_mem_ok eom) C vs) /\
+    fmp_free_ctx C
 End
 
 (* After FmpLowering: static, or dynamic at or above the initial fmp. *)
@@ -650,16 +615,29 @@ Definition o1_lowered_inv_def:
     ?eom. max_live_eom C = SOME eom /\ mem_inv (lowered_mem_fact eom) C vs
 End
 
+(* Rows 5 and 6 (SimplifyCFG's input, SUE's input) add wf_ssa: MakeSSA's
+   second run establishes it and SimplifyCFG keeps it. *)
+Definition o1_ssa_inv_def:
+  o1_ssa_inv C vs <=> o1_lowered_inv C vs /\ EVERY wf_ssa C.ctx_functions
+End
+
 (* The invariant of the k-th stage context of the walk (k = 0 its input,
    k = 9 its output).  A pass run's contract takes row k to row k+1; a
    fact a run needs of its input is a conjunct of its row, put there by
    the run that establishes it, and a conjunct of row 0 is a premise of
    S4 that the lowering stage owes.  A row may speak of the dead bytes D
-   the runs are matched up to. *)
+   the runs are matched up to.  Up to FmpLowering, which seals a
+   function after its callees, the functions are in a callee-first
+   order. *)
 Definition o1_inv_def:
   o1_inv (D : dead) (k : num) =
-    if k <= 2 then o1_src_inv
-    else if k = 3 then o1_static_inv
+    if k = 0 then
+      (\C vs. o1_walk_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k <= 2 then
+      (\C vs. o1_src_inv D C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k = 3 then
+      (\C vs. o1_static_inv C vs /\ ?names. callee_first names C.ctx_functions)
+    else if k = 5 \/ k = 6 then o1_ssa_inv
     else o1_lowered_inv
 End
 

@@ -37,22 +37,14 @@ Proof
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, same_blocks_def]
 QED
 
-Theorem run_inst_seq_mem_ok_no_ranges[local]:
-  !is s. EVERY (\i. !t. inst_mem_below_frontier i t) is ==>
-    run_inst_seq_mem_ok is s
-Proof
-  Induct >> simp[run_inst_seq_mem_ok_def] >> rpt strip_tac >>
-  Cases_on `step_inst_base h s` >> simp[]
-QED
-
 Theorem compile_assert_slice_bounds_mem_ok:
   !start len src_len sa sb s.
     compile_assert_slice_bounds start len src_len sa = ((), sb) ==>
     run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   rpt strip_tac >> drule slice_bounds_shape >> strip_tac >>
-  gvs[] >> irule run_inst_seq_mem_ok_no_ranges >>
-  simp[EVERY_DEF] >> rpt conj_tac >> gen_tac >>
+  gvs[] >> irule run_inst_seq_mem_ok_every >>
+  simp[EVERY_DEF, mk_inst_def] >> rpt conj_tac >> gen_tac >>
   irule below_frontier_no_ranges >> simp[mk_inst_def]
 QED
 

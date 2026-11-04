@@ -153,7 +153,9 @@ Theorem truncate_unsigned_i2w_roundtrip:
     &(truncate_unsigned n ((i2w i) : bytes32)) = i
 Proof
   PURE_REWRITE_TAC[truncate_unsigned_def] >> rpt strip_tac >>
-  `2 ** n <= dimword(:256)` by simp[wordsTheory.dimword_def] >>
+  `2 ** n <= dimword(:256)` by
+    (PURE_REWRITE_TAC[wordsTheory.dimword_def, dimindex_256] >>
+     irule bitTheory.TWOEXP_MONO2 >> FIRST_ASSUM ACCEPT_TAC) >>
   `0 <= i /\ i < &dimword(:256)` by intLib.ARITH_TAC >>
   `i % &dimword(:256) = i` by simp[integerTheory.INT_LESS_MOD] >>
   `&(w2n ((i2w i) : bytes32)) = i` by

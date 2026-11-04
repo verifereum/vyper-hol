@@ -1,0 +1,503 @@
+{
+  "contract_name": "<unknown>",
+  "ast": {
+    "source_sha256sum": "71f9eee791142cb3e6b13df9917bb77425b696cc7da6cb84291329cc747a0033",
+    "ast_type": "Module",
+    "body": [
+      {
+        "annotation": {
+          "ast_type": "Name",
+          "col_offset": 16,
+          "end_col_offset": 23,
+          "end_lineno": 1,
+          "id": "bytes32",
+          "lineno": 1,
+          "node_id": 7,
+          "src": "16:7:-1"
+        },
+        "ast_type": "VariableDecl",
+        "col_offset": 0,
+        "end_col_offset": 93,
+        "end_lineno": 1,
+        "is_constant": true,
+        "is_immutable": false,
+        "is_public": false,
+        "is_reentrant": false,
+        "is_transient": false,
+        "lineno": 1,
+        "node_id": 1,
+        "src": "0:93:-1",
+        "target": {
+          "ast_type": "Name",
+          "col_offset": 0,
+          "end_col_offset": 5,
+          "end_lineno": 1,
+          "id": "topic",
+          "lineno": 1,
+          "node_id": 2,
+          "src": "0:5:-1",
+          "type": {
+            "m": 32,
+            "name": "bytes32",
+            "typeclass": "bytes_m"
+          },
+          "folded_value": {
+            "ast_type": "Hex",
+            "col_offset": 27,
+            "end_col_offset": 93,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 9,
+            "src": "27:66:-1",
+            "value": "0x1212121212121210212801291212121212121210121212121212121212121212"
+          }
+        },
+        "value": {
+          "ast_type": "Hex",
+          "col_offset": 27,
+          "end_col_offset": 93,
+          "end_lineno": 1,
+          "lineno": 1,
+          "node_id": 9,
+          "src": "27:66:-1",
+          "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+          "type": {
+            "m": 32,
+            "name": "bytes32",
+            "typeclass": "bytes_m"
+          },
+          "folded_value": {
+            "ast_type": "Hex",
+            "col_offset": 27,
+            "end_col_offset": 93,
+            "end_lineno": 1,
+            "lineno": 1,
+            "node_id": 9,
+            "src": "27:66:-1",
+            "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+            "type": {
+              "m": 32,
+              "name": "bytes32",
+              "typeclass": "bytes_m"
+            }
+          }
+        },
+        "type": {
+          "m": 32,
+          "name": "bytes32",
+          "typeclass": "bytes_m"
+        }
+      },
+      {
+        "args": {
+          "args": [],
+          "ast_type": "arguments",
+          "col_offset": 0,
+          "default": null,
+          "defaults": [],
+          "end_col_offset": 30,
+          "end_lineno": 4,
+          "lineno": 3,
+          "node_id": 11,
+          "src": "104:41:-1"
+        },
+        "ast_type": "FunctionDef",
+        "body": [
+          {
+            "ast_type": "Expr",
+            "col_offset": 4,
+            "end_col_offset": 30,
+            "end_lineno": 4,
+            "lineno": 4,
+            "node_id": 12,
+            "src": "119:26:-1",
+            "value": {
+              "args": [
+                {
+                  "ast_type": "Subscript",
+                  "col_offset": 12,
+                  "end_col_offset": 24,
+                  "end_lineno": 4,
+                  "lineno": 4,
+                  "node_id": 16,
+                  "slice": {
+                    "ast_type": "Int",
+                    "col_offset": 22,
+                    "end_col_offset": 23,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 23,
+                    "src": "137:1:-1",
+                    "value": 0,
+                    "type": {
+                      "bits": 8,
+                      "is_signed": true,
+                      "name": "int8",
+                      "typeclass": "integer"
+                    },
+                    "folded_value": {
+                      "ast_type": "Int",
+                      "col_offset": 22,
+                      "end_col_offset": 23,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 23,
+                      "src": "137:1:-1",
+                      "value": 0,
+                      "type": {
+                        "bits": 8,
+                        "is_signed": true,
+                        "name": "int8",
+                        "typeclass": "integer"
+                      }
+                    }
+                  },
+                  "src": "127:12:-1",
+                  "value": {
+                    "ast_type": "List",
+                    "col_offset": 12,
+                    "elements": [
+                      {
+                        "ast_type": "List",
+                        "col_offset": 13,
+                        "elements": [
+                          {
+                            "ast_type": "Name",
+                            "col_offset": 14,
+                            "end_col_offset": 19,
+                            "end_lineno": 4,
+                            "id": "topic",
+                            "lineno": 4,
+                            "node_id": 19,
+                            "src": "129:5:-1",
+                            "type": {
+                              "m": 32,
+                              "name": "bytes32",
+                              "typeclass": "bytes_m"
+                            },
+                            "folded_value": {
+                              "ast_type": "Hex",
+                              "col_offset": 27,
+                              "end_col_offset": 93,
+                              "end_lineno": 1,
+                              "lineno": 1,
+                              "node_id": 9,
+                              "src": "27:66:-1",
+                              "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+                              "type": {
+                                "m": 32,
+                                "name": "bytes32",
+                                "typeclass": "bytes_m"
+                              }
+                            },
+                            "variable_reads": [
+                              {
+                                "name": "topic",
+                                "decl_node": {
+                                  "node_id": 1,
+                                  "source_id": -1
+                                },
+                                "access_path": []
+                              }
+                            ]
+                          }
+                        ],
+                        "end_col_offset": 20,
+                        "end_lineno": 4,
+                        "lineno": 4,
+                        "node_id": 18,
+                        "src": "128:7:-1",
+                        "type": {
+                          "length": 1,
+                          "value_type": {
+                            "m": 32,
+                            "name": "bytes32",
+                            "typeclass": "bytes_m"
+                          },
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array"
+                        },
+                        "folded_value": {
+                          "ast_type": "List",
+                          "col_offset": 13,
+                          "elements": [
+                            {
+                              "ast_type": "Hex",
+                              "col_offset": 27,
+                              "end_col_offset": 93,
+                              "end_lineno": 1,
+                              "lineno": 1,
+                              "node_id": 9,
+                              "src": "27:66:-1",
+                              "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+                              "type": {
+                                "m": 32,
+                                "name": "bytes32",
+                                "typeclass": "bytes_m"
+                              }
+                            }
+                          ],
+                          "end_col_offset": 20,
+                          "end_lineno": 4,
+                          "lineno": 4,
+                          "node_id": 18,
+                          "src": "128:7:-1",
+                          "type": {
+                            "length": 1,
+                            "value_type": {
+                              "m": 32,
+                              "name": "bytes32",
+                              "typeclass": "bytes_m"
+                            },
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array"
+                          }
+                        }
+                      }
+                    ],
+                    "end_col_offset": 21,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 17,
+                    "src": "127:9:-1",
+                    "type": {
+                      "length": 1,
+                      "value_type": {
+                        "length": 1,
+                        "value_type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        },
+                        "name": "DynArray",
+                        "typeclass": "dynamic_array"
+                      },
+                      "name": "$SArray",
+                      "typeclass": "static_array"
+                    },
+                    "folded_value": {
+                      "ast_type": "List",
+                      "col_offset": 12,
+                      "elements": [
+                        {
+                          "ast_type": "List",
+                          "col_offset": 13,
+                          "elements": [
+                            {
+                              "ast_type": "Hex",
+                              "col_offset": 27,
+                              "end_col_offset": 93,
+                              "end_lineno": 1,
+                              "lineno": 1,
+                              "node_id": 9,
+                              "src": "27:66:-1",
+                              "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+                              "type": {
+                                "m": 32,
+                                "name": "bytes32",
+                                "typeclass": "bytes_m"
+                              }
+                            }
+                          ],
+                          "end_col_offset": 20,
+                          "end_lineno": 4,
+                          "lineno": 4,
+                          "node_id": 18,
+                          "src": "128:7:-1",
+                          "type": {
+                            "length": 1,
+                            "value_type": {
+                              "m": 32,
+                              "name": "bytes32",
+                              "typeclass": "bytes_m"
+                            },
+                            "name": "DynArray",
+                            "typeclass": "dynamic_array"
+                          }
+                        }
+                      ],
+                      "end_col_offset": 21,
+                      "end_lineno": 4,
+                      "lineno": 4,
+                      "node_id": 17,
+                      "src": "127:9:-1",
+                      "type": {
+                        "length": 1,
+                        "value_type": {
+                          "length": 1,
+                          "value_type": {
+                            "m": 32,
+                            "name": "bytes32",
+                            "typeclass": "bytes_m"
+                          },
+                          "name": "DynArray",
+                          "typeclass": "dynamic_array"
+                        },
+                        "name": "$SArray",
+                        "typeclass": "static_array"
+                      }
+                    }
+                  },
+                  "type": {
+                    "length": 4,
+                    "value_type": {
+                      "m": 32,
+                      "name": "bytes32",
+                      "typeclass": "bytes_m"
+                    },
+                    "name": "DynArray",
+                    "typeclass": "dynamic_array"
+                  },
+                  "folded_value": {
+                    "ast_type": "List",
+                    "col_offset": 13,
+                    "elements": [
+                      {
+                        "ast_type": "Hex",
+                        "col_offset": 27,
+                        "end_col_offset": 93,
+                        "end_lineno": 1,
+                        "lineno": 1,
+                        "node_id": 9,
+                        "src": "27:66:-1",
+                        "value": "0x1212121212121210212801291212121212121210121212121212121212121212",
+                        "type": {
+                          "m": 32,
+                          "name": "bytes32",
+                          "typeclass": "bytes_m"
+                        }
+                      }
+                    ],
+                    "end_col_offset": 20,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 18,
+                    "src": "128:7:-1",
+                    "type": {
+                      "length": 4,
+                      "value_type": {
+                        "m": 32,
+                        "name": "bytes32",
+                        "typeclass": "bytes_m"
+                      },
+                      "name": "DynArray",
+                      "typeclass": "dynamic_array"
+                    }
+                  }
+                },
+                {
+                  "ast_type": "Bytes",
+                  "col_offset": 26,
+                  "end_col_offset": 29,
+                  "end_lineno": 4,
+                  "lineno": 4,
+                  "node_id": 25,
+                  "src": "141:3:-1",
+                  "value": "0x",
+                  "type": {
+                    "length": 0,
+                    "name": "Bytes",
+                    "typeclass": "bytes"
+                  },
+                  "folded_value": {
+                    "ast_type": "Bytes",
+                    "col_offset": 26,
+                    "end_col_offset": 29,
+                    "end_lineno": 4,
+                    "lineno": 4,
+                    "node_id": 25,
+                    "src": "141:3:-1",
+                    "value": "0x",
+                    "type": {
+                      "length": 0,
+                      "name": "Bytes",
+                      "typeclass": "bytes"
+                    }
+                  }
+                }
+              ],
+              "ast_type": "Call",
+              "col_offset": 4,
+              "end_col_offset": 30,
+              "end_lineno": 4,
+              "func": {
+                "ast_type": "Name",
+                "col_offset": 4,
+                "end_col_offset": 11,
+                "end_lineno": 4,
+                "id": "raw_log",
+                "lineno": 4,
+                "node_id": 14,
+                "src": "119:7:-1",
+                "type": {
+                  "name": "raw_log",
+                  "typeclass": "builtin_function"
+                }
+              },
+              "keywords": [],
+              "lineno": 4,
+              "node_id": 13,
+              "src": "119:26:-1",
+              "type": {
+                "name": "(void)"
+              }
+            }
+          }
+        ],
+        "col_offset": 0,
+        "decorator_list": [
+          {
+            "ast_type": "Name",
+            "col_offset": 1,
+            "end_col_offset": 9,
+            "end_lineno": 2,
+            "id": "external",
+            "lineno": 2,
+            "node_id": 26,
+            "src": "95:8:-1"
+          }
+        ],
+        "doc_string": null,
+        "end_col_offset": 30,
+        "end_lineno": 4,
+        "lineno": 3,
+        "name": "foo",
+        "node_id": 10,
+        "returns": null,
+        "src": "104:41:-1",
+        "func_type": {
+          "argument_types": [],
+          "return_type": null,
+          "name": "foo",
+          "type_decl_node": {
+            "node_id": 10,
+            "source_id": -1
+          },
+          "typeclass": "contract_function"
+        }
+      }
+    ],
+    "col_offset": 0,
+    "doc_string": null,
+    "end_col_offset": 31,
+    "end_lineno": 4,
+    "is_interface": false,
+    "lineno": 1,
+    "name": null,
+    "node_id": 0,
+    "path": "<unknown>",
+    "resolved_path": "<unknown>",
+    "settings": {},
+    "source_id": -1,
+    "src": "0:146:-1",
+    "type": {
+      "name": "<unknown>",
+      "type_decl_node": {
+        "node_id": 0,
+        "source_id": -1
+      },
+      "typeclass": "module"
+    }
+  },
+  "imports": []
+}

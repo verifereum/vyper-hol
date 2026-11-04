@@ -125,56 +125,12 @@ val scalar_integer_min_int256_context_plan_step1 = SIMP_CONV (srw_ss())
   ``generate_context_plan (^scalar_integer_min_int256_unit).cu_context``
 val scalar_integer_min_int256_context_plan_step2 =
   EVAL (rhs (concl scalar_integer_min_int256_context_plan_step1))
-val scalar_integer_min_int256_actual_plan_call = find_term
-  (can (match_term ``generate_fn_plan f spill labels``))
-  (rhs (concl scalar_integer_min_int256_context_plan_step2))
-val scalar_integer_min_int256_actual_plan_args =
-  #2 (strip_comb scalar_integer_min_int256_actual_plan_call)
-val scalar_integer_min_int256_actual_fn =
-  hd scalar_integer_min_int256_actual_plan_args
-val scalar_integer_min_int256_actual_liveness_eval =
-  EVAL ``liveness_analyze ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_dfg_eval =
-  EVAL ``dfg_build_function ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_cfg_eval =
-  EVAL ``cfg_analyze ^scalar_integer_min_int256_actual_fn``
-val scalar_integer_min_int256_actual_liveness =
-  rhs (concl scalar_integer_min_int256_actual_liveness_eval)
-val scalar_integer_min_int256_actual_dfg =
-  rhs (concl scalar_integer_min_int256_actual_dfg_eval)
-val scalar_integer_min_int256_actual_cfg =
-  rhs (concl scalar_integer_min_int256_actual_cfg_eval)
-val scalar_integer_min_int256_actual_plan_eval = EVAL
-  ``generate_fn_plan_analyzed ^scalar_integer_min_int256_actual_liveness
-      ^scalar_integer_min_int256_actual_dfg
-      ^scalar_integer_min_int256_actual_cfg
-      ^scalar_integer_min_int256_actual_fn
-      ^scalar_integer_min_int256_max_eom 0``
-val scalar_integer_min_int256_actual_generate_step1 =
-  REWR_CONV stackPlanGenTheory.generate_fn_plan_def
-    ``generate_fn_plan ^scalar_integer_min_int256_actual_fn
-        ^scalar_integer_min_int256_max_eom 0``
-val scalar_integer_min_int256_actual_generate_step2 = PURE_REWRITE_CONV
-  [scalar_integer_min_int256_actual_liveness_eval,
-   scalar_integer_min_int256_actual_dfg_eval,
-   scalar_integer_min_int256_actual_cfg_eval]
-  (rhs (concl scalar_integer_min_int256_actual_generate_step1))
-val scalar_integer_min_int256_actual_generate_step3 =
-  REWR_CONV scalar_integer_min_int256_actual_plan_eval
-    (rhs (concl scalar_integer_min_int256_actual_generate_step2))
-val scalar_integer_min_int256_actual_generate_fn_plan =
-  TRANS scalar_integer_min_int256_actual_generate_step1
-    (TRANS scalar_integer_min_int256_actual_generate_step2
-      scalar_integer_min_int256_actual_generate_step3)
-val scalar_integer_min_int256_context_plan_step3 = PURE_REWRITE_CONV
-  [scalar_integer_min_int256_actual_generate_fn_plan]
-  (rhs (concl scalar_integer_min_int256_context_plan_step2))
+(* With generate_fn_plan scrubbed and replaced by the concrete plan above,
+   evaluation finishes the whole context plan. *)
 val scalar_integer_min_int256_context_plan_eval = save_thm
   ("scalar_integer_min_int256_context_plan_eval",
    TRANS scalar_integer_min_int256_context_plan_step1
-    (TRANS scalar_integer_min_int256_context_plan_step2
-      (TRANS scalar_integer_min_int256_context_plan_step3
-        (EVAL (rhs (concl scalar_integer_min_int256_context_plan_step3))))))
+     scalar_integer_min_int256_context_plan_step2)
 val scalar_integer_min_int256_context_plan = optionSyntax.dest_some
   (rhs (concl scalar_integer_min_int256_context_plan_eval))
 val scalar_integer_min_int256_target_wf_eval = EVAL
@@ -268,7 +224,22 @@ Proof
        scalar_integer_min_int256_runtime_pipeline_def,
        scalar_integer_min_int256_deploy_compile_def,
        checked_unit_pipeline_def] >>
-  rpt CASE_TAC >> gvs[]
+  Cases_on `resolve_o1_policy (o1_policy all_capabilities)` >> simp[] >>
+  rename1 `resolve_o1_policy _ = SOME rpolicy` >>
+  Cases_on `lower_vyper_runtime_unit tops rpolicy` >> simp[] >>
+  rename1 `lower_vyper_runtime_unit _ _ = SOME runtime_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              runtime_unit` >> simp[] >>
+  rename1 `run_venom_pipeline _ _ _ _ _ _ = SOME runtime_out` >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `finalize_codegen (K SOME) rpolicy runtime_out.po_unit` >> simp[] >>
+  rename1 `finalize_codegen _ _ _ = SOME runtime_bytecode` >>
+  Cases_on `lower_vyper_deploy_unit tops rpolicy runtime_bytecode` >> simp[] >>
+  rename1 `lower_vyper_deploy_unit _ _ _ = SOME deploy_unit` >>
+  Cases_on `run_venom_pipeline (K T) (K T) (K T) rpolicy o1_pipeline_spec
+              deploy_unit` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  CASE_TAC >> simp[]
 QED
 
 val () = evalCompilerBytecodeLib.add_staged_compile_eval

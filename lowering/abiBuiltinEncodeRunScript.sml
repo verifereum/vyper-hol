@@ -1,4 +1,7 @@
-(* Complete actual lower_abi_encode for either optional method-ID choice. *)
+(* Complete actual lower_abi_encode for either optional method-ID choice.
+   The effect frames the actual word-rounded output allocation: up to 31
+   padding bytes are inside its permitted write footprint, not the outside
+   memory frame. Logical bytes/capacity and all other frames are unchanged. *)
 Theory abiBuiltinEncodeRun
 Ancestors
   abiBuiltinEncodeMethod abiBuiltinEncodeCorrect abiBuiltinEncodeInput abiBuiltinEncodeEffect
@@ -42,10 +45,10 @@ Theorem lower_abi_encode_run:
     val_in_memory (BaseTV (BytesT (Dynamic (maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)))))
       (vyperValue$BytesV (abi_builtin_encode_prefix method_id_opt ++ enc at av)) p actual.vs_memory /\
     abi_builtin_encode_effect first last start final limit_st p
-      (maxlen+32+LENGTH (abi_builtin_encode_prefix method_id_opt))
+      (32+32*word_size (maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt)))
       (case method_id_opt of NONE => 0 | SOME _ => 32) b cap initial actual /\
     FLOOKUP actual.vs_allocas start.cs_next_id =
-      SOME (p,maxlen+32+LENGTH (abi_builtin_encode_prefix method_id_opt)) /\
+      SOME (p,32+32*word_size (maxlen+LENGTH (abi_builtin_encode_prefix method_id_opt))) /\
     actual.vs_current_bb = final.cs_current_bb /\ actual.vs_inst_idx = LENGTH final.cs_current_insts /\
     ~actual.vs_halted /\ abi_decode_sim ctx func initial actual
 Proof
@@ -56,7 +59,7 @@ Proof
   >- (drule_all lower_abi_encode_no_method >> disch_then (qspec_then `ctx` strip_assume_tac) >>
       rename1 `abi_decode_sim ctx func initial actual` >>
       `actual.vs_halted = initial.vs_halted` by simp[] >>
-      `abi_builtin_encode_effect first last start final limit_st p (maxlen+32) 0 b cap initial actual` by
+      `abi_builtin_encode_effect first last start final limit_st p (32+32*word_size maxlen) 0 b cap initial actual` by
         (drule_all abi_builtin_encode_effect_no_method >> simp[]) >>
       qexists_tac `actual` >> asm_simp_tac (srw_ss()) [ADD_COMM]) >>
   drule_all lower_abi_encode_method >> disch_then (qspec_then `ctx` strip_assume_tac) >>

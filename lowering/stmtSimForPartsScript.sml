@@ -407,6 +407,7 @@ Theorem compile_for_range_parts:
       ((), st') /\
     lower_value compile_expr cenv fty e1 st = (Lit w1, st) /\
     lower_value compile_expr cenv fty e2 st = (Lit w2, st) /\
+    (?a1 n1 a2 n2. e1 = Literal a1 (IntL n1) /\ e2 = Literal a2 (IntL n2)) /\
     cenv.ce_alloca_locals /\ fn_has_code st st' func /\
     (!c lc sa sb. compile_stmts c lc ty stmts sa = ((), sb) ==>
                   cs_extends sa sb) ==>
@@ -468,9 +469,11 @@ Theorem compile_for_range_parts:
       st'.cs_current_bb = exit_lbl /\ st'.cs_current_insts = []
 Proof
   rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  gvs[lower_value_int_lit] >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-  simp[compile_stmt_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       LET_THM] >>
+  simp[compile_stmt_def, lower_value_int_lit,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   Cases_on `declare_local cenv id fty st` >> rename1 `_ = (bc, st1)` >>
   drule_all declare_local_ptr >> strip_tac >> gvs[] >>
   simp[emit_local_alloca_def, fresh_label_def, emit_inst_def, emit_op_def,

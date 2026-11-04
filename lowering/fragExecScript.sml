@@ -392,7 +392,8 @@ Theorem frag_exec_weaken:
       (!s. P' s ==> P s) /\ (!s. Q s ==> Q' s) /\ (!r. R r ==> R' r) ==>
       frag_exec ctx st st' P' Q' R'
 Proof
-  metis_tac[frag_exec_conseq]
+  rpt strip_tac >> irule frag_exec_conseq >>
+  qexistsl_tac [`P`, `Q`, `R`] >> simp[]
 QED
 
 Theorem frag_exec_pre_exit:

@@ -314,7 +314,8 @@ val ext_call_rw =
 
 val ext_call_idx_ss = idx_case_ss ++ rewrites
   (ext_call_rw @ [exec_ext_call_def, venom_call_request_def,
-                 consume_call_outcome_eq, write_mem_idx, update_var_def,
+                 consume_call_outcome_eq, consume_create_outcome_eq,
+                 venom_create_request_def, write_mem_idx, update_var_def,
                  exec_delegatecall_def, make_venom_delegatecall_state_idx,
                  exec_create_def, make_venom_create_state_idx]);
 
@@ -343,7 +344,8 @@ Theorem exec_create_idx[local]:
     exec_result_map (\s'. s' with vs_inst_idx := n)
       (exec_create inst s value offset sz salt_opt)
 Proof
-  rpt gen_tac >> idx_cases_tac ext_call_idx_ss
+  rpt gen_tac >> idx_cases_tac ext_call_idx_ss >>
+  simp[halt_state_def, set_returndata_def]
 QED
 
 (* ================================================================

@@ -467,7 +467,7 @@ Theorem storage_copy_load_exact[local]:
     (mk_inst id (if loc = LocStorage then SLOAD else TLOAD) [op] [out]) s =
   OK (update_var out (copy_runtime_word loc s a) s)
 Proof
-  strip_tac >> gvs[step_inst_base_def, exec_read1_def, mk_inst_def,
+  strip_tac >> gvs[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def,
                           copy_runtime_word_def]
 QED
 
@@ -492,7 +492,7 @@ Theorem storage_copy_load_step[local]:
         t.vs_labels = s.vs_labels
 Proof
   rpt strip_tac >>
-  gvs[step_inst_base_def, exec_read1_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def] >>
   simp[lookup_var_update_var, update_var_def] >> metis_tac[]
 QED
 

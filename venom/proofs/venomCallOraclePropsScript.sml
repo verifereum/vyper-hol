@@ -108,16 +108,17 @@ Proof
 QED
 
 Theorem consume_call_outcome_static_or_failed:
-  rq.cr_static \/ ~(FST (take_outcome rq s.vs_outcomes)).co_success ==>
+  rq.cr_static \/ (rq.cr_kind = MessageCall /\
+    ~(FST (take_outcome rq s.vs_outcomes)).co_success) ==>
   (SND (consume_call_outcome rq ro rs s)).vs_accounts = s.vs_accounts /\
   (SND (consume_call_outcome rq ro rs s)).vs_transient = s.vs_transient /\
   (SND (consume_call_outcome rq ro rs s)).vs_logs = s.vs_logs /\
   (SND (consume_call_outcome rq ro rs s)).vs_pending_deletions =
     s.vs_pending_deletions
 Proof
-  simp[consume_call_outcome_def] >>
-  Cases_on `take_outcome rq s.vs_outcomes` >> simp[] >>
-  rw[adopt_outcome_def, adopt_outcome_deletions_def] >> simp[]
+  strip_tac >>
+  fs[consume_call_outcome_eq, adopt_outcome_def,
+     adopt_outcome_deletions_def]
 QED
 
 (* Binding the output leaves every residual field intact, by the existing

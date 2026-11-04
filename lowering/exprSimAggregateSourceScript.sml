@@ -36,7 +36,7 @@ Ancestors
 
 (* A captured storage place accepted by storage_holds reads to a value. *)
 Theorem storage_holds_materialised:
-  storage_holds cx trans t tv w es ==>
+  storage_holds cx trans t tv w es s ==>
   ?v. read_result cx tv es = (INL v, es)
 Proof
   simp[storage_holds_def] >> metis_tac[]

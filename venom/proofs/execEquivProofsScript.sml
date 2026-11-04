@@ -486,9 +486,17 @@ Triviality step_inst_djmp_equiv:
     inst.inst_opcode = DJMP ==>
     result_equiv vars (step_inst_base inst s1) (step_inst_base inst s2)
 Proof
-  rw[] >> step_inst_base_opcode_tac >> simp[] >>
-  imp_res_tac eval_operand_equiv >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def] >>
+  rpt gen_tac >> strip_tac >>
+  step_inst_base_opcode_tac >> simp[] >>
+  Cases_on `inst.inst_operands` >> simp[result_equiv_def] >>
+  rename1 `(selector_op : operand) :: label_ops` >>
+  `eval_operand selector_op s1 = eval_operand selector_op s2` by
+    (Cases_on `selector_op` >>
+     fs[eval_operand_def, state_equiv_def, execution_equiv_def, lookup_var_def]) >>
+  asm_rewrite_tac[] >>
+  Cases_on `eval_operand selector_op s2` >> simp[result_equiv_def] >>
+  Cases_on `extract_labels label_ops` >> simp[result_equiv_def] >>
+  IF_CASES_TAC >> simp[result_equiv_def] >>
   irule jump_to_preserves >> simp[]
 QED
 
@@ -665,9 +673,18 @@ Proof
   imp_res_tac eval_operand_equiv >>
   `s1.vs_immutables = s2.vs_immutables` by
     fs[state_equiv_def, execution_equiv_def] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def,
-    state_equiv_def, execution_equiv_def, lookup_var_def,
-    istore_def, mstore_def]
+  Cases_on `inst.inst_operands` >> gvs[result_equiv_def] >>
+  rename1 `h :: rest` >>
+  Cases_on `rest` >> gvs[result_equiv_def] >>
+  rename1 `h :: v :: rest` >>
+  Cases_on `rest` >> gvs[result_equiv_def] >>
+  `eval_operand h s1 = eval_operand h s2` by metis_tac[] >>
+  `eval_operand v s1 = eval_operand v s2` by metis_tac[] >>
+  asm_rewrite_tac[] >>
+  Cases_on `eval_operand h s2` >> gvs[result_equiv_def] >>
+  Cases_on `eval_operand v s2` >> gvs[result_equiv_def,
+    revert_equiv_def, state_equiv_def, execution_equiv_def,
+    lookup_var_def, istore_def, mstore_def]
 QED
 
 (* DLOADBYTES/CODECOPY: copy from data section/code to memory, 3 operands *)
@@ -803,8 +820,13 @@ Proof
       >- (disch_then irule >> rw[] >> first_x_assum irule >>
           metis_tac[MEM_DROP_IMP, MEM_REVERSE])
       >> Induct >> rw[eval_operands_def]) >>
-  simp[] >>
-  rpt CASE_TAC >> gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
+  gvs[listTheory.EL] >>
+  Cases_on `eval_operand (HD (REVERSE rest)) s2` >>
+  gvs[result_equiv_def] >>
+  Cases_on `eval_operand (EL 1 (REVERSE rest)) s2` >>
+  gvs[result_equiv_def] >>
+  Cases_on `eval_operands (DROP 2 (REVERSE rest)) s2` >>
+  gvs[result_equiv_def, revert_equiv_def, state_equiv_def,
     execution_equiv_def, lookup_var_def]
 QED
 
@@ -1002,9 +1024,15 @@ Proof
   Cases_on `inst.inst_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
   rename1 `inst.inst_outputs = out::rest_outputs` >>
   Cases_on `rest_outputs` >> simp[exec_ext_call_def, result_equiv_def] >>
-  rw[state_equiv_def, execution_equiv_def, lookup_var_def,
-     update_var_def, FLOOKUP_UPDATE, write_memory_with_expansion_def] >>
-  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
+  qpat_abbrev_tac `taken = take_outcome _ _` >>
+  qpat_abbrev_tac `adopted = adopt_outcome _ _ _` >>
+  `!off bs. (write_memory_with_expansion off bs s1).vs_memory =
+            (write_memory_with_expansion off bs s2).vs_memory` by
+    simp[write_memory_with_expansion_def] >>
+  asm_rewrite_tac[] >>
+  rw[state_equiv_def, execution_equiv_def] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  Cases_on `out = v` >> simp[]
 QED
 
 (* Original concrete-call proof retained:
@@ -1045,25 +1073,31 @@ Proof
 QED
 
 (* exec_create preserves equiv when states and operands match *)
-Triviality exec_create_equiv:
+Theorem exec_create_equiv[local]:
   !vars inst s1 s2 value offset sz salt_opt.
     state_equiv vars s1 s2 ==>
     result_equiv vars
       (exec_create inst s1 value offset sz salt_opt)
       (exec_create inst s2 value offset sz salt_opt)
 Proof
-  rw[exec_create_def, LET_THM] >>
-  `s1.vs_memory = s2.vs_memory /\ s1.vs_accounts = s2.vs_accounts /\
-   s1.vs_logs = s2.vs_logs /\ s1.vs_call_ctx = s2.vs_call_ctx /\
-   s1.vs_tx_ctx = s2.vs_tx_ctx /\ s1.vs_block_ctx = s2.vs_block_ctx /\
-   s1.vs_prev_hashes = s2.vs_prev_hashes /\
-   s1.vs_transient = s2.vs_transient`
-    by fs[state_equiv_def, execution_equiv_def] >>
-  simp[read_memory_def, make_venom_create_state_def,
-       make_sub_tx_def, make_rollback_def, venom_to_tx_params_def,
-       LET_THM] >>
-  Cases_on `salt_opt` >> simp[] >>
-  irule extract_venom_result_result_equiv >> simp[]
+  rpt strip_tac >>
+  Cases_on `w2n sz > 2 * max_code_size`
+  >- (Cases_on `inst.inst_outputs` >> simp[exec_create_def, result_equiv_def] >>
+      rename1 `inst.inst_outputs = out::rest_outputs` >>
+      Cases_on `rest_outputs` >> simp[exec_create_def, result_equiv_def] >>
+      gvs[state_equiv_def, execution_equiv_def, halt_state_def,
+          set_returndata_def, lookup_var_def]) >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[state_equiv_def, execution_equiv_def,
+       venom_create_request_def, read_memory_def] >>
+  fs[state_equiv_def, execution_equiv_def] >>
+  Cases_on `inst.inst_outputs` >> simp[exec_create_def, result_equiv_def] >>
+  rename1 `inst.inst_outputs = out::rest_outputs` >>
+  Cases_on `rest_outputs` >> simp[exec_create_def, result_equiv_def] >>
+  rw[state_equiv_def, execution_equiv_def, lookup_var_def,
+     update_var_def, FLOOKUP_UPDATE] >>
+  gvs[lookup_var_def] >> Cases_on `out = v` >> simp[]
 QED
 
 (* Helper: exec_alloca preserves equiv (operands are literals) *)

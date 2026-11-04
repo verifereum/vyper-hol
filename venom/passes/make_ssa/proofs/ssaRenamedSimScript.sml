@@ -364,32 +364,21 @@ Triviality exec_create_renamed:
           ssa_sim ((HD inst1.inst_outputs =+ HD inst2.inst_outputs) sigma)
                   s1' s2'
 Proof
-  rw[exec_create_def, LET_THM] >>
-  imp_res_tac ssa_sim_fields >> gvs[read_memory_def] >>
-  `make_venom_create_state s1
-     (case salt_opt of
-        NONE => address_for_create s2.vs_call_ctx.cc_address
-          (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
-      | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
-     (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)) =
-   make_venom_create_state s2
-     (case salt_opt of
-        NONE => address_for_create s2.vs_call_ctx.cc_address
-          (lookup_account s2.vs_call_ctx.cc_address s2.vs_accounts).nonce
-      | SOME salt => address_for_create2 s2.vs_call_ctx.cc_address salt
-          (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w)))
-     (s2.vs_call_ctx.cc_gas - s2.vs_call_ctx.cc_gas DIV 64)
-     (w2n value) (TAKE (w2n sz) (DROP (w2n offset) s2.vs_memory ++ REPLICATE (w2n sz) 0w))` by (
-    Cases_on `salt_opt` >> simp[] >>
-    metis_tac[make_venom_create_state_ssa_sim]) >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  BasicProvers.every_case_tac >> gvs[] >>
-  drule_all extract_venom_result_ssa_sim >> strip_tac >> gvs[] >>
-  irule ssa_sim_update_var >> gvs[] >>
-  gvs[extract_venom_result_def, AllCaseEqs(), LET_THM, lookup_var_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  rpt strip_tac >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[ssa_sim_def, venom_create_request_def, read_memory_def] >>
+  `s1.vs_outcomes = s2.vs_outcomes /\ s1.vs_requests = s2.vs_requests` by
+    fs[ssa_sim_def] >>
+  gvs[exec_create_def, AllCaseEqs()] >>
+  qexists_tac `update_var (HD inst2.inst_outputs)
+    (FST (consume_create_outcome
+      (venom_create_request s2 value offset sz salt_opt) s2))
+    (SND (consume_create_outcome
+      (venom_create_request s2 value offset sz salt_opt) s2))` >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  irule ssa_sim_update_var >>
+  gvs[ssa_sim_def, consume_create_outcome_eq, lookup_var_def]
 QED
 
 (* Under ssa_sim, vs_alloca_next is equal *)
@@ -732,7 +721,15 @@ Triviality step_term_return:
     (!e. step_inst_base inst1 s1 <> Error e) ==>
     ssa_result_equiv (step_inst_base inst1 s1) (step_inst_base inst2 s2)
 Proof
-  term_setup_tac >> gvs step_base_reduces >> term_resolve_tac
+  term_setup_tac >> gvs step_base_reduces >>
+  namedCases_on `inst1.inst_operands` ["", "off_op ops"] >> gvs[] >>
+  namedCases_on `ops` ["", "sz_op tail_ops"] >> gvs[] >>
+  Cases_on `tail_ops` >> gvs[] >>
+  Cases_on `eval_operand off_op s1` >> gvs[] >>
+  Cases_on `eval_operand sz_op s1` >> gvs[] >>
+  imp_res_tac eval_operand_renamed >>
+  gvs[ssa_result_equiv_def, execution_equiv_UNIV,
+      halt_state_def, set_returndata_def, ssa_sim_def]
 QED
 
 Triviality step_term_revert:
@@ -830,7 +827,7 @@ Proof
   gvs[dretShapeDefsTheory.parse_dret_shape_def, renamed_operand_def]
 QED
 
-Triviality step_term_dret:
+Theorem step_term_dret[local]:
   !sigma inst1 inst2 s1 s2.
     ssa_sim sigma s1 s2 /\ inst_renamed sigma inst1 inst2 /\
     inst1.inst_opcode = DRET /\
@@ -840,8 +837,17 @@ Proof
   term_setup_tac >>
   `parse_dret_shape inst2 = parse_dret_shape inst1` by
     metis_tac[parse_dret_shape_renamed] >>
-  gvs step_base_reduces >> term_resolve_tac >>
-  rpt (pairarg_tac >> gvs[]) >>
+  gvs step_base_reduces >>
+  Cases_on `inst1.inst_outputs = []` >> gvs[] >>
+  `inst2.inst_outputs = []` by (Cases_on `inst2.inst_outputs` >> gvs[]) >>
+  gvs[] >>
+  Cases_on `parse_dret_shape inst1` >> gvs[] >>
+  PairCases_on `x` >> gvs[] >>
+  Cases_on `eval_operands inst1.inst_operands s1` >> gvs[] >>
+  drule_all eval_operands_renamed >> strip_tac >> gvs[] >>
+  Cases_on `pair_dret_words (TAKE (2 * x1) (DROP (x0 + 1) x))` >> gvs[] >>
+  `s1.vs_call_entry_fmp = s2.vs_call_entry_fmp` by gvs[ssa_sim_def] >>
+  gvs[] >> rpt (pairarg_tac >> gvs[]) >>
   `ssa_sim sigma s1 s2` by gvs[ssa_sim_def] >>
   drule_all pack_dret_dynamic_ssa_sim >> strip_tac >>
   gvs[ssa_result_equiv_def, execution_equiv_UNIV, ssa_sim_def]
@@ -919,11 +925,12 @@ Proof
   gvs[inst_renamed_def, is_terminator_def] >>
   imp_res_tac ssa_sim_fields >>
   gvs step_base_reduces >>
-  gvs[exec_write2_def, AllCaseEqs(), LET_THM, renamed_operand_def] >>
-  TRY (imp_res_tac eval_operand_renamed >> gvs[]) >>
-  TRY (imp_res_tac eval_operands_renamed >> gvs[]) >>
-  irule ssa_sim_implies_exec_equiv_UNIV >>
-  gvs[ssa_sim_def, halt_state_def, revert_state_def, set_returndata_def,
-      lookup_var_def] >>
-  metis_tac[]
+  gvs[exec_write2_def, AllCaseEqs(), LET_THM, exec_create_abort_iff] >>
+  imp_res_tac eval_operand_renamed >>
+  imp_res_tac eval_operands_renamed >>
+  gvs[exec_create_abort_iff, AllCaseEqs()] >>
+  gvs[execution_equiv_UNIV, halt_state_def, revert_state_def,
+      set_returndata_def, ssa_sim_def] >>
+  Cases_on `inst2.inst_outputs` >> gvs[] >>
+  Cases_on `t` >> gvs[]
 QED

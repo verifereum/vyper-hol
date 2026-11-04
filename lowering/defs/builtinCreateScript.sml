@@ -2,14 +2,16 @@
  * Contract Creation Built-in Functions
  *
  * TOP-LEVEL:
- *   compile_raw_create        — full raw_create with optional ctor args
+ *   compile_create_proxy_buf  — proxy buffer before salt evaluation
  *   compile_create_proxy      — create_minimal_proxy_to (EIP-1167)
  *   compile_create_copy       — create_copy_of (extcodecopy + preamble)
  *   compile_create_blueprint  — create_from_blueprint (ERC-5202, with ctor args)
+ *   compile_create_blueprint_check / append — stages around ctor evaluation
  *
  * Helper:
  *   compile_create_dispatch   — inner CREATE/CREATE2 + result check
  *   compile_check_create_result — validate CREATE result
+ *   compile_raw_create_legacy — old pre-evaluated helper, counterexample only
  *
  * Each returns the new contract address.
  * Salt parameter triggers CREATE2 instead of CREATE.
@@ -41,8 +43,9 @@ Definition compile_check_create_result_def:
          (* Failure path: bubble up revert data *)
          new_block fail_lbl;
          rds <- emit_op RETURNDATASIZE [];
-         emit_void RETURNDATACOPY [Lit 0w; Lit 0w; rds];
-         emit_inst REVERT [Lit 0w; rds] [];
+         rbuf <- compile_alloc_buffer 0;
+         emit_void RETURNDATACOPY [rbuf.buf_operand; Lit 0w; rds];
+         emit_inst REVERT [rbuf.buf_operand; rds] [];
          (* Success path *)
          new_block ok_lbl;
          return result
@@ -53,7 +56,7 @@ End
 
 (* ===== CREATE/CREATE2 dispatch ===== *)
 (* Inner dispatch: emit CREATE or CREATE2 + check result.
-   Used by compile_raw_create, compile_create_proxy, compile_create_copy. *)
+   Used by compile_raw_create_legacy, compile_create_proxy, compile_create_copy. *)
 Definition compile_create_dispatch_def:
   compile_create_dispatch code_ptr code_len value_op salt_opt
                      revert_on_failure =
@@ -66,8 +69,10 @@ Definition compile_create_dispatch_def:
     od
 End
 
-(* ===== raw_create ===== *)
-(* Full raw_create pipeline with optional ABI-encoded constructor arguments.
+(* ===== Legacy pre-evaluated raw_create ===== *)
+(* Retained for rawCreateContractProbe's historical counterexample.
+   The production callback-driven pipeline lives in exprLowering.
+   Old raw_create pipeline with optional ABI-encoded constructor arguments.
    Mirrors Python: create.py lower_raw_create
 
    bytecode_op: pointer to bytestring [length][data] in memory.
@@ -81,8 +86,8 @@ End
      args_enc_info: ABI encoding info for the ctor args tuple type.
      abi_size: abi_type.size_bound() for the ctor args tuple.
      bytecode_maxlen: max length of bytecode (for buffer sizing). *)
-Definition compile_raw_create_def:
-  compile_raw_create bytecode_op value_op salt_opt
+Definition compile_raw_create_legacy_def:
+  compile_raw_create_legacy bytecode_op value_op salt_opt
                      revert_on_failure ctor_args_info =
     do (* Get bytecode length and data pointer *)
        bytecode_len <- emit_op MLOAD [bytecode_op];
@@ -123,8 +128,8 @@ End
 
    Address must be left-aligned via SHL(96, addr).
    Uses 3x MSTORE (96 bytes buffer) to write all components. *)
-Definition compile_create_proxy_def:
-  compile_create_proxy target_op value_op salt_opt revert_on_failure =
+Definition compile_create_proxy_buf_def:
+  compile_create_proxy_buf target_op =
     do (* Allocate 96-byte buffer for 3 x 32-byte stores *)
        buf_alloc <- compile_alloc_buffer 96;
        buf <- return buf_alloc.buf_operand;
@@ -142,7 +147,13 @@ Definition compile_create_proxy_def:
        (* Exact bytes: 5af43d82803e903d91602b57fd5bf3 (15 bytes) *)
        emit_void MSTORE [buf_post;
          Lit 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000w];
-       (* Create with 54 bytes total (19 + 20 + 15) *)
+       return buf
+    od
+End
+
+Definition compile_create_proxy_def:
+  compile_create_proxy target_op value_op salt_opt revert_on_failure =
+    do buf <- compile_create_proxy_buf target_op;
        compile_create_dispatch buf (Lit 54w) value_op salt_opt revert_on_failure
     od
 End
@@ -152,8 +163,8 @@ End
    vyper/codegen_venom/builtins/create.py:CreateCopyOf.build_IR
    Clone existing contract bytecode:
    1. Get code size via EXTCODESIZE, assert non-zero
-   2. Reserve code_size + 32 runtime bytes for the preamble word and code
-   3. Build 11-byte initcode preamble (PUSH3 codesize, codecopy, return)
+   2. Build 11-byte initcode preamble (PUSH3 codesize, codecopy, return)
+   3. Reserve code_size + 32 runtime bytes for the preamble word and code
    4. MSTORE preamble (with codesize embedded), EXTCODECOPY code after
    5. CREATE/CREATE2 from allocation+21 with preamble_len+codesize
 
@@ -167,9 +178,6 @@ Definition compile_create_copy_def:
        code_size <- emit_op EXTCODESIZE [target_op];
        (* Assert target has code *)
        emit_void ASSERT [code_size];
-       (* Reserve the full preamble word plus copied runtime code. *)
-       alloc_size <- emit_op ADD [code_size; Lit 32w];
-       mem_ofst <- compile_alloc_dynamic alloc_size;
        (* Build preamble with embedded codesize: shift codesize into position.
           Preamble template (11 bytes): 62 00 00 00 3d 81 60 0b 3d 39 f3
           PUSH3(sz) RDS DUP2 PUSH1(0x0B) RDS CODECOPY RETURN
@@ -181,6 +189,9 @@ Definition compile_create_copy_def:
        preamble <- emit_op OR
          [Lit 0x000000000000000000000000000000000000000000620000003d81600b3d39f3w;
           shifted_sz];
+       (* Reserve the full preamble word plus copied runtime code. *)
+       alloc_size <- emit_op ADD [code_size; Lit 32w];
+       mem_ofst <- compile_alloc_dynamic alloc_size;
        (* Store preamble at mem_ofst (32-byte word, preamble at bytes 21-31) *)
        emit_void MSTORE [mem_ofst; preamble];
        (* Copy target code to mem_ofst + 32 *)
@@ -196,6 +207,10 @@ Definition compile_create_copy_def:
             NONE => emit_op CREATE [value_op; buf; buf_len]
           | SOME salt_op => emit_op CREATE2
               [value_op; buf; buf_len; salt_op]);
+       (* The scratch initcode has been consumed.  Pinned Vyper restores the
+          FMP at the result branch only when failure must revert. *)
+       (if revert_on_failure then emit_void SETFMP [mem_ofst]
+        else return ());
        compile_check_create_result result revert_on_failure
     od
 End
@@ -213,30 +228,32 @@ End
      NONE means no ctor args.
    code_offset_op: offset into blueprint code (usually 3 for ERC-5202).
      Can be literal or runtime value. *)
-Definition compile_create_blueprint_def:
-  compile_create_blueprint target_op value_op salt_opt code_offset_op
-                           args_info revert_on_failure =
+Definition compile_create_blueprint_check_def:
+  compile_create_blueprint_check target_op code_offset_op =
     do (* Get blueprint code size, skipping preamble *)
        full_size <- emit_op EXTCODESIZE [target_op];
        code_size <- emit_op SUB [full_size; code_offset_op];
        (* Assert blueprint has code after preamble (sgt because underflow) *)
        has_code <- emit_op SGT [code_size; Lit 0w];
        emit_void ASSERT [has_code];
+       return code_size
+    od
+End
+
+Definition compile_create_blueprint_append_def:
+  compile_create_blueprint_append target_op value_op salt_opt code_offset_op
+                                  code_size args_ptr args_len revert_on_failure =
+    do
        (* Compute the complete contiguous CREATE extent before allocating. *)
-       total_len <-
-         (case args_info of
-            NONE => return code_size
-          | SOME (_, args_len) => emit_op ADD [code_size; args_len]);
+       total_len <- emit_op ADD [code_size; args_len];
        mem_ofst <- compile_alloc_dynamic total_len;
        (* Copy blueprint code (skipping preamble) to mem_ofst *)
        emit_void EXTCODECOPY
          [target_op; mem_ofst; code_offset_op; code_size];
        (* Append constructor args if present *)
-       (case args_info of
-          NONE => return ()
-        | SOME (args_ptr, args_len) =>
+       (if args_len = Lit 0w then return () else
             do args_dest <- emit_op ADD [mem_ofst; code_size];
-               emit_void MCOPY [args_dest; args_ptr; args_len]
+               compile_copy_memory_dynamic args_dest args_ptr args_len
             od);
        (* Create *)
        result <-
@@ -244,6 +261,19 @@ Definition compile_create_blueprint_def:
             NONE => emit_op CREATE [value_op; mem_ofst; total_len]
           | SOME salt_op => emit_op CREATE2
               [value_op; mem_ofst; total_len; salt_op]);
+       (if revert_on_failure then emit_void SETFMP [mem_ofst]
+        else return ());
        compile_check_create_result result revert_on_failure
+    od
+End
+
+Definition compile_create_blueprint_def:
+  compile_create_blueprint target_op value_op salt_opt code_offset_op
+                           args_info revert_on_failure =
+    do code_size <- compile_create_blueprint_check target_op code_offset_op;
+       let (args_ptr,args_len) =
+         case args_info of NONE => (Lit 0w,Lit 0w) | SOME info => info in
+       compile_create_blueprint_append target_op value_op salt_opt code_offset_op
+         code_size args_ptr args_len revert_on_failure
     od
 End

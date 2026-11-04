@@ -1,6 +1,7 @@
 (* Shared expression-call and body-precondition boundaries. *)
 Theory bodyExprPreFacts
 Ancestors
+  bodyStorageCases
   exprSimSource bodySim allocLimitsProps stmtLowering stmtLoweringMono
   fragExec stmtSimProps
   loweringPosts supportedStmtTraverse vyperCallOutcomeStorage vyperTypeExprSoundness
@@ -44,13 +45,6 @@ Proof
 QED
 
 (* supported_function_decl finds only the main module's functions. *)
-Theorem supported_function_decl_main[local]:
-  !tops id vis. IS_SOME (supported_function_decl tops id vis) ==> FST id = NONE
-Proof
-  Cases >> rpt gen_tac >> PairCases_on `id` >>
-  simp[supported_function_decl_def] >>
-  Cases_on `id0` >> simp[]
-QED
 
 (* An expression with no effect in it has no internal calls to make. *)
 Theorem no_effect_int_calls[local]:

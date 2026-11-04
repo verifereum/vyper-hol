@@ -9,10 +9,10 @@ Ancestors
   fragExec varsExt  freshWrites
   exprBopLowering loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
-  builtinSimple builtinProps
+  builtinSimple builtinProps arithmeticProps vyperArith
   compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
   vyperValueOperation valueEncoding venomExecSemantics venomInst venomState
-  vyperTyping
+  vyperTyping vyperTypeSystem
 Libs
   intLib pairLib
 
@@ -179,7 +179,7 @@ QED
 
 Theorem compile_unop_sim:
   !ctx func cenv cx ty ann bi e1 ty1 f es.
-    bi <> Len /\ builtin_args_length_ok bi 1 /\
+    bi <> Len /\ ~precompile_builtin bi /\ builtin_args_length_ok bi 1 /\
     is_word_type ann /\ is_word_type (expr_type e1) /\
     (!sa sb op.
        lower_value compile_expr cenv ty (Builtin ann bi [e1]) sa = (op, sb) ==>
@@ -216,7 +216,8 @@ Proof
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >>
      asm_rewrite_tac[]) >>
-  `builtin_args_length_ok bi 1 /\ bi <> Len` by asm_rewrite_tac[] >>
+  `builtin_args_length_ok bi 1 /\ bi <> Len /\ ~precompile_builtin bi` by
+    asm_rewrite_tac[] >>
   drule_all eval_expr_unop_cases >> strip_tac
   >- ((* e1 raises *)
       qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
@@ -255,4 +256,24 @@ Proof
   rpt strip_tac >> gvs[] >>
   irule expr_post_unop >> simp[] >>
   qexistsl_tac [`s1`, `t0`, `v1`, `x`] >> simp[]
+QED
+
+Theorem compile_neg_frag:
+  !ctx func cenv cx t tv v es.
+    is_numeric_type t /\ ~is_uint_type t /\
+    evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v ==>
+    unop_frag ctx func cenv cx (\x. compile_neg x t)
+      (typed_val_to_w256 tv v) t (unop_result cx t Neg [t] v es) es
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all neg_typed_source >> disch_then (qspec_then `es` assume_tac) >>
+  irule unop_frag_straight >>
+  (conj_tac >- (gen_tac >> BETA_TAC >>
+    irule (CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg))) >>
+  (conj_tac >- (Cases_on `t` >>
+    gvs[is_numeric_type_def, is_int_type_def, is_word_type_def] >>
+    rename1 `BaseT bt` >> Cases_on `bt` >> gvs[is_word_type_def])) >>
+  disch_then kall_tac >>
+  Cases_on `w2i (FST (type_bounds t)) < w2i (typed_val_to_w256 tv v)` >>
+  gvs[] >> rpt strip_tac >> drule_all compile_neg_run >> simp[]
 QED

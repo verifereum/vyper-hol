@@ -173,12 +173,17 @@ QED
 
 (* The copy length compile_bytestring_copy_len computes from the length
    word: the length word and the data rounded up to whole words. *)
-Theorem bytestring_copy_len_word[local]:
-  !L. L + 64 < dimword (:256) ==>
+Theorem bytestring_copy_len_word_exact:
+  !L. 32 + 32 * word_size L < dimword (:256) ==>
       w2n (((n2w L + 31w) && i2w (-32)) + 32w : bytes32) =
       32 + 32 * word_size L
 Proof
-  rpt strip_tac >> rewrite_tac[buffer_round_mask] >>
+  rpt strip_tac >>
+  `L <= 32 * word_size L` by
+    (rewrite_tac[word_size_def] >> qspec_then `32` mp_tac DIVISION >> simp[] >>
+     disch_then (qspec_then `L + 31` strip_assume_tac) >>
+     `(L + 31) MOD 32 < 32` by simp[] >> decide_tac) >>
+  rewrite_tac[buffer_round_mask] >>
   `(L + 31) DIV 32 * 32 <= L + 31` by
     (qspec_then `32` mp_tac DIVISION >> simp[] >>
      disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
@@ -191,8 +196,22 @@ Proof
   `(n2w L + 31w : bytes32) = n2w (L + 31)` by
     simp[wordsTheory.word_add_n2w] >>
   asm_rewrite_tac[] >>
-  `(L + 31) DIV 32 * 32 + 32 < dimword (:256)` by decide_tac >>
+  `(L + 31) DIV 32 * 32 + 32 < dimword (:256)` by
+    gvs[word_size_def] >>
   fs[wordsTheory.word_add_n2w, word_size_def, LESS_MOD]
+QED
+
+Theorem bytestring_copy_len_word[local]:
+  !L. L + 64 < dimword (:256) ==>
+      w2n (((n2w L + 31w) && i2w (-32)) + 32w : bytes32) =
+      32 + 32 * word_size L
+Proof
+  rpt strip_tac >> irule bytestring_copy_len_word_exact >>
+  `(L + 31) DIV 32 * 32 <= L + 31` by
+    (qspec_then `32` mp_tac DIVISION >> simp[] >>
+     disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
+  qpat_x_assum `_ DIV _ * _ <= _` mp_tac >>
+  simp_tac pure_ss [word_size_def, MULT_COMM] >> decide_tac
 QED
 
 (* The steps of the copy, as rewrites: the operands' values are THE of
@@ -243,13 +262,14 @@ Proof
   simp[stepInstBaseLib.simp_opcode_clause ``MCOPY``, venomInstTheory.mk_inst_def]
 QED
 
-Theorem store_bytestring_run[local]:
+Theorem store_bytestring_run_exact:
   !val_op dst_op sa sb s src dst L.
     compile_store_bytestring val_op dst_op sa = ((),sb) /\
     (!x. val_op = Var x ==> not_fresh_at sa x) /\
     (!x. dst_op = Var x ==> not_fresh_at sa x) /\
     eval_operand val_op s = SOME src /\ eval_operand dst_op s = SOME dst /\
-    mem_word_at (w2n src) s.vs_memory = n2w L /\ L + 64 < dimword (:256) ==>
+    mem_word_at (w2n src) s.vs_memory = n2w L /\
+    32 + 32 * word_size L < dimword (:256) ==>
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
     same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
     sa.cs_next_id <= sb.cs_next_id /\
@@ -262,7 +282,7 @@ Theorem store_bytestring_run[local]:
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_then assume_tac bytestring_copy_len_word >>
+  drule_then assume_tac bytestring_copy_len_word_exact >>
   `!n w s'. sa.cs_next_var <= n ==>
      eval_operand dst_op (update_var (STRING #"%" (toString n)) w s') =
        eval_operand dst_op s' /\
@@ -282,6 +302,34 @@ Proof
   rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def, update_var_def,
                        finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> gvs[]
+QED
+
+Theorem store_bytestring_run:
+  !val_op dst_op sa sb s src dst L.
+    compile_store_bytestring val_op dst_op sa = ((),sb) /\
+    (!x. val_op = Var x ==> not_fresh_at sa x) /\
+    (!x. dst_op = Var x ==> not_fresh_at sa x) /\
+    eval_operand val_op s = SOME src /\ eval_operand dst_op s = SOME dst /\
+    mem_word_at (w2n src) s.vs_memory = n2w L /\ L + 64 < dimword (:256) ==>
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
+    sa.cs_next_id <= sb.cs_next_id /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+      t.vs_memory =
+        (mcopy (w2n dst) (w2n src) (32 + 32 * word_size L) s).vs_memory /\
+      (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `32 + 32 * word_size L < dimword (:256)` by
+    (`(L + 31) DIV 32 * 32 <= L + 31` by
+       (qspec_then `32` mp_tac DIVISION >> simp[] >>
+        disch_then (qspec_then `L + 31` mp_tac) >> decide_tac) >>
+     qpat_x_assum `_ DIV _ * _ <= _` mp_tac >>
+     simp_tac pure_ss [word_size_def, MULT_COMM] >> decide_tac) >>
+  drule_all store_bytestring_run_exact >> simp[]
 QED
 
 Theorem emit_mstore_run[local]:
@@ -430,7 +478,7 @@ Resume compile_store_memory_run_size_bound_capacity[copy]:
   >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac)
   >~ [`LENGTH _ <= LENGTH _`]
   >- simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
-  simp[mcopy_def, write_memory_with_expansion_def, LET_THM,
+  simp_tac (srw_ss()) [mcopy_def, write_memory_with_expansion_def, LET_THM,
        venom_state_component_equality]
 QED
 

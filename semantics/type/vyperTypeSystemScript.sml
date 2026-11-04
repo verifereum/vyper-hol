@@ -463,7 +463,8 @@ Datatype:
     toplevel_vtypes         : (nsid |-> value_type);
     type_defs       : (nsid |-> type_args);
     fn_sigs         : (nsid |-> fn_sig);
-    flag_members    : (nsid |-> string list)
+    flag_members    : (nsid |-> string list);
+    event_fields    : (nsid |-> ((string # type) # bool) list)
   |>
 End
 
@@ -477,8 +478,29 @@ Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
 
+Definition event_arg_compatible_def:
+  event_arg_compatible (BaseT (StringT n)) (BaseT (StringT m)) = (m <= n) /\
+  event_arg_compatible (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) = (m <= n) /\
+  event_arg_compatible (ArrayT ft (Dynamic n)) (ArrayT at (Dynamic m)) =
+    (m <= n /\ event_arg_compatible ft at) /\
+  event_arg_compatible (ArrayT ft (Fixed n)) (ArrayT at (Fixed m)) =
+    (m = n /\ event_arg_compatible ft at) /\
+  event_arg_compatible (TupleT fts) (TupleT ats) =
+    (LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats) /\
+  event_arg_compatible fty aty = (aty = fty) /\
+  event_arg_compatible_list [] [] = T /\
+  event_arg_compatible_list (f::fs) (a::rest) =
+    (event_arg_compatible f a /\ event_arg_compatible_list fs rest) /\
+  event_arg_compatible_list _ _ = F
+End
+
 (* ===== Type builtin/conversion checks ===== *)
 
+(* Bytes[N]/String[N] targets accept only Bytes/String sources
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
+   conversion takes a source that is a subtype of its target: same-class
+   bytestrings must narrow, bytesM must change width
+   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -486,10 +508,9 @@ Definition valid_conversion_def:
   valid_conversion (BaseT (IntT _)) (BaseT BoolT) = T /\
   valid_conversion (BaseT BoolT) (BaseT (IntT _)) = T /\
   valid_conversion (BaseT BoolT) (BaseT (UintT _)) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = T /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Dynamic n))) = (m <= n) /\
+  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (BytesT (Fixed k))) = (m <> k) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Fixed m))) = (n <= m) /\
-  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = T /\
+  valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic k))) = (k < n) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (UintT _)) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (UintT _)) = (n <= 32) /\
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (IntT _)) = T /\
@@ -508,18 +529,14 @@ Definition valid_conversion_def:
     (20 <= m /\ m <= 32) /\
   valid_conversion (BaseT (UintT _)) (BaseT AddressT) = T /\
   valid_conversion (BaseT (IntT _)) (BaseT AddressT) = T /\
-  valid_conversion (FlagT _) (BaseT (IntT _)) = T /\
-  valid_conversion (FlagT _) (BaseT (UintT _)) = T /\
+  (* Vyper converts flags only to and from uint256 (vyperlang/vyper#5127). *)
+  valid_conversion (FlagT _) (BaseT (UintT n)) = (n = 256) /\
   valid_conversion (FlagT _) (BaseT (BytesT bd)) = (bd = Fixed 32) /\
-  valid_conversion (BaseT (UintT _)) (FlagT _) = T /\
-  valid_conversion (BaseT (IntT _)) (FlagT _) = T /\
+  valid_conversion (BaseT (UintT n)) (FlagT _) = (n = 256) /\
   valid_conversion (BaseT (UintT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (UintT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
   valid_conversion (BaseT (IntT n)) (BaseT (BytesT (Fixed m))) = (n <= 8 * m) /\
-  valid_conversion (BaseT (IntT _)) (BaseT (BytesT (Dynamic n))) = (32 <= n) /\
-  valid_conversion (BaseT (BytesT (Fixed m))) (BaseT (StringT n)) = (m <= n) /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT (StringT _)) = T /\
-  valid_conversion (BaseT (StringT _)) (BaseT (StringT _)) = T /\
+  valid_conversion (BaseT (StringT n)) (BaseT (StringT k)) = (k < n) /\
   valid_conversion (BaseT (StringT n)) (BaseT (BytesT (Fixed m))) = (n <= m) /\
   valid_conversion (BaseT (StringT _)) (BaseT (BytesT (Dynamic n))) = T /\
   valid_conversion (BaseT (UintT _)) (BaseT DecimalT) = T /\
@@ -655,10 +672,11 @@ Definition create_arg_types_ok_def:
        tys = [BaseT AddressT; BaseT (UintT 256)] ++
          (if has_salt then [BaseT (BytesT (Fixed 32))] else []) ++
          [BaseT (UintT 256)] ++ ctor_tys /\
-       (raw_args ==> ?bd. ctor_tys = [BaseT (BytesT bd)])) /\
+       (raw_args ==> ?n. ctor_tys = [BaseT (BytesT (Dynamic n))])) /\
   create_arg_types_ok RawCreate has_salt tys =
-    (?bd ctor_tys.
-       tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys ++
+    (?n ctor_tys.
+       n <= 49152 /\
+       tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys ++
          if has_salt then [BaseT (BytesT (Fixed 32))] else [])
 End
 
@@ -668,13 +686,15 @@ Theorem create_arg_types_ok_raw_create:
   create_arg_types_ok RawCreate has_salt tys <=>
     if has_salt then
       tys <> [] /\ LAST tys = BaseT (BytesT (Fixed 32)) /\
-      ?bd ctor_tys. FRONT tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
-    else ?bd ctor_tys. tys = [BaseT (BytesT bd); BaseT (UintT 256)] ++ ctor_tys
+      ?n ctor_tys. n <= 49152 /\
+        FRONT tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys
+    else ?n ctor_tys. n <= 49152 /\
+      tys = [BaseT (BytesT (Dynamic n)); BaseT (UintT 256)] ++ ctor_tys
 Proof
   Cases_on `has_salt` >> simp[create_arg_types_ok_def] >> eq_tac >> strip_tac
   >- simp[listTheory.LAST_CONS_cond, listTheory.FRONT_DEF,
           rich_listTheory.FRONT_APPEND]
-  >- (qexistsl [`bd`, `ctor_tys`] >>
+  >- (qexistsl [`n`, `ctor_tys`] >>
       qspec_then `tys` mp_tac listTheory.APPEND_FRONT_LAST >> simp[])
 QED
 
@@ -740,6 +760,14 @@ Definition well_typed_expr_def:
   well_typed_expr env (Call ty (ExtCall is_static _ (_, arg_types, ret_ty) opts) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ well_formed_type env.type_defs ty /\
      ty = ret_ty /\ ext_call_opts_ok is_static opts /\
+     (* Vyper rejects default_return_value on a call that returns nothing
+        (semantics/types/function.py). *)
+     (ret_ty = NoneT ==> ~MEM EKDefault opts) /\
+     (* Vyper's type annotations can't name None, nested or not
+        (semantics/types/utils.py), and interface parameters are
+        assignable, as params_ok requires of InterfaceDecl. *)
+     (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
+     EVERY (assignable_type env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
@@ -769,16 +797,20 @@ Definition well_typed_expr_def:
      EL 0 (MAP expr_type args) = BaseT AddressT) /\
   well_typed_expr env (Call ty RawLog args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 2 /\
-     (?bd. EL 0 (MAP expr_type args) = ArrayT (BaseT (BytesT (Fixed 32))) bd /\
-           bound_at_most bd 4) /\
-     (?bd'. EL 1 (MAP expr_type args) = BaseT (BytesT bd'))) /\
+     (?n. EL 0 (MAP expr_type args) =
+            ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n) /\ n <= 4) /\
+     (case EL 0 args of
+        Builtin _ (MakeArray _ _) topics => LENGTH topics <= 4
+      | _ => F) /\
+     (EL 1 (MAP expr_type args) = BaseT (BytesT (Fixed 32)) \/
+      ?n. EL 1 (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty RawRevert args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
-     (?bd. HD (MAP expr_type args) = BaseT (BytesT bd))) /\
+     (?n. HD (MAP expr_type args) = BaseT (BytesT (Dynamic n)))) /\
   well_typed_expr env (Call ty SelfDestructTarget args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = NoneT /\ LENGTH args = 1 /\
      HD (MAP expr_type args) = BaseT AddressT) /\
-  well_typed_expr env (Call ty (CreateTarget kind has_salt rof) args drv) =
+  well_typed_expr env (Call ty (CreateTarget kind has_salt rof _) args drv) =
     (well_typed_exprs env args /\ drv = NONE /\ ty = BaseT AddressT /\
      create_arg_types_ok kind has_salt (MAP expr_type args)) /\
 
@@ -1053,7 +1085,12 @@ Definition type_stmt_def:
     (if well_typed_expr env e ∧ expr_type e = BaseT BoolT ∧
         well_typed_custom_error env err then SOME env else NONE) /\
   type_stmt env ret_ty (Log id es) =
-    (if well_typed_exprs env es then SOME env else NONE) /\
+    (case FLOOKUP env.event_fields id of
+       NONE => NONE
+     | SOME fields =>
+         if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
+            LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+         then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
         type_widens_to env.type_defs (expr_type e) typ /\ id NOTIN FDOM env.var_types
@@ -1086,6 +1123,10 @@ Definition type_stmt_def:
      then SOME env else NONE) /\
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
+        (case it of
+           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+         | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
+         | Array _ => T) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
         IS_SOME (type_stmts (extend_local env id typ F) ret_ty body)
      then SOME env else NONE) /\

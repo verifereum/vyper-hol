@@ -132,11 +132,13 @@ QED
 
 Theorem vv_holds_vars_frame:
   vv_holds cenv cx ty tv vv es s /\ t.vs_memory = s.vs_memory /\
+  contract_storage t = contract_storage s /\
+  contract_transient t = contract_transient s /\
   eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) s ==>
   vv_holds cenv cx ty tv vv es t
 Proof
   Cases_on `vv` >>
-  simp[vv_holds_def, vv_operand_def, expr_val_rel_def] >>
+  simp[vv_holds_def, vv_operand_def, expr_val_rel_def, storage_holds_def] >>
   metis_tac[]
 QED
 
@@ -178,6 +180,10 @@ Proof
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with vs_vars := _ = s`
       (mp_tac o AP_TERM ``\z. (z.vs_memory,z.vs_allocas)``) >> simp[]) >>
+  `contract_storage t = contract_storage s /\
+   contract_transient t = contract_transient s` by
+    (qpat_x_assum `t with vs_vars := _ = s` (SUBST1_TAC o SYM) >>
+     simp[contract_storage_def, contract_transient_def]) >>
   qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds cenv cx (expr_type e) tv vv es' t` by

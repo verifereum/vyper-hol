@@ -1053,7 +1053,9 @@ Proof
       step_inst_base_preserves_stable_frame_metadata) >> simp[]) >>
   `v1.vs_initial_fmp = v2.vs_initial_fmp /\
    v1.vs_return_pc_token = v2.vs_return_pc_token` by metis_tac[] >>
-  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL` by
+  `inst.inst_opcode <> CALL /\ inst.inst_opcode <> STATICCALL /\
+   inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2 /\
+   inst.inst_opcode <> DELEGATECALL` by
     (rpt conj_tac >> strip_tac >> gvs[is_ext_call_op_def]) >>
   imp_res_tac step_inst_base_oracle >>
   `s1.vs_gas_readings = s2.vs_gas_readings` by
@@ -2679,7 +2681,7 @@ QED
 (* extract_venom_result: same run_result on both sides gives
    same output, and result states preserve m2v_inv_noix
    when the write range is nonpromoted *)
-(* Setting non-semantic fields (transient, returndata, accounts, logs)
+(* Setting non-semantic fields (transient, returndata, accounts, logs, deletions)
    to equal values preserves m2v_inv_noix. All semantic functions
    (lookup_var, mem_byte, mload, in_promoted_region, allocas_non_overlapping)
    are transparent to these fields. *)
@@ -2687,9 +2689,11 @@ Triviality m2v_inv_noix_set_fields:
   m2v_inv_noix fn s1 s2 ==>
   m2v_inv_noix fn
     (s1 with <| vs_transient := ts; vs_returndata := rd;
-                vs_accounts := accts; vs_logs := lgs |>)
+                vs_accounts := accts; vs_logs := lgs;
+                vs_pending_deletions := pending |>)
     (s2 with <| vs_transient := ts; vs_returndata := rd;
-                vs_accounts := accts; vs_logs := lgs |>)
+                vs_accounts := accts; vs_logs := lgs;
+                vs_pending_deletions := pending |>)
 Proof
   simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
        in_promoted_region_def, allocas_non_overlapping_def] >>
@@ -2707,11 +2711,13 @@ Triviality m2v_inv_noix_ext_update:
     (s1 with <| vs_memory :=
        (write_memory_with_expansion off bytes s1).vs_memory;
        vs_transient := ts; vs_returndata := rd;
-       vs_accounts := accts; vs_logs := lgs |>)
+       vs_accounts := accts; vs_logs := lgs;
+       vs_pending_deletions := pending |>)
     (s2 with <| vs_memory :=
        (write_memory_with_expansion off bytes s2).vs_memory;
        vs_transient := ts; vs_returndata := rd;
-       vs_accounts := accts; vs_logs := lgs |>)
+       vs_accounts := accts; vs_logs := lgs;
+       vs_pending_deletions := pending |>)
 Proof
   strip_tac >>
   `m2v_inv_noix fn
@@ -2721,10 +2727,12 @@ Proof
   `m2v_inv_noix fn
      ((write_memory_with_expansion off bytes s1) with
         <| vs_transient := ts; vs_returndata := rd;
-           vs_accounts := accts; vs_logs := lgs |>)
+           vs_accounts := accts; vs_logs := lgs;
+           vs_pending_deletions := pending |>)
      ((write_memory_with_expansion off bytes s2) with
         <| vs_transient := ts; vs_returndata := rd;
-           vs_accounts := accts; vs_logs := lgs |>)`
+           vs_accounts := accts; vs_logs := lgs;
+           vs_pending_deletions := pending |>)`
     by (irule m2v_inv_noix_set_fields >> simp[]) >>
   gvs[wmwe_preserves, write_memory_with_expansion_def, LET_THM]
 QED
@@ -2746,6 +2754,7 @@ Proof
   `s1.vs_transient = s2.vs_transient /\
    s1.vs_accounts = s2.vs_accounts /\
    s1.vs_logs = s2.vs_logs /\
+   s1.vs_pending_deletions = s2.vs_pending_deletions /\
    s1.vs_returndata = s2.vs_returndata`
     by gvs[m2v_inv_noix_def] >>
   gvs[extract_venom_result_def, CaseEq "option", CaseEq "prod",
@@ -2763,7 +2772,8 @@ Proof
             vs_transient := s2.vs_transient;
             vs_returndata := ctxt.returnData;
             vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs|>)
+            vs_logs := s2.vs_logs;
+            vs_pending_deletions := s2.vs_pending_deletions|>)
         (s2 with
           <|vs_memory :=
               (write_memory_with_expansion retOff
@@ -2771,7 +2781,8 @@ Proof
             vs_transient := s2.vs_transient;
             vs_returndata := ctxt.returnData;
             vs_accounts := s1.vs_accounts;
-            vs_logs := s2.vs_logs|>)` by
+            vs_logs := s2.vs_logs;
+            vs_pending_deletions := s2.vs_pending_deletions|>)` by
        (irule m2v_inv_noix_ext_update >> simp[LENGTH_TAKE_EQ]) >>
      gvs[]]
 QED
@@ -2797,6 +2808,7 @@ Theorem m2v_inv_noix_call_lists:
     (s2 with <| vs_outcomes := os; vs_requests := rqs;
                vs_pending_deletions := pending |>)
 Proof
+  rpt gen_tac >>
   simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
        in_promoted_region_def, allocas_non_overlapping_def] >>
   strip_tac >> gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
@@ -2825,10 +2837,12 @@ Proof
   `m2v_inv_noix fn
     (s1 with <| vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
                 vs_transient := ts; vs_returndata := rd;
-                vs_accounts := ac; vs_logs := lgs |>)
+                vs_accounts := ac; vs_logs := lgs;
+                vs_pending_deletions := s2.vs_pending_deletions |>)
     (s2 with <| vs_memory := (write_memory_with_expansion ro bytes s2).vs_memory;
                 vs_transient := ts; vs_returndata := rd;
-                vs_accounts := ac; vs_logs := lgs |>)` by
+                vs_accounts := ac; vs_logs := lgs;
+                vs_pending_deletions := s2.vs_pending_deletions |>)` by
     (irule m2v_inv_noix_ext_update >> simp[Abbr`bytes`, LENGTH_TAKE_EQ] >>
      rpt strip_tac >> first_x_assum irule >> simp[]) >>
   mp_tac (Q.SPECL [`record_request rq s2.vs_requests`,
@@ -2839,11 +2853,13 @@ Proof
       [`s1` |-> `s1 with
          <|vs_memory := (write_memory_with_expansion ro bytes s1).vs_memory;
            vs_transient := ts; vs_returndata := rd;
-           vs_accounts := ac; vs_logs := lgs|>`,
+           vs_accounts := ac; vs_logs := lgs;
+           vs_pending_deletions := s2.vs_pending_deletions|>`,
        `s2` |-> `s2 with
          <|vs_memory := (write_memory_with_expansion ro bytes s2).vs_memory;
            vs_transient := ts; vs_returndata := rd;
-           vs_accounts := ac; vs_logs := lgs|>`]
+           vs_accounts := ac; vs_logs := lgs;
+           vs_pending_deletions := s2.vs_pending_deletions|>`]
       m2v_inv_noix_call_lists)) >>
   simp[Abbr`bytes`, Abbr`rd`, Abbr`ac`, Abbr`ts`, Abbr`lgs`]
 QED
@@ -2947,22 +2963,23 @@ Triviality exec_create_m2v_inv:
        m2v_inv_noix fn v1 v2
 Proof
   strip_tac >>
-  `s1.vs_call_ctx = s2.vs_call_ctx /\ s1.vs_accounts = s2.vs_accounts`
-    by gvs[m2v_inv_noix_def] >>
   `read_memory (w2n offset) (w2n sz) s1 =
    read_memory (w2n offset) (w2n sz) s2` by
     metis_tac[read_memory_m2v_inv] >>
-  gvs[exec_create_def, LET_THM] >>
-  `make_venom_create_state s1 = make_venom_create_state s2` by
-    metis_tac[make_venom_create_state_m2v_inv] >>
-  gvs[] >>
-  qpat_x_assum `_ = OK v1` mp_tac >> simp[AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  (* retOff=0, retSz=0 so range condition is vacuous *)
-  `!addr. 0 <= addr /\ addr < 0 + 0 ==> ~in_promoted_region fn s1 addr`
-    by simp[] >>
-  drule_all extract_venom_result_m2v_inv >> strip_tac >> gvs[] >>
-  simp[AllCaseEqs()] >>
+  `venom_create_request s1 value offset sz salt_opt =
+   venom_create_request s2 value offset sz salt_opt` by
+    fs[venom_create_request_def, m2v_inv_noix_def] >>
+  `m2v_inv_noix fn
+    (SND (consume_create_outcome (venom_create_request s1 value offset sz salt_opt) s1))
+    (SND (consume_create_outcome (venom_create_request s2 value offset sz salt_opt) s2))` by
+    (fs[m2v_inv_noix_def] >>
+     simp[m2v_inv_noix_def, lookup_var_def, mem_byte_def, mload_def,
+          in_promoted_region_def, allocas_non_overlapping_def] >>
+     gvs[lookup_var_def, mem_byte_def, mload_def,
+         in_promoted_region_def, allocas_non_overlapping_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `s1.vs_outcomes = s2.vs_outcomes` by fs[m2v_inv_noix_def] >>
+  gvs[exec_create_def, AllCaseEqs()] >>
   irule m2v_inv_noix_update_var >> simp[]
 QED
 
@@ -3540,14 +3557,6 @@ Resume m2v_nonterminal_step_dispatch[alloca_none_sync]:
   gvs[]
 QED
 
-(* mstore8 is equivalent to wmwe with a single byte *)
-Triviality mstore8_eq_wmwe:
-  !off (val_w:bytes32) s. mstore8 off val_w s =
-    write_memory_with_expansion off [w2w val_w] s
-Proof
-  simp[mstore8_def, write_memory_with_expansion_def, LET_THM]
-QED
-
 (* Enumerate the ~14 opcodes with memory effects that are
    not alloca, not ext_call, not terminator, not INVOKE, not MEMTOP.
    Proved by Cases_on once; avoids repeating 70-way split inline. *)
@@ -3940,7 +3949,7 @@ QED
 Resume m2v_nonpromoted_mem_dispatch[mstore8]:
   gvs[step_inst_non_invoke] >>
   with_step_inst_base_opcode (fn eqs =>
-    gvs (AllCaseEqs() :: mstore8_eq_wmwe :: exec_write2_def :: eqs)) >>
+    gvs (AllCaseEqs() :: mstore8_eq_write_mem :: exec_write2_def :: eqs)) >>
   `eval_operand op1 s1 = SOME addr` by gvs[] >>
   irule m2v_inv_noix_both_sides_wmwe >> simp[] >>
   rpt strip_tac >> `addr' = w2n addr` by simp[] >> gvs[] >>
@@ -4814,9 +4823,7 @@ Triviality exec_call_helpers_no_halt_abort[simp]:
   (!inst s g a ao as_ ro rs ab s'.
      exec_delegatecall inst s g a ao as_ ro rs <> Abort ab s') /\
   (!inst s v off sz salt s'.
-     exec_create inst s v off sz salt <> Halt s') /\
-  (!inst s v off sz salt ab s'.
-     exec_create inst s v off sz salt <> Abort ab s')
+     exec_create inst s v off sz salt <> Halt s')
 Proof
   rw[exec_ext_call_def, exec_delegatecall_def, exec_create_def,
      extract_venom_result_def] >>
@@ -4867,7 +4874,7 @@ Proof
   gvs[is_terminator_def] >>
   qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
   with_step_inst_base_opcode PURE_ONCE_REWRITE_TAC >>
-  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs()]
+  ASM_REWRITE_TAC[] >> rw[] >> gvs[AllCaseEqs(), exec_create_abort_iff]
 QED
 
 (* m2v_non32_ok preserved under halt/revert state transform *)
@@ -5382,7 +5389,7 @@ Triviality exec_create_nao:
 Proof
   simp[exec_create_def, LET_THM, AllCaseEqs()] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_nao]
+  qexists_tac `0` >> simp[]
 QED
 
 (* Same-D variants: when two states agree on all fields that affect the
@@ -5454,7 +5461,7 @@ Proof
   simp[exec_create_def, LET_THM, AllCaseEqs(),
        make_venom_create_state_def] >>
   rpt strip_tac >> gvs[update_var_def] >>
-  metis_tac[extract_venom_result_same_D]
+  qexists_tac `0` >> simp[]
 QED
 
 (* For ext_call ops with FIND=NONE and same callee input: nao preserved.

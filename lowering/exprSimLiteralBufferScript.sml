@@ -344,6 +344,8 @@ Theorem literal_state_memory_frame:
   !func cenv cx es s t ctx.
     stmt_state_rel ctx func cenv cx es s /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. cenv.ce_imm_alloca = SOME (Var x) ==>
+       lookup_var x t = lookup_var x s) /\
     (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
        lookup_var p t = lookup_var p s) /\
@@ -379,6 +381,11 @@ Proof
   `alloca_room ctx func t` by
     (irule exprLoweringPropsTheory.alloca_room_fields >> qexists_tac `s` >>
      gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
+  `fmp_room ctx func t` by
+    (irule exprLoweringPropsTheory.fmp_room_fields >> qexists_tac `s` >>
+     qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
+       (fn th => once_rewrite_tac[th]) >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
     (irule immutables_rel_mem_agree >> qexists_tac `s` >>
      qpat_assum `t = _ with <|vs_vars := _; vs_memory := _|>`
@@ -391,6 +398,12 @@ Proof
      gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
      rpt strip_tac >> qexists_tac `id` >>
      fs[local_region_def] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+     qexists_tac `s` >>
+     gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+     qpat_assum `t = _ with <|vs_memory := _; vs_vars := _|>`
+       (fn th => once_rewrite_tac[th]) >> simp[]) >>
   rewrite_tac[exprLoweringPropsTheory.stmt_state_rel_def] >>
   conj_tac
   >- (irule exprLoweringPropsTheory.state_rel_frame >>
@@ -564,6 +577,11 @@ Resume literal_bytelike_run[frame]:
      impl_tac >- (rpt conj_tac
        >- first_assum ACCEPT_TAC
        >- first_assum ACCEPT_TAC
+       >- (rpt strip_tac >>
+           drule_all exprLoweringPropsTheory.local_ptrs_reserved_imm_base >>
+           strip_tac >>
+           qpat_x_assum `!x. not_fresh_at sa x ==> lookup_var x final = _` irule >>
+           first_assum ACCEPT_TAC)
        >- (map_every qx_gen_tac [`nm`, `ent`, `lp`, `lsz`] >> strip_tac >>
            `not_fresh_at sa lp` by
              (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>

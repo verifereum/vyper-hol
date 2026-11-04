@@ -82,6 +82,12 @@ QED
 (* The four opcodes' steps, apart from step_inst_base's case split.
    compile_cds_check_ok_or_revert covers the same instructions but does
    not say which exit the calldata length takes, which the frag needs. *)
+val cds_check_step_eqs = map (fn opc => valOf (List.find (fn th =>
+  let val (_, body) = strip_forall (concl th)
+  in aconv (rhs (fst (dest_imp body))) opc end)
+  (CONJUNCTS venomExecSemanticsTheory.step_inst_base_opcode_eqs)))
+  [``CALLDATASIZE``, ``LT``, ``ISZERO``, ``ASSERT``];
+
 Theorem step_cds_check_ops[local]:
   step_inst_base (mk_inst id CALLDATASIZE ops outs) s =
     exec_read0 (\s. n2w (LENGTH s.vs_call_ctx.cc_calldata))
@@ -98,8 +104,7 @@ Theorem step_cds_check_ops[local]:
                 else OK s
     | NONE => Error "undefined operand"
 Proof
-  rpt conj_tac >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def]
+  rpt conj_tac >> simp (cds_check_step_eqs @ [mk_inst_def])
 QED
 
 (* The four instructions run to the end when the calldata is not shorter
@@ -493,8 +498,8 @@ Theorem fallback_checks_nonpayable_value:
     call_tx_well_typed tx /\ source_deployment_rel tops am tx /\
     tx.function_name = "__default__" /\
     classify_functions tops = (exts, ints, fb, ctor) /\
-    (!mut typ x. ~MEM (VariableDecl Public mut "__default__" typ x) tops) /\
-    (!b kt vt x. ~MEM (HashMapDecl Public b "__default__" kt vt x) tops) /\
+    (!nr' mut typ x. ~MEM (VariableDecl (Public nr') mut "__default__" typ x) tops) /\
+    (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops) /\
     set_fallback_package_target target (package_fallback_fn tops ut nkm fb) =
       SOME (cenv, is_payable, F, nkey, ut', iv, fbody, rt) /\
     compile_fallback_body cenv is_payable F nkey ut' iv fbody rt st =
