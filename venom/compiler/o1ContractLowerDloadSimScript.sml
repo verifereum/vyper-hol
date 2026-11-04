@@ -57,6 +57,19 @@ Proof
   fs[GSYM lookup_function_def] >> metis_tac[]
 QED
 
+(* Zero-size allocation provenance cannot license a pointer comparison. *)
+Theorem access_ok_zero_size_comparison:
+  access_ok lo G fn inst s /\
+  (inst.inst_opcode = LT \/ inst.inst_opcode = GT \/ inst.inst_opcode = EQ) /\
+  inst.inst_operands = [Var u; Var w] /\ FLOOKUP G u = SOME (b,0)
+  ==> F
+Proof
+  strip_tac >>
+  `u IN FDOM G` by metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  fs[access_ok_def] >>
+  first_x_assum (qspecl_then [`u`, `w`] mp_tac) >> simp[]
+QED
+
 (* The simulation: every terminating run of C is matched by a run of C'
    up to the dead bytes D.  The DLOAD offset bound (in o1_src_inv) keeps
    the code_end-relative CODECOPY offset from wrapping; code_layout_valid
