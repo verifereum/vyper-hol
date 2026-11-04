@@ -2,6 +2,7 @@
 Theory lowerDloadSafetyBoundary
 Ancestors
   o1PassContract unitTransformDefs unitShapeDefs lowerDloadRelocationBoundary
+  ptrDiscipline finite_map list
 
 Theorem lower_dload_initial_allocations:
   o1_run_state_ok s ==>
@@ -80,4 +81,97 @@ QED
    record_request, adopt_outcome and adopt_outcome_deletions. State helper
    eval_operand/eval_operands read vars/labels, never historical fields.
    Full projected-step preservation is deliberately NOT claimed here.
+*)
+
+Theorem provenance_operand_erasure:
+  !e H op. op_prov (e o_f H) op = OPTION_MAP e (op_prov H op)
+Proof
+  Cases_on `op` >> simp[op_prov_def, FLOOKUP_o_f] >>
+  rpt gen_tac >> Cases_on `FLOOKUP H s` >> simp[]
+QED
+
+Theorem provenance_arguments_erasure:
+  !e H ops.
+    MAP (op_prov (e o_f H)) ops = MAP (OPTION_MAP e) (MAP (op_prov H) ops)
+Proof
+  Induct_on `ops` >> simp[provenance_operand_erasure]
+QED
+
+Theorem provenance_phi_erasure:
+  !e H prev inst.
+    phi_prov prev (e o_f H) inst = OPTION_MAP e (phi_prov prev H inst)
+Proof
+  rpt gen_tac >> Cases_on `prev` >> simp[phi_prov_def] >>
+  Cases_on `resolve_phi x inst.inst_operands` >>
+  simp[provenance_operand_erasure]
+QED
+
+Theorem provenance_return_erasure:
+  !e H outs.
+    e o_f (DRESTRICT H (COMPL (set outs))) =
+    DRESTRICT (e o_f H) (COMPL (set outs))
+Proof
+  rpt gen_tac >> simp[fmap_eq_flookup] >> gen_tac >>
+  Cases_on `x IN set outs` >> simp[FLOOKUP_o_f, FLOOKUP_DRESTRICT]
+QED
+
+Theorem provenance_param_erasure:
+  !e Q H inst s idx.
+    inst.inst_opcode = PARAM /\ inst.inst_operands = [Lit idx] ==>
+    out_prov (MAP (OPTION_MAP e) Q) (e o_f H) inst s =
+    OPTION_MAP e (out_prov Q H inst s)
+Proof
+  rpt strip_tac >> simp[out_prov_def] >>
+  Cases_on `w2n idx < LENGTH Q` >> simp[EL_MAP]
+QED
+
+(* C1.11.b selected-identity feasibility equations.
+
+   Represent an identity by num#num (activation serial, source aid). Choose
+   a TOTAL erasure e : (num#num)->(num#num) for the currently live identities;
+   e(serial,aid)=(source base,size). A total map is harmless outside selected
+   identities, where it is not used. Maintain G=e o_f H and
+   PG=MAP (OPTION_MAP e) Q. This does not invert e. Zero-sized identities
+   can be distinct even when e maps them to the same pair.
+
+   PARAM: the selected identity output is EL (w2n idx) Q when in bounds,
+   NONE otherwise. provenance_param_erasure proves the corresponding
+   out_prov equation. Scalar arguments at declared pointer positions use
+   NONE, not an arbitrary site; static pointer membership need NOT imply
+   dynamic identity presence. Invalid indices do not produce a successor.
+
+   PHI: use resolve_phi prev operands to select exactly the same operand
+   in H as in G. provenance_phi_erasure proves the selection equation.
+   At an entry run all PHIs in parallel from H0, updating output identities
+   from selected H0 operands; scalar selected alternatives stay NONE.
+   No domain completeness assumption on syntactic pointer variables is valid.
+
+   Caller push: for Var v select FLOOKUP H v, otherwise NONE, exactly
+   op_prov H. provenance_arguments_erasure gives the PG erasure equation.
+   Save H,Q alongside cf_prov,cf_params. This permits scalar arguments to
+   declared pointer positions without inventing identities.
+
+   Return: DRESTRICT H (COMPL (set inv.inst_outputs)); restore saved Q.
+   provenance_return_erasure checks this commutes with G erasure. Returned
+   results have no selected identity. That is sound only if pointer-valued
+   operands cannot be ordinary return values: fn_ptr_ok/ptr_use_ok forbids
+   syntactic pointer-derived variables in RET (RET has no mem access operand
+   and is not pointer-preserving). The final opaque RETPC_PARAM-derived
+   operand instead uses shape_retpc_operand_boundary and is discarded by RET.
+
+   Needed completeness shape, NOT proved here: each bound original variable
+   is either (a) selected H identity with modular pointer agreement, (b)
+   retpc_var fn with arbitrary but defined opaque word, or (c) scalar with
+   word_agree_except its source taint. If a variable is not syntactically
+   pointer-derived it cannot have a selected identity. The converse fails:
+   pointer-declared PARAM may receive a scalar, and selected PHI may select
+   such a scalar. Thus G=e o_f H suffices for source provenance erasure but
+   must be accompanied by this dynamic VALUE classification in a relation.
+   ASSIGN and scalar-selected PHI preserve (c); affine ADD/SUB needs the
+   existing fn_ptr_ok affine_pointer_ops restriction for (a). Opaque copies
+   are handled independently of pointer identity; overlap of static classes
+   requires checking the chosen priority, not demanding both word equations.
+
+   These equations validate the proposed ghost interface only. They are not
+   a provenance-completeness induction or a paired execution proof.
 *)
