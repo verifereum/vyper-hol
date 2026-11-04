@@ -844,3 +844,18 @@ post-entry source active/envelope reconstruction at PHI-prefix length,
 frame_reachable_block and same-frame owned coverage assembly. All allocation,
 expansion, call/return and terminal/current-raw integration obligations listed
 above also remain. No change to the frozen theorem or its original cheat.
+
+## C1.11.5.80: successful branch destinations
+
+`lowerDloadSafetyControl.ld_control_destination` proves a single combined
+JMP/JNZ/DJMP boundary. Premises are `ld_vars P A f`, source/target labels
+equality, `fn_shape_ok f.lf_fn`, `fn_ptr_ok P f.lf_fn`, source instruction
+membership, source `taint_ok` with `tn.t_var = f.lf_tv`, opcode membership
+in `[JMP; JNZ; DJMP]`, and target `step_inst fuelT CT inst f.lf_tgt = OK t1`.
+Conclusion: some `lbl` satisfies `t1 = jump_to lbl f.lf_tgt` and
+`step_inst fuelS CS inst f.lf_src = OK (jump_to lbl f.lf_src)` for arbitrary
+source fuel/context. Selector equality is pointwise `eval_operand` equality;
+no successful whole-list evaluation is assumed for label-bearing operands.
+This resolves destination reconstruction only. Successful block entry, PHI
+source activity, envelope, correlated ownership/synchronization packaging,
+and general target reachability remain unproved integration obligations.
