@@ -43,7 +43,7 @@
 
 Theory exprSimCalls
 Ancestors
-  list exprSim exprSimHyps exprSimSend vyperAST
+  list exprSim exprSimHyps exprSimSend exprSimRawCallCalldata vyperAST
 
 Theorem compile_extcall_sim:
   !cenv ann is_static skip sig opts args dflt.
@@ -74,7 +74,11 @@ Theorem compile_raw_call_calldata_sim:
     expr_sim_below cenv (expr_size (Call ann (RawCallCalldataTarget flags) args dflt)) ==>
     expr_vv_ok cenv (Call ann (RawCallCalldataTarget flags) args dflt)
 Proof
-  cheat
+  rpt strip_tac >> simp[expr_vv_ok_case] >> rpt gen_tac >>
+  `exprs_case T ctx func cenv cx args` by
+    (irule exprs_case_below >> irule expr_sim_below_mono >>
+     goal_assum (drule_at Any) >> simp[expr_size_def]) >>
+  metis_tac[compile_raw_call_calldata_case]
 QED
 
 Theorem compile_raw_log_sim:

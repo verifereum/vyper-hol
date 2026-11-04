@@ -471,7 +471,7 @@ QED
 
 (* These bounds adapters use distinct affine results: addAffine_bounded
    directly, versus mulAffine_bounded with the valid input point unpacked. *)
-Theorem ecadd_success_bounds[local]:
+Theorem ecadd_success_bounds:
   vfmExecution$ecadd a b = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
@@ -479,13 +479,53 @@ Proof
   mp_tac (Q.SPECL [`a`, `b`] addAffine_bounded) >> gvs[]
 QED
 
-Theorem ecmul_success_bounds[local]:
+Theorem ecmul_success_bounds:
   vfmExecution$ecmul a n = SOME (x,y) ==>
   x < 2 ** 256 /\ y < 2 ** 256
 Proof
   simp[vfmExecutionTheory.ecmul_def, AllCaseEqs()] >> strip_tac >>
   mp_tac (Q.SPECL [`a`, `n`] mulAffine_bounded) >>
   PairCases_on `a` >> gvs[bn254Theory.validAffine_def]
+QED
+
+(* Every precompile that answers returns at most two 32-byte words. *)
+Theorem precompile_result_length:
+  precompile_result target input = SOME (SOME bs) ==> LENGTH bs <= 64
+Proof
+  simp[precompile_result_def] >>
+  Cases_on `target = 1w`
+  >- (simp[] >> Cases_on `ecrecover
+        (word_of_bytes T 0w (take_pad_0 32 input))
+        (num_of_be_bytes (take_pad_0 32 (DROP 32 input)))
+        (num_of_be_bytes (take_pad_0 32 (DROP 64 input)))
+        (num_of_be_bytes (take_pad_0 32 (DROP 96 input)))` >>
+      simp[listTheory.PAD_LEFT, byteTheory.LENGTH_word_to_bytes,
+           fcpLib.INDEX_CONV ``dimindex(:160)``] >> strip_tac >>
+      gvs[fcpLib.INDEX_CONV ``dimindex(:160)``]) >>
+  Cases_on `target = 2w`
+  >- (simp[byteTheory.LENGTH_word_to_bytes] >> strip_tac >> gvs[]) >>
+  Cases_on `target = 6w`
+  >- (simp[] >>
+      Cases_on `vfmExecution$ecadd
+        (num_of_be_bytes (take_pad_0 32 input),
+         num_of_be_bytes (take_pad_0 32 (DROP 32 input)))
+        (num_of_be_bytes (take_pad_0 32 (DROP 64 input)),
+         num_of_be_bytes (take_pad_0 32 (DROP 96 input)))` >> simp[] >>
+      rename1 `_ = SOME xy` >> PairCases_on `xy` >>
+      drule ecadd_success_bounds >> strip_tac >>
+      simp[padded_num_to_be_bytes_word32, byteTheory.LENGTH_word_to_bytes,
+           fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+      strip_tac >> gvs[byteTheory.LENGTH_word_to_bytes]) >>
+  Cases_on `target = 7w` >> simp[] >>
+  Cases_on `vfmExecution$ecmul
+    (num_of_be_bytes (take_pad_0 32 input),
+     num_of_be_bytes (take_pad_0 32 (DROP 32 input)))
+    (num_of_be_bytes (take_pad_0 32 (DROP 64 input)))` >> simp[] >>
+  rename1 `_ = SOME xy` >> PairCases_on `xy` >>
+  drule ecmul_success_bounds >> strip_tac >>
+  simp[padded_num_to_be_bytes_word32, byteTheory.LENGTH_word_to_bytes,
+       fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  strip_tac >> gvs[byteTheory.LENGTH_word_to_bytes]
 QED
 
 Theorem ec_result_memory[local]:
