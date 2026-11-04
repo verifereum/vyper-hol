@@ -529,3 +529,61 @@ Proof
   mp_tac compile_runtime_fallback_cs_appends >>
   rewrite_tac[cs_appends_def] >> disch_then drule >> simp[]
 QED
+
+Theorem compiler_block_tail_new_block_segment:
+  compiler_block_tail m /\ m entry = (r,final) /\
+  new_block label before = (old,entry) ==>
+  ?seg. all_blocks final = all_blocks before ++ seg
+Proof
+  strip_tac >> Cases_on `m (entry with cs_blocks := [])` >>
+  rename1 `_ = (v,clean)` >>
+  drule_all compiler_block_tail_clean_run >> strip_tac >>
+  qexists_tac `REVERSE clean.cs_blocks ++
+    [<| bb_label := clean.cs_current_bb;
+        bb_instructions := clean.cs_current_insts |>]` >>
+  gvs[new_block_def, loweringShapeDefsTheory.all_blocks_def,
+      REVERSE_APPEND, APPEND_ASSOC]
+QED
+
+Theorem compiler_block_tail_new_block_code:
+  compiler_block_tail m /\ m entry = (r,final) /\
+  new_block label before = (old,entry) /\
+  all_blocks final = all_blocks before ++ func.fn_blocks /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks) ==>
+  fn_has_code entry final func
+Proof
+  strip_tac >> Cases_on `m (entry with cs_blocks := [])` >>
+  rename1 `_ = (v,clean)` >>
+  drule_all compiler_block_tail_clean_run >> strip_tac >>
+  irule fn_has_code_block_suffix >> conj_tac >- simp[] >>
+  qexists_tac `clean.cs_blocks` >>
+  gvs[new_block_def, loweringShapeDefsTheory.all_blocks_def,
+      REVERSE_APPEND, APPEND_ASSOC]
+QED
+
+Theorem compile_runtime_internal_singleton_segment_code:
+  supported_stmts tops bindings ss /\
+  ~supported_stmts_expr_exists expr_internal_call_root ss /\
+  ~compiler_label label /\
+  compile_internal_fn_bodies
+    [(label,ce,params,has_buf,F,nkey,transient,view,F,imm_len,ss,ret)]
+    before = (r,final) /\
+  all_blocks final = all_blocks before ++ func.fn_blocks ==>
+  ?old entry.
+    new_block label before = (old,entry) /\
+    compile_internal_function ce params has_buf F nkey transient view F imm_len ss ret
+      entry = ((),final) /\
+    fn_has_code entry final func
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) func.fn_blocks)` by
+    (irule compile_runtime_internal_segment_distinct >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  drule compile_internal_fn_bodies_singleton >> strip_tac >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  irule (INST_TYPE [alpha |-> ``:unit``] compiler_block_tail_new_block_code) >>
+  conj_tac >- simp[] >> conj_tac
+  >- (goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
+  goal_assum (drule_at Any) >>
+  irule compiler_block_tail_runtime_internal_function >> metis_tac[]
+QED
