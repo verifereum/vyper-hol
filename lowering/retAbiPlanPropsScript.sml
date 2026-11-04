@@ -37,6 +37,7 @@ Ancestors
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin abiLayoutSource
+  abiMetadataLayout
 
 (* ===== Source side ===== *)
 
@@ -98,17 +99,6 @@ Proof
       strip_tac >> gvs[])
 QED
 
-(* Instantiate the induction hypothesis at the struct map sf. *)
-val ih_at_sf =
-  first_x_assum (qspec_then
-    `sf : (string, (string # type # num) list) fmap` mp_tac) >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac;
-
-val abi_size_defs =
-  [is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-   vyper_is_dynamic_def, vyper_abi_size_bound_def,
-   abi_embedded_static_size_def];
-
 Theorem abi_props_vyper:
   (!tenv ty tv.
      evaluate_type tenv ty = SOME tv ==>
@@ -135,50 +125,9 @@ Theorem abi_props_vyper:
                          else abi_static_size sf t) ts) =
              vyper_abi_size_bound_list tenv ts))
 Proof
-  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      drule_all sfields_tenv_consistent_domsub >> strip_tac >>
-      `?fields. FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
-                MAP (FST o SND) fields = MAP SND args`
-        by (qpat_x_assum `sfields_tenv_consistent sf tenv` mp_tac >>
-            simp[sfields_tenv_consistent_def] >> strip_tac >>
-            first_x_assum drule >> strip_tac >> simp[]) >>
-      first_x_assum (qspec_then `fdomsub sf (nsid_to_string nsid)` mp_tac) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-      simp abi_size_defs >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >>
-      gvs[vyper_is_dynamic_def, vyper_abi_size_bound_def])
-  >~ [`ArrayT t bd`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      ih_at_sf >>
-      Cases_on `bd` >>
-      simp abi_size_defs >>
-      Cases_on `vyper_is_dynamic tenv t` >> gvs[])
-  >~ [`TupleT ts`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      ih_at_sf >>
-      simp abi_size_defs >>
-      CONV_TAC (DEPTH_CONV ETA_CONV) >>
-      gvs[vyper_is_dynamic_def, vyper_abi_size_bound_def])
-  >~ [`BaseT bt`]
-  >- (rpt strip_tac >>
-      Cases_on `bt` >> TRY (rename1 `BytesT bd` >> Cases_on `bd`) >>
-      gvs[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-          vyper_is_dynamic_def, vyper_abi_size_bound_def,
-          contractABITheory.ceil32_def])
-  >~ [`evaluate_types tenv (t::ts) acc`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[evaluate_type_def, AllCaseEqs()] >>
-      ih_at_sf >> ih_at_sf >>
-      simp[vyper_is_dynamic_def, vyper_abi_size_bound_def] >>
-      Cases_on `vyper_is_dynamic tenv t` >> gvs[]) >>
-  rpt strip_tac >>
-  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
-       vyper_is_dynamic_def, vyper_abi_size_bound_def]
+  conj_tac >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac
+  >- (drule_all abi_layout_vyper_type >> simp[])
+  >> drule_all abi_layout_vyper_list >> simp[]
 QED
 
 (* ===== Encoding plans ===== *)
