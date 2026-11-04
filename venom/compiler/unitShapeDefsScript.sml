@@ -39,6 +39,10 @@ Inductive copy_phi_var:
     copy_phi_var origin fn y ==> copy_phi_var origin fn x)
 End
 
+Definition gas_var_def:
+  gas_var fn x <=> copy_phi_var GAS fn x
+End
+
 Definition retpc_var_def:
   retpc_var fn x <=> copy_phi_var RETPC_PARAM fn x
 End
@@ -60,6 +64,13 @@ Proof
 QED
 
 (* ===== Opaque uses and label positions ===== *)
+
+Definition gas_use_ok_def:
+  gas_use_ok inst x <=>
+    inst.inst_opcode = ASSIGN \/ inst.inst_opcode = PHI \/
+    ((inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+     ?rest. inst.inst_operands = Var x :: rest /\ ~MEM (Var x) rest)
+End
 
 Definition retpc_use_ok_def:
   retpc_use_ok inst x <=>

@@ -210,17 +210,26 @@ QED
 Theorem simplify_cfg_opaque_legal:
   opaque_use_ok f ==>
   EVERY (\i.
-    (!x. gas_var f x /\ MEM (Var x) i.inst_operands ==> gas_use_ok i x) /\
     (!x. retpc_var f x /\ MEM (Var x) i.inst_operands ==> retpc_use_ok i x))
     (fn_insts (FST (simplify_cfg_fn_with_labels f)))
 Proof
   strip_tac >> irule simplify_cfg_fn_with_labels_every >>
   BETA_TAC >> rpt conj_tac
-  >- (gen_tac >> disch_tac >> irule (BETA_RULE canon_jnz_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE subst_label_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE update_phi_bypass_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE fix_phi_inst_opaque_legal) >> simp[])
-  >- (rpt gen_tac >> disch_tac >> irule (BETA_RULE subst_block_labels_inst_opaque_legal) >> simp[]) >>
+  >- (gen_tac >> disch_tac >>
+      irule (SRULE[] (Q.INST [`A` |-> `K F`, `B` |-> `retpc_var f`]
+        (BETA_RULE canon_jnz_inst_opaque_legal))) >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      irule (SRULE[] (Q.INST [`A` |-> `K F`, `B` |-> `retpc_var f`]
+        (BETA_RULE subst_label_inst_opaque_legal))) >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      irule (SRULE[] (Q.INST [`A` |-> `K F`, `B` |-> `retpc_var f`]
+        (BETA_RULE update_phi_bypass_opaque_legal))) >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      irule (SRULE[] (Q.INST [`A` |-> `K F`, `B` |-> `retpc_var f`]
+        (BETA_RULE fix_phi_inst_opaque_legal))) >> simp[])
+  >- (rpt gen_tac >> disch_tac >>
+      irule (SRULE[] (Q.INST [`A` |-> `K F`, `B` |-> `retpc_var f`]
+        (BETA_RULE subst_block_labels_inst_opaque_legal))) >> simp[]) >>
   gvs[EVERY_MEM, opaque_use_ok_def]
 QED
 
