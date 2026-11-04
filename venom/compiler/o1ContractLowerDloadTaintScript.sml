@@ -399,6 +399,52 @@ Proof
   simp[EVERY_MEM] >> strip_tac >> first_x_assum drule >> simp[]
 QED
 
+Theorem exec_alloca_fresh_projections:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s n = OK s' ==>
+  s'.vs_alloca_next = s.vs_alloca_next + w2n n /\
+  FLOOKUP s'.vs_allocas inst.inst_id =
+    SOME (s.vs_alloca_next,w2n n) /\
+  (!id. id <> inst.inst_id ==>
+    FLOOKUP s'.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+  lookup_var out s' = SOME (n2w s.vs_alloca_next)
+Proof
+  strip_tac >> drule_all exec_alloca_fresh >>
+  disch_then (qspec_then `n` assume_tac) >>
+  gvs[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem exec_alloca_fresh_displacement:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  exec_alloca inst s n = OK s' /\ exec_alloca inst t n = OK t' /\
+  t.vs_alloca_next = s.vs_alloca_next + d ==>
+  t'.vs_alloca_next = s'.vs_alloca_next + d
+Proof
+  strip_tac >>
+  drule_all exec_alloca_fresh_projections >> strip_tac >>
+  qpat_x_assum `exec_alloca inst t n = _` kall_tac >>
+  drule_all exec_alloca_fresh_projections >> strip_tac >>
+  gvs[]
+QED
+
+Theorem exec_alloca_repeated_projections:
+  inst.inst_outputs = [out] /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
+  exec_alloca inst s n = OK s' ==>
+  s'.vs_allocas = s.vs_allocas /\
+  s'.vs_alloca_next = s.vs_alloca_next /\
+  lookup_var out s' = SOME (n2w b)
+Proof
+  strip_tac >> drule_all exec_alloca_repeated >>
+  disch_then (qspec_then `n` assume_tac) >>
+  gvs[venomStateTheory.update_var_def, venomStateTheory.lookup_var_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
 (* The output's taint reaches only the dead bytes D. *)
 Theorem lower_dload_stage_taint:
   !rpolicy D view C C' vs names.
