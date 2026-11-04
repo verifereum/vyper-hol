@@ -281,3 +281,31 @@ Proof
   drule lineage_inventory_spilled_subset >> strip_tac >>
   simp[GSYM FDOM_EQ_EMPTY, restore_spilled_plan_domain] >> ASM_SET_TAC[]
 QED
+
+Theorem lineage_inventory_target_suffix:
+  !targets ps.
+    lineage_inventory (set targets) ps /\ ALL_DISTINCT targets /\
+    ~MEM dead_stack_marker targets /\
+    (?prefix. ps.ps_stack = prefix ++ targets) ==>
+    ps.ps_spilled = FEMPTY /\
+    ?m. ps.ps_stack = REPLICATE m dead_stack_marker ++ targets
+Proof
+  simp[lineage_inventory_def, lineage_core_def] >> rpt strip_tac >>
+  `FILTER (\op. op <> dead_stack_marker) core = core` by
+    (simp[FILTER_EQ_ID, EVERY_MEM] >> ASM_SET_TAC[]) >>
+  `FILTER (\op. op <> dead_stack_marker) targets = targets` by
+    simp[FILTER_EQ_ID, EVERY_MEM] >>
+  `FILTER (\op. op <> dead_stack_marker) (REPLICATE m dead_stack_marker) = []` by
+    simp[FILTER_EQ_NIL, EVERY_MEM, MEM_REPLICATE] >>
+  `core = FILTER (\op. op <> dead_stack_marker) prefix ++ targets` by
+    (qpat_x_assum `ps.ps_stack = prefix ++ targets` (mp_tac o
+       AP_TERM ``FILTER (\op. op <> dead_stack_marker)``) >>
+     simp[FILTER_APPEND]) >>
+  gvs[ALL_DISTINCT_APPEND] >>
+  `FILTER (\op. op <> dead_stack_marker) prefix = []` by
+    (Cases_on `FILTER (\op. op <> dead_stack_marker) prefix` >>
+     gvs[] >> ASM_SET_TAC[]) >>
+  gvs[] >>
+  `FDOM ps.ps_spilled = {}` by ASM_SET_TAC[] >>
+  gvs[FDOM_EQ_EMPTY] >> metis_tac[]
+QED
