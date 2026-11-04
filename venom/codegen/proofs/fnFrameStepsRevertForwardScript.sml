@@ -6,6 +6,7 @@ Ancestors
   frameViewFacts instSimHelpers emitSim venomExecSemantics venomInst
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
+  reorderSim genBlockSim doSwapSim planAlign
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -888,4 +889,44 @@ Proof
       Cases_on `no_opt` >> gvs[] >>
       drule optimistic_swap_plan_enclosed >> simp[]) >>
   simp[]
+QED
+
+Theorem spill_free_preparation_value_replay:
+  emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+  reorder_plan dfg targets ps1 = (reorder_ops,ps2) /\
+  opc <> INVOKE /\
+  (!off. ~MEM (SOSpill off) (input_ops ++ reorder_ops) /\
+         ~MEM (SORestore off) (input_ops ++ reorder_ops)) /\
+  (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+              FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==>
+              a + 32 <= b \/ b + 32 <= a) /\
+  LENGTH targets <= 16 /\ LENGTH targets <= LENGTH ps1.ps_stack /\
+  (!x. MEM x targets ==> LIST_ELEM_COUNT x targets <= LIST_ELEM_COUNT x ps1.ps_stack) /\
+  (!op. MEM op targets ==> op <> dead_stack_marker /\
+       !at. operand_equiv dfg op at ==> at <> dead_stack_marker) /\
+  (!op at. MEM op targets /\
+       (MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled) /\
+       operand_equiv dfg op at ==>
+       operand_val vs lo op = operand_val vs lo at) ==>
+  plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops) ps).ps_stack
+    ps2.ps_stack
+Proof
+  strip_tac >>
+  `EVERY is_simple_stack_op (input_ops ++ reorder_ops)` by
+    (metis_tac[spill_free_preparation_simple]) >>
+  fs[EVERY_APPEND] >>
+  `prefix_spill_wf initial_fmp lo input_ops ps` by
+    (irule simple_prefix_spill_wf >> simp[]) >>
+  `plan_stack_sem_eq lo vs
+    (apply_prefix_ops initial_fmp lo input_ops ps).ps_stack ps1.ps_stack` by
+    (metis_tac[emit_input_plan_same_initial_stack_value_replay,
+               pairTheory.FST, pairTheory.SND]) >>
+  simp[apply_prefix_ops_append] >>
+  irule reorder_plan_materialised_stack_value_replay >> conj_tac
+  >- (match_mp_tac safe_prefix_spilled_separated >> asm_rewrite_tac[]) >>
+  conj_tac
+  >- (qexistsl_tac [`dfg`, `targets`, `ps1`] >> asm_rewrite_tac[] >>
+      simp[]) >>
+  irule simple_prefix_spill_wf >> simp[]
 QED
