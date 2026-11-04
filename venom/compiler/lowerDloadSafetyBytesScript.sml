@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyBytes
 Ancestors
   lowerDloadSafetyKernel venomState codegenRel list rich_list arithmetic
-  finite_map pred_set
+    finite_map pred_set regularCallEmitSim byte ptrDiscipline
 
 Theorem ld_read_memory_byte:
   j < n ==> EL j (read_memory off n s) = read_byte (off+j) s.vs_memory
@@ -90,4 +90,22 @@ Proof
   disch_then (qspecl_then [`j`] mp_tac) >>
   simp[] >> Cases_on `b+j IN coords` >> simp[] >>
   metis_tac[ld_memory_slot]
+QED
+
+Theorem ld_mstore_byte:
+  read_byte i (mstore off v s).vs_memory =
+  if off <= i /\ i < off + 32 then EL (i-off) (word_to_bytes v T)
+  else read_byte i s.vs_memory
+Proof
+  `mstore off v s = write_memory_with_expansion off (word_to_bytes v T) s` by
+    simp[mstore_def, write_memory_with_expansion_def, LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  simp[read_byte_write_memory_with_expansion, LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``]
+QED
+
+Theorem ld_mstore_masked_byte:
+  word_agree_except mask v w /\ j < 32 /\ j NOTIN mask ==>
+  read_byte (off+j) (mstore off v s).vs_memory =
+  read_byte (dst+j) (mstore dst w t).vs_memory
+Proof
+  simp[ld_mstore_byte, word_agree_except_def] >> metis_tac[]
 QED
