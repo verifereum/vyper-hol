@@ -15575,3 +15575,35 @@ Proof
        simp[compile_name_vv_labels, unwrap_value_labels]) >>
   irule as_stack_val_labels >> simp[compile_pow_mod256_labels]
 QED
+
+Theorem fresh_label_pair_labels[local]:
+  (!lbl s. isPREFIX "@" lbl ==>
+    cs_extends s (SND (k lbl s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (k lbl s)))) ==>
+  cs_extends st (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND ((\(lbl,s). k lbl s) (fresh_label suffix st))))
+Proof
+  disch_tac >> rewrite_tac[GSYM (SRULE [LET_THM] comp_bind_def)] >>
+  irule fresh_label_bind_labels >> simp[]
+QED
+
+Theorem compile_expr_ifexp_labels[local]:
+  (!ce t e s. cs_extends s (SND (f ce t e s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (f ce t e s)))) ==>
+  cs_extends st (SND (compile_expr_body f g h cenv ty (IfExp ann c t e) st)) /\
+  EVERY (isPREFIX "@") (added_labels st
+    (SND (compile_expr_body f g h cenv ty (IfExp ann c t e) st)))
+Proof
+  disch_tac >> once_rewrite_tac[compile_expr_body_def] >> simp[LET_THM] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule lower_value_labels >> simp[]) >>
+  rpt gen_tac >> ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[fresh_var_action_labels] >>
+  rpt gen_tac >>
+  rpt (ho_match_mp_tac fresh_label_pair_labels >> rpt gen_tac >> disch_tac) >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac
+       >- (simp[emit_inst_labels, lower_value_labels] >>
+           irule new_block_action_labels >> simp[]) >> rpt gen_tac) >>
+  IF_CASES_TAC >> simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
