@@ -2121,3 +2121,145 @@ Proof
   first_x_assum drule_all >> strip_tac >>
   Cases_on `vyper_is_dynamic env h` >> gvs[] >> decide_tac
 QED
+
+Theorem ifexp_abi_bound_induction[local]:
+  (!env ty. !tv (sf : (string, (string # type # num) list) fmap).
+    evaluate_type env ty = SOME tv /\
+    (!nsid args fields.
+      FLOOKUP env nsid = SOME (StructArgs args) /\
+      FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+      MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
+    (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
+    abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
+    (~is_abi_dynamic sf ty ==> abi_static_size sf ty <= vyper_abi_size_bound env ty)) /\
+  (!env tys acc. !tvs (sf : (string, (string # type # num) list) fmap).
+    evaluate_types env tys acc = SOME tvs /\
+    (!nsid args fields.
+      FLOOKUP env nsid = SOME (StructArgs args) /\
+      FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+      MAP (\(name,ty,sz). (name,ty)) fields = args) ==>
+    EVERY (\ty.
+      (is_abi_dynamic sf ty ==> vyper_is_dynamic env ty) /\
+      abi_size_bound sf ty <= vyper_abi_size_bound env ty /\
+      (~is_abi_dynamic sf ty ==> abi_static_size sf ty <= vyper_abi_size_bound env ty)) tys)
+Proof
+  ho_match_mp_tac evaluate_type_ind >>
+  conj_tac >- suspend "base" >>
+  conj_tac >- suspend "tuple" >>
+  conj_tac >- suspend "array" >>
+  conj_tac >- suspend "struct" >>
+  conj_tac >- suspend "flag" >>
+  conj_tac >- suspend "none" >>
+  conj_tac >- simp[] >>
+  suspend "cons"
+QED
+
+Resume ifexp_abi_bound_induction[base]:
+  Cases_on `bt` >> simp[is_abi_dynamic_def, abi_size_bound_def,
+    abi_static_size_def, vyperABITheory.vyper_is_dynamic_def,
+    vyperABITheory.vyper_abi_size_bound_def, contractABITheory.ceil32_def] >>
+  rename1 `BytesT bound` >> Cases_on `bound` >> simp[is_abi_dynamic_def, abi_size_bound_def,
+    abi_static_size_def, vyperABITheory.vyper_is_dynamic_def,
+    vyperABITheory.vyper_abi_size_bound_def, contractABITheory.ceil32_def]
+QED
+Resume ifexp_abi_bound_induction[tuple]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `!sf. _ ==> EVERY _ tys` mp_tac >>
+  disch_then (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
+  strip_tac >>
+  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
+       Once abi_static_size_def, abi_embedded_static_size_def,
+       Once vyperABITheory.vyper_is_dynamic_def,
+       Once vyperABITheory.vyper_abi_size_bound_def] >>
+  conj_tac >- (strip_tac >> irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``] ifexp_abi_members_dynamic) >>
+    qexists_tac `sf` >> gvs[EVERY_MEM, ETA_THM] >> metis_tac[]) >>
+  conj_tac >- (irule ifexp_abi_members_bound >> simp[]) >>
+  strip_tac >>
+  gvs[Once is_abi_dynamic_def, Once vyperABITheory.vyper_abi_size_bound_def] >>
+  `MAP (\t. if is_abi_dynamic sf t then 32 else abi_static_size sf t) tys =
+   MAP (abi_static_size sf) tys` by
+    (irule MAP_CONG >> gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]) >>
+  simp[] >> irule ifexp_abi_static_members_bound >>
+  gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]
+QED
+Resume ifexp_abi_bound_induction[array]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `!sf. _ ==> (_ /\ _ /\ _)` (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
+  strip_tac >> Cases_on `bd` >>
+  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
+       abi_embedded_static_size_def, vyperABITheory.vyper_is_dynamic_def,
+       vyperABITheory.vyper_abi_size_bound_def] >>
+  Cases_on `is_abi_dynamic sf ty` >> Cases_on `vyper_is_dynamic env ty` >>
+  gvs[]
+QED
+Resume ifexp_abi_bound_induction[struct]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP sf (nsid_to_string nsid)`
+  >- (drule ifexp_abi_missing_struct >> simp[]) >>
+  rename1 `FLOOKUP sf (nsid_to_string nsid) = SOME fields` >>
+  `MAP (FST o SND) fields = MAP SND args` by
+    (irule ifexp_sfields_partial_types >> metis_tac[]) >>
+  qpat_x_assum `!sf. _ ==> EVERY _ _`
+    (qspec_then `sf \\ nsid_to_string nsid` mp_tac) >>
+  (impl_tac >- (rpt gen_tac >> strip_tac >>
+    irule ifexp_sfields_partial_delete >> metis_tac[])) >>
+  strip_tac >>
+  simp[Once is_abi_dynamic_def, Once abi_size_bound_def,
+       Once abi_static_size_def, abi_embedded_static_size_def,
+       Once vyperABITheory.vyper_is_dynamic_def,
+       Once vyperABITheory.vyper_abi_size_bound_def] >>
+  conj_tac >- (strip_tac >>
+    irule (INST_TYPE [``:'a`` |-> ``:string``, ``:'b`` |-> ``:num``]
+      ifexp_abi_members_dynamic) >>
+    qexists_tac `sf \\ nsid_to_string nsid` >>
+    gvs[EVERY_MEM, combinTheory.o_DEF] >> metis_tac[]) >>
+  conj_tac >- (irule ifexp_abi_members_bound >> simp[]) >>
+  strip_tac >>
+  gvs[Once is_abi_dynamic_def, Once vyperABITheory.vyper_abi_size_bound_def] >>
+  qmatch_goalsub_abbrev_tac `SUM (MAP (\t. if is_abi_dynamic sf1 t then 32 else abi_static_size sf1 t) tys)` >>
+  `MAP (\t. if is_abi_dynamic sf1 t then 32 else abi_static_size sf1 t) tys =
+   MAP (abi_static_size sf1) tys` by
+    (irule MAP_CONG >> gvs[EVERY_MEM, combinTheory.o_DEF, Abbr `sf1`, Abbr `tys`] >>
+     metis_tac[]) >>
+  simp[] >> irule ifexp_abi_static_members_bound >>
+  gvs[EVERY_MEM, combinTheory.o_DEF, Abbr `sf1`, Abbr `tys`] >> metis_tac[]
+QED
+Resume ifexp_abi_bound_induction[flag]:
+  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
+       vyperABITheory.vyper_is_dynamic_def, vyperABITheory.vyper_abi_size_bound_def]
+QED
+Resume ifexp_abi_bound_induction[none]:
+  simp[is_abi_dynamic_def, abi_size_bound_def, abi_static_size_def,
+       vyperABITheory.vyper_is_dynamic_def, vyperABITheory.vyper_abi_size_bound_def]
+QED
+Resume ifexp_abi_bound_induction[cons]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[Once evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `!sf. _ ==> EVERY _ tys` (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >>
+  strip_tac >> simp[] >>
+  qpat_x_assum `!sf. _ ==> (_ /\ _ /\ _)` (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >> simp[]
+QED
+Finalise ifexp_abi_bound_induction
+
+Theorem ifexp_abi_size_bound_source:
+  evaluate_type env ty = SOME tv /\
+  sfields_tenv_consistent (sf : (string, (string # type # num) list) fmap) env ==>
+  abi_size_bound sf ty <= vyper_abi_size_bound env ty
+Proof
+  strip_tac >>
+  `!nsid args fields.
+    FLOOKUP env nsid = SOME (StructArgs args) /\
+    FLOOKUP sf (nsid_to_string nsid) = SOME fields ==>
+    MAP (\(name,ty,sz). (name,ty)) fields = args` by
+      (rpt gen_tac >> strip_tac >> irule ifexp_sfields_partial >> metis_tac[]) >>
+  drule (cj 1 ifexp_abi_bound_induction) >>
+  disch_then (qspec_then `sf` mp_tac) >>
+  (impl_tac >- (rpt strip_tac >> first_x_assum drule_all >> simp[])) >> simp[]
+QED
