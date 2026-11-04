@@ -14943,3 +14943,72 @@ Proof
          compile_alloc_buffer_labels, compile_select_labels, comp_return_labels]) >>
   irule new_block_action_labels >> simp[]
 QED
+
+Theorem compile_raw_call_target_labels:
+  !cfn cenv ret_ty ty rcf args default_ret s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_call cfn cenv ret_ty ty
+      (RawCallTarget rcf) args default_ret s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_call cfn cenv ret_ty ty
+      (RawCallTarget rcf) args default_ret s)))
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `args` >>
+  once_rewrite_tac[compile_call_def] >> simp[LET_THM] 
+  >- (ho_match_mp_tac pair_case_labels >> simp[emit_inst_labels,
+        cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  Cases_on `t` >> simp[LET_THM]
+  >- (ho_match_mp_tac pair_case_labels >> simp[emit_inst_labels,
+        cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  rpt (ho_match_mp_tac pair_case_labels >> conj_tac >>
+       rpt gen_tac >> BETA_TAC >>
+       simp[lower_value_labels, emit_op_labels, compile_raw_call_outbuf_labels,
+            compile_raw_call_finish_labels, compile_ext_call_kwargs_labels]) >>
+  ho_match_mp_tac application_labels >> conj_tac
+  >- (irule compile_ext_call_kwargs_labels >> simp[]) >>
+  map_every qx_gen_tac [`x`, `t`] >> PairCases_on `x` >> simp[] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (Cases_on `x1`
+      >- simp[emit_op_labels] >>
+      simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  rpt gen_tac >> ho_match_mp_tac application_labels >> conj_tac
+  >- simp[compile_raw_call_outbuf_labels] >>
+  map_every qx_gen_tac [`y`, `u`] >> PairCases_on `y` >> simp[] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_raw_call_finish_labels] >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
+
+Theorem compile_raw_call_calldata_labels:
+  !cfn cenv ret_ty ty rcf args default_ret s.
+    (!ce ty e s. cs_extends s (SND (cfn ce ty e s)) /\
+      EVERY (isPREFIX "@") (added_labels s (SND (cfn ce ty e s)))) ==>
+    cs_extends s (SND (compile_call cfn cenv ret_ty ty
+      (RawCallCalldataTarget rcf) args default_ret s)) /\
+    EVERY (isPREFIX "@") (added_labels s (SND (compile_call cfn cenv ret_ty ty
+      (RawCallCalldataTarget rcf) args default_ret s)))
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `args` >>
+  once_rewrite_tac[compile_call_def] >> simp[LET_THM]
+  >- (ho_match_mp_tac pair_case_labels >> simp[emit_inst_labels,
+        cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (irule lower_value_labels >> simp[]) >>
+  rpt gen_tac >> ho_match_mp_tac application_labels >> conj_tac
+  >- (irule compile_ext_call_kwargs_labels >> simp[]) >>
+  map_every qx_gen_tac [`x`, `t`] >> PairCases_on `x` >> simp[] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- (Cases_on `x1` >- simp[emit_op_labels] >>
+      simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]) >>
+  rpt gen_tac >> ho_match_mp_tac application_labels >> conj_tac
+  >- simp[compile_raw_call_outbuf_labels] >>
+  map_every qx_gen_tac [`y`, `u`] >> PairCases_on `y` >> simp[] >>
+  ho_match_mp_tac application_labels >> conj_tac
+  >- simp[compile_msg_data_to_memory_labels] >>
+  map_every qx_gen_tac [`z`, `v`] >> PairCases_on `z` >> simp[] >>
+  ho_match_mp_tac pair_case_labels >> conj_tac
+  >- simp[compile_raw_call_finish_labels] >>
+  rpt gen_tac >> IF_CASES_TAC >>
+  simp[cs_extends_refl, added_labels_def, DROP_LENGTH_TOO_LONG]
+QED
