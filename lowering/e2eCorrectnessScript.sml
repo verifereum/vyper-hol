@@ -785,6 +785,7 @@ Proof
   >- (fs[source_unit_execution_correct_def] >>
       qexists_tac `fuel` >> gvs[]) >> strip_tac >>
   `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by simp[] >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
   drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_dload_offset_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_dload_headroom_ok >> strip_tac >>

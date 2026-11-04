@@ -4159,6 +4159,15 @@ Proof
   metis_tac[]
 QED
 
+(* phi_pairs membership implies Label l is in the operand list *)
+Theorem phi_pairs_mem_label:
+  !ops l v. MEM (l, v) (phi_pairs ops) ==> MEM (Label l) ops
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rpt strip_tac >> fs[venomInstTheory.phi_pairs_def] >>
+  metis_tac[]
+QED
+
 (* phi_vars_needing_forward produces vars that are in fn_all_vars *)
 Theorem phi_fwd_var_in_fn_all_vars:
   !func target_bb pred_lbl pred_bb v.

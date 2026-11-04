@@ -241,8 +241,12 @@ Proof
   metis_tac[]
 QED
 
+(* The new label must not already label an incoming edge of a PHI, or the
+   renamed PHI would list it twice. *)
 Theorem supply_update_phis_inst_shape:
-  EVERY inst_shape_ok bb.bb_instructions ==>
+  EVERY inst_shape_ok bb.bb_instructions /\
+  EVERY (\i. i.inst_opcode = PHI ==> ~MEM (Label new) i.inst_operands)
+    bb.bb_instructions ==>
   EVERY inst_shape_ok
     (update_phis_for_split old new repls bb).bb_instructions
 Proof
@@ -252,8 +256,15 @@ Proof
   rpt strip_tac >>
   rename1 `MEM inst _` >>
   `inst_shape_ok inst` by metis_tac[] >>
-  qpat_x_assum `!e. _` kall_tac >>
   Cases_on `inst.inst_opcode = PHI` >> simp[] >>
+  `~MEM (Label new) inst.inst_operands` by metis_tac[] >>
+  qpat_x_assum `!e. _` kall_tac >>
+  qpat_x_assum `!e. _` kall_tac >>
+  `ALL_DISTINCT
+     (MAP FST (phi_pairs (update_phi_ops old new repls inst.inst_operands)))` by
+    (irule supply_phi_pairs_update_distinct >>
+     gvs[inst_shape_ok_def, listTheory.MEM_MAP, pairTheory.EXISTS_PROD] >>
+     metis_tac[cfgNormBaseTheory.phi_pairs_mem_label]) >>
   gvs[inst_shape_ok_def, supply_phi_pairs_update, label_positions_ok_def,
       is_read0_opcode_def]
 QED
@@ -305,7 +316,23 @@ Theorem supply_block_image_inst_shape:
   EVERY inst_shape_ok
     (supply_block_image pred target split repls bb).bb_instructions
 Proof
-  strip_tac >> simp[supply_block_image_def] >>
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode = PHI ==> ~MEM (Label split.bb_label) i.inst_operands)
+     bb.bb_instructions` by
+    (gvs[listTheory.EVERY_MEM, irSupplyTheory.block_ir_labels_def,
+         irSupplyTheory.inst_ir_labels_def, irSupplyTheory.MEM_operand_ir_labels,
+         listTheory.MEM_FLAT, listTheory.MEM_MAP, PULL_EXISTS] >>
+     metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode = PHI ==> ~MEM (Label split.bb_label) i.inst_operands)
+     (subst_label_terminator target.bb_label split.bb_label bb).bb_instructions` by
+    (gvs[cfgTransformTheory.subst_label_terminator_def, listTheory.EVERY_MAP] >>
+     gvs[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     rename1 `MEM inst bb.bb_instructions` >>
+     Cases_on `is_terminator inst.inst_opcode` >>
+     gvs[cfgTransformTheory.subst_label_inst_def,
+         venomInstTheory.is_terminator_def] >>
+     metis_tac[]) >>
+  simp[supply_block_image_def] >>
   rpt IF_CASES_TAC >>
   metis_tac[supply_update_phis_inst_shape, supply_subst_terminator_inst_shape]
 QED

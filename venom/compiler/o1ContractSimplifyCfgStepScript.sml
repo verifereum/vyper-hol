@@ -116,6 +116,9 @@ Proof
   `wf_function f /\ fn_inst_wf f` by gvs[o1_fn_shape_def] >>
   mp_tac (Q.INST [`fn` |-> `f`] simplify_cfg_phi_two_pairs) >>
   simp[simplify_cfg_fn_def] >> strip_tac >>
+  mp_tac (Q.INST [`fn` |-> `f`] simplify_cfg_phi_labels_distinct) >>
+  impl_tac >- gvs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM, inst_shape_ok_def] >>
+  simp[simplify_cfg_fn_def] >> strip_tac >>
   gvs[EVERY_MEM, inst_shape_ok_def] >> metis_tac[]
 QED
 

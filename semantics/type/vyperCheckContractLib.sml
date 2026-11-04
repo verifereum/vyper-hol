@@ -136,6 +136,7 @@ val checker_defs =
    account_item_type_def,
    extract32_result_base_ok_def,
    assignable_type_def,
+   abi_decode_bytes_widths_def,
    valid_conversion_def,
    event_arg_compatible_def,
    hashmap_key_type_def,
