@@ -38,3 +38,16 @@ Proof
        written_taint_def, update_var_def, range_bytes_def] >>
   simp[FLOOKUP_DEF, EXTENSION] >> metis_tac[]
 QED
+
+Theorem positive_interval_identity:
+  !S p q (b:num) (c:num) (d:num) (z:num). (!p q b c z b' c' z'.
+    FLOOKUP S p = SOME (b,c,z) /\ FLOOKUP S q = SOME (b',c',z') /\
+    p <> q /\ 0 < z /\ 0 < z' ==> b+z <= b' \/ b'+z' <= b) /\
+  FLOOKUP S p = SOME (b,c,z) /\ FLOOKUP S q = SOME (b,d,z) /\
+  0 < z ==> p = q
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  first_x_assum (qspecl_then [`p`, `q`] mp_tac) >>
+  simp[] >> decide_tac
+QED
+
