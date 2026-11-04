@@ -4,7 +4,7 @@ Ancestors
   entryStopObserverConstruction abiEncoderObserver venomExecSemantics
   venomExecProofs venomExecProps venomInst list rich_list arithmetic
 
-Theorem entry_stop_phi_prefix[local]:
+Theorem entry_stop_phi_prefix:
   !xs k iid. phi_prefix_length xs <= k /\ k <= LENGTH xs ==>
     phi_prefix_length (TAKE k xs ++ [mk_inst iid STOP [] []] ++ DROP k xs) =
       phi_prefix_length xs /\
