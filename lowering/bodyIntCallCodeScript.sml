@@ -489,3 +489,27 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+(* Extension alone retains the delimiter, independently of code shape or
+   instruction certification.  The completed-history witness gives the exact
+   suffix as well, so no block-tail hypothesis is needed at this boundary. *)
+Theorem new_block_cs_extends_segment_head:
+  new_block label before = (old,entry) /\
+  cs_extends entry final ==>
+  ?seg. all_blocks final = all_blocks before ++ seg /\
+        seg <> [] /\ (HD seg).bb_label = label
+Proof
+  simp[new_block_def] >> strip_tac >> gvs[cs_extends_def] >>
+  qexists_tac `REVERSE new ++
+    [<| bb_label := final.cs_current_bb;
+        bb_instructions := final.cs_current_insts |>]` >>
+  conj_tac
+  >- simp[loweringShapeDefsTheory.all_blocks_def, REVERSE_APPEND, APPEND_ASSOC] >>
+  Cases_on `new` >> gvs[] >>
+  qmatch_goalsub_abbrev_tac `HD (REVERSE t ++ [h;cur])` >>
+  `REVERSE t ++ [h;cur] = REVERSE (cur::h::t)` by simp[] >>
+  `HD (REVERSE (cur::h::t)) = LAST (cur::h::t)` by
+    metis_tac[HD_REVERSE, NOT_CONS_NIL] >>
+  `LAST (cur::h::t) = LAST (h::t)` by simp[LAST_CONS_cond] >>
+  metis_tac[]
+QED
