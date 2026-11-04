@@ -1891,109 +1891,106 @@ Proof
   rw[] >> pairarg_tac >> rw[]
 QED
 
-Triviality range_analyze_invariant[local]:
-  ∀fn.
-    let ra = range_analyze fn in
-    range_fixpoint_P fn ra ∧
-    (∀lbl. df_widen_visits ra lbl ≤ WIDEN_THRESHOLD + 1) ∧
-    (∀lbl. df_widen_visits ra lbl = 0 ⇒
-           df_widen_boundary NONE ra lbl = NONE ∨
-           df_widen_boundary NONE ra lbl = SOME FEMPTY)
+(* The worklist's convergence invariant is independent of consumer invariants. *)
+Theorem range_worklist_initial[local]:
+  !fn st. (case fn_entry_label fn of
+     NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+   | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+       with dws_boundary :=
+         (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+           |+ (lbl,SOME FEMPTY)) = st ==>
+  range_fixpoint_P fn st /\
+  (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+  (!l. df_widen_visits st l = 0 ==>
+       df_widen_boundary NONE st l = NONE \/
+       df_widen_boundary NONE st l = SOME FEMPTY)
 Proof
-  gen_tac >> simp_tac std_ss [LET_THM, range_analyze_def,
-    df_analyze_widen_def, dfAnalyzeDefsTheory.direction_case_def] >>
-  qabbrev_tac `process = df_process_block_widen Forward NONE
-    range_join_opt range_widen_opt WIDEN_THRESHOLD
-    range_transfer_opt range_edge_transfer_opt
-    (dfg_build_function fn, fn.fn_blocks)
-    (OPTION_MAP (λlbl. (lbl, SOME FEMPTY)) (fn_entry_label fn))
-    (cfg_analyze fn) fn.fn_blocks` >>
-  qabbrev_tac `all_lbls = (cfg_analyze fn).cfg_dfs_pre` >>
-  qmatch_goalsub_abbrev_tac `range_fixpoint_P fn ra` >>
-  `(λst. range_fixpoint_P fn st ∧
-         (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
-         (∀l. df_widen_visits st l = 0 ⇒
-              df_widen_boundary NONE st l = NONE ∨
-              df_widen_boundary NONE st l = SOME FEMPTY)) ra`
-    suffices_by simp[] >>
-  qunabbrev_tac `ra` >>
-  suspend "wl_inv"
-QED
-
-Resume range_analyze_invariant[wl_inv]:
-  (* 1. Beta-reduce the lambda application *)
-  BETA_TAC >>
-  (* 2. Abbreviate SND(wl_iterate ...) to strip populate wrapper *)
-  qmatch_goalsub_abbrev_tac
-    `df_populate_widen_inst _ _ _ _ _ _ _ _ _ _ _ _ swli` >>
-  (* 3. Rewrite field accesses through populate to swli *)
-  simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
-       df_widen_entry_def, range_fold_result_def,
-       populate_widen_preserves] >>
-  (* 4. Re-package as (λst. P st) swli for irule *)
-  `(λst. range_fixpoint_P fn st ∧
-         (∀l. df_widen_visits st l ≤ WIDEN_THRESHOLD + 1) ∧
-         (∀l. df_widen_visits st l = 0 ⇒
-              df_widen_boundary NONE st l = NONE ∨
-              df_widen_boundary NONE st l = SOME FEMPTY)) swli`
-    suffices_by simp[range_fixpoint_P_def, df_widen_visits_def,
-      df_widen_boundary_def, df_widen_entry_def, range_fold_result_def] >>
-  qunabbrev_tac `swli` >>
-  irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  (* P initial — first conjunct after irule *)
-  conj_tac
-  >- suspend "P_initial"
-  >>
-  (* changed ⇔ process ≠ st — second conjunct *)
-  conj_tac
-  >- suspend "changed"
-  >>
-  qexistsl_tac [
-    `(WIDEN_THRESHOLD + 1) * LENGTH all_lbls`,
-    `λst. SUM (MAP (λl. df_widen_visits st l) all_lbls)`,
-    `λl. MEM l all_lbls`] >>
-  CONV_TAC (DEPTH_CONV BETA_CONV) >>
-  rpt conj_tac >|
-  [(* 1: measure bounded *)
-   rpt strip_tac >>
-   irule dfAnalyzeWidenProofsTheory.sum_bound >>
-   simp[markerTheory.Abbrev_def],
-   (* 2: P preserved *)
-   rpt strip_tac >>
-   mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`, `lbl`, `st`]
-     range_invariant_preserved)) >>
-   simp[markerTheory.Abbrev_def],
-   (* 3: measure increases *)
-   rpt strip_tac >>
-   irule dfAnalyzeWidenProofsTheory.sum_map_inc >>
-   qexists_tac `lbl` >>
-   mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`, `lbl`, `st`]
-     range_visits_inc)) >>
-   simp[markerTheory.Abbrev_def],
-   (* 4: deps closure *)
-   simp[markerTheory.Abbrev_def, listTheory.EVERY_MEM] >>
-   rpt strip_tac >>
-   mp_tac (Q.SPECL [`fn`, `lbl`] cfg_succs_closure) >>
-   simp[listTheory.EVERY_MEM],
-   (* 5: EVERY valid_lbl *)
-   simp[listTheory.EVERY_MEM, markerTheory.Abbrev_def]
-  ]
-QED
-
-Resume range_analyze_invariant[P_initial]:
+  rpt gen_tac >> strip_tac >> qpat_x_assum `_ = st` (SUBST1_TAC o SYM) >>
   Cases_on `fn_entry_label fn` >>
   simp[range_fixpoint_P_def, init_df_widen_state_def,
        df_widen_visits_def, finite_mapTheory.FLOOKUP_EMPTY] >>
-  rpt strip_tac >>
-  Cases_on `l = x` >>
+  rpt strip_tac >> Cases_on `l = x` >>
   simp[df_widen_boundary_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  CASE_TAC >> simp[] >>
-  imp_res_tac foldl_update_all_same >>
+  CASE_TAC >> simp[] >> imp_res_tac foldl_update_all_same >>
   fs[finite_mapTheory.FLOOKUP_EMPTY]
 QED
 
-Resume range_analyze_invariant[changed]:
+Theorem range_worklist_invariant:
+  !fn P.
+  P (case fn_entry_label fn of
+       NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+         with dws_boundary :=
+           (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+             |+ (lbl,SOME FEMPTY)) /\
+  (!lbl st. P st ==>
+    P (df_process_block_widen Forward NONE range_join_opt range_widen_opt
+      WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+      (dfg_build_function fn,fn.fn_blocks)
+      (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn))
+      (cfg_analyze fn) fn.fn_blocks lbl st)) ==>
+  P (SND (wl_iterate
+    (\lbl old new.
+      df_widen_boundary NONE new lbl <> df_widen_boundary NONE old lbl \/
+      df_widen_entry NONE new lbl <> df_widen_entry NONE old lbl)
+    (df_process_block_widen Forward NONE range_join_opt range_widen_opt
+      WIDEN_THRESHOLD range_transfer_opt range_edge_transfer_opt
+      (dfg_build_function fn,fn.fn_blocks)
+      (OPTION_MAP (\lbl. (lbl,SOME FEMPTY)) (fn_entry_label fn))
+      (cfg_analyze fn) fn.fn_blocks)
+    (cfg_succs_of (cfg_analyze fn)) (cfg_analyze fn).cfg_dfs_pre
+    (case fn_entry_label fn of
+       NONE => init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)
+     | SOME lbl => (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks))
+         with dws_boundary :=
+           (init_df_widen_state NONE (MAP (\bb. bb.bb_label) fn.fn_blocks)).dws_boundary
+             |+ (lbl,SOME FEMPTY))))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `wl_iterate _ process _ all_lbls initial` >>
+  `(\st. range_fixpoint_P fn st /\
+         (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+         (!l. df_widen_visits st l = 0 ==>
+              df_widen_boundary NONE st l = NONE \/
+              df_widen_boundary NONE st l = SOME FEMPTY) /\ P st)
+     (SND (wl_iterate
+       (\lbl old new.
+         df_widen_boundary NONE new lbl <> df_widen_boundary NONE old lbl \/
+         df_widen_entry NONE new lbl <> df_widen_entry NONE old lbl)
+       process (cfg_succs_of (cfg_analyze fn)) all_lbls initial))`
+    suffices_by simp[] >>
+  irule worklistProofsTheory.wl_iterate_invariant_process_restricted >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  conj_tac
+  >- (mp_tac (Q.SPECL [`fn`,`initial`] range_worklist_initial) >>
+      simp[Abbr `initial`] >> metis_tac[]) >>
+  conj_tac >- suspend "changed" >>
+  qexistsl_tac [
+    `(WIDEN_THRESHOLD + 1) * LENGTH all_lbls`,
+    `\st. SUM (MAP (\l. df_widen_visits st l) all_lbls)`,
+    `\l. MEM l all_lbls`] >>
+  CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  conj_tac
+  >- (rpt strip_tac >> irule dfAnalyzeWidenProofsTheory.sum_bound >>
+      simp[markerTheory.Abbrev_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_invariant_preserved)) >>
+      simp[markerTheory.Abbrev_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> irule dfAnalyzeWidenProofsTheory.sum_map_inc >>
+      qexists_tac `lbl` >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_visits_inc)) >> simp[markerTheory.Abbrev_def]) >>
+  conj_tac
+  >- (simp[markerTheory.Abbrev_def,listTheory.EVERY_MEM] >>
+      rpt strip_tac >> mp_tac (Q.SPECL [`fn`,`lbl`] cfg_succs_closure) >>
+      simp[listTheory.EVERY_MEM]) >>
+  simp[listTheory.EVERY_MEM,markerTheory.Abbrev_def]
+QED
+
+Resume range_worklist_invariant[changed]:
   rpt strip_tac >>
   simp[Abbr `process`, df_process_block_widen_def, LET_THM,
        dfAnalyzeDefsTheory.direction_case_def] >>
@@ -2004,18 +2001,54 @@ Resume range_analyze_invariant[changed]:
   simp[df_widen_boundary_def, df_widen_entry_def,
        finite_mapTheory.FLOOKUP_UPDATE,
        df_widen_state_component_equality, df_widen_visits_def] >>
-  fs[] >>
-  (* visits ≠: |+(lbl, v+1) can't equal original map *)
-  rpt strip_tac >>
+  fs[] >> rpt strip_tac >>
   `FLOOKUP (st.dws_visits |+ (lbl,
      (case FLOOKUP st.dws_visits lbl of NONE => 0 | SOME n => n) + 1)) lbl <>
-   FLOOKUP st.dws_visits lbl` by (
-    simp[finite_mapTheory.FLOOKUP_UPDATE] >>
-    Cases_on `FLOOKUP st.dws_visits lbl` >> simp[]) >>
+   FLOOKUP st.dws_visits lbl` by
+    (simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+     Cases_on `FLOOKUP st.dws_visits lbl` >> simp[]) >>
   metis_tac[]
 QED
 
-Finalise range_analyze_invariant
+Finalise range_worklist_invariant
+
+Triviality range_analyze_invariant[local]:
+  !fn.
+    let ra = range_analyze fn in
+    range_fixpoint_P fn ra /\
+    (!lbl. df_widen_visits ra lbl <= WIDEN_THRESHOLD + 1) /\
+    (!lbl. df_widen_visits ra lbl = 0 ==>
+           df_widen_boundary NONE ra lbl = NONE \/
+           df_widen_boundary NONE ra lbl = SOME FEMPTY)
+Proof
+  gen_tac >> simp_tac std_ss [LET_THM, range_analyze_def,
+    df_analyze_widen_def, dfAnalyzeDefsTheory.direction_case_def] >>
+  qmatch_goalsub_abbrev_tac
+    `df_populate_widen_inst _ _ _ _ _ _ _ _ _ _ _ _ swli` >>
+  `(\st. range_fixpoint_P fn st /\
+         (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+         (!l. df_widen_visits st l = 0 ==>
+              df_widen_boundary NONE st l = NONE \/
+              df_widen_boundary NONE st l = SOME FEMPTY)) swli`
+    suffices_by
+      simp[range_fixpoint_P_def, df_widen_visits_def, df_widen_boundary_def,
+           df_widen_entry_def, range_fold_result_def, populate_widen_preserves] >>
+  qunabbrev_tac `swli` >>
+  qspec_then `fn` (qspec_then
+    `\st. range_fixpoint_P fn st /\
+      (!l. df_widen_visits st l <= WIDEN_THRESHOLD + 1) /\
+      (!l. df_widen_visits st l = 0 ==>
+        df_widen_boundary NONE st l = NONE \/
+        df_widen_boundary NONE st l = SOME FEMPTY)` mp_tac)
+    range_worklist_invariant >>
+  impl_tac
+  >- (CONV_TAC (DEPTH_CONV BETA_CONV) >> conj_tac
+      >- (irule range_worklist_initial >> simp[]) >>
+      rpt strip_tac >>
+      mp_tac (SIMP_RULE std_ss [LET_THM] (Q.SPECL [`fn`,`lbl`,`st`]
+        range_invariant_preserved)) >> simp[]) >>
+  Cases_on `fn_entry_label fn` >> simp[]
+QED
 
 (* Bridge: exec_pure2 success extracts operand values and output *)
 Triviality exec_pure2_output[local]:
