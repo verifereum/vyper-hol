@@ -3,6 +3,7 @@
    Well-founded metadata recursion discharges every child callback. *)
 Theory typedCopyComplete
 Ancestors
+  vyperEventArgCompat
   typedCopyCompleteDefs typedCopyCompleteArray typedCopyCompleteAggregate
   checkedCopyAcyclic typedCopyDomain typedCopyTypeContract
   context compileEnv compileVyper vyperTypeContract vyperContext vyperValue

@@ -3,6 +3,7 @@
    compiler branches decide whether the child assumption is needed. *)
 Theory typedCopyArrayTypeContracts
 Ancestors
+  vyperEventArgCompat
   typedCopyTypeContract typedSArrayStoreContract typedDynStoreContract
   typedSArrayLoop typedDynLoopCode typedCopyContract abiBytestringCode abiStaticLoopCode
   context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem vyperValue

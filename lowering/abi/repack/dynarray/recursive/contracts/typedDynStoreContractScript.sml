@@ -3,6 +3,7 @@
    need only the actual recursive child's contract. *)
 Theory typedDynStoreContract
 Ancestors
+  vyperEventArgCompat
   typedDynArrayContract typedDynBulkContract typedDynStoreProps typedCopyContract
   typedDynLoopCode checkedCopyAcyclic context compileEnv compileVyper
   vyperTypeContract vyperContext vyperTypeSystem vyperValue

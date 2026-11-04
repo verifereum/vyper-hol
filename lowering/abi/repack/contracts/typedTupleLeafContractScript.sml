@@ -2,6 +2,7 @@
    bytes/string fields, including widening event argument tuples. *)
 Theory typedTupleLeafContract
 Ancestors
+  vyperEventArgCompat
   typedTupleContract typedStaticCompatibility typedCopyTypeContract
   compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem vyperValue list
 

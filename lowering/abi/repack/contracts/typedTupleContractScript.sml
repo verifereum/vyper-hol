@@ -2,6 +2,7 @@
    Child contracts may emit their own blocks and recursive array loops. *)
 Theory typedTupleContract
 Ancestors
+  vyperEventArgCompat
   typedFieldsList typedFieldsContract typedCopyTypeContract typedCopyContract
   checkedCopyAcyclic memoryValueDefs valueEncoding vyperTyping vyperValue
   context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem

@@ -3,6 +3,7 @@
    a recursive typed-copy contract; bulk and bytes branches are closed. *)
 Theory typedStoreContract
 Ancestors
+  vyperEventArgCompat
   typedStoreLayout typedCopyTypeContract typedCopyContract typedBytesStoreProps
   bytesCopyProps eventTopicValueProps
   context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem vyperValue

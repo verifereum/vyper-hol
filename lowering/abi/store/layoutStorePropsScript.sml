@@ -3,6 +3,7 @@
    types use the same theorem. Operand and disjoint-memory frames are kept. *)
 Theory layoutStoreProps
 Ancestors
+  vyperEventArgCompat
   memoryLayoutSource memoryLayoutRel memoryLayoutDefs memoryStoreProps
   fieldStoreComposition fieldAddressProps logBytesStoreProps
   memoryValueDefs memoryValueTyping valueLoadProps valueEncoding typeLayoutProps typedCopyProducer

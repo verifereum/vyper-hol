@@ -3,6 +3,7 @@
    are checked at the real emitted exit block. *)
 Theory typedDynLoopPath
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame typedCopyLoopStateFrame
   typedDynLoopCheckedRun typedDynLoopEntry typedDynLoopValues typedDynLoopInvariant
   typedDynLoopBodyFrames typedDynLoopCode typedDynLoopControl typedDynLoopStructure

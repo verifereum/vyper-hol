@@ -2,6 +2,7 @@
    arguments, including indexed values, and produces the declared data tuple. *)
 Theory typedLogSplitPath
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame
   typedLogSplitComplete typedLogSplitArgs typedLogDataContract typedLogArgs typedLogArgsFrames
   typedSArrayDynInvariant typedCopyContract eventLogSplitProps memoryValueDefs

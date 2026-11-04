@@ -3,6 +3,7 @@
    element types; checked metadata gives the exact physical copy length. *)
 Theory typedSArrayBulkContract
 Ancestors
+  vyperEventArgCompat
   typedCopyBulkContract typedStaticCompatibility typedCopyContract typedSArrayDynInvariant
   typeLayoutProps typedCopyProducer memoryValueDefs valueEncoding
   context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem vyperValue

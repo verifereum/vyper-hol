@@ -3,6 +3,7 @@
    the complete data-packing contract, without a per-field callback. *)
 Theory typedLogSplitComplete
 Ancestors
+  vyperEventArgCompat
   typedLogDataComplete typedLogDataContract eventLogSplitProps
   context stmtLowering compileEnv compileVyper vyperTypeContract vyperContext
   vyperTypeSystem vyperValue list pair

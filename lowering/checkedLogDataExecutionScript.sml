@@ -4,6 +4,7 @@
    assumptions about execution of the packing prefix. *)
 Theory checkedLogDataExecution
 Ancestors
+  vyperEventArgCompat
   checkedLogData checkedLogMetadata checkedLogValues logDataPacking logSourceFrame logAbiEncoder
   sourceLogFrames logArgumentLogSafety compileAllocationRequests compileAppendProps
   exprLowering context emitHelper emitHelperProps abiEncoderProps abiStaticLoopCode

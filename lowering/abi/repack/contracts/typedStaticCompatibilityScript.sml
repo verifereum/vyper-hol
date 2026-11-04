@@ -2,6 +2,7 @@
    Capacity widening occurs only in types with dynamic ABI encoding. *)
 Theory typedStaticCompatibility
 Ancestors
+  vyperEventArgCompat
   vyperTypeSystem compileEnv list
 
 Theorem event_arg_compatible_static_type:

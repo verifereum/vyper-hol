@@ -3,6 +3,7 @@
    or supported_log restriction remains in the data-packing theorem. *)
 Theory typedLogDataComplete
 Ancestors
+  vyperEventArgCompat
   typedCopyComplete typedLogFieldChecked typedLogFieldContract
   typedLogDataChecked typedLogDataContract
   context stmtLowering compileEnv compileVyper vyperTypeContract vyperContext

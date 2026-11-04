@@ -3,6 +3,7 @@
    This is the recursive child of nested string and bytes array copies. *)
 Theory typedBytesStoreProps
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame bytesCopyCode bytesCopyProps typedCopyContract typedSArrayDynInvariant eventTopicValueProps valueLoadProps memoryValueDefs
   context compileEnv exprLoweringProps abiBytestringCode
   vyperTypeSystem vyperValue vyperTyping fragBlockPath fragExec venomState list words

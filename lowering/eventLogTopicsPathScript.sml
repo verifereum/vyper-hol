@@ -2,6 +2,7 @@
    API: compile_saved_log_topics_path. No state after hashing is assumed. *)
 Theory eventLogTopicsPath
 Ancestors
+  vyperEventArgCompat
   eventLogTopicInputs eventTopicsPath typedLogArgs typedLogArgsMemory typedCopyStateFrame abiFieldOperands
   eventTopicValueProps stmtLowering compileEnv fragExec fragBlockPath
   venomState vyperTypeContract list pair words

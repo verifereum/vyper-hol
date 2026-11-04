@@ -4,6 +4,7 @@
 
 Theory vyperTypeEnvExtension
 Ancestors
+  vyperEventArgCompat
   list rich_list pred_set prim_rec arithmetic finite_map option pair
   vyperAST vyperValue vyperMisc vyperABI vyperInterpreter vyperState
   vyperContext vyperStorage vyperTyping vyperTypeSystem vyperTypeInvariants vyperTypeValues
@@ -224,5 +225,5 @@ Theorem type_log_inversion:
     well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
     LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
 Proof
-  simp[type_stmt_def, AllCaseEqs()] >> metis_tac[]
+  simp[type_stmt_def, AllCaseEqs(), event_arg_compatible_alias_def] >> metis_tac[]
 QED

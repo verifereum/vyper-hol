@@ -3,6 +3,7 @@
    and data pointers. These facts do not restrict the element constructors. *)
 Theory typedDynLoopValues
 Ancestors
+  vyperEventArgCompat
   typedDynLoopInvariant typedDynLoopNames vyperEventCompatibility memoryValueTyping
   memoryValueDefs valueEncoding compileEnv vyperTypeSystem vyperValue vyperTyping
   venomState venomInst list words arithmetic

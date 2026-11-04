@@ -4,6 +4,7 @@
    Helper: split_topic_operands_before. *)
 Theory eventTopicsPath
 Ancestors
+  vyperEventArgCompat
   eventTopicCode eventTopicsOperands eventLogSplitProps eventTopicsExecProps eventTopicExecProps eventTopicValueProps
   typedLogSplitArgs typedCopyStateFrame abiFieldOperands
   stmtLowering context compileEnv exprLoweringProps fragExec fragBlockPath instIdxIndep

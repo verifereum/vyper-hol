@@ -2,6 +2,7 @@
    needed by checked recursive Log packing. No encoder-cut state is assumed. *)
 Theory abiLogPackingBoundary
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame
   abiBufferAllocationCode typedLogSplitPath typedCopyContract typedLogArgs
   typedSArrayDynInvariant memoryValueDefs valueEncoding

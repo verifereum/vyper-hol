@@ -3,6 +3,7 @@
    executions in source order. *)
 Theory eventTopicsOperands
 Ancestors
+  vyperEventArgCompat
   eventTopicOperands eventTopicsExecProps eventLogSplitProps eventEncodingProps typedLogSplitArgs
   eventTopicValueProps eventTopicExecProps abiFieldOperands abiFlatRun
   context stmtLowering compileEnv exprLoweringProps emitHelperProps

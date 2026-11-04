@@ -3,6 +3,7 @@
    tuple-field copier supplies execution, layout and allocation frames. *)
 Theory typedStructContract
 Ancestors
+  vyperEventArgCompat
   typedStructCode typedStructMemory typedStructMetadata typedCopyCompatibility
   typedCopyTypeContract typedCopyContract typedFieldsList typedFieldsContract checkedCopyAcyclic
   context compileEnv compileVyper vyperContext vyperTypeContract vyperTypeSystem vyperValue

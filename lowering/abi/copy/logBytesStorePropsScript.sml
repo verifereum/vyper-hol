@@ -2,6 +2,7 @@
    argument at the declared buffer offset, including capacity widening. *)
 Theory logBytesStoreProps
 Ancestors
+  vyperEventArgCompat
   logBytesStoreCode bytesCopyCode bytesCopyExec bytesCopyMemory bytesCopyProps
   bytesSnapshotMemory memoryValueDefs valueLoadProps eventTopicValueProps
   vyperEventCompatibility vyperTypeSystem vyperValue vyperTyping

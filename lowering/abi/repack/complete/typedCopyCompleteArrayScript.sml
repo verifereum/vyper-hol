@@ -2,6 +2,7 @@
    constructors. Complete evaluations supply their count/capacity bounds. *)
 Theory typedCopyCompleteArray
 Ancestors
+  vyperEventArgCompat
   typedCopyCompleteDefs typedCopyArrayTypeContracts typedArrayLoopValues typedSArrayDynSafety
   vyperTypeValues vyperValue context compileEnv compileVyper vyperTypeContract vyperContext
   list words arithmetic

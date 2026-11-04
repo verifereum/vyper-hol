@@ -3,6 +3,7 @@
    Log packer's field layouts and its ABI output-capacity proof. *)
 Theory checkedLogValues
 Ancestors
+  vyperEventArgCompat
   eventLookupProps vyperEventSoundness vyperTypeEventLookup vyperTypeEnvExtension
   vyperTypeEvalSoundness vyperTypeExprSoundness vyperTypeInvariants vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperTypeContract vyperTypeSystem vyperTypeDefaults

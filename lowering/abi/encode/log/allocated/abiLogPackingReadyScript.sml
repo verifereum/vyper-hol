@@ -2,6 +2,7 @@
    and source pointer needed by the actual following allocation and encoder. *)
 Theory abiLogPackingReady
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame typedLogStoreCode typedLogSplitComplete abiLogReady abiFieldOperands
   typeLayoutProps typedCopyProducer
   abiAllocatedState abiAllocatorState abiAllocationFrame abiAllocatedWindows

@@ -2,6 +2,7 @@
    continuation with full source, target-prefix and memory/operand frames. *)
 Theory typedSArrayPath
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame typedCopyLoopStateFrame
   typedSArrayRun typedSArrayLoop typedSArrayControl typedSArrayChildContract typedCopyContract
   typedDynLoopEntry typedDynLoopInvariant typedArrayLoopFrames typedArrayLoopCode

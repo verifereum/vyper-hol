@@ -2,6 +2,7 @@
    and checked struct metadata, retaining the original compiler environment. *)
 Theory typedCopyCompleteAggregate
 Ancestors
+  vyperEventArgCompat
   typedCopyCompleteDefs typedCopyCompatibility typedStructContract typedTupleContract
   vyperTypeValues vyperValue context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem
   list pair combin

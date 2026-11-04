@@ -1,5 +1,6 @@
 Theory vyperEventCompatibility
 Ancestors
+  vyperEventArgCompat
   vyperTypeSystem vyperTypeContract vyperABI vyperEvent vyperTyping vyperValue list
 
 Theorem event_arg_compatible_abi_type:

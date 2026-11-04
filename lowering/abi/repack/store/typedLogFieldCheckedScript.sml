@@ -2,6 +2,7 @@
    contract. Only genuinely recursive outer stores need a child contract. *)
 Theory typedLogFieldChecked
 Ancestors
+  vyperEventArgCompat
   typedLogFieldContract typedStoreContract typedCopyTypeContract
   typedStaticCompatibility typedTupleLeafContract vyperEventCompatibility
   context compileEnv compileVyper vyperTypeContract vyperContext vyperTypeSystem vyperValue

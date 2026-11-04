@@ -3,6 +3,7 @@
    typed contract. Strides and name ranges come from checked metadata and code. *)
 Theory typedDynLoopSource
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame typedCopyLoopStateFrame
   typedDynLoopPath typedDynLoopPrefix typedDynChildContract typedCopyContract
   typedDynLoopCode typedDynLoopNames typedSArrayDynInvariant typedArrayCopyMemory

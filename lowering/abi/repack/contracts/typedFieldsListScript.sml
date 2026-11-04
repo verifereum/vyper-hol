@@ -2,6 +2,7 @@
    layouts using per-type child contracts, with actual compiler cuts. *)
 Theory typedFieldsList
 Ancestors
+  vyperEventArgCompat
   typedFieldsCons typedFieldsTypes typedFieldsContract typedCopyTypeContract
   compileVyper compileEnv vyperTypeContract vyperContext vyperTypeSystem vyperValue list
 

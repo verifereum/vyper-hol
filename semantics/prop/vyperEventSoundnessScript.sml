@@ -1,5 +1,6 @@
 Theory vyperEventSoundness
 Ancestors
+  vyperEventArgCompat
   vyperTypeABI vyperEventCompatibility vyperTypeEventLookup vyperTypeEnvExtension
   vyperEvent vyperValue vyperTyping vyperTypeSystem vyperTypeContract vyperABI list
 

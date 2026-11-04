@@ -2,6 +2,7 @@
    recursive child's typed copy contract, preserving full typed prefixes. *)
 Theory typedSArrayRun
 Ancestors
+  vyperEventArgCompat
   typedSArrayElement typedDynLoopRun typedDynLoopValues typedDynLoopInvariant
   typedSArrayChildContract typedCopyContract typedSArrayLoop typedSArrayDynInvariant
   memoryValueDefs valueEncoding abiBytestringCode abiStaticLoopCode

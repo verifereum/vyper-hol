@@ -3,6 +3,7 @@
    API: compile_saved_log_empty_path. *)
 Theory abiLogTopicsEmpty
 Ancestors
+  vyperEventArgCompat
   eventLogTopicsPath abiLogTopicsReady abiLogSourceEncoding abiEmptyLogPath abiLogAllocationFrame
   typedLogArgs typedCopyStateFrame typedLogSplitComplete abiFieldOperands abiFlatRun abiStateFrame
   context stmtLowering compileEnv fragExec fragBlockPath vyperTypeContract vyperTypeSystem

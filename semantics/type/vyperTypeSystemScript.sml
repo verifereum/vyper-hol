@@ -476,22 +476,6 @@ Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
 
-Definition event_arg_compatible_def:
-  event_arg_compatible (BaseT (StringT n)) (BaseT (StringT m)) = (m <= n) /\
-  event_arg_compatible (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) = (m <= n) /\
-  event_arg_compatible (ArrayT ft (Dynamic n)) (ArrayT at (Dynamic m)) =
-    (m <= n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (ArrayT ft (Fixed n)) (ArrayT at (Fixed m)) =
-    (m = n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (TupleT fts) (TupleT ats) =
-    (LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats) /\
-  event_arg_compatible fty aty = (aty = fty) /\
-  event_arg_compatible_list [] [] = T /\
-  event_arg_compatible_list (f::fs) (a::rest) =
-    (event_arg_compatible f a /\ event_arg_compatible_list fs rest) /\
-  event_arg_compatible_list _ _ = F
-End
-
 (* ===== Type builtin/conversion checks ===== *)
 
 Definition valid_conversion_def:
@@ -938,7 +922,7 @@ Definition type_stmt_def:
        NONE => NONE
      | SOME fields =>
          if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
-            LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+            LIST_REL (\e ((_,fty),_). arg_type_fits (expr_type e) fty) es fields
          then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\

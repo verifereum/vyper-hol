@@ -3,6 +3,7 @@
    Helpers expose exactly the declared types compatible with bytelikes. *)
 Theory logArgumentTypes
 Ancestors
+  vyperEventArgCompat
   typedCopyCompatibility abiTypeBounds abiTypeShape
   vyperTypeSystem vyperAST vyperValue vyperABI exprLowering compileEnv list arithmetic
 

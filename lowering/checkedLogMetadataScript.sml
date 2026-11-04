@@ -3,6 +3,7 @@
    layout types. No event whitelist premise is used. *)
 Theory checkedLogMetadata
 Ancestors
+  vyperEventArgCompat
   eventLookupProps logArgumentTyping eventLoweringStructure compileVyper
   vyperTypeEventLookup vyperTypeEnvExtension vyperTypeContract vyperTypeSystem
   vyperTypeInvariants compileEnv list pair combin finite_map

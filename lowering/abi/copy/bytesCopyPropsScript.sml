@@ -2,6 +2,7 @@
    establish the declared field's typed value, including capacity widening. *)
 Theory bytesCopyProps
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame bytesCopyCode bytesCopyExec bytesCopyMemory bytesSnapshotMemory
   memoryValueDefs valueLoadProps eventTopicValueProps abiBytestringCode
   vyperEventCompatibility vyperTypeSystem vyperValue vyperTyping vyperAST

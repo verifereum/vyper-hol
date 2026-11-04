@@ -3,6 +3,7 @@
    agree, so omitted source slots retain their meaning in the target. *)
 Theory typedSArraySource
 Ancestors
+  vyperEventArgCompat
   typedCopyStateFrame typedCopyLoopStateFrame
   typedSArrayPath typedArrayLoopValues typedArrayCopyMemory typedSArrayDynInvariant
   typedSArrayLoop typedCopyContract memoryValueDefs valueEncoding vyperEventCompatibility

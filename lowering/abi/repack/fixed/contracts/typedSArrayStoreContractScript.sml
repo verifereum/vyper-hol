@@ -3,6 +3,7 @@
    only the actual child's contract, cuts and allocated-name range. *)
 Theory typedSArrayStoreContract
 Ancestors
+  vyperEventArgCompat
   typedSArrayContract typedSArrayBulkContract typedSArrayChildContract typedCopyContract
   typedSArrayLoop checkedCopyAcyclic context compileEnv compileVyper
   vyperTypeContract vyperContext vyperTypeSystem vyperValue

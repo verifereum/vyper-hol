@@ -2,6 +2,7 @@
    signature hash stays the declared event's hash on both sides. *)
 Theory eventEncodingProps
 Ancestors
+  vyperEventArgCompat
   e2eDefs compileEnv vyperEventCompatibility vyperTypeSystem vyperTypeContract
   vyperEvent vyperABI list
 

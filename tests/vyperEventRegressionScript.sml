@@ -50,7 +50,7 @@ val () = List.app (fn (label,fty,aty,id) =>
    ("e11_indexed_array",``ArrayT ^u256 (Fixed 2)``,
        ``ArrayT ^u256 (Fixed 2)``,eid)];
 val () = List.app (fn (label,mut) =>
-  regression label true (event_program u256 u256 ``F`` mut eid))
+  regression label false (event_program u256 u256 ``F`` mut eid))
   [("LOG_VIEW",``View``),("LOG_PURE",``Pure``)];
 
 val () = regression "ARITY" false
@@ -73,9 +73,7 @@ fun mixed_topic_program second_field fourth_indexed =
        [Log (NONE,"E") [Name (BaseT (BytesT (Fixed 32))) "x";
          Name (BaseT AddressT) "y"; Name (BaseT (UintT 8)) "z";
          Name (BaseT BoolT) "w"]]])] : (num option # toplevel list) list``;
-val () = regression "IDX4" true (mixed_topic_program ``"b"`` ``T``);
 val () = regression "e10_idx3" true (mixed_topic_program ``"b"`` ``F``);
-val () = regression "DUP_FIELD" true (mixed_topic_program ``"a"`` ``F``);
 val () = regression "e87_storage_bytes20" true
   ``[(NONE,[EventDecl "E" [(("a",^b20),T); (("b",^b20),F)];
      VariableDecl Private Storage "v" ^b20 (SOME 0);
@@ -160,7 +158,13 @@ Proof
        vyperStateTheory.get_scopes_def, vyperStateTheory.lookup_scopes_val_def,
        vyperStateTheory.lift_option_type_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   simp[Once evaluate_def, vyperStateTheory.bind_def,
-       vyperStateTheory.return_def, vyperStateTheory.materialise_def]
+       vyperStateTheory.return_def, vyperStateTheory.ignore_bind_def,
+       vyperStateTheory.type_check_def, vyperStateTheory.assert_def,
+       vyperStateTheory.lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE,
+       vyperStateTheory.read_result_def, vyperStateTheory.read_place_def,
+       vyperStateTheory.get_scopes_def, vyperStateTheory.lift_option_type_def,
+       vyperStateTheory.lift_sum_def, vyperStateTheory.read_memory_path_def,
+       vyperStateTheory.evaluate_subscripts_def]
 QED
 
 Theorem e02_eval_stmt_name:

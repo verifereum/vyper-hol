@@ -2,6 +2,7 @@
    layouts. Source typing may widen while its physical layout is retained. *)
 Theory typedStoreLayout
 Ancestors
+  vyperEventArgCompat
   typedCopyContract typedCopyBulkContract typedSArrayDynInvariant
   memoryLayoutSource memoryLayoutRel layoutStoreProps typeLayoutProps typedCopyProducer
   memoryValueDefs valueEncoding vyperEventCompatibility

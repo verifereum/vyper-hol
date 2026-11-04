@@ -3,6 +3,7 @@
    Helpers remove dynamic tails only when every field is static. *)
 Theory abiStaticBounds
 Ancestors
+  vyperEventArgCompat
   abiTypeWidths abiTypeShape abiLogPackingReady typeLayoutProps typedCopyProducer
   context compileEnv compileVyper valueEncoding vyperTypeContract
   vyperABI vyperValue contractABI list arithmetic

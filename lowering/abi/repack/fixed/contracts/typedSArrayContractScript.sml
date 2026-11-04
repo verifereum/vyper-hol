@@ -3,6 +3,7 @@
    and the compiler-derived allocation range are preserved. *)
 Theory typedSArrayContract
 Ancestors
+  vyperEventArgCompat
   typedSArraySource typedSArrayChildContract typedSArrayLoop typedArrayLoopValues
   typedCopyContract typedArrayLoopCode typedSArrayDynInvariant checkedCopyAcyclic
   memoryValueDefs valueEncoding context compileEnv compileVyper

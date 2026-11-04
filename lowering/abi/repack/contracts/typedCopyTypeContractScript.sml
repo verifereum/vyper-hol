@@ -2,6 +2,7 @@
    operands and cuts. Scalar and bytes/string copies discharge it directly. *)
 Theory typedCopyTypeContract
 Ancestors
+  vyperEventArgCompat
   typedCopyContract typedCopyWordContract typedBytesStoreProps
   compileEnv context vyperValue vyperTypeSystem
 

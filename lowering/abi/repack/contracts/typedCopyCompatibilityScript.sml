@@ -2,6 +2,7 @@
    proofs, independently of any particular lowering entry point. *)
 Theory typedCopyCompatibility
 Ancestors
+  vyperEventArgCompat
   vyperTypeSystem list
 
 Theorem event_arg_compatible_reflexive:

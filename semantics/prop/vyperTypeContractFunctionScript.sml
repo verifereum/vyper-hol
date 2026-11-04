@@ -233,13 +233,14 @@ Theorem type_stmt_static_maps_transfer_mutual[local]:
 Proof
   ho_match_mp_tac type_stmt_ind >>
   rw[type_stmt_def, AllCaseEqs()] >>
-  gvs[] >>
-  TRY (rename1 `FLOOKUP env1.event_fields id = SOME fields` >>
-       qexists `env2` >> simp[] >>
-       `FLOOKUP env2.event_fields id = SOME fields` by
-         (gvs[static_maps_transfer_env_def] >> metis_tac[]) >>
-       simp[] >> irule well_typed_exprs_static_maps_transfer_env >>
-       qexists `env1` >> simp[] >> NO_TAC) >>
+  gvs[]
+  >~ [`FLOOKUP env1.event_fields _ = SOME _`] >-
+   (rename1 `FLOOKUP env1.event_fields id = SOME fields` >>
+    qexists `env2` >> simp[] >>
+    `FLOOKUP env2.event_fields id = SOME fields` by
+      (gvs[static_maps_transfer_env_def] >> metis_tac[]) >>
+    simp[] >> irule well_typed_exprs_static_maps_transfer_env >>
+    qexists `env1` >> simp[]) >>
   TRY (rename1 `well_typed_expr env1 e` >> qexists `env2` >> simp[] >>
        conj_tac >- metis_tac[type_place_expr_no_hash_static_maps_transfer_env] >>
        irule well_typed_expr_static_maps_transfer_env >> simp[]) >>
@@ -993,7 +994,7 @@ Theorem checked_explicit_external_entry_establishes_type_soundness_preconditions
   bind_arguments (type_env_all_modules mods) args vals = SOME scope /\
   args_values_typed (type_env_all_modules mods) args vals ==>
   ?env_body env_after st.
-    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>) /\
+    st = (initial_state am [scope] with <|outcomes := orc; requests := rqs|>) /\
     functions_well_typed
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)]) /\
     accounts_well_typed st.accounts /\
@@ -1051,7 +1052,7 @@ Theorem check_contract_explicit_external_entry_no_type_error:
     (eval_stmts
       ((initial_evaluation_context am.sources am.layouts tx src) with stk := [(src,fn)])
       body
-      (initial_state am [scope] with <|outcomes := orc; requests := rqs; gas_obs := gobs|>))
+      (initial_state am [scope] with <|outcomes := orc; requests := rqs|>))
 Proof
   metis_tac[
     checked_explicit_external_entry_establishes_type_soundness_preconditions,

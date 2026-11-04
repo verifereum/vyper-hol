@@ -2,6 +2,7 @@
    strides and target value typing for tuple-copy composition. *)
 Theory typedFieldsTypes
 Ancestors
+  vyperEventArgCompat
   typedCopyTypeContract typeLayoutProps typedCopyProducer vyperEventCompatibility
   compileVyper compileEnv vyperTypeContract vyperContext vyperTypeSystem vyperValue
 

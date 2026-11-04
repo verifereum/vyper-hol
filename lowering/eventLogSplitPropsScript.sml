@@ -2,6 +2,7 @@
    event-field encoding. Non-indexed arguments can have arbitrary types. *)
 Theory eventLogSplitProps
 Ancestors
+  vyperEventArgCompat
   eventTopicsExecProps eventTopicValueProps eventEncodingProps
   stmtLowering compileEnv vyperEvent list
 Libs pairLib

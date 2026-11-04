@@ -3,6 +3,7 @@
    real compiler cuts, so the result can itself serve as a recursive child. *)
 Theory typedDynArrayContract
 Ancestors
+  vyperEventArgCompat
   typedDynLoopSource typedDynChildContract typedDynLoopNames typedCopyContract
   typedDynLoopCode typedArrayLoopCode typedSArrayDynSafety typedSArrayDynInvariant
   memoryValueDefs valueEncoding context compileEnv compileVyper

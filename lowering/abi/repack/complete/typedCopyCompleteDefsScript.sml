@@ -3,6 +3,7 @@
    compatibility and close the leaf cases without source restrictions. *)
 Theory typedCopyCompleteDefs
 Ancestors
+  vyperEventArgCompat
   typedCopyTypeContract typedTupleLeafContract typedCopyBulkContract typedCopyContract
   context compileEnv valueEncoding vyperTypeSystem vyperValue
   list words arithmetic

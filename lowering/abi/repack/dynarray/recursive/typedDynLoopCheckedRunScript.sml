@@ -3,6 +3,7 @@
    range and child compiler cut are tied to the real compiler metadata. *)
 Theory typedDynLoopCheckedRun
 Ancestors
+  vyperEventArgCompat
   typedDynLoopElement typedDynLoopRun typedDynLoopValues typedDynLoopInvariant typedDynChildContract
   typedCopyContract typedDynLoopCode typedDynLoopStructure typedSArrayDynInvariant
   memoryValueDefs valueEncoding abiBytestringCode abiStaticLoopCode

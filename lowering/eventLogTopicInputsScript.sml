@@ -5,6 +5,7 @@
    Non-indexed values retain arbitrary recursive types. *)
 Theory eventLogTopicInputs
 Ancestors
+  vyperEventArgCompat
   typedLogArgs eventTopicValueProps valueLoadProps valueEncoding
   vyperTypeContract vyperTypeSystem compileEnv venomState list pair words arithmetic
 

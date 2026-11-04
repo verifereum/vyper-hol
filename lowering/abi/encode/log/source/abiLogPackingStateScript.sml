@@ -3,6 +3,7 @@
    Arguments retain their typed values while the packed tuple is produced. *)
 Theory abiLogPackingState
 Ancestors
+  vyperEventArgCompat
   abiLogPackingBoundary abiLogPackingReady typedLogStoreCode typedLogSplitComplete
   typedCopyStateFrame typedLogArgs typedCopyContract typedSArrayDynInvariant
   sourceMemoryFrames allocationGrowth abiFieldOperands abiStateFrame

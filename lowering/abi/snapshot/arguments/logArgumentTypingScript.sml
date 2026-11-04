@@ -2,6 +2,7 @@
    actual layout types retained by compile_log_eval_all. *)
 Theory logArgumentTyping
 Ancestors
+  vyperEventArgCompat
   logArgumentTypes logArgumentTypeEval eventLoweringStructure
   abiTypeShape vyperTypeSystem vyperTypeInvariants vyperTypeEnvExtension
   exprLowering stmtLowering compileEnv vyperAST list combin pair finite_map
