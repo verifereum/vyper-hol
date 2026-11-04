@@ -104,3 +104,48 @@ QED
    interfaces is an additional hypothesis on the frozen internal-call
    theorem, nor does this one-slot probe discharge aggregate forcing.
 *)
+
+(* Consumer contract for the remaining forcing development (unproved).
+
+   The unrestricted runtime boundary must have exactly the parameters and
+   conclusion of unwrap_runtime_noncopy_sim, dropping its case restriction
+   and retaining ~cenv.ce_is_ctor.  Equivalently its hypotheses are:
+     unwrap_value cenv vv sm = (op,sb) /\ local_ptrs_reserved cenv sm /\
+     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+     ~cenv.ce_is_ctor
+   and its conclusion is frag_exec ctx sm sb
+     (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s)
+     (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s) R.
+   The checked noncopy boundary handles StackValue, LocMemory and word
+   values; the additional obligations are precisely non-word LocStorage,
+   LocTransient and LocCode (LocCalldata has false vv_post).
+
+   The list consumer additionally needs a framed raw-result boundary.
+   Given read_result cx raw es = (INL v,es), expr_sim_inv cenv cx env es,
+   the same compile/freshness/runtime premises and the source vv_post
+   interpreted with raw, the precondition must carry
+     EVERY (\(ty,r,held,lo).
+       vv_holds cenv cx ty r held es s /\
+       vv_at cenv cx ty lo sm es r held s /\
+       safe_operand sm (vv_operand held)) hs.
+   The postcondition is expr_post of v at the new operand, conjoined with
+   the same EVERY at upper boundary sb instead of sm (lo is UNCHANGED).
+   This is the exact held-entry shape of vv_post_deferred_prefix; that
+   theorem assumes compile_expr, not unwrap_value, so it cannot supply
+   the required frame by instantiation.  vv_post_read_result handles raw
+   result interpretation but does not itself prove memory preservation.
+
+   Dependency map: slot execution + full copied-prefix loop + allocation
+   frame -> storage/transient contents; decoding/layout bridge -> typed
+   storage/transient unwrap.  Runtime DLOAD loop + sub_layout byte copy
+   -> code unwrap.  These plus checked noncopy -> unrestricted runtime
+   unwrap.  Operand/old-allocation/local-region frame for each copy ->
+   EVERY held-entry preservation -> framed raw forcing -> list staging.
+   The existing successful-list endpoint supplies held entries, their
+   original lo boundaries, and safe operands.  It does not supply copy
+   contents, allocation bounds, or an unwrap-specific held-entry frame.
+   Runtime exclusion must come from the body compile environment, and
+   size bounds from actual allocation/type correspondence; neither may
+   be silently postulated at the frozen call site.  Full implementation
+   requires a strategist-owned decomposition beyond this diagnostic.
+*)
