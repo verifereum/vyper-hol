@@ -6809,6 +6809,70 @@ Proof
   metis_tac[aug_place_base_immutable_origin]
 QED
 
+Theorem aug_place_body_target_failure:
+  !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
+   res es' ex st.
+    (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
+       eval_target_place cx t s'' = (INL p,t') /\
+       read_place cx p s'3' = (INL cur,t'') /\
+       place_type_value cx p s'4' = (INL ptv,t'3') ==>
+       body_expr_ok cx e) /\ body_base_target_ok cx t /\
+    body_inv tops ctx cenv cx /\
+    supported_stmt tops bindings (AugAssign ty t bop e) /\
+    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+    locals_alloc_ok cenv env /\
+    type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    stmt_exprs_ok cenv (AugAssign ty t bop e) /\
+    call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
+    frame_ret_ok ctx func cx RetQ cenv ret_ty /\
+    eval_stmt cx (AugAssign ty t bop e) es = (res, es') /\
+    ((?bt fld. t = AttributeTarget bt fld) \/ (?bt k. t = SubscriptTarget bt k)) /\
+    eval_target_place cx t es = (INR ex,st) ==>
+    stmt_frag ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ret_ty (AugAssign ty t bop e)) es res es'
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `res = INR ex /\ es' = st` by
+    (drule aug_place_eval_cases >> simp[]) >> gnvs[] >>
+  drule aug_place_typing >> strip_tac >>
+  `target_sim ctx func cenv cx env t es` by
+    (irule aug_place_stmt_target_sim >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         int_calls_stmt_def, call_evaluation_safe_def] >> metis_tac[]) >>
+  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
+  drule aug_place_code_parts >> strip_tac >>
+  `cs_extends sa s0'` by
+    (qspec_then `t` (qspec_then `cenv` (qspec_then `sa` mp_tac))
+       stmtLoweringMonoTheory.ci_mono_compile_get_target_ptr >>
+     simp[ci_mono_def]) >>
+  `cs_extends s0' sb` by
+    (FIRST [drule_all aug_place_emit_void_grows >> disch_then MATCH_ACCEPT_TAC,
+      `cs_extends s0' s1` by (drule_all aug_place_emit_op_grows >> simp[]) >>
+     `cs_extends s1 s2` by (drule (cj 2 compile_expr_grows) >> simp[]) >>
+     `cs_extends s2 s3` by (drule compile_binop_grows >> simp[]) >>
+     `cs_extends s3 sb` by (drule_all aug_place_emit_void_grows >> simp[]) >>
+     irule cs_extends_trans >> qexists_tac `s1` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s2` >> simp[] >>
+     irule cs_extends_trans >> qexists_tac `s3` >> simp[]]) >>
+  `fn_has_code sa s0' func` by metis_tac[fn_has_code_split] >>
+  `no_control_exc ex` by
+    metis_tac[vyperExprNoControlTheory.eval_target_place_no_control] >>
+  `(?m. ex = Error (RuntimeError m)) \/
+   (?d. ex = Error (RevertData d)) \/ (?str. ex = AssertException str)` by
+    gvs[stmt_res_ok_def, vyperExprNoControlTheory.no_control_exc_def] >>
+  `frag_exec ctx sa s0'
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. F) (expr_exit (INR ex : place + exception))` by
+    (drule_at (Pat `eval_target_place _ _ _ = _`)
+       targetPlaceSimCasesTheory.target_place_sim >> simp[] >>
+     disch_then irule >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  simp[frag_exec_def] >>
+  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
+  disj2_tac >> goal_assum (drule_at Any) >>
+  simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]
+QED
+
 Theorem body_augassign_place_pure:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
