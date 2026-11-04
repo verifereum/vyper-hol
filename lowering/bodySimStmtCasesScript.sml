@@ -3877,6 +3877,19 @@ QED
 
 Finalise aug_place_target_idx_metadata
 
+Theorem aug_place_target_sim_metadata:
+  compile_get_target_ptr compile_expr
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) t =
+  compile_get_target_ptr compile_expr cenv t ==>
+  (target_sim ctx func
+    (cenv with <|ce_hashmap_info := h; ce_module_var_type := m|>) cx env t es <=>
+   target_sim ctx func cenv cx env t es)
+Proof
+  strip_tac >> simp[target_sim_def, SRULE [] aug_place_target_post_metadata,
+    SRULE [] aug_place_stmt_state_rel_metadata,
+    SRULE [] aug_place_local_ptrs_reserved_metadata]
+QED
+
 Theorem body_augassign_place:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es
    res es'.
