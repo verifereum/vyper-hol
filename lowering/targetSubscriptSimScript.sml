@@ -176,7 +176,9 @@ Theorem place_ptr_rel_memory_current:
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL v /\
     evaluate_type (get_tenv cx) ty = SOME tv ==>
-    val_in_memory tv v (w2n w) s.vs_memory
+    val_in_memory tv v (w2n w) s.vs_memory /\
+    value_has_type tv v /\ well_formed_type_value tv /\
+    subscripts_type entry.type path = SOME tv
 Proof
   rpt gen_tac >> strip_tac >>
   `?ety. FLOOKUP env.var_types id = SOME ety` by
@@ -201,7 +203,12 @@ Proof
   drule alloca_room_next_lt >> strip_tac >>
   `w2n b + k < dimword (:256)` by decide_tac >>
   `k < dimword (:256)` by decide_tac >>
-  simp[w2n_add_2, w2n_n2w, LESS_MOD] >> fs[ADD_COMM]
+  simp[w2n_add_2, w2n_n2w, LESS_MOD] >> fs[ADD_COMM] >>
+  conj_tac
+  >- (irule evaluate_subscripts_type >> goal_assum (drule_at Any) >>
+      goal_assum (drule_at Any) >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  drule_all subscripts_type_well_formed >> simp[]
 QED
 
 Theorem array_len_ok_memory_current:
@@ -572,4 +579,153 @@ Theorem array_bounds_capacity:
      ((0 <= i /\ Num i < cap) /\ Num i < len))
 Proof
   rpt strip_tac >> eq_tac >> simp[]
+QED
+
+(* A read-only pointer suffix keeps the complete target frame, not just
+   the state relation.  The new place itself is supplied by the source step. *)
+Theorem target_post_suffix_frame:
+  !ctx func cenv cx es sa sm sb s0 es' pv vt rb t u pv' vt' dst loc.
+    target_post ctx func cenv cx es sa sm s0 es' pv vt rb t /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    stmt_state_rel ctx func cenv cx es' u /\
+    (?w. eval_operand dst u = SOME w /\
+         place_ptr_rel cenv cx u pv' w loc vt') /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    place_readable cx es' pv' /\
+    (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
+           lookup_var x u = SOME w) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    u.vs_memory = t.vs_memory ==>
+    target_post ctx func cenv cx es sa sb s0 es' pv' vt'
+      (dst,loc,SOME (value_type_place vt')) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  `locals_kept cenv es s0 u` by
+    (irule locals_kept_mem_tail >> qexists_tac `t` >>
+     gvs[target_post_def]) >>
+  gvs[target_post_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sm x` by
+        (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+(* Memory address extension depends on the declared layout, not on the
+   current value; bounds and current readability are established separately. *)
+Theorem place_ptr_rel_memory_step:
+  !cenv cx s id path w loc ty tv sb k ety etv.
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    mem_step_offset tv sb = SOME (k,etv) /\
+    evaluate_type (get_tenv cx) ety = SOME etv ==>
+    place_ptr_rel cenv cx s (PlaceR (MemoryPlace id (path ++ [sb])))
+      (w + n2w k) loc (Type ety)
+Proof
+  rpt gen_tac >> simp[place_ptr_rel_def] >> strip_tac >> gvs[] >>
+  drule_all mem_path_offset_snoc >> strip_tac >>
+  simp[place_ptr_rel_def, AC WORD_ADD_ASSOC WORD_ADD_COMM,
+       word_add_n2w, ADD_COMM]
+QED
+
+Theorem extend_place_memory_live_result:
+  !cx id path sb es entry v tv.
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    subscripts_type entry.type path = SOME tv ==>
+    extend_place cx (PlaceR (MemoryPlace id path)) sb es =
+      (case evaluate_subscripts tv v [sb] of
+       | INL w => (INL (PlaceR (MemoryPlace id (path ++ [sb]))),es)
+       | INR err => (INR (Error err),es))
+Proof
+  rpt strip_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       extend_memory_place_def] >>
+  Cases_on `evaluate_subscripts tv v [sb]` >>
+  simp[lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def]
+QED
+
+Theorem place_readable_memory_live:
+  !cx es id path entry v.
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v ==>
+    place_readable cx es (PlaceR (MemoryPlace id path))
+Proof
+  rpt strip_tac >>
+  simp[place_readable_def, read_place_def, get_scopes_def, bind_def,
+       lift_option_type_def, lift_sum_def, return_def, read_memory_path_def]
+QED
+
+(* Success half of the memory suffix: assemble the source live-path step,
+   declared address offset, and machine read-only frame at one boundary. *)
+Theorem target_post_memory_step:
+  !ctx func cenv cx es sa sm sb s0 es2 es3 id path ty tv
+   rb t u entry v sub k ety etv dst w pv'.
+    target_post ctx func cenv cx es sa sm s0 es2
+      (PlaceR (MemoryPlace id path)) (Type ty) rb t /\
+    lookup_scopes id es2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v /\
+    extend_place cx (PlaceR (MemoryPlace id path)) sub es2 = (INL pv',es3) /\
+    evaluate_type (get_tenv cx) ty = SOME tv /\
+    mem_step_offset tv sub = SOME (k,etv) /\
+    evaluate_type (get_tenv cx) ety = SOME etv /\
+    eval_operand (FST rb) t = SOME w /\
+    eval_operand dst u = SOME (w + n2w k) /\
+    stmt_state_rel ctx func cenv cx es2 u /\
+    local_ptrs_reserved cenv sm /\
+    sa.cs_next_var <= sm.cs_next_var /\
+    (!x. dst = Var x ==> not_fresh_at sb x) /\
+    (!x z. not_fresh_at sm x /\ lookup_var x t = SOME z ==>
+           lookup_var x u = SOME z) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP u.vs_allocas aid = SOME b) /\
+    u.vs_memory = t.vs_memory ==>
+    target_post ctx func cenv cx es sa sb s0 es3 pv' (Type ety)
+      (dst,SOME LocMemory,SOME (ValPT ety)) u
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+  `place_ptr_rel cenv cx t (PlaceR (MemoryPlace id path)) w
+      (SOME LocMemory) (Type ty)` by
+    gvs[target_post_def, place_ptr_rel_def] >>
+  `place_ptr_rel cenv cx t
+     (PlaceR (MemoryPlace id (path ++ [sub]))) (w + n2w k)
+     (SOME LocMemory) (Type ety)` by
+    (irule place_ptr_rel_memory_step >> goal_assum (drule_at Any) >> simp[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `place_ptr_rel cenv cx u
+     (PlaceR (MemoryPlace id (path ++ [sub]))) (w + n2w k)
+     (SOME LocMemory) (Type ety)` by
+    (irule place_ptr_rel_vars_frame >> qexistsl_tac [`t`, `sm`] >>
+     gvs[target_post_def]) >>
+  once_rewrite_tac[GSYM value_type_place_def] >>
+  drule_then irule target_post_suffix_frame >> simp[] >>
+  irule place_readable_memory_live >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem extend_place_memory_array_index:
+  !cx id path es entry et bd av i.
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL (ArrayV av) /\
+    subscripts_type entry.type path = SOME (ArrayTV et bd) /\
+    value_has_type (ArrayTV et bd) (ArrayV av) ==>
+    extend_place cx (PlaceR (MemoryPlace id path))
+      (ValueSubscript (IntV i)) es =
+    (if 0 <= i /\ Num i < array_length (ArrayTV et bd) av
+     then (INL (PlaceR (MemoryPlace id
+                  (path ++ [ValueSubscript (IntV i)]))),es)
+     else (INR (Error (RuntimeError "evaluate_subscripts array_index")),es))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all extend_place_memory_live_result >>
+  disch_then (qspecl_then [`cx`, `ValueSubscript (IntV i)`] mp_tac) >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[value_has_type_def, evaluate_subscripts_def, array_length_def,
+      array_index_def, oEL_THM] >>
+  rpt IF_CASES_TAC >> gvs[] >>
+  qmatch_goalsub_rename_tac `ALOOKUP sparse (Num i)` >>
+  Cases_on `ALOOKUP sparse (Num i)` >> gvs[]
 QED
