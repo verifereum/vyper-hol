@@ -33,6 +33,7 @@
 
 Theory exprSimAttributeFields
 Ancestors
+  exprSimHypsDefs
   storageDecodeMemory
   list rich_list finite_map pair
   exprSimHyps compileEnv valueEncoding

@@ -22,8 +22,9 @@
 
 Theory stmtSimDeclStore
 Ancestors
+  exprSimProps
   list rich_list finite_map pred_set
-  fragExec localPtrsProps venomMemDefs loweringSlice exprSim
+  fragExec localPtrsProps venomMemDefs loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProps
   vyperInterpreter vyperState vyperValue vyperTyping
@@ -46,7 +47,7 @@ Theorem stmt_state_rel_declare_memory:
     t.vs_outcomes = s.vs_outcomes /\ t.vs_requests = s.vs_requests /\
     t.vs_immutables = s.vs_immutables /\
     t.vs_pending_deletions = s.vs_pending_deletions /\
-    t.vs_data_section = s.vs_data_section /\
+    t.vs_data_section = s.vs_data_section /\ t.vs_labels = s.vs_labels /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t /\
     (!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
          lookup_var q t = lookup_var q s) /\
@@ -116,6 +117,13 @@ Proof
      `local_region cenv (sc :: rest) s j b len` by
        (gvs[local_region_def] >> metis_tac[]) >>
      metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule exprLoweringPropsTheory.immutable_base_zero_frame >> qexists_tac `s` >>
+     rpt conj_tac
+     >~ [`lookup_var _ t = lookup_var _ s`]
+     >- (rpt strip_tac >> qpat_x_assum `!q. q = p \/ _ ==> _` irule >>
+         simp[not_local_ptr_def]) >>
+     fs[stmt_state_rel_def]) >>
   fs[stmt_state_rel_def] >> metis_tac[]
 QED
 

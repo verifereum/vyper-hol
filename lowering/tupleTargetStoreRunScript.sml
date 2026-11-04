@@ -4,7 +4,7 @@ Ancestors
   tupleAssignParts
   tupleTargetStoreProps tupleLocalStoreRun stmtSimAssignStorage
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
-  storageStoreFrame stmtSim stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
+  storageStoreFrame stmtSimDefs stmtSimProps stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
   emitHelper emitHelperProps compileEnv list finite_map
   tupleMemoryFrame tupleMemoryLayout valueEncoding vyperTyping stmtLoweringMono

@@ -568,7 +568,7 @@ Proof
   gvs[exec_pure1_def] >>
   gvs[exec_pure2_def] >>
   gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_read0_def, exec_gas_def, exec_read1_def] >>
   gvs[exec_write2_def, exec_alloca_def] >>
   gvs[exec_ext_call_def] >>
   gvs[exec_delegatecall_def] >>
@@ -616,7 +616,7 @@ Proof
   gvs[exec_pure1_def] >>
   gvs[exec_pure2_def] >>
   gvs[exec_pure3_def] >>
-  gvs[exec_read0_def, exec_read1_def] >>
+  gvs[exec_read0_def, exec_gas_def, exec_read1_def] >>
   gvs[exec_write2_def, exec_alloca_def] >>
   gvs[exec_ext_call_def] >>
   gvs[exec_delegatecall_def] >>
@@ -2913,7 +2913,7 @@ local
 
   val exec_helper_defs = [
     exec_pure1_def, exec_pure2_def, exec_pure3_def,
-    exec_read0_def, exec_read1_def, exec_write2_def,
+    exec_read0_def, exec_gas_def, exec_read1_def, exec_write2_def,
     exec_alloca_def, exec_ext_call_def, exec_create_def,
     exec_delegatecall_def, LET_THM, AllCaseEqs()];
 

@@ -25,9 +25,14 @@
 
 Theory stmtSimForRange
 Ancestors
-  stmtSim stmtSimForParts stmtSimForLoop exprWordOperand
+  stmtSimProps
+  exprSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
+   stmtSimForParts stmtSimForLoop exprWordOperand
   list rich_list finite_map pred_set
-  fragExec localPtrsProps exprSim loweringSlice freshWrites
+  fragExec localPtrsProps  loweringSlice freshWrites
   vyperEvalExprPreservesScopesDom
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding
@@ -351,10 +356,9 @@ Proof
     (rpt strip_tac >> irule eval_operand_update_other_op >> metis_tac[]) >>
   `!s. (s = s1 \/ s = s2 \/ s = s3 \/ s = s4 \/ s = s5 \/ s = s6) ==>
        eval_operand op1 s = SOME a /\ eval_operand op2 s = SOME b` by
-    (rpt strip_tac >> qpat_x_assum `s = _` SUBST_ALL_TAC >>
-     qpat_assum `!x w s. MEM x _ ==> _` (fn th =>
-       simp[th, Abbr`s1`, Abbr`s2`, Abbr`s3`, Abbr`s4`, Abbr`s5`, Abbr`s6`]) >>
-     asm_rewrite_tac[]) >>
+    (rpt strip_tac >> first_x_assum SUBST1_TAC >>
+     simp[Abbr `s6`, Abbr `s5`, Abbr `s4`, Abbr `s3`, Abbr `s2`,
+          Abbr `s1`]) >>
   `eval_operand (Var rv) s2 = SOME (b - a) /\
    eval_operand (Var rv) s6 = SOME (b - a) /\
    eval_operand (Var g1) s3 = SOME (bool_to_word bad1) /\
@@ -364,8 +368,9 @@ Proof
     (gvs[markerTheory.Abbrev_def, ALL_DISTINCT, eval_operand_def,
          lookup_var_update_var]) >>
   `step_inst_base (mk_inst (i + 2) cmp [op1; op2] [g1]) s2 = OK s3` by
-    (simp[Abbr `s3`, Abbr `bad1`] >> Cases_on `cmp = SGT` >> gvs[] >>
-     FIRST [irule step_SGT, irule step_GT] >> metis_tac[]) >>
+    (simp[Abbr `s3`, Abbr `bad1`] >> Cases_on `cmp = SGT`
+     >- (gvs[] >> irule step_SGT >> metis_tac[]) >>
+     gvs[] >> irule step_GT >> metis_tac[]) >>
   `step_inst_base (mk_inst i ASSIGN [op1] [cv]) ee = OK s1` by
     simp[Abbr `s1`, step_ASSIGN_op] >>
   `step_inst_base (mk_inst (i + 1) SUB [op2; op1] [rv]) s1 = OK s2` by
@@ -761,12 +766,7 @@ Theorem reserved_fresh_not_local[local]:
     local_ptrs_reserved cenv st /\ st.cs_next_var <= n ==>
     not_local_ptr cenv scs (STRING #"%" (toString n))
 Proof
-  rw[not_local_ptr_def] >> strip_tac >>
-  fs[local_ptrs_reserved_def, not_fresh_at_def] >>
-  qpat_x_assum `!n1 n2 p sz1 sz2. _`
-    (qspecl_then [`name`, `name`, `STRING #"%" (toString n)`, `sz`, `sz`]
-       mp_tac) >>
-  simp[] >> qexists_tac `n` >> simp[]
+  metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_fresh]
 QED
 
 (* The operand-shape boundary used here does not need operator simulation. *)
@@ -832,6 +832,25 @@ Proof
   ONCE_REWRITE_TAC [INST_TYPE [beta |-> ``:value``]
                       expr_exit_INR_type] >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem range_expr_val_rel_int_operand[local]:
+  expr_val_rel cx t (IntV n) op s /\ is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME tv ==>
+  eval_operand op s = SOME (i2w n)
+Proof
+  rw[expr_val_rel_def] >>
+  first_x_assum (qspec_then `tv` mp_tac) >>
+  simp[typed_val_to_w256_word_value, word_value_def, val_to_w256_def]
+QED
+
+Theorem range_expr_post_int_operand[local]:
+  expr_post ctx func cenv cx e es sa sb s0 es' (IntV n) op s /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+  eval_operand op s = SOME (i2w n)
+Proof
+  rw[expr_post_def] >> drule_all range_expr_val_rel_int_operand >> simp[]
 QED
 
 (* Checked source endpoints may still lower to literal operands. The body
@@ -977,11 +996,7 @@ Resume compile_for_range_checked_frag_active[ends]:
   qpat_x_assum `IntV n1 = _`
     (SUBST_ALL_TAC o SYM o SIMP_RULE (srw_ss()) []) >>
   `eval_operand op1 t1 = SOME (i2w n1)` by
-    (qpat_x_assum `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-     TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     simp_tac (srw_ss ())
-       [typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+    (drule_all range_expr_post_int_operand >> simp[]) >>
   `stmt_state_rel ctx func cenv cx es1 t1` by fs[expr_post_def] >>
   qpat_x_assum `expr_sim _ _ _ _ _ e2 _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
@@ -1013,11 +1028,7 @@ Resume compile_for_range_checked_frag_active[alloca]:
      simp[]) >>
   `stmt_state_rel ctx func cenv cx es2 t2` by fs[expr_post_def] >>
   `eval_operand op2 t2 = SOME (i2w n2)` by
-    (qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
-     TRY (first_x_assum (qspec_then `tyv` mp_tac)) >>
-     simp_tac (srw_ss ())
-       [typed_val_to_w256_word_value, word_value_def, val_to_w256_def]) >>
+    (drule_all range_expr_post_int_operand >> simp[]) >>
   `!x w. not_fresh_at s1 x /\ lookup_var x t1 = SOME w ==>
          lookup_var x t2 = SOME w` by fs[expr_post_def] >>
   `eval_operand op1 t2 = SOME (i2w n1)` by
@@ -1176,11 +1187,8 @@ Resume compile_for_range_checked_frag_active[loop]:
      `not_local_ptr cenv (FEMPTY::scs) p` by
        (qpat_assum `p = _` SUBST1_TAC >> irule reserved_fresh_not_local >>
         qexists_tac `s2` >> simp[]) >>
-     fs[not_local_ptr_def] >> rpt strip_tac >>
-     `name <> id` by
-       (strip_tac >> qpat_x_assum `lookup_scopes _ (FEMPTY::_) = _` mp_tac >>
-        simp[lookup_scopes_def]) >>
-     metis_tac[]) >>
+     irule not_local_ptr_name_update >> qexistsl_tac [`cenv`, `id`] >> simp[] >>
+     qpat_assum `_ = cenv` (fn th => ONCE_REWRITE_TAC [SYM th]) >> simp[]) >>
   suspend "state"
 QED
 
@@ -1191,10 +1199,17 @@ Resume compile_for_range_checked_frag_active[state]:
   `stmt_state_rel ctx func cenv cx es2 cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_jump_to] >>
+     reverse conj_tac
+     >- (qx_gen_tac `q` >> strip_tac >>
+         `not_fresh_at s2 q` by metis_tac[local_ptrs_reserved_imm_base] >>
+         qpat_assum `!q. not_fresh_at s2 q ==> _`
+           (drule_then strip_assume_tac) >>
+         qpat_x_assum `!x. ~MEM x _ ==> _` drule >>
+         fs[lookup_var_def, jump_to_def]) >>
      qx_genl_tac [`nm`, `en`, `q`, `qsz`] >> strip_tac >>
      `not_fresh_at s2 q` by
        (qpat_x_assum `local_ptrs_reserved cenv s2`
-          (mp_tac o CONJUNCT2 o PURE_REWRITE_RULE [local_ptrs_reserved_def]) >>
+          (mp_tac o CONJUNCT1 o CONJUNCT2 o PURE_REWRITE_RULE [local_ptrs_reserved_def]) >>
         disch_then (qspecl_then [`nm`, `nm`, `q`, `qsz`, `qsz`] mp_tac) >>
         simp[]) >>
      qpat_assum `!q. not_fresh_at s2 q ==> _` (drule_then strip_assume_tac) >>

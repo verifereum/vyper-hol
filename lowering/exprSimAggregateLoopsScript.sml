@@ -17,10 +17,14 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
+  exprSimProps
+  exprSimHypsDefs
+  exprSimDefs
+  loweringPosts
   exprSimAggregateSource exprSimAggregateEncoding exprSimAggregateLayout exprLoweringProps
   localPtrsProps compileEnv valueEncoding valueEncodingProofs
   valueEncodingProps exprLowering vyperInterpreter vyperState
-  exprSimHyps exprSim fragExec exprSimAggregateChildren exprSimOps
+  exprSimHyps  fragExec exprSimAggregateChildren exprSimOps
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom
 
 Theorem aggregate_alloca_slice_excludes_local:
@@ -833,6 +837,7 @@ Resume aggregate_make_array_sim[header_suffix]:
            fs[stmt_state_rel_def, state_rel_def] >>
          drule_all local_ptrs_rel_alloca_disjoint >>
          simp[regions_disjoint_def] >> decide_tac)
+     >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.lookup_var_def]
      >- simp[immutableMemoryFrameTheory.immutable_mstore_capacity]
      >- simp_tac (srw_ss()) [venomStateTheory.mstore_def, venomStateTheory.write_memory_with_expansion_def, LET_THM]

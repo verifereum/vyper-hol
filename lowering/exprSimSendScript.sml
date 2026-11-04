@@ -35,8 +35,11 @@
 
 Theory exprSimSend
 Ancestors
+  exprSimHypsDefs
+  exprSimDefs exprSimStack
+  loweringPosts
   allocLimits
-  list pair vyperMisc fragExec loweringSlice exprSim exprSimHyps exprSimWordArgs
+  list pair vyperMisc fragExec loweringSlice  exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper compileEnv localPtrsProps valueEncoding
@@ -409,7 +412,8 @@ Proof
     vs_accounts := _; vs_transient := _; vs_logs := _;
     vs_pending_deletions := _; vs_returndata := _ |>` >>
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
-   s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars` by
+   s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars /\
+   s'.vs_labels = t.vs_labels` by
     (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
   irule frag_exec_run_inst_seq >>
   simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
@@ -428,6 +432,9 @@ Proof
          gvs[stmt_state_rel_def] >>
          rpt strip_tac >> qexists_tac `id` >>
          gvs[local_region_def, lookup_var_def]) >>
+      `immutable_base_zero cenv s'` by
+        (irule immutable_base_zero_frame >> qexists_tac `s` >>
+         fs[stmt_state_rel_def, lookup_var_def]) >>
       irule stmt_state_rel_allocas_frame >> simp[] >>
       qexistsl_tac [`es1`, `t`] >> simp[] >>
       qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;

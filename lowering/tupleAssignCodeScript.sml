@@ -1,7 +1,8 @@
 (* Target-independent tuple assignment code decomposition. *)
 Theory tupleAssignCode
 Ancestors
-  stmtSim stmtLowering exprLowering emitHelper compileEnv
+  loweringPosts
+  stmtSimDefs stmtSimProps stmtLowering exprLowering emitHelper compileEnv
   list rich_list
 Libs
   monadsyntax

@@ -44,7 +44,11 @@
 
 Theory loweringRuntimeCorrect
 Ancestors
-  list pair fragExec stmtSim bodySim bodySimMain loweringHalt stmtLoweringMono exprSim exprLoweringProps
+  stmtSimProps
+  stmtSimDefs
+  exprSimDefs
+  loweringPosts
+  list pair fragExec  bodySim bodySimMain loweringHalt stmtLoweringMono  exprLoweringProps
   compileEnv compileVyper moduleLowering stmtLowering
   e2eDefs supportedProgram vyperLoweringCorrect rawReturnHeader
   vyperTypeSelectedEntrySoundness vyperTypeSystem

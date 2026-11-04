@@ -48,9 +48,19 @@
 
 Theory bodySimStmtCases
 Ancestors
+  exprSimTopLevelProps
+  stmtSimBreak stmtSimContinue
+  stmtSimExpr
+  stmtSimSeqEnv
+  stmtSimPass
+  stmtSimProps
+  exprSimHypsDefs
+  stmtSimZero
+  stmtSimDefs
+  loweringPosts
   bodyAppendStorageFacts bodyExprPreFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
-  list finite_map bodySim allocLimits allocLimitsProps exprSim exprSimHyps exprLoweringProps stmtSim
+  list finite_map bodySim allocLimits allocLimitsProps exprSimHyps exprLoweringProps
   stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
@@ -2187,7 +2197,7 @@ Proof
          int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
   `?v0. read_storage_slot cx tr (n2w slot) tvt es = (INL v0, es)` by
-    (irule exprSimLeavesTheory.toplevel_storage_read_decodes >>
+    (irule exprSimTopLevelPropsTheory.toplevel_storage_read_decodes >>
      gvs[expr_sim_inv_def] >> metis_tac[]) >>
   drule_all eval_target_place_toplevel >> strip_tac >>
   `body_expr_ok cx e` by

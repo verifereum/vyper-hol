@@ -1,6 +1,7 @@
 (* Shared expression-call and body-precondition boundaries. *)
 Theory bodyExprPreFacts
 Ancestors
+  exprSimHypsDefs
   bodySim exprSimHyps supportedExprTraverse supportedExprs supportedDecls supportedStmts
   vyperTypeCallGraph vyperTypeCallStackSoundness
   vyperInterpreter vyperState compileEnv allocLimits

@@ -2,7 +2,7 @@ Theory convertScalarDispatch
 Ancestors
   convertScalarTyping convertScalarBytes convertScalarOutputs
   convertScalarDecimalFrag convertScalarFlags convertScalarProps
-  exprSimUnop exprSimConvert exprSimHyps exprSim
+  exprSimUnop exprSimConvert exprSimHyps exprSimDefs exprSimProps
   exprLowering compileEnv vyperValue vyperTyping vyperTypeSystem
   valueEncoding words integer_word arithmeticProps list
 

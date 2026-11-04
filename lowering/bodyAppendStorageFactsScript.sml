@@ -1,6 +1,7 @@
 (* Boundary facts for the supported storage/transient Append case. *)
 Theory bodyAppendStorageFacts
 Ancestors
+  exprSimHypsDefs
   bodySim supportedExprForms supportedTypes vyperValue vyperTypeSystem
   compileVyper compileEnv vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv

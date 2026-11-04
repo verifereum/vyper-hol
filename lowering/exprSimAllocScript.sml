@@ -180,7 +180,10 @@ Proof
       qexistsl_tac [`s`, `es`] >> simp[mstore_def] >>
       rpt strip_tac >> qexists_tac `id` >>
       fs[local_region_def, lookup_var_def]) >>
-  simp[mstore_def] >> metis_tac[]
+  conj_tac
+  >- (irule exprLoweringPropsTheory.immutable_base_zero_frame >>
+      qexists_tac `s` >> simp[mstore_def, lookup_var_def]) >>
+  simp[mstore_def] >> first_assum MATCH_ACCEPT_TAC
 QED
 
 (* Allocation preserves label operands as well as older registers. *)

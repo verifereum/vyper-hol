@@ -21,9 +21,11 @@
 
 Theory exprSimCopy
 Ancestors
+  exprSimProps
+  loweringPosts
   exprSimAlloc exprSimOps
   list finite_map
-  exprSim exprLowering compileEnv context vyperAST vyperInterpreter
+   exprLowering compileEnv context vyperAST vyperInterpreter
   vyperState valueEncoding
   fragExec localPtrsProps loweringSlice exprLoweringProps emitHelperProps
   exprSimStorageCopy immutableCopyExecution storageDecodeMemory
@@ -145,6 +147,11 @@ Proof
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >> simp[] >>
       metis_tac[copy_buffer_local_region_frame]) >>
+  conj_tac
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+      rpt strip_tac >>
+      `not_fresh_at st x` by metis_tac[local_ptrs_reserved_imm_base] >>
+      simp[]) >>
   metis_tac[]
 QED
 
@@ -1237,10 +1244,8 @@ Finalise unwrap_runtime_code_copy_sim
 (* An aggregate in code, in the constructor, given that the immutables
    region base is zero: ALLOCA a buffer, then per word ADD the base and
    ILOAD (an MLOAD) from the staged immutables region in memory, and
-   MSTORE into the buffer.  The constructor prologue sets the base to 0
-   (compile_fixed_region_with_id) and keeps the base variable reserved, so
-   the buffer's ALLOCA can't overwrite it.  unwrap_ctor_code_copy_sim gets
-   both from stmt_state_rel and local_ptrs_reserved once those carry them. *)
+   MSTORE into the buffer. stmt_state_rel supplies the zero base and
+   local_ptrs_reserved protects it from fresh allocation. *)
 Theorem unwrap_ctor_code_copy_base_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
@@ -1348,13 +1353,9 @@ QED
 
 Finalise unwrap_ctor_code_copy_base_sim
 
-(* An aggregate in code, in the constructor: an MLOAD from the immutables
-   buffer at its base variable plus the offset, per word.  Cheated: the
-   constructor's prologue sets the base variable to 0
-   (compile_fixed_region_with_id), but stmt_state_rel says nothing of the
-   base, so vv_post's offset can't be related to the memory the MLOAD
-   reads.  unwrap_ctor_immutable_word_sim, the one-word read, is cheated
-   for the same reason. *)
+(* Public constructor aggregate wrapper. The zero-base invariant is now
+   supplied by stmt_state_rel. Its remaining inherited admission concerns
+   composition with the checked base helper above and is owned separately. *)
 Theorem unwrap_ctor_code_copy_sim:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\

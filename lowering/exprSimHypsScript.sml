@@ -234,8 +234,12 @@
 
 Theory exprSimHyps
 Ancestors
-  list finite_map abiTypeBoundProps
-  exprSim exprCallBounds exprBopLowering exprLowering compileEnv
+  exprSimHypsDefs exprSimProps
+  exprSimDefs exprSimStack
+  gasContext
+  list finite_map
+  exprCallBounds exprBopLowering exprLowering compileEnv
+  abiTypeBoundProps
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   vyperTypeExprResult vyperTypeEvalSoundness vyperTypeBuiltins
@@ -252,34 +256,15 @@ Libs
 
 (* ===== The hypotheses ===== *)
 
-(* Every outcome still to consume has fewer than 2**256 bytes of return
-   data, which Venom's RETURNDATASIZE reads as a word, and every successful
-   one adopts accounts that are runtime well typed, as e2eDefs's
-   call_outcomes_ok asks of the initial ones.  The evaluator only drops
-   outcomes from the front (vyperEvalOutcomeSuffix), so this carries from
-   one operand to the next. *)
-Definition outcomes_accounts_typed_def:
-  outcomes_accounts_typed (oos : call_outcome list option) <=>
-    !os. oos = SOME os ==>
-         EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
-                     (oc.co_success ==>
-                      accounts_runtime_well_typed oc.co_accounts)) os
-End
+(* Every successful outcome still to consume adopts accounts that are
+   runtime well typed, as e2eDefs's call_outcomes_ok asks of the initial
+   ones.  The evaluator only drops outcomes from the front
+   (vyperEvalOutcomeSuffix), so this carries from one operand to the next. *)
 
 (* A local's popped history is typed at its paths, and every key is an index
    into a dynamic array: pop records the element it removes at
    path ++ [ValueSubscript (IntV i)] where path holds a DynArrayV
    (record_pop), and replace_popped keeps the keys. *)
-Definition popped_keys_indexed_def:
-  popped_keys_indexed (scs : scope list) <=>
-    EVERY (\sc. !id entry. FLOOKUP sc id = SOME entry ==>
-                 popped_history_typed entry.type entry.popped /\
-                 EVERY (\k. ?p i etv n.
-                             k = p ++ [ValueSubscript i] /\
-                             subscripts_type entry.type p =
-                               SOME (ArrayTV etv (Dynamic n)))
-                       (MAP FST entry.popped)) scs
-End
 
 (* The source takes external calls from the outcome oracle (state_rel's
    outcomes are SOME).  The storage conjuncts: every declared storage and
@@ -292,133 +277,34 @@ End
    name (env.bare_globals) is an immutable of the module being lowered, at
    an ImmutableLoc whose bytes end below 2 ** 256, as build_compile_env
    places a supported program's immutables (immutableLocationProps). *)
-Definition expr_sim_inv_def:
-  expr_sim_inv cenv cx env (es:evaluation_state) <=>
-    env_consistent env cx es /\ state_well_typed es /\
-    accounts_well_typed es.accounts /\
-    context_well_typed cx /\ functions_well_typed cx /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-             ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==>
-             cenv.ce_var_type id = SOME ty) /\
-    (!src fid ts ls mid i.
-       get_module_code cx src = SOME ts /\ lookup_flag fid ts = SOME ls /\
-       INDEX_OF mid ls = SOME i ==>
-       cenv.ce_flag_member_id (nsid_to_string (src, fid)) mid = i) /\
-    (!nsid m. FLOOKUP (get_tenv cx) nsid = SOME (FlagArgs m) ==>
-              cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
-    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
-    (!name fields.
-       FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
-       ALL_DISTINCT (MAP FST fields) /\
-       EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-                                     sz = type_memory_size tv) fields) /\
-    outcomes_accounts_typed es.outcomes /\
-    IS_SOME es.outcomes /\
-    contract_storage_well_formed cx es /\ storage_layout_safe cx /\
-    oracle_storage_ok cx es /\
-    popped_keys_indexed es.scopes /\
-    place_map_tables_agree_on_defined cenv env /\
-    (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
-               cenv.ce_hashmap_info nsid = NONE) /\
-    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
-       src = cenv.ce_module /\
-       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-             !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
-                  off + type_memory_size tv < dimword (:256))
-End
 
 (* The types whose values are word_values (loweringSlice): integers,
    decimals, booleans and flags.  address and bytesN values are BytesV. *)
-Definition word_value_type_def:
-  word_value_type t <=> is_numeric_type t \/ is_bool_type t \/ is_flag_type t
-End
 
 (* Every node of an expression has a type whose width, type_bits, is a
    whole number of bytes: of the integer types, those Vyper has.  The same
    recursion as int_calls_expr. *)
-Definition byte_widths_expr_def:
-  byte_widths_expr (Name t _) = (type_bits t MOD 8 = 0) /\
-  byte_widths_expr (TopLevelName t _) = (type_bits t MOD 8 = 0) /\
-  byte_widths_expr (FlagMember t _ _) = (type_bits t MOD 8 = 0) /\
-  byte_widths_expr (IfExp t c x y) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_expr c /\ byte_widths_expr x /\
-     byte_widths_expr y) /\
-  byte_widths_expr (Literal t _) = (type_bits t MOD 8 = 0) /\
-  byte_widths_expr (StructLit t _ kes) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_named_exprs kes) /\
-  byte_widths_expr (Subscript t x y) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_expr x /\ byte_widths_expr y) /\
-  byte_widths_expr (Attribute t x _) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_expr x) /\
-  byte_widths_expr (Builtin t _ es) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
-  byte_widths_expr (TypeBuiltin t _ _ es) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es) /\
-  byte_widths_expr (Pop t tgt) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_target tgt) /\
-  byte_widths_expr (Call t _ es dflt) =
-    (type_bits t MOD 8 = 0 /\ byte_widths_exprs es /\ byte_widths_opt dflt) /\
 
-  byte_widths_target (NameTarget _) = T /\
-  byte_widths_target (TopLevelNameTarget _) = T /\
-  byte_widths_target (SubscriptTarget tgt e) =
-    (byte_widths_target tgt /\ byte_widths_expr e) /\
-  byte_widths_target (AttributeTarget tgt _) = byte_widths_target tgt /\
-
-  byte_widths_exprs [] = T /\
-  byte_widths_exprs (e::es) = (byte_widths_expr e /\ byte_widths_exprs es) /\
-
-  byte_widths_opt NONE = T /\
-  byte_widths_opt (SOME e) = byte_widths_expr e /\
-
-  byte_widths_named_exprs [] = T /\
-  byte_widths_named_exprs ((_,e)::kes) =
-    (byte_widths_expr e /\ byte_widths_named_exprs kes)
-Termination
-  (* the measure names the container sizes with `list_size`/`option_size` over
-     `expr_size`, as in `vyperTypeCallGraph`, so that the obligations are
-     arithmetic over one set of size functions. *)
-  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
-                                      expr option + (identifier # expr) list).
-    case x of
-    | INL e => expr_size e
-    | INR (INL tgt) => base_assignment_target_size tgt
-    | INR (INR (INL es)) => list_size expr_size es
-    | INR (INR (INR (INL opt))) => option_size expr_size opt
-    | INR (INR (INR (INR kes))) =>
-        list_size (pair_size (list_size char_size) expr_size) kes)` >>
-  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
-  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def] >>
-  simp[expr_size_def, listTheory.list_size_def,
-       basicSizeTheory.pair_size_def, basicSizeTheory.option_size_def,
-       bnfPrelimsTheory.option_size_map, bnfPrelimsTheory.pair_size_map,
-       listTheory.list_size_map, SF ETA_ss]
-End
-
-Definition expr_sim_pre_def:
-  expr_sim_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
-    ~expr_has_evm_run e
-End
 
 (* expr_sim_pre without int_calls_expr e = []: the body simulation's
    (bodySim), where an operand may call an internal function.  Its calls
    are to the main module of a supported program, as supported_expr's
    are, so the callees' bodies keep storage well formed
    (bodyStoragePreservation). *)
-Definition expr_body_pre_def:
-  expr_body_pre cenv cx env e es <=>
-    expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
-    byte_widths_expr e /\ alloc_limits_expr cenv e /\
-    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
-    EVERY (\c. FST c = NONE /\
-               ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops)
-          (int_calls_expr e)
-End
+
+Theorem expr_sim_pre_gas_obs[simp]:
+  expr_sim_pre cenv cx env e (es with gas_obs := gs) <=>
+  expr_sim_pre cenv cx env e es
+Proof
+  simp[expr_sim_pre_def]
+QED
+
+Theorem expr_body_pre_gas_obs[simp]:
+  expr_body_pre cenv cx env e (es with gas_obs := gs) <=>
+  expr_body_pre cenv cx env e es
+Proof
+  simp[expr_body_pre_def]
+QED
 
 Theorem expr_sim_pre_body:
   !cenv cx env e es.
@@ -435,27 +321,11 @@ Proof
   simp[expr_sim_pre_body]
 QED
 
-Definition expr_sim_ok_def:
-  expr_sim_ok cenv e <=>
-    !ctx func cx env ty es.
-      expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
-End
 
-Definition expr_vv_ok_def:
-  expr_vv_ok cenv e <=>
-    !ctx func cx env ty es.
-      expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
-End
 
 (* The induction predicate: both judgments, so a case can use whichever an
    operand's lowering needs. *)
-Definition expr_ok_def:
-  expr_ok cenv e <=> expr_sim_ok cenv e /\ expr_vv_ok cenv e
-End
 
-Definition expr_sim_below_def:
-  expr_sim_below cenv n <=> !e. expr_size e < n ==> expr_ok cenv e
-End
 
 (* The judgments a shared case lemma takes of its operands and concludes of
    its expression: expr_sim and expr_vv_sim at one ctx, func and cx, at
@@ -465,52 +335,17 @@ End
    induction predicate; without, what the body simulation's body_expr_ok
    gives in a frame of the lowered program.  So one case lemma serves
    both. *)
-Definition expr_sim_case_def:
-  expr_sim_case nocalls ctx func cenv cx e <=>
-    !env ty es.
-      expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
-      expr_sim ctx func cenv cx ty e es
-End
 
-Definition expr_vv_case_def:
-  expr_vv_case nocalls ctx func cenv cx e <=>
-    !env ty es.
-      expr_body_pre cenv cx env e es /\ (nocalls ==> int_calls_expr e = []) ==>
-      expr_vv_sim ctx func cenv cx ty e es
-End
 
 (* The operands of an expression, evaluated and read in order, as
    evaluate_ind gives their judgments: each one's if the ones before it can
    evaluate (bodySim's body_exprs_ok). *)
-Definition exprs_case_def:
-  exprs_case nocalls ctx func cenv cx [] = T /\
-  exprs_case nocalls ctx func cenv cx (e::es) =
-    (expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e /\
-     ((?s tv t s1 v t1. eval_expr cx e s = (INL tv, t) /\
-                        read_result cx tv s1 = (INL v, t1)) ==>
-      exprs_case nocalls ctx func cenv cx es))
-End
 
 (* AddMod, MulMod and PowMod256 applied to names: compile_expr lowers these
    itself (compile_addmod_names, ...), not through
    compile_builtin_dispatch. *)
-Definition names_builtin_def:
-  (names_builtin AddMod [Name _ _; Name _ _; Name _ _] <=> T) /\
-  (names_builtin MulMod [Name _ _; Name _ _; Name _ _] <=> T) /\
-  (names_builtin PowMod256 [Name _ _; Name _ _] <=> T) /\
-  (names_builtin _ _ <=> F)
-End
 
-Definition builtin_sim_ok_def:
-  builtin_sim_ok cenv ann bi args <=>
-    ~names_builtin bi args ==> expr_ok cenv (Builtin ann bi args)
-End
 
-Definition type_builtin_sim_ok_def:
-  type_builtin_sim_ok cenv ann tb t args <=>
-    expr_ok cenv (TypeBuiltin ann tb t args)
-End
 
 (* ===== The induction hypothesis ===== *)
 
@@ -852,6 +687,22 @@ Proof
   metis_tac[expr_body_pre_vv_res_ok, expr_sim_pre_body_pre]
 QED
 
+Theorem expr_body_pre_gas_admissible:
+  expr_body_pre cenv cx env e es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]
+QED
+
+Theorem expr_body_pre_vv_gas_admissible:
+  expr_body_pre cenv cx env e es ==>
+  gas_admissible (eval_expr cx e) expr_vv_res_ok es
+Proof
+  rw[gas_admissible_def] >>
+  metis_tac[expr_body_pre_gas_obs, expr_body_pre_vv_res_ok]
+QED
+
 Theorem word_value_type_typed:
   !t tenv tyv x.
     word_value_type t /\ evaluate_type tenv t = SOME tyv /\
@@ -935,7 +786,8 @@ Theorem expr_sim_pre_builtin_arg:
     expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
+     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
   drule_all alloc_limits_exprs_mem >>
   gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >> metis_tac[]
@@ -977,7 +829,8 @@ Theorem expr_body_pre_builtin_arg:
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
@@ -1136,40 +989,9 @@ Proof
   metis_tac[expr_body_pre_copy_ok, expr_sim_pre_body_pre]
 QED
 
-(* A form lowered to a StackValue, with only values as results: expr_ok
-   from expr_sim_ok (exprSim's expr_vv_sim_stack). *)
-Theorem expr_ok_stack:
-  !cenv e.
-    expr_sim_ok cenv e /\
-    (!ty sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op, sb)) /\
-    (!cx es tv es'. eval_expr cx e es = (INL tv, es') ==> ?v. tv = Value v) ==>
-    expr_ok cenv e
-Proof
-  rw[expr_ok_def, expr_vv_ok_def] >> irule expr_vv_sim_stack >>
-  gvs[expr_sim_ok_def] >> metis_tac[]
-QED
 
-Theorem as_stack_val_stack:
-  !ty p. ?op st. as_stack_val ty p = (StackValue ty op, st)
-Proof
-  Cases_on `p` >> simp[as_stack_val_def]
-QED
 
-Theorem eval_expr_builtin_value:
-  !cx ann bi args es tv es'.
-    eval_expr cx (Builtin ann bi args) es = (INL tv, es') ==> ?v. tv = Value v
-Proof
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, return_def, COND_RATOR] >>
-  rw[] >> gvs[AllCaseEqs()]
-QED
 
-Theorem eval_expr_literal_value:
-  !cx ann l es tv es'.
-    eval_expr cx (Literal ann l) es = (INL tv, es') ==> ?v. tv = Value v
-Proof
-  simp[Once evaluate_def, return_def]
-QED
 
 (* ===== The judgments of the shared case lemmas ===== *)
 

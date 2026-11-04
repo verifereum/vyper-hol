@@ -1,7 +1,9 @@
 (* Dynamic-source conversion simulation before the exact source-exemption lift. *)
 Theory exprSimConvertFromBytes
 Ancestors
-  exprSimConvert exprSimHyps exprSim exprLowering compileEnv
+  exprSimHypsDefs
+  loweringPosts
+  exprSimConvert exprSimHyps exprSimDefs exprSimProps exprLowering compileEnv
   exprSimBuffer valueEncoding valueEncodingProofs
   vyperTypeSystem vyperValueOperation vyperValue vyperInterpreter
   fragExec freshWrites loweringSlice venomExecSemantics venomState

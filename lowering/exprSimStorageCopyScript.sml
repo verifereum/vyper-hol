@@ -31,7 +31,7 @@
 Theory exprSimStorageCopy
 Ancestors
   list rich_list finite_map pred_set valueEncodingProps
-  fragExec localPtrsProps exprSim loweringSlice
+  fragExec localPtrsProps  loweringSlice
   exprLowering emitHelper emitHelperProps exprLoweringProps
   context compileEnv moduleLoweringProps
   venomExecSemantics venomInst venomState

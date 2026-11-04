@@ -18,7 +18,9 @@
 
 Theory bodySimLog
 Ancestors
-  list bodySim bodySimStmtCases bodyExprPreFacts stmtSimLog stmtSim exprSim exprSimHyps
+  exprSimHypsDefs
+  list bodySim bodySimStmtCases stmtSimLog exprSimHyps
+  bodyExprPreFacts stmtSimDefs stmtSimProps exprSimDefs exprSimProps
   compileEnv compileVyper supportedStmts supportedDecls supportedTypes
   supportedExprs supportedExprTraverse supportedStmtTraverse vyperEvent vyperInterpreter
   vyperState vyperTypeSystem supportedProgram supportedNames vyperContext

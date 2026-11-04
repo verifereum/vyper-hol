@@ -14,11 +14,13 @@
  *)
 Theory exprSimUint2Str
 Ancestors
+  exprSimHypsDefs
+  loweringPosts
   arithmetic list ASCIInumbers numposrep logroot
   exprSimHyps allocLimits vyperTypeSystem compileEnv
   valueEncodingProps valueEncodingProofs venomExecSemantics byte words
   builtinStrings emitHelper fragExec exprSimLiteralBuffer immutableMemoryFrame
-  exprSim exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
+  exprSimDefs exprSimProps exprSimWordArgs exprSimOps exprSimHash exprSimCalldataSlice exprSimAlloc
 Libs
   monadsyntax
 
