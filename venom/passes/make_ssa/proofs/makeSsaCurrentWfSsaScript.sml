@@ -204,6 +204,30 @@ Proof
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
+Theorem current_wf_path_annotation_origin:
+  !path E v. current_path_env A E path v = E v \/
+    ?l k. MEM l path /\ k < LENGTH (A l) /\
+      MEM (current_path_env A E path v,v) (EL k (A l))
+Proof
+  Induct >> simp[current_path_env_def] >> rpt gen_tac >>
+  first_x_assum (qspecl_then [`current_advance_annotations A h E`, `v`] mp_tac) >>
+  strip_tac
+  >- (qspec_then `FLAT (A h)` (qspecl_then [`E`, `v`] mp_tac) current_wf_fold_origin >>
+      fs[current_advance_annotations_def, MEM_FLAT, MEM_EL] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem current_wf_event_entry_origin:
+  current_event_path A tree E ev ==>
+  ?path. current_tree_ancestor_path tree (current_event_label ev) path /\
+    (current_event_entry_env ev v = E v \/
+     ?l k. MEM l path /\ k < LENGTH (A l) /\
+       MEM (current_event_entry_env ev v,v) (EL k (A l)))
+Proof
+  strip_tac >> fs[current_event_path_def] >> qexists_tac `path` >> simp[] >>
+  metis_tac[current_wf_path_annotation_origin]
+QED
+
 Theorem current_wf_path_last_edge[local]:
   !pre p target. is_fn_path fn (pre ++ [p;target]) ==>
     is_fn_path fn (pre ++ [p]) /\ fn_cfg_edge fn p target
