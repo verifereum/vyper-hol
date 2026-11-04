@@ -5,6 +5,7 @@ Ancestors
   words finite_map combin vyperValue targetSubscriptSim
   emitHelperProps emitHelper exprLoweringProps venomExecSemantics venomState venomInst
   fragExec vyperInterpreter vyperContext vyperState vyperStorageBackend exprSimHyps
+  calleeTransport
 
 Theorem frag_exec_refutation_probe:
   !ctx sa sb P Q R fn s.
@@ -3243,4 +3244,74 @@ Proof
   simp[probe_word_final_state_def, sstore_def, probe_word_copied_runtime_frame,
        jump_to_def, probe_word_load_exit_state_def, update_var_def,
        probe_word_loaded_runtime_frame, probe_word_entry_runtime_frame]
+QED
+
+Theorem probe_word_function_entry:
+  ~NULL probe_word_function.fn_blocks /\
+  (HD probe_word_function.fn_blocks).bb_label = "entry"
+Proof
+  EVAL_TAC
+QED
+
+Theorem probe_word_setup_exists:
+  !args s. ?cs. setup_callee probe_word_function args s = SOME cs
+Proof
+  simp[setup_callee_def, probe_word_function_entry]
+QED
+
+Theorem probe_word_setup_observations:
+  !args s cs.
+    setup_callee probe_word_function args s = SOME cs ==>
+    cs.vs_current_bb = "entry" /\ ~cs.vs_halted /\
+    cs.vs_allocas = FEMPTY /\ cs.vs_alloca_next = s.vs_alloca_next /\
+    contract_storage cs = contract_storage s
+Proof
+  simp[setup_callee_def, probe_word_function_entry] >>
+  rpt strip_tac >> simp[contract_storage_def]
+QED
+
+Theorem probe_word_invoke:
+  !name ctx ops s args cs fuel id out.
+    lookup_function name ctx.ctx_functions = SOME probe_word_function /\
+    eval_operands ops s = SOME args /\
+    s.vs_alloca_next + 128 <= dimword (:256) /\
+    (sload 3w s = 0w \/ sload 3w s = 1w) /\
+    setup_callee probe_word_function args s = SOME cs ==>
+    step_inst ((if sload 3w s = 0w then 11 else 19) + fuel) ctx
+      (mk_inst id INVOKE (Label name :: ops) [out]) s =
+    OK (update_var out 0w
+      (merge_callee_state s (probe_word_final_state cs)))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule probe_word_setup_observations >> strip_tac >>
+  `sload 3w cs = sload 3w s` by simp[sload_def] >>
+  `run_blocks ((if sload 3w s = 0w then 11 else 19) + fuel)
+      ctx probe_word_function cs =
+    IntRet <| iret_values := [0w]; iret_adopt_fmp := NONE |>
+      (probe_word_final_state cs)` by
+    (qspecl_then [`cs`, `fuel`, `ctx`] mp_tac probe_word_run_function >> simp[]) >>
+  gvs[] >>
+  simp[Once step_inst_def, decode_invoke_def, bind_outputs_def, adopt_return_fmp_def]
+QED
+
+Theorem probe_word_invoke_caller_frame:
+  !s cs out.
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_allocas =
+      s.vs_allocas /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_alloca_next =
+      s.vs_alloca_next /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_current_bb =
+      s.vs_current_bb /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_inst_idx =
+      s.vs_inst_idx /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_fmp =
+      s.vs_fmp /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_call_entry_fmp =
+      s.vs_call_entry_fmp /\
+    (update_var out 0w (merge_callee_state s (probe_word_final_state cs))).vs_return_pc_token =
+      s.vs_return_pc_token /\
+    (!v. lookup_var v (update_var out 0w (merge_callee_state s (probe_word_final_state cs))) =
+      lookup_var v (update_var out 0w s))
+Proof
+  simp[update_var_def, lookup_var_def, merge_callee_local_fields]
 QED
