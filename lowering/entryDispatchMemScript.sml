@@ -359,3 +359,160 @@ Resume compile_selector_checks_mem_safe[miss_cont]:
   asm_rewrite_tac [selector_hit_def] >> BETA_TAC >> simp[]
 QED
 Finalise compile_selector_checks_mem_safe
+
+Theorem linear_dispatch_decompose[local]:
+  compile_selector_dispatch_linear sels fallback st = ((), st') ==>
+  ?cds small cond dispatch raw mid a1 a2 a3 a4 a5 a6 a7 a8 a9 old.
+    emit_op CALLDATASIZE [] st = (cds,a1) /\
+    emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+    emit_op ISZERO [small] a2 = (cond,a3) /\
+    fresh_label "dispatch" a3 = (dispatch,a4) /\
+    emit_inst JNZ [cond; Label dispatch; Label fallback] [] a4 = ((),a5) /\
+    new_block dispatch a5 = (old,a6) /\
+    emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+    emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+    compile_selector_checks mid sels a8 = ((),a9) /\
+    emit_inst JMP [Label fallback] [] a9 = ((),st')
+Proof
+  simp[compile_selector_dispatch_linear_def, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  pairarg_tac >> simp[] >> strip_tac >>
+  rpt (goal_assum (drule_at Any))
+QED
+
+Theorem linear_size_prefix_code[local]:
+  emit_op CALLDATASIZE [] st = (cds,a1) /\
+  emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+  emit_op ISZERO [small] a2 = (cond,a3) /\
+  fresh_label "dispatch" a3 = (dispatch,a4) /\
+  emit_inst JNZ [cond; Label dispatch; Label fallback] [] a4 = ((),a5) /\
+  new_block dispatch a5 = (old,a6) /\ fn_has_code st a6 fn ==>
+  lookup_block st.cs_current_bb fn.fn_blocks = SOME
+    <| bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts ++
+       emitted_insts st a3 ++
+       [mk_inst (st.cs_next_id + 3) JNZ
+          [cond; Label dispatch; Label fallback] []] |> /\
+  emitted_insts st a3 =
+    [mk_inst st.cs_next_id CALLDATASIZE []
+       [STRING #"%" (toString st.cs_next_var)];
+     mk_inst (st.cs_next_id + 1) LT [cds; Lit 4w]
+       [STRING #"%" (toString (st.cs_next_var + 1))];
+     mk_inst (st.cs_next_id + 2) ISZERO [small]
+       [STRING #"%" (toString (st.cs_next_var + 2))]] /\
+  LENGTH (emitted_insts st a3) = 3 /\
+  a3.cs_current_bb = st.cs_current_bb /\
+  a3.cs_current_insts = st.cs_current_insts ++ emitted_insts st a3 /\
+  a3.cs_next_var = st.cs_next_var + 3 /\
+  a3.cs_next_id = st.cs_next_id + 3 /\
+  a6.cs_current_bb = dispatch /\ a6.cs_current_insts = [] /\
+  a6.cs_next_var = a3.cs_next_var /\ a6.cs_next_id = a3.cs_next_id + 1
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  `fn_has_code a5 a6 fn` by
+    (irule fn_has_code_mid >> reverse conj_tac
+     >- (qexistsl_tac [`a6`, `st`] >> simp[cs_extends_refl] >>
+         metis_tac[cs_extends_trans]) >> simp[]) >>
+  drule_all fn_has_code_new_block >> strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  imp_res_tac emit_inst_extends >> imp_res_tac fresh_label_props >>
+  imp_res_tac new_block_props >>
+  `emitted_insts st a3 = emitted_insts st a1 ++
+     emitted_insts a1 a2 ++ emitted_insts a2 a3` by
+    (simp[SimpLHS, emitted_insts_def, APPEND_ASSOC,
+          rich_listTheory.DROP_LENGTH_APPEND] >> simp[]) >>
+  fs[same_blocks_def] >> simp[APPEND_ASSOC]
+QED
+
+Theorem linear_method_prefix_code[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) ==>
+  emitted_insts a6 a8 =
+    [mk_inst a6.cs_next_id CALLDATALOAD [Lit 0w]
+       [STRING #"%" (toString a6.cs_next_var)];
+     mk_inst (a6.cs_next_id + 1) SHR [Lit 224w; raw]
+       [STRING #"%" (toString (a6.cs_next_var + 1))]] /\
+  a8.cs_current_bb = a6.cs_current_bb /\
+  a8.cs_current_insts = a6.cs_current_insts ++ emitted_insts a6 a8 /\
+  a8.cs_next_var = a6.cs_next_var + 2 /\
+  a8.cs_next_id = a6.cs_next_id + 2 /\
+  mid = Var (STRING #"%" (toString (a6.cs_next_var + 1)))
+Proof
+  strip_tac >> imp_res_tac emitted_insts_emit_op >>
+  imp_res_tac emit_op_extends >>
+  `emitted_insts a6 a8 = emitted_insts a6 a7 ++ emitted_insts a7 a8` by
+    (irule emitted_insts_append >> simp[]) >>
+  fs[same_blocks_def] >> simp[APPEND_ASSOC]
+QED
+
+Theorem linear_fallback_code[local]:
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a9 st' fn ==>
+  ?bb. lookup_block a9.cs_current_bb fn.fn_blocks = SOME bb /\
+       get_instruction bb (LENGTH a9.cs_current_insts) =
+         SOME (mk_inst a9.cs_next_id JMP [Label fallback] [])
+Proof
+  strip_tac >> imp_res_tac emit_inst_extends >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qexists_tac `bb` >> simp[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
+Theorem linear_dispatch_tail_slices[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+  compile_selector_checks mid sels a8 = ((),a9) /\
+  emit_inst JMP [Label fallback] [] a9 = ((),st') /\
+  fn_has_code a6 st' fn ==>
+  fn_has_code a6 a8 fn /\ fn_has_code a8 a9 fn /\
+  fn_has_code a9 st' fn /\
+  a8.cs_next_var <= a9.cs_next_var /\
+  st'.cs_next_var = a9.cs_next_var
+Proof
+  strip_tac >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_emit_helpers) >>
+  imp_res_tac (SRULE [cs_appends_def] compile_selector_checks_appends) >>
+  imp_res_tac (SRULE [cs_appends_def] cs_appends_prims) >>
+  `cs_extends a6 a8 /\ cs_extends a8 st'` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code a6 a8 fn /\ fn_has_code a8 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  `fn_has_code a8 a9 fn /\ fn_has_code a9 st' fn` by
+    metis_tac[fn_has_code_split] >>
+  drule compile_selector_checks_next_var >>
+  imp_res_tac emit_inst_extends >> simp[]
+QED
+
+Theorem linear_method_entry_no_phi[local]:
+  emit_op CALLDATALOAD [Lit 0w] a6 = (raw,a7) /\
+  emit_op SHR [Lit 224w; raw] a7 = (mid,a8) /\
+  a6.cs_current_insts = [] /\ fn_has_code a6 a8 fn ==>
+  ?bb. lookup_block a6.cs_current_bb fn.fn_blocks = SOME bb /\
+       (!t. eval_phis t bb.bb_instructions = OK t) /\
+       phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule_all linear_method_prefix_code >> strip_tac >>
+  gvs[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
+
+Theorem linear_size_entry_no_phi[local]:
+  emit_op CALLDATASIZE [] st = (cds,a1) /\
+  emit_op LT [cds; Lit 4w] a1 = (small,a2) /\
+  emit_op ISZERO [small] a2 = (cond,a3) /\
+  fresh_label "dispatch" a3 = (dispatch,a4) /\
+  emit_inst JNZ [cond; Label dispatch; Label fallback] [] a4 = ((),a5) /\
+  new_block dispatch a5 = (old,a6) /\ fn_has_code st a6 fn /\
+  st.cs_current_insts = [] ==>
+  ?bb. lookup_block st.cs_current_bb fn.fn_blocks = SOME bb /\
+       (!t. eval_phis t bb.bb_instructions = OK t) /\
+       phi_prefix_length bb.bb_instructions = 0
+Proof
+  strip_tac >> drule_all linear_size_prefix_code >> strip_tac >>
+  goal_assum (drule_at Any) >>
+  simp[eval_phis_def, phi_prefix_length_def, mk_inst_def]
+QED
