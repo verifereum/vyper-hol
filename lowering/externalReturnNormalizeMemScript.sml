@@ -3,6 +3,8 @@ Ancestors
   typedCopyAgreement context compileEnv emitHelper fragExecMem instMemFrontier
   venomExecSemantics venomState venomInst exprLoweringProps words exprSim
   vfmConstants externalReturnBounds valueEncoding vyperTypeSystem vyperValue
+  exprSimBufferStore exprSimLiteralBuffer allocaFootprint
+  exprSimOperands abiCallerAllocation
 
 Theorem typed_copy_word_mem_ok:
   is_word_type dst_ty /\
@@ -134,4 +136,62 @@ Proof
   simp[] >> irule run_inst_seq_mem_ok_every >>
   simp[] >> rpt strip_tac >> irule below_frontier_no_ranges >>
   simp[mk_inst_def]
+QED
+
+Theorem store_bytestring_mem_ok[local]:
+  compile_store_bytestring src dst sa = ((),sb) /\
+  eval_operand src s = SOME p /\ eval_operand dst s = SOME d /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  mload (w2n p) s = n2w len /\
+  32 + 32 * word_size len < dimword (:256) /\
+  w2n p + (32 + 32 * word_size len) <= s.vs_alloca_next /\
+  w2n d + (32 + 32 * word_size len) <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [compile_store_bytestring_def, comp_bind_def, LET_THM] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+  rename1 `compile_bytestring_copy_len src sa = (out,mid)` >>
+  drule_all buffer_copy_len_run >> strip_tac >>
+  drule buffer_copy_len_shape >> strip_tac >>
+  drule emit_void_extends >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa mid ++ emitted_insts mid sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sa mid) s` by
+    (irule bytestring_copy_len_mem_ok >> goal_assum (drule_at Any) >> simp[]) >>
+  simp[] >> irule run_inst_seq_mem_ok_append >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  `q.vs_alloca_next = s.vs_alloca_next` by
+    (qpat_x_assum `q with vs_vars := _ = s`
+      (mp_tac o AP_TERM ``\z. z.vs_alloca_next``) >> simp[]) >>
+  `eval_operand src q = SOME p` by
+    (`eval_operand src q = eval_operand src s` by
+      (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  `eval_operand dst q = SOME d` by
+    (`eval_operand dst q = eval_operand dst s` by
+      (irule literal_operand_frame >> simp[] >> qexists_tac `sa` >> simp[]) >> simp[]) >>
+  drule emit_mcopy_mem_ok >> disch_then irule >> simp[]
+QED
+
+(* A normalization site comes after the source expression's sites.  Its
+   recorded row may be reused; no global freshness assumption is needed. *)
+Theorem normalize_alloca_source_separate[local]:
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at ce cx ty sa sb es v src s /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  0 < val_footprint tv v /\ eval_operand src s = SOME p /\
+  MEM inst (fn_insts func) /\ inst.inst_outputs = [x] /\
+  not_local_ptr ce es.scopes x /\ sb.cs_next_id <= inst.inst_id /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+  w2n p + val_footprint tv v <= b \/ b + sz <= w2n p
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+  >- (`alloca_inv s` by fs[stmt_state_rel_def] >>
+      `aid <> inst.inst_id` by decide_tac >>
+      drule_all abi_caller_allocation_separate >> decide_tac) >>
+  drule_all alloca_clear_of_locals >> decide_tac
 QED
