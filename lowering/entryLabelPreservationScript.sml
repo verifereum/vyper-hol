@@ -2,18 +2,15 @@
 Theory entryLabelPreservation
 Ancestors
   loweringShapeDefs loweringShapeProps compileEnv fragExec abiDecoderAppend
-  abiEncoder list
+  abiEncoder emitHelper list
 
 Theorem added_labels_compose:
   cs_extends a b /\ cs_extends b c ==>
   added_labels a c = added_labels a b ++ added_labels b c
 Proof
   strip_tac >>
-  drule block_labels_cs_extends >> strip_tac >>
-  drule_at (Pos last) block_labels_cs_extends >> strip_tac >>
-  simp[added_labels_def] >>
-  asm_rewrite_tac[] >>
-  simp[DROP_APPEND, LENGTH_MAP, added_labels_def]
+  `cs_extends a c` by metis_tac[cs_extends_trans] >>
+  imp_res_tac block_labels_cs_extends >> gvs[]
 QED
 
 Theorem label_extends_trans:
@@ -27,13 +24,17 @@ QED
 Theorem added_labels_new_block:
   new_block lbl st = (old, st') ==> added_labels st st' = [lbl]
 Proof
-  simp[new_block_def, added_labels_def, all_blocks_def, MAP_APPEND,
-       DROP_APPEND, LENGTH_MAP]
+  strip_tac >> gvs[new_block_def] >>
+  simp[added_labels_def, all_blocks_def, MAP_APPEND, DROP_APPEND,
+       LENGTH_MAP]
 QED
 
 Theorem added_labels_emit_inst:
   emit_inst opc ops outs st = (r, st') ==> added_labels st st' = []
 Proof
-  simp[emit_inst_def, fresh_id_def, comp_bind_def, comp_return_def,
-       added_labels_def, all_blocks_def, emit_def, LENGTH_MAP]
+  strip_tac >>
+  gvs[emit_inst_def, fresh_id_def, comp_bind_def, comp_return_def,
+      emit_def] >>
+  simp[added_labels_def, all_blocks_def, LENGTH_MAP]
 QED
+
