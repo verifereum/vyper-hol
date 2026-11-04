@@ -97,8 +97,10 @@ Theorem call_external_function_success_log_extends:
 The current-base definitions and statements have been independently inspected:
 the eleven-family trace-frame and unchanged physical soundness statements were
 judged PROVABLE; the executable definition audit also approved this exact port.
-There is no kernel validation on this base yet. The complete batch
-has not parsed because ancestors require this same ghost-field migration.
+The current primitive State, CallOutcome, Create, Interpreter and frame
+prerequisites built at the default budget. The precompile-success frame lemma
+has parsed but its short proof is incomplete. The complete batch has not parsed
+because ancestors require this same ghost-field migration.
 Keep the existing proofs; do not replace them with temporary admissions.
 
 ## Background
