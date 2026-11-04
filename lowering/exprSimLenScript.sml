@@ -355,8 +355,8 @@ Proof
 QED
 
 Theorem storage_holds_header_widens[local]:
-  !env cx tr pt t pvt tvt tv w es n.
-    storage_holds cx tr pt tv w es /\
+  !env cx tr pt t pvt tvt tv w es s n.
+    storage_holds cx tr pt tv w es s /\
     type_widens_to (get_tenv cx) pt t /\
     evaluate_type (get_tenv cx) pt = SOME pvt /\
     evaluate_type (get_tenv cx) t = SOME tvt /\ is_sized_type t /\
