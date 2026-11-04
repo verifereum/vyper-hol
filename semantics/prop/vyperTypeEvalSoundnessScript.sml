@@ -3107,7 +3107,8 @@ Resume eval_scc_type_sound_results_mutual[Log]:
   >- (
     strip_tac >> gvs[state_well_typed_def, accounts_well_typed_def] >>
     Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
-    gvs[lift_option_def, return_def, raise_def] >>
+    gvs[lift_option_def, return_def, raise_def, ignore_bind_def, bind_def,
+        check_def, assert_def, push_log_def, AllCaseEqs()] >>
     drule_all env_consistent_logs_append >>
     simp[return_exception_typed_def]) >>
   strip_tac >> gvs[] >>

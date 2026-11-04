@@ -1710,7 +1710,10 @@ Resume eval_mutual_scope_pop_effect_results[IntCall]:
   gvs[raise_def, return_def] >>
   Cases_on `FST (SND tup)` >> gvs[return_def] >>
   Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-  drule acquire_nonreentrant_lock_scopes >> simp[]
+  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
+  simp[ignore_bind_def, bind_def, check_def, assert_def, return_def,
+       raise_def, COND_RATOR, AllCaseEqs()] >>
+  rpt strip_tac >> imp_res_tac acquire_nonreentrant_lock_scopes >> gvs[]
 QED
 
 Finalise eval_mutual_scope_pop_effect_results
