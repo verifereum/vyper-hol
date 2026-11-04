@@ -455,6 +455,25 @@ Proof
   simp[type_widens_to_def]
 QED
 
+Theorem type_widens_to_ec_point:
+  type_widens_to tenv t (ArrayT (BaseT (UintT 256)) (Fixed 2)) ==>
+  t = ArrayT (BaseT (UintT 256)) (Fixed 2)
+Proof
+  Cases_on `t` >> simp[type_widens_to_def, arg_type_fits_def] >>
+  rename1 `arg_type_fits (ArrayT elem bd) _` >>
+  Cases_on `bd` >> simp[arg_type_fits_def] >>
+  Cases_on `elem` >> simp[arg_type_fits_def] >> metis_tac[]
+QED
+
+Theorem post_value_type_ec_point:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
+  post_value_type cenv e = expr_type e
+Proof
+  strip_tac >> drule_all post_value_type_widens >>
+  simp[] >> metis_tac[type_widens_to_ec_point]
+QED
+
 Theorem expr_sim_pre_body_pre:
   !cenv cx env e es.
     expr_sim_pre cenv cx env e es ==> expr_body_pre cenv cx env e es

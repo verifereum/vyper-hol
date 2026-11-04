@@ -389,6 +389,7 @@ Proof
 QED
 
 Theorem ec_point_operand_kept[local]:
+  post_value_type cenv e1 = expr_type e1 /\
   expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
@@ -719,6 +720,7 @@ Proof
 QED
 
 Theorem ec_result_pointer_post[local]:
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es sa s0 t /\
   eval_operand pop t = SOME w /\
@@ -1458,6 +1460,7 @@ Theorem ec_suffix_pointer_post[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
     regions_disjoint (w2n wo) 64 off (type_memory_size tv)) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   ?t. run_inst_seq (emitted_insts sm sb) st = OK t /\
       vv_post ctx func cenv cx e es sf sb s0 es (Value (mk_ec_result (x,y)))
@@ -1510,6 +1513,7 @@ Theorem ec_points_run[local]:
   (!z. MEM (Var z) [p;scalar] ==> not_fresh_at sf z) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
   w2n point + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecmul
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -1528,6 +1532,7 @@ Theorem ec_points_run[local]:
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
   w2n point + 64 < dimword (:256) /\ w2n point2 + 64 < dimword (:256) /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   case vfmExecution$ecadd
     (w2n (mem_word_at (w2n point) s.vs_memory),
@@ -1818,6 +1823,7 @@ Theorem ec_points_frag[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v p s /\
   expr_val_rel cx (BaseT (UintT 256)) k scalar s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   frag_exec ctx sf sb (\t. t = s)
     (\t. ?a. evaluate_ecmul [v;k] = INL a /\
@@ -1837,6 +1843,7 @@ Theorem ec_points_frag[local]:
   expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 p2 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v1 p1 s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v2 p2 s /\
+  post_value_type cenv e = expr_type e /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) ==>
   frag_exec ctx sf sb (\t. t = s)
     (\t. ?a. evaluate_ecadd [v1;v2] = INL a /\
@@ -1886,6 +1893,7 @@ QED
 Finalise ec_points_frag
 
 Theorem ec_point_operands_then[local]:
+  post_value_type cenv a = expr_type a /\
   expr_sim ctx func cenv cx ty1 a es /\
   expr_sim ctx func cenv cx ty2 b es1 /\
   lower_value compile_expr cenv ty1 a sa = (p,s1) /\
@@ -1970,6 +1978,7 @@ Proof
 QED
 
 Theorem ec_binary_call_then[local]:
+  post_value_type cenv a = expr_type a /\
   exprs_case nocalls ctx func cenv cx [a;b] /\
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
   (nocalls ==> int_calls_expr (Builtin ann bt [a;b]) = []) /\
@@ -2132,6 +2141,14 @@ Proof
     (imp_res_tac ec_points_code_shape >>
      simp[cs_extends_def] >> qexists_tac `[]` >>
      gvs[same_blocks_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  `post_value_type cenv a = expr_type a` by
+    (irule post_value_type_ec_point >> simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     gvs[expr_body_pre_def, well_typed_expr_def]) >>
+  `expr_sim_inv cenv cx env es /\ well_typed_expr env b` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  `post_value_type cenv b = expr_type b` by
+    metis_tac[post_value_type_ec_point, post_value_type_word, is_word_type_def] >>
   gvs[] >> irule ec_binary_call_then >> simp[builtin_args_length_ok_def] >>
   (reverse conj_tac
   >- (qexists_tac `nocalls` >> simp[]) >>
