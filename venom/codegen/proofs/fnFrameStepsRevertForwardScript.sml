@@ -982,3 +982,47 @@ Proof
      simp[]) >>
   metis_tac[prefix_wf_len_append, prefix_wf_append]
 QED
+
+Theorem rf_preparation_replay:
+  !opc inputs nl ps input_ops ps1 dfg reorder_ops ps2 lo current entry initial_fmp.
+  emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+  reorder_plan dfg inputs ps1 = (reorder_ops,ps2) /\
+  opc <> INVOKE /\ LENGTH inputs <= 16 /\
+  (!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  EVERY (\op. ~is_label_operand op /\
+    normalize_operand dfg [] op <> dead_stack_marker) inputs /\
+  (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at inputs ==>
+    operand_val current lo at = operand_val entry lo (normalize_operand dfg [] at)) /\
+  (!x a y b. FLOOKUP ps.ps_spilled x = SOME a /\
+    FLOOKUP ps.ps_spilled y = SOME b /\ x <> y ==> a + 32 <= b \/ b + 32 <= a) /\
+  (!off. ~MEM (SOSpill off) (input_ops ++ reorder_ops) /\
+    ~MEM (SORestore off) (input_ops ++ reorder_ops)) ==>
+  EVERY is_simple_stack_op (input_ops ++ reorder_ops) /\
+  prefix_wf lo (LENGTH ps.ps_stack) (input_ops ++ reorder_ops) /\
+  plan_stack_sem_eq lo current
+    (apply_prefix_ops initial_fmp lo (input_ops ++ reorder_ops) ps).ps_stack ps2.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- metis_tac[spill_free_preparation_simple] >>
+  conj_tac
+  >- (irule available_preparation_prefix_wf >>
+      qexistsl_tac [`dfg`, `inputs`, `nl`, `opc`, `ps1`, `ps2`] >>
+      fs[EVERY_MEM] >>
+      metis_tac[stackPlanTypesTheory.is_label_operand_def]) >>
+  `LENGTH inputs <= LENGTH ps1.ps_stack` by
+    metis_tac[available_input_plan_length] >>
+  `!x. LIST_ELEM_COUNT x inputs <= LIST_ELEM_COUNT x ps1.ps_stack` by
+    (drule_all emit_input_plan_materialised >> simp[]) >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at inputs` by
+    (drule emit_input_plan_inventory_subset >> simp[]) >>
+  irule spill_free_preparation_value_replay >> asm_rewrite_tac[] >>
+  qexistsl_tac [`dfg`, `inputs`, `nl`, `opc`, `ps1`, `inputs`] >>
+  asm_rewrite_tac[] >>
+  fs[EVERY_MEM, operand_equiv_def, dead_stack_marker_def] >>
+  simp[normalize_operand_def] >>
+  conj_tac
+  >- metis_tac[] >>
+  metis_tac[stackPlanTypesTheory.is_label_operand_def]
+QED
