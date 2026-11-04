@@ -2,7 +2,7 @@
 Theory stmtSimReturnWord
 Ancestors
   stmtSimReturn stmtSimProps stmtSimDefs exprSimProps exprSimDefs loweringPosts
-  gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath gasExemptCert
+  gasOutcome gasSummary gasSummaryCompose gasContext gasCount fragGasPath fragGasMode gasExemptCert
   list rich_list finite_map fragExec freshWrites vyperTypeABI
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding venomMemDefs
@@ -10,6 +10,147 @@ Ancestors
   vyperStatePreservation venomExecSemantics venomInst venomState
 Libs
   monadsyntax
+
+Theorem return_word_admissible[local]:
+  gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es ==>
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es
+Proof
+  strip_tac >> rw[gas_admissible_def] >>
+  Cases_on `res` >- simp[expr_res_ok_def] >>
+  rename1 `INR ex` >>
+  `eval_stmt cx (Return (SOME e)) (es with gas_obs := gs) = (INR ex, ee)` by
+    (pure_rewrite_tac[eval_return_forced] >>
+     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[Once bind_def]) >>
+  `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
+  Cases_on `eval_expr cx e (es with gas_obs := gs)` >>
+  rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_no_control >>
+  imp_res_tac (cj 1 eval_expr_no_control) >>
+  gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]
+QED
+
+Theorem return_word_exempt[local]:
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin) ==>
+  gas_exempt_cert memory tops (ctx,func)
+    (ignore_bind (eval_stmt cx (Return (SOME e))) (return ()))
+    (es,s0) marks (err,ee) (leaf,fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx (Return (SOME e))) (return ()) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind (raise (ReturnException v)) (return ()))` by
+    (simp[ignore_bind_def, FUN_EQ_THM, bind_def, eval_return_forced] >>
+     gen_tac >> Cases_on `eval_expr cx e x` >>
+     rename1 `_ = (raw, est)` >> Cases_on `raw` >> simp[] >>
+     rename1 `read_result cx v est` >>
+     Cases_on `read_result cx v est` >> Cases_on `q` >> simp[raise_def]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem return_word_consumer[local]:
+  cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
+  cenv.ce_returns_count = 1 /\ cenv.ce_return_buf = NONE /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME ret_tv /\
+  ret_pc_ok cenv sa s0 /\
+  expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+  ~t.vs_halted /\
+  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb t.vs_inst_idx = SOME (mk_inst iid RET [op; Var rpc] []) ==>
+  gas_marked_path F ctx func t 0
+    (IntRet <|iret_values := [typed_val_to_w256 ret_tv v]; iret_adopt_fmp := NONE|> t) /\
+  (!tail. stmt_exit (intret_q func cenv cx ret_tv)
+    (ee with gas_obs := tail) (INR (ReturnException v))
+    (IntRet <|iret_values := [typed_val_to_w256 ret_tv v]; iret_adopt_fmp := NONE|> t))
+Proof
+  strip_tac >> fs[expr_post_def, expr_val_rel_def] >>
+  rename1 `eval_operand op t = SOME w` >>
+  `w = typed_val_to_w256 ret_tv v` by metis_tac[] >>
+  `?pc. lookup_var rpc t = SOME pc` by
+    (fs[ret_pc_ok_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[gas_marked_path_def] >> irule (cj 3 gas_path_rules) >>
+      simp[exit_result_def] >>
+      simp[gas_path_edge_def] >>
+      qexists_tac `0` >>
+      simp[gas_count_defs, venomInstTheory.mk_inst_def] >>
+      disj2_tac >>
+      `step_inst 0 ctx (mk_inst iid RET [op; Var rpc] []) t =
+       IntRet <|iret_values := [w]; iret_adopt_fmp := NONE|> t` by
+        simp[step_inst_non_invoke, venomInstTheory.mk_inst_def,
+             step_inst_base_def, eval_operands_def, eval_operand_def] >>
+      fs[venomInstTheory.mk_inst_def, exit_result_def]) >>
+  `state_rel func cenv cx (ee with scopes := []) t` by
+    (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
+  simp[stmt_exit_def, intret_q_gas_obs, intret_q_def, result_rel_def,
+       expr_exit_def] >>
+  gen_tac >> conj_tac
+  >- (`ee with <|scopes := []; gas_obs := tail|> =
+       (ee with scopes := []) with gas_obs := tail` by simp[] >>
+      pop_assum SUBST1_TAC >> simp[state_rel_gas_obs]) >>
+  irule intret_vals_match_word >> metis_tac[]
+QED
+
+Theorem return_word_summary[local]:
+  gas_summary_at F (ctx,func) marks
+    (bind (eval_expr cx e) (read_result cx)) (es,s0)
+    (\res ee t. ?v. res = INL v /\
+      expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+      t.vs_current_bb = s1.cs_current_bb /\
+      t.vs_inst_idx = LENGTH s1.cs_current_insts)
+    (\res ee r. expr_exit res r) /\
+  (!ee v t.
+    expr_post ctx func cenv cx e es sa s1 s0 ee v op t /\
+    ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
+    t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
+    ?r. gas_marked_path F ctx func t 0 r /\ exit_result r /\
+      !tail. stmt_exit (intret_q func cenv cx ret_tv)
+        (ee with gas_obs := tail) (INR (ReturnException v)) r) ==>
+  gas_summary_at F (ctx,func) marks (eval_stmt cx (Return (SOME e))) (es,s0)
+    Q (\res ee r. !tail. stmt_exit (intret_q func cenv cx ret_tv)
+                                  (ee with gas_obs := tail) res r)
+Proof
+  strip_tac >>
+  `eval_stmt cx (Return (SOME e)) =
+   bind (bind (eval_expr cx e) (read_result cx))
+     (\v. raise (ReturnException v))` by
+    (simp[FUN_EQ_THM, eval_return_forced] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
+  simp[gas_summary_at_def] >> strip_tac
+  >- (gvs[] >>
+      `~t.vs_halted` by
+        (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+         simp[gas_marked_exec_def] >> metis_tac[gas_marked_path_exec, gas_path_normal]) >>
+      first_x_assum drule_all >> strip_tac >>
+      `gas_marked_exec F (ctx,func)
+        (raise (ReturnException v) : evaluation_state -> unit evaluation_result)
+        (es_end with gas_obs := [],t) [] (INR (ReturnException v)) es_end r` by
+        simp[gas_marked_exec_def, raise_def] >>
+      qexistsl_tac [`INR (ReturnException v)`, `es_end`, `r`] >>
+      conj_tac
+      >- (irule (SIMP_RULE std_ss [APPEND_NIL]
+            (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal)) >>
+          qexistsl_tac [`es_end`, `t`, `v`] >> simp[]) >>
+      disj2_tac >>
+      qpat_x_assum `!tail. stmt_exit _ _ _ _` (qspec_then `[]` mp_tac) >>
+      simp[stmt_exit_def, expr_exit_def] >> strip_tac >> gen_tac >>
+      `es_end with <|scopes := []; gas_obs := tail|> =
+       (es_end with scopes := []) with gas_obs := tail` by simp[] >>
+      pop_assum SUBST1_TAC >> simp[intret_q_gas_obs] >>
+      qpat_x_assum `intret_q _ _ _ _ _ _ _` mp_tac >>
+      `es_end with <|scopes := []; gas_obs := []|> =
+       (es_end with scopes := []) with gas_obs := []` by simp[] >>
+      pop_assum SUBST1_TAC >> simp[intret_q_gas_obs]) >>
+  `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
+  qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
+  >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  disj2_tac >> simp[] >> gen_tac >> simp[stmt_exit_def] >> disj1_tac >>
+  metis_tac[expr_exit_INR_type]
+QED
 
 (* return e in an internal function whose result, a word, goes back on the
    stack (ce_returns_count = 1, no return buffer): e's fragment, whose
@@ -27,8 +168,8 @@ Theorem compile_return_word_int_frag:
       (stmt_env cenv lctx ty (Return (SOME e)))
       (eval_stmt cx (Return (SOME e))) es
 Proof
-  rpt gen_tac >> strip_tac >> simp[stmt_frag_def] >> rpt gen_tac >>
-  strip_tac >> disj2_tac >>
+  rpt gen_tac >> strip_tac >> simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >>
+  strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def,
@@ -49,50 +190,28 @@ Proof
   `get_instruction bb (LENGTH s1.cs_current_insts) =
      SOME (mk_inst s1.cs_next_id RET [op; Var rpc] [])` by
     (qpat_x_assum `!i. _` (qspec_then `0` mp_tac) >> simp[]) >>
-  (* the source *)
-  qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  pure_rewrite_tac[eval_return_forced] >>
-  Cases_on `(do raw <- eval_expr cx e; read_result cx raw od) es` >>
-  rename1 `_ = (r1, es1)` >> simp[Once bind_def, raise_def] >> strip_tac >>
-  `expr_res_ok r1` by (
-    Cases_on `r1`
-    >- gvs[expr_res_ok_def] >>
-    qpat_x_assum `(do raw <- _; _ od) _ = _` mp_tac >>
-    simp[bind_def] >> Cases_on `eval_expr cx e es` >>
-    rename1 `_ = (raw,est)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-    imp_res_tac read_result_no_control >>
-    imp_res_tac (cj 1 eval_expr_no_control) >>
-    gvs[no_control_exc_def, expr_res_ok_def, stmt_res_ok_def]) >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (irule return_word_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `op`, `r1`, `es1`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`sa`, `s1`, `op`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
-  simp[frag_exec_def] >>
-  disch_then (qspec_then `func` mp_tac) >> impl_tac >- fs[] >> strip_tac
-  >- (
-    (* the value: RET with it and the return PC *)
-    gvs[expr_post_def, return_def] >>
-    qpat_x_assum `expr_val_rel _ _ _ _ _`
-      (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
-    rename1 `eval_operand op sv = SOME w` >>
-    `w = typed_val_to_w256 ret_tv v` by
-      (qpat_x_assum `!tv. _` (qspec_then `ret_tv` mp_tac) >> simp[]) >>
-    `?pc. lookup_var rpc sv = SOME pc` by
-      (qpat_x_assum `ret_pc_ok _ _ _` mp_tac >> simp[ret_pc_ok_def] >>
-       strip_tac >> qexists_tac `w'` >> first_x_assum irule >> simp[]) >>
-    `run_from 0 ctx func sv =
-     IntRet <| iret_values := [w]; iret_adopt_fmp := NONE |> sv` by
-      simp[run_from_def, Once exec_block_def, step_inst_non_invoke,
-           venomInstTheory.mk_inst_def, step_inst_base_def,
-           eval_operands_def, eval_operand_def] >>
-    qpat_x_assum `!fuel. (!e. run_from fuel ctx func sv <> Error e) ==> _`
-      (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
-    `state_rel func cenv cx (es' with scopes := []) sv` by
-      (irule state_rel_scopes_nil >> fs[stmt_state_rel_def]) >>
-    qexists_tac `fuel'` >>
-    simp[exit_result_def, stmt_exit_def, intret_q_def, result_rel_def] >>
-    metis_tac[intret_vals_match_word]) >>
-  qexists_tac `fuel` >> Cases_on `r1` >> gvs[stmt_exit_def] >> disj1_tac >>
-  metis_tac[expr_exit_INR_type]
+  simp[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule return_word_summary >> qexistsl_tac [`op`, `s1`, `sa`] >>
+      reverse conj_tac >- (first_assum ACCEPT_TAC) >>
+      rpt gen_tac >> strip_tac >>
+      qexists_tac `IntRet <|iret_values := [typed_val_to_w256 ret_tv v];
+                             iret_adopt_fmp := NONE|> t` >>
+      `gas_marked_path F ctx func t 0
+        (IntRet <|iret_values := [typed_val_to_w256 ret_tv v]; iret_adopt_fmp := NONE|> t) /\
+       !tail. stmt_exit (intret_q func cenv cx ret_tv) (ee with gas_obs := tail)
+         (INR (ReturnException v))
+         (IntRet <|iret_values := [typed_val_to_w256 ret_tv v]; iret_adopt_fmp := NONE|> t)` by
+        (irule return_word_consumer >> metis_tac[]) >>
+      simp[exit_result_def]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  irule return_word_exempt >> simp[]
 QED
 
 (* Integrity gate for the forced return boundary and RET consumer. *)
