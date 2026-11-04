@@ -134,3 +134,106 @@ Further family boundaries should be supplied by strategist after review: shifts 
 - Core cannot imply opaque definedness, dynamic provenance support, or saved-suffix bounds; these are missing execution invariants, not tactical gaps.
 - Calls inherit frontier displacement. Param relation covers all vs_params; it cannot be used to assert equality of vs_return_pc_token, which setup_callee sets from LAST args. Ordinary RETPC_PARAM must ignore its value on V.
 - No counterexample to the frozen task has been verified by this audit. This report is not a proof of ordinary_step_match or the frozen theorem.
+
+# Forwarding and frame-constructor interface checkpoint (C1.12.2.1)
+
+This section is a proposal, not a semantic transport result. No definition or
+existing theorem statement is changed. Repository search found no interval
+classification helper: the existing `revert_forward_at_opcode` classifies only
+endpoints. `lowerDloadPtrForwardTheory.revert_forward_pair_interval_opcode`
+now proves the three-way interval classification directly from
+`revert_forward_pair_def` (ordinary holbuild passed, TO_m1252).
+
+## Exact proposed forwarding alternative
+
+The following is an inline alternative in the target reachability invariant,
+not a new predicate. Free outer variables are the current target frame
+`gn, t, PH, H, un, ds` and source context/initial state `C, vs0`. Existential
+variables are witnesses. It intentionally relates memory only at the anchor,
+not after RETURNDATACOPY. `fuel` must be chosen consistently with the prefix;
+all instructions in this segment are context/fuel independent non-INVOKEs.
+
+```sml
+?fn bb tb i j a b k ri ti supply fs V Ws PG G tn s t0 H0 un0 cs fuel.
+  frame_reachable vs0 C cs PG G tn fn ri s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  s.vs_inst_idx = i /\ revert_forward_pair bb i j /\
+  get_instruction bb i = SOME ri /\
+  lookup_block t0.vs_current_bb gn.fn_blocks = SOME tb /\
+  t0.vs_inst_idx = a /\ revert_forward_pair tb a b /\
+  get_instruction tb a = SOME ti /\
+  dload_control_match supply fn gn s t0 ri [ti] 0 /\
+  dload_boundary_core lo fs V Ws PG PH G H0 tn un0 s t0 cs ds /\
+  a <= k /\ k <= b /\
+  t.vs_current_bb = t0.vs_current_bb /\ t.vs_inst_idx = k /\
+  dload_prefix_match fuel C' PH
+    (TAKE (SUC b - a) (DROP a tb.bb_instructions)) (k-a)
+    t0 H0 un0 t H un
+```
+
+This formula is only the forwarding-specific part. At its anchor retain the
+same explicit strengthened conjuncts as at ordinary boundaries: actual
+`lower_dload_function_supply` witness and original/transformed context
+membership; original-variable set selection and all-original definedness;
+source G/PG support and saved caller support; exact saved suffix layouts;
+distinct function-index/scratch-injection witnesses; saved supply/control and
+saved all-original-variable definedness. None follows from boundary_core.
+The alternative requires both source and target recognized pairs: neither
+recognition is inferred from mere interval membership. In particular proving
+that the supply transform preserves `resolve_block_assigns` and the pair
+endpoints is an UNRESOLVED syntax obligation (the opcode classifier does not
+prove it). There are no DLOAD expansions strictly inside a recognized pair,
+since every interior opcode is ASSIGN; target index translation still needs
+the actual transformed prefix before the first endpoint.
+
+Unlike an ordinary boundary alternative this need not reconstruct a source
+state at the current k. Its obligations are target `access_ok` and `taint_ok`
+at each active k, extension by successful ASSIGN, and impossibility of a next,
+block, call, or ret constructor leaving the terminal REVERT. Access bounds
+are exempt at recognized endpoints; strict interior ASSIGN has no ranges or
+pointer comparison. Taint safety is NOT implied by the opcode classifier:
+REVERT's variable operands must still have empty variable taint, and
+RETURNDATACOPY's operand and memory-taint updates must be checked. Syntax
+alone does not imply operand evaluation succeeds. For already reachable
+prefixes replay supplies successful intermediate steps, but endpoint safety
+still needs anchor invariants and evaluation/taint preservation. No claim of
+post-copy `dload_memory_match` is made or needed on a terminal-only path.
+
+## Finite premise-origin audit
+
+References are to the five constructors of `frame_reachable` in
+`ptrDisciplineScript.sml:447-500`, not completed big-step invocations.
+
+| Constructor | Given by constructor | Additional origin / unresolved obligation |
+|---|---|---|
+| entry | context entry name, function lookup, entry label, enters_block, active_inst; PG=[], G=FEMPTY, entry_taint, empty stack | initial core from dload_boundary_initial after initial frontier/headroom; same initial variables give definedness BEFORE PHIs only; parallel PHI entry matching and transformed entry control still needed. Empty support/suffix/index-stack facts are base cases, not supplied by enters_block. |
+| next (ordinary) | prior target reachability, active instruction, nonterminator/non-INVOKE, successful step, active successor; exact step_prov and step_taint updates | prior induction alternative determines ordinary, expansion, or forwarding case. Ordinary and expansion finish transport remain external obligations. For forwarding RETURNDATACOPY/ASSIGN extend prefix; retain anchor ghosts rather than infer a new boundary. Need segment instruction lookup and index bounds for successor, not endpoint-only in_revert_forward. |
+| block | successful terminator step, not halted, enters_block, active successor; entry_prov fn s' G and entry_taint_vars fn s' tn | recover matching source branch using translated untainted observations; prove simultaneous PHI transport with pre-entry G0/tn0 fixed (not sequential output substitutions); preserve all-original definedness including opaque variables, original support, exact saved suffix facts, and supply/control. Cannot carry a forwarding REVERT through this rule: its result is Abort, not OK. |
+| call | INVOKE decode, lookup callee, operand evaluation, setup_callee, enters_block; pushes caller snapshot; PG becomes MAP(op_prov G) ops, G=FEMPTY, variable taint=FEMPTY | translate args and parameter provenance; paired setup/entry/PHIs; push exact saved suffix layout with original caller frontier; save original definedness/support/control; derive callee function index and distinctness from callee_first and actual lookup. Constructors do not supply source/target scratch budget or supply freshness. External C1.6/C1.7/C1.8 and source support work remain needed. |
+| ret | nonempty saved stack, IntRet step, bind_outputs after adopt_return_fmp/merge_callee_state; caller PG restored, caller G and variable taint DRESTRICTed by output names | pair returned untainted values and bind_outputs definedness; restore SAVED caller suffix frontier/layout, never infer it from callee frontier; discard callee tables/scratch; restore saved original control/definedness and restrict provenance/taint by exact output names. Global memory taint comes from current tn while t_var comes from saved frame. Need return memory/shared-state transport; aggregate core alone does not imply these premises. |
+
+## Failed external CALL/STATICCALL entry
+
+`exec_ext_call_def` returns OK for a well-formed single output even when the
+outcome success word is zero. This is an ordinary `next` step, NOT the
+`frame_reachable.call` constructor (which is exclusively INVOKE).
+`step_inst_base_def` evaluates CALL/STATICCALL operands before exec_ext_call;
+`consume_call_outcome` provides the new returndata, memory and shared state.
+The following branch/block steps may lead to a recognized forwarding pair.
+Required origins are: paired call request/oracle outcome and shared-state
+transport from ordinary transport; paired branch tests from untainted
+observations; transformed block and pair recognition from control/supply
+syntax. The same reasoning must not assume failed calls never occur or
+infer a paired outcome from equal opcode alone. The forwarding anchor must
+be established at the copy endpoint reached by those steps, not at an
+arbitrary caller state and not by assuming ordinary memory agreement after
+the exempt copy.
+
+`ASSIGN` has OK only for one input, one output and a defined operand
+(venomExecSemanticsScript.sml:813-820); it leaves memory unchanged, but updates
+variable provenance/taint. `REVERT` yields Abort with padded memory slice
+returndata, or Error for malformed/undefined operands (lines 771-780), never
+OK or IntRet. It therefore cannot have a sequential successor through any
+frame_reachable rule. None of these observations proves relational closure:
+that remains blocked pending the explicit support, memory, PHI, call/return,
+and forwarding-taint obligations above.
