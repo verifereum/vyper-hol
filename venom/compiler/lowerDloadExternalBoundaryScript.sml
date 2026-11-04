@@ -154,3 +154,58 @@ Proof
   qexistsl_tac [`{}`, `k`, `LENGTH xs`, `sz`, `tn`] >>
   simp[NoAsms, GSYM ADD_ASSOC] >> metis_tac[]
 QED
+
+Theorem ld_consume_call_effect:
+  ld_memory lo A tn s t /\ ld_nonghost tn s t /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a k u v z b c sz.
+    FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
+    a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
+  rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
+  rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
+  rq.cr_data = rq'.cr_data /\ rq.cr_static = rq'.cr_static /\
+  consume_call_outcome rq ro rs s = (w,ss) /\
+  consume_call_outcome rq' rt rs t = (w',ts) /\
+  (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
+  xs = TAKE rs ss.vs_returndata /\
+  tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
+  tn'.t_imm = tn.t_imm /\
+  tn'.t_stor = adopt_reset inst (ss.vs_accounts <> s.vs_accounts) tn.t_stor /\
+  tn'.t_trans = adopt_reset inst (ss.vs_transient <> s.vs_transient) tn.t_trans /\
+  (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
+  w = w' /\ ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+  ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+  ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+  ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+  ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+  ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
+Proof
+  disch_then strip_assume_tac >> (
+  `ld_nonghost tn' ss ts` by (irule ld_consume_call_nonghost >> metis_tac[]) >>
+  `s.vs_outcomes = t.vs_outcomes` by fs[ld_nonghost_def] >>
+  `(FST (take_outcome rq s.vs_outcomes)).co_success =
+   (FST (take_outcome rq' t.vs_outcomes)).co_success` by
+    (asm_rewrite_tac[] >> irule ld_take_outcome_success >> simp[]) >>
+  `(FST (take_outcome rq s.vs_outcomes)).co_returnData =
+   (FST (take_outcome rq' t.vs_outcomes)).co_returnData` by
+    (asm_rewrite_tac[] >> irule ld_take_outcome_returndata >> simp[]) >>
+  `ld_memory lo A tn'
+    (write_memory_with_expansion ro xs s)
+    (write_memory_with_expansion rt xs t)` by
+    (irule ld_memory_write_classified >> metis_tac[]) >>
+  conj_tac >- gvs[consume_call_outcome_eq] >>
+  conj_tac
+  >- (qpat_x_assum `ld_memory lo A tn' _ _` mp_tac >>
+      qpat_x_assum `consume_call_outcome rq ro rs s = _` mp_tac >>
+      qpat_x_assum `consume_call_outcome rq' rt rs t = _` mp_tac >>
+      qpat_x_assum `xs = TAKE rs ss.vs_returndata` mp_tac >>
+      qpat_x_assum `_.co_returnData = _.co_returnData` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp[consume_call_outcome_eq] >> rpt strip_tac >>
+      gvs[ld_memory_def] >> metis_tac[]) >>
+  simp[] >> gvs[consume_call_outcome_eq])
+QED
