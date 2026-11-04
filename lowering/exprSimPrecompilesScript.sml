@@ -387,9 +387,15 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim:
-  frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. typed_args_post ctx func cenv cx es sa s0 es [] [] [] s)
-    (wb_args_exit (INL []))
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx []) (es, s0)
+    (\rr ee t. ?vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx es sa s0 ee [] [] vs t /\
+       t.vs_current_bb = sa.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sa.cs_current_insts)
+    (\rr ee r. wb_args_exit rr r)
 Proof
   irule frag_exec_refl >>
   simp[typed_args_post_def, wb_frame_refl] >> metis_tac[]
@@ -419,15 +425,22 @@ Proof
 QED
 
 Theorem lower_typed_args_sim:
-  !args ctx func cenv cx arg_ty Inv es sa xs sb rr es' s0.
+  !args ctx func cenv cx arg_ty Inv es sa xs sb s0.
     typed_args_ready ctx func cenv cx arg_ty Inv args /\ Inv es /\
+    (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
     wb_args_shape cenv arg_ty args /\
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
-    eval_exprs cx args es = (rr,es') /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?vs. rr = INL vs /\ typed_args_post ctx func cenv cx es sa s0 es' args xs vs s)
-      (wb_args_exit rr)
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx, func) (eval_exprs cx args) (es, s0)
+      (\rr ee t. ?vs. rr = INL vs /\
+         typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts)
+      (\rr ee r. wb_args_exit rr r)
 Proof
   Induct
   >- (simp[lower_word_args_nil, eval_exprs_nil] >> rpt strip_tac >>
