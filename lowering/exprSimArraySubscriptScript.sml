@@ -3868,3 +3868,157 @@ Proof
   irule flat_runtime_type_array_path >> goal_assum (drule_at Any) >>
   gvs[]
 QED
+
+Theorem lookup_global_immutable_origin:
+  lookup_global cx src id es =
+    (INL (PlaceR (ImmutablePlace md nm path)),mid) ==>
+  md = src /\ nm = id /\ path = [] /\
+  ?tops. get_module_code cx src = SOME tops /\
+         find_var_decl_by_name id tops = NONE
+Proof
+  disch_tac >>
+  gvs[lookup_global_def, bind_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
+  rename1 `get_module_code cx src = SOME tops` >>
+  Cases_on `find_var_decl_by_name id tops`
+  >- (gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `FLOOKUP imms id` >> gvs[return_def, raise_def]) >>
+  rename1 `find_var_decl_by_name id tops = SOME dcl` >>
+  PairCases_on `dcl` >> Cases_on `dcl0` >>
+  gvs[bind_def, return_def, raise_def, AllCaseEqs()]
+QED
+
+(* Immutable places can only originate at a statically known bare global.
+   Intermediate evaluation states need not have closed immutable domains. *)
+Theorem eval_expr_immutable_bare_global:
+  !e env cx es md nm path mid.
+    (well_typed_expr env e \/ IS_SOME (type_place_expr env e)) /\
+    env_context_consistent env cx /\
+    eval_expr cx e es = (INL (PlaceR (ImmutablePlace md nm path)),mid) ==>
+    ?ty. FLOOKUP env.bare_globals (md,nm) = SOME ty
+Proof
+  ho_match_mp_tac (vyperASTTheory.expr_induction |> Q.SPEC `P` |>
+    Q.SPEC `\x. T` |> SIMP_RULE (srw_ss()) []) >>
+  rpt conj_tac >> rpt gen_tac >>
+  all_tac >~ [`eval_expr _ (Name _ _) _ = _`] >- suspend "Name" >~
+  [`eval_expr _ (TopLevelName _ _) _ = _`] >- suspend "Global" >~
+  [`eval_expr _ (FlagMember _ _ _) _ = _`] >- suspend "Flag" >~
+  [`eval_expr _ (IfExp _ _ _ _) _ = _`] >- suspend "If" >~
+  [`eval_expr _ (Literal _ _) _ = _`] >-
+    (rpt strip_tac >> drule eval_expr_literal_value >> simp[]) >~
+  [`eval_expr _ (StructLit _ _ _) _ = _`] >- suspend "Struct" >~
+  [`eval_expr _ (Subscript _ _ _) _ = _`] >- suspend "Subscript" >~
+  [`eval_expr _ (Attribute _ _ _) _ = _`] >- suspend "Attribute" >~
+  [`eval_expr _ (Builtin _ _ _) _ = _`] >-
+    (rpt strip_tac >> drule eval_expr_builtin_value >> simp[]) >~
+  [`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`] >- suspend "TypeBuiltin" >~
+  [`eval_expr _ (Pop _ _) _ = _`] >- suspend "Pop" >>
+  suspend "Call"
+QED
+
+Resume eval_expr_immutable_bare_global[Name]:
+  simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, check_def, return_def, raise_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[Global]:
+  rename1 `TopLevelName ann nsid` >> PairCases_on `nsid` >>
+  rpt strip_tac >> gvs[Once evaluate_def] >>
+  drule lookup_global_immutable_origin >> strip_tac >> gvs[] >>
+  fs[vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP env.bare_globals (md,nm)` >> simp[] >>
+  fs[env_context_consistent_def] >>
+  Cases_on `FLOOKUP env.toplevel_vtypes (md,nm)` >> gvs[] >>
+  Cases_on `THE (FLOOKUP env.toplevel_vtypes (md,nm))` >> gvs[] >>
+  all_tac >>~- ([`FLOOKUP env.toplevel_vtypes (md,nm) = SOME (Type _)`],
+    qpat_x_assum `!src id ty. _ /\ _ ==> _` drule_all >>
+    strip_tac >> gvs[]) >>
+  qpat_x_assum `!src id kt vt. _ ==> _` drule >> strip_tac >> gvs[]
+QED
+
+Resume eval_expr_immutable_bare_global[Flag]:
+  rpt strip_tac >> rename1 `FlagMember ann nsid fld` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, lookup_flag_mem_def, bind_def, return_def, raise_def,
+      lift_sum_def, lift_option_type_def, vyperMiscTheory.option_CASE_rator,
+      AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[Struct]:
+  rpt strip_tac >> rename1 `StructLit ann nsid fields` >> PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[TypeBuiltin]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[If]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rename1 `conditional_result cx raw st = _` >> Cases_on `raw` >>
+  gvs[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rename1 `place_type_value cx p st = _` >> Cases_on `p` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >> simp[bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[Attribute]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule select_result_immutable_origin >> strip_tac >> gvs[] >>
+  gvs[vyperTypeSystemTheory.well_typed_expr_def] >>
+  first_x_assum irule >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Resume eval_expr_immutable_bare_global[Subscript]:
+  rpt strip_tac >> rename1 `Subscript ann obj idx` >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule select_result_immutable_origin >> strip_tac >> gvs[] >>
+  gvs[vyperTypeSystemTheory.well_typed_expr_def] >>
+  qpat_x_assum `!env cx es md nm path mid. _ /\ _ /\ eval_expr cx obj es = _ ==> _` irule >>
+  simp[SF SFY_ss] >> Cases_on `well_typed_expr env idx` >> gvs[] >>
+  Cases_on `type_place_expr env obj` >> gvs[]
+QED
+Resume eval_expr_immutable_bare_global[Pop]:
+  rpt strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  rename1 `pop_place cx p st = _` >> Cases_on `p` >>
+  gvs[oneline pop_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+      vyperStateTheory.assert_def, check_def, AllCaseEqs()] >>
+  gvs[vyperTypeSystemTheory.well_typed_expr_def] >>
+  all_tac >~ [`eval_target_place _ _ _ = (INL (StoragePlace _ _ tv),_)`]
+  >- (Cases_on `tv` >> gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+      rename1 `ArrayTV _ bd` >> Cases_on `bd` >>
+      gvs[bind_def, return_def, raise_def, AllCaseEqs()]) >>
+  pairarg_tac >> gvs[bind_def, return_def, AllCaseEqs()] >>
+  pairarg_tac >> gvs[bind_def, return_def, AllCaseEqs()]
+QED
+Resume eval_expr_immutable_bare_global[Call]:
+  rpt strip_tac >>
+  gvs[vyperTypeSystemTheory.well_typed_expr_def] >>
+  rename1 `Call ann target args kws` >> Cases_on `target` >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def, raise_def,
+      AllCaseEqs()]
+  >~ [`eval_expr _ (Call _ (IntCall _) _ _) _ = _`]
+  >- (rename1 `IntCall nsid` >> PairCases_on `nsid` >>
+      gvs[Once evaluate_def, bind_def, ignore_bind_def, return_def,
+          raise_def, AllCaseEqs()])
+  >~ [`eval_ext_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_ext_call_value >> simp[])
+  >~ [`eval_send _ _ _ _ = _`] >- suspend "Send"
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[])
+  >~ [`eval_raw_call _ _ _ _ _ _ _ = _`]
+  >- (drule eval_raw_call_value >> simp[]) >>
+  qmatch_asmsub_rename_tac `eval_create cx kind _ _ _ _ _` >>
+  Cases_on `kind` >> gvs[bind_def, AllCaseEqs()] >>
+  drule eval_create_value >> simp[]
+QED
+Resume eval_expr_immutable_bare_global[Send]:
+  rename1 `eval_send cx has_gas vs st = _` >>
+  Cases_on `vs` >- gvs[eval_send_def, raise_def] >>
+  rename1 `eval_send cx has_gas (to_v::rest) st = _` >>
+  Cases_on `rest` >>
+  gvs[eval_send_def, bind_def, ignore_bind_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  pairarg_tac >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+Finalise eval_expr_immutable_bare_global
