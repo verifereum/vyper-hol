@@ -138,3 +138,117 @@ Proof
        vyperValueTheory.evaluate_type_def, is_word_type_def,
        abi_args_empty_tuple_footprint, valueEncodingTheory.val_in_memory_def]
 QED
+
+Theorem abi_args_update_runtime_label:
+  ce.ce_imm_alloca <> SOME (Label "runtime_begin") /\
+  immutable_base_zero ce s ==>
+  immutable_base_zero ce
+    (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))
+Proof
+  namedCases_on `ce.ce_imm_alloca` ["", "immop"]
+  >- simp[immutable_base_zero_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `immop` >>
+  simp[immutable_base_zero_def, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem abi_args_state_rel_update_runtime:
+  stmt_state_rel ctx func ce cx es s /\
+  ce.ce_imm_alloca <> SOME (Label "runtime_begin") ==>
+  stmt_state_rel ctx func ce cx es
+    (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))
+Proof
+  strip_tac >>
+  `immutable_base_zero ce s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `immutable_base_zero ce
+     (s with vs_labels := s.vs_labels |+ ("runtime_begin",w))` by
+    metis_tac[abi_args_update_runtime_label] >>
+  metis_tac[abi_args_state_rel_label_transport]
+QED
+
+Theorem abi_args_runtime_word_observed:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label "runtime_begin",sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  FLOOKUP s0.vs_labels "runtime_begin" = SOME w ==>
+  w = typed_val_to_w256 tv v
+Proof
+  strip_tac >>
+  qabbrev_tac `z = s0 with <|vs_halted := F;
+    vs_current_bb := sa.cs_current_bb;
+    vs_inst_idx := LENGTH sa.cs_current_insts|>` >>
+  `stmt_state_rel ctx func ce cx es z` by
+    simp[Abbr `z`, abi_args_state_rel_control_only] >>
+  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
+  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
+  drule_all expr_sim_apply >> disch_then (qspec_then `z` mp_tac) >>
+  simp[] >> strip_tac >>
+  drule abi_lower_value_label_observer >> disch_then drule >>
+  disch_then (qspecl_then [`z`, `func`] mp_tac) >>
+  (impl_tac >- (simp[Abbr `z`, SRULE [] abi_args_state_rel_control_only])) >>
+  strip_tac >>
+  gvs[expr_post_def, expr_val_rel_def,
+      venomStateTheory.eval_operand_def, Abbr `z`]
+QED
+
+Theorem abi_args_runtime_word_is_base:
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (Label "runtime_begin",sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
+  ce.ce_imm_alloca = SOME (Label "runtime_begin")
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `!w. stmt_state_rel ctx func ce cx es
+     (s0 with vs_labels := s0.vs_labels |+ ("runtime_begin",w))` by
+    metis_tac[abi_args_state_rel_update_runtime] >>
+  `!w. FLOOKUP (s0 with vs_labels := s0.vs_labels |+ ("runtime_begin",w)).vs_labels
+     "runtime_begin" = SOME w` by simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  `0w = typed_val_to_w256 tv v` by metis_tac[abi_args_runtime_word_observed] >>
+  `1w = typed_val_to_w256 tv v` by metis_tac[abi_args_runtime_word_observed] >>
+  gvs[]
+QED
+
+Theorem abi_args_zero_footprint_size:
+  val_footprint tv v = 0 ==> type_memory_size tv = 0
+Proof
+  Cases_on `v` >> simp[val_footprint_def] >>
+  gvs[AllCaseEqs()] >> metis_tac[]
+QED
+
+Theorem abi_args_zero_footprint_relocate:
+  val_in_memory tv v src mem /\ val_wf tv v /\ val_footprint tv v = 0 ==>
+  val_in_memory tv v dst mem'
+Proof
+  strip_tac >>
+  `type_memory_size tv = 0` by metis_tac[abi_args_zero_footprint_size] >>
+  irule valueEncodingPropsTheory.val_in_memory_relocate >>
+  simp[] >> qexistsl_tac [`mem`, `0`, `src`] >>
+  simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+Theorem abi_args_runtime_zero_transport:
+  stmt_state_rel ctx func ce cx es' u /\ ce.ce_is_ctor /\
+  ~is_word_type ty /\
+  (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> val_footprint tv v = 0) /\
+  expr_val_rel cx ty v (Label "runtime_begin") t /\
+  expr_val_at ce cx ty sa sb es v (Label "runtime_begin") t ==>
+  expr_val_rel cx ty v (Label "runtime_begin") u /\
+  expr_val_at ce cx ty sa sb es' v (Label "runtime_begin") u
+Proof
+  strip_tac >>
+  `IS_SOME (FLOOKUP u.vs_labels "runtime_begin")` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, immutable_base_zero_def] >>
+  Cases_on `FLOOKUP u.vs_labels "runtime_begin"` >> gvs[] >>
+  gvs[expr_val_rel_def, expr_val_at_def, venomStateTheory.eval_operand_def] >>
+  metis_tac[abi_args_zero_footprint_relocate]
+QED
