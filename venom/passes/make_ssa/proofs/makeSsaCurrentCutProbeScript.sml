@@ -93,3 +93,18 @@ Proof
     [Label "E"; Var "a"; Label "D"; Var "v"] ["v"]`, `"v"`] >>
   simp[current_probe_inst_def, phi_pairs_def] >> EVAL_TAC >> metis_tac[]
 QED
+
+(* A local warning, not a certified cut counterexample: an original PHI
+   overwrites the inserted token, while cleanup redirects the later use. *)
+Theorem current_cut_probe_fork_original_token:
+  current_original_scan "v" "H" 0
+    [current_probe_inst 2 PHI
+      [Label "E"; Var "a"; Label "D"; Var "b"; Label "F"; Var "c"] ["v"]]
+    (CurrentInserted "v" "H") = CurrentOriginal "H" 0 0 /\
+  (EL 2 (EL 1 (FST (make_ssa_current_fn
+    (current_wf_probe_supply current_wf_probe_fork) current_wf_probe_fork)).fn_blocks).
+      bb_instructions).inst_operands =
+    [Var "formal_var_0"; Label "D"; Label "F"]
+Proof
+  EVAL_TAC
+QED
