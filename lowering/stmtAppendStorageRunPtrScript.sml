@@ -133,7 +133,8 @@ Theorem emit_storage_load_ptr:
          FLOOKUP G' x = FLOOKUP G x /\
          op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >> drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >> gnvs[] >>
   qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
   `step_inst_base i s = OK t` by
     (fs[run_inst_seq_def, AllCaseEqs()]) >>
@@ -151,4 +152,101 @@ Proof
     (fs[not_fresh_at_def]) >>
   simp[Abbr `i`, scalar_step_old_prov, scalar_step_old_taint,
        op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Theorem emit_append_arith_ptr:
+  emit_op opc ops st = (rop,st') /\ (?a b. ops = [a;b]) /\
+  (opc = ADD \/ opc = MUL \/
+   opc = LT /\ (?v k. ops = [Var v; Lit k])) /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  (!op. MEM op ops ==> op_taint tn op = {}) /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn'.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G' tn' /\
+    op_taint tn' rop = {} /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==>
+         FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >> gnvs[] >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >>
+     Cases_on `opc = ADD`
+     >- (irule append_scalar_inst_check >> simp[] >> metis_tac[]) >>
+     irule typed_copy_loop_test_check >> gvs[] >> metis_tac[]) >>
+  qexistsl_tac [`step_prov PG G i t`, `step_taint i s t tn`] >>
+  conj_tac >- simp[inst_seq_ptr_def] >>
+  `step_taint i s t tn =
+    tn with t_var := tn.t_var |+ (STRING #"%" (toString st.cs_next_var),{})` by
+    (simp[Abbr `i`] >> Cases_on `opc = ADD`
+     >- (gvs[] >> irule scalar_add_taint >> simp[]) >>
+     gvs[] >> metis_tac[typed_copy_loop_arith_ghost]) >>
+  simp[op_taint_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+  `x <> STRING #"%" (toString st.cs_next_var)` by
+    (fs[not_fresh_at_def]) >>
+  simp[Abbr `i`, scalar_step_old_prov, scalar_step_old_taint,
+       op_taint_def, FLOOKUP_UPDATE]
+QED
+
+Theorem emit_storage_store_ptr:
+  emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn a = {} /\ op_taint tn v = {} /\
+  eval_operand a s = SOME slot /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G
+    (if tr then tn with t_trans := key_update tn.t_trans slot {}
+     else tn with t_stor := key_update tn.t_stor slot {})
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule append_scalar_inst_check >>
+     Cases_on `tr` >> gvs[] >> metis_tac[]) >>
+  simp[inst_seq_ptr_def] >>
+  conj_tac >- simp[Abbr `i`, scalar_void_prov] >>
+  simp[Abbr `i`] >> sym_tac >> irule scalar_storage_store_taint >> simp[]
+QED
+
+Theorem emit_append_assert_ptr:
+  emit_void ASSERT [a] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn a = {} /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G tn
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule append_scalar_inst_check >> simp[] >> metis_tac[]) >>
+  simp[inst_seq_ptr_def] >>
+  conj_tac >- simp[Abbr `i`, scalar_void_prov] >>
+  simp[Abbr `i`] >> sym_tac >> irule scalar_assert_taint >> simp[]
+QED
+
+Theorem emit_append_assert_abort_ptr:
+  emit_void ASSERT [a] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = Abort ex t /\
+  op_taint tn a = {} /\ ~ctx_has_dalloca ctx ==>
+  inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st') s G tn
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [i] s` >>
+  `step_inst_base i s = Abort ex t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  simp[inst_seq_ptr_def] >> simp[Abbr `i`] >>
+  irule append_assert_abort_check >> simp[] >> metis_tac[]
 QED
