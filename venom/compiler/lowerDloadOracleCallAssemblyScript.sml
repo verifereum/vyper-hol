@@ -147,6 +147,7 @@ Theorem ld_oracle_call_dispatch:
     eval_operand g t = SOME gas /\ eval_operand a t = SOME addr /\
     (inst.inst_opcode = CALL ==> eval_operand v t = SOME value) /\
     (inst.inst_opcode = STATICCALL ==> value = 0w) /\
+    (inst.inst_opcode = CALL ==> ~(st /\ value <> 0w)) /\
     eval_operand ao t = SOME at /\ eval_operand az t = SOME size /\
     eval_operand ro t = SOME rt /\ eval_operand rz t = SOME rsize /\
     exec_ext_call inst t gas addr value at size rt rsize st = OK ts
@@ -174,6 +175,7 @@ Theorem ld_oracle_call_operands:
     eval_operand a f.lf_src = SOME addr /\
     (inst.inst_opcode = CALL ==> eval_operand v f.lf_src = SOME value) /\
     (inst.inst_opcode = STATICCALL ==> value = 0w) /\
+    (inst.inst_opcode = CALL ==> ~(st /\ value <> 0w)) /\
     eval_operand ao f.lf_src = SOME x /\
     eval_operand az f.lf_src = SOME size /\
     eval_operand ro f.lf_src = SOME r /\
@@ -499,7 +501,8 @@ Proof
     fs[ld_nonghost_def] >>
   qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
   gvs[] >> pure_once_rewrite_tac[step_inst_base_def] >>
-  asm_rewrite_tac[opcode_case_def] >> simp[]
+  asm_rewrite_tac[opcode_case_def] >>
+  Cases_on `f.lf_tgt.vs_call_ctx.cc_static` >> gvs[]
 QED
 
 Theorem ld_set_prov_selected:

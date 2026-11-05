@@ -75,7 +75,9 @@ Resume ld_sync_istore_effect[operands]:
      qexistsl_tac [`A`,`P`,`f`,`inst`] >> simp[]) >>
   `op_taint tn a = {}` by metis_tac[ld_write2_taint] >>
   `dst = dst'` by
-    (drule ld_write_address_observation >> simp[] >> metis_tac[MEM]) >>
+    (drule ld_write_address_observation >> simp[] >>
+     disch_then (qspecl_then [`dst'`,`dst`,`tn`,`a`,`inst`] mp_tac) >>
+     fs[]) >>
   gvs[] >> suspend "write"
 QED
 

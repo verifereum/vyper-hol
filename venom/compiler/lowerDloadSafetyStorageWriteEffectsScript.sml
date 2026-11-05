@@ -44,7 +44,7 @@ QED
 
 Theorem ld_storage_write_step[local]:
   (inst.inst_opcode = SSTORE \/ inst.inst_opcode = TSTORE) /\
-  inst.inst_operands = [a;v] /\
+  inst.inst_operands = [a;v] /\ ~s.vs_call_ctx.cc_static /\
   eval_operand a s = SOME key /\ eval_operand v s = SOME x ==>
   step_inst_base inst s = OK
     (if inst.inst_opcode = SSTORE then sstore key x s else tstore key x s)
@@ -108,6 +108,12 @@ Theorem ld_storage_write_effect:
     ts.vs_return_pc_token = f.lf_tgt.vs_return_pc_token
 Proof
   strip_tac >>
+  `~f.lf_tgt.vs_call_ctx.cc_static` by
+    (spose_not_then strip_assume_tac >>
+     qpat_x_assum `step_inst_base inst f.lf_tgt = OK ts` mp_tac >>
+     pure_once_rewrite_tac[step_inst_base_def] >>
+     asm_rewrite_tac[opcode_case_def] >> gvs[eval_operands_def]) >>
+  `~f.lf_src.vs_call_ctx.cc_static` by fs[ld_nonghost_def] >>
   `step_inst_base inst f.lf_src = OK
     (if inst.inst_opcode = SSTORE then sstore key x f.lf_src
      else tstore key x f.lf_src)` by (irule ld_storage_write_step >> simp[]) >>

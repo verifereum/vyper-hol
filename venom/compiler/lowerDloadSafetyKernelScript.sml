@@ -31,7 +31,8 @@ Definition ld_nonghost_def:
   ld_nonghost tn s t <=>
     s.vs_call_ctx = t.vs_call_ctx /\ s.vs_tx_ctx = t.vs_tx_ctx /\
     s.vs_block_ctx = t.vs_block_ctx /\ s.vs_returndata = t.vs_returndata /\
-    s.vs_outcomes = t.vs_outcomes /\ s.vs_data_section = t.vs_data_section /\
+    s.vs_outcomes = t.vs_outcomes /\ s.vs_gas_readings = t.vs_gas_readings /\
+    s.vs_data_section = t.vs_data_section /\
     s.vs_labels = t.vs_labels /\ s.vs_code = t.vs_code /\
     s.vs_fmp = t.vs_fmp /\ s.vs_call_entry_fmp = t.vs_call_entry_fmp /\
     s.vs_initial_fmp = t.vs_initial_fmp /\ s.vs_prev_hashes = t.vs_prev_hashes /\

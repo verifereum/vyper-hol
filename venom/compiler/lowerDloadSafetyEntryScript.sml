@@ -82,7 +82,7 @@ Proof
     (fs[o1_src_inv_def] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    (fs[ptr_discipline_def] >> qexists_tac `P` >> fs[EVERY_MEM]) >>
   pop_assum strip_assume_tac >>
   drule_all ld_sync_entry >> disch_then (qspecl_then [`u`, `lo`] strip_assume_tac) >>
   metis_tac[]
