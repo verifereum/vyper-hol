@@ -109,3 +109,64 @@ Proof
     venomInstTheory.fn_insts_blocks_def]
 QED
 
+
+Theorem deploy_ctor_noninit_lower_eq:
+  lower_vyper_deploy_unit
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> [] =
+  SOME <|cu_context :=
+    <|ctx_functions :=
+      [<|fn_name := "__deploy";
+         fn_blocks :=
+           [<|bb_label := "__deploy";
+              bb_instructions :=
+                [<|inst_id := 0; inst_opcode := JMP;
+                   inst_operands := [Label "@ctor_exit_0"]; inst_outputs := []|>]|>;
+            <|bb_label := "@ctor_exit_0";
+              bb_instructions :=
+                [<|inst_id := 1; inst_opcode := ALLOCA;
+                   inst_operands := [Lit 0w]; inst_outputs := ["%0"]|>;
+                 <|inst_id := 2; inst_opcode := CODECOPY;
+                   inst_operands := [Var "%0"; Label "runtime_begin"; Lit 0w];
+                   inst_outputs := []|>;
+                 <|inst_id := 3; inst_opcode := RETURN;
+                   inst_operands := [Var "%0"; Lit 0w]; inst_outputs := []|>]|>];
+         fn_call_abi := <|ica_has_memory_return_buffer := NONE;
+                          ica_user_return_count := NONE|>;
+         fn_noinline := F; fn_forced_alloc_positions := FEMPTY;
+         fn_eom := NONE; fn_mems_used := []; fn_fmp_signature := NONE|>];
+      ctx_entry := SOME "__deploy"; ctx_global_reserved := []|>;
+    cu_data_segment := [<|ds_label := "runtime_begin"; ds_items := [DataBytes []]|>]|>
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
+local
+  val stage_cs = computeLib.add_thms
+    [venomPipelineRunnerTheory.run_named_fn_schedules_def,
+     venomFnScheduleRunnerTheory.run_configured_fn_passes_def,
+     venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def,
+     irSupplyTheory.fn_ir_inst_ids_def,
+     irSupplyTheory.fn_ir_vars_def,
+     irSupplyTheory.fn_ir_labels_def]
+    (computeLib.copy (computeLib.the_compset ()));
+in
+Theorem deploy_ctor_noninit_simplify_probe:
+  IS_SOME (run_pipeline_stage
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |>
+    (PS_MapFunctions (CFP_Simple VP_SimplifyCFG))
+    (THE (lower_vyper_deploy_unit
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+         rpol_final_assembly := FAP_Optimize |> []))
+    (init_ir_supply (THE (lower_vyper_deploy_unit
+      [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+      <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+         rpol_final_assembly := FAP_Optimize |> []))))
+Proof
+  rewrite_tac[deploy_ctor_noninit_lower_eq] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+end
