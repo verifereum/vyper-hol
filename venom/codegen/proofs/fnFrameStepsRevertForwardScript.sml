@@ -3939,3 +3939,38 @@ Resume rf_strict_suffix_abort[assign]:
 QED
 
 Finalise rf_strict_suffix_abort
+
+Theorem rf_owned_operand_defined:
+  plan_stack_rel lo view ps.ps_stack stk /\
+  plan_spill_rel lo view ps.ps_spilled mem /\
+  (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  op <> dead_stack_marker ==>
+  ?v. operand_val view lo op = SOME v
+Proof
+  strip_tac
+  >- (`MEM op (REVERSE ps.ps_stack)` by simp[] >>
+      `?n. n < LENGTH (REVERSE ps.ps_stack) /\
+        op = EL n (REVERSE ps.ps_stack)` by metis_tac[MEM_EL] >>
+      fs[plan_stack_rel_def] >>
+      first_x_assum (qspec_then `n` mp_tac) >> metis_tac[]) >>
+  fs[plan_spill_rel_def, finite_mapTheory.FLOOKUP_DEF] >>
+  first_x_assum (qspec_then `op` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem rf_frame_input_defined:
+  !ctx cp lo fn ra rest mem0 ps vs st op.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  ~is_label_operand op /\
+  (is_var_operand op ==> MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+  ?v. operand_val (frame_view fn ra vs) lo op = SOME v
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `op` >>
+  gvs[stackPlanTypesTheory.is_var_operand_def,
+      stackPlanTypesTheory.is_label_operand_def]
+  >- simp[operand_val_def] >>
+  irule rf_owned_operand_defined >>
+  simp[dead_stack_marker_def] >>
+  fs[frameRelTheory.fn_frame_inv_def,
+     contextCodegenRelTheory.context_venom_asm_rel_def] >>
+  qexistsl_tac [`st.as_memory`, `ps`, `top`] >> simp[]
+QED
