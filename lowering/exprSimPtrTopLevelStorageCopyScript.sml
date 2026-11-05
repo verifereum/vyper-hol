@@ -1610,3 +1610,49 @@ Proof
   qpat_x_assum `!x. _ ==> FLOOKUP Gf x = _ /\ _` (qspec_then `x` mp_tac) >>
   gvs[] >> rpt strip_tac >> gvs[]
 QED
+
+Theorem toplevel_copy_iterate_path:
+  !(remaining:num) k G tn s.
+  (!j G tn q. j <= n /\ Inv j G tn q /\ ~q.vs_halted /\
+          q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
+     ?r G1 tn1. gas_path_ptr D 0 ctx fn PG G tn q 0 G1 tn1 (OK r) /\
+         Inv j G1 tn1 r /\ ~r.vs_halted /\ r.vs_inst_idx = 0 /\
+         r.vs_current_bb = (if j = n then exit else loop_body)) /\
+  (!j G tn q. j < n /\ Inv j G tn q /\ ~q.vs_halted /\
+          q.vs_current_bb = loop_body /\ q.vs_inst_idx = 0 ==>
+     ?r G1 tn1. gas_path_ptr D 0 ctx fn PG G tn q 0 G1 tn1 (OK r) /\
+         Inv (j+1) G1 tn1 r /\ ~r.vs_halted /\
+         r.vs_current_bb = hdr /\ r.vs_inst_idx = 0) /\
+  k + remaining = n /\ Inv k G tn s /\ ~s.vs_halted /\
+  s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+  ?t Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+      Inv n Gf tnf t /\ ~t.vs_halted /\
+      t.vs_current_bb = exit /\ t.vs_inst_idx = 0
+Proof
+  Induct_on `remaining`
+  >- (rpt gen_tac >> strip_tac >>
+      `k = n` by decide_tac >>
+      qpat_x_assum `!j G tn q. j <= n /\ _ ==> _`
+        (qspecl_then [`k`, `G`, `tn`, `s`] mp_tac) >>
+      simp[] >> strip_tac >> qexistsl_tac [`r`, `G1`, `tn1`] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `k < n /\ k <= n /\ (k+1)+remaining = n` by decide_tac >>
+  qpat_assum `!j G tn q. j <= n /\ _ ==> _`
+    (qspecl_then [`k`, `G`, `tn`, `s`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `r` strip_assume_tac) >>
+  qpat_assum `!j G tn q. j < n /\ _ ==> _`
+    (qspecl_then [`k`, `G1`, `tn1`, `r`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `u` strip_assume_tac) >>
+  qpat_x_assum `!k G tn s. (_ /\ _ /\ k + remaining = n /\ _) ==> _`
+    (qspecl_then [`k+1`, `G1'`, `tn1'`, `u`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  strip_tac >>
+  qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[] >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0+0) G1' tn1' (OK u)` by
+    (irule gas_path_ptr_then >> qexistsl_tac [`G1`, `r`, `tn1`] >> simp[]) >>
+  fs[] >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0+0) Gf tnf (OK t)` by
+    (irule gas_path_ptr_then >> qexistsl_tac [`G1'`, `u`, `tn1'`] >> simp[]) >> fs[]
+QED
