@@ -9,19 +9,15 @@ Ancestors
   exprLowering compileEnv vyperInterpreter vyperState
   exprSimUnwrapProps exprSimProps exprSimMemorySource bodyFieldMemoryProps
   gasSummary gasSummaryCompose gasExemptCert fragGasMode fragGasPath
-  fragGasPathMem fragGasSeqMem fragExecMem emitHelperProps emitHelper
-  exprLoweringProps loweringSlice context fragExec exprOperandVar
-  vyperEvalExprPreservesScopesDom venomState
-
-Theorem bytestring_not_word:
-  !t. is_bytestring_type t ==> ~is_word_type t
-Proof
-  Cases >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, is_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, is_word_type_def]
-QED
+  fragGasPathMem fragGasSeqMem fragExecMem instMemFrontier allocaHistoryFragment
+  emitHelperProps emitHelper exprLoweringProps loweringSlice context
+  bodyImmutableUnwrapMemory memSafeRun exprSimAccounts
+  fragExec exprOperandVar vyperEvalExprPreservesScopesDom
+  exprSimAlloc exprSimStorageCopy exprSimCopy storageCopyGasPath
+  immutableCopyExecution bodyImmutableCopyMemory bodyStorageCopyMemory
+  bodyAllocMemory bodyDeclMemoryCounted valueEncodingProps abiBuiltinAllocation
+  freshWrites allocaHistory immutableMemoryFrame venomMemDefs
+  venomExecSemantics venomInst venomState list rich_list finite_map
 
 (* unwrap_value_path_mem for a non-word expression, plus the room of a
    value left in memory. *)
@@ -58,7 +54,7 @@ Proof
   Cases_on `vv`
   >- (gvs[unwrap_value_def, comp_return_def, vv_location_def] >>
       qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
-      conj_tac >- (irule expr_post_of_vv_post_stack >> first_assum ACCEPT_TAC) >>
+      conj_tac >- metis_tac[expr_post_of_vv_post_stack] >>
       qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
       simp[vv_store_bound_def, expr_store_bound_def, read_result_def,
            return_def] >>
@@ -71,7 +67,7 @@ Proof
       simp[vv_location_def] >> strip_tac >> qexists_tac `u` >> simp[]) >>
   gvs[unwrap_value_def, comp_return_def, vv_location_def] >>
   qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
-  conj_tac >- (irule expr_post_of_vv_post_memory >> simp[]) >>
+  conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>
   qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def, read_result_def,
        return_def] >>
@@ -118,16 +114,17 @@ Proof
   `vv_store_bound cx (expr_type e) ee (Value v) vv s` by
     (qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
      simp[vv_store_bound_def, read_result_def, return_def] >>
-     strip_tac >> conj_tac
-     >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
-     first_assum ACCEPT_TAC) >>
+     rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_path_mem_room >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   simp[gas_marked_exec_def, gas_marked_path_def] >>
-  metis_tac[read_result_gas_obs, APPEND]
+  conj_tac >- metis_tac[read_result_gas_obs, APPEND] >>
+  rpt strip_tac >>
+  qpat_x_assum `vv_location _ = _ ==> _` drule >>
+  disch_then (qspecl_then [`sw`, `tvt`] mp_tac) >> simp[]
 QED
 
 (* The memory judgment of a non-word expression from its value one, with the
@@ -196,6 +193,10 @@ Proof
           rename1 `gas_marked_exec T _ (read_result _ _) _ [] _ _ (OK u2)` >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
+          reverse conj_tac
+          >- (rpt strip_tac >>
+              qpat_x_assum `vv_location _ = _ ==> _` drule >>
+              disch_then (qspecl_then [`sw`, `tvt`] mp_tac) >> simp[]) >>
           `marks = marks ++ []` by simp[] >>
           pop_assum SUBST1_TAC >> irule gas_marked_exec_bind_normal >>
           goal_assum drule >> simp[]) >>

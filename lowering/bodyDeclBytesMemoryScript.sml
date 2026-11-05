@@ -502,14 +502,15 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
     metis_tac[bodyMemoryPredsTheory.body_expr_mem_ok_def] >>
-  `~is_word_type (expr_type e)` by metis_tac[bytestring_not_word] >>
+  `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
   mp_tac (Q.SPECL [`ctx`, `func`, `c`, `cx`, `expr_type e`, `e`, `es`]
             expr_sim_mem_room) >>
-  impl_tac >- simp[] >>
+  impl_tac >- (rpt strip_tac >> gvs[]) >>
   disch_then (qspecl_then [`sa`, `sV`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   irule gas_outcome_post_mono >>
-  first_x_assum (irule_at (Pos hd)) >>
+  first_x_assum (irule_at (Pos last)) >>
   simp[] >> rpt strip_tac >> gvs[] >>
-  first_x_assum (qspecl_then [`sw`, `etv`] mp_tac) >> simp[]
+  rpt strip_tac >> qpat_x_assum `vv_location _ = _ ==> _` drule >>
+  disch_then drule >> strip_tac >> decide_tac
 QED
