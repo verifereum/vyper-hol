@@ -998,6 +998,15 @@ Proof
        bind_def, return_def, raise_def] >> EVAL_TAC
 QED
 
+(* Exact history-domain boundary; no typing or reachability premise. *)
+Theorem ifexp_memory_path_type_error[local]:
+  read_memory_path entry path = INR (TypeError msg) <=>
+  evaluate_subscripts entry.type entry.value path = INR (TypeError msg) /\
+  read_popped entry.type path entry.popped = NONE
+Proof
+  simp[read_memory_path_def, AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem ifexp_malformed_pop_source[local]:
   es.scopes =
     [FEMPTY |+ ("x", <| assignable := T; type := BaseTV BoolT;
