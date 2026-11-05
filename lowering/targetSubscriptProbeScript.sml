@@ -6419,6 +6419,22 @@ Proof
   simp[probe_clear_source_dead_descendant]
 QED
 
+Theorem probe_clear_source_transport:
+  !st mt v.
+    storage_agree (storage_dead probe_clear_source_context F st) st mt ==>
+    storage_agree
+      (storage_dead probe_clear_source_context F (update_storage 0w 0w st))
+      (update_storage 0w 0w st)
+      (update_storage 2w v (update_storage 0w 0w mt))
+Proof
+  rpt strip_tac >> irule probe_clear_source_dead_store_agree >>
+  conj_tac
+  >- simp[lookup_storage_def, update_storage_def, APPLY_UPDATE_THM] >>
+  irule accountsRelPropsTheory.storage_agree_update >>
+  qexists_tac `storage_dead probe_clear_source_context F st` >>
+  simp[accountsRelPropsTheory.storage_dead_update_zero]
+QED
+
 Theorem probe_clear_source_root_match:
   !st mt.
     lookup_storage 0w (update_storage 0w 0w st) =
