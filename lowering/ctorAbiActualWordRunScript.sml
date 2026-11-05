@@ -10,7 +10,7 @@ Ancestors
   valueEncoding words list rich_list arithmetic finite_map
 
 Theorem ctor_actual_word_ceiling_sequence:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -45,7 +45,7 @@ Proof
 QED
 
 Theorem ctor_actual_word_fragment:
-  compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv root_di av v /\
@@ -84,7 +84,7 @@ QED
 
 Theorem ctor_actual_word_run:
   !dst src hi ce env sf ty tv root_di av v st st' limit_st clamp ctx func site initial sb d.
-    compile_abi_decode_to_buf dst src DLOAD hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
+    compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (type_to_abi_dec_info sf ce ty) st = ((),st') /\
     type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
     abi_decoder_coherent ce env sf ty tv /\ abi_decoder_metadata ce env ty tv root_di av v /\
     eval_operand src initial = SOME (n2w sb) /\ eval_operand dst initial = SOME (n2w d) /\
@@ -131,7 +131,7 @@ Proof
     (Cases_on `src` >> Cases_on `dst` >>
      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def] >>
      metis_tac[not_fresh_at_def]) >>
-  `compile_abi_decode_to_buf dst src DLOAD hi (DecPrimWord clamp) st = ((),st') /\
+  `compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
    mem_bytes_at sb 32 initial.vs_data_section = enc (vyper_to_abi_type env ty) av` by
     metis_tac[] >>
   drule_all ctor_actual_word_fragment >>

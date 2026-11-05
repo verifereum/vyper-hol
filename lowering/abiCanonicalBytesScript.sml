@@ -70,3 +70,28 @@ Proof
   qexistsl_tac [`source`, `cap`, `sb`] >> asm_simp_tac bool_ss [] >>
   irule canonical_bytes_source_layout >> first_assum ACCEPT_TAC
 QED
+
+(* Representation needs only the runtime prefix, not unused capacity bytes. *)
+Theorem canonical_bytes_runtime_copied_layout:
+  mem_bytes_at sb (LENGTH (enc (Bytes NONE) (contractABI$BytesV bs))) source =
+    enc (Bytes NONE) (contractABI$BytesV bs) /\
+  mem_bytes_at d (32 + LENGTH bs) mem = mem_bytes_at sb (32 + LENGTH bs) source ==>
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (vyperValue$BytesV bs) d mem
+Proof
+  strip_tac >>
+  `mem_bytes_at sb (32 + LENGTH bs) source =
+     word_to_bytes (n2w (LENGTH bs) : 256 word) T ++ bs` by
+    (qspecl_then [`sb`, `[]`,
+       `word_to_bytes (n2w (LENGTH bs) : 256 word) T ++ bs`,
+       `REPLICATE (contractABI$ceil32 (LENGTH bs) - LENGTH bs) 0w`, `source`]
+       mp_tac abi_decoder_source_subwindow >>
+     gvs[canonical_bytes_encoding, APPEND_ASSOC]) >>
+  `mem_bytes_at d (LENGTH (word_to_bytes (n2w (LENGTH bs) : 256 word) T ++ bs)) mem =
+     word_to_bytes (n2w (LENGTH bs) : 256 word) T ++ bs` by gvs[] >>
+  drule abi_decoder_source_prefix >> strip_tac >>
+  `mem_bytes_at d 32 mem = word_to_bytes (n2w (LENGTH bs) : 256 word) T` by
+    (qspecl_then [`d`, `[]`, `word_to_bytes (n2w (LENGTH bs) : 256 word) T`,
+       `bs`, `mem`] mp_tac abi_decoder_source_subwindow >> gvs[]) >>
+  gvs[val_in_memory_def, mem_word_at_bytes, word_of_bytes_word_to_bytes,
+      dividesTheory.divides_def]
+QED

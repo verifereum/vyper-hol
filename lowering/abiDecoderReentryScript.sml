@@ -88,9 +88,9 @@ QED
 
 Theorem abi_decoder_prune_ranges:
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_operand_live next hi ==>
-  (abi_decoder_ranges opc hi src dst sb len d sz b cap (abi_decoder_prune_vars next s) <=>
-   abi_decoder_ranges opc hi src dst sb len d sz b cap s)
+  abi_decoder_operand_live next base_op /\ abi_decoder_operand_live next hi ==>
+  (abi_decoder_ranges opc base_op hi src dst src_base sb len d sz b cap (abi_decoder_prune_vars next s) <=>
+   abi_decoder_ranges opc base_op hi src dst src_base sb len d sz b cap s)
 Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_ranges_def] >>
   asm_simp_tac bool_ss [abi_decoder_prune_eval]
@@ -98,15 +98,16 @@ QED
 
 Theorem abi_decoder_pre_prune:
   abi_decoder_metadata ce env ty tv di av v /\
-  abi_decoder_reservation st.cs_next_id last b cap s /\
-  abi_decoder_ranges opc hi src dst sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+  abi_decoder_reservation (abi_decoder_entry_floor st) last b cap s /\
+  abi_decoder_ranges opc base_op hi src dst src_base sb (LENGTH (enc (vyper_to_abi_type env ty) av))
     d (type_memory_bytes ce ty) b cap s /\
-  mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env ty) av))
+  mem_bytes_at (src_base + sb) (LENGTH (enc (vyper_to_abi_type env ty) av))
     (abi_decode_source opc s) = enc (vyper_to_abi_type env ty) av /\
   abi_decoder_operand_live st.cs_next_var src /\
   abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
   abi_decoder_operand_live st.cs_next_var hi ==>
-  abi_decoder_pre ce env ty tv di av v st last src dst opc hi sb d b cap
+  abi_decoder_pre ce env ty tv di av v st last src dst opc base_op hi src_base sb d b cap
     (abi_decoder_prune_vars st.cs_next_var s)
 Proof
   strip_tac >> simp_tac bool_ss [abi_decoder_pre_def] >>

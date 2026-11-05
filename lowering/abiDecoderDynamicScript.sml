@@ -68,10 +68,10 @@ QED
 
 Theorem abi_decode_dynamic_singleton_members[local]:
   dec_info_needs_offset di ==>
-  compile_abi_decode_complex_elems dst src opc hi [(di,32,mem_sz)] 0 0 =
-    do child_src <- compile_getelemptr_abi src T 0 opc hi;
+  compile_abi_decode_complex_elems dst src opc base_op hi [(di,32,mem_sz)] 0 0 =
+    do child_src <- compile_getelemptr_abi src T 0 opc base_op hi;
        child_dst <- emit_op ADD [dst; Lit 0w];
-       compile_abi_decode_to_buf child_dst child_src opc hi di
+       compile_abi_decode_to_buf child_dst child_src opc base_op hi di
     od
 Proof
   strip_tac >>
@@ -103,9 +103,9 @@ QED
 
 Theorem abi_decode_dynamic_singleton_phases:
   dec_info_needs_offset di ==>
-  compile_abi_decode_to_buf dst src opc hi (DecComplex T [(di,32,mem_sz)]) =
-    do child_ops <- abi_decode_singleton_setup dst src opc hi;
-       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc hi di
+  compile_abi_decode_to_buf dst src opc base_op hi (DecComplex T [(di,32,mem_sz)]) =
+    do child_ops <- abi_decode_singleton_setup dst src opc base_op hi;
+       compile_abi_decode_to_buf (SND child_ops) (FST child_ops) opc base_op hi di
     od
 Proof
   strip_tac >>

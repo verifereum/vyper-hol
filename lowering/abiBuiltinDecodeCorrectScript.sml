@@ -12,7 +12,7 @@ Theorem lower_abi_decode_setup_trace:
   lower_abi_decode data info min_size max_size outsz st = (out,final) ==>
   ?ops ready.
     abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-    compile_abi_decode_to_buf (FST ops) (FST (SND ops)) MLOAD (SND (SND ops)) info ready =
+    compile_abi_decode_to_buf (FST ops) (Lit 0w) MLOAD (FST (SND ops)) (SND (SND ops)) info ready =
       ((),final) /\ out = FST ops
 Proof
   simp_tac bool_ss [lower_abi_decode_setup, comp_bind_def, comp_ignore_bind_def,
@@ -24,7 +24,7 @@ QED
 
 Theorem abi_builtin_decode_code:
   abi_builtin_decode_setup data min_size max_size outsz st = (ops,ready) /\
-  compile_abi_decode_to_buf (FST ops) (FST (SND ops)) MLOAD (SND (SND ops)) info ready =
+  compile_abi_decode_to_buf (FST ops) (Lit 0w) MLOAD (FST (SND ops)) (SND (SND ops)) info ready =
     ((),final) /\ fn_has_code st final func ==>
   fn_has_code st ready func /\ fn_has_code ready final func /\
   ready.cs_blocks = st.cs_blocks /\
@@ -80,14 +80,14 @@ Proof
   rename1 `abi_decode_sim ctx func initial prepared` >>
   `eval_operand (FST (SND ops)) prepared = SOME (n2w (src_base + 32)) /\
    eval_operand (SND (SND ops)) prepared =
-     SOME (n2w (src_base + 32 + LENGTH (enc (vyper_to_abi_type env ty) av)))`
+     SOME (n2w (LENGTH (enc (vyper_to_abi_type env ty) av)))`
     by asm_simp_tac (srw_ss()) [word_add_n2w] >>
   drule_all abi_builtin_canonical_pre_ready >> strip_tac >>
   mp_tac (Q.INST [`start` |-> `ready`, `end_st` |-> `final`, `opc` |-> `MLOAD`,
     `dst` |-> `FST (ops:operand # operand # operand)`,
-    `src` |-> `FST (SND (ops:operand # operand # operand))`,
+    `src` |-> `Lit 0w`, `base_op` |-> `FST (SND (ops:operand # operand # operand))`,
     `hi` |-> `SND (SND (ops:operand # operand # operand))`,
-    `sb` |-> `src_base + 32`, `initial` |-> `prepared:venom_state`] abi_decoder_decode) >>
+    `src_base` |-> `src_base + 32`, `sb` |-> `0`, `initial` |-> `prepared:venom_state`] abi_decoder_decode) >>
   impl_tac >- asm_simp_tac bool_ss [] >> strip_tac >>
   rename1 `val_in_memory tv v d actual.vs_memory` >>
   `eval_operand (FST ops) actual = SOME (n2w d)` by fs[abi_decoder_effect_def] >>

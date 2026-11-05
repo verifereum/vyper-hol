@@ -7,7 +7,7 @@ Ancestors
   contractABI valueEncoding venomExecSemantics venomState words arithmetic list
 
 Theorem abi_decode_canonical_dynamic_member_pointer:
-  compile_getelemptr_abi src T (SUM (MAP abi_member_head_size pre)) opc hi
+  compile_getelemptr_abi src T (SUM (MAP abi_member_head_size pre)) opc (Lit 0w) hi
     st = (member_op,st') /\
   has_types (pre ++ ty::post) (pvs ++ v::rest) /\
   LENGTH pre = LENGTH pvs /\ is_dynamic ty /\
@@ -34,14 +34,16 @@ Proof
   `sb + (head_lengths (pre ++ ty::post) 0 +
      SUM (MAP2 abi_member_tail_size pre pvs)) < dimword (:256)` by
     (asm_simp_tac arith_ss [head_lengths_acc] >> decide_tac) >>
-  drule_all abi_decode_dynamic_member_pointer >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
+    (Q.INST [`base_op` |-> `Lit 0w`, `src_base` |-> `0`]
+      abi_decode_dynamic_member_pointer)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') s = OK t` >>
   drule_all canonical_tuple_dynamic_child_source >> strip_tac >>
   qexists_tac `t` >> gvs[abi_decode_source_def] >> simp[ADD_ASSOC]
 QED
 
 Theorem abi_decode_canonical_array_pointer_bounded:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi abi_sz
+  compile_abi_decode_dyn_elem_ptr opc (Lit 0w) elem_src src_data hi abi_sz
     st = (child_op,st') /\ hi <> Lit 0w /\
   has_type (Array NONE ty) (ListV (pre ++ v::post)) /\ is_dynamic ty /\
   abi_sz <= LENGTH (enc ty v) /\
@@ -74,7 +76,9 @@ Proof
     (gvs[Excl "enc_def"] >> decide_tac) >>
   drule_all (SIMP_RULE bool_ss []
     (Q.INST [`bound` |-> `NONE`] canonical_array_offset_load)) >> strip_tac >>
-  drule_all abi_decode_bounded_array_pointer >> strip_tac >>
+  drule_all (SIMP_RULE (srw_ss()) [eval_operand_def]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`]
+      abi_decode_bounded_array_pointer)) >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st st') s = OK t` >>
   drule_all (SIMP_RULE bool_ss []
     (Q.INST [`bound` |-> `NONE`] canonical_array_dynamic_child_source)) >> strip_tac >>
@@ -82,7 +86,7 @@ Proof
 QED
 
 Theorem abi_decode_typed_array_pointer_bounded:
-  compile_abi_decode_dyn_elem_ptr opc elem_src src_data hi
+  compile_abi_decode_dyn_elem_ptr opc (Lit 0w) elem_src src_data hi
     (abi_embedded_static_size ce.ce_struct_fields ty) st = (child_op,st') /\
   hi <> Lit 0w /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\

@@ -1,7 +1,7 @@
 (* The decoder reloads and writes the dynamic-array count before its payload. *)
 Theory abiDecoderArrayHeader
 Ancestors
-  abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps
+  abiDecoderRange abiDecoderContract abiDecoderGuards emitHelperProps exprLoweringProps
   valueEncoding valueEncodingProps compileEnv emitHelper venomExecSemantics venomState words
 
 Theorem abi_decode_mstore_frame:

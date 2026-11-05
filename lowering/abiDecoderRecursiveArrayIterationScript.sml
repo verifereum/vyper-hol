@@ -10,33 +10,33 @@ Ancestors
 Theorem abi_decoder_effect_ranges:
   abi_decoder_effect first last lo hi next limit_st out outsz b cap s t /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_operand_live next hi_op /\
-  abi_decoder_ranges opc hi_op src dst sb len d sz b cap s ==>
-  abi_decoder_ranges opc hi_op src dst sb len d sz b cap t
+  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\
+  abi_decoder_ranges opc base_op hi_op src dst B sb len d sz b cap s ==>
+  abi_decoder_ranges opc base_op hi_op src dst B sb len d sz b cap t
 Proof
   rw[abi_decoder_ranges_def, abi_decoder_effect_def] >> metis_tac[]
 QED
 
 Theorem abi_decoder_array_body_at_index:
-  abi_decode_array_element_setup ip src dst opc hi (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\
+  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
-  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d j initial /\
+  abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d j initial /\
   j < LENGTH vs /\
-  abi_decoder_ranges opc hi src dst sb
+  abi_decoder_ranges opc base_op hi src dst B sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   eval_operand ip initial = SOME p /\ mload (w2n p) initial = n2w j /\
   abi_decoder_operand_live st.cs_next_var src /\ abi_decoder_operand_live st.cs_next_var dst /\
-  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var ip /\
+  abi_decoder_operand_live st.cs_next_var hi /\ abi_decoder_operand_live st.cs_next_var base_op /\ abi_decoder_operand_live st.cs_next_var ip /\
   abi_decoder_budget first last b cap initial /\ first <= st.cs_next_id /\
   st.cs_next_id <= middle.cs_next_id /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
@@ -70,20 +70,20 @@ Proof
 QED
 
 Theorem abi_decoder_recursive_body_inputs:
-  abi_decoder_recursive_loop_inv opc aty avs tv vs sb d outsz slot site
+  abi_decoder_recursive_loop_inv opc aty avs tv vs (B+sb) d outsz slot site
     first last lo hi next limit_st b cap initial body_lbl j s /\
-  abi_decoder_ranges opc hi_op src dst sb (LENGTH (enc (Array NONE aty) (ListV avs)))
+  abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     d outsz b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
+  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\ next <= body_next ==>
-  abi_decoder_array_memory opc aty avs tv vs sb d j s /\
-  abi_decoder_ranges opc hi_op src dst sb (LENGTH (enc (Array NONE aty) (ListV avs)))
+  abi_decoder_array_memory opc aty avs tv vs (B+sb) d j s /\
+  abi_decoder_ranges opc base_op hi_op src dst B sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     d outsz b cap s /\
   fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s /\
   eval_operand ip s = SOME (n2w slot) /\ mload (w2n (n2w slot:bytes32)) s = n2w j /\
   abi_decoder_operand_live body_next src /\ abi_decoder_operand_live body_next dst /\
-  abi_decoder_operand_live body_next hi_op /\ abi_decoder_operand_live body_next ip /\
+  abi_decoder_operand_live body_next hi_op /\ abi_decoder_operand_live body_next base_op /\ abi_decoder_operand_live body_next ip /\
   s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -100,31 +100,31 @@ QED
 (* TOP-LEVEL: the generated body extends the initialized prefix even when its
    recursive child allocates scratch and changes the current basic block. *)
 Theorem abi_decoder_recursive_array_iteration:
-  abi_decode_array_element_setup ip src dst opc hi_op (type_to_abi_dec_info sf ce ty)
+  abi_decode_array_element_setup ip src dst opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,middle) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc hi_op
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) opc base_op hi_op
     (type_to_abi_dec_info sf ce ty) middle = ((),end_st) /\
   fn_has_code st end_st func /\ st.cs_current_insts = [] /\
   (!bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
     phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_correct ce env sf ty tv /\
+  abi_decoder_correct ce env sf ty tv /\ (base_op = Lit 0w \/ opc = MLOAD) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     parent_di (ListV avs) (ArrayV (DynArrayV vs)) /\
-  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs sb d
+  abi_decoder_recursive_loop_inv opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial st.cs_current_bb j s /\ j < LENGTH vs /\
-  abi_decoder_ranges opc hi_op src dst sb
+  abi_decoder_ranges opc base_op hi_op src dst B sb
     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next dst /\
-  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next ip /\
+  abi_decoder_operand_live next hi_op /\ abi_decoder_operand_live next base_op /\ abi_decoder_operand_live next ip /\
   eval_operand ip initial = SOME (n2w slot) /\ slot < dimword (:256) /\
   first <= lo /\ lo <= st.cs_next_id /\ st.cs_next_id <= middle.cs_next_id /\
   end_st.cs_next_id <= hi /\ hi <= last /\ next <= st.cs_next_var /\
   first <= site /\ site < last /\ (site < st.cs_next_id \/ end_st.cs_next_id <= site) /\
   end_st.cs_next_var <= limit_st.cs_next_var ==>
-  ?actual. abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs sb d (SUC j) actual /\
+  ?actual. abi_decoder_array_memory opc (vyper_to_abi_type env ty) avs tv vs (B+sb) d (SUC j) actual /\
     abi_decoder_effect first last lo hi next limit_st
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap initial actual /\
     FLOOKUP actual.vs_allocas site = SOME (slot,32) /\ mload slot actual = n2w j /\
@@ -156,13 +156,13 @@ Proof
     by (qpat_x_assum `j * type_memory_size tv + type_memory_size tv <= _` mp_tac >>
         simp_tac bool_ss [Once type_memory_bytes_def] >>
         asm_simp_tac bool_ss [] >> decide_tac) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_ranges_def]) >>
   qpat_assum `type_memory_size tv = _`
     (fn size => mp_tac (PURE_REWRITE_RULE [size]
       (Q.INST [`child_lo` |-> `st.cs_next_id`, `child_hi` |-> `end_st.cs_next_id`,
         `child_next` |-> `st.cs_next_var`, `body_lbl` |-> `st.cs_current_bb`,
-        `aty` |-> `vyper_to_abi_type env ty`, `t` |-> `actual:venom_state`,
+        `aty` |-> `vyper_to_abi_type env ty`, `sb` |-> `B+sb`, `t` |-> `actual:venom_state`,
         `outsz` |-> `type_memory_bytes ce (ArrayT ty (Dynamic maxn))`]
         abi_decoder_recursive_child_advance))) >>
   impl_tac >- asm_simp_tac bool_ss [] >>

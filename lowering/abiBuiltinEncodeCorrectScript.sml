@@ -1,5 +1,6 @@
 Theory abiBuiltinEncodeCorrect
 Ancestors
+  abiDecoderRange
   abiBuiltinAllocation abiBuiltinEncodeSetup abiDecoderEffect compileEnv venomState finite_map
   abiBuiltinEncodeCode abiEncoderWrites abiBuiltinPrefix abiEncoderBytesPrefix
   abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderReentryAddress abiDecoderFrameCompose
