@@ -74,3 +74,61 @@ Proof
   Cases_on `fresh_ir_var s4` >>
   gvs[ao_alloc_fresh_def] >> strip_tac >> gvs[]
 QED
+
+Theorem ao_transform_insts_supply_mono:
+  !insts s idx outs s'.
+    ir_supply_inst_ok s /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    ir_supply_inst_ok s' /\
+    set s.irs_used_inst_ids SUBSET set s'.irs_used_inst_ids /\
+    set s.irs_used_vars SUBSET set s'.irs_used_vars /\
+    s'.irs_used_labels = s.irs_used_labels
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  `ir_supply_inst_ok s1 /\
+   set s.irs_used_inst_ids SUBSET set s1.irs_used_inst_ids /\
+   set s.irs_used_vars SUBSET set s1.irs_used_vars /\
+   s1.irs_used_labels = s.irs_used_labels` by
+    (drule_all ao_alloc_fresh_contract >> strip_tac >> gvs[SUBSET_DEF]) >>
+  first_x_assum drule_all >> strip_tac >>
+  metis_tac[SUBSET_TRANS]
+QED
+
+Theorem ao_transform_block_supply_mono:
+  ir_supply_inst_ok s /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  ir_supply_inst_ok s' /\
+  set s.irs_used_inst_ids SUBSET set s'.irs_used_inst_ids /\
+  set s.irs_used_vars SUBSET set s'.irs_used_vars /\
+  s'.irs_used_labels = s.irs_used_labels
+Proof
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def] >>
+  metis_tac[ao_transform_insts_supply_mono]
+QED
+
+Theorem ao_transform_blocks_supply_mono:
+  !bbs s bbs' s'.
+    ir_supply_inst_ok s /\
+    ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+    ir_supply_inst_ok s' /\
+    set s.irs_used_inst_ids SUBSET set s'.irs_used_inst_ids /\
+    set s.irs_used_vars SUBSET set s'.irs_used_vars /\
+    s'.irs_used_labels = s.irs_used_labels
+Proof
+  Induct >> simp[Once ao_transform_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  rename1 `ao_transform_block_supply dfg ra targets s h = (bb,s1)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets s1 bbs` >>
+  rename1 `ao_transform_blocks_supply dfg ra targets s1 bbs = (tail,s2)` >>
+  gvs[Once ao_transform_blocks_supply_def] >>
+  drule_all ao_transform_block_supply_mono >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >> metis_tac[SUBSET_TRANS]
+QED
