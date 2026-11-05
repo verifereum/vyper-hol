@@ -8,7 +8,7 @@ Ancestors
   abiEncoderAdmissible abiEncoder emitHelperProps emitHelper compileEnv
   pred_set instIdxIndep freshWrites exprLoweringProps fragExec venomState venomExecSemantics venomInst words list finite_map arithmetic
 
-Theorem window_array_register_high[local]:
+Theorem window_array_register_high:
   emit_op opc ops st = (out,en) /\ opc <> INVOKE /\
   window_pure_seq st en s t ==>
   !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s
