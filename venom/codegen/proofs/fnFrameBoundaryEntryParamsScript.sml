@@ -1,6 +1,6 @@
 Theory fnFrameBoundaryEntryParams
 Ancestors
-  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
+  allocMono frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers foldlSim
   callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
@@ -2023,4 +2023,83 @@ Proof
   qexists `st'` >> simp[] >> rpt strip_tac >>
   irule entry_local_footprint_outside_closure >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem entry_prepare_params_context_sim:
+  !ps0 ch growth spill_base lbl_ctr params fn pi liveness ops ps1
+   cplan lo o2pc prog vv st initial_fmp r ctx name.
+    ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+    params = get_params (HD fn.fn_blocks).bb_instructions /\
+    pi = ps0 with ps_stack := MAP (\i. Var (HD i.inst_outputs)) params /\
+    codegen_ready_fn fn /\
+    prepare_params_plan liveness fn ps0 = (ops,ps1) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    context_venom_asm_rel cplan lo pi vv st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+    MEM r cplan.cp_regions /\ r.sr_fn_name = name /\
+    r.sr_spill_base <= spill_base /\
+    ps1.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      context_venom_asm_rel cplan lo ps1 vv st' /\
+      (!b. ~closure_spill_byte ctx cplan name b ==>
+        read_byte b st'.as_memory = read_byte b st.as_memory) /\
+      r.sr_spill_base <= ps1.ps_alloc.sa_spill_base
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `context_venom_asm_rel cplan lo installed vv st` >>
+  `ps1.ps_alloc.sa_spill_base = spill_base` by
+    (drule prepare_params_plan_spill_base >>
+     gvs[init_cleanup_plan_state_def, init_plan_state_def, init_spill_alloc_def]) >>
+  Cases_on `params = []`
+  >- (`installed = ps0` by
+        gvs[init_cleanup_plan_state_def, init_plan_state_def] >>
+      gvs[prepare_params_plan_def] >>
+      qexists `st` >> simp[execute_plan_def, asm_steps_def]) >>
+  `FOLDL (\s inst. s with ps_stack := stack_push (Var (HD inst.inst_outputs)) s.ps_stack)
+    ps0 params = installed /\
+   spill_alloc_layout_wf installed.ps_alloc installed.ps_spilled /\
+   ALL_DISTINCT installed.ps_stack /\
+   DISJOINT (set installed.ps_stack) (FDOM installed.ps_spilled)` by
+    (irule entry_installed_structural >> metis_tac[]) >>
+  qpat_x_assum `prepare_params_plan _ _ _ = _` mp_tac >>
+  pure_rewrite_tac[prepare_params_plan_def, LET_THM] >> BETA_TAC >>
+  qpat_assum `params = get_params _` (fn th => pure_rewrite_tac[GSYM th]) >>
+  qpat_assum `FOLDL _ ps0 params = installed` (fn th => pure_rewrite_tac[th]) >>
+  qpat_assum `params <> []` (fn th => rewrite_tac[th]) >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead installed` >>
+  Cases_on `popmany_plan dead installed` >>
+  rename1 `popmany_plan dead installed = (pop_ops, ps2)` >>
+  pure_rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC >>
+  qmatch_goalsub_abbrev_tac `optimistic_swap_plan dfg_empty (LAST params) live term ps2` >>
+  Cases_on `optimistic_swap_plan dfg_empty (LAST params) live term ps2` >>
+  rename1 `optimistic_swap_plan _ _ _ _ ps2 = (swap_ops, ps3)` >>
+  simp[pairTheory.UNCURRY_DEF, pairTheory.PAIR_EQ] >> strip_tac >>
+  qpat_x_assum `pop_ops ++ swap_ops = ops` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `ps3 = ps1` SUBST_ALL_TAC >>
+  `r.sr_spill_base <= ps2.ps_alloc.sa_spill_base` by
+    (drule optimistic_swap_plan_spill_base >> simp[]) >>
+  `ps2.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (drule optimistic_swap_plan_next_offset >> decide_tac) >>
+  qpat_x_assum `ps0 = _` kall_tac >>
+  qpat_x_assum `params = _` kall_tac >>
+  qpat_x_assum `installed = _` kall_tac >>
+  qpat_x_assum `FOLDL _ _ _ = _` kall_tac >>
+  qpat_x_assum `codegen_ready_fn _` kall_tac >>
+  qpat_x_assum `Abbrev (dead = _)` kall_tac >>
+  qpat_x_assum `Abbrev (live = _)` kall_tac >>
+  qpat_x_assum `Abbrev (term = _)` kall_tac >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[execute_plan_append, asm_block_at_append] >> strip_tac >>
+  `!off. MEM (SOSpill off) pop_ops ==> off < dimword (:256)` by gvs[] >>
+  `!off. MEM (SOSpill off) swap_ops ==> off < dimword (:256)` by gvs[] >>
+  drule_all entry_context_popmany_outside_closure >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  `asm_block_at prog st'.as_pc (execute_plan initial_fmp swap_ops)` by gvs[] >>
+  `r.sr_spill_base <= ps1.ps_alloc.sa_spill_base` by simp[] >>
+  drule_all entry_context_optimistic_swap_outside_closure >>
+  disch_then (qspecl_then [`o2pc`, `ctx`] strip_assume_tac) >>
+  qexists `st''` >> conj_tac
+  >- (simp[] >> irule asm_steps_compose_ok >> qexists `st'` >> simp[]) >>
+  simp[] >> metis_tac[]
 QED
