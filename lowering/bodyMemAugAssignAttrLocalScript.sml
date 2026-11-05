@@ -1469,3 +1469,55 @@ Proof
        arithmeticTheory.EXP_BASE_LEQ_MONO_IMP) >> simp[]) >> decide_tac
 QED
 
+
+
+Theorem square_power_two_even_mem_src[local]:
+  !k b:num. b * b = 2 ** k ==> EVEN k
+Proof
+  completeInduct_on `k` >> rpt strip_tac >>
+  Cases_on `k` >- simp[] >>
+  `EVEN (b * b)` by
+    (asm_rewrite_tac[] >> simp[arithmeticTheory.EVEN_EXP_IFF]) >>
+  `EVEN b` by fs[arithmeticTheory.EVEN_MULT] >>
+  qpat_x_assum `EVEN b` (mp_tac o REWRITE_RULE [arithmeticTheory.EVEN_EXISTS]) >>
+  disch_then (qx_choose_then `c` assume_tac) >>
+  Cases_on `n`
+  >- (gvs[arithmeticTheory.EXP, GSYM arithmeticTheory.EXP_2,
+          arithmeticTheory.EXP_BASE_MULT] >> decide_tac) >>
+  rename1 `EVEN (SUC (SUC j))` >>
+  `c * c = 2 ** j` by
+    (gvs[arithmeticTheory.EXP, GSYM arithmeticTheory.EXP_2,
+         arithmeticTheory.EXP_BASE_MULT] >> decide_tac) >>
+  `EVEN j` by (first_x_assum irule >> simp[] >> qexists_tac `c` >> pure_asm_rewrite_tac[arithmeticTheory.EXP_2] >> REFL_TAC) >>
+  simp[arithmeticTheory.EVEN]
+QED
+
+Theorem pow_two_odd_exponent_mem_src[local]:
+  !a e k:num. 0 < a /\ a ** e = 2 ** k /\ ODD k ==> ODD e
+Proof
+  rpt strip_tac >> spose_not_then assume_tac >>
+  `EVEN e` by fs[arithmeticTheory.ODD_EVEN] >>
+  qpat_x_assum `EVEN e`
+    (mp_tac o REWRITE_RULE [arithmeticTheory.EVEN_EXISTS]) >>
+  disch_then (qx_choose_then `n` assume_tac) >>
+  `a ** n * a ** n = 2 ** k` by
+    (`2 * n = n + n` by decide_tac >>
+     qpat_x_assum `a ** e = _` mp_tac >>
+     pure_asm_rewrite_tac[arithmeticTheory.EXP_ADD] >>
+     disch_then ACCEPT_TAC) >>
+  drule square_power_two_even_mem_src >>
+  fs[arithmeticTheory.ODD_EVEN]
+QED
+
+Theorem byte_width_odd_predecessor_mem_src[local]:
+  !bits:num. 0 < bits /\ bits MOD 8 = 0 ==> ODD (bits - 1)
+Proof
+  rpt strip_tac >>
+  qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+  disch_then (qspec_then `bits` assume_tac) >>
+  `EVEN bits` by
+    (rewrite_tac[arithmeticTheory.EVEN_EXISTS] >>
+     qexists_tac `4 * (bits DIV 8)` >> decide_tac) >>
+  Cases_on `bits` >> fs[arithmeticTheory.EVEN, arithmeticTheory.ODD_EVEN]
+QED
+
