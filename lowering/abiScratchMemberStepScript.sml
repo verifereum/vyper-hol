@@ -8,7 +8,18 @@ Ancestors
   abiScratchSubset abiScratchFootprint abiEncoderTuple abiDecoderAllocation abiDecoderFootprint
   abiDecoderFrame abiDecoderReentry abiDecoderContract abiDecoderLoop compileEnv valueEncoding
   valueEncodingProps abiCanonicalWindows contractABI venomState finite_map pred_set words list
-  arithmetic
+  arithmetic abiSiteEncoderContract abiSiteAllocation
+
+Theorem abi_site_input_owned_output:
+  abi_site_encoder_input ei at av st src dst sb source_cap d sz A b cap s /\
+  abi_site_budget A b cap s /\ B SUBSET A ==>
+  abi_footprint_disjoint d sz (abi_decoder_child_scratch B b cap s)
+Proof
+  strip_tac >>
+  `abi_footprint_disjoint d sz (abi_decoder_child_scratch A b cap s)` by
+    fs[abi_site_encoder_input_def] >>
+  irule abi_scratch_disjoint_subset >> qexists_tac `A` >> fs[abi_site_budget_def]
+QED
 
 Theorem abi_scratch_input_owned_output:
   abi_scratch_input ei at av st src dst sb source_cap d sz first last b cap s /\
