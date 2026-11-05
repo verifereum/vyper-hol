@@ -4,6 +4,7 @@ Ancestors bodyPtrPrecompileBuiltinsPayloadRuns
           emitHelper context compileEnv venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
+          venomMemProps
 
 Theorem recovery_payload_run:
   (do emit_void MSTORE [buf; h];
@@ -102,4 +103,56 @@ Proof
     (qpat_x_assum `_ with <|vs_vars := _; vs_memory := _|> = s`
       (mp_tac o Q.AP_TERM `\z. z.vs_labels`) >> simp[]) >>
   Cases_on `buf` >> gvs[eval_operand_def] >> metis_tac[]
+QED
+
+Theorem point_pair_payload_run:
+  (do src <- emit_op ADD [point; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit off]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [point; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit (off+32w)]; emit_void MSTORE [dst; value] od)
+    sa = ((),sb) /\
+  eval_operand point s = SOME p /\ eval_operand buf s = SOME b /\
+  (!x. MEM (Var x) [point;buf] ==> not_fresh_at sa x) /\
+  w2n p + 64 < dimword (:256) /\
+  w2n (b+off) + 64 < dimword (:256) /\
+  regions_disjoint (w2n (b+off)) 64 (w2n p) 64 ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    t.vs_memory = (mstore (w2n (b+off)+32) (mload (w2n p+32) s)
+      (mstore (w2n (b+off)) (mload (w2n p) s) s)).vs_memory /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >> simp[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND] >>
+  `!op n z u. MEM op [point;buf] /\ sa.cs_next_var <= n ==>
+    eval_operand op (update_var (STRING #"%" (toString n)) z u) =
+    eval_operand op u` by
+    (rpt strip_tac >> irule exprSimWordBuiltinsTheory.eval_operand_update_not_fresh >>
+     qexists `sa` >> gvs[] >> metis_tac[]) >>
+  simp[run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomExecSemanticsTheory.exec_write2_def, eval_operand_lit,
+       eval_operand_update_var, eval_operand_update_other,
+       fresh_var_distinct, eval_operand_mstore] >>
+  qpat_x_assum `!op n z u. _` kall_tac >>
+  pure_rewrite_tac[GSYM update_var_mstore_commute] >>
+  `w2n (p+32w) = w2n p + 32 /\
+   w2n (b+(off+32w)) = w2n (b+off) + 32` by
+    (rewrite_tac[wordsTheory.WORD_ADD_ASSOC] >> rpt conj_tac >>
+     irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
+  `!w. mload (w2n p+32) (mstore (w2n (b+off)) w s) =
+       mload (w2n p+32) s` by
+    (gen_tac >> irule venomMemPropsTheory.mload_mstore_disjoint >>
+     gvs[venomMemDefsTheory.regions_disjoint_def,
+         compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  simp[GSYM mem_word_at_eq_mload, update_var_def,
+       mstore_vars_memory_overwrite] >>
+  conj_tac >- simp[mem_word_at_eq_mload, wordsTheory.WORD_ADD_0] >>
+  rpt strip_tac >> gvs[not_fresh_at_def, lookup_var_def,
+    finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[GSYM lookup_var_def, lookup_var_mstore]
 QED
