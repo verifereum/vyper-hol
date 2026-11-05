@@ -101,3 +101,93 @@ Theorem cfg_path_successor_free:
 Proof
   strip_tac >> drule cfg_path_first_step >> simp[]
 QED
+
+Theorem ready_halting_not_ret_reaching:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ bb_is_halting bb ==>
+  ~cfg_path (cfg_analyze fn) lbl target
+Proof
+  strip_tac >> strip_tac >>
+  `cfg_succs_of (cfg_analyze fn) lbl = []` by
+    (irule ready_halting_successors_empty >> metis_tac[]) >>
+  drule_all cfg_path_successor_free >> strip_tac >> gvs[] >>
+  drule_all ready_block_ret_not_halting >> simp[]
+QED
+
+Theorem must_halt_step_avoids_ret:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET /\
+  EVERY (\l. ~cfg_path (cfg_analyze fn) l target) labels ==>
+  EVERY (\l. ~cfg_path (cfg_analyze fn) l target)
+    (must_halt_step (cfg_analyze fn) fn labels lbl)
+Proof
+  strip_tac >> rewrite_tac[must_halt_step_def] >>
+  Cases_on `lookup_block lbl fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block lbl fn.fn_blocks = SOME bb` >>
+  IF_CASES_TAC >-
+    (IF_CASES_TAC >> simp[listTheory.EVERY_SNOC] >>
+     strip_tac >>
+     drule cfg_path_first_step >> strip_tac >-
+       (gvs[] >>
+        `~bb_is_halting bb` by
+          (irule ready_block_ret_not_halting >> metis_tac[]) >>
+        `cfg_succs_of (cfg_analyze fn) lbl = []` by
+          (irule ready_block_ret_successors_empty >> metis_tac[]) >>
+        fs[]) >>
+     Cases_on `bb_is_halting bb` >-
+       (drule_all ready_halting_not_ret_reaching >> simp[]) >>
+     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  simp[]
+QED
+
+Theorem must_halt_fold_avoids_ret[local]:
+  !order labels.
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET /\
+  EVERY (\l. ~cfg_path (cfg_analyze fn) l target) labels ==>
+  EVERY (\l. ~cfg_path (cfg_analyze fn) l target)
+    (FOLDL (must_halt_step (cfg_analyze fn) fn) labels order)
+Proof
+  Induct >> simp[] >> rpt strip_tac >> first_x_assum irule >>
+  simp[] >> irule must_halt_step_avoids_ret >> metis_tac[]
+QED
+
+Theorem must_halt_labels_avoids_ret:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET ==>
+  EVERY (\l. ~cfg_path (cfg_analyze fn) l target)
+    (must_halt_labels (cfg_analyze fn) fn)
+Proof
+  strip_tac >> rewrite_tac[must_halt_labels_def] >>
+  irule must_halt_fold_avoids_ret >>
+  simp[] >> reverse conj_tac >- (metis_tac[]) >>
+  simp[listTheory.EVERY_MAP, listTheory.EVERY_FILTER, listTheory.EVERY_MEM] >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    fs[codegen_ready_fn_def, wf_function_def, fn_labels_def] >>
+  metis_tac[MEM_lookup_block, ready_halting_not_ret_reaching]
+QED
+
+Theorem ret_reaching_not_must_halt:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET /\
+  cfg_path (cfg_analyze fn) lbl target ==>
+  ~MEM lbl (must_halt_labels (cfg_analyze fn) fn)
+Proof
+  strip_tac >> drule_all must_halt_labels_avoids_ret >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ret_reaching_cleanup_not_safe:
+  codegen_ready_fn fn /\ lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM inst retbb.bb_instructions /\ inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  cfg_path (cfg_analyze fn) lbl target ==>
+  ~cleanup_height_safe ch growth (cfg_analyze fn) fn bb h /\
+  ~cleanup_elision_safe ch growth (cfg_analyze fn) fn bb h
+Proof
+  strip_tac >> drule_all ret_reaching_not_must_halt >>
+  drule lookup_block_label >>
+  simp[cleanup_height_safe_def, cleanup_elision_safe_def]
+QED
