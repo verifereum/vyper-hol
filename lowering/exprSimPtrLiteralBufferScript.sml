@@ -716,3 +716,72 @@ Theorem literal_ptr_ghost_kept_initial_gas:
 Proof
   simp[ghost_kept_def]
 QED
+
+Theorem literal_ptr_nonmemory_step[local]:
+  (i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) /\
+  step_inst_base i s = OK t ==>
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base i s = OK t` mp_tac >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  asm_simp_tac bool_ss [] >>
+  simp[exec_alloca_def, exec_pure2_def, exec_write2_def, AllCaseEqs(),
+       update_var_def, mstore_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem literal_ptr_nonmemory_seq[local]:
+  !code s t.
+    EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE) code /\
+    run_inst_seq code s = OK t ==>
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+    t.vs_transient = s.vs_transient
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
+  rename1 `run_inst_seq code _ = _` >>
+  `~is_terminator h.inst_opcode` by gvs[is_terminator_def] >>
+  gvs[AllCaseEqs()] >>
+  drule_at Any literal_ptr_nonmemory_step >> simp[] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+
+Theorem literal_ptr_chunks_nonmemory_shape[local]:
+  !ptr bs off sa sb.
+    compile_store_byte_chunks ptr bs off sa = ((),sb) ==>
+    EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/ i.inst_opcode = MSTORE)
+      (emitted_insts sa sb)
+Proof
+  recInduct compile_store_byte_chunks_ind >> rpt gen_tac >> strip_tac
+  >- gvs[compile_store_byte_chunks_def, comp_return_def, emitted_insts_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rename1 `compile_store_byte_chunks data_ptr (hd::tl) offset sa = ((),sb)` >>
+  qpat_x_assum `compile_store_byte_chunks _ _ _ _ = _` mp_tac >>
+  simp_tac bool_ss [Once compile_store_byte_chunks_def, LET_THM,
+                   comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >>
+  pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+  rename1 `emit_void MSTORE _ mid = (u,post)` >> Cases_on `u` >>
+  first_x_assum (qspecl_then
+    [`TAKE 32 (hd::tl ++ REPLICATE 31 0w)`,
+     `word_of_bytes T 0w (TAKE 32 (hd::tl ++ REPLICATE 31 0w))`] mp_tac) >>
+  simp_tac bool_ss [] >> disch_then drule >> strip_tac >>
+  drule_all literal_chunk_head_shape >> strip_tac >>
+  drule literal_payload_chunks_shape >> strip_tac >>
+  `emitted_insts sa sb = emitted_insts sa post ++ emitted_insts post sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  simp[mk_inst_def]
+QED
+
+Theorem literal_bytelike_ptr_nonmemory_frame:
+  compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient
+Proof
+  strip_tac >> drule literal_ptr_bytelike_shape >> strip_tac >>
+  drule literal_ptr_chunks_nonmemory_shape >> strip_tac >>
+  irule literal_ptr_nonmemory_seq >> qexists_tac `emitted_insts sa sb` >>
+  simp[mk_inst_def]
+QED
