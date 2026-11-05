@@ -191,7 +191,9 @@ Proof
   qexists_tac `update_var out y t` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   irule ld_joint_var_update_next >> simp[] >>
-  conj_tac >- (qexistsl_tac [`out`,`x`,`y`] >> simp[]) >>
+  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`x`,`y`] >>
+    fs[update_var_def, venom_state_component_equality,
+       ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[] >>
   fs[MEM] >>
   (gvs[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,

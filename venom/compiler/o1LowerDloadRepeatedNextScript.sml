@@ -96,6 +96,8 @@ Proof
   qexists_tac `update_var out (n2w c) t` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >> gvs[] >>
   irule ld_joint_var_update_next >> simp[] >>
-  conj_tac >- (qexistsl_tac [`out`,`n2w b`,`n2w c`] >> simp[]) >>
+  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`n2w b`,`n2w c`] >>
+    fs[update_var_def, venom_state_component_equality,
+       ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[]
 QED

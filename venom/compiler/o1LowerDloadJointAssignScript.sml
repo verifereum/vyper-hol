@@ -161,7 +161,8 @@ Theorem ld_joint_var_update_next:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ o1_ctx_shape C /\
   active_inst fn inst s /\ ~MEM inst.inst_opcode [DLOAD; DLOADBYTES] /\
-  s1 = update_var out x s /\ t1 = update_var out y t /\
+  s1 = update_var out x (s with vs_gas_readings := rs) /\
+  t1 = update_var out y (t with vs_gas_readings := rs) /\
   G1 = step_prov PG G inst s1 /\ H1 = occurrence_step a HP H inst s1 /\
   tn1 = step_taint inst s s1 tn /\
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
@@ -246,7 +247,9 @@ Proof
   qexists_tac `update_var out y t` >> simp[] >>
   qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
   irule ld_joint_var_update_next >> simp[] >>
-  conj_tac >- (qexistsl_tac [`out`,`x`,`y`] >> simp[]) >>
+  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`x`,`y`] >>
+    fs[update_var_def, venom_state_component_equality,
+       ld_joint_boundary_def, ld_shared_agree_def]) >>
   qexistsl_tac [`G`,`H`,`tn`] >> simp[] >>
   simp[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
        imm_taint_def, update_var_def, new_site_bytes_def, written_taint_def,
