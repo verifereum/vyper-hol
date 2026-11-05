@@ -1,7 +1,7 @@
 (* Location adapters for the nonliteral membership loop. *)
 Theory exprSimBopRestWordLoads
 Ancestors
-  exprSimBopRestWordIndex exprSimAggregateEncoding valueEncodingProps vyperTyping
+  exprSimBopRestWordLoadPath exprSimBopRestWordIndex exprSimAggregateEncoding valueEncodingProps vyperTyping
   compileEnv loweringPosts exprSimUnwrap exprLoweringProps venomMemDefs
   valueEncodingProofs valueEncoding vyperValueOperation vyperValue list alist
 
@@ -240,4 +240,179 @@ Proof
   simp_tac bool_ss [GSYM arithmeticTheory.ADD_ASSOC] >>
   irule exprSimPropsTheory.buffer_offset_no_wrap >>
   qexists_tac `type_memory_size (ArrayTV et bd)` >> simp[]
+QED
+
+Theorem rest_word_array_memory_load_path:
+  is_word_type ty /\ evaluate_type tenv ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  val_in_memory (ArrayTV et bd) (ArrayV av) (w2n w) s.vs_memory /\
+  array_index (ArrayTV et bd) av (&i) = SOME v /\
+  w2n (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) =
+    w2n w + (case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32 /\
+  context$compile_ptr_load ctor imm LocMemory addr sa = (op,sb) /\
+  eval_operand addr s = SOME
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_path ctx func s 0 (OK u) /\
+      eval_operand op u = SOME (typed_val_to_w256 et v) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u = s with <|vs_vars := u.vs_vars;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+      (!x. (!inst. MEM inst (emitted_insts sa sb) ==> ~MEM x inst.inst_outputs) ==>
+           FLOOKUP u.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >>
+  `type_memory_size et = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+  drule_all rest_word_array_memory_load >> simp[] >> strip_tac >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand op t = SOME (typed_val_to_w256 et v)` by
+    (drule (Q.INST [`b` |-> `0w`] rest_word_ptr_load_run) >> simp[] >>
+     disch_then (qspecl_then [`s`,
+       `w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)`] mp_tac) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule rest_word_ptr_load_path >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem rest_word_array_immutable_load_path:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
+  is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et bd) (ArrayV av) /\
+  i < array_length (ArrayTV et bd) av /\
+  array_index (ArrayTV et bd) av (&i) = SOME v /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode addr sa = (op,sb) /\
+  eval_operand addr s = SOME
+    (w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_path ctx func s 0 (OK u) /\
+      eval_operand op u = SOME (typed_val_to_w256 et v) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u = s with <|vs_vars := u.vs_vars;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+      (!x. (!inst. MEM inst (emitted_insts sa sb) ==> ~MEM x inst.inst_outputs) ==>
+           FLOOKUP u.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >> drule_all rest_word_array_immutable_load >> strip_tac >>
+  `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
+    eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
+    (fs[stmt_state_rel_def, immutable_base_zero_def] >>
+     Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand op t = SOME (typed_val_to_w256 et v)` by
+    (drule (Q.INST [`b` |-> `0w`] rest_word_ptr_load_run) >> simp[] >>
+     disch_then (qspecl_then [`s`,
+       `w + n2w ((case bd of Fixed _ => 0 | Dynamic _ => 32) + i * 32)`] mp_tac) >>
+     Cases_on `cenv.ce_is_ctor` >> Cases_on `cenv.ce_imm_alloca` >>
+     gvs[wordsTheory.WORD_ADD_0]) >>
+  drule rest_word_ptr_load_path >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem rest_word_array_memory_header:
+  value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\
+  val_in_memory (ArrayTV et (Dynamic cap)) (ArrayV av) off mem ==>
+  mem_word_at off mem = n2w (array_length (ArrayTV et (Dynamic cap)) av) /\
+  array_length (ArrayTV et (Dynamic cap)) av <= cap
+Proof
+  Cases_on `av` >>
+  simp[value_has_type_def, val_in_memory_dynarray, array_length_def]
+QED
+
+Theorem rest_word_array_fixed_length:
+  value_has_type (ArrayTV et (Fixed cap)) (ArrayV av) ==>
+  array_length (ArrayTV et (Fixed cap)) av = cap
+Proof
+  Cases_on `av` >> simp[value_has_type_def, array_length_def]
+QED
+
+
+Theorem rest_word_array_immutable_header:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty (Dynamic cap)) (Value (ArrayV av)) w es s /\
+  evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) ==>
+  (if cenv.ce_is_ctor then mload (w2n w) s
+   else word_of_bytes T (0w:bytes32)
+     (TAKE 32 (DROP (w2n w) s.vs_data_section ++ REPLICATE 32 0w))) =
+  n2w (array_length (ArrayTV et (Dynamic cap)) av)
+Proof
+  strip_tac >>
+  `evaluate_type (get_tenv cx) (ArrayT ty (Dynamic cap)) =
+   SOME (ArrayTV et (Dynamic cap))` by
+    fs[immutable_holds_def, evaluate_type_def, AllCaseEqs()] >>
+  Cases_on `cenv.ce_is_ctor` >> simp[]
+  >- (drule_all exprSimCopyTheory.immutable_holds_memory >> strip_tac >>
+      drule_all rest_word_array_memory_header >> simp[mem_word_at_eq_mload]) >>
+  drule_all exprSimCopyTheory.immutable_holds_data >> strip_tac >>
+  gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  drule_all rest_word_array_memory_header >>
+  simp[mem_word_at_def, mem_bytes_at_def]
+QED
+
+Theorem rest_word_array_memory_header_path:
+  value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\
+  val_in_memory (ArrayTV et (Dynamic cap)) (ArrayV av) (w2n w) s.vs_memory /\
+  context$compile_ptr_load ctor imm LocMemory addr sa = (op,sb) /\
+  eval_operand addr s = SOME w /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_path ctx func s 0 (OK u) /\
+      eval_operand op u = SOME (n2w (array_length (ArrayTV et (Dynamic cap)) av)) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u = s with <|vs_vars := u.vs_vars;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+      (!x. (!inst. MEM inst (emitted_insts sa sb) ==> ~MEM x inst.inst_outputs) ==>
+           FLOOKUP u.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >> drule_all rest_word_array_memory_header >> strip_tac >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand op t = SOME (n2w (array_length (ArrayTV et (Dynamic cap)) av))` by
+    (drule (Q.INST [`b` |-> `0w`] rest_word_ptr_load_run) >> simp[] >>
+     disch_then (qspecl_then [`s`, `w`] mp_tac) >>
+     simp[GSYM mem_word_at_eq_mload]) >>
+  drule rest_word_ptr_load_path >> simp[] >>
+  disch_then drule_all >> simp[]
+QED
+
+Theorem rest_word_array_immutable_header_path:
+  stmt_state_rel ctx func cenv cx es s /\
+  immutable_holds cenv cx (ArrayT ty (Dynamic cap)) (Value (ArrayV av)) w es s /\
+  evaluate_type (get_tenv cx) ty = SOME et /\
+  value_has_type (ArrayTV et (Dynamic cap)) (ArrayV av) /\
+  context$compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocCode addr sa = (op,sb) /\
+  eval_operand addr s = SOME w /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_path ctx func s 0 (OK u) /\
+      eval_operand op u = SOME (n2w (array_length (ArrayTV et (Dynamic cap)) av)) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u = s with <|vs_vars := u.vs_vars;
+                   vs_inst_idx := LENGTH sb.cs_current_insts|> /\
+      (!x. (!inst. MEM inst (emitted_insts sa sb) ==> ~MEM x inst.inst_outputs) ==>
+           FLOOKUP u.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >> drule_all rest_word_array_immutable_header >> strip_tac >>
+  `(cenv.ce_is_ctor /\ cenv.ce_imm_alloca <> NONE ==>
+    eval_operand (THE cenv.ce_imm_alloca) s = SOME 0w)` by
+    (fs[stmt_state_rel_def, immutable_base_zero_def] >>
+     Cases_on `cenv.ce_imm_alloca` >> gvs[]) >>
+  `?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+       eval_operand op t = SOME (n2w (array_length (ArrayTV et (Dynamic cap)) av))` by
+    (drule (Q.INST [`b` |-> `0w`] rest_word_ptr_load_run) >> simp[] >>
+     disch_then (qspecl_then [`s`, `w`] mp_tac) >>
+     Cases_on `cenv.ce_is_ctor` >> Cases_on `cenv.ce_imm_alloca` >>
+     gvs[wordsTheory.WORD_ADD_0]) >>
+  drule rest_word_ptr_load_path >> simp[] >>
+  disch_then drule_all >> simp[]
 QED
