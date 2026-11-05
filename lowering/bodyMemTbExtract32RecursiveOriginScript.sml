@@ -420,3 +420,167 @@ Proof
   rpt strip_tac >> gvs[] >>
   metis_tac[extract32_ensure_in_memory_delta_excluded]
 QED
+
+Theorem extract32_lower_value_result_excluded:
+  (!s rr t. not_fresh_at s v /\ cfn ce ty e s = (rr,t) ==>
+              vv_operand rr <> Var v) /\
+  (!s. ci_mono s (SND (cfn ce ty e s))) /\
+  not_fresh_at sa v /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  lower_value cfn ce ty e sa = (r,sb) ==> r <> Var v
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac >>
+  Cases_on `cfn ce ty e sa` >> rename1 `cfn ce ty e sa = (vv,s1)` >>
+  gvs[lower_value_def, comp_bind_def] >>
+  `not_fresh_at s1 v` by
+    (irule compiler_ci_mono_not_fresh >> metis_tac[pairTheory.SND]) >>
+  `vv_operand vv <> Var v` by metis_tac[] >>
+  irule extract32_unwrap_value_result_excluded >> metis_tac[]
+QED
+
+Theorem extract32_lower_value_delta_excluded:
+  (!s rr t. not_fresh_at s v /\ cfn ce ty e s = (rr,t) ==>
+              vv_operand rr <> Var v) /\
+  (!s rr t. not_fresh_at s v /\ cfn ce ty e s = (rr,t) ==>
+    ?delta.
+      FLAT (MAP (\b. b.bb_instructions) (REVERSE t.cs_blocks)) ++ t.cs_current_insts =
+      (FLAT (MAP (\b. b.bb_instructions) (REVERSE s.cs_blocks)) ++ s.cs_current_insts) ++ delta /\
+      EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta) /\
+  (!s. ci_mono s (SND (cfn ce ty e s))) /\
+  not_fresh_at sa v /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  lower_value cfn ce ty e sa = (r,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  rpt gen_tac >> disch_then strip_assume_tac >>
+  Cases_on `cfn ce ty e sa` >> rename1 `cfn ce ty e sa = (vv,s1)` >>
+  gvs[lower_value_def, comp_bind_def] >>
+  `not_fresh_at s1 v` by
+    (irule compiler_ci_mono_not_fresh >> metis_tac[pairTheory.SND]) >>
+  `vv_operand vv <> Var v` by metis_tac[] >>
+  qpat_x_assum `!s rr t. _ ==> ?delta. _` (drule_at (Pos last)) >>
+  simp[] >> strip_tac >>
+  drule_at (Pos last) extract32_unwrap_value_delta_excluded >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> strip_tac >>
+  simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+QED
+
+Theorem extract32_multi_vvs_result_excluded:
+  !es sa rs sb.
+  (!e s rr t. MEM e es /\ not_fresh_at s v /\ cfn ce (expr_type e) e s = (rr,t) ==>
+                vv_operand rr <> Var v) /\
+  (!e s. MEM e es ==> ci_mono s (SND (cfn ce (expr_type e) e s))) /\
+  not_fresh_at sa v /\ compile_multi_vvs cfn ce es sa = (rs,sb) ==>
+  EVERY (\vv. vv_operand vv <> Var v) rs
+Proof
+  Induct
+  >- (simp[compile_multi_vvs_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[compile_multi_vvs_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >>
+  Cases_on `cfn ce (expr_type h) h sa` >> rename1 `cfn ce (expr_type h) h sa = (vv,s1)` >>
+  Cases_on `compile_multi_vvs cfn ce es s1` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `not_fresh_at s1 v` by
+    (irule compiler_ci_mono_not_fresh >> metis_tac[pairTheory.SND]) >>
+  conj_tac >- metis_tac[] >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem extract32_multi_vvs_delta_excluded:
+  !es sa rs sb.
+  (!e s rr t. MEM e es /\ not_fresh_at s v /\ cfn ce (expr_type e) e s = (rr,t) ==>
+    ?delta.
+      FLAT (MAP (\b. b.bb_instructions) (REVERSE t.cs_blocks)) ++ t.cs_current_insts =
+      (FLAT (MAP (\b. b.bb_instructions) (REVERSE s.cs_blocks)) ++ s.cs_current_insts) ++ delta /\
+      EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta) /\
+  (!e s. MEM e es ==> ci_mono s (SND (cfn ce (expr_type e) e s))) /\
+  not_fresh_at sa v /\ compile_multi_vvs cfn ce es sa = (rs,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  Induct
+  >- (simp[compile_multi_vvs_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[compile_multi_vvs_def, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >>
+  Cases_on `cfn ce (expr_type h) h sa` >> rename1 `cfn ce (expr_type h) h sa = (vv,s1)` >>
+  Cases_on `compile_multi_vvs cfn ce es s1` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `not_fresh_at s1 v` by
+    (irule compiler_ci_mono_not_fresh >> metis_tac[pairTheory.SND]) >>
+  qpat_assum `!e s rr t. _` (qspecl_then [`h`,`sa`,`vv`,`s1`] mp_tac) >>
+  (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+  qpat_x_assum `!sa rs sb. _ /\ _ /\ compile_multi_vvs _ _ _ _ = _ ==> _`
+    (drule_at (Pos last)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+QED
+
+Theorem extract32_multi_exprs_result_excluded:
+  !es sa rs sb.
+  (!e s rr t. MEM e es /\ not_fresh_at s v /\ cfn ce (expr_type e) e s = (rr,t) ==>
+                vv_operand rr <> Var v) /\
+  (!e s. MEM e es ==> ci_mono s (SND (cfn ce (expr_type e) e s))) /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  not_fresh_at sa v /\ compile_multi_exprs cfn ce es sa = (rs,sb) ==>
+  EVERY (\op. op <> Var v) rs
+Proof
+  Induct
+  >- (simp[compile_multi_exprs_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[compile_multi_exprs_def, comp_bind_def, comp_return_def] >> rpt gen_tac >>
+  Cases_on `lower_value cfn ce (expr_type h) h sa` >>
+  rename1 `lower_value cfn ce (expr_type h) h sa = (op,s1)` >>
+  Cases_on `compile_multi_exprs cfn ce es s1` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `ci_mono sa s1` by
+    (`ci_mono sa (SND (lower_value cfn ce (expr_type h) h sa))` suffices_by simp[] >>
+     pure_rewrite_tac[lower_value_def] >> irule ci_mono_bind >>
+     simp[ci_mono_unwrap_value]) >>
+  `not_fresh_at s1 v` by metis_tac[compiler_ci_mono_not_fresh] >>
+  conj_tac
+  >- (drule_at (Pos last) extract32_lower_value_result_excluded >>
+      disch_then (qspec_then `v` mp_tac) >>
+      (impl_tac >- (simp[] >> metis_tac[])) >> simp[]) >>
+  first_x_assum irule >> simp[] >> metis_tac[]
+QED
+
+Theorem extract32_multi_exprs_delta_excluded:
+  !es sa rs sb.
+  (!e s rr t. MEM e es /\ not_fresh_at s v /\ cfn ce (expr_type e) e s = (rr,t) ==>
+                vv_operand rr <> Var v) /\
+  (!e s rr t. MEM e es /\ not_fresh_at s v /\ cfn ce (expr_type e) e s = (rr,t) ==>
+    ?delta.
+      FLAT (MAP (\b. b.bb_instructions) (REVERSE t.cs_blocks)) ++ t.cs_current_insts =
+      (FLAT (MAP (\b. b.bb_instructions) (REVERSE s.cs_blocks)) ++ s.cs_current_insts) ++ delta /\
+      EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta) /\
+  (!e s. MEM e es ==> ci_mono s (SND (cfn ce (expr_type e) e s))) /\
+  (!base. ce.ce_imm_alloca = SOME base ==> base <> Var v) /\
+  not_fresh_at sa v /\ compile_multi_exprs cfn ce es sa = (rs,sb) ==>
+  ?delta.
+    FLAT (MAP (\b. b.bb_instructions) (REVERSE sb.cs_blocks)) ++ sb.cs_current_insts =
+    (FLAT (MAP (\b. b.bb_instructions) (REVERSE sa.cs_blocks)) ++ sa.cs_current_insts) ++ delta /\
+    EVERY (\i. ~MEM v i.inst_outputs /\ ~MEM (Var v) i.inst_operands) delta
+Proof
+  Induct
+  >- (simp[compile_multi_exprs_def, comp_return_def] >> rpt strip_tac >> gvs[]) >>
+  simp[compile_multi_exprs_def, comp_bind_def, comp_return_def] >> rpt gen_tac >>
+  Cases_on `lower_value cfn ce (expr_type h) h sa` >>
+  rename1 `lower_value cfn ce (expr_type h) h sa = (op,s1)` >>
+  Cases_on `compile_multi_exprs cfn ce es s1` >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  `ci_mono sa s1` by
+    (`ci_mono sa (SND (lower_value cfn ce (expr_type h) h sa))` suffices_by simp[] >>
+     pure_rewrite_tac[lower_value_def] >> irule ci_mono_bind >> simp[ci_mono_unwrap_value]) >>
+  `not_fresh_at s1 v` by metis_tac[compiler_ci_mono_not_fresh] >>
+  drule_at (Pos last) extract32_lower_value_delta_excluded >>
+  disch_then (qspec_then `v` mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> disch_then strip_assume_tac >>
+  qpat_x_assum `!sa rs sb. _ /\ _ /\ _ /\ compile_multi_exprs _ _ _ _ = _ ==> _`
+    (drule_at (Pos last)) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  simp[listTheory.APPEND_ASSOC, listTheory.EVERY_APPEND]
+QED
