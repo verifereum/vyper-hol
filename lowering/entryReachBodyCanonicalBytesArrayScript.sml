@@ -7,7 +7,8 @@ Ancestors
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup
   abiDecoderArraySetupInputs abiDecoderArrayBackedge abiDecoderReentry venomMemProofs
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderDynarrayBound
-  abiDecoderArrayHeader abiDecoderIndexInit context
+  abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayInit abiDecoderPrimitiveLoopEntry
+  abiDecoderLoopEmit abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry context
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -1088,4 +1089,71 @@ Proof
   pure_rewrite_tac[entry_loop_fields_def, abi_decoder_ranges_def,
      abi_decode_source_def] >>
   asm_rewrite_tac[] >> metis_tac[]
+QED
+
+Definition entry_bytes_array_resources_def:
+  entry_bytes_array_resources dst src maxn asz st
+    (ctx,fn,site,d,sz,b,cap,p,oid,capacity,initial) <=>
+  ?guard_st header_st loop_st ip cnt.
+    entry_array_init_resources dst src maxn asz
+      (st,guard_st,header_st,loop_st,ip,cnt)
+      (ctx,fn,site,d,sz,b,cap,p,initial) /\
+    FLOOKUP initial.vs_allocas oid = SOME (d,capacity) /\
+    oid <> header_st.cs_next_id /\ sz <= capacity /\
+    (d+sz <= p \/ p+32 <= d)
+End
+
+Theorem entry_bytes_array_resources_parent[local]:
+  entry_bytes_array_resources dst src maxn asz st
+    (ctx,fn,site,d,sz,b,cap,p,oid,capacity,initial) ==>
+  FLOOKUP initial.vs_allocas oid = SOME (d,capacity) /\ sz <= capacity
+Proof
+  simp_tac bool_ss [entry_bytes_array_resources_def] >> metis_tac[]
+QED
+
+Theorem entry_bytes_array_compile_phases[local]:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (DecBytestring n) asz msz T maxn) start = ((),final) /\
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz start =
+    ((ip,cnt),loop_st) ==>
+  ?labels body_st ops middle last.
+    abi_decode_loop_prefix ip src CALLDATALOAD loop_st = (labels,body_st) /\
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+      (DecBytestring n) asz msz body_st = (ops,middle) /\
+    compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD
+      (Lit 0w) (DecBytestring n) middle = ((),last) /\
+    abi_decode_loop_suffix ip (FST ops) (FST labels) (SND (SND labels)) last =
+      ((),final)
+Proof
+  strip_tac >> drule abi_decode_loop_array_trace >> simp[] >> strip_tac >>
+  gvs[] >> drule abi_decode_dyn_loop_trace >> simp[]
+QED
+
+Theorem entry_bytes_array_initializer_to_header[local]:
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    (setup,loop_st) /\ fn_has_code st loop_st fn /\
+  run_inst_seq (emitted_insts st loop_st) initial = OK prepared /\
+  prepared.vs_halted = initial.vs_halted /\ ~initial.vs_halted /\
+  initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  lookup_block loop_st.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := loop_st.cs_current_bb; bb_instructions :=
+      loop_st.cs_current_insts ++ [mk_inst loop_st.cs_next_id JMP [Label hdr] []]|> /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 ==>
+  abi_decode_sim ctx fn initial (jump_to hdr prepared)
+Proof
+  strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  drule_all abi_encoder_run_sequence_reach >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `~t.vs_halted` by fs[] >>
+  `abi_decode_sim ctx fn t (jump_to hdr t)` by
+    (irule abi_decoder_loop_entry_sim >> simp[SF SFY_ss] >>
+     qexistsl_tac [`<|bb_label := loop_st.cs_current_bb; bb_instructions :=
+       loop_st.cs_current_insts ++ [mk_inst loop_st.cs_next_id JMP [Label hdr] []]|>`,
+       `loop_st.cs_next_id`, `loop_st.cs_current_insts`] >> fs[]) >>
+  `jump_to hdr t = jump_to hdr prepared` by gvs[jump_to_def] >>
+  metis_tac[abi_decode_sim_trans]
 QED
