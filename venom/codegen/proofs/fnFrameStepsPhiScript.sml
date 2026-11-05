@@ -9,7 +9,7 @@ Ancestors
   fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
-  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation
+  allocaRemapSSA fnPlanPrefix removeUnusedSsaProofs dftCommutation fnFrameDeepInvoke
 
 Theorem phi_delete_spills_domain[local]:
   !xs ps at.
@@ -2791,4 +2791,70 @@ Proof
     (simp[stackModelTheory.stack_peek_def, listTheory.EL_REVERSE] >>
      AP_THM_TAC >> AP_TERM_TAC >> decide_tac) >>
   gvs[]
+QED
+
+Theorem phi_execute_poke:
+  execute_plan initial_fmp (SOPoke d op :: ops) = execute_plan initial_fmp ops
+Proof
+  simp[execute_plan_def, exec_stack_op_def]
+QED
+
+Theorem phi_numeric_hit_sim:
+  !inst live halting ps dist ops ps' lo o2pc prog u vars st initial_fmp.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+      ps.ps_stack = SOME dist /\
+    ~MEM (operand_to_string (stack_peek dist ps.ps_stack)) live /\
+    generate_phi_plan inst live halting ps = (ops, ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    EVERY (\s. case s of SOSpill off => off < dimword(:256)
+      | SORestore off => off < dimword(:256) | _ => T) ops /\
+    venom_asm_rel lo ps u st /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (u with vs_vars := vars) lo at = operand_val u lo at) /\
+    operand_val (u with vs_vars := vars) lo (Var (HD inst.inst_outputs)) =
+      operand_val u lo (stack_peek dist ps.ps_stack) /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' (u with vs_vars := vars) st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all genBlockSimTheory.stack_get_phi_depth_var_not_marker >> strip_tac >>
+  drule_all phi_plan_hit_no_dup >>
+  strip_tac >>
+  `venom_asm_rel lo
+      (ps with ps_stack := stack_poke dist (Var (HD inst.inst_outputs)) ps.ps_stack)
+      (u with vs_vars := vars) st` by
+    (irule phi_numeric_relabel >> simp[] >> metis_tac[]) >>
+  Cases_on `~halting /\ ~MEM (HD inst.inst_outputs) live`
+  >- (gvs[] >>
+      Cases_on `popmany_plan [Var (HD inst.inst_outputs)]
+        (ps with ps_stack := stack_poke dist (Var (HD inst.inst_outputs)) ps.ps_stack)` >>
+      gvs[phi_execute_poke] >>
+      `spill_alloc_layout_wf
+        (ps with ps_stack := stack_poke dist (Var (HD inst.inst_outputs)) ps.ps_stack).ps_alloc
+        (ps with ps_stack := stack_poke dist (Var (HD inst.inst_outputs)) ps.ps_stack).ps_spilled`
+        by simp[] >>
+      drule_all fnFrameDeepInvokeTheory.popmany_plan_sim_numeric >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      metis_tac[arithmeticTheory.ADD_COMM]) >>
+  gvs[execute_plan_def, exec_stack_op_def] >> qexists `st` >> simp[asm_steps_def]
+QED
+
+Theorem phi_numeric_no_hit_sim:
+  !inst live halting ps ops ps' lo o2pc prog u vars st initial_fmp.
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+      ps.ps_stack = NONE /\
+    generate_phi_plan inst live halting ps = (ops, ps') /\
+    venom_asm_rel lo ps u st /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (u with vs_vars := vars) lo at = operand_val u lo at) ==>
+    asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st /\
+    venom_asm_rel lo ps' (u with vs_vars := vars) st /\
+    st.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
+Proof
+  rpt gen_tac >> strip_tac >> drule phi_plan_no_hit >> strip_tac >>
+  gvs[execute_plan_def, asm_steps_def] >>
+  irule phi_venom_rel_vars_transfer >> simp[] >> metis_tac[]
 QED
