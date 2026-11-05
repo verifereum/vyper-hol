@@ -97,3 +97,20 @@ Resume typed_store_bytestring_mem_cont[bytes_code]:
   drule buffer_store_bytestring_shape >> simp[same_blocks_def]
 QED
 Finalise typed_store_bytestring_mem_cont
+
+(* Remaining recursive interface (not an admission):
+   compile_store_memory_typed_mem_cont will take the metadata consistency,
+   acyclicity, field-size, widening, type evaluation, value typing/WF,
+   operand freshness/evaluation, full-window disjointness, strict word bounds,
+   code containment and initial-control premises of
+   compile_store_memory_typed_run. In addition it requires both full type
+   windows below s.vs_alloca_next, a zero-phi compiler prefix at sa, and an
+   existing zero-phi block at sb.cs_current_bb.
+   Its SAME witness t must satisfy mem_cont_sim ctx fn s t, nonhalted control
+   at sb's endpoint, destination val_in_memory, exterior byte equality for the
+   full destination window, the state-record frame of typed_store_word_mem_cont
+   and preservation of all not_fresh_at sa variables.
+   Rank induction quantifies compiler/runtime states, operands and source types
+   universally; only the destination type_rank is bounded. Tuple/nominal
+   semantic field adapters and fast-copy/empty wrappers precede that induction.
+*)

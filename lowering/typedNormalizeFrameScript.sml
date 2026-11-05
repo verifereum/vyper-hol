@@ -129,7 +129,7 @@ QED
 Theorem normalize_copy_window_frame:
   (!a k. a + k <= d \/ d + n <= a ==>
     mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory) /\
-  (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s ==>
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_data_section = s.vs_data_section ==>
   abi_decode_footprint_frame [(d,n)] s q
 Proof
   strip_tac >>
