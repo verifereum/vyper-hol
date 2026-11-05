@@ -271,6 +271,17 @@ Proof
 QED
 
 
+(* The operand op points outside every live local's region at scopes.  An
+   internal call whose value is laid out at the callee's declared return
+   type, not its annotation (post_value_type), hands out its own return
+   buffer, never a pointer into a local. *)
+Definition outside_locals_def:
+  outside_locals cenv scopes s op <=>
+    ?w. eval_operand op s = SOME w /\
+        !n b sz. local_region cenv scopes s n b sz ==>
+                 w2n w < b \/ b + sz <= w2n w
+End
+
 (* Where the fragment of e that started in s0, related at es, lowered from
    compile state sa to sb, ends when the source gives v and es': related at
    es', the operand op holding v (and, for a memory-backed value, placed as
@@ -292,6 +303,8 @@ Definition expr_post_def:
     stmt_state_rel ctx func cenv cx es' s /\
     expr_val_rel cx (post_value_type cenv e) v op s /\
     expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op s /\
+    (post_value_type cenv e <> expr_type e ==>
+     outside_locals cenv es'.scopes s op) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -414,6 +427,8 @@ Definition vv_post_def:
     stmt_state_rel ctx func cenv cx es' s /\
     vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
     vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
+    (post_value_type cenv e <> expr_type e ==>
+     outside_locals cenv es'.scopes s (vv_operand vv)) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
