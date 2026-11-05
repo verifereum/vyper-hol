@@ -405,10 +405,10 @@ End
    agree with the source's: equal except at storage bytes the source
    leaves dead (accounts_agree, compileEnv). *)
 
-Definition call_result_rel_def:
-  call_result_rel tops ret am tx es r es' <=>
+Definition call_result_rel_at_def:
+  call_result_rel_at gobs tops ret am tx es r es' <=>
     let trace = call_trace es in
-    case call_external (SOME (MAP SND trace)) [] am tx of
+    case call_external (SOME (MAP SND trace)) gobs am tx of
       (INL v, am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?out lgs.
@@ -430,3 +430,20 @@ Definition call_result_rel_def:
     | (INR ContinueException, _, _) => F
     | (INR (ReturnException _), _, _) => F
 End
+
+(* OPEN ITEM, must land before main: the top-level gas observations gobs
+   are not yet tied to the EVM's gas readings (gas_readings es).
+   run_venom_pipeline_correct only gives ?vs_in. gas_variant vs_in vs, so
+   the source-side readings are unconstrained here; tying them needs the
+   O1 contract to relate vs_in's readings to vs's. *)
+Definition call_result_rel_def:
+  call_result_rel tops ret am tx es r es' <=>
+    ?gobs. call_result_rel_at gobs tops ret am tx es r es'
+End
+
+Theorem call_result_rel_at_imp:
+  call_result_rel_at gobs tops ret am tx es r es' ==>
+  call_result_rel tops ret am tx es r es'
+Proof
+  metis_tac[call_result_rel_def]
+QED
