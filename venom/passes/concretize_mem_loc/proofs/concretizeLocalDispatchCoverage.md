@@ -319,3 +319,51 @@ used through an actual step_inst witness; replay does not construct recursive
 callee fuel. run_blocks separately resets the index after parallel PHIs and
 uses the decremented block fuel. Forward unequal-length source/target prefixes
 remain compatible with this interface.
+
+## Finite replay and residual call boundary checkpoint (E0320 onward)
+
+`frameBlockSegments` supplies fixed-fuel arbitrary-result replay and paired
+replay for independent finite nonterminator prefixes. Its update uses the
+pre-step index and has no post-halted test. `concretizeLayoutParameterSegments`
+consumes `resolved_parameter_step` through actual `step_inst` and builds both
+segments plus next-control alignment. The local/ghost relation remains on the
+post states, not on index-updated states for arbitrary Obs.
+
+`concretizeLayoutCallControl` checks paired setup control and empty variable
+maps, and restores the saved caller control through actual merge/adopt/bind.
+Paired caller control gives next-index control after the call. The completed
+callee controls and returned tokens need not agree. `paired_return_values`
+uses `opaque_return_token_step` for actual RET wrappers with independent final
+tokens, retaining LIST_REL only on the returned FRONT values (possibly empty).
+It does not derive that value relation from local_rel. Existing
+`return_bind_allocation_frame` and `frame_cache_separated_pop` remain the
+allocation-frame and separation restoration interfaces; no copies were added.
+
+### Precise still-missing composition interfaces
+
+- Entry control equality alone does not relate PHI-selected values or
+  establish the callee guarded relation: empty variable maps are available,
+  but the incoming parameter resolution, ghost variable taint, demanded
+  memory and observation supplements must be assembled at the source push.
+- Source `joint_transition` provides push/pop events and saved caller ghosts;
+  no theorem here transports the full saved caller resolved origin map and
+  guarded variable relation across a recursively executed callee. Callee
+  memory changes must preserve bytes demanded on return in the caller.
+- `paired_return_values` deliberately assumes related FRONT values. To produce
+  them requires the reached RET discipline/opaque exclusion, operand reads,
+  and current resolved value relation, plus the actual source taint mask.
+  Output binding must then pair returned roots with the saved caller origin
+  map and actual pop taint update, not copy the callee variable map wholesale.
+- Current local producers consume ordinary source events. They do not yet
+  establish source push/pop demand inclusion or exclude new callee accesses
+  from saved caller demanded bytes. Activation identity must survive changes
+  in stack depth without treating equal numerical bases as equal origins.
+- Replay is at fixed fuel; completed step witnesses are inputs. Successful
+  non-error fuel monotonicity exists in frameExecutionPrefix. No helper here
+  constructs a common adequate target fuel for recursive INVOKE/run_blocks,
+  pairs terminal Error/Halt/Abort outcomes, or supplies PHI/block-exit control.
+
+These are residual obligations, not new assumptions asserted by the stage
+contract or a certification of generic recursive simulation. The next PLAN
+refinement must explicitly own PHI entry, recursive block/call replay and fuel,
+caller saved-root/returned-root binding and source push/pop demand transport.
