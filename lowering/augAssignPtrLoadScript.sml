@@ -5,6 +5,7 @@ Ancestors
   venomInst venomState venomExecSemantics ptrSafeRun representationCleanPtr
   finite_map vyperValue emitHelperProps exprSimMemoryPath
   emitHelper compileEnv fragExec loweringPosts ptrDiscipline codegenRel
+  loweringSlice exprLoweringProps valueEncodingProps exprSimNameWord stmtFragPtr
 
 Theorem mload_path_ptr:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
@@ -37,13 +38,13 @@ Theorem ghost_inv_scalar_local_clean:
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\
-  ((?b. entry.value = BoolV b) \/ (?n. entry.value = IntV n) \/
-   (?k. entry.value = FlagV k) \/ (?n. entry.value = DecimalV n)) ==>
+  word_value entry.value ==>
   !i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   gen_tac >> strip_tac >> irule robust_val_in_memory_prim_clean >>
-  qexistsl_tac [`w2n a`, `s.vs_memory`, `entry.type`, `entry.value`] >> simp[] >>
+  qexistsl_tac [`w2n a`, `s.vs_memory`, `entry.type`, `entry.value`] >>
+  simp[GSYM word_value_def] >>
   gvs[ghost_inv_def] >> metis_tac[]
 QED
 
@@ -82,6 +83,8 @@ Theorem emit_mload_path_ptr:
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf = update_var out (mload (w2n a) s)
+      (s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     lookup_var out sf = SOME (mload (w2n a) s) /\
     op_taint tnf (Var out) = {} /\
     ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
@@ -120,7 +123,8 @@ Proof
   `op_taint (step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
      (update_var out (mload (w2n a) s) s) tn) (Var out) = {}` by
     (irule (cj 1 mload_ghost_clean) >> simp[eval_operand_def]) >>
-  simp[mload_ambient_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  simp[mload_ambient_frame, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       arithmeticTheory.ADD1] >>
   irule (SRULE [update_var_def] mload_ambient_frame) >> metis_tac[]
 QED
 
@@ -149,4 +153,70 @@ Proof
   Cases_on `d` >> gvs[return_buf_frame_def, return_buf_ptr_def] >>
   PairCases_on `x` >> gvs[return_buf_frame_def, return_buf_ptr_def,
     ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem ghost_inv_word_local_inputs:
+  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  lookup_scopes name es.scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+  word_value entry.value ==>
+  ?a. lookup_var p s = SOME a /\ ptr_covers G tn p s 32 /\
+    mload (w2n a) s = val_to_w256 entry.value /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `?a. lookup_var p s = SOME a /\
+    type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
+    val_in_memory entry.type entry.value (w2n a) s.vs_memory` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     first_x_assum drule_all >> strip_tac >> metis_tac[]) >>
+  `32 <= sz` by
+    (gvs[word_value_def, valueEncodingTheory.val_wf_def] >> decide_tac) >>
+  qexists_tac `a` >> simp[] >> conj_tac
+  >- (`ptr_covers G tn p s sz` by (gvs[ghost_inv_def] >> metis_tac[]) >>
+      gvs[ptr_covers_def] >> qexistsl_tac [`a`, `b`, `sz'`] >> simp[] >>
+      decide_tac) >>
+  conj_tac
+  >- (gvs[word_value_def] >>
+      gvs[val_in_memory_prim, mem_word_at_eq_mload]) >>
+  gen_tac >> strip_tac >> irule ghost_inv_scalar_local_clean >> metis_tac[]
+QED
+
+Theorem augassign_local_load_ptr:
+  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+  is_word_type ty /\ lookup_scopes name es.scopes = SOME entry /\
+  word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
+  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  ret_pc_ok cenv sa s /\ return_buf_frame d cenv sa s /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    expr_post ctx fn cenv cx (Name ty name) es sa sb s
+      (es with gas_obs := []) entry.value (Var out) sf /\
+    ghost_inv d cenv cx (es with gas_obs := []) Gf tnf sf /\
+    ghost_kept cenv es sa G tn s Gf tnf /\ op_taint tnf (Var out) = {} /\
+    ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ not_fresh_at sb out /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp sf = lookup_var rp s)
+Proof
+  strip_tac >> drule_all ghost_inv_word_local_inputs >> strip_tac >>
+  drule_all emit_mload_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[IgnAsm `sf = _`] >>
+  conj_tac >- (gvs[] >> irule name_word_post >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `sf = _` kall_tac >> simp[ghost_inv_gas_obs] >>
+      irule ghost_inv_load_frame >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[]) >>
+  conj_tac >- simp[ghost_kept_def] >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_var_def, fresh_id_def, emit_def] >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  simp[not_fresh_at_def]
 QED
