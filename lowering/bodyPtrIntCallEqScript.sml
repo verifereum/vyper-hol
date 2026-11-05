@@ -14,7 +14,7 @@ Ancestors
   bodyPtrIntCallFrontierTransport bodyPtrIntCallLowRegion
   bodyPtrIntCallStageBoundary bodyPtrIntCallGhostTaint bodyPtrIntCallAuxEntry
   bodyPtrIntCallScalarStore bodyPtrIntCallMaterialize bodyPtrIntCallMaterializeList
-  bodyPtrIntCallParamPrefix
+  bodyPtrIntCallParamPrefix bodyPtrIntCallEntryMaterialize
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list
 
