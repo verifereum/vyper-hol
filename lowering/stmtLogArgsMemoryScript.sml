@@ -101,6 +101,7 @@ Theorem compile_log_eval_all_gas_mem:
          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
          LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
                                value_has_type tv v) (MAP expr_type args) vs /\
+         LIST_REL (\p v. expr_store_bound cx (SND p) v (FST p) t) xs vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs)
       (\res ee r. expr_exit res r)
@@ -238,6 +239,18 @@ Resume compile_log_eval_all_gas_mem[tail_value]:
      (es_end2 with gas_obs := [], t2) [] (INL (v::vs)) es_end2 (OK t2)` by
     (simp[gas_marked_exec_def, gas_marked_path_def, return_def] >>
      irule (cj 1 gas_path_mem_rules) >> simp[]) >>
+  `expr_store_bound cx (expr_type e) v x t2` by
+    (`t.vs_alloca_next <= t2.vs_alloca_next` by fs[] >>
+     `!w. eval_operand x t = SOME w ==> eval_operand x t2 = SOME w` by
+       (Cases_on `x` >> simp[venomStateTheory.eval_operand_def] >>
+        fs[log_args_post_def, wb_frame_def] >> metis_tac[]) >>
+     rw[expr_store_bound_def] >>
+     `?w'. eval_operand x t = SOME w'` by
+       (fs[expr_post_def, expr_val_at_def] >> metis_tac[]) >>
+     `w' = w` by (res_tac >> fs[]) >> gvs[] >>
+     `w2n w + val_store_size tv v <= t.vs_alloca_next` by
+       metis_tac[expr_store_bound_def] >>
+     decide_tac) >>
   qexistsl_tac [`INL (v::vs)`, `es_end2`, `OK t2`] >>
   conj_tac
   >- (irule gas_marked_exec_bind_normal >>

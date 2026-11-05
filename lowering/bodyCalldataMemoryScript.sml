@@ -225,7 +225,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `args = [] /\ ann = BaseT (UintT 256)` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  gvs[] >> irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  gvs[] >> irule expr_sim_mem_word_values >>
+  reverse conj_tac >- simp[vyperASTTheory.expr_type_def, is_word_type_def] >>
+  rpt gen_tac >> strip_tac >>
   drule_all body_calldatasize_mem_prefix >> strip_tac >>
   qexistsl_tac [`[]`, `IntV &LENGTH cx.txn.calldata`, `es`, `t`] >> simp[]
 QED

@@ -113,6 +113,33 @@ Proof
   Cases_on `a x` >> rename1 `a x = (r1, st1)` >> Cases_on `r1` >> simp[]
 QED
 
+(* A non-word scalar log argument is a bytestring, which the store bound
+   covers with its data rounded up to whole words. *)
+Theorem log_arg_store_bound[local]:
+  expr_store_bound cx ty v op t /\ supported_scalar_type ty /\
+  ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ eval_operand op t = SOME w /\
+  ((?bs. v = BytesV bs /\ n = LENGTH bs) \/
+   (?str. v = StringV str /\ n = LENGTH str)) ==>
+  w2n w + (32 * ((n + 31) DIV 32) + 32) <= t.vs_alloca_next
+Proof
+  rw[expr_store_bound_def] >> first_x_assum drule_all >>
+  Cases_on `ty` >>
+  gvs[supportedTypesTheory.supported_scalar_type_def,
+      supportedTypesTheory.supported_word_type_def,
+      supportedTypesTheory.supported_string_type_def, is_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[supportedTypesTheory.supported_word_type_def,
+      supportedTypesTheory.supported_string_type_def, is_word_type_def,
+      vyperValueTheory.evaluate_type_def, value_has_type_def,
+      val_store_size_def, vfmConstantsTheory.word_size_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[supportedTypesTheory.supported_word_type_def,
+      supportedTypesTheory.supported_string_type_def, is_word_type_def,
+      vyperValueTheory.evaluate_type_def, value_has_type_def,
+      val_store_size_def, vfmConstantsTheory.word_size_def]
+QED
+
 Theorem compile_log_ready_stmt_frag_mem:
   (!e tail s. R (e::tail) s ==>
     expr_sim_mem ctx func cenv cx (expr_type e) e s /\
@@ -203,15 +230,21 @@ Resume compile_log_ready_stmt_frag_mem[args_value]:
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
-  (* TEMPORARY: the rounded footprint of each bytestring argument below the
-     frontier.  It follows once expr_sim_mem's post bounds it (planned), and
-     compile_log_eval_all_gas_mem carries that post to every argument. *)
   `LIST_REL (\arg v. !w n.
      ~is_word_type (SND arg) /\ eval_operand (FST arg) t = SOME w /\
      ((?bs. v = BytesV bs /\ n = LENGTH bs) \/
       (?str. v = StringV str /\ n = LENGTH str)) ==>
      w2n w + 32 + 32 * ((n + 31) DIV 32) <= t.vs_alloca_next) xs vs` by
-    cheat >>
+    (qpat_x_assum `LIST_REL (\p v. expr_store_bound _ _ _ _ _) xs vs` mp_tac >>
+     qpat_x_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) xs vs`
+       mp_tac >>
+     simp[LIST_REL_EL_EQN, Excl "enc_def"] >> rpt strip_tac >>
+     qpat_x_assum `!n. _ ==> log_arg_rel _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `n` mp_tac) >>
+     qpat_x_assum `!n. _ ==> expr_store_bound _ _ _ _ _`
+       (qspec_then `n` mp_tac) >>
+     simp[Excl "enc_def"] >> rpt strip_tac >>
+     irule log_arg_store_bound >> metis_tac[]) >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_mem_ok)) >>
   strip_tac >>

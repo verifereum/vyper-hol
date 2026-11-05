@@ -74,6 +74,20 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
+(* Outside the bytestrings, a value's store size is its type's. *)
+Theorem val_store_size_non_bytestring[local]:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_store_size tv v = type_memory_size tv
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[val_store_size_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[]) >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+      is_bytestring_type_def]
+QED
+
 Theorem body_typed_store_memory_mem_ok:
   compile_store_memory ce src dst ann ann sa = ((),sb) /\
   ~is_word_type ann /\ evaluate_type tenv ann = SOME tv /\
@@ -82,7 +96,7 @@ Theorem body_typed_store_memory_mem_ok:
   type_memory_bytes ce ann = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
   eval_operand src s = SOME w /\ eval_operand dst s = SOME d /\
-  w2n w + type_memory_size tv <= s.vs_alloca_next /\
+  w2n w + val_store_size tv v <= s.vs_alloca_next /\
   w2n d + type_memory_size tv <= s.vs_alloca_next /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
@@ -95,6 +109,8 @@ Proof
       irule compile_store_bytestring_body_mem_ok >>
       qexistsl_tac [`d`, `dst`, `len`, `src`, `w`] >>
       simp[] >> fs[] >> decide_tac) >>
+  `val_store_size tv v = type_memory_size tv` by
+    metis_tac[val_store_size_non_bytestring] >>
   gvs[compile_store_memory_def] >>
   irule compile_copy_memory_body_mem_ok >>
   qexistsl_tac [`d`, `dst`, `type_memory_size tv`, `src`, `w`] >> simp[]
@@ -162,7 +178,7 @@ Theorem annassign_memory_store_body_frag_mem:
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
-    w2n sw + type_memory_size tyv <= s.vs_alloca_next /\
+    w2n sw + val_store_size tyv v <= s.vs_alloca_next /\
     w2n w + type_memory_size tyv <= s.vs_alloca_next /\
     alloca_history func s /\ return_buf_frame d cenv sa s ==>
     frag_exec_mem ctx sa sb (\u. u = s)
@@ -493,6 +509,9 @@ Proof
    w2n w + type_memory_size tyv <= t.vs_alloca_next` by
     (simp[] >> decide_tac) >>
   `w2n w' + type_memory_size tyv <= t.vs_alloca_next` by decide_tac >>
+  `w2n w' + val_store_size tyv v <= t.vs_alloca_next` by
+    (`val_store_size tyv v <= type_memory_size tyv` by
+       metis_tac[val_store_size_le] >> decide_tac) >>
   `not_fresh_at sn p` by simp[] >>
   drule_all annassign_memory_store_body_frag_mem >>
   disch_then (qspecl_then [`a`, `R`] mp_tac) >>
