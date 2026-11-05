@@ -100,3 +100,108 @@ Proof
   >> drule_all abi_encode_observer_edge_original
   >> metis_tac[abi_encode_original_no_self, abi_encode_singleton_edge]
 QED
+
+Theorem abi_encode_observer_unit_credit:
+  MEM func ctx.ctx_functions /\
+  ALL_DISTINCT (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts obs)) /\
+  (!i. MEM i (fn_insts obs) /\ i.inst_opcode = ALLOCA ==>
+       MEM i (fn_insts func)) ==>
+  unit_alloca_frame (ctx with ctx_functions := [obs]) <= unit_alloca_frame ctx
+Proof
+  strip_tac >> simp[unit_alloca_frame_def]
+  >> irule abi_encode_weighted_subset >> simp[MEM_FILTER, MEM_FLAT, MEM_MAP]
+  >> metis_tac[]
+QED
+
+Theorem abi_encode_observer_total_charge:
+  obs.fn_name = func.fn_name /\ alloca_room ctx func s /\
+  ALL_DISTINCT (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts obs)) /\
+  (!i. MEM i (fn_insts obs) /\
+       (i.inst_opcode = ALLOCA \/ i.inst_opcode = INVOKE) ==>
+       MEM i (fn_insts func)) ==>
+  s.vs_alloca_next + pending_alloca_size obs s +
+    CARD {g | TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g} *
+      unit_alloca_frame (ctx with ctx_functions := [obs]) <=
+  s.vs_alloca_next + pending_alloca_size func s +
+    CARD {g | TC (fn_directly_calls ctx) func.fn_name g} * unit_alloca_frame ctx
+Proof
+  strip_tac
+  >> `pending_alloca_size obs s <= pending_alloca_size func s` by
+       (irule abi_encode_pending_credit >> metis_tac[])
+  >> `unit_alloca_frame (ctx with ctx_functions := [obs]) <= unit_alloca_frame ctx` by
+       (irule abi_encode_observer_unit_credit >> simp[]
+        >> qexists_tac `func` >> gvs[alloca_room_def]
+        >> metis_tac[lookup_function_MEM])
+  >> `CARD {g | TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g} <=
+      CARD {g | TC (fn_directly_calls ctx) func.fn_name g}` by
+       (irule abi_encode_observer_reach_card >> metis_tac[])
+  >> `CARD {g | TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g} *
+        unit_alloca_frame (ctx with ctx_functions := [obs]) <=
+      CARD {g | TC (fn_directly_calls ctx) func.fn_name g} * unit_alloca_frame ctx` by
+       (irule arithmeticTheory.LESS_MONO_MULT2 >> simp[])
+  >> gvs[]
+QED
+
+Theorem abi_encode_registered_alloca_room:
+  obs.fn_name = func.fn_name /\ alloca_room ctx func s /\
+  ALL_DISTINCT (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts obs)) /\
+  (!i. MEM i (fn_insts obs) /\
+       (i.inst_opcode = ALLOCA \/ i.inst_opcode = INVOKE) ==>
+       MEM i (fn_insts func)) ==>
+  alloca_room (ctx with ctx_functions := [obs]) obs s
+Proof
+  strip_tac
+  >> `FINITE {g | TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g}` by
+       (irule abi_encode_observer_reach_finite >> qexistsl_tac [`func`, `s`] >> metis_tac[])
+  >> `!g. TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g ==>
+          ~TC (fn_directly_calls (ctx with ctx_functions := [obs])) g g` by
+       (`!i. MEM i (fn_insts obs) /\ i.inst_opcode = INVOKE ==>
+             MEM i (fn_insts func)` by metis_tac[]
+        >> metis_tac[abi_encode_observer_reach_acyclic])
+  >> drule_all abi_encode_observer_total_charge
+  >> gvs[alloca_room_def, lookup_function_def, FIND_thm]
+QED
+
+Theorem abi_encode_singleton_fmp_trigger:
+  (!a b. TC (fn_directly_calls (ctx with ctx_functions := [obs])) a b <=>
+          fn_directly_calls (ctx with ctx_functions := [obs]) a b) /\
+  ~fn_directly_calls (ctx with ctx_functions := [obs]) obs.fn_name obs.fn_name ==>
+  ~(?g f. TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g /\
+          MEM f [obs] /\ f.fn_name = g /\
+          EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f))
+Proof
+  simp[] >> metis_tac[]
+QED
+
+Theorem abi_encode_registered_fmp_room:
+  obs.fn_name = func.fn_name /\ alloca_room ctx func s /\ fmp_room ctx func s /\
+  ALL_DISTINCT (FILTER (\i. i.inst_opcode = ALLOCA) (fn_insts obs)) /\
+  (!i. MEM i (fn_insts obs) /\
+       (i.inst_opcode = ALLOCA \/ i.inst_opcode = INVOKE \/ i.inst_opcode = DALLOCA) ==>
+       MEM i (fn_insts func)) ==>
+  fmp_room (ctx with ctx_functions := [obs]) obs s
+Proof
+  strip_tac
+  >> `!a b. TC (fn_directly_calls (ctx with ctx_functions := [obs])) a b <=>
+            fn_directly_calls (ctx with ctx_functions := [obs]) a b` by
+       (irule abi_encode_observer_tc >> qexistsl_tac [`func`, `s`] >> metis_tac[])
+  >> `~fn_directly_calls (ctx with ctx_functions := [obs]) obs.fn_name obs.fn_name` by
+       (strip_tac
+        >> `!i. MEM i (fn_insts obs) /\ i.inst_opcode = INVOKE ==>
+                MEM i (fn_insts func)` by metis_tac[]
+        >> drule_all abi_encode_observer_edge_original
+        >> metis_tac[abi_encode_original_no_self])
+  >> drule_all abi_encode_singleton_fmp_trigger >> strip_tac
+  >> `s.vs_alloca_next + pending_alloca_size obs s +
+        CARD {g | TC (fn_directly_calls (ctx with ctx_functions := [obs])) obs.fn_name g} *
+          unit_alloca_frame (ctx with ctx_functions := [obs]) <=
+      s.vs_alloca_next + pending_alloca_size func s +
+        CARD {g | TC (fn_directly_calls ctx) func.fn_name g} * unit_alloca_frame ctx` by
+       (irule abi_encode_observer_total_charge >> metis_tac[])
+  >> gvs[fmp_room_def, EXISTS_MEM] >> strip_tac
+  >> `?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = DALLOCA` by
+       metis_tac[]
+  >> qpat_x_assum `_ \/ _ ==> _` mp_tac
+  >> (impl_tac >- (disj1_tac >> metis_tac[]))
+  >> strip_tac >> gvs[]
+QED

@@ -4,7 +4,7 @@ Ancestors
   exprLoweringProps venomExecSemantics venomInst venomState
   finite_map list rich_list words
 
-Theorem abi_encode_weighted_subset[local]:
+Theorem abi_encode_weighted_subset:
   !xs ys (w:'a -> num).
     ALL_DISTINCT xs /\ (!x. MEM x xs ==> MEM x ys) ==>
     SUM (MAP w xs) <= SUM (MAP w ys)
