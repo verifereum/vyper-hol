@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsBoundary
 Ancestors
   bodyPtrDefs representationCleanPtr exprSimLen exprSimProps
   vyperValue vyperTyping valueEncoding loweringPosts venomState
-  exprLowering compileEnv
+  exprLowering compileEnv bodyPtrPreds bodySim exprOpenFirstOperand exprPtrUnwrap
 
 Theorem ptr_mem_ok_header_clean:
   ptr_mem_ok cx ty v op G tn s /\
@@ -39,4 +39,75 @@ Theorem method_id_dynamic_result_capacity:
       (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args)) = 64
 Proof
   simp[lowered_value_type_def, type_memory_bytes_def, vyperASTTheory.expr_type_def]
+QED
+
+Theorem body_expr_ptr_sim:
+  body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env e es ==>
+  expr_sim_ptr d ctx PG func cenv cx ty e es
+Proof
+  simp[body_expr_ptr_ok_def] >> metis_tac[]
+QED
+
+Theorem body_expr_ptr_vv_sim:
+  body_expr_ptr_ok cx e /\ body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env e es ==>
+  expr_vv_sim_ptr d ctx PG func cenv cx ty e es
+Proof
+  simp[body_expr_ptr_ok_def] >> metis_tac[]
+QED
+
+Theorem body_exprs_ptr_head:
+  body_exprs_ptr_ok cx (e::es) ==> body_expr_ptr_ok cx e
+Proof
+  simp[body_exprs_ptr_ok_def]
+QED
+
+Theorem body_builtin_head_ptr_sim:
+  body_exprs_ptr_ok cx (e::args) /\ body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (Builtin ann bi (e::args)) es /\
+  ((!n. bi <> Slice n) \/ ~is_extcode e) ==>
+  expr_sim_ptr d ctx PG func cenv cx ty e es
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[expr_body_pre_builtin_head] >>
+  irule body_expr_ptr_sim >> metis_tac[body_exprs_ptr_head]
+QED
+
+Theorem body_builtin_head_ptr_vv_sim:
+  body_exprs_ptr_ok cx (e::args) /\ body_inv tops ctx cenv cx /\
+  expr_body_pre cenv cx env (Builtin ann bi (e::args)) es /\
+  ((!n. bi <> Slice n) \/ ~is_extcode e) ==>
+  expr_vv_sim_ptr d ctx PG func cenv cx ty e es
+Proof
+  strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    metis_tac[expr_body_pre_builtin_head] >>
+  irule body_expr_ptr_vv_sim >> metis_tac[body_exprs_ptr_head]
+QED
+
+Theorem body_expr_ptr_stack:
+  (!d PG tops ctx func cenv env ty es.
+     body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+     expr_sim_ptr d ctx PG func cenv cx ty e es) /\
+  (!cenv ty sa. ?t op sb.
+     compile_expr cenv ty e sa = (StackValue t op, sb)) /\
+  (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) ==>
+  body_expr_ptr_ok cx e
+Proof
+  strip_tac >> simp[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  `expr_sim_ptr d ctx PG func cenv cx ty e es` by metis_tac[] >>
+  conj_tac >- simp[] >> irule expr_vv_sim_ptr_stack >> metis_tac[]
+QED
+
+Theorem body_expr_ptr_of_vv:
+  (!d PG tops ctx func cenv env ty es.
+     body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
+     expr_vv_sim_ptr d ctx PG func cenv cx ty e es) ==>
+  body_expr_ptr_ok cx e
+Proof
+  strip_tac >> simp[body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  `expr_vv_sim_ptr d ctx PG func cenv cx ty e es` by metis_tac[] >>
+  conj_tac >- (irule expr_sim_ptr_of_vv >> metis_tac[]) >> simp[]
 QED
