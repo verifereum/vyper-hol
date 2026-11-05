@@ -3,7 +3,7 @@ Theory exprSimSubscriptArrayOrigin
 Ancestors
   exprSimSubscriptArraySource exprLowering vyperState vyperInterpreter
   vyperAST vyperValue vyperMisc pair vyperTypeContract vyperTypeSystem
-  compileEnv finite_map context
+  compileEnv finite_map context exprSafeOperandBuiltins
 
 Theorem extend_storage_place_not_memory:
   extend_storage_place cx tr slot tv sb s = (INL p,t) ==>
@@ -303,3 +303,4 @@ Proof
   gvs[exprSimHypsDefsTheory.expr_body_pre_def,
       exprSimHypsDefsTheory.expr_sim_inv_def]
 QED
+
