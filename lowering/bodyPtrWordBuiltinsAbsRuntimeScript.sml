@@ -624,3 +624,74 @@ Proof
         ``vyper_to_abi_types``]) >> simp[]) >>
   metis_tac[word_abs_runtime_alloca_sizes]
 QED
+
+Theorem word_abs_runtime_no_dalloca:
+  ~ctx_has_dalloca word_abs_runtime_unit.cu_context
+Proof
+  simp[ptrDisciplineTheory.ctx_has_dalloca_def, word_abs_runtime_functions,
+    listTheory.EXISTS_MEM] >>
+  mp_tac word_abs_runtime_no_calls_scratch >>
+  simp[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem word_abs_runtime_entry_fields:
+  ~word_abs_runtime_frame_cenv.ce_is_ctor /\
+  (!x sz. word_abs_runtime_frame_cenv.ce_return_buf = SOME (PtrVar (Var x) sz)
+    ==> not_fresh_at word_abs_runtime_sa x) /\
+  (!x sz. word_abs_runtime_frame_cenv.ce_return_pc = SOME (PtrVar (Var x) sz)
+    ==> not_fresh_at word_abs_runtime_sa x) /\
+  ~word_abs_runtime_s0.vs_halted /\
+  word_abs_runtime_s0.vs_current_bb = word_abs_runtime_sa.cs_current_bb /\
+  word_abs_runtime_s0.vs_inst_idx = LENGTH word_abs_runtime_sa.cs_current_insts
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``word_abs_runtime_func``, ``function_selector``, ``calldata_method_id``,
+     ``vyper_to_abi_types``]) >> simp[] >>
+  rewrite_tac[word_abs_runtime_func_def, word_abs_runtime_unit_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``package_external_fn``, ``run_lowering``, ``build_selectors``,
+     ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``]) >>
+  pure_rewrite_tac [set_external_package_target_all,
+    set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
+    GSYM word_abs_runtime_source_def, word_abs_runtime_package,
+    word_abs_runtime_allocs, word_abs_runtime_fallback,
+    word_abs_runtime_posargs, word_abs_runtime_mincds] >>
+  simp[external_return_buffer_ok_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``]) >>
+  simp[listTheory.INDEX_FIND_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``function_selector``, ``calldata_method_id``, ``vyper_to_abi_types``])
+QED
+
+Theorem word_abs_runtime_frame:
+  FLOOKUP G "%11" = SOME (0,32) ==>
+  lower_value compile_expr word_abs_runtime_frame_cenv (BaseT (IntT 256))
+    word_abs_runtime_expr word_abs_runtime_sa = (Var "%22",word_abs_runtime_sb) /\
+  fn_has_code word_abs_runtime_sa word_abs_runtime_sb word_abs_runtime_func /\
+  fn_inst_ids_distinct word_abs_runtime_func /\
+  local_ptrs_reserved word_abs_runtime_frame_cenv word_abs_runtime_sa /\
+  ~ctx_has_dalloca word_abs_runtime_unit.cu_context /\
+  ~word_abs_runtime_frame_cenv.ce_is_ctor /\
+  (!x sz. word_abs_runtime_frame_cenv.ce_return_buf = SOME (PtrVar (Var x) sz)
+    ==> not_fresh_at word_abs_runtime_sa x) /\
+  (!x sz. word_abs_runtime_frame_cenv.ce_return_pc = SOME (PtrVar (Var x) sz)
+    ==> not_fresh_at word_abs_runtime_sa x) /\
+  gas_admissible (bind (eval_expr word_abs_runtime_cx word_abs_runtime_expr)
+    (read_result word_abs_runtime_cx)) expr_res_ok word_abs_runtime_es /\
+  stmt_state_rel word_abs_runtime_unit.cu_context word_abs_runtime_func
+    word_abs_runtime_frame_cenv word_abs_runtime_cx word_abs_runtime_es
+    word_abs_runtime_s0 /\
+  ghost_inv NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
+    word_abs_runtime_es G entry_taint word_abs_runtime_s0 /\
+  ~word_abs_runtime_s0.vs_halted /\
+  word_abs_runtime_s0.vs_current_bb = word_abs_runtime_sa.cs_current_bb /\
+  word_abs_runtime_s0.vs_inst_idx = LENGTH word_abs_runtime_sa.cs_current_insts
+Proof
+  strip_tac >>
+  mp_tac word_abs_runtime_entry_fields >> mp_tac word_abs_runtime_code >>
+  simp[word_abs_runtime_compile, word_abs_runtime_local_reserved,
+    word_abs_runtime_no_dalloca, word_abs_runtime_stmt_state,
+    word_abs_runtime_ghost] >>
+  metis_tac[word_abs_runtime_gas_admissible]
+QED
