@@ -1,5 +1,5 @@
-(* Composition of the checked ABI suffix.  Phase boundaries use the ordinary
-   run endpoint, so that the ghost witnesses can be passed to the next phase. *)
+(* Composition of the checked ABI suffix. Semantic observations use ordinary
+   run endpoints; subsequent pointer checks use counted endpoint cursors. *)
 Theory revertReasonSuffixPathPtr
 Ancestors
   revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
