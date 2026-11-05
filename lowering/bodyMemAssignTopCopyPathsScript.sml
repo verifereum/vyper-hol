@@ -609,3 +609,78 @@ Proof
        lookup_var_update_var, update_var_def] >>
   gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
+
+Theorem topcopy_loop_induction:
+  !n cv sa loc b k sbase hdr loop_body exit ctx func remaining i s.
+    (!j u. j <= n /\ store_copy_frame sa loc b k sbase j u /\
+       eval_operand (Var cv) u = SOME (n2w j) /\ ~u.vs_halted /\
+       u.vs_current_bb = hdr /\ u.vs_inst_idx = 0 ==>
+       ?v. gas_marked_path T ctx func u 0 (OK v) /\
+         store_copy_frame sa loc b k sbase j v /\
+         eval_operand (Var cv) v = SOME (n2w j) /\ ~v.vs_halted /\
+         v.vs_current_bb = (if j=n then exit else loop_body) /\ v.vs_inst_idx = 0) /\
+    (!j u. j < n /\ store_copy_frame sa loc b k sbase j u /\
+       eval_operand (Var cv) u = SOME (n2w j) /\ ~u.vs_halted /\
+       u.vs_current_bb = loop_body /\ u.vs_inst_idx = 0 ==>
+       ?v. gas_marked_path T ctx func u 0 (OK v) /\
+         store_copy_frame sa loc b k sbase (SUC j) v /\
+         eval_operand (Var cv) v = SOME (n2w (SUC j)) /\ ~v.vs_halted /\
+         v.vs_current_bb = hdr /\ v.vs_inst_idx = 0) /\
+    i + remaining = n /\ store_copy_frame sa loc b k sbase i s /\
+    eval_operand (Var cv) s = SOME (n2w i) /\ ~s.vs_halted /\
+    s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+    ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_frame sa loc b k sbase n t /\ ~t.vs_halted /\
+      t.vs_current_bb = exit /\ t.vs_inst_idx = 0
+Proof
+  ntac 12 gen_tac >> Induct >> rpt gen_tac >> strip_tac
+  >- (gvs[] >> qpat_x_assum `!j u. j <= i /\ _ ==> _`
+        (qspecl_then [`i`, `s`] mp_tac) >> simp[] >> metis_tac[]) >>
+  `i < n /\ i <= n` by decide_tac >>
+  qpat_assum `!j u. j <= n /\ _ ==> _`
+    (qspecl_then [`i`, `s`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `v` strip_assume_tac) >>
+  qpat_x_assum `!j u. j < n /\ _ ==> _`
+    (fn th => assume_tac th >> mp_tac th) >>
+  disch_then (qspecl_then [`i`, `v`] mp_tac) >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choose_then `w` strip_assume_tac) >>
+  qpat_x_assum `!i s. (!j u. _) /\ _ ==> _`
+    (qspecl_then [`SUC i`, `w`] mp_tac) >>
+  impl_tac >- (gvs[] >> metis_tac[]) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >> qexists_tac `t` >> simp[] >>
+  metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
+Theorem topcopy_init_path:
+  !ctx func bb sa loc b k s cv id.
+    ~s.vs_halted /\ (!x. not_fresh_at sa x ==> x <> cv) /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSIGN [Lit 0w] [cv]) ==>
+    ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      store_copy_frame sa loc b k s 0 t /\
+      eval_operand (Var cv) t = SOME 0w /\
+      t.vs_current_bb = s.vs_current_bb /\
+      t.vs_inst_idx = SUC s.vs_inst_idx /\ ~t.vs_halted
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `u = update_var cv 0w s` >>
+  `run_inst_seq [mk_inst id ASSIGN [Lit 0w] [cv]] s = OK u` by
+    simp[Abbr `u`, run_inst_seq_def,
+         stepInstBaseLib.simp_opcode_clause ``ASSIGN``, mk_inst_def, eval_operand_lit] >>
+  `isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv]]
+    (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (irule topcopy_instruction_prefix >> simp[]) >>
+  `run_inst_seq_mem_ok [mk_inst id ASSIGN [Lit 0w] [cv]] s` by
+    (simp[fragExecMemTheory.run_inst_seq_mem_ok_last] >>
+     irule instMemFrontierTheory.below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  drule_at (Pat `run_inst_seq _ _ = _`) topcopy_seq_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  simp[mk_inst_def, is_terminator_def] >> strip_tac >>
+  `store_copy_frame sa loc b k s 0 u` by
+    (simp[Abbr `u`] >> irule topcopy_frame_update >> simp[] >> metis_tac[]) >>
+  qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  gvs[Abbr `u`, ADD1, eval_operand_def, lookup_var_update_var, update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE]
+QED
