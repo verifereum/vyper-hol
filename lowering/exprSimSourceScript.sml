@@ -380,6 +380,22 @@ Proof
   gen_tac >> Induct >> rw[alloc_limits_expr_def] >> gvs[]
 QED
 
+(* An operand of a builtin passes the allocation check, but a slice's
+   .code source, which the check skips for its address. *)
+Theorem alloc_limits_builtin_arg:
+  !cenv ann bi args e.
+    alloc_limits_expr cenv (Builtin ann bi args) /\ MEM e args /\
+    ((!n. bi <> Slice n) \/ ~is_extcode e) ==>
+    alloc_limits_expr cenv e
+Proof
+  rpt gen_tac >> simp[Once alloc_limits_expr_def] >> IF_CASES_TAC >>
+  rpt strip_tac >> gvs[]
+  >~ [`alloc_limits_exprs cenv (extcode_addr_expr _ :: _)`]
+  >- (Cases_on `args` >> gvs[alloc_limits_expr_def] >>
+      metis_tac[alloc_limits_exprs_mem]) >>
+  drule_all alloc_limits_exprs_mem >> simp[]
+QED
+
 Theorem well_typed_exprs_member:
   !args env e. well_typed_exprs env args /\ MEM e args ==> well_typed_expr env e
 Proof
@@ -403,19 +419,25 @@ Proof
   Induct >> rw[int_calls_expr_def] >> gvs[]
 QED
 
+(* A slice's .code source is the exception: expr_body_pre fails of it
+   (alloc_limits_expr), and slice's simulation takes its address instead. *)
 Theorem expr_body_pre_builtin_arg:
   !cenv cx env ann bi args e es es'.
     expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    ((!n. bi <> Slice n) \/ ~is_extcode e) /\
     expr_sim_inv cenv cx env es' ==>
     expr_body_pre cenv cx env e es'
 Proof
-  rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def,
-     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
+  rpt gen_tac >> strip_tac >>
+  `alloc_limits_expr cenv e` by
+    (irule alloc_limits_builtin_arg >> gvs[expr_body_pre_def] >> metis_tac[]) >>
+  gvs[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
+      byte_widths_expr_def,
+      supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
-            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
+            call_evaluation_safe_exprs_mem]
 QED
 
 Theorem word_value_type_word:
