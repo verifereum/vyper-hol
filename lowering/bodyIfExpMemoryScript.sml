@@ -534,6 +534,70 @@ Proof
   gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
 QED
 
+Theorem ifexp_arm_conditional_gas_obs[local]:
+  conditional_result cx raw ee = (INL tv,ee) ==>
+  !tail. conditional_result cx raw (ee with gas_obs := tail) =
+    (INL tv,ee with gas_obs := tail)
+Proof
+  Cases_on `raw`
+  >- simp[conditional_result_def, return_def]
+  >- (simp[conditional_result_def, bind_def] >>
+      Cases_on `place_type_value cx p ee` >>
+      rename1 `place_type_value cx p ee = (pr,pst)` >>
+      drule place_type_value_state >> strip_tac >> gvs[] >>
+      `!tail. place_type_value cx p (ee with gas_obs := tail) =
+         (pr,ee with gas_obs := tail)` by
+        (Cases_on `p` >>
+         gvs[place_type_value_def, get_scopes_def, get_immutables_def,
+             get_address_immutables_def, bind_def, return_def,
+             lift_option_type_def, raise_def, AllCaseEqs()] >>
+         rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def])) >>
+      simp[] >> Cases_on `pr` >> simp[] >>
+      IF_CASES_TAC >> simp[return_def] >>
+      Cases_on `read_place cx p ee` >>
+      rename1 `read_place cx p ee = (rr,ss)` >>
+      Cases_on `rr` >> simp[return_def] >> rpt strip_tac >>
+      gvs[bind_def, return_def] >>
+      rename1 `read_place cx p ee = (INL v,ee)` >>
+      `read_result cx (PlaceR p) ee = (INL v,ee)` by
+        simp[read_result_def] >>
+      drule exprSimMemorySourceTheory.read_result_gas_obs >> simp[read_result_def]) >>
+  simp[conditional_result_def, raise_def]
+QED
+
+Theorem ifexp_marked_conditional_of_read_mem[local]:
+  gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0) marks (INL raw) ee (OK s) /\
+  gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
+  gas_marked_exec T (ctx,func) (read_result cx raw)
+    (ee with gas_obs := [],s) [] (INL v) (ee with gas_obs := []) (OK u) ==>
+  ?tv. gas_marked_exec T (ctx,func) (conditional_result cx raw)
+    (ee with gas_obs := [],s) [] (INL tv) (ee with gas_obs := []) (OK u) /\
+    read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := [])
+Proof
+  strip_tac >>
+  `eval_expr cx e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL raw,ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  Cases_on `conditional_result cx raw (ee with gas_obs := [])` >>
+  rename1 `_ = (cr,cs)` >>
+  `expr_vv_res_ok cr` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def] >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[bind_def]) >>
+  drule_all ifexp_arm_conditional_read >> strip_tac >> gvs[] >>
+  qexists_tac `tv` >> simp[] >>
+  qpat_x_assum `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _` mp_tac >>
+  simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
+  drule ifexp_arm_conditional_gas_obs >> simp[]
+QED
+
 Theorem ifexp_root_forced_branch_admissible[local]:
   gas_admissible (bind (eval_expr cx (IfExp t c a b)) (read_result cx))
     expr_res_ok es /\
@@ -784,6 +848,110 @@ Proof
 QED
 
 Resume compile_ifexp_word_vv_sim_mem[selected]:
+  `?sel. v = BoolV sel` by
+    (irule ifexp_root_condition_bool >> goal_assum (drule_at Any) >>
+     qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `sj.cs_current_bb = _` kall_tac >>
+  qpat_x_assum `sj.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `se.cs_current_insts = _` kall_tac >>
+  qpat_x_assum `fn_has_code sj sn func` kall_tac >>
+  qpat_x_assum `fn_has_code se sx func` kall_tac >>
+  qpat_x_assum `fn_has_code sx sy func` kall_tac >>
+  qpat_x_assum `fn_has_code sy sz func` kall_tac >>
+  qpat_x_assum `local_ptrs_reserved cenv se` kall_tac >>
+  qpat_x_assum `cs_extends se sx` kall_tac >>
+  qpat_x_assum `sc.cs_next_var <= se.cs_next_var` kall_tac >>
+  qpat_x_assum `sc.cs_next_id <= se.cs_next_id` kall_tac >>
+  qpat_x_assum `sx.cs_next_id <= sb.cs_next_id` kall_tac >>
+  drule_all ifexp_root_code_layout >>
+  disch_then (qspec_then `sel` strip_assume_tac) >> gvs[] >>
+  pure_rewrite_tac[GSYM gas_summary_at_def, GSYM gas_outcome_def] >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `gas_path_mem ctx func t 0 (OK (jump_to se.cs_current_bb t))` by
+    (asm_rewrite_tac[] >> irule ifexp_jnz_path_mem >> simp[] >> metis_tac[]) >>
+  irule ifexp_selected_outcome_prefix_mem >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >>
+  `gas_admissible
+    (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
+    expr_vv_res_ok (es_end with gas_obs := [])` by
+    (irule ifexp_root_branch_admissible >> goal_assum (drule_at Any) >>
+     fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `expr_vv_sim_mem ctx func cenv cx ty (if sel then a else b)
+      (es_end with gas_obs := [])` by
+    (`?gs. bind (eval_expr cx c) (read_result cx) (es with gas_obs := gs) =
+         (INL (BoolV sel),es_end with gas_obs := [])` by
+       (fs[gas_marked_exec_def] >> metis_tac[]) >>
+     first_x_assum (qspecl_then [`gs`,`BoolV sel`,
+       `es_end with gas_obs := []`] mp_tac) >>
+     simp[SF ETA_ss] >> Cases_on `sel` >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := [])
+      (jump_to se.cs_current_bb t)` by
+    fs[expr_post_def, stmt_state_rel_jump_to] >>
+  `alloca_history func (jump_to se.cs_current_bb t)` by
+    metis_tac[ifexp_history_jump] >>
+  `expr_type (if sel then a else b) = expr_type a` by (Cases_on `sel` >> simp[]) >>
+  `sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id` by
+    (qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
+  `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes` by
+    (irule ifexp_root_condition_scopes >> fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `unwrap_value cenv av sea = (aop,sx)` by
+    gvs[compile_ifexp_arm_def] >>
+  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
+  drule exprSimUnwrapTheory.unwrap_value_extends >> strip_tac >>
+  `fn_has_code se sea func /\ fn_has_code sea sx func` by
+    metis_tac[fn_has_code_split] >>
+  `!x. vv_operand av = Var x ==> not_fresh_at sea x` by
+    (drule (cj 1 exprOperandVarTheory.compiler_compile_var) >> simp[]) >>
+  `gas_admissible (eval_expr cx (if sel then a else b)) expr_vv_res_ok
+      (es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible (bind _ (conditional_result _)) _ _` mp_tac >>
+     simp[gas_admissible_def] >> rpt strip_tac >>
+     first_x_assum (qspec_then `gs` mp_tac) >>
+     simp[bind_def] >> Cases_on `res`
+     >- (rename1 `eval_expr _ _ _ = (INL raw,ee)` >>
+         Cases_on `raw` >> simp[expr_vv_res_ok_def] >>
+         simp[conditional_result_def, raise_def, expr_vv_res_ok_def]) >>
+     simp[]) >>
+  qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ (if _ then _ else _) _` mp_tac >>
+  simp[expr_vv_sim_mem_def] >> disch_then drule >>
+  disch_then (qspec_then `jump_to se.cs_current_bb t` mp_tac) >>
+  impl_tac
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with gas_obs := []) _` mp_tac >>
+      simp[jump_to_def, exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  strip_tac >>
+  simp[Abbr `root_exit`] >>
+  gvs[] >>
+  drule ifexp_raw_conditional_outcome_mem >> disch_then irule >> simp[] >>
+  reverse conj_tac >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `~s.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
+     drule gas_path_mem_exec >> metis_tac[gas_path_normal]) >>
+  `MAP FDOM (es_end with gas_obs := []).scopes =
+      MAP FDOM (ee with gas_obs := []).scopes` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
+     drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_at (Pat `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`)
+    ifexp_marked_conditional_of_read_mem >>
+  disch_then (drule_at (Pat `gas_marked_exec _ _ (read_result _ _) _ _ _ _ _`)) >>
+  impl_tac >- simp[] >> strip_tac >>
+  suspend "route_after_unwrap"
+QED
+
+Resume compile_ifexp_word_vv_sim_mem[route_after_unwrap]:
   cheat
 QED
 
