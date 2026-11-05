@@ -41,11 +41,8 @@ Theorem copy_phi_var_mono:
        MEM i.inst_opcode [origin; ASSIGN; PHI] ==> MEM i (fn_insts input)) ==>
   !x. copy_phi_var origin output x ==> copy_phi_var origin input x
 Proof
-  strip_tac >>
-  `!org fn x. copy_phi_var org fn x ==>
-     org = origin /\ fn = output ==> copy_phi_var origin input x` suffices_by metis_tac[] >>
-  ho_match_mp_tac copy_phi_var_ind >> rpt strip_tac >> gvs[] >>
-  metis_tac[copy_phi_var_rules, MEM]
+  rpt strip_tac >> drule copy_phi_var_special_mono >> disch_then irule >>
+  rpt strip_tac >> first_x_assum irule >> gvs[]
 QED
 
 Theorem dft_shape_copy_phi_var:
