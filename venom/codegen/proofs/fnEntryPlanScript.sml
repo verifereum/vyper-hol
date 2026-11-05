@@ -184,5 +184,10 @@ Theorem entry_block_plan:
         (init_cleanup_plan_state ch growth spill_base lbl_ctr) /\
       ps1.ps_alloc.sa_next_offset <= ps_end.ps_alloc.sa_next_offset
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule entry_plan_first_block >> strip_tac >>
+  drule_all entry_plan_param_boundary >> strip_tac >> gvs[] >-
+    (simp[dfs_block_state_def] >>
+     qexistsl_tac [`[]`, `[]`] >> simp[dfs_aux_call_entry]) >>
+  decide_tac
 QED
