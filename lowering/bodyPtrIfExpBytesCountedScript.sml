@@ -106,7 +106,7 @@ Proof
 QED
 
 Theorem emit_copy_len_binop_seq_ptr:
-  !D ctx fn PG G tn s sa sb opc left right out (f:256 word -> 256 word -> 256 word) a b.
+  !opc (f:256 word -> 256 word -> 256 word) D ctx fn PG G tn s sa sb left right out a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
     emit_op opc [left;right] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
@@ -211,3 +211,61 @@ Proof
   gvs[run_inst_seq_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
   metis_tac[]
 QED
+
+Theorem compile_bytestring_copy_len_stages:
+  !src sa sb count.
+    compile_bytestring_copy_len src sa = (count,sb) ==>
+    ?s1 s2 s3 v1 v2 v3 v4.
+      emit_op MLOAD [src] sa = (Var v1,s1) /\
+      emit_op ADD [Var v1; Lit 31w] s1 = (Var v2,s2) /\
+      emit_op AND [Var v2; Lit (i2w (-32))] s2 = (Var v3,s3) /\
+      emit_op ADD [Var v3; Lit 32w] s3 = (Var v4,sb) /\
+      count = Var v4
+Proof
+  rpt gen_tac >>
+  simp[compile_bytestring_copy_len_def, comp_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+      fresh_id_def, emit_def, comp_return_def] >> metis_tac[]
+QED
+
+
+(* This existential summary compresses intermediate runtime/ghost contexts;
+   it changes no execution semantics and is opened only at interface proofs. *)
+Definition clean_emitted_prefix_def:
+  clean_emitted_prefix D ctx fn PG sa sb out w s G tn <=>
+    EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb) /\
+    ?Gf tnf sf.
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      eval_operand out sf = SOME w /\
+      (sf with vs_vars := s.vs_vars) = s /\
+      op_taint tnf out = {} /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+End
+
+Theorem clean_emitted_prefix_mload:
+  !D ctx fn PG G tn s sa sb src out a.
+    emit_op MLOAD [Var src] sa = (Var out,sb) /\
+    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    lookup_var src s = SOME a /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    clean_emitted_prefix D ctx fn PG sa sb (Var out)
+      (mload (w2n a) s) s G tn
+Proof
+  rpt strip_tac >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, emitted_insts_def,
+         DROP_APPEND1] >> simp[mk_inst_def, is_terminator_def]) >>
+  drule_all emit_mload_clean_seq_ptr >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+  simp[clean_emitted_prefix_def] >>
+  qexistsl_tac [`Gf`, `tnf`] >> simp[eval_operand_def] >> metis_tac[]
+QED
+
