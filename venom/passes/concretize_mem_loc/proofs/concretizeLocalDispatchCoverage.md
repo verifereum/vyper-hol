@@ -27,6 +27,21 @@ All paths in this paragraph are under `venom/passes/shared/proofs/` unless prefi
 9. `frameRelocationStoreSteps.local_rel_mstore8_step`: `[opd;opv]`, paired operand evaluations, local_rel, produced-byte equality for one-byte destination, write-complement retained demand and **post Obs** imply paired execution and local_rel with unchanged ptr/B. No actual ghost/T producer is included. `mstore8_as_write_memory` already exists; do not duplicate it.
 10. `frameRelocationOpaque.disciplined_retpc_operand_use` restricts opaque uses to ASSIGN, PHI, or final RET token; `opaque_return_token_step` drops that final token, and `setup_callee_opaque_token` explicitly allows different LAST args. These support return/frame work, not PARAM or RETPC_PARAM local integration.
 
+## Canonical clean-value interface (main-table reconciliation)
+
+`concretizeLayoutLocalValuesTheory.concretize_clean_value_local_complete`
+handles `clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT]`.
+This includes ISZERO/NOT (one operand), ADDMOD/MULMOD (three), and the
+nonpointer scalar binary families marked below (two), always with singleton
+output and the theorem's full discipline, shape, resolved-configuration,
+actual ordinary-event, incoming local relation and independent taint hypotheses.
+It derives operand cleanliness, target success, actual origin erasure,
+source/target step_taint, successor demand, dead-result observations and
+`relocation_env`. It does **not** export `relocation_reader_context` preservation;
+that is a separate consumer-side supplement, not missing unary execution.
+These entries supersede the initial audit's stale missing/conditional labels;
+no specialized unary producer is needed, and full dispatch remains outstanding.
+
 ## Exhaustive constructor inventory
 
 The obligations column refines V/G/D/O/T above. All semantic helpers here are in `venomExecSemantics`; all rows with operand envelopes can also return Error for malformed/undefined operands. No row silently excludes Error. References B1..B10 refer to numbered boundaries above.
@@ -35,15 +50,15 @@ The obligations column refines V/G/D/O/T above. All semantic helpers here are in
 |---|---|---|---|
 | ADD | exec_pure2 word_add / OK | B2,B3; conditional | Scalar/pointer-left/pointer-right split from fn_ptr_ok and resolved origin; clean scalar from taint_ok and nonopaque use; G/D/T adapters. |
 | SUB | exec_pure2 word_sub / OK | B2,B3; conditional | Pointer-left or scalar only under affine discipline; do not assume arbitrary pointer subtraction covered; G/D/T adapters. |
-| MUL, Div, SDIV, Mod, SMOD, Exp | exec_pure2 / OK | B2; conditional | All inputs clean nonpointer/nonopaque; actual source proof from discipline; D/T adapters. |
-| ADDMOD, MULMOD | exec_pure3 / OK | missing | Three clean scalar inputs, clean result origin/taint, V/G/D/O/T producer; B2 is binary only. |
+| MUL, Div, SDIV, Mod, SMOD, Exp | exec_pure2 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete derives clean inputs from discipline and supplies actual G/D/O/T; binary operand envelope and full incoming interface retained. |
+| ADDMOD, MULMOD | exec_pure3 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete handles the three-operand envelope, actual ghost updates and independent target taint; see interface below. |
 | EQ, LT, GT | exec_pure2 / OK | B2,B4; conditional | Scalar or same-site pointer pair; same lifetime token and numeric bounds must be derived; no mere numeric-origin inversion; D/T adapters. |
-| SLT, SGT | exec_pure2 signed comparison / OK | B2; conditional | Must be scalar; access_ok's unsigned pointer comparison clause does not authorize signed pointer comparisons. |
-| ISZERO | exec_pure1 / OK | missing | Clean scalar, nonpointer/nonopaque input from discipline; unary result clearing and V/G/D/O/T. Existing base dispatch equation alone is not preservation. |
-| AND, OR, XOR | exec_pure2 / OK | B2; conditional | Clean scalar inputs; no pointer/opaque or tainted use; D/T adapters. |
-| NOT | exec_pure1 / OK | missing | Same unary family as ISZERO. |
+| SLT, SGT | exec_pure2 signed comparison / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete derives scalar cleanliness; no signed pointer comparison claim. Full incoming interface and binary envelope retained. |
+| ISZERO | exec_pure1 / OK | reachable clean-value producer checked | concretizeLayoutLocalValuesTheory.concretize_clean_value_local_complete; see canonical clean-value interface below. Separate reader-context preservation is not exported. |
+| AND, OR, XOR | exec_pure2 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete derives clean scalar inputs and actual G/D/O/T; full incoming interface and binary envelope retained. |
+| NOT | exec_pure1 / OK | reachable clean-value producer checked | Same canonical clean-value producer and interface as ISZERO; no specialized unary theorem needed. |
 | SHL, SHR, SAR | exec_pure2 shift / OK | missing | Clean shift amount; value may be tainted by taint_ok. Need byte-mask shift/SAR propagation, actual `out_taint` and independent T. Scalar_binary_opcode explicitly omits these. |
-| SIGNEXTEND, BYTE | exec_pure2 / OK | B2; conditional | Both inputs clean scalar (not the shift taint exception); D/T adapters. |
+| SIGNEXTEND, BYTE | exec_pure2 / OK | reachable clean-value producer checked | Canonical concretize_clean_value_local_complete handles both clean scalar inputs and actual G/D/O/T; not the shift taint exception. Full incoming interface retained. |
 | MLOAD | exec_read1 mload / OK | B8; complete | Full concrete pre-interface still required: joint ordinary event, resolved/lifetime, nonexemption, labels, local_rel and independent T. Result origin is erased. |
 | MSTORE | exec_write2 mstore / OK | B8; complete | Same concrete event/interface requirements; paired possibly tainted stored word and actual ghost/T handled. |
 | MSTORE8 | exec_write2 mstore8 / OK | B9; complete | concretizeLayoutLocalStore8 exports concrete one-byte geometry and concretize_mstore8_local_complete: clean equal stored value from discipline, actual step_prov/step_taint, independent target taint inclusion, dead-result observation and restored-memory equalities retaining all execution-environment fields. Geometry shares coherent_written_interval with MSTORE. |
