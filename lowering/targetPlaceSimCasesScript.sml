@@ -528,184 +528,6 @@ Definition target_indices_def:
   target_indices (SubscriptTarget t e) = target_indices t ++ [e]
 End
 
-(* An element of an array or a mapping, for a target with no pop: the
-   base's fragment, the index's (lower_value), then, by the base's place
-   type, the slot of the key (compile_mapping_subscript, with
-   compile_keccak256_key for a bytes or string key) or the bounds check and
-   the element's pointer (compile_array_subscript).  Cheated, for the alan
-   run:
-   - the index runs after the base, so the base's target_post must survive
-     its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
-     pointers and the base's operand are not fresh at the index's start),
-     and without a pop the index leaves the source locals as they were
-     (a call restores the caller's scopes), so
-     place_readable does too;
-   - the bounds check: a source RuntimeError for an index out of range
-     (evaluate_subscripts array_index for a local's place,
-     resolve_array_element's checks for a storage one) against
-     compile_array_subscript's ASSERT, which aborts, and an index in range
-     against the length the loader reads (an MLOAD at the base's pointer,
-     an SLOAD or TLOAD at its slot);
-   - the mapping slot: compile_mapping_subscript's SHA3 over the slot and
-     key words in a fresh 64-byte buffer against hashmap_slot slot
-     (encode_hashmap_key kt kv).
-   Given those, the element's place is at the base's pointer plus the
-   element's offset (mem_step_offset) for a local, and at the element's
-   slot for storage. *)
-Theorem target_subscript_nopop_case:
-  !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    ~target_has_pop (SubscriptTarget bt e) /\
-    (!st r st' l.
-       compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
-       FST (SND r) = SOME l /\ is_slot_addressed l /\
-       (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
-       ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  cheat
-QED
-
-(* An element of a storage or transient array target with a call in any of
-   its indices (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
-   compile_subscript_array_storage_call_case on the read side: the call can
-   shrink the array the target already points into (outer[0][shrink()] = v),
-   and stmt_state_rel relates no dead slots, so nothing says the element's
-   slot is still the source's place.  The call may sit in the base target
-   too: in outer[0][shrink()][0] = v, the base's target_case holds, but the
-   outer subscript reads the length word of outer[0], which shrink made
-   dead (targetSubscriptRefutationProbe's
-   clear_frozen_subscript_counterexample).  A storage judgment that relates
-   dead slots replaces this lemma. *)
-Theorem target_subscript_storage_call_case:
-  !nocalls ctx func cenv cx bt e st r st' l.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
-    FST (SND r) = SOME l /\ is_slot_addressed l /\
-    (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
-    EXISTS expr_has_effect (target_indices (SubscriptTarget bt e)) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  cheat
-QED
-
-(* An element of a target with a pop (target_has_pop, exprSimHyps).
-   ADMITTED (cheat), with exprSimPlaces' compile_subscript_array_pop_case
-   on the read side: a pop in the base or the index that pops the base's
-   array leaves the source reading the base from the popped history
-   (read_memory_path), which no invariant relates to memory yet (a root
-   pop writes only its exempt length word, so the element's bytes are
-   still there), and a nested pop
-   (x[0][x[0].pop()]) writes an inner length word that the shared
-   locals_kept frame keeps, which target_post and the index's expr_vv_case
-   both inherit.  The repair of that frame replaces this lemma. *)
-Theorem target_subscript_pop_case:
-  !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) /\
-    target_has_pop (SubscriptTarget bt e) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  cheat
-QED
-
-Theorem target_subscript_case:
-  !nocalls ctx func cenv cx bt e.
-    target_case nocalls ctx func cenv cx bt /\
-    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
-     expr_sim_case nocalls ctx func cenv cx e /\
-     expr_vv_case nocalls ctx func cenv cx e) ==>
-    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
-Proof
-  rpt strip_tac >> Cases_on `target_has_pop (SubscriptTarget bt e)`
-  >- metis_tac[target_subscript_pop_case] >>
-  Cases_on `?st r st' l.
-              compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
-              FST (SND r) = SOME l /\ is_slot_addressed l /\
-              (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
-              EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))`
-  >- metis_tac[target_subscript_storage_call_case] >>
-  irule target_subscript_nopop_case >> metis_tac[]
-QED
-
-(* ===== Every target ===== *)
-
-Theorem target_case_all:
-  !bt nocalls ctx func cenv cx.
-    target_idx_case nocalls ctx func cenv cx bt ==>
-    target_case nocalls ctx func cenv cx bt
-Proof
-  recInduct base_assignment_target_induct >>
-  rw[target_idx_case_def, target_name_case, target_toplevel_case]
-  >- (irule target_subscript_case >> metis_tac[]) >>
-  irule target_attr_case >> metis_tac[]
-QED
-
-(* The indices of a target, in order. *)
-(* With no internal calls, the indices' judgments follow from expr_ok, as
-   compile_expr_sim's induction hypotheses give it. *)
-Theorem target_idx_case_ok:
-  !bt nocalls ctx func cenv cx.
-    int_calls_target bt = [] /\
-    (!e. MEM e (target_indices bt) ==> expr_ok cenv e) ==>
-    target_idx_case nocalls ctx func cenv cx bt
-Proof
-  recInduct base_assignment_target_induct >>
-  rw[target_idx_case_def, target_indices_def, int_calls_expr_def] >>
-  metis_tac[expr_case_of_ok, MEM_APPEND, MEM]
-QED
-
-(* ===== Places ===== *)
-
-(* The judgment for eval_target_place: a target typed by a value type
-   evaluates to a place, at the pointer. *)
-Theorem target_place_sim:
-  !ctx func cenv cx env bt es ty sa sb r res es' s0.
-    target_sim ctx func cenv cx env bt es /\
-    type_place_target env bt = SOME (Type ty) /\
-    compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-    eval_target_place cx bt es = (res, es') /\
-    ((?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
-     (?d. res = INR (Error (RevertData d))) \/
-     (?str. res = INR (AssertException str))) /\
-    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. ?p. res = INL p /\
-               target_post ctx func cenv cx es sa sb s0 es' (PlaceR p)
-                 (Type ty) r s)
-      (expr_exit res)
-Proof
-  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
-  qpat_x_assum `target_sim _ _ _ _ _ _ _`
-    (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
-  disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `r1`, `es1`, `s0`]
-                mp_tac) >>
-  Cases_on `r1` >> simp[]
-  >- (rename1 `INL pv` >> simp[target_res_ok_def] >> strip_tac >>
-      reverse (Cases_on `?p. pv = PlaceR p`)
-      >- (Cases_on `pv` >> gvs[get_place_def, raise_def] >>
-          TRY (strip_tac >> gvs[])) >>
-      gvs[get_place_def, return_def] >> strip_tac >> gvs[] >>
-      qpat_x_assum `frag_exec _ _ _ _ _ _`
-        (mp_then Any irule frag_exec_weaken) >> simp[]) >>
-  rename1 `eval_base_place cx bt es = (INR exc, es1)` >>
-  rpt strip_tac >> gvs[target_res_ok_def] >>
-  qpat_x_assum `frag_exec _ _ _ _ _ _` (mp_then Any irule frag_exec_weaken) >>
-  simp[] >> metis_tac[expr_exit_INR_type]
-QED
-
 (* The mapping target suffix allocates scratch but preserves the original
    target frame; its compiler equations supply straight-line execution. *)
 Theorem target_mapping_suffix_frag:
@@ -931,4 +753,182 @@ Proof
   conj_tac
   >- (drule_at (Pos last) extend_storage_place_read_live >> simp[]) >>
   drule_at (Pos last) extend_storage_place_slots >> simp[]
+QED
+
+(* An element of an array or a mapping, for a target with no pop: the
+   base's fragment, the index's (lower_value), then, by the base's place
+   type, the slot of the key (compile_mapping_subscript, with
+   compile_keccak256_key for a bytes or string key) or the bounds check and
+   the element's pointer (compile_array_subscript).  Cheated, for the alan
+   run:
+   - the index runs after the base, so the base's target_post must survive
+     its fragment: place_ptr_rel does (place_ptr_rel_vars_frame: the local
+     pointers and the base's operand are not fresh at the index's start),
+     and without a pop the index leaves the source locals as they were
+     (a call restores the caller's scopes), so
+     place_readable does too;
+   - the bounds check: a source RuntimeError for an index out of range
+     (evaluate_subscripts array_index for a local's place,
+     resolve_array_element's checks for a storage one) against
+     compile_array_subscript's ASSERT, which aborts, and an index in range
+     against the length the loader reads (an MLOAD at the base's pointer,
+     an SLOAD or TLOAD at its slot);
+   - the mapping slot: compile_mapping_subscript's SHA3 over the slot and
+     key words in a fresh 64-byte buffer against hashmap_slot slot
+     (encode_hashmap_key kt kv).
+   Given those, the element's place is at the base's pointer plus the
+   element's offset (mem_step_offset) for a local, and at the element's
+   slot for storage. *)
+Theorem target_subscript_nopop_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    ~target_has_pop (SubscriptTarget bt e) /\
+    (!st r st' l.
+       compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+       FST (SND r) = SOME l /\ is_slot_addressed l /\
+       (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) ==>
+       ~EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
+(* An element of a storage or transient array target with a call in any of
+   its indices (expr_has_effect).  ADMITTED (cheat), with exprSimPlaces'
+   compile_subscript_array_storage_call_case on the read side: the call can
+   shrink the array the target already points into (outer[0][shrink()] = v),
+   and stmt_state_rel relates no dead slots, so nothing says the element's
+   slot is still the source's place.  The call may sit in the base target
+   too: in outer[0][shrink()][0] = v, the base's target_case holds, but the
+   outer subscript reads the length word of outer[0], which shrink made
+   dead (targetSubscriptRefutationProbe's
+   clear_frozen_subscript_counterexample).  A storage judgment that relates
+   dead slots replaces this lemma. *)
+Theorem target_subscript_storage_call_case:
+  !nocalls ctx func cenv cx bt e st r st' l.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+    FST (SND r) = SOME l /\ is_slot_addressed l /\
+    (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
+    EXISTS expr_has_effect (target_indices (SubscriptTarget bt e)) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
+(* An element of a target with a pop (target_has_pop, exprSimHyps).
+   ADMITTED (cheat), with exprSimPlaces' compile_subscript_array_pop_case
+   on the read side: a pop in the base or the index that pops the base's
+   array leaves the source reading the base from the popped history
+   (read_memory_path), which no invariant relates to memory yet (a root
+   pop writes only its exempt length word, so the element's bytes are
+   still there), and a nested pop
+   (x[0][x[0].pop()]) writes an inner length word that the shared
+   locals_kept frame keeps, which target_post and the index's expr_vv_case
+   both inherit.  The repair of that frame replaces this lemma. *)
+Theorem target_subscript_pop_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) /\
+    target_has_pop (SubscriptTarget bt e) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  cheat
+QED
+
+Theorem target_subscript_case:
+  !nocalls ctx func cenv cx bt e.
+    target_case nocalls ctx func cenv cx bt /\
+    ((?s pv s1. eval_base_place cx bt s = (INL pv, s1)) ==>
+     expr_sim_case nocalls ctx func cenv cx e /\
+     expr_vv_case nocalls ctx func cenv cx e) ==>
+    target_case nocalls ctx func cenv cx (SubscriptTarget bt e)
+Proof
+  rpt strip_tac >> Cases_on `target_has_pop (SubscriptTarget bt e)`
+  >- metis_tac[target_subscript_pop_case] >>
+  Cases_on `?st r st' l.
+              compile_get_target_ptr compile_expr cenv bt st = (r, st') /\
+              FST (SND r) = SOME l /\ is_slot_addressed l /\
+              (!kt vt. SND (SND r) <> SOME (MapPT kt vt)) /\
+              EXISTS expr_has_effect (target_indices (SubscriptTarget bt e))`
+  >- metis_tac[target_subscript_storage_call_case] >>
+  irule target_subscript_nopop_case >> metis_tac[]
+QED
+
+(* ===== Every target ===== *)
+
+Theorem target_case_all:
+  !bt nocalls ctx func cenv cx.
+    target_idx_case nocalls ctx func cenv cx bt ==>
+    target_case nocalls ctx func cenv cx bt
+Proof
+  recInduct base_assignment_target_induct >>
+  rw[target_idx_case_def, target_name_case, target_toplevel_case]
+  >- (irule target_subscript_case >> metis_tac[]) >>
+  irule target_attr_case >> metis_tac[]
+QED
+
+(* The indices of a target, in order. *)
+(* With no internal calls, the indices' judgments follow from expr_ok, as
+   compile_expr_sim's induction hypotheses give it. *)
+Theorem target_idx_case_ok:
+  !bt nocalls ctx func cenv cx.
+    int_calls_target bt = [] /\
+    (!e. MEM e (target_indices bt) ==> expr_ok cenv e) ==>
+    target_idx_case nocalls ctx func cenv cx bt
+Proof
+  recInduct base_assignment_target_induct >>
+  rw[target_idx_case_def, target_indices_def, int_calls_expr_def] >>
+  metis_tac[expr_case_of_ok, MEM_APPEND, MEM]
+QED
+
+(* ===== Places ===== *)
+
+(* The judgment for eval_target_place: a target typed by a value type
+   evaluates to a place, at the pointer. *)
+Theorem target_place_sim:
+  !ctx func cenv cx env bt es ty sa sb r res es' s0.
+    target_sim ctx func cenv cx env bt es /\
+    type_place_target env bt = SOME (Type ty) /\
+    compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
+    eval_target_place cx bt es = (res, es') /\
+    ((?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
+     (?d. res = INR (Error (RevertData d))) \/
+     (?str. res = INR (AssertException str))) /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved cenv sa ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. ?p. res = INL p /\
+               target_post ctx func cenv cx es sa sb s0 es' (PlaceR p)
+                 (Type ty) r s)
+      (expr_exit res)
+Proof
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt es` >> rename1 `(r1, es1)` >>
+  qpat_x_assum `target_sim _ _ _ _ _ _ _`
+    (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
+  disch_then (qspecl_then [`Type ty`, `sa`, `sb`, `r`, `r1`, `es1`, `s0`]
+                mp_tac) >>
+  Cases_on `r1` >> simp[]
+  >- (rename1 `INL pv` >> simp[target_res_ok_def] >> strip_tac >>
+      reverse (Cases_on `?p. pv = PlaceR p`)
+      >- (Cases_on `pv` >> gvs[get_place_def, raise_def] >>
+          TRY (strip_tac >> gvs[])) >>
+      gvs[get_place_def, return_def] >> strip_tac >> gvs[] >>
+      qpat_x_assum `frag_exec _ _ _ _ _ _`
+        (mp_then Any irule frag_exec_weaken) >> simp[]) >>
+  rename1 `eval_base_place cx bt es = (INR exc, es1)` >>
+  rpt strip_tac >> gvs[target_res_ok_def] >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` (mp_then Any irule frag_exec_weaken) >>
+  simp[] >> metis_tac[expr_exit_INR_type]
 QED
