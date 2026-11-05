@@ -17,3 +17,12 @@ Proof
   rpt strip_tac >>
   gvs[Once ev_step_def, AllCaseEqs()]
 QED
+
+Theorem ev_step_non_invoke_local:
+  !orc p d fuel fuel' ctx ctx' inst s.
+    inst.inst_opcode <> INVOKE ==>
+    ev_step orc p d fuel ctx inst s =
+    ev_step orc p d fuel' ctx' inst s
+Proof
+  rpt strip_tac >> simp[ev_step_def]
+QED
