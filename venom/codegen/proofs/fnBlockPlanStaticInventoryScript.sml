@@ -1358,3 +1358,100 @@ Theorem regional_phi_live_source_probe:
 Proof
   rpt strip_tac >> simp[generate_phi_plan_def, LET_THM] >> EVAL_TAC
 QED
+
+Theorem inventory_restore_membership:
+  !requested ps ops qs.
+    restore_spilled_plan requested ps = (ops,qs) ==>
+    !x. MEM x qs.ps_stack <=> MEM x ps.ps_stack \/
+      (MEM x requested /\ x IN FDOM ps.ps_spilled)
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled h` >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      first_x_assum drule >> gvs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >>
+  simp[stack_push_def, MEM_SNOC, finite_mapTheory.FDOM_DOMSUB] >>
+  gvs[finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem inventory_restore_domain:
+  !requested ps ops qs.
+    restore_spilled_plan requested ps = (ops,qs) ==>
+    FDOM qs.ps_spilled = FDOM ps.ps_spilled DIFF set requested
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled h` >> simp[]
+  >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+      first_x_assum drule >> gvs[finite_mapTheory.FLOOKUP_DEF, EXTENSION] >> metis_tac[]) >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[finite_mapTheory.FDOM_DOMSUB, EXTENSION] >> metis_tac[]
+QED
+
+Theorem inventory_restore_disjoint:
+  restore_spilled_plan requested ps = (ops,qs) /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  strip_tac >> drule inventory_restore_membership >>
+  drule inventory_restore_domain >>
+  gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[]
+QED
+
+Theorem inventory_do_restore_partition[local]:
+  do_restore op ps = (ops,qs) /\ ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+  ALL_DISTINCT qs.ps_stack /\
+  DISJOINT (set qs.ps_stack) (FDOM qs.ps_spilled)
+Proof
+  simp[do_restore_def] >> Cases_on `FLOOKUP ps.ps_spilled op` >> simp[] >>
+  strip_tac >> gvs[stack_push_def, ALL_DISTINCT_SNOC,
+    DISJOINT_DEF, EXTENSION, finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]
+QED
+
+Theorem inventory_restore_distinct:
+  !requested ps ops qs.
+    restore_spilled_plan requested ps = (ops,qs) /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+    ALL_DISTINCT qs.ps_stack
+Proof
+  Induct >> simp[restore_spilled_plan_def] >> rpt gen_tac >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  drule_all inventory_do_restore_partition >> strip_tac >>
+  first_x_assum irule >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem inventory_restore_requested:
+  restore_spilled_plan requested ps = (ops,qs) /\
+  (!x. MEM x requested ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) ==>
+  !x. MEM x requested ==> MEM x qs.ps_stack
+Proof
+  metis_tac[inventory_restore_membership]
+QED
+
+Theorem inventory_restore_support:
+  restore_spilled_plan requested ps = (ops,qs) /\
+  EVERY P ps.ps_stack /\ EVERY P requested ==>
+  EVERY P qs.ps_stack
+Proof
+  strip_tac >> drule inventory_restore_membership >>
+  gvs[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem inventory_restore_length_floor:
+  restore_spilled_plan requested ps = (ops,qs) /\
+  ALL_DISTINCT requested /\
+  (!x. MEM x requested ==> MEM x ps.ps_stack \/ x IN FDOM ps.ps_spilled) ==>
+  LENGTH requested <= LENGTH qs.ps_stack
+Proof
+  strip_tac >>
+  `set requested SUBSET set qs.ps_stack` by
+    (simp[SUBSET_DEF] >> metis_tac[inventory_restore_requested]) >>
+  `CARD (set requested) <= CARD (set qs.ps_stack)` by
+    (irule CARD_SUBSET >> simp[]) >>
+  `CARD (set requested) = LENGTH requested` by
+    simp[ALL_DISTINCT_CARD_LIST_TO_SET] >>
+  `CARD (set qs.ps_stack) <= LENGTH qs.ps_stack` by simp[CARD_LIST_TO_SET] >>
+  decide_tac
+QED
