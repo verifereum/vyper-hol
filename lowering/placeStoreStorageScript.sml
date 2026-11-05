@@ -3979,6 +3979,30 @@ Proof
   fs[eval_operand_def, lookup_var_def]
 QED
 
+Theorem place_store_root_layout:
+  expr_sim_inv cenv cx env ee /\
+  declared_storage_region cx mid name subs = SOME (tr,rootk,root) ==>
+  w2n rootk + type_slot_size root <= dimword (:256) /\
+  (!mid' name' subs' k' tv'.
+    declared_storage_region cx mid' name' subs' = SOME (tr,k',tv') /\
+    (k',tv') <> (rootk,root) ==>
+    ranges_disjoint (w2n rootk) (type_slot_size root)
+                    (w2n k') (type_slot_size tv'))
+Proof
+  strip_tac >>
+  `storage_layout_safe cx` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     simp[expr_sim_inv_def]) >>
+  conj_tac
+  >- (drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >>
+      simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  `(mid,name,subs) <> (mid',name',subs')` by
+    (strip_tac >> gvs[]) >>
+  drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_separation >>
+  simp[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
