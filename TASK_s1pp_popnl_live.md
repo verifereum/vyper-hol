@@ -1,4 +1,4 @@
-# TASK: pop on an array inside a memory local
+# TASK: pop on an array inside a memory local, live place
 
 ## Meta
 Status: planned
@@ -11,11 +11,16 @@ Location: lowering/exprSimPopNestedLocalScript.sml (project root: this directory
 In `lowering/exprSimPopNestedLocalScript.sml`, currently `cheat`:
 
 ```sml
-Theorem pop_nested_local_sim:
+Theorem pop_nested_local_live_case:
   !ctx func cenv cx env ann bt ty es id.
     pop_target_frag ctx func cenv cx env bt es /\
     expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = NameTarget id ==>
+    target_root bt = NameTarget id /\
+    (!s path t entry err.
+       eval_target_place cx bt s = (INL (MemoryPlace id path), t) /\
+       lookup_scopes id t.scopes = SOME entry /\
+       evaluate_subscripts entry.type entry.value path = INR err ==>
+       read_popped entry.type path entry.popped = NONE) ==>
     expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
 ```
 
@@ -23,11 +28,11 @@ Theorem pop_nested_local_sim:
 
 **Do not modify this statement.** Prove it as-is, or produce a counterexample.
 
-You may use the deliberately admitted leaf `pop_local_popped_in_memory` in `lowering/exprSimPopNestedLocalPoppedScript.sml` (its comment says why it is admitted). Leave it, its statement and its `cheat` unchanged; it is the only admitted lemma of this piece.
+`pop_nested_local_sim` in the same file is already proved from this theorem and the deliberately admitted residual `pop_nested_local_popped_case` (lowering/exprSimPopNestedLocalPoppedScript.sml: a target whose place reads a popped snapshot; its comment says why). Leave both unchanged, and don't use `pop_nested_local_popped_case` to prove this theorem.
 
 ## Completion Criteria
 
-1. `holbuild -j4 build exprSimPopNestedLocalTheory exprSimPopNestedTheory` passes with no CHEAT warning for `pop_nested_local_sim` other than through `pop_local_popped_in_memory` and the theories of the local overlay (below).
+1. `holbuild -j4 build exprSimPopNestedLocalTheory exprSimPopNestedTheory` passes with no CHEAT warning for `pop_nested_local_live_case` other than through the theories of the local overlay (below).
 2. No duplicate or near-duplicate lemmas: search `lowering/` and `semantics/` before proving a helper; each helper exists once, in its most general form. Put this piece's machinery in new leaf theories (e.g. `lowering/exprSimPopNestedLocalPropsScript.sml`) that `exprSimPopNestedLocal` imports; don't edit low-level shared ancestors, except to add a lemma next to its definition where it belongs.
 3. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with `>~`, `>-`, `>|`. No tactic-timeout override. No new `cheat`, axiom, or changed statement anywhere. Don't change any definition in `semantics/`, `frontend/`, `lowering/defs/`, `venom/`, or any judgment (`exprSim*Defs`, `exprSimHyps*`, `loweringPosts`, `bodySim*`, `*Main`).
 4. Commit messages end with these two lines:
@@ -68,8 +73,8 @@ The root case `bt = NameTarget id` is also `exprSimPop.compile_pop_name_sim` (ol
 
 | Resource | Location | Description |
 |----------|----------|-------------|
-| Target | `lowering/exprSimPopNestedLocalScript.sml` | The theorem and its comment |
-| Admitted leaf | `lowering/exprSimPopNestedLocalPoppedScript.sml` | `pop_local_popped_in_memory`: a path dead in the value but read through the history sits in memory |
+| Target | `lowering/exprSimPopNestedLocalScript.sml` | The theorem, its comment, and the split `pop_nested_local_sim` |
+| Admitted residual | `lowering/exprSimPopNestedLocalPoppedScript.sml` | `pop_nested_local_popped_case`: the excluded case, and why |
 | Target fragment | `lowering/exprSimPopNestedBaseScript.sml` | `pop_target_frag_def` |
 | Consumer | `lowering/exprSimPopNestedScript.sml` | `pop_nested_sim` dispatches to this theorem |
 | Judgments | `lowering/exprSimDefsScript.sml`, `lowering/exprSimHypsDefsScript.sml`, `lowering/gasOutcomeScript.sml` | `expr_vv_sim`, `expr_exit`, `expr_body_pre`, `expr_sim_inv`, `popped_keys_indexed`, `gas_outcome` |
@@ -87,4 +92,5 @@ The root case `bt = NameTarget id` is also `exprSimPop.compile_pop_name_sim` (ol
 
 ## Notes
 
-- The case split between a live place (`evaluate_subscripts entry.type entry.value path = INL _`) and a place read through the history is the prover's to arrange; only the history case's memory fact is admitted.
+- The last premise excludes only places read from a popped snapshot; a dead place with no snapshot is unreadable, and `pop_place` raises there.
+- Indices may have effects, including pops of other arrays and internal calls.
