@@ -13,7 +13,7 @@
 
 Theory fnFrameSteps
 Ancestors
-  genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  fnFrameStepsRevertForward genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
 
@@ -160,5 +160,6 @@ Theorem revert_forward_frame_sim:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  drule_all rf_entry_forward_abort >> simp[]
 QED

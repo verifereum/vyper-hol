@@ -1111,7 +1111,7 @@ QED
 (* All simple stack ops trivially satisfy prefix_spill_wf:
    spill_op_wf only has non-trivial conditions for SOSpill/SORestore,
    which are excluded by is_simple_stack_op. *)
-Theorem simple_prefix_spill_wf[local]:
+Theorem simple_prefix_spill_wf:
   !ops lo ps. EVERY is_simple_stack_op ops ==> prefix_spill_wf initial_fmp lo ops ps
 Proof
   Induct >> simp[prefix_spill_wf_def] >> rpt strip_tac >>
@@ -1382,7 +1382,7 @@ Proof
      Cases_on `P (h0,h1)` >> gvs[] >>
      fs[MEM_MAP, MEM_FILTER] >> metis_tac[]
 QED
-Theorem generated_plan_state_wf_release_dead_spills[local]:
+Theorem generated_plan_state_wf_release_dead_spills:
   !base next_liveness ps.
     generated_plan_state_wf base ps ==>
     generated_plan_state_wf base (release_dead_spills next_liveness ps)
