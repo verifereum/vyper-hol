@@ -1657,3 +1657,61 @@ Theorem inventory_reorder_disjoint:
 Proof
   metis_tac[inventory_reorder_partition]
 QED
+
+Theorem inventory_distinct_supported_suffix:
+  ALL_DISTINCT stk /\ EVERY (\x. MEM x target) stk /\
+  stack_pop (LENGTH target) stk ++ target = stk ==> stk = target
+Proof
+  strip_tac >>
+  qabbrev_tac `prefix = stack_pop (LENGTH target) stk` >>
+  `ALL_DISTINCT (prefix ++ target)` by metis_tac[] >>
+  `EVERY (\x. MEM x target) prefix` by metis_tac[EVERY_APPEND] >>
+  `prefix = []` by
+    (Cases_on `prefix` >> gvs[ALL_DISTINCT_APPEND, EVERY_DEF] >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem inventory_join_pipeline_exact:
+  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  EVERY (\x. MEM x target) ps.ps_stack /\
+  restore_spilled_plan target ps = (restore_ops,mid) /\
+  reorder_plan dfg target mid = (reorder_ops,qs) /\
+  stack_pop (LENGTH target) qs.ps_stack ++ target = qs.ps_stack ==>
+  qs.ps_stack = target
+Proof
+  strip_tac >>
+  `ALL_DISTINCT mid.ps_stack /\ DISJOINT (set mid.ps_stack) (FDOM mid.ps_spilled)` by
+    metis_tac[inventory_restore_distinct, inventory_restore_disjoint] >>
+  `ALL_DISTINCT qs.ps_stack` by metis_tac[inventory_reorder_distinct] >>
+  `EVERY (\x. MEM x target) mid.ps_stack` by
+    (irule inventory_restore_support >> goal_assum (drule_at Any) >> simp[EVERY_MEM]) >>
+  `EVERY (\x. MEM x target) qs.ps_stack` by
+    (drule inventory_reorder_physical_origin >> simp[] >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[inventory_distinct_supported_suffix]
+QED
+
+Theorem inventory_join_reached_exact:
+  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  EVERY (\x. MEM x target) ps.ps_stack /\
+  restore_spilled_plan target ps = (restore_ops,mid) /\
+  reorder_plan dfg target mid = (reorder_ops,qs) /\
+  join_target_ops lv fn lbl inst = SOME target /\ join_reached lv fn lbl inst qs ==>
+  qs.ps_stack = target
+Proof
+  strip_tac >> gvs[join_reached_def] >> metis_tac[inventory_join_pipeline_exact]
+QED
+
+Theorem inventory_join_reached_length:
+  LENGTH target <= 16 /\ ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  EVERY (\x. MEM x target) ps.ps_stack /\
+  restore_spilled_plan target ps = (restore_ops,mid) /\
+  reorder_plan dfg target mid = (reorder_ops,qs) /\
+  join_target_ops lv fn lbl inst = SOME target /\ join_reached lv fn lbl inst qs ==>
+  LENGTH qs.ps_stack = LENGTH target
+Proof
+  metis_tac[inventory_join_reached_exact]
+QED
