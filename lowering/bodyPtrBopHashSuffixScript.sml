@@ -141,23 +141,58 @@ Proof
   qexistsl_tac [`G`, `s`, `tn`] >> simp[]
 QED
 
-Theorem bop_bytes_hash_pair_ptr:
+Theorem bop_hash_compile_ptr_cursor:
+  compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
+  fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\
+  stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  expr_val_at cenv cx ty sa sb es v (Var p)
+    (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  ptr_val_ok cx ty v (Var p) G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+  lookup_var p (s with vs_inst_idx := LENGTH sc.cs_current_insts) = SOME w /\
+  ((?bs. v = BytesV bs /\ LENGTH bs < dimword(:256) /\
+       tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k)))) \/
+   (?str. v = StringV str /\ LENGTH str < dimword(:256))) /\
+  run_inst_seq (emitted_insts sc sd) (s with vs_inst_idx := LENGTH sc.cs_current_insts) = OK t ==>
+  ?G' tn'.
+    gas_path_ptr D 0 ctx fn PG G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts)
+      0 G' tn' (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
+    op_taint tn' op = {} /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    (!x. not_fresh_at sc x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule bop_hash_compile_layout >> strip_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sc.cs_current_insts`]
+      (SPEC_ALL bop_hash_compile_ptr)))) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+QED
+
+Theorem bop_hash_pair_ptr:
   compile_bytestring_hash (Var p) sc = (h1,sd) /\
   compile_bytestring_hash (Var r) sd = (h2,se) /\
   not_fresh_at sc p /\ not_fresh_at sc r /\ local_ptrs_reserved cenv sc /\
   fn_has_code sc se fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
   ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
-  expr_val_at cenv cx ty1 sa1 sb1 es (BytesV bs1) (Var p) s /\
-  expr_val_at cenv cx ty2 sa2 sb2 es (BytesV bs2) (Var r) s /\
-  ptr_val_ok cx ty1 (BytesV bs1) (Var p) G tn s /\
-  ptr_val_ok cx ty2 (BytesV bs2) (Var r) G tn s /\
+  expr_val_at cenv cx ty1 sa1 sb1 es v1 (Var p) s /\
+  expr_val_at cenv cx ty2 sa2 sb2 es v2 (Var r) s /\
+  ptr_val_ok cx ty1 v1 (Var p) G tn s /\
+  ptr_val_ok cx ty2 v2 (Var r) G tn s /\
   evaluate_type (get_tenv cx) ty1 = SOME tv1 /\ ~is_word_type ty1 /\
   evaluate_type (get_tenv cx) ty2 = SOME tv2 /\ ~is_word_type ty2 /\
-  tv1 <> BaseTV AddressT /\ (!k. tv1 <> BaseTV (BytesT (Fixed k))) /\
-  tv2 <> BaseTV AddressT /\ (!k. tv2 <> BaseTV (BytesT (Fixed k))) /\
   lookup_var p s = SOME w1 /\ lookup_var r s = SOME w2 /\
-  LENGTH bs1 < dimword(:256) /\ LENGTH bs2 < dimword(:256) /\
+  ((?bs. v1 = BytesV bs /\ LENGTH bs < dimword(:256) /\
+      tv1 <> BaseTV AddressT /\ (!k. tv1 <> BaseTV (BytesT (Fixed k)))) \/
+   (?str. v1 = StringV str /\ LENGTH str < dimword(:256))) /\
+  ((?bs. v2 = BytesV bs /\ LENGTH bs < dimword(:256) /\
+      tv2 <> BaseTV AddressT /\ (!k. tv2 <> BaseTV (BytesT (Fixed k)))) \/
+   (?str. v2 = StringV str /\ LENGTH str < dimword(:256))) /\
   run_inst_seq (emitted_insts sc se) s = OK t ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + 6)) /\
@@ -166,10 +201,11 @@ Theorem bop_bytes_hash_pair_ptr:
     (!x. not_fresh_at sc x ==>
       FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
 Proof
-  strip_tac >> imp_res_tac bop_hash_compile_layout >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  imp_res_tac bop_hash_compile_layout >>
   `not_fresh_at sd r` by fs[not_fresh_at_def] >>
   drule_all bop_hash_pair_run_split >> strip_tac >>
-  drule_all bop_bytes_hash_compile_ptr >>
+  drule_all bop_hash_compile_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `stmt_state_rel ctx func cenv cx es
     (u with vs_inst_idx := LENGTH sd.cs_current_insts)` by
@@ -192,9 +228,7 @@ Proof
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ s` kall_tac >>
   qpat_x_assum `ptr_val_ok _ _ _ _ G tn s` kall_tac >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
-  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
-    (Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sc.cs_current_insts`]
-      (SPEC_ALL bop_bytes_hash_compile_ptr)))) >>
+  drule_all bop_hash_compile_ptr_cursor >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
   `!x. not_fresh_at sc x ==> not_fresh_at sd x` by fs[not_fresh_at_def] >>
