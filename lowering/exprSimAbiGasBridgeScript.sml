@@ -13,7 +13,7 @@ Ancestors
   fragGasMode fragExec exprLoweringProps abiDecoderLoop abiEncoderObserver
   venomInst venomExecSemantics venomState compileEnv list rich_list
   fragGasPath gasCount arithmetic venomExecProofs venomInstProps venomWf
-  jumpIndep
+  instIdxIndep
 
 (* The code a fragment emitted: the instructions after sa's position in the
    block it started, every block it finished after that, and the
@@ -1734,18 +1734,267 @@ Definition frag_relabel_state_def:
         vs_prev_bb := p|>
 End
 
+Theorem frag_eval_operand_control[local]:
+  !op s b p.
+    eval_operand op (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, lookup_var_def]
+QED
+
+Theorem frag_eval_operands_control[local]:
+  !ops s b p.
+    eval_operands ops (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    eval_operands ops s
+Proof
+  Induct >> simp[eval_operands_def, frag_eval_operand_control]
+QED
+
+Theorem frag_pure1_control[local]:
+  exec_pure1 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_pure1 f inst s)
+Proof
+  namedCases_on `inst.inst_operands` ["", "a ops"]
+  >- simp[exec_pure1_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `ops`
+  >- (simp[exec_pure1_def, frag_eval_operand_control] >>
+      Cases_on `eval_operand a s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `outs` >>
+      simp[instIdxIndepTheory.exec_result_map_def, update_var_def]) >>
+  simp[exec_pure1_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_pure2_control[local]:
+  exec_pure2 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_pure2 f inst s)
+Proof
+  namedCases_on `inst.inst_operands` ["", "a ops"]
+  >- simp[exec_pure2_def, instIdxIndepTheory.exec_result_map_def] >>
+  namedCases_on `ops` ["", "c rest"]
+  >- simp[exec_pure2_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `rest`
+  >- (simp[exec_pure2_def, frag_eval_operand_control] >>
+      Cases_on `eval_operand a s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `eval_operand c s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `outs` >>
+      simp[instIdxIndepTheory.exec_result_map_def, update_var_def]) >>
+  simp[exec_pure2_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_pure3_control[local]:
+  exec_pure3 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_pure3 f inst s)
+Proof
+  namedCases_on `inst.inst_operands` ["", "a ops"]
+  >- simp[exec_pure3_def, instIdxIndepTheory.exec_result_map_def] >>
+  namedCases_on `ops` ["", "c rest"]
+  >- simp[exec_pure3_def, instIdxIndepTheory.exec_result_map_def] >>
+  namedCases_on `rest` ["", "d tail"]
+  >- simp[exec_pure3_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `tail`
+  >- (simp[exec_pure3_def, frag_eval_operand_control] >>
+      Cases_on `eval_operand a s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `eval_operand c s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `eval_operand d s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `outs` >>
+      simp[instIdxIndepTheory.exec_result_map_def, update_var_def]) >>
+  simp[exec_pure3_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_call_request_control[local]:
+  venom_call_request (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    addr value off sz static = venom_call_request s addr value off sz static
+Proof
+  simp[venomCallOracleDefsTheory.venom_call_request_def, read_memory_def]
+QED
+
+Theorem frag_create_request_control[local]:
+  venom_create_request (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    value off sz salt = venom_create_request s value off sz salt
+Proof
+  simp[venomCallOracleDefsTheory.venom_create_request_def, read_memory_def]
+QED
+
+Theorem frag_consume_call_control[local]:
+  consume_call_outcome rq ro rs (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    (FST (consume_call_outcome rq ro rs s),
+     SND (consume_call_outcome rq ro rs s) with
+       <|vs_prev_bb := p; vs_current_bb := b|>)
+Proof
+  simp[venomCallOracleDefsTheory.consume_call_outcome_eq,
+       write_memory_with_expansion_def]
+QED
+
+Theorem frag_consume_create_control[local]:
+  consume_create_outcome rq (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    (FST (consume_create_outcome rq s),
+     SND (consume_create_outcome rq s) with
+       <|vs_prev_bb := p; vs_current_bb := b|>)
+Proof
+  simp[venomCallOracleDefsTheory.consume_create_outcome_eq]
+QED
+
+Theorem frag_ext_call_control[local]:
+  exec_ext_call inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    gas addr value ao az ro rz static =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_ext_call inst s gas addr value ao az ro rz static)
+Proof
+  namedCases_on `inst.inst_outputs` ["", "out outs"]
+  >- simp[exec_ext_call_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >>
+  simp[exec_ext_call_def, frag_call_request_control,
+       venomCallOracleDefsTheory.consume_call_outcome_eq,
+       write_memory_with_expansion_def, update_var_def,
+       instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_create_control[local]:
+  exec_create inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    value off sz salt =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_create inst s value off sz salt)
+Proof
+  namedCases_on `inst.inst_outputs` ["", "out outs"]
+  >- simp[exec_create_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >>
+  simp[exec_create_def, frag_create_request_control,
+       venomCallOracleDefsTheory.consume_create_outcome_eq,
+       update_var_def, halt_state_def, set_returndata_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  IF_CASES_TAC >> simp[instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_delegate_state_control[local]:
+  make_venom_delegatecall_state
+    (s with <|vs_prev_bb := p; vs_current_bb := b|>) target gas data code static =
+  make_venom_delegatecall_state s target gas data code static
+Proof
+  simp[make_venom_delegatecall_state_def, venom_to_tx_params_def]
+QED
+
+Theorem frag_extract_control[local]:
+  extract_venom_result (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    output ro rz result =
+  OPTION_MAP (\v. (FST v, SND v with <|vs_prev_bb := p; vs_current_bb := b|>))
+    (extract_venom_result s output ro rz result)
+Proof
+  Cases_on `result` >- simp[extract_venom_result_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >>
+  simp[extract_venom_result_def] >>
+  namedCases_on `pair1.contexts` ["", "ctxt rest"] >> simp[] >>
+  Cases_on `rest` >> simp[] >>
+  PairCases_on `ctxt` >>
+  Cases_on `pair0` >> simp[write_memory_with_expansion_def] >>
+  qmatch_goalsub_rename_tac `case outcome of NONE => _ | SOME _ => _` >>
+  Cases_on `outcome` >>
+  simp[write_memory_with_expansion_def]
+QED
+
+Theorem frag_delegatecall_control[local]:
+  exec_delegatecall inst (s with <|vs_prev_bb := p; vs_current_bb := b|>)
+    gas addr ao az ro rz =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_delegatecall inst s gas addr ao az ro rz)
+Proof
+  simp[exec_delegatecall_def, read_memory_def, frag_delegate_state_control,
+       frag_extract_control] >>
+  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
+  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) run_result` >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  rename1 `_ = SOME pair` >> PairCases_on `pair` >> simp[] >>
+  namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+  simp[instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >> simp[instIdxIndepTheory.exec_result_map_def, update_var_def]
+QED
+
+Theorem frag_read0_control[local]:
+  f (s with <|vs_prev_bb := p; vs_current_bb := b|>) = f s ==>
+  exec_read0 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_read0 f inst s)
+Proof
+  strip_tac >> namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+  simp[exec_read0_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `outs` >>
+  simp[exec_read0_def, instIdxIndepTheory.exec_result_map_def, update_var_def]
+QED
+
+Theorem frag_read1_control[local]:
+  (!v. f v (s with <|vs_prev_bb := p; vs_current_bb := b|>) = f v s) ==>
+  exec_read1 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_read1 f inst s)
+Proof
+  strip_tac >> namedCases_on `inst.inst_operands` ["", "a ops"]
+  >- simp[exec_read1_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `ops`
+  >- (simp[exec_read1_def, frag_eval_operand_control] >>
+      Cases_on `eval_operand a s` >> simp[instIdxIndepTheory.exec_result_map_def] >>
+      namedCases_on `inst.inst_outputs` ["", "out outs"] >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `outs` >>
+      simp[instIdxIndepTheory.exec_result_map_def, update_var_def]) >>
+  simp[exec_read1_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem frag_write2_control[local]:
+  (!v w. f v w (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+     f v w s with <|vs_prev_bb := p; vs_current_bb := b|>) ==>
+  exec_write2 f inst (s with <|vs_prev_bb := p; vs_current_bb := b|>) =
+    exec_result_map (\t. t with <|vs_prev_bb := p; vs_current_bb := b|>)
+      (exec_write2 f inst s)
+Proof
+  strip_tac >> namedCases_on `inst.inst_operands` ["", "a ops"]
+  >- simp[exec_write2_def, instIdxIndepTheory.exec_result_map_def] >>
+  namedCases_on `ops` ["", "c rest"]
+  >- simp[exec_write2_def, instIdxIndepTheory.exec_result_map_def] >>
+  Cases_on `rest`
+  >- (simp[exec_write2_def, frag_eval_operand_control] >>
+      Cases_on `eval_operand a s` >>
+      simp[instIdxIndepTheory.exec_result_map_def] >>
+      Cases_on `eval_operand c s` >>
+      simp[instIdxIndepTheory.exec_result_map_def]) >>
+  simp[exec_write2_def, instIdxIndepTheory.exec_result_map_def]
+QED
+
 Theorem frag_relabel_base_ordinary:
   ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
   inst.inst_opcode <> INVOKE /\ step_inst_base inst s = OK t ==>
   step_inst_base inst (s with <|vs_current_bb := b; vs_prev_bb := p|>) =
     OK (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
-  strip_tac >>
-  `t.vs_inst_idx = s.vs_inst_idx` by
-    metis_tac[step_inst_base_preserves_inst_idx] >>
-  qspecl_then [`inst`, `s`, `p`, `b`, `s.vs_inst_idx`]
-    mp_tac step_inst_base_jump_indep >>
-  simp[instIdxIndepTheory.exec_result_map_def]
+  Cases_on `inst.inst_opcode` >>
+  simp[is_pseudo_def, is_terminator_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
+       frag_ext_call_control, frag_create_control, frag_delegatecall_control,
+       frag_read0_control, frag_read1_control, frag_write2_control,
+       mload_def, sload_def, tload_def, contract_storage_def, contract_transient_def,
+       mstore_def, mstore8_def, istore_def, sstore_def, tstore_def,
+       write_memory_with_expansion_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  simp[frag_eval_operand_control, frag_eval_operands_control] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[mcopy_def, read_memory_def, write_memory_with_expansion_def,
+       update_var_def, exec_alloca_def, exec_gas_def,
+       instIdxIndepTheory.exec_result_map_def] >>
+  gvs[exec_alloca_def, exec_gas_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem frag_exec_gas_path_relabel:
