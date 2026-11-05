@@ -7,7 +7,8 @@ Ancestors
 
 Theorem unwrap_alloc_generated_code:
   compile_alloc_buffer nb sm = (buf,mid) ==>
-  ?out. buf.buf_operand = Var out /\ buf.buf_size = nb /\
+  ?out. out = STRING #"%" (toString sm.cs_next_var) /\
+    buf.buf_operand = Var out /\ buf.buf_size = nb /\
     emitted_insts sm mid =
       [mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [out]] /\
     mid.cs_current_insts = sm.cs_current_insts ++
@@ -28,6 +29,7 @@ Theorem unwrap_alloc_generated_step:
         (buffer_allocation_fields s sm.cs_next_id nb))
 Proof
   strip_tac >> drule unwrap_alloc_generated_code >> strip_tac >>
+  qpat_x_assum `out = _` kall_tac >>
   qexists_tac `out` >> simp[] >>
   drule compile_alloc_buffer_execution >>
   disch_then (qspec_then `s` mp_tac) >>
