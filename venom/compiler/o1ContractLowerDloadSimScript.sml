@@ -25,7 +25,8 @@ Ancestors
   o1LowerDloadHaltResult o1LowerDloadBranchExec o1LowerDloadSegmentContinuation
   o1LowerDloadOrdinaryDispatch o1LowerDloadEntryFetch o1LowerDloadRootResult
   o1LowerDloadRunnerBoundary o1LowerDloadRootEntry o1LowerDloadJointEntry
-  venomExecSemantics
+  venomExecSemantics o1LowerDloadSourceEntry
+  o1LowerDloadOccurrenceHeadroom venomWf
 
 (* The runner supplies a covering supply separately for each function. *)
 Theorem lower_dload_stage_supply_rel:
@@ -69,6 +70,49 @@ Proof
   drule lower_dload_function_supply_labels >> strip_tac >>
   Cases_on `src.fn_name = name` >> gvs[] >>
   fs[GSYM lookup_function_def] >> metis_tac[]
+QED
+
+Theorem lower_dload_stage_invoke_entry:
+  ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs /\ opaque_use_ok caller /\
+  ld_joint_boundary vs C C' lo D stk PG G tn caller callinst s t
+    n a U B HP H sites X ts /\ active_inst caller callinst s /\
+  callinst.inst_opcode = INVOKE /\ decode_invoke callinst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+  terminates (run_blocks k C callee cs) ==>
+  ?callee' args' ct s1 t1 inst.
+    lookup_function nm C'.ctx_functions = SOME callee' /\
+    lookup_function callee.fn_name C'.ctx_functions = SOME callee' /\
+    opaque_use_ok callee /\ ~cs.vs_halted /\
+    enters_block callee cs s1 /\ active_inst callee inst s1 /\
+    eval_operands ops t = SOME args' /\
+    setup_callee callee' args' t = SOME ct /\ enters_block callee' ct t1 /\
+    s1.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
+    t1.vs_call_ctx.cc_address = t.vs_call_ctx.cc_address /\
+    ld_joint_boundary vs C C' lo D
+      (<|cf_fn := caller; cf_inst := callinst; cf_state := s;
+         cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |> :: stk)
+      (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee inst s1 t1
+      (SUC n) n (<|of_owner := a; of_prov := H; of_params := HP |> :: U)
+      B (MAP (op_prov H) ops) FEMPTY sites X (t::ts)
+Proof
+  strip_tac >>
+  drule_all lower_dload_stage_lookup_supply >> strip_tac >>
+  `wf_function callee` by metis_tac[ld_ctx_shape_lookup_wf] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `~cs.vs_halted` by metis_tac[ld_setup_callee_not_halted] >>
+  drule_all ld_terminating_run_entry >> strip_tac >>
+  `opaque_use_ok callee` by metis_tac[ld_ctx_shape_lookup_opaque] >>
+  drule_all ld_joint_boundary_call_invariant >> strip_tac >>
+  `callee.fn_name = nm` by
+    (qpat_x_assum `lookup_function nm C.ctx_functions = SOME callee` mp_tac >>
+     Q.SPEC_TAC (`C.ctx_functions`, `fns`) >> qid_spec_tac `callee` >>
+     Induct_on `fns` >> simp[lookup_function_def, FIND_thm] >>
+     rpt strip_tac >> Cases_on `h.fn_name = nm` >>
+     gvs[lookup_function_def]) >>
+  qexistsl_tac [`g`, `args'`, `ct`, `s1`, `t1`, `i`] >> simp[]
 QED
 
 Theorem lower_dload_stage_root_entry:
