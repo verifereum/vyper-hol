@@ -2300,8 +2300,39 @@ Theorem imm_target_walk:
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  cheat
+  Induct_on `bt` using base_assignment_target_induct >>
+  rpt gen_tac >> strip_tac >>
+  gvs[target_root_def]
+  >- suspend "root"
+  >- suspend "subscript"
+  >> suspend "attribute"
 QED
+
+Resume imm_target_walk[root]:
+  irule imm_target_root_walk >> simp[] >> conj_tac
+  >- (qexists_tac `env` >> simp[]) >>
+  qexists_tac `nocalls` >> simp[]
+QED
+Resume imm_target_walk[subscript]:
+  fs[targetPlaceLiveTheory.target_indices_def] >>
+  irule imm_target_subscript_step >> simp[] >>
+  conj_tac
+  >- (qexists_tac `env` >> simp[] >> rpt strip_tac >>
+      first_x_assum irule >> simp[] >> conj_tac
+      >- (qexists_tac `env` >> fs[target_indices_pre_def]) >>
+      qexists_tac `nocalls` >>
+      fs[target_idx_case_def, vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qexists_tac `nocalls` >> simp[]
+QED
+Resume imm_target_walk[attribute]:
+  fs[targetPlaceLiveTheory.target_indices_def] >>
+  irule imm_target_attr_step >> simp[] >> qexists_tac `env` >> simp[] >>
+  rpt strip_tac >> first_x_assum irule >> simp[] >> conj_tac
+  >- (qexists_tac `env` >> fs[target_indices_pre_def]) >>
+  qexists_tac `nocalls` >>
+  fs[target_idx_case_def, vyperTypeCallGraphTheory.int_calls_expr_def]
+QED
+Finalise imm_target_walk
 
 (* RESIDUAL, FALSE as stated until ImmutablePlace reads get a popped
    history as MemoryPlace's have (the semantics ledger item shared with
