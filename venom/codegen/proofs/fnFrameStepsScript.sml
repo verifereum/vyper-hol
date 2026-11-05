@@ -33,15 +33,17 @@ Ancestors
    along the plan (allocMono), so it covers ps1.
 
    Why it should hold: the lineage entry from pred leaves pred's PHI
-   operands on the stack (the JMP reorder to input_vars_from pred), each
-   holding the value resolve_phi pred reads (fn_frame_inv), with return-PC
-   PHIs reading ra on both sides (retpc_shape_ok).  Each PHI pokes or dups
-   that slot into its output; a PHI output used by another PHI of the
-   same block is read at its old value by eval_phis, and its old slot is
-   overwritten in the same prefix since it is dead after it (SSA), so the
-   stack agrees with s_phi once the whole prefix has run.  Dead PHI
-   outputs are popped.  The alias invariant holds for PHI outputs, which
-   are their own roots. *)
+   operands on top of the stack (the JMP reorder to input_vars_from pred),
+   with only dead_stack_marker entries below them
+   (fnPlanLineageJoin$lineage_entry_join_stack), each holding the value
+   resolve_phi pred reads (fn_frame_inv), with return-PC PHIs reading ra
+   on both sides (retpc_shape_ok).  Each PHI pokes that slot into its
+   output: no PHI operand is live past the prefix (phi_block_ready), so
+   the dup branch never runs, and no PHI reads another PHI output of the
+   same block (that output would then be live past the prefix), so the
+   sequential code agrees with the parallel eval_phis.  Dead PHI outputs
+   are popped.  The alias invariant holds for PHI outputs, which are their
+   own roots. *)
 Theorem phi_prefix_frame_sim:
   !ctx cp lo o2pc prog liveness dfg cfg ch growth spill_base lbl_ctr fn bb pred
    ps_l h promised ps base vs as s_phi phis body ops ps3 r ra rest mem0.
