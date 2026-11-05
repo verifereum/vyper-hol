@@ -4,12 +4,13 @@
 Theory exprSimAbiEncodeOblivious
 Ancestors
   exprSimAbiGasBridge builtinAbi compileEnv fragExec
+  exprSimAbiEncodeObliviousContext exprSimAbiEncodeObliviousSimulation
 
 Theorem lower_abi_encode_start_oblivious:
   !ensure mid src info maxlen.
     frag_start_oblivious (lower_abi_encode ensure mid src info maxlen)
 Proof
-  cheat
+  simp[entry_action_oblivious, entry_action_lower_abi_encode]
 QED
 
 Theorem lower_abi_encode_frag_facts:
