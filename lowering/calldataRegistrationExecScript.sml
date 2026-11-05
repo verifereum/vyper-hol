@@ -150,7 +150,7 @@ QED
    Thus its clamps use the existing arbitrary-input decoder theorem too. *)
 Theorem registration_primitive_decoder_prelude:
   compile_decode_args ce [(name,T,dyn,sz,DecPrimWord c)] off
-    CALLDATALOAD (Lit 0w) (Lit 0w) 4 st = ((),last) /\
+    CALLDATALOAD (Lit 0w) 4 st = ((),last) /\
   FLOOKUP ce.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
@@ -170,7 +170,7 @@ QED
 
 Theorem registration_decoder_prelude:
   compile_decode_args ce [(name,prim,dyn,sz,info)] off
-    CALLDATALOAD (Lit 0w) (Lit 0w) 4 st = ((),last) /\
+    CALLDATALOAD (Lit 0w) 4 st = ((),last) /\
   FLOOKUP ce.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst /\
   (prim ==> ?c. info = DecPrimWord c) ==>

@@ -15,7 +15,7 @@ Theorem register_singleton_allocated_boundary:
     cef = ce with ce_vars updated_by
       (\m. m |+ (name,PtrVar buf.buf_operand mem_size)) /\
     compile_decode_args cef [(name,prim,dyn,sz,info)] off
-      CALLDATALOAD (Lit 0w) (Lit 0w) 4 allocated = ((),stf)
+      CALLDATALOAD (Lit 0w) 4 allocated = ((),stf)
 Proof
   strip_tac >>
   qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
@@ -27,7 +27,7 @@ QED
 
 Theorem decode_singleton_aggregate_prelude:
   compile_decode_args ce [(name,F,dyn,sz,info)] off
-    CALLDATALOAD (Lit 0w) (Lit 0w) 4 st = ((),stf) /\
+    CALLDATALOAD (Lit 0w) 4 st = ((),stf) /\
   FLOOKUP ce.ce_vars name = SOME loc /\
   var_location_decode_operand loc = SOME dst ==>
   ?head after_head src first.
