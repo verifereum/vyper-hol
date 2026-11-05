@@ -104,8 +104,8 @@ Proof
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>
-  qspecl_then [`deploy_dead`, `0`, `rpolicy`, `dunit`, `dout`,
-               `entry_venom_state prog cplan es`] mp_tac
+  qspecl_then [`deploy_dead`, `imm_len tops`, `rpolicy`, `dunit`, `dout`,
+               `deploy_entry_state prog cplan tops es`] mp_tac
     run_venom_pipeline_correct >>
   impl_tac >- fs[dead_wf_deploy_dead] >> strip_tac >>
   Cases_on `?marks. deploy_source_exempt tops
@@ -122,36 +122,36 @@ Proof
   drule_all deploy_unit_execution_correct >> strip_tac >- metis_tac[] >>
   `code_layout_valid vs_in` by
     (irule gas_variant_code_layout_valid >>
-     qexists_tac `entry_venom_state prog cplan es` >> fs[o1_run_state_ok_def]) >>
+     qexists_tac `deploy_entry_state prog cplan tops es` >> fs[o1_run_state_ok_def]) >>
   drule_all deploy_unit_memory_ok >> strip_tac >>
   drule_all deploy_unit_dload_ok >> strip_tac >>
   `ctx_sim deploy_dead dunit.cu_context dout.po_unit.cu_context vs_in
-     (entry_venom_state prog cplan es) /\
-   o1_lowered_inv dout.po_unit.cu_context (entry_venom_state prog cplan es)` by
+     (deploy_entry_state prog cplan tops es) /\
+   o1_lowered_inv dout.po_unit.cu_context (deploy_entry_state prog cplan tops es)` by
     metis_tac[] >>
   `terminates (run_context fuel dunit.cu_context vs_in)` by
     metis_tac[deploy_venom_result_rel_terminates] >>
   `?fuel'. dead_result_rel deploy_dead (run_context fuel dunit.cu_context vs_in)
              (run_context fuel' dout.po_unit.cu_context
-                (entry_venom_state prog cplan es))` by
+                (deploy_entry_state prog cplan tops es))` by
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
          [(NONE, tops)] [])` by metis_tac[] >>
   drule_all deploy_venom_result_rel_dead >> strip_tac >>
-  `(entry_venom_state prog cplan es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
-    simp[entry_venom_state_def] >>
+  `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
+    simp[deploy_entry_state_def, entry_venom_state_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `Inv`,
-               `entry_venom_state prog cplan es`, `shadow_root es`] mp_tac
+               `deploy_entry_state prog cplan tops es`, `shadow_root es`] mp_tac
     codegen_correct >>
   impl_tac >- fs[] >> disch_tac >>
   qspecl_then [`tops`, `runtime_bc`, `deploy_bc`, `am`, `tx`, `es`,
                `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                   [(NONE, tops)] []`,
                `run_context fuel' dout.po_unit.cu_context
-                  (entry_venom_state prog cplan es)`] mp_tac deploy_venom_frame >>
+                  (deploy_entry_state prog cplan tops es)`] mp_tac deploy_venom_frame >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`r`, `es'`] strip_assume_tac) >>
   qexistsl_tac [`r`, `es'`] >> fs[] >>
