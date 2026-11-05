@@ -18,7 +18,7 @@ Ancestors
   fnPlanLineage frameRel codegenRel unitShapeDefs stackPlanGen stackPlanTypes
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
-  venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
+  venomInst venomInstProps venomWf venomExecProps venomExecProofs list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
   fnFrameBoundaryEntryParams joinSpillWitness frameViewFacts instSimHelpers
 
@@ -304,6 +304,70 @@ Proof
     (irule normalize_operand_non_assign_output >> simp[] >>
      qexists_tac `inst` >> simp[]) >> simp[]
 QED
+
+Theorem alias_step_survivor_value:
+  step_inst fuel ctx inst s = OK s' /\
+  (!x. at = Var x ==> ~MEM x inst.inst_outputs) /\
+  (!x. normalize_operand dfg [] at = Var x ==> ~MEM x inst.inst_outputs) /\
+  operand_val (frame_view fn ra s) lo at =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] at) ==>
+  operand_val (frame_view fn ra s') lo at =
+    operand_val (frame_view fn ra s') lo (normalize_operand dfg [] at)
+Proof
+  strip_tac >>
+  `!x. ~MEM x inst.inst_outputs ==>
+    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x` by
+    (Cases_on `is_terminator inst.inst_opcode` >>
+     metis_tac[step_preserves_non_output_vars, step_terminator_preserves_vars,
+               lookup_var_def]) >>
+  Cases_on `normalize_operand dfg [] at` >> Cases_on `at` >>
+  gvs[operand_val_def, frame_view_vars_lookup]
+QED
+
+Theorem alias_phis_survivor_value:
+  eval_phis s instructions = OK s' /\
+  (!x inst. at = Var x /\ MEM inst instructions /\ inst.inst_opcode = PHI ==>
+    ~MEM x inst.inst_outputs) /\
+  (!x inst. normalize_operand dfg [] at = Var x /\
+    MEM inst instructions /\ inst.inst_opcode = PHI ==> ~MEM x inst.inst_outputs) /\
+  operand_val (frame_view fn ra s) lo at =
+    operand_val (frame_view fn ra s) lo (normalize_operand dfg [] at) ==>
+  operand_val (frame_view fn ra s') lo at =
+    operand_val (frame_view fn ra s') lo (normalize_operand dfg [] at)
+Proof
+  strip_tac >>
+  `!x. (!inst. MEM inst instructions /\ inst.inst_opcode = PHI ==>
+    ~MEM x inst.inst_outputs) ==>
+    FLOOKUP s'.vs_vars x = FLOOKUP s.vs_vars x` by
+      metis_tac[eval_phis_flookup_not_phi_output] >>
+  Cases_on `normalize_operand dfg [] at` >> Cases_on `at` >>
+  gvs[operand_val_def, frame_view_vars_lookup] >> metis_tac[]
+QED
+
+(* Pointwise demand interface ledger (C1.21.2.3).
+   Both survivor boundaries quantify over arbitrary operands and arbitrary dfg;
+   neither assumes liveness nor physical ownership, so dead retained names are
+   covered too. Label operands use lo, not vs_labels: no label preservation
+   premise is needed for these survivor statements. Terminator and ordinary
+   execution cases are both discharged by their exported preservation lemmas.
+
+   Consumers still need STATIC producers, not additional transport lemmas:
+   - New ASSIGN output: alias_assign_value_boundary consumes actual source
+     equality, normalization transport and root-read stability, plus SSA,
+     membership and the runtime label-map premise. None follows from mere
+     successful planning or an absent physical source.
+   - Other outputs: normalize_operand_non_assign_output gives reflexive
+     equality; alias_phi_output_value_boundary already specializes this to PHI.
+   - PHI survivors: alias_phis_survivor_value excludes both the demanded name
+     and its variable root from ALL physical PHI outputs in the batch. These
+     exclusions still need production under the target assumptions.
+   - Ordinary survivors: alias_step_survivor_value requires the two output
+     exclusions. This includes dead retained aliases; the earlier live-only
+     root exclusion is not a producer for that case.
+   - Backward traces still need initial equality coverage and final-held demand
+     inclusion from actual lineage. Neither prev=NONE nor static JMP planning
+     establishes runtime predecessor agreement or missing initial equality.
+*)
 
 (* Semantic-prefix interface probe (C1.20.1).
 
