@@ -2000,6 +2000,91 @@ Proof
   Cases_on `length` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
+Theorem place_store_index_init_path:
+  emit_inst ASSIGN [Lit 0w] [counter] init = ((),st0) /\
+  ~not_fresh_at sa counter /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  (!i. i < N ==> val_in_memory stv (f i)
+     (w2n sw + i * type_memory_size stv) s.vs_memory) /\
+  fn_has_code init st0 func /\ ~s.vs_halted /\
+  s.vs_current_bb = init.cs_current_bb /\ s.vs_inst_idx = LENGTH init.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s 0 t /\
+      ~t.vs_halted /\ t.vs_current_bb = st0.cs_current_bb /\
+      t.vs_inst_idx = LENGTH st0.cs_current_insts
+Proof
+  strip_tac >>
+  `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
+  `!x. not_fresh_at sa x ==> x <> counter` by metis_tac[] >>
+  drule_all place_store_assign_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
+  `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  qexists_tac `t` >> simp[typedMemoryCopyTheory.typed_copy_index_inv_def,
+    typedMemoryCopyTheory.typed_copy_index_prefix_zero]
+QED
+
+Theorem place_store_index_loop_path:
+  emit_op LT [Var counter; length] a = (lt,b) /\
+  emit_op ISZERO [lt] b = (done,c) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] c = ((),d) /\
+  ci_mono sa a /\ not_fresh_at a counter /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  (!x. length = Var x ==> not_fresh_at sa x) /\ N < dimword (:256) /\
+  a.cs_current_insts = [] /\ fn_has_code a d func /\
+  (!i q. i < N /\
+     typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 i q /\
+     eval_operand length q = SOME (n2w N) /\ ~q.vs_halted /\
+     q.vs_current_bb = blabel /\ q.vs_inst_idx = 0 ==>
+     ?r. gas_marked_path F ctx func q 0 (OK r) /\
+         typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 (SUC i) r /\
+         eval_operand length r = SOME (n2w N) /\ ~r.vs_halted /\
+         r.vs_current_bb = a.cs_current_bb /\ r.vs_inst_idx = 0) /\
+  typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 0 s /\
+  eval_operand length s = SOME (n2w N) /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = 0 ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 N t /\
+      eval_operand length t = SOME (n2w N) /\ ~t.vs_halted /\
+      t.vs_current_bb = exit /\ t.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qabbrev_tac `Inv = \i q.
+    typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 i q /\
+    eval_operand length q = SOME (n2w N) /\ ~q.vs_halted /\
+    q.vs_current_bb = a.cs_current_bb /\ q.vs_inst_idx = 0` >>
+  `!i q. Inv i q ==> ~q.vs_halted` by simp[Abbr `Inv`] >>
+  `!i q. i < N /\ Inv i q ==>
+      ?r. gas_marked_path F ctx func q 0 (OK r) /\ Inv (SUC i) r` by
+    (rpt gen_tac >> strip_tac >>
+     `typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 i q /\
+      eval_operand length q = SOME (n2w N) /\ ~q.vs_halted /\
+      q.vs_current_bb = a.cs_current_bb /\ q.vs_inst_idx = LENGTH a.cs_current_insts` by
+       gvs[Abbr `Inv`] >>
+     drule_all place_store_index_test_path >>
+     disch_then (qspec_then `ctx` (qx_choose_then `u` strip_assume_tac)) >>
+     qpat_x_assum `!i q. i < N /\ _ /\ _ ==> _`
+       (qspecl_then [`i`, `u`] mp_tac) >>
+     simp[] >> disch_then (qx_choose_then `r` strip_assume_tac) >>
+     qexists_tac `r` >> simp[Abbr `Inv`] >>
+     metis_tac[gas_marked_path_then, ADD_CLAUSES]) >>
+  `Inv 0 s` by simp[Abbr `Inv`] >>
+  `?u. gas_marked_path F ctx func s 0 (OK u) /\ Inv N u` by
+    (irule place_store_counted_iterate >> conj_tac
+     >- first_assum ACCEPT_TAC >> conj_tac
+     >- first_assum ACCEPT_TAC >> qexists_tac `0` >> simp[]) >>
+  `typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 N u /\
+   eval_operand length u = SOME (n2w N) /\ ~u.vs_halted /\
+   u.vs_current_bb = a.cs_current_bb /\ u.vs_inst_idx = LENGTH a.cs_current_insts` by
+     gvs[Abbr `Inv`] >>
+  drule_all place_store_index_test_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
+  qexists_tac `t` >> simp[] >> metis_tac[gas_marked_path_then, ADD_CLAUSES]
+QED
+
 Theorem place_store_counted_tuple_path:
   !dtys stys dtvs stvs vs dst src doff soff sa sb s dw sw.
   LIST_REL (\(dty,dtv) (sty,stv,v).
