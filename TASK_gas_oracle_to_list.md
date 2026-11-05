@@ -12,7 +12,7 @@ In `venom/compiler/dftGasOracleToListScript.sml`:
 
 ```sml
 Theorem gas_oracle_to_list:
-  FINITE {e | orc e <> 0w} ==>
+  EVERY wf_function ctx.ctx_functions /\ FINITE {e | orc e <> 0w} ==>
   ?W. (!fuel. gas_res_rel (run_context fuel ctx (s with vs_gas_readings := W))
                           (ev_context orc fuel ctx s)) /\
       (!p d fn inst t. ev_reachable orc s ctx p d fn inst t ==>
