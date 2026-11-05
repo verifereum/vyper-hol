@@ -454,3 +454,16 @@ Proof
     (qspec_then `target` irule) >>
   simp[supported_expr_exists_def]
 QED
+
+Theorem expr_body_pre_array_subscript_index_after_base:
+  expr_body_pre cenv cx env (Subscript ann obj idx) s /\
+  expr_type obj = ArrayT et bd /\
+  eval_expr cx obj s = (INL r,t) ==>
+  expr_body_pre cenv cx env idx t
+Proof
+  strip_tac >>
+  drule_all_then assume_tac expr_body_pre_array_subscript_base >>
+  drule_then assume_tac expr_body_pre_subscript_index >>
+  drule_all expr_body_pre_eval_result >> strip_tac >>
+  gvs[expr_body_pre_def]
+QED
