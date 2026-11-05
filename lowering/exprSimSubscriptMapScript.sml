@@ -677,6 +677,17 @@ Proof
   irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
 QED
 
+Theorem gas_outcome_conseq:
+  gas_outcome memory tops p source start Q R /\
+  (!res ee t. Q res ee t ==> Q' res ee t) /\
+  (!res ee r. R res ee r ==> R' res ee r) ==>
+  gas_outcome memory tops p source start Q' R'
+Proof
+  PairCases_on `p` >> PairCases_on `start` >>
+  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
+  metis_tac[]
+QED
+
 Theorem compile_mapping_subscript_outcome:
   expr_map_case nocalls ctx func cenv cx obj /\
   (!s tv t. eval_expr cx obj s = (INL tv,t) ==>
