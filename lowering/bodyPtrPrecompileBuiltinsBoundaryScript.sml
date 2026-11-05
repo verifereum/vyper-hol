@@ -8,10 +8,11 @@ Theorem staticcall_access_ok:
   ptr_covers G tn src s (w2n an) /\
   ptr_covers G tn dst s (w2n rn) ==>
   access_ok lo G fn
-    (mk_inst id STATICCALL [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn]
+    (mk_inst id STATICCALL [gp; Lit addr; Var src; Lit an; Var dst; Lit rn]
       [out]) s
 Proof
-  strip_tac >> gvs[bodyPtrDefsTheory.ptr_covers_def] >>
+  strip_tac >> Cases_on `eval_operand gp s` >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def] >>
   simp[access_ok_def, mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, memory_range_of_operands_def,
        eval_operand_def] >>
@@ -20,18 +21,21 @@ Proof
 QED
 
 Theorem staticcall_taint_ok:
+  op_taint tn gp = {} /\
   op_taint tn (Var src) = {} /\ op_taint tn (Var dst) = {} /\
   eval_operand (Var src) s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + w2n an ==> i NOTIN tn.t_mem) ==>
   taint_ok fn tn
-    (mk_inst id STATICCALL [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn]
+    (mk_inst id STATICCALL [gp; Lit addr; Var src; Lit an; Var dst; Lit rn]
       [out]) s
 Proof
   strip_tac >> simp[taint_ok_def, mk_inst_def] >> conj_tac
-  >- (gen_tac >> Cases_on `op` >> gvs[op_taint_def] >> metis_tac[]) >>
+  >- (gen_tac >> Cases_on `op` >> Cases_on `gp` >>
+      gvs[op_taint_def] >> metis_tac[]) >>
   gvs[eval_operand_def] >>
   simp[source_memory_read_ranges_def, memory_range_of_operands_def,
        eval_operand_def] >>
+  Cases_on `eval_operand gp s` >>
   Cases_on `lookup_var dst s` >> simp[] >> metis_tac[]
 QED
 
@@ -39,7 +43,8 @@ QED
    returned prefix, not the whole output allocation. *)
 Theorem staticcall_mem_taint:
   inst = mk_inst id STATICCALL
-    [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+    [gp; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+  eval_operand gp s = SOME gas /\
   eval_operand (Var src) s = SOME ai /\
   eval_operand (Var dst) s = SOME ro /\
   s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
@@ -57,7 +62,7 @@ QED
 
 Theorem staticcall_output_taint:
   inst = mk_inst id STATICCALL
-    [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] ==>
+    [gp; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] ==>
   op_taint (step_taint inst s s' tn) (Var out) = {}
 Proof
   strip_tac >>
@@ -87,7 +92,8 @@ QED
 
 Theorem staticcall_empty_output_taint:
   inst = mk_inst id STATICCALL
-    [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+    [gp; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+  eval_operand gp s = SOME gas /\
   eval_operand (Var src) s = SOME ai /\
   eval_operand (Var dst) s = SOME ro /\
   s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp /\
@@ -99,7 +105,8 @@ QED
 
 Theorem staticcall_full_output_taint:
   inst = mk_inst id STATICCALL
-    [Lit gas; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+    [gp; Lit addr; Var src; Lit an; Var dst; Lit rn] [out] /\
+  eval_operand gp s = SOME gas /\
   eval_operand (Var src) s = SOME ai /\
   eval_operand (Var dst) s = SOME ro /\
   s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp /\
