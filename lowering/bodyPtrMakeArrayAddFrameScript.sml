@@ -134,3 +134,53 @@ Proof
       FLOOKUP_UPDATE, typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
   metis_tac[])
 QED
+
+Theorem emit_binop_ghost_inv:
+  ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sm /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sm x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+          not_fresh_at sm x) /\
+  (opc = ADD \/ opc = AND) /\
+  emit_op opc [left;right] sm = (Var out,sn) ==>
+  ghost_inv d cenv cx es
+    (step_prov PG G (mk_inst sm.cs_next_id opc [left;right] [out])
+      (update_var out w s))
+    (step_taint (mk_inst sm.cs_next_id opc [left;right] [out]) s
+      (update_var out w s) tn)
+    ((update_var out w s) with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sm x ==> x <> out` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     rpt strip_tac >> decide_tac) >>
+  `!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+     p <> out` by
+    (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out`
+    by metis_tac[] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out`
+    by metis_tac[] >>
+  gvs[ghost_inv_def] >> (
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `p <> out` by metis_tac[] >>
+      simp[ptr_covers_def, typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
+      gvs[ptr_covers_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (Cases_on `d` >> gvs[return_buf_ptr_def] >> PairCases_on `x` >>
+      gvs[return_buf_ptr_def] >>
+      simp[ptr_covers_def, typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
+      gvs[ptr_covers_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `x <> out` by metis_tac[] >>
+      simp[typedCopyPtrTheory.copy_len_binop_ghost_frame] >> metis_tac[]) >>
+  gvs[stor_taint_ok_def, typedCopyPtrTheory.copy_len_binop_ghost_frame,
+      step_taint_def, venomInstTheory.mk_inst_def, store_taint_def, set_var_taint_def,
+      update_var_def, imm_taint_def])
+QED
