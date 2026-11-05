@@ -1,6 +1,7 @@
 (* Pure physical interpretation of common child certificates. *)
 Theory abiScratchMemberInterpret
 Ancestors
+  abiEncoderChildCapability abiSiteEncoderContract abiSiteAllocation emitHelperProps
   abiScratchMemberContract abiScratchMemberAdapter abiEncoderMemberPhaseExec
   abiScratchChild abiEncoderChildCode
   abiScratchFootprint abiScratchFrameCompose abiEncoderChildEffect
@@ -9,6 +10,73 @@ Ancestors
   abiScratchAddress abiScratchAfterAddress abiScratchEffect abiScratchEncoderContract
   abiEncoderMemberPhaseRaw abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderProtectedScratch abiDecoderArrayInitExec abiDecoderAllocation abiDecoderContract abiDecoderLoop fragExec compileEnv valueEncoding venomState words list arithmetic
+
+Theorem abi_encoder_member_static_input:
+  abi_encoder_child_capability A guard ei /\
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  (!head prepared. emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) ==>
+    guard prepared en) /\
+  fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  offset+LENGTH (enc at av) <= output_size /\
+  abi_site_budget A b cap initial /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_encoder_spine_child_input func limit_st
+    (abi_encoder_child_ready (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st) guard)
+    (abi_encoder_child_post (ctx,func) (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st))
+    (ei,F,dst,src,offset,dp,st,en,out) initial
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_static_child_structural_context >> strip_tac >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  `prepared.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  `eval_operand dst initial = SOME (n2w d)` by fs[abi_site_encoder_input_def] >>
+  simp_tac bool_ss [abi_encoder_spine_child_input_def] >>
+  qexistsl_tac [`head`,`prepared`,`n2w d`] >>
+  asm_simp_tac bool_ss [abi_encoder_spine_core_code_def] >>
+  rpt strip_tac >> drule_all abi_site_member_static_place_raw_transport >> strip_tac >>
+  drule_all abi_site_address >>
+  disch_then (qspecl_then [`A`, `[]`] strip_assume_tac) >>
+  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >>
+  strip_tac >> fs[abi_encoder_child_ready_def, abi_encoder_child_pre_def]
+QED
+
+Theorem abi_site_member_static_input:
+  abi_site_encoder ei /\
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A /\
+  fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  offset+LENGTH (enc at av) <= output_size /\
+  abi_site_budget A b cap initial /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_encoder_spine_child_input func limit_st
+    (abi_encoder_child_ready (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st)
+      (\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A))
+    (abi_encoder_child_post (ctx,func) (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st))
+    (ei,F,dst,src,offset,dp,st,en,out) initial
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_child_capability_site >> disch_then (qspec_then `A` assume_tac) >>
+  `!head prepared. emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) ==>
+    abi_decoder_emitted_sites prepared.cs_next_id en.cs_next_id prepared en SUBSET A` by
+    (rpt strip_tac >> drule_all abi_encoder_static_child_site_guard >> simp[]) >>
+  irule (SRULE [] (Q.INST
+    [`guard` |-> `\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A`]
+    abi_encoder_member_static_input)) >> asm_rewrite_tac[] >>
+  qexists_tac `output_size` >> asm_rewrite_tac[]
+QED
 
 Theorem abi_scratch_member_static_input:
   abi_scratch_encoder ei /\ compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
@@ -29,22 +97,67 @@ Theorem abi_scratch_member_static_input:
     (ei,F,dst,src,offset,dp,st,en,out) initial
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  drule_all abi_encoder_static_child_structural_context >> strip_tac >>
-  drule abi_encoder_emit_address_shape >> strip_tac >>
-  `prepared.cs_next_var <= limit_st.cs_next_var /\ first <= prepared.cs_next_id`
-    by decide_tac >>
-  `eval_operand dst initial = SOME (n2w d)` by fs[abi_scratch_input_def] >>
-  simp_tac bool_ss [abi_encoder_spine_child_input_def] >>
-  qexistsl_tac [`head`,`prepared`,`n2w d`] >>
-  asm_simp_tac bool_ss [abi_encoder_spine_core_code_def] >>
-  rpt strip_tac >> drule_all abi_scratch_member_static_place_raw_transport >> strip_tac >>
-  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
-  `abi_decoder_budget first last b cap r` by
-    (mp_tac (Q.INST [`s` |-> `initial:venom_state`, `t` |-> `r:venom_state`]
-      abi_decoder_budget_transport) >> fs[abi_decoder_address_frame_def]) >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >>
-  strip_tac >> fs[abi_scratch_member_core_pre_def]
+  drule abi_encoder_child_capability_interval >>
+  disch_then (qspecl_then [`last`,`first`] assume_tac) >>
+  `!head prepared. emit_op ADD [dst;Lit (n2w offset)] st = (head,prepared) ==>
+    first <= prepared.cs_next_id /\ en.cs_next_id <= last` by
+    (rpt strip_tac >> drule emitted_insts_emit_op >> strip_tac >> decide_tac) >>
+  `abi_site_encoder_input ei at av st src dst sb source_cap d output_size
+    (abi_decoder_ids first last) b cap initial /\
+   abi_site_budget (abi_decoder_ids first last) b cap initial` by
+    simp[abi_site_encoder_input_interval, abi_site_budget_interval] >>
+  drule_all (SRULE [] (Q.INST
+    [`guard` |-> `\st en. first <= st.cs_next_id /\ en.cs_next_id <= last`]
+    abi_encoder_member_static_input)) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  fs[abi_encoder_spine_child_input_def] >>
+  rpt strip_tac >> first_x_assum drule >>
+  simp[abi_encoder_child_ready_def, abi_encoder_child_pre_def,
+    abi_scratch_member_core_pre_def, abi_site_encoder_input_interval, abi_site_budget_interval]
 QED
+Theorem abi_encoder_member_static_output:
+  compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
+  fn_has_code st en func /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  offset+LENGTH (enc at av) <= output_size /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\ abi_site_budget A b cap initial /\
+  abi_encoder_spine_child_output
+    (abi_encoder_child_post (ctx,func) (at,av,sb,source_cap,d+offset) (A,b,cap,limit_st))
+    (ei,F,dst,src,offset,dp,st,en,out) initial t ==>
+  mem_bytes_at (d+offset) (LENGTH (enc at av)) t.vs_memory = enc at av /\
+  eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+  abi_site_encoder_effect A st.cs_next_id en.cs_next_id st.cs_next_var
+    limit_st (d+offset) (LENGTH (enc at av)) b cap initial t /\
+  t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
+  ~t.vs_halted /\ abi_decode_sim ctx func initial t
+Proof
+  simp_tac bool_ss [abi_encoder_spine_child_output_def, abi_encoder_child_post_def] >>
+  disch_then (MAP_EVERY strip_assume_tac o CONJUNCTS) >>
+  drule_all abi_encoder_static_child_structural_context >> strip_tac >>
+  gvs[] >> drule abi_encoder_emit_address_shape >> strip_tac >>
+  `p.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= p.cs_next_var /\
+    st.cs_next_id <= p.cs_next_id` by decide_tac >>
+  drule_all abi_site_member_static_place_raw_transport >> strip_tac >>
+  `eval_operand dst initial = SOME (n2w d)` by fs[abi_site_encoder_input_def] >>
+  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw_sim)) >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `st.cs_next_id <= p.cs_next_id /\ en.cs_next_id <= en.cs_next_id /\
+    d <= d+offset /\ (d+offset)+LENGTH (enc at av) <= d+output_size` by decide_tac >>
+  `abi_site_encoder_effect A st.cs_next_id en.cs_next_id st.cs_next_var
+    limit_st (d+offset) (LENGTH (enc at av)) b cap initial t` by
+    (irule abi_site_effect_after_address >>
+     qexistsl_tac [`d+offset`, `en.cs_next_id`, `st.cs_next_id+1`,
+       `st.cs_next_var+1`, `LENGTH (enc at av)`, `r`] >> simp[]) >>
+  `abi_decode_sim ctx func initial t` by
+    (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss []) >> simp[]
+QED
+
 
 Theorem abi_scratch_member_static_output:
   compile_abi_encode_child dst src ei F offset dp st = (out,en) /\
@@ -73,27 +186,33 @@ Theorem abi_scratch_member_static_output:
   t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
   ~t.vs_halted /\ abi_decode_sim ctx func initial t
 Proof
-  simp_tac bool_ss [abi_encoder_spine_child_output_def, abi_scratch_member_core_post_def] >>
-  disch_then (MAP_EVERY strip_assume_tac o CONJUNCTS) >>
-  drule_all abi_encoder_static_child_structural_context >> strip_tac >>
-  gvs[] >> drule abi_encoder_emit_address_shape >> strip_tac >>
-  `p.cs_next_var <= limit_st.cs_next_var /\ st.cs_next_var <= p.cs_next_var /\
-    st.cs_next_id <= p.cs_next_id` by decide_tac >>
-  drule_all abi_scratch_member_static_place_raw_transport >> strip_tac >>
-  `eval_operand dst initial = SOME (n2w d)` by fs[abi_scratch_input_def] >>
-  `eval_operand (Lit (n2w offset)) initial = SOME (n2w offset)` by simp[eval_operand_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_raw_sim)) >>
-  disch_then (qspec_then `ctx` assume_tac) >>
-  `st.cs_next_id <= p.cs_next_id /\ en.cs_next_id <= en.cs_next_id /\
-    d <= d+offset /\ (d+offset)+LENGTH (enc at av) <= d+output_size` by decide_tac >>
-  `abi_scratch_effect first last p.cs_next_id en.cs_next_id p.cs_next_var
-    limit_st (d+offset) (LENGTH (enc at av)) b cap r t` by fs[] >>
-  drule_all abi_scratch_spine_frame_after_address >> disch_tac >>
-  drule_all (Q.INST [`lo` |-> `st.cs_next_id`, `hi` |-> `en.cs_next_id`,
-    `d` |-> `d:num`, `sz` |-> `output_size:num`] abi_scratch_effect_after_address) >> disch_tac >>
-  `abi_decode_sim ctx func initial t` by
-    (irule abi_decode_sim_trans >> qexists_tac `r` >> asm_simp_tac bool_ss []) >>
-  fs[listTheory.APPEND]
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `abi_encoder_spine_child_output
+    (abi_encoder_child_post (ctx,func) (at,av,sb,source_cap,d+offset)
+      (abi_decoder_ids first last,b,cap,limit_st))
+    (ei,F,dst,src,offset,dp,st,en,out) initial t` by
+    (qpat_x_assum `abi_encoder_spine_child_output _ _ _ _` mp_tac >>
+     simp_tac bool_ss [abi_encoder_spine_child_output_def] >> strip_tac >>
+     drule emitted_insts_emit_op >> strip_tac >>
+     `first <= p.cs_next_id` by decide_tac >>
+     qexistsl_tac [`head`, `p`, `r`] >>
+     fs[abi_encoder_child_post_def, abi_scratch_member_core_post_def,
+       abi_site_encoder_effect_interval]) >>
+  `abi_site_encoder_input ei at av st src dst sb source_cap d output_size
+    (abi_decoder_ids first last) b cap initial /\
+   abi_site_budget (abi_decoder_ids first last) b cap initial` by
+    simp[abi_site_encoder_input_interval, abi_site_budget_interval] >>
+  drule_all abi_encoder_member_static_output >> strip_tac >>
+  `abi_scratch_effect first last st.cs_next_id en.cs_next_id st.cs_next_var
+    limit_st (d+offset) (LENGTH (enc at av)) b cap initial t` by
+    metis_tac[abi_site_encoder_effect_interval] >>
+  `abi_decode_footprint_frame
+    ([(d+offset,LENGTH (enc at av))] ++ abi_decoder_child_scratch
+      (abi_decoder_ids st.cs_next_id en.cs_next_id) b cap initial) initial t` by
+    fs[abi_scratch_effect_def] >>
+  simp[] >> irule abi_scratch_effect_widen >>
+  qexistsl_tac [`d+offset`, `en.cs_next_id`, `st.cs_next_id`, `st.cs_next_var`,
+    `LENGTH (enc at av)`] >> simp[]
 QED
 
 Theorem abi_scratch_member_dynamic_input:
@@ -274,4 +393,5 @@ val _ = List.app (fn theory => List.app (fn (name, th) =>
     else raise Fail ("non-clean member dependency: " ^ theory ^ "." ^ name)
   end) (DB.thms theory))
   ["compilerOccurrences", "abiDecoderSiteMembership", "abiEncoderChildContext",
-   "abiScratchInput", "abiScratchChild", "abiScratchAddress", "abiEncoderMemberPhaseExec"];
+   "abiScratchInput", "abiScratchChild", "abiScratchAddress", "abiEncoderMemberPhaseExec",
+   "abiScratchAfterAddress", "abiScratchMemberInterpret"];
