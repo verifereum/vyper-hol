@@ -113,3 +113,142 @@ Proof
        LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
   EVAL_TAC >> rw[] >> CCONTR_TAC >> gvs[]
 QED
+
+(* Second probe: a variable that is both a PARAM (at a pointer position)
+   and an ALLOCA output.  Every definition of it is a pointer root, but
+   renaming splits the roots, and the merging PHI's output derives from
+   both an alloca root and a non-alloca root, which the write exclusion
+   forbids. *)
+Definition pp2_supply_def:
+  pp2_supply =
+    <| irs_next_inst := 10; irs_next_var := 0; irs_next_label := 0;
+       irs_used_inst_ids := [0;1;2;3;4;5;6];
+       irs_used_vars := ["p"];
+       irs_used_labels := ["f";"A";"B";"D"] |>
+End
+
+Definition pp2_fn_def:
+  pp2_fn = mk_raw_function "f"
+    [<| bb_label := "f"; bb_instructions :=
+        [pp_inst 0 PARAM [Lit 0w] ["p"];
+         pp_inst 1 JNZ [Lit 0w; Label "A"; Label "B"] []] |>;
+     <| bb_label := "A"; bb_instructions :=
+        [pp_inst 2 ALLOCA [Lit 32w] ["p"];
+         pp_inst 3 JMP [Label "D"] []] |>;
+     <| bb_label := "B"; bb_instructions :=
+        [pp_inst 4 JMP [Label "D"] []] |>;
+     <| bb_label := "D"; bb_instructions :=
+        [pp_inst 5 MSTORE [Var "p"; Lit 0w] [];
+         pp_inst 6 STOP [] []] |>]
+End
+
+Theorem pp2_out_thm = EVAL ``FST (make_ssa_current_fn pp2_supply pp2_fn)``
+
+Theorem pp2_out_alloca_roots:
+  alloca_roots (FST (make_ssa_current_fn pp2_supply pp2_fn)) = {"formal_var_1"}
+Proof
+  simp[pp2_out_thm, alloca_roots_def, EXTENSION, fn_insts_def,
+       fn_insts_blocks_def, inst_output_def, LEFT_AND_OVER_OR,
+       RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem pp2_out_roots:
+  ptr_roots P (FST (make_ssa_current_fn pp2_supply pp2_fn)) =
+  if 0 IN P "f" then {"formal_var_1"; "p"} else {"formal_var_1"}
+Proof
+  simp[ptr_roots_def, pp2_out_alloca_roots] >>
+  simp[pp2_out_thm, EXTENSION, fn_insts_def, fn_insts_blocks_def,
+       inst_output_def, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  rw[] >> metis_tac[]
+QED
+
+Theorem pp2_out_use_vars:
+  pointer_use_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+    ["formal_var_1"] = ["formal_var_1"; "formal_var_0"] /\
+  pointer_use_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+    ["p"] = ["p"; "formal_var_0"]
+Proof
+  simp[pp2_out_thm, pointer_use_vars_def] >> conj_tac >>
+  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC >>
+  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC >>
+  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC
+QED
+
+Theorem pp2_out_pdv:
+  pointer_derived_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+    {"formal_var_1"} = {"formal_var_1"; "formal_var_0"} /\
+  pointer_derived_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+    {"p"} = {"p"; "formal_var_0"}
+Proof
+  simp[pointer_derived_vars_def, SET_TO_LIST_SING, pp2_out_use_vars]
+QED
+
+(* Without the PARAM as a root, the PHI mixes a pointer with p. *)
+Theorem pp2_out_not_phi_pv_all_var:
+  ~phi_pv_all_var (FST (make_ssa_current_fn pp2_supply pp2_fn))
+     {"formal_var_1"}
+Proof
+  simp[phi_pv_all_var_def, pp2_out_pdv] >>
+  simp[pp2_out_thm, RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+(* With it, the store address derives from both kinds of root. *)
+Theorem pp2_out_write_mixed:
+  ?inst ops v.
+    MEM inst (fn_insts (FST (make_ssa_current_fn pp2_supply pp2_fn))) /\
+    mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+    v IN pointer_derived_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+           {"formal_var_1"} /\
+    v IN pointer_derived_vars (FST (make_ssa_current_fn pp2_supply pp2_fn))
+           {"p"}
+Proof
+  simp[pp2_out_pdv] >>
+  simp[pp2_out_thm, fn_insts_def, fn_insts_blocks_def, RIGHT_AND_OVER_OR,
+       LEFT_AND_OVER_OR, EXISTS_OR_THM] >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem pp2_out_not_fn_ptr_ok:
+  !P. ~fn_ptr_ok P (FST (make_ssa_current_fn pp2_supply pp2_fn))
+Proof
+  gen_tac >> Cases_on `0 IN P "f"`
+  >- (`ptr_roots P (FST (make_ssa_current_fn pp2_supply pp2_fn)) DIFF
+       alloca_roots (FST (make_ssa_current_fn pp2_supply pp2_fn)) = {"p"}`
+        by (simp[pp2_out_roots, pp2_out_alloca_roots, EXTENSION] >> rw[EQ_IMP_THM] >> gvs[]) >>
+      simp[fn_ptr_ok_def] >> strip_tac >>
+      strip_assume_tac pp2_out_write_mixed >>
+      gvs[pp2_out_alloca_roots] >> metis_tac[]) >>
+  simp[fn_ptr_ok_def, pp2_out_roots, pp2_out_not_phi_pv_all_var]
+QED
+
+(* The input meets the syntactic half with position 0 a pointer
+   parameter: p's two definitions are both roots. *)
+Theorem pp2_in_roots:
+  alloca_roots pp2_fn = {"p"} /\ ptr_roots (K {0}) pp2_fn = {"p"}
+Proof
+  simp[pp2_fn_def, pp_inst_def, mk_raw_function_def, ptr_roots_def,
+       alloca_roots_def, EXTENSION, fn_insts_def, fn_insts_blocks_def,
+       inst_output_def, LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem pp2_in_use_vars:
+  pointer_use_vars pp2_fn ["p"] = ["p"] /\ pointer_use_vars pp2_fn [] = []
+Proof
+  simp[pointer_use_vars_def] >> conj_tac >>
+  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC >>
+  ONCE_REWRITE_TAC [WhileTheory.OWHILE_THM] >> EVAL_TAC
+QED
+
+Theorem pp2_in_fn_ptr_ok:
+  fn_ptr_ok (K {0}) pp2_fn
+Proof
+  `ptr_roots (K {0}) pp2_fn DIFF alloca_roots pp2_fn = {}` by
+    simp[pp2_in_roots] >>
+  simp[fn_ptr_ok_def, fn_pv_def, pp2_in_roots, pointer_derived_vars_def,
+       SET_TO_LIST_SING, pp2_in_use_vars, affine_pointer_ops_def,
+       phi_pv_all_var_def, ptr_use_ok_def] >>
+  simp[pp2_fn_def, pp_inst_def, mk_raw_function_def, fn_insts_def,
+       fn_insts_blocks_def, DISJ_IMP_THM, FORALL_AND_THM,
+       LEFT_AND_OVER_OR, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  EVAL_TAC >> rw[] >> CCONTR_TAC >> gvs[]
+QED
