@@ -31,10 +31,19 @@ Theorem concretize_guarded_pointer_range:
     w2n y + len <= activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (token,aid) + sz
 Proof
-  strip_tac >> drule_all resolved_activation_lookup >>
-  disch_then (strip_assume_tac o Q.ISPECL [`concretize_positions C'`, `0:num`]) >>
+  strip_tac >>
+  `?d owner.
+    activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+      d owner aid (b,sz) /\
+    activation_lookup (0:num) (concretize_positions C') (birth::ids)
+      (fn::MAP (\f. f.cf_fn) stk) (token,aid) =
+      concretize_positions C' owner aid` by
+    metis_tac[resolved_activation_lookup] >>
   `b+sz < dimword (:256)` by
     (drule_all joint_activation_cache_strict >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
   irule guarded_pointer_range >> simp[] >> metis_tac[]
 QED
+
+val _ = if null (hyp concretize_guarded_pointer_range) then ()
+        else raise Fail "concretize_guarded_pointer_range has hypotheses";
