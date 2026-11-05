@@ -313,7 +313,7 @@ Theorem literal_buffer_mem_run:
       vv_post ctx func cenv cx e es sa sb s0 es (Value v)
         (LocatedValue (expr_type e) (base_ptr buf)) t /\
       eval_operand buf.buf_operand t = SOME w /\
-      w2n w + val_store_size tvt v <= t.vs_alloca_next /\
+      w2n w + (32 + 32 * word_size (LENGTH bs)) <= t.vs_alloca_next /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next
@@ -357,7 +357,9 @@ Theorem literal_buffer_vv_sim_mem:
     (!a mem. mem_word_at a mem = n2w (LENGTH bs) /\
              mem_bytes_at (a + 32) (LENGTH bs) mem = bs ==>
              val_in_memory tvt v a mem) /\
-    32 + 32 * word_size (LENGTH bs) < dimword (:256) ==>
+    32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
+    (!ltv. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME ltv ==>
+           type_memory_size ltv <= 32 + 32 * word_size (LENGTH bs)) ==>
     expr_vv_sim_mem ctx func cenv cx ty e es
 Proof
   rpt gen_tac >> strip_tac >> rw[expr_vv_sim_mem_def] >>
@@ -375,7 +377,8 @@ Proof
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (Value v)`, `es`, `OK t`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def] >>
-  simp[vv_store_bound_def, base_ptr_def, read_result_def, return_def]
+  simp[vv_store_bound_def, base_ptr_def, read_result_def, return_def] >>
+  rw[] >> gvs[] >> res_tac >> decide_tac
 QED
 
 Theorem literal_buffer_sim_mem:
@@ -417,7 +420,7 @@ Proof
   qexistsl_tac [`INL v`, `es`, `OK t`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def,
        bind_def, read_result_def, return_def] >>
-  simp[expr_store_bound_def]
+  simp[expr_store_bound_def] >> rw[] >> gvs[] >> decide_tac
 QED
 
 (* A bytes literal of a dynamic bytes type, or a string literal. *)
@@ -467,14 +470,14 @@ Resume literal_other_body_mem[bytes]:
   qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
       fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
          val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
-         type_memory_size_def] >>
+         type_memory_size_def, lowered_value_type_def] >>
       rpt conj_tac >> decide_tac) >>
   irule literal_buffer_vv_sim_mem >>
   conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`bs`, `BaseTV (BytesT (Dynamic n))`, `BytesV bs`] >>
   fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
      val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
-     type_memory_size_def] >>
+     type_memory_size_def, lowered_value_type_def] >>
   rpt conj_tac >> decide_tac
 QED
 
@@ -505,14 +508,14 @@ Resume literal_other_body_mem[string]:
   qexistsl_tac [`MAP (n2w o ORD) str`, `BaseTV (StringT n)`, `StringV str`] >>
       fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
          val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
-         type_memory_size_def, LET_THM] >>
+         type_memory_size_def, LET_THM, lowered_value_type_def] >>
       rpt conj_tac >> decide_tac) >>
   irule literal_buffer_vv_sim_mem >>
   conj_tac >- simp[expr_type_def, is_word_type_def] >>
   qexistsl_tac [`MAP (n2w o ORD) str`, `BaseTV (StringT n)`, `StringV str`] >>
   fs[expr_type_def, is_word_type_def, vyperValueTheory.evaluate_type_def,
      val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def,
-     type_memory_size_def, LET_THM] >>
+     type_memory_size_def, LET_THM, lowered_value_type_def] >>
   rpt conj_tac >> decide_tac
 QED
 

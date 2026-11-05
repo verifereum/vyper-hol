@@ -580,9 +580,11 @@ Proof
          gvs[EVERY_MEM]) >>
      metis_tac[]) >>
   `~is_word_type (expr_type (Call NoneT (Send has_gas) args dflt)) ==>
-   !tvt. evaluate_type (get_tenv cx) (expr_type (Call NoneT (Send has_gas) args dflt)) =
+   !tvt. evaluate_type (get_tenv cx)
+           (lowered_value_type cenv (Call NoneT (Send has_gas) args dflt)) =
          SOME tvt ==> type_memory_size tvt = 0` by
     gvs[vyperASTTheory.expr_type_def, is_word_type_def,
+        exprLoweringTheory.lowered_value_type_def,
         vyperValueTheory.evaluate_type_def,
         valueEncodingTheory.type_memory_size_def] >>
   simp[] >> drule_then irule body_expr_vv_sim_mem_stack >> simp[] >> conj_tac

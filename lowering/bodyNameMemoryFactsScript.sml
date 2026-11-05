@@ -91,7 +91,7 @@ Theorem name_vv_store_bound:
   evaluate_type (get_tenv cx) ann = SOME entry.type /\
   val_wf entry.type entry.value /\ lookup_var p s = SOME w /\
   type_memory_size entry.type <= sz /\ w2n w + sz <= s.vs_alloca_next ==>
-  vv_store_bound cx ann (es with gas_obs := []) (PlaceR (MemoryPlace id []))
+  vv_store_bound cx ann ann (es with gas_obs := []) (PlaceR (MemoryPlace id []))
     (LocatedValue ann (mk_ptr (Var p) LocMemory)) s
 Proof
   simp[vv_store_bound_def, contextTheory.mk_ptr_def, eval_operand_def] >>

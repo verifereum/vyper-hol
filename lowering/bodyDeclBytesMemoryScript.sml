@@ -464,7 +464,7 @@ QED
    compile_annassign_bytes_stmt_frag_mem's premise.  Beyond expr_sim_mem's
    post, a value left in memory has its source region reach the lowered
    type's size, which the staging copy reads in full: vv_store_bound gives
-   room for the expression's type, which is at least as large. *)
+   that room at the lowered type. *)
 Theorem annassign_bytes_rhs_located_mem:
   !tops ctx func c cx env e es ltv etv.
     body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\

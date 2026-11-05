@@ -73,6 +73,7 @@ Proof
           type_check_def, assert_def, check_def, ignore_bind_def] >>
   disj1_tac >> simp[] >> conj_tac
   >- (irule name_value_post >> simp[]) >>
-  simp[vyperASTTheory.expr_type_def] >> irule name_vv_store_bound >> simp[] >> qexists_tac `sz` >> simp[]
+  simp[vyperASTTheory.expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
+  irule name_vv_store_bound >> simp[] >> qexists_tac `sz` >> simp[]
 QED
 

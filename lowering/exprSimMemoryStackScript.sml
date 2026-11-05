@@ -8,7 +8,7 @@ Ancestors
 Theorem expr_stack_outcome_mem:
   (!s tv s'. eval_expr cx e s = (INL tv,s') ==> ?v. tv = Value v) /\
   (~is_word_type (expr_type e) ==>
-   !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+   !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
          type_memory_size tvt = 0) /\
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
@@ -22,7 +22,7 @@ Theorem expr_stack_outcome_mem:
   gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee u. ?tv. res = INL tv /\
       vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue t op) u /\
-      vv_store_bound cx (expr_type e) ee tv (StackValue t op) u /\
+      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)
@@ -48,11 +48,11 @@ Proof
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED
 
-(* A non-word stack result's type must have zero size: its operand is
-   bounded only by the value's footprint. *)
+(* A non-word stack result's lowered type must have zero size: its operand
+   is bounded only by the value's footprint. *)
 Theorem body_expr_vv_sim_mem_stack:
   (~is_word_type (expr_type e) ==>
-   !tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+   !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
          type_memory_size tvt = 0) ==>
   expr_sim_mem ctx func cenv cx ty e es /\
   (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\

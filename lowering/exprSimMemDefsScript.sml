@@ -17,12 +17,12 @@ Definition expr_store_bound_def:
 End
 
 (* The same for a value_vv held in memory: a located one, or a stack value
-   of non-word type, whose operand points at its data.  The whole region at
-   the located type (a stack value's: the expression's) also lies below the
-   frontier, since a staging copy reads that type's full size, not just the
-   value's footprint. *)
+   of non-word type, whose operand points at its data.  t is the
+   expression's type and lt its lowered value type (lowered_value_type).
+   The whole region at lt also lies below the frontier, since a staging
+   copy reads that type's full size, not just the value's footprint. *)
 Definition vv_store_bound_def:
-  vv_store_bound cx t es tv vv s <=>
+  vv_store_bound cx t lt es tv vv s <=>
     (!vt op v tvt w.
       ((?p. vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
             p.ptr_operand = op) \/
@@ -35,8 +35,8 @@ Definition vv_store_bound_def:
     (!vt op tvt w.
       ((?p. vv = LocatedValue vt p /\ p.ptr_location = LocMemory /\
             p.ptr_operand = op) \/
-       ((?t'. vv = StackValue t' op) /\ vt = t /\ ~is_word_type t)) /\
-      evaluate_type (get_tenv cx) vt = SOME tvt /\
+       ((?t'. vv = StackValue t' op) /\ ~is_word_type t)) /\
+      evaluate_type (get_tenv cx) lt = SOME tvt /\
       eval_operand op s = SOME w ==>
       type_memory_size tvt = 0 \/
       w2n w + type_memory_size tvt <= s.vs_alloca_next)
@@ -58,25 +58,26 @@ Proof
 QED
 
 Theorem vv_store_bound_stack_word:
-  is_word_type t ==> vv_store_bound cx t es tv (StackValue t' op) s
+  is_word_type t ==> vv_store_bound cx t lt es tv (StackValue t' op) s
 Proof
   simp[vv_store_bound_def]
 QED
 
 (* A stack value's operand inherits the expression's store bound; the
-   expression's type needs no room when it is a word or has zero size. *)
+   lowered type needs no room when the expression's type is a word, or when
+   the lowered type has zero size. *)
 Theorem vv_store_bound_stack_value:
   expr_store_bound cx t v op s /\
   (~is_word_type t ==>
-   !tvt. evaluate_type (get_tenv cx) t = SOME tvt ==> type_memory_size tvt = 0) ==>
-  vv_store_bound cx t es (Value v) (StackValue t' op) s
+   !tvt. evaluate_type (get_tenv cx) lt = SOME tvt ==> type_memory_size tvt = 0) ==>
+  vv_store_bound cx t lt es (Value v) (StackValue t' op) s
 Proof
   rw[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def]
 QED
 
 Theorem vv_store_bound_nonmem:
   p.ptr_location <> LocMemory ==>
-  vv_store_bound cx t es tv (LocatedValue vt p) s
+  vv_store_bound cx t lt es tv (LocatedValue vt p) s
 Proof
   simp[vv_store_bound_def]
 QED
@@ -117,7 +118,7 @@ Definition expr_vv_sim_mem_def:
       gas_outcome T (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
         (\res ee t. ?tv. res = INL tv /\
           vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
-          vv_store_bound cx (expr_type e) ee tv vv t /\
+          vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
@@ -163,7 +164,7 @@ Theorem vv_store_bound_capacity:
   eval_operand p.ptr_operand t = SOME fw /\
   (type_memory_size ftv = 0 \/
    w2n fw + type_memory_size ftv <= t.vs_alloca_next) ==>
-  vv_store_bound cx (expr_type e) es' tv (LocatedValue vt p) t
+  vv_store_bound cx (expr_type e) (expr_type e) es' tv (LocatedValue vt p) t
 Proof
   rw[vv_store_bound_def, vv_post_def, vv_at_def] >> gvs[] >>
   imp_res_tac val_store_size_le >> decide_tac

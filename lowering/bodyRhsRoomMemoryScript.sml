@@ -34,7 +34,7 @@ Theorem unwrap_value_path_mem_room[local]:
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
-    vv_store_bound cx (expr_type e) es' (Value v) vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -43,7 +43,7 @@ Theorem unwrap_value_path_mem_room[local]:
         expr_store_bound cx (expr_type e) v op u /\
         (vv_location vv = SOME LocMemory ==>
          !sw tvt. eval_operand op u = SOME sw /\
-                  evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+                  evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
                   type_memory_size tvt = 0 \/
                   w2n sw + type_memory_size tvt <= u.vs_alloca_next) /\
         u.vs_current_bb = sb.cs_current_bb /\
@@ -55,7 +55,7 @@ Proof
   >- (gvs[unwrap_value_def, comp_return_def, vv_location_def] >>
       qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
       conj_tac >- metis_tac[expr_post_of_vv_post_stack] >>
-      qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
+      qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
       simp[vv_store_bound_def, expr_store_bound_def, read_result_def,
            return_def] >>
       metis_tac[]) >>
@@ -68,7 +68,7 @@ Proof
   gvs[unwrap_value_def, comp_return_def, vv_location_def] >>
   qexists_tac `s` >> simp[cj 1 gas_path_mem_rules] >>
   conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>
-  qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
   simp[vv_store_bound_def, expr_store_bound_def, read_result_def,
        return_def] >>
   metis_tac[]
@@ -88,7 +88,7 @@ Theorem unwrap_value_marked_read_mem_room[local]:
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
     vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
-    vv_store_bound cx (expr_type e) ee tv vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -98,7 +98,7 @@ Theorem unwrap_value_marked_read_mem_room[local]:
       expr_store_bound cx (expr_type e) v op u /\
       (vv_location vv = SOME LocMemory ==>
        !sw tvt. eval_operand op u = SOME sw /\
-                evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+                evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
                 type_memory_size tvt = 0 \/
                 w2n sw + type_memory_size tvt <= u.vs_alloca_next) /\
       u.vs_current_bb = sb.cs_current_bb /\
@@ -111,8 +111,8 @@ Proof
   reverse (Cases_on `res`)
   >- metis_tac[vv_post_failed_read] >>
   rename1 `read_result cx tv ee = (INL v, ee)` >>
-  `vv_store_bound cx (expr_type e) ee (Value v) vv s` by
-    (qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
+  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v) vv s` by
+    (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      simp[vv_store_bound_def, read_result_def, return_def] >>
      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>
@@ -154,7 +154,7 @@ Theorem expr_sim_mem_room:
           expr_store_bound cx (expr_type e) v op t /\
           (vv_location vv = SOME LocMemory ==>
            !sw tvt. eval_operand op t = SOME sw /\
-                    evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
+                    evaluate_type (get_tenv cx) (lowered_value_type cenv e) = SOME tvt ==>
                     type_memory_size tvt = 0 \/
                     w2n sw + type_memory_size tvt <= t.vs_alloca_next) /\
           t.vs_current_bb = sb.cs_current_bb /\

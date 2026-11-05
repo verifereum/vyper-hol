@@ -37,7 +37,8 @@ Proof
      qexists_tac `fw` >> simp[mk_ptr_def]) >>
   `read_result cx tv (es with gas_obs := []) = (INL v, es with gas_obs := [])` by simp[] >>
   `(mk_ptr p LocMemory).ptr_location = LocMemory` by simp[mk_ptr_def] >>
-  drule_all body_unwrap_memory_counted_read >> strip_tac >>
+  drule_all body_unwrap_memory_counted_read >>
+  disch_then (qspec_then `ann` strip_assume_tac) >>
   qexistsl_tac [`[]`, `v`, `es`, `u`] >>
   reverse conj_tac
   >- (simp[expr_type_def] >> first_x_assum irule >> fs[]) >>

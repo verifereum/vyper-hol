@@ -162,7 +162,7 @@ Theorem attr_field_store_bound[local]:
    tv sid fs ftv vals fv w t.
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
-    vv_store_bound cx (StructT sid) ee tv bvv t /\
+    vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     fields_layout
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs /\
@@ -175,13 +175,13 @@ Theorem attr_field_store_bound[local]:
     eval_operand dst u =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
     u.vs_alloca_next = t.vs_alloca_next ==>
-    vv_store_bound cx ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u
+    vv_store_bound cx ann ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `vv_loc bvv = LocMemory`
   >- (`type_memory_size_fields fs = 0 \/
        w2n w + type_memory_size_fields fs <= t.vs_alloca_next` by
-        (qpat_x_assum `vv_store_bound _ (StructT _) _ _ _ _`
+        (qpat_x_assum `vv_store_bound _ (StructT _) _ _ _ _ _`
            (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_store_bound_def]) >>
          Cases_on `bvv` >>
          gvs[vv_loc_def, vv_location_def, vv_operand_def, is_word_type_def,
@@ -217,7 +217,7 @@ Theorem attr_step[local]:
     sm = (dst, sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
-  vv_store_bound cx (StructT sid) ee tv bvv t /\
+  vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
@@ -229,7 +229,7 @@ Theorem attr_step[local]:
     gas_path_mem ctx func t 0 (OK u) /\
     vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
-    vv_store_bound cx ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
+    vv_store_bound cx ann ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
@@ -279,7 +279,7 @@ Proof
   irule forced_vv_then_outcome >> simp[] >>
   qexists_tac `\tv ee t.
     vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
-    vv_store_bound cx (StructT sid) ee tv bvv t /\
+    vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
@@ -290,7 +290,8 @@ Proof
         simp[vyperStateTheory.evaluation_state_component_equality] >>
       drule_all attr_step >> strip_tac >>
       qexistsl_tac [`INL tv'`, `ee`, `OK u`] >>
-      fs[gas_marked_path_def, expr_type_def]) >>
+      fs[gas_marked_path_def, expr_type_def,
+         exprLoweringTheory.lowered_value_type_def]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                          gas_outcome_post_mono)) >>

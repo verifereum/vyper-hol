@@ -154,7 +154,7 @@ Proof
   `gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,salloc)
     (\res ee t. ?tv. res = INL tv /\
       vv_post ctx func c cx e es sA sB salloc ee tv vv t /\
-      vv_store_bound cx (expr_type e) ee tv vv t /\
+      vv_store_bound cx (expr_type e) (lowered_value_type c e) ee tv vv t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
       alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next)

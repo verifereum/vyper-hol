@@ -1369,7 +1369,7 @@ Theorem unwrap_value_path_mem:
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
     vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
-    vv_store_bound cx (expr_type e) es' (Value v) vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -1401,7 +1401,7 @@ Proof
          `?w. eval_operand p.ptr_operand s = SOME w` by
            gvs[vv_post_def, vv_holds_def] >>
          qexists_tac `w` >> simp[] >>
-         qpat_x_assum `vv_store_bound _ _ _ _ _ _`
+         qpat_x_assum `vv_store_bound _ _ _ _ _ _ _`
            (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_store_bound_def]) >>
          disch_then (qspecl_then [`expr_type e`, `p.ptr_operand`, `v`, `tvt`, `w`] mp_tac) >>
          simp[] >>
@@ -1409,7 +1409,9 @@ Proof
          simp[]) >>
       drule_at (Pat `unwrap_value _ _ _ = _`) body_unwrap_memory_counted_read >>
       disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-      simp[] >> strip_tac >> qexists_tac `u` >> gvs[]) >>
+      simp[] >>
+      disch_then (qspec_then `lowered_value_type cenv e` strip_assume_tac) >>
+      qexists_tac `u` >> gvs[]) >>
   Cases_on `is_word_type t`
   >- (Cases_on `p.ptr_location = LocCode`
       >- (Cases_on `cenv.ce_is_ctor`
@@ -1451,7 +1453,7 @@ Theorem unwrap_value_marked_read_mem:
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
     vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
-    vv_store_bound cx (expr_type e) ee tv vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -1469,8 +1471,8 @@ Proof
   reverse (Cases_on `res`)
   >- metis_tac[vv_post_failed_read] >>
   rename1 `read_result cx tv ee = (INL v, ee)` >>
-  `vv_store_bound cx (expr_type e) ee (Value v) vv s` by
-    (qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
+  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v) vv s` by
+    (qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
      rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      first_x_assum irule >> metis_tac[]) >>
   drule vv_post_read_result >> strip_tac >> gvs[] >> pop_assum kall_tac >>

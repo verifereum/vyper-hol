@@ -47,7 +47,7 @@ Theorem reason_revert_path_mem:
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
-    vv_store_bound cx (expr_type se) ee tv vv t /\
+    vv_store_bound cx (expr_type se) (lowered_value_type cenv se) ee tv vv t /\
     read_result cx tv ee = (INL (StringV str), ee) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -90,7 +90,7 @@ Proof
                 Cases_on `vv` >>
                 simp[reason_vv_ok_def, reason_vv_def, vv_operand_def,
                      is_word_type_def]) >>
-             qpat_x_assum `vv_store_bound _ _ _ _ _ _`
+             qpat_x_assum `vv_store_bound _ _ _ _ _ _ _`
                (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_store_bound_def]) >>
              disch_then (qspecl_then [`vt`, `vv_operand vv`, `StringV str`,
                `BaseTV (StringT n)`, `w`] mp_tac) >>
