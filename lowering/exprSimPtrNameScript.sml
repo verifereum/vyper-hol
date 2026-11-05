@@ -68,7 +68,7 @@ Proof
    !mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
          val_in_memory entry.type entry.value (w2n w) mem` by
     (fs[ghost_inv_def] >> metis_tac[]) >>
-  drule val_footprint_le >> strip_tac >>
+  drule val_store_size_le >> strip_tac >>
   qexists_tac `w` >> simp[ptr_mem_ok_def, eval_operand_def] >>
   rpt strip_tac >> gvs[ptr_covers_def]
 QED
