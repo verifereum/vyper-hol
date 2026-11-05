@@ -2492,3 +2492,82 @@ Proof
  drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
  irule cse_prefix_assign_use_rewind >> metis_tac[]
 QED
+
+Theorem cse_dfg_assign_shape[local]:
+ fn_inst_wf fn /\
+ FLOOKUP (dfg_build_function fn).dfg_defs x = SOME inst /\
+ inst.inst_opcode = ASSIGN ==>
+ ?arg. inst.inst_operands = [arg] /\ inst.inst_outputs = [x]
+Proof
+ strip_tac >>
+ `dfg_get_def (dfg_build_function fn) x = SOME inst` by
+   simp[dfgDefsTheory.dfg_get_def_def] >>
+ drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+ `!bbs. MEM inst (fn_insts_blocks bbs) ==>
+    ?b. MEM b bbs /\ MEM inst b.bb_instructions` by
+   (Induct >> simp[fn_insts_blocks_def] >> metis_tac[]) >>
+ `?b. MEM b fn.fn_blocks /\ MEM inst b.bb_instructions` by
+   metis_tac[fn_insts_def] >>
+ `inst_wf inst` by metis_tac[fn_inst_wf_def] >>
+ gvs[inst_wf_def] >>
+ Cases_on `inst.inst_operands` >> gvs[] >>
+ Cases_on `inst.inst_outputs` >> gvs[]
+QED
+
+Theorem cse_prefix_operand_producer_rewind_aux[local]:
+ !d seen op. !fn ctx fuel0 s0 events n bb s use k.
+ d = dfg_build_function fn /\
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer d seen op = SOME k ==>
+ ?pre post m cb u terminal_use v definer.
+ events = pre ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ get_instruction cb u.vs_inst_idx = SOME terminal_use /\
+ terminal_use.inst_opcode <> PHI /\
+ MEM (Var v) terminal_use.inst_operands /\
+ FLOOKUP (dfg_build_function fn).dfg_defs v = SOME definer /\
+ definer.inst_opcode <> ASSIGN /\ definer.inst_id = k /\
+ eval_operand op s = eval_operand (Var v) u
+Proof
+ recInduct cseDefsTheory.operand_producer_ind >> rpt strip_tac >>
+ gvs[Once cseDefsTheory.operand_producer_def, AllCaseEqs()]
+ >- (drule_all cse_dfg_assign_shape >> gvs[])
+ >- suspend "copy"
+ >- (drule_all cse_dfg_assign_shape >> gvs[]) >>
+ qexistsl [`events`, `[]`, `n`, `bb`, `s`, `use`, `v`, `inst`] >> simp[]
+QED
+
+Resume cse_prefix_operand_producer_rewind_aux[copy]:
+ drule_all cse_dfg_assign_shape >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_assign_use_rewind_dfg >> strip_tac >>
+ `inst.inst_opcode <> PHI /\ MEM arg inst.inst_operands` by simp[] >>
+ first_x_assum (qspec_then `fn` (mp_tac o SRULE [])) >>
+ disch_then drule_all >> strip_tac >>
+ qexistsl [`pre'`, `post' ++ [CseStep m cb inst u t] ++ post`,
+   `m'`, `cb'`, `u'`, `terminal_use`, `v'`, `definer`] >>
+ gvs[APPEND_ASSOC]
+QED
+Finalise cse_prefix_operand_producer_rewind_aux
+
+Theorem cse_prefix_operand_producer_rewind:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) seen op = SOME k ==>
+ ?pre post m cb u terminal_use v definer.
+ events = pre ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ get_instruction cb u.vs_inst_idx = SOME terminal_use /\
+ terminal_use.inst_opcode <> PHI /\
+ MEM (Var v) terminal_use.inst_operands /\
+ FLOOKUP (dfg_build_function fn).dfg_defs v = SOME definer /\
+ definer.inst_opcode <> ASSIGN /\ definer.inst_id = k /\
+ eval_operand op s = eval_operand (Var v) u
+Proof
+ strip_tac >> irule cse_prefix_operand_producer_rewind_aux >>
+ metis_tac[]
+QED
