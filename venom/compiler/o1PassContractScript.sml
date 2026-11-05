@@ -413,24 +413,25 @@ End
    has been through the first k walk passes; from row 3 on (after
    ConcretizeMemLoc) the function has no ALLOCA, which SingleUseExpansion
    needs, since it would expand the literal operand of one.  From row 4
-   (after FmpLowering, which puts the parameters first) to row 8 every
+   (after FmpLowering, which puts the parameters first) to row 7 every
    block's pseudo-instructions come first, and only the entry block has
    parameter instructions: DFT keeps the pseudo-instructions in front of
    the instructions it reschedules, so a PHI it found after another
    instruction would move, and MakeSSA and SimplifyCFG keep the prefix
    only because the blocks they rewrite or merge have no parameters.
-   From row 5 (after MakeSSA's second run) to row 8 the function is in
-   SSA form, as the stage rows 5 to 8 say of every function: off SSA, DFT
+   From row 5 (after MakeSSA's second run) to row 7 the function is in
+   SSA form, as the stage rows 5 to 7 say of every function: off SSA, DFT
    can schedule a use after a redefinition of its variable, which breaks
-   the call-check shape it owes.  Row 6 also has every block reachable,
+   the call-check shape it owes.  Row 8 is DFT's output, and
+   CFGNormalization needs none of these of it.  Row 6 also has every block reachable,
    as stage row 6 does: SingleUseExpansion keeps SSA only then. *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
     (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
-    (4 <= k /\ k <= 8 ==>
+    (4 <= k /\ k <= 7 ==>
        fn_pseudos_prefix fn /\
        EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)) /\
-    (5 <= k /\ k <= 8 ==> wf_ssa fn) /\
+    (5 <= k /\ k <= 7 ==> wf_ssa fn) /\
     (k = 6 ==> all_reachable fn)
 End
 
