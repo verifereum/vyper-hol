@@ -668,6 +668,43 @@ Proof
   pure_rewrite_tac [exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> REFL_TAC
 QED
 
+Theorem augassign_attr_local_code_parts_mem_src[local]:
+  !cenv lctx ty0 ty id fld bop e sa c sf p sz sid.
+    stmt_env cenv lctx ty0
+      (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) sa =
+      (c, sf) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    cenv.ce_var_type id = SOME (StructT sid) ==>
+    c = cenv /\
+    ?dst sn cur s1 rhs s2 res_op s3.
+      emit_op ADD
+        [Var p; Lit (n2w (struct_field_offset
+           (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+           fld))] sa = (dst, sn) /\
+      emit_op MLOAD [dst] sn = (cur, s1) /\
+      lower_value compile_expr cenv ty e s1 = (rhs, s2) /\
+      compile_binop bop cur rhs ty NONE
+        (if bop = Exp then expr_int_literal e else NONE) s2 = (res_op, s3) /\
+      emit_void MSTORE [dst; res_op] s3 = ((), sf)
+Proof
+  rpt gen_tac >> strip_tac >>
+  FULL_SIMP_TAC std_ss [stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+    compile_get_target_ptr_def, comp_bind_def, comp_return_def,
+    comp_ignore_bind_def, LET_THM, var_location_case_def,
+    data_location_case_def, place_ty_case_def, vyperASTTheory.type_case_def] >>
+  rpt (pairarg_tac >>
+    FULL_SIMP_TAC std_ss [comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM, data_location_case_def] >>
+    rpt (qpat_x_assum `(_,_) = v` (SUBST_ALL_TAC o SYM)) >>
+    FULL_SIMP_TAC std_ss [comp_bind_def, comp_return_def,
+      comp_ignore_bind_def, LET_THM, data_location_case_def]) >>
+  qpat_x_assum `cenv = c` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `cs' = sf` SUBST_ALL_TAC >>
+  qpat_x_assum `(s:compile_state) = t` SUBST_ALL_TAC >>
+  rename1 `emit_void MSTORE _ _ = (u, sf)` >> Cases_on `u` >>
+  metis_tac[]
+QED
+
 Theorem compile_augassign_attr_local_mem[local]:
   (!gs. expr_sim_mem ctx func cenv cx ty e (es with gas_obs := gs)) /\
   expr_body_pre cenv cx env e es /\
@@ -696,7 +733,7 @@ Proof
         (fs[expr_sim_inv_def, state_well_typed_def] >>
          metis_tac[scope_well_typed_lookup_scopes]) >>
       gvs[value_has_type_def]) >>
-  drule_all augassign_attr_local_code_parts >> strip_tac >> gvs[] >>
+  drule_all augassign_attr_local_code_parts_mem_src >> strip_tac >> gvs[] >>
   `cs_extends sa sn /\ cs_extends sn s1 /\ cs_extends s3 sb` by
     metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
@@ -984,5 +1021,7 @@ Proof
   conj_tac >- metis_tac[] >>
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
+
+
 
 
