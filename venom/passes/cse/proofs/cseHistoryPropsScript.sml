@@ -2749,3 +2749,48 @@ Theorem cse_prefix_exec_labels:
 Proof
  strip_tac >> drule cse_prefix_labels_frame >> simp[cse_phase_state_def]
 QED
+
+Theorem cse_prefix_none_leaf_eval[local]:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) {} op = NONE ==>
+ (?w. mk_operand_expr (dfg_build_function fn) [] op = ExprLit w /\
+      eval_operand op s = eval_operand (Lit w) s0) \/
+ (?l. mk_operand_expr (dfg_build_function fn) [] op = ExprVar l /\
+      eval_operand op s = eval_operand (Label l) s0)
+Proof
+ strip_tac >> drule_all cse_prefix_operand_producer_none_rewind >>
+ strip_tac >> drule cse_prefix_exec_labels >>
+ simp[eval_operand_def] >> metis_tac[]
+QED
+
+Theorem cse_prefix_none_operands_equal:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ cse_prefix ctx' fn fuel0' s0' events' (CseExec n' bb' s') /\
+ s0.vs_labels = s0'.vs_labels /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ get_instruction bb' s'.vs_inst_idx = SOME use' /\
+ use.inst_opcode <> PHI /\ use'.inst_opcode <> PHI /\
+ MEM op use.inst_operands /\ MEM op' use'.inst_operands /\
+ operand_producer (dfg_build_function fn) {} op = NONE /\
+ operand_producer (dfg_build_function fn) {} op' = NONE /\
+ mk_operand_expr (dfg_build_function fn) [] op =
+ mk_operand_expr (dfg_build_function fn) [] op' ==>
+ eval_operand op s = eval_operand op' s'
+Proof
+ strip_tac >>
+ `(?w. mk_operand_expr (dfg_build_function fn) [] op = ExprLit w /\
+       eval_operand op s = eval_operand (Lit w) s0) \/
+  (?l. mk_operand_expr (dfg_build_function fn) [] op = ExprVar l /\
+       eval_operand op s = eval_operand (Label l) s0)` by
+   (irule cse_prefix_none_leaf_eval >> metis_tac[]) >>
+ `(?w. mk_operand_expr (dfg_build_function fn) [] op' = ExprLit w /\
+       eval_operand op' s' = eval_operand (Lit w) s0') \/
+  (?l. mk_operand_expr (dfg_build_function fn) [] op' = ExprVar l /\
+       eval_operand op' s' = eval_operand (Label l) s0')` by
+   (irule cse_prefix_none_leaf_eval >> metis_tac[]) >>
+ gvs[eval_operand_def]
+QED
