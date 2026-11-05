@@ -74,7 +74,10 @@ Theorem lower_runtime_selected_source_packages:
     sels = build_selectors (type_env tops) (FST (classify_functions tops)) /\
     EVERY (\(lbl,ce,pa,mc,pay,nr,key,tr,view,stmts,rt). jump_label_ok lbl) exts /\
     EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ints) /\
-    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt) exts
+    MEM ("fn_" ++ tx.function_name,ce,pa,mc,mut = Payable,nr,key,F,view,fbody,rt) exts /\
+    exts = MAP (set_external_package_target rp.rpol_target o
+      package_external_fn tops F (assign_nkeys tops 0))
+      (FST (classify_functions tops))
 Proof
   strip_tac >> drule_all selected_external_package_member >>
   disch_then (qspec_then `rp.rpol_target` strip_assume_tac) >>
