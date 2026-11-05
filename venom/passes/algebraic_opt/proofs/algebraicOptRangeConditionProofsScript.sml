@@ -1,7 +1,7 @@
 Theory algebraicOptRangeConditionProofs
 Ancestors
   rangeAnalysisProofs rangeAnalysisDefs dfgAnalysis dfgAnalysisProps venomInst finite_map
-  algebraicOptFreshnessProofs algebraicOptTraceProofs
+  algebraicOptFreshnessProofs algebraicOptTraceProofs algebraicOptRangeProofs
   venomExecSemantics venomState venomWf rich_list
 
 (* Conditional interfaces: producer provenance is a separate obligation. *)
@@ -395,3 +395,59 @@ Resume ao_source_trace_condition_sound[compare]:
   simp[] >> disch_then drule_all >> simp[]
 QED
 Finalise ao_source_trace_condition_sound
+
+Theorem ao_source_trace_branch_refine_sound:
+  !ctx fn trace k s t bb term rs.
+    trace <> [] /\ ao_source_trace ctx fn trace /\ LAST trace = (k,F,s) /\
+    wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\
+    EVERY label_positions_ok (fn_insts fn) /\
+    (!inst x. MEM inst (fn_insts fn) /\ MEM x inst.inst_outputs ==>
+      lookup_var x (SND (SND (HD trace))) = NONE) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME term /\
+    is_terminator term.inst_opcode /\ step_inst k ctx term s = OK t /\
+    ~t.vs_halted /\ in_range_state rs s.vs_vars ==>
+    in_range_state
+      (range_branch_refine (dfg_build_function fn) fn.fn_blocks
+         s.vs_current_bb t.vs_current_bb rs) t.vs_vars
+Proof
+  rpt gen_tac >> strip_tac >>
+  `t.vs_vars = s.vs_vars` by
+    (rw[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+     drule_all venomExecPropsTheory.step_terminator_preserves_vars >>
+     disch_then (qspec_then `x` mp_tac) >> simp[lookup_var_def]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecPropsTheory.lookup_block_MEM] >>
+  `bb_well_formed bb` by fs[wf_function_def] >>
+  `bb.bb_instructions <> [] /\ term = LAST bb.bb_instructions` by
+    (fs[get_instruction_def, bb_well_formed_def] >>
+     metis_tac[listTheory.LAST_EL]) >>
+  simp[range_branch_refine_def] >>
+  Cases_on `term.inst_opcode = JNZ` >- suspend "jnz" >>
+  gvs[]
+QED
+Resume ao_source_trace_branch_refine_sound[jnz]:
+  `MEM term (fn_insts fn)` by
+    (fs[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+        get_instruction_def] >> metis_tac[listTheory.MEM_EL]) >>
+  `MEM term bb.bb_instructions` by
+    (fs[get_instruction_def] >> metis_tac[listTheory.MEM_EL]) >>
+  `inst_wf term` by
+    (fs[fn_inst_wf_def] >> metis_tac[]) >>
+  `?cond yes no. term.inst_operands = [cond;Label yes;Label no]` by
+    gvs[inst_wf_def] >>
+  `yes <> no` by metis_tac[algebraicOptRangeProofsTheory.ao_range_source_jnz_distinct] >>
+  `!x. cond = Var x ==> def_available_at fn bb (SOME term) x` by
+    (fs[wf_ssa_def, def_dominates_uses_def] >>
+     first_x_assum (drule_at (Pat `MEM _ _.bb_instructions`)) >>
+     simp[]) >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def,
+       AllCaseEqs()] >> strip_tac >>
+  gvs[listTheory.NULL_EQ, jump_to_def] >>
+  irule ao_source_trace_condition_sound >>
+  goal_assum (drule_at Any) >> simp[] >>
+  (conj_tac
+   >- (qexistsl [`ctx`,`k`,`trace`] >> simp[] >> metis_tac[]) >>
+   qexists_tac `SOME (LAST bb.bb_instructions)` >> simp[] >> metis_tac[])
+QED
+Finalise ao_source_trace_branch_refine_sound
