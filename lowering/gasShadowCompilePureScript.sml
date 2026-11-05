@@ -56,7 +56,13 @@ Proof
   Cases_on `e` >>
   simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def]
   >~ [`lowered_value_type _ (Call _ ct _ _) = _`]
-  >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def]) >>
+  >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def])
+  >~ [`lowered_value_type _ (Builtin _ _ _) = _`]
+  >- (rename1 `gas_shadow_builtin bi` >>
+      Cases_on `bi` >>
+      simp[gas_shadow_builtin_def, lowered_value_type_def, expr_type_def,
+           MAP_MAP_o, combinTheory.o_DEF] >>
+      IF_CASES_TAC >> simp[lowered_value_type_def, expr_type_def]) >>
   rename1 `MAP gas_shadow_expr args` >>
   rename1 `TypeBuiltin ann tb ret_ty _` >>
   Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def, MAP_MAP_o, combinTheory.o_DEF] >>
