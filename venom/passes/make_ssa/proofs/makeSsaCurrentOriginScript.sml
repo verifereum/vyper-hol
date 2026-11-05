@@ -10,6 +10,29 @@ Ancestors
   makeSsaCurrentDefs venomWf cfgWf venomInst irSupply unitShapeDefs
   o1PassContract
 
+(* Intuition (the prover may ignore it).
+   - orig starts as the identity.  The only new names are the fresh
+     formal_var_<n> that push_current_name takes for a variable v when its
+     counter is nonzero; set orig n := orig v there.  fresh_ir_var returns a
+     name outside irs_used_vars, which covers every variable in the blocks
+     and on the rename stacks (makeSsaCurrentProps: add_phi_nodes_supply_ok,
+     rename_current_blocks_vars_covered), so the update never changes orig
+     on anything already related; and orig stays the identity on fn's own
+     variables (ir_supply_covers_fn).
+   - Renaming keeps every instruction equal modulo orig (outputs mapped by
+     orig, operands Var u |-> Var (orig u), same id and opcode), as long as
+     every name on the stack of key k has orig = orig k: latest_current_name
+     then preserves orig.  This holds even if a block is renamed twice.
+     replace_block replaces every block with the label; labels stay those of
+     fn, which wf_function keeps distinct.
+   - Instructions after PHI insertion are fn's own or
+     build_phi_inst_supply id var preds, with var a compute_defs key, i.e.
+     an output of some fn instruction; its operands are Label/Var var.
+   - simplify_current_phis_if rewrites only the leading PHI prefix of a
+     block into kept PHIs, then ASSIGN [Var v] (v a Var operand) or NOP; the
+     prefix length is unchanged, so reassign_current_inst_ids leaves the ids
+     of the instructions after the prefix alone.
+   - Input PHIs have one output and Label/Var operands (fn_inst_wf). *)
 Theorem make_ssa_current_fn_origin:
   fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
   fn_phis_cover_preds fn /\
