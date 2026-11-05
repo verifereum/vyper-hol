@@ -3,6 +3,7 @@ Theory targetSubscriptDecode
 Ancestors
   vyperStorage vyperStorageBackend vyperState vyperStorageReadSoundness
   targetPlaceLive vyperStoragePlaceProvenance words arithmetic list rich_list
+  vyperInterpreter vyperAST vyperPureExpr
 
 Theorem target_decode_static_child:
   !n raw off tv vs j.
@@ -259,3 +260,74 @@ Resume target_storage_extend_decodable[dynamic]:
 QED
 
 Finalise target_storage_extend_decodable
+
+Theorem target_extend_result_decodable:
+  contract_storage_well_formed cx st /\
+  target_result_decodable cx st pv /\
+  extend_place cx pv sb st = (INL pv',st') ==>
+  target_result_decodable cx st pv'
+Proof
+  Cases_on `pv` >> simp[extend_place_def, raise_def, target_result_decodable_def]
+  >- (Cases_on `p` >>
+      simp[extend_place_def, bind_def, ignore_bind_def, return_def, raise_def,
+           AllCaseEqs()] >> rpt strip_tac >> gvs[]
+      >~ [`extend_storage_place _ _ _ _ _ _`]
+      >- (gvs[target_result_decodable_def] >>
+          drule vyperPlaceFramesTheory.extend_storage_place_state >>
+          strip_tac >> gvs[] >>
+          drule_all target_storage_extend_decodable >> simp[]) >>
+      simp[extend_memory_place_def, target_result_decodable_def]) >>
+  Cases_on `sb` >> simp[extend_place_def, raise_def] >> Cases_on `v` >>
+  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
+       AllCaseEqs()] >> rpt strip_tac >>
+  gvs[target_result_decodable_def, vyperMiscTheory.option_CASE_rator,
+      return_def, raise_def, AllCaseEqs()] >>
+  drule storage_mapping_region_step >>
+  disch_then (qspec_then `v'` assume_tac) >>
+  simp[] >> rpt strip_tac >>
+  irule target_mapping_leaf_decodable >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem target_eval_base_decodable:
+  !bt cx st pv st'.
+    contract_storage_well_formed cx st /\
+    EVERY pure_expr (target_indices bt) /\
+    eval_base_place cx bt st = (INL pv,st') ==>
+    target_result_decodable cx st pv
+Proof
+  measureInduct_on `base_assignment_target_size bt` >> Cases_on `bt` >>
+  rpt gen_tac
+  >~ [`eval_base_place cx (TopLevelNameTarget p) st`]
+  >- (PairCases_on `p` >>
+      simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+           get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+           return_def, raise_def] >> rpt strip_tac >> gvs[] >>
+      simp[target_result_decodable_def] >>
+      metis_tac[target_lookup_global_decodable]) >>
+  simp[target_indices_def, Once evaluate_def, bind_def, AllCaseEqs(),
+       get_scopes_def, type_check_def, assert_def, ignore_bind_def,
+       return_def, raise_def] >> rpt strip_tac >> gvs[] >>
+  simp[target_result_decodable_def] >>
+  qpat_x_assum `!y. _` (qspec_then `b` mp_tac) >>
+  simp[expr_size_def] >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[]
+  >~ [`pure_expr e`]
+  >- (drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      drule_all target_extend_result_decodable >> simp[]) >>
+  drule_all target_extend_result_decodable >> simp[]
+QED
+
+Theorem target_eval_base_header_capacity:
+  contract_storage_well_formed cx st /\
+  EVERY pure_expr (target_indices bt) /\
+  eval_base_place cx bt st =
+    (INL (PlaceR (StoragePlace tr slot (ArrayTV etv (Dynamic cnt)))),st') ==>
+  w2n (lookup_storage slot (get_storage cx st tr)) <= cnt
+Proof
+  strip_tac >> drule_all target_eval_base_decodable >>
+  simp[target_result_decodable_def] >> strip_tac >>
+  drule target_storage_decodable_capacity >> simp[]
+QED
