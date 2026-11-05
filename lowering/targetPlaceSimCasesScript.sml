@@ -849,3 +849,86 @@ Proof
     simp[extend_place_def, extend_storage_place_def, bind_def, return_def] >>
   drule_all extend_place_storage_array_slots >> simp[]
 QED
+
+Theorem eval_base_place_pure_storage_invariant:
+  !bt cenv cx env es tr slot tv es'.
+    target_pre cenv cx env bt es /\
+    ~EXISTS expr_has_effect (target_indices bt) /\
+    eval_base_place cx bt es =
+      (INL (PlaceR (StoragePlace tr slot tv)),es') ==>
+    storage_read_live cx tr (get_storage cx es' tr) slot tv /\
+    slots_in_range (get_storage cx es' tr) (w2n slot) tv
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
+           type_check_def, assert_def, AllCaseEqs(), return_def, raise_def])
+  >- (metis_tac[eval_base_place_global_storage_invariant])
+  >- (strip_tac >> rpt gen_tac >> strip_tac >>
+      imp_res_tac (cj 2 target_pre_sub) >>
+      gvs[target_indices_def, listTheory.EXISTS_APPEND] >>
+      qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+      imp_res_tac read_result_state >> gvs[] >>
+      rename1 `eval_expr cx e es1 = (INL raw,es2)` >>
+      `get_storage cx es2 tr = get_storage cx es1 tr` by
+        (irule eval_expr_noeffect_storage >> goal_assum (drule_at Any) >> simp[]) >>
+      Cases_on `pv` >>
+      gvs[extend_place_def, bind_def, return_def, raise_def, AllCaseEqs()]
+      >- (Cases_on `p` >>
+          gvs[extend_place_def, bind_def, ignore_bind_def, lift_sum_def,
+              extend_memory_place_def, return_def, raise_def, AllCaseEqs()] >>
+          drule extend_storage_place_subregion >> strip_tac >> gvs[] >>
+          rename1 `eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr0 slot0 tv0)),es1)` >>
+          `storage_read_live cx tr0 (get_storage cx es1 tr0) slot0 tv0 /\
+           slots_in_range (get_storage cx es1 tr0) (w2n slot0) tv0` by
+            (first_x_assum irule >> qexistsl_tac [`cenv`,`env`,`es`] >> simp[]) >>
+          `get_storage cx es2 tr0 = get_storage cx es1 tr0` by
+            (irule eval_expr_noeffect_storage >> goal_assum (drule_at Any) >> simp[]) >>
+          conj_tac
+          >- (drule_at (Pos last) extend_storage_place_read_live >> simp[]) >>
+          drule_at (Pos last) extend_storage_place_slots >> simp[]) >>
+      rename1 `eval_base_place cx bt es = (INL (HashMapRef tr0 slot0 kt vt),es1)` >>
+      drule eval_base_place_region >> simp[storage_result_region_def] >> strip_tac >>
+      Cases_on `vt` >>
+      gvs[bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+      rename1 `read_result cx raw es2 = (INL key,es2)` >>
+      drule storage_mapping_region_step >>
+      disch_then (qspec_then `key` mp_tac) >>
+      simp[storage_mapping_region_def] >> strip_tac >>
+      qpat_x_assum `!subs leaf_slot leaf_tv. _`
+        (qspecl_then [`[]`,`hashmap_slot slot0 (encode_hashmap_key kt key)`,`tv`] mp_tac) >>
+      simp[resolve_hashmap_leaf_def] >> strip_tac >>
+      Cases_on `evaluate_type (get_tenv cx) t` >>
+      gvs[return_def, raise_def] >>
+      conj_tac
+      >- (irule declared_storage_region_read_live >> goal_assum (drule_at Any)) >>
+      `expr_sim_inv cenv cx env es1` by
+        (irule eval_base_place_sim_inv >> goal_assum (drule_at Any) >> simp[]) >>
+      `expr_body_pre cenv cx env e es1` by
+        gvs[target_pre_def, target_indices_pre_def] >>
+      drule_all exprSimHypsTheory.expr_body_pre_eval_result >> strip_tac >>
+      `contract_storage_well_formed cx es'` by gvs[expr_sim_inv_def] >>
+      irule contract_storage_well_formed_region >>
+      goal_assum (drule_at Any) >> simp[get_storage_backend_eq] >>
+      qexists_tac `tr` >> goal_assum (drule_at Any) >> simp[]) >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  imp_res_tac (cj 1 target_pre_sub) >>
+  gvs[target_indices_def] >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  gvs[] >> Cases_on `pv` >>
+  gvs[extend_place_def, bind_def, ignore_bind_def, lift_sum_def,
+      extend_memory_place_def, return_def, raise_def, AllCaseEqs()] >>
+  rename1 `eval_base_place cx bt es = (INL (PlaceR p),es1)` >>
+  Cases_on `p` >>
+  gvs[extend_place_def, bind_def, ignore_bind_def, lift_sum_def,
+      extend_memory_place_def, return_def, raise_def, AllCaseEqs()] >>
+  drule extend_storage_place_subregion >> strip_tac >> gvs[] >>
+  rename1 `eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr0 slot0 tv0)),es1)` >>
+  `storage_read_live cx tr0 (get_storage cx es1 tr0) slot0 tv0 /\
+   slots_in_range (get_storage cx es1 tr0) (w2n slot0) tv0` by
+    (first_x_assum irule >> qexistsl_tac [`cenv`,`env`,`es`] >> simp[]) >>
+  conj_tac
+  >- (drule_at (Pos last) extend_storage_place_read_live >> simp[]) >>
+  drule_at (Pos last) extend_storage_place_slots >> simp[]
+QED
