@@ -321,6 +321,35 @@ Proof
   disch_then irule >> simp[]
 QED
 
+Theorem reduce_depth_plan_holds:
+  !fuel target_ops target_op f target_len ps ops ps' at.
+    reduce_depth_plan fuel target_ops target_op f target_len ps = (ops,ps') /\
+    plan_holds ps at ==> plan_holds ps' at
+Proof
+  Induct >> simp[reduce_depth_plan_def] >> rpt gen_tac >>
+  Cases_on `f + 1 < target_len` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth target_op f target_len ps.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  Cases_on `dist <= 16` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  Cases_on `select_spill_candidate ps.ps_stack target_ops dist target_len` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `select_spill_candidate _ _ _ _ = SOME cand` >>
+  Cases_on `do_spill_at cand ps` >> simp[] >>
+  rename1 `do_spill_at _ _ = (sops,ps1)` >>
+  Cases_on `reduce_depth_plan fuel target_ops target_op f target_len ps1` >>
+  simp[] >> strip_tac >> gvs[] >>
+  `1 <= LENGTH ps.ps_stack` by
+    (drule stack_get_unfixed_depth_bound >> simp[]) >>
+  `cand < LENGTH ps.ps_stack` by
+    metis_tac[planWfTheory.select_spill_candidate_bound] >>
+  drule_all do_spill_at_plan_holds >> strip_tac >>
+  first_x_assum (qspecl_then [`target_ops`, `target_op`, `f`, `target_len`, `ps1`]
+    mp_tac) >> simp[]
+QED
+
 Definition alias_var_mass_def:
   alias_var_mass x ps =
     LIST_ELEM_COUNT (Var x) ps.ps_stack +
