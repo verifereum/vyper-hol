@@ -26,7 +26,7 @@ Theory stmtSimAssignPlace
 Ancestors
   bodySim supportedTargets supportedDecls
   placeStore targetPlaceSimCases targetPlaceSim targetPlaceSimDefs
-  stmtSimDefs exprSimHypsDefs exprSimDefs loweringPosts
+  stmtSimDefs exprSimHypsDefs exprSimDefs typedCopyDomain loweringPosts
   stmtLowering exprLowering compileEnv
   vyperInterpreter vyperState vyperTypeSystem
   venomState
@@ -44,7 +44,8 @@ Theorem compile_assign_place_case:
     target_env_ok cenv cx /\ ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy ==>
+    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
+    acyclic_struct_metadata cenv.ce_struct_fields ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
       (eval_stmt cx (Assign (BaseTarget bt) e)) es
@@ -66,7 +67,8 @@ Theorem assign_place_effectful_index_case:
     target_env_ok cenv cx /\ ~immutable_root cx bt /\
     target_indices_pre cenv cx env bt /\
     expr_vv_sim ctx func cenv cx (expr_type e) e es /\
-    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy ==>
+    expr_body_pre cenv cx env e es /\ cenv.ce_target CapMcopy /\
+    acyclic_struct_metadata cenv.ce_struct_fields ==>
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget bt) e))
       (eval_stmt cx (Assign (BaseTarget bt) e)) es
@@ -86,6 +88,15 @@ Theorem immutable_deploy_assign_case:
     stmt_frag ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Assign (BaseTarget (TopLevelNameTarget nsid)) e))
       (eval_stmt cx (Assign (BaseTarget (TopLevelNameTarget nsid)) e)) es
+Proof
+  cheat
+QED
+
+(* ADMITTED: body_inv relates only the main module's storage and mapping
+   declarations, and target_env_ok asks for every module's; waiting on
+   the same change to body_inv as immutable_deploy_assign_case. *)
+Theorem body_inv_target_env_ok:
+  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> target_env_ok cenv cx
 Proof
   cheat
 QED
