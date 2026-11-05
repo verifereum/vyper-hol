@@ -3,7 +3,7 @@ Ancestors
   targetSubscriptProbe words vyperStorage vyperStorageBackend vyperState
   vyperInterpreter vyperContext vyperValue vfmState
   venomExecSemantics venomState venomInst calleeTransport
-  exprSimLeaves exprSimHyps vyperTypeCallGraph
+  exprSimLeaves exprSimHyps vyperTypeCallGraph compileEnv exprLoweringProps
 Libs
   pairLib
 
@@ -288,4 +288,56 @@ Proof
   pop_assum mp_tac >>
   CONV_TAC (computeLib.RESTR_EVAL_CONV [``num_to_dec_string``]) >>
   simp[]
+QED
+
+(* Entry header observations: the child header is live only before clearing. *)
+Theorem clear_entry_root_header:
+  !k es ss.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss ==>
+    sload 0w ss =
+      lookup_storage 0w (get_storage probe_clear_source_context es F)
+Proof
+  rpt strip_tac >>
+  drule targetSubscriptSimTheory.stmt_state_rel_storage_live_head >>
+  disch_then (qspecl_then [`F`, `0w`,
+    `ArrayTV (ArrayTV (ArrayTV (BaseTV (UintT 256)) (Dynamic 1))
+      (Dynamic 1)) (Dynamic 1)`] mp_tac) >>
+  simp[type_slot_size_def] >> disch_then irule >>
+  irule accountsRelPropsTheory.declared_storage_region_read_live >>
+  qexistsl_tac [`NONE`, `"outer"`, `[]`] >>
+  simp[probe_clear_source_declared_region]
+QED
+
+Theorem clear_entry_child_not_dead[local]:
+  !st b.
+    lookup_storage 0w st <> 0w ==>
+    ~storage_dead probe_clear_source_context F st 1 b
+Proof
+  rpt strip_tac >>
+  gvs[storage_dead_def, probe_clear_source_declared_region,
+      type_slot_size_def, dead_bytes_def, w2n_eq_0] >>
+  decide_tac
+QED
+
+Theorem clear_entry_child_header:
+  !k es ss.
+    stmt_state_rel (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context es ss /\
+    lookup_storage 0w (get_storage probe_clear_source_context es F) <> 0w ==>
+    sload 1w ss =
+      lookup_storage 1w (get_storage probe_clear_source_context es F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `storage_agree
+    (storage_dead probe_clear_source_context F
+      (get_storage probe_clear_source_context es F))
+    (get_storage probe_clear_source_context es F) (contract_storage ss)` by
+    gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
+        get_storage_def, lookup_account_def] >>
+  simp[sload_def] >> sym_tac >>
+  irule accountsRelPropsTheory.word_to_bytes_EL_eq >> rpt strip_tac >>
+  qpat_x_assum `storage_agree _ _ _` mp_tac >>
+  simp[storage_agree_def] >>
+  disch_then irule >> simp[clear_entry_child_not_dead]
 QED
