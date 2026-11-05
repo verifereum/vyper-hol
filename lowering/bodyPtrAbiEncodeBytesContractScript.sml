@@ -88,3 +88,144 @@ Proof
     metis_tac[abi_encoder_bytes_encoding] >>
   qexistsl_tac [`p`, `t`, `H`, `un`] >> asm_rewrite_tac []
 QED
+
+(* Recursive resource-interface audit (C1.4.17.6.6).
+   This is a call-site table, NOT a theorem asserting invariant closure.
+   References are to the current source definitions, not an S1 path lift.
+
+   Notation used only in this comment:
+   E = LENGTH (enc at av), C = reserved output capacity, B = source base,
+   K = source-read capacity, D = destination base.  A child uses E_i,K_i.
+   All nonempty windows additionally need no-wrap and coverage.  For every
+   call at compiler state r, saved Vars must be not_fresh_at r; the counted
+   child must preserve lookup_var, provenance and op_taint of all such Vars.
+   A common limit state must bound the final cs_next_var and remain fresh.
+   Protected windows must be disjoint from the ENTIRE reserved child output
+   and every actual child ALLOCA site, including reused sites.  Allocation
+   growth by itself does not establish the reused-site disjointness.
+
+   Branch/call table: defs/abiEncoderScript.sml 180-382
+   * AbiPrimWord (251-253): K>=32, E=32, C>=32; load source word then store
+     destination word; no scratch.  window_word_contract (WindowLeaves)
+     supplies semantics only; existing counted primitive boundaries supply
+     edges, not the complete recursive frame post automatically.
+   * AbiCopy sz (276-279): K>=sz, E=sz, C>=sz; MCOPY uses Lit(n2w sz),
+     returned length is literal.  sz=0 is still an emitted MCOPY; whether its
+     operands need coverage follows the zero-access instruction rule, not
+     the empty-complex return rule.  Source/destination may be endpoints.
+   * AbiBytestring (255-274): n=LENGTH bs, K>=32+n, E=32+round_up_32 n,
+     C>=E; zero last word at D+round_up_32 n then copy 32+n bytes.  Even n=0
+     accesses 32 bytes on both sides.  abi_encode_bytes_contract_path above gives
+     same-endpoint counted semantics, full destination coverage and exterior
+     memory/taint plus older-variable frame, for Var src/dst.  Its source
+     capacity is not E and need not include padding.
+   * AbiComplex [] (304-305): E=0, K can be 0, no instruction, return Lit 0.
+     No provenance may be demanded merely to return that literal.
+   * AbiComplex nonempty (307-337): H=SUM member head sizes.  If dynamic,
+     allocate 32-byte dyn_ptr, initialize H, traverse members, reload cursor;
+     otherwise use Lit 0 as dyn_ptr, traverse and return Lit(n2w H).
+     Member i source = B+span(TAKE i infos), where span sums mem_sz, and
+     K_i<=mem_sz_i with span+K_i<=K.  head offset h sums abi_sz.  elem_src
+     is ALWAYS ADD-produced Var, even offset zero.  Child dst is described
+     next.  Remainder recursion keeps original dst/src and cursor, NOT a
+     sliced source operand.  Protect source, completed head/tails and cursor.
+   * Static child (236-238): ADD-produced static_loc at D+h, recurse there
+     with child_ptr.  Can choose C_i=E_i (or a proven disjoint larger slice),
+     need h+E_i<=C.  No dyn_ptr read, so Lit 0 passed by static complex is
+     inert.  E_i=0 still emits address ADD but must not require memory access.
+   * Dynamic child (240-247): load off from 32-byte dyn_ofst_ptr, child_dst
+     is ADD-produced Var at D+off, recurse, then store off at D+h and
+     off+E_i back to cursor.  Need off+E_i<=C, h+32<=C, clean off and E_i,
+     coverage of child suffix and saved head slot/cursor after recursion.
+     Choose C_i=E_i to avoid reserving a suffix overlapping protected siblings;
+     choosing C-off needs a separate proof of all protected disjointness.
+     Child exterior frame protects cursor and head when disjoint from child
+     output and child scratch sites.  Source K_i comes from parent window.
+   * AbiDynArray entry (281-302): ALWAYS allocate parent_dyn_ptr (32 bytes),
+     initialize zero, MLOAD source count N, MSTORE destination count, run
+     loop, then load/update/load parent cursor.  Thus K>=32 and C>=32 even
+     N=0.  Parent cursor must be protected across the complete loop.
+   * Static-element loop (191-225): allocate i_ptr (32 bytes); index j;
+     source child B+32+j*msz with K_j<=msz and 32+j*msz+K_j<=K;
+     destination D+32+j*asz with E_j=asz.  Need C>=32+N*asz.
+     Calls static_info, not recursive to_buf: admissibility must select
+     PrimWord or Copy.  Both child addresses are ADD-produced Vars.
+     Preserve clean count, root operands, i_ptr and parent_dyn_ptr; increment
+     index, JMP, reload count at exit, return 32+N*asz.  Empty loop still
+     initializes/loads cursor and branches, but never reads a child.
+   * Dynamic-element loop (339-382): allocate i_ptr and dyn_ptr (32 each).
+     off_j=N*asz+SUM tails(TAKE j avs), child source as above, destination
+     D+32+off_j; head slot D+32+j*asz.  Need
+       32+off_j+E_j<=C, 32+j*asz+32<=C, and C>=E(array).
+     Recurse on ADD-produced Var/Var with C_j=E_j; preserve head slot,
+     i_ptr, dyn_ptr, parent_dyn_ptr, completed encoded prefix and source.
+     Suffix stores off_j, off_j+E_j, j+1 then backedge; exit returns
+     32+off_N.  Register only actual ALLOCA sites, excluding outer cursors.
+
+   Semantic interfaces actually available:
+   abiEncoderWindowScript.sml window_input rules 8-54 and *_iff theorems
+   give EXACT K_i bounds above, without pointer provenance or taint facts.
+   abiEncoderWindowContractScript.sml abi_encoder_window_pre (9-29) asks
+   disjointness only for LIVE E, NOT reserved C; its alloca reuse clauses
+   range over actual opcode ALLOCA and require sz=32.  window_strong_contract
+   (207-213) produces window_strong_result; projections
+   window_strong_result_effect/growth/sizes (247-267) give registered effects
+   on window_alloca_sites, growth, 32-byte sizes, but NOT counted pointer paths.
+   abiEncoderWindowComplexScript.sml window_complex_strong_contract (378):
+     (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei)
+     ==> window_strong_contract (AbiComplex infos).
+   abiEncoderWindowArrayScript.sml window_array_strong_contract (372):
+     window_strong_contract ei ==>
+     window_strong_contract (AbiDynArray ei asz msz active).
+   abiEncoderWindowChildScript.sml window_dynamic_child_call (331-357)
+   threads prefix, child result, suffix code and saved values, but requires
+   an S1 window_strong_contract and returns window_phase, NOT gas_path_ptr.
+   Its Lit(n2w(D+off)) in window_pre is a specification operand, not the
+   actual compiler's recursive destination.
+   abiEncoderWindowArrayInvariantScript.sml window_array_inv (135-149)
+   tracks semantic prefix, count, index/cursor values and root resources;
+   window_array_transition_source/cursor_frame (81-103) transport memory
+   windows.  Neither interface carries ghost coverage, memory cleanliness,
+   saved provenance/taint, nor a common freshness limit across the backedge.
+
+   Target entry / operand audit:
+   defs/exprLoweringScript.sml 3362-3394 has three staging branches:
+   singleton word allocates/stores 32-byte tmp (Var); tuple staging allocates
+   type_memory_bytes cenv (TupleT arg_tys) (Var); singleton nonword unwraps.
+   unwrap_value (965-978) returns an existing LocMemory operand unchanged.
+   compile_name_vv (1490-1498) explicitly supplies Lit(n2w offset) for MemLoc
+   and the arbitrary stored operand ptr_op for PtrVar.  Thus Var-only source
+   is NOT justified for top-level recursive entry.  Operand datatype cases
+   must be handled generically or eliminated by an existing validity premise;
+   no unverified claim that PtrVar can contain only Vars is made here.
+   All internal to_buf callers produce Var destinations; complex and array
+   recursion produce Var sources.  static child passes its source through.
+   The only literal recursive control operand is inactive complex dyn_ptr;
+   other literals are sizes/offsets/zeros, not memory pointers created here.
+   defs/builtinAbiScript.sml 44-71 allocates
+     T=32+32*word_size(maxlen+mid_size), mid_size=0 or 4,
+   then ADD-produces destination at buffer+32+mid_size.  Available reserved
+   capacity is C=T-(32+mid_size), not T or actual E.  Need E<=maxlen<=C.
+   Method-id MSTORE at buffer+32 covers 32 bytes and may overlap data start;
+   it precedes recursion.  Final length MSTORE needs preserved buffer operand
+   and coverage, not merely the encoder's live E-byte write footprint.
+
+   Missing implications for strategist refinement, NOT target falsehood:
+   (1) General operand (in particular MemLoc literal) input coverage/cleanliness
+       boundary, including zero-capacity branch; Var-only bytes is insufficient.
+   (2) Child window extraction must combine semantic K_i witnesses with root
+       coverage, clean source, no-wrap and E_i output slices; live E_i capacity
+       avoids unnecessarily protecting the whole remaining output suffix.
+   (3) Actual scratch allocation/reuse must establish source/output/protected
+       disjointness and saved cursor coverage, excluding outer cursor sites.
+   (4) Prefix+IH+suffix contract closure: older-variable ghost preservation,
+       clean output/length, exact exterior memory/taint frame on actual sites,
+       and alloca resources must hold on ONE counted endpoint.
+   (5) Array loop invariant needs counted header/backedge/exit paths, j<=N,
+       clean count/index/cursors, root capacity, frame and common limit-state
+       freshness in addition to S1's semantic invariant; validate both loops.
+   (6) Staging establishes window_input/admissibility/source capacity and the
+       literal pointer case; top-level output reservation covers full lowered
+       bytestring type even when runtime encoding is short or zero.
+   No induction skeleton or new predicate is introduced by this diagnostic.
+*)
