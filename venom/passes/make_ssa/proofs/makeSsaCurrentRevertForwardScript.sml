@@ -14,7 +14,7 @@
 Theory makeSsaCurrentRevertForward
 Ancestors
   makeSsaCurrentDefs contextCodegenRel venomWf cfgWf venomInst irSupply
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract makeSsaRfPipeline makeSsaRfTransport
 
 Theorem make_ssa_current_fn_revert_forward_at:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
@@ -28,5 +28,8 @@ Theorem make_ssa_current_fn_revert_forward_at:
   revert_forward_at bb'
     (k + (LENGTH bb'.bb_instructions - LENGTH bb.bb_instructions))
 Proof
-  cheat
+  strip_tac >>
+  `all_reachable fn` by fs[make_ssa_input_ok_def] >>
+  drule_all rf_make_ssa_current_fn_certificate >> strip_tac >>
+  irule rf_phase_certificate_at >> metis_tac[]
 QED
