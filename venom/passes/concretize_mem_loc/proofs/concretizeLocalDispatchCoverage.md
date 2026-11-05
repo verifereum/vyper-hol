@@ -257,3 +257,65 @@ not restated. The frozen call ghost clears variable taint rather than installing
 a new parameter-taint vector. PARAM output preservation, callee local relation,
 control and execution composition remain open. Build checked by holbuild
 (TO_concretize_sim-20261105T054124Z_m10439_t001).
+
+## Frame composition interface reconciliation (E0318 follow-up)
+
+This section supersedes the stale PARAM row and the residual parameter-ghost
+claims above, but does not promote the INVOKE row to complete.
+
+| Composition use site | Authoritative existing exports | What remains |
+|---|---|---|
+| Evaluate caller arguments | `argument_roots_evaluation`, `argument_roots_setup` in concretizeLayoutArgumentRoots | Carry label equality and caller guarded relation; no equality of opaque arguments. |
+| Normalize disciplined incoming roots | `disciplined_invoke_roots`, `disciplined_invoke_setup_roots` in concretizeLayoutCalleeRoots | Supply shape, instruction membership, fn_ptr_ok and taint_ok from reached caller. Output is clean_resolved_root indexed by MAP (resolved_op caller_rv) ops. |
+| Install/read parameters | `parameter_roots_setup_callee`, `parameter_roots_read` in concretizeLayoutParameterRoots | Setup requires target blocks nonempty. FMP_PARAM remains excluded; RETPC_PARAM is separate and opaque. |
+| PARAM actual successor | `resolved_parameter_step`, `resolved_call_parameter_step` in concretizeLayoutParameterSteps | Complete base-step value/origin/actual source and independent target taint preservation at unchanged R; generic paired-update Obs stability. No parameter-taint vector is needed. Event-derived next-demand restriction, control/index and actual step_inst connection remain outside this theorem. |
+| Raw PG consistency | `resolution_arguments_erasure` in frameResolvedOrigins, consumed by resolved_call_parameter_step | Do not add another erasure assumption or restate this lemma. |
+| Call environment | `relocation_environment_setup_callee` and `relocation_environment_return_plumbing` in concretizeLayoutFrameEnvironment | Both relocation_env and relocation_reader_context transported. Return needs equal completed-callee gas tails; no returned value relation, origin/taint restoration or control alignment is asserted. |
+
+Residual generic call obligations are: paired callee lookup and entry/PHI
+control; initialization of callee variable domains, origin maps and taints;
+saved caller lifetime/resolution transport; recursive successful callee
+execution at adequate common fuel; related returned FRONT values rather than
+equal final return tokens; restoring caller origins/taints and output binding;
+and demand preservation across push/pop. Environment return plumbing alone
+cannot discharge these. No existing export above proves a callee run.
+
+### Demand/history scope
+
+`frameRelocationBinding.joint_relocation_demand` is indexed exclusively by
+`q0::qs` and `es` of a **source** joint_trace. Its future observed read,
+write-complement and activation_cache witnesses are source witnesses.
+`joint_relocation_demand_retained` consumes source joint_trace and empty initial
+allocation cache; `joint_relocation_demand_clean` and nonrevert properties
+likewise concern that source trace. The concrete Layout local memory and
+clean-value consumers use source ordinary events plus a target successful-step
+witness they construct, not a target joint_trace premise. Independent target
+taint inclusion is a pointwise successor invariant, not target-history
+reflection. A search of concretizeLayout proof sources found no target-trace,
+target-history or reflection premise. Thus this audit identifies **no current
+local demand consumer requiring universal target-history reflection**.
+This does not prove it unnecessary for every unfinished terminal/external
+request boundary; those interfaces must be audited when designed. In
+particular no removed stage-taint-only obligation is silently reinstated.
+
+### Existing execution replay and exact branch facts
+
+`venom/compiler/frameExecutionPrefixScript.sml` already provides
+`prefix_step_fuel_mono`, `prefix_exec_fuel_mono`, `local_return_suffix_next`,
+`local_return_suffix_block`, `execution_prefix_continuation` and
+`execution_prefix_return`. These construct existential-fuel IntRet suffixes
+through wf functions and active instructions. Reuse them for that interface;
+they are not a fixed-fuel, arbitrary-result finite block-prefix relation.
+No generic finite segment replay export was found in the searched frame
+libraries. A new segment boundary must not duplicate those return-suffix facts.
+
+Actual exec_block (venomExecSemanticsScript.sml:1732-1745) has no independent
+pre-state halted test: a successful nonterminator continues with post-state
+index set to SUC of the **pre-state** index, regardless of post.vs_halted.
+Terminator OK converts to Halt exactly when post.vs_halted; all non-OK
+constructors propagate immediately. These exact conditions, not an invented
+no-halt transition, govern the finite replay definition. INVOKE can only be
+used through an actual step_inst witness; replay does not construct recursive
+callee fuel. run_blocks separately resets the index after parallel PHIs and
+uses the decremented block fuel. Forward unequal-length source/target prefixes
+remain compatible with this interface.
