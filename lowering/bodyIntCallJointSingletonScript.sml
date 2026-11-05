@@ -3,7 +3,8 @@ Ancestors
   exprSimAggregateSource exprSimWordArgs vyperState
   exprSimSource exprSimHypsDefs vyperTypeSystem
   valueEncoding valueEncodingProps venomState
-  bodyIntCallGasPrefix bodyIntCallJointTuple exprSimBuffer exprSimAlloc
+  bodyIntCallGasPrefix bodyIntCallJointTuple bodyIntCallJointWrite
+  exprSimBuffer exprSimAlloc
   context compileEnv emitHelper exprLowering exprLoweringProps
 
 (* Materialise the sole child on its actual evaluation endpoint. *)
@@ -383,3 +384,41 @@ Resume joint_singleton_endpoint_post[assemble]:
        mstore_mem_word_at_same, valueEncodingTheory.val_to_w256_def]
 QED
 Finalise joint_singleton_endpoint_post
+
+(* Owned windows and initialized immutables are framed from the original entry.
+   Register/observation updates are arbitrary here: only memory is observed. *)
+Theorem joint_singleton_endpoint_resources:
+  compile_alloc_buffer 32 sa = (buf,sm) /\ fn_has_code sa sm func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  run_inst_seq (emitted_insts sa sm) s0 = OK t /\
+  eval_operand buf.buf_operand t = SOME p /\
+  EVERY (\(off,len).
+    (?aid b sz. aid < sa.cs_next_id /\
+      FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
+      b <= off /\ off + len <= b + sz) \/
+    (?name b sz. local_region ce es.scopes s0 name b sz /\
+      b <= off /\ off + len <= b + sz)) hs ==>
+  let r = (mstore (w2n p) w
+    (update_var (STRING #"%" (toString sn.cs_next_var)) p
+      (update_var (STRING #"%" (toString sm.cs_next_var)) w
+        (t with vs_gas_readings := readings)))) with vs_inst_idx := ix in
+  EVERY (\(off,len). mem_bytes_at off len r.vs_memory =
+                     mem_bytes_at off len s0.vs_memory) hs /\
+  (ce.ce_is_ctor ==> !name tv v off.
+    FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+      NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+      name = SOME (tv,v) ==>
+    mem_bytes_at off (type_memory_size tv) r.vs_memory =
+    mem_bytes_at off (type_memory_size tv) s0.vs_memory)
+Proof
+  strip_tac >>
+  `32 < dimword (:256)` by simp[wordsTheory.dimword_def] >>
+  drule_all (GEN_ALL (SRULE [] (Q.INST [`k` |-> `0`, `sz` |-> `32`]
+    (SPEC_ALL joint_alloc_buffer_write)))) >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  gvs[] >>
+  simp[LET_THM, mstore_def, update_var_def] >>
+  gvs[mstore_def] >> first_assum ACCEPT_TAC
+QED
