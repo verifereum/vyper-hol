@@ -85,6 +85,89 @@ Proof
   gvs[lookup_block_def]
 QED
 
+(* Insertion only adds PHIs at the head. *)
+Theorem insert_phi_lookup_prefix:
+  lookup_block l bs = SOME b /\ phi.inst_opcode = PHI ==>
+  ?b' pre.
+    lookup_block l
+      (MAP (\bb. if bb.bb_label = target then
+                   insert_phi_at_block phi bb else bb) bs) = SOME b' /\
+    b'.bb_instructions = pre ++ b.bb_instructions /\
+    EVERY (\i. i.inst_opcode = PHI) pre
+Proof
+  rpt strip_tac >>
+  drule_at Any lookup_block_map_relation >>
+  disch_then (qspec_then
+    `\bb. if bb.bb_label = target then insert_phi_at_block phi bb else bb`
+    mp_tac) >>
+  simp[makeSsaDefsTheory.insert_phi_at_block_def] >>
+  (impl_tac >- (gen_tac >> IF_CASES_TAC >> simp[])) >> strip_tac >>
+  Cases_on `b.bb_label = target`
+  >- (qexistsl [`insert_phi_at_block phi b`, `[phi]`] >>
+      gvs[makeSsaDefsTheory.insert_phi_at_block_def]) >>
+  qexistsl [`b`, `[]`] >> gvs[]
+QED
+
+Theorem process_frontiers_supply_prefix:
+  !fs s var pm li bs rest hp bs' rest' hp' s' l b.
+  process_frontiers_supply s var pm li bs rest hp fs =
+    (bs',rest',hp',s') /\ lookup_block l bs = SOME b ==>
+  ?b' pre. lookup_block l bs' = SOME b' /\
+    b'.bb_instructions = pre ++ b.bb_instructions /\
+    EVERY (\i. i.inst_opcode = PHI) pre
+Proof
+  Induct >- (simp[process_frontiers_supply_def] >>
+    rpt strip_tac >> qexistsl [`b`, `[]`] >> simp[]) >>
+  pop_assum $ mk_asm "ih" >>
+  simp[process_frontiers_supply_def] >> rpt gen_tac >>
+  IF_CASES_TAC >> gvs[]
+  >- (rpt strip_tac >> asm "ih" drule_all >> simp[]) >>
+  IF_CASES_TAC >> gvs[]
+  >- (rpt strip_tac >> asm "ih" drule_all >> simp[]) >>
+  rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  drule insert_phi_lookup_prefix >>
+  disch_then (qspecl_then [`h`, `build_phi_inst_supply id var
+     (case ALOOKUP pm h of NONE => [] | SOME ps => ps)`] mp_tac) >>
+  simp[build_phi_inst_supply_def] >> strip_tac >>
+  gvs[build_phi_inst_supply_def] >>
+  asm "ih" drule_all >> strip_tac >>
+  qexistsl [`b''`, `pre' ++ pre`] >> simp[EVERY_APPEND, APPEND_ASSOC]
+QED
+
+Theorem insert_phis_for_var_supply_prefix:
+  !s var df pm li bs wl hp bs' s' l b.
+  insert_phis_for_var_supply s var df pm li bs wl hp = (bs',s') /\
+  lookup_block l bs = SOME b ==>
+  ?b' pre. lookup_block l bs' = SOME b' /\
+    b'.bb_instructions = pre ++ b.bb_instructions /\
+    EVERY (\i. i.inst_opcode = PHI) pre
+Proof
+  recInduct insert_phis_for_var_supply_ind >>
+  rw[insert_phis_for_var_supply_def] >> gvs[] >>
+  rpt CASE_TAC >> gvs[] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  drule_all process_frontiers_supply_prefix >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`b''`, `pre' ++ pre`] >> simp[EVERY_APPEND, APPEND_ASSOC]
+QED
+
+Theorem add_phi_nodes_supply_prefix:
+  !defs s df pm li bs bs' s' l b.
+  add_phi_nodes_supply s df pm li bs defs = (bs',s') /\
+  lookup_block l bs = SOME b ==>
+  ?b' pre. lookup_block l bs' = SOME b' /\
+    b'.bb_instructions = pre ++ b.bb_instructions /\
+    EVERY (\i. i.inst_opcode = PHI) pre
+Proof
+  Induct
+  >- (simp[add_phi_nodes_supply_def] >> rpt strip_tac >>
+      qexistsl [`b`, `[]`] >> simp[]) >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[add_phi_nodes_supply_def] >> pairarg_tac >> gvs[] >> rpt strip_tac >>
+  drule_all insert_phis_for_var_supply_prefix >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`b''`, `pre' ++ pre`] >> simp[EVERY_APPEND, APPEND_ASSOC]
+QED
+
 Theorem make_ssa_current_fn_block_shape:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
