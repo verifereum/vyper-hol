@@ -1300,3 +1300,275 @@ Proof
   asm_rewrite_tac[] >> strip_tac >>
   drule_all toplevel_copy_counter_suffix_ghost >> simp[]
 QED
+
+Theorem toplevel_copy_register_step_allocation_frame:
+  MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD] /\
+  step_inst_base i s = OK t ==>
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp
+Proof
+  strip_tac >> conj_tac
+  >- (irule venomMemPropsTheory.step_inst_base_preserves_allocas >>
+      qexists_tac `i` >> gvs[] >> metis_tac[]) >>
+  irule venomInstProofs1Theory.step_inst_base_preserves_fmp_ordinary >>
+  qexists_tac `i` >>
+  gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
+QED
+
+Theorem toplevel_copy_seq_memory_frame:
+  !code G tn s Gf tnf.
+    EVERY (\i. MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD]) code /\
+    inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+    tnf.t_mem = tn.t_mem
+Proof
+  Induct_on `code` >> simp[inst_seq_ptr_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  `MEM h.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD]` by simp[] >>
+  drule_all toplevel_copy_register_step_allocation_frame >> strip_tac >>
+  first_x_assum drule >>
+  drule_all toplevel_copy_register_taint_frame >> simp[]
+QED
+
+Theorem toplevel_copy_source_prefix_ghost:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  eval_operand src s = SOME a /\ lookup_var cv s = SOME c /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]]
+    s Gf tnf ==>
+  op_taint tnf (Var vv) = key_taint (toplevel_copy_source_taint loc tn) (a+c)
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id ADD [src;Var cv] [sv]` >>
+  qabbrev_tac `j = mk_inst (id+1)
+    (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]` >>
+  qabbrev_tac `u = update_var sv (a+c) s` >>
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+         exec_pure2_def, eval_operands_def, eval_operand_def] >>
+  qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = update_var vv (copy_runtime_word loc s (a+c)) u1` >>
+  `step_inst_base j u1 = OK v` by
+    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`,
+      step_inst_base_def, mk_inst_def, exec_read1_def, eval_operand_def,
+      lookup_var_def, update_var_def, FLOOKUP_UPDATE, copy_runtime_word_def,
+      sload_def, tload_def, contract_storage_def, contract_transient_def] >>
+     Cases_on `loc = LocStorage` >> simp[]) >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
+  `eval_operand (Var sv) u1 = SOME (a+c)` by
+    simp[Abbr `u1`, Abbr `u`, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  simp[Abbr `i`, Abbr `j`, toplevel_copy_source_taint_def, step_taint_def,
+       store_taint_def, adopt_reset_def, set_var_taint_def, out_taint_def,
+       op_taint_def, mk_inst_def, FLOOKUP_UPDATE]
+QED
+
+Theorem toplevel_copy_store_middle_ghost:
+  ALL_DISTINCT [cv;vv;mv;dv] /\ dst <> mv /\
+  lookup_var vv s = SOME z /\
+  lookup_var cv s = SOME (n2w k) /\ lookup_var dst s = SOME (n2w b) /\
+  b + 32*k < dimword (:256) /\
+  inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+1) ADD [Var dst;Var mv] [dv];
+     mk_inst (id+2) MSTORE [Var dv;Var vv] []] s Gf tnf ==>
+  tnf.t_mem = (tn.t_mem DIFF toplevel_copy_word_region b k) UNION
+    {b + 32*k + j | j IN op_taint tn (Var vv)}
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id MUL [Var cv;Lit 32w] [mv]` >>
+  qabbrev_tac `j = mk_inst (id+1) ADD [Var dst;Var mv] [dv]` >>
+  qabbrev_tac `h = mk_inst (id+2) MSTORE [Var dv;Var vv] []` >>
+  qabbrev_tac `u = update_var mv (n2w (32*k)) s` >>
+  `step_inst_base i s = OK u` by
+    (simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+          exec_pure2_def, eval_operands_def, eval_operand_def] >>
+     simp[NoAsms, word_mul_n2w]) >>
+  qabbrev_tac `u1 = u with vs_inst_idx := SUC s.vs_inst_idx` >>
+  qabbrev_tac `v = update_var dv (n2w (b+32*k)) u1` >>
+  `step_inst_base j u1 = OK v` by
+    (simp[Abbr `j`, Abbr `v`, Abbr `u1`, Abbr `u`, step_inst_base_def,
+         mk_inst_def, exec_pure2_def, eval_operands_def, eval_operand_def,
+         lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def, GSYM word_add_n2w]) >>
+  qabbrev_tac `v1 = v with vs_inst_idx := SUC u1.vs_inst_idx` >>
+  `u1.vs_inst_idx = SUC s.vs_inst_idx` by simp[Abbr `u1`] >>
+  qabbrev_tac `w = mstore (b+32*k) z v1` >>
+  `step_inst_base h v1 = OK w` by
+    (simp[Abbr `h`, Abbr `w`, Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`,
+          step_inst_base_def, exec_write2_def, mk_inst_def, eval_operands_def,
+          eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+     gvs[lookup_var_def] >> REFL_TAC) >>
+  qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[inst_seq_ptr_def] >> strip_tac >> gvs[] >>
+  `u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
+   v.vs_allocas = u1.vs_allocas /\ v.vs_fmp = u1.vs_fmp` by
+    simp[Abbr `u`, Abbr `v`, update_var_def] >>
+  `w.vs_allocas = v1.vs_allocas /\ w.vs_fmp = v1.vs_fmp` by
+    (qpat_x_assum `step_inst_base h v1 = OK w` mp_tac >>
+     simp[Abbr `h`, step_inst_base_def, mk_inst_def, exec_write2_def,
+          eval_operands_def, AllCaseEqs(), mstore_def] >>
+     rpt strip_tac >> gvs[]) >>
+  `eval_operand (Var dv) v1 = SOME (n2w (b+32*k))` by
+    simp[Abbr `v1`, Abbr `v`, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  `w2n ((n2w (b+32*k)):256 word) = b+32*k` by simp[] >>
+  `MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD] /\
+   MEM j.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD]` by
+    simp[Abbr `i`, Abbr `j`, mk_inst_def] >>
+  `!tx. (step_taint i s u tx).t_mem = tx.t_mem /\
+    (step_taint j u1 v tx).t_mem = tx.t_mem` by
+    metis_tac[toplevel_copy_register_taint_frame] >>
+  `!tx. op_taint (step_taint i s u tx) (Var vv) = op_taint tx (Var vv) /\
+    op_taint (step_taint j u1 v tx) (Var vv) = op_taint tx (Var vv)` by
+    simp[Abbr `i`, Abbr `j`, step_taint_other_output, mk_inst_def] >>
+  `new_site_bytes v1 w = {}` by
+    (simp[new_site_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  `range_bytes (step_writes h v1 w) = toplevel_copy_word_region b k` by
+    (simp[Abbr `h`, step_writes_def, source_memory_write_ranges_def,
+          codegenRelTheory.fixed_source_write_range_def,
+          mk_inst_def, range_bytes_def, toplevel_copy_word_region_def, EXTENSION] >>
+     `eval_operand (Var vv) v1 = SOME z` by
+       (simp[Abbr `v1`, Abbr `v`, Abbr `u1`, Abbr `u`, eval_operand_def,
+             lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> gvs[lookup_var_def]) >>
+     simp[] >> decide_tac) >>
+  simp[Abbr `h`] >>
+  drule_all toplevel_copy_mstore_taint >> simp[]
+QED
+
+Theorem toplevel_copy_source_prefix_run:
+  cv <> sv /\ cv <> vv /\ dst <> sv /\ dst <> vv /\
+  eval_operand src s = SOME a /\ lookup_var cv s = SOME c /\
+  lookup_var dst s = SOME p /\
+  run_inst_seq
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]]
+    s = OK t ==>
+  lookup_var cv t = SOME c /\ lookup_var dst t = SOME p /\
+  lookup_var vv t = SOME (copy_runtime_word loc s (a+c))
+Proof
+  strip_tac >>
+  qabbrev_tac `i = mk_inst id ADD [src;Var cv] [sv]` >>
+  qabbrev_tac `j = mk_inst (id+1)
+    (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]` >>
+  qabbrev_tac `u = update_var sv (a+c) s` >>
+  `step_inst_base i s = OK u` by
+    simp[Abbr `i`, Abbr `u`, step_inst_base_def, mk_inst_def,
+         exec_pure2_def, eval_operands_def, eval_operand_def] >>
+  `step_inst_base j u = OK (update_var vv (copy_runtime_word loc s (a+c)) u)` by
+    (simp[Abbr `j`, Abbr `u`, step_inst_base_def, mk_inst_def,
+          exec_read1_def, eval_operand_def, lookup_var_def, update_var_def,
+          FLOOKUP_UPDATE, copy_runtime_word_def, sload_def, tload_def,
+          contract_storage_def, contract_transient_def] >>
+     Cases_on `loc = LocStorage` >> simp[]) >>
+  gvs[exprLoweringPropsTheory.run_inst_seq_def] >>
+  simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  gvs[lookup_var_def]
+QED
+
+Theorem toplevel_copy_lookup_cursor[local]:
+  lookup_var x (s with vs_inst_idx := n) = lookup_var x s
+Proof
+  simp[lookup_var_def]
+QED
+
+Theorem toplevel_copy_body_memory_ghost:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf ==>
+  tnf.t_mem = (tn.t_mem DIFF toplevel_copy_word_region b k) UNION
+    toplevel_copy_word_taint loc a b tn0 k
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `ALL_DISTINCT _` (strip_assume_tac o SRULE []) >>
+  qpat_assum `~MEM dst _` (strip_assume_tac o SRULE []) >>
+  drule toplevel_copy_inv_source >> strip_tac >>
+  drule toplevel_copy_inv_counter_value >> strip_tac >>
+  drule toplevel_copy_inv_destination >> strip_tac >>
+  drule toplevel_copy_inv_bounds >> strip_tac >>
+  qabbrev_tac `pre = TAKE 2 code` >>
+  qabbrev_tac `rest = DROP 2 code` >>
+  `code = pre ++ rest` by simp[Abbr `pre`, Abbr `rest`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+   EVERY (\i. ~is_terminator i.inst_opcode) rest /\
+   EVERY (\i. MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD]) pre` by
+    (Cases_on `loc = LocStorage` >>
+     gvs[Abbr `pre`, Abbr `rest`, mk_inst_def, is_terminator_def]) >>
+  `?t. run_inst_seq pre s = OK t /\ run_inst_seq rest t = OK r` by
+    (irule toplevel_copy_run_split >> metis_tac[]) >>
+  `?Gm tnm. inst_seq_ptr D 0 ctx fn PG G tn pre s Gm tnm /\
+    inst_seq_ptr D 0 ctx fn PG Gm tnm rest
+      (t with vs_inst_idx := s.vs_inst_idx + LENGTH pre) Gf tnf` by
+    (irule toplevel_copy_seq_split >> metis_tac[]) >>
+  `tnm.t_mem = tn.t_mem` by
+    (drule_all toplevel_copy_seq_memory_frame >> simp[]) >>
+  `pre = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv]]` by
+    gvs[Abbr `pre`] >>
+  `lookup_var cv t = SOME (n2w k) /\ lookup_var dst t = SOME (n2w b) /\
+   lookup_var vv t = SOME (copy_runtime_word loc s (a+n2w k))` by
+    (qpat_assum `run_inst_seq pre s = OK t` mp_tac >>
+     qpat_assum `pre = _` (fn th => pure_rewrite_tac[th]) >> disch_tac >>
+     drule_at (Pat `run_inst_seq _ _ = _`) toplevel_copy_source_prefix_run >>
+     disch_then (qspecl_then [`n2w b`, `dst`, `n2w k`, `a`] mp_tac) >>
+     (impl_tac >- simp[]) >> simp[]) >>
+  `op_taint tnm (Var vv) =
+    key_taint (toplevel_copy_source_taint loc tn) (a+n2w k)` by
+    (qpat_assum `inst_seq_ptr _ _ _ _ _ _ _ pre _ _ _` mp_tac >>
+     qpat_assum `pre = _` (fn th => pure_rewrite_tac[th]) >> disch_tac >>
+     drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
+       toplevel_copy_source_prefix_ghost >> simp[]) >>
+  qabbrev_tac `s1 = t with vs_inst_idx := s.vs_inst_idx + LENGTH pre` >>
+  qabbrev_tac `mid = TAKE 3 rest` >>
+  qabbrev_tac `post = DROP 3 rest` >>
+  `rest = mid ++ post` by simp[Abbr `mid`, Abbr `post`] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) mid /\
+   EVERY (\i. MEM i.inst_opcode [ADD;MUL;ASSIGN;SLOAD;TLOAD]) post` by
+    (simp[NoAsms, Abbr `mid`, Abbr `post`, Abbr `rest`] >>
+     qpat_assum `code = _::_` (fn th => pure_rewrite_tac[th]) >>
+     simp[NoAsms, mk_inst_def, is_terminator_def]) >>
+  `run_inst_seq rest s1 = OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH pre)` by
+    simp[Abbr `s1`, fragExecTheory.run_inst_seq_inst_idx,
+         instIdxIndepTheory.exec_result_map_def] >>
+  `?u. run_inst_seq mid s1 = OK u /\
+    run_inst_seq post u = OK (r with vs_inst_idx := s.vs_inst_idx + LENGTH pre)` by
+    (irule toplevel_copy_run_split >> metis_tac[]) >>
+  `?Gh tnh. inst_seq_ptr D 0 ctx fn PG Gm tnm mid s1 Gh tnh /\
+    inst_seq_ptr D 0 ctx fn PG Gh tnh post
+      (u with vs_inst_idx := s1.vs_inst_idx + LENGTH mid) Gf tnf` by
+    (irule toplevel_copy_seq_split >> metis_tac[]) >>
+  `tnf.t_mem = tnh.t_mem` by
+    (drule_all toplevel_copy_seq_memory_frame >> simp[]) >>
+  `mid = [mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst ((id+2)+1) ADD [Var dst;Var mv] [dv];
+    mk_inst ((id+2)+2) MSTORE [Var dv;Var vv] []]` by
+    (simp[NoAsms, Abbr `mid`, Abbr `rest`] >>
+     qpat_assum `code = _::_` (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  `tnh.t_mem = (tnm.t_mem DIFF toplevel_copy_word_region b k) UNION
+    {b+32*k+j | j IN op_taint tnm (Var vv)}` by
+    (qpat_assum `inst_seq_ptr _ _ _ _ _ _ _ mid _ _ _` mp_tac >>
+     qpat_assum `mid = _` (fn th => pure_rewrite_tac[th]) >> disch_tac >>
+     drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
+       toplevel_copy_store_middle_ghost >>
+     disch_then (qspecl_then [`copy_runtime_word loc s (a+n2w k)`, `k`, `b`] mp_tac) >>
+     (impl_tac >- (simp[Abbr `s1`, toplevel_copy_lookup_cursor] >>
+       `b+32*k < 2**256` by decide_tac >>
+       simp[dimword_def] >> qpat_x_assum `b+32*k < 2**256` mp_tac >> simp[])) >> simp[]) >>
+  drule toplevel_copy_inv_storage_taint >> disch_tac >>
+  drule toplevel_copy_inv_transient_taint >> disch_tac >>
+  simp[] >>
+  AP_TERM_TAC >>
+  simp[toplevel_copy_word_taint_def, key_taint_def,
+       toplevel_copy_source_taint_def, EXTENSION] >> metis_tac[]
+QED
