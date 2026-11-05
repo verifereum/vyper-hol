@@ -2,6 +2,7 @@
 Theory entryReachBodyNestedBytesExecution
 Ancestors
   entryReachBodyNestedOwnedPath entryReachBodyOwnedBytesArray
+  entryReachBodyNestedScratchTransport
   entryReachBodyOperationalPath entryReachBodySequenceObservations
   entryReachBodyExactArrayLoop abiEncoderRegisteredEffect
   abiDecoderDynamicLoopSetup abiDecoderTypedContract abiDecoderContract
@@ -78,7 +79,8 @@ Theorem entry_nested_owned_bytes_execution:
        eval_operand op t = SOME w) /\
     (!id. id <> header_st.cs_next_id ==> FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
     (if FLOOKUP s.vs_allocas header_st.cs_next_id = NONE then
-       t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next)
+       t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next) /\
+    entry_nested_scratch_ready header_st.cs_next_id b cap t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all entry_nested_owned_initializer_boundary >>
@@ -113,6 +115,7 @@ Resume entry_nested_owned_bytes_execution[compose]:
     (if FLOOKUP s.vs_allocas header_st.cs_next_id = NONE then
        t.vs_alloca_next = s.vs_alloca_next+32 else t.vs_alloca_next = s.vs_alloca_next)` by
     suspend "producer_frames" >>
+  `entry_nested_scratch_ready header_st.cs_next_id b cap t` by suspend "scratch_ready" >>
   `entry_decode_path ctx fn s t` by metis_tac[entry_decode_path_trans] >>
   `entry_loop_fields s t` by
     metis_tac[entryReachBodyRegisteredChildTheory.entry_registered_fields_trans] >>
@@ -139,5 +142,19 @@ Resume entry_nested_owned_bytes_execution[producer_frames]:
   POP_ASSUM_LIST (K all_tac) >>
   simp_tac (srw_ss()) [abi_decoder_address_frame_def] >> rpt strip_tac >>
   metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono]
+QED
+Resume entry_nested_owned_bytes_execution[scratch_ready]:
+  `entry_nested_scratch_ready header_st.cs_next_id b cap s` by
+    simp[entry_nested_scratch_ready_def, Excl "enc_def"] >>
+  `FLOOKUP t.vs_allocas header_st.cs_next_id = SOME (q,32)` by
+    fs[entryReachBodyOwnedLoopTheory.entry_owned_loop_resources_def, Excl "enc_def"] >>
+  irule entry_nested_scratch_ready_transition >>
+  goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+  qpat_x_assum `entry_array_init_resources _ _ _ _ _ (_,_,_,_,_,_,_,_,u)` mp_tac >>
+  qpat_x_assum `abi_decoder_address_frame _ s u` mp_tac >>
+  qpat_x_assum `if FLOOKUP s.vs_allocas _ = NONE then _ else _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp_tac (srw_ss()) [entryReachBodyCanonicalBytesArrayTheory.entry_array_init_resources_def,
+    abi_decoder_address_frame_def] >> rpt strip_tac >> gvs[Excl "enc_def"]
 QED
 Finalise entry_nested_owned_bytes_execution
