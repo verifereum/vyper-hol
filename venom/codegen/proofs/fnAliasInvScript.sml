@@ -18,6 +18,34 @@ Ancestors
   fnPlanLineage frameRel codegenRel unitShapeDefs stackPlanGen stackPlanTypes
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
 
+(* Actual single steps followed by normalize_operand, including literal roots. *)
+Definition alias_assign_step_def:
+  alias_assign_step dfg at src <=>
+    ?v inst. at = Var v /\ FLOOKUP dfg.dfg_defs v = SOME inst /\
+      inst.inst_opcode = ASSIGN /\ inst.inst_operands = [src]
+End
+
+Theorem normalize_operand_assign_chain:
+  !dfg visited at.
+    normalize_operand dfg visited at <> at ==>
+    TC (alias_assign_step dfg) at (normalize_operand dfg visited at)
+Proof
+  recInduct normalize_operand_ind >>
+  rpt strip_tac >>
+  gvs[Once normalize_operand_def, AllCaseEqs()] >>
+  Cases_on `FLOOKUP dfg.dfg_defs v` >> gvs[] >>
+  rename1 `FLOOKUP dfg.dfg_defs v = SOME inst` >>
+  Cases_on `inst.inst_operands` >> gvs[] >>
+  rename1 `inst.inst_operands = src::rest` >>
+  Cases_on `rest` >> gvs[] >>
+  gvs[Once normalize_operand_def] >>
+  `alias_assign_step dfg (Var v) src` by
+    (simp[alias_assign_step_def] >> metis_tac[]) >>
+  Cases_on `normalize_operand dfg (v::visited) src = src`
+  >- metis_tac[relationTheory.TC_SUBSET] >>
+  metis_tac[relationTheory.TC_RULES]
+QED
+
 (* Inventory boundaries do not depend on cleanup metadata or allocator fields. *)
 Definition plan_holds_def:
   plan_holds ps at <=> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
