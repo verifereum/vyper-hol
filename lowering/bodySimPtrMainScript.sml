@@ -122,8 +122,7 @@ Proof
 QED
 
 Theorem body_stmts_ptr_ok_sim:
-  !d PG tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es res
-   es'.
+  !d PG tops bindings ctx func cenv cx env env' ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
     (!target. supported_stmts_expr_exists
        (expr_abi_decode_target_root target) ss ==>
@@ -133,10 +132,9 @@ Theorem body_stmts_ptr_ok_sim:
     type_stmts env ret_ty ss = SOME env' /\
     EVERY (stmt_exprs_ok cenv) ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
-    frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
-    eval_stmts cx ss es = (res, es') ==>
+    frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
-      (stmts_env cenv lctx ret_ty ss) es res es'
+      (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 Proof
   metis_tac[body_sim_ptr_mutual, body_stmts_ptr_ok_def]
 QED

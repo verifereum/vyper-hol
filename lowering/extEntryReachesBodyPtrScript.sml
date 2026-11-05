@@ -62,7 +62,8 @@ Theorem external_entry_reaches_body_ptr:
       ghost_inv NONE cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0
         G0 tn0 s0 /\
-      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      ~s0.vs_halted /\ s0.vs_gas_readings = vs.vs_gas_readings /\
+      s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
       cenv.ce_return_buf = NONE /\
       ((!fuel. ptr_safe_run

@@ -27,7 +27,7 @@ End
 
 Definition body_stmt_ptr_ok_def:
   body_stmt_ptr_ok cx s <=>
-    !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
@@ -36,15 +36,14 @@ Definition body_stmt_ptr_ok_def:
       locals_alloc_ok cenv env /\
       type_stmt env ret_ty s = SOME env' /\ stmt_exprs_ok cenv s /\
       call_evaluation_safe cx (int_calls_stmt s) /\
-      frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
-      eval_stmt cx s es = (res, es') ==>
+      frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
       stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
-        (stmt_env cenv lctx ret_ty s) es res es'
+        (stmt_env cenv lctx ret_ty s) (eval_stmt cx s) es
 End
 
 Definition body_stmts_ptr_ok_def:
   body_stmts_ptr_ok cx ss <=>
-    !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
+    !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
@@ -54,10 +53,9 @@ Definition body_stmts_ptr_ok_def:
       type_stmts env ret_ty ss = SOME env' /\
       EVERY (stmt_exprs_ok cenv) ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
-      frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
-      eval_stmts cx ss es = (res, es') ==>
+      frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty ==>
       stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
-        (stmts_env cenv lctx ret_ty ss) es res es'
+        (stmts_env cenv lctx ret_ty ss) (eval_stmts cx ss) es
 End
 
 Definition body_exprs_ptr_ok_def:

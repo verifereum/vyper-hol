@@ -6,13 +6,15 @@
  * TOP-LEVEL:
  *   ghost_inv -- what the ghost owes the source state at a statement
  *     boundary
- *   frag_exec_ptr -- frag_exec with the ghost and pointer safety
+ *   frag_exec_ptr -- frag_exec with the ghost and pointer safety, for
+ *     fixed runs
  *   expr_sim_ptr, expr_vv_sim_ptr, stmt_frag_ptr, frame_ret_ok_ptr --
- *     the twins of expr_sim, expr_vv_sim, stmt_frag, frame_ret_ok
+ *     the twins of expr_sim, expr_vv_sim, stmt_frag, frame_ret_ok, as
+ *     counted paths (fragGasPathPtr's gas_outcome_ptr)
  *)
 Theory bodyPtrDefs
 Ancestors
-  bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
+  fragGasPathPtr gasContext bodySim stmtSimDefs stmtSimProps exprSimDefs exprSimProps exprSimHyps fragExec ptrSafeRun ptrDiscipline
   compileEnv valueEncoding exprLowering exprLoweringProps context
   venomState venomExecSemantics vyperInterpreter vyperTypeSystem list
   finite_map words
@@ -176,44 +178,53 @@ Definition frag_exec_ptr_def:
                 ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s)
 End
 
+(* expr_sim with the ghost: the ghost invariant at s0 gives a pointer-safe
+   counted path whose post keeps the invariant, with the value's pointer
+   covered, and leaves older variables' ghost alone. *)
 Definition expr_sim_ptr_def:
   expr_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb op res es' s0 G0 tn0.
+    !sa sb op s0 G0 tn0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
-      (do result <- eval_expr cx e; read_result cx result od) es = (res, es') /\
-      expr_res_ok res /\ fn_has_code sa sb func /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-      frag_exec_ptr cx ctx PG sa sb
-        (\G tn s. s = s0 /\ G = G0 /\ tn = tn0 /\
-                  stmt_state_rel ctx func cenv cx es s /\
-                  ghost_inv d cenv cx es G tn s)
-        (\G tn s. ?v. res = INL v /\
-           expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-           ghost_inv d cenv cx es' G tn s /\
-           ptr_val_ok cx (expr_type e) v op G tn s /\
-           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\gt r. expr_exit res r)
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+      stmt_state_rel ctx func cenv cx es s0 /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+        (bind (eval_expr cx e) (read_result cx)) (es, s0, G0, tn0)
+        (\res ee G tn t. ?v. res = INL v /\
+          expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          ghost_inv d cenv cx ee G tn t /\
+          ptr_val_ok cx (expr_type e) v op G tn t /\
+          ghost_kept cenv es sa G0 tn0 s0 G tn)
+        (\res ee gt r. expr_exit res r)
 End
 
 Definition expr_vv_sim_ptr_def:
   expr_vv_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb vv res es' s0 G0 tn0.
+    !sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
-      eval_expr cx e es = (res, es') /\ expr_vv_res_ok res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec_ptr cx ctx PG sa sb
-        (\G tn s. s = s0 /\ G = G0 /\ tn = tn0 /\
-                  stmt_state_rel ctx func cenv cx es s /\
-                  ghost_inv d cenv cx es G tn s)
-        (\G tn s. ?tv. res = INL tv /\
-           vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
-           ghost_inv d cenv cx es' G tn s /\
-           ptr_vv_ok cx (expr_type e) tv vv es' G tn s /\
-           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\gt r. expr_exit res r)
+      local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+      gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
+      stmt_state_rel ctx func cenv cx es s0 /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+        (eval_expr cx e) (es, s0, G0, tn0)
+        (\res ee G tn t. ?tv. res = INL tv /\
+          vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          ghost_inv d cenv cx ee G tn t /\
+          ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
+          ghost_kept cenv es sa G0 tn0 s0 G tn)
+        (\res ee gt r. expr_exit res r)
 End
 
 (* stmt_exit with the ghost where the run stops: a return's RetQ sees it,
@@ -227,51 +238,44 @@ End
 
 Definition stmt_frag_ptr_def:
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
-    (m : compile_env compiler) es res es' <=>
+    (m : compile_env compiler) source es <=>
     !sa sb s0 G0 tn0 cenv'.
       m sa = (cenv', sb) /\ fn_has_code sa sb func /\
       ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s0 /\
-      ~block_is_terminated sa /\ stmt_res_ok lctx res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
+      ~block_is_terminated sa /\
+      gas_admissible source (stmt_res_ok lctx) es /\
       stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\
-      ~s0.vs_halted /\
+      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      (?s G tn cenv''.
-         stmt_lands lctx sb res s /\ ~s.vs_halted /\
-         (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
-         cenv_top_ext cenv cenv'' es'.scopes /\
-         stmt_state_rel ctx func cenv'' cx es' s /\
-         ghost_inv d cenv'' cx es' G tn s /\
-         (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-                lookup_var x s = SOME w) /\
-         (!x. not_fresh_at sa x ==>
-              FLOOKUP G x = FLOOKUP G0 x /\
-              op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-         !fuel r. run_from fuel ctx func s = r /\ (!e. r <> Error e) ==>
-           ?fuel'. run_from fuel' ctx func s0 = r /\
-             ghost_run fuel' ctx func PG G0 tn0 s0 =
-               ghost_run fuel ctx func PG G tn s /\
-             (ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G tn s ==>
-              ptr_safe_run (cx_dead cx) 0 fuel' ctx func PG G0 tn0 s0)) \/
-      (?fuel r. run_from fuel ctx func s0 = r /\ exit_result r /\
-                stmt_exit_ptr RetQ es' res
-                  (ghost_run fuel ctx func PG G0 tn0 s0) r /\
-                ptr_safe_run (cx_dead cx) 0 fuel ctx func PG G0 tn0 s0)
+      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG source
+        (es, s0, G0, tn0)
+        (\res ee G tn t. ?cenv''.
+          stmt_lands lctx sb res t /\ ~t.vs_halted /\
+          (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
+          cenv_top_ext cenv cenv'' ee.scopes /\
+          stmt_state_rel ctx func cenv'' cx ee t /\
+          ghost_inv d cenv'' cx ee G tn t /\
+          (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+                 lookup_var x t = SOME w) /\
+          (!x. not_fresh_at sa x ==>
+               FLOOKUP G x = FLOOKUP G0 x /\
+               op_taint tn (Var x) = op_taint tn0 (Var x)))
+        (\res ee gt r.
+          !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
 End
 
 Definition frame_ret_ok_ptr_def:
   frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty <=>
-    !cenv' env lctx eo es res es'.
+    !cenv' env lctx eo es.
       same_frame cenv cenv' /\ expr_sim_inv cenv' cx env es /\
+      stmt_exprs_ok cenv' (Return eo) /\
       IS_SOME (type_stmt env ret_ty (Return eo)) /\
       call_evaluation_safe cx (int_calls_stmt (Return eo)) /\
       (!e ty. eo = SOME e ==>
               expr_sim_ptr d ctx PG func cenv' cx ty e es /\
-              expr_vv_sim_ptr d ctx PG func cenv' cx ty e es) /\
-      eval_stmt cx (Return eo) es = (res, es') ==>
+              expr_vv_sim_ptr d ctx PG func cenv' cx ty e es) ==>
       stmt_frag_ptr d ctx PG func cx lctx RetQ cenv'
-        (stmt_env cenv' lctx ret_ty (Return eo)) es res es'
+        (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 End
