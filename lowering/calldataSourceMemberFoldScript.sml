@@ -1019,3 +1019,136 @@ Resume calldata_source_member_cursor_step[advance]:
   simp[] >> decide_tac
 QED
 Finalise calldata_source_member_cursor_step
+
+Theorem calldata_source_members_owned_success:
+  let xs = abi_decoder_member_infos sf ce tys in
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) xs 0 0 first = ((),final) /\
+  fn_has_code first final fn /\
+  (first.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  final.cs_next_var <= limit_st.cs_next_var /\
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  LENGTH vs = LENGTH tys /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  abi_decoder_members ce env sf tys tvs
+    (abi_decode_members (MAP (vyper_to_abi_type env) tys) bs bs) vs /\
+  abi_decoder_operand_live first.cs_next_var src /\
+  abi_decoder_operand_live first.cs_next_var dst /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs) d outsz b reserve_cap initial /\
+  mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD initial) = bs /\
+  fresh_vars_wrt limit_st initial /\ alloca_inv initial /\
+  alloca_frontier_inv ctx fn site initial /\
+  calldata_member_own fn first.cs_next_id final.cs_next_id initial /\
+  FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < first.cs_next_id \/ final.cs_next_id <= oid) /\
+  base_addr <= d /\ d + SUM (MAP type_memory_size tvs) <= base_addr+cap /\
+  SUM (MAP type_memory_size tvs) <= outsz /\
+  d + SUM (MAP type_memory_size tvs) < dimword(:256) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = first.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH first.cs_current_insts /\
+  (!i. i < LENGTH tys ==> calldata_member_child_contract ce env sf ctx fn site limit_st
+    (EL i tys) (EL i tvs)) ==>
+  ?t scratch. ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\
+    calldata_member_resource_frame ctx fn site limit_st first.cs_next_id final.cs_next_id
+      first.cs_next_var d outsz initial t scratch /\
+    EVERY (\i. val_wf (EL i tvs) (EL i vs) /\
+      val_in_memory (EL i tvs) (EL i vs)
+        (d + SUM (MAP type_memory_size (TAKE i tvs))) t.vs_memory)
+      (GENLIST I (LENGTH tvs)) /\
+    calldata_member_transfers ctx fn initial t
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qabbrev_tac `xs = abi_decoder_member_infos sf ce tys` >>
+  `cs_extends first final` by
+    metis_tac[cj 2 cs_appends_abi_decode_mutual, cs_appends_def] >>
+  `first.cs_next_var <= final.cs_next_var` by
+    (mp_tac (cj 2 abi_decoder_vars_mono_mutual) >>
+     rewrite_tac[abi_decoder_vars_mono_def] >>
+     disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`0`,`0`,`first`] mp_tac) >>
+     simp[]) >>
+  `ci_mono first final` by
+    (`first.cs_next_id <= final.cs_next_id` by
+       (mp_tac (cj 2 abi_decoder_code_mutual) >>
+        disch_then (qspecl_then [`dst`,`src`,`CALLDATALOAD`,`Lit 0w`,`xs`,`0`,`0`] mp_tac) >>
+        simp[] >> disch_then (qspec_then `first` mp_tac) >>
+        simp[abi_decoder_code_def]) >>
+     simp[ci_mono_def]) >>
+  `calldata_source_member_cursor ce env sf ctx fn site limit_st
+    xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+    0 0 first final initial xs 0 0 first initial` by
+    (irule calldata_source_member_cursor_initial >> asm_rewrite_tac[]) >>
+  `?t. ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\
+    calldata_source_member_cursor ce env sf ctx fn site limit_st
+      xs tys tvs vs bs dst src sb d outsz b reserve_cap base_addr cap oid
+      0 0 first final initial []
+      (0+SUM (MAP (\(ei,az,mz). az) xs))
+      (0+SUM (MAP (\(ei,az,mz). mz) xs)) final t /\
+    calldata_member_transfers ctx fn initial t` suffices_by
+    (strip_tac >> drule calldata_source_member_cursor_terminal >>
+     impl_tac >- fs[Abbr `xs`, abi_decoder_member_infos_def, LIST_REL_EL_EQN] >>
+     strip_tac >> qexistsl_tac [`t`,`scratch`] >> fs[]) >>
+  suspend "iteration"
+QED
+
+Resume calldata_source_members_owned_success[iteration]:
+  irule calldata_members_success_relation >>
+  conj_tac >- (mp_tac calldata_member_transfers_composable >>
+    simp_tac bool_ss [LET_THM, calldata_member_transfers_def] >> metis_tac[]) >>
+  conj_tac >- (mp_tac calldata_member_transfers_composable >>
+    simp_tac bool_ss [LET_THM, calldata_member_transfers_def] >> metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`first`,`dst`,`fn`,`src`] >>
+  conj_tac >- suspend "head_extends" >>
+  conj_tac >- suspend "step" >>
+  conj_tac >- metis_tac[abi_decoder_members_extends] >>
+  asm_rewrite_tac[]
+QED
+Resume calldata_source_members_owned_success[head_extends]:
+  rpt gen_tac >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  drule cs_extends_abi_decode >> strip_tac >>
+  `cs_extends a cs'` by
+    metis_tac[cs_appends_abi_member_pointer, cs_appends_def] >>
+  `cs_extends cs' cs''` by metis_tac[cj 2 cs_appends_emit_helpers, cs_appends_def] >>
+  metis_tac[cs_extends_trans]
+QED
+
+Resume calldata_source_members_owned_success[step]:
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `cs_extends first a /\ cs_extends a final` by
+    (qhdtm_assum `calldata_source_member_cursor`
+      (strip_assume_tac o REWRITE_RULE [calldata_source_member_cursor_def]) >> simp[]) >>
+  `fn_has_code a final fn` by metis_tac[fn_has_code_split] >>
+  `a.cs_blocks = final.cs_blocks \/
+    !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0` by
+    (Cases_on `first.cs_blocks = final.cs_blocks`
+     >- (disj1_tac >>
+         qpat_x_assum `cs_extends first a` mp_tac >>
+         qpat_x_assum `cs_extends a final` mp_tac >>
+         qpat_x_assum `first.cs_blocks = final.cs_blocks` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[cs_extends_def] >> rpt strip_tac >>
+         qpat_assum `final.cs_blocks = _ ++ _`
+           (mp_tac o AP_TERM ``LENGTH : basic_block list -> num``) >>
+         qpat_assum `a.cs_blocks = _ ++ _`
+           (mp_tac o AP_TERM ``LENGTH : basic_block list -> num``) >>
+         simp_tac list_ss [] >> rpt strip_tac >>
+         `LENGTH new' = 0` by decide_tac >>
+         `new' = []` by metis_tac[LENGTH_NIL] >>
+         qpat_x_assum `a.cs_blocks = _` mp_tac >> simp[]) >>
+     disj2_tac >> metis_tac[]) >>
+  irule calldata_source_member_cursor_step >>
+  qhdtm_assum `calldata_source_member_cursor` (irule_at Any) >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
+    disj1_tac >> first_assum ACCEPT_TAC,
+    disj2_tac >> first_assum ACCEPT_TAC,
+    simp[Abbr `xs`]]
+QED
+Finalise calldata_source_members_owned_success
