@@ -134,20 +134,20 @@ holbuild -j4 build stmtForRangeLitMemoryTheory stmtForRangeMemoryTheory
 
 These are the memory-safe twins of S1's `compile_for_range_lit_frag` (`stmtSimFor`) and `compile_for_range_checked_frag_active` (`stmtSimForRange`): the same statements with `stmt_frag` replaced by `stmt_frag_mem d` and `expr_sim` by `expr_sim_mem`. `stmt_frag_mem` (`lowering/stmtSimDefsScript.sml`) is `stmt_framed_frag` with `gas_outcome T` (memory-safe runs) instead of `F`, plus `return_buf_frame d`, `alloca_history`, and a monotone `vs_alloca_next` in its pre and post. They are consumed by the for-loop case of the S3 body induction (`lowering/bodyMemForRangeLitScript.sml`, `lowering/bodyMemForRangeScript.sml`).
 
-S1's proofs of both lemmas, and of the loop machinery under them (`for_iteration`, `for_loop` in `stmtSimForLoop`, `compile_for_range_frag` in `stmtSimFor`), are finished on another branch; copies are in `alan-ref/s1/`. They are the template. The memory side already has the loop combinator `frag_exec_loop_mem` (`lowering/fragLoopMemoryScript.sml`) and memory-safe counted paths (`lowering/fragGasPathMemScript.sml`).
+S1's proofs of both lemmas, and of the loop machinery under them (`for_iteration`, `for_loop` in `stmtSimForLoop`, `compile_for_range_frag` in `stmtSimFor`), are finished on another branch; copies are in `/home/claude/tasks/opus-seq-1423-alan/s1-ref/`. They are the template. The memory side already has the loop combinator `frag_exec_loop_mem` (`lowering/fragLoopMemoryScript.sml`) and memory-safe counted paths (`lowering/fragGasPathMemScript.sml`).
 
 ## Domain Constraints
 
 - This is a frozen proof branch: other branches' theories are admitted locally (their proofs replaced by `cheat`, hidden from git). Cheat warnings from those inherited ancestors are expected; the new proofs and helpers you write must have none.
 - Put helper lemmas in new theories under `lowering/` named `stmtFor*Memory*` (or in the target theory itself). Do not edit existing theories (no changes to shared ancestors, statements or definitions).
 - No `cheat`, no new axioms, no `TRY`/`ORELSE` around search tactics (`metis_tac` and the like): select goals explicitly. Each tactic step must finish within holbuild's default 2.5 s step limit; split slow steps, never raise the limit.
-- The S1 proofs under `alan-ref/s1/` are reference text from another branch and are not built here. Its theory versions can differ from this tree's; build against this tree's theories (lowering/), and read the reference only for the proof structure.
+- The S1 proofs under `/home/claude/tasks/opus-seq-1423-alan/s1-ref/` are reference text from another branch and are not built here. Its theory versions can differ from this tree's; build against this tree's theories (lowering/), and read the reference only for the proof structure.
 
 ## Available Resources
 
 | Resource | Location | Description |
 |---|---|---|
-| S1 reference proofs | `alan-ref/s1/stmtSimForScript.sml`, `alan-ref/s1/stmtSimForLoopScript.sml`, `alan-ref/s1/stmtSimForRangeScript.sml`, `alan-ref/s1/stmtSimForPartsScript.sml`, `alan-ref/s1/stmtSimForRoundsScript.sml` | finished `gas_outcome F` proofs to port |
+| S1 reference proofs | `/home/claude/tasks/opus-seq-1423-alan/s1-ref/stmtSimForScript.sml`, `/home/claude/tasks/opus-seq-1423-alan/s1-ref/stmtSimForLoopScript.sml`, `/home/claude/tasks/opus-seq-1423-alan/s1-ref/stmtSimForRangeScript.sml`, `/home/claude/tasks/opus-seq-1423-alan/s1-ref/stmtSimForPartsScript.sml`, `/home/claude/tasks/opus-seq-1423-alan/s1-ref/stmtSimForRoundsScript.sml` | finished `gas_outcome F` proofs to port |
 | judgments | `lowering/stmtSimDefsScript.sml` | `stmt_frag`, `stmt_framed_frag`, `stmt_frag_mem`, `stmt_res_ok`, `stmt_exit` |
 | expression judgment | `lowering/exprSimMemDefsScript.sml` | `expr_sim_mem`, `expr_vv_sim_mem` |
 | posts and frames | `lowering/loweringPostsScript.sml` | `return_buf_frame`, `cenv_top_ext`, `expr_post`, `stmt_lands` |
