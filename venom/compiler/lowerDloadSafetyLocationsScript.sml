@@ -2,7 +2,7 @@
 Theory lowerDloadSafetyLocations
 Ancestors
   lowerDloadSafetyRelation lowerDloadConfiguredOrigins lowerDloadDefs
-  venomExecSemantics venomWf venomInst contextCodegenRel o1ContractLowerDload list rich_list arithmetic
+  venomExecSemantics venomExecProofs venomWf venomInst contextCodegenRel o1ContractLowerDload list rich_list arithmetic
 
 Theorem ld_block_label_unique:
   ALL_DISTINCT (MAP (\b. b.bb_label) bs) /\
@@ -157,3 +157,32 @@ QED
 
 val _ = if null (hyp ld_envelope_source_next) then ()
         else raise Fail "ld_envelope_source_next has hypotheses";
+
+(* Reverse expansion at a fetched target successor, in post-step coordinates. *)
+Theorem ld_envelope_successor_location:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  ld_envelope supply fn s j X p /\
+  fn' = FST (lower_dload_function_supply supply fn) /\
+  q.vs_current_bb = s.vs_current_bb /\ q.vs_inst_idx = p + LENGTH X /\
+  ss.vs_current_bb = s.vs_current_bb /\
+  lookup_block q.vs_current_bb fn'.fn_blocks = SOME bb /\
+  get_instruction bb q.vs_inst_idx = SOME ti ==>
+  ?next Y. active_inst fn next (ss with vs_inst_idx := SUC j) /\
+    ld_envelope supply fn (ss with vs_inst_idx := SUC j) (SUC j) Y (p + LENGTH X)
+Proof
+  strip_tac >>
+  `active_inst fn' ti (q with vs_inst_idx := p + LENGTH X)` by
+    (simp[active_inst_def] >> qexists_tac `bb` >>
+     fs[get_instruction_def] >>
+     metis_tac[venomExecProofsTheory.lookup_block_MEM,
+               venomExecProofsTheory.lookup_block_label]) >>
+  `?next Y. active_inst fn next (s with vs_inst_idx := SUC j) /\
+     ld_envelope supply fn (s with vs_inst_idx := SUC j) (SUC j) Y (p + LENGTH X)` by
+    (irule ld_envelope_expansion_next >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`q`,`ti`] >> metis_tac[]) >>
+  fs[active_inst_def, ld_envelope_def] >> metis_tac[]
+QED
+
+val _ = if null (hyp ld_envelope_successor_location) then ()
+        else raise Fail "envelope successor location has hypotheses";
