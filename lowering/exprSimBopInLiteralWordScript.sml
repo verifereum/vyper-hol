@@ -1024,6 +1024,108 @@ Proof
   qexists_tac `sm` >> simp[]
 QED
 
+Theorem literal_expr_sim:
+  expr_body_pre cenv cx env
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es /\
+  (bop = In \/ bop = NotIn) /\ is_word_type (expr_type e1) /\
+  exprs_case nocalls ctx func cenv cx (e1::elems) /\
+  (nocalls ==> int_calls_exprs (e1::elems) = []) ==>
+  expr_sim ctx func cenv cx ty
+    (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all literal_body_evaluate_types >> strip_tac >>
+  drule_all literal_body_typing >> strip_tac >>
+  `is_ArrayT a` by simp[is_ArrayT_def] >>
+  `wb_args_shape cenv expr_type (e1::elems)` by
+    metis_tac[literal_args_shape] >>
+  `literal_word_args_ready ctx func cenv cx expr_type tv
+     (expr_sim_inv cenv cx env) (e1::elems)` by
+    (irule literal_word_args_ready_from_cases >>
+     simp[] >> metis_tac[]) >>
+  rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all literal_lower_value >> strip_tac >>
+  drule_all lower_word_args_shape_ready >> strip_tac >>
+  `cs_extends sm sb` by
+    metis_tac[literal_membership_straight, straight_fresh_cs_extends] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!ee gs. expr_sim_inv cenv cx env ee ==>
+      expr_sim_inv cenv cx env (ee with gas_obs := gs)` by simp[] >>
+  drule_all literal_word_args_sim >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def])
+      >- suspend "normal"
+      >> suspend "exit") >>
+  suspend "exempt"
+QED
+
+Resume literal_expr_sim[normal]:
+  qpat_x_assum `(\rr ee t. _) _ _ _`
+    (strip_assume_tac o BETA_RULE) >>
+  gnvs[] >>
+  `~t'.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  disch_then (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
+  `!e. MEM e (e1::elems) ==> MEM e (e1::elems)` by simp[] >>
+  `expr_sim_inv cenv cx env
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all literal_eval_exprs_typed >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?v ys. _` strip_assume_tac >>
+  gnvs[EVERY_DEF] >>
+  qpat_x_assum `value_has_type tv v /\ _`
+    (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `exprs_case _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `literal_word_args_ready _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `wb_args_shape _ _ _` kall_tac >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by simp[] >>
+  `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs)` by
+    (simp[] >> metis_tac[]) >>
+  drule_all literal_typed_continuation_summary >>
+  disch_then (qspecl_then
+    [`SOME (expr_type e1)`, `n`, `elems`, `e1`, `ArrayT (expr_type e1) n`] mp_tac) >>
+  rewrite_tac[gas_summary_at_def] >>
+  disch_then (qx_choose_then `res` (qx_choose_then `es_end'`
+    (qx_choose_then `r` (map_every assume_tac o CONJUNCTS)))) >>
+  qexists_tac `marks` >> disj1_tac >>
+  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`res`, `es_end'`, `r`] >>
+  conj_tac
+  >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+               |> REWRITE_RULE [APPEND_NIL]) >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ (INL _) _ _` (irule_at Any) >>
+      gvs[]) >> gvs[]
+QED
+Resume literal_expr_sim[exit]:
+  Cases_on `res` >- gvs[wb_args_exit_def] >>
+  qexists_tac `marks` >> disj1_tac >>
+  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INR y`, `es_end`, `r`] >> conj_tac
+  >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
+  disj2_tac >> gvs[wb_args_exit_def]
+QED
+Resume literal_expr_sim[exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  drule_all literal_body_action_flat >> disch_then (fn th => rewrite_tac[th]) >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc,
+              vyperStateTheory.bind_return] >>
+  irule_at Any gas_exempt_cert_error_values >>
+  goal_assum (drule_at Any) >> simp[ignore_bind_def]
+QED
+Finalise literal_expr_sim
+
 Theorem compile_bop_in_literal_word_case:
   !nocalls ctx func cenv cx ann bop e1 a t n elems.
     is_word_type (expr_type e1) /\ (bop = In \/ bop = NotIn) /\
