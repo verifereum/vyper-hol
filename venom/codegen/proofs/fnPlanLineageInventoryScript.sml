@@ -3933,3 +3933,29 @@ Proof
     (assume_tac o REWRITE_RULE [reorder_plan_eq_plan_steps]) >>
   metis_tac[plan_steps_reorder_target_ceiling]
 QED
+
+Theorem restore_reorder_success_inventory_subset:
+  !targets ps rops mid dfg ops qs.
+    (!at. MEM at targets ==> MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) /\
+    restore_spilled_plan targets ps = (rops,mid) /\
+    reorder_plan dfg targets mid = (ops,qs) /\
+    stack_pop (LENGTH targets) qs.ps_stack ++ targets = qs.ps_stack ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `LENGTH targets <= LENGTH mid.ps_stack`
+  >- metis_tac[reorder_plan_inventory_subset_nb,
+               restore_spilled_plan_inventory_subset] >>
+  `FDOM mid.ps_spilled = FDOM ps.ps_spilled DIFF set targets` by
+    (qspecl_then [`targets`, `ps`] mp_tac restore_spilled_plan_domain >> simp[]) >>
+  `DISJOINT (set targets) (FDOM mid.ps_spilled)` by ASM_SET_TAC[] >>
+  `LENGTH mid.ps_stack <= LENGTH targets` by decide_tac >>
+  `LENGTH qs.ps_stack <= LENGTH targets /\ qs.ps_spilled = mid.ps_spilled` by
+    metis_tac[reorder_plan_target_ceiling] >>
+  `LENGTH qs.ps_stack - LENGTH targets = 0` by decide_tac >>
+  `qs.ps_stack = targets` by
+    (qpat_x_assum `stack_pop _ _ ++ _ = _` mp_tac >>
+     simp[stack_pop_def]) >>
+  gvs[] >> metis_tac[]
+QED
