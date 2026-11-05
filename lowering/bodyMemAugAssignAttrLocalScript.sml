@@ -1369,3 +1369,19 @@ Proof
   `type_bits ann < 256` by decide_tac >> metis_tac[integerTheory.INT_NOT_LE]
 QED
 
+
+Theorem bop_result_power_mem_src[local]:
+  !cx ann tys a b es u. type_to_int_bound ann = SOME u ==>
+    bop_result cx ann Exp tys (IntV a) (IntV b) es =
+      if b < 0 then INR (Error (RuntimeError "Exp~"))
+      else if within_int_bound u (a ** Num b) then INL (IntV (a ** Num b))
+      else INR (Error (RuntimeError "bounded_int_op bound"))
+Proof
+  rpt strip_tac >>
+  simp[bop_result_def, evaluate_builtin_def, evaluate_binop_def,
+       bounded_int_op_def] >>
+  Cases_on `b < 0` >> simp[] >>
+  Cases_on `within_int_bound u (a ** Num b)` >> simp[]
+QED
+
+
