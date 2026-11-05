@@ -1,7 +1,7 @@
 Theory o1MakeSsaVisitNames
 Ancestors
   o1MakeSsaVisitTrace o1MakeSsaReaching o1MakeSsaFormats o1MakeSsaFlags
-  makeSsaCurrentDefs makeSsaCurrentInduct venomInst list pair makeSsaCurrentAllocation
+  makeSsaCurrentDefs makeSsaCurrentInduct venomInst list pair makeSsaCurrentAllocation o1MakeSsaCfg
 
 Definition last_name_def:
   (last_name x n [] = n) /\
@@ -57,7 +57,7 @@ Theorem block_last_name:
 Proof
   Induct >> simp[rename_current_block_insts_def,block_output_pairs_def,last_name_def] >>
   rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >> drule reaching_block_length >> strip_tac >>
+  strip_tac >> gvs[] >> drule rename_current_block_insts_length >> strip_tac >>
   simp[block_output_pairs_def,ZIP,last_name_append] >>
   first_x_assum drule >> disch_then (qspec_then `x` mp_tac) >>
   drule inst_last_name >> simp[block_output_pairs_def]

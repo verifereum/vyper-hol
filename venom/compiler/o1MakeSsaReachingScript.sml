@@ -1,7 +1,7 @@
 Theory o1MakeSsaReaching
 Ancestors
   makeSsaCurrentDefs o1MakeSsaOwnership o1MakeSsaFlags o1MakeSsaFormats
-  venomInst list alist pair makeSsaCurrentAllocation
+  venomInst list alist pair makeSsaCurrentAllocation o1MakeSsaCfg
 
 (* Syntactic reaching-name boundaries.  Defaults are not eliminated. *)
 
@@ -100,16 +100,6 @@ Proof
   drule reaching_outputs_source >> simp[]
 QED
 
-Theorem reaching_block_length:
-  !insts s rs rt t outs.
-    rename_current_block_insts s rs insts = (rt,t,outs) ==>
-    LENGTH outs = LENGTH insts
-Proof
-  Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  first_x_assum drule >> simp[]
-QED
-
 Theorem reaching_block_source:
   !insts s rs rt t outs x.
     rename_current_block_insts s rs insts = (rt,t,outs) ==>
@@ -119,7 +109,7 @@ Theorem reaching_block_source:
 Proof
   Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  drule reaching_block_length >> strip_tac >> simp[ZIP] >>
+  drule rename_current_block_insts_length >> strip_tac >> simp[ZIP] >>
   first_x_assum drule >> disch_then (qspec_then `x` strip_assume_tac)
   >- (drule reaching_inst_source >> disch_then (qspec_then `x` mp_tac) >>
       metis_tac[]) >>
@@ -151,7 +141,7 @@ Proof
   metis_tac[reaching_outputs_defines]
 QED
 
-Theorem reaching_block_append:
+Theorem rename_current_block_insts_append:
   !pre post s rs.
     rename_current_block_insts s rs (pre ++ post) =
     let (mid,u,ns) = rename_current_block_insts s rs pre in
@@ -169,10 +159,10 @@ Theorem reaching_block_last:
     LENGTH before = LENGTH pre /\
     MEM (x,latest_current_name rt x) (ZIP (i.inst_outputs,j.inst_outputs))
 Proof
-  simp[reaching_block_append, rename_current_block_insts_def] >>
+  simp[rename_current_block_insts_append, rename_current_block_insts_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   drule_all reaching_block_absent >> strip_tac >>
   drule_all reaching_inst_defines >> strip_tac >>
-  drule reaching_block_length >> strip_tac >>
+  drule rename_current_block_insts_length >> strip_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED

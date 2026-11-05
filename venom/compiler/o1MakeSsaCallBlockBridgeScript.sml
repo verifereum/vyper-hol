@@ -2,20 +2,7 @@ Theory o1MakeSsaCallBlockBridge
 Ancestors
   o1MakeSsaCallChecks o1MakeSsaTraversalFrames o1MakeSsaFormats
   o1MakeSsaCallOwnership o1MakeSsaCallPaths unitShapeDefs makeSsaCurrentDefs
-  list pred_set o1ContractMakeSsaSrcOpcodes simplifyCfgCallChecks
-
-Theorem rename_current_block_insts_append:
-  !xs ys s rs.
-  rename_current_block_insts s rs (xs ++ ys) =
-  let (rs1,s1,xs1) = rename_current_block_insts s rs xs in
-  let (rs2,s2,ys1) = rename_current_block_insts s1 rs1 ys in
-  (rs2,s2,xs1 ++ ys1)
-Proof
-  Induct >> simp[rename_current_block_insts_def] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
-  first_x_assum (qspecl_then [`ys`,`s'`,`rs'`] mp_tac) >>
-  gvs[]
-QED
+  list pred_set o1ContractMakeSsaSrcOpcodes simplifyCfgCallChecks o1MakeSsaReaching
 
 Theorem current_calls_flagged_phi_prefix:
   rename_current_block_insts s rs (pre ++ rest) = (rs',s',insts') /\
@@ -33,7 +20,7 @@ Proof
   drule_all current_rename_owner_block_insts >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) pre` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>
-  `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) xs1` by
+  `EVERY (\i. i.inst_opcode <> CALL /\ i.inst_opcode <> STATICCALL) ns` by
     (qpat_assum `rename_current_block_insts s rs pre = _`
        (mp_tac o MATCH_MP rename_current_block_insts_opcodes) >>
      disch_then (mp_tac o Q.AP_TERM `EVERY (\op. op <> CALL /\ op <> STATICCALL)`) >>

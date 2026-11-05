@@ -1,7 +1,7 @@
 Theory o1MakeSsaPrefixNames
 Ancestors
   o1MakeSsaVisitNames o1MakeSsaReaching o1MakeSsaFormats
-  makeSsaCurrentDefs venomInst list pair
+  makeSsaCurrentDefs venomInst list pair o1MakeSsaCfg
 
 Theorem current_operand_var_at:
   !ops j x. j < LENGTH ops /\ EL j ops = Var x ==>
@@ -37,7 +37,7 @@ Proof
   >- (gvs[block_output_pairs_def, last_name_def] >>
       metis_tac[current_inst_operand_var_at]) >>
   gvs[] >>
-  `LENGTH rest' = LENGTH insts` by metis_tac[reaching_block_length] >>
+  `LENGTH rest' = LENGTH insts` by metis_tac[rename_current_block_insts_length] >>
   simp[block_output_pairs_def, ZIP, last_name_append] >>
   first_x_assum drule_all >>
   drule inst_last_name >> disch_then (qspec_then `x` assume_tac) >>
