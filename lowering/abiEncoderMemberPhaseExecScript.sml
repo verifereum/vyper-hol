@@ -15,6 +15,40 @@ Ancestors
   venomExecSemantics venomInst emitHelper instIdxIndep words list
 
 
+Theorem abi_site_members_prepare_raw_transport:
+  emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\
+  abi_site_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot A lo st limit_st
+    src dst sb so ho d hl output_size b cap initial /\
+  prepared.cs_next_var <= limit_st.cs_next_var /\
+  abi_encoder_member_phase_raw st prepared initial ready ==>
+  abi_site_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    pre pvs active dyn_ptr site slot A lo prepared limit_st
+    src dst sb so ho d hl output_size b cap ready /\
+  abi_site_encoder_input ei ty av prepared elem_src dst (sb+so) mem_sz d output_size A b cap ready /\
+  abi_decoder_address_frame st.cs_next_var initial ready
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `eval_operand src initial = SOME (n2w sb) /\ fresh_vars_wrt limit_st initial /\
+    initial.vs_current_bb = st.cs_current_bb` by
+    fs[abi_site_members_inv_def, abi_site_members_pre_def] >>
+  drule abi_encoder_emit_address_shape >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> drule abi_decoder_operand_live_emit >> strip_tac >>
+  `st.cs_next_var <= prepared.cs_next_var /\ st.cs_next_id <= prepared.cs_next_id` by decide_tac >>
+  `eval_operand (Lit (n2w so)) initial = SOME (n2w so)` by simp[eval_operand_def] >>
+  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`] abi_encoder_member_binary_transport)) >> strip_tac >>
+  `eval_operand elem_src ready = SOME (n2w (sb+so))` by fs[word_add_n2w] >>
+  `ready.vs_current_bb = prepared.cs_current_bb` by metis_tac[] >>
+  drule_all abi_site_members_inv_address >> disch_tac >>
+  drule abi_site_members_inv_layout >> strip_tac >>
+  `LENGTH (enc ty av) <= output_size` by (Cases_on `dyn` >> fs[] >> decide_tac) >>
+  `abi_site_members_pre ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
+    prepared src dst sb so d output_size A b cap ready` by
+    (qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ prepared _ _ _ _ _ _ _ _ _ _ _ ready`
+       mp_tac >> simp_tac bool_ss [abi_site_members_inv_def] >> metis_tac[]) >>
+  drule_all abi_site_members_child_buffer >> simp[]
+QED
+
 Theorem abi_scratch_members_prepare_raw_transport:
   emit_op ADD [src;Lit (n2w so)] st = (elem_src,prepared) /\
   abi_scratch_members_inv ((ei,abi_sz,mem_sz,dyn)::infos) (ty::tys) (av::avs)
