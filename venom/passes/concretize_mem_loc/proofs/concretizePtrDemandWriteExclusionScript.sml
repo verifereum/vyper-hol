@@ -9,9 +9,14 @@ Ancestors concretizePtrProtectedLivesets concretizePtrTokenInterval
   concretizePtrActivationChronology concretizePtrHistoryCfg
   concretizePtrExecutedCoverage concretizePtrAllocationSize
   concretizePtrImportOrigins concretizePtrStagePlacements
+  concretizePtrLayoutOutput concretizePtrTaggedOrigins
+  concretizePtrCallSeparation concretizePtrStackImports
+  concretizePtrRuntimeGeneration concretizePtrProductionCoverage
+  concretizeAnalysisBoundary concretizeAnalysisScanCoverage
+  concretizeAnalysisWriteSafety basePtrDefs
   concretizeMemLocProofs concretizeMemLocDefs
   staticLayoutAllocatorProofs o1PassContract venomPassDispatcher
-  contextCodegenRel venomWf venomInst option pair
+  contextCodegenRel o1ScheduleDecompHelpers venomWf venomInst option pair
   list rich_list finite_map arithmetic
 
 (* Keep the initializing writer selected by ProtectedLivesets: token
@@ -401,3 +406,287 @@ Proof
   asm_rewrite_tac[] >> qexistsl [`reserved`,`items`] >>
   metis_tac[]
 QED
+
+Theorem ptr_demand_other_owner_separation:
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\ w < j /\ j+1 < LENGTH h /\ A = EL j h /\
+  EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+  ptr_stage_placements C' positions /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  inst_write_op A.po_inst = SOME (Var dv) /\
+  FLOOKUP TGj dv = SOME (tokB,bid) /\
+  FLOOKUP A.po_prov dv = SOME (db,sb) /\
+  FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\
+  0 < sb /\ (tokB <> token \/ bid <> aid) ==>
+  reserved_intervals_disjoint (pa,sz) (pb,sb)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all ptr_demand_interval_owner_at >> strip_tac >>
+  drule_all ptr_demand_interval_snapshot >> strip_tac >>
+  `ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+     (o1_walk_view rpolicy 2) C C' /\
+   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
+   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
+   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+   ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+     births PT TG saved entries H` by fs[ptr_demand_interval_def] >>
+  `?e owner output p.
+    e <= LENGTH A.po_stack /\ EL (LENGTH A.po_stack-e) tsj = tokB /\
+    owner = (ptr_owner_view e A).cf_fn /\
+    FLOOKUP (ptr_owner_view e A).cf_state.vs_allocas bid = SOME (db,sb) /\
+    lookup_function owner.fn_name C'.ctx_functions = SOME output /\
+    FLOOKUP positions (Allocation bid) = SOME (p,sb)` by
+    (qpat_x_assum `A = EL j h` SUBST_ALL_TAC >>
+     `j <= j /\ j < LENGTH h` by decide_tac >>
+     drule_all ptr_transcript_historical_placement >>
+     strip_tac >> metis_tac[]) >>
+  `ptr_ledger_source_activations vs C (TAKE (SUC j) h) (EL j h) tsj rj` by
+    metis_tac[ptr_source_ownership_caches, ptr_source_birth_caches_activations] >>
+  `LENGTH tsj = SUC (LENGTH A.po_stack) /\ ALL_DISTINCT tsj` by
+    metis_tac[ptr_source_activations_length, ptr_source_activations_distinct] >>
+  `frame_reachable vs C A.po_stack A.po_params A.po_prov A.po_taint
+    A.po_fn A.po_inst A.po_state` by
+    metis_tac[ptr_source_activations_sound, ptr_chrono_history_reachable,
+      ptr_observation_reachable_def] >>
+  `MEM owner C.ctx_functions` by
+    (drule_all ptr_frame_table_source >> strip_tac >>
+     Cases_on `e = LENGTH A.po_stack`
+     >- (simp[ptr_owner_view_def] >> metis_tac[]) >>
+     `MEM (ptr_owner_view e A) A.po_stack` by
+       (simp[ptr_owner_view_def] >> irule EL_MEM >>
+        qpat_x_assum `A = EL j h` (fn th => fs[th]) >> decide_tac) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `lookup_function owner.fn_name C.ctx_functions = SOME owner` by
+    (fs[o1_ctx_shape_def, ctx_wf_def, ctx_distinct_fn_names_def, ctx_fn_names_def] >> metis_tac[lookup_function_member_iff]) >>
+  drule_all ptr_stage_lookup_origin >> strip_tac >>
+  `fn' = owner /\ p = pb` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  qpat_x_assum `fn' = owner` SUBST_ALL_TAC >>
+  `fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+   lookup_function fn.fn_name C.ctx_functions = SOME fn /\
+   lookup_function fn.fn_name C'.ctx_functions = SOME out.fpo_function /\
+   ctx_fn_names observed.cu_context = ctx_fn_names C /\
+   o1_walk_view rpolicy 2 C' fn observed` by fs[ptr_demand_interval_def] >>
+  `owner.fn_eom = NONE /\ fn_ptr_ok P owner /\ wf_function owner /\
+   ssa_form owner /\ all_reachable owner /\ fn_inst_wf owner /\
+   EVERY inst_wf (fn_insts owner) /\ ptr_history_cfg_ok owner (cfg_analyze owner) /\
+   MEM (Allocation bid,pb,sb) out'.fpo_function.fn_mems_used /\
+   ?reservedB itemsB.
+     concretize_function_fuel_in_context (concretize_memloc_fuel owner)
+       observed'.cu_context reservedB owner = SOME out'.fpo_function /\
+     static_alloca_items owner = SOME itemsB /\ MEM (Allocation bid,sb) itemsB /\
+     (!c p size. MEM (c,p,size) (imported_mems_used observed'.cu_context owner) ==>
+       ~MEM c (MAP (\i. Allocation i.inst_id)
+         (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts owner))))` by
+    (irule ptr_demand_owner_layout >>
+     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  `fn.fn_eom = NONE /\ fn_ptr_ok P fn /\ wf_function fn /\
+   ssa_form fn /\ all_reachable fn /\ fn_inst_wf fn /\
+   EVERY inst_wf (fn_insts fn) /\ ptr_history_cfg_ok fn (cfg_analyze fn) /\
+   MEM (Allocation aid,pa,sz) out.fpo_function.fn_mems_used /\
+   ?reservedA itemsA.
+     concretize_function_fuel_in_context (concretize_memloc_fuel fn)
+       observed.cu_context reservedA fn = SOME out.fpo_function /\
+     static_alloca_items fn = SOME itemsA /\ MEM (Allocation aid,sz) itemsA /\
+     (!c p size. MEM (c,p,size) (imported_mems_used observed.cu_context fn) ==>
+       ~MEM c (MAP (\i. Allocation i.inst_id)
+         (FILTER (\i. is_alloca_op i.inst_opcode) (fn_insts fn))))` by
+    (irule ptr_demand_owner_layout >>
+     goal_assum (drule_at (Pat `ptr_demand_interval _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `fn_pass_step _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME (_,_)`)) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  qpat_x_assum `A = EL j h` (fn th => SUBST_ALL_TAC (SYM th) >> mk_asm "observation" th) >>
+  `0 < sz /\ bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn` by
+    (fs[ptr_demand_interval_def] >> decide_tac) >>
+  `EL (LENGTH A.po_stack-d) tsj = token` by
+    (qpat_x_assum `EL (LENGTH A.po_stack-d) (FST (EL j H)) = token` mp_tac >> simp[]) >>
+  Cases_on `e = d`
+  >- (qpat_x_assum `e = d` SUBST_ALL_TAC >>
+      `tokB = token /\ owner = fn /\ bid <> aid /\
+       out'.fpo_function = out.fpo_function /\ itemsB = itemsA` by
+        metis_tac[optionTheory.SOME_11] >>
+      Cases_on `d = LENGTH A.po_stack`
+      >- suspend "active_same_depth" >>
+      `d < LENGTH A.po_stack` by
+        (qpat_x_assum `d <= LENGTH A.po_stack` mp_tac >>
+         qpat_x_assum `d <> LENGTH A.po_stack` mp_tac >> decide_tac) >>
+      `SUC (LENGTH A.po_stack-(d+1)) = LENGTH A.po_stack-d` by
+        (qpat_x_assum `d < LENGTH A.po_stack` mp_tac >> simp[]) >>
+      `LENGTH A.po_stack-(d+1) < LENGTH A.po_stack /\
+       EL (SUC (LENGTH A.po_stack-(d+1))) tsj = tokB /\
+       fn = (EL (LENGTH A.po_stack-(d+1)) A.po_stack).cf_fn` by
+        (simp[] >> qpat_x_assum `(ptr_owner_view d A).cf_fn = fn` mp_tac >>
+         simp[ptr_owner_view_def]) >>
+      `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+        fs[ptr_demand_interval_def] >>
+      drule_all ptr_source_tagged_owner_call_liveset >>
+      disch_then (qspec_then `observed.cu_context` strip_assume_tac) >>
+      `MEM ((ptr_owner_view d A).cf_state.vs_current_bb,
+            (ptr_owner_view d A).cf_state.vs_inst_idx) xs'` by
+        simp[ptr_owner_view_def] >>
+      `MEM (Allocation bid,sb) itemsA /\
+       MEM (Allocation bid,pb,sb) out.fpo_function.fn_mems_used` by metis_tac[] >>
+      qpat_x_assum `fn = (EL _ A.po_stack).cf_fn` kall_tac >>
+      qpat_x_assum `bp = bp_analyze_fuel _ _ _` SUBST_ALL_TAC >>
+      irule ptr_output_local_local_separation >> simp[] >>
+      goal_assum (drule_at (Pat `concretize_function_fuel_in_context _ _ _ fn = SOME out.fpo_function`)) >>
+      goal_assum (drule_at (Pat `fn_pass_step _ _ observed s fn out`)) >>
+      simp[] >>
+      qexistsl [`P`,`Allocation aid`,
+        `((ptr_owner_view d A).cf_state.vs_current_bb,
+          (ptr_owner_view d A).cf_state.vs_inst_idx)`,`Allocation bid`] >>
+      simp[] >> metis_tac[]) >>
+  suspend "distinct_depths"
+QED
+
+Resume ptr_demand_other_owner_separation[active_same_depth]:
+  `fn = A.po_fn /\ tokB = HD tsj` by
+    (fs[ptr_owner_view_def, GSYM HD] >> metis_tac[]) >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+    fs[ptr_demand_interval_def] >>
+  `dv IN pointer_derived_vars fn (ptr_bp_alloc_roots fn bid)` by
+    (irule (INST_TYPE [alpha |-> ``:num``] ptr_tag_roots_local_wf) >> simp[] >>
+     goal_assum (drule_at (Pat `FLOOKUP TGj dv = SOME (_,_)`)) >>
+     qexists `PTj` >> conj_tac
+     >- (rpt strip_tac >> spose_not_then strip_assume_tac >>
+         `MEM (SOME (tokB,bid)) PTj` by metis_tac[EL_MEM] >>
+         drule_all ptr_source_params_fresh_current >> simp[]) >>
+     drule_all ptr_source_tag_roots_current >>
+     disch_then (qspec_then `(tokB,bid)` mp_tac) >> simp[]) >>
+  `!i. MEM i (fn_insts fn) ==>
+    MEM i (bp_scan_insts fn (cfg_analyze fn).cfg_dfs_pre)` by
+    metis_tac[bp_scan_production_complete] >>
+  `?off. MEM (Ptr (Allocation bid) off)
+    (bp_get_ptrs (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) dv)` by
+    (irule ptr_bp_production_coverage >> metis_tac[]) >>
+  `MEM (Allocation bid) (find_base_allocas_opt bp (inst_write_op A.po_inst))` by
+    (asm_rewrite_tac[] >>
+     simp[find_base_allocas_opt_def, GSYM bp_bases_find_base_allocas, bp_bases_def, MEM_MAP] >>
+     metis_tac[ptr_base_def]) >>
+  `active_inst fn A.po_inst A.po_state` by
+    (`ptr_observation_reachable vs C A` by simp[ptr_observation_reachable_def] >>
+     drule (cj 1 ptr_owner_view_active) >>
+     disch_then (qspec_then `LENGTH A.po_stack` mp_tac) >>
+     simp[ptr_owner_view_def]) >>
+  `?ys. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
+      observed.cu_context fn bp (cfg_analyze fn)) (Allocation bid) = SOME ys /\
+    MEM (A.po_state.vs_current_bb,A.po_state.vs_inst_idx) ys` by
+    (irule ptr_active_write_liveset >> metis_tac[]) >>
+  `MEM (A.po_state.vs_current_bb,A.po_state.vs_inst_idx) xs` by
+    (qpat_x_assum `MEM (_,_) xs` mp_tac >> simp[ptr_owner_view_def]) >>
+  `MEM (Allocation bid,sb) itemsA /\
+   MEM (Allocation bid,pb,sb) out.fpo_function.fn_mems_used` by metis_tac[] >>
+  qpat_x_assum `fn = A.po_fn` kall_tac >>
+  qpat_x_assum `bp = bp_analyze_fuel _ _ _` SUBST_ALL_TAC >>
+  irule ptr_output_local_local_separation >> simp[] >>
+  goal_assum (drule_at (Pat `concretize_function_fuel_in_context _ _ _ fn = SOME out.fpo_function`)) >>
+  goal_assum (drule_at (Pat `fn_pass_step _ _ observed s fn out`)) >>
+  simp[] >>
+  qexistsl [`P`,`Allocation aid`,
+    `(A.po_state.vs_current_bb,A.po_state.vs_inst_idx)`,`Allocation bid`] >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ptr_demand_other_owner_separation[distinct_depths]:
+  `ptr_chrono_history vs C h endpoint` by
+    (drule ptr_structural_transcript_erasure >>
+     strip_tac >> drule ptr_structural_trace_source >> simp[]) >>
+  `j < LENGTH h` by decide_tac >>
+  Cases_on `d < e`
+  >- (`d < LENGTH A.po_stack /\
+       LENGTH A.po_stack-e <= LENGTH A.po_stack-(d+1)` by decide_tac >>
+      `ptr_owner_view d A = EL (LENGTH A.po_stack-(d+1)) A.po_stack` by
+        simp[ptr_owner_view_def] >>
+      `EL (LENGTH A.po_stack-e)
+        ((A.po_fn,A.po_state)::MAP (\f. (f.cf_fn,f.cf_state)) A.po_stack) =
+        (owner,(ptr_owner_view e A).cf_state)` by
+        (Cases_on `e = LENGTH A.po_stack` >>
+         simp[ptr_owner_view_def] >>
+         `0 < LENGTH A.po_stack-e /\
+          PRE (LENGTH A.po_stack-e) = LENGTH A.po_stack-(e+1)` by decide_tac >>
+         simp[EL_MAP, EL_CONS]) >>
+      qpat_x_assum `bp = bp_analyze_fuel _ _ _` SUBST_ALL_TAC >>
+      `?pc. MEM (Allocation bid,pc,sb) (imported_mems_used observed.cu_context fn) /\
+        reserved_intervals_disjoint (pa,sz) (pc,sb)` by
+        (irule ptr_output_suspended_descendant_separation >> simp[] >>
+         (conj_tac >- first_assum ACCEPT_TAC) >>
+         (conj_tac >- (qexists `P` >> asm_rewrite_tac[])) >>
+         goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
+         goal_assum (drule_at (Pat `concretize_function_fuel_in_context _ _ _ fn = SOME out.fpo_function`)) >>
+         goal_assum (drule_at (Pat `fn_pass_step _ _ observed s fn out`)) >>
+         goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
+         qexists `Allocation aid` >>
+         goal_assum (drule_at (Pat `FLOOKUP _ (Allocation aid) = SOME xs`)) >>
+         qexistsl [`db`,`owner`,`(ptr_owner_view e A).cf_state`,
+           `LENGTH A.po_stack-e`,`LENGTH A.po_stack-(d+1)`,`names`,`j`] >>
+         asm "observation" (fn th => rewrite_tac[GSYM th]) >>
+         asm_rewrite_tac[] >>
+         qpat_assum `ptr_owner_view d A = _` (fn th => rewrite_tac[GSYM th]) >>
+         asm_rewrite_tac[] >> simp[]) >>
+      `MEM (Allocation bid,pc,sb) out.fpo_function.fn_mems_used` by
+        (irule ptr_stage_import_retained >>
+         goal_assum (drule_at (Pat `fn_pass_step _ _ observed s fn out`)) >>
+         asm_rewrite_tac[] >> metis_tac[]) >>
+      `MEM out.fpo_function C'.ctx_functions` by metis_tac[lookup_function_MEM] >>
+      `FLOOKUP positions (Allocation bid) = SOME (pc,sb)` by
+        (fs[ptr_stage_placements_def] >> metis_tac[]) >>
+      `pc = pb` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+      metis_tac[]) >>
+  `e < d /\ e < LENGTH A.po_stack /\
+   LENGTH A.po_stack-d <= LENGTH A.po_stack-(e+1)` by decide_tac >>
+  `ptr_owner_view e A = EL (LENGTH A.po_stack-(e+1)) A.po_stack` by
+    simp[ptr_owner_view_def] >>
+  `EL (LENGTH A.po_stack-d)
+    ((A.po_fn,A.po_state)::MAP (\f. (f.cf_fn,f.cf_state)) A.po_stack) =
+    (fn,(ptr_owner_view d A).cf_state)` by
+    (Cases_on `d = LENGTH A.po_stack`
+     >- (simp[ptr_owner_view_def] >>
+         qpat_x_assum `(ptr_owner_view d A).cf_fn = fn` mp_tac >>
+         simp[ptr_owner_view_def]) >>
+     simp[ptr_owner_view_def] >>
+     `0 < LENGTH A.po_stack-d /\
+      PRE (LENGTH A.po_stack-d) = LENGTH A.po_stack-(d+1)` by decide_tac >>
+     simp[EL_MAP, EL_CONS] >>
+     qpat_x_assum `(ptr_owner_view d A).cf_fn = fn` mp_tac >>
+     simp[ptr_owner_view_def]) >>
+  `SUC (LENGTH A.po_stack-(e+1)) = LENGTH A.po_stack-e` by
+    (qpat_x_assum `e < LENGTH A.po_stack` mp_tac >> simp[]) >>
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions` by
+    fs[ptr_demand_interval_def] >>
+  `owner = (EL (LENGTH A.po_stack-(e+1)) A.po_stack).cf_fn` by metis_tac[] >>
+  pop_assum (mk_asm "owner_function") >>
+  qpat_x_assum `owner = (ptr_owner_view e A).cf_fn` kall_tac >>
+  `?pc. MEM (Allocation aid,pc,sz) (imported_mems_used observed'.cu_context owner) /\
+    reserved_intervals_disjoint (pb,sb) (pc,sz)` by
+    (irule ptr_output_tagged_ancestor_destination_separation >> simp[] >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- (qexists `P` >> asm_rewrite_tac[])) >>
+     goal_assum (drule_at (Pat `ptr_chrono_history _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `concretize_function_fuel_in_context _ _ _ owner = SOME out'.fpo_function`)) >>
+     goal_assum (drule_at (Pat `fn_pass_step _ _ observed' s' owner out'`)) >>
+     goal_assum (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
+     asm "observation" (fn th =>
+       qpat_assum `ptr_source_ownership _ _ _ A _ _ _ _ _ _`
+         (assume_tac o PURE_REWRITE_RULE [th])) >>
+     goal_assum (drule_at (Pat `ptr_source_ownership _ _ _ (EL j h) _ _ _ _ _ _`)) >>
+     qexists `bid` >>
+     qexistsl [`b`,`fn`,`(ptr_owner_view d A).cf_state`,
+       `LENGTH A.po_stack-d`,`LENGTH A.po_stack-(e+1)`,`names`,`dv`] >>
+     asm "observation" (fn th => rewrite_tac[GSYM th]) >>
+     asm_rewrite_tac[] >> asm "owner_function" (fn th => simp[th])) >>
+  `MEM (Allocation aid,pc,sz) out'.fpo_function.fn_mems_used` by
+    (irule ptr_stage_import_retained >>
+     goal_assum (drule_at (Pat `fn_pass_step _ _ observed' s' owner out'`)) >>
+     asm_rewrite_tac[] >> metis_tac[]) >>
+  `MEM out'.fpo_function C'.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `FLOOKUP positions (Allocation aid) = SOME (pc,sz)` by
+    (fs[ptr_stage_placements_def] >> metis_tac[]) >>
+  `pc = pa` by metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ] >>
+  fs[staticLayoutDefsTheory.reserved_intervals_disjoint_def] >> decide_tac
+QED
+
+Finalise ptr_demand_other_owner_separation
