@@ -13,7 +13,11 @@ Theorem frag_exec_gas_path:
   !ctx sa sb P Q R fn s.
     frag_exec ctx sa sb P Q R /\ cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\ (!h. ~R (Halt h)) /\
-    fn_has_code sa sb fn /\ P s /\ ~s.vs_halted /\
+    fn_has_code sa sb fn /\
+    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    P s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     (?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
@@ -23,13 +27,22 @@ Theorem frag_exec_gas_path:
 
 Theorem abi_decode_sim_gas_path:
   !ctx sa sb Q fn s.
-    (!fn. fn_has_code sa sb fn ==>
+    (!fn'. fn_has_code sa sb fn' /\ fn_inst_ids_distinct fn' /\
+       (!i. MEM i (fn_insts fn') /\ i.inst_opcode <> STOP ==>
+            MEM i (fn_insts fn)) /\
+       (sa.cs_blocks = sb.cs_blocks \/
+        !bb. lookup_block sb.cs_current_bb fn'.fn_blocks = SOME bb ==>
+             phi_prefix_length bb.bb_instructions = 0) ==>
        ?t. Q t /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
            t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-           abi_decode_sim ctx fn s t) /\
+           abi_decode_sim ctx fn' s t) /\
     cs_extends sa sb /\ frag_gas_free sa sb /\
     (!t rd. Q t ==> Q (t with vs_returndata := rd)) /\
-    fn_has_code sa sb fn /\ ~s.vs_halted /\
+    fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+    (sa.cs_blocks = sb.cs_blocks \/ sb.cs_current_insts <> [] \/
+     !bb. lookup_block sb.cs_current_bb fn.fn_blocks = SOME bb ==>
+          phi_prefix_length bb.bb_instructions = 0) /\
+    ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx fn s 0 (OK t) /\ Q t /\ ~t.vs_halted /\
@@ -58,7 +71,7 @@ Default tactic timeout and memory limits; no other targets.
 
 ## Background
 
-The counted expression judgments of the compiler proof need an actual `gas_marked_path` (`lowering/fragGasModeScript.sml`) through the code a fragment emitted. Older fragment proofs, including the ABI encoder and decoder executions, conclude `frag_exec` (`lowering/fragExecScript.sml`) or `abi_decode_sim` (`lowering/abiDecoderLoopScript.sml`) instead. These say what running the fragment reaches, as a run_from simulation. `lowering/fragGasPathScript.sml` has only the converse direction (`gas_path_normal`, `gas_path_exit`). These two theorems are the missing bridge for fragments that run no GAS, INVOKE or PHI, never jump back to the block they start in, and end in a block of a label they did not finish (`frag_gas_free`).
+The counted expression judgments of the compiler proof need an actual `gas_marked_path` (`lowering/fragGasModeScript.sml`) through the code a fragment emitted. Older fragment proofs, including the ABI encoder and decoder executions, conclude `frag_exec` (`lowering/fragExecScript.sml`) or `abi_decode_sim` (`lowering/abiDecoderLoopScript.sml`) instead. These say what running the fragment reaches, as a run_from simulation. `lowering/fragGasPathScript.sml` has only the converse direction (`gas_path_normal`, `gas_path_exit`). These two theorems are the missing bridge for fragments that run no GAS, INVOKE, PHI, STOP or RETURN, never jump back to the block they start in, and end in a block of a label they did not finish (`frag_gas_free`).
 
 `frag_exec` quantifies over every function with `fn_has_code`. That is what makes the bridge possible: a function that keeps only the fragment's blocks and puts STOP right after the fragment's end turns the simulation into a halting run.
 
@@ -73,10 +86,11 @@ The counted expression judgments of the compiler proof need an actual `gas_marke
 - `lowering/fragGasPathScript.sml`: `gas_path_edge`, `gas_path` and its lemmas.
 - `lowering/fragGasModeScript.sml`, `lowering/fragGasSeqScript.sml`: `gas_marked_path` and straight-line paths (`tuple_run_inst_seq_gas_path`).
 - `lowering/abiDecoderLoopScript.sml`: `abi_decode_sim`.
+- `lowering/abiEncoderObserverScript.sml` (an ancestor of the leaf): the STOP observer and first-visit cut, already proved. `abi_decode_sim_stop_run` and `observer_region_run_prefix_transfer` give `local_prefix ctx fn' cut s u /\ stop_view u = stop_view t`; induction on `local_prefix`, with no GAS instruction on the way, should give `gas_path ctx fn' s 0 (OK u)` and `u.vs_returndata = s.vs_returndata`. Reuse these rather than rebuilding an observer. `stop_view` drops `vs_returndata`, which is why `Q` must be closed under changing it.
 - `lowering/exprLoweringPropsScript.sml`: `emitted_insts`, `same_blocks`.
 - `lowering/defs/compileEnvScript.sml`: `cs_extends`.
 - `venom/defs/venomExecSemanticsScript.sml`, `venom/defs/venomStateScript.sml`: step semantics, STOP, `halt_state`, `jump_to`.
-- `lowering/alan-ref/abiArgsObservation.sml.txt` (reference copy, not a build input): `abi_frag_halting_observer`, a related observer construction from earlier work, for ideas.
+- `alan-ref/abiArgsObservation.sml.txt` (reference copy, not a build input): `abi_frag_halting_observer`, a related observer construction from earlier work, for ideas.
 
 ## Notes
 
