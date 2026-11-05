@@ -6,7 +6,7 @@ Ancestors
   calldataMemberResourceFrame allocaFrontierBound exprLowering
   valueEncoding list rich_list arithmetic abiDecoderValidFixed abiDecoderMemberInfos
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderMembers abiEncoder compileEnv
-  valueEncodingTyping valueEncodingProps abiStaticDynarrayLayout vyperTyping
+  valueEncodingTyping valueEncodingProps abiStaticDynarrayLayout vyperTyping abiDecoderFixedMemory abiDecoderValidContract abiDecoderTypedContract
 
 Theorem calldata_word_child_contract[local]:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==>
@@ -211,3 +211,62 @@ Resume calldata_struct_child_contract[value]:
   asm_simp_tac bool_ss [val_in_memory_struct]
 QED
 Finalise calldata_struct_child_contract
+
+Theorem calldata_fixed_child_contract[local]:
+  abi_decoder_coherent ce env sf ty tv /\
+  calldata_member_child_contract ce env sf ctx fn site limit_st ty tv ==>
+  calldata_member_child_contract ce env sf ctx fn site limit_st
+    (ArrayT ty (Fixed n)) (ArrayTV tv (Fixed n))
+Proof
+  strip_tac >> rewrite_tac[calldata_member_child_contract_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule abi_decoder_valid_fixed_array_inputs >> strip_tac >>
+  `LIST_REL (abi_decoder_coherent ce env sf) (REPLICATE n ty) (REPLICATE n tv)` by
+    simp[LIST_REL_REPLICATE_same] >>
+  `MAP type_memory_size (REPLICATE n tv) =
+    MAP (type_memory_bytes ce) (REPLICATE n ty)` by
+    (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def, map_replicate]) >>
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    (abi_decoder_member_infos sf ce (REPLICATE n ty)) 0 0 first = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+     simp[abi_decoder_fixed_array_infos, abi_decode_complex_phases,
+       abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def]) >>
+  `base_addr <= p /\
+    p + SUM (MAP type_memory_size (REPLICATE n tv)) <= base_addr + cap /\
+    SUM (MAP type_memory_size (REPLICATE n tv)) <=
+      SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) /\
+    p + SUM (MAP type_memory_size (REPLICATE n tv)) < dimword (:256)` by
+    (drule abi_decoder_coherent_header >>
+     simp[abi_decoder_header_def] >> strip_tac >>
+     gvs[type_memory_size_def, map_replicate, SUM_REPLICATE]) >>
+  `!i. i < LENGTH (REPLICATE n ty) ==>
+    calldata_member_child_contract ce env sf ctx fn site limit_st
+      (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv))` by simp[EL_REPLICATE] >>
+  `LENGTH vs = LENGTH (REPLICATE n ty)` by simp[] >>
+  drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
+    calldata_source_members_owned_success)) >>
+  strip_tac >> qexistsl_tac [`t`,`scratch`] >>
+  simp_tac bool_ss [calldata_member_success_def] >> suspend "value"
+QED
+Resume calldata_fixed_child_contract[value]:
+  `LENGTH vs = LENGTH (REPLICATE n tv)` by simp[] >>
+  drule_all calldata_tuple_value_from_members >> strip_tac >>
+  `tuple_in_memory vs (REPLICATE n tv) p t.vs_memory` by
+    fs[val_in_memory_tuple] >>
+  `val_in_memory (ArrayTV tv (Fixed n))
+    (ArrayV (SArrayV (enumerate_static_array (default_value tv) 0 vs))) p t.vs_memory` by
+    (irule abi_decoder_fixed_array_memory >> simp[]) >>
+  `val_wf (ArrayTV tv (Fixed n)) v` by
+    (qpat_assum `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp_tac bool_ss [abi_decoder_valid_pre_def, abi_decoder_metadata_def] >>
+     metis_tac[value_has_type_val_wf]) >>
+  `SUM (MAP (type_memory_bytes ce) (REPLICATE n ty)) = n * type_memory_size tv` by
+    (qpat_x_assum `MAP type_memory_size _ = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[map_replicate, SUM_REPLICATE]) >>
+  asm_simp_tac bool_ss [type_memory_size_def] >>
+  qpat_x_assum `calldata_member_resource_frame _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  asm_simp_tac bool_ss []
+QED
+Finalise calldata_fixed_child_contract
