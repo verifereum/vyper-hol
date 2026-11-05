@@ -2,7 +2,7 @@
 Theory compilerInstructionSuffix
 Ancestors
   loweringShapeDefs loweringShapeRules compileEnv exprLoweringProps abiEncoderProps list
-  emitHelper context venomInst rich_list
+  emitHelper context venomInst rich_list fragExec localPtrsProps
 
 Theorem added_insts_append:
   cs_extends a b /\ cs_extends b c ==>
@@ -376,4 +376,40 @@ Theorem added_insts_return_coverage:
     ?i. MEM i (added_insts s (SND (comp_return v s))) /\ i.inst_id = id
 Proof
   simp[comp_return_def, ci_mono_refl, frag_ids_def]
+QED
+
+Theorem added_insts_function_member:
+  cs_extends sa sb /\ fn_has_code sa sb func /\
+  MEM i (added_insts sa sb) ==> MEM i (fn_insts func)
+Proof
+  strip_tac >>
+  `?new. sb.cs_blocks = new ++ sa.cs_blocks` by fs[cs_extends_def] >>
+  `MEM i (FLAT (MAP (\bb. bb.bb_instructions) (REVERSE new)) ++
+          sb.cs_current_insts)` by
+    (qpat_x_assum `MEM i (added_insts sa sb)` mp_tac >>
+     simp[added_insts_def, state_insts_def, all_blocks_def,
+       REVERSE_APPEND, MAP_APPEND, FLAT_APPEND, DROP_APPEND] >>
+     qmatch_goalsub_abbrev_tac `DROP (LENGTH xs + n) xs` >>
+     `DROP (LENGTH xs + n) xs = []` by simp[DROP_EQ_NIL] >>
+     simp[] >> metis_tac[MEM_DROP_IMP]) >>
+  fs[MEM_APPEND, MEM_FLAT, MEM_MAP]
+  >- (gvs[fn_has_code_def, emitted_blocks_def, TAKE_APPEND] >>
+      metis_tac[lookup_block_fn_insts]) >>
+  fs[fn_has_code_def, IS_PREFIX_APPEND] >>
+  metis_tac[lookup_block_fn_insts, MEM_APPEND]
+QED
+
+Theorem added_insts_function_property:
+  cs_extends sa sb /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  EVERY P (added_insts sa sb) /\
+  (!id. id IN frag_ids sa sb ==>
+    ?i. MEM i (added_insts sa sb) /\ i.inst_id = id) /\
+  MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids sa sb ==>
+  P inst
+Proof
+  strip_tac >>
+  `?i. MEM i (added_insts sa sb) /\ i.inst_id = inst.inst_id` by metis_tac[] >>
+  `MEM i (fn_insts func)` by metis_tac[added_insts_function_member] >>
+  `i = inst` by metis_tac[fn_inst_ids_distinct_inj] >>
+  gvs[EVERY_MEM]
 QED
