@@ -21,6 +21,48 @@ Ancestors
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
 
+Theorem alias_do_swap_stack:
+  dist < LENGTH ps.ps_stack ==>
+  (SND (do_swap dist ps)).ps_stack = stack_swap dist ps.ps_stack
+Proof
+  strip_tac >> Cases_on `dist = 0`
+  >- (gvs[do_swap_def, stack_swap_def, LUPDATE_SAME]) >>
+  Cases_on `dist <= 16` >- simp[do_swap_def] >>
+  simp[do_swap_def] >> pairarg_tac >> simp[] >>
+  simp[top_n_def, GSYM LASTN_def, LASTN_DROP] >>
+  irule LIST_EQ >>
+  simp[stack_swap_def, LENGTH_LUPDATE] >>
+  rpt strip_tac >>
+  simp[EL_APPEND_EQN, EL_MAP, EL_GENLIST, EL_LUPDATE, EL_DROP] >>
+  Cases_on `x = LENGTH ps.ps_stack - (dist + 1)`
+  >- (gvs[] >> simp[]) >>
+  Cases_on `x = LENGTH ps.ps_stack - 1`
+  >- (gvs[] >> simp[HD_DROP]) >>
+  Cases_on `x < LENGTH ps.ps_stack - (dist + 1)` >>
+  simp[EL_TAKE]
+QED
+
+Theorem alias_select_spill_candidate_large:
+  16 < target_len ==>
+  select_spill_candidate stk forbidden target_dist target_len = NONE
+Proof
+  strip_tac >>
+  Cases_on `select_spill_candidate stk forbidden target_dist target_len`
+  >- simp[] >>
+  drule planWfTheory.select_spill_candidate_below_target >>
+  gvs[select_spill_candidate_def] >>
+  imp_res_tac FIND_SOME_MEM >> gvs[MEM_GENLIST, arithmeticTheory.MIN_DEF]
+QED
+
+Theorem alias_reduce_depth_plan_large:
+  16 < target_len ==>
+  reduce_depth_plan fuel target_ops target_op f target_len ps = ([],ps)
+Proof
+  strip_tac >> Cases_on `fuel` >>
+  simp[reduce_depth_plan_def, alias_select_spill_candidate_large] >>
+  Cases_on `stack_get_unfixed_depth target_op f target_len ps.ps_stack` >> simp[]
+QED
+
 Theorem alias_emit_reorder_consumed_window:
   emit_input_plan opc inputs nl ps = (iops,prepared) /\
   (!op. MEM op inputs /\ is_var_operand op ==>
