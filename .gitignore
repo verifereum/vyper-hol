@@ -12,6 +12,7 @@
 tests/vyper-test-exports
 tests/vyper-coverage-report.txt
 tests/generated/vyperTest*functional_codegen_vyper_hol_regression_*Script.sml
+tests/.emit/
 
 # Python bytecode caches
 __pycache__/
@@ -41,4 +42,5 @@ verifereum-ref
 # Generated native bytecode parity runner
 lowering/defs/bytecode/native/compilerNativeML.sml
 lowering/defs/bytecode/native/bytecode_parity_native.exe
+lowering/defs/bytecode/native/bytecode_parity_json.exe
 lowering/defs/bytecode/native/bytecode_parity_native.mlton
