@@ -63,6 +63,136 @@ Proof
   Cases_on `stack_get_unfixed_depth target_op f target_len ps.ps_stack` >> simp[]
 QED
 
+Theorem alias_reorder_one_large_step:
+  16 < LENGTH pending /\ idx < LENGTH pending /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  stack_get_unfixed_depth op (LENGTH pending - (idx + 1))
+    (LENGTH pending) ps.ps_stack = SOME d /\
+  reorder_one dfg pending idx op ps = (ops,qs) ==>
+  LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!at. LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at ps.ps_stack) /\
+  stack_peek (LENGTH pending - (idx + 1)) qs.ps_stack = op /\
+  (!i. i < idx ==> stack_peek (LENGTH pending - 1 - i) qs.ps_stack =
+                   stack_peek (LENGTH pending - 1 - i) ps.ps_stack)
+Proof
+  strip_tac >>
+  drule_then strip_assume_tac stack_get_unfixed_depth_props >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, alias_reduce_depth_plan_large] >>
+  Cases_on `d = LENGTH pending - (idx + 1)`
+  >- (gvs[] >> simp[]) >>
+  `LENGTH pending - (idx + 1) < LENGTH ps.ps_stack` by decide_tac >>
+  simp[] >>
+  Cases_on `operand_equiv dfg op (stack_peek (LENGTH pending - (idx + 1)) ps.ps_stack)`
+  >- (simp[] >> disch_then strip_assume_tac >> gnvs[] >>
+      conj_tac >- simp[stack_poke_def, LENGTH_LUPDATE] >>
+      conj_tac
+      >- (gen_tac >> irule doSwapSimTheory.stack_poke_exchange_multiplicity >> simp[]) >>
+      simp[stack_peek_def, stack_poke_def, EL_LUPDATE] >>
+      rpt strip_tac >> rpt IF_CASES_TAC >> gvs[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  disch_then strip_assume_tac >> gnvs[] >>
+  rename1 `do_swap (LENGTH pending - (idx + 1)) ps3 = (swap2_ops,qs)` >>
+  `LENGTH ps3.ps_stack = LENGTH ps.ps_stack /\
+   ps3.ps_spilled = ps.ps_spilled` by
+    (drule planWfTheory.do_swap_length >>
+     qspec_then `d` (qspec_then `ps` mp_tac) do_swap_spilled_unchanged >> simp[]) >>
+  `LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+   qs.ps_spilled = ps.ps_spilled` by
+    (qspec_then `LENGTH pending - (idx + 1)`
+       (qspec_then `ps3` mp_tac) planWfTheory.do_swap_length >>
+     qspec_then `LENGTH pending - (idx + 1)`
+       (qspec_then `ps3` mp_tac) do_swap_spilled_unchanged >> simp[]) >>
+  simp[] >> conj_tac
+  >- (gen_tac >>
+      qspec_then `d` (qspec_then `ps` mp_tac) doSwapSimTheory.do_swap_multiplicity >>
+      qspec_then `LENGTH pending - (idx + 1)`
+        (qspec_then `ps3` mp_tac) doSwapSimTheory.do_swap_multiplicity >> simp[]) >>
+  `ps3.ps_stack = stack_swap d ps.ps_stack` by
+    (drule alias_do_swap_stack >> simp[]) >>
+  `LENGTH pending - (idx + 1) < LENGTH ps3.ps_stack` by simp[] >>
+  `qs.ps_stack = stack_swap (LENGTH pending - (idx + 1)) ps3.ps_stack` by
+    metis_tac[alias_do_swap_stack, pairTheory.SND] >>
+  simp[stack_peek_def, stack_swap_def, EL_LUPDATE] >>
+  rpt strip_tac >> rpt IF_CASES_TAC >> gvs[]
+QED
+
+Theorem alias_plan_steps_large_materialised:
+  !rest done pending dfg ps ops qs.
+  pending = done ++ rest /\ 16 < LENGTH pending /\
+  LENGTH pending <= LENGTH ps.ps_stack /\
+  (!at. LIST_ELEM_COUNT at pending <= LIST_ELEM_COUNT at ps.ps_stack) /\
+  (!i. i < LENGTH done ==>
+    stack_peek (LENGTH pending - 1 - i) ps.ps_stack = EL i pending) /\
+  plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps)
+    (MAPi (\i op. (LENGTH done + i,op)) rest) ps = (ops,qs) ==>
+  LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!at. LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at ps.ps_stack) /\
+  (!i. i < LENGTH pending ==>
+    stack_peek (LENGTH pending - 1 - i) qs.ps_stack = EL i pending)
+Proof
+  Induct_on `rest`
+  >- (simp[foldlSimTheory.plan_steps_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `plan_steps _ _ _ = _` mp_tac >>
+  simp[indexedListsTheory.MAPi_def, combinTheory.o_DEF, arithmeticTheory.ADD_CLAUSES] >>
+  strip_tac >> drule plan_steps_cons_result >> strip_tac >> gvs[] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  `LENGTH done < LENGTH (done ++ h::rest)` by simp[] >>
+  `EL (LENGTH done) (done ++ h::rest) = h` by simp[EL_APPEND_EQN] >>
+  `?d. stack_get_unfixed_depth h
+    (LENGTH (done ++ h::rest) - (LENGTH done + 1))
+    (LENGTH (done ++ h::rest)) ps.ps_stack = SOME d` by
+    (qspecl_then [`done ++ h::rest`, `LENGTH done`, `ps`]
+       mp_tac materialised_pending_next_on_stack_window >>
+       `SUC (LENGTH done + LENGTH rest) - (LENGTH done + 1) = LENGTH rest` by decide_tac >>
+       simp[arithmeticTheory.ADD_CLAUSES]) >>
+  drule_at (Pat `reorder_one _ _ _ _ _ = _`) alias_reorder_one_large_step >>
+  simp[] >> disch_then strip_assume_tac >>
+  first_x_assum (qspec_then `done ++ [h]` mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, LENGTH_APPEND, LENGTH] >>
+  disch_then (qspecl_then [`dfg`, `ps1`, `rest_ops`, `qs`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES] >>
+  impl_tac
+  >- (rpt strip_tac >> Cases_on `i = LENGTH done`
+      >- (`SUC (LENGTH done + LENGTH rest) - (i + 1) = LENGTH rest` by decide_tac >>
+          simp[]) >>
+      `i < LENGTH done` by decide_tac >>
+      `SUC (LENGTH done + LENGTH rest) - (i + 1) = LENGTH done + LENGTH rest - i` by decide_tac >>
+      first_x_assum (qspec_then `i` mp_tac) >>
+      simp[arithmeticTheory.ADD_CLAUSES]) >>
+  disch_then strip_assume_tac >> rpt strip_tac >>
+  `SUC (LENGTH done + LENGTH rest) - (i + 1) = LENGTH done + LENGTH rest - i` by decide_tac >>
+  first_x_assum (qspec_then `i` mp_tac) >> simp[]
+QED
+
+Theorem alias_reorder_plan_large_materialised:
+  16 < LENGTH pending /\ LENGTH pending <= LENGTH ps.ps_stack /\
+  (!at. LIST_ELEM_COUNT at pending <= LIST_ELEM_COUNT at ps.ps_stack) /\
+  reorder_plan dfg pending ps = (ops,qs) ==>
+  LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+  qs.ps_spilled = ps.ps_spilled /\
+  (!at. LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at ps.ps_stack) /\
+  qs.ps_stack = TAKE (LENGTH qs.ps_stack - LENGTH pending) qs.ps_stack ++ pending
+Proof
+  strip_tac >>
+  `LENGTH qs.ps_stack = LENGTH ps.ps_stack /\
+   qs.ps_spilled = ps.ps_spilled /\
+   (!at. LIST_ELEM_COUNT at qs.ps_stack = LIST_ELEM_COUNT at ps.ps_stack) /\
+   (!i. i < LENGTH pending ==>
+     stack_peek (LENGTH pending - 1 - i) qs.ps_stack = EL i pending)` by
+    (irule alias_plan_steps_large_materialised >> simp[] >>
+     qexistsl_tac [`dfg`, `[]`, `ops`, `pending`] >>
+     simp[GSYM reorder_plan_eq_plan_steps]) >>
+  `qs.ps_stack = stack_pop (LENGTH pending) qs.ps_stack ++ pending` by
+    (irule fixed_suffix_decompose >> simp[]) >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+  qpat_x_assum `qs.ps_stack = stack_pop _ _ ++ _` mp_tac >>
+  simp[stack_pop_def]
+QED
+
 Theorem alias_emit_reorder_consumed_window:
   emit_input_plan opc inputs nl ps = (iops,prepared) /\
   (!op. MEM op inputs /\ is_var_operand op ==>
