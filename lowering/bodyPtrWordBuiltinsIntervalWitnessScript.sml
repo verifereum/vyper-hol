@@ -166,7 +166,9 @@ Theorem word_interval_literal_branch_path:
   ~ctx_has_dalloca ctx ==>
   ?t G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 /\
-    lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE
+    lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE /\
+    t = jump_to lbl (update_var tmp w s) /\
+    G' = DRESTRICT G (COMPL {tmp}) /\ tn' = tn with t_var := set_var_taint tn.t_var [tmp] {}
 Proof
   strip_tac >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0
@@ -188,7 +190,12 @@ Proof
   conj_tac >- metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES] >>
   simp[jump_to_def, Abbr `u`, lookup_var_def, update_var_def,
        Abbr `Ga`, step_prov_def, set_prov_def, out_prov_def,
-       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
+       first_prov_def, op_prov_def, mk_inst_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE,
+       Abbr `ta`, step_taint_def, out_taint_def, written_taint_def,
+       step_writes_def, store_taint_def, adopt_reset_def, new_site_bytes_def,
+       source_memory_write_ranges_def, mem_taint_def, imm_taint_def,
+       eval_operand_def, taint_component_equality] >>
+  simp[op_taint_def, range_bytes_def, FLOOKUP_DEF, SF CONJ_ss]
 QED
 
 Theorem word_interval_selected_branch_path:
@@ -203,7 +210,10 @@ Theorem word_interval_selected_branch_path:
   get_instruction bb 1 = SOME (mk_inst jid JMP [Label lbl] []) ==>
   ?t G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 /\
-    lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE
+    lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE /\
+    t = jump_to lbl (update_var tmp w (jump_to (if b then lt else lf) s)) /\
+    G' = DRESTRICT G (COMPL {tmp}) /\
+    tn' = tn with t_var := set_var_taint tn.t_var [tmp] {}
 Proof
   strip_tac >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G tn
@@ -212,7 +222,10 @@ Proof
   `?t G' tn'. gas_path_ptr D 0 ctx fn PG G tn
       (jump_to (if b then lt else lf) s) 0 G' tn' (OK t) /\
       t.vs_current_bb = lbl /\ t.vs_inst_idx = 0 /\
-      lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE` by
+      lookup_var tmp t = SOME w /\ op_prov G' (Var tmp) = NONE /\
+      t = jump_to lbl (update_var tmp w (jump_to (if b then lt else lf) s)) /\
+      G' = DRESTRICT G (COMPL {tmp}) /\
+      tn' = tn with t_var := set_var_taint tn.t_var [tmp] {}` by
     (irule word_interval_literal_branch_path >>
      simp[jump_to_def] >> metis_tac[]) >>
   qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >>
@@ -276,9 +289,13 @@ Proof
   `?t G' tn'. gas_path_ptr D 0 ctx fn PG Ga ta u 0 G' tn' (OK t) /\
     t.vs_current_bb = "@exit_2" /\ t.vs_inst_idx = 0 /\
     lookup_var "%6" t = SOME (if b then 1w else 2w) /\
-    op_prov G' (Var "%6") = NONE` by
-    (Cases_on `b` >> gvs[] >>
-     irule word_interval_selected_branch_path >> simp[] >> metis_tac[]) >>
+    op_prov G' (Var "%6") = NONE /\
+    t = jump_to "@exit_2" (update_var "%6" (if b then 1w else 2w)
+      (jump_to (if b then "@then_0" else "@else_1") u)) /\
+    G' = DRESTRICT Ga (COMPL {"%6"}) /\
+    tn' = ta with t_var := set_var_taint ta.t_var ["%6"] {}` by
+    (irule word_interval_selected_branch_path >> simp[] >>
+     Cases_on `b` >> gvs[] >> metis_tac[]) >>
   qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >>
   metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
 QED
