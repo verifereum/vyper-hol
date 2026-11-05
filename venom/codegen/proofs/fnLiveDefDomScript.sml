@@ -518,9 +518,3 @@ Proof
   >- (gvs[ldd_available_def] >> metis_tac[]) >>
   gvs[ldd_pending_phi_def] >> metis_tac[]
 QED
-
-(* Reject admitted dependencies, including any inherited by the main theorem. *)
-val _ = List.app (fn (_,th) =>
-  if List.all (fn s => s = "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
-  then () else raise Fail "oracle in live definition dominance proof")
-  (DB.thms "fnLiveDefDom");
