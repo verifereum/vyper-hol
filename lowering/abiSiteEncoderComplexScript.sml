@@ -4,7 +4,8 @@ Ancestors
   abiScratchMembersInterpret abiScratchMembersIndex abiScratchMembers
   abiEncoderChildCapability abiEncoderChildContext abiSiteEncoderContract abiEncoderMemberSpine
   abiSiteEncoderBoundary abiEncoderComplexCode abiEncoderComplexDynamic
-  abiEncoderComplexPrefix abiEncoderMembersInput abiEncoderTuple
+  abiEncoderComplexPrefix abiEncoderMembersInput abiEncoderTuple abiEncoderInput
+  abiEncoderMemberCode abiEncoderMembersDefs
   abiScratchAddress abiScratchEffect abiDecoderLoop abiDecoderContract
   compileEnv valueEncoding contractABI venomState list arithmetic
 
@@ -39,6 +40,42 @@ Proof
     [`guard` |-> `\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A`]
     abi_site_members_generate)) >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac []
+QED
+
+Theorem abi_site_encoder_complex_static:
+  EVERY (\(ei,_,_,_). abi_site_encoder ei) infos /\
+  ~EXISTS (\(_,_,_,dyn). dyn) infos ==>
+  abi_site_encoder (AbiComplex infos)
+Proof
+  strip_tac >> simp_tac bool_ss [abi_site_encoder_def] >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_site_encoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_site_encoder_input_def]) >>
+  disch_then (qx_choose_then `tys` (qx_choose_then `avs`
+    (MAP_EVERY assume_tac o CONJUNCTS)) o REWRITE_RULE [abi_encoder_complex_input_iff]) >>
+  qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
+  drule_all abi_site_members_root_pre >> strip_tac >>
+  qpat_assum `enc at (ListV avs) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
+  qpat_assum `abi_site_members_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_site_members_pre_def]) >> strip_tac >>
+  drule_all abi_encoder_complex_static_length >> disch_tac >>
+  drule abi_encoder_complex_static_flags >> disch_tac >>
+  drule_all abi_encoder_complex_static_trace >> strip_tac >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  `start.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  mp_tac (Q.INST [`active` |-> `F`, `dyn_ptr` |-> `Lit 0w`, `site` |-> `0:num`,
+    `slot` |-> `0:num`, `lo` |-> `start.cs_next_id`, `st` |-> `start`,
+    `hl` |-> `head_lengths tys 0`, `output_size` |-> `LENGTH (enc (Tuple tys) (ListV avs))`]
+    abi_site_members_initial_inv) >>
+  impl_tac >- asm_simp_tac (srw_ss()) [abi_encoder_cursor_def, Excl "enc_def"] >> disch_tac >>
+  drule_all abi_site_members_run >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+    (assume_tac o SIMP_RULE bool_ss [APPEND, ADD_CLAUSES]) >>
+  drule abi_site_members_final_output >> strip_tac >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_members_inv_def]) >>
+  qexists_tac `t` >> asm_simp_tac (srw_ss()) [eval_operand_def, Excl "enc_def"]
 QED
 
 val _ = List.app (fn (name,th) =>
