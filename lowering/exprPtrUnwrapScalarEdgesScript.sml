@@ -62,13 +62,14 @@ Proof
        FLOOKUP_DRESTRICT, FLOOKUP_UPDATE]
 QED
 
-Theorem ptr_inst_ok_copy_mul:
+Theorem ptr_inst_ok_copy_arith:
+  (opc = ADD \/ opc = MUL) /\
   op_taint tn left = {} /\ op_taint tn right = {} /\
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
   ptr_inst_ok D lo fuel ctx fn G tn
-    (mk_inst id MUL [left;right] [tmp]) s
+    (mk_inst id opc [left;right] [tmp]) s
 Proof
-  strip_tac >>
+  strip_tac >> gvs[] >>
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, mk_inst_def,
        source_memory_write_ranges_def, source_memory_read_ranges_def] >>
   simp[step_inst_non_invoke] >>
