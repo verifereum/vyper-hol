@@ -175,7 +175,11 @@ Theorem annassign_setup_ptr:
  (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                 FLOOKUP s1.vs_allocas aid = SOME entry) /\
  ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
- s1.vs_inst_idx = LENGTH st1.cs_current_insts
+ s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
+ ?u. step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 = OK u /\
+     s1 = u with vs_inst_idx := SUC s0.vs_inst_idx /\
+     G1 = step_prov PG G0 (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) u /\
+     tn1 = step_taint (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 u tn0
 Proof
  rpt gen_tac >> strip_tac >>
  `?u. exec_alloca (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p])
@@ -208,8 +212,7 @@ Proof
  `st1.cs_current_bb = st.cs_current_bb /\
   LENGTH st1.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
    gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
- qexistsl [`u with vs_inst_idx := SUC s0.vs_inst_idx`, `n2w b`] >>
- goal_assum (drule_at Any) >>
+ qexists `n2w b` >>
  simp[stmt_state_rel_inst_idx, lookup_var_def, eval_operand_def] >>
  simp[annassign_ghost_inst_idx_ptr] >>
  gvs[eval_operand_def, lookup_var_def]

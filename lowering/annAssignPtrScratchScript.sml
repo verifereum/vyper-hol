@@ -271,6 +271,7 @@ Theorem annassign_allocated_static_copy_ptr:
  s'.vs_current_bb = st1.cs_current_bb /\
  s'.vs_inst_idx = LENGTH st1.cs_current_insts /\ ~s'.vs_halted /\
  (!x. lookup_var x s' = lookup_var x s) /\
+ s'.vs_allocas = s.vs_allocas /\
  (!m. mem_agree_outside tn'.t_mem s'.vs_memory m ==> val_in_memory tv v (w2n b) m)
 Proof
  rpt gen_tac >> strip_tac >>
@@ -298,7 +299,9 @@ Proof
    (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
  `ptr_covers G tn' dst s' sz` by
    (irule annassign_coverage_var_frame_ptr >> metis_tac[]) >>
- qexistsl [`s'`,`tn'`] >> simp[]
+ qexistsl [`s'`,`tn'`] >> simp[] >>
+ qpat_x_assum `(_ with <|vs_memory := _;vs_inst_idx := _|>) = _` mp_tac >>
+ simp[venom_state_component_equality]
 QED
 
 (* expr_val_at, not ghost coverage alone, supplies the frontier argument.
