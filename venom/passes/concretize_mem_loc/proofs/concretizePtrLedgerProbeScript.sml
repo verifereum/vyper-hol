@@ -86,7 +86,7 @@ Definition ptr_ledger_follow_def:
     else NONE)
 End
 
-Theorem ptr_ledger_follow_history[local]:
+Theorem ptr_ledger_follow_history:
   !rest obs tail h endpoint.
     ptr_ledger_follow ctx rest obs = SOME tail /\
     ptr_chrono_history initial ctx h obs ==>
@@ -112,7 +112,7 @@ Definition ptr_ledger_source_entry_def:
     (ptr_probe_entry_state s)
 End
 
-Theorem ptr_ledger_next_projections[local,simp]:
+Theorem ptr_ledger_next_projections[simp]:
   (ptr_ledger_next obs inst post).po_fn = obs.po_fn /\
   (ptr_ledger_next obs inst post).po_inst = inst /\
   (ptr_ledger_next obs inst post).po_state =
@@ -213,7 +213,7 @@ Proof
     ptr_probe_entry_state_def, update_var_def, mstore_def]
 QED
 
-Theorem ptr_ledger_nop_edge[local]:
+Theorem ptr_ledger_nop_edge:
   step_inst fuel ctx (mk_inst 12 NOP [] []) s = OK s
 Proof
   simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def]
@@ -276,7 +276,7 @@ Proof
   simp[ptr_ledger_o4_def, venom_state_component_equality]
 QED
 
-Theorem ptr_ledger_instruction_opcode[local,simp]:
+Theorem ptr_ledger_instruction_opcode[simp]:
   (mk_inst iid opc ops outs).inst_opcode = opc
 Proof
   simp[mk_inst_def]
