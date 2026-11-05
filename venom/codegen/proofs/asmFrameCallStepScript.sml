@@ -1049,6 +1049,166 @@ Proof
   AP_TERM_TAC >> simp[asm_state_component_equality]
 QED
 
+Theorem asm_frame_call_abort_step:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a s /\
+  a.as_pc < LENGTH prog /\
+  (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") /\
+  s.contexts = (c,rb)::rest /\
+  op = (if EL a.as_pc prog = AsmOp "CALL" then Call else StaticCall) /\
+  asm_call_prepare op s =
+    (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) /\
+  ((lookup_account sender accounts).balance < value \/ 1024 < LENGTH s.contexts) ==>
+  asm_frame_step_ok prog data es0 a s
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a s /\ wf_state s /\
+   ~c.msgParams.static /\ ?d. s.msdomain = Collect d` by
+    (fs[asm_frame_rel_def] >> metis_tac[]) >>
+  `LENGTH c.stack <= stack_limit` by
+    (gvs[wf_state_def, wf_context_def]) >>
+  (Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac >- metis_tac[]) >>
+  `next_opcode c = SOME op` by
+    (drule_all asm_frame_call_decode >> simp[] >> metis_tac[]) >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_abort_state >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[])) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `step_call op s = (INL (),t)` >>
+  `step s = (INL (),t)` by (irule asm_call_step_success >> metis_tac[]) >>
+  `LENGTH t.contexts = LENGTH s.contexts` by simp[Abbr `t`] >>
+  `run_call t = run_call s` by metis_tac[run_call_same_depth_step] >>
+  `wf_state t` by
+    (drule step_preserves_wf_state >> simp[]) >>
+  `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack` by
+    (drule_all asm_call_prepare_success_stack >> simp[]) >>
+  `observable_call c` by
+    (simp[observable_call_def] >>
+     Cases_on `op = Call` >> gvs[call_has_value_def]) >>
+  drule frame_obs_call_same_depth >>
+  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  `outcome_of (request_of s).cr_kind t (LENGTH c.logs)
+     (LENGTH s.rollback.toDelete) = failed_outcome (request_of s)` by
+    (irule asm_call_abort_outcome >>
+     simp[Abbr `t`] >> metis_tac[]) >>
+  suspend "restore"
+QED
+
+Resume asm_frame_call_abort_step[restore]:
+  rpt strip_tac >>
+  drule_at (Pat `asm_call_prepare _ _ = _`) asm_call_prepare_success_view >>
+  disch_then (qspecl_then [`rest`,`rb`,`d`,`c`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qpat_x_assum `u = _` kall_tac >>
+  `c.stack = a.as_stack /\ ~a.as_call_ctx.cc_static` by gvs[asm_evm_rel_def] >>
+  `a.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `(request_of s).cr_kind = MessageCall` by
+    (Cases_on `EL a.as_pc prog = AsmOp "CALL"` >> gvs[request_of_def]) >>
+  `6 <= LENGTH a.as_stack` by
+    (qpat_x_assum `6 + _ <= LENGTH _` mp_tac >> simp[] >> decide_tac) >>
+  `?gas addr x y z w stk. a.as_stack = gas::addr::x::y::z::w::stk` by
+    (qpat_x_assum `6 <= LENGTH a.as_stack` mp_tac >>
+     namedCases_on `a.as_stack` ["", "gas t1"] >> simp[] >>
+     namedCases_on `t1` ["", "addr t2"] >> simp[] >>
+     namedCases_on `t2` ["", "x t3"] >> simp[] >>
+     namedCases_on `t3` ["", "y t4"] >> simp[] >>
+     namedCases_on `t4` ["", "z t5"] >> simp[] >>
+     namedCases_on `t5` ["", "w stk"] >> simp[]) >>
+  qpat_x_assum `asm_call_prepare _ _ = _` kall_tac >>
+  qpat_x_assum `(lookup_account _ _).balance < _ \/ _` kall_tac >>
+  qpat_x_assum `step_call _ _ = _` kall_tac >>
+  qpat_x_assum `sender = _` kall_tac >>
+  qpat_x_assum `accounts = _` kall_tac >>
+  qpat_x_assum `address = _` kall_tac >>
+  qpat_x_assum `value = _` kall_tac >>
+  suspend "assembly"
+QED
+
+Resume asm_frame_call_abort_step[assembly]:
+  `asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a =
+   AsmOK (asm_next (a with <|
+     as_memory := asm_call_memory ao az ro rs a.as_memory;
+     as_stack := 0w::DROP (6 + (if call_has_value op then 1 else 0)) a.as_stack;
+     as_outcomes := MAP SND (call_trace t);
+     as_requests := record_request (request_of s) a.as_requests;
+     as_returndata := [] |>))` by
+    (Cases_on `EL a.as_pc prog = AsmOp "CALL"`
+     >- (qpat_x_assum `Abbrev (t = _)` kall_tac >>
+         gvs[call_has_value_def] >>
+         namedCases_on `stk` ["", "rsw tail"] >> gvs[] >>
+         drule_all asm_frame_call_request >> disch_tac >>
+         simp[asm_step_call_staticcall_gas, asm_exec_call_def] >>
+         qmatch_goalsub_abbrev_tac `asm_consume_call_outcome _ _ _ _ b` >>
+         `b.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)`
+           by simp[Abbr `b`] >>
+         drule_all asm_consume_call_failed >>
+         disch_then (fn th => rewrite_tac[th]) >> simp[Abbr `b`]) >>
+     qpat_x_assum `Abbrev (t = _)` kall_tac >>
+     gvs[call_has_value_def] >>
+     drule_all asm_frame_staticcall_request >> disch_tac >>
+     simp[asm_step_call_staticcall_gas, asm_exec_staticcall_def] >>
+     qmatch_goalsub_abbrev_tac `asm_consume_call_outcome _ _ _ _ b` >>
+     `b.as_outcomes = failed_outcome (request_of s) :: MAP SND (call_trace t)`
+       by simp[Abbr `b`] >>
+     drule_all asm_consume_call_failed >>
+     disch_then (fn th => rewrite_tac[th]) >> simp[Abbr `b`]) >>
+  suspend "relation"
+QED
+
+Resume asm_frame_call_abort_step[relation]:
+  map_every (fn q => qpat_x_assum q kall_tac)
+    [`ao = _`, `az = _`, `ro = _`, `rs = _`,
+     `a.as_stack = _`, `op = (if _ then _ else _)`] >>
+  `buffer_to_list c.memory = a.as_memory` by gvs[asm_evm_rel_def] >>
+  `buffer_to_list (FST (HD t.contexts)).memory =
+     asm_call_memory ao az ro rs a.as_memory` by
+    (qpat_x_assum `Abbrev (t = _)`
+       (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+     simp_tac (srw_ss()) [] >>
+     qpat_x_assum `buffer_to_list c.memory = _`
+       (fn th => pure_rewrite_tac[GSYM th]) >>
+     Cases_on `max_expansion_range (ao,az) (ro,rs)` >>
+     rename1 `max_expansion_range (ao,az) (ro,rs) = (off,sz)` >>
+     simp_tac (srw_ss()) [] >>
+     irule asm_call_memory_buffer_extend >>
+     qexistsl_tac [`off`,`sz`] >> simp_tac (srw_ss()) [] >>
+     first_assum ACCEPT_TAC) >>
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) (a.as_pc + 1) =
+   asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc + 1` by
+    (`a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+     drule asm_pc_to_offset_suc >>
+     simp[arithmeticTheory.ADD1, EL_APPEND1] >>
+     Cases_on `EL a.as_pc prog = AsmOp "CALL"` >>
+     gvs[asm_inst_size_def]) >>
+  `record_request (request_of s) a.as_requests ++ call_requests t =
+     call_requests es0` by
+    (fs[asm_frame_rel_def, call_requests_def, record_request_def] >>
+     gvs[] >> IF_CASES_TAC >> gvs[]) >>
+  qpat_x_assum `Abbrev (t = _)` mp_tac >>
+  qmatch_goalsub_abbrev_tac `(ct,rb)::rest` >> disch_tac >>
+  `t.contexts = (ct,rb)::rest /\ t.txParams = s.txParams /\
+   t.msdomain = Collect d' /\
+   t.rollback.accounts = s.rollback.accounts /\
+   t.rollback.tStorage = s.rollback.tStorage /\
+   t.rollback.toDelete = s.rollback.toDelete` by simp[Abbr `t`] >>
+  qpat_x_assum `Abbrev (t = _)` kall_tac >>
+  `ct.msgParams = c.msgParams /\ ct.jumpDest = c.jumpDest /\
+   ct.pc = SUC c.pc /\ ct.logs = c.logs /\ ct.returnData = [] /\
+   ct.stack = 0w::DROP (6 + (if call_has_value op then 1 else 0)) c.stack` by
+    simp[Abbr `ct`] >>
+  qpat_x_assum `Abbrev (ct = _)` kall_tac >>
+  simp[asm_frame_step_ok_def] >> disj2_tac >>
+  qexists_tac `t` >> simp[] >>
+  qpat_x_assum `asm_frame_rel prog data es0 a s` mp_tac >>
+  rewrite_tac[asm_frame_rel_def] >> strip_tac >>
+  gvs[] >> simp[asm_next_def] >>
+  gvs[asm_evm_rel_def, asm_next_def]
+QED
+
+Finalise asm_frame_call_abort_step
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
