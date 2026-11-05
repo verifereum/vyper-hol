@@ -1121,3 +1121,295 @@ Proof
     (irule asm_steps_compose_ok >> qexists `mid` >> asm_rewrite_tac[]) >>
   qexists `final` >> fs[execute_plan_append]
 QED
+
+(* ===== Popping a fully placed target window under the marked budget ===== *)
+
+Theorem count_le_one_all_distinct[local]:
+  !(xs : 'a list). (!x. LIST_ELEM_COUNT x xs <= 1) ==> ALL_DISTINCT xs
+Proof
+  Induct >> rw[]
+  >- (qpat_x_assum `!x. LIST_ELEM_COUNT x (h::xs) <= 1`
+        (qspec_then `h` mp_tac) >>
+      simp[LIST_ELEM_COUNT_THM] >> strip_tac >>
+      fs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  first_x_assum irule >> gen_tac >>
+  qpat_x_assum `!x. LIST_ELEM_COUNT x (h::xs) <= 1`
+    (qspec_then `x` mp_tac) >>
+  Cases_on `h = x` >> simp[LIST_ELEM_COUNT_THM]
+QED
+
+Theorem elem_count_filter:
+  !P x (l : 'a list).
+    LIST_ELEM_COUNT x (FILTER P l) = if P x then LIST_ELEM_COUNT x l else 0
+Proof
+  gen_tac >> gen_tac >> Induct >> rw[LIST_ELEM_COUNT_DEF, FILTER] >>
+  gvs[LIST_ELEM_COUNT_DEF] >> Cases_on `h = x` >> gvs[]
+QED
+
+Theorem elem_count_split[local]:
+  !(full : 'a list) prefix suffix.
+    full = prefix ++ suffix ==>
+    !x. LIST_ELEM_COUNT x full =
+        LIST_ELEM_COUNT x prefix + LIST_ELEM_COUNT x suffix
+Proof
+  rpt strip_tac >> gvs[LIST_ELEM_COUNT_THM]
+QED
+
+Theorem plan_state_residual_wf_marked_pop:
+  !sb pending ps.
+    plan_state_residual_wf_marked sb pending (LENGTH pending) ps ==>
+    plan_slots_bounded sb
+      (ps with ps_stack := stack_pop (LENGTH pending) ps.ps_stack) /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    dead_stack_marker NOTIN FDOM ps.ps_spilled /\
+    ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+                   (stack_pop (LENGTH pending) ps.ps_stack)) /\
+    DISJOINT (set (stack_pop (LENGTH pending) ps.ps_stack))
+             (FDOM ps.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >> fs[plan_state_residual_wf_marked_def] >>
+  `ps.ps_stack = stack_pop (LENGTH pending) ps.ps_stack ++ pending` by
+    (irule fixed_suffix_decompose >> simp[]) >>
+  drule elem_count_split >> strip_tac >>
+  `!x. x <> dead_stack_marker ==>
+       LIST_ELEM_COUNT x (stack_pop (LENGTH pending) ps.ps_stack) <= 1` by
+    (rpt strip_tac >> res_tac >>
+     qpat_x_assum `!x. LIST_ELEM_COUNT x ps.ps_stack = _`
+       (qspec_then `x` assume_tac) >> decide_tac) >>
+  `!x. x IN FDOM ps.ps_spilled ==>
+       ~MEM x (stack_pop (LENGTH pending) ps.ps_stack)` by
+    (rpt strip_tac >> res_tac >>
+     qpat_x_assum `!x. LIST_ELEM_COUNT x ps.ps_stack = _`
+       (qspec_then `x` assume_tac) >>
+     fs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac) >>
+  `plan_slots_bounded sb
+     (ps with ps_stack := stack_pop (LENGTH pending) ps.ps_stack)` by
+    (fs[plan_slots_bounded_def] >> metis_tac[]) >>
+  `ALL_DISTINCT (FILTER (\op. op <> dead_stack_marker)
+     (stack_pop (LENGTH pending) ps.ps_stack))` by
+    (irule count_le_one_all_distinct >> rw[elem_count_filter]) >>
+  `DISJOINT (set (stack_pop (LENGTH pending) ps.ps_stack))
+     (FDOM ps.ps_spilled)` by
+    (simp[pred_setTheory.IN_DISJOINT] >> metis_tac[]) >>
+  simp[]
+QED
+
+
+(* ===== reorderSim's materialisation chain over the marked residual ===== *)
+
+Theorem elem_count_take_el_lt_m[local]:
+  !(xs : operand list) n.
+    n < LENGTH xs ==>
+    LIST_ELEM_COUNT (EL n xs) (TAKE n xs) <
+      LIST_ELEM_COUNT (EL n xs) xs
+Proof
+  rpt strip_tac >> drule TAKE_DROP_SUC >>
+  disch_then (fn th => mp_tac
+    (AP_TERM ``LIST_ELEM_COUNT (EL n xs) : operand list -> num`` th)) >>
+  simp[elem_count_append, LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
+Theorem fixed_window_segment_m[local]:
+  !(pending : operand list) fixed stack.
+    LENGTH pending <= LENGTH stack /\ fixed <= LENGTH pending /\
+    (!i. i < fixed ==>
+      stack_peek (LENGTH pending - 1 - i) stack = EL i pending) ==>
+    TAKE fixed (DROP (LENGTH stack - LENGTH pending) stack) =
+      TAKE fixed pending
+Proof
+  rpt gen_tac >> strip_tac >> irule LIST_EQ >>
+  simp[LENGTH_TAKE, LENGTH_DROP] >> rpt strip_tac >>
+  first_x_assum (qspec_then `x` mp_tac) >>
+  simp[stack_peek_def, EL_TAKE, EL_DROP] >>
+  AP_TERM_TAC >> decide_tac
+QED
+
+Theorem fixed_window_count_bound_m[local]:
+  !(pending : operand list) fixed stack op.
+    LENGTH pending <= LENGTH stack /\ fixed <= LENGTH pending /\
+    (!i. i < fixed ==>
+      stack_peek (LENGTH pending - 1 - i) stack = EL i pending) /\
+    stack_get_unfixed_depth op (LENGTH pending - 1 - fixed)
+      (LENGTH pending) stack = NONE ==>
+    LIST_ELEM_COUNT op stack <= LIST_ELEM_COUNT op (TAKE fixed pending)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stack_get_unfixed_depth _ _ _ _ = NONE` mp_tac >>
+  simp[stack_get_unfixed_depth_NONE] >> strip_tac >>
+  qabbrev_tac `off = LENGTH stack - LENGTH pending` >>
+  `TAKE fixed (DROP off stack) = TAKE fixed pending` by
+    (unabbrev_all_tac >> irule fixed_window_segment_m >> simp[]) >>
+  `stack = TAKE off stack ++ TAKE fixed (DROP off stack) ++
+           DROP (off + fixed) stack` by
+    (`TAKE fixed (DROP off stack) ++ DROP (off + fixed) stack =
+       DROP off stack` by
+       MATCH_ACCEPT_TAC
+         (ONCE_REWRITE_RULE [Q.SPECL [`fixed`, `off`] ADD_COMM]
+            (REWRITE_RULE [DROP_DROP_T]
+              (Q.SPECL [`fixed`, `DROP off stack`] TAKE_DROP))) >>
+     once_rewrite_tac[GSYM APPEND_ASSOC] >>
+     qpat_assum
+       `TAKE fixed (DROP off stack) ++ DROP (off + fixed) stack =
+          DROP off stack`
+       (fn th => once_rewrite_tac[th]) >>
+     MATCH_ACCEPT_TAC (SYM (Q.SPECL [`off`, `stack`] TAKE_DROP))) >>
+  `~MEM op (TAKE off stack)` by
+    (simp[MEM_EL] >> rpt strip_tac >>
+     first_x_assum (qspec_then `LENGTH stack - 1 - n` mp_tac) >>
+     simp[stack_peek_def] >>
+     `n < LENGTH stack` by
+       (qpat_assum `stack = _`
+          (fn th => mp_tac (AP_TERM ``LENGTH : operand list -> num`` th)) >>
+        simp[] >> decide_tac) >>
+     `LENGTH stack - 1 - (LENGTH stack - 1 - n) = n` by decide_tac >>
+     `off <= LENGTH stack` by (unabbrev_all_tac >> decide_tac) >>
+     `n < off` by fs[LENGTH_TAKE] >>
+     `LENGTH pending <= LENGTH stack - 1 - n` by
+       (unabbrev_all_tac >> decide_tac) >>
+     simp[EL_TAKE] >> decide_tac) >>
+  `~MEM op (DROP (off + fixed) stack)` by
+    (simp[MEM_EL] >> rpt strip_tac >>
+     first_x_assum
+       (qspec_then `LENGTH stack - 1 - (off + fixed + n)` mp_tac) >>
+     simp[stack_peek_def, EL_DROP] >>
+     `LENGTH stack - 1 - (LENGTH stack - 1 - (off + fixed + n)) =
+        off + fixed + n` by decide_tac >>
+     `LENGTH stack - 1 - (off + fixed + n) <=
+        LENGTH pending - 1 - fixed` by
+       (unabbrev_all_tac >> decide_tac) >>
+     simp[] >> unabbrev_all_tac >> decide_tac) >>
+  `LIST_ELEM_COUNT op (TAKE off stack) = 0 /\
+   LIST_ELEM_COUNT op (DROP (off + fixed) stack) = 0` by
+    fs[GSYM LIST_ELEM_COUNT_MEM] >>
+  qpat_x_assum `stack = _`
+    (fn th => mp_tac
+      (AP_TERM ``LIST_ELEM_COUNT op : operand list -> num`` th)) >>
+  simp[elem_count_append] >> decide_tac
+QED
+
+Theorem residual_budget_wf_marked_to_residual:
+  !base pending ps.
+    residual_budget_wf_marked base pending ps /\
+    LENGTH pending <= LENGTH ps.ps_stack ==>
+    plan_state_residual_wf_marked base pending 0 ps
+Proof
+  simp[residual_budget_wf_marked_def, plan_state_residual_wf_marked_def]
+QED
+
+Theorem materialised_pending_next_on_stack_marked:
+  !base pending fixed ps.
+    (!op. LIST_ELEM_COUNT op pending <=
+          LIST_ELEM_COUNT op ps.ps_stack) /\
+    plan_state_residual_wf_marked base pending fixed ps /\
+    fixed < LENGTH pending ==>
+    ?d. stack_get_unfixed_depth (EL fixed pending)
+          (LENGTH pending - 1 - fixed) (LENGTH pending)
+          ps.ps_stack = SOME d
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_unfixed_depth (EL fixed pending)
+    (LENGTH pending - 1 - fixed) (LENGTH pending) ps.ps_stack`
+  >- (`LIST_ELEM_COUNT (EL fixed pending) ps.ps_stack <=
+         LIST_ELEM_COUNT (EL fixed pending) (TAKE fixed pending)` by
+        (irule fixed_window_count_bound_m >>
+         fs[plan_state_residual_wf_marked_def]) >>
+      qpat_assum `!op. LIST_ELEM_COUNT op pending <= _`
+        (qspec_then `EL fixed pending` assume_tac) >>
+      drule_then assume_tac elem_count_take_el_lt_m >>
+      qsuff_tac `F` >- simp[] >> decide_tac)
+  >> simp[]
+QED
+
+Theorem plan_state_residual_wf_fix_next_marked:
+  !base pending fixed ps.
+    plan_state_residual_wf_marked base pending fixed ps /\
+    fixed < LENGTH pending /\
+    stack_peek (LENGTH pending - 1 - fixed) ps.ps_stack =
+      EL fixed pending ==>
+    plan_state_residual_wf_marked base pending (SUC fixed) ps
+Proof
+  simp[plan_state_residual_wf_marked_def] >> rpt strip_tac >>
+  Cases_on `i = fixed` >> gvs[] >>
+  first_x_assum irule >> decide_tac
+QED
+
+Theorem reorder_one_materialised_fix_next_marked:
+  !spillbase pending idx ps dfg ops ps'.
+    plan_state_residual_wf_marked spillbase pending idx ps /\
+    (!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    idx < LENGTH pending /\ LENGTH pending <= 16 /\
+    reorder_one dfg pending idx (EL idx pending) ps = (ops,ps') ==>
+    plan_state_residual_wf_marked spillbase pending (SUC idx) ps' /\
+    (!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps'.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `residual_budget_wf_marked spillbase pending ps /\
+   LENGTH pending <= LENGTH ps.ps_stack` by
+    fs[plan_state_residual_wf_marked_def, residual_budget_wf_marked_def] >>
+  `MEM (EL idx pending) pending` by simp[EL_MEM] >>
+  drule_all materialised_pending_next_on_stack_marked >> strip_tac >>
+  drule_all reorder_one_residual_budget_wf_marked >> strip_tac >>
+  `!i. i < idx ==>
+       stack_peek (LENGTH pending - 1 - i) ps'.ps_stack = EL i pending` by
+    (rpt strip_tac >>
+     drule_all reorder_one_preserves_fixed >>
+     fs[plan_state_residual_wf_marked_def]) >>
+  `stack_peek (LENGTH pending - 1 - idx) ps'.ps_stack = EL idx pending` by
+    (irule reorder_one_places >> metis_tac[]) >>
+  conj_tac
+  >- (irule plan_state_residual_wf_fix_next_marked >> simp[] >>
+      fs[plan_state_residual_wf_marked_def, residual_budget_wf_marked_def]) >>
+  gen_tac >> Cases_on `MEM x pending`
+  >- (drule_all reorder_one_materialised_counts_unconditional >> simp[]) >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM]
+QED
+
+Theorem plan_steps_reorder_materialised_marked[local]:
+  !rest done pending spillbase dfg ps ops ps'.
+    pending = done ++ rest /\
+    plan_state_residual_wf_marked spillbase pending (LENGTH done) ps /\
+    (!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    LENGTH pending <= 16 /\
+    plan_steps (\(idx,op) ps. reorder_one dfg pending idx op ps)
+      (MAPi (\i op. (LENGTH done + i,op)) rest) ps = (ops,ps') ==>
+    plan_state_residual_wf_marked spillbase pending (LENGTH pending) ps'
+Proof
+  Induct_on `rest`
+  >- (rpt gen_tac >> simp[plan_steps_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `plan_steps _ _ _ = _` mp_tac >>
+  simp[indexedListsTheory.MAPi_def, combinTheory.o_DEF, ADD_CLAUSES] >>
+  strip_tac >> drule plan_steps_cons_result >> strip_tac >> gvs[] >>
+  `EL (LENGTH done) (done ++ h::rest) = h` by simp[EL_APPEND_EQN] >>
+  `LENGTH done < LENGTH (done ++ h::rest)` by simp[] >>
+  `plan_state_residual_wf_marked spillbase (done ++ h::rest) (SUC (LENGTH done)) ps1 /\
+   (!x. LIST_ELEM_COUNT x (done ++ h::rest) <= LIST_ELEM_COUNT x ps1.ps_stack)` by
+    (irule reorder_one_materialised_fix_next_marked >> simp[] >>
+     qexistsl_tac [`dfg`, `step_ops`, `ps`] >>
+     rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+     asm_rewrite_tac[]) >>
+  first_x_assum (qspec_then `done ++ [h]` mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, LENGTH_APPEND, LENGTH,
+                   ADD_CLAUSES] >>
+  disch_then irule >> conj_tac >- decide_tac >>
+  qexistsl_tac [`dfg`, `rest_ops`, `ps1`] >> simp[ADD_CLAUSES]
+QED
+
+Theorem reorder_plan_materialised_arranged_marked:
+  !spillbase pending dfg ps ops ps'.
+    residual_budget_wf_marked spillbase pending ps /\
+    LENGTH pending <= LENGTH ps.ps_stack /\ LENGTH pending <= 16 /\
+    (!x. LIST_ELEM_COUNT x pending <= LIST_ELEM_COUNT x ps.ps_stack) /\
+    reorder_plan dfg pending ps = (ops,ps') ==>
+    plan_state_residual_wf_marked spillbase pending (LENGTH pending) ps' /\
+    ps'.ps_stack = stack_pop (LENGTH pending) ps'.ps_stack ++ pending
+Proof
+  rpt gen_tac >> strip_tac >>
+  `plan_state_residual_wf_marked spillbase pending (LENGTH pending) ps'` by
+    (irule plan_steps_reorder_materialised_marked >> simp[] >>
+     qexistsl_tac [`dfg`, `[]`, `ops`, `ps`, `pending`] >>
+     simp[GSYM reorder_plan_eq_plan_steps] >>
+     irule residual_budget_wf_marked_to_residual >> simp[]) >>
+  simp[] >> irule fixed_suffix_decompose >>
+  fs[plan_state_residual_wf_marked_def]
+QED

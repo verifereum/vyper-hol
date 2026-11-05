@@ -26,8 +26,8 @@ Theory deepResidualSim
 Ancestors
   deepResidualBudget fnPlanPrefix preparedPrefixSim generatedPrefixSim
   generatedReorderSim genericInputReady reorderSim doSwapSim codegenRel asmSem planExec
-  stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers
-  list rich_list arithmetic
+  stackPlanGen stackPlanOps stackPlanTypes stackModel blockSimHelpers planSpillBounds
+  stackOpSim sorting list rich_list arithmetic
 
 Theorem filter_distinct_elem_count_le_one[local]:
   !l (x : 'a) P.
@@ -81,7 +81,14 @@ Theorem emit_input_plan_prepared_sim_marked:
         venom_asm_rel lo ps' vs st' /\
         st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
-  cheat
+  strip_tac >>
+  conj_tac >- metis_tac[emit_input_plan_layout_wf] >>
+  conj_tac >- metis_tac[emit_input_plan_slots_bounded] >>
+  conj_tac
+  >- (drule_all emit_input_plan_residual_budget_wf_marked >> simp[]) >>
+  conj_tac >- metis_tac[emit_input_plan_pending_inventory] >>
+  irule emit_input_plan_venom_asm_rel_numeric >> simp[] >>
+  metis_tac[]
 QED
 
 (* generatedReorderSim$reorder_plan_venom_asm_rel_numeric over the marker-tolerant budget. *)
@@ -131,7 +138,19 @@ Theorem selected_input_arranged_marked:
   plan_state_residual_wf_marked spillbase selected (LENGTH selected) arranged /\
   arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected
 Proof
-  cheat
+  strip_tac >>
+  drule_all emit_input_plan_materialised >> strip_tac >>
+  `residual_budget_wf_marked spillbase operands prepared` by
+    (drule_all emit_input_plan_residual_budget_wf_marked >> simp[]) >>
+  drule perm_operand_counts >> strip_tac >>
+  `residual_budget_wf_marked spillbase selected prepared` by
+    metis_tac[residual_budget_wf_marked_perm] >>
+  `LENGTH selected = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!x. LIST_ELEM_COUNT x selected <= LIST_ELEM_COUNT x prepared.ps_stack` by
+    metis_tac[] >>
+  qspecl_then [`spillbase`, `selected`, `dfg`, `prepared`, `rops`, `arranged`]
+    mp_tac reorder_plan_materialised_arranged_marked >>
+  impl_tac >- fs[] >> simp[]
 QED
 
 (* preparedPrefixSim$selected_prefix_prepared_sim over the marker-tolerant budget. *)
@@ -163,7 +182,41 @@ Theorem selected_prefix_prepared_sim_marked:
     venom_asm_rel lo arranged vs st' /\
     st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops))
 Proof
-  cheat
+  strip_tac >>
+  `plan_state_residual_wf_marked spillbase selected (LENGTH selected) arranged /\
+   arranged.ps_stack = stack_pop (LENGTH selected) arranged.ps_stack ++ selected` by
+    (irule selected_input_arranged_marked >> metis_tac[]) >> simp[] >>
+  fs[EVERY_APPEND] >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  simp[execute_plan_append, asm_block_at_append] >> strip_tac >>
+  drule_all emit_input_plan_prepared_sim_marked >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `asm_steps _ _ _ _ st = AsmOK mid` >>
+  `asm_block_at prog mid.as_pc (execute_plan initial_fmp rops)` by
+    metis_tac[ADD_COMM] >>
+  `residual_budget_wf_marked spillbase selected prepared /\
+   pending_inventory_wf selected prepared` by
+    metis_tac[residual_budget_wf_marked_perm, pending_inventory_wf_perm] >>
+  `LENGTH selected <= 16 /\ LENGTH selected <= LENGTH prepared.ps_stack` by
+    metis_tac[PERM_LENGTH] >>
+  `EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) selected` by
+    (drule PERM_EVERY >> disch_then (qspec_then
+      `\op. op <> dead_stack_marker /\ ~operand_equiv dfg op dead_stack_marker`
+      mp_tac) >> simp[]) >>
+  `!op at. MEM op selected /\
+    (MEM at prepared.ps_stack \/ at IN FDOM prepared.ps_spilled) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at` by
+    (drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       emit_input_plan_alias_transport >>
+     disch_then (qspecl_then [`selected`, `dfg`, `vs`, `lo`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  drule_all reorder_plan_venom_asm_rel_numeric_marked >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `venom_asm_rel lo arranged vs endpoint` >>
+  qexists `endpoint` >> simp[execute_plan_append] >>
+  irule asm_steps_compose_ok >> qexists `mid` >> simp[]
 QED
 
 (* generatedPrefixSim$materialised_emit_resources over the marker-tolerant
@@ -179,5 +232,20 @@ Theorem materialised_emit_resources_marked:
     (stack_pop n ps.ps_stack) outputs ==>
   generated_plan_state_wf_marked spillbase emitted
 Proof
-  cheat
+  strip_tac >> drule plan_state_residual_wf_marked_pop >> strip_tac >>
+  simp[generated_plan_state_wf_marked_def] >>
+  Cases_on `outputs` >- gvs[] >>
+  rename1 `LENGTH (out::rest) <= 1` >>
+  `rest = []` by (Cases_on `rest` >> gvs[]) >> gvs[] >>
+  `~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled` by
+    (fs[EVERY_MEM] >> conj_tac
+     >- (qpat_x_assum `!op. MEM op _ ==> _`
+           (qspec_then `Var out` mp_tac) >> simp[] >> metis_tac[]) >>
+     qpat_x_assum `!op. op IN FDOM _ ==> _`
+       (qspec_then `Var out` mp_tac) >> simp[] >> metis_tac[]) >>
+  `Var out <> dead_stack_marker` by simp[dead_stack_marker_def] >>
+  gvs[stack_push_def, plan_slots_bounded_def, FILTER_SNOC,
+      ALL_DISTINCT_SNOC, MEM_FILTER] >>
+  fs[pred_setTheory.IN_DISJOINT, stack_pop_def] >>
+  metis_tac[rich_listTheory.MEM_TAKE]
 QED
