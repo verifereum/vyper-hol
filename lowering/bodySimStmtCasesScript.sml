@@ -71,6 +71,7 @@ Ancestors
   stmtSimAugAssignAttrStorage stmtSimAssignMem stmtSimAssignTupleMem
   stmtSimAssignTupleTargets
   memoryLocalRhsProps stmtPoppedKeys exprOpenMain bodyStorageMetadata
+  bodyAugAssignOther
 Libs
   monadsyntax
 
@@ -2298,6 +2299,8 @@ Theorem body_augassign_other:
        body_expr_ok cx e) /\ body_base_target_ok cx t /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AugAssign ty t bop e) /\
+    (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+       (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
@@ -2313,7 +2316,7 @@ Theorem body_augassign_other:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt strip_tac >> irule body_augassign_other_leaf >> metis_tac[]
 QED
 
 Theorem body_augassign_case:
