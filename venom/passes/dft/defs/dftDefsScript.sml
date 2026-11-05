@@ -178,6 +178,8 @@ Definition dft_abort_kind_def:
   dft_abort_kind ASSERT = CanRevert /\
   dft_abort_kind ASSERT_UNREACHABLE = CanExHalt /\
   dft_abort_kind RETURNDATACOPY = CanExHalt /\
+  dft_abort_kind CREATE = CanExHalt /\
+  dft_abort_kind CREATE2 = CanExHalt /\
   dft_abort_kind INVOKE = AnyFail /\
   dft_abort_kind _ = NoFail
 End
