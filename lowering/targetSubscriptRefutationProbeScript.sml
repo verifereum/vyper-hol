@@ -352,3 +352,78 @@ Proof
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >> simp[]
 QED
 
+
+Theorem clear_outer_concrete_abort:
+  !k. ?n a u. run_from n (probe_descendant_ctx k)
+    probe_descendant_outer_caller clear_outer_machine = Abort a u
+Proof
+  gen_tac >> qexists_tac `1` >>
+  simp[fragExecTheory.run_from_def, clear_outer_machine_position,
+       probe_descendant_outer_caller_def, venomInstTheory.mk_raw_function_def,
+       venomInstTheory.lookup_block_def, listTheory.FIND_thm] >>
+  ntac 10 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES, wordsTheory.dimword_def,
+         fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``exec_block``, ``step_inst``, ``probe_descendant_ctx``]) >>
+  pure_rewrite_tac[GSYM venomInstTheory.mk_inst_def,
+       numLib.num_CONV ``1``, clear_machine_invoke] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``exec_block``, ``probe_descendant_ctx``]) >>
+  ntac 3 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES, wordsTheory.dimword_def,
+         fcpLib.INDEX_CONV ``dimindex (:256)``]) >>
+  simp[Once venomExecSemanticsTheory.exec_block_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``exec_block``, ``probe_descendant_ctx``]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  simp_tac (srw_ss() ++ wordsLib.WORD_ss) [] >>
+  ntac 2 (simp[Once venomExecSemanticsTheory.exec_block_def] >>
+    CONV_TAC (computeLib.RESTR_EVAL_CONV
+      [``exec_block``, ``probe_descendant_ctx``]) >>
+    simp[wordsTheory.WORD_OR_CLAUSES, wordsTheory.WORD_ADD_0,
+         wordsTheory.WORD_MULT_CLAUSES]) >>
+  CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_THM))) >> simp[]
+QED
