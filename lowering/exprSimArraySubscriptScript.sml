@@ -7,6 +7,7 @@ Ancestors
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
   exprSimForeignImmutableFrame emitHelperProps ASCIInumbers freshWrites
+  exprArrayOperandProvenance
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
