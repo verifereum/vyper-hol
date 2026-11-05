@@ -119,3 +119,26 @@ Resume trace_visit_replay[blocks_phi]:
   qpat_x_assum `!vs0 ws. _` irule >> simp[]
 QED
 Finalise trace_visit_replay
+
+Theorem replay_context_visit:
+  agrees orc ws (trace_events (trace_context orc fuel ctx s)) /\
+  MEM (n,p,d,fn,inst,t) (trace_visits 0 (trace_context orc fuel ctx s)) ==>
+  raw_reachable (s with vs_gas_readings := ws) ctx fn inst
+    (t with vs_gas_readings := DROP n ws)
+Proof
+  simp[trace_context_def, trace_function_def] >>
+  Cases_on `ctx.ctx_entry`
+  >- simp[trace_visits_def] >>
+  rename1 `ctx.ctx_entry = SOME nm` >>
+  Cases_on `lookup_function nm ctx.ctx_functions`
+  >- simp[trace_visits_def] >>
+  rename1 `lookup_function nm ctx.ctx_functions = SOME entryfn` >>
+  Cases_on `fn_entry_label entryfn`
+  >- simp[trace_visits_def] >>
+  rename1 `fn_entry_label entryfn = SOME lbl` >>
+  simp[] >> strip_tac >>
+  drule_all entry_reachable_context >>
+  disch_then (qspecl_then [`s`, `ws`] assume_tac) >>
+  drule_all (cj 3 trace_visit_replay) >>
+  simp[visits_reachable_def] >> metis_tac[]
+QED
