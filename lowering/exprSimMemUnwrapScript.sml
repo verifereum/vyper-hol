@@ -402,7 +402,7 @@ Proof
 QED
 
 (* The buffer's ALLOCA, memory-checked. *)
-Theorem alloc_buffer_source_path_mem[local]:
+Theorem alloc_buffer_source_path_mem:
   !ctx func cenv cx es sm mid buf sz s src a.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
     stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
@@ -623,7 +623,7 @@ Proof
   metis_tac[alloca_history_jump]
 QED
 
-Theorem storage_unwrap_typed_suffix_path_mem[local]:
+Theorem storage_unwrap_typed_suffix_path_mem:
   !loc tv src dst mid result sb ctx func cenv cx es u t v a w.
   (loc = LocStorage \/ loc = LocTransient) /\
   (if type_slot_size tv = 1 then
@@ -672,7 +672,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem storage_unwrap_layout_facts[local]:
+Theorem storage_unwrap_layout_facts:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   ~is_word_type t /\ fn_has_code sm sb func ==>
@@ -719,7 +719,7 @@ Proof
   gvs[comp_ignore_bind_def, ci_mono_def] >> metis_tac[fn_has_code_split]
 QED
 
-Theorem storage_unwrap_type_facts[local]:
+Theorem storage_unwrap_type_facts:
   vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
