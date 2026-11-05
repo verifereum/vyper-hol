@@ -442,8 +442,22 @@ Definition phi_operands_ready_def:
     else EVERY (phi_block_ready (liveness_analyze fn)) fn.fn_blocks
 End
 
+(* The planner pushes an OFFSET's output and never pops it, dead or not, as
+   Python's _generate_evm_for_instruction does.  A dead one would stay below
+   a join's live-in variables and pile up in a loop, so codegen takes only
+   functions whose OFFSET outputs are all read (remove_unused drops the
+   others). *)
+Definition offset_outputs_used_def:
+  offset_outputs_used fn ⇔
+    EVERY (λinst. inst.inst_opcode = OFFSET ⇒
+             EVERY (λout. EXISTS (λuse. MEM (Var out) use.inst_operands)
+                            (fn_insts fn))
+               inst.inst_outputs)
+      (fn_insts fn)
+End
+
 (* Per-function: structural WF + SSA + SUE + normalized CFG + PHI operands
-   + no bad opcodes *)
+   + no bad opcodes + no dead OFFSET output *)
 Definition codegen_ready_fn_def:
   codegen_ready_fn fn ⇔
     canonical_param_prefix fn ∧
@@ -455,7 +469,8 @@ Definition codegen_ready_fn_def:
     cfg_is_normalized (cfg_analyze fn) fn ∧
     block_entries_ready (cfg_analyze fn) fn ∧
     phi_operands_ready fn ∧
-    EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
+    EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks ∧
+    offset_outputs_used fn
 End
 
 (* Per-context: all functions ready, and every function but the first
