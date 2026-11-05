@@ -21,6 +21,7 @@ Definition constructor_args_encode_def:
       vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
         SOME (mut, F, args, [], NoneT, body) /\
       LENGTH tx.args = LENGTH args /\
+      IS_SOME (bind_arguments (type_env tops) args tx.args) /\
       vyper_to_abi_list (type_env tops) (MAP SND args) tx.args = SOME abi_vals /\
       bs = enc (Tuple (vyper_to_abi_types (type_env tops) (MAP SND args)))
                (ListV abi_vals)
