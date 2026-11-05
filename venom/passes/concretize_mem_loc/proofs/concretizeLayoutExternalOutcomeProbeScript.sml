@@ -2,7 +2,7 @@ Theory concretizeLayoutExternalOutcomeProbe
 Ancestors frameRelocationEnvironment frameRelocationLocal frameRelocationValues
   concretizeLayoutReaderContext
   venomCallOracleDefs venomExecSemantics venomState venomInst extCallOracle
-  ptrDiscipline words list
+  ptrDiscipline venomWf words list
 Libs wordsLib
 
 val () = augment_srw_ss [wordsLib.SIZES_ss, wordsLib.WORD_GROUND_ss];
@@ -74,4 +74,36 @@ Proof
   strip_tac >>
   mp_tac external_probe_return_lengths >> strip_tac >>
   gvs[] >> simp[dead_result_rel_def]
+QED
+
+(* The obstruction is at the mandatory observation, independent of every
+   relocation mask, pointer relation and demand chosen by the caller. *)
+Theorem external_probe_no_local_successor:
+  step_inst_base external_probe_inst external_probe_source = OK post ==>
+  ~(?tpost. step_inst_base external_probe_inst external_probe_target = OK tpost /\
+    local_rel P pr B R (\s t. dead_result_rel D (Halt s) (Halt t)) post tpost)
+Proof
+  strip_tac >> strip_tac >>
+  drule local_rel_observation >> simp[] >>
+  metis_tac[external_probe_no_observation]
+QED
+
+Theorem external_probe_access_taint:
+  access_ok lo G fn external_probe_inst s /\
+  taint_ok fn entry_taint external_probe_inst s
+Proof
+  simp[access_ok_def, taint_ok_def, external_probe_inst_def, mk_inst_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       contextCodegenRelTheory.memory_range_of_operands_def,
+       eval_operand_def, entry_taint_def, op_taint_def] >>
+  Cases_on `op` >> simp[]
+QED
+
+Theorem external_probe_well_formed:
+  inst_wf external_probe_inst /\
+  ~is_terminator external_probe_inst.inst_opcode /\
+  external_probe_inst.inst_opcode <> INVOKE
+Proof
+  EVAL_TAC
 QED
