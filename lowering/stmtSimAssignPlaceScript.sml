@@ -36,6 +36,7 @@ Theorem compile_assign_place_case:
     supported_target_pure tops bt /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
+    assignable_type env.type_defs (expr_type e) /\
     (lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
@@ -59,6 +60,7 @@ Theorem assign_place_effectful_index_case:
     ~supported_target_pure tops bt /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
+    assignable_type env.type_defs (expr_type e) /\
     (lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
