@@ -53,6 +53,7 @@ Theorem place_store_value_storage_run:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
+    type_alloc_ok cenv dty /\
     stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
