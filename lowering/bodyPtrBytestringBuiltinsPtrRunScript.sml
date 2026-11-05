@@ -463,3 +463,59 @@ Proof
   simp[] >>
   simp[order_ptr_s17_def, order_ptr_s16_def, venomStateTheory.update_var_def]
 QED
+
+Definition order_ptr_s18_def:
+  order_ptr_s18 = order_ptr_s17 with
+    <|vs_vars := order_ptr_s17.vs_vars |+ ("%15",0w); vs_inst_idx := 18|>
+End
+
+Theorem order_ptr_step17:
+  step_inst_base (mk_inst 17 OR [Var "%13";Var "%14"] ["%15"]) order_ptr_s17 =
+    OK (order_ptr_s18 with vs_inst_idx := 17)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%13" order_ptr_s17 = SOME 0w` by
+    simp[order_ptr_s17_def, order_ptr_s16_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  `lookup_var "%14" order_ptr_s17 = SOME 0w` by
+    simp[order_ptr_s17_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_ptr_s18_def, order_ptr_s17_def, venomStateTheory.update_var_def]
+QED
+
+Definition order_ptr_s19_def:
+  order_ptr_s19 = order_ptr_s18 with
+    <|vs_vars := order_ptr_s18.vs_vars |+ ("%16",1w); vs_inst_idx := 19|>
+End
+
+Theorem order_ptr_step18:
+  step_inst_base (mk_inst 18 ISZERO [Var "%15"] ["%16"]) order_ptr_s18 =
+    OK (order_ptr_s19 with vs_inst_idx := 18)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%15" order_ptr_s18 = SOME 0w` by
+    simp[order_ptr_s18_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[] >>
+  simp[order_ptr_s19_def, order_ptr_s18_def, venomStateTheory.update_var_def]
+QED
+
+Definition order_ptr_s20_def:
+  order_ptr_s20 = order_ptr_s19 with vs_inst_idx := 20
+End
+
+Theorem order_ptr_step19:
+  step_inst_base (mk_inst 19 ASSERT [Var "%16"] []) order_ptr_s19 =
+    OK (order_ptr_s20 with vs_inst_idx := 19)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[order_ptr_s20_def, order_ptr_s19_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256]
+QED
