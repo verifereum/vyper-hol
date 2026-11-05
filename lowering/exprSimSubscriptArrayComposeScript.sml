@@ -2,7 +2,7 @@
 Theory exprSimSubscriptArrayCompose
 Ancestors
   exprSimSubscriptArraySuffix gasOutcome gasSummary gasSummaryCompose gasExemptCert
-  exprSimDefs exprSimSubscriptArraySource vyperState list
+  exprSimDefs exprSimSubscriptArraySource exprSimMemorySource vyperState list
 
 Theorem framed_array_summary_after_prefix[local]:
   gas_marked_exec memory (ctx,func) a (es,s0) left (INL v) mid (OK t) /\
@@ -111,4 +111,70 @@ Proof
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
   simp[] >> first_assum ACCEPT_TAC
+QED
+
+(* Source observations are consumed by executions, but not by endpoint posts. *)
+Theorem expr_post_initial_gas:
+  expr_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
+  expr_post ctx func cenv cx e es sa sb s0 ee v op s
+Proof
+  simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.locals_kept_def]
+QED
+
+Theorem read_result_success_gas_iff[local]:
+  read_result cx r (ee with gas_obs := gs) = (INL v,ee with gas_obs := gs) <=>
+  read_result cx r ee = (INL v,ee)
+Proof
+  eq_tac >> strip_tac
+  >- (drule read_result_gas_obs >>
+      disch_then (qspec_then `ee.gas_obs` mp_tac) >> simp[]) >>
+  drule read_result_gas_obs >> simp[]
+QED
+
+Theorem stmt_state_rel_source_gas[local]:
+  stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) s <=>
+  stmt_state_rel ctx func cenv cx ee s
+Proof
+  simp[exprLoweringPropsTheory.stmt_state_rel_def,
+       compileEnvTheory.state_rel_gas_obs,
+       exprLoweringPropsTheory.immutable_alloca_sep_def]
+QED
+
+Theorem vv_at_source_gas[local]:
+  vv_at cenv cx ty sa sb (ee with gas_obs := gs) r vv s <=>
+  vv_at cenv cx ty sa sb ee r vv s
+Proof
+  Cases_on `vv` >>
+  simp[loweringPostsTheory.vv_at_def, read_result_success_gas_iff,
+       loweringPostsTheory.expr_val_at_def]
+QED
+
+Theorem read_storage_success_gas_iff[local]:
+  read_storage_slot cx tr w tvt (ee with gas_obs := gs) =
+    (INL v,ee with gas_obs := gs) <=>
+  read_storage_slot cx tr w tvt ee = (INL v,ee)
+Proof
+  qspec_then `PlaceR (StoragePlace tr w tvt)` mp_tac
+    (Q.GEN `r` read_result_success_gas_iff) >>
+  simp[vyperStateTheory.read_result_def, vyperStateTheory.read_place_def]
+QED
+
+Theorem vv_holds_source_gas[local]:
+  vv_holds cenv cx ty r vv (ee with gas_obs := gs) s <=>
+  vv_holds cenv cx ty r vv ee s
+Proof
+  Cases_on `vv` >>
+  simp[loweringPostsTheory.vv_holds_def, read_result_success_gas_iff] >>
+  Cases_on `p.ptr_location` >>
+  simp[loweringPostsTheory.immutable_holds_def,
+       loweringPostsTheory.storage_holds_def, read_result_success_gas_iff,
+       read_storage_success_gas_iff, vyperStorageBackendTheory.get_storage_def]
+QED
+
+Theorem vv_post_final_gas:
+  vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) r vv s <=>
+  vv_post ctx func cenv cx e es sa sb s0 ee r vv s
+Proof
+  simp[loweringPostsTheory.vv_post_def, stmt_state_rel_source_gas,
+       vv_holds_source_gas, vv_at_source_gas]
 QED
