@@ -269,3 +269,34 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE] >>
   CONV_TAC (DEPTH_CONV wordsLib.WORD_EVAL_CONV)
 QED
+
+(* Explicit memory update for Pop's length store; no execution is hidden here. *)
+Definition order_run_s9_def:
+  order_run_s9 = order_run_s8 with
+    <|vs_memory := TAKE 128 order_run_s8.vs_memory ++
+        word_to_bytes (1w:bytes32) T ++ DROP 160 order_run_s8.vs_memory;
+      vs_inst_idx := 9|>
+End
+
+Theorem order_run_s8_memory_length:
+  LENGTH order_run_s8.vs_memory = 224
+Proof
+  simp[order_run_s8_def, order_run_s7_def, order_run_s6_def,
+       order_run_s5_def, order_run_s4_def, order_run_s3_def,
+       order_run_s2_def, order_run_start_def]
+QED
+
+Theorem order_run_step8:
+  step_inst_base (mk_inst 8 MSTORE [Lit 128w;Var "%6"] []) order_run_s8 =
+    OK (order_run_s9 with vs_inst_idx := 8)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_write2_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def] >>
+  `lookup_var "%6" order_run_s8 = SOME 1w` by
+    simp[order_run_s8_def, venomStateTheory.lookup_var_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[venomStateTheory.mstore_def, order_run_s8_memory_length,
+       wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >>
+  simp[order_run_s9_def, order_run_s8_def]
+QED
