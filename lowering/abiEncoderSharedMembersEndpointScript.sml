@@ -121,8 +121,20 @@ Proof
   qpat_x_assum `abi_encoder_shared_member_dynamic_pre _ _ _ _ _` kall_tac >>
   qpat_x_assum `compile_abi_encode_child _ _ _ _ _ _ _ = _` kall_tac >>
   `ce.cs_next_id <= en.cs_next_id` by decide_tac >>
-  drule_all (SRULE [] (Q.INST [`hi` |-> `en.cs_next_id`, `next` |-> `st.cs_next_var`]
-    abi_encoder_spine_dynamic_shared_effects)) >> strip_tac >>
+  `abi_scratch_effect first last lo en.cs_next_id st.cs_next_var
+     limit_st d output_size b cap initial actual /\
+   abi_encoder_registered_effect (abi_decoder_ids lo en.cs_next_id)
+     [(d,output_size)] initial actual /\
+   (alloca_inv initial ==> alloca_inv actual)` by
+    (irule abi_encoder_spine_dynamic_shared_effects >> asm_rewrite_tac [] >>
+     qpat_assum `abi_encode_child_prefix _ _ _ _ = _`
+       (irule_at Any) >>
+     qpat_assum `abi_encoder_shared_endpoint _ _ _ _ _ _`
+       (irule_at Any) >>
+     qpat_assum `abi_encode_child_suffix _ _ _ _ _ = _`
+       (irule_at Any) >>
+     qexistsl_tac [`slot`, `site`, `off`, `d+ho`] >>
+     asm_rewrite_tac []) >>
   drule_all abi_encoder_spine_dynamic_shared_sim >>
   disch_then assume_tac >>
   drule abi_encoder_shared_endpoint_scratch >> disch_tac >>
