@@ -78,7 +78,11 @@ End
    is not on a must-halt path, so it has no dead_stack_marker slots, and
    every slot but RET's operands is dead and popped before it (the DFS
    premises tie h and promised: the replay must emit the DFS block's ops,
-   so its cleanup pops where the DFS one does).  OPEN: a dead OFFSET
+   so its cleanup pops where the DFS one does).  A revert forwarding's code
+   from k on has no spill or restore: its REVERT ends bb and its
+   RETURNDATACOPY is in bb, so generate_block_plan would have rejected the
+   replay (revert_block_spills) had the instruction ops, of which these
+   are a suffix, held one.  OPEN: a dead OFFSET
    output is pushed and never popped (generate_offset_plan), which leaves
    a slot at RET; this conjunct needs that excluded.  The
    marker clauses hold since no instruction has the marker as an operand,
@@ -175,7 +179,14 @@ Theorem block_plan_state_static:
        (!k'' inst'' x. k <= k'' /\ k'' < k' /\
                        get_instruction bb k'' = SOME inst'' /\
                        op = Var x ==> ~MEM x inst''.inst_outputs) ==>
-       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled)
+       MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    (!j. revert_forward_pair bb k j ==>
+     !ops ps_end.
+       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
+         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+         (LENGTH bb.bb_instructions) (k - LENGTH (get_params bb.bb_instructions))
+         (DROP k bb.bb_instructions) ps = SOME (ops, ps_end) ==>
+       !off. ~MEM (SORestore off) ops /\ ~MEM (SOSpill off) ops)
 Proof
   cheat
 QED

@@ -830,6 +830,20 @@ Definition generate_block_insts_plan_def:
         | SOME (rest_ops, ps'') => SOME (step_ops ++ rest_ops, ps'')
 End
 
+(* A block that ends in a REVERT after a RETURNDATACOPY may forward a
+   failed call's revert data: the RETURNDATACOPY writes past the memory
+   frontier, where nothing but the REVERT reads.  The codegen proof covers
+   such a block only when its code uses no spill slot, which lives in that
+   same memory, so the planner rejects one whose code would spill or
+   restore (Python's venom_to_assembly spills there freely). *)
+Definition revert_block_spills_def:
+  revert_block_spills bb (ops : stack_op list) ⇔
+    bb.bb_instructions ≠ [] ∧
+    (LAST bb.bb_instructions).inst_opcode = REVERT ∧
+    EXISTS (λinst. inst.inst_opcode = RETURNDATACOPY) bb.bb_instructions ∧
+    EXISTS (λop. case op of SOSpill _ => T | SORestore _ => T | _ => F) ops
+End
+
 Definition generate_block_plan_def:
   generate_block_plan liveness dfg cfg fn bb ps =
     let label_op = [SOLabel bb.bb_label] in
@@ -850,7 +864,8 @@ Definition generate_block_plan_def:
     case result of
       NONE => NONE
     | SOME (inst_ops, ps3) =>
-        SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops, ps3)
+        if revert_block_spills bb inst_ops then NONE
+        else SOME (label_op ++ param_ops ++ clean_ops ++ inst_ops, ps3)
 End
 
 (* =========================================================================
