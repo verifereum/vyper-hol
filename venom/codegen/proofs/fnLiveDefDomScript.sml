@@ -149,6 +149,163 @@ Proof
   gvs[] >> irule ldd_available_at_end >> simp[]
 QED
 
+Theorem ldd_input_fold_mem[local]:
+  !xs acc placed op_map matching v.
+    MEM v (FST (FOLDL (\(acc, placed) w.
+      case FLOOKUP op_map w of
+        NONE => (acc ++ [w], placed)
+      | SOME phi_idx =>
+          if MEM phi_idx placed then (acc, placed)
+          else case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v], phi_idx::placed)
+               | NONE => (acc, placed)) (acc, placed) xs)) ==>
+    MEM v acc \/ (MEM v xs /\ FLOOKUP op_map v = NONE) \/
+    ?i. FLOOKUP matching i = SOME v
+Proof
+  Induct >> simp[] >> rpt gen_tac >> rename1 `FLOOKUP op_map w` >>
+  Cases_on `FLOOKUP op_map w` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[listTheory.MEM_APPEND] >> metis_tac[]) >>
+  rename1 `FLOOKUP op_map w = SOME phi_idx` >>
+  Cases_on `MEM phi_idx placed` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> metis_tac[]) >>
+  Cases_on `FLOOKUP matching phi_idx` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule >> strip_tac >>
+  gvs[listTheory.MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem ldd_phi_matching_fold[local]:
+  !xs op_map matching src i v.
+    FLOOKUP (SND (FOLDL (\(om, mt) (j,phi).
+      (FOLDL (\m (l,w). m |+ (w,j)) om (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = src) (phi_pairs phi.inst_operands) of
+         NONE => mt | SOME (_,w) => mt |+ (j,w)))
+      (op_map, matching) xs)) i = SOME v ==>
+    FLOOKUP matching i = SOME v \/
+    ?j phi. MEM (j,phi) xs /\ MEM (src,v) (phi_pairs phi.inst_operands)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> rename1 `ip :: xs` >>
+  PairCases_on `ip` >> simp[] >> strip_tac >>
+  first_x_assum (drule_then strip_assume_tac)
+  >- (Cases_on `FIND (\(l,w). l = src) (phi_pairs ip1.inst_operands)`
+      >- gvs[] >>
+      rename1 `FIND _ _ = SOME found` >> PairCases_on `found` >>
+      gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+      Cases_on `ip0 = i` >> gvs[] >>
+      drule_then assume_tac venomExecProofsTheory.FIND_MEM >>
+      drule_then assume_tac venomExecProofsTheory.FIND_P >> gvs[] >>
+      metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ldd_phi_pair_domain[local]:
+  !pairs m j v.
+    v IN FDOM m \/ (?l. MEM (l,v) pairs) ==>
+    v IN FDOM (FOLDL (\m (l,w). m |+ (w,j)) m pairs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> rename1 `lv :: pairs` >>
+  PairCases_on `lv` >> simp[] >> strip_tac >>
+  first_x_assum irule >> simp[finite_mapTheory.FDOM_FUPDATE] >>
+  metis_tac[]
+QED
+
+Theorem ldd_phi_maps_domain_fold[local]:
+  !xs om mt src v.
+    v IN FDOM om \/
+    (?j phi l. MEM (j,phi) xs /\ MEM (l,v) (phi_pairs phi.inst_operands)) ==>
+    v IN FDOM (FST (FOLDL (\(om, mt) (j,phi).
+      (FOLDL (\m (l,w). m |+ (w,j)) om (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = src) (phi_pairs phi.inst_operands) of
+         NONE => mt | SOME (_,w) => mt |+ (j,w))) (om,mt) xs))
+Proof
+  Induct >- simp[] >> rpt gen_tac >> rename1 `ip :: xs` >>
+  PairCases_on `ip` >> simp[] >> strip_tac >>
+  first_x_assum irule >> simp[] >>
+  metis_tac[ldd_phi_pair_domain]
+QED
+
+Theorem ldd_phi_maps_domain[local]:
+  MEM phi phis /\ MEM (l,v) (phi_pairs phi.inst_operands) ==>
+  v IN FDOM (FST (build_phi_maps src phis))
+Proof
+  strip_tac >> simp[build_phi_maps_def] >>
+  irule ldd_phi_maps_domain_fold >> simp[] >>
+  simp[indexedListsTheory.MEM_MAPi] >>
+  metis_tac[listTheory.MEM_EL]
+QED
+
+Theorem ldd_phi_maps_matching[local]:
+  FLOOKUP (SND (build_phi_maps src phis)) i = SOME v ==>
+  ?phi. MEM phi phis /\ MEM (src,v) (phi_pairs phi.inst_operands)
+Proof
+  simp[build_phi_maps_def] >> strip_tac >>
+  drule ldd_phi_matching_fold >> simp[] >> strip_tac >>
+  gvs[indexedListsTheory.MEM_MAPi] >> metis_tac[listTheory.MEM_EL]
+QED
+
+Theorem ldd_collect_phi_prefix[local]:
+  !xs j. j < LENGTH xs /\
+    (!i. i <= j ==> (EL i xs).inst_opcode = PHI) ==>
+    MEM (EL j xs) (collect_phis xs)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> rename1 `inst :: xs` >>
+  Cases_on `j` >- simp[collect_phis_def] >>
+  simp[collect_phis_def] >> strip_tac >>
+  `inst.inst_opcode = PHI` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[] >> disj2_tac >> first_x_assum irule >> simp[] >>
+  rpt strip_tac >> first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]
+QED
+
+Theorem ldd_pending_phi_domain[local]:
+  bb_well_formed bb /\
+  (!phi. MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI ==>
+    phi_well_formed phi.inst_operands) /\
+  ldd_pending_phi bb 0 v ==>
+  v IN FDOM (FST (build_phi_maps src (collect_phis bb.bb_instructions)))
+Proof
+  rw[ldd_pending_phi_def] >>
+  `MEM (EL j bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+    (irule ldd_collect_phi_prefix >> simp[] >> rpt strip_tac >>
+     Cases_on `i = j` >- gvs[] >>
+     gvs[bb_well_formed_def] >> metis_tac[arithmeticTheory.LESS_OR_EQ]) >>
+  `phi_well_formed (EL j bb.bb_instructions).inst_operands` by
+    metis_tac[listTheory.MEM_EL] >>
+  drule_all phi_well_formed_var_pair >> strip_tac >>
+  irule ldd_phi_maps_domain >> metis_tac[]
+QED
+
+Theorem ldd_input_vars_from[local]:
+  bb_well_formed bb /\
+  (!phi. MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI ==>
+    phi_well_formed phi.inst_operands) /\
+  MEM v (input_vars_from pred bb.bb_instructions live) ==>
+  (MEM v live /\ ~ldd_pending_phi bb 0 v) \/
+  (?phi. MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI /\
+    MEM (pred,v) (phi_pairs phi.inst_operands))
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM v (input_vars_from _ _ _)` mp_tac >>
+  simp[input_vars_from_def] >>
+  Cases_on `NULL (collect_phis bb.bb_instructions)`
+  >- (simp[] >> strip_tac >> disj1_tac >> simp[] >> strip_tac >>
+      drule_all ldd_pending_phi_domain >>
+      gvs[listTheory.NULL_EQ, build_phi_maps_def]) >>
+  Cases_on `build_phi_maps pred (collect_phis bb.bb_instructions)` >>
+  rename1 `build_phi_maps _ _ = (op_map, matching)` >> simp[] >>
+  simp[Once pairTheory.UNCURRY] >> strip_tac >>
+  drule ldd_input_fold_mem >> simp[] >> strip_tac
+  >- (disj1_tac >> simp[] >> strip_tac >>
+      drule_all ldd_pending_phi_domain >>
+      disch_then (qspec_then `pred` mp_tac) >>
+      gvs[finite_mapTheory.FLOOKUP_DEF]) >>
+  `FLOOKUP (SND (build_phi_maps pred (collect_phis bb.bb_instructions))) i = SOME v`
+    by gvs[] >>
+  drule ldd_phi_maps_matching >> strip_tac >>
+  disj2_tac >> metis_tac[collect_phis_mem]
+QED
+
 (* Used by fnLineageStatic: no stack slot of a lineage state is an output
    of the block it enters.
 
