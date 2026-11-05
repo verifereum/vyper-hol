@@ -768,3 +768,26 @@ Proof
   qexists `sz` >>
   simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> metis_tac[]
 QED
+
+(* Interface probe: disjoint allocations give full-layout source safety. *)
+Theorem aggregate_allocated_source_bounds:
+  stmt_state_rel ctx func ce cx es s /\
+  FLOOKUP s.vs_allocas aid = SOME (a,n) /\
+  FLOOKUP s.vs_allocas did = SOME (b,k) /\ aid <> did /\
+  a <= src /\ src + len <= a+n /\
+  b <= dst /\ dst + dlen <= b+k ==>
+  src + len < dimword (:256) /\
+  (src + len <= dst \/ dst + dlen <= src)
+Proof
+  strip_tac >>
+  `s.vs_alloca_next < dimword (:256)` by
+    metis_tac[exprLoweringPropsTheory.alloca_room_next_lt,
+              exprLoweringPropsTheory.stmt_state_rel_def] >>
+  `alloca_inv s` by
+    gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def] >>
+  `a+n <= s.vs_alloca_next` by
+    (fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >> metis_tac[]) >>
+  `a+n <= b \/ b+k <= a` by
+    (fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]) >>
+  decide_tac
+QED
