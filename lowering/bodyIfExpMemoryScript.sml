@@ -1049,6 +1049,49 @@ Proof
   CONV_TAC (RAND_CONV (REWR_CONV (GSYM ETA_AX))) >> simp[]
 QED
 
+(* Primitive snapshot-rescued Pop: the child snapshot has no type metadata. *)
+Theorem ifexp_snapshot_pop_child_probe[local]:
+  es.scopes =
+    [FEMPTY |+ ("x", <| assignable := T;
+       type := ArrayTV (BaseTV BoolT) (Dynamic 1); value := BoolV F;
+       popped := [([],ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])]))] |>)] ==>
+  ?ee. pop_place cx (MemoryPlace "x" [ValueSubscript (IntV 0)]) es =
+    (INL (PlaceR (MemoryPlace "x"
+      [ValueSubscript (IntV 0); ValueSubscript (IntV 0)])),ee) /\
+    read_result cx (PlaceR (MemoryPlace "x"
+      [ValueSubscript (IntV 0); ValueSubscript (IntV 0)])) ee =
+    (INR (Error (TypeError "evaluate_subscripts type")),ee)
+Proof
+  Cases_on `es` >> simp[] >> strip_tac >> gvs[] >>
+  simp[get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def,
+       lookup_scopes_def, pop_place_def,
+       find_containing_scope_def, read_memory_path_def, evaluate_subscripts_def,
+       lift_option_type_def, lift_sum_def, read_result_def, read_place_def,
+       set_scopes_def, record_pop_def, read_popped_def, subscripts_type_def] >>
+  EVAL_TAC >> simp[return_def, bind_def, lift_sum_def, raise_def] >> EVAL_TAC >>
+  simp[lookup_scopes_def, return_def, bind_def, lift_sum_def, raise_def] >> EVAL_TAC >>
+  simp[return_def, raise_def] >> EVAL_TAC
+QED
+
+(* The corresponding target rejects the malformed current root before Pop. *)
+Theorem ifexp_snapshot_pop_target_rejected[local]:
+  es.scopes =
+    [FEMPTY |+ ("x", <| assignable := T;
+       type := ArrayTV (BaseTV BoolT) (Dynamic 1); value := BoolV F;
+       popped := [([],ArrayV (DynArrayV [ArrayV (DynArrayV [BoolV T])]))] |>)] ==>
+  eval_target_place cx
+    (SubscriptTarget (NameTarget "x") (Literal (BaseT (UintT 256)) (IntL 0))) es =
+    (INR (Error (TypeError "evaluate_subscripts type")),es)
+Proof
+  Cases_on `es` >> simp[] >> strip_tac >> gvs[] >>
+  simp[evaluate_def, get_scopes_def, type_check_def,
+       vyperStateTheory.assert_def, ignore_bind_def, bind_def, return_def,
+       lookup_scopes_def, get_place_def, extend_place_def, place_type_value_def,
+       read_place_def, read_memory_path_def, evaluate_subscripts_def,
+       lift_option_type_def, lift_sum_def, read_result_def, raise_def] >> EVAL_TAC
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
