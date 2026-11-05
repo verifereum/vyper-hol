@@ -59,3 +59,29 @@ Proof
   Induct >> simp[current_chain_token_def] >>
   metis_tac[current_nondeg_block_token_local]
 QED
+
+Theorem current_nondeg_changing_chain_source:
+  wf_function fn /\ MEM d (fn_labels fn) /\ current_changing_site fn ins v d ==>
+  ?l. MEM l (d::xs) /\
+      current_nondeg_token_at l (current_chain_token fn ins v (d::xs) t)
+Proof
+  strip_tac >> simp[current_chain_token_def] >>
+  drule_all current_nondeg_changing_block_reset >> strip_tac >>
+  metis_tac[current_nondeg_chain_token_local]
+QED
+
+Theorem current_nondeg_disjoint_chain_tokens:
+  wf_function fn /\ MEM d (fn_labels fn) /\ current_changing_site fn ins v d /\
+  DISJOINT (set (d::xs)) (set ys) /\
+  (!l. MEM l (d::xs) ==> ~current_nondeg_token_at l u) ==>
+  current_chain_token fn ins v (d::xs) t <> current_chain_token fn ins v ys u
+Proof
+  strip_tac >>
+  drule_all current_nondeg_changing_chain_source >> strip_tac >>
+  spose_not_then assume_tac >>
+  `current_chain_token fn ins v ys u = u \/
+   ?k. MEM k ys /\ current_nondeg_token_at k (current_chain_token fn ins v ys u)` by
+    metis_tac[current_nondeg_chain_token_local] >>
+  gvs[pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+  metis_tac[current_nondeg_token_at_unique]
+QED
