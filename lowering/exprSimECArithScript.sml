@@ -2238,6 +2238,7 @@ Theorem ec_binary_call_gas[local]:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!n. bt <> Slice n` by (rpt strip_tac >> gvs[]) >>
   `expr_body_pre cenv cx env a es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then (qspecl_then [`a`, `es`] mp_tac) >> simp[]) >>

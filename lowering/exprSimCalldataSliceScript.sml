@@ -1017,6 +1017,8 @@ Theorem compile_unary_builtin_rel_vv_sim:
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
   strip_tac >> rewrite_tac[expr_vv_sim_def] >> rpt strip_tac >>
+  `!n. bt <> Slice n` by
+    (rpt strip_tac >> gvs[builtin_args_length_ok_def]) >>
   `expr_body_pre cenv cx env e es` by
     (drule expr_body_pre_builtin_arg >>
      disch_then irule >> gvs[expr_body_pre_def]) >>

@@ -2290,7 +2290,10 @@ Proof
   strip_tac >> irule stack_args_values_typed >> goal_assum (drule_at Any) >>
   qexistsl_tac [`cenv`, `env`] >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- (irule expr_sim_pre_builtin_arg >> simp[] >>
+      >- (irule expr_sim_pre_builtin_typed_arg >> simp[] >>
+          conj_tac
+          >- (strip_tac >> gvs[EVERY_MEM] >> first_x_assum drule >>
+              simp[is_word_type_def]) >>
           qexistsl_tac [`ann`, `args`, `bt`, `es`] >> simp[]) >>
       gvs[EVERY_MEM] >> first_x_assum drule >> simp[]) >>
   gvs[expr_sim_pre_def]
@@ -2967,7 +2970,10 @@ Proof
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
          expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by
-    (rpt strip_tac >- metis_tac[expr_body_pre_builtin_arg] >>
+    (rpt strip_tac
+     >- (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+           (mp_then Any mp_tac expr_body_pre_builtin_arg) >>
+         simp[] >> disch_then irule >> simp[]) >>
      gvs[EVERY_MEM]) >>
   `typed_args_ready ctx func cenv cx (\e. ty) (expr_sim_inv cenv cx env) args /\
    wb_args_shape cenv (\e. ty) args` by metis_tac[typed_stack_args_shape] >>
@@ -3052,7 +3058,9 @@ Proof
   irule ecrecover_expr_sim >> qexists_tac `env` >> gvs[] >> gen_tac >>
   irule typed_args_ready_of_case >> qexists_tac `nocalls` >> simp[] >>
   rpt gen_tac >> strip_tac >> rpt conj_tac
-  >- metis_tac[expr_body_pre_builtin_arg]
+  >- (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+        (mp_then Any mp_tac expr_body_pre_builtin_arg) >>
+      simp[] >> disch_then irule >> simp[])
   >- metis_tac[int_calls_builtin_arg] >>
   gvs[EVERY_MEM]
 QED

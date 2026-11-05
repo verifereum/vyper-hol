@@ -380,6 +380,20 @@ Proof
   gen_tac >> Induct >> rw[alloc_limits_expr_def] >> gvs[]
 QED
 
+(* A well-typed .code read has the bytes type of account code. *)
+Theorem well_typed_extcode_type:
+  !env e. well_typed_expr env e /\ is_extcode e ==>
+          expr_type e = BaseT (BytesT (Dynamic 24576))
+Proof
+  gen_tac >> Cases >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin t b l` >> Cases_on `b` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >> simp[exprLoweringTheory.is_extcode_def] >>
+  Cases_on `l` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >> simp[exprLoweringTheory.is_extcode_def] >>
+  simp[well_typed_expr_def, well_typed_builtin_app_def,
+       account_item_type_def, vyperASTTheory.expr_type_def]
+QED
+
 (* An operand of a builtin passes the allocation check, but a slice's
    .code source, which the check skips for its address. *)
 Theorem alloc_limits_builtin_arg:
@@ -438,6 +452,23 @@ Proof
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
             call_evaluation_safe_exprs_mem]
+QED
+
+(* An operand that isn't of the account-code type is never a slice's
+   .code source. *)
+Theorem expr_body_pre_builtin_typed_arg:
+  !cenv cx env ann bi args e es es'.
+    expr_body_pre cenv cx env (Builtin ann bi args) es /\ MEM e args /\
+    expr_type e <> BaseT (BytesT (Dynamic 24576)) /\
+    expr_sim_inv cenv cx env es' ==>
+    expr_body_pre cenv cx env e es'
+Proof
+  rpt strip_tac >> irule expr_body_pre_builtin_arg >> simp[] >>
+  qexistsl_tac [`ann`, `args`, `bi`, `es`] >> simp[] >> disj2_tac >>
+  strip_tac >> qpat_x_assum `expr_type e <> _` mp_tac >> simp[] >>
+  irule well_typed_extcode_type >> simp[] >> qexists_tac `env` >>
+  irule well_typed_exprs_member >> qexists_tac `args` >>
+  gvs[expr_body_pre_def, well_typed_expr_def]
 QED
 
 Theorem word_value_type_word:
