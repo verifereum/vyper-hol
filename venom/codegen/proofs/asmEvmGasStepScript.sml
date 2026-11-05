@@ -91,6 +91,22 @@ Proof
   simp[] >> disj1_tac >> irule gas_handle_step_starved >> simp[]
 QED
 
+Theorem gas_rel_next_stack[local]:
+  asm_evm_rel prog as es /\ es.contexts = [(ctxt, rb)] /\
+  as.as_pc < LENGTH prog /\ asm_inst_size (EL as.as_pc prog) = 1 ==>
+  asm_evm_rel prog (as with <|as_stack := stk; as_pc := as.as_pc + 1|>)
+    (es with contexts :=
+      [(ctxt with <|stack := stk;
+                    pc := asm_pc_to_offset prog as.as_pc + 1;
+                    gasUsed := gas|>, rb)])
+Proof
+  strip_tac >>
+  qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
+  simp[asm_evm_rel_def] >> strip_tac >> gvs[] >>
+  once_rewrite_tac[GSYM arithmeticTheory.ADD1] >>
+  simp[asm_pc_to_offset_suc]
+QED
+
 Theorem asm_evm_gas_step:
   !prog data as es.
     asm_encoding_wf prog /\
@@ -107,5 +123,13 @@ Theorem asm_evm_gas_step:
               (as with <| as_stack := w :: as.as_stack;
                           as_pc := as.as_pc + 1 |>) es1
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all gas_step_setup >> strip_tac >>
+  drule_all gas_singleton_step >> strip_tac
+  >- metis_tac[]
+  >- metis_tac[] >>
+  disj2_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  irule gas_rel_next_stack >>
+  simp[EL_APPEND1, asm_inst_size_def]
 QED
