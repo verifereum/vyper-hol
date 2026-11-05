@@ -1,6 +1,7 @@
 Theory loadElimJoinPlacement
 Ancestors
-  loadElimDefs cfgDefs list rich_list pred_set
+  loadElimDefs loadElimStaticGeneration loadElimOccurrenceCoverage
+  cfgDefs venomWf list rich_list pred_set
 
 (* Finite paths oriented from entry to consumer, using predecessor edges. *)
 Definition le_pred_path_def:
@@ -75,4 +76,25 @@ Theorem le_find_join_path_placement:
   MEM (find_join_block cfg {} (LAST xs)) xs
 Proof
   metis_tac[le_find_join_path_escape]
+QED
+
+Theorem le_fn_path_pred_path:
+  !xs. wf_function fn /\ is_fn_path fn xs ==>
+    le_pred_path (cfg_analyze fn) xs
+Proof
+  Induct >> simp[le_pred_path_def] >>
+  Cases_on `xs` >> simp[is_fn_path_def, le_pred_path_def] >>
+  metis_tac[le_static_edge_pred]
+QED
+
+Theorem le_occ_prefix_pred_route:
+  le_occ_prefix C fn s0 es i s /\
+  wf_function fn /\ fn_inst_wf fn /\
+  fn_entry_label fn = SOME s0.vs_current_bb ==>
+  le_occ_route es <> [] /\
+  le_pred_path (cfg_analyze fn) (le_occ_route es) /\
+  HD (le_occ_route es) = s0.vs_current_bb /\
+  LAST (le_occ_route es) = s.vs_current_bb
+Proof
+  metis_tac[le_occ_prefix_route, le_fn_path_pred_path]
 QED
