@@ -998,3 +998,189 @@ val _ = ``
       operand_frame ce es0 s0 a0 esK sK /\ local_ptrs_reserved ce a3)
     (expr_exit res)
 ``;
+
+(* Q/T draft. q is before emit_op CALL/STATICCALL, not after it. The two
+   compiler computations below are literally the prefix and suffix of
+   compile_external_call_kwargs_def. Their equations are proposed cut
+   equations, NOT an asserted factorization theorem.
+
+   The Q input `payload` is the success payload of S at a3. In particular
+   raw representations at tys, the keyword representations and default
+   placement are obligations, not consequences of operand_frame alone.
+   Optional GAS belongs to Q. T includes the oracle instruction: splitting
+   after CALL would lose the failure outcome before the revert branch.
+*)
+val _ = ``
+  let tys = MAP (lowered_value_type ce) ps;
+      am = SUM (MAP (type_memory_bytes ce) tys);
+      az = abi_size_bound ce.ce_struct_fields (TupleT tys);
+      wrapped = if needs_external_call_wrap ret_ty then TupleT [ret_ty]
+                else ret_ty;
+      rz = abi_size_bound ce.ce_struct_fields wrapped;
+      rmin = abi_static_size ce.ce_struct_fields wrapped;
+      rm = type_memory_bytes ce ret_ty;
+      mid = ce.ce_method_id name arg_tys;
+      enc = type_to_abi_enc_info ce.ce_struct_fields ce (TupleT tys);
+      dec = type_to_abi_dec_info ce.ce_struct_fields ce wrapped;
+      value_op = case value_opt of NONE => Lit 0w | SOME v => v;
+      hdflt = IS_SOME default_opt;
+      dop = case default_opt of NONE => Lit 0w | SOME (v,ty) => v;
+      dty = case default_opt of NONE => ret_ty | SOME (v,ty) => ty;
+      prefix =
+        (do ba <- compile_alloc_buffer (MAX az rz + 32);
+            let bp = ba.buf_operand in
+            do emit_void MSTORE [bp; Lit (n2w mid)];
+               len <- (if vvs = [] then return (Lit 4w) else
+                 do aa <- compile_alloc_buffer am;
+                    compile_extcall_store_values ce (ZIP (vvs,tys))
+                      aa.buf_operand 0;
+                    dst <- emit_op ADD [bp; Lit 32w];
+                    len <- compile_abi_encode_to_buf dst aa.buf_operand enc;
+                    emit_op ADD [len; Lit 4w]
+                 od);
+               off <- emit_op ADD [bp; Lit 28w];
+               (if ret_ty = NoneT /\ ~skip then
+                  compile_extcodesize_check addr_op else return ());
+               return (bp,off,len)
+            od
+         od);
+      suffix = (\(bp,off,len).
+        do success <- (if stat then
+             emit_op STATICCALL [gas_op;addr_op;off;len;bp;Lit (n2w rz)]
+           else emit_op CALL [gas_op;addr_op;value_op;off;len;bp;Lit (n2w rz)]);
+           fail_lbl <- fresh_label "extcall_fail";
+           cont_lbl <- fresh_label "extcall_cont";
+           emit_inst JNZ [success;Label cont_lbl;Label fail_lbl] [];
+           new_block fail_lbl;
+           rds <- emit_op RETURNDATASIZE [];
+           fa <- compile_alloc_buffer 0;
+           emit_void RETURNDATACOPY [fa.buf_operand;Lit 0w;rds];
+           emit_inst REVERT [fa.buf_operand;rds] [];
+           new_block cont_lbl;
+           if ret_ty = NoneT then comp_return (Lit 0w)
+           else if hdflt then
+             do ra <- compile_alloc_buffer rm;
+                compile_default_return_path ce ret_ty dty bp ra.buf_operand dop
+                  addr_op skip rmin rz dec
+             od
+           else
+             do ra <- compile_alloc_buffer rm;
+                hi <- compile_return_value_decode bp rmin rz;
+                compile_abi_decode_to_buf ra.buf_operand bp MLOAD hi dec;
+                return ra.buf_operand
+             od
+        od);
+      payload = (\s.
+        stmt_state_rel ctx func ce cx esK s /\ expr_sim_inv ce cx env esK /\
+        expr_val_rel cx (BaseT AddressT) target_v addr_op s /\
+        LENGTH rs = LENGTH ps /\ LENGTH vvs = LENGTH ps /\
+        read_results cx rs esK = (INL vs,esK) /\
+        (?los. LENGTH los = LENGTH rs /\
+          (!i. i < LENGTH rs ==>
+            vv_holds ce cx (EL i tys) (EL i rs) (EL i vvs) esK s /\
+            vv_at ce cx (EL i tys) (EL i los) a3
+              esK (EL i rs) (EL i vvs) s)) /\
+        (case ext_call_kwarg EKValue opts kwargs of
+           NONE => value_opt = NONE
+         | SOME v => ?op. value_opt = SOME op /\
+             expr_val_rel cx (BaseT (UintT 256)) v op s) /\
+        (case ext_call_kwarg EKGas opts kwargs of
+           NONE => gas_opt = NONE
+         | SOME v => ?op. gas_opt = SOME op /\
+             expr_val_rel cx (BaseT (UintT 256)) v op s) /\
+        (case ext_call_kwarg EKDefault opts kwargs of
+           NONE => default_opt = NONE
+         | SOME v => ?op ty. default_opt = SOME (op,ty) /\
+             expr_val_rel cx ty v op s /\
+             expr_val_at ce cx ty a0 a3 esK v op s) /\
+        operand_frame ce es0 s0 a0 esK s);
+      ready = (\s.
+        ?aw vw ow lw bw gw target value calldata.
+          eval_operand addr_op s = SOME aw /\
+          eval_operand value_op s = SOME vw /\
+          eval_operand off s = SOME ow /\ eval_operand len s = SOME lw /\
+          eval_operand bp s = SOME bw /\ eval_operand gas_op s = SOME gw /\
+          dest_AddressV target_v = SOME target /\ w2w aw = target /\
+          value = (if stat then NONE else
+            SOME (case ext_call_kwarg EKValue opts kwargs of
+                    NONE => 0 | SOME v => THE (dest_NumV v))) /\
+          w2n vw = (case value of NONE => 0 | SOME n => n) /\
+          stat = IS_NONE value /\
+          build_ext_calldata (get_tenv cx) name arg_tys vs = SOME calldata /\
+          read_memory (w2n ow) (w2n lw) s = calldata /\
+          request_agree cx (call_outcome_request target calldata value esK)
+            (venom_call_request s aw vw ow lw stat) /\
+          ext_call_precheck_ok skip ret_ty target esK.accounts /\
+          stmt_state_rel ctx func ce cx esK s /\
+          expr_sim_inv ce cx env esK /\ local_ptrs_reserved ce q /\
+          operand_frame ce es0 s0 a0 esK s /\
+          (!bytes. LENGTH bytes <= rz ==>
+            local_ptrs_rel func ce esK.scopes
+              (write_memory_with_expansion (w2n bw) bytes s) /\
+            immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor esK
+              (write_memory_with_expansion (w2n bw) bytes s)) /\
+          (case ext_call_kwarg EKDefault opts kwargs of
+             NONE => T
+           | SOME v => expr_val_rel cx dty v dop s /\
+               expr_val_at ce cx dty a0 q esK v dop s))
+  in
+    expr_body_pre ce cx env call es0 /\
+    call = Call ann (ExtCall stat skip (name,arg_tys,ret_ty) opts)
+             (addr::rest) dflt /\
+    ps = TAKE (LENGTH arg_tys) rest /\ ks = DROP (LENGTH arg_tys) rest /\
+    LENGTH kwargs = LENGTH opts /\ LENGTH kwargs = LENGTH ks /\
+    (case gas_opt of NONE => emit_op GAS [] a3 | SOME g => (g,a3)) =
+      (gas_op,a5) /\
+    prefix a5 = ((bp,off,len),q) /\ suffix (bp,off,len) q = (result_op,a6) /\
+    fn_has_code a0 a6 func /\ fn_inst_ids_distinct func /\
+    local_ptrs_reserved ce a3 /\
+    eval_ext_call cx stat skip (name,arg_tys,ret_ty) opts
+      (target_v::(vs ++ kwargs)) esK = (res,esF) /\
+    expr_res_ok (case res of INL _ => INL NoneV | INR ex => INR ex) ==>
+    (* Q: precheck failures already exit; ready is only for reaching CALL. *)
+    frag_exec ctx a3 q (\s. s = sK /\ payload s) ready (expr_exit res) /\
+    (* T: generic oracle call, revert, void, default, decoder success/reject. *)
+    frag_exec ctx q a6 ready
+      (\s. ?v. res = INL (Value v) /\
+        expr_post ctx func ce cx call es0 a0 a6 s0 esF v result_op s)
+      (expr_exit res)
+``;
+
+(* S-output / Q-T-input gap inventory (all proposed, not discharged here):
+
+   S output/input carried       Q or T consumer                 Owner / gap
+   original expr_body_pre       am, MAX az rz +32 <2**64         Q: extract
+     ext_call_alloc_ok has syntactic bounds on the ORIGINAL call, not new
+     assumptions on esK. rm is a type_alloc_ok obligation; encoder/decoder
+     numeric/layout bounds also need typing and compile-env projections.
+   address + kwargs reps        CALL operand evaluation          S.Compose
+     Q preserves addr/value/gas and default through GAS/alloc/store/encode.
+   raw vvs + read_results       store_values at tys, ABI encode   Representation
+     lowered types are not expr_type; runtime typing alone is insufficient.
+   declared arg_tys vs tys      build_ext_calldata equality       Q
+     ABI selector uses declared types, memory tuple uses lowered types.
+   default rep + expr_val_at    default after CALL and decode     Q, T
+     Requires buffer separation plus call-frame preservation, not just
+     preserving operand words. Nonword default can alias a source local.
+   stmt_state_rel at esK        request_agree + oracle step       Q, T
+     Q derives exact-length calldata; T uses exec_ext_call_oracle_step and
+     outcomes_accounts_typed. Q's universally bounded write frame is intended
+     to discharge that lemma's local_ptrs_rel/immutables_rel premises.
+   original cumulative frame    expr_post at a6                   Q, T
+     No operand_frame across adoption is asserted: the source changes at the
+     call. Preserve its explicit fresh-var/alloca/memory/local projections.
+   source prefix equations      residual eval_ext_call equation   S.Compose
+     Prefix errors from target/results/kwargs/read_results use expr_exit;
+     on success residual errors include precheck, oracle failure and decode.
+     Q must link its precheck abort to the residual source error. T must
+     propagate RevertData before adoption on failure; NoneT uses the void
+     path, empty returndata may use the default (with post-call code check),
+     otherwise decoder success or the sole allowed reject admission.
+   fn_has_code, reservations    a3/a5/q/a6 cuts                   Q, T
+     Exact compiler factorization and frame transitivity remain unproved.
+
+   Missing input ownership is explicit: the draft carries original pre at
+   es0, not expr_body_pre at esK. Later typing, liveness and allocation facts
+   must be derived by the designated components. No quotation above is a
+   theorem and no diagnostic quotation is a usable assumption in assembly.
+*)
