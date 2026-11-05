@@ -1,7 +1,7 @@
 (* Pointer and taint boundaries for calldata decoding writes. *)
 Theory calldataDecodePtr
 Ancestors bodyPtrDefs ptrDiscipline venomInst venomState venomExecSemantics
-  codegenRel contextCodegenRel memLocDefs pred_set
+  codegenRel contextCodegenRel memLocDefs pred_set abiEncoder compileEnv emitHelper
 
 Theorem calldatacopy_access_ok:
   eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) ==>
@@ -37,4 +37,31 @@ Theorem calldatacopy_nonmemory_taint:
   (step_taint (mk_inst id CALLDATACOPY [dst;src;n] []) s s' tn).t_imm = tn.t_imm
 Proof
   simp[step_taint_def, mk_inst_def, adopt_reset_def, store_taint_def, imm_taint_def]
+QED
+
+Theorem calldata_bytestring_decoder_instructions:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring m) sa =
+    ((),sb) ==>
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst sa.cs_next_id CALLDATALOAD [src]
+       ["%" ++ toString sa.cs_next_var];
+     mk_inst (sa.cs_next_id + 1) GT
+       [Var ("%" ++ toString sa.cs_next_var); Lit (n2w m)]
+       ["%" ++ toString (sa.cs_next_var + 1)];
+     mk_inst (sa.cs_next_id + 2) ISZERO
+       [Var ("%" ++ toString (sa.cs_next_var + 1))]
+       ["%" ++ toString (sa.cs_next_var + 2)];
+     mk_inst (sa.cs_next_id + 3) ASSERT
+       [Var ("%" ++ toString (sa.cs_next_var + 2))] [];
+     mk_inst (sa.cs_next_id + 4) CALLDATACOPY
+       [dst;src;Lit (n2w (32 + 32 * ((m + 31) DIV 32)))] []] /\
+  sb.cs_next_var = sa.cs_next_var + 3 /\
+  sb.cs_next_id = sa.cs_next_id + 5
+Proof
+  simp[Once compile_abi_decode_to_buf_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
+       fresh_var_def, fresh_id_def, emit_def, listTheory.APPEND_ASSOC] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> simp[]
 QED
