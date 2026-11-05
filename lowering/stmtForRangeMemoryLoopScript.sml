@@ -1,10 +1,13 @@
 (* Memory-safe invocation of the range loop body. *)
 Theory stmtForRangeMemoryLoop
 Ancestors
-  stmtForRangeMemoryEntry stmtForRangeMemoryRound bodyMemoryDefs
+  stmtForRangeMemoryEntry stmtForRangeMemoryRound bodyMemoryDefs stmtSimDeclGas
+  gasExemptCert gasSummary gasOutcome gasContext
   stmtSimForLoop stmtSimDefs stmtSimProps stmtLowering compileEnv
   loweringPosts exprLoweringProps vyperState allocaHistory
   stmtForRangeMemoryParts fragExec fragGasPathMem venomState venomInst memSafeRun
+Libs
+  monadsyntax
 
 Theorem for_body_outcome_mem:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
@@ -205,3 +208,153 @@ Proof
        finite_mapTheory.FLOOKUP_UPDATE, stmtSimForPartsTheory.i2w_counter_suc] >>
   fs[for_code_def, lookup_var_def] >> metis_tac[]
 QED
+
+Theorem for_cert_start_gas_mem[local]:
+  gas_exempt_cert T tops (ctx,func) source (es with gas_obs := gs,s)
+    marks out endpoint <=>
+  gas_exempt_cert T tops (ctx,func) source (es,s) marks out endpoint
+Proof
+  eq_tac >> strip_tac >> drule gas_exempt_cert_start_gas_obs
+  >- (disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[]) >>
+  disch_then (qspec_then `gs` mp_tac) >> simp[]
+QED
+
+Theorem for_outcome_start_gas_mem:
+  gas_outcome T tops (ctx,func) source (es with gas_obs := gs,s) Q R <=>
+  gas_outcome T tops (ctx,func) source (es,s) Q R
+Proof
+  simp[gas_outcome_def, gas_summary_at_def, gas_marked_exec_def,
+       for_cert_start_gas_mem]
+QED
+
+Theorem for_frag_start_gas_mem:
+  stmt_frag_mem d ctx func cx lc RetQ c m source (es with gas_obs := gs) <=>
+  stmt_frag_mem d ctx func cx lc RetQ c m source es
+Proof
+  simp[stmt_frag_mem_def, for_outcome_start_gas_mem,
+       stmt_state_rel_def, compileEnvTheory.state_rel_gas_obs,
+       immutable_alloca_sep_def]
+QED
+
+Theorem for_iteration_mem:
+  !d ctx func cenv bc cx lctx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv
+   nv n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
+   sb0 sb1 sj st vs.
+    for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+      cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+    not_local_ptr bc (FEMPTY :: esk.scopes) p /\
+    st.cs_next_var <= sb0.cs_next_var /\ ret_pc_ok cenv st cc /\
+    return_buf_frame d cenv st cc /\ alloca_history func cc /\
+    (!x. not_fresh_at st x ==> x <> dv /\ x <> cv /\ x <> nv) /\
+    n1 <= n2 /\ k < Num (n2 - n1) /\ Num (n2 - n1) < dimword (:256) /\
+    cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
+    stmt_state_rel ctx func cenv cx esk cc /\
+    lookup_scopes id esk.scopes = NONE /\
+    lookup_var cv cc = SOME (i2w (n1 + &k)) /\
+    lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
+      (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
+      (esk with <| scopes :=
+         (FEMPTY |+ (id, <| assignable := F; type := tyv;
+                            value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes;
+                   gas_obs := [] |>) /\
+    gas_admissible (eval_for cx tyv id stmts (IntV (n1 + &k) :: vs))
+      (stmt_res_ok lctx) esk ==>
+    gas_outcome T (cx_tops cx) (ctx, func)
+      (do push_scope_with_var id tyv (IntV (n1 + &k));
+          finally
+            (try (do eval_stmts cx stmts; return F od) handle_loop_exception)
+            pop_scope
+       od) (esk, cc)
+      (\res ee t. ?broke. res = INL broke /\
+         t.vs_inst_idx = 0 /\ ~t.vs_halted /\
+         stmt_state_rel ctx func cenv cx ee t /\
+         return_buf_frame d cenv st t /\ alloca_history func t /\
+         cc.vs_alloca_next <= t.vs_alloca_next /\
+         (!x v. not_fresh_at st x /\ lookup_var x cc = SOME v ==>
+                lookup_var x t = SOME v) /\
+         (!a b. FLOOKUP cc.vs_allocas a = SOME b ==>
+                FLOOKUP t.vs_allocas a = SOME b) /\
+         (broke ==> t.vs_current_bb = exit_lbl) /\
+         (~broke ==> t.vs_current_bb = cond_lbl /\
+                     lookup_var cv t = SOME (i2w (n1 + &(k + 1))) /\
+                     lookup_var ev t = SOME (i2w n2) /\
+                     lookup_var p t = SOME w))
+      (\res ee r. ?ex. res = INR ex /\
+         !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bc.ce_module_vars = cenv.ce_module_vars /\ bc.ce_module = cenv.ce_module /\
+   bc.ce_is_ctor = cenv.ce_is_ctor /\ bc.ce_imm_alloca = cenv.ce_imm_alloca` by
+    (fs[for_code_def] >>
+     qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
+  `?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\ ~s2.vs_halted /\
+    stmt_state_rel ctx func bc cx
+      (esk with scopes := (FEMPTY |+ (id, <|assignable := F; type := tyv;
+         value := IntV (n1 + &k); popped := []|>)) :: esk.scopes) s2 /\
+    (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
+    s2.vs_allocas = cc.vs_allocas /\ s2.vs_alloca_next = cc.vs_alloca_next /\
+    alloca_history func s2 /\ gas_path_mem ctx func cc 0 (OK s2)` by
+    (qhdtm_assum `for_code` (strip_assume_tac o SRULE [for_code_def]) >>
+     `not_local_ptr cenv esk.scopes dv` by metis_tac[] >>
+     drule_all for_body_entry_mem >> simp[]) >>
+  `!ei scs gs. ei with <|scopes := scs; gas_obs := gs|> =
+     (ei with scopes := scs) with gas_obs := gs` by
+    simp[evaluation_state_component_equality] >>
+  qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[for_frag_start_gas_mem] >>
+  first_assum (fn th => CHANGED_TAC (pure_rewrite_tac[th])) >>
+  pure_rewrite_tac[for_frag_start_gas_mem] >>
+  strip_tac >>
+  qpat_x_assum `!ei scs gs. _` kall_tac >>
+  `gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl))
+    (esk with scopes := (FEMPTY |+ (id, <|assignable := F; type := tyv;
+      value := IntV (n1 + &k); popped := []|>)) :: esk.scopes)` by
+    (drule for_round_body_admissible >> simp[]) >>
+  `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
+  drule_all for_body_outcome_mem >> strip_tac >>
+  irule for_outcome_zero_prefix_mem >> qexists_tac `s2` >> simp[] >>
+  irule for_round_outcome_mem >> conj_tac >- first_assum ACCEPT_TAC >>
+  qhdtm_x_assum `gas_outcome` (irule_at Any) >>
+  rpt gen_tac >> strip_tac >> suspend "landing"
+QED
+
+Resume for_iteration_mem[landing]:
+  qpat_x_assum `(\res ee t. _) res ee t` mp_tac >>
+  simp_tac bool_ss [boolTheory.BETA_THM] >> strip_tac >>
+  qpat_x_assum `stmt_frag_mem _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_admissible (eval_for _ _ _ _ _) _ _` kall_tac >>
+  qpat_x_assum `gas_admissible (eval_stmts _ _) _ _` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ bc _ _ s2` kall_tac >>
+  conj_tac >- fs[stmt_lands_def] >>
+  `ee.scopes <> []` by
+    (drule vyperEvalPreservesScopesTheory.eval_stmts_preserves_scopes_len >>
+     simp[] >> strip_tac >> Cases_on `ee.scopes` >> gvs[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `ee.scopes` >- gvs[] >> rename1 `ee.scopes = sc :: rest` >>
+  `lookup_scopes id rest = NONE /\
+   (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE)` by
+    (irule for_body_scope_mem >> qexistsl_tac
+       [`cx`, `esk with gas_obs := gs`,
+        `<|assignable := F; type := tyv; value := IntV (n1 + &k); popped := []|>`,
+        `ee`, `res`, `stmts`] >> simp[] >>
+     qpat_x_assum `eval_stmts _ _ _ = _` mp_tac >>
+     simp[evaluation_state_component_equality]) >>
+  `stmt_state_rel ctx func cenv cx (ee with scopes := rest) t` by
+    (irule for_body_pop_mem >> conj_tac
+     >- (qexists_tac `sc` >> simp[]) >>
+     qexistsl_tac [`bc`, `cenv''`, `id`] >> simp[] >> fs[for_code_def]) >>
+  drule_all for_body_original_frame_mem >> strip_tac >>
+  `lookup_var cv t = SOME (i2w (n1 + &k)) /\
+   lookup_var ev t = SOME (i2w n2) /\ lookup_var p t = SOME w` by
+    (qhdtm_assum `for_code` (strip_assume_tac o SRULE [for_code_def]) >>
+     metis_tac[]) >>
+  `!x. not_fresh_at st x ==> x <> cv /\ x <> nv` by metis_tac[] >>
+  `!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP t.vs_allocas a = SOME b` by
+    metis_tac[] >>
+  `res = INL () ==> ~block_is_terminated sb1` by metis_tac[] >>
+  drule_all for_body_landing_mem >> strip_tac >>
+  qexists_tac `u` >> simp[]
+QED
+Finalise for_iteration_mem
