@@ -216,3 +216,34 @@ existing local `mmBlockSimProofs.step_inst_ok_preserves_call_ctx` demonstrates
 this split but is not importable. Minimal requested outputs are equal call_ctx
 and data_section for successful terminators; combine with nonterminator field
 theorems and K1 reads, rather than unfolding run_blocks or INVOKE.
+
+## Actual-analysis exclusion checkpoint (E0056 interface)
+
+`loadElimBPEmptyTheory.le_step_preserves_analyze_empty` now composes
+`le_step_preserves_no_alloca` with `le_bp_analyze_empty`. Its antecedent is
+exactly `fn_inst_wf fn /\ le_step_preserves bp dfg fn /\
+bp_assigns_stable bp dfg /\ dfg_assigns_sound dfg s`; the cfg used by the
+analysis is arbitrary. `le_step_preserves_analyze_ptr_none` exports
+`bp_ptr_from_op (bp_analyze cfg fn) op = NONE` for every operand. This is
+empty **queries**, not an assertion that the finite map is FEMPTY.
+
+Consumer check: `loadElimKeyReadOperationalScript.sml` lines 71–99
+(`le_fixed_segment_runtime_word`) distinguishes literal addresses from Var
+addresses with `bp_ptr_from_op = SOME (Ptr alloc off)`. For the analyzed
+original fn under the above antecedent, every such SOME branch is excluded,
+including both SOME and NONE offsets. In `bp_segment_from_ops_def` a Var
+therefore takes the unallocated, unknown-offset result (`ml_alloca = NONE`,
+`ml_offset = NONE`); literal addresses retain their fixed w2n interpretation,
+and labels still yield ml_undefined. Thus the different-allocation
+unknown-offset counterexample branch documented above cannot originate in
+this actual BP analysis. The local segment-key bridge (lines 119–139) and
+configured read/write key bridges (141–153, 180–191) still apply to arbitrary
+supplied BP maps; their statements must not be weakened or silently
+specialized. DLOAD's operand-only branch (156–163) is independent of BP.
+
+This only resolves the BP-origin obstruction for this analyzed function.
+It proves neither arbitrary retained-key currentness nor normalization
+validity. Later rounds analyze transformed functions: they still need a
+separate no-ALLOCA preservation argument (or their own wrapper antecedent)
+before using `le_bp_analyze_empty`. Do not transfer the original universal
+step hypothesis to rebuilt DFGs or transformed functions.

@@ -1,6 +1,6 @@
 Theory loadElimBPEmpty
 Ancestors
-  finite_map pred_set list basePtrDefs venomInst venomExecProps dfIterateDefs While
+  finite_map pred_set list basePtrDefs venomInst venomExecProps dfIterateDefs While loadElimAllocationExclusion venomWf
 
 Definition le_bp_empty_writes_def:
   le_bp_empty_writes inst =
@@ -177,4 +177,29 @@ Proof
   >> drule_all le_bp_empty_pass
   >> disch_then (qspec_then `cfg.cfg_dfs_pre` strip_assume_tac)
   >> simp[bp_analyze_def, le_df_iterate_one_step]
+QED
+
+Theorem le_step_preserves_analyze_empty:
+  fn_inst_wf fn /\ le_step_preserves bp dfg fn /\
+  bp_assigns_stable bp dfg /\ dfg_assigns_sound dfg s ==>
+  (!v. bp_get_ptrs (bp_analyze cfg fn) v = [])
+Proof
+  strip_tac >> irule le_bp_analyze_empty >> rpt gen_tac >> strip_tac
+  >> irule le_step_preserves_no_alloca
+  >> gvs[fn_inst_wf_def] >> metis_tac[]
+QED
+
+Theorem le_bp_empty_ptr_from_op:
+  (!v. bp_get_ptrs bp v = []) ==> bp_ptr_from_op bp op = NONE
+Proof
+  strip_tac >> Cases_on `op` >> simp[bp_ptr_from_op_def]
+QED
+
+Theorem le_step_preserves_analyze_ptr_none:
+  fn_inst_wf fn /\ le_step_preserves bp dfg fn /\
+  bp_assigns_stable bp dfg /\ dfg_assigns_sound dfg s ==>
+  bp_ptr_from_op (bp_analyze cfg fn) op = NONE
+Proof
+  strip_tac >> irule le_bp_empty_ptr_from_op
+  >> metis_tac[le_step_preserves_analyze_empty]
 QED
