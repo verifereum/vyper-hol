@@ -610,6 +610,51 @@ Proof
   irule vv_post_deferred_entry >> metis_tac[]
 QED
 
+(* The frame belongs to the supplied execution, not to arbitrary vv_post states. *)
+Theorem expr_vv_framed_deferred_prefix:
+  expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
+  compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
+  local_ptrs_reserved cenv sm /\
+  es' = es with outcomes := es'.outcomes /\
+  frag_exec ctx sm sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. vv_post ctx func cenv cx e es sm sn start es' raw_new vv_new s /\
+         contract_storage s = contract_storage start /\
+         contract_transient s = contract_transient start)
+    (\r. F) ==>
+  frag_exec ctx sm sn
+    (\s. s = start /\ stmt_state_rel ctx func cenv cx es s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es s /\
+        vv_at cenv cx ty lo sm es raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. vv_post ctx func cenv cx e es sm sn start es' raw_new vv_new s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sn es' raw held s /\
+        safe_operand sn (vv_operand held)) hs /\
+      safe_operand sn (vv_operand vv_new))
+    (\r. F)
+Proof
+  strip_tac >> irule frag_exec_pointwise >>
+  qx_gen_tac `s0` >> strip_tac >> fs[] >>
+  qpat_x_assum `s0 = start` SUBST_ALL_TAC >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
+  gen_tac >> strip_tac >> simp[] >> conj_tac
+  >- (irule vv_post_deferred_prefix >>
+      `local_ptrs_rel func cenv es.scopes start` by
+        gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
+  irule compile_expr_operand_safe >> metis_tac[]
+QED
+
+val () =
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag expr_vv_framed_deferred_prefix)
+  in
+    if null axioms andalso null (Thm.hyp expr_vv_framed_deferred_prefix) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Framed deferred prefix has unproved dependencies"
+  end;
+
 Theorem expr_vv_success_deferred_prefix:
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   expr_vv_sim ctx func cenv cx (expr_type e) e es /\
