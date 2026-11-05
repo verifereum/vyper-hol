@@ -96,6 +96,36 @@ Proof
   gvs[Abbr `out`, same_blocks_def, update_var_def]
 QED
 
+Theorem body_name_wordtype_post[local]:
+  emit_op MLOAD [Var p] sa = (Var out,sb) /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv ==>
+  expr_post ctx func ce cx (Name ann id) es sa sb s0
+    (es with gas_obs := []) v (Var out)
+    (update_var out (typed_val_to_w256 tv v)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `out = STRCAT "%" (toString sa.cs_next_var)` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def] >>
+  `not_local_ptr ce (es with gas_obs := []).scopes out` by
+    (gvs[] >> irule local_ptrs_reserved_fresh >> qexists `sa` >> simp[]) >>
+  `stmt_state_rel ctx func ce cx (es with gas_obs := [])
+    (update_var out (typed_val_to_w256 tv v)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (irule stmt_state_rel_update_var >> simp[] >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`,
+                            `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[]) >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
+       vyperASTTheory.expr_type_def, eval_operand_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE, locals_kept_mem] >>
+  rpt strip_tac >>
+  `STRING #"%" (toString sa.cs_next_var) <> x` by
+    (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
+QED
+
 Theorem compile_name_wordtype_body_sim_mem:
   !ctx func ce cx env ty ann id es.
     expr_sim_pre ce cx env (Name ann id) es /\
