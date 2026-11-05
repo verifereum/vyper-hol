@@ -1989,3 +1989,21 @@ Theorem rf_probe_assign_liveness:
 Proof
   EVAL_TAC
 QED
+
+Theorem rf_probe_assign_excluded:
+  ~codegen_ready_fn rf_probe_assign_fn
+Proof
+  EVAL_TAC
+QED
+
+(* Readiness itself excludes ordinary variable uses in disconnected blocks. *)
+Theorem ready_ordinary_use_reachable:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\
+  MEM inst bb.bb_instructions /\ inst.inst_opcode <> PHI /\
+  MEM (Var x) inst.inst_operands ==>
+  fn_reachable fn bb.bb_label
+Proof
+  strip_tac >> fs[codegen_ready_fn_def, def_dominates_uses_def] >>
+  `def_available_at fn bb (SOME inst) x` by metis_tac[] >>
+  gvs[def_available_at_def, fn_dominates_def]
+QED
