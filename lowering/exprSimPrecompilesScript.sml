@@ -22,6 +22,9 @@
  *     computed_static_exec_state_rel,
  *     computed_static_exec_wb_frame, write_memory_stmt_state_rel,
  *     wb_frame_readonly_input
+ *   - counted composition: eval_exprs_suffix (operands, then a
+ *     continuation), run_inst_seq_gas_path (a straight-line run as a
+ *     counted path)
  *   - the GAS/STATICCALL/ASSERT suffix: computed_suffix_shape,
  *     computed_suffix_success, computed_suffix_failure,
  *     computed_suffix_output, computed_suffix_preserves
@@ -2838,6 +2841,39 @@ Proof
     simp[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   pop_assum SUBST1_TAC >>
   metis_tac[gas_exempt_cert_error_values]
+QED
+
+(* frag_exec_run_inst_seq's premise, concluding a counted target path. *)
+Theorem run_inst_seq_gas_path:
+  fn_has_code st st' func /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  isPREFIX st.cs_current_insts st'.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+    (emitted_insts st st') /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  ((?s'. run_inst_seq (emitted_insts st st') s = OK s' /\
+         Q (s' with vs_inst_idx := LENGTH st'.cs_current_insts)) \/
+   (?a s'. run_inst_seq (emitted_insts st st') s = Abort a s' /\
+           !n. R (Abort a (s' with vs_inst_idx := n)))) ==>
+  ?n r. gas_marked_path F ctx func s n r /\
+    ((?u. r = OK u /\ Q u /\ u.vs_current_bb = st'.cs_current_bb /\
+          u.vs_inst_idx = LENGTH st'.cs_current_insts) \/
+     (exit_result r /\ R r))
+Proof
+  strip_tac >>
+  `st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st'` by
+    gvs[rich_listTheory.IS_PREFIX_APPEND, emitted_insts_def,
+        rich_listTheory.DROP_LENGTH_APPEND]
+  >- (drule_all hash_run_path >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS)
+                               (emitted_insts st st'))`,
+                    `OK (s' with vs_inst_idx := LENGTH st'.cs_current_insts)`] >>
+      gvs[]) >>
+  drule_all hash_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  goal_assum drule >> asm_simp_tac (srw_ss()) [exit_result_def]
 QED
 
 Theorem eval_expr_ecrecover_read_action[local]:
