@@ -21,7 +21,9 @@ Ancestors
    the cleanup fields lineage_state_block_plan chose, and the PHI prefix is
    stated whole because the Venom side has no state between two PHIs.  The
    well-formedness premise allows repeated dead_stack_marker slots, which
-   earlier cleanup elisions on the path leave.
+   earlier cleanup elisions on the path leave; it and the premise that no
+   slot stands for one of bb's own outputs (which the PHIs would rebind)
+   come from fnLineageStatic$lineage_state_static.
 
    Why it should hold: the cleanup only pops dead variables (popmany_plan,
    by swaps, with spills when deeper than 16) or marks retained ones dead
@@ -46,6 +48,9 @@ Theorem single_pred_prefix_frame_sim:
       pred bb.bb_label ps_l /\
     ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
     generated_plan_state_wf_marked base ps /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+            normalize_operand dfg [] op = Var v ==>
+            ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
     ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
