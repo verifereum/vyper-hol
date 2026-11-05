@@ -11,7 +11,7 @@ Ancestors
   exprSimBufferStore bodyMemoryDefs fragGasMode fragGasPathMem fragGasPath
   gasSummary gasOutcome loweringPosts exprSimDefs stmtSimDefs stmtSimProps
   loweringSlice exprLoweringProps exprOperandVar localPtrsProps freshWrites
-  valueTypingMemoryProps valueCopyBytes emitHelper emitHelperProps fragExec
+  valueTypingMemoryProps valueCopyBytes bodySim exprSimHypsDefs emitHelper emitHelperProps fragExec
   venomInst venomState exprLowering stmtLowering context compileEnv
   vyperInterpreter vyperState list rich_list finite_map
 Libs
@@ -444,30 +444,40 @@ Proof
   simp[stmt_lands_def]
 QED
 
-Theorem body_annassign_bytestring_mem:
-  !d cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
-    (!tenv s'' tyv t.
-       tenv = get_tenv cx /\
-       lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
-       (INL tyv,t) ==>
-       body_expr_mem_ok cx e) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (AnnAssign id typ e) /\
-    (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
-       occurs_abi_decode_target target tops) /\
-    expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
-    type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
-    stmt_exprs_ok cenv (AnnAssign id typ e) /\
-    call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
-    is_bytestring_type typ /\ ~(has_length_word typ /\ is_empty_value_expr e) /\
-    (lowered_value_type cenv e = expr_type e \/
-     is_bytestring_type (expr_type e) /\
-     is_bytestring_type (lowered_value_type cenv e) /\
-     arg_type_fits (lowered_value_type cenv e) (expr_type e)) ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
-      (eval_stmt cx (AnnAssign id typ e)) es
+(* HELD: the right-hand side of a bytestring declaration, lowered as by
+   compile_annassign_bytes_stmt_frag_mem's premise.  Beyond expr_sim_mem's
+   post, a value left in memory has its source region reach the lowered
+   type's size, which the staging copy reads in full.  It waits on the
+   type-size bound for memory-located value views (vv_store_bound); the
+   rest of the bytestring arm is proved. *)
+Theorem annassign_bytes_rhs_located_mem:
+  !tops ctx func c cx env e es ltv.
+    body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
+    body_expr_mem_ok cx e /\
+    is_bytestring_type (lowered_value_type c e) /\
+    evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv ==>
+    !sa sV sb vv op s0.
+      compile_expr c (expr_type e) e sa = (vv, sV) /\
+      unwrap_value c vv sV = (op, sb) /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      local_ptrs_reserved c sa /\
+      gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+      stmt_state_rel ctx func c cx es s0 /\
+      alloca_history func s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome T (cx_tops cx) (ctx, func)
+        (bind (eval_expr cx e) (read_result cx)) (es, s0)
+        (\res ee t. ?v. res = INL v /\
+          expr_post ctx func c cx e es sa sb s0 ee v op t /\
+          expr_store_bound cx (expr_type e) v op t /\
+          (vv_location vv = SOME LocMemory ==>
+           !sw. eval_operand op t = SOME sw ==>
+                w2n sw + type_memory_size ltv <= t.vs_alloca_next) /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+          alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
+        (\res ee r. expr_exit res r)
 Proof
   cheat
 QED
