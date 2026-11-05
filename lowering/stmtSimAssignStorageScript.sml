@@ -42,7 +42,7 @@ Ancestors
   loweringPosts
   list rich_list finite_map pred_set
   fragExec exprSimLeaves stmtSimDecl stmtSimDeclMem storageStoreFrame
-  stmtSimAssign stmtSimAssignMem accountsRelProps
+  stmtSimAssign stmtSimAssignMem accountsRelProps exprSimTopLevelProps
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv valueEncoding valueEncodingProofs
   vyperInterpreter vyperState vyperStorage vyperStorageBackend vyperValue
@@ -284,6 +284,7 @@ Proof
   simp[Once evaluate_def, bind_def] >>
   Cases_on `eval_expr cx e x` >> rename1 `eval_expr cx e x = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
+  simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, lookup_global_def, bind_def,
        lift_option_type_def, return_def, LET_THM, get_place_def] >>
   Cases_on `read_result cx x' es1` >>
@@ -299,15 +300,15 @@ Theorem write_storage_slot_gas_obs:
      SND (write_storage_slot cx tr slot tv v es) with gas_obs := g)
 Proof
   rpt gen_tac >> simp[write_storage_slot_eq] >>
-  Cases_on `encode_value tv v` >> Cases_on `tr` >>
-  simp[set_storage_def, get_storage_def]
+  Cases_on `cx.txn.is_static` >> Cases_on `encode_value tv v` >>
+  Cases_on `tr` >> simp[set_storage_def, get_storage_def]
 QED
 
 (* The SSTORE or TSTORE of e's word at x's slot reads no gas. *)
 Theorem assign_storage_store_path:
   !ctx func s tr slot op w st st'.
     emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] st = ((), st') /\
-    fn_has_code st st' func /\ ~s.vs_halted /\
+    fn_has_code st st' func /\ ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w ==>
@@ -360,6 +361,8 @@ Proof
   drule_all storage_dead_update_word_region >> strip_tac >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt v ee` >>
   rename1 `_ = (res, ee')` >>
+  `~t.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
   drule_all assign_storage_store_path >>
   disch_then (qspec_then `ctx` assume_tac) >>
@@ -428,20 +431,22 @@ Proof
   drule_all eval_assign_toplevel_action >>
   disch_then (qspec_then `e` assume_tac) >>
   irule forced_then_stmt_outcome >>
-  qexistsl_tac [`e`, `write_storage_slot cx tr (n2w slot) tvt`,
+  qexistsl_tac [
     `\v ee t. expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
               t.vs_current_bb = sB.cs_current_bb /\
-              t.vs_inst_idx = LENGTH sB.cs_current_insts`] >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (qpat_x_assum `expr_sim _ _ _ _ _ _ _`
+              t.vs_inst_idx = LENGTH sB.cs_current_insts`,
+    `e`, `write_storage_slot cx tr (n2w slot) tvt`] >>
+  reverse conj_tac
+  >- (conj_tac >- first_assum ACCEPT_TAC >>
+      qpat_x_assum `expr_sim _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_sim_def]) >>
       disch_then (qspecl_then [`sa`, `sB`, `op`, `s0`] mp_tac) >>
       impl_tac >- (fs[] >> metis_tac[forced_then_admissible]) >>
       simp[]) >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
-    metis_tac[] >>
+    (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
+     fs[ETA_THM] >> metis_tac[]) >>
   drule_all assign_storage_word_suffix >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
   qexistsl_tac [`INL ()`, `ee'`, `r`] >> simp[]
