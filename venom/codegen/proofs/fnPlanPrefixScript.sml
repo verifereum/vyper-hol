@@ -92,7 +92,7 @@ Theorem wf_marked_cleanup_fields:
       (ps with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) <=>
     generated_plan_state_wf_marked base ps
 Proof
-  simp[generated_plan_state_wf_marked_def, plan_slots_bounded_def]
+  simp[generated_plan_state_wf_marked_def, planSpillBoundsTheory.plan_slots_bounded_def]
 QED
 
 (* generated_plan_state_wf doesn't keep the marker out of the spill map,
