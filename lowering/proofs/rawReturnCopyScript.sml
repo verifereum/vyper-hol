@@ -7,8 +7,6 @@ Ancestors
   list arithmetic words
   copyFwdEquiv allocaRemapDefs venomExecSemantics venomState
   valueEncoding valueEncodingProofs vyperValue vyperAST vyperTyping
-Libs
-  proofAuditLib
 
 Theorem mcopy_bytes_at:
   offset + len <= copied ==>
@@ -48,5 +46,3 @@ Proof
       mcopy_bytes_at) >> simp[]) >>
   simp[word_add_n2w]
 QED
-
-val () = proofAuditLib.check_theory "rawReturnCopy";

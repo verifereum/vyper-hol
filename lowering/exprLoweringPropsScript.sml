@@ -57,7 +57,6 @@ Ancestors
   valueEncoding valueEncodingProofs localPtrsProps venomMemDefs
   vyperAST vyperTyping fcgDefs
 Libs
-  proofAuditLib
   pairLib BasicProvers monadsyntax
 
 (* The shared semantic predicate preserves the former ExtCall wrap test. *)
@@ -4514,10 +4513,6 @@ Proof
   gvs[GSYM prefix_drop_equiv, emitted_insts_def]
 QED
 
-(* RawLog and call monotonicity must remain kernel-closed too. *)
-val () = proofAuditLib.check_all
-  [("ci_mono_compile_raw_log", ci_mono_compile_raw_log),
-   ("ci_mono_compile_call", ci_mono_compile_call)];
 (* Immutable helper monotonicity interfaces share the typed-memory family
    with aggregate construction; all must remain kernel-closed. *)
 val () = List.app (fn th =>

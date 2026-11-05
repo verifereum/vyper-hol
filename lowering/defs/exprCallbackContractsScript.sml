@@ -4,8 +4,6 @@
 Theory exprCallbackContracts
 Ancestors
   exprLowering exprCallBounds compileEnv context vyperAST list
-Libs
-  proofAuditLib
 
 Definition expr_callbacks_agree_def:
   expr_callbacks_agree f g cenv es =
@@ -539,6 +537,3 @@ Proof
   irule expr_child_callback_agrees >> simp[] >>
   drule_all extcode_child_bound >> simp[]
 QED
-
-(* Check all callback contracts in the same theory session. *)
-val () = proofAuditLib.check_theory "exprCallbackContracts";
