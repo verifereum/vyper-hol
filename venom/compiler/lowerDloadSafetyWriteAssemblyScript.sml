@@ -40,7 +40,7 @@ QED
 Theorem ld_write_operand_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
+  ~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y ==>
   (op_prov f.lf_H op = NONE ==> word_agree_except (op_taint tn op) x y) /\
@@ -82,7 +82,7 @@ QED
 Theorem ld_write_scalar_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
+  ~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y /\
   op_prov f.lf_H op = NONE ==>
@@ -94,7 +94,7 @@ QED
 Theorem ld_write_address_observation:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
-  MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY;ISTORE] /\ MEM op inst.inst_operands /\
+  ~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET] /\ MEM op inst.inst_operands /\
   tn.t_var = f.lf_tv /\
   eval_operand op f.lf_src = SOME x /\ eval_operand op f.lf_tgt = SOME y /\
   op_taint tn op = {} ==>
