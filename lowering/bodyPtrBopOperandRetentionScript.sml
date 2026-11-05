@@ -1,6 +1,6 @@
 Theory bodyPtrBopOperandRetention
 Ancestors
-  bodyPtrDefs stmtSimLogArgs loweringPosts
+  bodyPtrDefs stmtSimLogArgs loweringPosts bodyPtrBopRepresentationFrame ptrDiscipline
 
 Theorem bop_argument_taint_kept:
   expr_val_at cenv cx ty sa sb es v op s /\
@@ -29,4 +29,26 @@ Proof
         (qspecl_then [`n`, `b`, `sz`, `i`] mp_tac) >>
       simp[] >> disch_then irule >> metis_tac[]) >>
   gvs[]
+QED
+
+Theorem bop_argument_ptr_val_kept:
+  ptr_val_ok cx ty v op G tn s /\
+  expr_val_at cenv cx ty sa sb es v op s /\
+  wb_frame cenv es sb s t /\ ghost_kept cenv es sb G tn s G' tn' /\
+  log_arg_clear cenv cx ty v /\
+  (!x. op = Var x ==> not_fresh_at sb x) /\
+  eval_operand op t = eval_operand op s /\
+  (~is_word_type ty ==> evaluate_type (get_tenv cx) ty = SOME tv) ==>
+  ptr_val_ok cx ty v op G' tn' t
+Proof
+  strip_tac >>
+  `op_taint tn' op = op_taint tn op` by
+    (Cases_on `op` >> gvs[op_taint_def, ghost_kept_def]) >>
+  irule bop_ptr_val_ok_frame >> simp[] >>
+  qexistsl_tac [`G`, `s`, `tn`, `tv`] >> simp[] >> strip_tac >> simp[] >>
+  conj_tac >- metis_tac[expr_val_at_def] >>
+  conj_tac >- metis_tac[ghost_kept_def] >>
+  rpt strip_tac >> gvs[]
+  >- (drule_all log_argument_footprint_kept >> simp[]) >>
+  drule_all bop_argument_taint_kept >> simp[]
 QED
