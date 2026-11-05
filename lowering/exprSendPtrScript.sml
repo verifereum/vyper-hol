@@ -5,6 +5,7 @@ Ancestors
   venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
   venomCallOracleDefs venomMemProps ghostPcTransportPtr
   exprLoweringProps exprSimOperands exprSimWordArgs compileEnv localPtrsProps
+  sendSourceFrame
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -483,3 +484,51 @@ Resume send_tail_path_ptr[failed]:
 QED
 
 Finalise send_tail_path_ptr
+
+Theorem send_tail_summary_ptr:
+  emit_op CALL [gas; addr; value; Lit 0w; Lit 0w; Lit 0w; Lit 0w] sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (void, sb) /\ fn_has_code sm sb fn /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  stmt_state_rel ctx fn cenv cx es1 s /\ wb_frame cenv es sa s0 s /\
+  ghost_inv d cenv cx es1 G tn s /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  outcomes_accounts_typed es1.outcomes /\ accounts_runtime_well_typed es1.accounts /\
+  op_taint tn gas = {} /\ op_taint tn addr = {} /\ op_taint tn value = {} /\
+  eval_operand gas s = SOME gw /\
+  eval_operand addr s = SOME aw /\ dest_AddressV to_v = SOME (w2w aw) /\
+  eval_operand value s = SOME vw /\ dest_NumV amount_v = SOME (w2n vw) /\
+  LENGTH gas_vs = (if has_gas then 1 else 0) /\
+  expr_type e = NoneT /\ es1.gas_obs = [] ==>
+  gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
+    (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs); read_result cx tv od)
+    (es1,s,G,tn)
+    (\res ee G' tn' z. res = INL NoneV /\
+      expr_post ctx fn cenv cx e es sa sb s0 ee NoneV (Lit 0w) z /\
+      ghost_inv d cenv cx ee G' tn' z /\
+      ghost_kept cenv es sa G tn s G' tn' /\
+      z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee ghosts r. expr_exit res r)
+Proof
+  strip_tac >>
+  qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+                       read_result cx tv od` >>
+  Cases_on `src es1` >> rename1 `src es1 = (res,ee)` >>
+  `ee.gas_obs = es1.gas_obs /\
+   !gs. src (es1 with gas_obs := gs) = (res,ee with gas_obs := gs)` by
+    (fs[Abbr `src`, SF ETA_ss] >>
+     qspec_then `read_result cx` mp_tac (GEN_ALL send_bind_gas_frame) >>
+     simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def, SF ETA_ss] >>
+     disch_then drule >> simp[]) >>
+  ` (do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
+        read_result cx tv od) es1 = (res,ee)` by fs[Abbr `src`] >>
+  `ee with gas_obs := [] = ee` by
+    (simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  drule_all send_tail_path_ptr >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`res`,`ee`,`G'`,`tn'`,`r`] >>
+  simp[gasSummaryTheory.gas_explicit_def]
+QED
