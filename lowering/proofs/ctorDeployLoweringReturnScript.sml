@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
-  ctorDeployLoweringDefs ctorDeployLoweringAgreeDefs o1PassContract ctorReturnFrame
+  ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
 
 (* A constructor that finishes normally (falls off its end or returns)
    halts returning the runtime code and the immutables section, with the
@@ -26,7 +26,7 @@ Theorem deploy_ctor_return:
     constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
       (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
-    deploy_venom_result_agree tops runtime_bc am tx
+    deploy_venom_result_rel tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)
 Proof
   cheat
