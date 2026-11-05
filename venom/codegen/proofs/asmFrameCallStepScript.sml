@@ -14,7 +14,7 @@ Ancestors
   asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
-  vfmAccountFrame vfmStepLength asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+  vfmAccountFrame vfmStepLength vfmDomainCollection asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
 Libs
   wordsLib
 
@@ -4632,6 +4632,24 @@ Proof
   `~vfm_abort exc` by
     (drule_at (Pat `step_inner _ = _`) asm_call_step_inner_noabort >> simp[]) >>
   drule_all asm_call_nested_handler_inl >> simp[]
+QED
+
+Theorem asm_call_nested_run_inl:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  2 <= LENGTH s.contexts /\ run_call s = SOME (r,t) ==> ISL r
+Proof
+  strip_tac >> gvs[run_call_def] >>
+  `(\p. wf_state (SND p) /\ (?d. (SND p).msdomain = Collect d) /\
+        ISL (FST p)) (r,t)` suffices_by simp[] >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
+  goal_assum $ drule_at Any >> simp[] >>
+  qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> strip_tac >>
+  Cases_on `step p1` >> rename1 `step p1 = (res,mid)` >> simp[] >>
+  conj_tac >- (drule_all step_preserves_wf_state >> simp[]) >>
+  conj_tac
+  >- (drule_at (Pat `step _ = _`) step_preserves_collect >> simp[]) >>
+  `2 <= LENGTH p1.contexts` by decide_tac >>
+  drule_at (Pat `step _ = _`) asm_call_nested_step_inl >> simp[]
 QED
 
 Theorem asm_frame_call_step:
