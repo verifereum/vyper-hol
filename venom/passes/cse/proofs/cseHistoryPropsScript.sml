@@ -3092,3 +3092,70 @@ Resume cse_prefix_copy_suffix_crossing[extract]:
  simp[EL_APPEND_EQN]
 QED
 Finalise cse_prefix_copy_suffix_crossing
+
+Theorem cse_prefix_live_copy_predecessor_nonwriting:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ events = pre ++ [CseStep m cb copy u t] ++ post /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] /\ EVERY (\ev. ~cse_event_writes ev y) post /\
+ MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\ copy.inst_id <> use.inst_id ==>
+ EVERY (\ev. ~cse_event_writes ev x) (CseStep m cb copy u t :: post)
+Proof
+ strip_tac >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `~MEM x copy.inst_outputs` by
+   (strip_tac >> `d = copy` by
+      (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[]) >>
+    gvs[]) >>
+ simp[cse_event_writes_def] >>
+ rewrite_tac[EVERY_EL] >> qx_gen_tac `k` >> strip_tac >>
+ BETA_TAC >> strip_tac >>
+ `MEM (EL k post) events` by metis_tac[EL_MEM, MEM_APPEND] >>
+ drule_all cse_prefix_writing_static_definer >> strip_tac >>
+ `LENGTH pre + 1 + k < LENGTH events` by (gvs[] >> simp[] >> decide_tac) >>
+ `EL (LENGTH pre + 1 + k) events = EL k post` by
+   (qpat_assum `events = _` (fn th => rewrite_tac[th]) >>
+    simp[EL_APPEND_EQN]) >>
+ `?i b l. LENGTH pre + 1 + k < i /\ i < LENGTH events /\
+    cse_event_covers (EL i events) b l copy` by
+   (metis_tac[cse_prefix_copy_suffix_crossing]) >>
+ `LENGTH pre + 1 <= i` by decide_tac >>
+ `i - (LENGTH pre + 1) < LENGTH post` by
+   (qpat_x_assum `i < LENGTH events` mp_tac >> simp[] >> decide_tac) >>
+ `EL i events = EL (i - (LENGTH pre + 1)) post` by
+   (qpat_assum `events = _` (fn th => rewrite_tac[th]) >>
+    simp[EL_APPEND_EQN]) >>
+ `MEM (EL i events) post` by metis_tac[EL_MEM] >>
+ `cse_event_writes (EL i events) y` by
+   (irule cse_prefix_covered_write >> metis_tac[MEM]) >>
+ qpat_x_assum `EVERY _ post` mp_tac >> rewrite_tac[EVERY_MEM] >>
+ metis_tac[]
+QED
+
+Theorem cse_prefix_live_copy_predecessor_binding:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ events = pre ++ [CseStep m cb copy u t] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m cb u) /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] /\ EVERY (\ev. ~cse_event_writes ev y) post /\
+ MEM d (fn_insts fn) /\ MEM x d.inst_outputs /\
+ cse_path_preorder fn d.inst_id copy.inst_id /\ d.inst_id <> copy.inst_id /\
+ cse_path_preorder fn copy.inst_id use.inst_id /\ copy.inst_id <> use.inst_id ==>
+ lookup_var x s = lookup_var x u
+Proof
+ strip_tac >>
+ drule_all cse_prefix_live_copy_predecessor_nonwriting >> strip_tac >>
+ `lookup_var x (cse_phase_state (CseExec n bb s)) =
+  lookup_var x (cse_phase_state (CseExec m cb u))` suffices_by
+   simp[cse_phase_state_def] >>
+ irule cse_prefix_nonwriting_cut_binding >>
+ goal_assum (drule_at Any) >>
+ goal_assum (drule_at Any) >>
+ qexistsl [`events`, `events`, `[]`] >> simp[]
+QED
