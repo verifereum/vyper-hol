@@ -535,6 +535,40 @@ Proof
   gvs[expr_vv_res_ok_def, bind_def, AllCaseEqs()]
 QED
 
+Theorem ifexp_forced_success_conditional_marked[local]:
+  gas_marked_exec T (ctx,func)
+    (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks (INL v) ee (OK u) /\
+  (!tail. eval_expr cx e
+    (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+    (INL raw,ee with gas_obs := tail)) /\
+  (!tail. conditional_result cx raw (ee with gas_obs := tail) =
+    (INL tv,ee with gas_obs := tail)) ==>
+  gas_marked_exec T (ctx,func)
+    (bind (eval_expr cx e) (conditional_result cx))
+    (es,s0) marks (INL tv) ee (OK u) /\
+  read_result cx tv (ee with gas_obs := []) =
+    (INL v,ee with gas_obs := [])
+Proof
+  simp[gas_marked_exec_def] >> strip_tac >> conj_tac
+  >- simp[bind_def] >>
+  `read_result cx raw (ee with gas_obs := []) =
+    (INL v,ee with gas_obs := [])` by
+    (qpat_x_assum `!tail. bind _ _ _ = _`
+       (qspec_then `[]` mp_tac) >> simp[bind_def]) >>
+  drule ifexp_arm_conditional_read >>
+  simp[expr_vv_res_ok_def] >>
+  disch_then irule >>
+  qpat_x_assum `!tail. conditional_result _ _ _ = _`
+    (qspec_then `[]` assume_tac) >> simp[] >>
+  Cases_on `raw` >>
+  gvs[conditional_result_def, bind_def, return_def, raise_def,
+      AllCaseEqs()] >>
+  qpat_x_assum `(if _ then _ else _) _ = _` mp_tac >>
+  IF_CASES_TAC >>
+  simp[bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem ifexp_retained_read_typeerror_probe[local]:
   !cx es.
     ?st raw.
