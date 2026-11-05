@@ -578,3 +578,37 @@ Proof
   simp[order_run_s17_def, order_run_s16_def, order_run_s15_def] >>
   simp[order_run_s14_def, order_run_s13_accounts]
 QED
+
+(* Explicit expanded-memory snapshot for the external-code byte copy. *)
+Definition order_run_s21_def:
+  order_run_s21 = order_run_s20 with
+    <|vs_memory := TAKE 288 (order_run_s20.vs_memory ++ REPLICATE 65 0w) ++
+        [30w] ++ DROP 289 (order_run_s20.vs_memory ++ REPLICATE 65 0w);
+      vs_inst_idx := 21|>
+End
+
+Theorem order_run_s20_memory_length:
+  LENGTH order_run_s20.vs_memory = 224
+Proof
+  simp[order_run_s20_def, order_run_s19_def, order_run_s18_def] >>
+  simp[order_run_s17_def, order_run_s16_def, order_run_s15_def] >>
+  simp[order_run_s14_def, order_run_s13_def, order_run_s12_def] >>
+  simp[order_run_s11_def, order_run_s10_def, order_run_s9_def,
+       order_run_s8_memory_length, byteTheory.LENGTH_word_to_bytes,
+       venomMemPropsTheory.dimindex_256]
+QED
+
+Theorem order_run_step20:
+  step_inst_base (mk_inst 20 EXTCODECOPY
+    [Var "%10";Var "%2";Var "%0";Lit 1w] []) order_run_s20 =
+    OK (order_run_s21 with vs_inst_idx := 20)
+Proof
+  simp[venomExecSemanticsTheory.step_inst_base_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.eval_operand_def, order_run_s20_copy_operands,
+       order_run_s20_accounts] >>
+  `(lookup_account (2w:address) order_run_start.vs_accounts).code =
+     [10w;20w;30w]` by EVAL_TAC >>
+  simp[venomStateTheory.write_memory_with_expansion_def,
+       order_run_s20_memory_length] >>
+  simp[order_run_s21_def, order_run_s20_def]
+QED
