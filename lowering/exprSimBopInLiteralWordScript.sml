@@ -20,7 +20,7 @@ Ancestors
   venomExecSemantics venomState words valueEncodingProofs vyperStorage
   exprSimSource
   exprSimHypsDefs
-  exprSimDefs
+  exprSimDefs exprSimStack
   allocLimits
   list finite_map
   fragExec  exprSimHyps exprSimOps exprSimBinopFrag
@@ -1135,7 +1135,23 @@ Theorem compile_bop_in_literal_word_case:
     expr_vv_case nocalls ctx func cenv cx
       (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  conj_asm1_tac
+  >- (rewrite_tac[expr_sim_case_def] >> rpt gen_tac >> strip_tac >>
+      irule literal_expr_sim >> goal_assum (drule_at Any) >>
+      simp[] >> conj_tac >- metis_tac[] >>
+      qexists_tac `nocalls` >> simp[] >>
+      qpat_x_assum `nocalls ==> _` mp_tac >> simp[int_calls_expr_def]) >>
+  rewrite_tac[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  `expr_sim ctx func cenv cx ty
+     (Builtin ann (Bop bop) [e1; Builtin a (MakeArray t n) elems]) es` by
+    metis_tac[expr_sim_case_apply] >>
+  drule_all literal_body_typing >> strip_tac >>
+  irule expr_vv_sim_stack >> simp[] >> conj_tac
+  >- (gen_tac >>
+      `is_ArrayT a` by simp[is_ArrayT_def] >>
+      drule_all literal_compile_stack >> metis_tac[]) >>
+  metis_tac[eval_expr_builtin_value]
 QED
 
 Theorem compile_bop_in_literal_word_sim:
