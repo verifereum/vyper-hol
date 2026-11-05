@@ -151,8 +151,12 @@ Proof
     fs[ptr_chrono_write_def] >>
   drule_all ptr_write_byte_selected_site >> strip_tac >>
   qexistsl [`k`,`v`,`b`,`sz`] >> simp[ptr_observation_reachable_def] >>
+  `MEM (Var v) (EL k h).po_inst.inst_operands` by
+    (drule ptr_write_op_operand >> simp[]) >>
+  `EVERY (fn_ptr_ok P) ctx.ctx_functions` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
   irule ptr_frame_operand_seed >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[ptr_write_op_operand]
+  rpt (goal_assum (drule_at Any))
 QED
 
 (* An allocating seed is in the writer activation or a suspended ancestor at
