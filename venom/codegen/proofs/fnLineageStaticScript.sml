@@ -599,6 +599,35 @@ Proof
   irule dominating_def_excludes_outputs >> metis_tac[]
 QED
 
+Theorem ready_phi_live_seed[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM phi (collect_phis bb.bb_instructions) ==>
+  ?v. MEM (Var v) phi.inst_operands /\
+    MEM v (live_vars_at (liveness_analyze fn) lbl 0)
+Proof
+  strip_tac >> drule_all ready_phi_external_value >>
+  disch_then (qx_choose_then `v` strip_assume_tac) >>
+  qexists_tac `v` >> simp[] >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `MEM lbl (cfg_analyze fn).cfg_dfs_pre` by
+    metis_tac[fn_reachable_in_cfg_dfs_pre] >>
+  `MEM phi bb.bb_instructions` by metis_tac[collect_phis_mem] >>
+  `?idx. idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = phi`
+    by metis_tac[MEM_EL] >>
+  `MEM v (inst_uses (EL idx bb.bb_instructions))` by
+    metis_tac[operand_var_in_inst_uses] >>
+  `MEM v (live_vars_at (liveness_analyze fn) lbl idx)` by
+    metis_tac[live_vars_at_uses] >>
+  drule live_vars_at_propagate_range >> simp[] >> disch_then irule >> simp[] >>
+  qexists_tac `idx` >> simp[] >>
+  rpt strip_tac >>
+  `MEM (EL k bb.bb_instructions) bb.bb_instructions` by
+    (irule EL_MEM >> decide_tac) >>
+  qpat_x_assum `~MEM v (FLAT _)` mp_tac >>
+  simp[MEM_FLAT, MEM_MAP] >> metis_tac[inst_defs_def]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
