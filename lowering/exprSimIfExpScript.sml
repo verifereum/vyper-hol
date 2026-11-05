@@ -1613,13 +1613,30 @@ Theorem ifexp_forced_arm_typed[local]:
   expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
   compile_expr ce ty e sa = (vv,sm) /\
   compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
-  (~is_word_type (expr_type e) ==>
+  ((~is_word_type (expr_type e) ==>
     lowered_value_type ce e = expr_type e \/
     is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
     same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) /\
-    ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp) /\
+    ?tvp. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tvp) \/
+   (~same_memory_layout ce (lowered_value_type ce e) (expr_type e) /\
+    lowered_value_type ce e <> expr_type e /\
+    post_value_type ce e = lowered_value_type ce e /\
+    ~is_word_type (lowered_value_type ce e) /\
+    ~is_bytestring_type (lowered_value_type ce e) /\
+    ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
+    type_widens_to (get_tenv cx) (lowered_value_type ce e) (expr_type e) /\
+    acyclic_struct_metadata ce.ce_struct_fields /\
+    sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP ce.ce_struct_fields name = SOME fields ==>
+      ALL_DISTINCT (MAP FST fields) /\
+      EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+        sz = type_memory_size tv) fields) /\
+    ?stv dtv.
+      evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME stv /\
+      evaluate_type (get_tenv cx) (expr_type e) = SOME dtv /\
+      (!v. res = INL v ==> value_has_type stv v /\ value_has_type dtv v /\ val_wf dtv v))) /\
   (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
     type_memory_bytes ce ty = type_memory_size tv) /\
   (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
@@ -1634,15 +1651,47 @@ Theorem ifexp_forced_arm_typed[local]:
       expr_post ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 es' v op s)
     (expr_exit res)
 Proof
-  strip_tac >>
-  `frag_exec ctx sa sb (\s. s = s0)
-    (\s. ?v. res = INL v /\ expr_post ctx func ce cx e es sa sb s0 es' v op s)
-    (expr_exit res)` by
-    (irule ifexp_forced_arm_sim >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
-  rpt strip_tac >> qexists_tac `v` >> simp[] >>
-  irule ifexp_post_annotated >> goal_assum (drule_at Any) >> metis_tac[]
+  strip_tac
+  >- (`frag_exec ctx sa sb (\s. s = s0)
+        (\s. ?v. res = INL v /\ expr_post ctx func ce cx e es sa sb s0 es' v op s)
+        (expr_exit res)` by
+        (irule ifexp_forced_arm_sim >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[] >>
+      rpt strip_tac >> qexists_tac `v` >> simp[] >>
+      irule ifexp_post_annotated >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  Cases_on `res`
+  >- suspend "typed_success" >>
+  suspend "typed_exit"
 QED
+
+Resume ifexp_forced_arm_typed[typed_success]:
+  gvs[] >>
+  `type_memory_size dtv < dimword (:256)` by
+    (simp[wordsTheory.dimword_def] >> decide_tac) >>
+  irule ifexp_typed_arm_success >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Resume ifexp_forced_arm_typed[typed_exit]:
+  drule_all ifexp_different_type_unwrap_pure >> strip_tac >>
+  `lower_value compile_expr ce ty e sa = (op',sm)` by
+    simp[lower_value_def, comp_bind_def, comp_return_def] >>
+  `ci_mono sa sm /\ ci_mono sm sb` by
+    (conj_tac
+     >- (drule (cj 1 compile_expr_grows) >> simp[ci_mono_def]) >>
+     qspecl_then [`ce`, `expr_type e`, `lowered_value_type ce e`, `vv`, `sm`]
+       mp_tac ci_mono_compile_ifexp_arm >> simp[]) >>
+  `fn_has_code sa sm func` by metis_tac[ci_mono_def, fn_has_code_split] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_def] >>
+  disch_then (qspecl_then [`sa`, `sm`, `op'`, `INR y`, `es'`, `s0`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule frag_exec_exit_prefix >> qexists_tac `sm` >>
+  conj_tac >- metis_tac[ci_mono_def] >>
+  conj_tac >- metis_tac[ci_mono_def] >>
+  irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[]
+QED
+Finalise ifexp_forced_arm_typed
 
 (* What compile_expr emits for an IfExp. *)
 Theorem compile_expr_ifexp:
