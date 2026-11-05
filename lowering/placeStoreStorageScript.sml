@@ -117,6 +117,37 @@ Proof
   Cases_on `i = 1` >> simp[]
 QED
 
+Theorem place_store_dead_tuple_component:
+  !types i elem st base j b.
+    oEL i types = SOME elem /\
+    dead_bytes st (base + tuple_prefix_slot_size i types) elem j b ==>
+    dead_bytes st base (TupleTV types) j b
+Proof
+  Induct >> Cases_on `i` >>
+  simp[listTheory.oEL_def, tuple_prefix_slot_size_def, dead_bytes_def] >>
+  rpt strip_tac >> disj2_tac >>
+  gvs[dead_bytes_def] >> first_x_assum irule >>
+  qexistsl_tac [`elem`, `n`] >> asm_rewrite_tac[GSYM ADD_ASSOC]
+QED
+
+Theorem place_store_dead_struct_component:
+  !fields id delta elem st base j b.
+    struct_field_slot fields id = SOME (delta,elem) /\
+    dead_bytes st (base + delta) elem j b ==>
+    dead_bytes st base (StructTV fields) j b
+Proof
+  Induct >> simp[struct_field_slot_def, dead_bytes_def] >>
+  Cases_on `h` >> rpt gen_tac >>
+  simp[struct_field_slot_def] >>
+  IF_CASES_TAC >> simp[] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), dead_bytes_def] >>
+  PairCases_on `z` >> gvs[] >>
+  disj2_tac >> first_x_assum irule >>
+  goal_assum (drule_at Any) >>
+  `base' + type_slot_size r + z0 = base' + (z0 + type_slot_size r)` by
+    decide_tac >> asm_rewrite_tac[]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
