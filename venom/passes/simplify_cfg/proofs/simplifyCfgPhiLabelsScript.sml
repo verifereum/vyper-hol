@@ -114,7 +114,7 @@ Proof
      gvs[can_bypass_jump_def] >> metis_tac[]) >>
   irule removed_label_edges_closed >>
   qexistsl_tac [`a`, `f`, `b.bb_label`] >> simp[] >>
-  metis_tac[bypass_edge_origin]
+  mp_tac bypass_edge_origin >> simp[]
 QED
 
 Theorem fix_phi_inst_phi_distinct:

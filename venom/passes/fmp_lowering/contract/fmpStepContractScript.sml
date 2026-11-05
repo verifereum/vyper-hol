@@ -53,10 +53,83 @@ QED
 
 (* The step contract of FmpLowering's walk run: it adds no ALLOCA, so the
    function row (no ALLOCA from row 3 on) carries over. *)
+(* Every successful lowering is checked against its sealed signature, whose
+   syntax demands the canonical parameter prefix. *)
+Theorem fmp_lower_function_canonical_param_prefix:
+  fmp_lower_function ctx s fn = SOME (fn',s') ==> canonical_param_prefix fn'
+Proof
+  simp[fmp_lower_function_def, fmp_lower_function_with_info_def,
+       AllCaseEqs()] >> rpt strip_tac >>
+  gvs[fmp_signature_matches_fn_def, fmp_signature_syntax_wf_def] >>
+  drule fmp_checked_seal_some >> strip_tac >>
+  gvs[fmp_signature_syntax_wf_def]
+QED
+
+Theorem is_pseudo_param_or_phi:
+  is_pseudo op <=> op = PHI \/ is_param_opcode op
+Proof
+  Cases_on `op` >> simp[is_pseudo_def, is_param_opcode_def]
+QED
+
+Theorem pseudos_prefix_split:
+  bb.bb_instructions = ps ++ rest /  EVERY (\i. is_pseudo i.inst_opcode) ps /  EVERY (\i. ~is_pseudo i.inst_opcode) rest ==> pseudos_prefix bb
+Proof
+  rw[pseudos_prefix_def] >> gvs[EVERY_EL] >>
+  Cases_on `i < LENGTH ps` >> gvs[EL_APPEND1] >>
+  `LENGTH ps <= j` by decide_tac >>
+  `j - LENGTH ps < LENGTH rest` by decide_tac >>
+  gvs[EL_APPEND2]
+QED
+
+Theorem canonical_entry_params_split:
+  !k insts. canonical_entry_params_from k insts ==>
+    ?ps rest. insts = ps ++ rest /      EVERY (\i. is_param_opcode i.inst_opcode) ps /\ no_param_insts rest
+Proof
+  Induct_on `insts` >> simp[canonical_entry_params_from_def] >>
+  rpt gen_tac >> rpt IF_CASES_TAC >> strip_tac
+  >- (first_x_assum drule >> strip_tac >>
+      qexistsl [`h::ps`, `rest`] >> gvs[is_param_opcode_def])
+  >- (Cases_on `insts` >> gvs[canonical_after_fmp_def]
+      >- (qexistsl [`[h]`, `[]`] >> gvs[is_param_opcode_def, no_param_insts_def])
+      >> Cases_on `h'.inst_opcode = RETPC_PARAM` >> gvs[]
+      >- (qexistsl [`[h; h']`, `t`] >> gvs[is_param_opcode_def])
+      >> qexistsl [`[h]`, `h'::t`] >> gvs[is_param_opcode_def])
+  >- (qexistsl [`[h]`, `insts`] >> gvs[is_param_opcode_def])
+  >> qexistsl [`[]`, `h::insts`] >> simp[]
+QED
+
+(* The canonical parameter prefix, with no PHI in the first block and the
+   PHI prefix of every block, makes the pseudo instructions a prefix. *)
+Theorem canonical_param_prefix_pseudos:
+  canonical_param_prefix fn /\ wf_function fn /\ first_block_no_phi fn ==>
+  fn_pseudos_prefix fn /  EVERY (\bb. no_param_insts bb.bb_instructions) (TL fn.fn_blocks)
+Proof
+  strip_tac >>
+  Cases_on `fn.fn_blocks` >> gvs[canonical_param_prefix_def] >>
+  simp[fn_pseudos_prefix_def] >> rpt strip_tac >> gvs[]
+  >- (drule canonical_entry_params_split >> strip_tac >>
+      irule pseudos_prefix_split >> qexistsl [`ps`, `rest`] >>
+      gvs[first_block_no_phi_def, no_param_insts_def, EVERY_MEM,
+          is_pseudo_param_or_phi] >>
+      rpt strip_tac >> res_tac >> gvs[is_param_opcode_def]) >>
+  `bb_well_formed bb` by gvs[wf_function_def] >>
+  gvs[EVERY_MEM, no_param_insts_def] >>
+  `!i. MEM i bb.bb_instructions ==> ~is_param_opcode i.inst_opcode` by
+    metis_tac[] >>
+  gvs[pseudos_prefix_def, bb_well_formed_def, is_pseudo_param_or_phi] >>
+  metis_tac[MEM_EL]
+QED
+
 Theorem fmp_step_contract_at:
   o1_step_contract_at 3 rpolicy (CFP_Simple VP_FmpLowering)
 Proof
   irule o1_step_contract_at_preserve >> simp[fmp_step_contract] >>
   rpt strip_tac >> drule fmp_fn_pass_step_result >> strip_tac >>
+  drule_all fmp_fn_pass_step_input >> strip_tac >>
+  `wf_function out.fpo_function /\ first_block_no_phi out.fpo_function` by
+    metis_tac[fmp_lower_function_wf_function,
+              fmp_lower_function_first_block_no_phi, o1_fn_shape_def] >>
+  drule fmp_lower_function_canonical_param_prefix >> strip_tac >>
+  drule_all canonical_param_prefix_pseudos >> strip_tac >>
   fs[o1_fn_row_def] >> metis_tac[fmp_lower_function_no_alloca]
 QED
