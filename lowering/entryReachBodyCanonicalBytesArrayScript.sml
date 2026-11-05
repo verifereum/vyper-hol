@@ -2,10 +2,10 @@
 Theory entryReachBodyCanonicalBytesArray
 Ancestors
   entryReachBodyCanonicalBytes entryReachBodyCanonicalChildAddress
-  entryReachBodyExactArrayLoop entryReachBodyArrayInit calldataBytesLeaf
-  abiEncoderSequence abiDecoderExecution abiDecoderLoopRegisters abiDecoderReentryPointer ctorAbiActualBytes
+  entryReachBodyExactArrayLoop entryReachBodyExactChildOwnership entryReachBodyArrayInit calldataBytesLeaf
+  abiEncoderSequence abiDecoderExecution abiDecoderLoop abiDecoderLoopRegisters abiDecoderReentryPointer ctorAbiActualBytes
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup
-  abiDecoderArraySetupInputs abiDecoderReentry
+  abiDecoderArraySetupInputs abiDecoderArrayBackedge abiDecoderReentry venomMemProofs
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -226,6 +226,7 @@ Theorem entry_canonical_bytes_element_sequence[local]:
       eval_operand op t = SOME w) /\
     (!ctx fn. fn_has_code st last fn /\ ~s.vs_halted /\
       s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+      t.vs_current_bb = last.cs_current_bb /\
       abi_decode_sim ctx fn s (t with vs_inst_idx := LENGTH last.cs_current_insts))
 Proof
   strip_tac >>
@@ -257,6 +258,7 @@ Proof
   `eval_operand (FST ops) t = SOME (n2w j)` by metis_tac[] >>
   `!ctx fn. fn_has_code st last fn /\ ~s.vs_halted /\
       s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+      t.vs_current_bb = last.cs_current_bb /\
       abi_decode_sim ctx fn s (t with vs_inst_idx := LENGTH last.cs_current_insts)` by
     (rpt strip_tac >> drule_all entry_bytes_element_shape >> strip_tac >>
      drule_all abi_encoder_run_sequence_reach >> simp[]) >>
@@ -358,3 +360,156 @@ Proof
     (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
   metis_tac[]
 QED
+
+(* Readiness supplies the ncounter observation; it is not inferred from J. *)
+Theorem entry_bytes_header_inputs[local]:
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr ncount j s /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap s /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  abi_decoder_operand_live next dst /\
+  next + 4 <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j ncount s) ==>
+  eval_operand ip h = SOME p /\ mload (w2n p) h = n2w j /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap h /\
+  fresh_vars_wrt limit_st h /\ h.vs_call_ctx = s.vs_call_ctx /\
+  ~h.vs_halted /\ h.vs_current_bb = body_lbl /\ h.vs_inst_idx = 0
+Proof
+  strip_tac >> drule_all abi_decoder_header_registers >>
+  disch_then (qspecl_then [`ncount`,`j`] strip_assume_tac) >>
+  gvs[abi_decode_loop_ready_def, abi_decoder_ranges_def] >>
+  asm_simp_tac (srw_ss()) [] >>
+  fs[jump_to_def, abi_decode_header_state_def, update_var_def, mload_def]
+QED
+
+Theorem entry_bytes_element_after_header[local]:
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) (abi_embedded_static_size ce.ce_struct_fields ty)
+    (type_memory_bytes ce ty) st = (ops,middle) /\
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops))
+    CALLDATALOAD (Lit 0w) (DecBytestring n) middle = ((),last) /\
+  type_to_abi_dec_info sf ce ty = DecBytestring n /\ n < dimword (:256) /\
+  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
+  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+    parent_di (ListV avs) (ArrayV (DynArrayV xs)) /\
+  j < LENGTH xs /\ is_dynamic (vyper_to_abi_type env ty) /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap s /\
+  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD s) =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
+  abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) j s /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  abi_decoder_operand_live next dst /\ next <= st.cs_next_var /\
+  next + 4 <= limit_st.cs_next_var /\
+  middle.cs_next_var <= limit_st.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st s /\
+  h = jump_to body_lbl (abi_decode_header_state (STRING #"%" (toString next))
+    (STRING #"%" (toString (next+1))) (STRING #"%" (toString (next+2)))
+    (STRING #"%" (toString (next+3))) j (LENGTH xs) s) ==>
+  ?t. run_inst_seq (emitted_insts st last) h = OK t /\
+    val_in_memory tv (EL j xs) (d+32+j*type_memory_bytes ce ty) t.vs_memory /\
+    fresh_vars_wrt limit_st t /\ entry_loop_fields h t /\
+    abi_decode_frame (d+32+j*type_memory_bytes ce ty) (type_memory_bytes ce ty) h t /\
+    t.vs_allocas = h.vs_allocas /\ t.vs_alloca_next = h.vs_alloca_next /\
+    ~t.vs_halted /\ eval_operand (FST ops) t = SOME (n2w j) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op h = SOME w ==>
+      eval_operand op t = SOME w) /\
+    (!ctx fn. fn_has_code st last fn /\ st.cs_current_bb = body_lbl /\
+      st.cs_current_insts = [] ==>
+      t.vs_current_bb = last.cs_current_bb /\
+      abi_decode_sim ctx fn h (t with vs_inst_idx := LENGTH last.cs_current_insts))
+Proof
+  strip_tac >> drule_all entry_bytes_header_inputs >> strip_tac >>
+  `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
+    (abi_decode_source CALLDATALOAD h) =
+    enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by
+    fs[abi_decode_source_def] >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var dst` by
+    (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  drule_all entry_canonical_bytes_element_sequence >> strip_tac >>
+  goal_assum (drule_at Any) >> asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!ctx fn. _` (qspecl_then [`ctx`,`fn`] mp_tac) >>
+  (impl_tac >- simp[]) >> simp[]
+QED
+
+Theorem entry_bytes_element_invariant[local]:
+  entry_bytes_array_inv next limit_st d outsz q (LENGTH xs) prepared h /\
+  entry_loop_prefix tv xs d j h /\ j < LENGTH xs /\ EVERY (val_wf tv) xs /\
+  FLOOKUP h.vs_allocas oid = SOME (d,capacity) /\
+  32+j*type_memory_size tv <= capacity /\ alloca_inv t /\
+  t.vs_allocas = h.vs_allocas /\ t.vs_alloca_next = h.vs_alloca_next /\
+  entry_loop_fields h t /\ fresh_vars_wrt limit_st t /\ next <= child_next /\
+  (!op w. abi_decoder_operand_live child_next op /\ eval_operand op h = SOME w ==>
+    eval_operand op t = SOME w) /\
+  abi_decode_frame (d+32+j*type_memory_size tv) (type_memory_size tv) h t /\
+  d+32+j*type_memory_size tv+type_memory_size tv <= d+outsz /\
+  val_in_memory tv (EL j xs) (d+32+j*type_memory_size tv) t.vs_memory ==>
+  entry_bytes_array_inv next limit_st d outsz q (LENGTH xs) prepared t /\
+  entry_loop_prefix tv xs d (SUC j) t
+Proof
+  strip_tac >> conj_tac
+  >- (irule entry_bytes_array_inv_child >> goal_assum (drule_at Any) >>
+      qexistsl_tac [`d+32+j*type_memory_size tv`,`child_next`,`type_memory_size tv`,`h`] >>
+      simp[]) >>
+  irule entry_child_exact_prefix_extend >> asm_rewrite_tac[] >>
+  qexistsl_tac [`capacity`,`0`,`0`,`oid`,`h`,`[]`] >>
+  simp[GSYM abi_decode_frame_footprint]
+QED
+
+Theorem entry_bytes_array_backedge[local]:
+  entry_loop_child_end fn tail prefix bid iv (STRING #"%" (toString nv))
+    ip hdr src p srcaddr (LENGTH xs) j t /\
+  lookup_block hdr fn.fn_blocks = SOME hdr_bb /\
+  phi_prefix_length hdr_bb.bb_instructions = 0 /\
+  entry_bytes_array_inv next limit_st d outsz (w2n p) (LENGTH xs) prepared t /\
+  entry_loop_prefix tv xs d (SUC j) t /\ EVERY (val_wf tv) xs /\
+  j < LENGTH xs /\ LENGTH xs < dimword (:256) /\
+  abi_decoder_operand_live next ip /\ abi_decoder_operand_live next src /\
+  next <= nv /\ nv < limit_st.cs_next_var /\
+  (d+32 <= w2n p \/ w2n p+32 <= d) /\
+  (!k. k < SUC j ==> w2n p+32 <= d+32+k*type_memory_size tv \/
+    d+32+k*type_memory_size tv+type_memory_size tv <= w2n p) ==>
+  ?v. abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) (SUC j) v /\
+    entry_bytes_array_inv next limit_st d outsz (w2n p) (LENGTH xs) prepared v /\
+    entry_loop_prefix tv xs d (SUC j) v /\ entry_loop_fields t v /\
+    abi_decode_sim ctx fn t v
+Proof
+  strip_tac >>
+  `abi_decoder_operand_live nv ip /\ abi_decoder_operand_live nv src` by
+    (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  `ip <> Var (STRING #"%" (toString nv))` by
+    (irule abi_decoder_live_excludes_output >> qexists_tac `next` >> simp[]) >>
+  qabbrev_tac `v = jump_to hdr (mstore (w2n p) (n2w (SUC j))
+    (update_var (STRING #"%" (toString nv)) (n2w (SUC j)) t))` >>
+  `entry_bytes_array_inv next limit_st d outsz (w2n p) (LENGTH xs) prepared v` by
+    (simp[Abbr `v`] >> irule entry_bytes_array_inv_backedge >> simp[]) >>
+  `abi_decode_sim ctx fn t v` by
+    (simp[Abbr `v`] >> irule abi_decode_backedge_sim >>
+     fs[entry_loop_child_end_def] >> metis_tac[]) >>
+  `eval_operand ip v = SOME p /\ eval_operand src v = SOME srcaddr` by
+    (fs[entry_loop_child_end_def, Abbr `v`, eval_operand_mstore,
+        abi_decoder_generated_update_operand]) >>
+  `abi_decode_loop_ready hdr ip src CALLDATALOAD p srcaddr (LENGTH xs) (SUC j) v` by
+    (fs[entry_loop_child_end_def, abi_decode_loop_ready_def, Abbr `v`,
+      abi_decode_mload_jump, mload_mstore_same_proof, abi_decode_load_def,
+      abi_decode_source_def, jump_to_def, mstore_def, update_var_def,
+      write_memory_with_expansion_def]) >>
+  `entry_loop_prefix tv xs d (SUC j) v` by
+    (simp_tac bool_ss [entry_loop_prefix_def] >> rpt strip_tac >>
+     `val_wf tv (EL k xs)` by
+       (fs[EVERY_EL] >> first_x_assum irule >> decide_tac) >>
+     `val_in_memory tv (EL k xs) (d+32+k*type_memory_size tv) t.vs_memory` by
+       fs[entry_loop_prefix_def] >>
+     `val_in_memory tv (EL k xs) (d+32+k*type_memory_size tv)
+       (mstore (w2n p) (n2w (SUC j)) (t with vs_memory := t.vs_memory)).vs_memory` by
+       (irule (cj 1 mstore_preserves_val_in_memory) >> simp[]) >>
+     gvs[Abbr `v`, jump_to_def, mstore_def, update_var_def, write_memory_with_expansion_def]) >>
+  qexists_tac `v` >> asm_rewrite_tac[] >>
+  simp[Abbr `v`, entry_loop_fields_def, jump_to_def, mstore_def,
+    update_var_def, write_memory_with_expansion_def]
+QED
+
