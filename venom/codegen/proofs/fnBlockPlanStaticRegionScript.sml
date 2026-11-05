@@ -1,7 +1,7 @@
 Theory fnBlockPlanStaticRegion
 Ancestors
   fnBlockPlanStaticPromises fnBlockPlanStaticInventory fnPlanLineage fnPlanLineageJoin
-  fnLineageInv fnPlanPrefix list stackPlanGen
+  fnLineageInv fnPlanPrefix list stackPlanGen fnFrameBoundaryGenRet
 
 Theorem dfs_saved_parent_origin_mutual[local]:
   (!wl visited pg.
@@ -210,4 +210,36 @@ Theorem regional_dfs_join_target_distinct:
 Proof
   rpt gen_tac >> strip_tac >> drule_all dfs_edge_lineage_entry >>
   strip_tac >> drule_all regional_lineage_join_target_distinct >> simp[]
+QED
+
+Theorem regional_ret_operand_support_empty:
+  inst.inst_opcode = RET /\ inst.inst_outputs = [] /\
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  EVERY (\op. ?v. op = Var v /\ MEM op (compute_operands inst)) ps.ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan RET (compute_operands inst) [] ps)).ps_stack /\
+  generate_inst_plan lv dfg cfg fn inst [] halting next_term lbl ps = SOME (ops,ps')
+  ==> ps'.ps_stack = []
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan RET (compute_operands inst) [] ps` >>
+  rename1 `emit_input_plan _ _ _ _ = (iops,mid)` >>
+  Cases_on `reorder_plan dfg (compute_operands inst) mid` >>
+  rename1 `reorder_plan _ _ _ = (rops,arranged)` >>
+  `EVERY (\op. ?v. op = Var v /\ (MEM v [] \/ MEM op (compute_operands inst)))
+     ps.ps_stack` by simp[] >>
+  `PERM (compute_operands inst) (compute_operands inst)` by simp[] >>
+  `LENGTH (compute_operands inst) <= LENGTH mid.ps_stack` by gvs[] >>
+  drule_all inventory_regular_core_live_support_unconditional >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
+       venomInstTheory.is_param_opcode_def, generate_regular_inst_plan_def,
+       venomEffectsTheory.is_commutative_def, generate_emit_ops_def,
+       asmIRTheory.venom_to_evm_name_def] >>
+  strip_tac >> gvs[release_dead_spills_stack]
 QED
