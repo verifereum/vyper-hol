@@ -6,6 +6,8 @@ Ancestors
   compileEnv list memLocDefs venomInstProofs codegenRel contextCodegenRel
   fragGasPathPtr fragGasSeqPtr finite_map bodyPtrDefs emitHelper emitHelperProps
   exprLoweringProps fragExec stmtFragPtr
+  bodyPtrEnvBuiltinsAccountReads bodyPtrEnvBuiltinsScalar
+  valueEncoding vyperValue vyperContext vyperTypeSystem exprSimAccounts
 
 Theorem ptr_inst_ok_account_gt:
   op_taint tn arg = {} /\ ~ctx_has_dalloca ctx ==>
@@ -166,4 +168,93 @@ Proof
       simp[op_taint_def, step_taint_def, mk_inst_def, set_var_taint_def,
            out_taint_def, FLOOKUP_UPDATE]) >>
   rpt strip_tac >> IF_CASES_TAC >> gvs[]
+QED
+
+Theorem account_read_counted_run:
+  MEM (item,opc) [(Balance,BALANCE); (Codesize,EXTCODESIZE); (Codehash,EXTCODEHASH)] /\
+  emit_op opc [arg] sa = (op,sb) /\ fn_has_code sa sb fn /\
+  LENGTH bs = 20 /\
+  eval_operand arg s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
+  evaluate_type (get_tenv cx) (account_item_type item) = SOME tv /\
+  op_taint tn arg = {} /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
+    op_taint tn' op = {} /\
+    eval_operand op t = SOME (typed_val_to_w256 tv
+      (evaluate_account_op item bs
+        (lookup_account (word_of_bytes_be bs) es.accounts))) /\
+    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas
+Proof
+  strip_tac >>
+  `MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
+    GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
+    ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
+    BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\ opc <> GAS` by gvs[] >>
+  drule_all account_read_typed_step >>
+  disch_then (qspecl_then [`STRING #"%" (toString sa.cs_next_var)`,
+    `sa.cs_next_id`] assume_tac) >>
+  `!a. MEM a [arg] ==> op_taint tn a = {}` by simp[] >>
+  drule_all emit_scalar_builtin_run >> simp[]
+QED
+
+Theorem emit_account_gt_append:
+  emit_op GT [arg; Lit lit] sm = (op,sb) /\ fn_has_code sm sb fn /\
+  op_taint tn arg = {} /\
+  gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G tn (OK s) /\
+  ghost_inv d cenv cx es G tn s /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  sa.cs_next_id <= sm.cs_next_id /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  local_ptrs_rel fn cenv es.scopes s0 /\
+  stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
+  (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
+  s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
+  step_inst_base (mk_inst sm.cs_next_id GT [arg; Lit lit]
+    [STRING #"%" (toString sm.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s) ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G' tn' (OK t) /\
+    ghost_inv d cenv cx es G' tn' t /\
+    ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
+    op_taint tn' op = {} /\ eval_operand op t = SOME w /\
+    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\
+    t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas
+Proof
+  strip_tac >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sm x` by metis_tac[] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sm x` by metis_tac[] >>
+  `ghost_kept cenv es sm G tn s G tn` by simp[ghost_kept_refl] >>
+  drule_all emit_account_gt_run >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+    (drule_all scalar_frame_kept_trans >> simp[]) >>
+  `gas_path_ptr D 0 ctx fn PG G0 tn0 s0 (k + 0) G' tn' (OK t)` by
+    (irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >> qexistsl_tac [`G'`, `tn'`, `t`] >> simp[] >>
+  metis_tac[]
 QED
