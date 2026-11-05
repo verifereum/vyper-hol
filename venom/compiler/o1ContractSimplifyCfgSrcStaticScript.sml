@@ -701,7 +701,7 @@ Theorem fn_ptr_ok_data_transfer:
   EVERY (\i. i.inst_opcode <> PHI) (fn_insts g) /\
   EVERY (\i. is_terminator i.inst_opcode ==>
        i.inst_opcode <> DRET /\ i.inst_opcode <> RETFMP /\
-       ptr_use_ok P (fn_pv P g) i) (fn_insts g) /\
+       i.inst_outputs = [] /\ ptr_use_ok P (fn_pv P g) i) (fn_insts g) /\
   fn_ptr_ok P f ==> fn_ptr_ok P g
 Proof
   strip_tac >>
@@ -732,12 +732,19 @@ Proof
   >- (qpat_x_assum `EVERY (\i. i.inst_opcode <> PHI) _` mp_tac >>
       simp[EVERY_MEM, fn_insts_def, MEM_fn_insts_blocks_iff,
            phi_pv_all_var_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `~is_terminator inst.inst_opcode` by
+        (Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
+         `inst.inst_opcode <> DRET /\ inst.inst_opcode <> RETFMP` by
+           (fs[EVERY_MEM] >> metis_tac[]) >>
+         drule_all terminator_ptr_static_rows >> simp[]) >>
+      `MEM inst (fn_insts f)` by
+        (fs[EXTENSION, MEM_FILTER] >> metis_tac[]) >> metis_tac[]) >>
   rpt strip_tac >>
   `~is_terminator inst.inst_opcode` by
-    (Cases_on `is_terminator inst.inst_opcode` >> simp[] >>
-     `inst.inst_opcode <> DRET /\ inst.inst_opcode <> RETFMP` by
-       (fs[EVERY_MEM] >> metis_tac[]) >>
-     drule_all terminator_ptr_static_rows >> simp[]) >>
+    (strip_tac >> `inst.inst_outputs = []` by (fs[EVERY_MEM] >> metis_tac[]) >>
+     fs[]) >>
   `MEM inst (fn_insts f)` by
     (fs[EXTENSION, MEM_FILTER] >> metis_tac[]) >> metis_tac[]
 QED
@@ -776,6 +783,14 @@ Proof
         metis_tac[reachable_inst_fields, fn_insts_def, MEM_fn_insts_blocks_iff]) >>
      fs[scfg_static_def, fn_inst_wf_def, fn_ptr_ok_def, EVERY_MEM] >>
      metis_tac[fn_insts_def, MEM_fn_insts_blocks_iff]) >>
+  `scfg_static (simplify_cfg_fn f)` by
+    (qspecl_then [`LENGTH f.fn_blocks`, `f`] mp_tac scfg_iter_contract >>
+     simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def]) >>
+  `EVERY (\i. is_terminator i.inst_opcode ==> i.inst_outputs = [])
+       (fn_insts (simplify_cfg_fn f))` by
+    (drule scfg_static_inst_wf >>
+     simp[fn_inst_wf_def, EVERY_MEM, fn_insts_def, MEM_fn_insts_blocks_iff] >>
+     metis_tac[venomExecProofsTheory.terminator_no_outputs]) >>
   irule fn_ptr_ok_data_transfer >> simp[EVERY_MEM] >> conj_tac
   >- (fs[EVERY_MEM] >> metis_tac[]) >>
   qexists_tac `reachable_fn f` >> simp[reachable_fn_def]

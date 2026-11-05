@@ -13,11 +13,13 @@
  *   lower_dload_stage_shape        - no eom and no DALLOCA kept
  *   lower_dload_stage_fmp_free     - no FMP signature or raw FMP op kept
  *   lower_dload_stage_callee_first - the callee-first order kept
+ *   lower_dload_stage_ssa_form     - SSA form kept
  *   lower_dload_stage_dload_ok     - the DLOAD offset bound, vacuous after
  *   lower_dload_stage_headroom     - the DLOAD headroom bound, raw_mem_ok's
  *                                    frontier bound after
  *   (the simulation and the raw memory, pointer and taint rows are in
  *    o1ContractLowerDload{Sim,Mem,Ptr,Taint})
+ *   lower_dload_fn_row             - function row 1 to row 2
  *   o1_contract_lower_dload        - the contract theorem
  *)
 Theory o1ContractLowerDloadStage
@@ -26,7 +28,8 @@ Ancestors
   lowerDloadDefs venomPassSchedule list venomInst venomWf
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
-  o1ContractLowerDloadPtr o1ContractLowerDloadTaint
+  o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
+  venomFnScheduleRunnerProps
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -232,17 +235,42 @@ Proof
   metis_tac[]
 QED
 
+(* LowerDload's fresh variables keep SSA form. *)
+Theorem lower_dload_stage_ssa_form:
+  !rpolicy view C C'.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    EVERY ssa_form C.ctx_functions ==>
+    EVERY ssa_form C'.ctx_functions
+Proof
+  rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
+  rename1 `n < LENGTH C.ctx_functions` >>
+  qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> ?observed. _`
+    (qspec_then `n` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule lower_dload_step_supply >> strip_tac >>
+  metis_tac[lower_dload_function_supply_ssa_form]
+QED
+
 (* LowerDload keeps the inputs MakeSSA needs: it adds no PHI, keeps every
    block reachable, and each variable it introduces is defined before its
    uses in the same block. *)
 Theorem lower_dload_stage_make_ssa_input_ok:
   !rpolicy view C C'.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    o1_ctx_shape C /\
     EVERY make_ssa_input_ok C.ctx_functions ==>
     EVERY make_ssa_input_ok C'.ctx_functions
 Proof
-  (* admitted at base cut: new make_ssa_input_ok row of o1_inv 2 (argon's interface ruling) *)
-  cheat
+  rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
+  rename1 `n < LENGTH C.ctx_functions` >>
+  qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> ?observed. _`
+    (qspec_then `n` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  `fn_inst_ids_distinct (EL n C.ctx_functions) /\
+   fn_inst_wf (EL n C.ctx_functions)` by
+    gvs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_EL] >>
+  `make_ssa_input_ok (EL n C.ctx_functions)` by gvs[] >>
+  metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
 QED
 
 Theorem lower_dload_run_contract:
@@ -267,7 +295,10 @@ Proof
   `callee_first names C'.ctx_functions` by
     metis_tac[lower_dload_stage_callee_first] >>
   `EVERY make_ssa_input_ok C'.ctx_functions` by
-    metis_tac[lower_dload_stage_make_ssa_input_ok] >>
+    (irule lower_dload_stage_make_ssa_input_ok >> fs[o1_src_inv_def] >>
+     metis_tac[]) >>
+  `EVERY ssa_form C'.ctx_functions` by
+    metis_tac[lower_dload_stage_ssa_form] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
     (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
@@ -275,10 +306,35 @@ Proof
   fs[fixed_region_reserved_def] >> metis_tac[]
 QED
 
+(* One run takes function row 1 to row 2: it keeps a valid MakeSSA
+   input, adds no raw FMP operation and keeps the FMP convention. *)
+Theorem lower_dload_fn_row:
+  fn_pass_step rpolicy (CFP_Simple VP_LowerDload) observed s fn out /\
+  o1_ctx_shape observed.cu_context /\ o1_fn_row 1 fn ==>
+  o1_fn_row 2 out.fpo_function
+Proof
+  strip_tac >>
+  `MEM fn observed.cu_context.ctx_functions` by
+    (gvs[fn_pass_step_def] >>
+     metis_tac[lookup_unique_function_member]) >>
+  `fn_inst_ids_distinct fn /\ fn_inst_wf fn` by
+    gvs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >>
+  gvs[o1_fn_row_def] >> rpt conj_tac
+  >- metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
+  >- (drule lower_dload_step_supply >> strip_tac >>
+      fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
+      drule_all lower_dload_function_supply_member >> strip_tac >>
+      `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
+        metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
+      fs[EVERY_MEM] >> metis_tac[]) >>
+  drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def]
+QED
+
 Theorem o1_contract_lower_dload:
   o1_step_contract_at 1 rpolicy (CFP_Simple VP_LowerDload) /\
   o1_run_contract rpolicy D 1
 Proof
-  simp[o1_step_contract_at_plain, lower_dload_step_contract,
-       lower_dload_run_contract]
+  simp[lower_dload_run_contract] >>
+  irule o1_step_contract_at_preserve >>
+  simp[lower_dload_step_contract] >> metis_tac[lower_dload_fn_row]
 QED
