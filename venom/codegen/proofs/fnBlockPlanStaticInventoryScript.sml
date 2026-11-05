@@ -1170,6 +1170,44 @@ Proof
     (qspec_then `Var v` mp_tac) >> simp[]
 QED
 
+Theorem inventory_regular_core_live_support_unconditional:
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) /\
+  EVERY (\op. ?v. op = Var v /\ (MEM v nl \/ MEM op operands)) ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v nl)
+    (stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  strip_tac >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!op. MEM op pending <=> MEM op operands` by metis_tac[PERM_MEM_EQ] >>
+  `EVERY is_var_operand ps.ps_stack` by
+    (gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  `!op. MEM op mid.ps_stack ==> MEM op ps.ps_stack \/ MEM op operands` by
+    metis_tac[inventory_emit_physical_origin] >>
+  `!op. MEM op arranged.ps_stack ==> MEM op mid.ps_stack \/ MEM op pending` by
+    metis_tac[inventory_reorder_physical_origin] >>
+  `!op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
+    MEM op arranged.ps_stack` by
+    metis_tac[stack_pop_def, rich_listTheory.MEM_TAKE] >>
+  `!op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
+    MEM op ps.ps_stack \/ MEM op operands` by metis_tac[] >>
+  `!op. MEM op operands /\ ~is_var_operand op ==>
+    ~MEM op (stack_pop (LENGTH operands) arranged.ps_stack)` by
+    metis_tac[inventory_regular_core_nonvar_absent] >>
+  `!op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
+    is_var_operand op /\ (MEM op ps.ps_stack \/ MEM op operands)` by
+    metis_tac[EVERY_MEM] >>
+  irule inventory_regular_core_live_support >> simp[] >>
+  goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >> simp[]
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
