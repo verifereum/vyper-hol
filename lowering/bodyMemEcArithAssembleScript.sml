@@ -425,3 +425,116 @@ Proof
   strip_tac >> qexistsl [`ib`,`ob`,`sm`,`t`,`pi'`,`po`] >>
   gvs[Abbr `bytes`] >> first_assum ACCEPT_TAC
 QED
+
+Theorem ecmul_prefix_mem:
+  compile_ecmul_point p scalar sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\ alloca_history func s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  eval_operand p s = SOME point /\ eval_operand scalar s = SOME wscalar /\
+  (!x. MEM (Var x) [p;scalar] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next ==>
+  ?ib ob sm t pi po.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 7w; ib.buf_operand; Lit 96w; ob.buf_operand; Lit 64w];
+        emit_void ASSERT [success]; return ob.buf_operand od) sm = (res,sb) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 12 /\
+    sm.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sm /\
+    same_blocks sf sm /\
+    (!i. MEM i (emitted_insts sf sm) ==>
+      MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
+    run_inst_seq (emitted_insts sf sm) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    eval_operand ib.buf_operand t = SOME pi /\
+    eval_operand ob.buf_operand t = SOME po /\
+    w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
+    w2n pi + 96 <= t.vs_alloca_next /\ w2n po + 64 <= t.vs_alloca_next /\
+    mem_bytes_at (w2n pi) 96 t.vs_memory =
+      word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
+      word_to_bytes wscalar T /\
+    (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
+    (!x. ib.buf_operand = Var x ==> not_fresh_at sm x) /\
+    (!x. ob.buf_operand = Var x ==> not_fresh_at sm x) /\
+    gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := s.vs_inst_idx + 12)) /\
+    alloca_history func (t with vs_inst_idx := s.vs_inst_idx + 12)
+Proof
+  strip_tac >>
+  drule_all ecmul_prefix_take_safe >> disch_tac >>
+  drule_all ecmul_prefix_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sf sm) s` by
+    (qpat_x_assum `run_inst_seq_mem_ok _ s` mp_tac >>
+     simp[listTheory.TAKE_APPEND1] >>
+     qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `isPREFIX (emitted_insts sf sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  drule_all ec_prefix_mem_lift >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl [`ib`, `ob`, `sm`, `t`, `pi'`, `po`] >> simp[] >>
+  qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[]
+QED
+
+Theorem ecadd_prefix_mem:
+  compile_ecadd_points p q sf = (res,sb) /\
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sf /\ alloca_history func s /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sf sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v p s /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo2 sf es v2 q s /\
+  eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
+  (!x. MEM (Var x) [p;q] ==> not_fresh_at sf x) /\
+  w2n point + 64 < dimword (:256) /\ w2n point2 + 64 < dimword (:256) /\
+  w2n point + 64 <= s.vs_alloca_next /\
+  w2n point2 + 64 <= s.vs_alloca_next ==>
+  ?ib ob sm t pi po.
+    (do gas <- emit_op GAS [];
+        success <- emit_op STATICCALL
+          [gas; Lit 6w; ib.buf_operand; Lit 128w; ob.buf_operand; Lit 64w];
+        emit_void ASSERT [success]; return ob.buf_operand od) sm = (res,sb) /\
+    emitted_insts sf sb = emitted_insts sf sm ++ emitted_insts sm sb /\
+    LENGTH (emitted_insts sf sm) = 18 /\
+    sm.cs_current_insts = sf.cs_current_insts ++ emitted_insts sf sm /\
+    same_blocks sf sm /\
+    (!i. MEM i (emitted_insts sf sm) ==>
+      MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
+    run_inst_seq (emitted_insts sf sm) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    eval_operand ib.buf_operand t = SOME pi /\
+    eval_operand ob.buf_operand t = SOME po /\
+    w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
+    w2n pi + 128 <= t.vs_alloca_next /\ w2n po + 64 <= t.vs_alloca_next /\
+    mem_bytes_at (w2n pi) 128 t.vs_memory =
+      word_to_bytes (mem_word_at (w2n point) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point+32) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point2) s.vs_memory) T ++
+      word_to_bytes (mem_word_at (w2n point2+32) s.vs_memory) T /\
+    (!x. not_fresh_at sf x ==> lookup_var x t = lookup_var x s) /\
+    (!x. ib.buf_operand = Var x ==> not_fresh_at sm x) /\
+    (!x. ob.buf_operand = Var x ==> not_fresh_at sm x) /\
+    gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := s.vs_inst_idx + 18)) /\
+    alloca_history func (t with vs_inst_idx := s.vs_inst_idx + 18)
+Proof
+  strip_tac >>
+  drule_all ecadd_prefix_take_safe >> disch_tac >>
+  drule_all ecadd_prefix_run >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sf sm) s` by
+    (qpat_x_assum `run_inst_seq_mem_ok _ s` mp_tac >>
+     simp[listTheory.TAKE_APPEND1] >>
+     qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `alloca_inv s` by fs[stmt_state_rel_def] >>
+  `isPREFIX (emitted_insts sf sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (gvs[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[listTheory.APPEND_ASSOC]) >>
+  drule_all ec_prefix_mem_lift >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl [`ib`, `ob`, `sm`, `t`, `pi'`, `po`] >> simp[] >>
+  qpat_x_assum `LENGTH _ = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[]
+QED
