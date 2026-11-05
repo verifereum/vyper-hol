@@ -90,7 +90,13 @@ Theorem body_ifexp_widened_call_arm:
       expr_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es /\
       expr_vv_sim ctx func cenv cx ty (IfExp v5 e1 e2 e3) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `expr_sim_case F ctx func cenv cx (IfExp v5 e1 e2 e3) /\
+   expr_vv_case F ctx func cenv cx (IfExp v5 e1 e2 e3)` by
+    (irule compile_ifexp_case >> simp[] >>
+     `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+     simp[] >> metis_tac[body_expr_ok_case]) >>
+  gvs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 
 (* exprSimOperators' compile_ifexp_case. *)
