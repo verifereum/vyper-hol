@@ -14,7 +14,8 @@
 
 Theory fnLineageStatic
 Ancestors
-  fnPlanPrefix fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs
+  fnPlanLineageJoin fnLineageInv fnLiveDefDom fnPlanPrefix fnPlanLineage
+  stackPlanGen stackPlanTypes livenessDefs dfgDefs
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in

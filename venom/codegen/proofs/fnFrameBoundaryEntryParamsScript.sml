@@ -327,6 +327,14 @@ Proof
        MEM_MAP]
 QED
 
+Theorem entry_ret_family_offsets_used:
+  offset_outputs_used (entry_ret_family n)
+Proof
+  simp[offset_outputs_used_def, fn_insts_def, fn_insts_blocks_def,
+       entry_ret_family_def, entry_probe_params_def, EVERY_APPEND,
+       EVERY_GENLIST, mk_inst_def]
+QED
+
 Theorem entry_ret_family_small:
   (HD (entry_ret_family 1).fn_blocks).bb_instructions =
     [mk_inst 0 PARAM [Lit 0w] [""];
@@ -557,7 +565,8 @@ Proof
        entry_ret_family_no_preds, entry_ret_family_no_phis,
        entry_ret_family_opcodes_ready] >>
   qpat_x_assum `_ = [HD _]` (fn th => once_rewrite_tac[th]) >>
-  simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready]
+  simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready,
+       entry_ret_family_offsets_used]
 QED
 
 (* The long member is admitted by every source-side contract. *)

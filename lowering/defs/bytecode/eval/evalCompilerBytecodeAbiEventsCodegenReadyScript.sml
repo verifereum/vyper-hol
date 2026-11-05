@@ -158,6 +158,8 @@ QED
 
 val mixed_event_types_ready_sue_eval =
   EVAL ``single_use_form ^mixed_event_types_final_fn``
+val mixed_event_types_ready_offsets_eval =
+  EVAL ``stackPlanGen$offset_outputs_used ^mixed_event_types_final_fn``
 val mixed_event_types_ready_cfg_norm_eval = EVAL
   ``cfg_is_normalized ^(rhs (concl mixed_event_types_ready_cfg_eval))
       ^mixed_event_types_final_fn``
@@ -205,7 +207,8 @@ val mixed_event_types_final_fn_ready_rhs = LIST_CONJ
    EQT_ELIM mixed_event_types_ready_cfg_norm_exact_eval,
    EQT_ELIM mixed_event_types_ready_entries_eval,
    EQT_ELIM mixed_event_types_ready_phi_eval,
-   EQT_ELIM mixed_event_types_ready_insts_eval]
+   EQT_ELIM mixed_event_types_ready_insts_eval,
+   EQT_ELIM mixed_event_types_ready_offsets_eval]
 val mixed_event_types_final_fn_ready = prove
   (``codegen_ready_fn ^mixed_event_types_final_fn``,
    PURE_REWRITE_TAC [stackPlanGenTheory.codegen_ready_fn_def] >>
