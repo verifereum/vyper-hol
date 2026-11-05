@@ -1,7 +1,7 @@
 (* Probe: dynamic bytes retain an exact safe trace before CPS conversion. *)
 Theory decoderPrefixSafety
 Ancestors
-  calldataBytesLive fragExecMem
+  calldataBytesLive calldataBytesLeaf fragExecMem list
 
 Theorem calldata_bytes_safe_exact_run:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring maxn) st = ((),st') /\
@@ -24,6 +24,7 @@ Theorem calldata_bytes_safe_exact_run:
 Proof
   strip_tac >> conj_tac
   >- (drule_all calldata_bytes_accepted_live >> simp[]) >>
-  irule run_inst_seq_mem_ok_of_prefix_safe >>
+  irule run_inst_seq_mem_ok_of_prefix_safe >> reverse conj_tac
+  >- (drule calldata_bytes_opcodes >> simp[EVERY_MEM] >> metis_tac[]) >>
   drule_at (Pos hd) calldata_bytes_prefix_live >> simp[] >> metis_tac[]
 QED
