@@ -3919,6 +3919,66 @@ Proof
       vyperContextTheory.empty_call_txn_def]
 QED
 
+Theorem place_store_storage_replace:
+  !ctx func cenv cx es s tr stor mt.
+    stmt_state_rel ctx func cenv cx es s /\
+    storage_agree (storage_dead cx tr stor) stor mt ==>
+    stmt_state_rel ctx func cenv cx (set_storage cx es tr stor)
+      (if tr then s with vs_transient :=
+         (s.vs_call_ctx.cc_address =+ mt) s.vs_transient
+       else s with vs_accounts :=
+         (s.vs_call_ctx.cc_address =+
+           (lookup_account s.vs_call_ctx.cc_address s.vs_accounts with storage := mt))
+           s.vs_accounts)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by
+    gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  Cases_on `tr` >>
+  fs[stmt_state_rel_def, state_rel_def, vyperStorageBackendTheory.set_storage_def,
+     accounts_rel_def, accounts_agree_def, transient_agree_def,
+     storage_rel_def, transient_rel_def, contract_storage_def,
+     contract_transient_def, vfmStateTheory.lookup_account_def,
+     combinTheory.APPLY_UPDATE_THM] >>
+  simp[local_ptrs_rel_def, local_backed_def, local_region_def,
+     lookup_var_def, immutables_rel_def, logs_rel_def,
+     venomMemDefsTheory.alloca_inv_def, alloca_room_def, pending_alloca_size_def,
+     fmp_room_def, immutable_alloca_sep_def, immutable_base_zero_def,
+     venomMemDefsTheory.allocas_non_overlapping_def,
+     venomMemDefsTheory.alloca_next_valid_def] >>
+  qpat_x_assum `local_ptrs_rel _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (boss_ss())
+      [local_ptrs_rel_def, local_backed_def, local_region_def, lookup_var_def]) >>
+  qpat_x_assum `immutables_rel _ _ _ _ _ _`
+    (assume_tac o SIMP_RULE (boss_ss()) [immutables_rel_def]) >>
+  qpat_x_assum `logs_rel _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (boss_ss()) [logs_rel_def]) >>
+  qpat_x_assum `alloca_inv _`
+    (strip_assume_tac o SIMP_RULE (boss_ss())
+      [venomMemDefsTheory.alloca_inv_def,
+       venomMemDefsTheory.allocas_non_overlapping_def,
+       venomMemDefsTheory.alloca_next_valid_def]) >>
+  qpat_x_assum `alloca_room _ _ _`
+    (strip_assume_tac o SIMP_RULE (boss_ss())
+      [alloca_room_def, pending_alloca_size_def]) >>
+  qpat_x_assum `fmp_room _ _ _`
+    (assume_tac o SIMP_RULE (boss_ss())
+      [fmp_room_def, pending_alloca_size_def]) >>
+  qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
+    (assume_tac o SIMP_RULE (boss_ss())
+      [immutable_alloca_sep_def, local_region_def, lookup_var_def]) >>
+  `es.accounts cx.txn.target with storage := mt =
+   s.vs_accounts cx.txn.target with storage := mt` by
+    (qpat_assum `es.accounts _ with storage := _ = _`
+       (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `immutable_base_zero _ _`
+    (fn th => POP_ASSUM_LIST (K ALL_TAC) >> mp_tac th) >>
+  simp[immutable_base_zero_def] >> strip_tac >>
+  qx_gen_tac `operand` >> strip_tac >> Cases_on `operand` >>
+  fs[eval_operand_def, lookup_var_def]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
