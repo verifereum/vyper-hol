@@ -525,6 +525,16 @@ QED
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
+    (~is_word_type t ==>
+     !e. (e = a \/ e = b) ==>
+         lowered_value_type cenv e = expr_type e \/
+         is_bytestring_type (expr_type e) /\
+         is_bytestring_type (lowered_value_type cenv e) /\
+         arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
+         same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ ~is_word_type t ==>
+       type_memory_bytes cenv t = type_memory_size tvt /\
+       type_memory_size tvt < 2 ** 64) /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
@@ -533,21 +543,18 @@ Theorem compile_ifexp_vv_sim_mem:
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
     expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
-    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+    (!gs tv es1.
+       (do result <- eval_expr cx c; read_result cx result od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
        expr_sim_mem ctx func cenv cx ty a es1 /\
-       expr_sim_mem ctx func cenv cx ty b es1) ==>
-    !sa sb vv res es' s0.
-      compile_expr cenv ty (IfExp t c a b) sa = (vv, sb) /\
-      eval_expr cx (IfExp t c a b) es = (res, es') /\ expr_read_res_ok cx es' res /\
-      res <> INR (Error (RuntimeError "convert empty bytes to signed")) /\
-      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec_mem ctx sa sb
-        (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
-        (\s. (?tv. res = INL tv /\
-                  vv_post ctx func cenv cx (IfExp t c a b) es sa sb s0 es' tv vv s) /\
-              s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
-        (expr_exit res)
+       expr_sim_mem ctx func cenv cx ty b es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty a es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty b es1 /\
+       !e gs' v es2. ~is_word_type t /\ (e = a \/ e = b) /\
+         (do r <- eval_expr cx e; read_result cx r od)
+           (es1 with gas_obs := gs') = (INL v, es2) ==>
+         ?tvt. evaluate_type (get_tenv cx) t = SOME tvt /\ value_has_type tvt v) ==>
+    expr_vv_sim_mem ctx func cenv cx ty (IfExp t c a b) es
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   irule readable_eval_frag_transport_mem >>
@@ -568,9 +575,13 @@ Theorem compile_ifexp_word_sim_mem:
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) /\
     expr_sim_mem ctx func cenv cx (BaseT BoolT) c es /\
-    (!tv es1. (do result <- eval_expr cx c; read_result cx result od) es = (INL tv, es1) ==>
+    (!gs tv es1.
+       (do result <- eval_expr cx c; read_result cx result od)
+         (es with gas_obs := gs) = (INL tv, es1) ==>
        expr_sim_mem ctx func cenv cx ty a es1 /\
-       expr_sim_mem ctx func cenv cx ty b es1) ==>
+       expr_sim_mem ctx func cenv cx ty b es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty a es1 /\
+       expr_vv_sim_mem ctx func cenv cx ty b es1) ==>
     expr_sim_mem ctx func cenv cx ty (IfExp t c a b) es
 Proof
   rpt gen_tac >> strip_tac >> pure_rewrite_tac[expr_sim_mem_def] >>
