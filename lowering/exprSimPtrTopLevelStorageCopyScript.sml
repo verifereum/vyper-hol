@@ -807,11 +807,7 @@ Proof
            fragGasSeqPtrTheory.inst_seq_ptr_def]
 QED
 
-(* C1.4.3.2: restore toplevel_copy_body_ptr with the exact body_safe
-   premises and conclusion
-     ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf /\
-       toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf r
-   after the whole-body ghost and ordinary observation boundaries. *)
+(* Ordinary endpoint observations used by the pointer-body assembly below. *)
 
 Theorem toplevel_copy_body_ordinary:
   (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
@@ -1571,4 +1567,46 @@ Proof
   AP_TERM_TAC >>
   simp[toplevel_copy_word_taint_def, key_taint_def,
        toplevel_copy_source_taint_def, EXTENSION] >> metis_tac[]
+QED
+
+Theorem toplevel_copy_body_ptr:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  code = [mk_inst id ADD [src;Var cv] [sv];
+    mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+    mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+    mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+    mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+    mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+    mk_inst (id+6) ASSIGN [Var nv] [cv]] /\
+  run_inst_seq code s = OK r ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn code s Gf tnf /\
+    toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf r
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_body_safe >>
+  disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`] >> conj_tac >- simp[] >>
+  drule_all toplevel_copy_body_ordinary >> strip_tac >>
+  drule_all toplevel_copy_body_destination_covers >> disch_tac >>
+  drule toplevel_copy_inv_source >> strip_tac >>
+  drule toplevel_copy_inv_counter >> strip_tac >>
+  drule_all toplevel_copy_body_source_clean >> disch_tac >>
+  drule_all toplevel_copy_body_counter_ghost >> strip_tac >>
+  drule_all toplevel_copy_body_storage_frame >> strip_tac >>
+  drule_all toplevel_copy_body_memory_ghost >> disch_tac >>
+  drule toplevel_copy_inv_memory_taint >> disch_tac >>
+  drule_all toplevel_copy_store_taint_bound >> disch_tac >>
+  drule toplevel_copy_body_register_frame >> disch_then drule >> disch_tac >>
+  fs[toplevel_copy_inv_def] >>
+  rpt strip_tac >>
+  `~MEM x [cv;sv;vv;mv;dv;nv]` by
+    (simp[] >> rpt conj_tac >> strip_tac >> gvs[]) >>
+  qpat_x_assum `!x. ~MEM x ds ==> _` (qspec_then `x` mp_tac) >>
+  qpat_x_assum `!x. _ ==> FLOOKUP Gf x = _ /\ _` (qspec_then `x` mp_tac) >>
+  gvs[] >> rpt strip_tac >> gvs[]
 QED
