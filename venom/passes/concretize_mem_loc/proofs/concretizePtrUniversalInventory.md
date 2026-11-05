@@ -678,3 +678,24 @@ This closes that source-side conflict supplier only: constructing the historical
 ownership snapshots and relating an actual target write to the selected source
 row still belong to universal prefix coverage. No target suffix exclusion,
 future read equality, or matching source execution is established here.
+
+## Checked ordinary-writer exact footprints (.66)
+
+`concretizePtrExactWriteTransportTheory` supplies
+`ptr_write_transport_owner_exact` and `ptr_write_transport_fixed_exact`.
+Both use the same ordinary instruction, `mem_write_ops = SOME ops`, a finite
+maximum size operand, label-aware variable transport, source destination/size
+evaluations and scalar-empty size provenance/taint. The owned theorem uses
+actual birth/position lookups and the closed source/target bounds; it gives
+membership equivalence for every allocation-relative byte `k < sz`. The fixed
+theorem uses scalar-empty destination provenance/taint and gives set equality.
+Only CALL/STATICCALL/DELEGATECALL require equal post-returndata lengths, not
+values. Other operand evaluations may carry different values or fail; the
+option-valued transport supplies exactly matching success/failure. Finite
+classification excludes DRET via the maximum-size premise.
+
+Same-owner nonwrite follows directly by negating the checked membership
+biconditional; maximum containment alone did not give this for truncated call
+output writes. This interface assumes neither source step success nor target
+suffix exclusion. Historical transport, production writer ownership, distinct
+owner separation and universal source-prefix construction remain to integrate.
