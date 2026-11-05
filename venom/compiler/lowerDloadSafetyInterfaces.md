@@ -43,7 +43,7 @@ B = o1_ctx_shape C /\ o1_run_state_ok vs0 /\
     fmp_free_ctx C /\
     mem_inv raw_mem_ok C vs0 /\
     mem_inv dload_offset_ok C vs0 /\
-    mem_inv dload_headroom_ok C vs0 /\ callee_first names C /\
+    mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
     (!fn. MEM fn C.ctx_functions ==>
       lookup_function fn.fn_name C'.ctx_functions =
         SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn)))
@@ -975,3 +975,138 @@ constructors, especially atomic INVOKE and target-only terminal suffixes.
 These prerequisites are currently outside the scheduler's high-risk focus;
 review must authorize them before implementation. No parent semantic risk
 has been reduced by this baseline audit.
+
+## 9. Checked success-guarded package experiment (C1.3.2.1.1)
+
+This section supersedes earlier candidate run packages, not the frozen contract.
+The exact typed, capture-avoiding textual expansions are the ML quotations
+`ld_probe_guard`, `ld_probe_stable`, `ld_probe_point`, `ld_probe_entry`,
+`ld_probe_terminal`, `ld_probe_ambient`, `ld_probe_S`, `ld_probe_E`, and
+`ld_probe_R` in `lowerDloadReturnInterfaceProbeScript.sml`. They introduce **no
+HOL constants or definitions**. The following formulas spell out the packages;
+all environment fields are individually quantified in S/E/R, not packaged in a
+new record. Write e for lo,P,C,C',vs0,stk,fn,fn',cs,fs,f0,A0,Sigma,names.
+
+```
+Guard(k,bb,t) =
+  ?z. run_block_non_phis k C' bb t = z /\
+      ((?u. z = OK u) \/ (?rt u. z = IntRet rt u))
+
+Stable(A,frames) =
+  frames <> [] /\ TL frames = fs /\
+  (HD frames).lf_serial = f0.lf_serial /\ ld_global lo A frames /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames /\
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) frames /\
+  (!j k. j < k /\ k < LENGTH frames ==>
+    list_precedes (EL j frames).lf_fn.fn_name
+                  (EL k frames).lf_fn.fn_name names) /\
+  (!g. MEM g fs ==> FRANGE g.lf_H SUBSET ld_slots A fs /\
+    (!a. MEM (SOME a) g.lf_Q ==> a IN ld_slots A fs)) /\
+  (!a. a IN FDOM A0 /\ a IN ld_slots A0 fs ==>
+    FLOOKUP A a = FLOOKUP A0 a)
+
+Point(e,bb,t) =
+  ?PG G tn inst s t0 A frames N X p h.
+    ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
+    Stable(A,frames) /\ fn' = ld_image (HD frames) /\
+    ld_envelope (HD frames).lf_supply fn s s.vs_inst_idx X p /\
+    ld_prefix C' fn' X p h t0 t /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb /\
+    ld_return_cont C fn cs s
+
+Entry(e,q) =
+  !k bb tp. lookup_block q.vs_current_bb fn'.fn_blocks = SOME bb /\
+    eval_phis q bb.bb_instructions = OK tp /\
+    Guard(k,bb,tp with vs_inst_idx := phi_prefix_length bb.bb_instructions) ==>
+    Point(e,bb,tp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+
+Terminal(e,rt,u) =
+  ?sf rs cs' Ar fr tnr rinst se te PG' G' Nr.
+    run_blocks sf C fn cs = IntRet rs cs' /\
+    ld_sync lo P C vs0 stk PG' G' tnr fn rinst se te Ar fr Nr /\
+    Stable(Ar,fr) /\ rinst.inst_opcode = RET /\
+    step_inst 0 C rinst se = IntRet rs cs' /\
+    step_inst 0 C' rinst te = IntRet rt u /\
+    rs.iret_values = rt.iret_values /\
+    rs.iret_adopt_fmp = NONE /\ rt.iret_adopt_fmp = NONE /\
+    ld_memory lo Ar tnr cs' u /\ ld_nonghost tnr cs' u /\
+    (!a. a IN ld_slots Ar fs ==>
+      FLOOKUP (DRESTRICT Ar (ld_slots Ar fs)) a = FLOOKUP Ar a)
+
+Ambient(e) =
+  o1_ctx_shape C /\ o1_run_state_ok vs0 /\
+  reserved_intervals_wf C.ctx_global_reserved /\ fixed_region_reserved lo C /\
+  ptr_discipline lo C vs0 /\ fmp_free_ctx C /\
+  mem_inv raw_mem_ok C vs0 /\ mem_inv dload_offset_ok C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\ callee_first names C.ctx_functions /\
+  (!f. MEM f C.ctx_functions ==>
+    lookup_function f.fn_name C'.ctx_functions =
+      SOME (FST (lower_dload_function_supply (Sigma f.fn_name) f))) /\
+  fn' = FST (lower_dload_function_supply (Sigma fn.fn_name) fn)
+
+Outcome(e,z) = case z of OK q => Entry(e,q)
+  | IntRet rt u => Terminal(e,rt,u) | _ => T
+
+S k ctx ti t z = !e bb. ctx=C' ==>
+  Ambient(e) /\ Point(e,bb,t) /\ get_instruction bb t.vs_inst_idx = SOME ti ==>
+  (case z of OK q =>
+    if is_terminator ti.inst_opcode then (~q.vs_halted ==> Entry(e,q))
+    else (!j. Guard(j,bb,q with vs_inst_idx := SUC t.vs_inst_idx) ==>
+      Point(e,bb,q with vs_inst_idx := SUC t.vs_inst_idx))
+   | IntRet rt u => Terminal(e,rt,u) | _ => T)
+E k ctx bb t z = !e. ctx=C' ==>
+  Ambient(e) /\ Point(e,bb,t) ==> Outcome(e,z)
+R k ctx fnT q z = !e. ctx=C' ==>
+  Ambient(e) /\ fnT=fn' /\ Entry(e,q) ==>
+  (case z of IntRet rt u => Terminal(e,rt,u) | _ => T)
+```
+
+### Checked results and limits
+
+`ld_probe_conditional_induction` instantiates `ld_successful_run_induction`
+**once**, with precisely the above S/E/R. Alias equality premises pin its three
+families to the concrete Ambient, Point and Terminal quotations. The proof then
+forgets these equalities and proves the five compositional closures abstractly:
+nonterminating suffix, terminator OK, instruction IntRet, run recursion and
+block IntRet. Each Resume is under five tactic lines; no semantic definition is
+unfolded there. Its only remaining semantic premises are the base-step and
+nested-INVOKE producers, exactly as quantified in the generic induction. All
+seven generic closures have therefore been checked conditionally, not proved
+unconditionally.
+
+`ld_probe_entry_body` consumes Entry, lookup, successful PHIs, and a successful
+body equation to produce Point. `ld_probe_terminal_invoke` projects the actual
+source run and equal return vector out of the concrete Terminal package and
+feeds the unchanged `ld_invoke_from_return`. `ld_probe_run_return` consumes the
+run conclusion of the conditional induction, Ambient, a successful target run,
+and **Entry at the initial setup state** to extract Terminal. This last Entry
+premise is the third semantic producer group: no claim deriving it from setup
+has been proved. The conditional induction itself needs no initial Entry
+producer because R is an implication *from* Entry. Null-kernel-hypothesis
+assertions check all four new theorems (and the existing INVOKE consumer).
+
+Missing concrete semantic work, deliberately NOT discharged by this probe:
+
+1. Base-step producer: strict-prefix stuttering; endpoint source advancement;
+   success-guarded successor alignment; branch-to-Entry transfer; RET-to-Terminal.
+   Target suffix success alone is not source activity. In particular endpoint
+   conditional synchronization still needs a proved alignment/inversion bridge.
+2. Nested-INVOKE producer: actual setup witnesses and a fresh independently
+   quantified callee origin; initial callee Entry; use of the R IH; then concrete
+   merge/adopt/bind/pop preservation of Stable and Point/Entry. Equal values and
+   existence of source execution are all the elementary consumer currently
+   validates; it does not establish the ghost restoration clauses.
+3. Initial/pre-entry producer: synchronized source/target entry, source
+   frame_reachable_block and PHI/provenance transfer, preservation of saved tails
+   and the fixed-origin return continuation. Entry deliberately makes no claim
+   about unsuccessful PHI or suffix executions.
+4. Stage-derived availability of the fixed Ambient, configured supply freshness
+   (`ir_supply_covers_fn`), and any per-point non-revert facts used by endpoint
+   theorems. They have not been smuggled into Ambient as new hypotheses.
+5. RET-only terminal behavior uses unchanged `fmp_free_ctx C`, not the obsolete
+   claim that fn_ptr_ok alone excludes RETFMP/DRET. Terminal carries no demand
+   for activity at a returned state and never uses ld_prefix at an endpoint.
+
+Verification: `holbuild(targets=['lowerDloadReturnInterfaceProbeTheory'])` passes
+without cheats; the frozen stage theorem has not been changed by this experiment.
