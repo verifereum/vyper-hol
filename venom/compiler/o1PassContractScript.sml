@@ -412,10 +412,15 @@ End
    function at a time in a mixed context.  Row k holds of a function that
    has been through the first k walk passes; from row 3 on (after
    ConcretizeMemLoc) the function has no ALLOCA, which SingleUseExpansion
-   needs, since it would expand the literal operand of one. *)
+   needs, since it would expand the literal operand of one.  From row 5
+   (MakeSSA's second run, which puts its PHIs first) to row 8 every
+   block's pseudo-instructions come first: DFT keeps them in front of the
+   instructions it reschedules, so a PHI it found after another
+   instruction would move. *)
 Definition o1_fn_row_def:
   o1_fn_row (k : num) fn <=>
-    3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)
+    (3 <= k ==> EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn)) /\
+    (5 <= k /\ k <= 8 ==> fn_pseudos_prefix fn)
 End
 
 (* The step contract of the k-th walk run: the step contract, with row k

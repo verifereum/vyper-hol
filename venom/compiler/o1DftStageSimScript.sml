@@ -1,15 +1,11 @@
 (*
- * DFT's stage simulation in the gas form (piece of o1ContractDft).
- *
- * DFT may move a GAS read past another GAS read or an INVOKE, so C'
- * consumes the gas readings in another order than C.  For the run of C'
- * from vs', the witness vs is vs' with the readings C' consumes put back
- * in the order C reads them; every terminating run of C from vs is then
- * matched by a run of C' from vs', and the memory invariant carries over.
+ * DFT's stage simulation at run 7 in the gas form, from the
+ * context-level simulation over its function relation (dft_ctx_sim_gas)
+ * and the labels code_layout_valid binds (dft_ctx_labels_bound).
  *)
 Theory o1DftStageSim
 Ancestors
-  o1PassContract venomPassSchedule venomWf
+  o1DftStageSsa dftContractGas o1PassContract venomPassSchedule venomWf
 
 Theorem dft_stage_sim_gas:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
@@ -18,5 +14,7 @@ Theorem dft_stage_sim_gas:
   ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
-  cheat
+  strip_tac >> drule_all dft_stage_fn_rel >> strip_tac >>
+  irule dft_ctx_sim_gas >> simp[] >>
+  irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]
 QED
