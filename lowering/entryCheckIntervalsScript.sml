@@ -1,7 +1,7 @@
 (* Preserve the entry-check states at the compiler boundary. *)
 Theory entryCheckIntervals
 Ancestors actualRegistrationCode actualDecoderPackaging loweringShapeProps
-  loweringShapeDefs loweringShapeRules moduleLowering compileEnv list
+  loweringShapeDefs loweringShapeRules moduleLowering compileEnv fragExec list rich_list
 
 Theorem external_singleton_check_interval:
   compile_external_fn_bodies
@@ -68,4 +68,26 @@ Proof
   drule_all external_bodies_run_shape >> strip_tac >>
   qexistsl_tac [`opened`, `checked`, `mid'`] >>
   simp[] >> metis_tac[cs_extends_trans]
+QED
+
+Theorem installed_selected_check_code:
+  compile_external_fn_bodies pkgs start = ((),(stop_st : compile_state)) /\
+  shape_state start /\ EVERY external_fn_shape_ok pkgs /\
+  MEM (lbl,cenv,args,min_cds,pay,nr,nkey,transient,view,ss,ret_type) pkgs /\
+  fn_has_code start stop_st fn ==>
+  ?opened checked.
+    compile_entry_checks min_cds pay opened = ((),checked) /\
+    fn_has_code opened checked fn /\
+    opened.cs_current_bb = lbl /\ opened.cs_current_insts = [] /\
+    ~block_is_terminated opened
+Proof
+  strip_tac >>
+  qpat_x_assum `MEM _ pkgs` mp_tac >> rewrite_tac[MEM_SPLIT] >> strip_tac >>
+  gvs[] >> drule external_selected_check_interval >>
+  impl_tac >- simp[] >> strip_tac >>
+  qexistsl_tac [`opened`, `checked`] >> simp[] >> conj_tac
+  >- metis_tac[fn_has_code_mid] >>
+  qpat_x_assum `new_block _ _ = _` mp_tac >>
+  simp[new_block_def, comp_bind_def, comp_return_def] >>
+  strip_tac >> gvs[block_is_terminated_def]
 QED

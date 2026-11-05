@@ -2,7 +2,7 @@
 Theory rawEntryCode
 Ancestors
   vyperCompiler actualDecoderPackaging fragExec compileEnv venomWf
-  venomExecSemantics venomInst list
+  venomExecSemantics venomInst list loweringShapeDefs rich_list
 
 Theorem run_lowering_member_labels:
   run_lowering selectors external_fns internal_fns fallback_fn rpolicy
@@ -41,4 +41,19 @@ Proof
   simp[] >> irule external_decoder_fn_has_code >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `first` >> simp[]
+QED
+
+(* Extension preserves the chronological entry block. *)
+Theorem cs_extends_raw_entry_label:
+  cs_extends first last /\ first.cs_blocks = [] ==>
+  fn_entry_label (mk_raw_function fname (all_blocks last)) =
+    SOME first.cs_current_bb
+Proof
+  rw[cs_extends_def] >>
+  Cases_on `new = []` >>
+  gvs[all_blocks_def, fn_entry_label_def, entry_block_def, mk_raw_function_def,
+    HD_REVERSE] >>
+  `REVERSE last.cs_blocks <> []` by simp[] >>
+  Cases_on `REVERSE last.cs_blocks` >> gvs[] >>
+  metis_tac[HD_REVERSE, HD]
 QED
