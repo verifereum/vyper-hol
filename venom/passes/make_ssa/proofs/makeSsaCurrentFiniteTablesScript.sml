@@ -274,3 +274,96 @@ Proof
   gvs[current_loop_seed_table_def, current_token_name_def,
     alistTheory.ALOOKUP_def, resolve_phi_def]
 QED
+
+Definition current_backedges_seed_table_def:
+  current_backedges_seed_table =
+    [(CurrentStaticCut "" "E" 0 0, Lit 1w, Lit 1w);
+     (CurrentStaticCut "" "E" 1 1, Lit 2w, Lit 2w);
+     (CurrentStaticCut "" "E" 2 2, Lit 3w, Lit 3w);
+     (CurrentStaticCut "" "E" 3 3, Label "H", Label "H");
+     (CurrentStaticCut "E" "H" 0 0, Var "x", Var "x");
+     (CurrentStaticCut "D" "H" 0 0, Var "x", Var "formal_var_2");
+     (CurrentStaticCut "S" "H" 0 0, Var "x", Var "formal_var_0");
+     (CurrentStaticCut "E" "H" 0 0, Var "a", Var "a");
+     (CurrentStaticCut "D" "H" 0 0, Var "b", Var "b");
+     (CurrentStaticCut "S" "H" 0 0, Var "a", Var "a");
+     (CurrentStaticCut "H" "D" 0 0, Lit 4w, Lit 4w);
+     (CurrentStaticCut "H" "D" 1 1, Label "H", Label "H");
+     (CurrentStaticCut "H" "S" 0 0, Label "H", Label "H")] ++
+    FLAT (MAP (\p.
+      [(CurrentStaticCut p "H" 1 2, Var "v", Var "formal_var_1");
+       (CurrentStaticCut p "H" 1 3, Var "x", Var "formal_var_0");
+       (CurrentStaticCut p "H" 1 3, Var "v", Var "formal_var_1");
+       (CurrentStaticCut p "H" 2 4, Var "z", Var "z");
+       (CurrentStaticCut p "H" 2 4, Label "D", Label "D");
+       (CurrentStaticCut p "H" 2 4, Label "S", Label "S")]) ["E";"D";"S"])
+End
+
+Theorem current_finite_backedges_source_blocks:
+  history_probe_backedges.fn_blocks =
+  [history_probe_bb "E"
+    [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+     current_probe_inst 1 ASSIGN [Lit 2w] ["b"];
+     current_probe_inst 2 ASSIGN [Lit 3w] ["x"];
+     current_probe_inst 3 JMP [Label "H"] []];
+   history_probe_bb "H"
+    [current_probe_inst 4 PHI
+       [Label "E"; Var "a"; Label "D"; Var "b"; Label "S"; Var "a"] ["v"];
+     current_probe_inst 5 ADD [Var "x"; Var "v"] ["z"];
+     current_probe_inst 6 JNZ [Var "z"; Label "D"; Label "S"] []];
+   history_probe_bb "D"
+    [current_probe_inst 7 ASSIGN [Lit 4w] ["x"];
+     current_probe_inst 8 JMP [Label "H"] []];
+   history_probe_bb "S" [current_probe_inst 9 JMP [Label "H"] []]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_finite_backedges_target_blocks:
+  (current_finite_target history_probe_backedges).fn_blocks = history_probe_backedges_target
+Proof
+  simp[current_finite_target_def, history_probe_backedges_target_blocks]
+QED
+
+Theorem current_backedges_seed_covered:
+  current_finite_seed history_probe_backedges (current_finite_target history_probe_backedges)
+    (current_finite_history history_probe_backedges) c x y ==>
+  MEM (c,x,y) current_backedges_seed_table
+Proof
+  simp[current_finite_seed_def] >>
+  CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
+  strip_tac >> gvs[] >>
+  gvs[current_static_seed_lookup, current_finite_backedges_target_blocks,
+    current_finite_backedges_source_blocks, history_probe_backedges_target_def,
+    lookup_block_def, FIND_def, INDEX_FIND_def, history_probe_bb_def,
+    current_probe_inst_def]
+  >>~- ([`MEM (CurrentStaticCut "" "E" _ _,_,_) _`],
+    fs[current_static_seed_data_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_seed_table_def])
+  >>~- ([`MEM (CurrentStaticCut "H" "D" _ _,_,_) _`],
+    fs[current_static_seed_data_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_seed_table_def])
+  >>~- ([`MEM (CurrentStaticCut "H" "S" _ _,_,_) _`],
+    fs[current_static_seed_data_def, phi_prefix_length_def,
+      current_static_body_start_def] >> gvs[current_backedges_seed_table_def])
+  >>~- ([`MEM (CurrentStaticCut "E" "H" _ _,_,_) _`],
+    fs[current_static_seed_data_def, phi_prefix_length_def,
+      current_static_body_start_def] >>
+    gvs[current_finite_backedges_owners, current_finite_backedges_inserted,
+      current_finite_backedges_history_data] >>
+    gvs[current_backedges_seed_table_def, current_token_name_def,
+      alistTheory.ALOOKUP_def, resolve_phi_def])
+  >>~- ([`MEM (CurrentStaticCut "D" "H" _ _,_,_) _`],
+    fs[current_static_seed_data_def, phi_prefix_length_def,
+      current_static_body_start_def] >>
+    gvs[current_finite_backedges_owners, current_finite_backedges_inserted,
+      current_finite_backedges_history_data] >>
+    gvs[current_backedges_seed_table_def, current_token_name_def,
+      alistTheory.ALOOKUP_def, resolve_phi_def]) >>
+  fs[current_static_seed_data_def, phi_prefix_length_def,
+    current_static_body_start_def] >>
+  gvs[current_finite_backedges_owners, current_finite_backedges_inserted,
+    current_finite_backedges_history_data] >>
+  gvs[current_backedges_seed_table_def, current_token_name_def,
+    alistTheory.ALOOKUP_def, resolve_phi_def]
+QED
