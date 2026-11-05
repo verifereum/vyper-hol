@@ -726,3 +726,137 @@ val () = List.app (fn (name, th) =>
    ("force_alloc_buffer_held_frag", force_alloc_buffer_held_frag),
    ("force_runtime_copy_window", force_runtime_copy_window),
    ("force_runtime_copy_typed_endpoint", force_runtime_copy_typed_endpoint)];
+
+Theorem force_runtime_code_unwrap_held:
+  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
+  p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
+  local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+  (!tv. evaluate_type (get_tenv cx) t = SOME tv ==>
+    type_memory_bytes cenv t = type_memory_size tv) ==>
+  frag_exec ctx sm sb
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+        (LocatedValue t p) s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sm es' raw held s /\
+        safe_operand sm (vv_operand held)) hs)
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+      EVERY (\(ty,raw,held,lo).
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sb es' raw held s /\
+        safe_operand sb (vv_operand held)) hs) R
+Proof
+  strip_tac >> qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[exprLoweringTheory.unwrap_value_def, contextTheory.compile_ensure_in_memory_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
+  irule frag_exec_pointwise >> qx_gen_tac `s1` >> simp[] >> strip_tac >>
+  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `?a. eval_operand p.ptr_operand s1 = SOME a /\
+       immutable_holds cenv cx t (Value v) a es'` by
+    gvs[vv_post_def, vv_holds_def] >>
+  `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
+    (gvs[immutable_holds_def] >> metis_tac[]) >>
+  `val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)` by
+    (drule_all immutable_holds_bounds >> simp[]) >>
+  `type_memory_bytes cenv t = type_memory_size tv` by metis_tac[] >>
+  `type_memory_bytes cenv t < dimword (:256)` by decide_tac >>
+  suspend "allocate"
+QED
+
+Resume force_runtime_code_unwrap_held[allocate]:
+  rename1 `compile_imm_copy_to_memory _ _ _ _ _ _ mid = (_,sb)` >>
+  `ci_mono sm mid` by
+    (qspecl_then [`type_memory_bytes cenv t`, `sm`] mp_tac
+       ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono mid sb` by
+    (qpat_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_imm_copy_to_memory, pairTheory.SND]) >>
+  `cs_extends sm mid /\ cs_extends mid sb /\
+   sm.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id <= sb.cs_next_id /\
+   mid.cs_next_var <= sb.cs_next_var` by gvs[ci_mono_def] >>
+  `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  drule_all exprSimAllocTheory.alloc_buffer_source_frag >>
+  disch_then (qspec_then `R` strip_assume_tac) >>
+  suspend "allocated"
+QED
+
+Resume force_runtime_code_unwrap_held[allocated]:
+  `!name b len. local_region cenv es'.scopes u name b len <=>
+                local_region cenv es'.scopes s1 name b len` by
+    (rpt strip_tac >> irule local_region_pointer_frame >>
+     rpt strip_tac >> first_x_assum irule >>
+     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  `EVERY (\(ty,raw,held,lo).
+      vv_holds cenv cx ty raw held es' u /\
+      vv_at cenv cx ty lo sm es' raw held u /\
+      safe_operand sm (vv_operand held)) hs` by
+    (irule force_copy_held_prefix >>
+     qexistsl_tac [`0`, `0`, `s1`, `sm`] >>
+     simp[compileEnvTheory.regions_disjoint_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
+    (rw[copy_old_operand_def] >> gvs[] >>
+     metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `(type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv` by
+    (simp[storageDecodeMemoryTheory.type_memory_size_slots] >> decide_tac) >>
+  suspend "copy_ready"
+QED
+
+Resume force_runtime_code_unwrap_held[copy_ready]:
+  qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
+  disch_then irule >> simp[] >>
+  `sm.cs_next_id <= sb.cs_next_id` by decide_tac >>
+  `!aid b len. aid < sm.cs_next_id /\
+     FLOOKUP u.vs_allocas aid = SOME (b,len) ==>
+     compileEnv$regions_disjoint (w2n w) (type_memory_size tv) b len` by
+    (rpt strip_tac >>
+     irule exprSimPrecompilesTheory.state_allocations_disjoint >>
+     goal_assum (drule_at Any) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ u` (irule_at Any) >>
+     qexists_tac `sm.cs_next_id` >> simp[] >> decide_tac) >>
+  qpat_x_assum `EVERY (\(ty,raw,held,lo).
+    vv_holds _ _ _ _ _ _ s1 /\ _) hs` kall_tac >>
+  qpat_x_assum `p.ptr_location = _` kall_tac >>
+  qpat_x_assum `!tv. evaluate_type _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `frag_exec ctx sm mid _ _ R` kall_tac >>
+  qpat_x_assum `ci_mono sm mid` kall_tac >>
+  qpat_x_assum `ci_mono mid sb` kall_tac >>
+  qpat_x_assum `!name b len. local_region _ _ u name b len <=> _` kall_tac >>
+  gvs[storageDecodeMemoryTheory.type_memory_size_slots] >>
+  `w2n a + 32 * type_slot_size tv < dimword (:256) /\
+   w2n w + 32 * type_slot_size tv < dimword (:256)` by decide_tac >>
+  `sm.cs_next_id <= sb.cs_next_id` by decide_tac >>
+  drule_all force_runtime_copy_held_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  suspend "copy"
+QED
+
+Resume force_runtime_code_unwrap_held[copy]:
+  disch_then (mp_then Any mp_tac frag_exec_conseq) >>
+  disch_then irule >> simp[] >> qx_gen_tac `z` >> strip_tac >> simp[] >>
+  `eval_operand (Var p') z = SOME w` by
+    (gvs[eval_operand_def, lookup_var_def] >> metis_tac[]) >>
+  drule_all compile_alloc_buffer_member >> strip_tac >>
+  irule force_runtime_copy_typed_endpoint >> simp[] >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ u` (irule_at Any) >>
+  simp[storageDecodeMemoryTheory.type_memory_size_slots] >>
+  qpat_assum `MEM _ (fn_insts func)` (irule_at Any) >>
+  qexistsl_tac [`mid`, `a`] >>
+  simp[mk_inst_def] >>
+  suspend "typed_endpoint"
+QED
+
+Resume force_runtime_code_unwrap_held[typed_endpoint]:
+  conj_tac >> first_assum ACCEPT_TAC
+QED
+Finalise force_runtime_code_unwrap_held
