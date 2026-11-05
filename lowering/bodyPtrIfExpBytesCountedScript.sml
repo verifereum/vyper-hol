@@ -313,3 +313,71 @@ Proof
   rpt strip_tac >> `p <> out` by metis_tac[] >>
   gvs[lookup_var_def] >> metis_tac[]
 QED
+
+Theorem copy_len_stages_structure:
+  !sa s1 s2 s3 sb src v1 v2 v3 v4.
+    emit_op MLOAD [src] sa = (Var v1,s1) /\
+    emit_op ADD [Var v1;Lit 31w] s1 = (Var v2,s2) /\
+    emit_op AND [Var v2;Lit (i2w (-32))] s2 = (Var v3,s3) /\
+    emit_op ADD [Var v3;Lit 32w] s3 = (Var v4,sb) ==>
+    emitted_insts sa s2 = emitted_insts sa s1 ++ emitted_insts s1 s2 /\
+    emitted_insts sa s3 = emitted_insts sa s2 ++ emitted_insts s2 s3 /\
+    emitted_insts sa sb = emitted_insts sa s3 ++ emitted_insts s3 sb /\
+    (!p. not_fresh_at sa p ==> not_fresh_at s1 p /\
+       not_fresh_at s2 p /\ not_fresh_at s3 p)
+Proof
+  rpt strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+      fresh_id_def, emit_def, comp_return_def, not_fresh_at_def,
+      emitted_insts_def, DROP_APPEND1] >>
+  simp[DROP_APPEND] >> rpt strip_tac >> decide_tac
+QED
+
+Theorem compile_bytestring_copy_len_clean_prefix:
+  !D ctx fn PG G tn s sa sb src count a.
+    compile_bytestring_copy_len (Var src) sa = (count,sb) /\
+    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    lookup_var src s = SOME a /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    clean_emitted_prefix D ctx fn PG sa sb count
+      ((mload (w2n a) s + 31w && i2w (-32)) + 32w) s G tn
+Proof
+  rpt strip_tac >>
+  drule compile_bytestring_copy_len_stages >> strip_tac >> gvs[] >>
+  drule_all copy_len_stages_structure >> strip_tac >>
+  `clean_emitted_prefix D ctx fn PG sa s1 (Var v1)
+     (mload (w2n a) s) s G tn` by
+    (irule clean_emitted_prefix_mload >> metis_tac[]) >>
+  `clean_emitted_prefix D ctx fn PG sa s2 (Var v2)
+     (mload (w2n a) s + 31w) s G tn` by
+    (irule (Q.SPECL [`ADD`, `word_add`] clean_emitted_prefix_binop) >> metis_tac[]) >>
+  `clean_emitted_prefix D ctx fn PG sa s3 (Var v3)
+     (mload (w2n a) s + 31w && i2w (-32)) s G tn` by
+    (irule (Q.SPECL [`AND`, `word_and`] clean_emitted_prefix_binop) >> metis_tac[]) >>
+  irule (Q.SPECL [`ADD`, `word_add`] clean_emitted_prefix_binop) >> metis_tac[]
+QED
+
+Theorem compile_bytestring_copy_len_seq_ptr:
+  !D ctx fn PG G tn s sa sb src count a.
+    compile_bytestring_copy_len (Var src) sa = (count,sb) /\
+    ptr_covers G tn src s 32 /\ ~ctx_has_dalloca ctx /\
+    lookup_var src s = SOME a /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    ?Gf tnf sf.
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+      run_inst_seq (emitted_insts sa sb) s = OK sf /\
+      eval_operand count sf =
+        SOME ((mload (w2n a) s + 31w && i2w (-32)) + 32w) /\
+      (sf with vs_vars := s.vs_vars) = s /\
+      op_taint tnf count = {} /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt strip_tac >> drule_all compile_bytestring_copy_len_clean_prefix >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`] mp_tac) >>
+  simp[clean_emitted_prefix_def]
+QED
