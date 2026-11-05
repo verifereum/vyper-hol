@@ -1539,9 +1539,10 @@ Proof
     fs[assignable_type_def, well_formed_type_def,
        optionTheory.IS_SOME_EXISTS] >>
   drule evaluate_type_TupleT_cases >> strip_tac >> gvs[] >>
-  irule compile_assign_tuple_locals_memory_stmt_frag >>
-  rpt conj_tac >- fs[] >- fs[] >- fs[] >>
-  qexistsl_tac [`tvs`, `tys`] >> rpt conj_tac
+  qspecl_then [`ctx`, `func`, `cx`, `lctx`, `RetQ`, `cenv`, `ret_ty`, `ids`,
+               `e`, `es`, `tys`, `tvs`] mp_tac
+    compile_assign_tuple_locals_memory_stmt_frag >>
+  disch_then irule >> rpt conj_tac
   >~ [`expr_sim _ _ _ _ _ _ _`] >- metis_tac[body_expr_ok_def]
   >~ [`cenv.ce_target CapMcopy`] >- metis_tac[body_inv_mcopy]
   >~ [`type_memory_size (TupleTV _) < _`]
@@ -1696,7 +1697,7 @@ Proof
   gvs[] >>
   qpat_x_assum `IS_SOME (lookup_var_slot_from_layout _ _ _ _)`
     (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
-  drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >> strip_tac >>
+  drule_all exprSimTopLevelPropsTheory.toplevel_storage_ce_vars >> strip_tac >>
   simp[tupleTargetStorePropsTheory.tuple_target_aligned_toplevel] >>
   rpt strip_tac >> irule accountsRelPropsTheory.storage_dead_update_word_region >>
   qexistsl_tac [`NONE`, `id`, `[]`, `tv`] >>
@@ -1740,7 +1741,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
   qpat_x_assum `IS_SOME (evaluate_type _ _)`
     (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
-  drule_all exprSimLeavesTheory.toplevel_storage_ce_vars >> strip_tac >>
+  drule_all exprSimTopLevelPropsTheory.toplevel_storage_ce_vars >> strip_tac >>
   drule_all exprSimAttributeFieldsTheory.struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all exprSimAttributeFieldsTheory.struct_field_type >> strip_tac >> gvs[] >>
   drule vyperPlaceResultTypingTheory.struct_field_slot_exists >> strip_tac >>
