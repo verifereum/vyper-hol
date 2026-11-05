@@ -352,3 +352,329 @@ Proof
   `LENGTH operands <= 17` by decide_tac >>
   drule_all reorder_plan_output_exclusion >> simp[]
 QED
+
+Theorem invoke_selected_prefix_sim:
+  EVERY (\op. ~is_label_operand op) operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (iops,prepared) /\
+  reorder_plan dfg operands prepared = (rops,arranged) /\
+  LENGTH operands <= 16 /\ LENGTH operands <= LENGTH prepared.ps_stack /\
+  spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+  plan_slots_bounded spillbase ps /\ residual_budget_wf spillbase [] ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
+    operand_val vs lo op = operand_val vs lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  venom_asm_rel lo ps vs st /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp (iops ++ rops)) ==>
+  plan_state_residual_wf spillbase operands (LENGTH operands) arranged /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp (iops ++ rops)))
+          st = AsmOK st' /\
+    venom_asm_rel lo arranged vs st' /\
+    st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp (iops ++ rops))
+Proof
+  strip_tac >>
+  `emit_input_plan ADD operands nl ps = (iops,prepared)` by
+    metis_tac[invoke_label_free_input] >>
+  irule selected_prefix_prepared_sim >>
+  simp[] >> qexistsl [`dfg`, `nl`, `ADD`, `operands`, `prepared`, `ps`] >>
+  simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_label_operand_def]
+QED
+
+Theorem invoke_prefix_frame_transport:
+  !ctx cp lo fn ra rest mem0 ps vs st arranged endpoint.
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  venom_asm_rel lo arranged
+    (frame_view fn ra vs with vs_memory := st.as_memory) endpoint /\
+  (?r. MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+    r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end) ==>
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs
+    (endpoint with as_stack := endpoint.as_stack ++ rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
+    operand_val (frame_view fn ra vs) lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  `memory_rel arranged.ps_alloc st.as_memory endpoint.as_memory` by
+    fs[venom_asm_rel_def] >>
+  `context_memory_rel cplan vs.vs_memory st.as_memory` by
+    fs[fn_frame_inv_def, context_venom_asm_rel_def, frame_view_def] >>
+  `context_memory_rel cplan vs.vs_memory endpoint.as_memory` by
+    (irule fnFrameTerminalPrepTheory.context_memory_rel_local_prefix >> metis_tac[]) >>
+  `!b. context_spill_byte cplan b /\ ~closure_spill_byte ctx cplan fn.fn_name b ==>
+    read_byte b endpoint.as_memory = read_byte b st.as_memory` by
+    (rpt strip_tac >>
+     `~(arranged.ps_alloc.sa_spill_base <= b /\
+        b < arranged.ps_alloc.sa_next_offset)` by
+       (strip_tac >> qpat_x_assum `~closure_spill_byte _ _ _ _` mp_tac >>
+        simp[closure_spill_byte_def] >> qexists `r` >> simp[] >>
+        simp[fcg_path_def]) >>
+     fs[memory_rel_def]) >>
+  simp[fn_frame_inv_def] >>
+  conj_tac >- fs[fn_frame_inv_def] >>
+  conj_tac >- fs[fn_frame_inv_def] >>
+  conj_tac
+  >- (fs[context_venom_asm_rel_def, venom_asm_rel_def,
+         plan_stack_rel_def, plan_spill_rel_def] >>
+      fs[frame_view_def] >> metis_tac[]) >>
+  conj_tac >- (fs[fn_frame_inv_def] >> metis_tac[]) >>
+  qexists `r` >> simp[]
+QED
+
+Theorem invoke_frame_prefix:
+  !ctx cp lo o2pc prog fn ra rest mem0 base ps vs st operands nl
+    iops prepared dfg rops arranged r.
+  EVERY (\op. ~is_label_operand op) operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan INVOKE operands nl ps = (iops,prepared) /\
+  reorder_plan dfg operands prepared = (rops,arranged) /\
+  LENGTH operands <= 16 /\ LENGTH operands <= LENGTH prepared.ps_stack /\
+  generated_plan_state_wf base ps /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) operands /\
+  (!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops) /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp (iops ++ rops)) ==>
+  plan_state_residual_wf base operands (LENGTH operands) arranged /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  ?mid. asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)))
+          st = AsmOK mid /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+    mid.as_pc = st.as_pc + LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops))
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf spillbase ps` >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  drule fnFrameTerminalPrepTheory.fn_frame_inv_local_state >> strip_tac >>
+  `residual_budget_wf spillbase [] ps /\ plan_slots_bounded spillbase ps /\
+   spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled` by
+    (fs[generated_plan_state_wf_def] >>
+     metis_tac[residual_budget_wf_canonical]) >>
+  `!op. operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
+    operand_val (frame_view fn ra vs) lo op` by
+    (Cases >> simp[operand_val_def]) >>
+  `!op at. MEM op operands /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at operands) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo op =
+    operand_val (frame_view fn ra vs with vs_memory := st.as_memory) lo at` by
+    (simp[] >> metis_tac[]) >>
+  `asm_block_at prog (st with as_stack := top).as_pc
+    (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by simp[] >>
+  drule_all invoke_selected_prefix_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  suspend "lift"
+QED
+
+Resume invoke_frame_prefix[lift]:
+  rename1 `venom_asm_rel lo arranged _ endpoint` >>
+  simp[] >>
+  drule asm_steps_frame >> disch_then (qspec_then `rest` assume_tac) >>
+  `st with as_stack := top ++ rest = st` by
+    simp[asm_state_component_equality] >>
+  qexists `endpoint with as_stack := endpoint.as_stack ++ rest` >>
+  conj_tac >- gvs[] >>
+  conj_tac >- (irule invoke_prefix_frame_transport >> metis_tac[]) >>
+  simp[]
+QED
+Finalise invoke_frame_prefix
+
+Theorem invoke_frame_arranged_stack:
+  !ctx cp lo fn ra rest mem0 arranged vs mid operands values.
+  fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH operands) arranged.ps_stack ++ operands /\
+  EVERY (\op. op <> dead_stack_marker) operands /\
+  (!op. MEM op operands ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  eval_operands (REVERSE operands) (frame_view fn ra vs) = SOME values ==>
+  ?saved. mid.as_stack = values ++ saved ++ rest /\
+    LENGTH saved = LENGTH (stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 arranged vs mid` >>
+  `?top. mid.as_stack = top ++ rest /\
+    plan_stack_rel lo (frame_view fn ra vs) arranged.ps_stack top` by
+    fs[fn_frame_inv_def, context_venom_asm_rel_def] >>
+  `LIST_REL (\op value. operand_val (frame_view fn ra vs) lo op = SOME value)
+    (REVERSE operands) values` by
+    (irule emitSimTheory.eval_operands_operand_val_rel >> simp[]) >>
+  `top = values ++ DROP (LENGTH operands) top` by
+    (qspecl_then [`lo`, `frame_view fn ra vs`,
+       `stack_pop (LENGTH operands) arranged.ps_stack`, `REVERSE operands`]
+       mp_tac emitSimTheory.asm_stack_inputs_from_plan >>
+     simp[] >> disch_then irule >> metis_tac[]) >>
+  qexists `DROP (LENGTH operands) top` >>
+  conj_tac >- metis_tac[APPEND_ASSOC] >>
+  fs[plan_stack_rel_def, stack_pop_def] >>
+  qpat_x_assum `arranged.ps_stack = _` (mp_tac o AP_TERM ``LENGTH:operand list -> num``) >>
+  simp[] >> decide_tac
+QED
+
+Theorem invoke_push_outputs_alloc[local]:
+  !outs ps. (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+    ps outs).ps_alloc = ps.ps_alloc
+Proof
+  Induct >> simp[]
+QED
+
+Theorem invoke_arranged_alloc:
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+  reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) ==>
+  arranged.ps_alloc.sa_spill_base = final.ps_alloc.sa_spill_base /\
+  arranged.ps_alloc.sa_next_offset <= final.ps_alloc.sa_next_offset
+Proof
+  strip_tac >> drule_all invoke_plan_decompose >> strip_tac >> gvs[] >>
+  `called.ps_alloc = arranged.ps_alloc` by
+    (gvs[fresh_label_def, invoke_push_outputs_alloc]) >>
+  `called.ps_alloc.sa_spill_base = popped.ps_alloc.sa_spill_base /\
+   called.ps_alloc.sa_next_offset <= popped.ps_alloc.sa_next_offset` by
+    (Cases_on `inst.inst_outputs = []` >> gvs[] >>
+     Cases_on `~halting \/ LENGTH inst.inst_outputs > 1` >> gvs[] >>
+     metis_tac[allocMonoTheory.popmany_plan_spill_base,
+       allocMonoTheory.popmany_plan_next_offset]) >>
+  `popped.ps_alloc.sa_spill_base = swapped.ps_alloc.sa_spill_base /\
+   popped.ps_alloc.sa_next_offset <= swapped.ps_alloc.sa_next_offset` by
+    (Cases_on `inst.inst_outputs = [] \/ FILTER (\out. MEM out nl) inst.inst_outputs = []` >>
+     gvs[] >> metis_tac[allocMonoTheory.optimistic_swap_plan_spill_base,
+       allocMonoTheory.optimistic_swap_plan_next_offset]) >>
+  gvs[allocMonoTheory.release_dead_spills_spill_base,
+       allocMonoTheory.release_dead_spills_next_offset] >> decide_tac
+QED
+
+Theorem invoke_prefix_address_bounds:
+  prefix_spill_wf initial_fmp lo
+    (FRONT (iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)) ps ==>
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops)
+Proof
+  strip_tac >>
+  `prefix_spill_wf initial_fmp lo
+    (FRONT ((iops ++ rops ++ [SOPushLabel ret_lbl; SOPushLabel nm]) ++
+      [SOEmit "JUMP"] ++ (SOLabel ret_lbl :: post))) ps` by
+    (qpat_x_assum `prefix_spill_wf _ _ _ _` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  drule scratchPrefixSimTheory.prefix_spill_wf_front_emit_address_bounds >>
+  simp[]
+QED
+
+Theorem invoke_generated_frame_prefix:
+  !ctx cp lo o2pc prog liveness dfg cfg fn inst nl halting term label
+    base ps vs st ops final ra rest mem0 nm arg_ops values r.
+  inst.inst_opcode = INVOKE /\ inst.inst_operands = Label nm :: arg_ops /\
+  EVERY (\op. ~is_label_operand op) (compute_operands inst) /\
+  generated_plan_state_wf base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <=
+    LENGTH (SND (emit_input_plan INVOKE (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  prefix_spill_wf cp.cp_initial_fmp lo (FRONT ops) ps /\
+  fn_frame_inv ctx cp lo fn ra rest mem0 ps vs st /\
+  MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generate_inst_plan liveness dfg cfg fn inst nl halting term label ps = SOME (ops,final) /\
+  asm_block_at prog st.as_pc (execute_plan cp.cp_initial_fmp ops) /\
+  eval_operands (REVERSE (compute_operands inst)) (frame_view fn ra vs) = SOME values ==>
+  ?iops prepared rops arranged ret_lbl post mid saved.
+    emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+    reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+    ops = iops ++ rops ++
+      [SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post /\
+    asm_steps lo o2pc prog (LENGTH (execute_plan cp.cp_initial_fmp (iops ++ rops)))
+      st = AsmOK mid /\
+    asm_block_at prog mid.as_pc (execute_plan cp.cp_initial_fmp
+      ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ post)) /\
+    fn_frame_inv ctx cp lo fn ra rest mem0 arranged vs mid /\
+    plan_state_residual_wf base (compute_operands inst) (LENGTH (compute_operands inst)) arranged /\
+    arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++ compute_operands inst /\
+    mid.as_stack = values ++ saved ++ rest /\
+    LENGTH saved = LENGTH (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) /\
+    r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+    arranged.ps_alloc.sa_next_offset <= r.sr_spill_end
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `generated_plan_state_wf spillbase ps` >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  drule_all invoke_plan_decompose >> strip_tac >>
+  suspend "bounds"
+QED
+
+Resume invoke_generated_frame_prefix[bounds]:
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> _` drule >>
+     simp[] >> strip_tac
+     >- (drule stack_get_depth_props >> simp[stack_peek_def] >>
+         strip_tac >> disj1_tac >>
+         qpat_x_assum `EL _ _ = op` (SUBST1_TAC o SYM) >>
+         irule EL_MEM >> decide_tac) >>
+     Cases_on `op IN FDOM ps.ps_spilled` >> fs[FLOOKUP_DEF]) >>
+  `r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
+   arranged.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    (drule_all invoke_arranged_alloc >> strip_tac >> gvs[] >> decide_tac) >>
+  `EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) (iops ++ rops)` by
+    (irule invoke_prefix_address_bounds >> metis_tac[APPEND_ASSOC]) >>
+  `asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp (iops ++ rops))` by
+    gvs[execute_plan_append, asm_block_at_append] >>
+  qpat_x_assum `consumed = _` kall_tac >>
+  qpat_x_assum `pushed = _` kall_tac >>
+  qpat_x_assum `fresh_label _ _ = _` kall_tac >>
+  ntac 2 (qpat_x_assum `(if _ then _ else _) = _` kall_tac) >>
+  qpat_x_assum `final = _` kall_tac >>
+  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `prefix_spill_wf _ _ _ _` kall_tac >>
+  `LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack` by gvs[] >>
+  drule_all invoke_frame_prefix >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  suspend "finish"
+QED
+
+Resume invoke_generated_frame_prefix[finish]:
+  `EVERY (\op. op <> dead_stack_marker) (compute_operands inst)` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all invoke_frame_arranged_stack >> strip_tac >>
+  `asm_block_at prog mid.as_pc (execute_plan cplan.cp_initial_fmp
+    ([SOPushLabel ret_lbl; SOPushLabel nm; SOEmit "JUMP"; SOLabel ret_lbl] ++ (pops ++ opts)))` by
+    (qpat_x_assum `asm_block_at prog st.as_pc (execute_plan _ ops)` mp_tac >>
+     qpat_x_assum `ops = _` mp_tac >>
+     qpat_x_assum `mid.as_pc = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[execute_plan_append, asm_block_at_append] >> rpt strip_tac >>
+     gvs[] >> metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
+  qexistsl [`iops`, `prepared`, `rops`, `arranged`, `ret_lbl`, `pops ++ opts`, `mid`, `saved`] >>
+  simp[APPEND_ASSOC]
+QED
+Finalise invoke_generated_frame_prefix
