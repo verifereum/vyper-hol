@@ -655,3 +655,39 @@ Proof
      strip_tac >> ASM_SET_TAC[]) >>
   qexists_tac `rest` >> metis_tac[]
 QED
+
+Theorem regular_post_emit_tail_live_inventory:
+  !ps m core spillbase outputs live halting dfg inst term deleted ps8 ps9 final.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf spillbase [] (ps with ps_stack := core) /\
+    deleted = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then MAP Var (FILTER (\v. ~MEM v live) outputs) else []) /\
+    ps8 = (if outputs <> [] /\ (~halting \/ LENGTH outputs > 1)
+      then SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v live) outputs)) ps)
+      else ps) /\
+    ps9 = (if outputs <> [] /\ FILTER (\v. MEM v live) outputs <> []
+      then SND (optimistic_swap_plan dfg inst live term ps8) else ps8) /\
+    final = release_dead_spills live ps9 /\
+    set core DIFF set deleted SUBSET set (MAP Var live) /\
+    set (MAP Var live) SUBSET set core UNION FDOM ps.ps_spilled ==>
+    lineage_inventory (set (MAP Var live)) final /\
+    ?rest. lineage_core m rest final /\
+      residual_budget_wf spillbase [] (final with ps_stack := rest)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all regular_post_emit_tail_core_resource >> strip_tac >>
+  `DISJOINT (set deleted) (set (MAP Var live))` by
+    (qpat_x_assum `deleted = _` SUBST1_TAC >>
+     Cases_on `outputs <> [] /\ (~halting \/ LENGTH outputs > 1)` >>
+     simp[DISJOINT_DEF, EXTENSION, MEM_MAP, MEM_FILTER] >>
+     Cases >> simp[] >> metis_tac[]) >>
+  `set rest UNION FDOM final.ps_spilled = set (MAP Var live)` by ASM_SET_TAC[] >>
+  drule residual_budget_wf_empty_inventory >> simp[] >> strip_tac >>
+  conj_tac
+  >- (simp[lineage_inventory_def] >> qexistsl_tac [`m`, `rest`] >>
+      simp[lineage_core_def] >>
+      `!op. MEM op (MAP Var live) ==> is_var_operand op` by
+        (simp[MEM_MAP] >> rpt strip_tac >> gvs[is_var_operand_def]) >>
+      simp[EVERY_MEM] >> ASM_SET_TAC[]) >>
+  qexists_tac `rest` >> metis_tac[lineage_core_def]
+QED
