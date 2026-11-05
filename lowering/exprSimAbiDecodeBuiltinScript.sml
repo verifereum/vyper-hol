@@ -10,14 +10,19 @@ Ancestors
   abiDecoderSiteEffect actualDecoderSites
 
 (* Resources for the decode on arbitrary input, per allocation site: the
-   source lies below the next allocation and away from the output, and the
+   source lies below the next allocation and away from the output and from
+   the fragment's allocations (IDs st.cs_next_id .. last) that already
+   exist (a decode re-run in a loop reuses its sites), and the
    registered function's allocation sites have room (decode_site_resources).
    The size guard is not assumed: on arbitrary input it is what the emitted
    size check tests. *)
 Definition abi_builtin_decode_site_resources_def:
-  abi_builtin_decode_site_resources ctx func st min_size max_size outsz cnt p d s <=>
+  abi_builtin_decode_site_resources ctx func st last min_size max_size outsz cnt p d s <=>
     max_size < dimword (:256) /\ p + 32 + cnt <= s.vs_alloca_next /\
     d + outsz < dimword (:256) /\ abi_footprint_disjoint (p + 32) cnt [(d,outsz)] /\
+    (!id b sz. st.cs_next_id <= id /\ id < last /\
+       FLOOKUP s.vs_allocas id = SOME (b,sz) ==>
+       abi_footprint_disjoint (p + 32) cnt [(b,sz)]) /\
     decode_site_resources ctx func s /\ fn_inst_ids_distinct func /\
     ((FLOOKUP s.vs_allocas (abi_builtin_decode_output_site st min_size max_size) = NONE /\
         d = s.vs_alloca_next) \/
@@ -35,7 +40,7 @@ Theorem lower_abi_decode_outcome:
   final.cs_next_var <= limit_st.cs_next_var ==>
   !s0. eval_operand data s0 = SOME (n2w p) /\
     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) p s0.vs_memory /\
-    abi_builtin_decode_site_resources ctx func start
+    abi_builtin_decode_site_resources ctx func start final.cs_next_id
       (abi_static_size ce.ce_struct_fields ty) (abi_size_bound ce.ce_struct_fields ty)
       (type_memory_bytes ce ty) (LENGTH bs) p d s0 /\
     fresh_vars_wrt limit_st s0 ==>
@@ -52,7 +57,10 @@ Theorem lower_abi_decode_outcome:
        fresh_vars_wrt limit_st t /\
        decode_site_effect ctx func start.cs_next_var
          ({a | d <= a /\ a < d + type_memory_bytes ce ty} UNION
-          {a | s0.vs_alloca_next <= a}) s0 t /\
+          {a | s0.vs_alloca_next <= a} UNION
+          {a | ?id b sz. start.cs_next_id <= id /\ id < final.cs_next_id /\
+                 FLOOKUP t.vs_allocas id = SOME (b,sz) /\ b <= a /\ a < b + sz})
+         s0 t /\
        (!id. id < start.cs_next_id \/ final.cs_next_id <= id ==>
              FLOOKUP t.vs_allocas id = FLOOKUP s0.vs_allocas id) /\
        ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
