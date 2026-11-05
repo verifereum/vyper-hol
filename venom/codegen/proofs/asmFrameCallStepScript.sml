@@ -4889,6 +4889,25 @@ Proof
   disch_then (qspec_then `two` mp_tac) >> simp[]
 QED
 
+Theorem asm_call_saved_suffix_step:
+  wf_state s /\ asm_call_saved_suffix saved s /\ step s = (r,t) /\
+  LENGTH saved < LENGTH t.contexts ==>
+  asm_call_saved_suffix saved t
+Proof
+  strip_tac >> Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (irule asm_call_saved_suffix_step_grow >> metis_tac[])
+  >> Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (drule_all step_same_frame_foreign >> strip_tac >>
+      fs[asm_call_saved_suffix_view] >>
+      Cases_on `t.contexts` >> gvs[] >> metis_tac[])
+  >> `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
+  drule_all step_pop_foreign >> strip_tac >>
+  fs[asm_call_saved_suffix_def] >>
+  namedCases_on `active` ["", "first others"] >> gvs[] >>
+  namedCases_on `others` ["", "second above"] >> gvs[] >>
+  qexists_tac `(new_head,SND parent)::above` >> simp[]
+QED
+
 (* The saved suffix is intentionally unconstrained: the caller need not be static. *)
 Theorem asm_call_cp_static_prefix:
   cp f /\ f s = (r,t) /\ active <> [] /\
