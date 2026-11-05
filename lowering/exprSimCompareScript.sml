@@ -25,8 +25,8 @@
  *                          typed words
  *   compile_minmax_sim   — binop_frag for Min and Max
  *
- * Helpers: int_word_cmp, compile_compare_shape, straight_fresh_compare,
- *   typed_val_to_w256_bytes_11, bop_result_minmax, straight_fresh_minmax, compile_minmax_correct
+ * Helpers: int_word_cmp, straight_fresh_compare, typed_val_to_w256_bytes_11,
+ *   bop_result_minmax, straight_fresh_minmax, compile_minmax_correct
  *)
 
 Theory exprSimCompare
@@ -186,46 +186,6 @@ QED
 
 (* ===== The lowering ===== *)
 
-val wfe = REWRITE_RULE [GSYM AND_IMP_INTRO] writes_fresh_emit_op;
-
-Theorem compile_compare_shape:
-  !cmp x y ty st op st'.
-    compile_compare cmp x y ty st = (op, st') /\
-    MEM cmp [Lt; Gt; Eq; NotEq; LtE; GtE] ==>
-    writes_fresh st (emitted_insts st st') /\
-    st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
-    isPREFIX st.cs_current_insts st'.cs_current_insts
-Proof
-  rpt gen_tac >> strip_tac >> gvs[compile_compare_def, LET_THM] >>
-  Cases_on `is_uint256 ty` >> fs[comp_bind_def] >>
-  FIRST [
-    (* one instruction *)
-    imp_res_tac emit_op_extends >> imp_res_tac writes_fresh_emit_op >>
-    fs[same_blocks_def, fresh_write_op_def] >>
-    qpat_x_assum `_.cs_current_insts = _ ++ _`
-      (fn th => ONCE_REWRITE_TAC [th]) >>
-    simp[rich_listTheory.IS_PREFIX_APPEND3] >> NO_TAC,
-    (* two *)
-    pairarg_tac >> gvs[] >>
-    rename1 `emit_op _ _ mid = (op, st')` >>
-    qpat_assum `emit_op _ _ st = _` (fn th1 =>
-      qpat_assum `emit_op _ _ mid = _` (fn th2 =>
-        strip_assume_tac (MATCH_MP emit_op_extends th1) >>
-        strip_assume_tac (MATCH_MP emit_op_extends th2) >>
-        strip_assume_tac (MATCH_MP emitted_insts_emit_op th1) >>
-        mp_tac (MATCH_MP wfe th1) >> mp_tac (MATCH_MP wfe th2))) >>
-    simp_tac (srw_ss()) [fresh_write_op_def] >> rpt strip_tac >>
-    `emitted_insts st st' = emitted_insts st mid ++ emitted_insts mid st'` by
-       (irule emitted_insts_append >> simp[]) >>
-    `writes_fresh st (emitted_insts mid st')` by
-       (irule writes_fresh_mono >> qexists_tac `mid` >> simp[]) >>
-    qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
-    asm_rewrite_tac [writes_fresh_append] >>
-    fs[same_blocks_def] >>
-    REWRITE_TAC [GSYM listTheory.APPEND_ASSOC,
-                 rich_listTheory.IS_PREFIX_APPEND3]]
-QED
-
 (* A straight_fresh action built from the combinators. *)
 val straight_fresh_tac =
   rpt (FIRST [IF_CASES_TAC,
@@ -258,7 +218,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `expr_res_ok _ ==> _` drule >> strip_tac >>
   `straight_fresh (compile_binop bop x y ty bl el)` by
-    metis_tac[straight_fresh_compare] >>
+    (irule straight_fresh_compare >> simp[]) >>
   `compile_compare bop x y ty sa = (op, sb)` by
     (qpat_x_assum `compile_binop _ _ _ _ _ _ _ = _` mp_tac >> fs[] >>
      rw[compile_binop_def]) >>

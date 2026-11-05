@@ -79,7 +79,7 @@ Ancestors
   exprSimUnop exprSimCompare
   exprBopLowering exprWordOperand
   loweringSlice
-  exprLowering compileEnv
+  exprLowering exprLoweringProps compileEnv
   vyperAST vyperInterpreter vyperState vyperContext vyperTypeSystem
   vyperTypeCallGraph
   vyperTyping vyperTypeInvariants vyperTypeExprResult vyperTypeExprSoundness
@@ -228,8 +228,8 @@ Proof
   irule compile_bop_sim >> rpt conj_tac
   >~ [`binop_frag`]
   >- (rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL v1`, `es1`]
-        mp_tac expr_body_pre_word_result >>
+      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es with gas_obs := gs1`,
+                   `INL v1`, `es1`] mp_tac expr_body_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v1` mp_tac) >> simp[] >> strip_tac >>
       rename1 `value_has_type tv1 v1` >>
@@ -241,8 +241,8 @@ Proof
       conj_tac
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
       rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL v2`, `es2`]
-        mp_tac expr_body_pre_word_result >>
+      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1 with gas_obs := gs2`,
+                   `INL v2`, `es2`] mp_tac expr_body_pre_word_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v2` mp_tac) >> simp[] >>
       strip_tac >> rename1 `value_has_type tv2 v2` >> simp[] >>
@@ -348,8 +348,8 @@ Proof
   >- (qexistsl_tac [`ot`, `ot`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
       rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `INL v1`, `es1`]
-        mp_tac expr_body_pre_word_type_result >>
+      qspecl_then [`cenv`, `cx`, `env`, `e1`, `es with gas_obs := gs1`,
+                   `INL v1`, `es1`] mp_tac expr_body_pre_word_type_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v1` mp_tac) >> simp[] >> strip_tac >>
       `expr_body_pre cenv cx env e2 es1` by (first_assum irule >> simp[]) >>
@@ -359,8 +359,8 @@ Proof
       conj_tac
       >- (irule expr_sim_case_apply >> metis_tac[]) >>
       rpt gen_tac >> strip_tac >>
-      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1`, `INL v2`, `es2`]
-        mp_tac expr_body_pre_word_type_result >>
+      qspecl_then [`cenv`, `cx`, `env`, `e2`, `es1 with gas_obs := gs2`,
+                   `INL v2`, `es2`] mp_tac expr_body_pre_word_type_result >>
       impl_tac >- gvs[] >> strip_tac >>
       first_x_assum (qspec_then `v2` mp_tac) >> simp[] >> strip_tac >>
       qpat_x_assum `expr_type e1 = _ \/ _` strip_assume_tac >>
@@ -596,7 +596,9 @@ Proof
     >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
         simp[straight_fresh_not])
     >- metis_tac[unop_operand_sim] >>
-    rpt strip_tac >> drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
+    rpt strip_tac >>
+    `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
+    drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
     irule_at Any compile_not_frag >> gvs[] >>
     rpt strip_tac >> gvs[] >>
     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
@@ -640,15 +642,21 @@ Proof
   irule compile_unop_sim >> simp[builtin_args_length_ok_def, is_word_type_def] >>
   qexistsl [`\x. compile_neg x (expr_type e1)`, `expr_type e1`] >>
   rpt conj_tac
-  >- (rpt strip_tac >> drule lower_value_neg >> simp[])
-  >- (rpt gen_tac >> strip_tac >>
-      drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
-  >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
-      simp[CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg])
-  >- (rpt strip_tac >> drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
+  >~ [`unop_frag`]
+  >- (rpt strip_tac >>
+      `expr_body_pre cenv cx env e1 (es with gas_obs := gs1)` by simp[] >>
+      drule_all expr_body_pre_word_value >> strip_tac >> gvs[] >>
       irule_at Any compile_neg_frag >>
-      gvs[is_numeric_type_def, is_uint_type_def]) >>
-  metis_tac[unop_operand_sim])
+      gvs[is_numeric_type_def, is_uint_type_def])
+  >~ [`expr_sim`]
+  >- metis_tac[unop_operand_sim]
+  >~ [`Builtin`]
+  >- (rpt strip_tac >> drule lower_value_neg >> simp[])
+  >~ [`compile_neg`]
+  >- (rpt gen_tac >> strip_tac >> drule_at Any straight_fresh_cs_extends >>
+      simp[CONV_RULE (DEPTH_CONV ETA_CONV) straight_fresh_neg]) >>
+  rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_lower_value_word_shape >> disch_then drule >> simp[])
 QED
 
 (* abs: compile_builtin_abs on the operand (exprSimUnop's
@@ -688,7 +696,7 @@ Proof
         simp[straight_fresh_abs])
     >- simp[] >>
     rpt strip_tac >>
-    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es`, `v1`, `es1`] mp_tac
+    qspecl_then [`cenv`, `cx`, `env`, `e1`, `es with gas_obs := gs1`, `v1`, `es1`] mp_tac
       expr_body_pre_word_value >>
     simp[is_word_type_def] >> strip_tac >>
     gvs[vyperValueTheory.evaluate_type_def, compile_abs_frag]) >>
