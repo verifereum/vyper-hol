@@ -3856,6 +3856,9 @@ Proof
   >- (Cases_on `eval_operands inst.inst_operands st` >>
       simp[exec_result_map_prev_bb_def] >> Cases_on `x` >>
       simp[exec_result_map_prev_bb_def])
+  >> IF_CASES_TAC
+  >- simp[exec_result_map_prev_bb_def,
+          venomStateTheory.venom_state_component_equality]
   >> namedCases_on `inst.inst_operands` ["", "addr rest"]
   >- simp[exec_result_map_prev_bb_def] >>
   Cases_on `rest` >> simp[exec_result_map_prev_bb_def] >>
