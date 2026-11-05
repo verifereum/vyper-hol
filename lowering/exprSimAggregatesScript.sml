@@ -700,14 +700,15 @@ Proof
 QED
 
 (* The conversions exprSimConvert does not cover: those to or from
-   decimal, address, bytesM, bytestrings and flags, in exprSimConvertOther;
-   for several of them the checker, the lowering and the semantics
-   disagree (#548). *)
+   decimal, address, bytesM, bytestrings and flags, in exprSimConvertOther
+   (#548). *)
 Theorem compile_convert_other_case = exprSimConvertOtherTheory.compile_convert_other_case
 
 Theorem compile_convert_case:
   !nocalls ctx func cenv cx ann t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (~nocalls ==> !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann Convert t args)
 Proof
   rpt strip_tac >>

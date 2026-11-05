@@ -87,7 +87,10 @@ QED
 
 Theorem compile_type_builtin_case:
   !nocalls ctx func cenv cx ann tb t args.
-    exprs_case nocalls ctx func cenv cx args ==>
+    exprs_case nocalls ctx func cenv cx args /\
+    (tb = Convert ==> ~nocalls ==>
+     !e1 a f cargs d. args = [e1] /\ e1 = Call a (IntCall f) cargs d ==>
+       lowered_value_type cenv e1 = expr_type e1) ==>
     expr_sim_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args) /\
     expr_vv_case nocalls ctx func cenv cx (TypeBuiltin ann tb t args)
 Proof
