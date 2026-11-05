@@ -7,6 +7,23 @@ Ancestors
   words venomState venomExecSemantics memContinuation abiDecoderFrame
   tupleTypedLoad valueEncodingProps valueEncodingProofs typedNormalizeLayout
 
+Theorem normalize_tuple_child_interval[local]:
+  LIST_REL (\ty tv. type_memory_bytes ce ty = type_memory_size tv) tys tvs /\
+  i < LENGTH tys /\
+  (!j. off j = start + SUM (MAP (type_memory_bytes ce) (TAKE j tys))) ==>
+  off i + type_memory_size (EL i tvs) = off (SUC i) /\
+  off (SUC i) <= off (LENGTH tys) /\ start <= off i
+Proof
+  strip_tac >>
+  `type_memory_bytes ce (EL i tys) = type_memory_size (EL i tvs)` by
+    (gvs[LIST_REL_EL_EQN]) >>
+  drule normalize_prefix_step >>
+  disch_then (qspec_then `type_memory_bytes ce` assume_tac) >>
+  drule abiEncoderInputTheory.abi_encoder_prefix_sum_bound >>
+  disch_then (qspec_then `type_memory_bytes ce` assume_tac) >>
+  simp[]
+QED
+
 Theorem normalize_tuple_semantic_cont:
   LENGTH DT = LENGTH ST /\ LENGTH DT = LENGTH dtvs /\
   LENGTH ST = LENGTH stvs /\ LENGTH vs = LENGTH DT /\
@@ -31,6 +48,10 @@ Theorem normalize_tuple_semantic_cont:
     u.vs_current_bb = sd.cs_current_bb /\
     u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     d (SUC i) <= u.vs_alloca_next /\ h (SUC i) <= u.vs_alloca_next /\
+    d i + type_memory_size (EL i dtvs) < dimword (:256) /\
+    h i + type_memory_size (EL i stvs) < dimword (:256) /\
+    (h i + type_memory_size (EL i stvs) <= d i \/
+      d i + type_memory_size (EL i dtvs) <= h i) /\
     val_in_memory (EL i stvs) (EL i vs) (h i) u.vs_memory ==>
     ?v. mem_cont_sim ctx fn u v /\
       val_in_memory (EL i dtvs) (EL i vs) (d i) v.vs_memory /\
@@ -105,6 +126,19 @@ Resume normalize_tuple_semantic_cont[tuple_source]:
 QED
 Resume normalize_tuple_semantic_cont[tuple_child]:
   rpt gen_tac >> strip_tac >>
+  `d i + type_memory_size (EL i dtvs) = d (SUC i) /\
+   d (SUC i) <= d (LENGTH DT) /\ b <= d i` by
+    (irule normalize_tuple_child_interval >> conj_tac >- simp[] >>
+     qexists_tac `ce` >> simp[]) >>
+  `h i + type_memory_size (EL i stvs) = h (SUC i) /\
+   h (SUC i) <= h (LENGTH ST) /\ a <= h i` by
+    (irule normalize_tuple_child_interval >> conj_tac >- simp[] >>
+     qexists_tac `ce` >> simp[]) >>
+  `d i + type_memory_size (EL i dtvs) < dimword (:256) /\
+   h i + type_memory_size (EL i stvs) < dimword (:256) /\
+   (h i + type_memory_size (EL i stvs) <= d i \/
+    d i + type_memory_size (EL i dtvs) <= h i)` by
+    (`h (LENGTH ST) = h (LENGTH DT)` by metis_tac[] >> decide_tac) >>
   qpat_x_assum `Child` mp_tac >> simp_tac bool_ss [Abbr `Child`] >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (qspec_then `u` mp_tac) >>
@@ -112,10 +146,14 @@ Resume normalize_tuple_semantic_cont[tuple_child]:
   strip_tac >> qexists_tac `v` >> simp[] >>
   `type_memory_bytes ce (EL i DT) = type_memory_size (EL i dtvs)` by
     (gvs[LIST_REL_EL_EQN]) >>
-  conj_tac
-  >- (irule normalize_copy_window_frame >> simp[] >>
-      gvs[venom_state_component_equality] >> metis_tac[ADD_COMM]) >>
-  metis_tac[cj 1 ci_mono_typed_memory_family, ci_mono_def, pairTheory.SND]
+  rpt conj_tac >>
+  (all_tac >>~- ([`abi_decode_footprint_frame _ _ _`],
+    irule normalize_copy_window_frame >> simp[] >>
+    gvs[venom_state_component_equality] >> metis_tac[ADD_COMM])) >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  mp_tac (CONJUNCT1 ci_mono_typed_memory_family) >>
+  simp[ci_mono_def] >> metis_tac[pairTheory.SND]
 QED
 Resume normalize_tuple_semantic_cont[tuple_reconstruct]:
   irule normalize_tuple_compiler_offsets >>
