@@ -300,3 +300,43 @@ Proof
       gvs[venomInstTheory.mk_inst_def]) >>
   gvs[same_blocks_def]
 QED
+
+(* Counted split-tail prototype.  The read is executed on the actual state;
+   the arithmetic suffix can still use the clean fresh-variable interface. *)
+Theorem runtime_array_split_counted:
+  compile_imm_load_word F imm base_op sa = (lop,sm) /\
+  comp_ignore_bind (array_bounds_check idx_op lop sgn)
+    (array_elem_ptr base_op idx_op T ws esz) sm = (op,sb) /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func /\
+  eval_operand base_op s = SOME b /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func s 0 (OK u) /\
+    u.vs_current_bb = sm.cs_current_bb /\
+    u.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~u.vs_halted /\
+    u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas /\
+    (!t0. run_inst_seq (emitted_insts sm sb) (drop_fresh sm u) = OK t0 ==>
+      ?t. vars_ext t0 t /\ gas_marked_path F ctx func s 0
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))) /\
+    (!a t0. run_inst_seq (emitted_insts sm sb) (drop_fresh sm u) = Abort a t0 ==>
+      ?t j. gas_marked_path F ctx func s 0 (Abort a (t with vs_inst_idx := j)))
+Proof
+  strip_tac >> drule_all compile_imm_load_word_runtime_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t with vs_inst_idx := LENGTH sm.cs_current_insts` >>
+  simp[] >>
+  `straight_fresh (comp_ignore_bind (array_bounds_check idx_op lop sgn)
+      (array_elem_ptr base_op idx_op T ws esz))` by
+    simp[straight_fresh_array_check_ptr] >>
+  `~(t with vs_inst_idx := LENGTH sm.cs_current_insts).vs_halted /\
+   (t with vs_inst_idx := LENGTH sm.cs_current_insts).vs_current_bb = sm.cs_current_bb /\
+   (t with vs_inst_idx := LENGTH sm.cs_current_insts).vs_inst_idx = LENGTH sm.cs_current_insts` by simp[] >>
+  conj_tac
+  >- (rpt strip_tac >> drule_all straight_fresh_clean_success_path >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >>
+      goal_assum (drule_at Any) >>
+      drule_all gas_marked_path_then >> simp[]) >>
+  rpt strip_tac >> drule_all straight_fresh_clean_abort_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`t'`, `j`] >> drule_all gas_marked_path_then >> simp[]
+QED
