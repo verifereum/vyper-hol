@@ -61,13 +61,15 @@ Theorem force_alloca_frame:
        FLOOKUP s'.vs_allocas aid = SOME (p,sz) ==>
        regions_disjoint b n p sz)
 Proof
-  rpt strip_tac
-  >- metis_tac[alloca_inv_exec_alloca]
-  >- metis_tac[local_ptrs_rel_exec_alloca]
-  >- (irule local_ptrs_rel_alloca_disjoint >>
-      qexistsl_tac [`cenv`, `func`, `inst`, `name`, `q`, `scopes`, `s'`] >>
-      metis_tac[alloca_inv_exec_alloca, local_ptrs_rel_exec_alloca]) >>
+  rpt gen_tac >> strip_tac >>
+  drule not_local_ptr_scope >> strip_tac >>
   `alloca_inv s'` by metis_tac[alloca_inv_exec_alloca] >>
+  `local_ptrs_rel func cenv scopes s'` by
+    (drule_all local_ptrs_rel_exec_alloca >> simp[]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
+      qexistsl_tac [`cenv`, `func`, `inst`, `name`, `q`, `scopes`, `s'`] >>
+      simp[]) >> rpt strip_tac >>
   fs[alloca_inv_def, allocas_non_overlapping_def, compileEnvTheory.regions_disjoint_def] >>
   metis_tac[]
 QED

@@ -1,7 +1,7 @@
 (* Clean runtime forcing: code-aware allocation and copy composition. *)
 Theory bodyIntCallForce
 Ancestors
-  bodyIntCallArgList bodyIntCallForceFrame loweringSlice exprLoweringProps
+  bodyIntCallForceFrame loweringSlice exprLoweringProps
   exprSim exprSimOperands context compileEnv venomExecSemantics venomInst
   words finite_map list localPtrsProps venomState venomMemDefs loweringHalt
   exprSimWordArgs bodyIntCallCodeCopy fragExec freshWrites
@@ -42,7 +42,11 @@ Theorem runtime_stmt_memory_frame:
     stmt_state_rel ctx func cenv cx es (s with vs_memory := mem)
 Proof
   rpt strip_tac >> irule stmt_state_rel_allocas_frame >>
-  conj_tac >- simp[immutable_alloca_sep_def] >>
+  conj_tac
+  >- (simp[immutable_alloca_sep_def] >>
+      irule immutable_base_zero_frame >> qexists_tac `s` >>
+      fs[stmt_state_rel_def, lookup_var_def]) >>
+  simp[] >> conj_tac >- simp[immutable_alloca_sep_def] >>
   reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
   `local_ptrs_rel func cenv es.scopes (s with vs_memory := mem)` by
     (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>
@@ -85,7 +89,7 @@ Proof
        contract_storage_def, contract_transient_def, alloca_inv_def,
        allocas_non_overlapping_def, alloca_next_valid_def, alloca_room_def,
        pending_alloca_size_def, immutable_alloca_sep_def,
-       accounts_rel_def]
+       immutable_base_zero_alt, fmp_room_def, accounts_rel_def]
 QED
 
 Theorem runtime_stmt_copy_frame:
@@ -261,3 +265,49 @@ Proof
   irule decoded_copied_in_memory >> goal_assum drule >>
   qexistsl_tac [`w2n a`, `st`] >> simp[] >> metis_tac[]
 QED
+
+(* The ensure-in-memory singleton branch emits no loop. *)
+Theorem runtime_storage_singleton_typed_frag:
+  !ctx opc src dst tv v st sa u sb sbase a b R.
+    (opc = SLOAD \/ opc = TLOAD) /\
+    do value <- emit_op opc [src]; emit_void MSTORE [dst; value] od sa = (u,sb) /\
+    (!x. dst = Var x ==> not_fresh_at sa x) /\
+    eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME b /\
+    type_slot_size tv = 1 /\ well_formed_type_value tv /\
+    slots_in_range st (w2n a) tv /\ decode_value st (w2n a) tv = SOME v /\
+    (if opc = SLOAD then sload a sbase else tload a sbase) =
+      read_slot st (w2n a) ==>
+    frag_exec ctx sa sb (\s. s = sbase)
+      (\s. val_in_memory tv v (w2n b) s.vs_memory /\
+        (!off len. off+len <= w2n b \/ w2n b+32 <= off ==>
+          mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory) /\
+        (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x sbase) /\
+        s with <|vs_memory := sbase.vs_memory; vs_vars := sbase.vs_vars;
+          vs_prev_bb := sbase.vs_prev_bb; vs_current_bb := sbase.vs_current_bb;
+          vs_inst_idx := sbase.vs_inst_idx|> = sbase) R
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  drule_all compile_storage_singleton_content_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  disch_then (fn th => irule frag_exec_conseq >> irule_at Any th) >>
+  simp[] >> rpt strip_tac >> simp[] >>
+  irule decoded_copied_in_memory >> goal_assum drule >>
+  qexistsl_tac [`w2n a`, `st`] >> simp[] >>
+  rpt strip_tac >> `j = 0` by decide_tac >> gvs[]
+QED
+
+(* Check the singleton boundary and the strict proof dependencies used here. *)
+val () = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then
+      print ("SINGLETON_FORCE_AUDIT " ^ name ^ " OK\n")
+    else raise Fail (name ^ " has unproved dependencies")
+  end)
+  [("compile_storage_singleton_content_frag", compile_storage_singleton_content_frag),
+   ("runtime_storage_singleton_typed_frag", runtime_storage_singleton_typed_frag),
+   ("force_alloca_frame", force_alloca_frame),
+   ("decoded_copied_in_memory", decoded_copied_in_memory),
+   ("runtime_stmt_memory_frame", runtime_stmt_memory_frame),
+   ("stmt_state_rel_control", stmt_state_rel_control)];

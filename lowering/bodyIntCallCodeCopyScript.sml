@@ -607,7 +607,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `k+type_memory_size tv <= type_memory_size itv /\
     val_in_memory tv v (off+k) sbase.vs_data_section` by
-    (fs[sub_layout_def] >> metis_tac[]) >>
+    (fs[loweringPostsTheory.sub_layout_def] >> metis_tac[]) >>
   `off+k < dimword (:256) /\ off+k+type_memory_size tv < dimword (:256)` by
     decide_tac >>
   `w2n (n2w (off+k):bytes32) = off+k` by simp[wordsTheory.w2n_n2w] >>
@@ -751,7 +751,9 @@ Theorem compile_storage_singleton_content_frag:
     (!x. dst = Var x ==> not_fresh_at sa x) /\
     eval_operand src sbase = SOME a /\ eval_operand dst sbase = SOME b ==>
     frag_exec ctx sa sb (\s. s = sbase)
-      (\s. mem_bytes_at (w2n b) 32 s.vs_memory =
+      (\s. mem_word_at (w2n b) s.vs_memory =
+          (if opc = SLOAD then sload a sbase else tload a sbase) /\
+        mem_bytes_at (w2n b) 32 s.vs_memory =
           word_to_bytes (if opc = SLOAD then sload a sbase else tload a sbase) T /\
         (!off len. off+len <= w2n b \/ w2n b+32 <= off ==>
           mem_bytes_at off len s.vs_memory = mem_bytes_at off len sbase.vs_memory) /\

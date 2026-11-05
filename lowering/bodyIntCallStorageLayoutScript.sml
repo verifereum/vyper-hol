@@ -714,7 +714,7 @@ Proof
   >- suspend "dynamic_array"
   >~ [`tuple_in_memory _ _ _ _`]
   >- suspend "tuple_cons" >>
-  gvs[vyperValueTheory.type_slot_size_def, type_memory_size_slots,
+  gvs[vyperValueTheory.type_slot_size_def, storageDecodeMemoryTheory.type_memory_size_slots,
       arithmeticTheory.MULT_CLAUSES]
   >~ [`fields_in_memory _ _ _ _`]
   >- (first_x_assum irule >> rpt strip_tac >>
@@ -730,7 +730,7 @@ Proof
 QED
 
 Resume decoded_copied_memory_mutual[tuple_cons]:
-  gvs[vyperValueTheory.type_slot_size_def, type_memory_size_slots] >>
+  gvs[vyperValueTheory.type_slot_size_def, storageDecodeMemoryTheory.type_memory_size_slots] >>
   first_x_assum irule >> rpt strip_tac >>
   first_x_assum (qspec_then `type_slot_size tv + j` mp_tac) >>
   `b + 32 * (type_slot_size tv + j) = b + 32 * type_slot_size tv + 32 * j` by decide_tac >>
