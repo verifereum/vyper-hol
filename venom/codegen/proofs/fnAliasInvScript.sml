@@ -20,7 +20,7 @@ Ancestors
   fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
   venomInst venomInstProps venomWf venomExecProps list rich_list stackModel
   stackPlanOps reorderSim sorting genericInputReady cleanOpsSim
-  fnFrameBoundaryEntryParams
+  fnFrameBoundaryEntryParams joinSpillWitness
 
 Theorem alias_do_swap_stack:
   dist < LENGTH ps.ps_stack ==>
@@ -2444,6 +2444,150 @@ Theorem alias_spill_probe_edge_demand:
 Proof
   EVAL_TAC
 QED
+
+Theorem alias_spill_probe_selected_phi:
+  MEM (mk_inst 22 PHI [Label "E"; Var "x18"] ["p"])
+    (collect_phis (EL 1 alias_spill_probe_fn.fn_blocks).bb_instructions) /\
+  MEM ("E", "x18") (phi_pairs [Label "E"; Var "x18"])
+Proof
+  EVAL_TAC
+QED
+
+(* Keep release opaque until its concrete live-key premise can be checked. *)
+fun alias_release_conv tm =
+  let
+    val (_, args) = strip_comb tm
+    val th = SPECL args jp_release_live
+    val hyp = fst (dest_imp (concl th))
+    val hth = EQT_ELIM
+      ((SIMP_CONV (srw_ss())
+          [finite_mapTheory.FDOM_FUPDATE, finite_mapTheory.FDOM_FEMPTY,
+           boolTheory.DISJ_IMP_THM, boolTheory.FORALL_AND_THM] THENC EVAL) hyp)
+  in MP th hth end;
+val alias_rel_c = ``stackPlanOps$release_dead_spills``;
+val () =
+  let
+    val rules = List.concat (List.concat (map
+      (fn (_,xs) => map (fn clauses.RRules ths => ths
+                          | clauses.Conversion _ => []) xs)
+      (computeLib.listItems (computeLib.the_compset ()))))
+    val callers = List.filter (fn th =>
+      let val (_,body) = strip_forall (concl th)
+          val (_,r) = boolSyntax.dest_eq body
+      in can (find_term (aconv alias_rel_c)) r end
+      handle HOL_ERR _ => false) rules
+  in
+    computeLib.del_funs [stackPlanOpsTheory.release_dead_spills_def];
+    computeLib.add_convs [(alias_rel_c,2,alias_release_conv)];
+    computeLib.add_funs callers
+  end;
+
+Theorem alias_spill_probe_entry_fields:
+  IS_SOME alias_spill_probe_entry_result /\
+  ~MEM (Var "x18") (SND (THE alias_spill_probe_entry_result)).ps_stack /\
+  Var "x18" IN FDOM (SND (THE alias_spill_probe_entry_result)).ps_spilled
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_spill_probe_after_def:
+  alias_spill_probe_after = SND (THE alias_spill_probe_entry_result)
+End
+
+Theorem alias_spill_probe_entry_plan:
+  generate_block_plan alias_spill_probe_live
+    (dfg_build_function alias_spill_probe_fn) (cfg_analyze alias_spill_probe_fn)
+    alias_spill_probe_fn (HD alias_spill_probe_fn.fn_blocks)
+    (init_cleanup_plan_state NONE [] 0 0) =
+    SOME (FST (THE alias_spill_probe_entry_result), alias_spill_probe_after)
+Proof
+  rewrite_tac[GSYM alias_spill_probe_entry_result_def, alias_spill_probe_after_def] >>
+  mp_tac alias_spill_probe_entry_fields >>
+  Cases_on `alias_spill_probe_entry_result` >> simp[]
+QED
+
+Theorem alias_spill_probe_first_edge:
+  dfs_block_state alias_spill_probe_live (dfg_build_function alias_spill_probe_fn)
+    (cfg_analyze alias_spill_probe_fn) alias_spill_probe_fn
+    (init_cleanup_plan_state NONE [] 0 0) "P" alias_spill_probe_after
+Proof
+  simp[dfs_block_state_def] >>
+  qexistsl_tac [`[]`, `["E"]`] >> simp[] >>
+  `alias_spill_probe_after = alias_spill_probe_after with
+    <|ps_stack := alias_spill_probe_after.ps_stack;
+      ps_spilled := alias_spill_probe_after.ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  irule dfs_aux_call_branch >>
+  qexists_tac `["S"]` >>
+  rewrite_tac[GSYM (cj 1 alias_spill_probe_edge_demand)] >>
+  irule dfs_aux_call_succs >>
+  simp[] >>
+  qexistsl_tac [`HD alias_spill_probe_fn.fn_blocks`,
+    `FST (THE alias_spill_probe_entry_result)`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[alias_spill_probe_entry_plan] >>
+  conj_tac >- EVAL_TAC >>
+  irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_spill_probe_lineage:
+  lineage_state alias_spill_probe_live (dfg_build_function alias_spill_probe_fn)
+    (cfg_analyze alias_spill_probe_fn) alias_spill_probe_fn
+    (init_cleanup_plan_state NONE [] 0 0) "P" alias_spill_probe_after
+Proof
+  `alias_spill_probe_after = alias_spill_probe_after with
+    <|ps_stack := alias_spill_probe_after.ps_stack;
+      ps_spilled := alias_spill_probe_after.ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  irule lineage_state_step >>
+  conj_tac >- ACCEPT_TAC alias_spill_probe_first_edge >>
+  qexistsl_tac [`HD alias_spill_probe_fn.fn_blocks`,
+    `FST (THE alias_spill_probe_entry_result)`, `NONE`, `"E"`, `F`,
+    `init_cleanup_plan_state NONE [] 0 0`,
+    `init_cleanup_plan_state NONE [] 0 0`, `alias_spill_probe_after`] >>
+  `init_cleanup_plan_state NONE [] 0 0 with
+    <|ps_cleanup_height := NONE; ps_cleanup_promised := F|> =
+    init_cleanup_plan_state NONE [] 0 0` by EVAL_TAC >>
+  simp[alias_spill_probe_entry_plan, alias_spill_probe_edge_demand] >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac
+  >- (simp[dfs_block_state_def] >> qexistsl_tac [`[]`, `[]`] >>
+      simp[] >> irule dfs_aux_call_entry >> EVAL_TAC) >>
+  irule lineage_state_entry >> EVAL_TAC
+QED
+
+Definition alias_spill_probe_clean_def:
+  alias_spill_probe_clean = SND (clean_stack_plan alias_spill_probe_live
+    (cfg_analyze alias_spill_probe_fn) alias_spill_probe_fn
+    (EL 1 alias_spill_probe_fn.fn_blocks) alias_spill_probe_after)
+End
+
+Theorem alias_spill_probe_clean_and_phi:
+  alias_spill_probe_clean = alias_spill_probe_after /\
+  generate_phi_plan (mk_inst 22 PHI [Label "E"; Var "x18"] ["p"])
+    (live_vars_at alias_spill_probe_live "P" 1) T alias_spill_probe_clean =
+    ([], alias_spill_probe_clean) /\
+  ~plan_holds alias_spill_probe_clean (Var "p")
+Proof
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Definition alias_spill_probe_assign_def:
+  alias_spill_probe_assign = generate_regular_inst_plan alias_spill_probe_live
+    (dfg_build_function alias_spill_probe_fn) (cfg_analyze alias_spill_probe_fn)
+    alias_spill_probe_fn (mk_inst 23 ASSIGN [Var "p"] ["q"])
+    (live_vars_at alias_spill_probe_live "P" 2) T F "P" alias_spill_probe_clean
+End
+
+Theorem alias_spill_probe_assign_fields:
+  plan_holds (SND alias_spill_probe_assign) (Var "q") /\
+  normalize_operand (dfg_build_function alias_spill_probe_fn) [] (Var "q") = Var "p"
+Proof
+  EVAL_TAC >> simp[release_dead_spills_def, alias_release_fold_fields]
+QED
+
+val () = computeLib.add_funs [stackPlanOpsTheory.release_dead_spills_def];
 
 (* Small computation fixture: an actual DFG, not an assumed equivalence. *)
 Definition alias_probe_fn_def:
