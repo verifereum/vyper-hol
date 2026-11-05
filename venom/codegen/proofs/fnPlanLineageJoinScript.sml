@@ -176,6 +176,15 @@ Proof
   metis_tac[]
 QED
 
+Theorem distinct_filtered_prefix_markers:
+  ALL_DISTINCT (FILTER (\x. x <> marker) (pre ++ suffix)) /\
+  (!x. MEM x pre /\ x <> marker ==> MEM x suffix) ==>
+  EVERY (\x. x = marker) pre
+Proof
+  simp[FILTER_APPEND_DISTRIB, ALL_DISTINCT_APPEND, MEM_FILTER, EVERY_MEM] >>
+  metis_tac[]
+QED
+
 (* Used by fnFrameStepsPhi for phi_prefix_frame_sim: the PHI prefix reads
    pred's PHI operands from the top of the stack, and nothing below them
    may be a stale variable whose value the PHIs change.
