@@ -131,3 +131,7 @@ quantifies over every gas list `gs` (approved pattern from the declaration
 port); its producer is gas-observation invariant. Once the rule lands, the
 public `compile_assign_local_stmt_frag` is derived from this lemma outside
 this task.
+
+The statement has not been parsed by a build yet: the theory currently
+stops earlier, at the obsolete `assign_local_word_success_run`.
+Ancestors of `stmtSimAssignTheory` build on this tree.
