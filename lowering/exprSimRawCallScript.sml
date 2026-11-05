@@ -4495,78 +4495,6 @@ Proof
   Cases_on `flags.rcf_max_outsize = 0` >> gvs[]
 QED
 
-Theorem raw_call_compile_shape[local]:
-  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  !ty sa.
-    (flags.rcf_max_outsize = 0 ==>
-      ?t op sb. compile_expr cenv ty (Call ann (RawCallTarget flags) args dflt) sa =
-        (StackValue t op,sb)) /\
-    (flags.rcf_max_outsize <> 0 ==>
-      ?t p sb. compile_expr cenv ty (Call ann (RawCallTarget flags) args dflt) sa =
-        (LocatedValue t p,sb) /\ p.ptr_location = LocMemory /\ ~is_word_type t)
-Proof
-  strip_tac >> drule raw_call_pre_operands >> strip_tac >> gvs[] >>
-  drule raw_call_pre_flags >> strip_tac >> rpt gen_tac >>
-  Cases_on `compile_expr cenv ty (Call ann (RawCallTarget flags) (a::d::kws) dflt) sa` >>
-  drule compile_expr_raw_call >> strip_tac >> gvs[] >>
-  Cases_on `flags.rcf_max_outsize = 0` >>
-  simp[raw_call_return_type_def, contextTheory.mk_ptr_def, is_word_type_def]
-QED
-
-Theorem eval_expr_raw_call_value[local]:
-  eval_expr cx (Call ann (RawCallTarget flags) args dflt) st = (INL pv,st') ==>
-  ?v. pv = Value v
-Proof
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, AllCaseEqs()] >>
-  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  drule eval_raw_call_success_value >> strip_tac >> gvs[]
-QED
-
-Theorem raw_call_stack_sim[local]:
-  expr_vv_sim ctx func cenv cx ty e es /\
-  (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
-  (!tv es'. eval_expr cx e es = (INL tv,es') ==> ?v. tv = Value v) ==>
-  expr_sim ctx func cenv cx ty e es
-Proof
-  rw[expr_sim_def] >>
-  qpat_x_assum `!sa. ?t op sb. _` (qspec_then `sa` strip_assume_tac) >>
-  qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
-  simp[lower_value_def, comp_bind_def, unwrap_value_def, comp_return_def] >>
-  strip_tac >> gvs[] >>
-  Cases_on `eval_expr cx e es` >> rename1 `_ = (raw,est)` >>
-  qpat_x_assum `(do result <- _; _ od) _ = _` mp_tac >>
-  simp[bind_def] >> Cases_on `raw`
-  >- (rename1 `eval_expr cx e es = (INL r,est)` >>
-      `?v. r = Value v` by metis_tac[] >> gvs[read_result_def, return_def] >>
-      strip_tac >> gvs[] >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
-      simp[expr_vv_sim_def] >> strip_tac >>
-      first_x_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-      disch_then (qspec_then `s0` mp_tac) >>
-      simp[expr_vv_res_ok_def, read_result_def, return_def] >>
-      disch_then (mp_then Any irule frag_exec_conseq) >>
-      simp[] >> metis_tac[expr_post_of_vv_post_stack]) >>
-  simp[] >> strip_tac >> gvs[] >>
-  qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_vv_sim_def] >> strip_tac >>
-  first_x_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  fs[expr_vv_res_ok_def, expr_res_ok_def] >>
-  disch_then (mp_then Any irule frag_exec_conseq) >>
-  simp[expr_exit_exception_transport, expr_res_ok_def]
-QED
-
-Theorem raw_call_sim_case_of_vv[local]:
-  expr_vv_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt) ==>
-  expr_sim_case nocalls ctx func cenv cx (Call ann (RawCallTarget flags) args dflt)
-Proof
-  rw[expr_sim_case_def, expr_vv_case_def] >>
-  drule raw_call_compile_shape >> strip_tac >>
-  Cases_on `flags.rcf_max_outsize = 0`
-  >- (irule raw_call_stack_sim >> simp[] >> metis_tac[eval_expr_raw_call_value]) >>
-  irule expr_sim_of_vv_sim_buffer >> simp[] >> metis_tac[eval_expr_raw_call_value]
-QED
 
 (* TOP-LEVEL *)
 Theorem compile_raw_call_case:
@@ -4578,7 +4506,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `expr_vv_case nocalls ctx func cenv cx
      (Call ann (RawCallTarget flags) args dflt)`
-    suffices_by simp[raw_call_sim_case_of_vv] >>
+    suffices_by simp[expr_sim_case_of_vv] >>
   rewrite_tac[expr_vv_case_def] >> rpt strip_tac >>
   drule raw_call_pre_operands >> strip_tac >> gvs[] >>
   rewrite_tac[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
