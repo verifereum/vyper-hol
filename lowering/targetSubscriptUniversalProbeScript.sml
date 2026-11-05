@@ -3,6 +3,7 @@ Ancestors
   targetSubscriptProbe words vyperStorage vyperStorageBackend vyperState
   vyperInterpreter vyperContext vyperValue vfmState
   venomExecSemantics venomState venomInst calleeTransport
+  exprSimLeaves exprSimHyps vyperTypeCallGraph
 Libs
   pairLib
 
@@ -137,5 +138,21 @@ Theorem clear_machine_frames:
 Proof
   simp[update_var_def, lookup_var_def, sstore_def, contract_storage_def,
        finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem clear_literal_cases:
+  !k.
+    expr_sim_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context
+      (Literal (BaseT (UintT 256)) (IntL 0)) /\
+    expr_vv_case F (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context
+      (Literal (BaseT (UintT 256)) (IntL 0))
+Proof
+  gen_tac >>
+  mp_tac compile_literal_case_sim >>
+  rewrite_tac[expr_ok_case] >>
+  simp[expr_sim_case_def, expr_vv_case_def, int_calls_expr_def] >>
   metis_tac[]
 QED
