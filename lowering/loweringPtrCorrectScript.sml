@@ -25,7 +25,7 @@
  * (loweringRuntimeCorrect).
  *)
 Theory loweringPtrCorrect
-Ancestors decoderIndexInitPtr calldataValidWordInputPtr typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr typedCopyLoopBackedgePtr
+Ancestors decoderProtectedScratchPtr decoderIndexInitPtr calldataValidWordInputPtr typedCopyArrayExecutionPtr batchCopyRobustPtr normalizationAllocPtr typedCopyLoopBackedgePtr
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
   venomState compileEnv e2eDefs supportedProgram compileVyper fragExec
