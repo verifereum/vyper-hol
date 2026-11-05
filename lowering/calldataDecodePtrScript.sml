@@ -3,7 +3,7 @@ Theory calldataDecodePtr
 Ancestors bodyPtrDefs ptrDiscipline venomInst venomState venomExecSemantics
   codegenRel contextCodegenRel memLocDefs pred_set abiEncoder compileEnv emitHelper
   entryDispatchPtr ptrSafeRun list finite_map abiDecoderGuards exprLoweringProps
-  fragExec words abiDecoderContract
+  fragExec words abiDecoderContract ghostPcTransportPtr
 
 Theorem calldatacopy_access_ok:
   eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) ==>
@@ -322,8 +322,7 @@ Proof
   fs[eval_operand_def, lookup_var_def] >>
   simp[lookup_var_def] >>
   conj_tac
-  >- (qpat_x_assum `ptr_covers G5 tn5 p (_ with vs_inst_idx := _) C` mp_tac >>
-      simp[]) >>
+  >- metis_tac[] >>
   disch_tac >>
   `?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
      !k. k < LENGTH [i0;i1;i2;i3;i4] ==> get_instruction bb (LENGTH sa.cs_current_insts + k) =
@@ -340,12 +339,7 @@ Proof
      simp[Abbr `i4`, eval_operand_def, op_taint_def] >>
      conj_tac
      >- (qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ G5 tn5 _` mp_tac >>
-         simp[Abbr `G5`, Abbr `tn5`, Abbr `copied`, step_prov_def,
-           step_taint_def, mk_inst_def, set_prov_def, set_var_taint_def,
-           out_prov_def, mem_taint_def, out_taint_def, adopt_reset_def,
-           store_taint_def, imm_taint_def, eval_operand_def,
-           new_site_bytes_def, step_writes_def, written_taint_def, arithmeticTheory.ADD1,
-           write_memory_with_expansion_def, write_memory_def, expand_memory_def]) >>
+         simp[Abbr `G5`, Abbr `tn5`, Abbr `copied`, arithmeticTheory.ADD1]) >>
      qpat_x_assum `ptr_covers G4 tn4 p s3 C` mp_tac >>
      simp[ptr_covers_def, lookup_var_def, op_taint_def]) >>
   `op_taint tn1 (Var v0) = {}` by
@@ -371,11 +365,7 @@ Proof
              eval_operand_def, AllCaseEqs()] >> metis_tac[]) >>
      fs[mk_inst_def] >> conj_tac
      >- (qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ G4 tn4 _` mp_tac >>
-         simp[Abbr `G4`, Abbr `tn4`, step_prov_def, step_taint_def,
-           mk_inst_def, set_prov_def, set_var_taint_def, mem_taint_def,
-           new_site_bytes_def, step_writes_def, written_taint_def,
-           source_memory_write_ranges_def, adopt_reset_def,
-           store_taint_def, imm_taint_def, arithmeticTheory.ADD1]) >>
+         simp[Abbr `G4`, Abbr `tn4`, arithmeticTheory.ADD1]) >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           source_memory_read_ranges_def, source_memory_write_ranges_def] >>
      fs[allocas_from_def] >> first_assum MATCH_ACCEPT_TAC) >>
@@ -408,11 +398,7 @@ Proof
      simp[Abbr `i2`, mk_inst_def, is_terminator_def] >>
      conj_tac
      >- (qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ G3 tn3 _` mp_tac >>
-         simp[Abbr `G3`, Abbr `tn3`, step_prov_def, step_taint_def,
-           mk_inst_def, set_prov_def, set_var_taint_def, out_prov_def,
-           out_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
-           written_taint_def, source_memory_write_ranges_def, adopt_reset_def,
-           store_taint_def, imm_taint_def, eval_operand_def, arithmeticTheory.ADD1]) >>
+         simp[Abbr `G3`, Abbr `tn3`, arithmeticTheory.ADD1]) >>
      fs[mk_inst_def] >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           source_memory_read_ranges_def, source_memory_write_ranges_def] >>
@@ -431,11 +417,7 @@ Proof
      simp[Abbr `i1`, mk_inst_def, is_terminator_def] >>
      conj_tac
      >- (qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ G2 tn2 _` mp_tac >>
-         simp[Abbr `G2`, Abbr `tn2`, step_prov_def, step_taint_def,
-           mk_inst_def, set_prov_def, set_var_taint_def, out_prov_def,
-           out_taint_def, mem_taint_def, new_site_bytes_def, step_writes_def,
-           written_taint_def, source_memory_write_ranges_def, adopt_reset_def,
-           store_taint_def, imm_taint_def, eval_operand_def, arithmeticTheory.ADD1]) >>
+         simp[Abbr `G2`, Abbr `tn2`, arithmeticTheory.ADD1]) >>
      fs[mk_inst_def] >>
      simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           source_memory_read_ranges_def, source_memory_write_ranges_def,
