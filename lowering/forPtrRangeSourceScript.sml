@@ -89,3 +89,40 @@ Proof
   simp[vyperEvalPreservesScopesTheory.preserves_scopes_dom_def] >> strip_tac >>
   metis_tac[vyperEvalPreservesScopesTheory.lookup_scopes_none_map_fdom]
 QED
+
+(* Static callback obligations are transported from the original loop entry,
+   not assumed at the fresh body compiler state.  Dynamic state/ghost facts
+   are supplied separately by for_range_body_prepare_ptr. *)
+Theorem for_range_callback_entry_ptr:
+  for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
+    cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
+  ~cenv.ce_is_ctor /\ ret_pc_ok cenv st s /\
+  st.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at st x ==> x <> dv) /\
+  (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==>
+    not_fresh_at st x) /\
+  (!x. x <> dv ==> lookup_var x s2 = lookup_var x s) /\
+  s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\ ~s2.vs_halted ==>
+  (?bc'. stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0 = (bc',sb1)) /\
+  ~bc.ce_is_ctor /\ ret_pc_ok bc sb0 s2 /\
+  (!x q. bc.ce_return_buf = SOME (PtrVar (Var x) q) ==>
+    not_fresh_at sb0 x) /\
+  ~s2.vs_halted /\ s2.vs_current_bb = sb0.cs_current_bb /\
+  s2.vs_inst_idx = LENGTH sb0.cs_current_insts /\
+  (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> x <> dv)
+Proof
+  strip_tac >>
+  `bc.ce_return_pc = cenv.ce_return_pc /\
+   bc.ce_return_buf = cenv.ce_return_buf /\ bc.ce_is_ctor = cenv.ce_is_ctor` by
+    (fs[stmtSimForLoopTheory.for_code_def,
+        compileEnvTheory.compile_env_component_equality]) >>
+  `ret_pc_ok bc sb0 s2` by (irule for_prepared_ret_pc >> metis_tac[]) >>
+  conj_tac
+  >- (irule stmtSimForArrayLoopTheory.array_body_compiler_env >>
+      fs[stmtSimForLoopTheory.for_code_def]) >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at st x` by metis_tac[] >>
+      fs[compileEnvTheory.not_fresh_at_def] >> metis_tac[]) >>
+  fs[stmtSimForLoopTheory.for_code_def] >> metis_tac[]
+QED
