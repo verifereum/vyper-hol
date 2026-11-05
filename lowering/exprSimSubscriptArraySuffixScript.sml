@@ -447,7 +447,8 @@ Resume framed_array_represented_suffix_summary[dynamic_valid]:
     (gvs[compileEnvTheory.elem_size_in_location_def, compileEnvTheory.is_slot_addressed_def,
         compileEnvTheory.word_scale_def, wordsTheory.word_mul_n2w,
         wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC] >>
-     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC]) >>
+     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.WORD_ADD_ASSOC] >>
+     simp[AC wordsTheory.WORD_ADD_ASSOC wordsTheory.WORD_ADD_COMM]) >>
   qpat_assum `p.ptr_location = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   irule framed_array_element_summary >> simp[] >>
   conj_tac >- (gvs[] >> metis_tac[]) >>
@@ -551,7 +552,6 @@ Proof
   qpat_x_assum `iv = IntV i` SUBST1_TAC >>
   irule framed_array_represented_suffix_summary >>
   simp[SF SFY_ss] >>
-  conj_tac >- fs[] >>
   qexistsl_tac [`iop`,`iw`,`sc`] >> simp[] >>
   rpt strip_tac >>
   qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
