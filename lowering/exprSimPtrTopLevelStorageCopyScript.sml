@@ -1656,3 +1656,112 @@ Proof
   `gas_path_ptr D 0 ctx fn PG G tn s (0+0) Gf tnf (OK t)` by
     (irule gas_path_ptr_then >> qexistsl_tac [`G1'`, `u`, `tn1'`] >> simp[]) >> fs[]
 QED
+
+Theorem toplevel_copy_compile_exit:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) ==>
+  sb.cs_current_bb = fresh_label_output "wcopy_exit" (sa.cs_next_label+2) /\
+  sb.cs_current_insts = [] /\
+  sb.cs_next_var = sa.cs_next_var+7 /\
+  sb.cs_next_id = sa.cs_next_id+12 /\
+  sb.cs_next_label = sa.cs_next_label+3
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `loc = LocStorage` >> gvs[] >>
+  simp[contextTheory.compile_word_copy_loop_def, compileEnvTheory.word_scale_def,
+       contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       emitHelperTheory.emit_inst_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+       compileEnvTheory.fresh_label_def, compileEnvTheory.fresh_var_def,
+       compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+       compileEnvTheory.new_block_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem toplevel_copy_compile_blocks:
+  (loc = LocStorage \/ loc = LocTransient) /\
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) ==>
+  ?cv tv sv vv mv dv nv hdr body exit.
+    [cv;tv;sv;vv;mv;dv;nv] =
+      GENLIST (\i. "%" ++ toString (sa.cs_next_var+i)) 7 /\
+    hdr = fresh_label_output "wcopy_cond" sa.cs_next_label /\
+    body = fresh_label_output "wcopy_body" (sa.cs_next_label+1) /\
+    exit = fresh_label_output "wcopy_exit" (sa.cs_next_label+2) /\
+    emitted_blocks sa sb =
+      [<|bb_label := body; bb_instructions :=
+         [mk_inst (sa.cs_next_id+4) ADD [src;Var cv] [sv];
+          mk_inst (sa.cs_next_id+5) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+          mk_inst (sa.cs_next_id+6) MUL [Var cv;Lit 32w] [mv];
+          mk_inst (sa.cs_next_id+7) ADD [Var dst;Var mv] [dv];
+          mk_inst (sa.cs_next_id+8) MSTORE [Var dv;Var vv] [];
+          mk_inst (sa.cs_next_id+9) ADD [Var cv;Lit 1w] [nv];
+          mk_inst (sa.cs_next_id+10) ASSIGN [Var nv] [cv];
+          mk_inst (sa.cs_next_id+11) JMP [Label hdr] []]|>;
+       <|bb_label := hdr; bb_instructions :=
+         [mk_inst (sa.cs_next_id+2) EQ [Var cv;Lit (n2w n)] [tv];
+          mk_inst (sa.cs_next_id+3) JNZ [Var tv;Label exit;Label body] []]|>;
+       <|bb_label := sa.cs_current_bb; bb_instructions := sa.cs_current_insts ++
+         [mk_inst sa.cs_next_id ASSIGN [Lit 0w] [cv];
+          mk_inst (sa.cs_next_id+1) JMP [Label hdr] []]|>]
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` mp_tac >>
+  Cases_on `loc = LocStorage` >> gvs[] >>
+  simp[contextTheory.compile_word_copy_loop_def, compileEnvTheory.word_scale_def,
+       contextTheory.compile_ptr_load_def, contextTheory.compile_ptr_store_def,
+       emitHelperTheory.emit_op_def, emitHelperTheory.emit_void_def,
+       emitHelperTheory.emit_inst_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+       compileEnvTheory.fresh_label_def, compileEnvTheory.fresh_var_def,
+       compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+       compileEnvTheory.new_block_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[fragExecTheory.emitted_blocks_def, GENLIST, GSYM APPEND_ASSOC]
+QED
+
+Theorem toplevel_copy_generated_vars:
+  ds = GENLIST (\i. "%" ++ toString (sa.cs_next_var+i)) 7 ==>
+  ALL_DISTINCT ds /\
+  (!x. not_fresh_at sa x ==> ~MEM x ds)
+Proof
+  strip_tac >> conj_tac
+  >- (gvs[GENLIST] >>
+      rpt conj_tac >> irule emitHelperPropsTheory.fresh_var_distinct >> decide_tac) >>
+  rpt strip_tac >> gvs[MEM_GENLIST, compileEnvTheory.not_fresh_at_def] >>
+  first_x_assum (qspec_then `sa.cs_next_var+i` mp_tac) >> simp[]
+QED
+
+Theorem toplevel_copy_layout_lookups:
+  fn_has_code sa sb fn /\
+  emitted_blocks sa sb =
+    [<|bb_label := loop_body; bb_instructions := body_code|>;
+     <|bb_label := hdr; bb_instructions := hdr_code|>;
+     <|bb_label := sa.cs_current_bb;
+       bb_instructions := sa.cs_current_insts ++ init_code|>] ==>
+  lookup_block loop_body fn.fn_blocks =
+    SOME <|bb_label := loop_body; bb_instructions := body_code|> /\
+  lookup_block hdr fn.fn_blocks =
+    SOME <|bb_label := hdr; bb_instructions := hdr_code|> /\
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    DROP (LENGTH sa.cs_current_insts) bb.bb_instructions = init_code
+Proof
+  simp[fragExecTheory.fn_has_code_def] >> strip_tac >>
+  qpat_x_assum `!bb. MEM bb _ ==> _` mp_tac >>
+  simp[DISJ_IMP_THM, FORALL_AND_THM] >> strip_tac >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND]
+QED
+
+Theorem toplevel_copy_layout_freshness:
+  [cv;tv;sv;vv;mv;dv;nv] =
+    GENLIST (\i. "%" ++ toString (sa.cs_next_var+i)) 7 /\
+  not_fresh_at sa dst /\ (!x. src = Var x ==> not_fresh_at sa x) ==>
+  ALL_DISTINCT [cv;tv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;tv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;tv;sv;vv;mv;dv;nv]) /\
+  (!x. not_fresh_at sa x ==> ~MEM x [cv;tv;sv;vv;mv;dv;nv])
+Proof
+  strip_tac >> drule toplevel_copy_generated_vars >> strip_tac >>
+  metis_tac[]
+QED
