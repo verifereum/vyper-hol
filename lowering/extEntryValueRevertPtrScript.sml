@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   external_entry_value_revert_ptr
  *)
-Theory entryValueRevertPtr
+Theory extEntryValueRevertPtr
 Ancestors
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics

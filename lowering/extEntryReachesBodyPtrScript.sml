@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   external_entry_reaches_body_ptr
  *)
-Theory entryReachesBodyPtr
+Theory extEntryReachesBodyPtr
 Ancestors
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics

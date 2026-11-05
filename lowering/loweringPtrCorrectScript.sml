@@ -17,10 +17,10 @@
  * The pieces, each a pointer twin of a piece S1 rests on, in its own
  * leaf theory:
  *   body_stmts_sim_ptr (bodyStmtsSimPtr) -- body_stmts_sim with the ghost
- *   external_entry_value_revert_ptr (entryValueRevertPtr),
- *   external_entry_reaches_body_ptr (entryReachesBodyPtr) --
+ *   external_entry_value_revert_ptr (extEntryValueRevertPtr),
+ *   external_entry_reaches_body_ptr (extEntryReachesBodyPtr) --
  *     S1's entry bridge with the ghost
- *   external_frame_ret_ok_ptr (frameRetOkPtr) -- the frame's returns with
+ *   external_frame_ret_ok_ptr (extFrameRetOkPtr) -- the frame's returns with
  *     the ghost
  *
  * Inherited admissions: the composition also uses S1's
@@ -37,7 +37,7 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract
-  bodyStmtsSimPtr entryValueRevertPtr entryReachesBodyPtr frameRetOkPtr
+  bodyStmtsSimPtr extEntryValueRevertPtr extEntryReachesBodyPtr extFrameRetOkPtr
 
 val _ = Parse.hide "body";
 

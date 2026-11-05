@@ -4,7 +4,7 @@
  * TOP-LEVEL:
  *   external_frame_ret_ok_ptr
  *)
-Theory frameRetOkPtr
+Theory extFrameRetOkPtr
 Ancestors
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps vyperInterpreter vyperContext venomExecSemantics
