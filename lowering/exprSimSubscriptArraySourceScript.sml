@@ -3,7 +3,7 @@ Theory exprSimSubscriptArraySource
 Ancestors
   exprSimSource exprSimHypsDefs vyperState vyperInterpreter vyperValue
   vyperPlaceResultTyping vyperPlaceStatePreservation vyperTypeEnvPreservation
-  vyperTypeInvariants vyperTypeSystem
+  vyperTypeInvariants vyperTypeSystem vyperPlaceTyping vyperArray
   integer option list rich_list finite_map
 
 Theorem read_result_nonstorage_frame:
@@ -253,4 +253,108 @@ Proof
     (irule read_memory_path_snoc >> conj_tac >- simp[] >>
      goal_assum (drule_at Any) >> simp[]) >>
   simp[return_def]
+QED
+
+Theorem select_typed_immutable_read:
+  runtime_place_typed cx es (ImmutablePlace src id path) ptv /\
+  read_result cx (PlaceR (ImmutablePlace src id path)) es = (INL v,es) /\
+  evaluate_subscripts ptv v [sb] = INL w ==>
+  select_result cx ty (PlaceR (ImmutablePlace src id path)) sb es =
+    (INL (PlaceR (ImmutablePlace src id (path ++ [sb]))),es) /\
+  read_result cx (PlaceR (ImmutablePlace src id (path ++ [sb]))) es = (INL w,es)
+Proof
+  simp[runtime_place_typed_immutable] >> strip_tac >>
+  gvs[read_result_def, read_place_def, bind_def, lift_option_type_def,
+      lift_sum_def, return_def, AllCaseEqs()] >>
+  Cases_on `evaluate_subscripts root a path` >> gvs[return_def, raise_def] >>
+  conj_tac
+  >- (drule_all_then assume_tac select_immutable_result >>
+      simp[bind_def, lift_sum_def, return_def]) >>
+  drule_all evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` assume_tac) >> simp[return_def]
+QED
+
+Theorem evaluate_array_subscript_result:
+  evaluate_subscripts (ArrayTV et bd) (ArrayV av) [ValueSubscript (IntV i)] =
+    case array_index (ArrayTV et bd) av i of
+    | SOME w => INL w
+    | NONE => INR (RuntimeError "evaluate_subscripts array_index")
+Proof
+  simp[evaluate_subscripts_def] >>
+  Cases_on `array_index (ArrayTV et bd) av i` >> simp[evaluate_subscripts_def]
+QED
+
+Theorem select_value_read:
+  evaluate_type (get_tenv cx) ty = SOME ptv /\
+  evaluate_subscripts ptv v [sb] = INL w ==>
+  select_result cx ty (Value v) sb es = (INL (Value w),es) /\
+  read_result cx (Value w) es = (INL w,es)
+Proof
+  strip_tac >> drule_then assume_tac select_value_result >>
+  simp[bind_def, lift_sum_def, return_def, read_result_def]
+QED
+
+Theorem expr_body_pre_place_metadata:
+  expr_body_pre cenv cx env e es /\
+  eval_expr cx e es = (INL (PlaceR p),es') ==>
+  ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+       runtime_place_typed cx es' p tv
+Proof
+  strip_tac >> drule_all expr_body_pre_runtime_typed >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
+        env_context_consistent_def] >>
+  gvs[eval_result_typed_def]
+QED
+
+Theorem expr_body_pre_popped_keys_indexed:
+  expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res,es') ==>
+  popped_keys_indexed es'.scopes
+Proof
+  strip_tac >> irule eval_expr_popped_keys_indexed >>
+  goal_assum (drule_at Any) >>
+  gvs[expr_body_pre_def, expr_sim_inv_def]
+QED
+
+Theorem evaluate_array_subscript_in_bounds:
+  valid_index (ArrayTV et bd) av i ==>
+  ?w. evaluate_subscripts (ArrayTV et bd) (ArrayV av) [ValueSubscript (IntV i)] = INL w
+Proof
+  strip_tac >> drule array_index_valid >>
+  Cases_on `array_index (ArrayTV et bd) av i` >>
+  simp[evaluate_array_subscript_result]
+QED
+
+Theorem evaluate_array_subscript_oob:
+  (!al. av = SArrayV al ==> ?n. bd = Fixed n) /\
+  ~valid_index (ArrayTV et bd) av i ==>
+  evaluate_subscripts (ArrayTV et bd) (ArrayV av) [ValueSubscript (IntV i)] =
+    INR (RuntimeError "evaluate_subscripts array_index")
+Proof
+  strip_tac >> simp[evaluate_array_subscript_result] >>
+  Cases_on `array_index (ArrayTV et bd) av i` >> simp[] >>
+  drule array_index_bounds >> simp[] >> metis_tac[]
+QED
+
+Theorem select_nonstorage_place_error:
+  (!tr slot vt. p <> StoragePlace tr slot vt) /\
+  runtime_place_typed cx es p ptv /\
+  read_result cx (PlaceR p) es = (INL v,es) /\
+  evaluate_subscripts ptv v [sb] = INR err ==>
+  select_result cx ty (PlaceR p) sb es = (INR (Error err),es)
+Proof
+  strip_tac >> Cases_on `p`
+  >- metis_tac[]
+  >- (gvs[runtime_place_typed_memory] >>
+      gvs[read_result_def, read_place_def, get_scopes_def, bind_def,
+          lift_option_type_def, lift_sum_def, return_def] >>
+      Cases_on `read_memory_path entry l` >> gvs[return_def, raise_def] >>
+      drule_all_then assume_tac select_memory_result >>
+      simp[bind_def, lift_sum_def, raise_def]) >>
+  gvs[runtime_place_typed_immutable] >>
+  gvs[read_result_def, read_place_def, bind_def, lift_option_type_def,
+      lift_sum_def, return_def] >>
+  Cases_on `evaluate_subscripts root a l` >> gvs[return_def, raise_def] >>
+  drule_all_then assume_tac select_immutable_result >>
+  simp[bind_def, lift_sum_def, raise_def]
 QED
