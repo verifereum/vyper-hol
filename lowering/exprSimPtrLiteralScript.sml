@@ -146,30 +146,30 @@ Proof
 QED
 
 (* Shared proof phases: semantic parameters are supplied by each literal case. *)
-fun literal_buffer_run_tac size =
+fun literal_buffer_run_tac norm size =
   Q.SUBGOAL_THEN size ASSUME_TAC
     >- (simp[wordsTheory.dimword_def] >> decide_tac) >>
-  drule_all literal_bytelike_ptr_run >>
+  drule_all (norm literal_bytelike_ptr_run) >>
   disch_then (qspecl_then [`tn0`, `func`, `PG`, `G0`, `cx_dead cx`]
     strip_assume_tac) >>
-  drule_all literal_buffer_ptr_path >> strip_tac >>
-  drule_all literal_bytelike_ptr_nonmemory_frame >> strip_tac >>
+  drule_all (norm literal_buffer_ptr_path) >> strip_tac >>
+  drule_all (norm literal_bytelike_ptr_nonmemory_frame) >> strip_tac >>
   `b < dimword (:256)` by decide_tac >>
   `w2n (n2w b : 256 word) = b` by simp[wordsTheory.w2n_n2w];
 
-fun literal_buffer_vv_post_tac e size tv =
+fun literal_buffer_vv_post_tac norm e size tv =
   simp[] >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`n` |-> size, `e` |-> e]
       (SPEC_ALL literal_ptr_memory_vv_frame_post))) >>
   simp[is_word_type_def] >>
-  conj_tac >- (drule literal_buffer_next_id >> simp[]) >>
+  conj_tac >- (drule (norm literal_buffer_next_id) >> simp[]) >>
   conj_tac
-  >- (drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  >- (drule_all (norm literal_ptr_bytelike_alloca_mem) >> strip_tac >>
       qexists_tac `STRING #"%" (toString sa.cs_next_var)` >> gvs[]) >>
   qexistsl_tac [`sh`, tv, `u`, `n2w b`] >>
-  drule_all literal_ptr_bytelike_alloca_mem >> strip_tac >>
+  drule_all (norm literal_ptr_bytelike_alloca_mem) >> strip_tac >>
   simp[vyperASTTheory.expr_type_def, is_word_type_def,
     vyperValueTheory.evaluate_type_def, eval_operand_def] >>
   gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
@@ -197,10 +197,75 @@ fun literal_buffer_value_tac e size tv value =
            wordsTheory.dimword_def])) >>
   strip_tac;
 
-(* A dynamic bytes or string literal: compile_bytelike_literal's ALLOCA, the
-   length word and the padded chunks.  The new site starts tainted
-   (mem_taint); the stores write all val_store_size bytes of the value with
-   untainted data, so the buffer holds the value robustly. *)
+fun literal_buffer_prepare_tac is_expr =
+  rw[if is_expr then expr_sim_ptr_def else expr_vv_sim_ptr_def] >>
+  gvs[lower_value_def, compile_expr_def, compile_literal_vv_def,
+      is_word_type_def, vyperASTTheory.expr_type_def, comp_bind_def,
+      comp_return_def] >>
+  pairarg_tac >>
+  gvs[unwrap_value_def, contextTheory.base_ptr_def, comp_return_def, is_word_type_def] >>
+  (if is_expr then
+     (pairarg_tac >>
+      gvs[unwrap_value_def, contextTheory.base_ptr_def, comp_return_def, is_word_type_def] >>
+      rename1 `compile_bytelike_literal _ _ sa = (buf,cs')`)
+   else all_tac) >>
+  gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
+      Once evaluate_def, return_def, evaluate_literal_def,
+      alloc_limits_expr_def, literal_alloc_ok_def];
+
+fun literal_buffer_consumer_tac is_expr norm bound_tac rep e size tv value vvpost =
+  literal_buffer_prepare_tac is_expr >>
+  literal_buffer_run_tac norm (size @ ` < dimword (:256)`) >>
+  bound_tac >>
+  drule_all rep >> strip_tac >>
+  Q.SUBGOAL_THEN vvpost ASSUME_TAC
+    >- literal_buffer_vv_post_tac norm e size tv >>
+  literal_buffer_ghost_tac size >>
+  (if is_expr then
+     (drule (GEN_ALL (SRULE [vyperASTTheory.expr_type_def, is_word_type_def]
+        (Q.INST [`e` |-> e] (SPEC_ALL literal_memory_vv_expr_post)))) >>
+      simp[vyperASTTheory.expr_type_def, is_word_type_def] >> strip_tac)
+   else all_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  Q.EXISTS_TAC (if is_expr then `INL (` @ value @ `)`
+               else `INL (Value (` @ value @ `))`) >>
+  qexistsl_tac [`es`, `G'`, `tn'`,
+    `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
+  simp[gas_explicit_def, Once evaluate_def, return_def, evaluate_literal_def,
+       vyperStateTheory.bind_def, vyperStateTheory.read_result_def] >>
+  simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas] >>
+  literal_buffer_value_tac e size tv value >>
+  gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def,
+      ptr_vv_ok_def, ptr_val_ok_def, vyperStateTheory.read_result_def];
+
+fun literal_bytes_consumer_tac is_expr =
+  literal_buffer_consumer_tac is_expr I
+    (`LENGTH (bs:word8 list) <= n` by gvs[vyperValueTheory.compatible_bound_def])
+    literal_ptr_bytes_representation
+    `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
+    `32+32*word_size (LENGTH (bs:word8 list))`
+    `BaseTV (BytesT (Dynamic n))` `BytesV bs`
+    `vv_post ctx func cenv cx
+      (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
+      (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
+      (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
+
+fun literal_string_norm th =
+  GEN_ALL (SRULE [listTheory.LENGTH_MAP]
+    (Q.INST [`bs` |-> `(MAP (n2w o ORD) str : word8 list)`] (SPEC_ALL th)));
+
+fun literal_string_consumer_tac is_expr =
+  literal_buffer_consumer_tac is_expr literal_string_norm all_tac literal_ptr_string_representation
+    `Literal (BaseT (StringT n)) (StringL str)`
+    `32+32*word_size (LENGTH (str:string))`
+    `BaseTV (StringT n)` `StringV str`
+    `vv_post ctx func cenv cx
+      (Literal (BaseT (StringT n)) (StringL str)) es sa cs' s0 (es with gas_obs := [])
+      (Value (StringV str)) (LocatedValue (BaseT (StringT n)) (base_ptr buf))
+      (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
+
+(* Both judgments use the same allocation, stores and ghost witnesses. *)
 Theorem literal_buffer_sim_ptr:
   !d PG ctx func cenv cx env ty ann l es.
     expr_sim_pre cenv cx env (Literal ann l) es /\ ~is_word_type ann ==>
@@ -214,45 +279,16 @@ Proof
 QED
 
 Resume literal_buffer_sim_ptr[bytes_vv]:
-  rw[expr_vv_sim_ptr_def] >>
-  gvs[compile_expr_def, compile_literal_vv_def, is_word_type_def,
-      vyperASTTheory.expr_type_def, comp_bind_def, comp_return_def] >>
-  pairarg_tac >> gvs[] >>
-  gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_literal_def,
-      Once evaluate_def, return_def, evaluate_literal_def,
-      alloc_limits_expr_def, literal_alloc_ok_def] >>
-  literal_buffer_run_tac `32+32*word_size (LENGTH bs) < dimword (:256)` >>
-  `LENGTH bs <= n` by gvs[vyperValueTheory.compatible_bound_def] >>
-  drule_all literal_ptr_bytes_representation >> strip_tac >>
-  `vv_post ctx func cenv cx
-    (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
-    (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
-    (t with vs_inst_idx := LENGTH cs'.cs_current_insts)` by
-    literal_buffer_vv_post_tac
-      `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
-      `32+32*word_size (LENGTH (bs:word8 list))` `BaseTV (BytesT (Dynamic n))` >>
-  literal_buffer_ghost_tac `32+32*word_size (LENGTH bs)` >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  rewrite_tac[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (Value (BytesV bs))`, `es`, `G'`, `tn'`,
-    `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
-  simp[gas_explicit_def, Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[literal_ptr_ghost_inv_normalize, vv_post_initial_gas] >>
-  literal_buffer_value_tac
-    `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
-    `32+32*word_size (LENGTH (bs:word8 list))`
-    `BaseTV (BytesT (Dynamic n))` `BytesV bs` >>
-  gvs[vyperASTTheory.expr_type_def, contextTheory.base_ptr_def]
+  literal_bytes_consumer_tac false
 QED
-
 Resume literal_buffer_sim_ptr[bytes_expr]:
-  cheat
-QED
-Resume literal_buffer_sim_ptr[string_expr]:
-  cheat
+  literal_bytes_consumer_tac true
 QED
 Resume literal_buffer_sim_ptr[string_vv]:
-  cheat
+  literal_string_consumer_tac false
+QED
+Resume literal_buffer_sim_ptr[string_expr]:
+  literal_string_consumer_tac true
 QED
 Finalise literal_buffer_sim_ptr
 
