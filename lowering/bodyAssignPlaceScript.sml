@@ -18,8 +18,8 @@
 Theory bodyAssignPlace
 Ancestors
   stmtSimAssignPlace bodySim exprSimHypsDefs stmtSimDefs
-  targetPlaceSim targetPlaceSimCases supportedStmts supportedTargets
-  supportedStmtTraverse supportedExprTraverse supportedProgram bodyExprPreFacts gasContext bodyStorageCases
+  targetPlaceSim targetPlaceSimCases supportedStmts supportedTargets supportedDecls supportedExprForms
+  supportedStmtTraverse supportedExprTraverse supportedProgram bodyExprPreFacts gasContext bodyStorageCases bodyStorageMetadata
   vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeCallGraph vyperCompiler
   stmtLowering exprLowering compileEnv compileVyper
   vyperInterpreter vyperState vyperTypeSystem
@@ -175,6 +175,136 @@ Proof
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
   metis_tac[call_evaluation_safe_append_left]
+QED
+
+Theorem supported_decl_storage_exists[local]:
+  !tops src id.
+    ((?vis mut ty slot.
+       supported_variable_decl tops (src,id) = SOME (vis,mut,ty,slot) /\
+       (mut = Storage \/ mut = Transient)) \/
+     IS_SOME (supported_hashmap_decl tops (src,id))) ==>
+    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
+Proof
+  Induct >> simp[supported_variable_decl_def, supported_hashmap_decl_def] >>
+  gen_tac >> Cases_on `h` >> rpt gen_tac >> Cases_on `src` >>
+  gvs[supported_variable_decl_def, supported_hashmap_decl_def,
+      find_var_decl_by_name_def] >>
+  rpt strip_tac >>
+  first_x_assum (qspecl_then [`NONE`, `id`] mp_tac) >>
+  simp[] >> Cases_on `s = id` >> gvs[] >>
+  Cases_on `v0 = Storage \/ v0 = Transient` >> gvs[] >> metis_tac[]
+QED
+
+Theorem supported_place_root_decl[local]:
+  !tops src id. supported_place_root tops (src,id) ==>
+    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
+Proof
+  rpt gen_tac >> simp[supported_place_root_def] >> strip_tac >>
+  irule supported_decl_storage_exists >>
+  Cases_on `supported_variable_decl tops (src,id)`
+  >- (gvs[] >> Cases_on `supported_hashmap_decl tops (src,id)` >> gvs[]) >>
+  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem supported_target_info_root[local]:
+  !t tops bindings.
+    IS_SOME (supported_target_info tops bindings t) ==>
+    (?id. target_root t = NameTarget id) \/
+    (?nsid. target_root t = TopLevelNameTarget nsid /\ supported_place_root tops nsid)
+Proof
+  Induct using base_assignment_target_induct >>
+  simp[supported_target_info_def, target_root_def, optionTheory.IS_SOME_EXISTS] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  metis_tac[optionTheory.IS_SOME_EXISTS]
+QED
+
+Theorem supported_legacy_root_decl[local]:
+  !tops src id field.
+    (supported_scalar_target tops (src,id) \/
+     supported_subscript_base tops (src,id) \/
+     supported_storage_field_write tops (src,id) field) ==>
+    src = NONE /\ IS_SOME (find_var_decl_by_name id tops)
+Proof
+  rpt gen_tac >> disch_tac >> irule supported_decl_storage_exists >>
+  qpat_x_assum `_ \/ _` mp_tac >>
+  simp[supported_scalar_target_def, supported_subscript_base_def,
+       supported_storage_array_def, supported_storage_field_write_def,
+       supported_storage_fields_def] >>
+  Cases_on `supported_variable_decl tops (src,id)`
+  >- (simp[] >> Cases_on `supported_hashmap_decl tops (src,id)` >> simp[]) >>
+  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  simp[] >> Cases_on `decl2` >> simp[] >>
+  Cases_on `supported_hashmap_decl tops (src,id)` >> simp[]
+QED
+
+Theorem supported_legacy_target_root[local]:
+  !t tops bindings.
+    supported_target tops bindings t ==>
+    (?id. target_root t = NameTarget id) \/
+    (?src id. target_root t = TopLevelNameTarget (src,id) /\
+      src = NONE /\ IS_SOME (find_var_decl_by_name id tops)) \/
+    (?nsid. t = TopLevelNameTarget nsid /\ IS_SOME (supported_immutable_type tops nsid))
+Proof
+  Cases >> simp[supported_target_def, target_root_def] >> rpt strip_tac
+  >- (PairCases_on `p` >>
+      metis_tac[supported_legacy_root_decl])
+  >- simp[] >>
+  Cases_on `b` >> gvs[target_root_def] >>
+  PairCases_on `p` >>
+  metis_tac[supported_legacy_root_decl]
+QED
+
+Theorem body_assign_immutable_target[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  immutable_root cx t ==>
+  ?nsid. t = TopLevelNameTarget nsid /\
+         IS_SOME (supported_immutable_type tops nsid)
+Proof
+  rpt strip_tac >>
+  `get_module_code cx NONE = SOME tops` by gvs[body_inv_def] >>
+  gvs[supported_stmt_def, supported_assignment_def]
+  >- (drule_then strip_assume_tac supported_legacy_target_root >>
+      gvs[immutable_root_def] >>
+      metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]) >>
+  `IS_SOME (supported_target_info tops bindings t)` by
+    (Cases_on `supported_target_info tops bindings t` >> gvs[AllCaseEqs()]) >>
+  drule_then strip_assume_tac supported_target_info_root
+  >- gvs[immutable_root_def] >>
+  rename1 `supported_place_root tops nsid` >> PairCases_on `nsid` >>
+  drule_then strip_assume_tac supported_place_root_decl >>
+  fs[immutable_root_def] >> metis_tac[optionTheory.NOT_IS_SOME_EQ_NONE]
+QED
+
+Theorem body_immutable_target_type[local]:
+  body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
+  supported_immutable_type tops nsid = SOME ity /\
+  type_place_target env (TopLevelNameTarget nsid) = SOME (Type dty) ==>
+  cx.in_deploy /\ dty = ity
+Proof
+  PairCases_on `nsid` >> strip_tac >>
+  qpat_x_assum `supported_immutable_type _ _ = _` mp_tac >>
+  simp[supported_immutable_type_def] >>
+  Cases_on `supported_variable_decl tops (nsid0,nsid1)` >> simp[] >>
+  rename1 `_ = SOME decl` >> PairCases_on `decl` >>
+  Cases_on `decl0` >> Cases_on `decl1` >> Cases_on `decl3` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule_then strip_assume_tac supported_variable_decl_mem >> gvs[] >>
+  rename1 `supported_value_type tops ity` >>
+  `get_module_code cx NONE = SOME tops /\
+   bare_globals_complete env.bare_globals cx /\
+   bare_global_assignable_complete env.bare_global_assignable cx` by
+    fs[body_inv_def, expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `FLOOKUP env.bare_globals (NONE,nsid1) = SOME ity` by
+    metis_tac[bare_globals_complete_def] >>
+  fs[Once well_typed_expr_def] >>
+  Cases_on `cx.in_deploy`
+  >- ( `FLOOKUP env.bare_global_assignable (NONE,nsid1) = SOME ity` by
+         metis_tac[bare_global_assignable_complete_def] >> fs[]) >>
+  fs[bare_global_assignable_complete_def]
 QED
 
 Theorem body_assign_place_case:
