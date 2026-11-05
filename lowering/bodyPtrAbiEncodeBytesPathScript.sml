@@ -66,3 +66,16 @@ Proof
   qexistsl_tac [`t'`, `H'`, `un'`] >>
   fs[AC ADD_ASSOC ADD_COMM]
 QED
+
+(* The two cleared windows overlap: copy includes the length word and
+   padding starts at ceil32 cnt. This includes cnt=0, which still copies 32. *)
+Theorem abi_encode_bytes_written_clean:
+  abi_encode_read_frame st written G
+    (tn with t_mem := (tn.t_mem DIFF {i | w2n lp <= i /\ i < w2n lp+32})
+                       DIFF {i | w2n b <= i /\ i < w2n b+(32+cnt)}) t H un /\
+  w2n lp = w2n b+rounded /\ rounded < cnt+32 ==>
+  (!i. w2n b <= i /\ i < w2n b+(32+rounded) ==> i NOTIN un.t_mem)
+Proof
+  simp_tac (srw_ss()) [abi_encode_read_frame_def] >> strip_tac >>
+  fs[] >> rpt strip_tac >> simp[] >> decide_tac
+QED

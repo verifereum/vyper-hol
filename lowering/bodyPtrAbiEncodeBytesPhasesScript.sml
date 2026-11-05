@@ -3,7 +3,7 @@ Theory bodyPtrAbiEncodeBytesPhases
 Ancestors
   bodyPtrAbiEncodeBytesSites bodyPtrAbiEncodeBytesPath bodyPtrAbiEncodeBytesPrefix bodyPtrAbiEncodeBytesSuffix
   bodyPtrAbiEncodeBytesCopy bodyPtrAbiEncodeCursorFrame bodyPtrDefs
-  abiEncoderBytesCode abiEncoderBytesPrefix exprLoweringProps emitHelperProps
+  abiEncoderRounding abiEncoderBytesCode abiEncoderBytesPrefix exprLoweringProps emitHelperProps
   compileEnv emitHelper fragGasPathPtr ptrDiscipline venomState
   venomExecSemantics words arithmetic list rich_list
 
@@ -30,6 +30,7 @@ Theorem abi_encode_bytes_phases_path:
     lookup_var p t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
     op_taint un (Var p) = {} /\ not_fresh_at en p /\
     ptr_covers H un dst t total /\
+    (!i. w2n b <= i /\ i < w2n b+(32+contractABI$ceil32 cnt) ==> i NOTIN un.t_mem) /\
     fresh_vars_wrt limit_st t /\ t.vs_inst_idx = s.vs_inst_idx+10
 Proof
   gen_tac >> strip_tac >>
@@ -61,6 +62,12 @@ Proof
    en.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_encode_bytes_copy_suffix_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `w2n (b+n2w (contractABI$ceil32 cnt)) = w2n b+contractABI$ceil32 cnt` by
+    (simp[w2n_add_2, w2n_n2w] >> decide_tac) >>
+  `contractABI$ceil32 cnt < cnt+32` by simp[abi_encoder_ceil32_bounds] >>
+  qpat_assum `abi_encode_read_frame ready (mcopy _ _ _ _) _ _ _ _ _`
+    (mp_then Any mp_tac abi_encode_bytes_written_clean) >>
+  disch_then (qspec_then `contractABI$ceil32 cnt` mp_tac) >> simp[] >> strip_tac >>
   `ptr_covers H un dst t total'` by metis_tac[abi_encode_read_frame_covers] >>
   qmatch_asmsub_abbrev_tac `abi_encode_read_frame ready written H clean t' H' un'` >>
   `ptr_covers H clean dst written total'` by
@@ -92,6 +99,7 @@ Theorem abi_encode_bytes_checked_path:
     lookup_var p t = SOME (n2w (32+contractABI$ceil32 cnt)) /\
     op_taint un (Var p) = {} /\ not_fresh_at en p /\
     ptr_covers H un dst t total /\
+    (!i. w2n b <= i /\ i < w2n b+(32+contractABI$ceil32 cnt) ==> i NOTIN un.t_mem) /\
     fresh_vars_wrt limit_st t /\ t.vs_inst_idx = s.vs_inst_idx+10
 Proof
   gen_tac >> strip_tac >> drule_all abi_encode_bytes_phase_sites >> strip_tac >>
