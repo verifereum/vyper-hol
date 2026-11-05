@@ -921,7 +921,7 @@ Proof
 QED
 
 Theorem body_annassign_name_mem:
-  !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ id typ source_id es res es'.
+  !d tops bindings ctx func cenv cx env env' ret_ty lctx RetQ id typ source_id es.
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (AnnAssign id typ (Name typ source_id)) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
@@ -930,10 +930,10 @@ Theorem body_annassign_name_mem:
     stmt_exprs_ok cenv (AnnAssign id typ (Name typ source_id)) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ (Name typ source_id))) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty /\
-    eval_stmt cx (AnnAssign id typ (Name typ source_id)) es = (res,es') /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AnnAssign id typ (Name typ source_id))) es res es'
+      (stmt_env cenv lctx ret_ty (AnnAssign id typ (Name typ source_id)))
+      (eval_stmt cx (AnnAssign id typ (Name typ source_id))) es
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
