@@ -8,4 +8,5 @@ p21_for_body_call
 p39_int_local_clobber
 p40_int_for_clobber
 p41_int_local_and_call
+p76_int_assert_raise
 p92_int_revert_branch

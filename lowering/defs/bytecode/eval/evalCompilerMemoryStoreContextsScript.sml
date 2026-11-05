@@ -11,6 +11,14 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../memory-stores/oracle"
 
+val r07_assert_storage_string_reason = memoryStoreWitnessLib.evaluate fixture_root "r07_assert_storage_string_reason"
+Theorem r07_assert_storage_string_reason_matches_python_oracle:
+  ^(#term r07_assert_storage_string_reason) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "r07_assert_storage_string_reason")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation r07_assert_storage_string_reason))) >> EVAL_TAC
+QED
+
 val p06_local_append_struct = memoryStoreWitnessLib.evaluate fixture_root "p06_local_append_struct"
 Theorem p06_local_append_struct_matches_python_oracle:
   ^(#term p06_local_append_struct) =
