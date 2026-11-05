@@ -13,7 +13,7 @@
 Theory makeSsaCurrentLockstepShape
 Ancestors
   makeSsaCurrentProps makeSsaCurrentDefs o1PassContract unitShapeDefs
-  venomWf venomExecSemantics irSupply venomInst list
+  venomWf venomExecSemantics venomExecProofs irSupply venomInst list
 
 (* List-level shape boundaries. *)
 Theorem phi_prefix_length_prepend:
@@ -21,13 +21,6 @@ Theorem phi_prefix_length_prepend:
     phi_prefix_length (pre ++ xs) = LENGTH pre + phi_prefix_length xs
 Proof
   Induct >> simp[phi_prefix_length_def] >> rpt strip_tac >> simp[]
-QED
-
-Theorem phi_prefix_length_bound:
-  !xs. phi_prefix_length xs <= LENGTH xs
-Proof
-  Induct >> simp[phi_prefix_length_def] >>
-  Cases_on `h.inst_opcode = PHI` >> simp[]
 QED
 
 Theorem instruction_signatures_length:
@@ -433,7 +426,7 @@ Proof
   simp[reassign_current_inst_ids_phi_prefix] >> rpt strip_tac >>
   `j < LENGTH (phis ++ ordinary)` by
     (drule simplify_current_phi_prefix_parts_length >> strip_tac >>
-     mp_tac (Q.SPEC `xs` phi_prefix_length_bound) >> simp[]) >>
+     mp_tac (Q.SPEC `xs` venomExecProofsTheory.phi_prefix_length_le) >> simp[]) >>
   drule reassign_current_inst_ids_EL >>
   disch_then (qspec_then `MAP (\i. i.inst_id) xs` strip_assume_tac) >>
   gvs[] >>
