@@ -181,3 +181,29 @@ Proof
   gvs[bind_def, read_result_def, return_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
+
+Theorem bool_literal_lower_value:
+  lower_value compile_expr cenv ty (Literal (BaseT BoolT) (BoolL b)) sa =
+    (Lit (if b then 1w else 0w),sa)
+Proof
+  Cases_on `b` >>
+  simp[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
+       compile_literal_vv_def, unwrap_value_def, evaluate_literal_def, expr_type_def]
+QED
+
+Theorem bool_literal_post:
+  stmt_state_rel ctx fn cenv cx es s ==>
+  expr_post ctx fn cenv cx (Literal (BaseT BoolT) (BoolL b))
+    es sa sa s (es with gas_obs := []) (BoolV b) (Lit (if b then 1w else 0w)) s
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx fn cenv cx (es with gas_obs := []) s` by
+    (drule exprLoweringPropsTheory.msg_gas_state_frame >>
+     disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  Cases_on `b` >>
+  simp[expr_post_def, expr_type_def, expr_val_rel_def, expr_val_at_def,
+       venomStateTheory.eval_operand_def,
+       exprSimPropsTheory.typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
+       locals_kept_def, is_word_type_def]
+QED
