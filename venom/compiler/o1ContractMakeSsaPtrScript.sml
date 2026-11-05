@@ -5,7 +5,7 @@
  *)
 Theory o1ContractMakeSsaPtr
 Ancestors
-  o1PassContract ptrDiscipline unitMemInv venomPassSchedule list
+  o1PassContract ptrDiscipline unitMemInv venomPassSchedule list makeSsaCurrentOrigin
 
 Theorem make_ssa_stage_ptr:
   !rpolicy D view C C' vs names lo.
