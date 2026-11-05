@@ -1,6 +1,6 @@
 Theory concretizeAnalysisSizeLookup
 Ancestors
-  concretizeMemLocDefs venomInst venomWf removeUnusedSsaProofs finite_map list
+  concretizeMemLocDefs venomInst venomWf finite_map list
 
 Theorem find_by_inst_id_alt:
   !Q l inst.
@@ -22,7 +22,10 @@ Proof
     (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)))` by
     gvs[fn_inst_ids_distinct_def, MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF] >>
   `MEM inst (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks))` by
-    gvs[fn_insts_def, fn_insts_blocks_flat] >>
+    (`!bbs. fn_insts_blocks bbs =
+            FLAT (MAP (\bb. bb.bb_instructions) bbs)` by
+       (Induct >> simp[fn_insts_blocks_def]) >>
+     gvs[fn_insts_def]) >>
   `FIND (\i. is_alloca_op i.inst_opcode /\ i.inst_id = inst.inst_id)
     (FLAT (MAP (\bb. bb.bb_instructions) fn.fn_blocks)) = SOME inst` by
     (match_mp_tac (find_by_inst_id_alt |> Q.SPEC `is_alloca_op o inst_opcode`
