@@ -532,6 +532,64 @@ Definition alias_var_mass_def:
     (if Var x IN FDOM ps.ps_spilled then 1 else 0)
 End
 
+Theorem alias_var_mass_positive:
+  0 < alias_var_mass x ps <=> plan_holds ps (Var x)
+Proof
+  simp[alias_var_mass_def, plan_holds_def, GSYM LIST_ELEM_COUNT_MEM] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[]
+QED
+
+Theorem emit_one_input_plan_holds:
+  plan_holds ps at ==> plan_holds (SND (emit_one_input opc nl op ps)) at
+Proof
+  mp_tac (Q.SPECL [`opc`, `nl`, `op`, `ps`] emit_one_input_inventory_mono_aux) >>
+  disch_then (qspec_then `at` mp_tac) >>
+  simp[plan_holds_def, GSYM LIST_ELEM_COUNT_MEM] >>
+  rpt IF_CASES_TAC >> simp[] >> decide_tac
+QED
+
+Theorem emit_input_plan_holds:
+  !operands opc nl ps at.
+    plan_holds ps at ==> plan_holds (SND (emit_input_plan opc operands nl ps)) at
+Proof
+  Induct >> simp[emit_input_plan_def] >> rpt gen_tac >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >> simp[] >>
+  Cases_on `emit_input_plan opc operands nl r` >> simp[] >> strip_tac >>
+  `plan_holds r at` by
+    (drule emit_one_input_plan_holds >>
+     disch_then (qspecl_then [`opc`, `h`, `operand_vars operands ++ nl`] mp_tac) >>
+     simp[]) >>
+  first_x_assum (qspecl_then [`opc`, `nl`, `r`, `at`] mp_tac) >> simp[]
+QED
+
+Theorem emit_input_plan_live_surplus:
+  !operands opc nl ps x.
+    MEM x nl /\ plan_holds ps (Var x) ==>
+    alias_var_mass x ps + LIST_ELEM_COUNT (Var x) operands <=
+    alias_var_mass x (SND (emit_input_plan opc operands nl ps))
+Proof
+  Induct >> simp[emit_input_plan_def, LIST_ELEM_COUNT_THM] >> rpt gen_tac >>
+  Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >> simp[] >>
+  Cases_on `emit_input_plan opc operands nl r` >> simp[] >> strip_tac >>
+  `plan_holds r (Var x)` by
+    (drule emit_one_input_plan_holds >>
+     disch_then (qspecl_then [`opc`, `h`, `operand_vars operands ++ nl`] mp_tac) >>
+     simp[]) >>
+  first_x_assum (qspecl_then [`opc`, `nl`, `r`, `x`] mp_tac) >>
+  simp[] >> strip_tac >>
+  Cases_on `Var x = h`
+  >- (gvs[] >>
+      mp_tac (Q.SPECL [`opc`, `operand_vars operands ++ nl`, `Var x`, `ps`]
+        emit_one_input_inventory_inc) >>
+      simp[is_var_operand_def, GSYM plan_holds_def, GSYM alias_var_mass_def,
+           LIST_ELEM_COUNT_THM] >>
+      decide_tac) >>
+  mp_tac (Q.SPECL [`opc`, `operand_vars operands ++ nl`, `h`, `ps`]
+    emit_one_input_inventory_mono_aux) >>
+  disch_then (qspec_then `Var x` mp_tac) >>
+  simp[GSYM alias_var_mass_def, LIST_ELEM_COUNT_THM] >> decide_tac
+QED
+
 Definition alias_var_budget_def:
   alias_var_budget pending ps <=>
     !x. alias_var_mass x ps <= SUC (LIST_ELEM_COUNT (Var x) pending)
