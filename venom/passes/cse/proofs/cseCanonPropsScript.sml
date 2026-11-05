@@ -1280,3 +1280,68 @@ Proof
    (PairCases_on `p` >> gvs[cse_point_has_id_def] >> metis_tac[]) >>
  gvs[listTheory.MEM_APPEND] >> metis_tac[]
 QED
+
+Theorem cse_static_trace_coverage:
+ !fn ps. cse_static_trace fn ps ==> !lbl k. LAST ps = (lbl,k) ==>
+ ?path entry. path <> [] /\ is_fn_path fn path /\
+   fn_entry_label fn = SOME entry /\ HD path = entry /\ LAST path = lbl /\
+   (!j. j <= k ==> MEM (lbl,j) ps) /\
+   (!d db. MEM d path /\ d <> lbl /\ lookup_block d fn.fn_blocks = SOME db ==>
+      !j. j <= LENGTH db.bb_instructions ==> MEM (d,j) ps)
+Proof
+ gen_tac >> ho_match_mp_tac cse_static_trace_ind >> rpt conj_tac
+ >- (rpt strip_tac >> gvs[] >> qexists_tac `[entry]` >>
+     simp[venomWfTheory.is_fn_path_def])
+ >- (rpt gen_tac >> strip_tac >> rpt gen_tac >>
+     simp[rich_listTheory.LAST_APPEND_NOT_NIL] >> strip_tac >> gvs[] >>
+     qexists_tac `path` >> simp[] >>
+     rpt strip_tac >> Cases_on `j = SUC k` >> simp[] >>
+     `j <= k` by decide_tac >> metis_tac[]) >>
+ rpt gen_tac >> strip_tac >> rpt gen_tac >>
+ simp[rich_listTheory.LAST_APPEND_NOT_NIL] >> strip_tac >> gvs[] >>
+ `HD (path ++ [lbl']) = HD path` by (Cases_on `path` >> gvs[]) >>
+ qexists_tac `path ++ [lbl']` >>
+ simp[rich_listTheory.LAST_APPEND_NOT_NIL] >>
+ conj_tac >- (irule venomExecProofsTheory.is_fn_path_snoc >> simp[]) >>
+ rpt strip_tac >> Cases_on `d = LAST path`
+ >- (gvs[] >> metis_tac[]) >>
+ metis_tac[]
+QED
+
+Theorem cse_dominates_local_order_preorder:
+ wf_function fn /\
+ lookup_block db.bb_label fn.fn_blocks = SOME db /\
+ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+ MEM copy db.bb_instructions /\ MEM use bb.bb_instructions /\
+ fn_dominates fn db.bb_label bb.bb_label /\
+ (db = bb ==> ?i j. i < j /\ j < LENGTH bb.bb_instructions /\
+    EL i bb.bb_instructions = copy /\ EL j bb.bb_instructions = use) ==>
+ cse_path_preorder fn copy.inst_id use.inst_id
+Proof
+ strip_tac >> rewrite_tac[cse_path_preorder_def] >> rpt strip_tac >>
+ `?j. j < LENGTH bb.bb_instructions /\ EL j bb.bb_instructions = use` by
+   metis_tac[listTheory.MEM_EL] >>
+ `cse_point_has_id fn (bb.bb_label,j) use.inst_id` by
+   (simp[cse_point_has_id_def] >> metis_tac[]) >>
+ `p = (bb.bb_label,j)` by metis_tac[cse_point_has_id_injective] >>
+ qpat_x_assum `p = _` SUBST_ALL_TAC >>
+ drule_all cse_static_trace_coverage >> strip_tac >>
+ `MEM db.bb_label path` by
+   (qpat_x_assum `fn_dominates fn _ _` mp_tac >>
+    simp[venomWfTheory.fn_dominates_def] >> metis_tac[]) >>
+ Cases_on `db.bb_label = bb.bb_label`
+ >- (`db = bb` by metis_tac[optionTheory.SOME_11] >>
+     qpat_x_assum `db = bb` SUBST_ALL_TAC >>
+     qpat_x_assum `bb = bb ==> _` (strip_assume_tac o SRULE []) >>
+     `cse_point_has_id fn (bb.bb_label,j') use.inst_id` by
+       (simp[cse_point_has_id_def] >> metis_tac[]) >>
+     `j' = j` by metis_tac[cse_point_has_id_injective, pairTheory.PAIR_EQ] >>
+     qexists_tac `(bb.bb_label,i)` >>
+     conj_tac >- metis_tac[arithmeticTheory.LESS_OR_EQ] >>
+     simp[cse_point_has_id_def] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+ `?i. i < LENGTH db.bb_instructions /\ EL i db.bb_instructions = copy` by
+   metis_tac[listTheory.MEM_EL] >>
+ qexists_tac `(db.bb_label,i)` >>
+ conj_tac >- metis_tac[arithmeticTheory.LESS_OR_EQ] >>
+ simp[cse_point_has_id_def] >> metis_tac[]
+QED
