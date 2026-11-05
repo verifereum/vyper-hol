@@ -1497,6 +1497,70 @@ Proof
   EVAL_TAC >> simp[vyperValueOperationTheory.popped_value_def,
     vyperValueOperationTheory.pop_element_def, oEL_THM]
 QED
+Theorem ifexp_read_popped_extend[local]:
+  !history ty path pty v suffix w.
+    subscripts_type ty path = SOME pty /\
+    read_popped ty path history = SOME v /\
+    evaluate_subscripts pty v suffix = INL w ==>
+    ?z. read_popped ty (path ++ suffix) history = SOME z
+Proof
+  Induct >- simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[read_popped_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()]
+  >- (first_x_assum drule_all >> strip_tac >> qexists_tac `z` >> metis_tac[])
+  >- (drule_all vyperPlaceResultTypingTheory.read_popped_snapshot_extend >>
+      strip_tac >> qexists_tac `w` >> simp[])
+  >- (first_x_assum drule_all >> strip_tac >>
+      Cases_on `IS_PREFIX (path ++ suffix) h0` >> simp[] >>
+      Cases_on `evaluate_subscripts ptv h1 (DROP (LENGTH h0) (path ++ suffix))` >>
+      gvs[] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `IS_PREFIX (path ++ suffix) h0` >> simp[] >>
+  Cases_on `subscripts_type ty h0` >> simp[] >>
+  Cases_on `evaluate_subscripts x h1 (DROP (LENGTH h0) (path ++ suffix))` >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ifexp_read_memory_extend[local]:
+  subscripts_type entry.type path = SOME pty /\
+  read_memory_path entry path = INL v /\
+  evaluate_subscripts pty v suffix = INL w ==>
+  ?z. read_memory_path entry (path ++ suffix) = INL z
+Proof
+  strip_tac >> Cases_on `evaluate_subscripts entry.type entry.value path`
+  >- (gvs[read_memory_path_def] >>
+      drule_all vyperPlaceResultTypingTheory.evaluate_subscripts_append >>
+      simp[read_memory_path_def]) >>
+  gvs[read_memory_path_def, AllCaseEqs()] >>
+  drule_all ifexp_read_popped_extend >> strip_tac >>
+  Cases_on `evaluate_subscripts entry.type entry.value (path ++ suffix)` >>
+  simp[]
+QED
+
+Theorem ifexp_extend_memory_readback[local]:
+  extend_place cx (PlaceR (MemoryPlace id path)) sb es =
+    (INL (PlaceR (MemoryPlace outid outpath)),ee) /\
+  conditional_result cx (PlaceR (MemoryPlace outid outpath)) ee = (INL tv,ee) ==>
+  ?v. read_result cx (PlaceR (MemoryPlace outid outpath)) ee = (INL v,ee)
+Proof
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       bind_def, get_scopes_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def, extend_memory_place_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[return_def, raise_def, ignore_bind_def, bind_def, AllCaseEqs()] >>
+  Cases_on `lookup_scopes id es.scopes` >> gvs[return_def, raise_def] >>
+  rename1 `lookup_scopes id es.scopes = SOME retained_entry` >>
+  Cases_on `subscripts_type retained_entry.type path` >> gvs[return_def, raise_def] >>
+  rename1 `subscripts_type retained_entry.type path = SOME retained_ty` >>
+  Cases_on `read_memory_path retained_entry path` >> gvs[return_def, raise_def] >>
+  rename1 `read_memory_path retained_entry path = INL retained_val` >>
+  Cases_on `evaluate_subscripts retained_ty retained_val [sb]` >> gvs[return_def, raise_def] >>
+  drule_all ifexp_read_memory_extend >> strip_tac >>
+  simp[read_result_def, read_place_def, bind_def, get_scopes_def,
+       lift_option_type_def, lift_sum_def, return_def, raise_def]
+QED
+
 
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
