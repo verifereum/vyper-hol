@@ -796,3 +796,133 @@ Proof
   gvs[FRONT_DEF, rich_listTheory.FRONT_APPEND_NOT_NIL, EVERY_APPEND] >>
   metis_tac[ao_transform_inst_not_terminator]
 QED
+
+Theorem ao_transform_insts_supply_labels:
+  !insts s idx outs s'.
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+       ~is_label_operand op) /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    set (FLAT (MAP inst_ir_labels outs)) SUBSET
+      set (FLAT (MAP inst_ir_labels insts))
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  gvs[Once ao_transform_insts_supply_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule ao_transform_inst_labels >> strip_tac >>
+  gvs[SUBSET_DEF, MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED
+
+Theorem ao_transform_block_supply_labels:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  set (block_ir_labels bb') SUBSET set (block_ir_labels bb)
+Proof
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def] >> strip_tac >> gvs[] >>
+  drule_all ao_transform_insts_supply_labels >>
+  simp[block_ir_labels_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_transform_blocks_supply_label_support:
+  !bbs s bbs' s'.
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+       ~is_label_operand op) /\
+    ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+    set (FLAT (MAP block_ir_labels bbs')) SUBSET
+      set (FLAT (MAP block_ir_labels bbs))
+Proof
+  Induct >> simp[Once ao_transform_blocks_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  rename1 `ao_transform_block_supply dfg ra targets s h = (bb,s1)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets s1 bbs` >>
+  gvs[Once ao_transform_blocks_supply_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all ao_transform_block_supply_labels >>
+  fs[SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_handle_offset_label_positions:
+  label_positions_ok inst ==> label_positions_ok (ao_handle_offset_inst inst)
+Proof
+  Cases_on `inst.inst_opcode = ADD` >> simp[ao_handle_offset_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t'` >>
+  simp[label_positions_ok_def, is_label_operand_def]
+QED
+
+Theorem ao_offset_function_label_contract:
+  !fn fn0.
+    EVERY label_positions_ok (fn_insts fn) /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks ==>
+    EVERY label_positions_ok (fn_insts fn0) /\
+    fn_ir_labels fn0 = fn_ir_labels fn
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ao_offset_function_insts >> strip_tac >> conj_tac
+  >- (gvs[EVERY_MAP, combinTheory.o_DEF, EVERY_MEM, MEM_MAP] >>
+      metis_tac[ao_handle_offset_label_positions]) >>
+  gvs[fn_ir_labels_def, block_ir_labels_def, MAP_MAP_o, combinTheory.o_DEF,
+      ao_handle_offset_inst_labels] >>
+  simp[lambdify block_ir_labels_def, ETA_THM]
+QED
+
+Theorem ao_main_function_label_support:
+  !fn fn0 supply bbs supply1 mid.
+    EVERY label_positions_ok (fn_insts fn) /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+      (ao_compute_fn_iszero_targets fn0) supply fn0.fn_blocks = (bbs,supply1) /\
+    mid = fn0 with fn_blocks := bbs ==>
+    set (fn_ir_labels mid) SUBSET set (fn_ir_labels fn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_offset_function_label_contract >> strip_tac >>
+  drule ao_compute_iszero_targets_no_labels >> strip_tac >>
+  `!v chain op. ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
+    MEM op chain ==> ~is_label_operand op` by
+    (rewrite_tac[ao_compute_fn_iszero_targets_def] >> metis_tac[]) >>
+  drule_all ao_transform_blocks_supply_label_support >> strip_tac >>
+  gvs[fn_ir_labels_def, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_main_function_coverage:
+  !fn fn0 supply bbs supply1 mid.
+    ir_supply_inst_ok supply /\ ir_supply_covers_fn supply fn /\
+    EVERY label_positions_ok (fn_insts fn) /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+      (ao_compute_fn_iszero_targets fn0) supply fn0.fn_blocks = (bbs,supply1) /\
+    mid = fn0 with fn_blocks := bbs ==>
+    ir_supply_inst_ok supply1 /\ ir_supply_covers_fn supply1 mid
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all ao_main_function_vars >> strip_tac >>
+  drule_all ao_main_function_label_support >> strip_tac >>
+  drule_all ao_transform_blocks_supply_mono >> strip_tac >>
+  drule_all ao_transform_blocks_supply_keys >> strip_tac >>
+  drule ao_offset_function_ids_outputs >> strip_tac >>
+  `set (fn_ir_inst_ids mid) SUBSET set supply1.irs_used_inst_ids` by
+    (gvs[fn_ir_inst_ids_def, fn_insts_def, fn_insts_blocks_inst_ids,
+       ir_supply_covers_fn_def, list_subset_def, SUBSET_DEF, EVERY_MEM] >>
+     gvs[lambdify block_ir_inst_ids_def] >> metis_tac[]) >>
+  gvs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM, SUBSET_DEF,
+      ir_supply_inst_ok_def] >>
+  qpat_x_assum `!inst. MEM inst (fn_insts _) ==> _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+       fn_ir_vars_def, block_ir_vars_def, MEM_FLAT, MEM_MAP] >>
+  rpt strip_tac >> gvs[MEM_FLAT, MEM_MAP] >> metis_tac[]
+QED

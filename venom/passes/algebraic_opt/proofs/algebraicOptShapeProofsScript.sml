@@ -838,3 +838,167 @@ Proof
    is_terminator inst.inst_opcode` by metis_tac[ao_transform_inst_control] >>
   gvs[get_successors_def]
 QED
+
+Theorem ao_handle_offset_inst_labels:
+  inst_ir_labels (ao_handle_offset_inst inst) = inst_ir_labels inst
+Proof
+  Cases_on `inst.inst_opcode = ADD` >> simp[ao_handle_offset_inst_def] >>
+  Cases_on `inst.inst_operands` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `h` >> simp[] >> Cases_on `t'` >>
+  simp[inst_ir_labels_def, operand_ir_labels_def]
+QED
+
+Theorem ao_flip_inst_labels:
+  set (inst_ir_labels (ao_pre_flip_inst inst)) = set (inst_ir_labels inst) /\
+  set (inst_ir_labels (ao_post_flip_inst inst)) = set (inst_ir_labels inst)
+Proof
+  Cases_on `inst.inst_operands` >>
+  simp[ao_pre_flip_inst_def, ao_post_flip_inst_def] >>
+  Cases_on `t` >> simp[ao_pre_flip_inst_def, ao_post_flip_inst_def] >>
+  Cases_on `t'` >> simp[ao_pre_flip_inst_def, ao_post_flip_inst_def] >>
+  rpt (IF_CASES_TAC >> gvs[]) >> Cases_on `h` >> Cases_on `h'` >>
+  simp[inst_ir_labels_def, operand_ir_labels_def, EXTENSION, DISJ_COMM]
+QED
+
+Theorem ao_opt_producer_labels:
+  ao_opt_producer dfg inst = SOME outs ==>
+  !out. MEM out outs ==> set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  simp[ao_opt_producer_def] >> rpt strip_tac >> gvs[AllCaseEqs()] >>
+  simp[inst_ir_labels_def, operand_ir_labels_def]
+QED
+
+Theorem ao_simple_peephole_labels:
+  (MEM out (ao_opt_shift inst) \/
+   MEM out (ao_opt_signextend ra lbl idx inst) \/
+   MEM out (ao_opt_exp inst) \/ MEM out (ao_opt_addsub inst) \/
+   MEM out (ao_opt_and inst) \/ MEM out (ao_opt_muldiv inst) \/
+   MEM out (ao_opt_or dfg inst)) ==>
+  set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  pure_rewrite_tac[DISJ_IMP_THM] >> rpt conj_tac >>
+  Cases_on `inst.inst_operands` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t'` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `h` >> Cases_on `h'` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >>
+  gvs[inst_ir_labels_def, operand_ir_labels_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_eq_labels:
+  MEM out (ao_opt_eq dfg fr inst) ==>
+  set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  Cases_on `inst.inst_operands` >> simp[ao_opt_eq_def] >>
+  Cases_on `t` >> simp[ao_opt_eq_def] >>
+  Cases_on `t'` >> simp[ao_opt_eq_def] >>
+  Cases_on `fr "not"` >> Cases_on `fr "xor"` >>
+  Cases_on `h` >> Cases_on `h'` >>
+  rpt (IF_CASES_TAC >> simp[]) >> strip_tac >>
+  gvs[inst_ir_labels_def, operand_ir_labels_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_cmp_range_labels:
+  ao_opt_cmp_range ra lbl idx inst is_gt signed = SOME op ==>
+  operand_ir_labels [op] = []
+Proof
+  simp[ao_opt_cmp_range_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs(), operand_ir_labels_def]
+QED
+
+Theorem ao_cmp_prefer_iz_labels:
+  !fr op1 op2 inst out.
+  (MEM out (ao_cmp_prefer_iz_zero fr op1 inst) \/
+   MEM out (ao_cmp_prefer_iz_max fr op1 inst) \/
+   MEM out (ao_cmp_prefer_iz_general fr op1 op2 inst)) ==>
+  set (inst_ir_labels out) SUBSET set (operand_ir_labels [op1;op2])
+Proof
+  rpt gen_tac >> Cases_on `fr "not"` >> Cases_on `fr "xor"` >>
+  Cases_on `fr "iz"` >>
+  simp[ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `op1` >> Cases_on `op2` >>
+  gvs[inst_ir_labels_def, operand_ir_labels_def, SUBSET_DEF]
+QED
+
+Theorem ao_opt_comparator_labels:
+  !out. MEM out (ao_opt_comparator dfg ra lbl idx fr inst) ==>
+  set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  Cases_on `inst.inst_operands` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t'` >> simp[ao_opt_comparator_def] >>
+  Cases_on `h = h'`
+  >- simp[inst_ir_labels_def, operand_ir_labels_def] >>
+  simp[] >>
+  Cases_on `ao_opt_cmp_range ra lbl idx inst
+    (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+    (inst.inst_opcode = SGT \/ inst.inst_opcode = SLT)`
+  >- (qspecl_then [`fr`,`h`,`h'`,`inst`] mp_tac ao_cmp_prefer_iz_labels >>
+      simp[] >> strip_tac >> simp[] >> pairarg_tac >> simp[] >>
+      rpt (IF_CASES_TAC >> simp[]) >>
+      Cases_on `fr "not"` >> Cases_on `fr "iz"` >> simp[] >>
+      Cases_on `h` >> Cases_on `h'` >> rpt strip_tac >> gvs[] >>
+      fs[inst_ir_labels_def, operand_ir_labels_def, SUBSET_DEF] >> metis_tac[]) >>
+  drule ao_opt_cmp_range_labels >> strip_tac >>
+  simp[inst_ir_labels_def, SUBSET_DEF]
+QED
+
+Theorem ao_peephole_inst_labels:
+  !out. MEM out (ao_peephole_inst dfg ra lbl idx fr inst) ==>
+  set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  simp[ao_peephole_inst_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac
+  >~ [`MEM out (ao_opt_eq dfg fr inst)`]
+  >- (irule ao_opt_eq_labels >> qexists_tac `dfg` >> qexists_tac `fr` >> simp[])
+  >~ [`MEM out (ao_opt_comparator dfg ra lbl idx fr inst)`]
+  >- (irule ao_opt_comparator_labels >>
+      qexistsl_tac [`dfg`,`fr`,`idx`,`lbl`,`ra`] >> simp[]) >>
+  irule ao_simple_peephole_labels >>
+  qexistsl_tac [`dfg`,`idx`,`lbl`,`ra`] >> simp[]
+QED
+
+Theorem ao_resolve_iszero_inst_ir_labels:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  set (inst_ir_labels (ao_resolve_iszero_inst targets inst)) SUBSET
+    set (inst_ir_labels inst)
+Proof
+  strip_tac >> simp[inst_ir_labels_def, SUBSET_DEF,
+    MEM_operand_ir_labels, ao_resolve_iszero_inst_def, MEM_MAP] >>
+  rpt strip_tac >>
+  `get_label (ao_resolve_iszero_op targets inst.inst_opcode y) = get_label y` by
+    metis_tac[ao_resolve_iszero_op_label] >>
+  `get_label y = SOME x` by metis_tac[get_label_def] >>
+  Cases_on `y` >> gvs[get_label_def]
+QED
+
+Theorem ao_transform_inst_labels:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  !out. MEM out (ao_transform_inst dfg ra lbl idx targets fr inst) ==>
+    set (inst_ir_labels out) SUBSET set (inst_ir_labels inst)
+Proof
+  strip_tac >>
+  `set (inst_ir_labels (ao_resolve_iszero_inst targets inst)) SUBSET
+    set (inst_ir_labels inst)` by
+    (irule ao_resolve_iszero_inst_ir_labels >> metis_tac[]) >>
+  simp[ao_transform_inst_def] >>
+  qabbrev_tac `inst0 = ao_resolve_iszero_inst targets inst` >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `ao_opt_producer dfg inst0`
+  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      simp[ao_flip_inst_labels] >>
+      metis_tac[ao_peephole_inst_labels, ao_flip_inst_labels, SUBSET_TRANS]) >>
+  drule ao_opt_producer_labels >> strip_tac >>
+  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  simp[ao_flip_inst_labels] >> metis_tac[SUBSET_TRANS]
+QED
