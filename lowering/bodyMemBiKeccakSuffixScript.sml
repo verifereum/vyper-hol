@@ -2,9 +2,9 @@
 Theory bodyMemBiKeccakSuffix
 Ancestors
   exprSimHash exprSimAlloc exprSimDefs allocaFootprint bodyAllocMemory
-  builtinHashing emitHelper emitHelperProps exprLoweringProps fragExecMem
+  valueEncodingProps builtinHashing emitHelper emitHelperProps exprLoweringProps fragExecMem
   instMemFrontier compileEnv context venomState venomInst venomExecSemantics
-  abiBuiltinAllocation venomMemDefs venomMemProps words list finite_map
+  abiBuiltinAllocation venomMemDefs venomMemProps memSafeRun words list finite_map
 Libs
   pairLib
 
@@ -61,7 +61,7 @@ Proof
   simp[compile_keccak256_bytesm_def, compile_alloc_buffer_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def] >>
-  rpt strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
     by decide_tac >>
   gvs[emitted_insts_def, DROP_APPEND] >>
@@ -86,4 +86,64 @@ Proof
          [STRING #"%" (toString (sa.cs_next_var + 1))]`] >>
      simp[step_inst_non_invoke, mk_inst_def, is_terminator_def, is_ext_call_op_def]) >>
   decide_tac
+QED
+
+Theorem keccak_memory_suffix_mem_ok:
+  compile_keccak256_bytes x sa = (op,sb) /\
+  (!v. x = Var v ==> not_fresh_at sa v) /\
+  eval_operand x s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w n /\
+  b + 32 < dimword (:256) /\ n < dimword (:256) /\
+  b + 32 <= s.vs_alloca_next /\
+  (n = 0 \/ b + 32 + n <= s.vs_alloca_next) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  simp[compile_keccak256_bytes_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, fresh_id_def, fresh_var_def, emit_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!k. LENGTH sa.cs_current_insts - (LENGTH sa.cs_current_insts + k) = 0`
+    by decide_tac >>
+  qpat_x_assum `_ with <| cs_next_var := _; cs_next_id := _;
+      cs_current_insts := _ |> = sb` (SUBST1_TAC o SYM) >>
+  simp[emitted_insts_def, DROP_APPEND] >>
+  rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
+  >- simp[below_frontier_MLOAD] >>
+  drule step_MLOAD_local >>
+  disch_then (qspecl_then [`STRING #"%" (toString sa.cs_next_var)`,
+                          `sa.cs_next_id`] assume_tac) >>
+  simp[] >>
+  `eval_operand x (update_var (STRING #"%" (toString sa.cs_next_var))
+      (mload b s) s) = SOME (n2w b)` by
+    (irule eval_operand_update_other_local >> simp[] >>
+     rpt strip_tac >> first_x_assum drule >> simp[not_fresh_at_def]) >>
+  conj_tac
+  >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  drule step_ADD >>
+  disch_then (qspec_then `Lit 32w` mp_tac) >>
+  simp[eval_operand_def] >>
+  disch_then (qspecl_then [`sa.cs_next_id + 1`,
+    `STRING #"%" (toString (sa.cs_next_var + 1))`] assume_tac) >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_SHA3] >>
+  simp[eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE, ASCIInumbersTheory.toString_inj,
+       GSYM mem_word_at_eq_mload, GSYM word_add_n2w] >>
+  Cases_on `n = 0` >> simp[] >>
+  `n2w b + 32w = (n2w (b + 32):256 word)` by simp[word_add_n2w] >>
+  simp[] >> decide_tac
+QED
+
+Theorem keccak_memory_suffix_frontier:
+  compile_keccak256_bytes x sa = (op,sb) /\
+  (!v. x = Var v ==> not_fresh_at sa v) /\
+  eval_operand x s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
+  b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t.vs_alloca_next = s.vs_alloca_next
+Proof
+  rpt strip_tac >> drule_all compile_keccak256_bytes_run >>
+  strip_tac >> gvs[] >>
+  qpat_x_assum `_ with vs_vars := _ = _` mp_tac >>
+  simp[venom_state_component_equality]
 QED
