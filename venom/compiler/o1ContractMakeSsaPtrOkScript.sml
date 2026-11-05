@@ -322,6 +322,156 @@ Proof
   simp[mssa_ptr_roots_finite]
 QED
 
+Theorem mssa_origin_closure_step:
+  mssa_inst_origin orig fn inst' /\
+  is_pointer_preserving_op inst'.inst_opcode /\
+  MEM (Var u) inst'.inst_operands /\
+  orig u IN pointer_derived_vars fn roots /\
+  MEM v inst'.inst_outputs ==>
+  orig v IN pointer_derived_vars fn roots
+Proof
+  simp[mssa_inst_origin_def] >> rpt strip_tac >> gvs[]
+  >- (irule mssa_derived_closed >> goal_assum (drule_at Any) >>
+      qexists_tac `inst` >> simp[] >> conj_tac
+      >- metis_tac[listTheory.MEM_MAP] >>
+      qpat_x_assum `MAP _ inst'.inst_operands = _` (SUBST1_TAC o SYM) >>
+      simp[listTheory.MEM_MAP] >> qexists_tac `Var u` >> simp[])
+  >> metis_tac[mssa_derived_closed, is_pointer_preserving_op_def]
+QED
+
+Theorem mssa_derived_forward:
+  FINITE roots' /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  (!v. v IN roots' ==> orig v IN pointer_derived_vars fn roots) ==>
+  !v. v IN pointer_derived_vars fn' roots' ==>
+      orig v IN pointer_derived_vars fn roots
+Proof
+  strip_tac >>
+  `pointer_derived_vars fn' roots' SUBSET
+     {v | orig v IN pointer_derived_vars fn roots}` suffices_by
+    simp[pred_setTheory.SUBSET_DEF] >>
+  irule mssa_derived_least >> simp[pred_setTheory.SUBSET_DEF] >>
+  rpt strip_tac >> irule mssa_origin_closure_step >> metis_tac[]
+QED
+
+Theorem mssa_origin_root:
+  fn_inst_wf fn /\ mssa_inst_origin orig fn inst' /\
+  (inst'.inst_opcode = ALLOCA \/ inst'.inst_opcode = DALLOCA \/
+   inst'.inst_opcode = PARAM) /\ inst_output inst' = SOME v ==>
+  ?inst. MEM inst (fn_insts fn) /\
+    inst.inst_opcode = inst'.inst_opcode /\
+    inst_output inst = SOME (orig v) /\
+    inst.inst_outputs = [orig v] /\
+    MAP (\op. case op of Var u => Var (orig u) | _ => op)
+      inst'.inst_operands = inst.inst_operands
+Proof
+  strip_tac >>
+  `?w. inst'.inst_outputs = [w]` by
+    (irule mssa_root_output >> metis_tac[]) >>
+  gvs[inst_output_def] >>
+  gvs[mssa_inst_origin_def] >> qexists_tac `inst` >>
+  qpat_x_assum `[_] = inst.inst_outputs` (SUBST1_TAC o SYM) >>
+  gvs[inst_output_def]
+QED
+
+Theorem mssa_alloca_roots_origin:
+  fn_inst_wf fn /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN alloca_roots fn' ==> orig v IN alloca_roots fn
+Proof
+  simp[alloca_roots_def] >> strip_tac >>
+  `mssa_inst_origin orig fn inst` by metis_tac[] >>
+  drule_at (Pat `mssa_inst_origin _ _ _`) mssa_origin_root >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem mssa_ptr_roots_origin:
+  fn_inst_wf fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN ptr_roots P fn' ==> orig v IN ptr_roots P fn
+Proof
+  simp[ptr_roots_def] >> strip_tac
+  >- (disj1_tac >> disj1_tac >> irule mssa_alloca_roots_origin >> metis_tac[])
+  >- (`mssa_inst_origin orig fn inst` by metis_tac[] >>
+      drule_at (Pat `mssa_inst_origin _ _ _`) mssa_origin_root >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[])
+  >> `mssa_inst_origin orig fn inst` by metis_tac[] >>
+  drule_at (Pat `mssa_inst_origin _ _ _`) mssa_origin_root >>
+  simp[] >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem mssa_nonalloca_definition:
+  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  MEM v inst.inst_outputs /\ v IN ptr_roots P fn /\
+  (inst.inst_opcode = DALLOCA \/ inst.inst_opcode = PARAM) ==>
+  v NOTIN alloca_roots fn
+Proof
+  strip_tac >>
+  `v IN fn_pv P fn` by
+    (simp[fn_pv_def] >> irule mssa_derived_initial >> simp[mssa_ptr_roots_finite]) >>
+  gvs[fn_ptr_ok_def] >>
+  qpat_x_assum `!inst v. _` (drule_at Any) >>
+  simp[] >> disch_then (qspec_then `inst` mp_tac) >>
+  simp[is_pointer_preserving_op_def]
+QED
+
+Theorem mssa_nonalloca_roots_origin:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN ptr_roots P fn' DIFF alloca_roots fn' ==>
+  orig v IN ptr_roots P fn DIFF alloca_roots fn
+Proof
+  strip_tac >>
+  `orig v IN ptr_roots P fn` by
+    (irule mssa_ptr_roots_origin >> metis_tac[pred_setTheory.IN_DIFF]) >>
+  simp[] >>
+  qpat_x_assum `v IN _ DIFF _` mp_tac >>
+  simp[ptr_roots_def] >> strip_tac >>
+  `mssa_inst_origin orig fn inst` by metis_tac[] >>
+  drule_at (Pat `mssa_inst_origin _ _ _`) mssa_origin_root >>
+  simp[] >> strip_tac >> gvs[] >>
+  irule mssa_nonalloca_definition >> metis_tac[listTheory.MEM]
+QED
+
+Theorem mssa_pv_forward:
+  fn_inst_wf fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN fn_pv P fn' ==> orig v IN fn_pv P fn
+Proof
+  simp[fn_pv_def] >> strip_tac >> irule mssa_derived_forward >> qexists_tac `fn'` >>
+  qexists_tac `ptr_roots P fn'` >> simp[mssa_ptr_roots_finite] >>
+  rpt strip_tac >>
+  irule mssa_derived_initial >> simp[mssa_ptr_roots_finite] >>
+  irule mssa_ptr_roots_origin >> metis_tac[]
+QED
+
+Theorem mssa_alloca_forward:
+  fn_inst_wf fn /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN pointer_derived_vars fn' (alloca_roots fn') ==>
+  orig v IN pointer_derived_vars fn (alloca_roots fn)
+Proof
+  strip_tac >> irule mssa_derived_forward >> qexists_tac `fn'` >>
+  qexists_tac `alloca_roots fn'` >> simp[FINITE_alloca_roots] >>
+  rpt strip_tac >>
+  irule mssa_derived_initial >> simp[FINITE_alloca_roots] >>
+  irule mssa_alloca_roots_origin >> metis_tac[]
+QED
+
+Theorem mssa_nonalloca_forward:
+  fn_inst_wf fn /\ fn_ptr_ok P fn /\ fn'.fn_name = fn.fn_name /\
+  (!i. MEM i (fn_insts fn') ==> mssa_inst_origin orig fn i) /\
+  v IN pointer_derived_vars fn' (ptr_roots P fn' DIFF alloca_roots fn') ==>
+  orig v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)
+Proof
+  strip_tac >> irule mssa_derived_forward >> qexists_tac `fn'` >>
+  qexists_tac `ptr_roots P fn' DIFF alloca_roots fn'` >>
+  simp[mssa_nonalloca_roots_finite] >>
+  rpt strip_tac >>
+  irule mssa_derived_initial >> simp[mssa_nonalloca_roots_finite] >>
+  metis_tac[mssa_nonalloca_roots_origin, pred_setTheory.IN_DIFF]
+QED
+
 (* Why it holds.  make_ssa_current_fn_origin gives orig, from fn' vars to
    fn vars: each instruction of fn' is a renamed non-PHI of fn (same
    opcode and id, outputs and Var operands mapped by orig), a NOP, or a
