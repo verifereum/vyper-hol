@@ -9,7 +9,8 @@ Ancestors
   lowerDloadVariableTransport venomState venomExecSemantics codegenRel
   lowerDloadGasProducer lowerDloadFrameCertificate lowerDloadAllocation
   lowerDloadParameterEnvelope lowerDloadParamProducer lowerDloadMaskBounds
-  lowerDloadEnvironmentRead lowerDloadOperand
+  lowerDloadEnvironmentRead lowerDloadOperand lowerDloadStorageRead
+  lowerDloadSharedState vfmState lowerDloadStorageWrite lowerDloadNormalTransport
 
 Theorem ld_annotated_inst_wf:
   o1_ctx_shape CS /\ (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
@@ -531,3 +532,164 @@ Resume ld_normal_bump_backward[complete]:
 QED
 
 Finalise ld_normal_bump_backward
+
+Theorem ld_normal_storage_read_backward:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i.inst_opcode [SLOAD; TLOAD] /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `!op. MEM op i.inst_operands ==>
+    (!v. op = Var v ==> v IN U) /\
+    ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
+    (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
+       ld_annotated_residual_read_operands >>
+     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     strip_tac >> gen_tac >> disch_tac >>
+     first_x_assum (qspec_then `op` mp_tac) >>
+     impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+                   simp[MEM] >> strip_tac >> simp[]) >>
+     simp[] >> metis_tac[]) >>
+  `ld_owned_vars U E AG BH tn un s t /\ ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_owned_operand_clean >> simp[] >> metis_tac[]) >>
+  `?s' out x y. step_inst fuel CS i s = OK s' /\ i.inst_outputs = [out] /\
+    s' = update_var out x s /\ t' = update_var out y t` by
+    (drule_all ld_storage_read_backward >>
+     disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >> metis_tac[]) >>
+  `ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+    (step_taint i s s' tn) (step_taint i t t' un) s' t'` by
+    (`?s1. step_inst fuel CS i s = OK s1 /\
+       ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+         (step_taint i s s1 tn) (step_taint i t t' un) s1 t'` by
+       (irule ld_owned_storage_read_backward >> simp[] >> metis_tac[]) >>
+     metis_tac[venomExecSemanticsTheory.exec_result_11]) >>
+  qexists_tac `s'` >> simp[] >> irule ld_normal_residual_update_complete >> simp[] >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem ld_account_read_backward:
+  MEM i.inst_opcode [BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] /\
+  ld_shared_state tn un s t /\
+  (!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s' out w. step_inst fuelS CS i s = OK s' /\ i.inst_outputs = [out] /\
+    s' = update_var out w s /\ t' = update_var out w t
+Proof
+  strip_tac >>
+  drule ld_shared_state_environment >> strip_tac >>
+  `!a. (lookup_account a s.vs_accounts).balance =
+       (lookup_account a t.vs_accounts).balance /\
+       (lookup_account a s.vs_accounts).code = (lookup_account a t.vs_accounts).code /\
+       account_empty (lookup_account a s.vs_accounts) =
+       account_empty (lookup_account a t.vs_accounts)` by
+    (drule ld_shared_state_nonstorage >> strip_tac >> gen_tac >>
+     first_x_assum (qspec_then `a` mp_tac) >>
+     simp[lookup_account_def] >> disch_tac >>
+     qsuff_tac
+       `(s.vs_accounts a with storage := (t.vs_accounts a).storage).balance =
+          (t.vs_accounts a).balance /\
+        (s.vs_accounts a with storage := (t.vs_accounts a).storage).code =
+          (t.vs_accounts a).code /\
+        account_empty (s.vs_accounts a with storage := (t.vs_accounts a).storage) =
+          account_empty (t.vs_accounts a)`
+     >- simp[account_empty_def] >>
+     rpt conj_tac >> AP_TERM_TAC >> simp[]) >>
+  qpat_x_assum `step_inst fuelT CT i t = OK t'` mp_tac >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+  simp[Once step_inst_non_invoke, SimpLHS] >>
+  asm_rewrite_tac[step_inst_base_def, opcode_case_def] >> strip_tac >>
+  FIRST [drule_at (Pat `exec_read0 _ _ _ = _`) ld_exec_read0_backward,
+         drule_at (Pat `exec_read1 _ _ _ = _`) ld_exec_read1_backward] >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
+  qexists_tac `w` >> simp[Once step_inst_non_invoke] >>
+  asm_rewrite_tac[step_inst_base_def, opcode_case_def] >> simp[]
+QED
+
+Theorem ld_owned_account_read_backward:
+  MEM i.inst_opcode [BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] /\
+  ld_shared_state tn un s t /\
+  i.inst_outputs = [out] /\ ld_owned_vars V E AG AH tn un s t /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  (!op. MEM op i.inst_operands ==> ld_op_prov AG op = NONE /\ op_taint tn op = {}) /\
+  step_inst fuelT CT i t = OK t' ==>
+  ?s'. step_inst fuelS CS i s = OK s' /\
+    ld_owned_vars V E (ld_step_prov AP AG L i) (ld_step_prov AQ AH M i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+Proof
+  strip_tac >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_owned_operand_clean >> simp[] >> metis_tac[]) >>
+  drule_all ld_account_read_backward >>
+  disch_then (qspecl_then [`fuelS`,`CS`] strip_assume_tac) >> gvs[] >>
+  `!st ta. out_taint ta i st = {}` by
+    (rpt gen_tac >> simp[out_taint_def] >> rpt CASE_TAC >> simp[]) >>
+  `ld_owned_value E NONE NONE {} {} w w` by
+    simp[ld_owned_value_def, ld_mask_word_def] >>
+  drule_all ld_owned_vars_update >>
+  disch_then (qspec_then `out` mp_tac) >>
+  simp[ld_step_prov_def, ld_out_prov_def, step_taint_def, out_taint_def,
+       ld_owned_vars_def, op_taint_def]
+QED
+
+Theorem ld_normal_account_read_backward:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i.inst_opcode [BALANCE; SELFBALANCE; EXTCODESIZE; EXTCODEHASH] /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `!op. MEM op i.inst_operands ==>
+    (!v. op = Var v ==> v IN U) /\
+    ld_op_prov AG op = NONE /\ op_taint tn op = {}` by
+    (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)
+       ld_annotated_residual_read_operands >>
+     disch_then (qspecl_then [`lo`,`V`,`P`] mp_tac) >>
+     strip_tac >> gen_tac >> disch_tac >>
+     first_x_assum (qspec_then `op` mp_tac) >>
+     impl_tac >- (simp[] >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+                   simp[MEM] >> strip_tac >> simp[]) >>
+     simp[] >> metis_tac[]) >>
+  `ld_owned_vars U E AG BH tn un s t /\ ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `!op. MEM op i.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_owned_operand_clean >> simp[] >> metis_tac[]) >>
+  `?s' out w. step_inst fuel CS i s = OK s' /\ i.inst_outputs = [out] /\
+    s' = update_var out w s /\ t' = update_var out w t` by
+    (drule_all ld_account_read_backward >>
+     disch_then (qspecl_then [`fuel`,`CS`] strip_assume_tac) >> metis_tac[]) >>
+  `ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+    (step_taint i s s' tn) (step_taint i t t' un) s' t'` by
+    (`?s1. step_inst fuel CS i s = OK s1 /\
+       ld_owned_vars U E (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+         (step_taint i s s1 tn) (step_taint i t t' un) s1 t'` by
+       (irule ld_owned_account_read_backward >> simp[] >> metis_tac[]) >>
+     metis_tac[venomExecSemanticsTheory.exec_result_11]) >>
+  qexists_tac `s'` >> simp[] >> irule ld_normal_residual_update_complete >> simp[] >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
