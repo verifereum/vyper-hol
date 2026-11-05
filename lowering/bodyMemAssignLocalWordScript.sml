@@ -23,7 +23,7 @@ Libs
 (* The MSTORE of the typed word of v at a live local's pointer, run on a
    memory-safe path: the local's region holds a word (store_lays_out) and
    lies below the frontier (local_ptrs_rel). *)
-Theorem assign_local_word_store_path_mem[local]:
+Theorem assign_local_word_store_path_mem:
   !ctx func cenv cx es s id p sz pre env entry rest v etv op st st'.
     emit_void MSTORE [Var p; op] st = ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\

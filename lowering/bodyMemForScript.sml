@@ -1,8 +1,9 @@
-(* Memory case of the body induction (bodyMemory's body_mem_mutual): for loop;
-   fragLoopMemory's frag_exec_loop_mem is the loop step. *)
+(* Memory case of the body induction (bodyMemory's body_mem_mutual): for loop.
+   The same split as S1's body_for_case: a range of two literals, a computed
+   range, and an array, each in its own bodyMemFor* leaf. *)
 Theory bodyMemFor
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemForRangeLit bodyMemForRange bodyMemForArray
 
 Theorem body_for_mem_case:
   !cx id typ it n body.
@@ -20,5 +21,11 @@ Theorem body_for_mem_case:
        body_iterator_mem_ok cx it) ==>
     body_stmt_mem_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> PURE_REWRITE_TAC [body_stmt_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?a1 n1 a2 n2. it = Range (Literal a1 (IntL n1)) (Literal a2 (IntL n2))`
+  >- (drule_all body_for_range_lit_mem >> simp[]) >>
+  Cases_on `it`
+  >- (irule body_for_array_mem >> simp[] >> metis_tac[]) >>
+  irule body_for_range_mem >> simp[] >> metis_tac[]
 QED

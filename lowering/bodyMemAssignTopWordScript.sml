@@ -24,7 +24,7 @@ Libs
 (* The SSTORE or TSTORE of w at slot, run on a memory-safe path: it
    touches no memory, so it lands past the store with every variable and
    allocation kept. *)
-Theorem assign_storage_store_path_mem[local]:
+Theorem assign_storage_store_path_mem:
   !ctx func cenv cx es' s tr slot op w st st'.
     emit_void (if tr then TSTORE else SSTORE) [Lit slot; op] st = ((), st') /\
     fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
