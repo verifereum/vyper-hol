@@ -22,20 +22,23 @@ Ancestors
    (target_place_sim's conclusion, at every start). *)
 Definition pop_target_frag_def:
   pop_target_frag ctx func cenv cx env bt es <=>
-    !ty sa sb r res es' s0.
+    !ty sa sb r s0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
-      eval_target_place cx bt es = (res, es') /\
-      ((?p. res = INL p) \/ (?m. res = INR (Error (RuntimeError m))) \/
-       (?d. res = INR (Error (RevertData d))) \/
-       (?str. res = INR (AssertException str))) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. ?p. res = INL p /\
-                 target_post ctx func cenv cx es sa sb s0 es' (PlaceR p)
-                   (Type ty) r s)
-        (expr_exit res)
+      local_ptrs_reserved cenv sa /\
+      gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
+      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      gas_outcome F (cx_tops cx) (ctx, func) (eval_target_place cx bt)
+        (es, s0)
+        (\res ee t. ?p. res = INL p /\
+          target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
+            r t /\
+          t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts)
+        (\res ee r. expr_exit res r)
 End
 
 Theorem pop_target_frag_of_sim:
@@ -43,7 +46,7 @@ Theorem pop_target_frag_of_sim:
     target_sim ctx func cenv cx env bt es ==>
     pop_target_frag ctx func cenv cx env bt es
 Proof
-  cheat
+  rw[pop_target_frag_def] >> irule target_place_sim >> metis_tac[]
 QED
 
 Definition nested_pop_suffix_def:
