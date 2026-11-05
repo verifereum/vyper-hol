@@ -2,6 +2,7 @@
 Theory rawCallPrefixPtr
 Ancestors
   rawCallKeywordPrefixPtr gasCount compileEnv venomInst
+  gasContext exprSimDefs vyperInterpreter vyperState exprSimWordArgs
 
 (* GAS consumes one observation, even when the runtime oracle is empty. *)
 Theorem raw_call_gas_observation_count:
@@ -254,4 +255,47 @@ Proof
   simp[] >> strip_tac >> gvs[] >> qexistsl_tac [`G`, `tn`, `s`] >>
   simp[exprSimWordArgsTheory.wb_frame_refl, bodyPtrDefsTheory.ghost_kept_def,
     cj 1 fragGasPathPtrTheory.gas_path_ptr_rules]
+QED
+
+Theorem raw_call_operands_admissible:
+  gas_admissible (eval_expr cx (Call ann (RawCallTarget flags) args dflt))
+    expr_vv_res_ok es ==>
+  gas_admissible (eval_exprs cx args)
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es
+Proof
+  rewrite_tac[gas_admissible_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `res` >- simp[] >>
+  drule rawCallShapePtrTheory.eval_expr_raw_call_operand_exit >>
+  disch_then (qspecl_then [`flags`, `dflt`, `ann`] assume_tac) >>
+  first_x_assum drule >> simp[expr_vv_res_ok_def, expr_res_ok_def]
+QED
+
+Theorem eval_exprs_append_action:
+  !xs ys cx. eval_exprs cx (xs ++ ys) =
+    do vs <- eval_exprs cx xs; ws <- eval_exprs cx ys; return (vs ++ ws) od
+Proof
+  Induct_on `xs`
+  >- (simp[Once evaluate_def, FUN_EQ_THM, bind_def, return_def] >>
+      rpt gen_tac >> Cases_on `eval_exprs cx ys x` >>
+      Cases_on `q` >> simp[]) >>
+  rpt gen_tac >> simp[eval_exprs_cons_action, bind_assoc] >>
+  simp[FUN_EQ_THM, bind_def, return_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> simp[]) >> Cases_on `v` >> simp[]
+QED
+
+(* Machine-only suffixes record observations with F marks, rather than
+   requiring the unchanged source action to consume a gas reading. *)
+Theorem gas_marked_exec_ptr_implicit_suffix:
+  gas_marked_exec_ptr D (ctx,func) PG source (es,s0,G0,tn0) marks
+    res ee G1 tn1 (OK t) /\
+  gas_path_ptr D 0 ctx func PG G1 tn1 t n G tn r ==>
+  gas_marked_exec_ptr D (ctx,func) PG source (es,s0,G0,tn0)
+    (marks ++ REPLICATE n F) res ee G tn r
+Proof
+  rewrite_tac[gasSummaryComposePtrTheory.gas_marked_exec_ptr_def] >>
+  strip_tac >> conj_tac
+  >- simp[gasSummaryTheory.gas_explicit_append] >>
+  simp[listTheory.LENGTH_APPEND] >>
+  once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
+  irule fragGasPathPtrTheory.gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]
 QED
