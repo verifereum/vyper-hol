@@ -108,3 +108,34 @@ Proof
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   qexistsl_tac [`a`, `j`] >> simp[joint_nonrevert_read_exempt]
 QED
+
+Theorem joint_relocation_demand_clean:
+  joint_trace vs0 C q0 es qs q /\
+  joint_relocation_demand lo positions q0 es qs n a z ==>
+  a NOTIN joint_mem_taint (EL n (q0::qs))
+Proof
+  rw[joint_relocation_demand_def, joint_observed_read_def] >>
+  spose_not_then assume_tac >>
+  `a IN joint_mem_taint (EL j (q0::qs))` suffices_by simp[] >>
+  irule joint_trace_mem_taint >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  qexists_tac `n` >> simp[]
+QED
+
+Theorem joint_relocation_demand_fresh_excluded:
+  joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
+  EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
+  EL c es = SOME (OriginOrdinary fuel post) /\ inst.inst_opcode = ALLOCA /\
+  aid NOTIN FDOM s.vs_allocas /\ FLOOKUP post.vs_allocas aid = SOME (b,sz) /\
+  b <= a /\ a < b+sz ==>
+  ~joint_relocation_demand lo positions q0 es qs (SUC c) a z
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  gvs[joint_relocation_demand_def, joint_observed_read_def] >>
+  `a IN joint_mem_taint (EL j (q0::qs))` suffices_by simp[] >>
+  irule joint_trace_fresh_alloca_tainted >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `EL _ (_::_) = _`)) >>
+  goal_assum (drule_at (Pat `EL _ es = _`)) >>
+  goal_assum (drule_at (Pat `FLOOKUP _ _ = _`)) >> simp[]
+QED
