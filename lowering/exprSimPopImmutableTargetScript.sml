@@ -303,6 +303,60 @@ Proof
 QED
 
 
+Theorem imm_typed_step_memory[local]:
+  !tv v sub d ptv pv b mem.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_path_offset tv [sub] = SOME (d,ptv) /\
+    evaluate_subscripts tv v [sub] = INL pv /\
+    val_in_memory tv v b mem ==>
+    val_in_memory ptv pv (b+d) mem
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sub`
+  >- ((rename1 `ValueSubscript idx` >> Cases_on `idx` >>
+       Cases_on `tv` >>
+       gvs[mem_path_offset_def, mem_step_offset_def, AllCaseEqs()] >>
+       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+       rename1 `ArrayV av` >> Cases_on `av` >>
+       gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+           vyperValueOperationTheory.array_index_def, AllCaseEqs()])
+      >- (gvs[valueEncodingPropsTheory.val_in_memory_tuple] >>
+          `LENGTH l' = LENGTH l` by
+            metis_tac[vyperTypingTheory.values_have_types_length] >>
+          `!xs. type_memory_size_list xs = SUM (MAP type_memory_size xs)` by
+            (Induct >> simp[valueEncodingTheory.type_memory_size_def]) >>
+          gvs[listTheory.oEL_EQ_EL] >>
+          irule tupleMemoryLayoutTheory.tuple_in_memory_element >> simp[])
+      >- (Cases_on `b'` >>
+           gvs[vyperTypingTheory.value_has_type_def, mem_step_offset_def,
+               valueEncodingPropsTheory.val_in_memory_dynarray,
+               listTheory.oEL_EQ_EL] >>
+           drule exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+           disch_then (qspec_then `Num i` mp_tac) >>
+           simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])
+       >- (gvs[mem_step_offset_def,
+               valueEncodingPropsTheory.val_in_memory_sarray]) >>
+      gvs[mem_step_offset_def, valueEncodingPropsTheory.val_in_memory_sarray] >>
+      metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup]) >>
+  Cases_on `tv` >>
+  gvs[mem_path_offset_def, mem_step_offset_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+      valueEncodingPropsTheory.val_in_memory_struct, AllCaseEqs()] >>
+  qpat_x_assum `well_formed_type_value _` kall_tac >>
+  rpt (pop_assum mp_tac) >>
+  map_every qid_spec_tac [`b`, `pv`, `ptv`, `d`, `s`, `l'`, `l`] >>
+  Induct >> Cases_on `l'` >>
+  simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def] >>
+  rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >>
+  simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def,
+       valueEncodingTheory.val_in_memory_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h0 = s` >> gvs[AllCaseEqs()] >>
+  rpt strip_tac >> PairCases_on `z` >> gvs[] >>
+  first_x_assum drule_all >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
    constructor's compile env and the root's declared type in it: from s0
