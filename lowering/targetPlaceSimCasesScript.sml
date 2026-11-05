@@ -789,3 +789,63 @@ Proof
   goal_assum (drule_at Any) >> simp[get_storage_backend_eq] >>
   qexists_tac `tr` >> goal_assum (drule_at Any) >> simp[]
 QED
+
+Theorem extend_storage_place_read_live:
+  !cx tr slot tv sb es slot' tv' es'.
+    storage_read_live cx tr (get_storage cx es tr) slot tv /\
+    extend_storage_place cx tr slot tv sb es =
+      (INL (StoragePlace tr slot' tv'),es') ==>
+    storage_read_live cx tr (get_storage cx es' tr) slot' tv'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tv` >> Cases_on `sb` >>
+  gvs[extend_storage_place_def, raise_def] >>
+  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
+       gvs[extend_storage_place_def, raise_def])
+  >~ [`TupleTV ts`]
+  >- (gvs[bind_def, ignore_bind_def, check_def, assert_def,
+          lift_option_type_def, return_def, raise_def, AllCaseEqs(),
+          listTheory.oEL_THM] >>
+      gvs[AllCaseEqs(), return_def, raise_def] >>
+      irule storage_read_live_tuple_elem >> simp[])
+  >~ [`StructTV fs`]
+  >- (Cases_on `struct_field_slot fs s` >>
+      gvs[bind_def, lift_option_type_def, return_def, raise_def] >>
+      pairarg_tac >> gvs[return_def] >>
+      irule storage_read_live_field >> goal_assum (drule_at Any) >> simp[]) >>
+  `extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV t b)))
+     (ValueSubscript (IntV i)) es =
+     (INL (PlaceR (StoragePlace tr slot' tv')),es')` by
+    simp[extend_place_def, extend_storage_place_def, bind_def, return_def] >>
+  drule_all extend_place_storage_array_live >> simp[]
+QED
+
+Theorem extend_storage_place_slots:
+  !cx tr slot tv sb es slot' tv' es'.
+    slots_in_range (get_storage cx es tr) (w2n slot) tv /\
+    extend_storage_place cx tr slot tv sb es =
+      (INL (StoragePlace tr slot' tv'),es') ==>
+    slots_in_range (get_storage cx es' tr) (w2n slot') tv'
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `tv` >> Cases_on `sb` >>
+  gvs[extend_storage_place_def, raise_def] >>
+  TRY (rename1 `ValueSubscript key` >> Cases_on `key` >>
+       gvs[extend_storage_place_def, raise_def])
+  >~ [`TupleTV ts`]
+  >- (gvs[bind_def, ignore_bind_def, check_def, assert_def,
+          lift_option_type_def, return_def, raise_def, AllCaseEqs(),
+          listTheory.oEL_THM] >>
+      gvs[AllCaseEqs(), return_def, raise_def] >>
+      irule tuple_elem_slots_in_range >> simp[])
+  >~ [`StructTV fs`]
+  >- (Cases_on `struct_field_slot fs s` >>
+      gvs[bind_def, lift_option_type_def, return_def, raise_def] >>
+      pairarg_tac >> gvs[return_def] >>
+      irule storage_field_slots_in_range >> goal_assum (drule_at Any) >> simp[]) >>
+  `extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV t b)))
+     (ValueSubscript (IntV i)) es =
+     (INL (PlaceR (StoragePlace tr slot' tv')),es')` by
+    simp[extend_place_def, extend_storage_place_def, bind_def, return_def] >>
+  drule_all extend_place_storage_array_slots >> simp[]
+QED
