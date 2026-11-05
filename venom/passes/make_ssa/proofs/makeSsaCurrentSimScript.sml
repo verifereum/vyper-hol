@@ -10,7 +10,8 @@
  * up degenerate PHIs.  A run of the output matches the input's run block
  * for block; the renamed variables hold the values of the originals.
  *
- * Premises: definite assignment (fn_defs_reach_uses) makes every PHI value
+ * Premises (make_ssa_input_ok unfolds to the first seven): definite
+ * assignment (fn_defs_reach_uses) makes every PHI value
  * defined at its predecessor's end; all_reachable makes the dominator tree
  * cover every block, so every block is renamed; fn_phi_operands_single_def
  * keeps the liveness the pass uses exact for the variables PHIs read;
@@ -20,6 +21,8 @@
  * confines a re-placed PHI for an existing PHI's output to that PHI's own
  * block, and fn_phis_non_degenerate keeps every existing PHI a PHI through
  * cleanup, so it defines its new name before the collapsed copy reads it.
+ * Every PHI's operand labels are distinct CFG predecessors of its block,
+ * so the PHI the output enters resolves to the input PHI's operand.
  *)
 Theory makeSsaCurrentSim
 Ancestors
@@ -28,10 +31,7 @@ Ancestors
 
 (* Terminating runs of the input and the output correspond. *)
 Theorem make_ssa_current_fn_fn_bisim:
-  fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
-  fn_phis_cover_preds fn /\
-  fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
-  all_reachable fn /\ fn_inst_wf fn /\ wf_function fn /\
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   make_ssa_current_fn s fn = (fn',s') ==>
@@ -44,10 +44,7 @@ QED
    the input reaches, with the same alloca frame and memory ranges. *)
 Theorem make_ssa_current_fn_frame_sim:
   ctx_bisim C C' /\
-  fn_defs_reach_uses fn /\ fn_phi_operands_single_def fn /\
-  fn_phis_cover_preds fn /\
-  fn_phi_outputs_single_def fn /\ fn_phis_non_degenerate fn /\
-  all_reachable fn /\ fn_inst_wf fn /\ wf_function fn /\
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
   ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
   make_ssa_current_fn s fn = (fn',s') ==>
