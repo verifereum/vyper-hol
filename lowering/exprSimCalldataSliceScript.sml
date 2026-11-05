@@ -39,6 +39,8 @@ Ancestors
   exprSimWordBuiltins exprSimWordArgs emitHelperProps freshWrites
   exprSimPrecompiles exprSimHash valueEncodingProps valueCopy exprSimLiteralBuffer
   loweringHalt valueTypingMemoryProps
+  gasContext gasSummary gasSummaryCompose gasOutcome gasExemptCert
+  fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
 
 Theorem calldata_slice_typing[local]:
   well_typed_expr env (Builtin ann (CalldataSlice n) args) ==>
@@ -842,51 +844,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> qexists_tac `aid` >> simp[]
 QED
 
-Theorem slice_calldata_frag[local]:
-  !ctx func cenv cx e es sa sb op p n a s0 res.
-  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sa =
-    (p.ptr_operand,sb) /\ p.ptr_location = LocMemory /\
-  expr_type e = BaseT (BytesT (Dynamic n)) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ context_well_typed cx /\
-  0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
-  32 + 32 * word_size n < 2 ** 64 /\
-  (!x. op = Var x ==> not_fresh_at sa x) /\
-  res = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
-           INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
-         eval_operand op s = SOME (n2w a))
-    (\t. ?tv. res = INL tv /\ vv_post ctx func cenv cx e es sa sb s0 es tv
-           (LocatedValue (expr_type e) p) t)
-    (expr_exit res)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule slice_calldata_shape >> strip_tac >>
-  gvs[same_blocks_def] >>
-  irule frag_exec_run_inst_seq >>
-  simp[rich_listTheory.IS_PREFIX_APPEND] >>
-  rpt strip_tac >> gvs[] >>
-  drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
-    [wordsTheory.dimword_def] slice_calldata_run) >>
-  Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
-  gns[wordsTheory.dimword_def] >> strip_tac
-  >- (disj2_tac >> qexistsl_tac [`Revert_abort`,`t`] >> simp[] >>
-      Cases_on `dimword (:256) <= a+n` >>
-      fs[wordsTheory.dimword_def] >>
-      simp[CONV_RULE numLib.REDUCE_CONV
-        evaluate_calldata_slice_uint, expr_exit_def]) >>
-  disj1_tac >> qexists_tac `t` >> simp[] >>
-  `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  simp[evaluate_calldata_slice_uint] >>
-  qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
-  asm_rewrite_tac[] >>
-  `t = t with vs_inst_idx := t.vs_inst_idx` by
-    simp[venom_state_component_equality] >>
-  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >>
-  irule slice_calldata_vv_post >> simp[] >> metis_tac[]
-QED
-
 Theorem vv_at_start_mono:
   sa.cs_next_id <= sm.cs_next_id /\
   vv_at cenv cx ty sm sb es tv vv u ==>
@@ -915,30 +872,181 @@ Proof
   metis_tac[wb_frame_trans]
 QED
 
+(* The builtin's source action: its operand's read value, then the slice,
+   which reads no gas and leaves the state alone. *)
+Theorem calldata_slice_action[local]:
+  !cx ann n e.
+    eval_expr cx (Builtin ann (CalldataSlice n) [e]) =
+    bind (bind (eval_expr cx e) (read_result cx))
+      (\v es. ((case evaluate_calldata_slice cx.txn.calldata v n of
+                  INL out => INL (Value out) | INR err => INR (Error err)),
+               es))
+Proof
+  rpt gen_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `st` >>
+  Cases_on `eval_expr cx (Builtin ann (CalldataSlice n) [e]) st` >>
+  drule eval_calldata_slice_cases >> strip_tac >>
+  drule eval_exprs_cons_cases >> strip_tac >>
+  gvs[eval_exprs_nil, CONV_RULE (DEPTH_CONV ETA_CONV) bind_def]
+QED
+
+Theorem calldata_slice_exempt_cert[local]:
+  gas_exempt_cert memory tops p
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    start marks out endpoint ==>
+  gas_exempt_cert memory tops p
+    (ignore_bind (eval_expr cx (Builtin ann (CalldataSlice n) [e]))
+      (return ())) start marks out endpoint
+Proof
+  strip_tac >> rewrite_tac[calldata_slice_action] >>
+  PairCases_on `p` >> PairCases_on `start` >>
+  PairCases_on `out` >> PairCases_on `endpoint` >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (bind a k) _` >>
+  `ignore_bind (bind a k) (return ()) =
+   bind a (\v. ignore_bind (k v) (return ()))` by
+    (simp[Abbr `k`, FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
+     Cases_on `a x` >> Cases_on `q` >> simp[] >>
+     CASE_TAC >> simp[]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_value >> simp[]
+QED
+
+Theorem slice_calldata_no_gas[local]:
+  !op num_op sz sa buf_op sb.
+  compile_slice_calldata op num_op sz sa = (buf_op,sb) ==>
+  EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+             ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  rpt gen_tac >>
+  simp[compile_slice_calldata_def, compile_slice_out_buf_def,
+       contextTheory.compile_alloc_buffer_def, compile_assert_slice_bounds_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1,
+       mk_inst_def, is_terminator_def]
+QED
+
+(* The emitted slice code from the operand's post state: its own counted
+   path (it reads no gas) with the builtin's full post, or its revert. *)
+Theorem slice_calldata_continuation[local]:
+  expr_post ctx func cenv cx e es sa sm s0 (ee with gas_obs := [])
+    (IntV &a) op t /\
+  t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
+  expr_type e = BaseT (UintT 256) /\ a < 2 ** 256 /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!z. op = Var z ==> not_fresh_at sm z) /\
+  compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm =
+    (out,sc) /\
+  fn_has_code sm sc func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ context_well_typed cx /\
+  0 < n /\ n < 2 ** 256 /\ 32 + 32 * word_size n < 2 ** 64 ==>
+  gas_summary_at F (ctx,func) []
+    (\vs. ((case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
+              INL v => INL (Value v) | INR err => INR (Error err)), vs))
+    (ee with gas_obs := [], t)
+    (\res fin u. ?tv. res = INL tv /\
+       vv_post ctx func cenv cx
+         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
+         es sa sc s0 fin tv
+         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) u /\
+       u.vs_current_bb = sc.cs_current_bb /\
+       u.vs_inst_idx = LENGTH sc.cs_current_insts)
+    (\res fin r. expr_exit res r)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t` by
+    metis_tac[expr_post_state] >>
+  `eval_operand op t = SOME (n2w a)` by
+    (drule expr_post_word_operand >>
+     simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
+          integer_wordTheory.i2w_pos]) >>
+  drule slice_calldata_shape >> strip_tac >>
+  drule slice_calldata_no_gas >> strip_tac >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sm sc) (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     simp[listTheory.DROP_APPEND, listTheory.DROP_LENGTH_TOO_LONG]) >>
+  `a < dimword (:256) /\ n < dimword (:256)` by fs[wordsTheory.dimword_def] >>
+  drule_all slice_calldata_run >>
+  Cases_on `dimword (:256) <= a+n \/ LENGTH cx.txn.calldata < a+n` >>
+  gns[wordsTheory.dimword_def] >> strip_tac
+  >- (drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_zero_path >>
+      disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+      (impl_tac >- simp[]) >> strip_tac >>
+      simp[gas_summary_at_def, gas_marked_exec_def] >>
+      qexistsl_tac [`case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
+                       INL v => INL (Value v) | INR err => INR (Error err)`,
+                    `ee with gas_obs := []`,
+                    `Abort Revert_abort (t' with vs_inst_idx := j)`] >>
+      simp[exit_result_def] >>
+      Cases_on `2 ** 256 <= a + n` >>
+      fs[CONV_RULE numLib.REDUCE_CONV evaluate_calldata_slice_uint,
+         expr_exit_def]) >>
+  `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
+  `t'.vs_current_bb = t.vs_current_bb` by
+    (irule (SRULE [] (Q.ISPEC `\s:venom_state. s.vs_current_bb`
+      run_inst_seq_preserves_field)) >>
+     qexists_tac `emitted_insts sm sc` >> simp[] >> rpt strip_tac >>
+     fs[EVERY_MEM] >>
+     metis_tac[venomInstProofsTheory.step_preserves_control_flow,
+               venomExecSemanticsTheory.step_inst_non_invoke]) >>
+  drule_at (Pat `run_inst_seq _ _ = OK _`) tuple_run_inst_seq_gas_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- fs[EVERY_MEM]) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sc) = []` by
+    fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  simp[] >> strip_tac >>
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
+       evaluate_calldata_slice_uint] >>
+  qexistsl_tac [`INL (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))`,
+    `ee with gas_obs := []`,
+    `OK (t' with vs_inst_idx := LENGTH sc.cs_current_insts)`] >>
+  gvs[same_blocks_def] >>
+  irule vv_post_prefix_frame >>
+  asm_simp_tac (srw_ss()) [] >>
+  qexistsl_tac [`ee with gas_obs := []`, `sm`, `t`] >> asm_simp_tac (srw_ss()) [] >>
+  conj_tac >- metis_tac[expr_post_frame] >>
+  irule (SRULE [vyperASTTheory.expr_type_def]
+    (Q.INST [`e` |-> `Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]`]
+      (SPEC_ALL slice_calldata_vv_post))) >>
+  simp[contextTheory.mk_ptr_def] >> metis_tac[]
+QED
+
+Theorem expr_exit_INR_type[local]:
+  !ex rr. expr_exit (INR ex : 'a + exception) rr =
+          expr_exit (INR ex : 'b + exception) rr
+Proof
+  rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
+  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
+QED
+
 Theorem slice_calldata_uint_compose[local]:
   expr_type e = BaseT (UintT 256) /\
   expr_body_pre cenv cx env e es /\
   expr_sim ctx func cenv cx (expr_type e) e es /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL (IntV (&a)),es') /\
   lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
   compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm = (out,sc) /\
-  context_well_typed cx /\ 0 < n /\ n < 2 ** 256 /\ a < 2 ** 256 /\
+  context_well_typed cx /\ 0 < n /\ n < 2 ** 256 /\
   32 + 32 * word_size n < 2 ** 64 /\
   fn_has_code sa sc func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  res = (case evaluate_calldata_slice cx.txn.calldata (IntV (&a)) n of
-           INL v => INL (Value v) | INR err => INR (Error err)) ==>
-  frag_exec ctx sa sc (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-    (\s. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
-        es sa sc s0 es' tv
-        (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) s)
-    (expr_exit res)
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func)
+    (eval_expr cx (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]))
+    (es,s0)
+    (\res ee t. ?tv. res = INL tv /\
+       vv_post ctx func cenv cx
+         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])
+         es sa sc s0 ee tv
+         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) t /\
+       t.vs_current_bb = sc.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sc.cs_current_insts)
+    (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
-        (simp[FUN_EQ_THM] >> metis_tac[]) >>
-      simp[] >> irule frag_exec_false_pre) >>
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   drule slice_calldata_shape >> strip_tac >>
@@ -948,35 +1056,60 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sc func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `MAP FDOM es.scopes = MAP FDOM es'.scopes` by
-    (qpat_x_assum `bind _ _ es = (INL _,es')` mp_tac >>
-     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
-     imp_res_tac read_result_state >> gvs[] >>
-     drule eval_expr_preserves_scopes_dom >> simp[]) >>
-  `expr_exit (INL (IntV (&a))) = (\r. F)` by simp[FUN_EQ_THM] >>
-  `expr_res_ok (INL (IntV (&a)))` by simp[expr_res_ok_def] >>
-  drule_all expr_sim_apply >> disch_then (qspec_then `s0` mp_tac) >>
-  simp[] >> strip_tac >>
-  irule wb_frag_then >>
-  qexistsl_tac [`\s. expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&a)) op s`, `sm`] >>
-  reverse conj_tac
-  >- (simp[] >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]) >> simp[] >>
-  qx_gen_tac `t` >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' t` by metis_tac[expr_post_state] >>
-  `eval_operand op t = SOME (n2w a)` by
-    (drule expr_post_word_operand >>
-     simp[evaluate_type_def, is_word_type_def, word_value_def, val_to_w256_def,
-          integer_wordTheory.i2w_pos]) >>
-  irule frag_exec_conseq >>
-  irule_at Any slice_calldata_frag >>
-  qexistsl_tac [`t`, `res`, `mk_ptr out LocMemory`, `op`, `n`, `func`,
-    `es'`, `Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]`,
-    `cx`, `cenv`, `a`] >>
-  simp[contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def] >>
-  rpt strip_tac >> gvs[] >>
-  irule vv_post_prefix_frame >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[expr_post_frame]
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  qpat_x_assum `expr_sim _ _ _ _ _ e _`
+    (mp_tac o REWRITE_RULE [expr_sim_def]) >>
+  disch_then (qspecl_then [`sa`, `sm`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[calldata_slice_action] >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      strip_tac
+      >- (gvs[] >>
+          `bind (eval_expr cx e) (read_result cx)
+             (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+             (INL v, es_end with gas_obs := [])` by
+            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+             strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+          `word_value_type (expr_type e)` by simp[word_value_type_def] >>
+          drule_at (Pat `bind _ _ _ = _`)
+            (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_word_result) >>
+          disch_then (qspecl_then [`cenv`, `env`] mp_tac) >>
+          (impl_tac >- fs[]) >> strip_tac >>
+          gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
+          `?a. v = IntV (&a) /\ a < 2 ** 256` by
+            (Cases_on `v` >> gvs[value_has_type_inv, word_value_def] >>
+             rename1 `0 <= i` >> qexists_tac `Num i` >> simp[]) >>
+          gvs[] >>
+          `~t.vs_halted` by
+            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          `MAP FDOM es.scopes = MAP FDOM es_end.scopes` by
+            (qpat_x_assum `bind _ _ (es with gas_obs := _) = _` mp_tac >>
+             simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+             imp_res_tac read_result_state >> gvs[] >>
+             drule eval_expr_preserves_scopes_dom >> simp[]) >>
+          `compile_slice_calldata op (Lit (n2w n)) (32 + 32 * word_size n) sm =
+             (out,sc) /\ a < 2 ** 256 /\ n < 2 ** 256 /\
+           32 + 32 * word_size n < 2 ** 64` by fs[] >>
+          drule_all slice_calldata_continuation >>
+          rewrite_tac[gas_summary_at_def] >> strip_tac >>
+          qexistsl_tac [`res`, `es_end'`, `r`] >>
+          (conj_tac
+           >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+                      |> REWRITE_RULE [APPEND_NIL]) >>
+               qexistsl_tac [`es_end`, `t`, `IntV &a`] >> gvs[]) >>
+           gvs[])) >>
+      Cases_on `res` >- gvs[] >>
+      simp[gas_summary_at_def] >> qexistsl_tac [`INR y`, `es_end`, `r`] >>
+      simp[] >> conj_tac
+      >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      metis_tac[expr_exit_INR_type]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  irule_at Any calldata_slice_exempt_cert >> metis_tac[]
 QED
 
 Theorem compile_calldata_slice_call_case:
@@ -999,37 +1132,6 @@ Proof
   Cases_on `compile_slice_calldata start_op (Lit (n2w n))
     (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) s_start` >>
   simp[as_ptr_val_def] >> strip_tac >> gvs[] >>
-  rename1 `compile_slice_calldata _ _ _ sm = (out_op,sc)` >>
-  `cs_extends sa sm /\ sa.cs_next_id <= sm.cs_next_id /\
-   sa.cs_next_var <= sm.cs_next_var` by
-    (drule (cj 2 compile_expr_grows) >> simp[]) >>
-  drule slice_calldata_shape >> strip_tac >>
-  `cs_extends sm sc` by
-    gvs[cs_extends_def, same_blocks_def, rich_listTheory.IS_PREFIX_APPEND] >>
-  `fn_has_code sa sm func /\ fn_has_code sm sc func` by
-    metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  drule eval_calldata_slice_cases >> strip_tac
-  >- (gvs[] >> drule eval_exprs_cons_cases >> strip_tac
-      >- (gvs[] >>
-          `expr_res_ok (INR exc)` by
-            (irule expr_body_pre_res_ok >> simp[] >>
-             goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
-          drule_all expr_sim_apply >>
-          disch_then (qspec_then `s0` mp_tac) >> simp[] >> strip_tac >>
-          irule frag_exec_exit_prefix >> qexists_tac `sm` >> simp[] >>
-          irule frag_exec_conseq >> goal_assum (drule_at Any) >>
-          simp[exprSimUnwrapPropsTheory.expr_exit_exception_transport]) >>
-      gvs[eval_exprs_nil]) >>
-  drule eval_exprs_cons_cases >> strip_tac
-  >- gvs[] >>
-  gvs[eval_exprs_nil] >>
-  `word_value_type (expr_type e)` by simp[word_value_type_def] >>
-  drule_all expr_body_pre_word_result >> simp[] >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, value_has_type_def] >>
-  `?a. v = IntV (&a) /\ a < 2 ** 256` by
-    (Cases_on `v` >> gvs[value_has_type_inv, word_value_def] >>
-     rename1 `0 <= i` >> qexists_tac `Num i` >> simp[]) >>
-  gvs[] >>
   irule slice_calldata_uint_compose >>
   goal_assum (drule_at Any) >>
   simp[type_memory_bytes_def] >>
