@@ -2,7 +2,7 @@ Theory rawCallBufferPtr
 Ancestors
   bodyPtrDefs representationCleanPtr exprSimProps oracleCallStepPtr
   finite_map pred_set exprSimMemoryTransport valueEncodingProps valueEncodingProofs
-  venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr
+  venomMemProofs list fragGasSeqPtr fragGasPathPtr fragExec gasCount decoderGhostFramePtr robustCopyTransportPtr
 
 Theorem ptr_mem_ok_site:
   ptr_mem_ok cx ty v op G tn s /\
@@ -278,4 +278,36 @@ Proof
   qunabbrev_tac `s'` >>
   drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
   simp[] >> metis_tac[]
+QED
+
+(* Copying an inline suffix may propagate padding taint: only robust
+   element representations, not clean type-sized windows, are needed. *)
+Theorem robust_pair_copied_suffix:
+  val_wf ht hv /\ val_footprint ht hv <= type_memory_size ht /\
+  val_wf tt tv /\ val_footprint tt tv <= n /\
+  mem_bytes_at (b + type_memory_size ht) n mem' = mem_bytes_at a n mem /\
+  (!i. i < n ==> (b + type_memory_size ht + i IN dirty' <=> a+i IN dirty)) /\
+  (!i. ~(b + type_memory_size ht <= i /\ i < b + type_memory_size ht+n) ==>
+    mem_bytes_at i 1 mem' = mem_bytes_at i 1 mem) /\
+  (!i. ~(b + type_memory_size ht <= i /\ i < b + type_memory_size ht+n) ==>
+    (i IN dirty' <=> i IN dirty)) /\
+  (!m. mem_agree_outside dirty mem m ==> val_in_memory ht hv b m) /\
+  (!m. mem_agree_outside dirty mem m ==> val_in_memory tt tv a m) ==>
+  !m. mem_agree_outside dirty' mem' m ==>
+    val_in_memory (TupleTV [ht;tt]) (ArrayV (TupleV [hv;tv])) b m
+Proof
+  strip_tac >>
+  `!m. mem_agree_outside dirty' mem' m ==>
+    val_in_memory tt tv (b+type_memory_size ht) m` by
+    (rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`mem`, `mem'`, `n`, `a`, `dirty`, `dirty'`] >> simp[]) >>
+  `!m. mem_agree_outside dirty' mem' m ==> val_in_memory ht hv b m` by
+    (rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     goal_assum (drule_at (Pat `mem_agree_outside _ _ _`)) >>
+     qexistsl_tac [`mem`, `dirty`, `{i | b+type_memory_size ht <= i /\
+       i < b+type_memory_size ht+n}`] >>
+     simp[]) >>
+  rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def]
 QED
