@@ -112,6 +112,29 @@ Proof
   rw[] >> metis_tac[expr_post_of_vv_post_memory]
 QED
 
+Theorem framed_vv_memory_stack_lower_value_frag:
+  compile_expr cenv ty e sa = (vv,sm) /\
+  unwrap_value cenv vv sm = (op,sb) /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  (case vv of StackValue t operand => T
+            | LocatedValue t p => p.ptr_location = LocMemory) /\
+  frag_exec ctx sa sm P
+    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R ==>
+  frag_exec ctx sa sb P
+    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >> irule frag_exec_seq >>
+  goal_assum (drule_at (Pat `frag_exec _ _ _ _ _ _`)) >>
+  rpt conj_tac
+  >~ [`cs_extends sa sm`] >- metis_tac[compile_expr_extends]
+  >~ [`cs_extends sm sb`] >- metis_tac[unwrap_value_extends] >>
+  irule unwrap_memory_stack_storage_frame_frag >> simp[]
+QED
+
 val () = List.app (fn th =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
   in
@@ -121,4 +144,5 @@ val () = List.app (fn th =>
   end) [compile_name_word_storage_frame_frag,
         compile_literal_word_storage_frame_frag,
         unwrap_memory_word_storage_frame_frag,
-        unwrap_memory_stack_storage_frame_frag];
+        unwrap_memory_stack_storage_frame_frag,
+        framed_vv_memory_stack_lower_value_frag];
