@@ -1817,3 +1817,234 @@ Proof
   simp[step_inst_base_def, mk_inst_def, jump_to_def, op_taint_def]
 QED
 
+
+Theorem toplevel_copy_body_counted_literal:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  run_inst_seq
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]] s = OK r /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  isPREFIX
+    [mk_inst id ADD [src;Var cv] [sv];
+     mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+     mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+     mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+     mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+     mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+     mk_inst (id+6) ASSIGN [Var nv] [cv]]
+    (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
+    (OK (r with vs_inst_idx := s.vs_inst_idx+7)) /\
+    toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf
+      (r with vs_inst_idx := s.vs_inst_idx+7)
+Proof
+  metis_tac[toplevel_copy_body_counted]
+QED
+
+Theorem toplevel_copy_body_backedge:
+  (loc = LocStorage \/ loc = LocTransient) /\ ~ctx_has_dalloca ctx /\
+  ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+  EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+  ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+  (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv]) /\
+  toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 k G tn s /\ k < n /\
+  ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      [mk_inst id ADD [src;Var cv] [sv];
+       mk_inst (id+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+       mk_inst (id+2) MUL [Var cv;Lit 32w] [mv];
+       mk_inst (id+3) ADD [Var dst;Var mv] [dv];
+       mk_inst (id+4) MSTORE [Var dv;Var vv] [];
+       mk_inst (id+5) ADD [Var cv;Lit 1w] [nv];
+       mk_inst (id+6) ASSIGN [Var nv] [cv];
+       mk_inst (id+7) JMP [Label hdr] []]|> ==>
+  ?t Gf tnf. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+    toplevel_copy_inv cv ds dst src loc a b n s0 G0 tn0 (k+1) Gf tnf t /\
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule toplevel_copy_inv_source >> strip_tac >>
+  drule toplevel_copy_inv_destination >> strip_tac >>
+  drule toplevel_copy_inv_counter_value >> strip_tac >>
+  `eval_operand (Var dst) s = SOME (n2w b) /\
+   eval_operand (Var cv) s = SOME (n2w k)` by simp[eval_operand_def] >>
+  qspecl_then [`if loc = LocStorage then SLOAD else TLOAD`, `src`, `Var dst`,
+    `a`, `n2w b`, `cv`, `sv`, `vv`, `mv`, `dv`, `nv`, `id`, `s`, `n2w k`]
+    mp_tac storage_copy_body_run >>
+  (impl_tac >- (Cases_on `loc = LocStorage` >> gvs[MEM] >> metis_tac[])) >>
+  disch_then (qx_choose_then `r` strip_assume_tac) >>
+  drule_at (Pat `run_inst_seq _ _ = _`) toplevel_copy_body_counted_literal >>
+  disch_then (drule_at (Pat `toplevel_copy_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
+  disch_then (qspecl_then [`ctx`, `PG`, `D`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qabbrev_tac `u = r with vs_inst_idx := 7` >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = 7` by
+    simp[Abbr `u`] >>
+  `gas_path_ptr D 0 ctx fn PG Gf tnf u 0 Gf tnf (OK (jump_to hdr u))` by
+    (irule toplevel_copy_jmp_path >> simp[] >>
+     qexists_tac `id+7` >> simp[get_instruction_def]) >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ s _ _ _ _` mp_tac >>
+  simp[] >> strip_tac >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0+0) Gf tnf (OK (jump_to hdr u))` by
+    (irule gas_path_ptr_then >>
+     qexistsl_tac [`Gf`, `u`, `tnf`] >> simp[Abbr `u`]) >>
+  qexistsl_tac [`jump_to hdr u`, `Gf`, `tnf`] >>
+  gvs[Abbr `u`] >> simp[jump_to_def]
+QED
+
+Theorem toplevel_copy_init_header:
+  MEM cv ds /\ dst <> cv /\ (!x. src = Var x ==> x <> cv) /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  n < 2**256 /\ b + 32*n < 2**256 /\ b + 32*n <= s.vs_alloca_next /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  DROP s.vs_inst_idx bb.bb_instructions =
+    [mk_inst id ASSIGN [Lit 0w] [cv]; mk_inst (id+1) JMP [Label hdr] []] ==>
+  ?t G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
+    toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t /\
+    ~t.vs_halted /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `isPREFIX [mk_inst id ASSIGN [Lit 0w] [cv]]
+     (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  drule_all toplevel_copy_init_path >>
+  disch_then (qspecl_then [`loc`, `PG`, `D`] strip_assume_tac) >>
+  `get_instruction bb (s.vs_inst_idx+1) =
+     SOME (mk_inst (id+1) JMP [Label hdr] [])` by
+    (`DROP (s.vs_inst_idx+1) bb.bb_instructions =
+        [mk_inst (id+1) JMP [Label hdr] []]` by
+       (`s.vs_inst_idx+1 <= LENGTH bb.bb_instructions` by
+          (qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+           simp[]) >>
+        qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `DROP 1`) >>
+        simp[rich_listTheory.DROP_DROP, arithmeticTheory.ADD_COMM]) >>
+     `isPREFIX [mk_inst (id+1) JMP [Label hdr] []]
+        (DROP (s.vs_inst_idx+1) bb.bb_instructions)` by simp[] >>
+     drule instruction_prefix_cursor >> simp[]) >>
+  `gas_path_ptr D 0 ctx fn PG G1 tn1 t 0 G1 tn1 (OK (jump_to hdr t))` by
+    (irule toplevel_copy_jmp_path >> simp[] >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0+0) G1 tn1 (OK (jump_to hdr t))` by
+    (irule gas_path_ptr_then >> qexistsl_tac [`G1`, `t`, `tn1`] >> simp[]) >>
+  qexistsl_tac [`jump_to hdr t`, `G1`, `tn1`] >>
+  gvs[] >> simp[jump_to_def]
+QED
+
+Theorem toplevel_copy_compiled_path:
+  compile_word_copy_loop src (Var dst) n loc LocMemory F sa = (u,sb) /\
+  fn_has_code sa sb fn /\ (loc = LocStorage \/ loc = LocTransient) /\
+  ~ctx_has_dalloca ctx /\ not_fresh_at sa dst /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  lookup_var dst s = SOME (n2w b) /\ ptr_covers G tn dst s (32*n) /\
+  n < 2**256 /\ b+32*n < 2**256 /\ b+32*n <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf cv ds. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
+    toplevel_copy_inv cv ds dst src loc a b n s G tn n Gf tnf t /\
+    (!x. not_fresh_at sa x ==> ~MEM x ds) /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all toplevel_copy_compile_blocks >> strip_tac >>
+  drule_all toplevel_copy_layout_freshness >> strip_tac >>
+  drule_all toplevel_copy_layout_lookups >> strip_tac >>
+  drule_all toplevel_copy_compile_exit >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_blocks sa sb =
+    [<|bb_label := loop_body; bb_instructions := body_code|>;
+     <|bb_label := hdr; bb_instructions := hdr_code|>;
+     <|bb_label := initial; bb_instructions := init_code|>]` >>
+  `MEM cv [cv;tv;sv;vv;mv;dv;nv] /\ dst <> cv /\
+   (!x. src = Var x ==> x <> cv)` by metis_tac[MEM] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+   DROP s.vs_inst_idx bb.bb_instructions =
+     [mk_inst sa.cs_next_id ASSIGN [Lit 0w] [cv];
+      mk_inst (sa.cs_next_id+1) JMP [Label hdr] []]` by simp[] >>
+  drule_all toplevel_copy_init_header >>
+  disch_then (qspecl_then [`loc`, `PG`, `D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `toplevel_copy_inv cv ds dst src loc a b n s G tn 0 G1 tn1 t` >>
+  qpat_x_assum `compile_word_copy_loop _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `fn_has_code _ _ _` kall_tac >>
+  qpat_x_assum `emitted_blocks _ _ = _` kall_tac >>
+  qpat_x_assum `_ = GENLIST _ _` kall_tac >>
+  `!j Gj tj q. j <= n /\
+     toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
+     ~q.vs_halted /\ q.vs_current_bb = hdr /\ q.vs_inst_idx = 0 ==>
+     ?r Gr tr. gas_path_ptr D 0 ctx fn PG Gj tj q 0 Gr tr (OK r) /\
+       toplevel_copy_inv cv ds dst src loc a b n s G tn j Gr tr r /\
+       ~r.vs_halted /\ r.vs_inst_idx = 0 /\
+       r.vs_current_bb = (if j=n then exit else loop_body)` by
+    (rpt strip_tac >>
+     `cv <> tv /\ dst <> tv /\ (!x. src = Var x ==> x <> tv) /\ MEM tv ds` by
+       (simp[Abbr `ds`] >> metis_tac[MEM, ALL_DISTINCT]) >>
+     `isPREFIX [mk_inst (sa.cs_next_id+2) EQ [Var cv;Lit (n2w n)] [tv];
+        mk_inst ((sa.cs_next_id+2)+1) JNZ [Var tv;Label exit;Label loop_body] []]
+        (DROP q.vs_inst_idx
+          <|bb_label := hdr; bb_instructions := hdr_code|>.bb_instructions)` by
+       simp[Abbr `hdr_code`] >>
+     `lookup_block q.vs_current_bb fn.fn_blocks =
+        SOME <|bb_label := hdr; bb_instructions := hdr_code|>` by metis_tac[] >>
+     drule toplevel_copy_header_path >> disch_then drule_all >>
+     disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+     metis_tac[]) >>
+  `!j Gj tj q. j < n /\
+     toplevel_copy_inv cv ds dst src loc a b n s G tn j Gj tj q /\
+     ~q.vs_halted /\ q.vs_current_bb = loop_body /\ q.vs_inst_idx = 0 ==>
+     ?r Gr tr. gas_path_ptr D 0 ctx fn PG Gj tj q 0 Gr tr (OK r) /\
+       toplevel_copy_inv cv ds dst src loc a b n s G tn (j+1) Gr tr r /\
+       ~r.vs_halted /\ r.vs_current_bb = hdr /\ r.vs_inst_idx = 0` by
+    (rpt strip_tac >>
+     `ALL_DISTINCT [cv;sv;vv;mv;dv;nv] /\
+      EVERY (\x. MEM x ds) [cv;sv;vv;mv;dv;nv] /\
+      ~MEM dst [cv;sv;vv;mv;dv;nv] /\
+      (!x. src = Var x ==> ~MEM x [cv;sv;vv;mv;dv;nv])` by
+       (qpat_x_assum `ALL_DISTINCT ds` mp_tac >>
+        qpat_x_assum `~MEM dst ds` mp_tac >>
+        qpat_x_assum `!x. src = Var x ==> ~MEM x ds` mp_tac >>
+        unabbrev_all_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
+        simp[ALL_DISTINCT] >> metis_tac[]) >>
+     `lookup_block q.vs_current_bb fn.fn_blocks = SOME
+        <|bb_label := q.vs_current_bb; bb_instructions :=
+          [mk_inst (sa.cs_next_id+4) ADD [src;Var cv] [sv];
+           mk_inst ((sa.cs_next_id+4)+1) (if loc = LocStorage then SLOAD else TLOAD) [Var sv] [vv];
+           mk_inst ((sa.cs_next_id+4)+2) MUL [Var cv;Lit 32w] [mv];
+           mk_inst ((sa.cs_next_id+4)+3) ADD [Var dst;Var mv] [dv];
+           mk_inst ((sa.cs_next_id+4)+4) MSTORE [Var dv;Var vv] [];
+           mk_inst ((sa.cs_next_id+4)+5) ADD [Var cv;Lit 1w] [nv];
+           mk_inst ((sa.cs_next_id+4)+6) ASSIGN [Var nv] [cv];
+           mk_inst ((sa.cs_next_id+4)+7) JMP [Label hdr] []]|>` by
+       (simp[Abbr `body_code`] >> metis_tac[]) >>
+     drule_at (Pat `lookup_block _ _ = SOME <|bb_label := _; bb_instructions := _|>`)
+       toplevel_copy_body_backedge >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+     metis_tac[]) >>
+  `?r Gr tr. gas_path_ptr D 0 ctx fn PG G1 tn1 t 0 Gr tr (OK r) /\
+     toplevel_copy_inv cv ds dst src loc a b n s G tn n Gr tr r /\
+     ~r.vs_halted /\ r.vs_current_bb = exit /\ r.vs_inst_idx = 0` by
+    (qpat_x_assum `hdr = _` kall_tac >>
+     qpat_x_assum `loop_body = _` kall_tac >>
+     qpat_x_assum `exit = _` kall_tac >>
+     qpat_x_assum `Abbrev (loop_body = _)` kall_tac >>
+     irule toplevel_copy_iterate_path >> simp[] >>
+     conj_tac >- (qexists_tac `loop_body` >> simp[]) >>
+     qexistsl_tac [`0`, `n`] >> simp[]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0+0) Gr tr (OK r)` by
+    (irule gas_path_ptr_then >> qexistsl_tac [`G1`, `t`, `tn1`] >> simp[]) >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ s (0+0) _ _ _` mp_tac >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`r`, `Gr`, `tr`, `cv`, `ds`] >> simp[]
+QED
