@@ -6309,6 +6309,37 @@ Proof
   drule_all asm_call_pending_step_result >> simp[]
 QED
 
+Theorem asm_frame_call_enter_transport:
+  asm_frame_rel prog data es0 a s /\ s.contexts = (c,rb)::rest /\
+  step s = (INL (),u) /\ LENGTH u.contexts = SUC (LENGTH s.contexts) /\
+  observable_call c /\ run_call u = SOME (INL (),t) /\
+  LENGTH t.contexts = LENGTH s.contexts ==>
+  let observed = outcome_of (request_of s).cr_kind t
+        (LENGTH c.logs) (LENGTH s.rollback.toDelete) in
+  run_call t = run_call s /\
+  a.as_outcomes = observed::MAP SND (call_trace t) /\
+  gas_readings t = gas_readings s /\
+  record_request (request_of s) a.as_requests ++ call_requests t = call_requests es0 /\
+  take_outcome (request_of s) a.as_outcomes =
+    (FST (take_outcome (request_of s) (observed::MAP SND (call_trace t))),
+     MAP SND (call_trace t))
+Proof
+  strip_tac >>
+  `run_call t = run_call s` by (drule_all run_call_enter_return >> simp[]) >>
+  drule frame_obs_call_enter >> disch_then (qspec_then `t` mp_tac) >>
+  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  `a.as_outcomes = outcome_of (request_of s).cr_kind t
+      (LENGTH c.logs) (LENGTH s.rollback.toDelete)::MAP SND (call_trace t)` by
+    (fs[asm_frame_rel_def] >> gvs[]) >>
+  `record_request (request_of s) a.as_requests ++ call_requests t =
+     call_requests es0` by
+    (fs[asm_frame_rel_def, call_requests_def, record_request_def] >>
+     gvs[] >> IF_CASES_TAC >> gvs[]) >>
+  simp[] >>
+  qspecl_then [`request_of s`,`a.as_outcomes`] mp_tac (GEN_ALL take_outcome_rest) >>
+  simp[] >> strip_tac >> metis_tac[pairTheory.PAIR]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
