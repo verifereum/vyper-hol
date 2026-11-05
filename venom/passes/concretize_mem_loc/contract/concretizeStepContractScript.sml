@@ -127,7 +127,7 @@ Proof
   `no_raw_fmp_ops out.fpo_function` by metis_tac[concretize_step_no_raw_fmp] >>
   `fmp_sig_no_param out.fpo_function` by
     (drule fn_pass_step_fmp_sig_no_param >>
-     simp[fn_pass_tag_def, fn_pass_abi_effect_def] >> metis_tac[]) >>
+     simp[fn_pass_tag_def] >> metis_tac[]) >>
   qpat_x_assum `fn_pass_step _ _ _ _ _ _` mp_tac >>
   simp[fn_pass_step_def, execute_configured_fn_pass_concretize, AllCaseEqs()] >>
   strip_tac >> gvs[] >>

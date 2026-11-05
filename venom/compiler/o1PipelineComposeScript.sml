@@ -341,7 +341,7 @@ Proof
      rpt conj_tac
      >- first_assum ACCEPT_TAC
      >- (rpt strip_tac >> drule fn_pass_step_fmp_sig_no_param >>
-         simp[fn_pass_tag_def, fn_pass_abi_effect_def] >> metis_tac[]) >>
+         simp[fn_pass_tag_def] >> metis_tac[]) >>
      fs[unit_fmp_unsealed_def, EVERY_MEM, fmp_sig_no_param_def]) >>
   fs[EVERY_MEM, o1_fn_row_def]
 QED

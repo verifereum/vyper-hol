@@ -452,16 +452,17 @@ Definition fmp_sig_no_param_def:
     !sig. fn.fn_fmp_signature = SOME sig ==> ~sig.fms_has_fmp_param
 End
 
-(* A pass that keeps the FMP convention keeps fmp_sig_no_param. *)
+(* Every pass but FmpLowering keeps the FMP convention, so it keeps
+   fmp_sig_no_param. *)
 Theorem fn_pass_step_fmp_sig_no_param:
   fn_pass_step rpolicy pass observed s fn out /\
-  fn_pass_abi_effect (fn_pass_tag pass) = FAE_PreserveFmpConvention /\
+  fn_pass_tag pass <> VP_FmpLowering /\
   fmp_sig_no_param fn ==>
   fmp_sig_no_param out.fpo_function
 Proof
   rw[fn_pass_step_def, fn_pass_effects_hold_def, fn_abi_effect_holds_def,
      fn_fmp_convention_eq_def, fmp_sig_no_param_def] >>
-  gvs[]
+  Cases_on `fn_pass_tag pass` >> gvs[fn_pass_abi_effect_def]
 QED
 
 (* The per-function stage rows: what a run may assume of the function it
