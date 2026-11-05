@@ -221,17 +221,20 @@ Proof
   `!op v. (MEM op ps2.ps_stack \/ op IN FDOM ps2.ps_spilled) /\
      ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                      (collect_phis bb.bb_instructions))) /\
-     normalize_operand dfg [] op = Var v ==>
+     (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
      ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
-    metis_tac[operand_distinct] >>
+    metis_tac[operand_distinct, dead_stack_marker_def] >>
   `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
      operand_val (frame_view fn ra vs) lo at =
      operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)` by
     metis_tac[] >>
-  `asm_block_at prog as2.as_pc (execute_plan cp.cp_initial_fmp ops)` by
-    simp[] >>
+  qpat_x_assum `asm_block_at _ (_ + _) _` mp_tac >>
+  qpat_x_assum `as2.as_pc = _` (fn th => SUBST1_TAC (SYM th) >> assume_tac th) >>
+  strip_tac >>
   drule_all phi_prefix_hits_frame_sim >> strip_tac >>
+  qpat_x_assum `asm_steps _ _ _ n as = _`
+    (assume_tac o Q.SPEC `n'` o MATCH_MP asm_steps_add_ok) >>
   qexistsl_tac [`phi_ops`, `ps1`, `body_ops`, `n + n'`, `as'`] >>
-  gvs[execute_plan_append] >>
-  irule asm_steps_add_ok >> simp[]
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  gvs[execute_plan_append]
 QED
