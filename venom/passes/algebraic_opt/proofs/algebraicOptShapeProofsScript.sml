@@ -1,6 +1,7 @@
 Theory algebraicOptShapeProofs
 Ancestors
   algebraicOptDefs venomInst algebraicOptSupplyProofs irSupply
+  venomWf venomState stackPlanTypes
 Libs
   listTheory pred_setTheory
 
@@ -488,4 +489,32 @@ Proof
       gvs[ao_pre_flip_inst_shape, SUBSET_DEF] >> metis_tac[]) >>
   drule ao_opt_producer_shape >> strip_tac >> gvs[] >>
   simp[ao_post_flip_inst_shape] >> metis_tac[SUBSET_TRANS, SUBSET_UNION]
+QED
+
+Theorem ao_resolve_iszero_op_label:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  get_label (ao_resolve_iszero_op targets opc op) = get_label op
+Proof
+  strip_tac >> Cases_on `op` >> simp[ao_resolve_iszero_op_def] >>
+  Cases_on `ALOOKUP targets s` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `EL k x` >>
+  `k < LENGTH x` by gvs[Abbr `k`] >>
+  `~is_label_operand (EL k x)` by
+    (first_x_assum irule >> metis_tac[MEM_EL]) >>
+  Cases_on `EL k x` >>
+  gvs[stackPlanTypesTheory.is_label_operand_def, get_label_def]
+QED
+
+Theorem ao_resolve_iszero_inst_labels:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  MAP get_label (ao_resolve_iszero_inst targets inst).inst_operands =
+  MAP get_label inst.inst_operands
+Proof
+  strip_tac >> simp[ao_resolve_iszero_inst_def, MAP_MAP_o,
+                    combinTheory.o_DEF] >>
+  irule MAP_CONG >> simp[] >> rpt strip_tac >>
+  irule ao_resolve_iszero_op_label >> metis_tac[]
 QED
