@@ -9,7 +9,7 @@ Theory codegenAsmProgOk
 Ancestors
   asmFrameRel codegenEncodingWf codegen unitShapeDefs asmWf asmSem
   symbolResolve stackPlanGen stackPlanOps stackPlanTypes asmIR list rich_list
-  arithmetic finite_map planExec
+  arithmetic finite_map planExec venomInst
 
 Theorem exec_stack_op_no_data[local]:
   EVERY (\i. ~is_data_inst i) (exec_stack_op fmp op)
@@ -334,6 +334,163 @@ Proof
   gvs[venom_to_evm_name_def] >>
   Cases_on `inst.inst_opcode` >> gvs[venom_to_evm_name_def]
 QED
+Theorem generate_regular_inst_plan_no_forbidden[local]:
+  generate_regular_inst_plan liveness dfg cfg fn inst live halting term cur ps =
+    (ops, ps') /\
+  ~MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT] ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) ops
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def] >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) input_ops` by metis_tac[emit_input_plan_no_emit] >>
+  gvs[] >> qpat_x_assum `_ = (input_ops, ps1)` kall_tac >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) join_ops` by
+    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+     metis_tac[reorder_plan_no_emit, restore_spilled_plan_no_emit]) >>
+  gvs[] >> qpat_x_assum `_ = (join_ops, ps2)` kall_tac >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) reorder_ops` by
+    (gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
+     gvs[AllCaseEqs()] >> metis_tac[reorder_plan_no_emit]) >>
+  gvs[] >> qpat_x_assum `_ = (reorder_ops, ps4)` kall_tac >> pairarg_tac >>
+  `!name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) emit_ops` by
+    (qmatch_asmsub_abbrev_tac `generate_emit_ops inst topics ps6` >>
+     drule generate_emit_ops_no_forbidden >> simp[]) >>
+  gvs[] >> qpat_x_assum `_ = (emit_ops, ps7)` kall_tac >>
+  IF_CASES_TAC >> simp[] >- (rw[] >> gvs[]) >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) pop_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[popmany_plan_no_emit]) >>
+  gvs[] >> qpat_x_assum `_ = (pop_ops, ps8)` kall_tac >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) opt_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[optimistic_swap_plan_no_emit]) >>
+  gvs[] >> rw[] >> gvs[]
+QED
+
+Theorem generate_inst_plan_no_forbidden[local]:
+  generate_inst_plan liveness dfg cfg fn inst live halting term cur ps =
+    SOME (ops, ps') /\
+  ~MEM inst.inst_opcode [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT] ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) ops
+Proof
+  simp[generate_inst_plan_def] >> rpt IF_CASES_TAC >> simp[] >>
+  metis_tac[generate_phi_plan_no_emit, generate_offset_plan_no_emit,
+            generate_regular_inst_plan_no_forbidden, MEM]
+QED
+
+Theorem prepare_params_plan_no_emit[local]:
+  prepare_params_plan liveness fn ps = (ops, ps') ==>
+  !name. ~MEM (SOEmit name) ops
+Proof
+  simp[prepare_params_plan_def] >> IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[popmany_plan_no_emit, optimistic_swap_plan_no_emit, MEM_APPEND]
+QED
+
+Theorem clean_stack_plan_no_emit[local]:
+  clean_stack_plan liveness cfg fn bb ps = (ops, ps') ==>
+  !name. ~MEM (SOEmit name) ops
+Proof
+  simp[clean_stack_plan_def] >> gvs[AllCaseEqs()] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[popmany_plan_no_emit]
+QED
+
+Theorem generate_block_insts_plan_no_forbidden[local]:
+  !insts i ps ops ps'.
+  generate_block_insts_plan liveness dfg cfg fn bb_label halting
+    n_params block_len i insts ps = SOME (ops, ps') /\
+  EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) insts ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) ops
+Proof
+  Induct >> simp[generate_block_insts_plan_def] >> rpt gen_tac >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  drule generate_inst_plan_no_forbidden >> simp[] >>
+  strip_tac >> metis_tac[]
+QED
+
+Theorem generate_block_plan_no_forbidden[local]:
+  generate_block_plan liveness dfg cfg fn bb ps = SOME (ops, ps') /\
+  EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) bb.bb_instructions ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) ops
+Proof
+  simp[generate_block_plan_def] >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) param_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[prepare_params_plan_no_emit]) >>
+  gvs[] >> qpat_x_assum `_ = (param_ops, ps1)` kall_tac >> pairarg_tac >>
+  `!name. ~MEM (SOEmit name) clean_ops` by
+    (gvs[AllCaseEqs()] >> metis_tac[clean_stack_plan_no_emit]) >>
+  gvs[] >> qpat_x_assum `_ = (clean_ops, ps2)` kall_tac >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (non_param_insts bb)` by
+    (gvs[non_param_insts_def, EVERY_MEM, MEM_FILTER] >> metis_tac[]) >>
+  drule generate_block_insts_plan_no_forbidden >> simp[] >>
+  gvs[]
+QED
+
+Theorem lookup_block_every_insts[local]:
+  !bbs. EVERY P (fn_insts_blocks bbs) /\ lookup_block lbl bbs = SOME bb ==>
+    EVERY P bb.bb_instructions
+Proof
+  Induct >> simp[fn_insts_blocks_def, lookup_block_def, FIND_thm] >>
+  rpt gen_tac >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[lookup_block_def]
+QED
+
+Theorem fn_plan_aux_no_forbidden[local]:
+  (!liveness dfg cfg fn worklist visited ps ops visited' ps'.
+    generate_fn_plan_aux liveness dfg cfg fn worklist visited ps =
+      SOME (ops, visited', ps') /\
+    EVERY (\inst. ~MEM inst.inst_opcode
+      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (fn_insts fn) ==>
+    !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) ops) /\
+  (!liveness dfg cfg fn ss sp succs visited ps ops visited' ps'.
+    generate_succs_plan liveness dfg cfg fn ss sp succs visited ps =
+      SOME (ops, visited', ps') /\
+    EVERY (\inst. ~MEM inst.inst_opcode
+      [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (fn_insts fn) ==>
+    !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+      ~MEM (SOEmit name) ops)
+Proof
+  ho_match_mp_tac generate_fn_plan_aux_ind >> rpt conj_tac
+  >- (rpt gen_tac >> simp[Once generate_fn_plan_aux_def] >> rw[] >> simp[])
+  >- (rpt gen_tac >> strip_tac >> simp[Once generate_fn_plan_aux_def] >>
+      Cases_on `MEM lbl visited` >- (gvs[] >> metis_tac[]) >>
+      gvs[] >> Cases_on `lookup_block lbl fn.fn_blocks`
+      >- (gvs[] >> metis_tac[]) >>
+      simp[AllCaseEqs()] >> rpt gen_tac >> strip_tac >> gvs[] >>
+      `EVERY (\inst. ~MEM inst.inst_opcode
+        [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) x.bb_instructions` by
+        (irule lookup_block_every_insts >> gvs[fn_insts_def] >> metis_tac[]) >>
+      drule generate_block_plan_no_forbidden >> simp[] >>
+      gvs[] >> metis_tac[])
+  >- (rpt gen_tac >> simp[Once generate_fn_plan_aux_def] >> rw[] >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once generate_fn_plan_aux_def, AllCaseEqs()] >>
+  rpt gen_tac >> strip_tac >> gvs[] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem generate_fn_plan_with_cleanup_no_forbidden[local]:
+  generate_fn_plan_with_cleanup ch growth fn spill_base lbl_ctr = SOME (ops, ps) /\
+  EVERY (\inst. ~MEM inst.inst_opcode
+    [DELEGATECALL; CREATE; CREATE2; SELFDESTRUCT]) (fn_insts fn) ==>
+  !name. MEM name ["DELEGATECALL"; "CREATE"; "CREATE2"; "SELFDESTRUCT"] ==>
+    ~MEM (SOEmit name) ops
+Proof
+  simp[generate_fn_plan_with_cleanup_def,
+       generate_fn_plan_with_cleanup_analyzed_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  drule (cj 1 fn_plan_aux_no_forbidden) >> simp[] >> gvs[]
+QED
+
 
 
 Theorem codegen_assembly_frame_prog_ok:
