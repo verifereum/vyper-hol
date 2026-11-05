@@ -107,3 +107,40 @@ Proof
        exec_pure2_def, exec_read1_def, exec_write2_def, bind_outputs_def,
        eval_operand_def, lookup_var_update_var]
 QED
+
+Theorem ec_precompile_suffix_mem_ok:
+  (do gas <- emit_op GAS [];
+      success <- emit_op STATICCALL [gas; Lit target; ip; Lit insz; op; Lit 64w];
+      emit_void ASSERT [success];
+      comp_return op od) sm = (res,sb) /\
+  eval_operand ip s = SOME wi /\ eval_operand op s = SOME wo /\
+  (!z. ip = Var z ==> not_fresh_at sm z) /\
+  (!z. op = Var z ==> not_fresh_at sm z) /\
+  w2n wi + w2n insz <= s.vs_alloca_next /\
+  w2n wo + 64 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >>
+  `!q k z t. MEM q [ip;op] /\ sm.cs_next_var <= k ==>
+     eval_operand q (update_var (STRING #"%" (toString k)) z t) =
+     eval_operand q t` by
+    (rpt strip_tac >> irule eval_operand_update_not_fresh >>
+     qexists_tac `sm` >> gvs[] >> metis_tac[]) >>
+  qpat_x_assum `_ sm = (res,sb)` mp_tac >>
+  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, rich_listTheory.DROP_APPEND1] >>
+  simp[Once run_inst_seq_mem_ok_def, below_frontier_no_ranges,
+       memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
+  simp[step_inst_base_opcode_eqs, exec_gas_def, bind_outputs_def] >>
+  Cases_on `s.vs_gas_readings` >> simp[] >>
+  pure_rewrite_tac[GSYM mk_inst_def] >>
+  simp[Once run_inst_seq_mem_ok_def, below_frontier_STATICCALL,
+       memSafeRunTheory.inst_dload_in_section_def] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_no_ranges,
+       memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
+       eval_operand_def, lookup_var_update_var] >>
+  simp[wordsTheory.dimword_def] >>
+  CASE_TAC >> simp[]
+QED
