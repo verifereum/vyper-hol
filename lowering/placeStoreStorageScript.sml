@@ -4962,6 +4962,51 @@ Proof
   >> rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
 QED
 
+Theorem place_store_wrap_probe_mcopy_zero:
+  !s. mload 0 (mcopy (dimword (:256) - 32) 0 64 s) = mload 0 s
+Proof
+  gen_tac >>
+  `mem_bytes_at 0 32 (mcopy (dimword (:256) - 32) 0 64 s).vs_memory =
+   mem_bytes_at 0 32 s.vs_memory` by
+    (irule valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint >> EVAL_TAC) >>
+  gvs[valueEncodingTheory.mem_bytes_at_def, mload_def]
+QED
+
+Theorem place_store_wrap_probe_counter_key:
+  !j. j < dimword (:256) DIV 32 ==>
+    ((n2w j:bytes32) = 1w <=> j = 1)
+Proof
+  rpt strip_tac >>
+  `j < dimword (:256)` by
+    (fs[wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256] >> decide_tac) >>
+  simp[wordsTheory.n2w_11, wordsTheory.dimword_def, venomMemPropsTheory.dimindex_256,
+       arithmeticTheory.LESS_MOD]
+QED
+
+Theorem place_store_wrap_probe_wrap_address:
+  (n2w ((dimword (:256) - 32) + 32):bytes32) = 0w /\
+  EL 0 (word_to_bytes (1w:bytes32) T) = 0w
+Proof
+  EVAL_TAC
+QED
+
+Theorem place_store_wrap_probe_store_observation:
+  !j value s.
+    j < dimword (:256) DIV 32 /\
+    EL 0 (word_to_bytes (lookup_storage 1w (contract_storage s)) T) = 0w /\
+    (j = 1 ==> value = 1w) ==>
+    EL 0 (word_to_bytes
+      (lookup_storage 1w (contract_storage (sstore (n2w j) value s))) T) = 0w
+Proof
+  rpt strip_tac >>
+  drule place_store_wrap_probe_counter_key >> strip_tac >>
+  Cases_on `j = 1` >>
+  gvs[sstore_def, contract_storage_def, vfmStateTheory.lookup_account_def,
+      combinTheory.APPLY_UPDATE_THM, vfmStateTheory.lookup_storage_def,
+      vfmStateTheory.update_storage_def] >>
+  EVAL_TAC
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
