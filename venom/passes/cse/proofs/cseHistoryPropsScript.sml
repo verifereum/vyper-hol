@@ -3159,3 +3159,52 @@ Proof
  goal_assum (drule_at Any) >>
  qexistsl [`events`, `events`, `[]`] >> simp[]
 QED
+
+Theorem cse_prefix_copy_use_distinct:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM (Var y) use.inst_operands /\
+ MEM copy (fn_insts fn) /\ copy.inst_opcode = ASSIGN /\
+ copy.inst_outputs = [y] ==>
+ copy.inst_id <> use.inst_id
+Proof
+ strip_tac >>
+ `MEM bb fn.fn_blocks` by
+   (drule_all cse_prefix_exec_control >> metis_tac[lookup_block_MEM]) >>
+ `MEM use bb.bb_instructions` by
+   (gvs[get_instruction_def, AllCaseEqs()] >> metis_tac[MEM_EL]) >>
+ `def_available_at fn bb (SOME use) y` by
+   (qpat_x_assum `wf_ssa fn` mp_tac >>
+    simp[wf_ssa_def, def_dominates_uses_def] >> strip_tac >>
+    first_x_assum (qspecl_then [`bb`, `use`] mp_tac) >> simp[]) >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ qpat_x_assum `def_available_at fn bb (SOME use) y` mp_tac >>
+ rewrite_tac[def_available_at_def] >> strip_tac >>
+ `MEM def_inst (fn_insts fn)` by
+   (simp[fn_insts_def] >>
+    qpat_x_assum `MEM def_bb fn.fn_blocks` mp_tac >>
+    qspec_tac (`fn.fn_blocks`, `bbs`) >>
+    Induct >> simp[fn_insts_blocks_def] >> rpt strip_tac >> gvs[]) >>
+ `def_inst = copy` by
+   (irule ssa_outputs_same_inst >> gvs[fn_insts_def] >> metis_tac[MEM]) >>
+ qpat_x_assum `def_inst = copy` SUBST_ALL_TAC >>
+ `lookup_block def_bb.bb_label fn.fn_blocks = SOME def_bb /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+   (conj_tac >> irule MEM_lookup_block >>
+    gvs[wf_function_def, fn_labels_def]) >>
+ strip_tac >>
+     `?i. i < LENGTH def_bb.bb_instructions /\ EL i def_bb.bb_instructions = copy` by
+       metis_tac[MEM_EL] >>
+     `cse_point_has_id fn (def_bb.bb_label,i) copy.inst_id` by
+       (simp[cse_point_has_id_def] >> metis_tac[]) >>
+     `cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) copy.inst_id` by
+       (gvs[get_instruction_def, cse_point_has_id_def, AllCaseEqs()] >> metis_tac[]) >>
+     `def_bb.bb_label = bb.bb_label` by metis_tac[cse_point_has_id_injective, pairTheory.PAIR_EQ] >>
+     `def_bb = bb` by metis_tac[optionTheory.SOME_11] >>
+     gvs[] >>
+     `cse_point_has_id fn (bb.bb_label,i') (EL j bb.bb_instructions).inst_id /\
+      cse_point_has_id fn (bb.bb_label,j) (EL j bb.bb_instructions).inst_id` by
+       (gvs[cse_point_has_id_def] >> metis_tac[]) >>
+     `i' = j` by metis_tac[cse_point_has_id_injective, pairTheory.PAIR_EQ] >> decide_tac
+QED
