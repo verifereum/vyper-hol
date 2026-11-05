@@ -186,6 +186,12 @@ Proof
       simp[] >> rpt strip_tac >>
       qpat_x_assum `!name b len. local_region _ es'.scopes _ _ _ _ ==> _` drule >>
       decide_tac) >>
+  conj_tac
+  >- (strip_tac >> simp[expr_val_own_def] >>
+      disj1_tac >> qexistsl [`aid`, `w2n w`, `sz`] >>
+      simp[] >> rpt strip_tac >>
+      qpat_x_assum `!name b len. local_region _ es'.scopes _ _ _ _ ==> _` drule >>
+      decide_tac) >>
   metis_tac[]
 QED
 
