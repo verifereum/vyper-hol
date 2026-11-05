@@ -26,6 +26,7 @@ Ancestors
   o1LowerDloadOrdinaryDispatch o1LowerDloadEntryFetch o1LowerDloadRootResult
   o1LowerDloadRunnerBoundary o1LowerDloadRootEntry o1LowerDloadJointEntry
   venomExecSemantics o1LowerDloadSourceEntry o1LowerDloadRunner
+  o1LowerDloadRunnerExec
   o1LowerDloadEndpointConsumer o1LowerDloadJointRelation o1LowerDloadOccurrence
   o1LowerDloadOccurrenceHeadroom venomWf passSimulationDefs venomState
 
@@ -303,6 +304,22 @@ QED
    shifted alloca sites from wrapping; the pointer discipline and the
    taint bound (in o1_src_inv) keep the shifted alloca addresses out of
    what the run observes. *)
+val ldMutualResult = snd (dest_imp (concl ld_runner_conditional_induction));
+
+Theorem ld_runner_simulation:
+  ^ldMutualResult
+Proof
+  mp_tac ld_runner_conditional_induction >>
+  (impl_tac >- (conj_tac
+    >- ACCEPT_TAC ld_runner_step_clause
+    >> ACCEPT_TAC ld_runner_exec_clause)) >>
+  simp[]
+QED
+
+val _ = if null (hyp ld_runner_simulation) andalso
+               aconv (concl ld_runner_simulation) ldMutualResult
+        then () else raise Fail "mutual runner audit failed";
+
 Theorem lower_dload_stage_sim:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
