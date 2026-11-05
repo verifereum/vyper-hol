@@ -21,6 +21,24 @@ Proof
  rpt gen_tac >> Cases_on `a = k` >> simp[]
 QED
 
+(* Collision boundaries include raw identity fallback, not only map keys. *)
+Theorem canonical_id_update_collision_away:
+ !c i r a b. a <> i /\ b <> i ==>
+ (canonical_id (c |+ (i,r)) a = canonical_id (c |+ (i,r)) b <=>
+  canonical_id c a = canonical_id c b)
+Proof
+ simp[canonical_id_update]
+QED
+
+Theorem canonical_id_update_collision_key:
+ !c i j k. k <> i ==>
+ (canonical_id (c |+ (i,canonical_id c j)) i =
+  canonical_id (c |+ (i,canonical_id c j)) k <=>
+  canonical_id c j = canonical_id c k)
+Proof
+ simp[canonical_id_update]
+QED
+
 Theorem canonical_operand_ids_update_away:
  !c d i k r.
  (!op. MEM op i.inst_operands ==> operand_producer d {} op <> SOME k) ==>
