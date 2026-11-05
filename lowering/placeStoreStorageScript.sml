@@ -1311,6 +1311,63 @@ Resume place_store_bytestring_path[post]:
 QED
 Finalise place_store_bytestring_path
 
+(* Shared actual-execution contract for recursive normalization. *)
+Definition place_store_counted_entry_def:
+  place_store_counted_entry cenv ctx dty sty dtv stv v <=>
+    !dst src sa sb func s dw sw.
+      compile_store_memory_typed cenv dst dty src sty sa = ((),sb) /\
+      (!x. dst = Var x ==> not_fresh_at sa x) /\
+      (!x. src = Var x ==> not_fresh_at sa x) /\
+      eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
+      val_in_memory stv v (w2n sw) s.vs_memory /\
+      w2n sw + type_memory_size stv < dimword (:256) /\
+      w2n dw + type_memory_size dtv < dimword (:256) /\
+      regions_disjoint (w2n sw) (type_memory_size stv)
+                       (w2n dw) (type_memory_size dtv) /\
+      fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+      ?t. gas_marked_path F ctx func s 0 (OK t) /\
+          val_in_memory dtv v (w2n dw) t.vs_memory /\
+          typedMemoryCopy$typed_copy_state_frame sa (w2n dw) (type_memory_size dtv) s t /\
+          ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+          t.vs_inst_idx = LENGTH sb.cs_current_insts
+End
+
+Theorem place_store_counted_word_entry:
+  is_word_type dty /\ type_widens_to tenv sty dty /\
+  evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
+  value_has_type stv v ==>
+  place_store_counted_entry cenv ctx dty sty dtv stv v
+Proof
+  strip_tac >> rw[place_store_counted_entry_def] >>
+  drule_all place_store_typed_word_path >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexists_tac `t` >>
+  simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
+       typedMemoryCopyTheory.typed_copy_frame_def] >> metis_tac[ADD_COMM]
+QED
+
+(* List alignment uses the library relation, not a second entries concept. *)
+Theorem place_store_counted_fields_cons:
+  LIST_REL
+    (\(dty,dtv) (sty,stv,v).
+       type_memory_bytes cenv dty = type_memory_size dtv /\
+       type_memory_bytes cenv sty = type_memory_size stv /\
+       place_store_counted_entry cenv ctx dty sty dtv stv v)
+    ((dty,dtv)::ds) ((sty,stv,v)::ss) <=>
+  type_memory_bytes cenv dty = type_memory_size dtv /\
+  type_memory_bytes cenv sty = type_memory_size stv /\
+  place_store_counted_entry cenv ctx dty sty dtv stv v /\
+  LIST_REL
+    (\(dty,dtv) (sty,stv,v).
+       type_memory_bytes cenv dty = type_memory_size dtv /\
+       type_memory_bytes cenv sty = type_memory_size stv /\
+       place_store_counted_entry cenv ctx dty sty dtv stv v) ds ss
+Proof
+  simp[CONJ_ASSOC]
+QED
+
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
