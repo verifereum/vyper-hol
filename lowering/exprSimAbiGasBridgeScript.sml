@@ -1210,6 +1210,82 @@ Definition frag_ops_free_def:
                i.inst_opcode <> RETURN) (frag_code sa sb)
 End
 
+Theorem start_swap_emitted_blocks:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks ==>
+  emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb) =
+    FRONT (emitted_blocks sa sb) ++
+    [LAST (emitted_blocks sa sb) with
+      <|bb_label := L;
+        bb_instructions := MAP (\id. mk_inst id NOP [] []) ids ++
+          DROP (LENGTH sa.cs_current_insts)
+            (LAST (emitted_blocks sa sb)).bb_instructions|>]
+Proof
+  simp[cs_extends_def] >> strip_tac >>
+  `emitted_blocks sa sb = new` by
+    (irule emitted_blocks_append >> simp[]) >>
+  `new <> []` by (strip_tac >> gvs[]) >>
+  simp[start_swap_def, start_relabel_def, NULL_EQ] >>
+  irule emitted_blocks_append >> simp[DROP_LENGTH_APPEND]
+QED
+
+Theorem start_swap_fields:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks ==>
+  (start_swap sa L ids sb).cs_current_bb = sb.cs_current_bb /\
+  (start_swap sa L ids sb).cs_current_insts = sb.cs_current_insts
+Proof
+  simp[cs_extends_def] >> strip_tac >>
+  `emitted_blocks sa sb = new` by
+    (irule emitted_blocks_append >> simp[]) >>
+  `new <> []` by (strip_tac >> gvs[]) >>
+  simp[start_swap_def, NULL_EQ]
+QED
+
+Theorem start_relabel_extends:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks ==>
+  cs_extends (start_relabel L ids sa) (start_swap sa L ids sb)
+Proof
+  simp[cs_extends_def] >> strip_tac >>
+  `emitted_blocks sa sb = new` by
+    (irule emitted_blocks_append >> simp[]) >>
+  `new <> []` by (strip_tac >> gvs[]) >>
+  simp[start_swap_def, start_relabel_def, NULL_EQ, cs_extends_def,
+       DROP_LENGTH_APPEND] >>
+  qexists_tac `FRONT new ++
+    [LAST new with <|bb_label := L;
+      bb_instructions := MAP (\id. mk_inst id NOP [] []) ids ++
+        DROP (LENGTH sa.cs_current_insts) (LAST new).bb_instructions|>]` >>
+  simp[IS_PREFIX_APPEND]
+QED
+
+Theorem start_swap_emitted_shape:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks ==>
+  emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb) <> [] /\
+  FRONT (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) =
+    FRONT (emitted_blocks sa sb) /\
+  LAST (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) =
+    (LAST (emitted_blocks sa sb) with
+      <|bb_label := L;
+        bb_instructions := MAP (\id. mk_inst id NOP [] []) ids ++
+          DROP (LENGTH sa.cs_current_insts)
+            (LAST (emitted_blocks sa sb)).bb_instructions|>)
+Proof
+  strip_tac >> drule_all start_swap_emitted_blocks >> simp[FRONT_APPEND]
+QED
+
+Theorem start_relabel_frag_code:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  LENGTH ids = LENGTH sa.cs_current_insts ==>
+  frag_code (start_relabel L ids sa) (start_swap sa L ids sb) = frag_code sa sb
+Proof
+  strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  drule_all start_swap_emitted_shape >> strip_tac >>
+  drule_all start_swap_fields >> strip_tac >>
+  simp[frag_code_def, NULL_EQ] >>
+  simp[start_relabel_def, DROP_APPEND]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
