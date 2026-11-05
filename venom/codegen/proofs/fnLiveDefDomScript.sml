@@ -306,6 +306,44 @@ Proof
   disj2_tac >> metis_tac[collect_phis_mem]
 QED
 
+Theorem ldd_edge_successor[local]:
+  codegen_ready_fn fn /\ fn_reachable fn p /\
+  MEM s (cfg_succs_of (cfg_analyze fn) p) ==>
+  fn_cfg_edge fn p s /\ fn_reachable fn s /\
+  ?sb. lookup_block s fn.fn_blocks = SOME sb
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `fn_cfg_edge fn p s` by metis_tac[fn_cfg_edge_cfg_analyze] >>
+  simp[] >> conj_tac
+  >- metis_tac[venomExecProofsTheory.fn_reachable_step] >>
+  gvs[fn_cfg_edge_def, wf_function_def, fn_succs_closed_def] >>
+  `MEM s (fn_labels fn)` by metis_tac[] >>
+  gvs[venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+  metis_tac[MEM_lookup_block]
+QED
+
+Theorem ldd_available_predecessor[local]:
+  codegen_ready_fn fn /\ fn_reachable fn p /\
+  lookup_block p fn.fn_blocks = SOME pb /\
+  lookup_block s fn.fn_blocks = SOME sb /\
+  MEM s (cfg_succs_of (cfg_analyze fn) p) /\
+  ldd_available fn sb 0 v ==>
+  ldd_available fn pb (LENGTH pb.bb_instructions) v
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `pb.bb_label = p /\ sb.bb_label = s /\ MEM pb fn.fn_blocks` by
+    metis_tac[lookup_block_label, lookup_block_MEM] >>
+  drule ldd_available_entry >> strip_tac >>
+  `fn_cfg_edge fn p s` by metis_tac[fn_cfg_edge_cfg_analyze] >>
+  `fn_dominates fn db.bb_label p` by
+    metis_tac[venomExecProofsTheory.fn_dominates_predecessor] >>
+  simp[ldd_available_def] >> qexistsl_tac [`db`, `di`] >> simp[] >>
+  strip_tac >> `db = pb` by metis_tac[wf_function_blocks_same_label] >>
+  gvs[] >> metis_tac[listTheory.MEM_EL]
+QED
+
 (* Used by fnLineageStatic: no stack slot of a lineage state is an output
    of the block it enters.
 
