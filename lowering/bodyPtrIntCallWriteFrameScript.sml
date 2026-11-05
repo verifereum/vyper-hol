@@ -1,7 +1,7 @@
 (* Ordinary write exclusion; exceptional revert forwarding is explicit. *)
 Theory bodyPtrIntCallWriteFrame
 Ancestors bodyPtrIntCallConfinement ptrDiscipline pred_set arithmetic
-  venomExecSemantics
+  venomExecSemantics codegenRel
 
 Theorem intcall_access_write_outside:
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
@@ -110,3 +110,49 @@ QED
    obligations. Neither the missing-value probe nor this audit refutes or
    proves body_intcall_eq_ptr.
 *)
+
+Theorem intcall_written_taint_range_ok:
+  step_inst fuel ctx inst s = OK t /\
+  (!op k. MEM op inst.inst_operands /\ k IN op_taint tn op ==> k < 32)
+  ==> written_taint tn inst s SUBSET
+      range_bytes (source_memory_write_ranges inst s)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >- simp[written_taint_def] >>
+  rename1 `inst.inst_operands = a::rest` >>
+  Cases_on `rest` >- simp[written_taint_def] >>
+  rename1 `inst.inst_operands = a::v::rest` >>
+  Cases_on `rest`
+  >- (Cases_on `inst.inst_opcode = MSTORE \/ inst.inst_opcode = ISTORE`
+      >- (drule_all intcall_store_ok_evaluates >> strip_tac >>
+          gvs[written_taint_def, source_memory_write_ranges_def,
+              fixed_source_write_range_def, range_bytes_def, SUBSET_DEF] >>
+          rpt strip_tac >> gvs[] >>
+          first_x_assum (qspecl_then [`v`,`k`] mp_tac) >> simp[]) >>
+      simp[written_taint_def]) >>
+  rename1 `inst.inst_operands = a::v::n::rest` >>
+  Cases_on `rest`
+  >- (Cases_on `inst.inst_opcode = MCOPY` >>
+      simp[written_taint_def] >>
+      Cases_on `eval_operand a s` >> simp[] >>
+      Cases_on `eval_operand v s` >> simp[] >>
+      Cases_on `eval_operand n s` >>
+      gvs[source_memory_write_ranges_def, sized_source_write_range_def,
+          range_bytes_def, SUBSET_DEF] >> rpt strip_tac >> gvs[]) >>
+  simp[written_taint_def]
+QED
+
+Theorem intcall_written_taint_outside_ok:
+  step_inst fuel ctx inst s = OK t /\
+  (!op k. MEM op inst.inst_operands /\ k IN op_taint tn op ==> k < 32) /\
+  access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
+  intcall_prov_outside P PG G /\ (!i. i < lo ==> i NOTIN P)
+  ==> written_taint tn inst s SUBSET COMPL P
+Proof
+  strip_tac >>
+  drule_all intcall_written_taint_range_ok >>
+  simp[SUBSET_DEF, range_bytes_def] >> strip_tac >>
+  rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[intcall_access_write_outside, ADD_COMM]
+QED
