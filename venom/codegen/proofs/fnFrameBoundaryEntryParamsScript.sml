@@ -1834,3 +1834,64 @@ Proof
     (drule_all popmany_plan_noncontig_new >> simp[]) >>
   drule_all popmany_individual_sim_structural >> simp[]
 QED
+
+Theorem entry_context_popmany_sim:
+  !items ps ops ps' cp lo o2pc prog vs st initial_fmp r.
+    popmany_plan items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    context_venom_asm_rel cp lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+    MEM r cp.cp_regions /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      context_venom_asm_rel cp lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      memory_rel ps'.ps_alloc st.as_memory st'.as_memory /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule entry_context_to_local_memory >> strip_tac >>
+  drule_all popmany_plan_sim_structural >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `context_venom_asm_rel cplan lo ps vs st` >>
+  `context_memory_rel cplan vs.vs_memory st.as_memory` by
+    gvs[context_venom_asm_rel_def] >>
+  drule_all entry_local_to_context_memory >> strip_tac >>
+  drule entry_local_memory_footprint >> strip_tac >>
+  qexists `st'` >> simp[]
+QED
+
+Theorem entry_context_popmany_outside_closure:
+  !items ps ops ps' cp lo o2pc prog vs st initial_fmp r ctx name.
+    popmany_plan items ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    context_venom_asm_rel cp lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+    MEM r cp.cp_regions /\ r.sr_fn_name = name /\
+    r.sr_spill_base <= ps'.ps_alloc.sa_spill_base /\
+    ps'.ps_alloc.sa_next_offset <= r.sr_spill_end ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      context_venom_asm_rel cp lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      (!b. ~closure_spill_byte ctx cp name b ==>
+        read_byte b st'.as_memory = read_byte b st.as_memory) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all entry_context_popmany_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists `st'` >> simp[] >> rpt strip_tac >>
+  irule entry_local_footprint_outside_closure >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
