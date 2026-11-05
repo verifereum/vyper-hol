@@ -5,6 +5,7 @@ Ancestors abiDecoderGuards abiDecoderArrayInitExec decoderArraySetupPtr decoderI
   compileEnv emitHelper venomInst venomExecSemantics venomState words list
   rich_list arithmetic finite_map ptrDiscipline ptrSafeRun venomInstProofs codegenRel contextCodegenRel
   emitHelperProps exprLoweringProps fragExec decoderGhostFramePtr
+  abiDecoderContract entryDispatchPtr instIdxIndep
 
 Theorem calldata_count_guard_layout[local]:
   abi_decode_count_guard CALLDATALOAD src maxn st = (cnt,st') ==>
@@ -30,28 +31,33 @@ Proof
   strip_tac >> gvs[APPEND_ASSOC]
 QED
 
-Theorem count_bound_comparison_frag_ptr[local]:
-  sb.cs_current_bb = sa.cs_current_bb /\
-  sb.cs_current_insts = sa.cs_current_insts ++
-    [mk_inst id GT [src; Lit bound] [out]] /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} ==>
-  ?H u.
-    frag_exec_ptr cx ctx PG sa sb
+Theorem emit_count_comparison_endpoint_ptr[local]:
+  !src bound sa out sb s t a G tn cx ctx PG R.
+  emit_op GT [src; Lit bound] sa = (out,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H u. frag_exec_ptr cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
       (\g z v. g = H /\ z = u /\
-        v = (update_var out (bool_to_word (w2n a > w2n bound)) s with
-          vs_inst_idx := SUC s.vs_inst_idx)) R /\
-    op_taint u (Var out) = {} /\ op_prov H (Var out) = NONE /\
+        v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    op_taint u out = {} /\ op_prov H out = NONE /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
-    (!x. x <> out ==> FLOOKUP H x = FLOOKUP G x /\
-      op_taint u (Var x) = op_taint tn (Var x))
+    (?vars. t = s with vs_vars := vars) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
-  strip_tac >>
-  qabbrev_tac `inst = mk_inst id GT [src; Lit bound] [out]` >>
-  qabbrev_tac `t = update_var out (bool_to_word (w2n a > w2n bound)) s` >>
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id GT [src; Lit bound] [out]` >>
+  `t = update_var out (bool_to_word (w2n a > w2n bound)) s` by
+    (gvs[run_inst_seq_def, Abbr `inst`, Abbr `out`, step_inst_base_def,
+      mk_inst_def, exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
   `step_inst_base inst s = OK t` by
-    (simp[Abbr `inst`, Abbr `t`, step_inst_base_def, mk_inst_def,
+    (simp[Abbr `inst`, step_inst_base_def, mk_inst_def,
       exec_pure2_def] >> Cases_on `src` >> gvs[eval_operand_def]) >>
   `!fuel fn. ~ctx_has_dalloca ctx ==>
     ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn inst s` by
@@ -61,16 +67,20 @@ Proof
      simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
        allocas_from_def, Abbr `inst`, mk_inst_def, step_inst_non_invoke,
        source_memory_write_ranges_def, source_memory_read_ranges_def,
-       Abbr `t`, update_var_def] >>
+       update_var_def] >>
      metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
   qabbrev_tac `H = step_prov PG G inst t` >>
   qabbrev_tac `u = step_taint inst s t tn` >>
   qexistsl_tac [`H`,`u`] >> conj_tac
   >- (irule ptr_fragment_step >>
       simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
-      rpt strip_tac >> gvs[] >> qexists_tac `t` >>
-      simp[Abbr `H`, Abbr `u`] >> gvs[Abbr `t`, update_var_def, mk_inst_def]) >>
-  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `t`,
+      rpt strip_tac >>
+      qexists_tac `update_var out (bool_to_word (w2n a > w2n bound)) s` >>
+      simp[Abbr `H`, Abbr `u`] >> gvs[update_var_def, mk_inst_def, Abbr `out`]) >>
+  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`,
+    lookup_var_def,
     op_prov_def, step_prov_def, out_prov_def, set_prov_def,
     op_taint_def, step_taint_def, out_taint_def, set_var_taint_def,
     FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,
@@ -78,6 +88,11 @@ Proof
     written_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
     update_var_def, source_memory_write_ranges_def, range_bytes_def,
     pred_setTheory.EXTENSION, FDOM_DRESTRICT, SF CONJ_ss] >>
+  simp[FLOOKUP_DEF, SF CONJ_ss] >>
+  conj_tac >- (qexists_tac `t.vs_vars` >> simp[update_var_def]) >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` (assume_tac o SRULE []) >>
+  gen_tac >> disch_tac >>
+  `x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
   simp[FLOOKUP_DEF, SF CONJ_ss]
 QED
 
@@ -185,3 +200,66 @@ Proof
     written_taint_def, FDOM_DRESTRICT, DRESTRICT_UNIV, FLOOKUP_DEF,
     SF CONJ_ss]
 QED
+
+Theorem emit_count_load_endpoint_ptr[local]:
+  !src sa out sb s t a G tn cx ctx PG R.
+  emit_op CALLDATALOAD [src] sa = (out,sb) /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H u. frag_exec_ptr cx ctx PG sa sb
+    (\g z v. g = G /\ z = tn /\ v = s)
+    (\g z v. g = H /\ z = u /\
+      v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+    op_taint u out = {} /\ op_prov H out = NONE /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (?vars. t = s with vs_vars := vars) /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_op_same_blocks >> simp[same_blocks_def]) >>
+  qabbrev_tac `out = "%" ++ toString sa.cs_next_var` >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id CALLDATALOAD [src] [out]` >>
+  `t = update_var out (abi_decode_load CALLDATALOAD a s) s` by
+    gvs[run_inst_seq_def, Abbr `out`, step_inst_base_def, mk_inst_def,
+      exec_read1_def, abi_decode_load_def, abi_decode_source_def] >>
+  qabbrev_tac `H = step_prov PG G inst t` >>
+  qabbrev_tac `u = step_taint inst s t tn` >>
+  qexistsl_tac [`H`, `u`] >> conj_tac >-
+    (irule ptr_fragment_step >> simp[Abbr `inst`, mk_inst_def, is_terminator_def] >>
+     rpt strip_tac >> qexists_tac `update_var out (abi_decode_load CALLDATALOAD a s) s` >>
+     simp[Abbr `H`, Abbr `u`, Abbr `out`, mk_inst_def,
+       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       abi_decode_source_def, update_var_def] >>
+     rpt strip_tac >>
+     irule (cj 1 (SRULE [ptr_safe_step_def, mk_inst_def] ptr_safe_dispatch_scalar_step)) >>
+     simp[allocas_from_def] >>
+     qexists_tac `update_var (STRING #"%" (toString sa.cs_next_var)) (abi_decode_load CALLDATALOAD a s) s` >>
+     simp[mk_inst_def, step_inst_non_invoke,
+       step_inst_base_def, exec_read1_def, abi_decode_load_def,
+       abi_decode_source_def, update_var_def]) >>
+  conj_tac >-
+    (simp[Abbr `u`, Abbr `inst`, Abbr `out`] >>
+     irule dispatch_scalar_output_clean >> simp[]) >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
+  simp[Abbr `H`, Abbr `u`, Abbr `inst`, Abbr `out`,
+    op_prov_def, step_prov_def, out_prov_def, set_prov_def,
+    op_taint_def, step_taint_def, out_taint_def, set_var_taint_def,
+    FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, mk_inst_def,
+    mem_taint_def, new_site_bytes_def, step_writes_def,
+    written_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
+    update_var_def, lookup_var_def, source_memory_write_ranges_def, range_bytes_def,
+    pred_setTheory.EXTENSION, FDOM_DRESTRICT, SF CONJ_ss] >>
+  simp[FLOOKUP_DEF, SF CONJ_ss] >>
+  conj_tac >- (qexists_tac `t.vs_vars` >> simp[update_var_def]) >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` (assume_tac o SRULE []) >>
+  gen_tac >> disch_tac >>
+  `x <> STRING #"%" (toString sa.cs_next_var)` by metis_tac[] >>
+  simp[FLOOKUP_DEF, SF CONJ_ss]
+QED
+
+
