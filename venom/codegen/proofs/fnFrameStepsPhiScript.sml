@@ -2295,3 +2295,95 @@ Proof
     metis_tac[phi_stack_poke_mem] >>
   simp[] >> metis_tac[]
 QED
+
+Theorem phi_entry_output_absent:
+  codegen_ready_fn fn /\ MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    ~(MEM op ps.ps_stack /\
+      ?inst. MEM inst (collect_phis bb.bb_instructions) /\
+             resolve_phi pred inst.inst_operands = SOME op) /\
+    (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+    ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+  MEM phi (collect_phis bb.bb_instructions) /\ MEM out phi.inst_outputs ==>
+  ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  strip_tac >>
+  `~(?inst. MEM inst (collect_phis bb.bb_instructions) /\
+            resolve_phi pred inst.inst_operands = SOME (Var out))` by
+    (strip_tac >>
+     `MEM (Var out) inst.inst_operands` by
+       metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+     metis_tac[phi_prefix_output_not_operand]) >>
+  `MEM out (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))` by
+    (simp[listTheory.MEM_FLAT, listTheory.MEM_MAP] >>
+     metis_tac[livenessProofsTheory.collect_phis_mem]) >>
+  qpat_x_assum `!op v. _` (qspecl_then [`Var out`, `out`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem phi_provenance_output_absent:
+  !base pred entry done todo ps out.
+    phi_stack_provenance base pred entry done todo ps /\
+    ~MEM (Var out) entry.ps_stack /\ Var out NOTIN FDOM entry.ps_spilled /\
+    (!inst. MEM inst done ==> ~MEM out inst.inst_outputs) ==>
+    ~MEM (Var out) ps.ps_stack /\ Var out NOTIN FDOM ps.ps_spilled
+Proof
+  simp[phi_stack_provenance_def] >> rpt strip_tac >> metis_tac[operand_11]
+QED
+
+Theorem phi_stack_hit_operand:
+  !ops stk d.
+    stack_get_phi_depth (FILTER is_var_operand ops) stk = SOME d ==>
+    is_var_operand (stack_peek d stk) /\ MEM (stack_peek d stk) ops /\
+    MEM (stack_peek d stk) stk
+Proof
+  rpt gen_tac >> strip_tac >>
+  `d < LENGTH stk` by
+    metis_tac[genBlockSimTheory.stack_get_phi_depth_var_not_marker] >>
+  `MEM (EL d (REVERSE stk)) (FILTER is_var_operand ops)` by
+    (qpat_x_assum `stack_get_phi_depth _ _ = _` mp_tac >>
+     simp[stackModelTheory.stack_get_phi_depth_def] >> strip_tac >>
+     drule genBlockSimTheory.stack_find_el >> simp[]) >>
+  `stack_peek d stk = EL d (REVERSE stk)` by
+    (simp[stackModelTheory.stack_peek_def, listTheory.EL_REVERSE] >>
+     `PRE (LENGTH stk - d) = LENGTH stk - 1 - d` by decide_tac >> simp[]) >>
+  gvs[listTheory.MEM_FILTER] >>
+  metis_tac[listTheory.EL_MEM, listTheory.MEM_REVERSE, listTheory.LENGTH_REVERSE]
+QED
+
+Theorem phi_provenance_hit_selected:
+  !base pred entry done inst todo ps d.
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    (!phi op. MEM phi (inst::todo) /\ is_var_operand op /\
+      MEM op phi.inst_operands /\ MEM op entry.ps_stack ==>
+      resolve_phi pred phi.inst_operands = SOME op) /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands) ps.ps_stack = SOME d ==>
+    resolve_phi pred inst.inst_operands = SOME (stack_peek d ps.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule phi_stack_hit_operand >> strip_tac >>
+  gvs[phi_stack_provenance_def] >>
+  qpat_x_assum `!phi op. _` irule >> simp[] >> metis_tac[]
+QED
+
+Theorem phi_provenance_rename:
+  !base pred entry done inst todo ps next src out keep.
+    phi_stack_provenance base pred entry done (inst::todo) ps /\
+    resolve_phi pred inst.inst_operands = SOME src /\ MEM out inst.inst_outputs /\
+    generated_plan_state_wf_marked base next /\ next.ps_spilled = ps.ps_spilled /\
+    (!at. MEM at next.ps_stack <=>
+      (MEM at ps.ps_stack /\ at <> src) \/ (keep /\ at = Var out)) /\
+    (!phi op. MEM phi todo /\ is_var_operand op /\ MEM op phi.inst_operands ==>
+      op <> src /\ op <> Var out) ==>
+    phi_stack_provenance base pred entry (done ++ [inst]) todo next
+Proof
+  rpt gen_tac >> simp[phi_stack_provenance_def] >> strip_tac >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `!at. MEM at _ <=> _` (qspec_then `at` mp_tac) >>
+      qpat_x_assum `!at. MEM at _ ==> _ \/ _` (qspec_then `at` mp_tac) >>
+      simp[] >> metis_tac[optionTheory.SOME_11]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!at. MEM at _ <=> _` (qspec_then `op` mp_tac) >>
+  metis_tac[]
+QED
