@@ -14,7 +14,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem concat_fixed_code_shape[local]:
+Theorem concat_fixed_code_shape:
   (do offset_op <- emit_op MLOAD [off_ptr];
       dst <- emit_op ADD [data_ptr; offset_op];
       emit_void MSTORE [dst; v];
@@ -30,7 +30,7 @@ Proof
   simp[emitted_insts_def, DROP_LENGTH_APPEND]
 QED
 
-Theorem concat_bytes_code_shape[local]:
+Theorem concat_bytes_code_shape:
   (do arg_len <- emit_op MLOAD [mem_ptr];
       arg_data <- emit_op ADD [mem_ptr; Lit 32w];
       offset_op <- emit_op MLOAD [off_ptr];
