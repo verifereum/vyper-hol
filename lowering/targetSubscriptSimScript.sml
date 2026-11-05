@@ -1243,3 +1243,35 @@ Proof
        simp[GSYM word_add_n2w] >> simp[]) >>
   gvs[]
 QED
+
+Theorem extend_place_storage_array_live:
+  !cx tr slot et bd i es pv es'.
+    storage_read_live cx tr (get_storage cx es tr) slot (ArrayTV et bd) /\
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV et bd)))
+      (ValueSubscript (IntV i)) es = (INL pv,es') ==>
+    ?child. pv = PlaceR (StoragePlace tr child et) /\
+      storage_read_live cx tr (get_storage cx es' tr) child et
+Proof
+  rpt gen_tac >> Cases_on `bd` >>
+  simp[extend_place_storage_array_index, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[]
+  >- (irule storage_read_live_fixed_array_child >> goal_assum (drule_at Any) >> simp[]) >>
+  once_rewrite_tac[ADD_COMM] >>
+  irule storage_read_live_dynamic_array_child >> simp[] >> qexists `n` >> simp[]
+QED
+
+Theorem extend_place_storage_array_slots:
+  !cx tr slot et bd i es pv es'.
+    slots_in_range (get_storage cx es tr) (w2n slot) (ArrayTV et bd) /\
+    extend_place cx (PlaceR (StoragePlace tr slot (ArrayTV et bd)))
+      (ValueSubscript (IntV i)) es = (INL pv,es') ==>
+    ?child. pv = PlaceR (StoragePlace tr child et) /\
+      slots_in_range (get_storage cx es' tr) (w2n child) et
+Proof
+  rpt gen_tac >> Cases_on `bd` >>
+  simp[extend_place_storage_array_index, AllCaseEqs()] >> rpt strip_tac >>
+  gvs[]
+  >- (irule storage_fixed_array_child_slots >> goal_assum (drule_at Any) >> simp[]) >>
+  once_rewrite_tac[ADD_COMM] >>
+  irule storage_dynamic_array_child_slots >> simp[] >> qexists `n` >> simp[]
+QED
