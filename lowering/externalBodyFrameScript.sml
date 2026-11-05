@@ -726,53 +726,6 @@ Proof
   metis_tac[]
 QED
 
-(* local copy of a [local] lemma in lowering/bodySimEntryScript.sml until it is exported *)
-Theorem build_compile_env_bound[local]:
-  !tops vis mut fname args ret body use_trans n l.
-    FLOOKUP (build_compile_env tops vis mut fname args ret body
-               use_trans).ce_vars n = SOME l ==>
-    MEM n (MAP FST args)
-Proof
-  rpt gen_tac >> simp[build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `MEM n (MAP FST args)` >> simp[] >>
-  drule_all allocate_args_FLOOKUP_other >> strip_tac >> gvs[]
-QED
-
-(* local copy of a [local] lemma in lowering/bodySimEntryScript.sml until it is exported *)
-Theorem compile_register_positional_args_bound[local]:
-  !args cenv off st cenv' st' n l.
-    compile_register_positional_args cenv args off st = (cenv', st') /\
-    FLOOKUP cenv'.ce_vars n = SOME l ==>
-    ?l0. FLOOKUP cenv.ce_vars n = SOME l0
-Proof
-  Induct >- simp[compile_register_positional_args_def, comp_return_def] >>
-  PairCases >> rpt gen_tac >> simp[Once compile_register_positional_args_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
-  first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[]
-QED
-
-(* local copy of a [local] lemma in lowering/entryStateRelScript.sml until it is exported *)
-Theorem build_positional_args_names[local]:
-  !cenv fargs. MAP FST (build_positional_args cenv fargs) = MAP FST fargs
-Proof
-  Induct_on `fargs` >> fs[build_positional_args_def] >>
-  PairCases >> fs[build_positional_arg_def]
-QED
-
-(* MULTI source_typing_ok_type_def_keys_distinct ['./lowering/entryStateRelScript.sml', './lowering/externalBodyFrameScript.sml'] *)
-(* local copy of a [local] lemma in lowering/entryStateRelScript.sml until it is exported *)
-Theorem source_typing_ok_type_def_keys_distinct[local]:
-  !tops am tx.
-    source_typing_ok tops am tx ==>
-    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
-Proof
-  rw[source_typing_ok_def, check_contract_def] >>
-  drule contract_namespaces_ok_module_type_def_keys >> simp[]
-QED
-
 Theorem package_external_target_param_memory:
   set_external_package_target target
     (package_external_fn tops use_trans nkey_map
