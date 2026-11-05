@@ -141,9 +141,16 @@ Proof
   drule gas_path_mem_exec >> simp[update_var_def]
 QED
 
+Theorem compile_msg_gas_requested_type:
+  compile_expr ce ty (Builtin ann (Env MsgGas) args) sa =
+  compile_expr ce ty' (Builtin ann (Env MsgGas) args) sa
+Proof
+  simp[compile_expr_def]
+QED
+
 Theorem compile_msg_gas_joint_windows_outcome:
   expr_sim_pre cenv cx env (Builtin ann (Env MsgGas) args) es /\
-  compile_expr cenv (expr_type (Builtin ann (Env MsgGas) args))
+  compile_expr cenv ty
     (Builtin ann (Env MsgGas) args) sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -169,6 +176,9 @@ Theorem compile_msg_gas_joint_windows_outcome:
         mem_bytes_at off (type_memory_size tv) s0.vs_memory))
     (\res ee r. F)
 Proof
+  once_rewrite_tac[Q.INST
+    [`ty'` |-> `expr_type (Builtin ann (Env MsgGas) args)`]
+    compile_msg_gas_requested_type] >>
   strip_tac >> drule_all compile_msg_gas_memory_outcome >>
   simp[gas_outcome_def, gas_summary_at_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>

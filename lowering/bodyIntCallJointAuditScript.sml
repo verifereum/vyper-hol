@@ -100,33 +100,25 @@ val joint_audit_contract = ``\tops e.
    with the prefix equality s -> t0, keeping the SAME p throughout.
 
    Counted test:
-   The allocation prefix currently gives gas_path 0, not a marked witness.
-   Need the corresponding all-F marked prefix; then gas_outcome_zero_prefix
-   transports the child outcome including exempt-certificate origin/focus.
-   An ordinary child success needs an actual marked zero-read ADD/STORE
-   suffix; the existing gas_path suffix alone does not certify the marked
-   join. Error paths skip that suffix. Exempt outcomes carry no success post
-   and must NOT be required to satisfy the above resource clauses.
+   gas_marked_path F is gas_path, so the zero-read allocation and ADD/STORE
+   paths contribute [] marks. JointCounted supplies the same-source success
+   continuation and prefix transport, including exempt-certificate origin
+   and focus. Error paths skip the suffix; exempt outcomes carry no success
+   resource post. Recursive source bind composition remains outstanding.
 
-   MsgGas test / smallest next genuine producer:
-   Specialize the quoted proposition to e = Builtin ann (Env MsgGas) args
-   and ty = expr_type e. In fact its hs ownership premise can be dropped:
-   the concrete target endpoint is update_var out w of the entry with only
-   vs_gas_readings dropped and vs_inst_idx advanced, so ALL memory windows
-   are unchanged. Use the existing compile_msg_gas_prefix_outcome premises
-   (expr_sim_pre, compile_expr, code/distinctness, reservation, state relation,
-   not halted and entry PC); the semantic held-prefix premise is unnecessary
-   for this byte-only post. Its [T] marked path supplies an ordinary outcome
-   for all observation tails, source consumption w::tail -> tail. Its error
-   post is false. gas_admissible may be retained to match the general API
-   but is not used by that concrete proof. Reconstruct this strengthened post
-   on the SAME concrete endpoint, not by combining its existential outcome
-   with an independently chosen memory-frame outcome.
+   MsgGas family:
+   joint_audit_msg_gas below proves the full quoted contract for arbitrary
+   requested compiler type, hs and deployment mode. It reuses the existing
+   compile_msg_gas_joint_windows_outcome, whose concrete endpoint changes
+   only a register, gas readings and instruction index. Thus all memory
+   windows are preserved on the SAME semantic witness; even the ownership
+   premise is unnecessary for this family. Its false error post is weakened
+   to expr_exit without changing the ordinary or exempt witnesses.
 
-   Verdict: proposal typechecks; singleton ordinary resource consumption is
-   feasible under the stated compiler/source side conditions, but the full
-   window post and marked recursive composition remain unproved. This file
-   neither implements a recursive producer nor closes the internal-call case.
+   Verdict: the MsgGas family and the allocating singleton are proved.
+   The full recursive window producer, ordinary counted source composition,
+   and place admissibility remain unproved. This file does not close the
+   universal producer or the internal-call case.
 *)
 
 (* A checked specialization, not a proof of any of its family premises. *)
@@ -170,4 +162,14 @@ Proof
   gen_tac >> gen_tac >> gen_tac >>
   CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
   MATCH_ACCEPT_TAC joint_supported_induction
+QED
+
+(* An actual semantic family, with no conditional family-handler premise. *)
+Theorem joint_audit_msg_gas:
+  !tops ann args. (^joint_audit_contract) tops (Builtin ann (Env MsgGas) args)
+Proof
+  CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt strip_tac >>
+  drule_all compile_msg_gas_joint_windows_outcome >>
+  simp[gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  metis_tac[]
 QED
