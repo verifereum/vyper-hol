@@ -2,6 +2,7 @@ Theory bodyIntCallSemanticFrame
 Ancestors
   fragExec exprLoweringProps venomCallOracleDefs venomState venomExecSemantics list rich_list
   loweringSlice venomExecProofs valueEncoding emitHelperProps compileEnv venomInst
+  localPtrsProps stmtSim exprLowering emitHelper finite_map
 
 Theorem run_inst_seq_observation:
   !insts s t obs.
@@ -149,4 +150,52 @@ val () =
     if null axioms andalso null (Thm.hyp th) andalso
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Selected branch observation has unproved dependencies"
+  end;
+
+Theorem emit_op_storage_frame_frag:
+  !ctx func cenv cx es opc args sa op sb s0 w R.
+    emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
+    opc <> INVOKE /\ ~is_terminator opc /\
+    (stmt_state_rel ctx func cenv cx es s0 ==>
+     !out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s0 =
+           OK (update_var out w s0)) ==>
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+      (\s. stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w /\
+           (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
+                   lookup_var x s = SOME w') /\
+           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+                    FLOOKUP s.vs_allocas aid = SOME b) /\
+           s.vs_memory = s0.vs_memory /\
+           contract_storage s = contract_storage s0 /\
+           contract_transient s = contract_transient s0) R
+Proof
+  rpt strip_tac >>
+  imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (qunabbrev_tac `out` >> irule local_ptrs_reserved_fresh >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by simp[venomInstTheory.mk_inst_def] >>
+  irule frag_exec_run_inst_seq >>
+  fs[same_blocks_def, IS_PREFIX_APPEND3] >>
+  rpt strip_tac >> disj1_tac >> gvs[] >>
+  qexists_tac `update_var out w s0` >>
+  asm_simp_tac (srw_ss()) [run_inst_seq_def, stmt_state_rel_inst_idx] >>
+  conj_tac >- (irule stmt_state_rel_update_var >> simp[]) >>
+  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       contract_storage_def, contract_transient_def] >>
+  rpt strip_tac >> Cases_on `out = x` >> gvs[lookup_var_def]
+QED
+
+val () =
+  let val th = emit_op_storage_frame_frag
+      val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Instruction storage frame has unproved dependencies"
   end;
