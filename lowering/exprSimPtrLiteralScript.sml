@@ -13,7 +13,7 @@
  *)
 Theory exprSimPtrLiteral
 Ancestors
-  exprSimPtrProps bodyPtrDefs fragGasPathPtr ptrDiscipline exprSimHypsDefs
+  exprSimPtrLiteralBuffer exprSimPtrProps bodyPtrDefs fragGasPathPtr ptrDiscipline exprSimHypsDefs
   exprSimLiteralWord exprSimProps exprSimDefs loweringPosts gasSummary
   loweringSlice exprLowering exprLoweringProps compileEnv vyperAST
   vyperInterpreter vyperState vyperValue vyperTypeSystem valueEncoding
@@ -89,6 +89,17 @@ Proof
   >~ [`BytesT bd`] >- (Cases_on `bd` >> gvs[is_word_type_def] >>
                        literal_word_tac) >>
   literal_word_tac
+QED
+
+Theorem literal_buffer_unwrap[local]:
+  ~is_word_type ann /\
+  compile_expr cenv ty (Literal ann l) sa =
+    (LocatedValue ann (base_ptr buf),sb) ==>
+  lower_value compile_expr cenv ty (Literal ann l) sa = (buf.buf_operand,sb)
+Proof
+  strip_tac >>
+  simp[lower_value_def, comp_bind_def, unwrap_value_def, contextTheory.base_ptr_def,
+       comp_return_def]
 QED
 
 (* A dynamic bytes or string literal: compile_bytelike_literal's ALLOCA, the
