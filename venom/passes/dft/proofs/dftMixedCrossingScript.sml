@@ -95,6 +95,69 @@ Proof
   irule dft_empty_effect_ranges >> simp[]
 QED
 
+Theorem dft_gas_gas_two_steps:
+  l.dft_occ_core = DftOpen (DftAt fn 0 bb s) stack n /\
+  MAP (dft_fill_frame 0) stack = stack /\
+  (stack = [] ==> l.dft_occ_saved = []) /\
+  l.dft_occ_path = path /\ l.dft_occ_visit = visit /\
+  get_instruction bb s.vs_inst_idx = SOME x /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME y /\
+  x.inst_opcode = GAS /\ x.inst_outputs = [u] /\
+  y.inst_opcode = GAS /\ y.inst_outputs = [v] ==>
+  FUNPOW (dft_occ_oracle_next w C) 2 l =
+    l with dft_occ_core := DftOpen (DftAt fn 0 bb
+      ((update_var v (w (path ++ [(visit,y.inst_id)]))
+         (update_var u (w (path ++ [(visit,x.inst_id)])) s))
+        with vs_inst_idx := SUC (SUC s.vs_inst_idx))) stack (SUC (SUC n))
+Proof
+  strip_tac >> drule_all dft_suspend_gas_step >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  simp[arithmeticTheory.FUNPOW_2] >>
+  qmatch_goalsub_abbrev_tac `dft_occ_oracle_next w C mid` >>
+  `mid.dft_occ_core = DftOpen (DftAt fn 0 bb
+      ((update_var u (w (path ++ [(visit,x.inst_id)])) s)
+        with vs_inst_idx := SUC s.vs_inst_idx)) stack (SUC n)` by
+    simp[Abbr `mid`] >>
+  drule dft_suspend_gas_step >> simp[Abbr `mid`, update_var_inst_idx] >>
+  disch_then (qspecl_then [`w`, `C`] mp_tac) >>
+  simp[update_var_def]
+QED
+
+Theorem dft_gas_gas_stack_square:
+  l.dft_occ_core = DftOpen (DftAt fnL 0 bbL s) stackL nL /\
+  r.dft_occ_core = DftOpen (DftAt fnR 0 bbR s) stackR nR /\
+  MAP (dft_fill_frame 0) stackL = stackL /\
+  MAP (dft_fill_frame 0) stackR = stackR /\
+  (stackL = [] ==> l.dft_occ_saved = []) /\
+  (stackR = [] ==> r.dft_occ_saved = []) /\
+  l.dft_occ_path = path /\ r.dft_occ_path = path /\
+  l.dft_occ_visit = visit /\ r.dft_occ_visit = visit /\
+  get_instruction bbL s.vs_inst_idx = SOME x /\
+  get_instruction bbL (SUC s.vs_inst_idx) = SOME y /\
+  get_instruction bbR s.vs_inst_idx = SOME y /\
+  get_instruction bbR (SUC s.vs_inst_idx) = SOME x /\
+  x.inst_opcode = GAS /\ x.inst_outputs = [u] /\
+  y.inst_opcode = GAS /\ y.inst_outputs = [v] /\ u <> v ==>
+  let after = (update_var v (w (path ++ [(visit,y.inst_id)]))
+                 (update_var u (w (path ++ [(visit,x.inst_id)])) s))
+                with vs_inst_idx := SUC (SUC s.vs_inst_idx)
+  in
+    FUNPOW (dft_occ_oracle_next w C) 2 l =
+      l with dft_occ_core := DftOpen (DftAt fnL 0 bbL after)
+        stackL (SUC (SUC nL)) /\
+    FUNPOW (dft_occ_oracle_next w C') 2 r =
+      r with dft_occ_core := DftOpen (DftAt fnR 0 bbR after)
+        stackR (SUC (SUC nR))
+Proof
+  strip_tac >> simp_tac bool_ss [LET_THM] >>
+  conj_tac
+  >- (irule dft_gas_gas_two_steps >> simp[]) >>
+  qpat_assum `r.dft_occ_core = _`
+    (mp_then Any mp_tac dft_gas_gas_two_steps) >>
+  simp[] >> disch_then (qspecl_then [`w`, `C'`] mp_tac) >>
+  simp[update_var_def, finite_mapTheory.FUPDATE_COMMUTES]
+QED
+
 Theorem dft_gas_ordinary_stack_square:
   l.dft_occ_core = DftOpen (DftAt fnL 0 bbL s) stackL n /\
   r.dft_occ_core = DftOpen (DftAt fnR 0 bbR s) stackR n /\
