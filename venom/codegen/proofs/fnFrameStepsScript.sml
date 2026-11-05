@@ -102,7 +102,19 @@ Theorem phi_prefix_frame_sim:
          operand_val (frame_view fn ra s_phi) lo at =
          operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
+               `lbl_ctr`, `pred`, `bb`, `vs.vs_current_bb`, `ps_l`, `h`,
+               `promised`, `ps`, `phis`, `body'`]
+    mp_tac fnFrameStepsPhiTheory.phi_join_entry_hits >>
+  impl_tac >- asm_rewrite_tac[] >>
+  strip_tac >>
+  qspecl_then [`ctx`, `cp'`, `lo`, `o2pc`, `prog`, `liveness`, `dfg`, `cfg`,
+               `fn`, `bb`, `pred`, `base'`, `ps`, `vs`, `as`, `s_phi`, `phis`,
+               `body'`, `ops`, `ps3`, `r`, `ra`, `rest`, `mem0`]
+    mp_tac fnFrameStepsPhiTheory.phi_prefix_hits_frame_sim >>
+  impl_tac >- asm_rewrite_tac[] >>
+  simp[]
 QED
 
 
