@@ -2,6 +2,7 @@ Theory dftPositionalMixedSegment
 Ancestors
   dftPositionalGasSegment dftMixedSegmentAccount dftMixedCrossing
   dftMixedResidualProbe instIdxIndep dftOccurrenceOrdinaryClosure
+  dftGasOrdinaryTrace dftOccurrenceOrdinaryStop dftOrdinaryEventTrace
   dftPositionalPhase dftPositionalRuntime dftPositionalEdit
   dftOccurrenceSuspended dftOccurrenceOrdinaryEdit dftOccurrenceReplay
   dftOccurrenceMachine dftOpenMachine dftOpenErase venomExecSemantics venomState
@@ -256,3 +257,122 @@ Resume dft_pos_mixed_segment_next[pair]:
   disj2_tac >> goal_assum (drule_at Any) >> metis_tac[]
 QED
 Finalise dft_pos_mixed_segment_next
+
+Theorem dft_pos_mixed_done_prefix_events[local]:
+  (FUNPOW (dft_occ_oracle_next w C) k c).dft_occ_core =
+    DftOpen (DftDone result) stack n ==>
+  ((?h. h < SUC k /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w C) h c)) <=>
+   (?h. h < k /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w C) h c)))
+Proof
+  strip_tac >> `~dft_occ_gas_event i addr
+    (FUNPOW (dft_occ_oracle_next w C) k c)` by
+    metis_tac[dft_done_no_gas_event] >>
+  `!h. h < SUC k <=> h < k \/ h = k` by decide_tac >>
+  simp[RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem dft_pos_mixed_done_prefix_observe[local]:
+  (FUNPOW (dft_occ_oracle_next w C) k c).dft_occ_core =
+    DftOpen (DftDone result) stack n /\
+  h < SUC k /\ dft_open_observe f i s
+    (FUNPOW (dft_occ_oracle_next w C) h c).dft_occ_core ==>
+  h < k
+Proof
+  strip_tac >> Cases_on `h = k` >> gvs[dft_open_observe_def]
+QED
+
+Theorem dft_pos_mixed_pair_abort_closed:
+  D = dft_pos_edit_ctx fi bi pre gas inst post C /\
+  dft_pos_runtime_ready C fi bi pre gas inst post /\
+  dft_pos_gas_phase C D fi bi pre l r /\
+  l.dft_occ_core = DftOpen (DftAt f 0 bb s) ls n /\
+  r.dft_occ_core = DftOpen (DftAt g 0 bb' s) rs n /\
+  dft_pos_slot C D fi bi f g bb bb' /\
+  s.vs_inst_idx = LENGTH pre /\
+  gas.inst_opcode = GAS /\ gas.inst_outputs = [v] /\
+  inst.inst_opcode <> GAS /\ inst.inst_opcode <> INVOKE /\
+  ~is_terminator inst.inst_opcode /\
+  ~MEM (Var v) inst.inst_operands /\ ~MEM v inst.inst_outputs /\
+  step_inst_base inst s = Abort a t ==>
+  dft_gas_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w C) 3 l)
+    (FUNPOW (dft_occ_oracle_next w D) 2 r) /\
+  dft_mixed_segment_events w C D gas inst l r 3 2 /\
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 3 l) = SUC n /\
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w D) 2 r) = n /\
+  (!i addr. ((?h. h < 3 /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w C) h l)) <=>
+      i = gas /\ addr = l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]) /\
+    ~(?h. h < 2 /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w D) h r))) /\
+  (!j f i t. j < 3 /\ dft_open_observe f i t
+      (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+      inst_mem_ranges i t <> [] ==>
+    ?k g u. k < 2 /\ dft_pos_functions C D f g /\
+      dft_open_observe g i u
+        (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+      u.vs_memory = t.vs_memory /\ inst_mem_ranges i u = inst_mem_ranges i t) /\
+  (!k g i u. k < 2 /\ dft_open_observe g i u
+      (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core /\
+      inst_mem_ranges i u <> [] ==>
+    ?j f t. j < 3 /\ dft_pos_functions C D f g /\
+      dft_open_observe f i t
+        (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core /\
+      u.vs_memory = t.vs_memory /\ inst_mem_ranges i t = inst_mem_ranges i u)
+Proof
+  strip_tac >> drule_all dft_pos_mixed_pair_abort >>
+  disch_then (qspec_then `w` strip_assume_tac) >>
+  qpat_x_assum `D = _` kall_tac >>
+  qpat_assum `(FUNPOW _ 2 l).dft_occ_core = _`
+    (mp_then Any mp_tac dft_occ_abort_clear) >>
+  disch_then (qspecl_then [`w`, `C`] assume_tac) >>
+  qpat_assum `(FUNPOW _ 1 r).dft_occ_core = _`
+    (mp_then Any mp_tac dft_occ_abort_clear) >>
+  disch_then (qspecl_then [`w`, `D`] assume_tac) >>
+  `FUNPOW (dft_occ_oracle_next w C) 3 l =
+     dft_occ_oracle_next w C (FUNPOW (dft_occ_oracle_next w C) 2 l) /\
+   FUNPOW (dft_occ_oracle_next w D) 2 r =
+     dft_occ_oracle_next w D (FUNPOW (dft_occ_oracle_next w D) 1 r)` by
+    (`3 = SUC 2 /\ (2:num) = SUC 1` by decide_tac >>
+     metis_tac[FUNPOW_SUC]) >>
+  `dft_gas_ordinary_stopped
+    (FUNPOW (dft_occ_oracle_next w C) 3 l)
+    (FUNPOW (dft_occ_oracle_next w D) 2 r)` by
+    (fs[FUNPOW_1] >> simp[dft_gas_ordinary_stopped_def]) >>
+  `!i addr. ((?h. h < 3 /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w C) h l)) <=>
+      i = gas /\ addr = l.dft_occ_path ++ [(l.dft_occ_visit,gas.inst_id)]) /\
+    ~(?h. h < 2 /\ dft_occ_gas_event i addr
+      (FUNPOW (dft_occ_oracle_next w D) h r))` by
+    (rpt gen_tac >>
+     qpat_assum `(FUNPOW _ 2 l).dft_occ_core = _`
+       (mp_then Any mp_tac dft_pos_mixed_done_prefix_events) >>
+     qpat_assum `(FUNPOW _ 1 r).dft_occ_core = _`
+       (mp_then Any mp_tac dft_pos_mixed_done_prefix_events) >>
+     simp[] >> metis_tac[]) >>
+  `dft_occ_count (FUNPOW (dft_occ_oracle_next w C) 3 l) = SUC n /\
+   dft_occ_count (FUNPOW (dft_occ_oracle_next w D) 2 r) = n` by
+    (fs[FUNPOW_1] >> simp[dft_occ_count_def]) >>
+  simp[] >> conj_tac
+  >- (simp[dft_mixed_segment_events_def] >> disj2_tac >> simp[] >>
+      metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `j < 2` by
+        (irule dft_pos_mixed_done_prefix_observe >>
+         simp[] >> goal_assum (drule_at Any) >> metis_tac[]) >>
+      qpat_x_assum `!j f i t. _` drule_all >> strip_tac >>
+      `k < 2` by decide_tac >> metis_tac[]) >>
+  rpt strip_tac >>
+  `k < 1` by
+    (irule dft_pos_mixed_done_prefix_observe >>
+     simp[] >> goal_assum (drule_at Any) >>
+     qpat_assum `(FUNPOW _ 1 r).dft_occ_core = _`
+       (strip_assume_tac o REWRITE_RULE[FUNPOW_1]) >>
+     goal_assum (drule_at Any)) >>
+  qpat_x_assum `!k g i u. _` drule_all >> strip_tac >>
+  `j < 3` by decide_tac >> metis_tac[]
+QED
