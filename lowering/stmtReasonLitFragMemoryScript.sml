@@ -57,7 +57,7 @@ QED
 Theorem bytelike_literal_shape:
   !bs ml sa buf sb.
     compile_bytelike_literal bs ml sa = (buf, sb) ==>
-    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_bb = sa.cs_current_bb /\ sb.cs_blocks = sa.cs_blocks /\
     sa.cs_next_var < sb.cs_next_var /\ sa.cs_next_id < sb.cs_next_id /\
     ?rest. sb.cs_current_insts = sa.cs_current_insts ++
       mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32 + ((ml + 31) DIV 32) * 32))]
@@ -125,38 +125,26 @@ Proof
   simp[reason_head_def, reason_tail_def, is_terminator_def, mk_inst_def]
 QED
 
-Theorem compile_raise_reason_lit_frag_mem:
-  !d ctx func cx lctx RetQ cenv ty ml str es.
-    LENGTH str <= ml /\
-    type_memory_bytes cenv (BaseT (StringT ml)) < 2 ** 64 ==>
-    stmt_frag_mem d ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ty
-         (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
-      (eval_stmt cx
-         (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
-      es
+(* The literal's buffer and the reason encoder after it run, from a state
+   at the start of that code, to the encoder's REVERT below the frontier. *)
+Theorem lit_reason_revert_path_mem:
+  !ctx func cenv cx es s0 str ml mt sa buf sm sb.
+    compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf, sm) /\
+    compile_revert_with_reason cenv
+      (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) mt
+      (32 + ((ml + 31) DIV 32) * 32) sm = ((), sb) /\
+    fn_has_code sa sb func /\
+    LENGTH str <= ml /\ 32 + ((ml + 31) DIV 32) * 32 < 2 ** 64 /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t. gas_path_mem ctx func s0 0 (Abort Revert_abort t)
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
-       compile_reason_message_def, expr_type_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, LET_THM] >>
-  Cases_on `compile_bytelike_literal (MAP (n2w o ORD) str) ml sa` >>
-  rename1 `compile_bytelike_literal _ _ sa = (buf, sm)` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `compile_revert_with_reason cenv VV MT MS sm` >>
-  Cases_on `compile_revert_with_reason cenv VV MT MS sm` >>
-  rename1 `compile_revert_with_reason _ _ _ _ sm = (u, sc)` >> Cases_on `u` >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `sc = sb` SUBST_ALL_TAC >>
-  `MS = 32 + ((ml + 31) DIV 32) * 32` by
-    simp[Abbr `MS`, Abbr `MT`, type_memory_bytes_def] >>
-  qpat_x_assum `Abbrev (MS = _)` kall_tac >>
-  qpat_x_assum `MS = _` SUBST_ALL_TAC >>
   drule compile_revert_reason_shape >>
   disch_then (qx_choosel_then [`op`, `sn`] strip_assume_tac) >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
-  simp[Abbr `VV`, unwrap_value_def, base_ptr_def, is_word_type_def,
+  simp[unwrap_value_def, base_ptr_def, is_word_type_def,
        comp_return_def] >> strip_tac >>
   qpat_x_assum `_ = sn` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `_ = op` (SUBST_ALL_TAC o SYM) >>
@@ -315,13 +303,47 @@ Proof
       qpat_assum `s0.vs_inst_idx = _` SUBST1_TAC >>
       first_assum ACCEPT_TAC) >>
   strip_tac >>
+  qexists_tac `t with vs_inst_idx := j` >>
+  pop_assum mp_tac >> simp_tac (srw_ss()) [gas_marked_path_def]
+QED
+
+Theorem compile_raise_reason_lit_frag_mem:
+  !d ctx func cx lctx RetQ cenv ty ml str es.
+    LENGTH str <= ml /\
+    type_memory_bytes cenv (BaseT (StringT ml)) < 2 ** 64 ==>
+    stmt_frag_mem d ctx func cx lctx RetQ cenv
+      (stmt_env cenv lctx ty
+         (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
+      (eval_stmt cx
+         (Raise (RaiseReason (Literal (BaseT (StringT ml)) (StringL str)))))
+      es
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def,
+       compile_reason_message_def, expr_type_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, LET_THM] >>
+  Cases_on `compile_bytelike_literal (MAP (n2w o ORD) str) ml sa` >>
+  rename1 `compile_bytelike_literal _ _ sa = (buf, sm)` >> simp[] >>
+  qmatch_goalsub_abbrev_tac `compile_revert_with_reason cenv VV MT MS sm` >>
+  Cases_on `compile_revert_with_reason cenv VV MT MS sm` >>
+  rename1 `compile_revert_with_reason _ _ _ _ sm = (u, sc)` >> Cases_on `u` >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `sc = sb` SUBST_ALL_TAC >>
+  `MS = 32 + ((ml + 31) DIV 32) * 32` by
+    simp[Abbr `MS`, Abbr `MT`, type_memory_bytes_def] >>
+  qpat_x_assum `Abbrev (MS = _)` kall_tac >>
+  qpat_x_assum `MS = _` SUBST_ALL_TAC >>
+  qunabbrev_tac `VV` >>
+  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `str`, `ml`, `MT`,
+               `sa`, `buf`, `sm`, `sb`] mp_tac lit_reason_revert_path_mem >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then (qx_choose_then `t` assume_tac) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
   simp_tac (srw_ss()) [gas_summary_at_def, gas_marked_exec_def,
                        gas_marked_path_def] >>
-  qpat_x_assum `gas_marked_path _ _ _ _ _ _`
-    (assume_tac o SIMP_RULE (srw_ss()) [gas_marked_path_def]) >>
-  qexistsl_tac [`INR (AssertException str)`, `es`,
-                `Abort Revert_abort (t with vs_inst_idx := j)`] >>
+  qexistsl_tac [`INR (AssertException str)`, `es`, `Abort Revert_abort t`] >>
   conj_tac
   >- (conj_tac >- (
         gen_tac >> qunabbrev_tac `MT` >>
