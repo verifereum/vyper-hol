@@ -892,7 +892,7 @@ QED
 
 (* ----- code ----- *)
 
-Theorem code_copy_path_mem[local]:
+Theorem code_copy_path_mem:
   !imm src dst n off sa sb func s a b ctx.
   compile_imm_copy_to_memory F imm src dst n off sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1077,7 +1077,7 @@ Proof
   irule body_copy_frame_mem_append >> metis_tac[]
 QED
 
-Theorem ctor_code_copy_path_mem[local]:
+Theorem ctor_code_copy_path_mem:
   !imm src dst n off sa sb func s a b ctx.
   compile_imm_copy_to_memory T imm src dst n off sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1133,7 +1133,7 @@ Proof
 QED
 
 (* Runtime transfers leave memory outside the buffer alone. *)
-Theorem runtime_copy_frame_facts[local]:
+Theorem runtime_copy_frame_facts:
   w2n a + type_memory_size tv < dimword (:256) /\
   w2n w + type_memory_size tv < dimword (:256) /\
   zm = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory ==>
