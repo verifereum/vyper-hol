@@ -1,7 +1,7 @@
 Theory bodyIntCallJointWrite
 Ancestors
   list finite_map exprSimAlloc exprSimHash exprLoweringProps compileEnv vyperState
-  venomState venomExecSemantics
+  venomState venomExecSemantics exprSimProps context venomInst words
 
 (* All windows are framed at the same concrete bounded-write endpoint. *)
 Theorem joint_alloca_write_frame:
@@ -42,4 +42,61 @@ Proof
   rpt strip_tac >>
   first_x_assum drule_all >>
   simp[regions_disjoint_def] >> metis_tac[]
+QED
+
+(* Uses the actual allocation endpoint, including reused allocation entries. *)
+Theorem joint_alloc_buffer_write:
+  compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ sz < dimword (:256) /\ k + 32 <= sz /\
+  EVERY (\(off,len).
+    (?aid p n. aid < sa.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (p,n) /\
+      p <= off /\ off + len <= p+n) \/
+    (?name p n. local_region ce es.scopes s name p n /\
+      p <= off /\ off + len <= p+n)) hs ==>
+  ?t wbuf.
+    run_inst_seq (emitted_insts sa sm) s = OK t /\
+    eval_operand buf.buf_operand t = SOME wbuf /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n wbuf,sz) /\
+    w2n wbuf + sz < dimword (:256) /\
+    stmt_state_rel ctx func ce cx es (mstore (w2n wbuf+k) w t) /\
+    EVERY (\(off,len).
+      mem_bytes_at off len (mstore (w2n wbuf+k) w t).vs_memory =
+      mem_bytes_at off len s.vs_memory) hs /\
+    (ce.ce_is_ctor ==> !name tv v off.
+      FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
+      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables ce.ce_module imms)
+        name = SOME (tv,v) ==>
+      mem_bytes_at off (type_memory_size tv)
+        (mstore (w2n wbuf+k) w t).vs_memory =
+      mem_bytes_at off (type_memory_size tv) s.vs_memory)
+Proof
+  strip_tac >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  drule_all literal_alloc_buffer_run >> strip_tac >>
+  `!name p n. local_region ce es.scopes s name p n ==>
+      local_region ce es.scopes t name p n` by
+    (rpt strip_tac >> irule local_region_frame_fwd >>
+     qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]) >>
+  `EVERY (\(off,len). regions_disjoint (w2n w') sz off len) hs` by
+    (gvs[EVERY_MEM] >> rpt strip_tac >>
+     PairCases_on `e` >>
+     qpat_x_assum `!e. MEM e hs ==> _` drule >> simp[] >>
+     strip_tac
+     >- (qpat_x_assum `!aid b len. _ ==> regions_disjoint _ _ _ _`
+           drule_all >> simp[regions_disjoint_def] >> decide_tac) >>
+     qpat_x_assum `!name p n. local_region _ _ s _ _ _ ==> _`
+       drule >> strip_tac >>
+     qpat_x_assum `!name b len. local_region _ _ t _ _ _ ==> _`
+       drule >> simp[regions_disjoint_def] >> decide_tac) >>
+  qexistsl_tac [`t`, `w'`] >> simp[] >>
+  qpat_x_assum `t.vs_memory = s.vs_memory`
+    (fn th => rewrite_tac[GSYM th]) >>
+  irule joint_alloca_write_frame >> simp[] >>
+  qexistsl_tac [`w2n w'`,
+    `mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
+      [STRING #"%" (toString sa.cs_next_var)]`, `sz`] >>
+  simp[mk_inst_def] >> metis_tac[]
 QED
