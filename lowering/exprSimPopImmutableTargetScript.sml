@@ -1092,6 +1092,31 @@ Proof
   qexistsl_tac [`sid`, `sm`] >> simp[]
 QED
 
+Theorem imm_extend_place_index[local]:
+  !cx es src id path itv iv etv bd av ix.
+    FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+        NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+        SOME (itv,iv) /\
+    subscripts_type itv path = SOME (ArrayTV etv bd) /\
+    evaluate_subscripts itv iv path = INL (ArrayV av) ==>
+    extend_place cx (PlaceR (ImmutablePlace src id path))
+      (ValueSubscript (IntV ix)) es =
+    (case array_index (ArrayTV etv bd) av ix of
+       NONE => (INR (Error (RuntimeError "evaluate_subscripts array_index")),es)
+     | SOME v =>
+       (INL (PlaceR (ImmutablePlace src id
+          (path ++ [ValueSubscript (IntV ix)]))),es))
+Proof
+  rpt strip_tac >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_immutables_def, get_address_immutables_def, bind_def,
+       ignore_bind_def, lift_option_type_def, lift_sum_def, return_def,
+       extend_memory_place_def, evaluate_subscripts_def] >>
+  Cases_on `array_index (ArrayTV etv bd) av ix` >>
+  simp[return_def, raise_def, evaluate_subscripts_def]
+QED
+
 (* The counted walk of a target rooted at an immutable in the
    constructor, with pure indices, given their judgments, the
    constructor's compile env and the root's declared type in it: from s0
@@ -1099,6 +1124,49 @@ QED
    (imm_target_post), the source state unchanged, or exits as the source
    does.  Admitted pending alan; provable as stated, no invariant change
    needed. *)
+Theorem imm_index_word_range[local]:
+  !sgn i ix n.
+    n < dimword (:256) /\ i = (integer_word$i2w ix : bytes32) /\
+    (if sgn then -(&(2 ** 255)) <= ix /\ ix < &(2 ** 255)
+     else 0 <= ix /\ ix < &(dimword (:256))) ==>
+    (idx_in_range sgn i (n2w n) <=> 0 <= ix /\ Num ix < n)
+Proof
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  Cases_on `sgn`
+  >- (`integer_word$w2i (integer_word$i2w ix : bytes32) = ix` by
+        (irule integer_wordTheory.w2i_i2w >>
+         simp[wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def] >>
+         intLib.ARITH_TAC) >>
+      simp[idx_in_range_def, integer_wordTheory.WORD_LTi,
+           integer_wordTheory.w2i_eq_w2n] >>
+      Cases_on `ix < 0` >- intLib.ARITH_TAC >>
+      `0 <= ix` by intLib.ARITH_TAC >>
+      `Num ix < dimword (:256)` by
+        (simp[wordsTheory.dimword_def] >> intLib.ARITH_TAC) >>
+      simp[integer_wordTheory.i2w_def]) >>
+  gvs[] >>
+  `~(ix < 0)` by intLib.ARITH_TAC >>
+  `Num ix < dimword (:256)` by
+    (simp[wordsTheory.dimword_def] >> intLib.ARITH_TAC) >>
+  simp[idx_in_range_def, integer_wordTheory.i2w_def]
+QED
+
+Theorem imm_index_word_nat[local]:
+  !sgn i ix n.
+    n < dimword (:256) /\ i = (integer_word$i2w ix : bytes32) /\
+    (if sgn then -(&(2 ** 255)) <= ix /\ ix < &(2 ** 255)
+     else 0 <= ix /\ ix < &(dimword (:256))) /\
+    idx_in_range sgn i (n2w n) ==>
+    i = n2w (Num ix)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all imm_index_word_range >> strip_tac >>
+  `0 <= ix` by metis_tac[] >>
+  qpat_x_assum `if sgn then _ else _` kall_tac >>
+  `~(ix < 0)` by intLib.ARITH_TAC >>
+  simp[integer_wordTheory.i2w_def]
+QED
+
 Theorem imm_target_walk:
   !bt nocalls ctx func cenv cx env es ty src id sa sb r s0.
     cx.in_deploy /\ cenv.ce_is_ctor /\
