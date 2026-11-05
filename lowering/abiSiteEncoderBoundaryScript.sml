@@ -2,7 +2,7 @@
 Theory abiSiteEncoderBoundary
 Ancestors
   abiSiteAllocation abiSiteCaller abiSiteEncoderContract abiEncoderComplexPrefix abiScratchSequence
-  abiScratchFootprint abiEncoderSequence abiDecoderReentryAddress
+  abiScratchEffect abiScratchFootprint abiEncoderSequence abiDecoderReentryAddress
   abiDecoderProtectedScratch abiDecoderFootprint abiDecoderAllocation abiDecoderFrame
   abiDecoderContract abiDecoderLoop abiDecoderIndexInit abiDecoderArrayHeader
   abiDecoderGuards venomMemProps compilerOccurrences abiDecoderSiteMembership
@@ -97,25 +97,6 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem abi_site_child_excludes_ancestor:
-  abi_site_budget A b cap s /\ B SUBSET A /\
-  ancestor IN A /\ ~(ancestor IN B) /\
-  FLOOKUP s.vs_allocas ancestor = SOME (p,32) ==>
-  abi_footprint_disjoint p 32 (abi_decoder_child_scratch B b cap s)
-Proof
-  strip_tac >>
-  `FINITE A /\ FINITE B` by metis_tac[abi_site_budget_def, SUBSET_FINITE] >>
-  qpat_x_assum `abi_site_budget _ _ _ _` mp_tac >>
-  pure_rewrite_tac[abi_site_budget_def] >> strip_tac >>
-  `p+32 <= s.vs_alloca_next` by metis_tac[] >>
-  `s.vs_alloca_next <= b+cap` by decide_tac >>
-  irule abi_decoder_child_scratch_disjoint >> asm_rewrite_tac[] >>
-  rpt strip_tac >>
-  `id IN A /\ ancestor <> id` by metis_tac[SUBSET_DEF] >>
-  `sz = 32` by metis_tac[] >>
-  qpat_x_assum `sz = 32` SUBST_ALL_TAC >>
-  qpat_x_assum `!i j p q. _` drule_all >> simp_tac bool_ss []
-QED
 
 (* A real recursive encoder invocation must preserve an already initialized
    parent slot. Its budget is A, not the smaller child footprint. *)
@@ -127,25 +108,8 @@ Theorem abi_site_encoder_child_slot:
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = mload slot s
 Proof
   strip_tac >>
-  `FINITE A` by metis_tac[abi_site_budget_def] >>
-  `FINITE (A INTER abi_decoder_ids lo hi) /\
-   A INTER abi_decoder_ids lo hi SUBSET A /\
-   ~(site IN A INTER abi_decoder_ids lo hi)` by
-    (simp[abi_decoder_ids_def] >> decide_tac) >>
-  drule_all abi_site_child_excludes_ancestor >> disch_tac >>
-  `MEM (slot,32) (abi_decoder_child_scratch A b cap s)` by
-    (irule abi_scratch_registered_member >> asm_rewrite_tac[] >>
-     qexists_tac `site` >> asm_rewrite_tac[]) >>
-  `abi_footprint_disjoint slot 32
-     ((d,sz)::abi_decoder_child_scratch (A INTER abi_decoder_ids lo hi) b cap s)` by
-    (asm_simp_tac bool_ss [abi_scratch_disjoint_cons] >>
-     qpat_x_assum `abi_footprint_disjoint d sz _` mp_tac >>
-     rewrite_tac[abi_footprint_disjoint_def] >> metis_tac[]) >>
-  qpat_x_assum `abi_site_encoder_effect _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[abi_site_encoder_effect_def] >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  conj_tac >- metis_tac[] >>
-  drule_all abi_decode_footprint_frame_mload >> simp_tac bool_ss []
+  `~(site IN abi_decoder_ids lo hi)` by simp[abi_decoder_ids_def] >>
+  drule_all abi_site_effect_slot >> simp[]
 QED
 
 Theorem abi_site_encoder_child_run:
