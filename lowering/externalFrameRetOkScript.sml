@@ -14,6 +14,23 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* Notes for the proof (unchecked analysis, not part of the statement):
+   - IntCall returns: typing lets a call's annotation widen the callee's
+     return type, while compile_call leaves the value at the callee's type
+     (lowered_value_type = ce_func_return_type), and expr_post describes it
+     at the annotation.  Where the two differ, the premises can't hold on a
+     successful run; expr_vv_sim's vv_holds ties a LocatedValue's type to
+     expr_type e, which may give the needed equality.
+   - Footprints: expr_val_at bounds a value by val_footprint (a "abc" literal
+     returned as String[100] has a 64-byte buffer), not type_memory_size, so
+     helpers asking for p + type_memory_size tv <= vs_alloca_next need a
+     footprint form.
+   - A return inside a loop can rerun its ALLOCAs: their ids may already be
+     allocated (stmt_frag has no alloca_history), so "fragment ALLOCA ids
+     unallocated" premises need replacing by alloca_inv disjointness.
+   - nr = F in this frame's package (lookup_function's tuple), so no unlock;
+     a raw-return function returns Bytes. *)
+
 (* ADMITTED (#640): in the selected external function's frame, a return
    statement exits as S1 asks of the call: the returned value casts to the
    return type, and the run halts in external_call_result_rel's success
