@@ -509,3 +509,98 @@ Proof
   gvs[popmany_plan_spilled_unchanged] >> irule residual_budget_wf_canonical >>
   gvs[plan_slots_bounded_def, popmany_plan_spilled_unchanged] >> ASM_SET_TAC[]
 QED
+
+Theorem residual_budget_wf_remove_free[local]:
+  !spillbase pending ps op off.
+    residual_budget_wf spillbase pending ps /\
+    FLOOKUP ps.ps_spilled op = SOME off ==>
+    residual_budget_wf spillbase pending
+      (ps with <| ps_spilled := ps.ps_spilled \\ op;
+                  ps_alloc := free_spill_slot off ps.ps_alloc |>)
+Proof
+  rpt gen_tac >> strip_tac >> fs[residual_budget_wf_def] >>
+  rpt conj_tac
+  >- (fs[plan_slots_bounded_def, alloc_slots_bounded_def] >>
+      simp[plan_slots_bounded_def, alloc_slots_bounded_def,
+           free_spill_slot_def, EVERY_SNOC, DOMSUB_FLOOKUP_THM] >>
+      metis_tac[])
+  >- metis_tac[spill_alloc_layout_wf_after_free]
+  >> fs[DOMSUB_FLOOKUP_THM] >> metis_tac[]
+QED
+
+Theorem residual_budget_wf_release_fold[local]:
+  !dead spillbase pending ps.
+    residual_budget_wf spillbase pending ps /\
+    ALL_DISTINCT (MAP FST dead) /\
+    (!op off. MEM (op,off) dead ==>
+       FLOOKUP ps.ps_spilled op = SOME off) ==>
+    residual_budget_wf spillbase pending
+      (FOLDL (\ps' (op,off).
+         ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                     ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps dead)
+Proof
+  Induct >- simp[] >> rpt gen_tac >> PairCases_on `h` >> simp[] >> strip_tac >>
+  `FLOOKUP ps.ps_spilled h0 = SOME h1` by metis_tac[] >>
+  `residual_budget_wf spillbase pending
+     (ps with <| ps_spilled := ps.ps_spilled \\ h0;
+                 ps_alloc := free_spill_slot h1 ps.ps_alloc |>)` by
+    metis_tac[residual_budget_wf_remove_free] >>
+  `!op off. MEM (op,off) dead ==>
+     FLOOKUP (ps.ps_spilled \\ h0) op = SOME off` by
+    (rpt gen_tac >> strip_tac >>
+     `op <> h0` by
+       (strip_tac >> qpat_x_assum `~MEM h0 (MAP FST dead)` mp_tac >>
+        simp[MEM_MAP] >> qexists_tac `(op,off)` >> simp[]) >>
+     simp[DOMSUB_FLOOKUP_THM] >> metis_tac[]) >>
+  first_x_assum irule >> simp[]
+QED
+
+Theorem residual_budget_wf_release_dead_spills:
+  !spillbase pending live ps.
+    residual_budget_wf spillbase pending ps ==>
+    residual_budget_wf spillbase pending (release_dead_spills live ps)
+Proof
+  rpt gen_tac >> strip_tac >> simp[release_dead_spills_def] >>
+  irule residual_budget_wf_release_fold >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      fs[MEM_FILTER, alistTheory.MEM_pair_fmap_to_alist_FLOOKUP])
+  >- (`MAP FST (FILTER (\(op,off). case op of
+          Var v => ~MEM v live | _ => T) (fmap_to_alist ps.ps_spilled)) =
+       FILTER (\op. case op of Var v => ~MEM v live | _ => T)
+         (MAP FST (fmap_to_alist ps.ps_spilled))` by
+        simp[FILTER_MAP, combinTheory.o_DEF, pairTheory.LAMBDA_PROD] >>
+      pop_assum SUBST1_TAC >>
+      irule FILTER_ALL_DISTINCT >>
+      simp[alistTheory.ALL_DISTINCT_fmap_to_alist_keys])
+  >> first_assum ACCEPT_TAC
+QED
+
+Theorem release_fold_stack_update[local]:
+  !dead ps core.
+    FOLDL (\ps' (op,off).
+      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                  ps_alloc := free_spill_slot off ps'.ps_alloc |>)
+      (ps with ps_stack := core) dead =
+    (FOLDL (\ps' (op,off).
+      ps' with <| ps_spilled := ps'.ps_spilled \\ op;
+                  ps_alloc := free_spill_slot off ps'.ps_alloc |>) ps dead)
+      with ps_stack := core
+Proof
+  Induct >- simp[] >> rpt gen_tac >> PairCases_on `h` >>
+  simp[] >> first_x_assum (qspecl_then
+    [`ps with <| ps_spilled := ps.ps_spilled \\ h0;
+                 ps_alloc := free_spill_slot h1 ps.ps_alloc |>`, `core`] mp_tac) >>
+  simp[]
+QED
+
+Theorem residual_budget_wf_release_dead_spills_core:
+  !spillbase pending live ps core.
+    residual_budget_wf spillbase pending (ps with ps_stack := core) ==>
+    residual_budget_wf spillbase pending
+      ((release_dead_spills live ps) with ps_stack := core)
+Proof
+  rpt gen_tac >> strip_tac >> drule residual_budget_wf_release_dead_spills >>
+  disch_then (qspec_then `live` mp_tac) >>
+  simp[release_dead_spills_def, release_fold_stack_update]
+QED
