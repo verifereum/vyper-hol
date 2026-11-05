@@ -2,6 +2,8 @@
    (bodyMemAssign's dispatch): a word field of a local struct (S1's body_assign_attr_local). *)
 Theory bodyMemAssignAttrLocal
 Ancestors
+  bodySim bodyExprPreFacts supportedStmtTraverse supportedStmts supportedExprs
+  vyperTypeCallGraph vyperTypeSystem vyperTypeInvariants
   bodyMemoryPreds bodyFieldMemoryProps bodyDeclMemoryCounted
   exprSimVVFrame exprOperandVar emitHelperProps gasSummary fragGasMode
   venomState venomInst venomExecSemantics compileEnv emitHelper fragExec
@@ -768,5 +770,32 @@ Theorem body_assign_attr_local_mem:
       (stmt_env cenv lctx ret_ty (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
       (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `supported_expr tops e` by
+    gvs[supported_stmt_def, supported_assignment_def] >>
+  `well_typed_expr env e /\ expr_type e = fty` by
+    (gvs[type_stmt_def, atarget_accepts_def, well_typed_expr_def,
+         AllCaseEqs()] >>
+     Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
+     Cases_on `x` >> gvs[] >> metis_tac[type_widens_to_word]) >>
+  drule_then strip_assume_tac supported_expr_body_calls >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
+  `expr_body_pre cenv cx env e es` by
+    (irule stmt_expr_body_pre >>
+     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+         supported_assignment_exists_def, int_calls_stmt_def,
+         int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
+     qexists_tac `[]` >> simp[]) >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  drule attribute_type_struct_field >>
+  disch_then (qspecl_then [`sid`, `fld`, `fty`] mp_tac) >>
+  impl_tac >- metis_tac[] >> strip_tac >>
+  irule assign_attr_local_frag_mem >> simp[] >>
+  conj_tac
+  >- (qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]) >>
+  fs[body_expr_mem_ok_def] >>
+  first_x_assum (drule_then (drule_then strip_assume_tac)) >> simp[]
 QED
