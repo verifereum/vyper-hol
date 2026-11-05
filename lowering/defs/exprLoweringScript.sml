@@ -3598,3 +3598,19 @@ Proof
        emit_op_def, emit_void_def, fresh_id_def, fresh_var_def, emit_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def, mk_inst_def]
 QED
+
+Theorem type_to_abi_dec_info_layout_cong:
+  !sf ce ty ce'.
+    ce'.ce_struct_fields = ce.ce_struct_fields /\
+    ce'.ce_flag_n_members = ce.ce_flag_n_members ==>
+    type_to_abi_dec_info sf ce' ty = type_to_abi_dec_info sf ce ty
+Proof
+  recInduct type_to_abi_dec_info_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  simp[Ntimes type_to_abi_dec_info_def 2]
+  >- (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+      first_x_assum drule >> simp[])
+  >- (irule MAP_CONG >> simp[])
+  >> Cases_on `FLOOKUP sfields (nsid_to_string nsid)` >> simp[] >>
+  irule MAP_CONG >> simp[pairTheory.FORALL_PROD] >> metis_tac[]
+QED
