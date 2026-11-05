@@ -2,7 +2,7 @@ Theory concretizePtrPairedPrefixProbe
 Ancestors
   concretizePtrPairedPrefix concretizePtrPairedFields concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology concretizePtrActivationBirths
-  concretizePtrValueTransport
+  concretizePtrValueTransport concretizePtrOpaqueRetpc
   concretizePtrValueSelection concretizePtrAffineTransport
   concretizePtrOwnedAssignPrefix concretizePtrSharedFields
   concretizePtrChronologicalHistory concretizePtrRuntimeTotality
@@ -145,9 +145,15 @@ Theorem ptr_paired_gap_scan_sample:
   ptr_paired_sample positions (ptr_gap_scan bb n a) at
     (tokens,registry,births,PT,ptr_gap_tag_scan bb n a PT TG,saved,entries)
 Proof
-  simp[ptr_paired_sample_def] >> strip_tac >> conj_tac
-  >- (irule ptr_assign_prefix_gap_transport >> simp[]) >>
-  gvs[ptr_gap_scan_fields, ptr_shared_fields_def]
+  simp[ptr_paired_sample_def] >> strip_tac >>
+  `ptr_gap_tag_scan bb n a PT TG = TG /\
+   (ptr_gap_scan bb n a).po_prov = a.po_prov /\
+   (ptr_gap_scan bb n a).po_taint = a.po_taint` by
+    (irule ptr_assign_prefix_gap_ghosts >> simp[]) >>
+  conj_tac
+  >- (simp[ptr_gap_scan_fields] >> irule ptr_mixed_vars_fields >>
+      goal_assum (drule_at Any) >> simp[ptr_gap_scan_fields]) >>
+  gvs[ptr_gap_scan_fields, ptr_core_shared_def, ptr_shared_fields_def]
 QED
 
 Theorem ptr_paired_cursor_nop_next:

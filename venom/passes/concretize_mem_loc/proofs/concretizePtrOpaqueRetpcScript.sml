@@ -63,15 +63,15 @@ Ancestors
    production witness, not equality of whole functions invented locally.
    concretize_stage_shape does NOT export EVERY o1_fn_shape C'.
 
-   MIGRATION MAP (not yet installed in production).
-   - ptr_paired_sample currently conjoins unrestricted ptr_vars_transport
-     and ptr_shared_fields. Replace these only after probes with a mixed
-     relation on non-retpc vars + synchronized definedness and own-token
-     interpretation on retpc vars, and token-normalized shared fields.
-   - ptr_paired_samples_transport and ptr_paired_samples_shared project
-     the old relations. No external uses of the shared projection currently
-     occur in the pass proofs; their future consumers must use the mixed
-     operand boundary or the core-field projection respectively.
+   MIGRATION MAP (certificate migration installed, C1.10.8).
+   - ptr_paired_sample now conjoins ptr_mixed_vars on source/target po_fn
+     and ptr_core_shared. The opaque clause has synchronized definedness
+     and own-token interpretation, not equality of the two tokens.
+   - ptr_paired_samples_mixed and ptr_paired_samples_core project these
+     relations; ptr_paired_samples_eval_operands requires nonopaque operands.
+     Conditional gap/pair retention and the actual NOP gap-scan consumer
+     build against the mixed sample. This does not construct a universal
+     paired prefix or its semantic endpoint suppliers.
    - ptr_vars_transport_def quantifies ALL vars. NONE tag / empty taint
      demands equality (ptr_value_transport_scalar_empty). RETPC_PARAM
      outputs with unequal tokens therefore cannot use the unrestricted
@@ -97,12 +97,15 @@ Ancestors
      by FRONT for RET, not returned as ordinary outputs.
 
    REMAINING GAPS.
-   Isolated setup/RETPC_PARAM/merge probes are next, not a universal proof.
-   Production migration still needs the mixed definedness invariant,
-   opaque-copy/parallel-PHI preservation, source/target observation shape,
-   non-opaque operand exclusion and ordinary return-value transport.
-   No proof of opaque/pointer-tag disjointness is assumed here. No final
-   frozen theorem or full paired-certificate counterexample is claimed.
+   Local setup/RETPC_PARAM, copy/PHI selection, mixed batch binding,
+   merge/adopt and equal-return binding boundaries are proved below.
+   The complete certificate still needs universal successful source-prefix
+   construction, production observation shape/nonopaque-use suppliers,
+   actual PHI binding order and compatible postghost ordinary masks,
+   retrospective byte/read recovery and equal ordinary returned values.
+   Saved-caller restoration consumes a historical mixed sample; return
+   binding consumes equal iret_values and NONE adoption explicitly.
+   No opaque/pointer-tag disjointness or frozen target proof is claimed.
 *)
 
 Definition ptr_core_shared_def:

@@ -2,6 +2,7 @@ Theory concretizePtrPairedPrefix
 Ancestors
   concretizePtrStructuralTranscript concretizePtrStructuralTrace concretizePtrSharedFields
   concretizePtrValueSelection concretizePtrEventEmbedding concretizePtrPairedFields
+  concretizePtrOpaqueRetpc
   concretizePtrChronologicalHistory concretizePtrActivationChronology concretizePtrActivationBirths
   list rich_list arithmetic pair
 
@@ -10,8 +11,9 @@ Ancestors
 Definition ptr_paired_sample_def:
   ptr_paired_sample positions a at
       (tokens,registry,births,PT,TG,saved,entries) <=>
-    ptr_vars_transport births positions TG a.po_taint a.po_state at.po_state /\
-    ptr_shared_fields a.po_state at.po_state
+    ptr_mixed_vars births positions TG a.po_taint a.po_fn at.po_fn
+      a.po_state at.po_state /\
+    ptr_core_shared a.po_state at.po_state
 End
 
 Definition ptr_paired_samples_def:
@@ -25,21 +27,22 @@ Definition ptr_paired_samples_def:
         (EL (EL j (done ++ [LENGTH h - 1])) H))
 End
 
-Theorem ptr_paired_samples_transport:
+Theorem ptr_paired_samples_mixed:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht /\
   EL (EL j (done ++ [LENGTH h - 1])) H =
     (tokens,registry,births,PT,TG,saved,entries) ==>
-  ptr_vars_transport births positions TG
+  ptr_mixed_vars births positions TG
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_taint
+    (EL (EL j (done ++ [LENGTH h - 1])) h).po_fn (EL j ht).po_fn
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state (EL j ht).po_state
 Proof
   simp[ptr_paired_samples_def] >> rpt strip_tac >>
   first_x_assum drule >> simp[ptr_paired_sample_def]
 QED
 
-Theorem ptr_paired_samples_shared:
+Theorem ptr_paired_samples_core:
   ptr_paired_samples positions h ht done H /\ j < LENGTH ht ==>
-  ptr_shared_fields
+  ptr_core_shared
     (EL (EL j (done ++ [LENGTH h - 1])) h).po_state (EL j ht).po_state
 Proof
   simp[ptr_paired_samples_def] >> rpt strip_tac >>
@@ -47,6 +50,28 @@ Proof
   qmatch_goalsub_abbrev_tac `ptr_paired_sample positions a at snapshot` >>
   PairCases_on `snapshot` >> simp[ptr_paired_sample_def]
 QED
+(* Operand transport is available only outside the opaque return-PC class. *)
+Theorem ptr_paired_samples_eval_operands:
+  ptr_paired_samples positions h ht done H /\ j < LENGTH ht /\
+  EL (EL j (done ++ [LENGTH h - 1])) H =
+    (tokens,registry,births,PT,TG,saved,entries) /\
+  EVERY (ptr_nonopaque_operand
+    (EL (EL j (done ++ [LENGTH h - 1])) h).po_fn) ops ==>
+  OPTREL (ptr_args_transport births positions
+    (MAP (ptrDiscipline$op_prov TG) ops)
+    (MAP (ptrDiscipline$op_taint
+      (EL (EL j (done ++ [LENGTH h - 1])) h).po_taint) ops))
+    (eval_operands ops (EL (EL j (done ++ [LENGTH h - 1])) h).po_state)
+    (eval_operands ops (EL j ht).po_state)
+Proof
+  strip_tac >> drule_all ptr_paired_samples_mixed >> strip_tac >>
+  drule_all ptr_paired_samples_core >> strip_tac >>
+  irule ptr_mixed_vars_eval_operands >>
+  rpt (goal_assum (drule_at Any)) >>
+  fs[ptr_core_shared_def, concretizePtrSharedFieldsTheory.ptr_shared_fields_def] >>
+  metis_tac[]
+QED
+
 
 (* Departed samples do not move. The final sample does: it must be
    supplied by the eventual NOP-preservation proof, not by list algebra. *)
