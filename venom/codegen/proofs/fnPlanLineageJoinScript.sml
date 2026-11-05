@@ -110,6 +110,72 @@ Proof
   gvs[live_vars_at_def, liveness_analyze_def] >> metis_tac[]
 QED
 
+Theorem successful_jmp_join_reached:
+  generate_inst_plan lv dfg cfg fn inst next_live halting next_term lbl ps =
+    SOME (ops, ps') /\ inst.inst_opcode = JMP ==>
+  join_reached lv fn lbl inst ps'
+Proof
+  strip_tac >>
+  gvs[generate_inst_plan_def, is_pre_codegen_opcode_def, is_param_opcode_def,
+      AllCaseEqs()]
+QED
+
+Theorem successful_insts_last_jmp:
+  !insts i ps ops ps'.
+    insts <> [] /\ (LAST insts).inst_opcode = JMP /\
+    generate_block_insts_plan lv dfg cfg fn lbl halting np blen i insts ps =
+      SOME (ops, ps') ==>
+    join_reached lv fn lbl (LAST insts) ps'
+Proof
+  Induct_on `insts` >- simp[] >>
+  rpt gen_tac >> Cases_on `insts = []`
+  >- (gvs[generate_block_insts_plan_def, AllCaseEqs()] >>
+      metis_tac[successful_jmp_join_reached]) >>
+  simp[generate_block_insts_plan_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[LAST_DEF] >> first_x_assum irule >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem non_param_insts_last_jmp:
+  bb.bb_instructions <> [] /\
+  (LAST bb.bb_instructions).inst_opcode = JMP ==>
+  non_param_insts bb <> [] /\
+  LAST (non_param_insts bb) = LAST bb.bb_instructions
+Proof
+  strip_tac >>
+  `bb.bb_instructions = FRONT bb.bb_instructions ++
+                           [LAST bb.bb_instructions]` by
+    metis_tac[APPEND_FRONT_LAST] >>
+  `non_param_insts bb =
+    FILTER (\inst. ~is_param_opcode inst.inst_opcode)
+      (FRONT bb.bb_instructions) ++ [LAST bb.bb_instructions]` by
+    (simp[non_param_insts_def] >>
+     qpat_x_assum `bb.bb_instructions = _` (fn th =>
+       CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [th]))) >>
+     simp[FILTER_APPEND_DISTRIB, is_param_opcode_def]) >>
+  simp[LAST_APPEND_NOT_NIL]
+QED
+
+Theorem successful_block_jmp_suffix:
+  generate_block_plan lv dfg cfg fn pb ps = SOME (ops, ps') /\
+  pb.bb_instructions <> [] /\
+  (LAST pb.bb_instructions).inst_opcode = JMP /\
+  (LAST pb.bb_instructions).inst_operands = [Label target] /\
+  lookup_block target fn.fn_blocks = SOME bb ==>
+  ?pre. ps'.ps_stack = pre ++ MAP Var
+    (input_vars_from pb.bb_label bb.bb_instructions (live_vars_at lv target 0))
+Proof
+  strip_tac >> drule_all non_param_insts_last_jmp >> strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `(LAST (non_param_insts pb)).inst_opcode = JMP` by simp[] >>
+  drule_all successful_insts_last_jmp >>
+  simp[join_reached_def, join_target_ops_def] >> strip_tac >>
+  metis_tac[]
+QED
+
 (* Used by fnFrameStepsPhi for phi_prefix_frame_sim: the PHI prefix reads
    pred's PHI operands from the top of the stack, and nothing below them
    may be a stale variable whose value the PHIs change.
