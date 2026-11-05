@@ -824,7 +824,8 @@ Proof
     (gvs[expr_sim_pre_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
          byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
          expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
-         call_evaluation_safe_def] >> metis_tac[]) >>
+         call_evaluation_safe_def, exprLoweringTheory.is_extcode_def] >>
+     metis_tac[]) >>
   drule stmt_env_annassign >> strip_tac >>
   `same_frame ce c` by
     (drule_then irule declare_local_same_frame >> simp[]) >>
