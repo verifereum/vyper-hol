@@ -2,6 +2,7 @@ Theory abiEncodeArgsSim
 Ancestors
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
   compileEnv exprSim exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
+  abiArgsLabelBoundary
 
 Definition abi_args_post_def:
   abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s <=>
@@ -191,6 +192,33 @@ Proof
   simp[] >> qexistsl [`st`, `s0`] >> gvs[wb_frame_def]
 QED
 
+Theorem abi_args_location_kept_eq:
+  stmt_state_rel ctx func ce cx es s0 /\
+  MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
+  wb_frame ce es st s0 s1 /\
+  eval_operand op s0 = eval_operand op s1 /\
+  expr_val_at ce cx ty sa sb es v op s0 ==>
+  expr_val_at ce cx ty sa sb es' v op s1
+Proof
+  strip_tac >> rewrite_tac[expr_val_at_def] >> rpt strip_tac >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[expr_val_at_def] >> strip_tac >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
+  simp[]
+  >- (disj1_tac >> qexistsl [`aid`, `b`, `sz`] >>
+      conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >> simp[] >>
+      rpt strip_tac >> first_x_assum irule >> qexists `n` >>
+      irule exprSimOpsTheory.local_region_frame >>
+      conj_tac
+      >- (qexists `func` >>
+          gvs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def]) >>
+      qexistsl [`st`, `es'.scopes`, `s1`] >> gvs[wb_frame_def])
+  >- (disj2_tac >> disj1_tac >> qexistsl [`n`, `b`, `sz`] >> simp[] >>
+      irule exprSimOpsTheory.local_region_frame_fwd >>
+      qexistsl [`s0`, `st`, `es.scopes`] >> gvs[wb_frame_def])
+  >> simp[]
+QED
+
 Theorem abi_args_location_kept:
   stmt_state_rel ctx func ce cx es s0 /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
@@ -218,24 +246,23 @@ Proof
   >> simp[]
 QED
 
-Theorem abi_args_value_kept:
+Theorem abi_args_value_kept_eq:
   expr_sim_inv ce cx env es /\
   stmt_state_rel ctx func ce cx es s0 /\
   stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
   sb.cs_next_id <= st.cs_next_id /\
-  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  eval_operand op s0 = eval_operand op s1 /\
   expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
   expr_val_rel cx ty v op s1
 Proof
   strip_tac >> Cases_on `is_word_type ty`
   >- (qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
       simp[expr_val_rel_def] >> rpt strip_tac >>
-      qexists `w` >> simp[] >> irule abi_args_operand_kept >> metis_tac[]) >>
+      qexists `w` >> simp[]) >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   simp[expr_val_rel_def] >> strip_tac >>
-  `eval_operand op s1 = SOME w` by
-    (irule abi_args_operand_kept >> metis_tac[]) >>
+  `eval_operand op s1 = SOME w` by metis_tac[] >>
   rewrite_tac[expr_val_rel_def] >> qexists `w` >> simp[] >> rpt strip_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def] >> strip_tac >> irule val_in_memory_footprint_agree >>
@@ -248,6 +275,23 @@ Proof
       simp[])
   >- (sym_tac >> irule abi_args_local_window_kept >> metis_tac[])
   >> simp[valueEncodingTheory.mem_bytes_at_def]
+QED
+
+Theorem abi_args_value_kept:
+  expr_sim_inv ce cx env es /\
+  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  local_ptrs_reserved ce st /\ wb_frame ce es st s0 s1 /\
+  sb.cs_next_id <= st.cs_next_id /\
+  (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
+  expr_val_rel cx ty v op s0 /\ expr_val_at ce cx ty sa sb es v op s0 ==>
+  expr_val_rel cx ty v op s1
+Proof
+  strip_tac >> irule abi_args_value_kept_eq >>
+  `eval_operand op s0 = eval_operand op s1` by
+    (Cases_on `eval_operand op s0` >>
+     gvs[expr_val_rel_def] >> metis_tac[abi_args_operand_kept]) >>
+  metis_tac[]
 QED
 
 Theorem abi_args_captured_value_kept:
@@ -388,6 +432,46 @@ Proof
   irule abi_args_post_cons_frame >> metis_tac[]
 QED
 
+Theorem abi_args_post_cons_uncaptured_labels:
+  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
+  (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sb.cs_next_id /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
+  expr_sim ctx func ce cx (expr_type e) e es /\
+  lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
+  fn_has_code sa sm func /\ fn_inst_ids_distinct func ==>
+  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+Proof
+  strip_tac >> Cases_on `op`
+  >- (irule abi_args_post_cons_uncaptured >> simp[] >> metis_tac[])
+  >- (irule abi_args_post_cons_uncaptured >> simp[] >> metis_tac[]) >>
+  rename1 `Label l` >>
+  `expr_val_rel cx (expr_type e) v (Label l) t /\
+   expr_val_at ce cx (expr_type e) sa sm es1 v (Label l) t /\
+   stmt_state_rel ctx func ce cx es1 t` by gvs[expr_post_def] >>
+  `wb_frame ce es1 sm t u /\ stmt_state_rel ctx func ce cx es' u` by
+    gvs[abi_args_post_def] >>
+  drule_all abi_args_success_label_transport >> strip_tac
+  >- (`expr_val_at ce cx (expr_type e) sa sb es' v (Label l) u` by
+        (irule abi_args_location_end_mono >> qexists `sm` >> simp[] >>
+         irule abi_args_location_kept_eq >> metis_tac[]) >>
+      `expr_val_rel cx (expr_type e) v (Label l) u` by
+        (Cases_on `is_word_type (expr_type e)`
+         >- (gvs[expr_val_rel_def] >> metis_tac[]) >>
+         irule abi_args_value_kept_eq >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+      irule abi_args_post_cons_frame >> metis_tac[]) >>
+  `expr_val_at ce cx (expr_type e) sa sb es' v (Label l) u` by
+    metis_tac[abi_args_location_end_mono] >>
+  irule abi_args_post_cons_frame >> metis_tac[]
+QED
+
 Theorem abi_args_post_cons_captured:
   expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
   abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
@@ -460,46 +544,6 @@ Proof
        comp_return_def]
 QED
 
-Theorem abi_args_state_rel_controls:
-  stmt_state_rel ctx func ce cx es
-    (s with <|vs_labels := labels; vs_halted := halted;
-              vs_current_bb := bb; vs_inst_idx := idx|>) <=>
-  stmt_state_rel ctx func ce cx es s
-Proof
-  simp[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_def,
-       local_ptrs_rel_def, local_region_def, local_backed_def,
-       venomStateTheory.lookup_var_def, storage_rel_def, transient_rel_def,
-       accounts_rel_def, immutables_rel_def, logs_rel_def, call_ctx_rel_def,
-       venomStateTheory.contract_storage_def, venomStateTheory.contract_transient_def,
-       venomMemDefsTheory.alloca_inv_def,
-       venomMemDefsTheory.allocas_non_overlapping_def,
-       venomMemDefsTheory.alloca_next_valid_def,
-       exprLoweringPropsTheory.alloca_room_def,
-       exprLoweringPropsTheory.pending_alloca_size_def,
-       exprLoweringPropsTheory.immutable_alloca_sep_def]
-QED
-
-Theorem abi_args_success_not_label:
-  expr_sim ctx func ce cx (expr_type e) e es /\
-  lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
-  (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
-  fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
-  !l. op <> Label l
-Proof
-  strip_tac >> gen_tac >> strip_tac >> gvs[] >>
-  qabbrev_tac `z = s0 with <|vs_labels := FEMPTY; vs_halted := F;
-    vs_current_bb := sa.cs_current_bb; vs_inst_idx := LENGTH sa.cs_current_insts|>` >>
-  `stmt_state_rel ctx func ce cx es z` by
-    simp[Abbr `z`, abi_args_state_rel_controls] >>
-  `expr_res_ok (INL v)` by simp[expr_res_ok_def] >>
-  `expr_exit (INL v) = (\r. F)` by simp[FUN_EQ_THM] >>
-  drule_all expr_sim_apply >> disch_then (qspec_then `z` mp_tac) >>
-  simp[] >> strip_tac >>
-  drule_at (Pat `frag_exec`) abi_lower_value_label_observer >>
-  simp[Abbr `z`, expr_post_def, expr_val_rel_def,
-       venomStateTheory.eval_operand_def] >> gvs[] >> metis_tac[]
-QED
 
 Theorem abi_args_operand_live:
   (!x. op = Var x ==> not_fresh_at sm x) /\ ci_mono sm sb ==>
@@ -521,7 +565,7 @@ Theorem abi_args_uncaptured_cons_sim_live:
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
   (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
   ci_mono sa sm /\ ci_mono sm sb /\
-  (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
   (!t. frag_exec ctx sm sb (\s. s = t /\ stmt_state_rel ctx func ce cx es1 s)
     (\s. ?vs. rr = INL vs /\ abi_args_post ctx func ce cx es1 sm sb t es' args ops vs s /\
        EVERY (abi_decoder_operand_live sb.cs_next_var) ops)
@@ -547,7 +591,7 @@ Proof
       conj_tac >- (Cases_on `rr` >> simp[wb_args_exit_def]) >>
       conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[expr_post_state]) >>
       rpt strip_tac >> gvs[] >>
-      irule abi_args_post_cons_uncaptured >>
+      irule abi_args_post_cons_uncaptured_labels >>
       gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   gvs[exprLoweringPropsTheory.ci_mono_def]
 QED
@@ -562,7 +606,7 @@ Theorem abi_args_uncaptured_cons_sim:
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
   (~is_word_type (expr_type e) ==> es'.scopes = es1.scopes) /\
   ci_mono sa sm /\ ci_mono sm sb /\
-  (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) /\
+  (!x. op = Var x ==> not_fresh_at sm x) /\
   (!t. frag_exec ctx sm sb (\s. s = t /\ stmt_state_rel ctx func ce cx es1 s)
     (\s. ?vs. rr = INL vs /\ abi_args_post ctx func ce cx es1 sm sb t es' args ops vs s)
     (wb_args_exit rr)) ==>
@@ -585,7 +629,7 @@ Proof
       conj_tac >- (Cases_on `rr` >> simp[wb_args_exit_def]) >>
       conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[expr_post_state]) >>
       rpt strip_tac >> gvs[] >>
-      irule abi_args_post_cons_uncaptured >>
+      irule abi_args_post_cons_uncaptured_labels >>
       gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[]) >>
   gvs[exprLoweringPropsTheory.ci_mono_def]
 QED
@@ -844,7 +888,6 @@ Proof
   >- (gvs[] >>
       `lower_value compile_expr ce (expr_type e) e sa = (op,sm)` by
         simp[exprLoweringTheory.lower_value_def, comp_bind_def] >>
-      `!l. op <> Label l` by metis_tac[abi_args_success_not_label] >>
       `!x. op = Var x ==> not_fresh_at sm x` by
         metis_tac[compiler_lower_value_var, compiler_compile_var] >>
       `~is_word_type (expr_type e) ==> es'.scopes = es1.scopes` by
