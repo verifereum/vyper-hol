@@ -28,15 +28,6 @@ Proof
     current_allocation_consistent_restore, SND]
 QED
 
-Theorem current_annotations_edge_insts:
-  !anns insts.
-  LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns
-    (MAP (current_edge_inst rs p) insts) <=>
-  LIST_REL (\a inst. MAP SND a = inst.inst_outputs) anns insts
-Proof
-  Induct >> Cases_on `insts` >> simp[]
-QED
-
 Theorem current_unvisited_annotations_edge_step:
   current_unvisited_annotations A visited bbs ==>
   current_unvisited_annotations A visited (current_edge_step rs p bbs h)
