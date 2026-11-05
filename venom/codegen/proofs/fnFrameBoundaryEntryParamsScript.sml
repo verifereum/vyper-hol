@@ -305,33 +305,137 @@ Proof
   gvs[is_terminator_def]
 QED
 
+(* One single-operand NOP per parameter keeps every parameter live after
+   the prefix, so preparing the parameters emits no code.  The return PC is
+   copied by an ASSIGN before them, so it is the last live variable there and
+   the optimistic swap is a no-op.  Every instruction has at most one stack
+   operand, so the family meets the codegen arity bound for every n. *)
+Definition entry_ret_nops_def:
+  entry_ret_nops n =
+    GENLIST (\i. mk_inst (n+2+i) NOP [Var (entry_probe_name i)] []) n
+End
+
 Definition entry_ret_family_def:
   entry_ret_family n = (entry_probe_fn 0) with fn_blocks :=
     [<|bb_label := "entry"; bb_instructions :=
       entry_probe_params n ++
       [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"];
-       mk_inst (SUC n) RET
-         (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++
-          [Var "retpc"]) []]|>]
+       mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"]] ++
+      entry_ret_nops n ++
+      [mk_inst (2*n+2) RET [Var "rpc"] []]|>]
 End
+
+Theorem entry_probe_name_not_opaque[simp]:
+  entry_probe_name i <> "retpc" /\ "retpc" <> entry_probe_name i /\
+  entry_probe_name i <> "rpc" /\ "rpc" <> entry_probe_name i
+Proof
+  Cases_on `i` >> simp[entry_probe_name_def, REPLICATE]
+QED
 
 Theorem entry_ret_family_opcodes_ready:
   EVERY codegen_ready_inst
     (HD (entry_ret_family n).fn_blocks).bb_instructions
 Proof
   simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
+       entry_ret_nops_def,
        EVERY_APPEND, EVERY_GENLIST, codegen_ready_inst_def,
        mk_inst_def, is_pre_codegen_opcode_def,
        is_unlowered_fmp_opcode_def, is_raw_fmp_opcode_def,
        is_unlowered_internal_call_opcode_def, dead_stack_marker_def,
-       MEM_MAP]
+       compute_operands_def, python_stack_operands_def]
+QED
+
+Theorem entry_ret_family_single[local]:
+  (entry_ret_family n).fn_blocks = [HD (entry_ret_family n).fn_blocks]
+Proof
+  simp[entry_ret_family_def]
+QED
+
+Theorem entry_ret_family_blocks[local]:
+  (HD (entry_ret_family n).fn_blocks).bb_label = "entry" /\
+  LENGTH (HD (entry_ret_family n).fn_blocks).bb_instructions = 2 * n + 3 /\
+  lookup_block "entry" (entry_ret_family n).fn_blocks =
+    SOME (HD (entry_ret_family n).fn_blocks) /\
+  fn_insts (entry_ret_family n) =
+    (HD (entry_ret_family n).fn_blocks).bb_instructions
+Proof
+  simp[entry_ret_family_def, lookup_block_def, FIND_thm, fn_insts_def,
+       fn_insts_blocks_def, entry_probe_params_def, entry_ret_nops_def]
+QED
+
+Theorem entry_ret_family_mem[local]:
+  MEM inst (HD (entry_ret_family n).fn_blocks).bb_instructions <=>
+    (?i. i < n /\ inst = mk_inst i PARAM [Lit (n2w i)] [entry_probe_name i]) \/
+    inst = mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"] \/
+    inst = mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"] \/
+    (?i. i < n /\
+         inst = mk_inst (n+2+i) NOP [Var (entry_probe_name i)] []) \/
+    inst = mk_inst (2*n+2) RET [Var "rpc"] []
+Proof
+  simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
+       MEM_GENLIST] >> metis_tac[]
+QED
+
+Theorem entry_ret_family_el_param[local]:
+  !k. k < n ==>
+    EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    mk_inst k PARAM [Lit (n2w k)] [entry_probe_name k]
+Proof
+  simp[entry_ret_family_def, entry_probe_params_def, EL_APPEND_EQN,
+       EL_GENLIST]
+QED
+
+Theorem entry_ret_family_el_retpc[local]:
+  !k. k = n ==>
+    EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]
+Proof
+  simp[entry_ret_family_def, entry_probe_params_def, EL_APPEND_EQN]
+QED
+
+Theorem entry_ret_family_el_assign[local]:
+  !k. k = n + 1 ==>
+    EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"]
+Proof
+  simp[entry_ret_family_def, entry_probe_params_def, EL_APPEND_EQN,
+       rich_listTheory.EL_CONS]
+QED
+
+Theorem entry_ret_family_el_nop[local]:
+  !k. n + 2 <= k /\ k < 2 * n + 2 ==>
+    EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    mk_inst k NOP [Var (entry_probe_name (k - (n + 2)))] []
+Proof
+  rpt strip_tac >>
+  simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
+       EL_APPEND_EQN, EL_GENLIST, rich_listTheory.EL_CONS, mk_inst_def]
+QED
+
+Theorem entry_ret_family_el_ret[local]:
+  !k. k = 2 * n + 2 ==>
+    EL k (HD (entry_ret_family n).fn_blocks).bb_instructions =
+    mk_inst (2*n+2) RET [Var "rpc"] []
+Proof
+  simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
+       EL_APPEND_EQN, rich_listTheory.EL_CONS]
+QED
+
+Theorem entry_ret_family_offsets_used:
+  offset_outputs_used (entry_ret_family n)
+Proof
+  simp[offset_outputs_used_def, entry_ret_family_blocks, EVERY_MEM,
+       entry_ret_family_mem] >>
+  rpt strip_tac >> gvs[mk_inst_def]
 QED
 
 Theorem entry_ret_family_small:
   (HD (entry_ret_family 1).fn_blocks).bb_instructions =
     [mk_inst 0 PARAM [Lit 0w] [""];
      mk_inst 1 RETPC_PARAM [Lit 1w] ["retpc"];
-     mk_inst 2 RET [Var ""; Var "retpc"] []]
+     mk_inst 2 ASSIGN [Var "retpc"] ["rpc"];
+     mk_inst 3 NOP [Var ""] [];
+     mk_inst 4 RET [Var "rpc"] []]
 Proof
   EVAL_TAC
 QED
@@ -341,11 +445,14 @@ Theorem entry_ret_family_get_params:
     entry_probe_params n ++
       [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]
 Proof
-  qspec_then `entry_probe_params n ++
-    [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]` mp_tac get_params_prefix >>
-  disch_then (qspec_then `[mk_inst (SUC n) RET
-    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) []]` mp_tac) >>
-  simp[entry_ret_family_def, entry_probe_params_def, EVERY_APPEND,
+  `(HD (entry_ret_family n).fn_blocks).bb_instructions =
+     (entry_probe_params n ++
+      [mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]]) ++
+     (mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"] ::
+      entry_ret_nops n ++ [mk_inst (2*n+2) RET [Var "rpc"] []])` by
+    simp[entry_ret_family_def] >>
+  pop_assum SUBST1_TAC >> irule get_params_prefix >>
+  simp[entry_probe_params_def, entry_ret_nops_def, EVERY_APPEND,
        EVERY_GENLIST, mk_inst_def, no_param_insts_def, is_param_opcode_def]
 QED
 
@@ -367,51 +474,58 @@ Theorem entry_ret_family_reachable:
 Proof
   irule reachable_fn_single_block >>
   simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
-       EVERY_APPEND, EVERY_GENLIST, mk_inst_def]
+       entry_ret_nops_def, EVERY_APPEND, EVERY_GENLIST, mk_inst_def]
 QED
 
 Theorem entry_ret_family_opaque_vars:
-  !x. (retpc_var (entry_ret_family n) x <=> x = "retpc") /\
+  !x. (retpc_var (entry_ret_family n) x <=> x = "retpc" \/ x = "rpc") /\
       ~gas_var (entry_ret_family n) x
 Proof
-  gen_tac >> simp[retpc_var_def, gas_var_def] >>
-  once_rewrite_tac[copy_phi_var_cases] >>
-  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
-       fn_insts_def, fn_insts_blocks_def, mk_inst_def,
-       MEM_FLAT, MEM_MAP, MEM_GENLIST] >>
-  dsimp[] >> rpt strip_tac >> disj1_tac >> rpt strip_tac >> gvs[]
+  `copy_phi_var RETPC_PARAM (entry_ret_family n) "retpc"` by
+    (irule copy_phi_var_seed >>
+     qexists_tac `mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]` >>
+     simp[entry_ret_family_blocks, entry_ret_family_mem, mk_inst_def]) >>
+  `copy_phi_var RETPC_PARAM (entry_ret_family n) "rpc"` by
+    (irule copy_phi_var_assign >>
+     qexistsl_tac [`mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"]`, `"retpc"`] >>
+     simp[entry_ret_family_blocks, entry_ret_family_mem, mk_inst_def]) >>
+  gen_tac >> rewrite_tac[retpc_var_def, gas_var_def] >> conj_tac
+  >- (eq_tac
+      >- (once_rewrite_tac[copy_phi_var_cases] >>
+          simp[entry_ret_family_blocks, entry_ret_family_mem, PULL_EXISTS] >>
+          rpt strip_tac >> gvs[mk_inst_def]) >>
+      strip_tac >> gvs[]) >>
+  irule copy_phi_var_no_seed >>
+  simp[entry_ret_family_blocks, entry_ret_family_mem, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[mk_inst_def]
 QED
 
 Theorem entry_ret_family_opaque_ok:
   opaque_use_ok (entry_ret_family n)
 Proof
   simp[opaque_use_ok_def, entry_ret_family_opaque_vars,
-       entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
-       fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP, MEM_GENLIST,
-       mk_inst_def] >> rpt strip_tac >> gvs[] >>
-  simp[retpc_use_ok_def, MEM_MAP] >>
-  rpt strip_tac >> gvs[]
+       entry_ret_family_blocks, entry_ret_family_mem, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[mk_inst_def, retpc_use_ok_def] >>
+  qexists_tac `[]` >> simp[]
 QED
 
 Theorem entry_ret_family_retpc_shape:
   retpc_shape_ok (entry_ret_family n)
 Proof
   simp[retpc_shape_ok_def, entry_ret_family_reachable,
-       entry_ret_family_opaque_vars] >>
-  simp[entry_ret_family_def, entry_probe_fn_def, entry_probe_params_def,
-       fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP, MEM_GENLIST,
-       EVERY_APPEND, EVERY_GENLIST, mk_inst_def] >>
-  rpt strip_tac >> gvs[] >>
-  qexistsl [`MAP (\i. Var (entry_probe_name i)) (GENLIST I n)`, `"retpc"`] >>
-  simp[entry_ret_family_opaque_vars]
+       entry_ret_family_opaque_vars, entry_ret_family_blocks,
+       entry_ret_family_mem, PULL_EXISTS] >>
+  rpt strip_tac >> gvs[mk_inst_def] >>
+  qexistsl_tac [`[]`, `"rpc"`] >> simp[]
 QED
 
 Theorem entry_ret_family_inst_wf:
   fn_inst_wf (entry_ret_family n)
 Proof
-  simp[fn_inst_wf_def, entry_ret_family_def, entry_probe_params_def,
-       MEM_GENLIST, mk_inst_def] >> rpt strip_tac >> gvs[] >>
-  simp[inst_wf_def, mk_inst_def]
+  once_rewrite_tac[fn_inst_wf_def] >>
+  once_rewrite_tac[entry_ret_family_single] >>
+  simp[entry_ret_family_mem, PULL_EXISTS] >>
+  rpt strip_tac >> simp[inst_wf_def, mk_inst_def]
 QED
 
 Theorem entry_ret_family_ssa:
@@ -420,49 +534,113 @@ Proof
   `!m. FLAT (GENLIST (\i. [entry_probe_name i]) m) =
         GENLIST entry_probe_name m` by
     (Induct >> simp[GENLIST, FLAT_SNOC]) >>
+  `!m. FLAT (GENLIST (\i. [] : string list) m) = []` by
+    (Induct >> simp[GENLIST, FLAT_SNOC]) >>
   simp[ssa_form_def, entry_ret_family_def, entry_probe_params_def,
-       fn_insts_def, fn_insts_blocks_def, mk_inst_def,
+       entry_ret_nops_def, fn_insts_def, fn_insts_blocks_def, mk_inst_def,
        MAP_GENLIST, combinTheory.o_DEF, ALL_DISTINCT_APPEND,
-       ALL_DISTINCT_GENLIST, MEM_GENLIST]
+       ALL_DISTINCT_GENLIST, MEM_GENLIST] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem filter_genlist_unique_le1[local]:
+  !m f P. (!i j. i < m /\ j < m /\ P (f i) /\ P (f j) ==> i = j) ==>
+    LENGTH (FILTER P (GENLIST f m)) <= 1
+Proof
+  Induct >> simp[GENLIST, FILTER_SNOC] >> rpt strip_tac >>
+  IF_CASES_TAC
+  >- (`FILTER P (GENLIST f m) = []` suffices_by simp[] >>
+      simp[FILTER_EQ_NIL, EVERY_GENLIST] >> rpt strip_tac >>
+      qpat_x_assum `!i j. i < SUC m /\ _ ==> _`
+        (qspecl_then [`i`, `m`] mp_tac) >> simp[]) >>
+  first_x_assum irule >> rpt strip_tac >>
+  qpat_x_assum `!i j. i < SUC m /\ _ ==> _`
+    (qspecl_then [`i`, `j`] mp_tac) >> simp[]
 QED
 
 Theorem entry_ret_family_single_use:
   single_use_form (entry_ret_family n)
 Proof
-  simp[passSharedDefsTheory.single_use_form_def,
-       passSharedDefsTheory.var_use_count_block_def,
-       entry_ret_family_def, entry_probe_params_def, FILTER_APPEND,
-       passSharedDefsTheory.sue_count_exempt_def, is_param_opcode_def,
-       mk_inst_def, FILTER_EQ_NIL, EVERY_GENLIST] >>
-  gen_tac >> qmatch_goalsub_abbrev_tac `FILTER p xs` >>
-  `FILTER p xs = []` by
-    simp[FILTER_EQ_NIL, Abbr `p`, Abbr `xs`, EVERY_GENLIST,
-         is_param_opcode_def] >>
-  simp[] >> IF_CASES_TAC >> simp[]
+  rw[passSharedDefsTheory.single_use_form_def,
+     passSharedDefsTheory.var_use_count_block_def, entry_ret_family_def,
+     FILTER_APPEND] >>
+  `FILTER (\inst. ~sue_count_exempt inst.inst_opcode /\
+                  MEM (Var v) inst.inst_operands) (entry_probe_params n) = []` by
+    simp[FILTER_EQ_NIL, entry_probe_params_def, EVERY_GENLIST, mk_inst_def,
+         passSharedDefsTheory.sue_count_exempt_def, is_param_opcode_def] >>
+  `LENGTH (FILTER (\inst. ~sue_count_exempt inst.inst_opcode /\
+                  MEM (Var v) inst.inst_operands) (entry_ret_nops n)) <= 1 /\
+   (v = "rpc" ==>
+    FILTER (\inst. ~sue_count_exempt inst.inst_opcode /\
+                  MEM (Var v) inst.inst_operands) (entry_ret_nops n) = [])` by
+    (simp[entry_ret_nops_def] >> conj_tac
+     >- (irule filter_genlist_unique_le1 >>
+         simp[mk_inst_def, passSharedDefsTheory.sue_count_exempt_def,
+              is_param_opcode_def] >>
+         rpt strip_tac >> gvs[]) >>
+     simp[FILTER_EQ_NIL, EVERY_GENLIST, mk_inst_def]) >>
+  Cases_on `v = "rpc"` >>
+  gvs[mk_inst_def, passSharedDefsTheory.sue_count_exempt_def,
+      is_param_opcode_def]
+QED
+
+Theorem entry_ret_family_ids_distinct[local]:
+  ALL_DISTINCT (HD (entry_ret_family n).fn_blocks).bb_instructions
+Proof
+  irule (Q.ISPEC `\inst. inst.inst_id` ALL_DISTINCT_MAP) >>
+  simp[entry_ret_family_def, entry_probe_params_def, entry_ret_nops_def,
+       MAP_GENLIST, combinTheory.o_DEF, mk_inst_def, ALL_DISTINCT_APPEND,
+       ALL_DISTINCT_GENLIST, MEM_GENLIST]
+QED
+
+Theorem entry_ret_family_succs[local]:
+  bb_succs (HD (entry_ret_family n).fn_blocks) = []
+Proof
+  `!bb. bb.bb_instructions <> [] ==>
+     bb_succs bb = nub (REVERSE (get_successors (LAST bb.bb_instructions)))` by
+    (rpt strip_tac >> simp[bb_succs_def] >>
+     Cases_on `bb.bb_instructions` >> gvs[]) >>
+  pop_assum (qspec_then `HD (entry_ret_family n).fn_blocks` mp_tac) >>
+  simp[entry_ret_family_def] >> disch_then kall_tac >>
+  simp[get_successors_def, mk_inst_def, is_terminator_def, get_label_def,
+       nub_def]
 QED
 
 Theorem entry_ret_family_wf:
   wf_function (entry_ret_family n)
 Proof
+  `bb_well_formed (HD (entry_ret_family n).fn_blocks)` by
+    (rewrite_tac[bb_well_formed_def] >> rpt conj_tac
+     >- simp[entry_ret_family_def]
+     >- simp[entry_ret_family_def, LAST_APPEND_CONS, LAST_DEF, mk_inst_def,
+             is_terminator_def]
+     >- (rpt strip_tac >> fs[entry_ret_family_blocks] >>
+         `MEM (EL i (HD (entry_ret_family n).fn_blocks).bb_instructions)
+            (HD (entry_ret_family n).fn_blocks).bb_instructions` by
+           (irule EL_MEM >> simp[entry_ret_family_blocks]) >>
+         `EL i (HD (entry_ret_family n).fn_blocks).bb_instructions =
+          EL (2 * n + 2) (HD (entry_ret_family n).fn_blocks).bb_instructions` by
+           (simp[entry_ret_family_el_ret] >>
+            qpat_x_assum `MEM _ _` mp_tac >> simp[entry_ret_family_mem] >>
+            rpt strip_tac >> gvs[mk_inst_def, is_terminator_def]) >>
+         qpat_x_assum `EL i _ = EL _ _` mp_tac >>
+         simp[ALL_DISTINCT_EL_IMP, entry_ret_family_ids_distinct,
+              entry_ret_family_blocks]) >>
+     rpt strip_tac >>
+     `MEM (EL j (HD (entry_ret_family n).fn_blocks).bb_instructions)
+        (HD (entry_ret_family n).fn_blocks).bb_instructions` by
+       (irule EL_MEM >> simp[]) >>
+     qpat_x_assum `MEM _ _` mp_tac >> simp[entry_ret_family_mem] >>
+     rpt strip_tac >> gvs[mk_inst_def]) >>
+  `fn_inst_ids_distinct (entry_ret_family n)` by
+    simp[fn_inst_ids_distinct_def, entry_ret_family_def,
+         entry_probe_params_def, entry_ret_nops_def, MAP_GENLIST,
+         combinTheory.o_DEF, mk_inst_def, ALL_DISTINCT_APPEND,
+         ALL_DISTINCT_GENLIST, MEM_GENLIST] >>
   simp[wf_function_def, fn_labels_def, fn_has_entry_def,
-       fn_succs_closed_def, fn_inst_ids_distinct_def,
-       entry_ret_family_def, entry_probe_params_def,
-       bb_succs_def, mk_inst_def, MAP_GENLIST, combinTheory.o_DEF,
-       ALL_DISTINCT_APPEND, ALL_DISTINCT_GENLIST, MEM_GENLIST] >>
-  simp[bb_well_formed_def, EL_APPEND_EQN, EL_GENLIST, is_terminator_def] >>
-  rpt conj_tac
-  >- (rpt strip_tac >> Cases_on `i < n` >> gvs[is_terminator_def] >>
-      Cases_on `i = n` >> gvs[is_terminator_def] >>
-      `i = n + 1` by decide_tac >> gvs[is_terminator_def])
-  >- (rpt strip_tac >> Cases_on `j < n` >> gvs[] >>
-      Cases_on `j = n` >> gvs[] >>
-      `j = n + 1` by decide_tac >> gvs[]) >>
-  Cases_on `n` >>
-  simp[GENLIST_CONS, LAST_DEF, LAST_APPEND, get_successors_def,
-       is_terminator_def, FILTER_EQ_NIL, EVERY_GENLIST,
-       MAP_GENLIST, combinTheory.o_DEF, get_label_def,
-       MEM_MAP, MEM_FILTER, MEM_GENLIST] >>
-  rpt strip_tac >> gvs[]
+       fn_succs_closed_def] >>
+  once_rewrite_tac[entry_ret_family_single] >>
+  simp[entry_ret_family_succs]
 QED
 
 Theorem entry_ret_family_canonical:
@@ -480,8 +658,9 @@ Proof
      `f = g` by simp[Abbr `f`, Abbr `g`, FUN_EQ_THM, ADD_COMM] >>
      gvs[]) >>
   simp[canonical_param_prefix_def, entry_ret_family_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
   irule canonical_entry_params_from_prepend_users >>
-  simp[entry_probe_params_def, EVERY_GENLIST,
+  simp[entry_probe_params_def, entry_ret_nops_def, EVERY_GENLIST,
        canonical_entry_params_from_def, param_inst_at_def,
        no_param_insts_def, mk_inst_def, is_param_opcode_def] >>
   first_x_assum (qspecl_then [`n`, `0`] mp_tac) >> simp[mk_inst_def]
@@ -495,43 +674,55 @@ Proof
   rpt strip_tac >> Cases_on `path` >> gvs[]
 QED
 
+Theorem entry_ret_family_avail[local]:
+  !d u v. d < u /\ u < 2 * n + 3 /\
+    MEM v (EL d (HD (entry_ret_family n).fn_blocks).bb_instructions).inst_outputs ==>
+    def_available_at (entry_ret_family n) (HD (entry_ret_family n).fn_blocks)
+      (SOME (EL u (HD (entry_ret_family n).fn_blocks).bb_instructions)) v
+Proof
+  rpt strip_tac >> simp[def_available_at_def] >>
+  qexistsl_tac [`HD (entry_ret_family n).fn_blocks`,
+    `EL d (HD (entry_ret_family n).fn_blocks).bb_instructions`] >>
+  `MEM (HD (entry_ret_family n).fn_blocks) (entry_ret_family n).fn_blocks` by
+    simp[entry_ret_family_def] >>
+  simp[entry_ret_family_blocks, entry_ret_family_entry_dominates, EL_MEM] >>
+  qexistsl_tac [`d`, `u`] >> simp[entry_ret_family_blocks]
+QED
+
 Theorem entry_ret_family_dominance:
   def_dominates_uses (entry_ret_family n)
 Proof
-  mp_tac entry_ret_family_entry_dominates >>
-  simp[entry_ret_family_def, entry_probe_params_def, mk_inst_def] >>
-  disch_tac >>
-  simp[def_dominates_uses_def, entry_ret_family_def,
-       entry_probe_params_def, MEM_GENLIST, mk_inst_def] >>
-  rpt strip_tac >> gvs[] >>
-  simp[MEM_MAP, MEM_GENLIST] >> rpt strip_tac >> gvs[] >>
-  simp[def_available_at_def]
-  >- (qexists_tac `mk_inst i PARAM [Lit (n2w i)] [entry_probe_name i]` >>
-      simp[mk_inst_def, MEM_GENLIST] >>
-      qexistsl [`i`, `n+1`] >>
-      simp[EL_APPEND_EQN, EL_GENLIST]) >>
-  qexists_tac `mk_inst n RETPC_PARAM [Lit (n2w n)] ["retpc"]` >>
-  simp[mk_inst_def] >> qexistsl [`n`, `n+1`] >>
-  simp[EL_APPEND_EQN, EL_GENLIST]
+  rewrite_tac[def_dominates_uses_def] >> rpt gen_tac >>
+  once_rewrite_tac[entry_ret_family_single] >> rewrite_tac[MEM] >>
+  strip_tac >> gvs[MEM_EL, entry_ret_family_blocks] >>
+  rename1 `u < 2 * n + 3` >>
+  Cases_on `u < n`
+  >- gvs[entry_ret_family_el_param, mk_inst_def] >>
+  Cases_on `u = n`
+  >- gvs[entry_ret_family_el_retpc, mk_inst_def] >>
+  Cases_on `u = n + 1`
+  >- (gvs[] >>
+      qspecl_then [`n`, `n + 1`, `"retpc"`] mp_tac entry_ret_family_avail >>
+      simp[entry_ret_family_el_retpc, entry_ret_family_el_assign,
+           mk_inst_def]) >>
+  Cases_on `u < 2 * n + 2`
+  >- (qspecl_then [`u - (n + 2)`, `u`, `entry_probe_name (u - (n + 2))`]
+        mp_tac entry_ret_family_avail >>
+      simp[entry_ret_family_el_param, entry_ret_family_el_nop, mk_inst_def]) >>
+  `u = 2 * n + 2` by decide_tac >> gvs[] >>
+  qspecl_then [`n + 1`, `2 * n + 2`, `"rpc"`] mp_tac entry_ret_family_avail >>
+  simp[entry_ret_family_el_assign, entry_ret_family_el_ret, mk_inst_def]
 QED
 
 Theorem entry_ret_family_no_preds:
   cfg_preds_of (cfg_analyze (entry_ret_family n)) lbl = []
 Proof
-  simp[cfg_analyze_preds, entry_ret_family_def,
-       cfgDefsTheory.build_preds_def, cfgDefsTheory.build_succs_def,
+  simp[cfg_analyze_preds] >> once_rewrite_tac[entry_ret_family_single] >>
+  simp[cfgDefsTheory.build_preds_def, cfgDefsTheory.build_succs_def,
        cfgDefsTheory.init_succs_def, cfgDefsTheory.init_preds_def,
-       cfgDefsTheory.fmap_lookup_list_def] >>
-  Cases_on `n` >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE, entry_probe_params_def,
-       GENLIST_CONS, bb_succs_def, LAST_DEF, LAST_APPEND,
-       get_successors_def, mk_inst_def, is_terminator_def,
-       MEM_MAP, MEM_FILTER, MEM_GENLIST, MAP_GENLIST,
-       combinTheory.o_DEF, get_label_def]
-  >- (IF_CASES_TAC >> simp[]) >>
-  `FILTER IS_SOME (GENLIST (\x. NONE : string option) n' ++ [NONE]) = []` by
-    simp[FILTER_EQ_NIL, EVERY_GENLIST] >>
-  simp[finite_mapTheory.FLOOKUP_UPDATE] >> IF_CASES_TAC >> simp[]
+       cfgDefsTheory.fmap_lookup_list_def, finite_mapTheory.FLOOKUP_UPDATE,
+       entry_ret_family_blocks, entry_ret_family_succs] >>
+  rw[]
 QED
 
 Theorem entry_ret_family_no_phis:
@@ -553,11 +744,12 @@ Proof
   `entry_block (entry_ret_family n) =
     SOME (HD (entry_ret_family n).fn_blocks)` by
     simp[entry_block_def, entry_ret_family_def] >>
-  simp[block_entries_ready_def, phi_operands_ready_def,
+  simp[block_entries_ready_def, phi_operands_ready_def, phis_at_joins_def,
        entry_ret_family_no_preds, entry_ret_family_no_phis,
        entry_ret_family_opcodes_ready] >>
   qpat_x_assum `_ = [HD _]` (fn th => once_rewrite_tac[th]) >>
-  simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready]
+  simp[entry_ret_family_no_phis, entry_ret_family_opcodes_ready,
+       entry_ret_family_offsets_used]
 QED
 
 (* The long member is admitted by every source-side contract. *)
@@ -631,7 +823,9 @@ QED
    every ordinary name and retpc at n+1.  entry_ret_family_prepare_params
    proves the arbitrary-n empty-code formula from an empty symbolic stack;
    entry_ret_family_prepare_cleanup simplifies the initialized state.
-   entry_ret_family_first_non_param checks RET is the first non-param.
+   entry_ret_family_first_non_param checks the ASSIGN copying retpc is the
+   first non-param, and entry_ret_family_live_last makes retpc the last live
+   name there, so the optimistic swap emits nothing.
 
    Checked planner projections: init_cleanup_plan_state leaves the spill
    allocator and spilled map unchanged.  At spill_base=0 one may choose a
@@ -652,15 +846,11 @@ QED
 
    Existential state: fn_frame_inv only fixes selected shared state and
    frame-view values; by itself it does not identify vs_p with the canonical
-   prefix state.  However RET returns IntRet values s with its WHOLE input
-   state unchanged (checked entry_ret_probe_result_state).  exec_block's
-   RET branch at venomExecSemanticsScript 1691-1704 returns that state;
-   block fuel is not decremented for PARAM/RET.  A successful source-prefix
-   run followed by RET thus exposes its final vars and instruction index.
-   At the required final index, equal exec_block results should force
-   vs_p equal to that final source state.  The arbitrary-n execution and
-   this inversion are UNPROVED; they must include successful eval_operands
-   (no undefined values), not assume that an Error result is informative.
+   prefix state.  From the required index the block copies retpc into rpc,
+   skips the NOPs, and its RET returns the whole state
+   (entry_ret_family_tail_exec).  Equal exec_block results therefore give
+   vs_p the canonical prefix state's value for every name but rpc
+   (entry_ret_family_witness_lookup), including the Dth ordinary output.
 
    Minimal remaining path: symbolic all-live/planner equation; successful
    source PARAM-prefix+RET result (with wrapped source lookups); RET-result
@@ -683,36 +873,168 @@ Proof
   Cases_on `(cfg_analyze (entry_ret_family n)).cfg_dfs_pre` >> gvs[]
 QED
 
+Theorem entry_ret_family_live_uses[local]:
+  !idx v. idx < 2 * n + 3 /\
+    MEM v (inst_uses (EL idx (HD (entry_ret_family n).fn_blocks).bb_instructions)) ==>
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" idx)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`entry_ret_family n`, `"entry"`,
+    `HD (entry_ret_family n).fn_blocks`, `idx`, `v`] mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_uses >>
+  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
+  disch_then irule >>
+  simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
+QED
+
+Theorem entry_ret_family_live_range[local]:
+  !i j v. i <= j /\ j <= 2 * n + 3 /\
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" j) /\
+    (!k. i <= k /\ k < j ==>
+       ~MEM v (inst_defs
+         (EL k (HD (entry_ret_family n).fn_blocks).bb_instructions))) ==>
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" i)
+Proof
+  rpt strip_tac >>
+  qspecl_then [`entry_ret_family n`, `"entry"`,
+    `HD (entry_ret_family n).fn_blocks`, `i`, `j`, `v`] mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
+  disch_then irule >>
+  simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
+QED
+
+Theorem entry_ret_family_live_forward[local]:
+  !i j v. i <= j /\ j <= 2 * n + 3 /\
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" i) /\
+    (!k. i <= k /\ k < j ==>
+       ~MEM v (inst_defs
+         (EL k (HD (entry_ret_family n).fn_blocks).bb_instructions))) ==>
+    MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" j) \/
+    ?k. i <= k /\ k < j /\
+      MEM v (inst_uses
+        (EL k (HD (entry_ret_family n).fn_blocks).bb_instructions))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`entry_ret_family n`, `"entry"`,
+    `HD (entry_ret_family n).fn_blocks`, `i`, `j`, `v`] mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_forward_or_used >>
+  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
+  disch_then irule >>
+  simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
+QED
+
+Theorem entry_ret_family_live_transfer[local]:
+  !idx. idx < 2 * n + 3 ==>
+    live_vars_at (liveness_analyze (entry_ret_family n)) "entry" idx =
+    liveness_transfer (entry_ret_family n).fn_blocks
+      (EL idx (HD (entry_ret_family n).fn_blocks).bb_instructions)
+      (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (SUC idx))
+Proof
+  rpt strip_tac >>
+  qspecl_then [`entry_ret_family n`, `"entry"`,
+    `HD (entry_ret_family n).fn_blocks`, `idx`] mp_tac
+    livenessAnalysisPropsTheory.live_vars_at_transfer >>
+  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
+  disch_then irule >>
+  simp[entry_ret_family_preorder_entry, entry_ret_family_blocks]
+QED
+
+(* The block has no successors, so nothing is live at its end. *)
+Theorem entry_ret_family_live_exit[local]:
+  live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (2 * n + 3) = []
+Proof
+  `cfg_reachable_of (cfg_analyze (entry_ret_family n)) "entry"` by
+    (mp_tac (Q.SPEC `entry_ret_family n` cfg_analyze_reachable_sets) >>
+     simp[entry_ret_family_wf, EXTENSION] >>
+     metis_tac[entry_ret_family_preorder_entry]) >>
+  mp_tac (Q.INST [`fn` |-> `entry_ret_family n`, `lbl` |-> `"entry"`]
+    livenessProofsTheory.liveness_convergence) >>
+  simp[entry_ret_family_wf, livenessBlockProofsTheory.liveness_instrs_def,
+       livenessBlockProofsTheory.liveness_out_def,
+       cfgAnalysisPropsTheory.cfg_analyze_succs, entry_ret_family_blocks] >>
+  once_rewrite_tac[entry_ret_family_single] >>
+  simp[cfgDefsTheory.build_succs_def, cfgDefsTheory.init_succs_def,
+       cfgDefsTheory.fmap_lookup_list_def, finite_mapTheory.FLOOKUP_UPDATE,
+       entry_ret_family_blocks, entry_ret_family_succs,
+       livenessDefsTheory.same_vars_set, livenessDefsTheory.live_vars_at_def]
+QED
+
 Theorem entry_ret_family_all_live:
   !n v. MEM v (MAP entry_probe_name (GENLIST I n) ++ ["retpc"]) ==>
     MEM v (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n+1))
 Proof
-  rpt strip_tac >>
-  qspec_then `entry_ret_family n` mp_tac
-    livenessAnalysisPropsTheory.live_vars_at_uses >>
-  simp_tac pure_ss [entry_ret_family_wf, LET_THM] >>
-  disch_then irule >>
-  simp_tac (srw_ss()) [entry_ret_family_preorder_entry] >>
-  qexists `HD (entry_ret_family n).fn_blocks` >>
-  simp[entry_ret_family_wf, entry_ret_family_preorder_entry,
-       entry_ret_family_def, lookup_block_def, FIND_thm,
-       entry_probe_params_def, EL_APPEND_EQN, inst_uses_def, mk_inst_def,
-       passSharedDefsTheory.MEM_operand_vars_eq_Var, MEM_MAP] >>
-  gvs[MEM_MAP]
+  rpt gen_tac >> rewrite_tac[MEM_APPEND, MEM, OR_CLAUSES] >> strip_tac
+  >- (gvs[MEM_MAP, MEM_GENLIST] >>
+      qmatch_goalsub_rename_tac `entry_probe_name y` >>
+      `MEM (entry_probe_name y)
+         (live_vars_at (liveness_analyze (entry_ret_family n)) "entry"
+           (n + 2 + y))` by
+        (irule entry_ret_family_live_uses >>
+         simp[entry_ret_family_el_nop, mk_inst_def, inst_uses_def,
+              passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+      irule entry_ret_family_live_range >>
+      qexists_tac `n + 2 + y` >> simp[] >>
+      rpt strip_tac >>
+      Cases_on `k = n + 1`
+      >- gvs[entry_ret_family_el_assign, mk_inst_def, inst_defs_def] >>
+      `n + 2 <= k /\ k < 2 * n + 2` by decide_tac >>
+      gvs[entry_ret_family_el_nop, mk_inst_def, inst_defs_def]) >>
+  irule entry_ret_family_live_uses >>
+  simp[entry_ret_family_el_assign, mk_inst_def, inst_uses_def,
+       passSharedDefsTheory.MEM_operand_vars_eq_Var]
+QED
+
+(* retpc is used only by the ASSIGN, so it is the name the ASSIGN appends
+   last to the live list. *)
+Theorem entry_ret_family_live_last[local]:
+  live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n + 1) <> [] /\
+  LAST (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n + 1)) =
+    "retpc"
+Proof
+  `!k. n + 2 <= k /\ k < 2 * n + 3 ==>
+     ~MEM "retpc" (inst_defs
+        (EL k (HD (entry_ret_family n).fn_blocks).bb_instructions)) /\
+     ~MEM "retpc" (inst_uses
+        (EL k (HD (entry_ret_family n).fn_blocks).bb_instructions))` by
+    (rpt gen_tac >> strip_tac >>
+     Cases_on `k = 2 * n + 2`
+     >- simp[entry_ret_family_el_ret, mk_inst_def, inst_defs_def,
+             inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
+     `k < 2 * n + 2` by decide_tac >>
+     simp[entry_ret_family_el_nop, mk_inst_def, inst_defs_def,
+          inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
+  `~MEM "retpc"
+     (live_vars_at (liveness_analyze (entry_ret_family n)) "entry" (n + 2))` by
+    (strip_tac >>
+     qspecl_then [`n + 2`, `2 * n + 3`, `"retpc"`] mp_tac
+       entry_ret_family_live_forward >>
+     impl_tac >- simp[] >>
+     simp[entry_ret_family_live_exit] >> metis_tac[]) >>
+  `SUC (n + 1) = n + 2` by decide_tac >>
+  qspec_then `n + 1` mp_tac entry_ret_family_live_transfer >>
+  impl_tac >- decide_tac >>
+  disch_then SUBST1_TAC >> pop_assum SUBST1_TAC >>
+  simp[livenessDefsTheory.liveness_transfer_def,
+       livenessDefsTheory.live_update_def, entry_ret_family_el_assign,
+       mk_inst_def, inst_defs_def, livenessDefsTheory.ordered_inst_uses_def,
+       python_stack_operands_def, venomInstTheory.operand_vars_def,
+       venomInstTheory.operand_var_def, MEM_FILTER]
 QED
 
 Theorem entry_ret_family_first_non_param[local]:
   FIND (\inst. ~is_param_opcode inst.inst_opcode)
     (HD (entry_ret_family n).fn_blocks).bb_instructions =
-  SOME (mk_inst (SUC n) RET
-    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])
+  SOME (mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"])
 Proof
   `!xs ys. EVERY (\inst. is_param_opcode inst.inst_opcode) xs ==>
     FIND (\inst. ~is_param_opcode inst.inst_opcode) (xs ++ ys) =
     FIND (\inst. ~is_param_opcode inst.inst_opcode) ys` by
     (Induct >> simp[FIND_thm] >> rpt strip_tac >> gvs[FIND_thm]) >>
-  simp[entry_ret_family_def, entry_probe_params_def, EVERY_GENLIST,
-       mk_inst_def, is_param_opcode_def, FIND_thm]
+  simp[entry_ret_family_def] >>
+  rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  simp[entry_probe_params_def, EVERY_GENLIST, mk_inst_def,
+       is_param_opcode_def, FIND_thm]
 QED
 
 Theorem entry_ret_family_prepare_params:
@@ -731,15 +1053,17 @@ Proof
     (simp[FILTER_EQ_NIL, EVERY_MEM, MEM_MAP, operand_to_string_def] >>
      rpt strip_tac >> gvs[] >> irule entry_ret_family_all_live >> simp[MEM_MAP, operand_to_string_def] >>
      metis_tac[]) >>
+  `(HD (entry_ret_family n).fn_blocks).bb_label = "entry"` by
+    simp[entry_ret_family_def] >>
   simp[prepare_params_plan_def, entry_ret_family_get_params,
        entry_ret_family_first_non_param, parameter_stack_fold,
        stackPlanOpsTheory.popmany_plan_def, optimistic_swap_plan_def,
        entry_probe_params_def, MAP_MAP_o, combinTheory.o_DEF,
-       mk_inst_def, is_terminator_def] >>
-  `(HD (entry_ret_family n).fn_blocks).bb_label = "entry"` by
-    simp[entry_ret_family_def] >>
+       mk_inst_def, is_terminator_def, entry_ret_family_live_last,
+       dfgDefsTheory.operand_equiv_def] >>
   gvs[MAP_GENLIST, combinTheory.o_DEF, stackPlanOpsTheory.popmany_plan_def]
 QED
+
 
 Theorem entry_ret_family_prepare_cleanup:
   prepare_params_plan (liveness_analyze (entry_ret_family n))
@@ -855,46 +1179,85 @@ Proof
   BETA_TAC >> rewrite_tac[]
 QED
 
-Theorem entry_ret_prefix_eval:
-  eval_operands
-    (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"])
-    (entry_ret_prefix_state n s) =
-  SOME (GENLIST (\i. EL (i MOD dimword (:256)) s.vs_params) n ++
-    [s.vs_return_pc_token])
+Theorem entry_ret_family_nop_skip[local]:
+  !d k s. k + d = 2 * n + 2 /\ n + 2 <= k ==>
+    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+      (s with vs_inst_idx := k) =
+    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+      (s with vs_inst_idx := 2 * n + 2)
 Proof
-  `!xs. EVERY (\i. i < n) xs ==>
-    eval_operands (MAP (\i. Var (entry_probe_name i)) xs ++ [Var "retpc"])
-      (entry_ret_prefix_state n s) =
-    SOME (MAP (\i. EL (i MOD dimword (:256)) s.vs_params) xs ++
-      [s.vs_return_pc_token])` by
-    (Induct >> simp[eval_operands_def, eval_operand_def, lookup_var_def,
-                   entry_ret_prefix_retpc_lookup] >>
-     rpt strip_tac >> gvs[] >>
-     simp[eval_operands_def, eval_operand_def, lookup_var_def,
-          entry_ret_prefix_lookup]) >>
-  first_x_assum (qspec_then `GENLIST I n` mp_tac) >>
-  simp[EVERY_GENLIST, MAP_GENLIST, combinTheory.o_DEF]
+  Induct
+  >- (rpt strip_tac >> `k = 2 * n + 2` by decide_tac >> simp[]) >>
+  rpt strip_tac >>
+  `k < 2 * n + 2 /\ k < 2 * n + 3` by decide_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_nop,
+       step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+       is_terminator_def] >>
+  first_x_assum irule >> decide_tac
 QED
 
-Theorem entry_ret_prefix_at_ret:
-  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
-    (entry_ret_prefix_state n s) =
-  IntRet <|iret_values := GENLIST
-     (\i. EL (i MOD dimword (:256)) s.vs_params) n;
-     iret_adopt_fmp := NONE|> (entry_ret_prefix_state n s)
+(* From the index after the parameters, the block copies retpc into rpc,
+   skips the NOPs and returns its whole state. *)
+Theorem entry_ret_family_tail_exec[local]:
+  !fuel ctx t. t.vs_inst_idx = n + 1 ==>
+    exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t =
+    case FLOOKUP t.vs_vars "retpc" of
+      NONE => Error "undefined operand"
+    | SOME r => IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+        ((update_var "rpc" r t) with vs_inst_idx := 2 * n + 2)
 Proof
-  `get_instruction (HD (entry_ret_family n).fn_blocks)
-    (entry_ret_prefix_state n s).vs_inst_idx =
-    SOME (mk_inst (SUC n) RET
-      (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])` by
-    simp[get_instruction_def, entry_ret_prefix_state_def,
-         entry_ret_family_def, entry_probe_params_def, EL_APPEND_EQN] >>
-  once_rewrite_tac[exec_block_def] >>
-  simp[step_inst_non_invoke, mk_inst_def, step_inst_base_def,
-       entry_ret_prefix_eval, FRONT_APPEND] >>
-  qmatch_goalsub_abbrev_tac `vals ++ [_]` >>
-  Cases_on `vals` >>
-  simp[FRONT_DEF, GSYM SNOC_APPEND, FRONT_SNOC]
+  rpt strip_tac >>
+  `n + 1 < 2 * n + 3` by decide_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def, entry_ret_family_blocks,
+       entry_ret_family_el_assign, step_inst_non_invoke, mk_inst_def,
+       step_inst_base_def, eval_operand_def, lookup_var_def,
+       is_terminator_def] >>
+  Cases_on `FLOOKUP t.vs_vars "retpc"` >> simp[] >>
+  irule EQ_TRANS >>
+  qexists_tac `exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+    ((update_var "rpc" x t) with vs_inst_idx := 2 * n + 2)` >>
+  conj_tac
+  >- (irule entry_ret_family_nop_skip >>
+      conj_tac >- decide_tac >> qexists_tac `n` >> decide_tac) >>
+  `2 * n + 2 < 2 * n + 3` by decide_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def, entry_ret_family_blocks, entry_ret_family_el_ret,
+       step_inst_non_invoke, mk_inst_def, step_inst_base_def,
+       eval_operands_def, eval_operand_def, lookup_var_def, update_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, FRONT_DEF]
+QED
+
+Theorem entry_ret_family_exec[local]:
+  EVERY (entry_param_shape s)
+    (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions) ==>
+  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+    (s with vs_inst_idx := 0) =
+  IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+    ((update_var "rpc" s.vs_return_pc_token (entry_ret_prefix_state n s))
+       with vs_inst_idx := 2 * n + 2)
+Proof
+  strip_tac >>
+  `?suffix. (HD (entry_ret_family n).fn_blocks).bb_instructions =
+     get_params (HD (entry_ret_family n).fn_blocks).bb_instructions ++
+     suffix` by
+    (qexists_tac `[mk_inst (n+1) ASSIGN [Var "retpc"] ["rpc"]] ++
+       entry_ret_nops n ++ [mk_inst (2*n+2) RET [Var "rpc"] []]` >>
+     rewrite_tac[entry_ret_family_get_params] >>
+     simp[entry_ret_family_def] >>
+     rewrite_tac[GSYM APPEND_ASSOC, APPEND]) >>
+  drule_all entry_param_skip_prefix >>
+  disch_then (fn th => once_rewrite_tac[th]) >>
+  `LENGTH (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions) =
+     n + 1` by simp[entry_ret_family_get_params, entry_probe_params_def] >>
+  pop_assum SUBST1_TAC >>
+  rewrite_tac[GSYM entry_ret_prefix_state_def] >>
+  `(entry_ret_prefix_state n s).vs_inst_idx = n + 1` by
+    simp[entry_ret_prefix_state_def] >>
+  drule entry_ret_family_tail_exec >>
+  disch_then (fn th => rewrite_tac[th]) >>
+  simp[entry_ret_prefix_retpc_lookup]
 QED
 
 Theorem entry_ret_family_wrap_exec:
@@ -902,60 +1265,37 @@ Theorem entry_ret_family_wrap_exec:
   exec_block fuel ctx
     (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
     (s with vs_inst_idx := 0) =
-  IntRet <|iret_values := GENLIST
-      (\i. EL (i MOD dimword (:256)) s.vs_params) (SUC (dimword (:256)));
-      iret_adopt_fmp := NONE|>
-    (entry_ret_prefix_state (SUC (dimword (:256))) s)
+  IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+    ((update_var "rpc" s.vs_return_pc_token
+       (entry_ret_prefix_state (SUC (dimword (:256))) s))
+       with vs_inst_idx := 2 * SUC (dimword (:256)) + 2)
 Proof
-  strip_tac >>
-  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
-    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
-  `!m. (HD (entry_ret_family m).fn_blocks).bb_instructions =
-     get_params (HD (entry_ret_family m).fn_blocks).bb_instructions ++
-     [mk_inst (SUC m) RET
-       (MAP (\i. Var (entry_probe_name i)) (GENLIST I m) ++ [Var "retpc"]) []]` by
-    (gen_tac >> simp[entry_ret_family_get_params, entry_ret_family_def,
-                     APPEND_ASSOC]) >>
-  `exec_block fuel ctx
-    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
-    (s with vs_inst_idx := 0) =
-   exec_block fuel ctx
-    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks)
-    (entry_ret_prefix_state (SUC (dimword (:256))) s)` by
-    (mp_tac (Q.INST
-       [`insts` |-> `get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions`,
-        `bb` |-> `HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks`,
-        `suffix` |-> `[mk_inst (SUC (SUC (dimword (:256)))) RET
-          (MAP (\i. Var (entry_probe_name i)) (GENLIST I (SUC (dimword (:256)))) ++
-           [Var "retpc"]) []]`]
-       entry_param_skip_prefix) >>
-     `EVERY (entry_param_shape s)
-       (get_params (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks).bb_instructions)` by
-       (irule entry_ret_family_wrap_param_shape >> asm_rewrite_tac[]) >>
-     qpat_x_assum `!m. _.bb_instructions = _`
-       (qspec_then `SUC (dimword (:256))` assume_tac) >>
-     disch_then drule_all >>
-     qpat_x_assum `_.bb_instructions = _` kall_tac >>
-     asm_rewrite_tac[entry_ret_prefix_state_def]) >>
-  qpat_x_assum `!m. _.bb_instructions = _` kall_tac >>
-  asm_rewrite_tac[entry_ret_prefix_at_ret]
+  strip_tac >> irule entry_ret_family_exec >>
+  irule entry_ret_family_wrap_param_shape >> first_assum ACCEPT_TAC
 QED
 
-Theorem entry_ret_family_ret_result_state:
-  s.vs_inst_idx = n+1 /\
-  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) s = IntRet vals t ==>
-  t = s
+(* A state at the required index whose run matches the canonical run
+   agrees with the canonical prefix state on every name but rpc. *)
+Theorem entry_ret_family_witness_lookup[local]:
+  EVERY (entry_param_shape s)
+    (get_params (HD (entry_ret_family n).fn_blocks).bb_instructions) /\
+  t.vs_inst_idx = n + 1 /\
+  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks)
+    (s with vs_inst_idx := 0) =
+  exec_block fuel ctx (HD (entry_ret_family n).fn_blocks) t ==>
+  !x. x <> "rpc" ==>
+    FLOOKUP t.vs_vars x = FLOOKUP (entry_ret_prefix_state n s).vs_vars x
 Proof
-  strip_tac >>
-  `get_instruction (HD (entry_ret_family n).fn_blocks) s.vs_inst_idx =
-    SOME (mk_inst (SUC n) RET
-      (MAP (\i. Var (entry_probe_name i)) (GENLIST I n) ++ [Var "retpc"]) [])` by
-    simp[get_instruction_def, entry_ret_family_def,
-         entry_probe_params_def, EL_APPEND_EQN] >>
+  strip_tac >> gen_tac >> strip_tac >>
+  `"rpc" <> x` by (strip_tac >> gvs[]) >>
   qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  once_rewrite_tac[exec_block_def] >>
-  simp[step_inst_non_invoke, step_inst_base_def, mk_inst_def] >>
-  gvs[AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  drule_then (fn th => rewrite_tac[th]) entry_ret_family_exec >>
+  drule_then (fn th => rewrite_tac[th]) entry_ret_family_tail_exec >>
+  Cases_on `FLOOKUP t.vs_vars "retpc"` >- simp[] >>
+  rewrite_tac[optionTheory.option_case_def] >>
+  disch_then (mp_tac o Q.AP_TERM
+    `\r. case r of IntRet v st => FLOOKUP st.vs_vars x | _ => NONE`) >>
+  simp[update_var_def, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
 Theorem entry_ret_family_wrap_witness:
@@ -966,19 +1306,19 @@ Theorem entry_ret_family_wrap_witness:
     (s with vs_inst_idx := 0) =
   exec_block fuel ctx
     (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) t ==>
-  t = entry_ret_prefix_state (SUC (dimword (:256))) s
+  FLOOKUP t.vs_vars (entry_probe_name (dimword (:256))) = SOME 0w
 Proof
-  strip_tac >> drule entry_ret_family_wrap_exec >>
-  disch_then (qspecl_then [`fuel`, `ctx`] mp_tac) >>
   strip_tac >>
-  `exec_block fuel ctx
-    (HD (entry_ret_family (SUC (dimword (:256)))).fn_blocks) t =
-    IntRet <|iret_values := GENLIST
-      (\i. EL (i MOD dimword (:256)) s.vs_params) (SUC (dimword (:256)));
-      iret_adopt_fmp := NONE|>
-      (entry_ret_prefix_state (SUC (dimword (:256))) s)` by metis_tac[] >>
-  drule_all entry_ret_family_ret_result_state >> simp[]
+  drule entry_ret_family_wrap_param_shape >> strip_tac >>
+  mp_tac (Q.INST [`n` |-> `SUC (dimword (:256))`]
+    entry_ret_family_witness_lookup) >>
+  impl_tac >- asm_rewrite_tac[] >>
+  disch_then (qspec_then `entry_probe_name (dimword (:256))` mp_tac) >>
+  rewrite_tac[entry_probe_name_not_opaque] >>
+  disch_then SUBST1_TAC >>
+  irule entry_ret_prefix_wrapped_lookup >> first_assum ACCEPT_TAC
 QED
+
 
 Definition entry_wrap_source_def:
   entry_wrap_source = (init_venom_state "entry") with
@@ -1125,16 +1465,14 @@ Proof
 QED
 
 Theorem entry_wrap_frame_impossible:
+  FLOOKUP vp.vs_vars (entry_probe_name (dimword (:256))) = SOME 0w ==>
   ~fn_frame_inv ctx entry_wrap_context lo
     (entry_ret_family (SUC (dimword (:256)))) 0w []
-    entry_wrap_asm.as_memory entry_wrap_plan
-    (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source)
-    (asm_next entry_wrap_asm)
+    entry_wrap_asm.as_memory entry_wrap_plan vp (asm_next entry_wrap_asm)
 Proof
-  strip_tac >>
+  rpt strip_tac >>
   `plan_stack_rel lo
-    (frame_view (entry_ret_family (SUC (dimword (:256)))) 0w
-      (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source))
+    (frame_view (entry_ret_family (SUC (dimword (:256)))) 0w vp)
     entry_wrap_plan.ps_stack (asm_next entry_wrap_asm).as_stack` by
     (qpat_x_assum `fn_frame_inv _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[fn_frame_inv_def, APPEND_NIL] >>
@@ -1144,9 +1482,6 @@ Proof
     (rewrite_tac[entry_wrap_plan_def, plan_state_accfupds,
                  combinTheory.K_THM, LENGTH_APPEND, LENGTH_MAP, LENGTH_GENLIST] >>
      simp[]) >>
-  `FLOOKUP (entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source).vs_vars
-      (entry_probe_name (dimword (:256))) = SOME 0w` by
-    (irule entry_ret_prefix_wrapped_lookup >> simp[entry_wrap_source_def]) >>
   fs[codegenRelTheory.plan_stack_rel_def] >>
   first_x_assum (qspec_then `1` mp_tac) >>
   asm_rewrite_tac[entry_wrap_plan_position, entry_wrap_asm_position] >>
@@ -1174,19 +1509,18 @@ Theorem entry_wrap_no_conclusion:
       entry_wrap_asm.as_memory entry_wrap_plan vp t)
 Proof
   strip_tac >>
+  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
+    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
+  `FLOOKUP vp.vs_vars (entry_probe_name (dimword (:256))) = SOME 0w` by
+    (mp_tac (Q.INST [`s` |-> `entry_wrap_source`, `t` |-> `vp`]
+       entry_ret_family_wrap_witness) >>
+     disch_then irule >>
+     asm_rewrite_tac[] >> simp[entry_wrap_source_def]) >>
   `t.as_pc = 1` by
     (qpat_x_assum `t.as_pc = _` mp_tac >>
      simp[entry_wrap_asm_def, entry_wrap_context_def, execute_plan_def,
           exec_stack_op_def]) >>
   drule_all entry_wrap_asm_inversion >> strip_tac >> gvs[] >>
-  `!m. LENGTH (get_params (HD (entry_ret_family m).fn_blocks).bb_instructions) = m+1` by
-    (gen_tac >> simp[entry_ret_family_get_params, entry_probe_params_def]) >>
-  `vp = entry_ret_prefix_state (SUC (dimword (:256))) entry_wrap_source` by
-    (irule entry_ret_family_wrap_witness >>
-     conj_tac
-     >- (qexistsl [`ctx`, `fuel`] >> simp[]) >>
-     asm_rewrite_tac[] >> simp[entry_wrap_source_def]) >>
-  gvs[] >>
   mp_tac (Q.INST [`lo` |-> `SND (compute_label_offsets [AsmLabel "entry"])`]
     entry_wrap_frame_impossible) >> simp[]
 QED

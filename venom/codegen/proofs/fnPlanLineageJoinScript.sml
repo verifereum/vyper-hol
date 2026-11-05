@@ -9,7 +9,7 @@
 
 Theory fnPlanLineageJoin
 Ancestors
-  fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
+  fnLineageInv fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs cfgDefs
 
 (* Used by fnFrameStepsPhi for phi_prefix_frame_sim: the PHI prefix reads
    pred's PHI operands from the top of the stack, and nothing below them
