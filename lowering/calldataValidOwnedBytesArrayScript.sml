@@ -136,8 +136,8 @@ Theorem calldata_valid_bytes_array_owned_success:
   isPREFIX st.cs_current_insts loop_st.cs_current_insts /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
     i.inst_opcode <> DLOAD /\ i.inst_opcode <> DLOADBYTES) (emitted_insts st loop_st) /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),end_st) /\
-  fn_has_code st loop_st fn /\ fn_has_code loop_st end_st fn /\
+  abi_decode_loop_prefix ip src CALLDATALOAD loop_st = ((hdr,body_lbl,exit_lbl),prefix_st) /\
+  fn_has_code st loop_st fn /\ fn_has_code loop_st prefix_st fn /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts /\
   abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
