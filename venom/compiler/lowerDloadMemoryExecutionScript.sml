@@ -72,7 +72,7 @@ Proof
   simp[ld_owned_vars_def, step_taint_def, out_taint_def, op_taint_def]
 QED
 
-Theorem ld_owned_mload_range:
+Theorem ld_owned_mload_live_range:
   i.inst_opcode = MLOAD /\ i.inst_operands = [op] /\
   ld_owned_vars V E AG AH tn un s t /\
   (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
@@ -80,7 +80,7 @@ Theorem ld_owned_mload_range:
   eval_operand op s = SOME x /\ eval_operand op t = SOME y /\
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
-  (!owner bs bt sz. ld_site_entry E owner bs bt sz ==>
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz < dimword(:256)) /\
   (!a. a < lo ==> R a a) /\
   (!a b. ld_site_bytes E live a b ==> R a b) ==>
@@ -111,6 +111,27 @@ Proof
   simp[ld_site_bytes_def] >>
   qexistsl_tac [`owner`,`bs`,`bt`,`sz`,`w2n x-bs+k`] >>
   simp[] >> decide_tac
+QED
+
+Theorem ld_owned_mload_range:
+  i.inst_opcode = MLOAD /\ i.inst_operands = [op] /\
+  ld_owned_vars V E AG AH tn un s t /\
+  (!v. op = Var v ==> v IN V) /\ op_taint tn op = {} /\
+  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  eval_operand op s = SOME x /\ eval_operand op t = SOME y /\
+  (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
+    owner IN live /\ bs+sz < dimword(:256)) /\
+  (!owner bs bt sz. ld_site_entry E owner bs bt sz ==>
+    bt+sz < dimword(:256)) /\
+  (!a. a < lo ==> R a a) /\
+  (!a b. ld_site_bytes E live a b ==> R a b) ==>
+  !k. k < 32 ==> R (w2n x+k) (w2n y+k)
+Proof
+  strip_tac >>
+  `!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bt+sz < dimword(:256)` by metis_tac[] >>
+  rpt strip_tac >> irule ld_owned_mload_live_range >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Theorem ld_owned_mload_access_backward:
