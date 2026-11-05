@@ -26,6 +26,9 @@ Theorem concretize_halt_abort_complete:
     (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
   relocation_taint_le
     (joint_relocation_demand lo (concretize_positions C') q0 es qs (LENGTH es)) tn un /\
+  storage_agree_except tn.t_stor (contract_storage s) (contract_storage t) /\
+  storage_agree_except tn.t_trans (contract_transient s) (contract_transient t) /\
+  s.vs_outcomes = t.vs_outcomes /\ dead_wf D /\ taint_within D C vs0 /\
   MEM inst.inst_opcode
     [RETURN; RETURNDATACOPY; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] /\
   step_inst_base inst s = r /\
