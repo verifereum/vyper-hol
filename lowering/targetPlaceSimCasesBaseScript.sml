@@ -23,23 +23,17 @@ Ancestors
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc
   venomState venomInst
+  gasContext gasOutcome gasSummary gasSummaryCompose gasExemptCert
+  fragGasMode fragGasPath
 Libs
   pairLib
 
 
 (* ===== Facts from the statement simulation =====
-   Restated from stmtSim (expr_exit_INR_type), stmtSimAssignAttr
-   (struct_field_type, attribute_type_struct_field) and
-   stmtSimAssignAttrStorage (extend_storage_place_attr), so the judgment
+   Restated from stmtSimAssignAttr (alookup_fields_args,
+   attribute_type_struct_field) and stmtSimAssignAttrStorage
+   (extend_storage_place_attr, struct_field_slot_alookup), so the judgment
    does not depend on the statement simulation. *)
-
-Theorem expr_exit_INR_type[local]:
-  !ex rr. expr_exit (INR ex : 'a + exception) rr =
-          expr_exit (INR ex : 'b + exception) rr
-Proof
-  rpt gen_tac >> Cases_on `rr` >> Cases_on `ex` >> simp[expr_exit_def] >>
-  TRY (rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def])
-QED
 
 Theorem alookup_fields_args[local]:
   !fields args fld fty.
@@ -307,25 +301,90 @@ Proof
   simp[update_var_def] >> metis_tac[]
 QED
 
-Theorem target_attr_add_frag[local]:
-  !ctx func cenv cx es sa sm sb s0 es1 pv vt rb dst off pv' vt' R t w0.
+(* The ADD of the field's offset, as a 0-GAS counted path from the base's
+   post at sm to the field's post at sb. *)
+Theorem target_attr_add_path[local]:
+  !ctx func cenv cx es sa sm sb s0 es1 pv vt rb dst off pv' vt' t w0.
     target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
     local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
     emit_op ADD [FST rb; Lit (n2w off)] sm = (dst, sb) /\
+    fn_has_code sm sb func /\ ~t.vs_halted /\
+    t.vs_current_bb = sm.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     eval_operand (FST rb) t = SOME w0 /\
     place_ptr_rel cenv cx t pv' (w0 + n2w off) (FST (SND rb)) vt' /\
     place_readable cx es1 pv' ==>
-    frag_exec ctx sm sb (\s. s = t)
-      (\s. target_post ctx func cenv cx es sa sb s0 es1 pv' vt'
-             (dst, FST (SND rb), SOME (value_type_place vt')) s) R
+    ?q. gas_marked_path F ctx func t 0 (OK q) /\
+        target_post ctx func cenv cx es sa sb s0 es1 pv' vt'
+          (dst, FST (SND rb), SOME (value_type_place vt')) q /\
+        q.vs_current_bb = sb.cs_current_bb /\
+        q.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  rpt strip_tac >> irule frag_exec_run_inst_seq >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  gvs[same_blocks_def, mk_inst_def, is_terminator_def,
-      rich_listTheory.IS_PREFIX_APPEND3] >>
-  rpt strip_tac >> disj1_tac >> gvs[] >>
-  drule_all target_post_add >> strip_tac >> qexists_tac `q` >> gvs[]
+  rpt strip_tac >>
+  drule_all target_post_add >> strip_tac >>
+  drule_all buffer_emit_add_run >> strip_tac >> gvs[] >>
+  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var))
+                 (w0 + n2w off) t with vs_inst_idx := SUC t.vs_inst_idx` >>
+  simp[] >> rpt conj_tac
+  >- (pure_rewrite_tac[gas_marked_path_def, COND_CLAUSES] >>
+      qpat_assum `t.vs_inst_idx = _` (SUBST1_TAC o SYM) >>
+      irule emit_op_zero_path >> simp[] >>
+      qexistsl_tac [`[FST rb; Lit (n2w off)]`, `dst`, `ADD`, `sb`] >>
+      simp[is_terminator_def] >> gen_tac >> irule step_ADD >>
+      simp[eval_operand_def]) >>
+  gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+      comp_ignore_bind_def, comp_return_def, emit_def, update_var_def]
+QED
+
+(* A field step reads no gas: its result and state do not depend on the
+   source's gas observations. *)
+Theorem extend_place_attr_gas_obs[local]:
+  !cx pv fld es gs.
+    extend_place cx pv (AttrSubscript fld) (es with gas_obs := gs) =
+      (FST (extend_place cx pv (AttrSubscript fld) es), es with gas_obs := gs) /\
+    SND (extend_place cx pv (AttrSubscript fld) es) = es
+Proof
+  rpt gen_tac >> Cases_on `pv`
+  >~ [`PlaceR p`]
+  >- (Cases_on `p`
+      >~ [`StoragePlace tr slot tv`]
+      >- (Cases_on `tv` >>
+          simp[extend_place_def, extend_storage_place_def, bind_def,
+               lift_option_type_def, return_def, raise_def] >>
+          rename1 `struct_field_slot fs fld` >>
+          Cases_on `struct_field_slot fs fld` >> simp[raise_def, return_def] >>
+          rename1 `SOME q` >> PairCases_on `q` >> simp[return_def]) >>
+      simp[extend_place_def, place_type_value_def, read_place_def,
+           get_scopes_def, get_immutables_def, get_address_immutables_def,
+           bind_def, ignore_bind_def, return_def, raise_def,
+           lift_option_type_def, lift_sum_def]
+      >~ [`lookup_scopes _ es.scopes`]
+      >- (rename1 `lookup_scopes id es.scopes` >>
+          Cases_on `lookup_scopes id es.scopes` >>
+          simp[return_def, raise_def] >>
+          rename1 `subscripts_type entry.type path` >>
+          Cases_on `subscripts_type entry.type path` >>
+          simp[return_def, raise_def] >>
+          Cases_on `read_memory_path entry path` >>
+          simp[return_def, raise_def] >>
+          rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+          Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+          simp[return_def, raise_def]) >>
+      rename1 `ALOOKUP es.immutables cx.txn.target` >>
+      Cases_on `ALOOKUP es.immutables cx.txn.target` >>
+      simp[return_def, raise_def] >>
+      rename1 `FLOOKUP (get_source_immutables src imms) id` >>
+      Cases_on `FLOOKUP (get_source_immutables src imms) id` >>
+      simp[return_def, raise_def] >>
+      rename1 `subscripts_type (FST tva) path` >>
+      Cases_on `subscripts_type (FST tva) path` >>
+      simp[return_def, raise_def] >>
+      Cases_on `evaluate_subscripts (FST tva) (SND tva) path` >>
+      simp[return_def, raise_def] >>
+      rename1 `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      Cases_on `evaluate_subscripts tv v [AttrSubscript fld]` >>
+      simp[return_def, raise_def]) >>
+  simp[extend_place_def, raise_def]
 QED
 
 (* The source's field step on a base place typed by a struct: the field's
@@ -403,6 +462,109 @@ Theorem target_attr_case:
     target_case nocalls ctx func cenv cx bt ==>
     target_case nocalls ctx func cenv cx (AttributeTarget bt fld)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> simp[target_case_def, target_sim_def] >>
+  rpt gen_tac >> strip_tac >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
+  `target_sim ctx func cenv cx env bt es` by
+    (fs[target_case_def] >> first_x_assum irule >>
+     gvs[int_calls_expr_def]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `type_place_target _ _ = _` mp_tac >>
+  simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  rename1 `attribute_type _ bty fld = SOME fty` >>
+  drule compile_get_target_ptr_attr >> strip_tac >> gvs[] >>
+  `ci_mono sa sm` by metis_tac[ci_mono_compile_get_target_ptr, SND] >>
+  `ci_mono sm sb` by metis_tac[ci_mono_emit_op, SND] >>
+  `cs_extends sa sm /\ cs_extends sm sb /\ sa.cs_next_var <= sm.cs_next_var`
+    by fs[ci_mono_def] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    metis_tac[fn_has_code_split] >>
+  `eval_base_place cx (AttributeTarget bt fld) =
+     bind (eval_base_place cx bt) (\pv. extend_place cx pv (AttrSubscript fld))`
+    by simp[FUN_EQ_THM, Once evaluate_def] >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
+                      REWRITE_TAC [th]) >>
+  `gas_admissible (eval_base_place cx bt) target_res_ok es` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, bind_def] >> rpt strip_tac >>
+     Cases_on `res` >> simp[target_res_ok_def] >>
+     first_x_assum (qspec_then `gs` mp_tac) >> simp[target_res_ok_def]) >>
+  qpat_x_assum `target_sim _ _ _ _ _ bt _`
+    (mp_tac o SIMP_RULE std_ss [target_sim_def]) >>
+  disch_then (qspecl_then [`Type bty`, `sa`, `sm`, `rb`, `s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- suspend "summary" >>
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gas_exempt_cert_error_result >>
+  fs[ignore_bind_def]
 QED
 
+Resume target_attr_case[summary]:
+  qexists_tac `marks` >> disj1_tac >>
+  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+  >~ [`exit_result r`]
+  >- (Cases_on `res` >> gvs[expr_exit_def] >>
+      simp[gas_summary_at_def] >>
+      qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
+      irule gas_marked_exec_bind_exception >> simp[]) >>
+  rename1 `target_post _ _ _ _ _ _ _ _ _ pv _ _ t` >>
+  qabbrev_tac `es1 = es_end with gas_obs := []` >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  `eval_base_place cx bt
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL pv, es1)` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[Abbr `es1`]) >>
+  `expr_sim_inv cenv cx env es1` by
+    (irule eval_base_place_sim_inv >>
+     qexistsl_tac [`bt`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                   `INL pv`] >>
+     fs[target_pre_def]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?sid. bty = StructT sid` by
+    (Cases_on `bty` >> gvs[attribute_type_def]) >>
+  gvs[] >>
+  Cases_on `extend_place cx pv (AttrSubscript fld) es1` >>
+  rename1 `extend_place _ _ _ _ = (res1, es2)` >>
+  `!m. res1 <> INR (Error (TypeError m))` by
+    (qpat_x_assum `gas_admissible (bind _ _) _ _`
+       (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
+     disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
+     simp[bind_def] >> rpt strip_tac >> gvs[target_res_ok_def]) >>
+  `?w0. eval_operand (FST rb) t = SOME w0 /\
+        place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\
+        SND (SND rb) = SOME (ValPT (StructT sid)) /\
+        place_readable cx es1 pv` by
+    (fs[target_post_def, value_type_place_def] >> metis_tac[]) >>
+  drule_all attr_place_step >> strip_tac >> gvs[] >>
+  drule_at (Pat `emit_op _ _ _ = _`) target_attr_add_path >>
+  disch_then (drule_at (Pat `place_ptr_rel _ _ _ _ (_ + _) _ _`)) >>
+  disch_then (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> strip_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL pv'`, `es_end`, `OK q`] >> simp[Abbr `es1`] >>
+  irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+         |> REWRITE_RULE [APPEND_NIL]) >>
+  qexistsl_tac [`es_end`, `t`, `pv`] >>
+  simp[gas_marked_exec_def, gas_explicit_nil] >>
+  gen_tac >>
+  `(es_end with gas_obs := []) with gas_obs := tail =
+     es_end with gas_obs := tail` by
+    simp[evaluation_state_component_equality] >>
+  simp[] >>
+  qspecl_then [`cx`, `pv`, `fld`, `es_end`, `tail`] mp_tac
+    extend_place_attr_gas_obs >>
+  qspecl_then [`cx`, `pv`, `fld`, `es_end`, `[]`] mp_tac
+    extend_place_attr_gas_obs >>
+  simp[]
+QED
+
+Finalise target_attr_case
