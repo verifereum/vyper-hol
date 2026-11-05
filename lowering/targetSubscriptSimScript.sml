@@ -10,7 +10,7 @@ Ancestors
   vyperPlaceStatePreservation vyperPlaceTyping vyperTypeStatePreservation
   words finite_map option exprSimArrayIndex valueEncodingProps accountsRelProps
   venomState venomMemDefs vyperArith integer integer_word exprNoEffectStorage
-  exprSimMappingHash
+  exprSimMappingHash stmtLoweringMono
 Libs
   pairLib
 
@@ -269,6 +269,33 @@ Proof
   rename1 `SND (SND rb) = SOME pt` >> Cases_on `pt` >>
   gvs[comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
+(* Intermediate code states are monotone before the semantic suffix is known. *)
+Theorem compile_get_target_ptr_subscript_mono:
+  compile_get_target_ptr compile_expr cenv (SubscriptTarget bt e) sa = (r,sb) /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
+  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) ==>
+  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb
+Proof
+  strip_tac >>
+  `ci_mono sa sm` by metis_tac[ci_mono_compile_get_target_ptr, SND] >>
+  `ci_mono sm sn` by metis_tac[ci_mono_compile_expr_sa, SND] >>
+  simp[] >>
+  drule compile_get_target_ptr_subscript >> strip_tac >> gvs[] >>
+  qpat_x_assum `case SND (SND rb) of NONE => _ | SOME _ => _` mp_tac >>
+  Cases_on `SND (SND rb)` >> simp[]
+  >- (strip_tac >> gvs[] >>
+      metis_tac[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load, SND]) >>
+  rename1 `SND (SND rb) = SOME pt` >> reverse (Cases_on `pt`) >> simp[]
+  >- (rpt strip_tac >> gvs[] >>
+      metis_tac[ci_mono_compile_array_subscript, ci_mono_compile_ptr_load, SND]) >>
+  rpt strip_tac >> rename1 `SND (SND rb) = SOME (MapPT kt mvt)` >>
+  `ci_mono sk sb` by metis_tac[ci_mono_compile_mapping_subscript, SND] >>
+  `ci_mono sn sk` by
+    (Cases_on `is_bytestring_type kt` >> gvs[comp_return_def, ci_mono_refl] >>
+     metis_tac[ci_mono_compile_keccak256_key, SND]) >>
+  fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 (* The index keeps the captured base pointer and composes its memory frame. *)
