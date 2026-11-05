@@ -146,6 +146,33 @@ Proof
   Cases_on `t` >> simp[asm_exec_staticcall_def]
 QED
 
+Theorem asm_abort_call_value_state:
+  s.contexts = (c,rb)::rest /\ LENGTH c.stack < stack_limit /\
+  stipend <= c.gasUsed ==>
+  abort_call_value stipend s =
+    (INL (), s with contexts :=
+      (c with <| stack := 0w :: c.stack; returnData := [];
+                 gasUsed := c.gasUsed - stipend; pc updated_by SUC |>, rb)::rest)
+Proof
+  simp[abort_call_value_def, push_stack_def, set_return_data_def,
+       unuse_gas_def, inc_pc_def, bind_def, ignore_bind_def,
+       get_current_context_def, set_current_context_def,
+       assert_def, return_def, b2w_def]
+QED
+
+Theorem asm_abort_unuse_state:
+  s.contexts = (c,rb)::rest /\ LENGTH c.stack < stack_limit /\
+  stipend <= c.gasUsed ==>
+  abort_unuse stipend s =
+    (INL (), s with contexts :=
+      (c with <| stack := 0w :: c.stack;
+                 gasUsed := c.gasUsed - stipend; pc updated_by SUC |>, rb)::rest)
+Proof
+  simp[abort_unuse_def, push_stack_def, unuse_gas_def, inc_pc_def,
+       bind_def, ignore_bind_def, get_current_context_def,
+       set_current_context_def, assert_def, return_def, b2w_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
