@@ -5401,6 +5401,92 @@ Proof
   simp[handle_step_def, handle_def, reraise_def]
 QED
 
+Theorem asm_call_push_message_tail:
+  wf_state s /\ step s = (r,t) /\
+  LENGTH s.contexts < LENGTH t.contexts ==>
+  MAP (\p. (FST p).msgParams) (TL t.contexts) =
+  MAP (\p. (FST p).msgParams) s.contexts
+Proof
+  strip_tac >>
+  `s.contexts <> [] /\ outputTo_consistent_stack s` by gvs[wf_state_def] >>
+  drule step_push_structure >> simp[] >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >>
+  namedCases_on `t.contexts` ["", "child below"] >> gvs[] >>
+  namedCases_on `below` ["", "parent rest"] >> gvs[] >>
+  fs[MAP_MAP_o, combinTheory.o_DEF] >>
+  qpat_x_assum `MAP FST rest = _` (mp_tac o AP_TERM ``MAP (\c:context. c.msgParams)``) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF]
+QED
+
+Theorem asm_call_message_last:
+  a <> [] /\ b <> [] /\
+  MAP (\p. (FST p).msgParams) a = MAP (\p. (FST p).msgParams) b ==>
+  (FST (LAST a)).msgParams = (FST (LAST b)).msgParams
+Proof
+  strip_tac >>
+  qpat_x_assum `MAP _ a = _` (mp_tac o AP_TERM ``LAST : message_parameters list -> message_parameters``) >>
+  simp[LAST_MAP]
+QED
+
+Theorem asm_call_bottom_message_step:
+  wf_state s /\ active <> [] /\ s.contexts = active ++ saved /\
+  step s = (r,t) /\ LENGTH saved < LENGTH t.contexts ==>
+  ?active'. active' <> [] /\ t.contexts = active' ++ saved /\
+    (FST (LAST active')).msgParams = (FST (LAST active)).msgParams
+Proof
+  strip_tac >>
+  `asm_call_saved_suffix saved s` by
+    (simp[asm_call_saved_suffix_def] >> metis_tac[]) >>
+  drule_all asm_call_saved_suffix_step >>
+  simp[asm_call_saved_suffix_def] >> strip_tac >>
+  rename1 `t.contexts = next ++ saved` >>
+  qexists_tac `next` >> simp[] >>
+  Cases_on `LENGTH s.contexts < LENGTH t.contexts`
+  >- (drule_all asm_call_push_message_tail >>
+      Cases_on `next` >> gvs[] >>
+      Cases_on `t'` >> gvs[MAP_APPEND] >>
+      strip_tac >> irule asm_call_message_last >> simp[] >> metis_tac[]) >>
+  Cases_on `LENGTH t.contexts = LENGTH s.contexts`
+  >- (drule_all step_same_frame_foreign >> strip_tac >>
+      Cases_on `active` >> Cases_on `next` >> gvs[] >>
+      Cases_on `t'` >> gvs[]) >>
+  `LENGTH t.contexts < LENGTH s.contexts` by decide_tac >>
+  drule_all step_pop_foreign >> strip_tac >>
+  namedCases_on `active` ["", "first others"] >> gvs[] >>
+  namedCases_on `others` ["", "second above"] >> gvs[] >>
+  Cases_on `above` >> gvs[]
+QED
+
+Theorem asm_call_bottom_message_finite:
+  !n. wf_state s /\ s.contexts = child::saved /\
+    (!k. k <= n ==>
+      LENGTH saved < LENGTH (SND (FUNPOW (step o SND) k (INL (),s))).contexts) ==>
+    wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+    ?active. active <> [] /\
+      (SND (FUNPOW (step o SND) n (INL (),s))).contexts = active ++ saved /\
+      (FST (LAST active)).msgParams = (FST child).msgParams
+Proof
+  Induct
+  >- (strip_tac >> simp[] >> qexists_tac `[child]` >> simp[]) >>
+  strip_tac >>
+  `wf_state (SND (FUNPOW (step o SND) n (INL (),s))) /\
+   ?active. active <> [] /\
+     (SND (FUNPOW (step o SND) n (INL (),s))).contexts = active ++ saved /\
+     (FST (LAST active)).msgParams = (FST child).msgParams` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  simp[arithmeticTheory.FUNPOW_SUC] >>
+  qmatch_goalsub_abbrev_tac `step mid` >>
+  `wf_state mid /\ mid.contexts = active ++ saved` by simp[Abbr `mid`] >>
+  `LENGTH saved < LENGTH (SND (step mid)).contexts` by
+    (first_x_assum (qspec_then `SUC n` mp_tac) >>
+     simp[arithmeticTheory.FUNPOW_SUC, Abbr `mid`]) >>
+  Cases_on `step mid` >> gvs[] >> conj_tac
+  >- (drule_all step_preserves_wf_state >> simp[]) >>
+  drule_all asm_call_bottom_message_step >> strip_tac >>
+  qexists_tac `active'` >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
