@@ -292,13 +292,14 @@ Theorem gas_shadow_inst_ptr_checks:
     (inst_ptr_ok_check PL pv i <=> inst_ptr_ok_check PL pv j) /\
     (affine_check pv i <=> affine_check pv j) /\
     (phi_check pv i <=> phi_check pv j) /\
-    (write_excl_check pva pvo i <=> write_excl_check pva pvo j)
+    (write_excl_check pva pvo i <=> write_excl_check pva pvo j) /\
+    (pv_def_check pl ar pv i <=> pv_def_check pl ar pv j)
 Proof
   gas_shadow_inst_tac
     [inst_ptr_ok_check_def, ptr_use_ok_check_def, ptr_cmp_exempt_def,
        addr_operand_is_def, mem_write_ops_def, mem_read_ops_def,
        is_pointer_preserving_op_def, affine_check_def, phi_check_def,
-       write_excl_check_def]
+       write_excl_check_def, pv_def_check_def]
 QED
 
 Theorem gas_shadow_fn_ptr_params:
@@ -333,12 +334,14 @@ Proof
   `f.fn_name = g.fn_name /\
    f.fn_forced_alloc_positions = g.fn_forced_alloc_positions`
     by metis_tac[gas_shadow_function_fields] >>
-  `!pv pva pvo.
+  `!pv pva pvo pl ar.
      EVERY (\inst. inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-                   phi_check pv inst /\ write_excl_check pva pvo inst)
+                   phi_check pv inst /\ write_excl_check pva pvo inst /\
+                   pv_def_check pl ar pv inst)
        (fn_insts f) <=>
      EVERY (\inst. inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-                   phi_check pv inst /\ write_excl_check pva pvo inst)
+                   phi_check pv inst /\ write_excl_check pva pvo inst /\
+                   pv_def_check pl ar pv inst)
        (fn_insts g)`
     by (rpt gen_tac >> irule gas_shadow_list_every >>
         qexists_tac `gas_shadow_inst` >> simp[gas_shadow_function_insts] >>

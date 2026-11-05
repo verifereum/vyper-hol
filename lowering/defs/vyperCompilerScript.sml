@@ -411,6 +411,25 @@ Definition write_excl_check_def:
     | NONE => T
 End
 
+(* Each definition of a pointer variable is a root (an ALLOCA, or a DALLOCA
+   or pointer PARAM whose output no ALLOCA writes), or a pointer-preserving
+   op on a pointer variable. *)
+Definition pv_def_check_def:
+  pv_def_check (pl : num list) ar pv inst <=>
+    EVERY (\v. MEM v pv ==>
+             inst.inst_opcode = ALLOCA \/
+             ((inst.inst_opcode = DALLOCA \/
+               (inst.inst_opcode = PARAM /\
+                case inst.inst_operands of
+                  [Lit idx] => MEM (w2n idx) pl
+                | _ => F)) /\
+              ~MEM v ar) \/
+             (is_pointer_preserving_op inst.inst_opcode /\
+              EXISTS (\op. case op of Var u => MEM u pv | _ => F)
+                inst.inst_operands))
+      inst.inst_outputs
+End
+
 Definition fn_ptr_ok_check_def:
   fn_ptr_ok_check PL fn <=>
     let ar = opcode_root_list ALLOCA fn in
@@ -420,7 +439,8 @@ Definition fn_ptr_ok_check_def:
       (SOME pv, SOME pva, SOME pvo) =>
         fn.fn_forced_alloc_positions = FEMPTY /\
         EVERY (\inst. inst_ptr_ok_check PL pv inst /\ affine_check pv inst /\
-                      phi_check pv inst /\ write_excl_check pva pvo inst)
+                      phi_check pv inst /\ write_excl_check pva pvo inst /\
+                      pv_def_check (PL fn.fn_name) ar pv inst)
           (fn_insts fn)
     | _ => F
 End
