@@ -104,5 +104,20 @@ Theorem run_blocks_intret_fields:
     vs'.vs_block_ctx = vs.vs_block_ctx /\ vs'.vs_code = vs.vs_code /\
     vs'.vs_prev_hashes = vs.vs_prev_hashes
 Proof
-  cheat
+  Induct_on `fuel`
+  >- simp[Once venomExecSemanticsTheory.run_blocks_def] >>
+  rpt gen_tac >>
+  once_rewrite_tac[run_blocks_unfold] >> simp[] >>
+  Cases_on `lookup_block vs.vs_current_bb fn.fn_blocks` >> simp[] >>
+  rename1 `lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb` >>
+  Cases_on `run_block fuel ctx bb vs` >> simp[]
+  >- (rename1 `run_block fuel ctx bb vs = OK u` >>
+      Cases_on `u.vs_halted` >> simp[] >> disch_tac >>
+      `u.vs_call_ctx = vs.vs_call_ctx /\ u.vs_tx_ctx = vs.vs_tx_ctx /\
+       u.vs_block_ctx = vs.vs_block_ctx /\ u.vs_code = vs.vs_code /\
+       u.vs_prev_hashes = vs.vs_prev_hashes` by
+        (irule run_block_return_fields >> metis_tac[]) >>
+      first_x_assum drule >> simp[]) >>
+  strip_tac >> gvs[] >>
+  irule run_block_return_fields >> metis_tac[]
 QED
