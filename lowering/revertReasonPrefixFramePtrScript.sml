@@ -1,7 +1,8 @@
 (* Shared observational effects of the checked encoder prefix. *)
 Theory revertReasonPrefixFramePtr
-Ancestors revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr
+Ancestors revertReasonPrefixPtr ghostObservationPtr decoderGhostFramePtr bodyPtrDefs
   allocationPtr loweringHalt typedCopyPtr ptrDiscipline instIdxIndep
+  exprLoweringProps venomInstProps list
   allocaSiteResource localPtrsProps exprSimProps stmtSimLogSuffixFrame
   fragGasSeqPtr revertReasonLayout context venomInst venomExecSemantics venomState finite_map
 
@@ -390,3 +391,176 @@ Proof
     (irule alloca_site_registered_disjoint >> metis_tac[]) >>
   fs[venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+
+Theorem revert_reason_prefix_labels_frame:
+  run_inst_seq (revert_reason_prefix id vn ms) s = OK t ==>
+  t.vs_labels = s.vs_labels
+Proof
+  strip_tac >>
+  drule_at (Pos hd)
+    (Q.ISPEC `\s:venom_state. s.vs_labels` run_inst_seq_preserves_field) >>
+  simp[] >> disch_then irule >> rpt strip_tac >>
+  fs[revert_reason_prefix_def, MEM, mk_inst_def] >>
+  irule venomInstPropsTheory.step_preserves_labels >>
+  qexistsl [`ARB`, `0`, `i`] >>
+  simp[step_inst_non_invoke, is_terminator_def]
+QED
+
+Theorem revert_reason_prefix_ptr_vv_nonmemory:
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es G tn s /\
+  p.ptr_location <> LocMemory /\
+  (!k. k < 3 ==> p.ptr_operand <> Var (STRING #"%" (toString (v+k)))) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es Gf tnf t
+Proof
+  strip_tac >> drule revert_reason_prefix_ghost_observations >> strip_tac >>
+  drule revert_reason_prefix_data_frame >> strip_tac >>
+  `op_taint tnf p.ptr_operand = op_taint tn p.ptr_operand /\
+   eval_operand p.ptr_operand t = eval_operand p.ptr_operand s` by
+    (drule revert_reason_prefix_labels_frame >> strip_tac >>
+     Cases_on `p.ptr_operand` >> simp[op_taint_def, eval_operand_def] >>
+     `!k. k < 3 ==> s' <> STRING #"%" (toString (v+k))` by metis_tac[] >>
+     conj_tac >- (first_x_assum drule >> simp[op_taint_def]) >>
+     irule revert_reason_prefix_lookup_frame >> metis_tac[]) >>
+  irule ptr_vv_ok_nonmemory_frame >> metis_tac[]
+QED
+
+Theorem revert_reason_prefix_old_ptr_covers:
+  ptr_covers G tn x s sz /\
+  (!k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  ptr_covers Gf tnf x t sz
+Proof
+  strip_tac >> drule revert_reason_prefix_ghost_observations >> strip_tac >>
+  drule_all revert_reason_prefix_lookup_frame >> strip_tac >>
+  first_x_assum drule >> fs[ptr_covers_def]
+QED
+
+Theorem revert_reason_prefix_return_frame:
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
+     cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     !k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  return_buf_ptr d cenv Gf tnf t /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    op_taint tnf (Var x) = {}) /\ stor_taint_ok cx tnf t
+Proof
+  strip_tac >> drule revert_reason_prefix_ghost_observations >> strip_tac >>
+  drule revert_reason_prefix_data_frame >> strip_tac >>
+  conj_tac >-
+    (Cases_on `d` >> simp[return_buf_ptr_def] >> PairCases_on `x` >>
+     fs[ghost_inv_def, return_buf_ptr_def] >>
+     conj_tac >-
+       (`lookup_var x t = lookup_var x s` by
+          (irule revert_reason_prefix_lookup_frame >>
+           metis_tac[arithmeticTheory.ADD_COMM]) >> simp[]) >>
+     irule revert_reason_prefix_old_ptr_covers >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  fs[ghost_inv_def, stor_taint_ok_def] >> metis_tac[]
+QED
+
+Theorem revert_reason_prefix_ghost_inv:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString v)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (v+2))]) (fn_insts func) /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
+     cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+     !k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
+  64+ms < dimword (:256) /\ ghost_inv d cenv cx es G tn s /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  ghost_inv d cenv cx es Gf tnf t
+Proof
+  strip_tac >>
+  `!k. k < 2 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))`
+    by (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  drule_all revert_reason_prefix_memory_effects >> strip_tac >>
+  drule_all revert_reason_prefix_return_frame >> strip_tac >>
+  irule ghost_inv_exterior_frame >> simp[] >>
+  qexistsl_tac [`G`, `{i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}`,
+    `s`, `tn`] >> simp[] >> rpt gen_tac >> strip_tac >>
+  `!k. k < 3 ==> p <> STRING #"%" (toString (v+k))` by
+    (fs[compileEnvTheory.not_local_ptr_def] >> metis_tac[]) >>
+  `lookup_var p t = lookup_var p s` by
+    (irule revert_reason_prefix_lookup_frame >> metis_tac[]) >>
+  `local_ptrs_rel func cenv es.scopes s` by
+    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  `?w. lookup_var p s = SOME w /\ type_memory_size entry.type <= sz /\
+       val_wf entry.type entry.value` by
+    (fs[compileEnvTheory.local_ptrs_rel_def] >> metis_tac[]) >>
+  simp[] >> conj_tac >-
+    (irule revert_reason_prefix_old_ptr_covers >> fs[ghost_inv_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >>
+  `val_footprint entry.type entry.value <= sz` by
+    metis_tac[val_footprint_le, arithmeticTheory.LESS_EQ_TRANS] >>
+  `local_region cenv es.scopes s name (w2n w) sz` by
+    (simp[compileEnvTheory.local_region_def] >> metis_tac[]) >>
+  `i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})` by
+    (irule revert_reason_prefix_local_exterior >> simp[] >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     fs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
+  fs[]
+QED
+
+Theorem revert_reason_prefix_ghost_kept:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
+    [STRING #"%" (toString v)]) (fn_insts func) /\
+  MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
+    [STRING #"%" (toString (v+2))]) (fn_insts func) /\
+  (!k. k < 3 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))) /\
+  64+ms < dimword (:256) /\ sa.cs_next_id <= id /\ sa.cs_next_var <= v /\
+  local_ptrs_reserved cenv sa /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x s = SOME w) /\
+  (!aid site. FLOOKUP s0.vs_allocas aid = SOME site ==> FLOOKUP s.vs_allocas aid = SOME site) /\
+  ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
+  inst_seq_ptr D lo ctx func PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
+  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
+Proof
+  strip_tac >>
+  `!k. k < 2 ==> not_local_ptr cenv es.scopes (STRING #"%" (toString (v+k)))`
+    by (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  drule_all revert_reason_prefix_memory_effects >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule revert_reason_prefix_state_rel >> metis_tac[]) >>
+  `alloca_inv t` by fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+  irule ghost_kept_exterior_frame >>
+  qexistsl_tac [`G`, `{i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms}`, `tn`] >>
+  simp[] >> conj_tac >-
+    (drule revert_reason_prefix_ghost_observations >> strip_tac >>
+     gen_tac >> disch_tac >> first_x_assum irule >>
+     fs[compileEnvTheory.not_fresh_at_def] >> rpt strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  conj_tac >- suspend "initial_locals" >> suspend "old_allocations"
+QED
+
+Resume revert_reason_prefix_ghost_kept[old_allocations]:
+  rpt gen_tac >> strip_tac >>
+  `i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})` by
+    (irule revert_reason_prefix_old_allocation_exterior >> simp[] >>
+     goal_assum (drule_at (Pat `FLOOKUP s0.vs_allocas _ = _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     fs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >> fs[]
+QED
+
+Resume revert_reason_prefix_ghost_kept[initial_locals]:
+  rpt gen_tac >> strip_tac >>
+  `local_region cenv es.scopes s n b' sz` by
+    (irule local_region_frame_fwd >> metis_tac[]) >>
+  `i NOTIN ({i | b <= i /\ i < b+(64+ms)} UNION {i | c <= i /\ i < c+ms})` by
+    (irule revert_reason_prefix_local_exterior >> simp[] >>
+     goal_assum (drule_at (Pat `local_region _ _ s _ _ _`)) >>
+     simp[] >> goal_assum (drule_at (Pat `run_inst_seq _ _ = _`)) >>
+     fs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >> fs[]
+QED
+
+Finalise revert_reason_prefix_ghost_kept
