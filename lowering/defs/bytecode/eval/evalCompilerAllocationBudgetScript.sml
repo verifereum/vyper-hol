@@ -4,13 +4,16 @@ Ancestors vyperCompiler venomInst venomWf words venomExecSemantics
   venomState stackPlanGen fmpLowerDefs
 Libs computeLib wordsLib
 
+(* Every block ends in a terminator, so the test units are well-formed
+   functions, which lowering_context_ok's ptr_ok_check asks for. *)
 Definition allocation_budget_test_context_def:
   allocation_budget_test_context sizes =
     mk_venom_context
       [mk_raw_function "__entry"
         [<| bb_label := "__entry";
             bb_instructions :=
-              MAP (\(id, size). instruction id ALLOCA [Lit size] ["ptr"]) sizes |>]]
+              MAP (\(id, size). instruction id ALLOCA [Lit size] ["ptr"]) sizes ++
+              [instruction 1000 STOP [] []] |>]]
       (SOME "__entry")
 End
 
@@ -132,11 +135,13 @@ Definition allocation_budget_invoke_context_def:
       [mk_raw_function "__entry"
         [<| bb_label := "__entry";
             bb_instructions :=
-              [instruction 0 INVOKE [Label "callee"] []] |>];
+              [instruction 0 INVOKE [Label "callee"] [];
+               instruction 2 STOP [] []] |>];
        mk_raw_function "callee"
          [<| bb_label := "callee";
              bb_instructions :=
-               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"]] |>]]
+               [instruction 1 ALLOCA [Lit (n2w (2 ** 255))] ["p"];
+                instruction 3 RET [] []] |>]]
       (SOME "__entry")
 End
 

@@ -3764,7 +3764,20 @@ Proof
     (simp[Abbr `L`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
      mp_tac (Q.SPEC `[len_op]:operand list` shape_stable_plain_operands) >> simp[]) >>
   shape_scalar_emit_bind_tac `L` `data_ptr` (simp[Abbr `L`, Abbr `P`]) >>
-  shape_scalar_emit_bind_tac `L` `data_op` all_tac >>
+  shape_scalar_emit_bind_tac `L` `raw_data` all_tac >>
+  match_mp_tac shape_step_bind >>
+  qexists_tac `\data_op st. L st /\ plain_operand st data_op` >> conj_tac
+  >- (Cases_on `shift_opc = SAR` >> simp[]
+      >- (qmatch_goalsub_abbrev_tac `shape_step internal compiler_label M _ _` >>
+          `shape_stable M` by
+            (simp[Abbr `M`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>
+             mp_tac (Q.SPEC `[raw_data]:operand list` shape_stable_plain_operands) >> simp[]) >>
+          shape_scalar_emit_bind_tac `M` `empty` (simp[Abbr `M`, Abbr `L`]) >>
+          shape_scalar_emit_bind_tac `M` `nonempty` all_tac >>
+          shape_under_tac shape_step_emit_op_plain `L` >>
+          simp[Abbr `M`] >> shape_opcode_tac) >>
+      irule shape_step_return >> simp[]) >>
+  qx_gen_tac `data_op` >> simp[] >>
   qmatch_goalsub_abbrev_tac `shape_step internal compiler_label D _ _` >>
   `shape_stable D` by
     (simp[Abbr `D`] >> ho_match_mp_tac shape_stable_conj >> simp[] >>

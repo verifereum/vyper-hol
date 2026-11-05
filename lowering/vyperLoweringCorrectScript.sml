@@ -30,6 +30,8 @@
  *   lower_vyper_runtime_unit_source_unit_ok -- S2 (Milestone 5)
  *   lower_vyper_runtime_unit_o1_shape_extras -- S2b: the entry function
  *     has no PARAM, no function has its FMP convention set
+ *   lower_vyper_runtime_unit_fn_ptr_ok -- the lowered functions and their
+ *     reachable parts are pointer-confined (fn_ptr_ok)
  *   lower_vyper_runtime_unit_defs_reach_uses -- S2b (planned admission):
  *     every use is written on every path to it
  *   (S3, lower_vyper_runtime_unit_memory_ok, is in loweringMemCorrect)
@@ -43,6 +45,7 @@
 Theory vyperLoweringCorrect
 Ancestors
   vyperCompiler
+  ptrOkCheck
   selectorDispatch
   moduleLoweringProps
   stmtLoweringProps
@@ -60,7 +63,7 @@ Ancestors
   unitTransformDefs unitShapeDefs o1PassContract ptrDiscipline
   fragExec loweringHalt loweringShapeProps loweringShapeSource retAbiPlanProps
   venomInst venomWf contextCodegenRel memSafeRun allocaFrontierBound
-  supportedNames
+  supportedNames ptrSafeRun
 
 (* TASK056 RETIRED SOURCE ARCHIVE: old NONE-mode helpers, replaced by the
    exact oracle-mode boundary below. Original text retained without bridges.
@@ -1034,6 +1037,24 @@ Definition external_call_dead_def:
                           else {});
        d_imm := K {}; d_ret := K {} |>
 End
+
+(* The lowered unit's functions and their reachable parts are
+   pointer-confined (fn_ptr_ok), with P each function's pointer parameters:
+   the return buffer, if any, and the arguments passed in memory:
+   lowering_context_ok's ptr_ok_check, which ptrOkCheck proves sound. *)
+Theorem lower_vyper_runtime_unit_fn_ptr_ok:
+  !tops rpolicy unit.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
+    ?P. EVERY (fn_ptr_ok P) unit.cu_context.ctx_functions /\
+        EVERY (\f. fn_ptr_ok P (reachable_fn f)) unit.cu_context.ctx_functions
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
+  drule run_lowering_context_ok >> simp[lowering_context_ok_def] >>
+  strip_tac >> drule ptr_ok_check_sound >> strip_tac >>
+  qexists_tac `\nm. set (ctx_ptr_param_list unit.cu_context nm)` >>
+  fs[listTheory.EVERY_MEM]
+QED
 
 (* ===== Superseded admission provenance ===== *)
 (* TASK051 full-token consumer audit found no source consumer of
