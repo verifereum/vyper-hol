@@ -139,14 +139,15 @@ Proof
   mp_tac (Q.INST [`R` |-> `{}:num set`] step_taint_memory_bound) >> simp[]
 QED
 
-Theorem calldata_bytestring_decoder_prefix_framed:
+Theorem calldata_bytestring_overwrite_endpoint_core[local]:
   compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
     (DecBytestring m) sa = ((),sb) /\
   C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
   m < dimword (:256) /\
   eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
   abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
-  fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
+  not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q) /\
+  run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
   op_taint tn src = {} /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
@@ -172,12 +173,7 @@ Theorem calldata_bytestring_decoder_prefix_framed:
 Proof
   strip_tac >>
   drule calldata_bytestring_decoder_instructions >> strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by
-    simp[abi_decode_source_opcode_def] >>
-  Cases_on `abi_decode_count_guard CALLDATALOAD src m sa` >>
-  rename1 `abi_decode_count_guard CALLDATALOAD src m sa = (count_op,sg)` >>
-  drule_all abi_decode_count_guard_sequence >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts sa sg) s = OK guarded` >>
+
   qabbrev_tac `v0 = "%" ++ toString sa.cs_next_var` >>
   qabbrev_tac `v1 = "%" ++ toString (sa.cs_next_var + 1)` >>
   qabbrev_tac `v2 = "%" ++ toString (sa.cs_next_var + 2)` >>
@@ -185,27 +181,21 @@ Proof
   qabbrev_tac `i1 = mk_inst (sa.cs_next_id + 1) GT [Var v0; Lit (n2w m)] [v1]` >>
   qabbrev_tac `i2 = mk_inst (sa.cs_next_id + 2) ISZERO [Var v1] [v2]` >>
   qabbrev_tac `i3 = mk_inst (sa.cs_next_id + 3) ASSERT [Var v2] []` >>
-  `emitted_insts sa sg = [i0;i1;i2;i3]` by
-    (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
-     map_every (qunabbrev_tac) [`i0`,`i1`,`i2`,`i3`,`v0`,`v1`,`v2`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
-          comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
-          fresh_var_def, fresh_id_def, emit_def, APPEND_ASSOC] >>
-     strip_tac >> gvs[emitted_insts_def, APPEND_ASSOC, DROP_PREFIX]) >>
+  `?guarded. run_inst_seq [i0;i1;i2;i3] s = OK guarded` by
+    (spose_not_then assume_tac >>
+     qspecl_then [`[i0;i1;i2;i3]`,
+       `[mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]`, `s`]
+       mp_tac run_inst_seq_append_err >>
+     gvs[emitted_insts_def, DROP_PREFIX, Abbr `i0`, Abbr `i1`, Abbr `i2`,
+       Abbr `i3`, Abbr `v0`, Abbr `v1`, Abbr `v2`]) >>
+  qpat_x_assum `run_inst_seq _ s = OK actual` kall_tac >>
   qpat_x_assum `run_inst_seq _ s = OK guarded` mp_tac >>
-  simp[run_inst_seq_def] >>
-  simp[AllCaseEqs()] >> strip_tac >>
+  simp[run_inst_seq_def] >> simp[AllCaseEqs()] >> strip_tac >>
   rename1 `step_inst_base i0 s = OK s1` >>
   rename1 `step_inst_base i1 s1 = OK s2` >>
   rename1 `step_inst_base i2 s2 = OK s3` >>
   `p <> v0 /\ src <> Var v0` by
-    (qpat_x_assum `fresh_vars_wrt sa s` mp_tac >>
-     simp[fresh_vars_wrt_def] >>
-     disch_then (qspec_then `sa.cs_next_var` mp_tac) >>
-     gvs[Abbr `v0`, eval_operand_def, lookup_var_def, FLOOKUP_DEF] >>
-     strip_tac >> Cases_on `src` >>
-     gvs[eval_operand_def, lookup_var_def, FLOOKUP_DEF] >> metis_tac[]) >>
+    (gvs[not_fresh_at_def, Abbr `v0`] >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   `ptr_covers (step_prov PG G i0 s1) (step_taint i0 s s1 tn) p s1 C /\
    op_taint (step_taint i0 s s1 tn) src = {}` by
     (qpat_x_assum `step_inst_base i0 s = OK s1` mp_tac >>
@@ -220,12 +210,8 @@ Proof
   qabbrev_tac `tn2 = step_taint i1 s1 s2 tn1` >>
   `!k. p <> "%" ++ toString (sa.cs_next_var + k) /\
        src <> Var ("%" ++ toString (sa.cs_next_var + k))` by
-    (gen_tac >> qpat_x_assum `fresh_vars_wrt sa s` mp_tac >>
-     simp[fresh_vars_wrt_def] >>
-     disch_then (qspec_then `sa.cs_next_var + k` mp_tac) >>
-     gvs[eval_operand_def, lookup_var_def, FLOOKUP_DEF] >>
-     strip_tac >> Cases_on `src` >>
-     gvs[eval_operand_def, lookup_var_def, FLOOKUP_DEF] >> metis_tac[]) >>
+    (fs[not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_ADD, arithmeticTheory.ADD_COMM]) >>
   `p <> v1 /\ src <> Var v1` by
     (first_x_assum (qspec_then `1` mp_tac) >> simp[Abbr `v1`]) >>
   `ptr_covers G2 tn2 p s2 C /\ op_taint tn2 src = {}` by
@@ -261,7 +247,18 @@ Proof
      gvs[Abbr `i3`, op_taint_def, step_taint_def, set_var_taint_def,
           mk_inst_def, FLOOKUP_DRESTRICT]) >>
   `eval_operand (Var p) guarded = SOME dw /\
-   eval_operand src guarded = SOME sw` by metis_tac[] >>
+   eval_operand src guarded = SOME sw` by
+    (map_every (fn q => qpat_x_assum q mp_tac)
+       [`step_inst_base i0 s = OK s1`,
+        `step_inst_base i1 s1 = OK s2`,
+        `step_inst_base i2 s2 = OK s3`] >>
+     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, mk_inst_def] >>
+     simp[Once step_inst_base_def] >>
+     simp[Once step_inst_base_def] >>
+     simp[Once step_inst_base_def] >>
+     simp[exec_read1_def, exec_pure1_def, exec_pure2_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> Cases_on `src` >>
+     gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
   qabbrev_tac `i4 = mk_inst (sa.cs_next_id + 4) CALLDATACOPY
     [Var p;src;Lit (n2w C)] []` >>
   qabbrev_tac `copied = write_memory_with_expansion (w2n dw)
@@ -499,6 +496,112 @@ Proof
        source_memory_read_ranges_def, source_memory_write_ranges_def,
        step_inst_non_invoke] >>
   fs[allocas_from_def] >> first_assum MATCH_ACCEPT_TAC
+QED
+
+Theorem calldata_bytestring_overwrite_prefix:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+    (DecBytestring m) sa = ((),sb) /\
+  C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
+  m < dimword (:256) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
+  not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q) /\
+  run_inst_seq (emitted_insts sa sb) s = OK actual /\ ptr_covers G tn p s C /\
+  op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn'.
+    ~(actual with vs_inst_idx := LENGTH sb.cs_current_insts).vs_halted /\
+    (actual with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+    (actual with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) (actual with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME dw /\
+    eval_operand src (actual with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME sw /\
+    (actual with vs_inst_idx := LENGTH sb.cs_current_insts).vs_allocas = s.vs_allocas /\
+    (actual with vs_inst_idx := LENGTH sb.cs_current_insts).vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p (actual with vs_inst_idx := LENGTH sb.cs_current_insts) C /\
+    (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn'
+        (actual with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >> drule_all calldata_bytestring_overwrite_endpoint_core >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `s' = actual with vs_inst_idx := LENGTH sb.cs_current_insts` by
+    (gvs[] >> simp[venom_state_component_equality]) >>
+  qexistsl_tac [`G'`, `tn'`] >> gvs[]
+QED
+
+Theorem calldata_bytestring_decoder_prefix_framed:
+  compile_abi_decode_to_buf (Var p) src CALLDATALOAD (Lit 0w)
+    (DecBytestring m) sa = ((),sb) /\
+  C = 32 + 32 * ((m + 31) DIV 32) /\ C < dimword (:256) /\
+  m < dimword (:256) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  abi_decode_load CALLDATALOAD sw s = n2w len /\ len <= m /\
+  fresh_vars_wrt sa s /\ ptr_covers G tn p s C /\
+  op_taint tn src = {} /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?s' G' tn'.
+    run_inst_seq (emitted_insts sa sb) s =
+      OK (s' with vs_inst_idx := s.vs_inst_idx) /\
+    ~s'.vs_halted /\ s'.vs_current_bb = sb.cs_current_bb /\
+    s'.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    eval_operand (Var p) s' = SOME dw /\ eval_operand src s' = SOME sw /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+    ptr_covers G' tn' p s' C /\
+    (!i. w2n dw <= i /\ i < w2n dw + C ==> i NOTIN tn'.t_mem) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem SUBSET tn.t_mem /\
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' s') ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  strip_tac >>
+  `not_fresh_at sa p /\ (!q. src = Var q ==> not_fresh_at sa q)` by
+    (Cases_on `src` >>
+     gvs[not_fresh_at_def, fresh_vars_wrt_def, eval_operand_def, lookup_var_def,
+       arithmeticTheory.GREATER_EQ] >>
+     metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  Cases_on `abi_decode_count_guard CALLDATALOAD src m sa` >>
+  rename1 `abi_decode_count_guard CALLDATALOAD src m sa = (count_op,sg)` >>
+  drule_all abi_decode_count_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sg) s = OK guarded` >>
+  `eval_operand (Var p) guarded = SOME dw /\ eval_operand src guarded = SOME sw` by metis_tac[] >>
+  `?actual. run_inst_seq (emitted_insts sa sb) s = OK actual` by
+    (drule calldata_bytestring_decoder_instructions >> strip_tac >>
+     drule abi_decode_count_guard_shape >> strip_tac >>
+     `emitted_insts sa sb = emitted_insts sa sg ++
+       [mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` by
+       (qpat_x_assum `abi_decode_count_guard _ _ _ _ = _` mp_tac >>
+        simp[abi_decode_count_guard_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, emit_op_def, emit_void_def, emit_inst_def,
+          fresh_var_def, fresh_id_def, emit_def, APPEND_ASSOC] >>
+        strip_tac >> gvs[emitted_insts_def, DROP_PREFIX, APPEND_ASSOC]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa sg) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >>
+     disch_then (qspec_then
+       `[mk_inst (sa.cs_next_id + 4) CALLDATACOPY [Var p;src;Lit (n2w C)] []]` mp_tac) >>
+     simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, eval_operand_def] >>
+     metis_tac[]) >>
+  irule calldata_bytestring_overwrite_endpoint_core >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl_tac [`len`,`m`] >> simp[] >>
+  `len < dimword(:256)` by decide_tac >> simp[]
 QED
 
 Theorem calldata_bytestring_decoder_prefix:
