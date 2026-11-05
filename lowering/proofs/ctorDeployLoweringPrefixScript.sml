@@ -820,6 +820,33 @@ Proof
   pure_rewrite_tac[deploy_prefix_negative_named_walk] >> REFL_TAC
 QED
 
+Theorem deploy_prefix_negative_pipeline_artifact:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  o1PipelineCorrect$o1_pipeline rp (THE (lower_vyper_deploy_unit tops rp [])) =
+    SOME <|po_unit := ^prefix_final_unit_tm; po_final_assembly := FAP_Optimize|>
+Proof
+  simp_tac bool_ss [LET_THM, o1PipelineCorrectTheory.o1_pipeline_def,
+    venomPipelineDriverTheory.run_venom_pipeline_def] >>
+  pure_rewrite_tac[deploy_prefix_negative_unit_wf_probe |>
+                    SIMP_RULE bool_ss [LET_THM],
+                  deploy_prefix_negative_static_probe |>
+                    SIMP_RULE bool_ss [LET_THM],
+                  deploy_prefix_negative_prewalk_artifact |>
+                    SIMP_RULE bool_ss [LET_THM]] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomPipelineRunner$run_named_fn_schedules``,
+     ``venomFnScheduleRunner$run_configured_fn_passes``,
+     ``venomPassSchedule$o1_fn_passes``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_named_walk] >>
+  EVAL_TAC >>
+  simp[venomInstTheory.fn_insts_blocks_def,
+       venomWfTheory.bb_well_formed_compute, venomWfTheory.inst_wf_def,
+       venomInstTheory.is_terminator_def, venomStateTheory.get_label_def,
+       venomInstTheory.fn_labels_def, wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
