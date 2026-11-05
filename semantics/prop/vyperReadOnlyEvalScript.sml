@@ -500,6 +500,13 @@ Resume evaluate_read_only[builtin_len]:
 QED
 
 Resume evaluate_read_only[builtin_other]:
+  Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+  >- (irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
+      >- (rpt strip_tac >> simp[ignore_bind_def] >>
+          match_mp_tac machine_frame_bind >> simp[machine_frame_primitives] >>
+          match_mp_tac machine_frame_bind >>
+          simp[machine_frame_primitives]) >>
+      gvs[SF ETA_ss] >> metis_tac[]) >>
   irule state_rel_frame_bind_guarded >> simp[machine_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule state_rel_frame_bind_guarded >>
       simp[machine_frame_def, machine_frame_reads, machine_frame_primitives]) >>
@@ -596,7 +603,7 @@ Resume evaluate_read_only[intcall_after_lock]:
         (* Discard consumed large induction hypotheses before substitution. *)
         ntac 3 (qpat_x_assum `!s. _` kall_tac) >>
         qpat_x_assum `push_function _ _ cx _ = _` mp_tac >>
-        simp[push_function_def, return_def] >> strip_tac >> gvs[] >>
+        simp[push_function_def, return_def] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
         qpat_x_assum `read_only_context mods cx` mp_tac >> simp[read_only_context_def]) >>
       simp[]) >>
   strip_tac >> ntac 3 (qpat_x_assum `!s. _` kall_tac) >>

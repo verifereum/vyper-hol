@@ -1023,7 +1023,7 @@ Proof
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
-              flag_members := FEMPTY |>` >>
+              flag_members := FEMPTY; event_fields := FEMPTY |>` >>
   qexists `<| current_src := NONE;
               var_types := FEMPTY;
               var_assignable := FEMPTY;
@@ -1032,7 +1032,7 @@ Proof
               toplevel_vtypes := FEMPTY;
               type_defs := FEMPTY;
               fn_sigs := FEMPTY;
-              flag_members := FEMPTY |>` >>
+              flag_members := FEMPTY; event_fields := FEMPTY |>` >>
   qexists `initial_state initial_machine_state [FEMPTY]` >>
   `source_supply (initial_state initial_machine_state [FEMPTY])` by
     simp[initial_machine_state_def, vyperAccountSupplyTheory.accounts_supply_empty] >>
