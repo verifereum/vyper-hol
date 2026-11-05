@@ -2,6 +2,7 @@
 Theory targetSubscriptMapping
 Ancestors
   targetPlaceSimCasesBase loweringPosts vyperState exprSimHash fragGasMode
+  supportedTypes vyperTyping vyperValue valueEncoding vyperStorage
   emitHelperProps venomInst exprSimAlloc exprSimPrecompiles exprSimProps compileEnv
   exprLowering exprLoweringProps emitHelper fragExec venomState words finite_map list arithmetic valueEncodingProps
 
@@ -358,4 +359,15 @@ Proof
     (irule local_region_frame_fwd >>
      qexistsl_tac [`s`, `sa`, `es.scopes`] >> simp[]) >>
   metis_tac[]
+QED
+
+Theorem target_mapping_decimal_encoding_probe:
+  supported_scalar_type (BaseT DecimalT) /\
+  ~is_bytestring_type (BaseT DecimalT) /\
+  evaluate_type FEMPTY (BaseT DecimalT) = SOME (BaseTV DecimalT) /\
+  value_has_type (BaseTV DecimalT) (DecimalV 1) /\
+  typed_val_to_w256 (BaseTV DecimalT) (DecimalV 1) <>
+    encode_hashmap_key (BaseT DecimalT) (DecimalV 1)
+Proof
+  EVAL_TAC >> simp[]
 QED
