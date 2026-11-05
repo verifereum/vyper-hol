@@ -792,3 +792,196 @@ Theorem phi_prefix_hits_frame_sim:
 Proof
   cheat
 QED
+
+(* ===== PHI hits at a join's entry stack ===== *)
+
+(* resolve_phi on well-formed PHI operands is the first matching pair. *)
+Theorem phi_resolve_find_pairs[local]:
+  !ops pred.
+    phi_well_formed ops ==>
+    resolve_phi pred ops =
+      case FIND (\(l,w). l = pred) (phi_pairs ops) of
+        NONE => NONE
+      | SOME (_,w) => SOME (Var w)
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[venomInstTheory.phi_pairs_def, venomWfTheory.phi_well_formed_def,
+     resolve_phi_def, listTheory.FIND_thm] >> rw[]
+QED
+
+Theorem phi_edge_maps_acc_op_none[local]:
+  !phis n om m pred v.
+    FLOOKUP (FST (phi_edge_maps_acc pred n phis (om,m))) v = NONE ==>
+    FLOOKUP om v = NONE /\
+    EVERY (\phi. ~MEM v (MAP SND (phi_pairs phi.inst_operands))) phis
+Proof
+  Induct >- simp[phi_edge_maps_acc_def] >>
+  rpt gen_tac >> simp[phi_edge_maps_acc_cons] >> strip_tac >>
+  first_x_assum drule >> simp[phi_pair_updates_lookup] >>
+  rw[] >> gvs[]
+QED
+
+Theorem phi_edge_maps_acc_matching[local]:
+  !phis n om m pred i.
+    FLOOKUP (SND (phi_edge_maps_acc pred n phis (om,m))) i =
+      if n <= i /\ i < n + LENGTH phis then
+        (case FIND (\(l,w). l = pred)
+                (phi_pairs (EL (i - n) phis).inst_operands) of
+           NONE => FLOOKUP m i
+         | SOME (_,w) => SOME w)
+      else FLOOKUP m i
+Proof
+  Induct >- simp[phi_edge_maps_acc_def] >>
+  rpt gen_tac >> simp[phi_edge_maps_acc_cons] >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs h.inst_operands)` >>
+  TRY (rename1 `SOME pr` >> PairCases_on `pr`) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `i = n` >> simp[] >>
+  Cases_on `n < i` >> simp[] >>
+  `i - n = SUC (i - SUC n)` by decide_tac >>
+  `LENGTH phis + SUC n = n + SUC (LENGTH phis)` by decide_tac >> simp[]
+QED
+
+Theorem phi_build_maps_acc[local]:
+  !pred phis.
+    build_phi_maps pred phis = phi_edge_maps_acc pred 0 phis (FEMPTY,FEMPTY)
+Proof
+  simp[build_phi_maps_def, phi_edge_maps_acc_def, LET_THM] >>
+  rpt gen_tac >> AP_THM_TAC >> AP_THM_TAC >> AP_TERM_TAC >>
+  simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >> rw[] >>
+  BasicProvers.every_case_tac >> simp[]
+QED
+
+Theorem phi_input_vars_fold_mem[local]:
+  !base acc placed op_map matching y.
+    MEM y (FST (FOLDL (\(acc,placed) v.
+        case FLOOKUP op_map v of
+          SOME phi_idx =>
+            if MEM phi_idx placed then (acc,placed)
+            else
+              (case FLOOKUP matching phi_idx of
+                 SOME src_v => (acc ++ [src_v],phi_idx::placed)
+               | NONE => (acc,placed))
+        | NONE => (acc ++ [v],placed)) (acc,placed) base)) ==>
+    MEM y acc \/ (FLOOKUP op_map y = NONE /\ MEM y base) \/
+    ?i. FLOOKUP matching i = SOME y
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  Cases_on `FLOOKUP op_map h` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `FLOOKUP op_map h = SOME j` >>
+  Cases_on `MEM j placed` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `FLOOKUP matching j` >> simp[]
+  >- (strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]) >>
+  strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* A variable the join entry stack holds is either no PHI's operand, or
+   the operand some PHI selects for the edge from pred. *)
+Theorem phi_input_vars_from_mem[local]:
+  !pred instrs live y.
+    MEM y (input_vars_from pred instrs live) /\
+    ~NULL (collect_phis instrs) ==>
+    EVERY (\phi. ~MEM y (MAP SND (phi_pairs phi.inst_operands)))
+      (collect_phis instrs) \/
+    ?i. i < LENGTH (collect_phis instrs) /\
+        FIND (\(l,w). l = pred)
+          (phi_pairs (EL i (collect_phis instrs)).inst_operands) =
+          SOME (pred,y)
+Proof
+  rpt gen_tac >> simp[input_vars_from_def, LET_THM, phi_build_maps_acc] >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >> strip_tac >>
+  qspecl_then [`live`, `[]`, `[]`, `op_map`, `matching`, `y`] mp_tac
+    phi_input_vars_fold_mem >>
+  gvs[] >> strip_tac
+  >- (disj1_tac >>
+      qspecl_then [`collect_phis instrs`, `0`, `FEMPTY`, `FEMPTY`, `pred`, `y`]
+        mp_tac phi_edge_maps_acc_op_none >> gvs[]) >>
+  disj2_tac >> qexists_tac `i` >>
+  qspecl_then [`collect_phis instrs`, `0`, `FEMPTY`, `FEMPTY`, `pred`, `i`]
+    mp_tac phi_edge_maps_acc_matching >>
+  gvs[] >> rw[] >> gvs[AllCaseEqs()] >>
+  drule stackPlanGenTheory.FIND_SOME_MEM >> simp[pairTheory.ELIM_UNCURRY] >>
+  rename1 `FIND _ _ = SOME pr` >> PairCases_on `pr` >> simp[]
+QED
+
+Theorem phi_pairs_mem_var_operand[local]:
+  !ops l v. MEM (l,v) (phi_pairs ops) ==> MEM (Var v) ops
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[venomInstTheory.phi_pairs_def] >> metis_tac[]
+QED
+
+Theorem phi_operand_vars_mem[local]:
+  !ops v. MEM v (venomInst$operand_vars ops) <=> MEM (Var v) ops
+Proof
+  Induct >> simp[venomInstTheory.operand_vars_def] >>
+  Cases >> simp[venomInstTheory.operand_var_def] >> metis_tac[]
+QED
+
+Theorem phi_uses_disjoint_el[local]:
+  !l i k v.
+    phi_uses_disjoint l /\ i < LENGTH l /\ k < LENGTH l /\ i <> k /\
+    MEM (Var v) (EL i l).inst_operands ==>
+    ~MEM (Var v) (EL k l).inst_operands
+Proof
+  Induct >> simp[] >> rpt gen_tac >> simp[phi_uses_disjoint_def] >>
+  strip_tac >> Cases_on `i` >> Cases_on `k` >> gvs[]
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >>
+      metis_tac[listTheory.EL_MEM])
+  >- (gvs[listTheory.EVERY_MEM, inst_uses_def, phi_operand_vars_mem] >>
+      metis_tac[listTheory.EL_MEM]) >>
+  metis_tac[]
+QED
+
+(* At a join's entry stack (lineage_entry_join_stack's shape), each PHI's
+   hit is the operand resolve_phi selects for the edge from pred. *)
+Theorem phi_join_stack_hit:
+  !pred instrs live pre inst dist.
+    phi_uses_disjoint (collect_phis instrs) /\
+    EVERY (\phi. phi_well_formed phi.inst_operands) (collect_phis instrs) /\
+    MEM inst (collect_phis instrs) /\
+    EVERY (\op. op = dead_stack_marker) pre /\
+    stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+      (pre ++ MAP Var (input_vars_from pred instrs live)) = SOME dist ==>
+    resolve_phi pred inst.inst_operands =
+      SOME (stack_peek dist (pre ++ MAP Var (input_vars_from pred instrs live)))
+Proof
+  rpt gen_tac >> strip_tac >>
+  qabbrev_tac `stk = pre ++ MAP Var (input_vars_from pred instrs live)` >>
+  qpat_x_assum `stack_get_phi_depth _ _ = _` mp_tac >>
+  simp[stackModelTheory.stack_get_phi_depth_def] >> strip_tac >>
+  drule genBlockSimTheory.stack_find_el >>
+  drule planWfTheory.stack_find_bound >> simp[listTheory.MEM_FILTER] >>
+  rpt strip_tac >>
+  `EL dist (REVERSE stk) = stack_peek dist stk` by
+    simp[stackModelTheory.stack_peek_def, listTheory.EL_REVERSE,
+         arithmeticTheory.PRE_SUB1] >>
+  `MEM (stack_peek dist stk) stk` by
+    metis_tac[listTheory.EL_MEM, listTheory.MEM_REVERSE,
+              listTheory.LENGTH_REVERSE] >>
+  `?y. stack_peek dist stk = Var y` by
+    (Cases_on `stack_peek dist stk` >> gvs[is_var_operand_def]) >>
+  gvs[] >>
+  `MEM y (input_vars_from pred instrs live)` by
+    (qpat_x_assum `MEM (Var y) stk` mp_tac >>
+     simp[Abbr `stk`, listTheory.MEM_MAP] >> strip_tac >>
+     gvs[listTheory.EVERY_MEM] >> res_tac >> gvs[dead_stack_marker_def]) >>
+  `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
+  drule_all phi_input_vars_from_mem >> strip_tac
+  >- (gvs[listTheory.EVERY_MEM, listTheory.MEM_MAP] >>
+      `phi_well_formed inst.inst_operands` by metis_tac[] >>
+      drule_all venomWfTheory.phi_well_formed_var_pair >> strip_tac >>
+      metis_tac[pairTheory.SND]) >>
+  `?k. k < LENGTH (collect_phis instrs) /\ inst = EL k (collect_phis instrs)`
+    by metis_tac[listTheory.MEM_EL] >>
+  drule stackPlanGenTheory.FIND_SOME_MEM >> strip_tac >>
+  drule phi_pairs_mem_var_operand >> strip_tac >>
+  Cases_on `i = k`
+  >- (gvs[] >>
+      `phi_well_formed (EL i (collect_phis instrs)).inst_operands` by
+        gvs[listTheory.EVERY_EL] >>
+      gvs[phi_resolve_find_pairs]) >>
+  metis_tac[phi_uses_disjoint_el]
+QED
