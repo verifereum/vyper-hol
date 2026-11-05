@@ -1,6 +1,8 @@
 (* Independent checked-frontend bytecode witnesses for slice output buffers
    (#561, a07-06).
-   TOP-LEVEL: slice_storage_bytes_matches_python_oracle. *)
+   TOP-LEVEL: slice_bytes_var_matches_python_oracle,
+              slice_storage_bytes_matches_python_oracle,
+              slice_string_lit_matches_python_oracle. *)
 Theory evalCompilerSliceBuffers
 Ancestors compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute alist byte integer_word option
 Libs memoryStoreWitnessLib vyperCheckContractFrontendLib jsonASTLib evalCompilerBytecodeLib finite_mapLib computeLib wordsLib supportedEvalLib
@@ -13,6 +15,15 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../slice-buffers/oracle"
 
+(* control: memory Bytes source, variable start and length. *)
+val slice_bytes_var = memoryStoreWitnessLib.evaluate fixture_root "slice_bytes_var"
+Theorem slice_bytes_var_matches_python_oracle:
+  ^(#term slice_bytes_var) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "slice_bytes_var")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation slice_bytes_var))) >> EVAL_TAC
+QED
+
 (* control: storage Bytes source. *)
 val slice_storage_bytes = memoryStoreWitnessLib.evaluate fixture_root "slice_storage_bytes"
 Theorem slice_storage_bytes_matches_python_oracle:
@@ -20,4 +31,13 @@ Theorem slice_storage_bytes_matches_python_oracle:
     SOME ^(memoryStoreWitnessLib.oracle fixture_root "slice_storage_bytes")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation slice_storage_bytes))) >> EVAL_TAC
+QED
+
+(* control: String source, literal start and length. *)
+val slice_string_lit = memoryStoreWitnessLib.evaluate fixture_root "slice_string_lit"
+Theorem slice_string_lit_matches_python_oracle:
+  ^(#term slice_string_lit) =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "slice_string_lit")
+Proof
+  CONV_TAC (LAND_CONV (K (#evaluation slice_string_lit))) >> EVAL_TAC
 QED

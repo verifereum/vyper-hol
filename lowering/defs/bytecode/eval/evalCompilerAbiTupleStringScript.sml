@@ -1,4 +1,4 @@
-(* C7.2: checked frontend acceptance and supported_program membership. *)
+(* C7.2: checked frontend and exact independent pinned-Python bytecode parity. *)
 Theory evalCompilerAbiTupleString
 Ancestors
   compileVyper supportedProgram concretizeMemLocDefs codegenReadyCompute
@@ -27,4 +27,14 @@ Theorem tup_string_arg_supported:
   supported_program ^tup_string_arg_program
 Proof
   ACCEPT_TAC tup_string_arg_supported_eval
+QED
+
+val tup_string_arg_term = memoryStoreWitnessLib.compile_term tup_string_arg_program
+val tup_string_arg_evaluation = EVAL tup_string_arg_term
+
+Theorem tup_string_arg_matches_python_oracle:
+  ^tup_string_arg_term =
+    SOME ^(memoryStoreWitnessLib.oracle fixture_root "tup_string_arg")
+Proof
+  CONV_TAC (LAND_CONV (K tup_string_arg_evaluation)) >> EVAL_TAC
 QED

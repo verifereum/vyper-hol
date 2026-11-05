@@ -301,6 +301,19 @@ Definition var_location_memory_size_def:
   var_location_memory_size _ = NONE
 End
 
+(* A dynamic calldata argument's location must not be below the start of the
+   argument tuple; constructor arguments read with other opcodes keep no
+   guard.  Mirrors Python: module.py _get_abi_arg_ptr. *)
+Definition compile_abi_arg_ptr_guard_def:
+  compile_abi_arg_ptr_guard load_opc actual_src parent =
+    if load_opc = CALLDATALOAD then
+      do below <- emit_op LT [actual_src; parent];
+         ok <- emit_op ISZERO [below];
+         emit_void ASSERT [ok]
+      od
+    else return ()
+End
+
 Definition compile_decode_args_def:
   compile_decode_args cenv [] _ _ _ _ = return () ∧
   compile_decode_args cenv ((name, is_prim, is_dynamic, abi_size, dec_info)::rest)
@@ -330,6 +343,8 @@ Definition compile_decode_args_def:
                      [Lit (n2w base_adj); Lit (n2w (offset - base_adj))];
                    offset_val <- emit_op load_opc [static_src];
                    actual_src <- emit_op ADD [Lit (n2w base_adj); offset_val];
+                   compile_abi_arg_ptr_guard load_opc actual_src
+                     (Lit (n2w base_adj));
                    compile_abi_decode_to_buf dst actual_src load_opc
                      (if load_opc = CALLDATALOAD then Lit 0w else hi_op)
                      dec_info;
@@ -485,8 +500,10 @@ Definition compile_init_kwargs_def:
           head <- emit_op ADD [Lit 4w; Lit (n2w (calldata_offset - 4))];
           src <- (if is_abi_dynamic cenv.ce_struct_fields kwarg_type then
                     do relative <- emit_op CALLDATALOAD [head];
-                      emit_op ADD [Lit 4w; relative]
-                   od
+                       actual <- emit_op ADD [Lit 4w; relative];
+                       compile_abi_arg_ptr_guard CALLDATALOAD actual (Lit 4w);
+                       return actual
+                    od
                   else return head);
          compile_abi_decode_to_buf alloca_ptr src CALLDATALOAD (Lit 0w) dec_info;
          compile_init_kwargs cenv rest (calldata_offset + abi_sz)

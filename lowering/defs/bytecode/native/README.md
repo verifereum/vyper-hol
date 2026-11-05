@@ -4,12 +4,12 @@
 
 The parity theories in `../eval/` prove, by `EVAL`, that `compile_vyper`
 produces exactly the deployment and runtime bytes of the pinned Python
-compiler for each of the 91 retained fixtures in `../python-o1-no-asm-opt/`. They are
+compiler for each of the 94 retained fixtures in `../python-o1-no-asm-opt/`. They are
 kernel-checked and slow, which is why the rollup is opt-in.
 
 This directory runs the same check as compiled Standard ML. The equations
 `EVAL` uses for `compile_vyper` are printed by EmitML and compiled. The
-result is trusted rather than kernel-checked. It runs all 91 fixtures in
+result is trusted rather than kernel-checked. It runs all 94 fixtures in
 about half a second, so it can run on every change; the `EVAL` theories remain the
 proof.
 

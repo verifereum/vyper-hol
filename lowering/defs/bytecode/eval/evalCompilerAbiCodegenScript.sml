@@ -38,9 +38,9 @@ in () end
    (vyperlang/vyper#5127); their exact-bytes comparison returns with the ports
    listed in ../pending-5127-port.md. *)
 val () = List.app (ignore o check_supported)
-  ["arr_string_arg", "st_string_field_arg", "arr_dyn_of_fixed",
-   "arr_struct_noclamp", "arr_string_ret", "enc_multi", "enc_ensT_bytes",
-   "dec_bytes_unwrapT", "dec_uint_unwrapT", "flag256_array_arg"]
+  ["enc_multi", "enc_ensT_bytes"]
 
 val () = List.app (fn name => check_parity name (check_supported name))
-  ["flag256_arg"]
+  ["arr_string_arg", "st_string_field_arg", "arr_dyn_of_fixed",
+   "arr_struct_noclamp", "arr_string_ret", "dec_bytes_unwrapT",
+   "dec_uint_unwrapT", "flag256_arg", "flag256_array_arg"]
