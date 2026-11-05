@@ -347,3 +347,182 @@ If the two output names coincide, the second write wins. Shared-field
 stability therefore covers coincident outputs as well; equal/relocated
 output VALUES remain with the separate value relation. No conditional
 opcode wrapper or source simulation theorem is inferred from this audit.
+
+## Demand lifetime / production conflict audit (C1.5.90.57)
+
+This section supersedes the suggestion in the X table that numerical interval
+presence is wholly missing. The audit outcome is localized unresolved interfaces,
+not universal coverage and not a counterexample to StageStatic. No SML theorem
+is added by this report. Checked prerequisite targets: ProtectedLivesets,
+HistoricalPlacement and SharedFields (2026-11-05).
+
+### Existing lifetime evidence and the SAME writer
+
+Exact source signatures relevant to lifetime (all variables implicitly universally
+quantified by the existing declarations):
+
+* `ptr_source_ownership_live_prov` (SourceOwnership:520--523):
+  `ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+   EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+   FLOOKUP TG v = SOME (token,aid) ==> MEM token tokens`.
+  Saved provenance has the stronger suffix conclusion
+  `MEM token (DROP (SUC n) tokens)` for `n < LENGTH saved` and
+  `FLOOKUP (SND (EL n saved)) v = SOME (token,aid)` (same source:541--545).
+  These are live-tag facts, not facts about all retained births.
+* `ptr_chrono_endpoint_birth` (EndpointOrigin:58--72) takes
+  `ptr_chrono_history vs0 ctx h endpoint`, empty initial allocas, no DALLOCA
+  at every history index, `j < LENGTH h`, `d <= LENGTH (EL j h).po_stack`,
+  and `FLOOKUP (ptr_bottom_state d (EL j h)).vs_allocas aid = SOME site`.
+  Its conclusion is exactly
+  `?i fuel sa'. i < j /\ LENGTH (EL i h).po_stack = d /\
+   (EL i h).po_inst.inst_opcode = ALLOCA /\
+   (EL i h).po_inst.inst_id = aid /\
+   FLOOKUP (EL i h).po_state.vs_allocas aid = NONE /\
+   step_inst fuel ctx (EL i h).po_inst (EL i h).po_state = OK sa' /\
+   FLOOKUP sa'.vs_allocas aid = SOME site /\
+   (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
+   FLOOKUP (ptr_bottom_state d (EL (SUC i) h)).vs_allocas aid = SOME site`.
+  Thus this is birth of the continuously present bottom-depth owner, not an
+  arbitrary earlier activation with the same allocation id or function name.
+* `ptr_endpoint_protected_history` (ProtectedHistory:31--55) already returns
+  `?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
+   (!k. w <= k /\ k < LENGTH h ==>
+     d <= LENGTH (EL k h).po_stack /\
+     FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+     ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
+   (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write C x (EL k h)) /\
+   ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
+   ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst`.
+  Its antecedent is precisely lines32--47 of that source: history, empty initial
+  cache, shape/wf/reachable/SSA/fn_ptr_ok/inst_wf/no-DALLOCA, history access_ok,
+  non-revert/non-ASSIGN endpoint, owner cache and positive byte bounds, untainted
+  endpoint byte, selected Var read (or INVOKE), numerical provenance and owner BP.
+  The proof obtains birth i then selects w with i<w; the cache/depth guard holds
+  even at w, not only at w+1. This answers numerical lifetime positively.
+* `ptr_endpoint_protected_livesets` (ProtectedLivesets:8--43) adds actual stage,
+  per-function pass, observed-context and source discipline premises. Its exact
+  output is
+  `?w. w + 1 < LENGTH h /\ ptr_chrono_write C x (EL w h) /\
+   (!k. w < k /\ k + 1 < LENGTH h ==> ~ptr_chrono_write C x (EL k h)) /\
+   (!t. w < t /\ t < LENGTH h ==>
+     ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
+       observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
+       MEM ((ptr_owner_view d (EL t h)).cf_state.vs_current_bb,
+            (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs)`.
+  Its proof uses ProtectedHistory ONCE at lines48--49 and retains precisely that
+  witness w. Its exported conclusion discards the depth/cache/non-revert and
+  used/read seed conjuncts. Calling the two exports independently need not yield
+  the same w. Recommended interface repair: strengthen THIS existing export
+  in-place to retain those conjuncts, rather than create a synonym wrapper or
+  assume equality of independently chosen writers. No repair is installed here.
+
+### Exact token continuity candidate (unproved, no new constant)
+
+The following is a candidate HOL statement using only existing constants and
+inferred existing types; it is not claimed as a checked theorem:
+
+```sml
+!R vs0 C Ct h a ht at done tokens registry births PT TG saved entries H
+ i j d tsj rj bj PTj TGj sj ej token.
+ ptr_structural_transcript R vs0 C Ct h a ht at done tokens registry births
+   PT TG saved entries H /\
+ i <= j /\ j < LENGTH h /\
+ (!k. i <= k /\ k <= j ==> d <= LENGTH (EL k h).po_stack) /\
+ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
+ EL (LENGTH (EL j h).po_stack - d) tsj = token ==>
+ !k. i <= k /\ k <= j ==>
+ ?tsk rk bk PTk TGk sk ek.
+   EL k H = (tsk,rk,bk,PTk,TGk,sk,ek) /\
+   EL (LENGTH (EL k h).po_stack - d) tsk = token
+```
+
+This is deliberately a continuity statement conditional on a numerical interval,
+not conditional on target exclusion or future agreement. ProtectedHistory supplies
+its interval with i=w and j=PRE(LENGTH h). HistoricalPlacement:66--90, specialized
+at the demand endpoint, supplies d and the endpoint token equation from actual TG
+and numerical G lookups, as well as actual output metadata. Transcript ownership
+and adjacency use the SAME H (StructuralTranscript:92--96,126--131); no independently
+generated ownership snapshots are permissible.
+
+Reason to expect the candidate: `ptr_activation_tokens h a b tokens` is exactly
+`LENGTH h :: tokens` on push, `TL tokens` on pop, otherwise `tokens`.
+Bottom-depth indices are invariant under a push and under a pop above d; the
+interval depth condition forbids popping the d owner. Root is token 0; each push
+uses its new history index, strictly beyond all existing registry tokens
+(ActivationChronology:108--113). Registry retention is not stack membership.
+A popped token cannot be freshly pushed again: later history lengths increase.
+This non-reappearance argument has NOT been exported as a theorem by the audited
+interfaces; the continuity candidate is the smaller sufficient next boundary.
+
+Consequences conditional on checking that boundary: a completed child cannot be
+the current selected TG owner (live_prov); a later invocation uses a fresh token,
+not the child's retained birth. Over the selected writer/read interval the demand
+owner cannot be completed even temporarily. A writer destination owner obtained
+from its actual live TG must therefore coexist with the demand owner at that
+observation. Two coexisting stack activations are ancestor-comparable. Hence no
+separation theorem for distinct nonancestor retained births is needed for this
+owned-demand case. This does not exclude completed activations from the entire
+history, only from this particular protected interval/destination classification.
+
+### Actual production conflict matrix and premise provenance
+
+| Destination relation at intervening source observation t | Actual supplier | Still to discharge, not new assumptions |
+|---|---|---|
+| Same (token,aid) | source suffix nonwrite + coherent birth/position + address/footprint transport | Same-token interval; paired write footprint containment and offsets for each writer family. No liveset separation is appropriate. |
+| Same token, distinct aid | `ptr_owner_context_store_conflict`, then `ptr_output_local_local_separation` | For the SAME w: used seed, endpoint read seed, no-kill interval, and actual BP write-origin membership at t. Actual static items, output metadata, positive sizes, imported/local disjoint ids and pass witnesses must come from production, not arbitrary positions. |
+| Demand owner ancestor of writer destination owner | `ptr_output_suspended_descendant_separation` | Demand owner's liveset at its suspended cursor from SAME-w protection; descendant live cache at t; convert bottom depths to n,k; actual ancestor pass/layout/import witnesses. The supplier gives the descendant imported item and separation, not equality with the global positions map automatically. |
+| Demand owner descendant of writer destination owner | local/import separation with the shallower writer owner as local item, if its liveset can be supplied | Imported descendant cache/demand is available via StackImports/CallSeparation, but writer-only used_gen is NOT the read_gen required by `ptr_owner_context_liveset`. Need actual store-marking/BP write-origin at the shallower owner's current cursor, or a precise projected call-demand case when suspended. Merely swapping names in ProtectedLivesets does not supply this. |
+| Distinct nonancestor / completed sibling / repeated invocation | exclude from coexisting live-owner case using interval continuity + live_prov | Birth retention and function/token inequality are insufficient. If writer is classified only by retained birth rather than live destination provenance, the classification itself is invalid. |
+
+Exact consumer requirements explaining the remaining gap:
+
+* OwnerConflict:105--128 `ptr_owner_context_store_conflict` requires the BP,
+  callee-mems and sizes equations; history with `u<=t<=r<LENGTH h`; continuous d
+  presence on [u,r]; owner function at u; wf and cfg correctness; `ml_used_gen a`
+  at u, `ml_read_gen a` at r; no-kill on [t,r); and
+  `MEM b (find_base_allocas_opt bp (inst_write_op (ptr_owner_view d (EL t h)).cf_inst))`.
+  It returns BOTH `a` and `b` livesets containing the SAME owner cursor at t.
+  This is stronger and more relevant than independently inventing writer liveness.
+* LayoutOutput:135--151 `ptr_output_local_local_separation` needs fresh fn_eom,
+  fn_ptr_ok, successful actual concretize call and actual fn_pass_step with
+  `fn'=out.fpo_function`; static items for distinct a,b, positive sizes and both
+  output metadata tuples; imported/local id disjointness; BOTH liveset lookups
+  with one common `addr`. It concludes
+  `reserved_intervals_disjoint (pa,sa) (pb,sb)`.
+  LayoutOutput:70--86 local/import has the SAME production obligations but takes
+  only a as local static item/output metadata and b from imported_mems_used.
+  These conclusions are whole item separation, not actual-write exclusion.
+* CallSeparation:8--39 `ptr_output_suspended_descendant_separation` takes actual
+  stage/no-eom/shape/run-state/no-DALLOCA/distinct-id/callee-first; history at t;
+  `stk=(EL t h).po_stack`, `n<LENGTH stk`, `k<=n`,
+  `EL k (((EL t h).po_fn,(EL t h).po_state)::MAP (\f.(f.cf_fn,f.cf_state)) stk)
+    =(desc,ds)` and `FLOOKUP ds.vs_allocas bid=SOME(db,sb)`;
+  ancestor fn/addr are the n-th suspended frame's fn/cursor. It further needs
+  observed-context/pass/success/static-item/output metadata/id-disjointness for
+  the ancestor and its LOCAL item's liveset at addr. It returns
+  `?pb. MEM (Allocation bid,pb,sb) (imported_mems_used observed.cu_context fn) /\
+    reserved_intervals_disjoint (pa,sa) (pb,sb)`.
+  Its proof derives imported membership and callee demand from the live descendant
+  cache. It does NOT require a descendant writer to be the executing frame.
+
+### Recommended semantic frontier / dependency ledger
+
+First check bottom-token interval continuity on the accepted transcript, and
+strengthen ProtectedLivesets in place to export its already-proved same-w interval
+and seeds. These are finite interface repairs with premises from already-built
+SOURCE histories. Neither requires constructing a future source step. Next audit
+or prove the projected writer-conflict supplier for the descendant-demand /
+ancestor-destination row above, retaining actual BP origins and call cursor cases.
+Do not resume general opcode wrappers until that reverse-direction row is checked.
+
+Premise provenance: frozen antecedent supplies source wf/SSA/reachable/discipline,
+shape/no-DALLOCA/run-state/ids/schedule; stage decomposition supplies actual observed
+pass/layout witnesses; accepted transcript supplies coherent historical ownership
+and adjacency; endpoint TG+G and HistoricalPlacement supply live owner/depth/cache
+and metadata; ProtectedHistory supplies w, interval, source nonwrite and seeds;
+ProtectedLivesets supplies SAME-w liveset only after its interface is strengthened;
+OwnerDemand supplies no-kill from protected source bytes; BP origins/store marking
+must supply actual writer conflicts. Paired write content/footprint containment
+and byte framing remain separate consumers. No target noninterference is yet proved.
+Shared setup's final argument-token equality is also separate and unresolved;
+equality of entire relocated argument vectors must not be introduced to solve it.
