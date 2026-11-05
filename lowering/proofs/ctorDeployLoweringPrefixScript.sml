@@ -344,6 +344,39 @@ Proof
                    wordsTheory.dimword_def]
 QED
 
+Theorem deploy_prefix_addr_cmp_probe:
+  toto$apto concretizeMemLocDefs$inst_addr_to ("__deploy",8) ("__deploy",9) = LESS
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_addr_merge_probe:
+  enumeral$smerge concretizeMemLocDefs$inst_addr_to
+    [("__deploy",8)] [("__deploy",9)] = [("__deploy",8);("__deploy",9)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_addr_merge_same_probe:
+  enumeral$smerge concretizeMemLocDefs$inst_addr_to
+    [("__deploy",8)] [("__deploy",8)] = [("__deploy",8)]
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_addr_inter_probe:
+  enumeral$sinter concretizeMemLocDefs$inst_addr_to
+    [("__deploy",8)] [("__deploy",9)] = []
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_word_size_probe:
+  words$w2n (32w : 256 word) = 32
+Proof
+  simp[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
