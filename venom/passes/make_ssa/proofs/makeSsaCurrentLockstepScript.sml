@@ -271,6 +271,209 @@ Proof
   qexists_tac `bb'` >> gvs[make_ssa_pos_def]
 QED
 
+Definition current_cleanup_tail_def:
+  current_cleanup_tail fn A renamed H events l i xs end q sgs st st' <=>
+    q <= end /\
+    sgs end = current_cut_sg fn A renamed H events l i /\
+    state_rel (sgs q) st st' /\
+    (!v. current_demand fn v l i ==> IS_SOME (lookup_var v st)) /\
+    (!k. q <= k /\ k < end ==>
+      ((EL k xs).inst_opcode = ASSIGN \/
+       (EL k xs).inst_opcode = NOP /\ (EL k xs).inst_operands = []) /\
+      copy_rename_ok (sgs k) (EL k xs) (sgs (SUC k)))
+End
+
+Definition current_lockstep_rel_def:
+  current_lockstep_rel fn fn' A renamed H events p (inst,st) sg (inst',st') <=>
+    active_inst fn inst st /\ active_inst fn' inst' st' /\
+    st'.vs_current_bb = st.vs_current_bb /\
+    ?old bb' pre.
+      lookup_block st.vs_current_bb fn.fn_blocks = SOME old /\
+      lookup_block st.vs_current_bb fn'.fn_blocks = SOME bb' /\
+      A st.vs_current_bb = current_block_annotations old pre /\
+      LENGTH bb'.bb_instructions = LENGTH pre + LENGTH old.bb_instructions /\
+      if p then
+        LENGTH (collect_phis old.bb_instructions) <= st.vs_inst_idx /\
+        st'.vs_inst_idx = LENGTH pre + st.vs_inst_idx /\
+        sg = current_cut_sg fn A renamed H events st.vs_current_bb st.vs_inst_idx /\
+        current_cut_inv fn A renamed H events st.vs_current_bb st.vs_inst_idx st st'
+      else
+        st.vs_inst_idx = LENGTH (collect_phis old.bb_instructions) /\
+        st'.vs_inst_idx < LENGTH pre + st.vs_inst_idx /\
+        ?sgs. sg = sgs st'.vs_inst_idx /\
+          current_cleanup_tail fn A renamed H events st.vs_current_bb st.vs_inst_idx
+            bb'.bb_instructions (LENGTH pre + st.vs_inst_idx) st'.vs_inst_idx sgs st st'
+End
+
+Theorem current_cleanup_tail_endpoint:
+  current_cleanup_tail fn A renamed H events l i xs end end sgs st st' ==>
+  current_cut_inv fn A renamed H events l i st st'
+Proof
+  rw[current_cleanup_tail_def, current_cut_inv_def] >> gvs[]
+QED
+
+Theorem current_cleanup_tail_step:
+  current_cleanup_tail fn A renamed H events l i xs end q sgs st st' /\
+  q < end /\ step_inst fuel C' (EL q xs) st' = OK t' ==>
+  current_cleanup_tail fn A renamed H events l i xs end (SUC q) sgs st t' /\
+  copy_rename_ok (sgs q) (EL q xs) (sgs (SUC q))
+Proof
+  strip_tac >> fs[current_cleanup_tail_def] >>
+  `((EL q xs).inst_opcode = ASSIGN \/
+    (EL q xs).inst_opcode = NOP /\ (EL q xs).inst_operands = []) /\
+    copy_rename_ok (sgs q) (EL q xs) (sgs (SUC q))` by simp[] >>
+  `state_rel (sgs (SUC q)) st t'` by metis_tac[state_rel_copy] >>
+  simp[] >> rpt strip_tac >> first_x_assum irule >> decide_tac
+QED
+
+Theorem current_lockstep_paired_intro:
+  active_inst fn inst st /\ active_inst fn' inst' st' /\
+  st'.vs_current_bb = st.vs_current_bb /\
+  lookup_block st.vs_current_bb fn.fn_blocks = SOME old /\
+  lookup_block st.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  A st.vs_current_bb = current_block_annotations old pre /\
+  LENGTH bb'.bb_instructions = LENGTH pre + LENGTH old.bb_instructions /\
+  LENGTH (collect_phis old.bb_instructions) <= st.vs_inst_idx /\
+  st'.vs_inst_idx = LENGTH pre + st.vs_inst_idx /\
+  current_cut_inv fn A renamed H events st.vs_current_bb st.vs_inst_idx st st' ==>
+  current_lockstep_rel fn fn' A renamed H events T (inst,st)
+    (current_cut_sg fn A renamed H events st.vs_current_bb st.vs_inst_idx) (inst',st')
+Proof
+  rw[current_lockstep_rel_def] >> qexists_tac `pre` >> simp[]
+QED
+
+Theorem current_lockstep_cleanup_intro:
+  active_inst fn inst st /\ active_inst fn' inst' st' /\
+  st'.vs_current_bb = st.vs_current_bb /\
+  lookup_block st.vs_current_bb fn.fn_blocks = SOME old /\
+  lookup_block st.vs_current_bb fn'.fn_blocks = SOME bb' /\
+  A st.vs_current_bb = current_block_annotations old pre /\
+  LENGTH bb'.bb_instructions = LENGTH pre + LENGTH old.bb_instructions /\
+  st.vs_inst_idx = LENGTH (collect_phis old.bb_instructions) /\
+  current_cleanup_tail fn A renamed H events st.vs_current_bb st.vs_inst_idx
+    bb'.bb_instructions (LENGTH pre + st.vs_inst_idx) st'.vs_inst_idx sgs st st' /\
+  p = (st'.vs_inst_idx = LENGTH pre + st.vs_inst_idx) /\
+  sg = sgs st'.vs_inst_idx ==>
+  current_lockstep_rel fn fn' A renamed H events p (inst,st) sg (inst',st')
+Proof
+  strip_tac >> qpat_x_assum `p = _` SUBST_ALL_TAC >>
+  qpat_x_assum `sg = _` SUBST_ALL_TAC >> Cases_on `st'.vs_inst_idx = LENGTH pre + st.vs_inst_idx`
+  >- (fs[] >> drule current_cleanup_tail_endpoint >> strip_tac >>
+      fs[current_cleanup_tail_def] >>
+      rw[current_lockstep_rel_def] >> qexists_tac `pre` >>
+      gvs[current_cut_inv_def]) >>
+  rw[current_lockstep_rel_def] >> qexists_tac `pre` >> simp[] >>
+  conj_tac >- (fs[current_cleanup_tail_def] >> decide_tac) >>
+  qexists_tac `sgs` >> gvs[]
+QED
+
+Theorem active_inst_at_lookup:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  lookup_block st.vs_current_bb fn.fn_blocks = SOME bb ==>
+  (active_inst fn inst st <=> st.vs_inst_idx < LENGTH bb.bb_instructions /\
+    inst = EL st.vs_inst_idx bb.bb_instructions)
+Proof
+  strip_tac >> eq_tac
+  >- (rw[active_inst_def] >>
+      `lookup_block st.vs_current_bb fn.fn_blocks = SOME bb'` by
+        (irule MEM_lookup_block >> simp[]) >> gvs[]) >>
+  strip_tac >> simp[active_inst_def] >> qexists_tac `bb` >>
+  metis_tac[lookup_block_MEM, makeSsaHelperTheory.lookup_block_label]
+QED
+
+Theorem current_phi_context_output_distinct:
+  current_wf_phi_context s fn renamed s' A H events ==>
+  ALL_DISTINCT (MAP (\b. b.bb_label)
+    (simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed))
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\ wf_function fn` by
+    fs[current_wf_phi_context_def] >>
+  drule current_wf_precleanup_labels >> strip_tac >>
+  fs[wf_function_def, fn_labels_def]
+QED
+
+Theorem current_lockstep_rel_boundary:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn' = fn with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+  ctx_bisim C C' /\
+  current_lockstep_rel fn fn' A renamed H events p (inst,st) sg (inst',st') ==>
+  active_inst fn inst st /\ active_inst fn' inst' st' /\ state_rel sg st st' /\
+  (p ==> inst_pair sg inst inst' /\
+    st'.vs_inst_idx = make_ssa_pos fn fn' st.vs_current_bb st.vs_inst_idx) /\
+  (~p ==> inst'.inst_opcode = ASSIGN \/
+    inst'.inst_opcode = NOP /\ inst'.inst_operands = [])
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    fs[current_wf_phi_context_def, wf_function_def, fn_labels_def] >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    (drule current_phi_context_output_distinct >> simp[]) >>
+  Cases_on `p`
+  >- (fs[current_lockstep_rel_def] >>
+      `st.vs_inst_idx < LENGTH old.bb_instructions /\
+       inst = EL st.vs_inst_idx old.bb_instructions` by
+        metis_tac[active_inst_at_lookup] >>
+      `inst' = EL (LENGTH pre + st.vs_inst_idx) bb'.bb_instructions` by
+        metis_tac[active_inst_at_lookup] >>
+      `st.vs_current_bb = st.vs_current_bb` by simp[] >>
+      drule_all current_cut_inv_ordinary_step >> strip_tac >>
+      gvs[current_cut_inv_def, make_ssa_pos_def]) >>
+  fs[current_lockstep_rel_def, current_cleanup_tail_def] >>
+  `inst' = EL st'.vs_inst_idx bb'.bb_instructions` by
+    metis_tac[active_inst_at_lookup] >>
+  gvs[] >> first_x_assum (qspec_then `st'.vs_inst_idx` mp_tac) >> simp[]
+QED
+
+Theorem current_cleanup_tail_inst_idx[simp]:
+  (current_cleanup_tail fn A renamed H events l i xs end q sgs
+     (st with vs_inst_idx := n) st' <=>
+   current_cleanup_tail fn A renamed H events l i xs end q sgs st st') /\
+  (current_cleanup_tail fn A renamed H events l i xs end q sgs
+     st (st' with vs_inst_idx := n) <=>
+   current_cleanup_tail fn A renamed H events l i xs end q sgs st st')
+Proof
+  simp[current_cleanup_tail_def, lookup_var_def]
+QED
+
+Theorem current_lockstep_unpaired_step:
+  current_wf_phi_context s fn renamed s' A H events /\
+  fn' = fn with fn_blocks :=
+    simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed /\
+  current_lockstep_rel fn fn' A renamed H events F (inst,st) sg (inst',st') /\
+  step_inst fuel C' inst' st' = OK t' /\
+  active_inst fn' j' (t' with vs_inst_idx := SUC st'.vs_inst_idx) ==>
+  ?p sg'. current_lockstep_rel fn fn' A renamed H events p (inst,st) sg'
+    (j',t' with vs_inst_idx := SUC st'.vs_inst_idx) /\ copy_rename_ok sg inst' sg'
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks)` by
+    (drule current_phi_context_output_distinct >> simp[]) >>
+  qpat_x_assum `current_lockstep_rel _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SRULE[current_lockstep_rel_def]) >>
+  `inst' = EL st'.vs_inst_idx bb'.bb_instructions` by
+    metis_tac[active_inst_at_lookup] >>
+  `copy_rename_ok (sgs st'.vs_inst_idx)
+      (EL st'.vs_inst_idx bb'.bb_instructions) (sgs (SUC st'.vs_inst_idx))` by
+    (fs[current_cleanup_tail_def] >> simp[]) >>
+  `t'.vs_current_bb = st'.vs_current_bb` by
+    (`inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP` by
+       (fs[current_cleanup_tail_def] >>
+        first_x_assum (qspec_then `st'.vs_inst_idx` mp_tac) >> simp[] >> metis_tac[]) >>
+     `t' = st' \/ ?x v. t' = update_var x v st'` by
+       metis_tac[step_inst_copy] >> gvs[update_var_def]) >>
+  `current_cleanup_tail fn A renamed H events st.vs_current_bb st.vs_inst_idx
+    bb'.bb_instructions (LENGTH pre + st.vs_inst_idx)
+    (SUC st'.vs_inst_idx) sgs st t'` by
+    metis_tac[current_cleanup_tail_step] >>
+  qexistsl_tac [`SUC st'.vs_inst_idx = LENGTH pre + st.vs_inst_idx`,
+    `sgs (SUC st'.vs_inst_idx)`] >> conj_tac
+  >- (irule current_lockstep_cleanup_intro >> simp[] >>
+      qexistsl_tac [`pre`, `sgs`] >> gvs[]) >>
+  gvs[]
+QED
+
 Theorem make_ssa_current_fn_frame_lockstep:
   ctx_bisim C C' /\
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
