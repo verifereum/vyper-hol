@@ -135,8 +135,9 @@ QED
    from the instruction path so it also applies to field/storage loads. *)
 Theorem ghost_inv_load_frame:
   ghost_inv d cenv cx es G tn s /\
-  local_ptrs_reserved cenv sa /\ ret_pc_ok cenv sa s /\
-  return_buf_frame d cenv sa s /\
+  local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!p. not_fresh_at sa p ==>
     lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
     op_taint un (Var p) = op_taint tn (Var p)) /\
@@ -153,9 +154,8 @@ Proof
   >- (rpt strip_tac >>
       `not_fresh_at sa p` by metis_tac[] >>
       gvs[ptr_covers_def] >> metis_tac[]) >>
-  Cases_on `d` >> gvs[return_buf_frame_def, return_buf_ptr_def] >>
-  PairCases_on `x` >> gvs[return_buf_frame_def, return_buf_ptr_def,
-    ptr_covers_def] >> metis_tac[]
+  Cases_on `d` >> gvs[return_buf_ptr_def] >>
+  PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def] >> metis_tac[]
 QED
 
 Theorem ghost_inv_word_local_inputs:
@@ -214,7 +214,9 @@ Proof
   conj_tac
   >- (qpat_x_assum `sf = _` kall_tac >> simp[ghost_inv_gas_obs] >>
       irule ghost_inv_load_frame >>
-      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[]) >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
+      Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
+      PairCases_on `x` >> gvs[return_buf_frame_def]) >>
   conj_tac >- simp[ghost_kept_def] >>
   qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
   simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
@@ -393,7 +395,9 @@ Proof
       irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `sf = _` kall_tac >> irule ghost_inv_load_frame >>
-      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[]) >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
+      Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
+      PairCases_on `x` >> gvs[return_buf_frame_def]) >>
   conj_tac >- simp[ghost_kept_def] >>
   conj_tac
   >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>

@@ -274,6 +274,8 @@ Proof
       irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `sf = _` kall_tac >> irule ghost_inv_load_frame >>
-      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[]) >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[] >>
+      Cases_on `d` >> gvs[return_buf_frame_def, ret_pc_ok_def] >>
+      PairCases_on `x` >> gvs[return_buf_frame_def]) >>
   simp[ghost_kept_def, not_fresh_at_def]
 QED
