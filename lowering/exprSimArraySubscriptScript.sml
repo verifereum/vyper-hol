@@ -1736,6 +1736,22 @@ Proof
   fs[expr_post_def] >> first_x_assum irule >> metis_tac[]
 QED
 
+Theorem compile_array_expr_operand_expr_post_frame:
+  expr_body_pre cenv cx env obj es0 /\ expr_type obj = ArrayT et bd /\
+  compile_expr cenv ty obj sa = (bvv,sm) /\
+  local_ptrs_reserved cenv sa /\
+  expr_post ctx func cenv cx idx es sm sn s0 es' v op s1 ==>
+  !w. eval_operand (vv_operand bvv) s0 = SOME w ==>
+      eval_operand (vv_operand bvv) s1 = SOME w
+Proof
+  strip_tac >>
+  drule_all compile_array_expr_not_label >> strip_tac >>
+  rpt strip_tac >> irule compile_expr_operand_expr_post_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qexistsl [`obj`, `sa`, `ty`] >> simp[]
+QED
+
 (* Sparse/default representations differ, but give the same observation. *)
 Theorem sparse_default_code_observation_probe[local]:
   !b mem.
