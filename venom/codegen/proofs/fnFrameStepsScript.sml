@@ -185,5 +185,6 @@ Theorem revert_forward_frame_sim:
         venom_asm_terminal_rel vs' as'
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
+  drule rf_spills_separated_entry >> strip_tac >>
   drule_all rf_entry_forward_abort >> simp[]
 QED
