@@ -391,17 +391,12 @@ Proof
      rename1 `Literal _ lit` >> Cases_on `lit` >>
      gvs[supported_string_reason_def]) >>
   `!gs es1. (do raw <- eval_expr cx e; read_result cx raw od)
-              (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
-            expr_vv_sim ctx func cenv cx (expr_type se) se es1` by
+             (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
+         expr_vv_sim ctx func cenv cx (expr_type se) se es1` by
     (rpt strip_tac >> irule assert_reason_vv_sim >>
      gvs[expr_sim_pre_body, stmt_exprs_ok_def,
          supported_stmt_expr_exists_def, supported_assert_exists_def] >>
      metis_tac[expr_sim_pre_gas_obs]) >>
-  `!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
-           (INL (BoolV F), es1) ==>
-         expr_vv_sim ctx func cenv cx (expr_type se) se es1` by
-    (rpt strip_tac >> first_x_assum irule >>
-     qexists_tac `es.gas_obs` >> simp[]) >>
   Cases_on `reason_covered cenv se`
   >- (gvs[reason_covered_def]
       >- (irule compile_assert_reason_frag >> simp[] >> metis_tac[])
