@@ -2,7 +2,7 @@
 Theory bodyCopyMemory
 Ancestors
   loweringPosts
-  exprSimVVFrame
+  exprSimVVFrame exprSimProps
   bodyNameMemoryFacts
   bodyAllocMemory exprSimDefs exprSimBufferStore exprSimLiteralBuffer exprSimAlloc fragExec fragExecMem instMemFrontier
   stmtLowering
@@ -304,12 +304,13 @@ Proof
   rpt strip_tac >> drule_all body_name_source_region >> strip_tac >> gvs[] >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
   drule val_footprint_le >> strip_tac >>
+  drule val_store_size_le >> strip_tac >>
   Cases_on `is_bytestring_type ann`
   >- (gvs[compile_store_memory_def] >>
       drule_all buffer_typed_bytestring_header >> strip_tac >>
       irule compile_store_bytestring_body_mem_ok >>
       qexistsl_tac [`d`, `dst`, `len`, `Var p`, `w`] >>
-      simp[] >> metis_tac[]) >>
+      simp[] >> fs[] >> decide_tac) >>
   gvs[compile_store_memory_def] >>
   irule compile_copy_memory_body_mem_ok >>
   qexistsl_tac [`d`, `dst`, `type_memory_size entry.type`, `Var p`, `w`] >>
@@ -560,12 +561,14 @@ Proof
     (drule_all body_name_source_region >> strip_tac >>
      qpat_x_assum `val_in_memory _ _ _ a.vs_memory` kall_tac >>
      drule val_footprint_le >> strip_tac >>
+     drule val_store_size_le >> strip_tac >>
      Cases_on `is_bytestring_type ann`
      >- (gvs[compile_store_memory_def] >>
          drule_all buffer_typed_bytestring_header >> strip_tac >>
          `32 + 32 * word_size len < dimword (:256) /\
           w2n w + (32 + 32 * word_size len) <= t.vs_alloca_next /\
-          w2n d + (32 + 32 * word_size len) <= t.vs_alloca_next` by decide_tac >>
+          w2n d + (32 + 32 * word_size len) <= t.vs_alloca_next` by
+           (fs[] >> decide_tac) >>
          irule compile_store_bytestring_body_mem_ok >>
          qexistsl_tac [`d`, `dst`, `len`, `buf.buf_operand`, `w`] >>
          simp[] >> rpt strip_tac >>
