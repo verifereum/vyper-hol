@@ -3,6 +3,7 @@ Theory rawCallPrefixPtr
 Ancestors
   rawCallKeywordPrefixPtr gasCount compileEnv venomInst
   gasContext exprSimDefs vyperInterpreter vyperState exprSimWordArgs
+  abiCanonicalHeadSize
 
 (* GAS consumes one observation, even when the runtime oracle is empty. *)
 Theorem raw_call_gas_observation_count:
@@ -307,3 +308,187 @@ Theorem raw_call_operand_actions:
 Proof
   mp_tac (Q.SPECL [`[a;d]`, `kws`, `cx`] eval_exprs_append_action) >> simp[]
 QED
+
+(* Operand prefix, before the optional machine-only GAS instruction. *)
+Theorem raw_call_operands_sim_ptr:
+  body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx (a::d::kws) /\
+  expr_body_pre cenv cx env (Call ann (RawCallTarget flags) (a::d::kws) dflt) es /\
+  gas_admissible (eval_exprs cx (a::d::kws))
+    (\rr. case rr of INL vs => T | INR exc => expr_res_ok (INR exc)) es /\
+  raw_call_kws_ok flags kws /\
+  lower_value compile_expr cenv (BaseT AddressT) a sa = (addr,s1) /\
+  lower_value compile_expr cenv (expr_type d) d s1 = (data,s2) /\
+  emit_op MLOAD [data] s2 = (len_op,sl) /\
+  emit_op ADD [data; Lit 32w] sl = (data_op,sm) /\
+  compile_ext_call_kwargs compile_expr cenv NoneT flags.rcf_kws kws sm = ((vo,go,ig),s5) /\
+  fn_has_code sa s5 func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    (eval_exprs cx (a::d::kws)) (es,s0,G0,tn0)
+    (\rr ee G tn t. ?av bs kvs xs ea ed ta tb th b x base sz.
+      rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
+      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
+      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
+      go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
+      EVERY (\op. op_taint tn op = {}) xs /\
+      EVERY (\op. !v. op = Var v ==> not_fresh_at s5 v) xs /\
+      stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
+      wb_frame cenv es sa s0 t /\ ghost_inv dep cenv cx ee G tn t /\
+      ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      t.vs_current_bb = s5.cs_current_bb /\
+      t.vs_inst_idx = LENGTH s5.cs_current_insts /\ ~t.vs_halted /\
+      expr_val_rel cx (BaseT AddressT) av addr t /\ op_taint tn addr = {} /\
+      eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
+      eval_operand data_op t = SOME (n2w (b+32)) /\
+      op_taint tn len_op = {} /\ op_taint tn data_op = {} /\
+      data = Var x /\ eval_operand data t = SOME (n2w b) /\
+      FLOOKUP G x = SOME (base,sz) /\ base <= b /\
+      b + 32 + LENGTH bs <= base + sz /\ b < dimword (:256) /\
+      (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
+      mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+      (!v. addr = Var v \/ data = Var v \/ len_op = Var v \/ data_op = Var v ==>
+        not_fresh_at s5 v))
+    (\rr ee gt r. wb_args_exit rr r)
+Proof
+  strip_tac >>
+  drule rawCallShapePtrTheory.raw_call_kwargs_types >> strip_tac >>
+  `LENGTH kws = LENGTH flags.rcf_kws` by
+    (fs[vyperTypeSystemTheory.raw_call_kws_ok_def] >>
+     metis_tac[listTheory.LENGTH_MAP]) >>
+  drule_all rawCallShapePtrTheory.raw_call_kwargs_word_args >> strip_tac >>
+  `!e ee. MEM e kws /\ expr_sim_inv cenv cx env ee ==>
+      expr_body_pre cenv cx env e ee /\ is_word_type (expr_type e)` by
+    (rpt strip_tac
+     >- (irule rawCallShapePtrTheory.expr_body_pre_raw_call_arg >>
+         first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+     fs[listTheory.EVERY_MEM, compileEnvTheory.is_word_type_def]) >>
+  `expr_sim_inv cenv cx env es` by
+    fs[exprSimHypsDefsTheory.expr_body_pre_def] >>
+  `wb_args_shape cenv (K (BaseT (UintT 256))) kws` by
+    (irule exprSimPrecompilesTheory.typed_stack_args_shape >> metis_tac[]) >>
+  drule_all exprSimWordArgsTheory.lower_word_args_shape_ready >> strip_tac >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sl /\ ci_mono sl sm` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_cfn,
+      exprLoweringPropsTheory.compile_expr_ci_mono, pairTheory.SND,
+      exprLoweringPropsTheory.ci_mono_emit_op] >>
+  `cs_extends sa sm /\ cs_extends sm s5` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[compileEnvTheory.cs_extends_trans]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm s5 func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  drule_all rawCallOperandPrefixPtrTheory.raw_call_addr_data_header_sim_ptr >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  once_rewrite_tac[raw_call_operand_actions] >>
+  irule gasSummaryComposePtrTheory.gas_outcome_ptr_bind >> rpt conj_tac
+  >- suspend "tail_cert"
+  >- suspend "head_cert"
+  >> irule gasSummaryComposePtrTheory.gas_outcome_ptr_conseq >>
+  goal_assum (drule_at Any) >> conj_tac
+  >- suspend "keywords"
+  >> simp[exprSimWordArgsTheory.wb_args_exit_def] >> rpt strip_tac >> gvs[]
+QED
+
+Resume raw_call_operands_sim_ptr[head_cert]:
+  POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_values >>
+  goal_assum (drule_at Any)
+QED
+
+Resume raw_call_operands_sim_ptr[tail_cert]:
+  POP_ASSUM_LIST (K all_tac) >> CONV_TAC (DEPTH_CONV BETA_CONV) >>
+  rewrite_tac[operandOutcomePtrTheory.ignore_map_return] >>
+  rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
+  goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any)
+QED
+
+Resume raw_call_operands_sim_ptr[keywords]:
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  drule rawCallShapePtrTheory.raw_call_pre_operands >> strip_tac >> gvs[] >>
+  `local_ptrs_reserved cenv sm` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var]) >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z)` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
+  `expr_body_pre cenv cx env d ee` by
+    (irule rawCallShapePtrTheory.expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
+      SOME (BaseTV (BytesT (Dynamic n)))` by
+    (qpat_assum `expr_body_pre _ _ _ d _`
+       (mp_tac o MATCH_MP exprSimHypsTheory.expr_body_pre_type_evaluates) >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()]) >>
+  `expr_body_pre cenv cx env a es` by
+    (irule rawCallShapePtrTheory.expr_body_pre_raw_call_arg >>
+     first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `is_word_type (expr_type a)` by simp[compileEnvTheory.is_word_type_def] >>
+  `(!l. addr <> Label l)` by
+    (drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >>
+     simp[compileEnvTheory.is_word_type_def]) >>
+  `(!l. len_op <> Label l) /\ (!l. data_op <> Label l)` by
+    metis_tac[exprSafeOperandTheory.emit_op_safe_operand,
+      exprSafeOperandTheory.safe_operand_def] >>
+  `(!op. MEM op [addr;len_op;data_op] ==>
+      (!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l))` by
+    (simp[] >> metis_tac[]) >>
+  `not_fresh_at sm x` by metis_tac[] >>
+  `b + 32 + LENGTH bs <= base' + sz` by decide_tac >>
+  `!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem` by
+    (qpat_x_assum `!i. _ ==> i NOTIN tn.t_mem` mp_tac >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  suspend "keyword_map"
+QED
+
+Resume raw_call_operands_sim_ptr[keyword_map]:
+  drule_all (Q.INST [`saved` |-> `[addr;len_op;data_op]`]
+    rawCallKeywordPrefixPtrTheory.raw_call_kwargs_sim_ptr) >>
+  disch_then (qspec_then `PG` assume_tac) >>
+  irule (BETA_RULE (Q.ISPEC `\kvs. av::BytesV bs::kvs`
+    (Q.GEN `f` (SPEC_ALL operandOutcomePtrTheory.gas_outcome_ptr_map_return)))) >>
+  goal_assum (drule_at Any) >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[] >>
+      `wb_frame cenv es sa s0 t'` by
+        (irule exprSimWordArgsTheory.wb_frame_trans >>
+         goal_assum (drule_at Any) >> conj_tac
+         >- (qexistsl_tac [`ee`,`sm`,`t`] >>
+             simp[] >> fs[exprLoweringPropsTheory.ci_mono_def]) >>
+         goal_assum (drule_at Any)) >>
+      `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
+        (irule wordOperandsPtrTheory.ghost_kept_trans >> simp[] >> conj_tac
+         >- (qexists_tac `func` >>
+             fs[exprLoweringPropsTheory.stmt_state_rel_def, compileEnvTheory.state_rel_def]) >>
+         qexistsl_tac [`G`, `ee`, `t`, `sm`, `tn`] >>
+         fs[exprLoweringPropsTheory.ci_mono_def]) >>
+      `expr_val_rel cx (BaseT AddressT) av addr t' /\ op_taint tn' addr = {}` by
+        (qpat_x_assum `!op. _ ==> op_taint tn' op = _ /\ _`
+           (qspec_then `addr` assume_tac) >>
+         qpat_x_assum `expr_val_rel cx (BaseT AddressT) av addr t` mp_tac >>
+         simp[loweringPostsTheory.expr_val_rel_def] >> metis_tac[]) >>
+      qexistsl_tac [`xs'`, `ea`, `ee`, `ta`, `tb`, `t`, `b`] >>
+      simp[wordsTheory.MOD_DIMINDEX] >> conj_tac
+      >- (qpat_x_assum `mem_bytes_at b (LENGTH bs + 32) _ = _` mp_tac >>
+          qpat_x_assum `mem_bytes_at (b + 32) (LENGTH bs) _ = bs` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          qspecl_then [`b`, `32`, `LENGTH bs`, `LENGTH bs + 32`]
+            (fn th => simp[GSYM th]) abiCanonicalHeadSizeTheory.mem_bytes_at_window) >>
+      qpat_x_assum `!v. _ ==> not_fresh_at sm v` mp_tac >>
+      qpat_x_assum `sm.cs_next_var <= s5.cs_next_var` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp[compileEnvTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS])
+  >> rpt gen_tac >> Cases_on `res` >>
+     simp[exprSimWordArgsTheory.wb_args_exit_def]
+QED
+
+
+Finalise raw_call_operands_sim_ptr

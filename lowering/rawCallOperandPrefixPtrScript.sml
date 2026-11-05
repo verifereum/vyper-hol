@@ -351,7 +351,7 @@ Theorem raw_call_addr_data_header_sim_ptr:
     (es,s0,G0,tn0)
     (\rr ee G tn t. ?av bs ea ta tb b x base sz.
       rr = INL [av;BytesV bs] /\ value_has_type (BaseTV AddressT) av /\
-      ea.gas_obs = [] /\
+      ea.gas_obs = [] /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
       wb_frame cenv ee s2 tb t /\
