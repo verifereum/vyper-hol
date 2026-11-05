@@ -272,3 +272,87 @@ Remaining task-level obligations are not discharged by this consumer:
   result nor `dft_block_rel` implies ASSIGN-only forwarding intervals.
 
 These are integration obligations, not premises to add to the frozen theorem.
+
+## Integration checkpoint C1.4.9.16: rule-by-rule producers
+
+Checked extraction signature: `inv_lookup_scheduled_observation` in
+`dftGasInvExtractionScript.sml:346-363` is authoritative. It assumes aligned
+source/target lookups and `dft_fn_rel`, a source pseudo/body split, a target
+split `pseudos ++ scheduled ++ targetobs::targetpost`, observation-ID equality,
+source body residual initialization at s0, s0 index/nonstaticness, actual
+same-context `inv_ev_ftrace ... scheduled s0 sT`, and a memory-observation
+opcode. Its conclusion is exactly a fetched source prefix, source index,
+original-observation operand equality and initial-FMP equality. The following
+are producer obligations, not hypotheses to add to the frozen theorem.
+
+| ev_reachable rule (Defs:145-178) | Available input / required bridge |
+|---|---|
+| entry | Context LIST_REL supplies corresponding function lookup; entry-label preservation supplies source label. `enters_block` performs PHIs only. It does **not** execute all pseudos: PARAM/FMP_PARAM/etc must be replayed before invoking body extraction. Entry-label strict dominance is vacuous; inv_entry_pseudo_initialized can be used after a successful common pseudo run and label readiness. Observations in the pseudo prefix need separate trivial projection. |
+| next | Consecutive actual OK nonterminator steps append to a target ftrace with existential per-step fuel. Non-INVOKE replay in source ctx is context independent. For INVOKE, the returning witness must first be reflected across contexts; local exchange cannot do that. Each observation is reconstructed afresh from its block-entry state, not from the previous reconstructed source observation. |
+| block | The terminator OK step and `enters_block` expose the next PHI state, with depth SUC d. Need same observable control-flow/label state at the old block boundary, matching next-block lookup, equal PHI selections, and preservation of strict dominating definitions into the new entry. Extraction of memory observations alone does not establish this boundary relation. |
+| callee | No returning witness is required for entering a callee. Need source reachability of the caller INVOKE and agreement of decoded argument evaluations, FMP and shared effect fields at call setup. Then setup_callee uses a fresh variable/alloca frame and source entry label; depth SUC d and frame `(d,id)::p` match. A callee may diverge after entry. |
+
+General block-entry invariant still needed: at a matching current block label,
+strict_dom_vars_defined for the **source** function, and the restricted label
+availability clause of dft_remaining_inv (RunRel:533-536), together with equal
+PHI predecessor selection and availability of its selected inputs. After PHIs
+and all remaining pseudos succeed, their output definitions are available;
+these are precisely the already-produced definitions required by
+RunRel:531-532. The distinctness/order clauses come from wf_function and the
+source split, not execution. `inv_remaining_ev_step` preserves the invariant
+within a block, but does not prove its transfer along a terminator edge.
+`enters_block` alone has no dominance assertion; that transfer must be proved
+from actual predecessor execution/SSA dominance rather than assumed from an
+arbitrary current label. Re-entry through a loop is a required case.
+
+### Proposed finite-return contract (UNPROVED, not a new assumption)
+
+At the recursion boundary the needed direction is target-to-source IntRet:
+
+```
+!fuel p d C C' fn fn' s ret t'.
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  dft_fn_rel fn fn' /\ [entry shape, label and dominance readiness] /\
+  ev_blocks orc p d fuel C' fn' s = IntRet ret t' ==>
+  ?t. ev_blocks orc p d fuel C fn s = IntRet ret t /\
+      merge_callee_state caller t = merge_callee_state caller t'
+```
+
+Here caller is universally quantified, not existentially selected. The merged
+state equality is the minimal checked use-site demand from Defs:56-61:
+return values and iret_adopt_fmp must be identical; merge copies exactly
+memory, transient, accounts, returndata, logs, outcomes, requests, pending
+deletions, gas_readings and immutables (Semantics:1468-1481). It does not copy
+callee vars, current/prev block, instruction index, allocas or FMP. Thus exact
+callee-state equality is stronger than the INVOKE consumer needs. In contrast,
+`gas_variant` alone is not enough for literal same-state step replay: merge
+copies gas_readings too. The oracle never consumes that list, so either prove
+its preservation and exact merged equality or introduce and validate a
+reading-insensitive trace/observation interface. No such relation has been
+selected or proved here. For normal inter-block continuations, variable values,
+control labels, prev_bb and FMP **are** needed; the merge projection is not a
+sufficient block-boundary relation. The bracketed entry readiness is unresolved
+and must be replaced by a producer-backed invariant before this contract can
+be a theorem. It is deliberately not an executable conditional final theorem.
+
+The quantification is over all p,d and every finite fuel; no claim about
+termination, a uniform reachability fuel, or out-of-fuel reflection is needed
+for crossing a returning call. Defs:83-100 at SUC fuel invokes its block at
+fuel and depth SUC d. That block's INVOKE calls ev_blocks at that same fuel,
+frame `((SUC d,id)::p)` and depth SUC d; the callee's first block is one depth
+higher. This is strict fuel descent relative to the containing ev_blocks.
+Within a block use instruction remainder descent; ev_step -> ev_blocks has
+same fuel but decreases the lexicographic secondary measure 1 -> 0. The
+second measure for ev_block is `2 + (LENGTH instructions - idx)` (Defs:101-107).
+Oracle events use p,d,id, not instruction index, so reorderings/flips preserve
+the event only when the original ID and block-depth/frame are preserved.
+
+Dependency direction: general block-entry readiness and pseudo replay feed a
+finite block reconstruction. Returning-call reflection at smaller fuel must
+be available **before** changing that block's target trace to source context.
+Full block reconstruction (including terminators and all effects, not only
+memory operands) then supplies same-fuel ev_blocks reflection through jumps.
+Only after this mutually organized induction is proved can reachability next
+cross returning calls. Reachability callee uses argument/setup agreement but
+not termination. A theorem assuming all callee reflections or all source
+prefixes would conceal this cycle, not solve it.
