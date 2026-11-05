@@ -1,6 +1,6 @@
 (* Typed representations at clean decoder endpoints. *)
 Theory calldataTypedRobustPtr
-Ancestors calldataDecodePtr robustCopyTransportPtr exprSimMemoryTransport
+Ancestors calldataDecodePtr calldataWordPtr robustCopyTransportPtr exprSimMemoryTransport
   bodyPtrDefs venomMemProofs list valueEncoding valueEncodingProofs valueEncodingProps
   abiEncoder abiDecoderContract venomInst venomState venomExecSemantics words
   codegenRel contextCodegenRel compileEnv ptrDiscipline ptrSafeRun fragExec finite_map
