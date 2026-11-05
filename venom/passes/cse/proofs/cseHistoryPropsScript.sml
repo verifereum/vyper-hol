@@ -1,7 +1,7 @@
 Theory cseHistoryProps
 Ancestors passSharedProps venomExecSemantics venomState stateEquiv execEquivProofs
   cfgAnalysisProps analysisSimProps venomInstProps venomExecProps
-  venomWf venomInst venomExecProofs list cfgDefs cseCanonProps
+  venomWf venomInst venomExecProofs list cfgDefs cseCanonProps instIdxIndep
 
 (* Local copy transport only: the persistence premise must be established
    for the particular later execution occurrence by a separate argument. *)
@@ -1578,4 +1578,179 @@ Proof
  conj_tac >- (qexists_tac `bb` >> simp[]) >>
  conj_tac >- (Cases_on `n` >> simp[GENLIST]) >>
  gvs[arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem cse_phi_points_cursor[local]:
+ !n lbl. GENLIST (\k. (lbl,k)) n ++ [(lbl,n)] =
+   (lbl,0)::GENLIST (\i. (lbl,SUC i)) n
+Proof
+ Induct >> simp[GENLIST, rich_listTheory.SNOC_APPEND] >>
+ rpt gen_tac >> first_x_assum (qspec_then `lbl` mp_tac) >>
+ simp[APPEND_ASSOC]
+QED
+
+Theorem cse_static_trace_phi:
+ cse_static_trace fn (ps ++ [(bb.bb_label,0)]) /\
+ lookup_block bb.bb_label fn.fn_blocks = SOME bb ==>
+ cse_static_trace fn (ps ++ GENLIST (\k. (bb.bb_label,k))
+   (phi_prefix_length bb.bb_instructions) ++
+   [(bb.bb_label,phi_prefix_length bb.bb_instructions)])
+Proof
+ strip_tac >> rewrite_tac[GSYM APPEND_ASSOC, cse_phi_points_cursor] >>
+ qspecl_then
+   [`phi_prefix_length bb.bb_instructions`, `ps ++ [(bb.bb_label,0)]`,
+    `bb.bb_label`, `0`, `bb`, `fn`] mp_tac cse_static_trace_advance >>
+ rewrite_tac[GSYM APPEND_ASSOC, APPEND, arithmeticTheory.ADD] >>
+ simp[phi_prefix_length_le]
+QED
+
+Theorem cse_prefix_project_trace:
+ !ctx fn fuel0 s0 events phase.
+ cse_prefix ctx fn fuel0 s0 events phase ==>
+ wf_function fn /\ fn_inst_wf fn ==>
+ case phase of
+   CseRun n s => !bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+     s.vs_inst_idx = 0 /\ cse_static_trace fn (cse_project_trace events phase)
+ | CseExec n bb s => cse_static_trace fn (cse_project_trace events phase)
+Proof
+ ho_match_mp_tac cse_prefix_strongind >> rpt conj_tac
+ >- (rpt gen_tac >> strip_tac >> strip_tac >>
+     simp[cse_project_trace_def, cse_history_points_def, cse_phase_point_def] >>
+     rpt strip_tac >> irule (cj 1 cse_static_trace_rules) >> metis_tac[])
+ >- suspend "phi"
+ >- suspend "ordinary"
+ >> suspend "branch"
+QED
+Resume cse_prefix_project_trace[phi]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+ gvs[cse_project_trace_def, cse_history_points_append,
+     cse_history_points_def, cse_event_points_def, cse_phase_point_def,
+     MAP_GENLIST, combinTheory.o_DEF] >>
+ qpat_assum `bb.bb_label = s.vs_current_bb`
+   (fn th => rewrite_tac[GSYM th]) >>
+ irule cse_static_trace_phi >> simp[]
+QED
+Resume cse_prefix_project_trace[ordinary]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions` by
+   gvs[get_instruction_def, AllCaseEqs()] >>
+ gvs[cse_project_trace_def, cse_history_points_append,
+     cse_history_points_def, cse_event_points_def, cse_phase_point_def] >>
+ irule (cj 2 cse_static_trace_rules) >> simp[] >> metis_tac[]
+QED
+Resume cse_prefix_project_trace[branch]:
+ rpt gen_tac >> strip_tac >> strip_tac >> gvs[] >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ drule_all cse_terminator_boundary >> strip_tac >>
+ drule_all cse_terminator_cfg_edge >> strip_tac >>
+ `inst.inst_opcode <> INVOKE` by
+   (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
+ `step_inst_base inst s = OK t` by
+   gvs[step_inst_def] >>
+ `t.vs_inst_idx = 0` by metis_tac[terminator_OK_inst_idx_0] >>
+ simp[] >> rpt strip_tac >>
+ gvs[cse_project_trace_def, cse_history_points_append,
+     cse_history_points_def, cse_event_points_def, cse_phase_point_def] >>
+ irule (cj 3 cse_static_trace_rules) >>
+ conj_tac >- metis_tac[] >>
+ reverse conj_tac >- (simp[] >> metis_tac[]) >>
+ qpat_assum `SUC s.vs_inst_idx = LENGTH bb.bb_instructions`
+   (fn th => rewrite_tac[GSYM th]) >>
+ `s.vs_inst_idx < LENGTH bb.bb_instructions` by decide_tac >>
+ `cse_static_trace fn
+    ((MAP FST (cse_history_points 0 events) ++
+      [(s.vs_current_bb,s.vs_inst_idx)]) ++
+      [(s.vs_current_bb,SUC s.vs_inst_idx)])` suffices_by
+    rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+ irule (cj 2 cse_static_trace_rules) >> simp[] >> metis_tac[]
+QED
+Finalise cse_prefix_project_trace
+
+Theorem cse_prefix_project_exec:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) ==>
+ cse_static_trace fn (cse_project_trace events (CseExec n bb s)) /\
+ LAST (cse_project_trace events (CseExec n bb s)) = (bb.bb_label,s.vs_inst_idx)
+Proof
+ strip_tac >> drule cse_prefix_project_trace >>
+ simp[cse_project_trace_last, cse_phase_point_def]
+QED
+
+Theorem cse_prefix_project_run:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseRun n s) /\
+ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+ cse_static_trace fn (cse_project_trace events (CseRun n s)) /\
+ LAST (cse_project_trace events (CseRun n s)) = (bb.bb_label,0)
+Proof
+ strip_tac >> drule cse_prefix_project_trace >> simp[] >>
+ strip_tac >>
+ simp[cse_project_trace_last, cse_phase_point_def] >>
+ metis_tac[lookup_block_label]
+QED
+
+Theorem cse_event_points_covers:
+ MEM (p,SOME ((j:num),k)) (cse_event_points j ev) ==>
+ ?bb inst. p = (bb.bb_label,k) /\ cse_event_covers ev bb k inst
+Proof
+ Cases_on `ev` >> simp[cse_event_points_def, MEM_GENLIST] >>
+ rpt strip_tac
+ >- (gvs[] >> rename1 `k < phi_prefix_length bb.bb_instructions` >>
+     qexistsl_tac [`bb`, `EL k bb.bb_instructions`] >>
+     simp[cse_event_covers_def, get_instruction_def] >>
+     metis_tac[phi_prefix_length_le, arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+ gvs[cse_event_covers_def, AllCaseEqs()] >>
+ Cases_on `is_terminator i.inst_opcode` >> gvs[]
+QED
+
+Theorem cse_history_points_covers:
+ MEM (p,SOME (j,k)) (cse_history_points 0 events) ==>
+ j < LENGTH events /\
+ ?bb inst. p = (bb.bb_label,k) /\ cse_event_covers (EL j events) bb k inst
+Proof
+ strip_tac >> drule cse_history_points_occurrence >> strip_tac >> gvs[] >>
+ simp[listTheory.EL_APPEND_EQN] >>
+ irule cse_event_points_covers >> metis_tac[]
+QED
+
+Theorem cse_event_points_padding:
+ MEM (p,NONE) (cse_event_points j ev) ==>
+ ?n bb inst s t. ev = CseStep n bb inst s t /\
+   is_terminator inst.inst_opcode /\ p = (bb.bb_label,LENGTH bb.bb_instructions)
+Proof
+ Cases_on `ev` >> simp[cse_event_points_def, MEM_GENLIST] >>
+ Cases_on `is_terminator i.inst_opcode` >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_history_points_padding:
+ !events start. MEM (p,NONE) (cse_history_points start events) ==>
+ ?j n bb inst s t. j < LENGTH events /\
+   EL j events = CseStep n bb inst s t /\
+   is_terminator inst.inst_opcode /\ p = (bb.bb_label,LENGTH bb.bb_instructions)
+Proof
+ Induct >> simp[cse_history_points_def] >> rpt gen_tac >> strip_tac
+ >- (drule cse_event_points_padding >> strip_tac >>
+     qexists_tac `0` >> simp[] >> metis_tac[]) >>
+ first_x_assum drule >> strip_tac >>
+ qexists_tac `SUC j` >> simp[] >> metis_tac[]
+QED
+
+Theorem cse_history_points_cut:
+ MEM (p,SOME (j,k)) (cse_history_points 0 events) ==>
+ ?pre ev post left right.
+   events = pre ++ ev::post /\ j = LENGTH pre /\
+   cse_event_points j ev = left ++ (p,SOME (j,k))::right /\
+   cse_history_points 0 events =
+     cse_history_points 0 pre ++ left ++
+       (p,SOME (j,k))::(right ++ cse_history_points (SUC j) post)
+Proof
+ strip_tac >> drule cse_history_points_occurrence >> strip_tac >> gvs[] >>
+ qpat_x_assum `MEM _ (cse_event_points _ _)` mp_tac >>
+ rewrite_tac[MEM_SPLIT] >>
+ disch_then (qx_choose_then `left` (qx_choose_then `right` assume_tac)) >>
+ qexistsl_tac [`pre`, `ev`, `post`, `left`, `right`] >>
+ simp[cse_history_points_append, cse_history_points_def, APPEND_ASSOC,
+      arithmeticTheory.ADD1]
 QED
