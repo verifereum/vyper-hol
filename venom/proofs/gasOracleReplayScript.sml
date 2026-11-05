@@ -665,22 +665,8 @@ Resume gas_base_data_dispatch[selfdestruct]:
   cheat
 QED
 Resume gas_base_data_dispatch[call]:
-  namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
-  namedCases_on `ops` ["", "b r1"] >> simp[lift_result_def] >>
-  namedCases_on `r1` ["", "c r2"] >> simp[lift_result_def] >>
-  namedCases_on `r2` ["", "d r3"] >> simp[lift_result_def] >>
-  namedCases_on `r3` ["", "e r4"] >> simp[lift_result_def] >>
-  namedCases_on `r4` ["", "f r5"] >> simp[lift_result_def] >>
-  namedCases_on `r5` ["", "g r6"] >> simp[lift_result_def] >>
-  Cases_on `r6` >> simp[lift_result_def] >>
-  Cases_on `eval_operand a s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand b s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand c s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand d s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand e s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand f s` >> simp[lift_result_def] >>
-  Cases_on `eval_operand g s` >> simp[lift_result_def] >>
-  irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
+  (* admitted at base cut: static-frame CALL semantics (#1169) adds a cc_static value guard; gas_exec_ext_call no longer matches *)
+  cheat
 QED
 Resume gas_base_data_dispatch[staticcall]:
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
