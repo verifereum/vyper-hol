@@ -19,8 +19,8 @@
  *                                  and out of a loop iteration's scope
  *   body_annassign_case, body_for_case — the cases
  *   body_annassign_memory        — the declarations in memory
- *   body_annassign_other         — RESIDUAL, the declarations not of a
- *                                  word type that it leaves
+ *   body_annassign_other         — the declarations it leaves, which are
+ *                                  unsupported
  *   body_for_other               — dispatcher for computed ranges and arrays
  *   body_for_array               — iteration over a fixed array
  *   body_for_range               — checked integer-range body simulation
@@ -344,10 +344,21 @@ Proof
   metis_tac[]
 QED
 
-(* RESIDUAL (#637 declarations): a declaration of a type that is not a
-   word, which body_annassign_memory leaves: a value that widens to a type
-   other than a bytestring (type_widens_to: a DynArray of a smaller bound,
-   elementwise) has no statement lemma. *)
+(* A supported copy into a type other than the source's, and not a word,
+   is a bytestring copy. *)
+Theorem copy_types_not_word_bytestring[local]:
+  !dst src.
+    supported_copy_types dst src /\ dst <> src /\ ~is_word_type dst ==>
+    is_bytestring_type dst
+Proof
+  simp[supportedTypesTheory.supported_copy_types_def] >> rpt strip_tac
+  >- metis_tac[typedCopyMetadataTheory.supported_word_type_is_word] >>
+  BasicProvers.every_case_tac >> gvs[is_bytestring_type_def]
+QED
+
+(* The declarations body_annassign_memory leaves are not supported: a
+   supported declaration copies a value of the declared type itself, a
+   word, or a bytestring (supported_copy_types). *)
 Theorem body_annassign_other:
   !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res
    es'.
@@ -370,7 +381,10 @@ Theorem body_annassign_other:
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `supported_copy_types typ (expr_type e)` by
+    (qpat_x_assum `supported_stmt _ _ _` mp_tac >> simp[supported_stmt_def]) >>
+  metis_tac[copy_types_not_word_bytestring]
 QED
 
 (* RESIDUAL (#767): a memory-backed declaration of an internal call whose
