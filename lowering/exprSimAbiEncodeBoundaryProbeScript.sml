@@ -1,7 +1,7 @@
 (* Checked interfaces for relabeled ABI-encoder execution. *)
 Theory exprSimAbiEncodeBoundaryProbe
 Ancestors
-  exprSimAbiEncodeRegistration abiTupleProps
+  exprSimAbiEncodeRegistration abiTupleProps abiDecoderAllocation arithmetic
 
 Theorem abi_encode_relabel_registered_room:
   obs.fn_name = func.fn_name /\ alloca_room ctx func s /\
@@ -26,4 +26,24 @@ Theorem abi_encode_tuple_staging_same_blocks:
 Proof
   strip_tac >> drule_all compile_store_abi_tuple_correct >>
   strip_tac >> simp[]
+QED
+
+(* This constructs a budget, but deliberately leaves its word bound and
+   allocated-site size obligations visible to the resource producer. *)
+Theorem abi_encode_canonical_scratch_budget:
+  let cap = s.vs_alloca_next + 32 * CARD (abi_decoder_missing first last s) in
+  cap < dimword (:256) /\
+  (!id off sz. id IN abi_decoder_ids first last /\
+     FLOOKUP s.vs_allocas id = SOME (off,sz) ==>
+     sz = 32 /\ off + 32 <= s.vs_alloca_next) /\
+  (!i j p q. i IN abi_decoder_ids first last /\
+     j IN abi_decoder_ids first last /\ i <> j /\
+     FLOOKUP s.vs_allocas i = SOME (p,32) /\
+     FLOOKUP s.vs_allocas j = SOME (q,32) ==>
+     p+32 <= q \/ q+32 <= p) ==>
+  abi_decoder_budget first last 0 cap s
+Proof
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  simp_tac bool_ss [abi_decoder_budget_def, ADD_CLAUSES, ZERO_LESS_EQ,
+                    LESS_EQ_REFL] >> metis_tac[]
 QED
