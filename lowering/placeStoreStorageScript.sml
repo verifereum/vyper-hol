@@ -3663,6 +3663,35 @@ Proof
   disch_then (qspecl_then [`32`, `32`] mp_tac) >> simp[]
 QED
 
+Theorem place_store_wrapped_live_payload_probe:
+  ?s.
+    mem_bytes_at 0 32 s.vs_memory = byte$word_to_bytes (1w:bytes32) T /\
+    mem_bytes_at 32 32 s.vs_memory = (2w:byte) :: REPLICATE 31 0w /\
+    mem_bytes_at 0 32 (mcopy (dimword (:256) - 32) 0 64 s).vs_memory =
+      byte$word_to_bytes (1w:bytes32) T /\
+    mem_bytes_at (dimword (:256)) 32
+      (mcopy (dimword (:256) - 32) 0 64 s).vs_memory =
+      (2w:byte) :: REPLICATE 31 0w /\
+    EL 0 (mem_bytes_at 0 32
+      (mcopy (dimword (:256) - 32) 0 64 s).vs_memory) = 0w /\
+    EL 0 (mem_bytes_at (dimword (:256)) 32
+      (mcopy (dimword (:256) - 32) 0 64 s).vs_memory) = 2w /\
+    mem_bytes_at 0 32 (mcopy (dimword (:256) - 32) 0 64 s).vs_memory <>
+    mem_bytes_at (dimword (:256)) 32
+      (mcopy (dimword (:256) - 32) 0 64 s).vs_memory
+Proof
+  qexists_tac `(ARB:venom_state) with vs_memory :=
+    byte$word_to_bytes (1w:bytes32) T ++ (2w:byte) :: REPLICATE 31 0w` >>
+  mp_tac place_store_wrapped_suffix_address_probe >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  first_x_assum (qspec_then
+    `(ARB:venom_state) with vs_memory :=
+      byte$word_to_bytes (1w:bytes32) T ++ (2w:byte) :: REPLICATE 31 0w`
+    strip_assume_tac) >>
+  asm_rewrite_tac [] >>
+  EVAL_TAC
+QED
+
 Theorem place_store_nested_normalization_dispatch_probe:
   !cenv dst src.
     acyclic_struct_metadata cenv.ce_struct_fields ==>
