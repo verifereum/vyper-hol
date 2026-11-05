@@ -377,5 +377,38 @@ Theorem body_augassign_other_leaf:
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
 Proof
-  cheat
+  rpt strip_tac >>
+  `supported_expr tops e` by fs[supported_stmt_def] >>
+  drule_all augassign_rhs_pre >> strip_tac >>
+  `((?s p s1 s2 cur s3 s4 ptv s5.
+      eval_target_place cx t s = (INL p,s1) /\
+      read_place cx p s2 = (INL cur,s3) /\
+      place_type_value cx p s4 = (INL ptv,s5)) ==>
+    expr_sim_case F ctx func cenv cx e)` by metis_tac[augassign_rhs_case] >>
+  `target_case F ctx func cenv cx t` by metis_tac[augassign_target_case] >>
+  Cases_on `t`
+  >- gvs[]
+  >- (rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
+      Cases_on `supported_aug_target tops bindings
+        (TopLevelNameTarget (nsid0,nsid1))`
+      >- metis_tac[body_augassign_toplevel_aug] >>
+      `?ity. supported_immutable_type tops (nsid0,nsid1) = SOME ity` by
+        gvs[supported_stmt_def, supported_target_def, optionTheory.IS_SOME_EXISTS] >>
+      Cases_on `cx.in_deploy`
+      >- (irule immutable_deploy_augassign_case >> metis_tac[]) >>
+      `env_context_consistent env cx /\ get_module_code cx NONE = SOME tops` by
+        fs[expr_sim_inv_def, env_consistent_def, body_inv_def] >>
+      drule_all augassign_immutable_runtime_untyped >> strip_tac >>
+      gvs[type_stmt_def, well_typed_target_def]) >>
+  `target_env_ok cenv cx` by metis_tac[body_inv_target_env_ok] >>
+  (qmatch_goalsub_abbrev_tac `AugAssign ty bt bop e` >>
+  `((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k))` by
+    simp[Abbr `bt`] >>
+  (`~immutable_root cx bt` by metis_tac[augassign_target_not_immutable] >>
+  `target_indices_pre cenv cx env bt` by metis_tac[augassign_target_pre] >>
+  Cases_on `?id. target_root bt = NameTarget id`
+  >- (irule compile_augassign_place_memory_case >> metis_tac[]) >>
+  Cases_on `supported_target_pure tops bt`
+  >- (irule compile_augassign_place_storage_case >> metis_tac[]) >>
+  irule augassign_place_effectful_index_case >> simp[] >> metis_tac[]))
 QED
