@@ -108,3 +108,117 @@ Proof
   metis_tac[dft_target_oracle_finite_support, dft_target_oracle_read,
     dft_target_oracle_absent, dft_target_oracle_prefix_compatible]
 QED
+
+Definition dft_source_event_time_def:
+  dft_source_event_time w C c n = @j.
+    dft_occ_count (FUNPOW (dft_occ_oracle_next w C) j c) = n /\
+    ?inst addr. dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j c)
+End
+
+Definition dft_source_oracle_def:
+  dft_source_oracle w C c n =
+    if ?j inst addr. dft_occ_count (FUNPOW (dft_occ_oracle_next w C) j c) = n /\
+         dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j c)
+    then w (dft_occ_address (FUNPOW (dft_occ_oracle_next w C)
+      (dft_source_event_time w C c n) c))
+    else 0w
+End
+
+Theorem dft_source_event_time_exists:
+  (?j inst addr. dft_occ_count (FUNPOW (dft_occ_oracle_next w C) j c) = n /\
+    dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j c)) ==>
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c) = n /\
+  ?inst addr. dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c)
+Proof
+  simp[dft_source_event_time_def] >> metis_tac[SELECT_AX]
+QED
+
+Theorem dft_source_event_time_eq:
+  dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j c) ==>
+  dft_source_event_time w C c
+    (dft_occ_count (FUNPOW (dft_occ_oracle_next w C) j c)) = j
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `dft_source_event_time w C c n` >>
+  `dft_occ_count (FUNPOW (dft_occ_oracle_next w C)
+      (dft_source_event_time w C c n) c) = n /\
+   ?i ad. dft_occ_gas_event i ad (FUNPOW (dft_occ_oracle_next w C)
+      (dft_source_event_time w C c n) c)` by
+    (irule dft_source_event_time_exists >> metis_tac[]) >>
+  metis_tac[dft_occ_oracle_gas_ordinal_unique]
+QED
+
+Theorem dft_source_oracle_read:
+  dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C) j c) ==>
+  dft_source_oracle w C c (dft_occ_count (FUNPOW (dft_occ_oracle_next w C) j c)) = w addr
+Proof
+  strip_tac >> drule dft_source_event_time_eq >> strip_tac >>
+  drule dft_occ_gas_address >> strip_tac >>
+  simp[dft_source_oracle_def] >> metis_tac[]
+QED
+
+Theorem dft_source_oracle_nonzero_event:
+  dft_source_oracle w C c n <> 0w ==>
+  dft_occ_count (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c) = n /\
+  (?inst addr. dft_occ_gas_event inst addr (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c)) /\
+  w (dft_occ_address (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c)) <> 0w
+Proof
+  simp[dft_source_oracle_def] >> IF_CASES_TAC >> simp[] >>
+  metis_tac[dft_source_event_time_exists]
+QED
+
+Theorem dft_source_oracle_finite_support:
+  dft_ctx_ids C /\ dft_occ_valid c /\ FINITE {addr | w addr <> 0w} ==>
+  FINITE {n | dft_source_oracle w C c n <> 0w}
+Proof
+  strip_tac >> irule (FINITE_INJ |> INST_TYPE [beta |-> ``:(num # num) list``]) >>
+  qexistsl_tac [`\n. dft_occ_address (FUNPOW (dft_occ_oracle_next w C)
+    (dft_source_event_time w C c n) c)`, `{addr | w addr <> 0w}`] >>
+  simp[INJ_DEF] >> conj_tac
+  >- metis_tac[dft_source_oracle_nonzero_event] >>
+  rpt strip_tac >>
+  dxrule dft_source_oracle_nonzero_event >> strip_tac >>
+  dxrule dft_source_oracle_nonzero_event >> strip_tac >>
+  `dft_source_event_time w C c n = dft_source_event_time w C c n'` by
+    metis_tac[dft_occ_oracle_gas_event_unique, dft_occ_gas_address] >>
+  metis_tac[]
+QED
+
+Theorem dft_source_oracle_prefix_compatible:
+  !j. dft_occ_prefix_compatible w (dft_source_oracle w C c) C c j
+Proof
+  simp[dft_occ_prefix_compatible_def, dft_occ_compatible_def] >>
+  metis_tac[dft_source_oracle_read]
+QED
+
+Theorem dft_source_oracle_exists:
+  dft_ctx_ids C /\ dft_occ_valid c /\ FINITE {addr | w addr <> 0w} ==>
+  ?a ys. dft_sparse_oracle a ys /\
+    (!j. dft_occ_prefix_compatible w a C c j)
+Proof
+  strip_tac >>
+  `FINITE {n | dft_source_oracle w C c n <> 0w}` by
+    metis_tac[dft_source_oracle_finite_support] >>
+  drule (iffRL dft_sparse_oracle_finite_support) >> strip_tac >>
+  qexistsl_tac [`dft_source_oracle w C c`, `xs`] >>
+  simp[dft_source_oracle_prefix_compatible]
+QED
+
+Theorem dft_two_root_oracles_exist:
+  dft_ctx_ids C /\ dft_occ_valid c /\
+  dft_ctx_ids D /\ dft_occ_valid d /\ dft_sparse_oracle b xs ==>
+  ?w a ys. FINITE {addr | w addr <> 0w} /\ dft_sparse_oracle a ys /\
+    (!j. dft_occ_prefix_compatible w a C c j) /\
+    (!j. dft_occ_prefix_compatible w b D d j)
+Proof
+  strip_tac >> drule_all dft_target_oracle_exists >> strip_tac >>
+  `?a ys. dft_sparse_oracle a ys /\
+    (!j. dft_occ_prefix_compatible w a C c j)` by
+    (irule dft_source_oracle_exists >> simp[]) >>
+  metis_tac[]
+QED
