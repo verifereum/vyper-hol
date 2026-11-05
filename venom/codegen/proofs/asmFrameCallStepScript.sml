@@ -834,6 +834,40 @@ Proof
   simp[vfmContextTheory.context_component_equality]
 QED
 
+Theorem asm_call_step_terminal:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR e,t) ==>
+  step s = handle_step e t
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  `FLOOKUP c.msgParams.parsed c.pc = SOME op` by
+    (qpat_x_assum `next_opcode c = _` mp_tac >>
+     simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]) >>
+  simp_tac (srw_ss()) [step_def, get_current_context_def, handle_def,
+    bind_def, ignore_bind_def, return_def] >>
+  qpat_assum `s.contexts = _` (fn th => pure_rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  qpat_assum `FLOOKUP _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+  qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+  gvs[step_inst_def, bind_def, ignore_bind_def]
+QED
+
+Theorem asm_handle_step_memory:
+  t.contexts = (child,child_rb)::tail /\
+  child.msgParams.outputTo = Memory mr ==>
+  handle_step e t =
+    (if vfm_abort e then (INR e,t) else handle_exception e t)
+Proof
+  strip_tac >>
+  simp[handle_step_def, handle_create_def, get_return_data_def,
+       get_output_to_def, get_current_context_def, handle_def,
+       bind_def, ignore_bind_def, return_def, reraise_def] >>
+  Cases_on `e` >> Cases_on `vfm_abort (SOME x)` >>
+  simp[handle_def, bind_def, ignore_bind_def, get_current_context_def,
+       return_def, reraise_def]
+QED
+
 Theorem asm_proceed_call_contexts_wf:
   s.contexts <> [] /\ EVERY (wf_context o FST) s.contexts /\
   proceed_call op sender address value ao az code stipend outputTo s = (res,t) ==>
@@ -949,6 +983,94 @@ Proof
   qexistsl [`child`, `child_rb`] >> conj_tac >- simp[] >>
   `child.gasUsed <= child.msgParams.gasLimit` by gvs[] >>
   drule_all asm_handle_exception_memory_exception >> simp[]
+QED
+
+Theorem asm_call_step_memory_success:
+  s.contexts = (c,rb)::outer /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR NONE,t) /\
+  u.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) u = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    step s = (INL (), t with contexts :=
+      (parent with <|
+        gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+        pc := SUC parent.pc; stack := b2w T :: parent.stack;
+        returnData := child.returnData;
+        memory := buffer_write mr.offset (TAKE mr.size child.returnData) parent.memory;
+        logs := parent.logs ++ child.logs;
+        addRefund := parent.addRefund + child.addRefund;
+        subRefund := parent.subRefund + child.subRefund |>,parent_rb)::rest)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_step_terminal >> disch_tac >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  drule_all asm_proceed_call_memory_success >> strip_tac >>
+  gvs[vfm_abort_def] >> metis_tac[]
+QED
+
+Theorem asm_call_step_memory_reverted:
+  s.contexts = (c,rb)::outer /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR (SOME Reverted),t) /\
+  u.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) u = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    step s = (INL (), t with <|
+      contexts := (parent with <|
+        gasUsed := parent.gasUsed - (child.msgParams.gasLimit-child.gasUsed);
+        pc := SUC parent.pc; stack := b2w F :: parent.stack;
+        returnData := child.returnData;
+        memory := buffer_write mr.offset (TAKE mr.size child.returnData) parent.memory
+      |>,parent_rb)::rest; rollback := child_rb |>)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_step_terminal >> disch_tac >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  drule_all asm_proceed_call_memory_reverted >> strip_tac >>
+  gvs[vfm_abort_def] >> metis_tac[]
+QED
+
+Theorem asm_call_step_memory_exception:
+  s.contexts = (c,rb)::outer /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR (SOME exc),t) /\
+  u.contexts = (parent,parent_rb)::rest /\
+  proceed_call op sender address value ao az code stipend (Memory mr) u = (res,t) /\
+  stipend <= parent.gasUsed /\ LENGTH parent.stack < stack_limit /\
+  exc <> Reverted /\ ~vfm_abort (SOME exc) /\
+  (FST (HD t.contexts)).gasUsed <= (FST (HD t.contexts)).msgParams.gasLimit ==>
+  ?child child_rb.
+    t.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
+    step s = (INL (), t with <|
+      contexts := (parent with <| pc := SUC parent.pc;
+        stack := 0w :: parent.stack; returnData := [];
+        memory := buffer_write mr.offset [] parent.memory |>,parent_rb)::rest;
+      rollback := child_rb |>)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_step_terminal >> disch_tac >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  drule_all asm_handle_step_memory >> disch_tac >>
+  drule_all asm_proceed_call_memory_exception >> strip_tac >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem asm_call_step_terminal_abort:
+  s.contexts = (c,rb)::rest /\
+  next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
+  step_call op s = (INR e,t) /\ vfm_abort e ==>
+  step s = (INR e,t)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  drule_all asm_call_step_terminal >>
+  simp[handle_step_def, reraise_def]
 QED
 
 Theorem asm_expand_memory_append_zeros[local]:
