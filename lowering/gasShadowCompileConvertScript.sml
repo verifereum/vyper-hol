@@ -7,7 +7,7 @@ Ancestors
 Theorem gas_shadow_compiles_load_bytestring_as_word:
   gas_shadow_compiles (load_bytestring_as_word v opc) (load_bytestring_as_word v opc)
 Proof
-  simp[load_bytestring_as_word_def] >>
+  Cases_on `opc = SAR` >> simp[load_bytestring_as_word_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[] >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
 QED
