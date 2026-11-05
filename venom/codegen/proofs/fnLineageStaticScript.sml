@@ -234,6 +234,70 @@ Proof
   simp[NoAsms]
 QED
 
+Theorem ready_assign_source_def[local]:
+  codegen_ready_fn fn /\ MEM db fn.fn_blocks /\ MEM def db.bb_instructions /\
+  MEM u def.inst_outputs /\
+  FLOOKUP (dfg_build_function fn).dfg_defs u = SOME inst /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [Var w] ==>
+  ?source_bb source_inst.
+    MEM source_bb fn.fn_blocks /\ MEM source_inst source_bb.bb_instructions /\
+    MEM w source_inst.inst_outputs /\
+    fn_dominates fn source_bb.bb_label db.bb_label
+Proof
+  strip_tac >>
+  `ssa_form fn /\ def_dominates_uses fn` by gvs[codegen_ready_fn_def] >>
+  `MEM def (fn_insts fn)` by
+    (simp[fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  `dfg_get_def (dfg_build_function fn) u = SOME def` by
+    metis_tac[dfg_build_function_ssa_def] >>
+  `def = inst` by gvs[dfg_get_def_def] >>
+  `def_available_at fn db (SOME inst) w` by
+    (gvs[def_dominates_uses_def] >>
+     first_x_assum (qspecl_then [`db`, `def`] mp_tac) >> simp[]) >>
+  gvs[def_available_at_def] >> metis_tac[]
+QED
+
+Theorem normalize_dominating_def[local]:
+  codegen_ready_fn fn /\
+  MEM db fn.fn_blocks /\ MEM inst db.bb_instructions /\ MEM u inst.inst_outputs /\
+  fn_dominates fn db.bb_label target /\
+  normalize_operand (dfg_build_function fn) visited (Var u) = Var v ==>
+  ?vb vi. MEM vb fn.fn_blocks /\ MEM vi vb.bb_instructions /\
+    MEM v vi.inst_outputs /\ fn_dominates fn vb.bb_label target
+Proof
+  strip_tac >>
+  mp_tac (normalize_var_invariant |> Q.SPEC
+    `\x. ?vb vi. MEM vb fn.fn_blocks /\ MEM vi vb.bb_instructions /\
+       MEM x vi.inst_outputs /\ fn_dominates fn vb.bb_label target` |>
+    Q.SPEC `dfg_build_function fn` |> Q.SPEC `visited` |> Q.SPEC `Var u`) >>
+  (impl_tac >-
+    (simp[NoAsms] >> rpt strip_tac >> drule_all ready_assign_source_def >> strip_tac >>
+     metis_tac[ready_dominates_trans])) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem normalize_strict_dominating_def[local]:
+  codegen_ready_fn fn /\
+  MEM db fn.fn_blocks /\ MEM inst db.bb_instructions /\ MEM u inst.inst_outputs /\
+  fn_dominates fn db.bb_label target /\ db.bb_label <> target /\
+  normalize_operand (dfg_build_function fn) visited (Var u) = Var v ==>
+  ?vb vi. MEM vb fn.fn_blocks /\ MEM vi vb.bb_instructions /\
+    MEM v vi.inst_outputs /\ fn_dominates fn vb.bb_label target /\
+    vb.bb_label <> target
+Proof
+  strip_tac >>
+  mp_tac (normalize_var_invariant |> Q.SPEC
+    `\x. ?vb vi. MEM vb fn.fn_blocks /\ MEM vi vb.bb_instructions /\
+       MEM x vi.inst_outputs /\ fn_dominates fn vb.bb_label target /\
+       vb.bb_label <> target` |>
+    Q.SPEC `dfg_build_function fn` |> Q.SPEC `visited` |> Q.SPEC `Var u`) >>
+  (impl_tac >-
+    (simp[NoAsms] >> rpt strip_tac >>
+     drule_all ready_assign_source_def >> strip_tac >>
+     metis_tac[ready_dominates_trans, ready_dominates_antisym])) >>
+  disch_then (qspec_then `v` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 Theorem collect_phis_idempotent[local]:
   !instrs. collect_phis (collect_phis instrs) = collect_phis instrs
 Proof
