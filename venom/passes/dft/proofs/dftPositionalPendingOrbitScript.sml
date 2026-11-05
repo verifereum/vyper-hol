@@ -2,7 +2,8 @@ Theory dftPositionalPendingOrbit
 Ancestors
   dftCofinalSegments dftPositionalPendingClosure dftPositionalPendingGas
   dftOccurrenceMachine dftPositionalRuntime dftOriginalRuntime
-  dftPositionalEdit venomInst list arithmetic
+  dftPositionalEdit dftPositionalPhase dftOpenMachine dftOpenErase dftOccurrenceReplay
+  venomInst list arithmetic
 
 Theorem dft_pending_cofinal_segments:
   D = dft_pos_edit_ctx fi bi pre gas call post C /\
@@ -285,4 +286,89 @@ Proof
     (qspec_then `n` (mp_then Any mp_tac (cj 4 (iffLR pending_segment_account_def)))) >>
   disch_then drule_all >> strip_tac >>
   qexistsl [`j + A n`,`f`,`s`] >> simp[FUNPOW_ADD]
+QED
+
+Theorem dft_pending_phase_terminal_forward:
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  l.dft_occ_core = DftOpen (DftDone result) [] n ==>
+  zs = [] /\ ?m. r.dft_occ_core = DftOpen (DftDone result) [] m /\ n = m + LENGTH H
+Proof
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all dft_pos_pending_gas_stack_length >> strip_tac >>
+  gvs[dft_pos_control_def, dft_pos_pending_gas_events_def]
+QED
+
+Theorem dft_pending_phase_terminal_backward:
+  dft_pos_pending_aligned_phase w C D fi bi pre gas call post zs H l r /\
+  r.dft_occ_core = DftOpen (DftDone result) [] m ==>
+  zs = [] /\ ?n. l.dft_occ_core = DftOpen (DftDone result) [] n /\ n = m + LENGTH H
+Proof
+  simp[dft_pos_pending_aligned_phase_def, dft_pos_pending_gas_phase_def] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all dft_pos_pending_gas_stack_length >> strip_tac >>
+  gvs[dft_pos_control_def, dft_pos_pending_gas_events_def]
+QED
+
+Theorem dft_pending_terminal_next[local]:
+  c.dft_occ_core = DftOpen (DftDone result) [] n ==>
+  (dft_occ_oracle_next w C c).dft_occ_core = DftOpen (DftDone result) [] n
+Proof
+  Cases_on `result` >>
+  simp[dft_occ_oracle_next_def, dft_next_inf_def, dft_fill_def,
+    dft_fill_control_def, dft_open_next_def, dft_open_return_def, dft_erase_def]
+QED
+
+Theorem dft_pending_terminal_iter[local]:
+  !k c. c.dft_occ_core = DftOpen (DftDone result) [] n ==>
+  (FUNPOW (dft_occ_oracle_next w C) k c).dft_occ_core = DftOpen (DftDone result) [] n
+Proof
+  Induct_on `k` >> simp[FUNPOW_SUC] >> metis_tac[dft_pending_terminal_next]
+QED
+
+Theorem dft_pending_terminal_later[local]:
+  (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core = DftOpen (DftDone result) [] n /\
+  j <= k ==>
+  (FUNPOW (dft_occ_oracle_next w C) k l).dft_occ_core = DftOpen (DftDone result) [] n
+Proof
+  strip_tac >> `k = (k-j) + j` by decide_tac >>
+  metis_tac[FUNPOW_ADD, dft_pending_terminal_iter]
+QED
+
+Theorem dft_pending_orbit_terminal_forward:
+  (!i. i <= A i /\ i <= B i) /\
+  (!i. dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (FST (Z i)) (SND (Z i))
+    (FUNPOW (dft_occ_oracle_next w C) (A i) l)
+    (FUNPOW (dft_occ_oracle_next w D) (B i) r)) /\
+  (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core = DftOpen (DftDone result) [] n ==>
+  ?k m. (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core = DftOpen (DftDone result) [] m
+Proof
+  strip_tac >>
+  `j <= A j` by metis_tac[] >>
+  `(FUNPOW (dft_occ_oracle_next w C) (A j) l).dft_occ_core = DftOpen (DftDone result) [] n` by
+    metis_tac[dft_pending_terminal_later] >>
+  qpat_x_assum `!i. dft_pos_pending_aligned_phase _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `j` assume_tac) >>
+  drule_all dft_pending_phase_terminal_forward >> strip_tac >>
+  qexistsl [`B j`,`m`] >> simp[]
+QED
+
+Theorem dft_pending_orbit_terminal_backward:
+  (!i. i <= A i /\ i <= B i) /\
+  (!i. dft_pos_pending_aligned_phase w C D fi bi pre gas call post
+    (FST (Z i)) (SND (Z i))
+    (FUNPOW (dft_occ_oracle_next w C) (A i) l)
+    (FUNPOW (dft_occ_oracle_next w D) (B i) r)) /\
+  (FUNPOW (dft_occ_oracle_next w D) k r).dft_occ_core = DftOpen (DftDone result) [] m ==>
+  ?j n. (FUNPOW (dft_occ_oracle_next w C) j l).dft_occ_core = DftOpen (DftDone result) [] n
+Proof
+  strip_tac >>
+  `k <= B k` by metis_tac[] >>
+  `(FUNPOW (dft_occ_oracle_next w D) (B k) r).dft_occ_core = DftOpen (DftDone result) [] m` by
+    metis_tac[dft_pending_terminal_later] >>
+  qpat_x_assum `!i. dft_pos_pending_aligned_phase _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `k` assume_tac) >>
+  drule_all dft_pending_phase_terminal_backward >> strip_tac >>
+  qexistsl [`A k`,`n`] >> simp[]
 QED
