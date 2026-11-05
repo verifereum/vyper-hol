@@ -4,7 +4,7 @@ Ancestors decoderNavigationPtr calldataOverwritePtr calldataClampPtr entryDispat
   decoderGhostFramePtr fragExecPtr ptrSafeRun ptrDiscipline bodyPtrDefs
   venomExecSemantics venomInst venomState compileEnv emitHelper fragExec
   words finite_map pred_set list arithmetic codegenRel instIdxIndep contextCodegenRel
-  emitHelperProps exprLoweringProps abiDecoderLoop
+  emitHelperProps exprLoweringProps abiDecoderLoop ghostPcTransportPtr exprLowering abiEncoder decoderArraySetupPtr
 
 Theorem member_navigation_state_frame[local]:
   MEM opc [ADD; CALLDATALOAD] /\
@@ -237,3 +237,41 @@ Proof
     op_prov_def, mk_inst_def, FLOOKUP_UPDATE, lookup_var_def, update_var_def,
     eval_operand_def, w2n_add_2, w2n_n2w, LESS_MOD] >> decide_tac
 QED
+
+Theorem member_navigation_emit_endpoint_pc:
+  MEM opc [ADD; CALLDATALOAD] /\ emit_op opc ops sa = (out,sb) /\
+  EVERY (\op. op_taint tn op = {}) ops /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = sa.cs_current_bb ==>
+  ?x H u. out = Var x /\ op_taint u out = {} /\
+    (EVERY (\op. op_prov G op = NONE) ops ==> op_prov H out = NONE) /\
+    t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
+    t.vs_allocas = s.vs_allocas /\
+    u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
+    u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q s /\
+      FLOOKUP H q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q)) /\
+    ((!fuel. ptr_safe_run D lower fuel ctx func PG H u
+      (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+     !fuel. ptr_safe_run D lower fuel ctx func PG G tn
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts))
+Proof
+  strip_tac >>
+  `~is_terminator opc` by fs[MEM, is_terminator_def] >>
+  `run_inst_seq (emitted_insts sa sb)
+      (s with vs_inst_idx := LENGTH sa.cs_current_insts) =
+      OK (t with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+    (drule_all emit_op_run_pc >>
+     disch_then (qspecl_then [`s`,`LENGTH sa.cs_current_insts`] mp_tac) >>
+     simp[exec_result_map_def]) >>
+  `allocas_from lower (s with vs_inst_idx := LENGTH sa.cs_current_insts)` by
+    (fs[allocas_from_def] >> metis_tac[]) >>
+  `(s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_current_bb = sa.cs_current_bb /\
+   (s with vs_inst_idx := LENGTH sa.cs_current_insts).vs_inst_idx = LENGTH sa.cs_current_insts` by simp[] >>
+  drule_all member_navigation_emit_endpoint >>
+  disch_then (qspecl_then [`PG`,`G`,`D`] (qx_choose_then `x` strip_assume_tac)) >>
+  qexistsl_tac [`x`,`H`,`u`] >>
+  gvs[lookup_var_def]
+QED
+
