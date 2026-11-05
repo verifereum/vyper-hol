@@ -6,6 +6,7 @@
 Theory externalReturnValueMem
 Ancestors
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
+  externalReturnZeroLayout
   nonreentrantExit
   stmtSimDefs loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
