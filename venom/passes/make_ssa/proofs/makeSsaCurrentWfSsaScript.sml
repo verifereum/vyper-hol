@@ -5559,6 +5559,48 @@ Proof
   simp[]
 QED
 
+Theorem current_wf_no_leading_phi_member[local]:
+  !bbs bb. ~blocks_have_leading_phi bbs /\ MEM bb bbs ==>
+    !i. i < LENGTH bb.bb_instructions /\
+      (EL i bb.bb_instructions).inst_opcode = PHI ==> ~bb_well_formed bb
+Proof
+  Induct >- simp[] >> gen_tac >> simp[blocks_have_leading_phi_def] >>
+  Cases_on `h.bb_instructions` >> simp[]
+  >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
+  rpt strip_tac >> Cases_on `bb = h`
+  >- (gvs[bb_well_formed_def] >> Cases_on `i` >> gvs[] >>
+      qpat_x_assum `!i j. _` (qspecl_then [`0`, `SUC n`] mp_tac) >> simp[]) >>
+  metis_tac[]
+QED
+
+Theorem current_wf_phi_context_no_cleanup_dominates:
+  current_wf_phi_context s fn renamed s' A H events /\ entry_block fn = SOME eb /\
+  ~blocks_have_leading_phi fn.fn_blocks ==>
+  def_dominates_uses (fn with fn_blocks := renamed)
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events /\
+   wf_function fn /\ fn_inst_wf fn /\ fn_defs_reach_uses fn /\
+   fn_phi_operands_single_def fn /\ all_reachable fn /\ first_block_no_preds fn /\
+   first_block_no_phi fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s` by
+    fs[current_wf_phi_context_def] >>
+  `!h k r slots. ~current_wf_original_phi_at fn A renamed h k r slots` by
+    (rpt strip_tac >> fs[current_wf_original_phi_at_def] >>
+     `MEM old fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+     metis_tac[current_wf_no_leading_phi_member, wf_function_def]) >>
+  simp[def_dominates_uses_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = PHI`
+  >- (simp[] >>
+      `?q. q < LENGTH bb.bb_instructions /\ inst = EL q bb.bb_instructions` by
+        metis_tac[MEM_EL] >>
+      drule_all current_wf_phi_context_lookup >> strip_tac >>
+      qpat_x_assum `inst = EL q _` SUBST_ALL_TAC >>
+      drule_all current_wf_phi_occurrence_producer >> metis_tac[]) >>
+  simp[] >> rpt strip_tac >>
+  irule current_wf_precleanup_ordinary_available >> simp[] >>
+  metis_tac[EL_MEM]
+QED
+
 (* Bounded cleanup probe: two backedge predecessors of an original PHI. *)
 Definition current_wf_probe_fork_def:
   current_wf_probe_fork = mk_raw_function "fork"
