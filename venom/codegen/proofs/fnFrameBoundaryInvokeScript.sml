@@ -1744,14 +1744,15 @@ QED
 (* Spill offsets of the cleanup are covered by the prefix spill invariant on
    FRONT ops: the last op of the plan is never a spill. *)
 Theorem invoke_cleanup_spill_bounds:
-  !f lo pre lbl outs nl halting called pops popped dfg inst term opts swapped ps.
+  !f lo iops rops b lbl outs nl halting called pops popped dfg inst term opts swapped ps.
   (if outs = [] then ([],called)
    else if ~halting \/ LENGTH outs > 1 then
      popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
    else ([],called)) = (pops,popped) /\
   (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
    else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
-  prefix_spill_wf f lo (FRONT (pre ++ [SOLabel lbl] ++ pops ++ opts)) ps ==>
+  prefix_spill_wf f lo (FRONT (iops ++ rops ++
+    [SOPushLabel lbl; SOPushLabel b; SOEmit "JUMP"; SOLabel lbl] ++ pops ++ opts)) ps ==>
   !off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)
 Proof
   rpt gen_tac >> strip_tac >> rpt strip_tac >>
@@ -1764,11 +1765,39 @@ Proof
      qpat_x_assum `(if _ then _ else _) = (opts,swapped)` mp_tac >>
      rw[optimistic_swap_plan_def] >> gvs[AllCaseEqs()] >>
      metis_tac[invoke_do_swap_last]) >>
-  `MEM (SOSpill off) (FRONT (pre ++ [SOLabel lbl] ++ pops ++ opts))` by
+  `MEM (SOSpill off) (FRONT (iops ++ rops ++
+     [SOPushLabel lbl; SOPushLabel b; SOEmit "JUMP"; SOLabel lbl] ++ pops ++ opts))` by
     (irule invoke_mem_front >> simp[] >>
      `pops ++ opts <> []` by (strip_tac >> fs[]) >>
-     `LAST (pre ++ [SOLabel lbl] ++ pops ++ opts) = LAST (pops ++ opts)` by
+     `LAST (iops ++ rops ++
+        [SOPushLabel lbl; SOPushLabel b; SOEmit "JUMP"; SOLabel lbl] ++ pops ++ opts) =
+      LAST (pops ++ opts)` by
        metis_tac[LAST_APPEND_NOT_NIL, APPEND_ASSOC] >>
      fs[]) >>
   metis_tac[prefix_spill_wf_address_bound]
+QED
+
+Theorem invoke_return_block:
+  !prog pc f iops rops a b pops opts.
+  asm_block_at prog pc (execute_plan f
+    (iops ++ rops ++ [SOPushLabel a; SOPushLabel b; SOEmit "JUMP"; SOLabel a] ++
+     pops ++ opts)) ==>
+  asm_block_at prog (pc + LENGTH (execute_plan f (iops ++ rops)) + 3)
+    (execute_plan f (SOLabel a :: (pops ++ opts)))
+Proof
+  rpt gen_tac >>
+  `iops ++ rops ++ [SOPushLabel a; SOPushLabel b; SOEmit "JUMP"; SOLabel a] ++
+     pops ++ opts =
+   (iops ++ rops ++ [SOPushLabel a; SOPushLabel b; SOEmit "JUMP"]) ++
+     (SOLabel a :: (pops ++ opts))` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  `LENGTH (execute_plan f (iops ++ rops ++
+     [SOPushLabel a; SOPushLabel b; SOEmit "JUMP"])) =
+   LENGTH (execute_plan f (iops ++ rops)) + 3` by
+    simp[execute_plan_append, execute_plan_def, exec_stack_op_def] >>
+  strip_tac >>
+  qpat_x_assum `asm_block_at _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [asm_block_at_append] o
+     ONCE_REWRITE_RULE [execute_plan_append]) >>
+  qpat_x_assum `LENGTH _ = _` (fn th => fs[th])
 QED
