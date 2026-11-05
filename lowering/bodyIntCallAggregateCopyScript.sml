@@ -4,6 +4,7 @@ Ancestors
   exprLoweringProps localPtrsProps loweringSlice loweringPosts valueEncoding
   valueEncodingProps vyperValue vyperValueOperation context freshWrites
   venomInst words finite_map fragExec exprSimAlloc storageDecodeMemory
+  immutableCopyExecution
 
 (* copy_static hides only registers, memory and execution position.
    Contract observations therefore project from its exact equality. *)
@@ -155,4 +156,125 @@ val _ =
     if null axioms andalso null (Thm.hyp th) andalso
        List.all (fn oracle => oracle = "DISK_THM") oracles then ()
     else raise Fail "Storage copy forcing has unproved dependencies"
+  end;
+
+Theorem unwrap_runtime_code_copy_storage_frame_frag:
+  !ctx func cenv cx e es sa sm sb s0 es' v t p op R s1.
+    unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
+    p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
+    local_ptrs_reserved cenv sa /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ sa.cs_next_var <= sm.cs_next_var /\
+    sa.cs_next_id <= sm.cs_next_id /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+    (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
+       type_memory_bytes cenv t = type_memory_size tvt) /\
+    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s1 ==>
+    frag_exec ctx sm sb (\s. s = s1)
+      (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+           contract_storage s = contract_storage s1 /\
+           contract_transient s = contract_transient s1) R
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+  simp[unwrap_value_def, compile_ensure_in_memory_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
+  gvs[] >> rename1 `compile_alloc_buffer _ sm = (buf,mid)` >>
+  rename1 `fn_has_code sm sf func` >> suspend "allocation"
+QED
+
+Resume unwrap_runtime_code_copy_storage_frame_frag[allocation]:
+  `t = expr_type e` by gvs[vv_post_def, vv_holds_def] >>
+  `?a. eval_operand p.ptr_operand s1 = SOME a /\
+       immutable_holds cenv cx t (Value v) a es'` by
+    gvs[vv_post_def, vv_holds_def] >>
+  `?tv. evaluate_type (get_tenv cx) t = SOME tv` by
+    (gvs[immutable_holds_def] >> metis_tac[]) >>
+  `val_wf tv v /\ w2n a + type_memory_size tv < dimword (:256)` by
+    (drule_all immutable_holds_bounds >> simp[]) >>
+  `type_memory_bytes cenv t = type_memory_size tv` by metis_tac[] >>
+  `type_memory_bytes cenv t < dimword (:256)` by decide_tac >>
+  `ci_mono sm mid` by
+    (qspecl_then [`type_memory_bytes cenv t`, `sm`] mp_tac
+       ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono mid sf` by
+    (qpat_assum `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> strip_tac >>
+     metis_tac[ci_mono_compile_imm_copy_to_memory, pairTheory.SND]) >>
+  `cs_extends sm mid /\ cs_extends mid sf /\
+   sm.cs_next_var <= mid.cs_next_var /\ mid.cs_next_id <= sf.cs_next_id` by
+    gvs[ci_mono_def] >>
+  `fn_has_code sm mid func` by metis_tac[fn_has_code_split] >>
+  `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
+  `stmt_state_rel ctx func cenv cx es' s1` by gvs[vv_post_def] >>
+  drule_all alloc_buffer_source_frag >>
+  disch_then (qspec_then `R` strip_assume_tac) >> suspend "suffix"
+QED
+
+Resume unwrap_runtime_code_copy_storage_frame_frag[suffix]:
+  `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
+    (rw[copy_old_operand_def] >> gvs[] >> metis_tac[not_fresh_at_mono]) >>
+  `MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
+       [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
+    metis_tac[buffer_alloc_code] >>
+  `(type_memory_bytes cenv t + 31) DIV 32 = type_slot_size tv` by
+    (simp[type_memory_size_slots] >> decide_tac) >>
+  qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
+  disch_then irule >> simp[] >>
+  drule_all copy_runtime_frag >>
+  disch_then (qspecl_then [`ctx`, `R`] mp_tac) >>
+  disch_then (mp_then Any mp_tac frag_exec_conseq) >>
+  disch_then irule >> simp[] >> gen_tac >> strip_tac >>
+  conj_tac >- suspend "semantic_post" >>
+  metis_tac[copy_static_contract_storage, copy_static_contract_transient]
+QED
+
+Resume unwrap_runtime_code_copy_storage_frame_frag[semantic_post]:
+  `s.vs_memory = (immutable_transfers F F a w (type_slot_size tv) 0 u).vs_memory` by
+    metis_tac[] >>
+  `w2n w + type_memory_size tv < dimword (:256)` by metis_tac[] >>
+  drule_all copy_runtime_contents >> strip_tac >> suspend "runtime_post"
+QED
+
+Resume unwrap_runtime_code_copy_storage_frame_frag[runtime_post]:
+  `LENGTH u.vs_memory <= LENGTH s.vs_memory /\
+   (!off len. off + len <= w2n w \/
+      w2n w + type_memory_bytes cenv t <= off ==>
+      mem_bytes_at off len s.vs_memory = mem_bytes_at off len u.vs_memory)` by
+    (Cases_on `type_slot_size tv = 0`
+     >- gvs[immutable_transfers_def] >>
+     `immutable_transfers F F a w (type_slot_size tv) 0 u =
+       write_memory_with_expansion (w2n w)
+         (mem_bytes_at (w2n a) (type_memory_size tv) u.vs_data_section) u` by
+       (qspecl_then [`type_slot_size tv`, `w2n a`, `w2n w`, `0`, `u`] mp_tac
+         immutable_runtime_transfers_snapshot >>
+        simp[mem_bytes_at_def, type_memory_size_slots] >>
+        gvs[type_memory_size_slots]) >>
+     gvs[] >> conj_tac
+     >- simp[immutableMemoryFrameTheory.immutable_write_memory_capacity] >>
+     rpt strip_tac >> simp[write_memory_mem_bytes_at_disjoint]) >>
+  `eval_operand (Var p') s = SOME w` by
+    (qsuff_tac `eval_operand (Var p') s = eval_operand (Var p') u`
+     >- gvs[] >>
+     irule storage_copy_operand_preserved >> simp[] >>
+     qexists `mid` >> simp[]) >>
+  irule copy_buffer_post_transport >>
+  qpat_assum `t = expr_type e` (fn th => rewrite_tac[GSYM th]) >>
+  simp[] >> goal_assum (drule_at Any) >> simp[mk_inst_def, SF SFY_ss] >>
+  qexists `mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))]
+       [STRING #"%" (toString sm.cs_next_var)]` >>
+  qexistsl [`mid`, `s1`, `sm`, `u`, `LocatedValue t p`] >>
+  simp[mk_inst_def] >> gnvs[] >> metis_tac[]
+QED
+
+Finalise unwrap_runtime_code_copy_storage_frame_frag
+
+val _ =
+  let val th = unwrap_runtime_code_copy_storage_frame_frag
+      val (oracles,axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Runtime code copy forcing has unproved dependencies"
   end;
