@@ -15,6 +15,106 @@ Ancestors
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmContextLength vfmDecreasesGas
   vfmAccountFrame asmEncodeParse rich_list vfmOperation regularMemorySim vfmBuffer vfmTypes list spillSim
+Libs
+  wordsLib
+
+Theorem asm_precompile_sha256_success:
+  s.contexts = (c,rb)::rest /\
+  precompile_sha2_256 s = (INR NONE,t) ==>
+  precompile_result 2w (buffer_to_list c.msgParams.data) =
+    SOME (SOME (FST (HD t.contexts)).returnData) /\
+  t.rollback = s.rollback /\
+  (FST (HD t.contexts)).logs = c.logs
+Proof
+  strip_tac >>
+  qhdtm_x_assum `precompile_sha2_256` mp_tac >>
+  simp[precompile_sha2_256_def, get_call_data_def, consume_gas_def,
+       set_return_data_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+       finish_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem asm_precompile_ecrecover_success:
+  s.contexts = (c,rb)::rest /\
+  c.returnData = [] /\ precompile_ecrecover s = (INR NONE,t) ==>
+  precompile_result 1w (buffer_to_list c.msgParams.data) =
+    SOME (SOME (FST (HD t.contexts)).returnData) /\
+  t.rollback = s.rollback /\
+  (FST (HD t.contexts)).logs = c.logs
+Proof
+  strip_tac >>
+  qhdtm_x_assum `precompile_ecrecover` mp_tac >>
+  simp[precompile_ecrecover_def, get_call_data_def, consume_gas_def,
+       set_return_data_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+       finish_def, precompile_result_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[bind_def, ignore_bind_def, return_def, finish_def, fail_def,
+      get_current_context_def, set_current_context_def, AllCaseEqs()]
+QED
+
+Theorem asm_precompile_ecadd_success:
+  s.contexts = (c,rb)::rest /\
+  precompile_ecadd s = (INR NONE,t) ==>
+  precompile_result 6w (buffer_to_list c.msgParams.data) =
+    SOME (SOME (FST (HD t.contexts)).returnData) /\
+  t.rollback = s.rollback /\
+  (FST (HD t.contexts)).logs = c.logs
+Proof
+  strip_tac >>
+  qhdtm_x_assum `precompile_ecadd` mp_tac >>
+  simp[precompile_ecadd_def, get_call_data_def, consume_gas_def,
+       set_return_data_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+       finish_def, precompile_result_ecadd] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[bind_def, ignore_bind_def, return_def, finish_def, fail_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, ignore_bind_def, return_def, finish_def,
+      get_current_context_def, set_current_context_def]
+QED
+
+Theorem asm_precompile_ecmul_success:
+  s.contexts = (c,rb)::rest /\
+  precompile_ecmul s = (INR NONE,t) ==>
+  precompile_result 7w (buffer_to_list c.msgParams.data) =
+    SOME (SOME (FST (HD t.contexts)).returnData) /\
+  t.rollback = s.rollback /\
+  (FST (HD t.contexts)).logs = c.logs
+Proof
+  strip_tac >>
+  qhdtm_x_assum `precompile_ecmul` mp_tac >>
+  simp[precompile_ecmul_def, get_call_data_def, consume_gas_def,
+       set_return_data_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def,
+       finish_def, precompile_result_ecmul] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >>
+  BasicProvers.FULL_CASE_TAC >>
+  gvs[bind_def, ignore_bind_def, return_def, finish_def, fail_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, ignore_bind_def, return_def, finish_def,
+      get_current_context_def, set_current_context_def]
+QED
+
+Theorem asm_computed_precompile_success:
+  s.contexts = (c,rb)::rest /\ c.returnData = [] /\
+  (address = 1w \/ address = 2w \/ address = 6w \/ address = 7w) /\
+  dispatch_precompiles address s = (INR NONE,t) ==>
+  precompile_result address (buffer_to_list c.msgParams.data) =
+    SOME (SOME (FST (HD t.contexts)).returnData) /\
+  t.rollback = s.rollback /\
+  (FST (HD t.contexts)).logs = c.logs
+Proof
+    `dimindex (:160) = 160` by simp[] >>
+  strip_tac >> gvs[dispatch_precompiles_def, wordsTheory.dimword_def]
+  >- (drule_all asm_precompile_ecrecover_success >> simp[])
+  >- (drule_all asm_precompile_sha256_success >> simp[])
+  >- (drule_all asm_precompile_ecadd_success >> simp[])
+  >> drule_all asm_precompile_ecmul_success >> simp[]
+QED
 
 Theorem asm_call_child_parent_msgParams:
   step_call op s = (q,e) /\ s.contexts <> [] /\
