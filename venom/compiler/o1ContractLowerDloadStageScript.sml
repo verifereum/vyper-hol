@@ -13,6 +13,7 @@
  *   lower_dload_stage_shape        - no eom and no DALLOCA kept
  *   lower_dload_stage_fmp_free     - no FMP signature or raw FMP op kept
  *   lower_dload_stage_callee_first - the callee-first order kept
+ *   lower_dload_stage_ssa_form     - SSA form kept
  *   lower_dload_stage_dload_ok     - the DLOAD offset bound, vacuous after
  *   lower_dload_stage_headroom     - the DLOAD headroom bound, raw_mem_ok's
  *                                    frontier bound after
@@ -232,6 +233,22 @@ Proof
   metis_tac[]
 QED
 
+(* LowerDload's fresh variables keep SSA form. *)
+Theorem lower_dload_stage_ssa_form:
+  !rpolicy view C C'.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    EVERY ssa_form C.ctx_functions ==>
+    EVERY ssa_form C'.ctx_functions
+Proof
+  rw[ctx_pass_stage_def, EVERY_EL, LIST_REL_EL_EQN] >>
+  rename1 `n < LENGTH C.ctx_functions` >>
+  qpat_x_assum `!n. n < LENGTH C.ctx_functions ==> ?observed. _`
+    (qspec_then `n` mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule lower_dload_step_supply >> strip_tac >>
+  metis_tac[lower_dload_function_supply_ssa_form]
+QED
+
 (* LowerDload keeps the inputs MakeSSA needs: it adds no PHI, keeps every
    block reachable, and each variable it introduces is defined before its
    uses in the same block. *)
@@ -278,6 +295,8 @@ Proof
   `EVERY make_ssa_input_ok C'.ctx_functions` by
     (irule lower_dload_stage_make_ssa_input_ok >> fs[o1_src_inv_def] >>
      metis_tac[]) >>
+  `EVERY ssa_form C'.ctx_functions` by
+    metis_tac[lower_dload_stage_ssa_form] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
     (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
