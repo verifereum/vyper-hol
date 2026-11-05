@@ -14,7 +14,33 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* ADMITTED: a piece of the body induction. *)
+(* ADMITTED: a piece of the body induction.
+   Intuition.  Runtime only: the judgments assume ~cenv.ce_is_ctor, and
+   body_inv makes it cx.in_deploy, so lookup_callable_function is the
+   Internal lookup.  The S1 half of each post (expr_post, vv_post) is S1's
+   reasoning (bodySimMain's body_sim_mutual covers this case at this base);
+   the ghost half follows compile_call's pieces in order:
+   - the arguments and defaults by their IHs (ptr_val_ok/ptr_vv_ok of each
+     argument), then their staging into fresh buffers (stage_mem_arg_frag's
+     ptr twin: copies into a new alloca, so the staged pointer's site is
+     the alloca's);
+   - the INVOKE edge: the callee's run is ptr-safe from its entry with
+     PG = MAP (op_prov G) ops.  Its prologue gives each pointer parameter
+     its site from PG and the return buffer's from the caller's alloca, so
+     the callee's ghost_inv holds at its body's start, and the IH
+     body_stmts_ptr_ok cxf body' at the callee's frame (d = the return
+     buffer, RetQ carrying the ghost) gives a ptr-safe counted path to its
+     IntRet, which gas_path_ptr_exec turns into the ptr_safe_blocks the
+     INVOKE's ptr_safe_step asks for;
+   - the return: the caller's ghost after the INVOKE is ghost_step's
+     (callee taint, caller's t_var minus the outputs); the callee writes
+     only above the caller's live regions (intCallFrame's
+     callee_writes_above), so ghost_kept and the caller's live locals'
+     ghost_inv carry over; the result (stack word, stack multi-return
+     stored by store_multi_results, or the memory return buffer) is
+     ptr_val_ok/ptr_vv_ok with the return buffer's site.
+   One lemma per return form (stack word, stack multi-return, memory
+   return, no value). *)
 Theorem body_intcall_case_ptr:
   !cx v16 src_id_opt fn es v17.
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
