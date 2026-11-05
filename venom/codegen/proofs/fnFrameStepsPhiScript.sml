@@ -721,7 +721,8 @@ QED
 (* phi_prefix_frame_sim without the join-entry facts: it assumes only that
    each PHI's stack hit (the shallowest of its variable operands on the
    entry stack, which generate_phi_plan pokes) is the operand resolve_phi
-   selects for the edge taken.  The join case (fnFrameSteps) and the
+   selects for the edge taken.  A PHI with no hit (its operand spilled,
+   say) gets no code and no slot.  The join case (fnFrameSteps) and the
    single-predecessor case both derive that from their entry stacks.
 
    Why it should hold: each PHI pokes its hit's slot with its output
@@ -743,9 +744,9 @@ Theorem phi_prefix_hits_frame_sim:
     bb <> HD fn.fn_blocks /\
     vs.vs_prev_bb = SOME pred /\
     (!inst. MEM inst phis ==>
-       ?dist.
+       !dist.
          stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
-           ps.ps_stack = SOME dist /\
+           ps.ps_stack = SOME dist ==>
          resolve_phi pred inst.inst_operands =
            SOME (stack_peek dist ps.ps_stack)) /\
     generated_plan_state_wf_marked base ps /\
