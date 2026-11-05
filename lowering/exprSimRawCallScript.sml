@@ -29,6 +29,7 @@ Ancestors
   allocLimits freshWrites varsExt builtinSimple builtinProps
   list pair vyperMisc fragExec loweringSlice exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
+  exprSimRawCallCalldata rawCallFragPath
   extCallOracleStep exprCallbackContracts exprCallBounds exprLowering
   exprLoweringProps emitHelper emitHelperProps compileEnv localPtrsProps valueEncoding
   vyperAST vyperInterpreter vyperState vyperValue vyperTyping
@@ -2079,6 +2080,7 @@ Theorem raw_call_emit_run:
   eval_operand ao_op s = SOME ao /\ eval_operand az_op s = SOME az /\
   eval_operand ro_op s = SOME ro /\ eval_operand rz_op s = SOME rz /\
   (~static_call ==> eval_operand val_op s = SOME vw) /\
+  (~static_call /\ s.vs_call_ctx.cc_static ==> vw = 0w) /\
   exec_ext_call
     (mk_inst sm.cs_next_id (if static_call then STATICCALL else CALL)
       (if static_call then [gas_op; to_op; ao_op; az_op; ro_op; rz_op]
@@ -2090,7 +2092,8 @@ Theorem raw_call_emit_run:
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   Cases_on `static_call` >>
-  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def]
+  gvs[run_inst_seq_def, Once step_inst_base_def, mk_inst_def] >>
+  Cases_on `s.vs_call_ctx.cc_static` >> gvs[]
 QED
 
 (* A fresh result variable is disjoint from source locals even after adoption. *)
@@ -2114,24 +2117,25 @@ Theorem raw_call_oracle_stmt_frame[local]:
   es' = SND (adopt_call_outcome rq outcome es1) /\
   stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' t /\
   t.vs_vars = s.vs_vars /\ t.vs_allocas = s.vs_allocas /\
-  t.vs_alloca_next = s.vs_alloca_next ==>
+  t.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_fmp = s.vs_fmp /\ t.vs_labels = s.vs_labels ==>
   stmt_state_rel ctx func cenv cx es' t
 Proof
   strip_tac >>
   `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
-    (drule take_call_outcome_frame >>
-     simp[Once evaluation_state_component_equality] >> strip_tac >>
-     qpat_x_assum `es' = _` mp_tac >>
-     simp[adopt_call_outcome_equation] >>
-     Cases_on `outcome.co_success /\ ~rq.cr_static` >> simp[] >>
-     rpt strip_tac >> gvs[]) >>
-  irule stmt_state_rel_allocas_frame >>
-  reverse conj_tac >- (simp[] >> qexistsl_tac [`es`,`s`] >> simp[]) >>
-  irule immutable_alloca_sep_fields >>
-  qexistsl_tac [`s`,`es`] >> simp[] >>
-  reverse conj_tac >- fs[stmt_state_rel_def] >>
-  simp[local_region_def, lookup_var_def] >> metis_tac[]
+    (drule raw_call_take_adopt_fields >> simp[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     fs[stmt_state_rel_def, lookup_var_def]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  conj_tac
+  >- (irule immutable_alloca_sep_fields >>
+      qexistsl_tac [`s`,`es`] >> gvs[] >>
+      reverse conj_tac >- fs[stmt_state_rel_def] >>
+      simp[local_region_def, lookup_var_def] >> metis_tac[]) >>
+  qexistsl_tac [`es`,`s`] >> simp[]
 QED
+
 
 (* The two new blocks are essential: the failure arm is not a linear prefix
    of the successful arm.  Leave the final length-store program packaged. *)
@@ -2573,6 +2577,17 @@ Proof
     (irule local_ptrs_rel_frame >> qexists_tac `t` >>
      simp[] >> fs[stmt_state_rel_def, state_rel_def] >>
      conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
+  `fmp_room ctx func u` by
+    (irule fmp_room_fields >> qexists_tac `t` >> fs[stmt_state_rel_def]) >>
+  `immutable_base_zero cenv u` by
+    (fs[stmt_state_rel_def, immutable_base_zero_alt] >>
+     rpt strip_tac >> first_x_assum drule >>
+     rename1 `cenv.ce_imm_alloca = SOME operand` >>
+     Cases_on `operand` >> simp[] >> strip_tac >>
+     rename1 `FLOOKUP u.vs_vars x = SOME 0w` >>
+     qpat_x_assum `!a w. eval_operand a t = SOME w ==> _`
+       (qspec_then `Var x` mp_tac) >>
+     simp[eval_operand_def, lookup_var_def]) >>
   fs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
     accounts_rel_def, logs_rel_def, immutables_rel_def, venomMemDefsTheory.alloca_inv_def,
     venomMemDefsTheory.allocas_non_overlapping_def,
@@ -3015,7 +3030,8 @@ Proof
        `rz` |-> `(n2w cap : bytes32)`]) >>
   `~s.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   `oracle_state.vs_vars = s.vs_vars /\ oracle_state.vs_allocas = s.vs_allocas /\
-   oracle_state.vs_alloca_next = s.vs_alloca_next` by
+   oracle_state.vs_alloca_next = s.vs_alloca_next /\
+   oracle_state.vs_fmp = s.vs_fmp /\ oracle_state.vs_labels = s.vs_labels` by
     (qpat_x_assum `oracle_state = _ with <| vs_outcomes := _; vs_requests := _;
        vs_accounts := _; vs_transient := _; vs_logs := _;
        vs_pending_deletions := _; vs_returndata := _; vs_memory := _ |>`
@@ -3044,7 +3060,8 @@ QED
 
 Finalise raw_call_oracle_emit_run_aged
 
-val _ = if null (hyp raw_call_oracle_emit_run_aged) then ()
+val _ = if null (hyp raw_call_oracle_emit_run_aged) then
+  print "Checked raw_call_oracle_emit_run_aged Resume/Finalise: no retained hypotheses\n"
   else raise Fail "raw_call_oracle_emit_run_aged retained hypotheses";
 
 Theorem raw_call_finish_frag_aged[local]:

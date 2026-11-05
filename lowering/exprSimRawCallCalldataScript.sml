@@ -2442,7 +2442,7 @@ Definition raw_call_buffer_frame_def[local]:
     w2n w + (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) < dimword (:256)
 End
 
-Theorem raw_call_take_adopt_fields[local]:
+Theorem raw_call_take_adopt_fields:
   take_call_outcome addr data value es = (INL (rq,outcome),es1) ==>
     (SND (adopt_call_outcome rq outcome es1)).scopes = es.scopes /\
     (SND (adopt_call_outcome rq outcome es1)).immutables = es.immutables
