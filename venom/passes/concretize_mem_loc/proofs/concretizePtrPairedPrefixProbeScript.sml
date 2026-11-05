@@ -313,3 +313,19 @@ Proof
       metis_tac[optionTheory.IS_SOME_DEF]) >>
   gvs[concretize_positions_unchanged]
 QED
+
+(* Setup copies the final runtime argument into the return-PC token even
+   when that argument is an ordinary relocated pointer. *)
+Theorem ptr_paired_call_last_arg_obstruction:
+  ~NULL f.fn_blocks ==>
+  ptr_args_transport (FEMPTY |+ ((0,0),(1,1)))
+    (FEMPTY |+ (Allocation 0,(2,1))) [SOME (0,0)] [{}]
+    [1w] [2w] /\
+  ?cs ct. setup_callee f [1w] s = SOME cs /\
+    setup_callee f [2w] s = SOME ct /\ ~ptr_shared_fields cs ct
+Proof
+  strip_tac >> conj_tac
+  >- (simp[ptr_args_transport_def, ptr_value_transport_def, FLOOKUP_UPDATE] >>
+      wordsLib.WORD_DECIDE_TAC) >>
+  simp[setup_callee_def, ptr_shared_fields_def]
+QED
