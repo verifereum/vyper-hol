@@ -556,17 +556,6 @@ Proof
   rpt strip_tac >> pairarg_tac >> gvs[]
 QED
 
-Triviality mem_write_result_class[local]:
-  !inst s vs' a.
-    is_mem_write_op inst.inst_opcode ==>
-    step_inst_base inst s <> Halt vs' /\
-    (step_inst_base inst s = Abort a vs' ==> inst.inst_opcode = RETURNDATACOPY)
-Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (match_mp_tac mem_write_not_halt >> simp[]) >>
-  strip_tac >> drule_all mem_write_abort_opcode >> simp[]
-QED
-
 Triviality alloca_not_halt_abort[local]:
   !inst s vs' a.
     is_alloca_op inst.inst_opcode ==>

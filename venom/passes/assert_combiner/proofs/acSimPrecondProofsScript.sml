@@ -345,31 +345,6 @@ Proof
    ac_extend_mp_lookup_tac (), ac_extend_mp_lookup_tac ()]
 QED
 
-(* Head-drop + mp extension: compose transfer_same + extend_mp *)
-Triviality ac_sim_precond_transfer_ext[local]:
-  !h insts cands mp id pred dfg s_t V.
-    ac_sim_precond cands mp dfg (h::insts) s_t V ==>
-    (!i. MEM i insts ==> i.inst_id <> id) /\
-    eval_operand pred s_t = SOME 0w /\
-    (!i x. MEM i insts /\ MEM x i.inst_outputs /\ pred = Var x ==> F) /\
-    (!mc x. MEM mc cands /\ pred = Var x /\
-       (?i. MEM i insts /\ i.inst_id = mc.mc_second_id) ==>
-       x <> ac_or_var mc.mc_second_id /\ x <> ac_iz_var mc.mc_second_id) /\
-    (!mc. MEM mc cands /\ mc.mc_first_id = h.inst_id /\
-       ALOOKUP mp mc.mc_first_id = NONE ==>
-       eval_operand mc.mc_first_pred s_t = SOME 0w) ==>
-    ac_sim_precond cands ((id,pred)::mp) dfg insts s_t V
-Proof
-  rpt strip_tac >>
-  `ac_sim_precond cands mp dfg insts s_t V` by (
-    qpat_x_assum `ac_sim_precond _ _ _ (h::_) _ _`
-      (mp_tac o MATCH_MP ac_sim_precond_transfer_same) >>
-    disch_then match_mp_tac >> simp[]) >>
-  irule ac_sim_precond_extend_mp >> simp[] >>
-  qpat_x_assum `ac_sim_precond _ _ _ insts _ _` mp_tac >>
-  simp[ac_sim_precond_def] >> metis_tac[]
-QED
-
 (* Extract all head-instruction facts from ac_sim_precond.
    Avoids repeated simp[ac_sim_precond_def, EVERY_DEF] in case bodies. *)
 Theorem ac_sim_precond_head_facts:
@@ -817,24 +792,6 @@ Proof
   `~EXISTS (\mc. mc.mc_first_id = h.inst_id) cands` by
     metis_tac[ac_sim_precond_head_facts] >>
   metis_tac[ac_step_passthrough]
-QED
-
-(* Helper: ASSERT on equiv state also succeeds *)
-Triviality ac_assert_ok_on_equiv[local]:
-  !fuel ctx h s_o s_t V.
-    step_inst fuel ctx h s_o = OK s_o /\
-    h.inst_opcode = ASSERT /\ h.inst_opcode <> INVOKE /\
-    state_equiv V s_o s_t /\
-    (!x. MEM (Var x) h.inst_operands ==> x NOTIN V) ==>
-    step_inst fuel ctx h s_t = OK s_t
-Proof
-  rpt strip_tac >>
-  `result_equiv V (step_inst fuel ctx h s_o) (step_inst fuel ctx h s_t)` by (
-    irule execEquivPropsTheory.step_inst_result_equiv >> simp[] >>
-    metis_tac[]) >>
-  fs[] >>
-  Cases_on `step_inst fuel ctx h s_t` >> gvs[result_equiv_def] >>
-  imp_res_tac step_assert_identity
 QED
 
 (* Combined forward-reasoning helper: transfer ac_sim_precond through a
