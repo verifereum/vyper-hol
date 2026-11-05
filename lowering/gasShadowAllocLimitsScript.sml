@@ -9,6 +9,24 @@ Proof
   Induct >> simp[]
 QED
 
+(* The shadow keeps a slice's .code source and its address. *)
+Theorem gas_shadow_extcode[local]:
+  !e. (is_extcode (gas_shadow_expr e) <=> is_extcode e) /\
+      (is_extcode e ==>
+       extcode_addr_expr (gas_shadow_expr e) =
+       gas_shadow_expr (extcode_addr_expr e))
+Proof
+  Cases >> simp[gas_shadow_expr_def, exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin _ b l` >> Cases_on `b` >>
+  rw[gas_shadow_builtin_def, exprLoweringTheory.is_extcode_def] >>
+  rename1 `Acc a` >> Cases_on `a` >>
+  simp[exprLoweringTheory.is_extcode_def] >>
+  Cases_on `l` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `_ :: tl` >> Cases_on `tl` >>
+  simp[exprLoweringTheory.is_extcode_def,
+       exprLoweringTheory.extcode_addr_expr_def]
+QED
+
 Theorem gas_shadow_alloc_limits_expr:
   (!ce e. alloc_limits_expr ce (gas_shadow_expr e) = alloc_limits_expr ce e) /\
   (!ce g. alloc_limits_target ce (gas_shadow_target g) = alloc_limits_target ce g) /\
@@ -21,8 +39,12 @@ Proof
   simp[gas_shadow_expr_def, alloc_limits_expr_def] >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> Cases_on `bi` >>
-      simp[gas_shadow_builtin_def, MAP_MAP_o, combinTheory.o_DEF] >>
-      IF_CASES_TAC >> simp[]) >>
+      gvs[gas_shadow_builtin_def, MAP_MAP_o, combinTheory.o_DEF]
+      >~ [`extcode_addr_expr`]
+      >- (Cases_on `es` >> gvs[gas_shadow_extcode] >>
+          rename1 `is_extcode h` >> Cases_on `is_extcode h` >>
+          gvs[gas_shadow_extcode]) >>
+      IF_CASES_TAC >> gvs[]) >>
   rpt gen_tac >> strip_tac >> Cases_on `tb` >> simp[] >>
   Cases_on `es` >> simp[]
 QED
