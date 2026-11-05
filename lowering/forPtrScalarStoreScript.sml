@@ -39,10 +39,14 @@ Theorem scalar_mstore_path_ptr:
   ?tf. gas_path_ptr D 0 ctx fn PG G tn s 0 G tf
       (OK ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx)) /\
     tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+    tf.t_imm = tn.t_imm /\
     tf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}
 Proof
   strip_tac >> drule_all mstore_zero_path_ptr >>
-  drule_all mstore_ghost_frame >> strip_tac >> gvs[] >> metis_tac[]
+  drule_all mstore_ghost_frame >> strip_tac >> gvs[] >>
+  `(step_taint (mk_inst iid MSTORE [Var dst; value] []) s
+       (mstore (w2n a) w s) tn).t_imm = tn.t_imm` by
+    simp[step_taint_def, mk_inst_def, imm_taint_def] >> metis_tac[]
 QED
 
 Theorem scalar_mstore_outer_ghost:
