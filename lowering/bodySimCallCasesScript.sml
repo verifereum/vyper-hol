@@ -4,8 +4,9 @@
  * The cases of evaluate_ind for internal and external calls, raw calls,
  * raw_log, raw_revert, selfdestruct and create, split from
  * bodySimExprCases so they can be worked on apart from the other
- * expression cases.  Each but create is its piece in a leaf theory
- * bodySimCall*; create holds vacuously (expr_body_pre excludes it).
+ * expression cases.  Each but create and selfdestruct is its piece in a
+ * leaf theory bodySimCall*; those two hold vacuously (expr_body_pre
+ * excludes them).
  *)
 
 Theory bodySimCallCases
@@ -14,7 +15,7 @@ Ancestors
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
   bodySimCallExtcall bodySimCallIntcall bodySimCallRawCall
-  bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert bodySimCallSelfDestruct
+  bodySimCallRawCallCalldata bodySimCallRawLog bodySimCallRawRevert
 
 Theorem body_extcall_case:
   !cx v14 is_static skip_check sig opts es v15.
@@ -140,7 +141,10 @@ Theorem body_selfdestruct_case:
     body_exprs_ok cx es ==>
     body_expr_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  ACCEPT_TAC selfdestruct_body_expr_ok
+  rpt strip_tac >> irule body_expr_ok_intro >>
+  rw[exprSimHypsDefsTheory.expr_body_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
+     supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
 Theorem body_create_case:

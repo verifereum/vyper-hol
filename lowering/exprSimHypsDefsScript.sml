@@ -162,7 +162,8 @@ Definition expr_body_pre_def:
     ~supported_expr_exists call_operands_effect_root e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops)
+                      get_module_code cx NONE = SOME tops /\
+                      IS_SOME (supported_function_decl tops c Internal))
           (int_calls_expr e) /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
