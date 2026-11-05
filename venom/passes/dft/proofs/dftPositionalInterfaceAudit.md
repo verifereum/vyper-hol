@@ -104,3 +104,82 @@ balance must be proved, not inferred from equality of event sets (which ignores
 multiplicity). Reverse ordinary call readiness needs the residual exclusion,
 labels and phase above discharged. No additional hypotheses may be added to
 the frozen target to bypass these obligations.
+
+## Residual O/O audit after positional successful diamond (C3.7.14.3)
+
+This section is diagnostic only. Build check on 2026-11-05 passed for
+`dftPositionalOrdinaryCrossingTheory`, `dftPositionalOrdinaryBoundaryTheory`,
+`dftGasProvenanceTheory`, and `o1ContractDftTheory`. It does not certify the
+remaining compiler cheat.
+
+Let c and d have actual cores `DftOpen (DftAt fn 0 bb s) stack n` and
+`DftOpen (DftAt fn' 0 bb' s) stack' n'`, and four selected fetch equations
+x,y on bb and y,x on bb'. These are paired actual cores, not independently
+chosen value-level slots. Below pair means `dft_ordinary_swap_pair x y`.
+
+| Case | Existing primitive boundary and exact extra premises | Missing positional/integration boundary |
+|---|---|---|
+| x succeeds, then y succeeds | Accepted `dftPositionalOrdinaryCrossing` selected successful diamond; `dft_occ_ordinary_observe_source_prefix` (OrdinaryObserve:264) takes pair, wf x/y, both actual cores, four fetches and the two OK equations. Returns observations after each first step, operand equality, ranges equality and conditional memory equality. | Package positive 2/2 segment with positional endpoint phase and both memory directions. The successful endpoint theorem alone is not this package. |
+| x aborts immediately | `dft_ordinary_first_abort_crossing` (OrdinaryStop:246): pair, wf x/y, x not empty-output/effect-free, y operands defined at s, and x Abort. Returns y Abort of same code OR y OK followed by x Abort of same code. `dft_occ_ordinary_first_abort` (OccurrenceOrdinaryStop:64) additionally takes actual cores and three fetches and gives 1 versus 1..2 instruction steps. | Port terminal clearing with positional saved-frame relation; obtain 2 versus 2..3 steps, equal abort code (not abort state), stable stopped phase and observation package. Non-invisibility follows from forward ~must_order, not reversed ~must_order. |
+| x OK, y aborts | `dft_ordinary_second_abort_crossing` (OrdinaryStop:265): pair and the OK/Abort equations, no totality or opcode-subset premise. `dft_occ_ordinary_second_abort` (:96) adds actual cores/three fetches and yields 2 versus 1 instruction steps, same abort code. | Positional clearing/stopped phase gives 3/2 segments. No equal abort-state claim is available or needed. |
+| x Error, or x OK then y Error | `dft_ordinary_result_cases` (OrdinaryClosure:845) needs nonterminator AND independent no-Error premise. `dft_shaped_ordinary_outcome` (LocalOrdinaryClosure:7) supplies OK-or-Abort only with wf, no pseudo/terminator/INVOKE/GAS/ALLOCA, operand definedness AND exclusion of DELEGATECALL/CREATE/CREATE2. | Either establish a native/original admissibility boundary ruling out these Errors at the exact use site, or provide Error transport (and intermediate observation coverage). Static runtime readiness does not supply this. No such complete boundary was identified. |
+| Halt or IntRet | `dft_ordinary_no_halt` uses nonterminator; `step_inst_base_intret_opcodes` plus nonterminator rules out IntRet, as in OrdinaryClosure:845-853. | Only routine use of pair's nonterminator clauses; does not rule out Error. |
+| Outside selected slot, Enter/Done | Accepted positional unaffected-step and outside-memory boundaries (C3.7.14.1), generic in selected opcodes. | Compose with selected segment; do not rederive from global edit wrappers. |
+
+### Intermediate observations, including stopping
+
+All relevant memory primitives are context-independent and allow independent C,C':
+
+* `dft_ordinary_observe_indexed` (OrdinaryObserve:180) requires pair and
+  `step_inst_base y s = OK t`; for any idx it gives operand agreement for x,
+  equal ranges, and equal memory if x has nonempty ranges. No special-opcode
+  exclusion occurs. Symmetric pair plus this fact covers both successful
+  intermediate directions. `dft_occ_ordinary_observe_prefixes` (:227) is the
+  actual-core/four-fetch wrapper when both first successor cores are known.
+* `dft_occ_ordinary_first_abort_observe` (OccurrenceOrdinaryStop:133) requires
+  pair, wf x, forward ~must_order, actual cores/three fetches, x Abort,
+  h<2, and a nonempty target observation. It matches that observation at
+  source offset 0, with operand/ranges/memory equality. Partner y has empty
+  ranges by `dft_ordinary_abort_crossing_ranges` (:117). Conversely source
+  x at offset 0 needs a target x observation after y if y succeeds; if y
+  aborts first, a separate argument must show the omitted x observation has
+  empty ranges. The existing one-way cover does NOT prove this converse.
+* `dft_occ_ordinary_second_abort_observe` (:170) needs pair, actual cores/
+  three fetches and x OK. A nonempty target observation at offset 0 (y at s)
+  is matched by source offset 1 (y after x), with full agreement. Converse
+  coverage must additionally handle source x at offset 0, which is not
+  visited by target when y aborts. This is another missing empty-range or
+  matching boundary; do not infer it from equal abort codes.
+* `dft_occ_abort_clear`, `dft_occ_abort_prefix_clear` and
+  `dft_ordinary_abort_no_observe` separate terminal clearing from instruction
+  execution. Cleared aborts have no further open observations. They do not
+  remove pre-abort observations.
+
+`dft_ordinary_sync_success_cover`, `...first_abort_cover`,
+`...second_abort_cover` and their segment wrappers (OrdinaryClosure:642-843)
+are only target-to-source `dft_ordinary_prefix_cover`. They impose global
+`dft_gas_edit_fn`/`dft_gas_edit_ctx` identity and cannot be applied as indexed
+positional relations in the presence of duplicate equal blocks/functions.
+The primitive observe and stopping facts above avoid that identity problem.
+
+### Special effects are a real residual, not a proved exclusion
+
+`exec_delegatecall_def` (venomExecSemantics:509-522) and `exec_create_def`
+(:528-546) inspect `extract_venom_result ... (run evm_s)`. SOME plus singleton
+output yields OK; NONE yields Error ("non-terminating or invalid state").
+Thus wf and defined operands alone do not syntactically establish totality.
+DELEGATECALL, CREATE and CREATE2 remain allowed ordinary opcodes unless a
+separate provenance/admissibility theorem excludes the specific situation.
+No such exclusion follows from the pair definition or runtime_ready alone.
+Their memory ranges ARE covered by `dft_ordinary_ranges_cong` (explicit
+DELEGATECALL/CREATE/CREATE2 Resume cases at OrdinaryObserve:139-153), and
+successful effects are covered by the opcode-generic observe primitives.
+The first-Abort partner classification (OrdinaryStop:72) legitimately
+excludes these opcodes only in the RETURNDATACOPY-partner branch; it is not
+a global pair exclusion.
+
+Required next design decision: supply exact admissibility/Error interface
+and bidirectional pre-abort memory coverage (or revise the demanded
+integration contract if only one direction is mathematically needed), then
+port the small stopping/observation wrappers to common positional witnesses.
+This audit establishes neither impossibility nor a counterexample.
