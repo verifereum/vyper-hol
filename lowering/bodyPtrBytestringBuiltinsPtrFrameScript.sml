@@ -123,3 +123,27 @@ Proof
   EVAL_TAC >> rw[] >> gvs[AllCaseEqs(), vyperStateTheory.lookup_flag_def] >>
   EVAL_TAC
 QED
+
+Theorem order_ptr_frame_expr_typed:
+  well_typed_expr order_ptr_tenv
+    bodyPtrBytestringBuiltinsOrderProbe$order_probe_expr
+Proof
+  qspec_then `order_ptr_tenv` mp_tac
+    bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_well_typed >>
+  simp[order_ptr_tenv_def]
+QED
+
+Theorem order_ptr_frame_no_call_safety:
+  ~call_evaluation_safe order_frame_cx []
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem order_ptr_frame_no_body_pre:
+  ~exprSimHypsDefs$expr_body_pre order_ptr_env order_frame_cx order_ptr_tenv
+    bodyPtrBytestringBuiltinsOrderProbe$order_probe_expr order_ptr_source
+Proof
+  simp[exprSimHypsDefsTheory.expr_body_pre_def,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_internal_calls,
+       order_ptr_frame_no_call_safety]
+QED
