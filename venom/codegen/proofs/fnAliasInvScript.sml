@@ -627,14 +627,14 @@ Proof
   Cases_on `MEM (Var x) inputs` >> gvs[] >> decide_tac
 QED
 
-Theorem alias_emit_reorder_pop_support:
-  alias_var_budget [] ps /\
-  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) inputs) /\
+Theorem alias_emit_reorder_pop_var_support:
+  alias_var_mass x ps <= 1 /\
+  (plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) inputs) /\
   (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
   emit_input_plan opc inputs live ps = (iops,mid) /\
   PERM targets inputs /\ LENGTH inputs <= 16 /\
   reorder_plan dfg targets mid = (rops,qs) ==>
-  !x. plan_holds (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack)
+  plan_holds (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack)
          (Var x) ==> MEM x live
 Proof
   rpt strip_tac >> spose_not_then assume_tac >>
@@ -662,13 +662,25 @@ Proof
     (gvs[plan_holds_def, alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM] >>
      decide_tac) >>
   Cases_on `MEM (Var x) inputs`
-  >- (gvs[alias_var_budget_def, LIST_ELEM_COUNT_THM] >>
-      qpat_x_assum `!v. alias_var_mass v ps <= 1`
-        (qspec_then `x` mp_tac) >> decide_tac) >>
+  >- (gvs[] >> decide_tac) >>
   `~plan_holds ps (Var x)` by metis_tac[] >>
   `alias_var_mass x ps = 0` by
     gvs[plan_holds_def, alias_var_mass_def, GSYM LIST_ELEM_COUNT_MEM] >>
   gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
+Theorem alias_emit_reorder_pop_support:
+  alias_var_budget [] ps /\
+  (!x. plan_holds ps (Var x) ==> MEM x live \/ MEM (Var x) inputs) /\
+  (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
+  emit_input_plan opc inputs live ps = (iops,mid) /\
+  PERM targets inputs /\ LENGTH inputs <= 16 /\
+  reorder_plan dfg targets mid = (rops,qs) ==>
+  !x. plan_holds (qs with ps_stack := stack_pop (LENGTH inputs) qs.ps_stack)
+         (Var x) ==> MEM x live
+Proof
+  simp[alias_var_budget_def, LIST_ELEM_COUNT_THM] >> rpt strip_tac >>
+  irule alias_emit_reorder_pop_var_support >> metis_tac[]
 QED
 
 Theorem alias_var_budget_emit_inputs:
