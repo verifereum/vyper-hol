@@ -10,6 +10,8 @@
 Theory dftGasOracleToList
 Ancestors
   dftGasOracleDefs contextRawReachable o1PassContract venomExecSemantics
+  dftGasToListCompact dftGasToListReplay dftGasToListReachWitness
+  dftGasToListVisitReplay
 
 Theorem gas_oracle_to_list:
   EVERY wf_function ctx.ctx_functions /\ FINITE {e | orc e <> 0w} ==>
@@ -19,5 +21,13 @@ Theorem gas_oracle_to_list:
          ?ws. raw_reachable (s with vs_gas_readings := W) ctx fn inst
                 (t with vs_gas_readings := ws))
 Proof
-  cheat
+  strip_tac >> drule context_agreement_exists >>
+  disch_then (qspecl_then [`s`, `ctx`] strip_assume_tac) >>
+  qexists_tac `ws` >> conj_tac
+  >- (gen_tac >> first_x_assum (qspec_then `fuel` mp_tac) >>
+      strip_tac >> drule replay_context >> strip_tac >>
+      metis_tac[residual_result_gas_rel]) >>
+  rpt strip_tac >> drule_all ev_reachable_trace_witness >> strip_tac >>
+  qexists_tac `DROP n ws` >> irule replay_context_visit >>
+  metis_tac[]
 QED
