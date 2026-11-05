@@ -994,3 +994,22 @@ Checked build: lowerDloadPtrJointMemoryReadTheory and
 This is local closure evidence only: allocation, expansion and remaining
 families/global induction still need proof, and the frozen contract is not
 certified by this build.
+
+## C1.12.93: checked ordinary MSTORE8 whole-normal-Q row
+
+`lowerDloadPtrJointMemoryStoreTheory.dload_joint_tracked_mstore8_next` has the
+same whole-normal-Q incoming and outgoing existentials as the MLOAD row, with
+only the incoming opcode restriction changed to MSTORE8. Arbitrary literal
+target fuel is retained. Source shape provides empty outputs and operand
+origins; source reachability and discipline provide access/taint safety;
+distinct-label active lookup excludes revert forwarding. The existing general
+V/U byte-store core provides source success, exact ghosts, definedness and the
+post boundary. The new `dload_mstore8_step_fields` proves allocation/frontier,
+call-context and control field preservation directly from successful semantics.
+The fields-version singleton reachability interface, index update and NormalNext
+then return every ancillary Q field. No byte-store memory proof is duplicated.
+
+Checked build: lowerDloadPtrJointMemoryStoreTheory and
+o1ContractLowerDloadPtrTheory (TO_ld_ptr_v2-20261104T185312Z_m6778_t001).
+This is only the original MSTORE8 next row, not MSTORE, MCOPY, an expansion
+completion, or global closure; the frozen theorem remains unfinished.
