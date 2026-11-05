@@ -5,6 +5,7 @@ Ancestors
   exprSimIfExp fragExec fragExecMem instMemFrontier allocaHistoryFragment
   emitHelper emitHelperProps compileEnv venomState venomInst
   list rich_list loweringSlice venomExecSemantics venomExecProofs exprLoweringProps
+  fragGasSeqMem fragGasPathMem stmtSimProps
   bodyMemoryDefs exprSimDefs exprSimMemDefs vyperAST vyperInterpreter memSafeRun allocaHistory
 
 Theorem frag_exec_assign_mem:
@@ -84,6 +85,56 @@ Theorem ifexp_history_jump[local]:
 Proof
   strip_tac >> irule alloca_history_jump >> simp[jump_to_def] >>
   qexists_tac `s` >> simp[]
+QED
+
+Theorem ifexp_assign_zero_path_mem:
+  emit_inst ASSIGN [op] [rv] sa = ((),sb) /\ fn_has_code sa sb func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ eval_operand op s = SOME w ==>
+  gas_path_mem ctx func s 0
+    (OK ((update_var rv w s) with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id ASSIGN [op] [rv]]` by
+    metis_tac[emit_inst_extends] >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst sa.cs_next_id ASSIGN [op] [rv])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_path_mem_edge ctx func s 0
+    (OK ((update_var rv w s) with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule (SRULE [mk_inst_def] (Q.INST
+       [`i` |-> `mk_inst sa.cs_next_id ASSIGN [op] [rv]`,
+        `u` |-> `update_var rv w s`] straight_line_mem_edge)) >>
+     simp[step_inst_base_def, exec_pure1_def, mk_inst_def,
+          is_terminator_def, inst_dload_in_section_def] >>
+     qexistsl_tac [`op`, `sa`] >> simp[GSYM mk_inst_def] >>
+     conj_tac >- metis_tac[] >>
+     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  `~((update_var rv w s) with vs_inst_idx := SUC s.vs_inst_idx).vs_halted` by
+    simp[update_var_def] >>
+  drule (cj 1 gas_path_mem_rules) >> strip_tac >>
+  gvs[GSYM arithmeticTheory.ADD1] >>
+  metis_tac[cj 2 gas_path_mem_rules, arithmeticTheory.ADD_CLAUSES]
+QED
+
+Theorem ifexp_jnz_path_mem:
+  expr_post ctx func cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
+  expr_type c = BaseT BoolT /\
+  emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
+  fn_has_code sj sn func /\ sj.cs_current_bb = sc.cs_current_bb /\
+  sj.cs_current_insts = sc.cs_current_insts /\
+  ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sc.cs_current_insts ==>
+  gas_path_mem ctx func u 0 (OK (jump_to (if sel then tl else el) u))
+Proof
+  strip_tac >> irule assert_jnz_zero_path_mem >>
+  simp[] >> qexistsl_tac [`cop`,`sj`,`sn`] >> simp[] >>
+  drule emit_inst_extends >> strip_tac >> simp[] >>
+  fs[expr_post_def, expr_val_rel_def, vyperValueTheory.evaluate_type_def, is_word_type_def,
+     valueEncodingTheory.typed_val_to_w256_def, valueEncodingTheory.val_to_w256_def]
 QED
 
 Theorem compile_ifexp_vv_sim_mem:
