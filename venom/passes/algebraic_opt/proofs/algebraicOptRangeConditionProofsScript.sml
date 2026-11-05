@@ -248,7 +248,7 @@ Proof
   Cases_on `test` >> simp[venomExecSemanticsTheory.bool_to_word_def]
 QED
 
-Theorem ao_non_phi_index_after_prefix[local]:
+Theorem ao_non_phi_index_after_prefix:
   !insts r. r < LENGTH insts /\ (EL r insts).inst_opcode <> PHI ==>
     phi_prefix_length insts <= r
 Proof
