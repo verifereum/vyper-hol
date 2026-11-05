@@ -9,6 +9,8 @@
 Theory dftGasOracleFromList
 Ancestors
   dftGasOracleDefs contextRawReachable o1PassContract venomExecSemantics
+  dftGasFromListUnion dftGasFromListLocator dftGasFromListContextReach
+  dftGasFromListReplay
 
 (* Within a block execution each id runs at most once, so distinct ids in
    every block make the event names of one run distinct.  The list is
@@ -23,5 +25,11 @@ Theorem gas_oracle_from_list:
          ?p d. ev_reachable orc s ctx p d fn inst
                  (t with vs_gas_readings := s.vs_gas_readings))
 Proof
-  cheat
+  strip_tac >> drule finite_trace_oracle >>
+  disch_then (qspec_then `s` strip_assume_tac) >>
+  qexists_tac `orc` >> simp[] >> conj_tac
+  >- (gen_tac >> irule trace_context_gas_res >> simp[]) >>
+  rpt strip_tac >> drule_all raw_reachable_trace >> strip_tac >>
+  qexistsl_tac [`p`,`d`] >> irule trace_context_reachable >>
+  qexistsl_tac [`fuel`,`inst.inst_id`] >> simp[]
 QED
