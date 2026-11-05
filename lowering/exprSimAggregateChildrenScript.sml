@@ -877,3 +877,27 @@ Proof
       first_x_assum drule >> decide_tac) >>
   simp[wordsTheory.w2n_lt]
 QED
+
+Theorem aggregate_physical_source_slot_bounds:
+  expr_val_at ce cx sty sa sb es v op s /\
+  evaluate_type (get_tenv cx) sty = SOME tv /\ ~is_word_type sty /\
+  ~is_bytestring_type sty /\
+  type_widens_to (get_tenv cx) sty dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  eval_operand op s = SOME sw /\ stmt_state_rel ctx func ce cx es s /\
+  FLOOKUP s.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
+  b <= w2n dw /\ w2n dw + type_memory_size dtv <= b+k /\
+  (!name a n. local_region ce es.scopes s name a n ==>
+    a+n <= w2n dw \/ w2n dw + type_memory_size dtv <= a) ==>
+  w2n sw + type_memory_size tv < dimword (:256) /\
+  (w2n sw + type_memory_size tv <= w2n dw \/
+   w2n dw + type_memory_size dtv <= w2n sw)
+Proof
+  strip_tac >> Cases_on `type_memory_size tv = 0`
+  >- (drule_all widening_zero_memory_size >> strip_tac >>
+      gvs[wordsTheory.w2n_lt] >> decide_tac) >>
+  `val_footprint tv v = type_memory_size tv` by
+    metis_tac[evaluated_nonbytes_footprint] >>
+  `0 < type_memory_size tv` by decide_tac >>
+  drule_all aggregate_physical_source_bounds >> simp[]
+QED
