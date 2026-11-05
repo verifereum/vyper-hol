@@ -1561,6 +1561,163 @@ Proof
        lift_option_type_def, lift_sum_def, return_def, raise_def]
 QED
 
+Theorem ifexp_root_pop_readable[local]:
+  subscripts_type tv path = SOME rty /\
+  evaluate_subscripts tv (ArrayV (DynArrayV (SNOC p xs))) path = INL v ==>
+  (?w. evaluate_subscripts tv (ArrayV (DynArrayV xs)) path = INL w) \/
+  (?w. read_popped tv path
+     (record_pop [] (ArrayV (DynArrayV (SNOC p xs))) p []) = SOME w)
+Proof
+  Cases_on `path` >- simp[evaluate_subscripts_def] >>
+  rename1 `sb::rest` >> Cases_on `sb` >>
+  simp[evaluate_subscripts_def] >>
+  rename1 `ValueSubscript a` >> Cases_on `a` >>
+  simp[evaluate_subscripts_def] >>
+  rename1 `IntV i` >>
+  simp[vyperValueOperationTheory.array_index_def, oEL_THM,
+       AllCaseEqs()] >> rpt strip_tac >>
+  Cases_on `Num i < LENGTH xs`
+  >- (disj1_tac >> qexists_tac `v` >> gvs[EL_SNOC]) >>
+  `Num i = LENGTH xs` by decide_tac >>
+  `i = &(LENGTH xs)` by intLib.ARITH_TAC >>
+  gvs[EL_SNOC, SNOC_APPEND, EL_APPEND_EQN] >>
+  qexists_tac `v` >>
+  simp[record_pop_def, read_popped_def, LENGTH_SNOC, LENGTH_APPEND] >>
+  Cases_on `tv` >>
+  gvs[subscripts_type_def, subscript_type_def, evaluate_subscripts_def,
+      vyperValueOperationTheory.array_index_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_pop_replace_readable[local]:
+  !mutation tv value p xs updated retained rty v.
+    evaluate_subscripts tv value mutation = INL (ArrayV (DynArrayV (SNOC p xs))) /\
+    assign_subscripts tv value mutation (Replace (ArrayV (DynArrayV xs))) = INL updated /\
+    subscripts_type tv retained = SOME rty /\
+    evaluate_subscripts tv value retained = INL v ==>
+    (?w. evaluate_subscripts tv updated retained = INL w) \/
+    (?w. read_popped tv retained
+       (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p []) = SOME w)
+Proof
+  Induct >> rpt gen_tac
+  >- (simp[evaluate_subscripts_def, assign_subscripts_def] >>
+      rpt strip_tac >> gvs[] >> irule ifexp_root_pop_readable >> metis_tac[]) >>
+  Cases_on `h`
+  >- suspend "ArrayStep"
+  >> suspend "StructStep"
+QED
+
+Resume ifexp_pop_replace_readable[ArrayStep]:
+  rename1 `ValueSubscript index::mutation` >>
+  Cases_on `index` >> Cases_on `value` >>
+  simp[evaluate_subscripts_def, assign_subscripts_def] >> rpt strip_tac >>
+  gvs[AllCaseEqs()] >>
+  drule vyperPlaceResultTypingTheory.array_set_result_shape >> strip_tac >> gvs[] >>
+  Cases_on `retained` >- simp[evaluate_subscripts_def] >>
+  rename1 `subscripts_type tv (sb::rest) = SOME rty` >>
+  Cases_on `sb` >> gvs[evaluate_subscripts_def] >>
+  rename1 `ValueSubscript idx::rest` >>
+  Cases_on `idx` >> gvs[evaluate_subscripts_def] >>
+  rename1 `subscripts_type tv (ValueSubscript (IntV j)::rest) = SOME rty` >>
+  Cases_on `i = j`
+  >- (gvs[] >> drule vyperArrayTheory.array_index_after_set_same >> strip_tac >>
+      gvs[AllCaseEqs()] >>
+      gvs[subscripts_type_def, CaseEq "option"] >>
+      rename1 `subscript_type tv (ValueSubscript (IntV i)) = SOME etv` >>
+      `read_popped tv (ValueSubscript (IntV i)::rest)
+         (record_pop (ValueSubscript (IntV i)::mutation)
+           (ArrayV (DynArrayV (SNOC p xs))) p []) =
+       read_popped etv rest
+         (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p [])` by
+        (simp[vyperPlaceResultTypingTheory.record_pop_rebase] >>
+         irule vyperPlaceResultTypingTheory.read_popped_rebase >> simp[]) >>
+      asm_rewrite_tac[] >>
+      Cases_on `tv` >> gvs[subscript_type_def] >>
+      first_x_assum drule_all >> simp[]) >>
+  `array_index tv av' j = array_index tv a j` by
+    (irule vyperArrayTheory.array_index_after_set_other >> metis_tac[]) >>
+  gvs[] >> disj1_tac >> metis_tac[]
+QED
+
+Resume ifexp_pop_replace_readable[StructStep]:
+  Cases_on `value` >> simp[evaluate_subscripts_def, assign_subscripts_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  Cases_on `retained` >- simp[evaluate_subscripts_def] >>
+  rename1 `subscripts_type tv (sb::rest) = SOME rty` >>
+  Cases_on `sb`
+  >- (rename1 `ValueSubscript idx::rest` >> Cases_on `idx` >>
+      gvs[evaluate_subscripts_def]) >>
+  rename1 `subscripts_type tv (AttrSubscript key::rest) = SOME rty` >>
+  gvs[evaluate_subscripts_def] >> Cases_on `s = key`
+  >- (gvs[alistTheory.AFUPDKEY_ALOOKUP, AllCaseEqs(),
+          subscripts_type_def] >>
+      Cases_on `tv` >> gvs[subscript_type_def, AllCaseEqs()] >>
+      rename1 `ALOOKUP fields key = SOME etv` >>
+      `read_popped (StructTV fields) (AttrSubscript key::rest)
+         (record_pop (AttrSubscript key::mutation)
+           (ArrayV (DynArrayV (SNOC p xs))) p []) =
+       read_popped etv rest
+         (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p [])` by
+        (simp[vyperPlaceResultTypingTheory.record_pop_rebase] >>
+         irule vyperPlaceResultTypingTheory.read_popped_rebase >>
+         simp[subscript_type_def]) >>
+      asm_rewrite_tac[] >> first_x_assum drule_all >> simp[]) >>
+  gvs[alistTheory.AFUPDKEY_ALOOKUP, AllCaseEqs()] >>
+  disj1_tac >> metis_tac[]
+QED
+
+Finalise ifexp_pop_replace_readable
+
+Theorem ifexp_read_popped_append_success[local]:
+  !fresh tv path old.
+    (?v. read_popped tv path fresh = SOME v) \/
+    (?v. read_popped tv path old = SOME v) ==>
+    ?w. read_popped tv path (fresh ++ old) = SOME w
+Proof
+  Induct >- simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[read_popped_def] >>
+  Cases_on `IS_PREFIX path h0`
+  >- (simp[] >> Cases_on `subscripts_type tv h0`
+      >- (simp[] >> metis_tac[]) >>
+      simp[] >> Cases_on `evaluate_subscripts x h1 (DROP (LENGTH h0) path)`
+      >- simp[] >> simp[] >> metis_tac[]) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem ifexp_entry_pop_live_readable[local]:
+  entry_pop_step entry mutation entry' /\
+  evaluate_subscripts entry.type entry.value mutation = INL live /\
+  subscripts_type entry.type retained = SOME rty /\
+  read_memory_path entry retained = INL v ==>
+  ?w. read_memory_path entry' retained = INL w
+Proof
+  simp[vyperPlaceResultTypingTheory.entry_pop_step_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[read_memory_path_def, AllCaseEqs()] >>
+  Cases_on `arr` >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs()] >>
+  Cases_on `a` >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs()]
+  >- (`l = SNOC (LAST l) (FRONT l)` by metis_tac[SNOC_LAST_FRONT] >>
+  qpat_x_assum `l <> []` kall_tac >>
+  pop_assum SUBST_ALL_TAC >> gvs[FRONT_SNOC, LAST_SNOC] >>
+  drule_all ifexp_pop_replace_readable >> strip_tac
+  >- metis_tac[] >>
+  `?z. read_popped entry.type retained
+     (record_pop mutation (ArrayV (DynArrayV (SNOC (LAST l) (FRONT l))))
+       (LAST l) [] ++ entry.popped) = SOME z` by
+    (irule ifexp_read_popped_append_success >> metis_tac[]) >>
+  gvs[record_pop_def] >>
+  Cases_on `evaluate_subscripts entry.type current' retained` >> simp[]) >>
+  `?z. read_popped entry.type retained
+     (record_pop mutation (ArrayV (DynArrayV l)) (LAST l) [] ++ entry.popped) = SOME z` by
+    (irule ifexp_read_popped_append_success >> metis_tac[]) >>
+  gvs[record_pop_def] >>
+  Cases_on `evaluate_subscripts entry.type current' retained` >> simp[]
+QED
+
 
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
