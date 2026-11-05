@@ -690,3 +690,127 @@ Resume calldata_array_init_endpoint_ptr[joint_compose]:
 QED
 
 Finalise calldata_array_init_endpoint_ptr
+
+
+Theorem calldata_array_init_sequence_ptr:
+  abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+    maxn abi_sz sa = (setup,sb) /\
+  eval_operand src s = SOME (n2w srcpos) /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decode_load CALLDATALOAD (n2w srcpos:bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
+  sb.cs_next_id <= last /\ (d + totalbytes <= b \/ b + cap <= d) /\
+  fresh_vars_wrt sa s /\ ~s.vs_halted /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  op_taint tn src = {} ==>
+  ?t p H u q.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    eval_operand (SND setup) t = SOME (n2w n) /\
+    mload p t = 0w /\ mem_word_at d t.vs_memory = n2w n /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    abi_decoder_budget first last b cap t /\ fresh_vars_wrt sb t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    abi_decode_footprint_frame [(d,32);(b,cap)] s t /\
+    abi_decode_footprint_frame [(d,32);(p,32)] s t /\
+    FLOOKUP t.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
+    (!id. id <> sb.cs_next_id - 2 ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_halted = s.vs_halted /\ inst_extends sa sb /\
+    FST setup = Var q /\
+    ptr_covers H u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    ptr_covers H u root (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    frag_exec_ptr cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = H /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand (Var root) s = SOME (n2w d)` by simp[eval_operand_def] >>
+  drule_at (Pat `abi_decoder_budget _ _ _ _ _`) abi_decode_array_loop_init_sequence >>
+  disch_then (drule_at (Pat `abi_decode_array_loop_init _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand src s = _`)) >>
+  simp[abi_decode_source_opcode_def] >>
+  disch_then (qspecl_then [`srcpos`,`n`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all calldata_array_init_endpoint_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  `p < dimword (:256)` by
+    (drule abi_decoder_budget_word_bound >> decide_tac) >>
+  `n2w p = (n2w p':bytes32)` by metis_tac[optionTheory.SOME_11] >>
+  `p' < dimword (:256)` by decide_tac >>
+  `p = p'` by
+    (qpat_x_assum `n2w p = (n2w p':bytes32)` (mp_tac o AP_TERM ``w2n:bytes32 -> num``) >>
+     simp[]) >>
+  qexistsl_tac [`t`,`p`,`H`,`u`,`q`] >> simp[] >>
+  fs[ptr_covers_def, lookup_var_def]
+QED
+
+(* Actual dynamic-array compiler phase split, retaining the residual loop. *)
+Theorem calldata_array_loop_entry_ptr:
+  compile_abi_decode_to_buf (Var root) src CALLDATALOAD (Lit 0w)
+    (DecDynArray ei abi_sz mem_sz elem_dyn maxn) sa = ((),sc) /\
+  (elem_dyn \/ dec_info_needs_clamp ei) /\
+  eval_operand src s = SOME (n2w srcpos) /\
+  lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decode_load CALLDATALOAD (n2w srcpos:bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_budget first last b cap s /\ first <= sa.cs_next_id /\
+  sc.cs_next_id <= last /\ (d + totalbytes <= b \/ b + cap <= d) /\
+  fresh_vars_wrt sa s /\ ~s.vs_halted /\
+  ptr_covers G tn root s totalbytes /\ 32 <= totalbytes /\
+  not_fresh_at sa root /\ (!x. src = Var x ==> not_fresh_at sa x) /\
+  op_taint tn src = {} ==>
+  ?setup sb t p H u q.
+    abi_decode_array_loop_init (Var root) src CALLDATALOAD (Lit 0w)
+      maxn abi_sz sa = (setup,sb) /\
+    compile_abi_decode_dyn_loop (Var root) src CALLDATALOAD (Lit 0w)
+      ei abi_sz mem_sz (FST setup) (SND setup) sb = ((),sc) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand (FST setup) t = SOME (n2w p) /\
+    eval_operand (SND setup) t = SOME (n2w n) /\
+    mload p t = 0w /\ mem_word_at d t.vs_memory = n2w n /\
+    b <= p /\ p + 32 <= b + cap /\ p + 32 < dimword (:256) /\
+    abi_decoder_budget first last b cap t /\ fresh_vars_wrt sb t /\
+    (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+    abi_decode_footprint_frame [(d,32);(b,cap)] s t /\
+    abi_decode_footprint_frame [(d,32);(p,32)] s t /\
+    FLOOKUP t.vs_allocas (sb.cs_next_id - 2) = SOME (p,32) /\
+    (!id. id <> sb.cs_next_id - 2 ==>
+      FLOOKUP t.vs_allocas id = FLOOKUP s.vs_allocas id) /\
+    t.vs_halted = s.vs_halted /\ inst_extends sa sb /\
+    FST setup = Var q /\ ptr_covers H u q t 32 /\
+    ptr_covers H u root t totalbytes /\
+    op_taint u (SND setup) = {} /\ op_prov H (SND setup) = NONE /\
+    frag_exec_ptr cx ctx PG sa sb
+      (\g z v. g = G /\ z = tn /\ v = s)
+      (\g z v. g = H /\ z = u /\
+        v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
+    u.t_mem = (tn.t_mem DIFF {x | d <= x /\ x < d + 32})
+      DIFF {x | p <= x /\ x < p + 32} /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all abi_decode_loop_array_trace >> strip_tac >>
+  rename1 `abi_decode_array_loop_init _ _ _ _ _ _ sa = (setup,sb)` >>
+  `sb.cs_next_id <= sc.cs_next_id` by
+    (mp_tac (cj 3 ci_mono_compile_abi_decode) >>
+     disch_then (qspecl_then [`Var root`,`src`,`CALLDATALOAD`,`Lit 0w`,
+       `ei`,`abi_sz`,`mem_sz`,`FST setup`,`SND setup`,`sb`] mp_tac) >>
+     simp[ci_mono_def, cs_extends_def]) >>
+  `sb.cs_next_id <= last` by decide_tac >>
+  drule_all calldata_array_init_sequence_ptr >>
+  disch_then (qspecl_then [`cx`,`ctx`,`R`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`setup`,`sb`,`t`,`p`,`H`,`u`,`q`] >>
+  simp[] >> fs[ptr_covers_def, lookup_var_def]
+QED
