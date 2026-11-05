@@ -1,5 +1,5 @@
 Theory concretizeLayoutStoreProduction
-Ancestors concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
+Ancestors concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
   frameJointDemand venomState byte
   frameActivationCache frameRelocationBinding frameJointTrace frameJointTransition
   frameRelocationOpaque frameRelocationStoreValues frameRelocationStoreSteps frameRelocationWriteCoverage
@@ -14,16 +14,12 @@ Theorem joint_mstore_demand_address_coherence:
   joint_trace vs0 C q0 es qs q /\ vs0.vs_allocas = FEMPTY /\
   c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
-  EL c es = SOME (OriginOrdinary fuel post) /\ inst.inst_opcode = MSTORE /\
+  EL c es = SOME (OriginOrdinary fuel post) /\ post.vs_allocas = s.vs_allocas /\
   joint_relocation_demand lo positions q0 es qs (SUC c) a z /\
   relocation_pair lo positions (EL c (q0::qs)) a w ==> z = w
 Proof
   strip_tac >>
   drule_all joint_trace_edge_at >> strip_tac >>
-  `post.vs_allocas = s.vs_allocas` by
-    (gvs[joint_transition_ordinary] >>
-     gvs[step_inst_def] >>
-     irule step_inst_base_preserves_allocas >> qexists_tac `inst` >> simp[]) >>
   `!d owner aid site.
     activation_cache (EL c (q0::qs)) d owner aid site ==>
     activation_cache (EL (SUC c) (q0::qs)) d owner aid site` by
@@ -135,51 +131,16 @@ Resume concretize_mstore_execution_geometry[value]:
   disch_then drule_all >> metis_tac[]
 QED
 Resume concretize_mstore_execution_geometry[address]:
-  `MEM (w2n dst,32) (source_memory_write_ranges inst s)` by
-    simp[source_memory_write_ranges_def, fixed_source_write_range_def] >>
-  `mem_write_ops inst = SOME <| iao_ofst := opd; iao_size := SOME (Lit 32w);
-      iao_max_size := SOME (Lit 32w) |>` by simp[mem_write_ops_def] >>
-  `((w2n dst + 32 <= lo /\
-      (!u. opd = Var u ==> FLOOKUP rv u = NONE)) \/
-     (?u tok b sz. opd = Var u /\ FLOOKUP rv u = SOME (tok,(b,sz)) /\
-       b <= w2n dst /\ w2n dst + 32 <= b+sz))` by
-    (drule_at (Pat `SND o_f _ = _`) resolved_memory_access >>
-     disch_then drule >> simp[] >> strip_tac >>
-     first_x_assum (qspecl_then
-       [`<| iao_ofst := opd; iao_size := SOME (Lit 32w);
-            iao_max_size := SOME (Lit 32w) |>`, `w2n dst`, `32`] mp_tac) >> simp[]) >>
-  pop_assum strip_assume_tac
-  >- (`eval_operand opd s = eval_operand opd t` by
-        (`op_taint tn opd = {}` by
-           (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
-            simp[taint_ok_def] >> strip_tac >>
-            qpat_x_assum `!op. _` (qspec_then `opd` mp_tac) >> simp[] >>
-            Cases_on `op_taint tn opd = {}` >> simp[]) >>
-         `!v. opd = Var v ==> ~retpc_var fn v /\ FLOOKUP rv v = NONE` by
-           (rpt strip_tac >> simp[] >> spose_not_then assume_tac >>
-            `MEM (Var v) inst.inst_operands` by simp[] >>
-            drule_all disciplined_retpc_operand_use >> simp[]) >>
-         drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_masked_operand >>
-         disch_then drule_all >> strip_tac >>
-         gvs[] >> metis_tac[frameRelocationGuardedValuesTheory.word_agree_except_empty]) >>
-      qexists_tac `dst` >> `eval_operand opd t = SOME dst` by metis_tac[] >> simp[]) >>
-  `~retpc_var fn u` by
-    (drule disciplined_memory_offset_not_retpc >>
-     disch_then drule >> disch_then drule >>
-     simp[] >> disch_then irule >> metis_tac[]) >>
-  PairCases_on `tok` >> gvs[] >>
-  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range >>
-  disch_then drule_all >> strip_tac >>
-  `?d owner.
-    activation_cache (JointConfig stk PG (SND o_f rv) tn fn inst s oms om hs h)
-      d owner tok1 (b,sz) /\
-    activation_lookup (0:num) (concretize_positions C') (birth::ids)
-      (fn::MAP (\f. f.cf_fn) stk) (tok0,tok1) =
-      concretize_positions C' owner tok1` by
-    metis_tac[resolved_activation_lookup] >>
-  `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
-  qexists_tac `y` >> simp[] >>
-  qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]
+  irule concretize_memory_access_geometry >> simp[] >>
+  conj_tac
+  >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME (Lit 32w);
+                    iao_max_size := SOME (Lit 32w) |>` >>
+      simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+           mem_write_ops_def]) >>
+  conj_tac >- metis_tac[] >>
+  goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  simp[] >> metis_tac[]
 QED
 Resume concretize_mstore_execution_geometry[memory]:
   markerLib.RESUME_TAC >> (all_tac >>
@@ -205,7 +166,8 @@ Resume concretize_mstore_execution_geometry[memory]:
       `relocation_pair lo (concretize_positions C') (EL c (q0::qs))
           a (w2n dstT+(a-w2n dst))` by metis_tac[] >>
       `z = w2n dstT+(a-w2n dst)` by
-        (irule joint_mstore_demand_address_coherence >> metis_tac[]) >>
+        (irule joint_mstore_demand_address_coherence >>
+         `post.vs_allocas = s.vs_allocas` by simp[mstore_def] >> metis_tac[]) >>
       decide_tac) >>
   rpt strip_tac >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by

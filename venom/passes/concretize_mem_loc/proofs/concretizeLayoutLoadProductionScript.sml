@@ -1,5 +1,6 @@
 Theory concretizeLayoutLoadProduction
-Ancestors concretizeLayoutPointerRanges frameRelocationBinding
+Ancestors concretizeLayoutAccessGeometry frameRelocationWriteCoverage
+  concretizeLayoutPointerRanges frameRelocationBinding
   frameRelocationLoadSteps frameRelocationLocal frameJointDemand frameJointTaint
   frameRelocationMemoryAccess frameRelocationMemoryOpaque
   frameRelocationCleanOperands frameJointTrace frameJointTransition frameOriginReachable
@@ -7,37 +8,6 @@ Ancestors concretizeLayoutPointerRanges frameRelocationBinding
   frameResolvedTrace frameActivationLookup frameActivationLifetime
   o1PassContract ptrDiscipline unitMemInv contextCodegenRel finite_map list pred_set words
 
-Theorem frame_reachable_saved_allocas_from:
-  !vs0 C stk PG G tn fn inst s.
-  frame_reachable vs0 C stk PG G tn fn inst s ==>
-  ptr_discipline lo C vs0 ==>
-  EVERY (\f. allocas_from lo f.cf_state) stk
-Proof
-  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac >>
-  rpt strip_tac >> gvs[] >>
-  fs[ptr_discipline_def] >> metis_tac[]
-QED
-
-Theorem joint_activation_cache_lower_bound:
-  ptr_discipline lo C vs0 /\
-  joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
-  activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-    d owner aid (b,sz) ==> lo <= b
-Proof
-  strip_tac >>
-  `frame_reachable vs0 C stk PG G tn fn inst s` by
-    (fs[joint_config_reachable_def] >>
-     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `allocas_from lo s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
-  drule_all frame_reachable_saved_allocas_from >> strip_tac >>
-  gvs[frameActivationCacheTheory.activation_cache_def]
-  >- metis_tac[allocas_from_def] >>
-  `LENGTH stk - SUC d < LENGTH stk` by decide_tac >>
-  qpat_x_assum `EVERY _ stk` mp_tac >>
-  rewrite_tac[EVERY_EL] >>
-  disch_then (qspec_then `LENGTH stk - SUC d` mp_tac) >>
-  simp[allocas_from_def] >> metis_tac[]
-QED
 
 Theorem concretize_mload_execution_clean_lanes:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -86,54 +56,33 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def, exec_read1_def] >>
      metis_tac[]) >>
-  `MEM (w2n dst,32) (source_memory_read_ranges inst s)` by
-    simp[source_memory_read_ranges_def] >>
-  `mem_read_ops inst = SOME <| iao_ofst := opd; iao_size := SOME (Lit 32w);
-      iao_max_size := SOME (Lit 32w) |>` by simp[mem_read_ops_def] >>
-  `((w2n dst + 32 <= lo /\
-      (!u. opd = Var u ==> FLOOKUP rv u = NONE)) \/
-     (?u tok b sz. opd = Var u /\ FLOOKUP rv u = SOME (tok,(b,sz)) /\
-       b <= w2n dst /\ w2n dst + 32 <= b+sz))` by
-    (drule_at (Pat `SND o_f _ = _`) resolved_memory_access >>
-     disch_then drule >> simp[] >> strip_tac >>
-     first_x_assum (qspecl_then
-       [`<| iao_ofst := opd; iao_size := SOME (Lit 32w);
-            iao_max_size := SOME (Lit 32w) |>`, `w2n dst`, `32`] mp_tac) >> simp[]) >>
-  pop_assum strip_assume_tac
-  >- ( `eval_operand opd s = eval_operand opd t` by
-         (drule_at (Pat `local_rel _ _ _ _ _ _ _`) disciplined_scalar_operand >>
-          disch_then drule >> simp[] >> disch_then drule >> simp[] >>
-          disch_then drule >> simp[]) >>
-       qexists_tac `dst` >>
-       `eval_operand opd t = SOME dst` by metis_tac[] >>
-       simp[step_inst_base_def, exec_read1_def] >>
-       rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
-       conj_tac
-       >- (simp[joint_observed_read_def, joint_reads_def, joint_mem_taint_def,
-                source_memory_read_ranges_def, range_bytes_def] >> gvs[]) >>
-       simp[relocation_pair_def] >> decide_tac) >>
-  `~retpc_var fn u` by
-    (drule disciplined_memory_offset_not_retpc >>
-     disch_then drule >> disch_then drule >>
-     simp[] >> disch_then irule >> metis_tac[]) >>
-  PairCases_on `tok` >> gvs[] >>
-  drule_at (Pat `FLOOKUP _ _ = SOME _`) concretize_guarded_pointer_range >>
-  disch_then drule_all >> strip_tac >>
-  `?d owner.
-    activation_cache (JointConfig stk PG (SND o_f rv) tn fn inst s oms om hs h)
-      d owner tok1 (b,sz) /\
-    activation_lookup (0:num) (concretize_positions C') (birth::ids)
-      (fn::MAP (\f. f.cf_fn) stk) (tok0,tok1) =
-      concretize_positions C' owner tok1` by
-    metis_tac[resolved_activation_lookup] >>
-  `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
-  qexists_tac `y` >> simp[step_inst_base_def, exec_read1_def] >>
+  `?dstT. eval_operand opd t = SOME dstT /\
+    ((w2n dst+32 <= lo /\ w2n dstT = w2n dst) \/
+     (?d owner aid b sz.
+       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
+       w2n dst+32 <= b+sz /\
+       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
+    (irule concretize_memory_access_geometry >> simp[] >>
+     conj_tac
+     >- (qexists_tac `<| iao_ofst := opd; iao_size := SOME (Lit 32w);
+                    iao_max_size := SOME (Lit 32w) |>` >>
+     simp[source_memory_read_ranges_def, mem_read_ops_def]) >>
+     conj_tac >- metis_tac[] >>
+     goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
+  (all_tac >>
+  `!i. i < 32 ==> relocation_pair lo (concretize_positions C')
+      (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
+    (rpt strip_tac >> irule relocation_pair_range >> metis_tac[]) >>
+  qexists_tac `dstT` >> simp[step_inst_base_def, exec_read1_def] >>
   rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
   conj_tac
   >- (simp[joint_observed_read_def, joint_reads_def, joint_mem_taint_def,
            source_memory_read_ranges_def, range_bytes_def] >> gvs[]) >>
-  simp[relocation_pair_def] >>
-  qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[] >> decide_tac
+  qpat_x_assum `!i. i < 32 ==> relocation_pair _ _ _ _ _`
+    (qspec_then `i` mp_tac) >> simp[arithmeticTheory.ADD_COMM])
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
