@@ -1107,3 +1107,39 @@ Proof
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
 
+
+Theorem int_type_byte_width_mem_src[local]:
+  !tenv ty tv. is_int_type ty /\ evaluate_type tenv ty = SOME tv ==>
+    type_bits ty MOD 8 = 0
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  FULL_SIMP_TAC std_ss [is_int_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  FULL_SIMP_TAC std_ss [is_int_type_def, evaluate_type_def,
+    type_bits_def, AllCaseEqs(), vyperASTTheory.base_type_distinct,
+    vyperASTTheory.base_type_11, LET_THM]
+QED
+
+Theorem int_type_value_mem_src[local]:
+  !tenv ty tv v.
+    is_int_type ty /\ evaluate_type tenv ty = SOME tv /\ value_has_type tv v ==>
+    ?i. v = IntV i /\ 0 < type_bits ty /\ type_bits ty <= 256 /\
+      type_to_int_bound ty = SOME (if is_signed_type ty then Signed (type_bits ty)
+        else Unsigned (type_bits ty)) /\
+      within_int_bound (if is_signed_type ty then Signed (type_bits ty)
+        else Unsigned (type_bits ty)) i
+Proof
+  rpt gen_tac >> Cases_on `ty` >>
+  FULL_SIMP_TAC std_ss [is_int_type_def] >>
+  rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
+  FULL_SIMP_TAC std_ss [is_int_type_def, evaluate_type_def,
+    type_bits_def, AllCaseEqs(), vyperASTTheory.base_type_distinct,
+    vyperASTTheory.base_type_11, LET_THM] >>
+  rpt strip_tac >> qpat_x_assum `BaseTV _ = tv` (SUBST_ALL_TAC o SYM) >>
+  Cases_on `v` >>
+  FULL_SIMP_TAC std_ss [value_has_type_def, type_bits_def,
+    is_signed_type_def, type_to_int_bound_def, within_int_bound_def,
+    vyperValueTheory.value_distinct, vyperValueTheory.value_11] >>
+  decide_tac
+QED
+
