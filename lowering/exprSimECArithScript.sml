@@ -1933,7 +1933,7 @@ Proof
 QED
 
 Theorem ec_two_args_source[local]:
-  bt <> Len /\ builtin_args_length_ok bt 2 /\
+  bt <> Len /\ bt <> Bop In /\ bt <> Bop NotIn /\ builtin_args_length_ok bt 2 /\
   eval_expr cx (Builtin ann bt [a;b]) es = (res,es') /\
   (do r <- eval_expr cx a; read_result cx r od) es = (r1,es1) /\
   (do r <- eval_expr cx b; read_result cx r od) es1 = (r2,es2) ==>
@@ -1967,7 +1967,7 @@ Theorem ec_binary_call_then[local]:
   exprs_case nocalls ctx func cenv cx [a;b] /\
   expr_body_pre cenv cx env (Builtin ann bt [a;b]) es /\
   (nocalls ==> int_calls_expr (Builtin ann bt [a;b]) = []) /\
-  bt <> Len /\ builtin_args_length_ok bt 2 /\
+  bt <> Len /\ bt <> Bop In /\ bt <> Bop NotIn /\ builtin_args_length_ok bt 2 /\
   expr_type a = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lower_value compile_expr cenv (expr_type a) a sa = (p,s1) /\
   lower_value compile_expr cenv (expr_type b) b s1 = (q,sm) /\
