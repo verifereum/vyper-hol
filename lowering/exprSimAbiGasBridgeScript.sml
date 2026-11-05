@@ -1286,6 +1286,185 @@ Proof
   simp[start_relabel_def, DROP_APPEND]
 QED
 
+Theorem start_relabel_gas_free:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  LENGTH ids = LENGTH sa.cs_current_insts /\ frag_ops_free sa sb /\
+  L <> sb.cs_current_bb /\
+  ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) /\
+  EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb) ==>
+  frag_gas_free (start_relabel L ids sa) (start_swap sa L ids sb)
+Proof
+  strip_tac >>
+  drule_all start_relabel_frag_code >> strip_tac >>
+  drule_all start_swap_emitted_blocks >> strip_tac >>
+  drule_all start_swap_fields >> strip_tac >>
+  simp[frag_gas_free_def] >>
+  simp[start_relabel_def] >>
+  gvs[frag_ops_free_def, EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem frag_fresh_label:
+  !labels:string list. ?L. ~MEM L labels
+Proof
+  gen_tac >>
+  qexists_tac `REPLICATE (SUC (SUM (MAP LENGTH labels))) #"x"` >>
+  strip_tac >> drule SUM_MAP_MEM_bound >>
+  disch_then (qspec_then `LENGTH` mp_tac) >> simp[]
+QED
+
+Theorem frag_relabel_fresh_label:
+  ?L. L <> sb.cs_current_bb /\
+      ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+      EVERY (\i. ~MEM (Label L) i.inst_operands) (frag_code sa sb)
+Proof
+  qspec_then `sb.cs_current_bb ::
+    MAP (\bb. bb.bb_label) (emitted_blocks sa sb) ++
+    FLAT (MAP (\i. MAP (\op. case op of Label l => l | _ => "")
+      i.inst_operands) (frag_code sa sb))` mp_tac frag_fresh_label >>
+  simp[MEM_FLAT, MEM_MAP, EVERY_MEM] >> strip_tac >>
+  qexists_tac `L` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!l. _` (qspec_then
+    `MAP (\op. case op of Label l => l | _ => "") i.inst_operands` mp_tac) >>
+  simp[MEM_MAP] >> conj_tac
+  >- (qexists_tac `i` >> simp[]) >>
+  qexists_tac `Label L` >> simp[]
+QED
+
+Theorem frag_relabel_fresh_ids:
+  !code:instruction list. !n.
+    ?ids id. LENGTH ids = n /\ ALL_DISTINCT ids /\ ~MEM id ids /\
+      (!i. MEM i code ==> ~MEM i.inst_id ids /\ i.inst_id <> id)
+Proof
+  rpt gen_tac >>
+  qexistsl_tac [`GENLIST (\k. SUC (SUM (MAP (\i. i.inst_id) code)) + k) n`,
+    `SUC (SUM (MAP (\i. i.inst_id) code)) + n`] >>
+  simp[ALL_DISTINCT_GENLIST, MEM_GENLIST] >> rpt strip_tac >>
+  drule SUM_MAP_MEM_bound >>
+  disch_then (qspec_then `\i. i.inst_id` mp_tac) >> simp[]
+QED
+
+Definition frag_relabel_observer_def:
+  frag_relabel_observer sa sb L ids fn id =
+    fn with fn_blocks :=
+      <|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|> ::
+      emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)
+End
+
+Theorem frag_relabel_observer_cut:
+  lookup_block sb.cs_current_bb
+    (frag_relabel_observer sa sb L ids fn id).fn_blocks =
+  SOME <|bb_label := sb.cs_current_bb;
+         bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>
+Proof
+  simp[frag_relabel_observer_def, lookup_block_def, FIND_thm]
+QED
+
+Theorem frag_blocks_consistent_lookup[local]:
+  !blocks bb.
+    MEM bb blocks /\
+    (!b. MEM b blocks /\ b.bb_label = bb.bb_label ==> b = bb) ==>
+    lookup_block bb.bb_label blocks = SOME bb
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  simp[Once lookup_block_def, FIND_thm] >>
+  Cases_on `h.bb_label = bb.bb_label`
+  >- (`h = bb` by metis_tac[MEM] >> simp[]) >>
+  simp[] >> rewrite_tac[GSYM lookup_block_def] >>
+  first_x_assum irule >> metis_tac[MEM]
+QED
+
+Theorem start_swap_blocks_consistent:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ fn_has_code sa sb fn /\
+  ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) ==>
+  !b c.
+    MEM b (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) /\
+    MEM c (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) /\
+    b.bb_label = c.bb_label ==> b = c
+Proof
+  strip_tac >> drule_all start_swap_emitted_blocks >> strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  `!b. MEM b (FRONT (emitted_blocks sa sb)) ==>
+       MEM b (emitted_blocks sa sb)` by
+    (`emitted_blocks sa sb = FRONT (emitted_blocks sa sb) ++
+        [LAST (emitted_blocks sa sb)]` by simp[APPEND_FRONT_LAST] >>
+     metis_tac[MEM_APPEND]) >>
+  fs[fn_has_code_def] >>
+  `!b c. MEM b (FRONT (emitted_blocks sa sb)) /\
+          MEM c (FRONT (emitted_blocks sa sb)) /\
+          b.bb_label = c.bb_label ==> b = c` by
+    (rpt strip_tac >>
+     `lookup_block b.bb_label fn.fn_blocks = SOME b` by metis_tac[] >>
+     `lookup_block c.bb_label fn.fn_blocks = SOME c` by metis_tac[] >>
+     metis_tac[optionTheory.SOME_11]) >>
+  simp[MEM_APPEND, MEM] >> rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem frag_relabel_observer_has_code:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\ fn_has_code sa sb fn /\
+  ~MEM L (MAP (\bb. bb.bb_label) (emitted_blocks sa sb)) /\
+  L <> sb.cs_current_bb /\
+  ~MEM sb.cs_current_bb (MAP (\bb. bb.bb_label) (FRONT (emitted_blocks sa sb))) ==>
+  fn_has_code (start_relabel L ids sa) (start_swap sa L ids sb)
+    (frag_relabel_observer sa sb L ids fn id)
+Proof
+  strip_tac >>
+  drule_all start_swap_fields >> strip_tac >>
+  `!bb. MEM bb (emitted_blocks (start_relabel L ids sa) (start_swap sa L ids sb)) ==>
+    bb.bb_label <> sb.cs_current_bb` by
+    (drule_all start_swap_emitted_blocks >> simp[MEM_APPEND, MEM] >>
+     rpt strip_tac >> gvs[MEM_MAP] >> metis_tac[]) >>
+  simp[fn_has_code_def] >> conj_tac
+  >- (rpt strip_tac >>
+      simp[frag_relabel_observer_def, Once lookup_block_def, FIND_thm] >>
+      rewrite_tac[GSYM lookup_block_def] >>
+      irule frag_blocks_consistent_lookup >>
+      metis_tac[start_swap_blocks_consistent]) >>
+  qexists_tac `<|bb_label := sb.cs_current_bb;
+    bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>` >>
+  simp[frag_relabel_observer_cut, IS_PREFIX_APPEND]
+QED
+
+Theorem frag_relabel_ids_reorder[local]:
+  ALL_DISTINCT (a ++ b ++ c) /\ ALL_DISTINCT ids /\ ~MEM id ids /\
+  (!x. MEM x (a ++ b ++ c) ==> ~MEM x ids /\ x <> id) ==>
+  ALL_DISTINCT (c ++ [id] ++ b ++ ids ++ a)
+Proof
+  simp[ALL_DISTINCT_APPEND, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem frag_relabel_observer_id_layout:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks ==>
+  FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions)
+    (frag_relabel_observer sa sb L ids fn id).fn_blocks) =
+  MAP (\i. i.inst_id) sb.cs_current_insts ++ [id] ++
+  MAP (\i. i.inst_id)
+    (FLAT (MAP (\bb. bb.bb_instructions) (FRONT (emitted_blocks sa sb)))) ++
+  ids ++ MAP (\i. i.inst_id)
+    (DROP (LENGTH sa.cs_current_insts) (LAST (emitted_blocks sa sb)).bb_instructions)
+Proof
+  strip_tac >> drule_all start_swap_emitted_blocks >> strip_tac >>
+  simp[frag_relabel_observer_def, MAP_APPEND, FLAT_APPEND, MAP_FLAT,
+       MAP_MAP_o, combinTheory.o_DEF, mk_inst_def, APPEND_ASSOC]
+QED
+
+Theorem frag_relabel_observer_ids:
+  cs_extends sa sb /\ sa.cs_blocks <> sb.cs_blocks /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (frag_code sa sb)) /\
+  ALL_DISTINCT ids /\ ~MEM id ids /\
+  (!i. MEM i (frag_code sa sb) ==> ~MEM i.inst_id ids /\ i.inst_id <> id) ==>
+  fn_inst_ids_distinct (frag_relabel_observer sa sb L ids fn id)
+Proof
+  strip_tac >> drule_all frag_relabel_observer_id_layout >> strip_tac >>
+  `emitted_blocks sa sb <> []` by
+    (drule frag_extends_emitted_shape >> strip_tac >> gvs[]) >>
+  simp[fn_inst_ids_distinct_def] >>
+  irule frag_relabel_ids_reorder >>
+  gvs[frag_code_def, NULL_EQ, MAP_APPEND] >>
+  simp[MEM_MAP, MEM_APPEND] >> metis_tac[]
+QED
+
 Theorem frag_exec_gas_path_relabel:
   !ctx sa sb Q R fn s.
     (!L ids fn'.
