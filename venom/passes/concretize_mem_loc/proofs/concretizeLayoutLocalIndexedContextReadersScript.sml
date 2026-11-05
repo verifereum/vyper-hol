@@ -3,7 +3,11 @@ Ancestors concretizeLayoutLocalContextReaders concretizeLayoutReaderContext
   frameRelocationGuardedValues
   frameRelocationEnvironment venomExecSemantics venomState
   ptrDiscipline codegenRel finite_map frameRelocationBinding frameJointDemand
-  concretizeLayoutLocalValues frameRelocationCleanValueSteps
+  concretizeLayoutLocalValues concretizeLayoutOperandCleanliness
+  frameRelocationCleanOperands frameRelocationReachableSupport
+  frameJointTrace frameJointTransition frameResolvedTrace frameJointTaint
+  frameOriginReachable frameOriginHistory pointerConfinedDefs memLocDefs
+  frameRelocationCleanValueSteps
   frameRelocationLocal frameRelocationTaintOrder frameRelocationMemory
 
 Definition indexed_context_read_opcode_def:
@@ -106,13 +110,17 @@ Proof
 QED
 
 Theorem concretize_indexed_context_reader_local_complete:
-  vs0.vs_allocas = FEMPTY /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\
   indexed_context_read_opcode inst.inst_opcode /\
   inst.inst_operands = [arg] /\ inst.inst_outputs = [v] /\
-  (!x. arg = Var x ==> clean_scalar (retpc_var fn) rv tn x) /\
+  resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
+    (birth::ids) ((rp,rv)::anns) /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   step_inst_base inst s = OK post /\
   relocation_env s t /\ relocation_reader_context s t /\
   local_rel (\u. F)
@@ -140,6 +148,25 @@ Theorem concretize_indexed_context_reader_local_complete:
     relocation_env post tpost /\ relocation_reader_context post tpost
 Proof
   strip_tac >>
+  `frame_reachable vs0 C stk PG G tn fn inst s` by
+    (drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
+     fs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `taint_ok fn tn inst s` by
+    (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
+    (drule resolved_config_current >> simp[] >> strip_tac >>
+     rpt strip_tac >> irule reachable_resolved_support >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `!x. arg = Var x ==> clean_scalar (retpc_var fn) rv tn x` by
+    (rpt strip_tac >>
+     `MEM (Var x) inst.inst_operands` by simp[] >>
+     `~is_pointer_preserving_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+      ~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+      mem_write_ops inst = NONE /\ mem_read_ops inst = NONE` by
+       (fs[indexed_context_read_opcode_def] >>
+        simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def]) >>
+     drule_all nonpointer_operand_clean >> simp[]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>

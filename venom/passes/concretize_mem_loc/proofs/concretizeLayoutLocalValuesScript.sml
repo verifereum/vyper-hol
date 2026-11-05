@@ -1,5 +1,6 @@
 Theory concretizeLayoutLocalValues
-Ancestors frameRelocationCleanValueSteps frameRelocationEnvironment
+Ancestors concretizeLayoutOperandCleanliness
+  frameRelocationCleanValueSteps frameRelocationEnvironment
   frameRelocationCleanOperands frameRelocationReachableSupport
   concretizeLayoutLoadProduction pointerConfinedDefs memLocDefs
   frameRelocationBinding frameJointDemand frameJointTrace frameJointTransition
@@ -17,23 +18,6 @@ Proof
   simp[clean_value_shape_def, frameRelocationScalarStepsTheory.scalar_binary_opcode_def, MEM] >> strip_tac >>
   simp[is_pointer_preserving_op_def, mem_write_ops_def, mem_read_ops_def,
        step_writes_def, source_memory_write_ranges_def, range_bytes_def]
-QED
-
-Theorem nonpointer_clean_origins_absent[local]:
-  clean_value_shape inst /\ ~MEM inst.inst_opcode [ADD; SUB; EQ; LT; GT] /\
-  fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
-  (!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn) /\
-  MEM (Var w) inst.inst_operands ==>
-  FLOOKUP rv w = NONE
-Proof
-  strip_tac >> drule nonpointer_clean_classification >> strip_tac >>
-  spose_not_then assume_tac >>
-  `w IN fn_pv P fn` by metis_tac[] >>
-  `ptr_use_ok P (fn_pv P fn) inst` by
-    (fs[fn_ptr_ok_def] >> metis_tac[]) >>
-  fs[ptr_use_ok_def] >>
-  qpat_x_assum `!v. MEM (Var v) _ /\ _ ==> _`
-    (qspec_then `w` mp_tac) >> simp[]
 QED
 
 Theorem nonpointer_clean_no_writes[local]:
@@ -95,11 +79,9 @@ Proof
   `!w. MEM (Var w) inst.inst_operands ==>
        clean_scalar (retpc_var fn) rv tn w` by
     (rpt strip_tac >>
-     `FLOOKUP rv w = NONE` by
-       (irule nonpointer_clean_origins_absent >> metis_tac[]) >>
-     `~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by
-       metis_tac[nonpointer_clean_classification] >>
-     drule_all disciplined_clean_scalar >> simp[]) >>
+     drule nonpointer_clean_classification >> simp[] >> strip_tac >>
+     `~MEM inst.inst_opcode [EQ; LT; GT; ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+     drule_all nonpointer_operand_clean >> simp[]) >>
   `!a b. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a b ==>
          joint_relocation_demand lo (concretize_positions C') q0 es qs c a b` by
     (rpt strip_tac >> irule joint_relocation_demand_retained >>
