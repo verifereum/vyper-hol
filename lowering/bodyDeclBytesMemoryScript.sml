@@ -8,7 +8,7 @@ Ancestors
   bodyDeclCopyMemory bodyDeclMemoryCompose bodyDeclMemoryCounted
   bodyDeclMemoryCore bodyMemoryPreds stmtSimDeclCompose stmtSimDeclSource
   stmtSimDeclStore stmtSimDeclMem stmtSimDecl exprSimMemDefs exprSimProps
-  exprSimBufferStore bodyMemoryDefs fragGasMode fragGasPathMem fragGasPath
+  exprSimBufferStore bodyRhsRoomMemory bodyMemoryDefs fragGasMode fragGasPathMem fragGasPath
   gasSummary gasOutcome loweringPosts exprSimDefs stmtSimDefs stmtSimProps
   loweringSlice exprLoweringProps exprOperandVar localPtrsProps freshWrites
   valueTypingMemoryProps valueCopyBytes bodySim exprSimHypsDefs emitHelper emitHelperProps fragExec
@@ -460,18 +460,22 @@ Proof
   simp[stmt_lands_def]
 QED
 
-(* HELD: the right-hand side of a bytestring declaration, lowered as by
+(* The right-hand side of a bytestring declaration, lowered as by
    compile_annassign_bytes_stmt_frag_mem's premise.  Beyond expr_sim_mem's
    post, a value left in memory has its source region reach the lowered
-   type's size, which the staging copy reads in full.  It waits on the
-   type-size bound for memory-located value views (vv_store_bound); the
-   rest of the bytestring arm is proved. *)
+   type's size, which the staging copy reads in full: vv_store_bound gives
+   room for the expression's type, which is at least as large. *)
 Theorem annassign_bytes_rhs_located_mem:
-  !tops ctx func c cx env e es ltv.
+  !tops ctx func c cx env e es ltv etv.
     body_inv tops ctx c cx /\ expr_body_pre c cx env e es /\
     body_expr_mem_ok cx e /\
-    is_bytestring_type (lowered_value_type c e) /\
-    evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv ==>
+    is_bytestring_type (expr_type e) /\
+    evaluate_type (get_tenv cx) (lowered_value_type c e) = SOME ltv /\
+    evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
+    type_memory_bytes c (expr_type e) = type_memory_size etv /\
+    type_memory_size etv < 2 ** 64 /\
+    0 < type_memory_size ltv /\
+    type_memory_size ltv <= type_memory_size etv ==>
     !sa sV sb vv op s0.
       compile_expr c (expr_type e) e sa = (vv, sV) /\
       unwrap_value c vv sV = (op, sb) /\
@@ -495,5 +499,18 @@ Theorem annassign_bytes_rhs_located_mem:
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
         (\res ee r. expr_exit res r)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
+    metis_tac[bodyMemoryPredsTheory.body_expr_mem_ok_def] >>
+  `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>
+  mp_tac (Q.SPECL [`ctx`, `func`, `c`, `cx`, `expr_type e`, `e`, `es`]
+            expr_sim_mem_room) >>
+  impl_tac >- (rpt strip_tac >> gvs[]) >>
+  disch_then (qspecl_then [`sa`, `sV`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >> strip_tac >>
+  irule gas_outcome_post_mono >>
+  first_x_assum (irule_at (Pos last)) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> qpat_x_assum `vv_location _ = _ ==> _` drule >>
+  disch_then drule >> strip_tac >> decide_tac
 QED

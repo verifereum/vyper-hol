@@ -181,6 +181,13 @@ Resume body_annassign_mem_case[bytes]:
   disch_then (strip_assume_tac o REWRITE_RULE [optionTheory.IS_SOME_EXISTS]) >>
   rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME etv` >>
   `type_memory_size ltv <= type_memory_size tyv` by metis_tac[] >>
+  `type_memory_bytes cenv (expr_type e) <= type_memory_bytes cenv typ` by
+    metis_tac[type_widens_to_def, arg_type_fits_bytestring_memory_bytes,
+              arithmeticTheory.LESS_EQ_REFL] >>
+  `type_memory_bytes cenv (lowered_value_type cenv e) <=
+     type_memory_bytes cenv (expr_type e)` by
+    (irule lowered_value_type_memory_bound >> metis_tac[]) >>
+  `type_memory_bytes cenv (expr_type e) < 2 ** 64` by decide_tac >>
   `type_memory_size ltv < dimword (:256)` by decide_tac >>
   irule compile_annassign_bytes_stmt_frag_mem >> simp[PULL_EXISTS] >>
   rpt conj_tac
@@ -203,9 +210,11 @@ Resume body_annassign_mem_case[bytes]:
     `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
     `expr_body_pre c cx env e es` by metis_tac[body_annassign_mem_rhs_pre] >>
     drule_all declare_local_memory_types_mem >> strip_tac >>
-    mp_tac (Q.SPECL [`tops`, `ctx`, `func`, `c`, `cx`, `env`, `e`, `es`, `ltv`]
-              annassign_bytes_rhs_located_mem) >>
-    impl_tac >- (simp[] >> metis_tac[]) >>
+    `type_memory_bytes c (expr_type e) = type_memory_size etv` by
+      metis_tac[expr_sim_inv_memory_size] >>
+    mp_tac (Q.SPECL [`tops`, `ctx`, `func`, `c`, `cx`, `env`, `e`, `es`, `ltv`,
+                     `etv`] annassign_bytes_rhs_located_mem) >>
+    impl_tac >- (rpt conj_tac >> gvs[] >> metis_tac[]) >>
     simp[]) >>
   metis_tac[]
 QED
