@@ -3,7 +3,7 @@ Theory bodyPtrEnvBuiltinsSelectorRun
 Ancestors exprSimLiteralBuffer bodyPtrEnvBuiltinsSelectorBuffer
   exprLoweringProps venomExecSemantics venomState venomInst
   compileEnv context emitHelper fragExec exprSimAlloc localPtrsProps
-  loweringSlice exprSimHash list words finite_map
+  loweringSlice exprSimHash exprSimProps list words finite_map
 
 Theorem selector_store_tail_run:
   lookup_var p s = SOME (n2w b) /\ b+64 < dimword (:256) /\
@@ -133,3 +133,115 @@ Proof
      simp[mstore_def, update_var_def]) >>
   asm_rewrite_tac[] >> irule selector_buffer_memory >> simp[]
 QED
+
+Theorem selector_store_tail_lookup:
+  lookup_var x
+    (mstore (b+32) w (update_var q (n2w (b+32)) (mstore b 4w s))) =
+  if x = q then SOME (n2w (b+32)) else lookup_var x s
+Proof
+  simp[lookup_var_def, mstore_def, update_var_def, FLOOKUP_UPDATE, EQ_SYM_EQ]
+QED
+
+Theorem selector_store_tail_allocas:
+  (mstore (b+32) w (update_var q (n2w (b+32)) (mstore b 4w s))).vs_allocas =
+  s.vs_allocas
+Proof
+  simp[mstore_def, update_var_def]
+QED
+
+Theorem selector_store_tail_local_region:
+  not_local_ptr cenv scopes q ==>
+  (local_region cenv scopes
+    (mstore (b+32) w (update_var q (n2w (b+32)) (mstore b 4w s))) name lb sz <=>
+   local_region cenv scopes s name lb sz)
+Proof
+  strip_tac >>
+  simp[local_region_def, selector_store_tail_lookup] >>
+  gvs[not_local_ptr_def] >> metis_tac[]
+QED
+
+Theorem selector_buffer_run_frame:
+  compile_alloc_buffer 64 sa = (buf,sm) /\ buf.buf_operand = Var p /\
+  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ p <> q /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
+  eval_operand value s = SOME w /\
+  (!x. value = Var x ==> not_fresh_at sa x) ==>
+  ?t b. run_inst_seq (emitted_insts sa sm ++
+      [mk_inst il MSTORE [Var p; Lit 4w] [];
+       mk_inst ip ADD [Var p; Lit 32w] [q];
+       mk_inst iw MSTORE [Var q; value] []]) s = OK t /\
+    stmt_state_rel ctx fn cenv cx es t /\
+    eval_operand (Var p) t = SOME (n2w b) /\
+    FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,64) /\
+    sa.cs_next_id < sm.cs_next_id /\ b+64 < dimword (:256) /\
+    val_in_memory (BaseTV (BytesT (Dynamic 4)))
+      (BytesV (TAKE 4 (word_to_bytes w T))) b t.vs_memory /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+       FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid off len. aid < sa.cs_next_id /\
+       FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
+    (!name off len. local_region cenv es.scopes s name off len ==>
+       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) /\
+    (!name off len. local_region cenv es.scopes t name off len ==>
+       regions_disjoint b 64 off len)
+Proof
+  strip_tac >>
+  `64 < dimword (:256)` by simp[dimword_def] >>
+  drule_all alloc_buffer_frame_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK u` >>
+  `not_local_ptr cenv es.scopes q` by
+    (gvs[local_ptrs_reserved_def, not_local_ptr_def] >> metis_tac[]) >>
+  `eval_operand value u = SOME w /\ value <> Var q` by
+    (Cases_on `value` >> gvs[eval_operand_def] >> metis_tac[]) >>
+  qexistsl_tac [`mstore (w2n w'+32) w
+    (update_var q (n2w (w2n w'+32)) (mstore (w2n w') 4w u))`, `w2n w'`] >>
+  simp[selector_store_tail_lookup, selector_store_tail_allocas,
+       selector_store_tail_representation, eval_operand_def,
+       selector_store_tail_local_region] >>
+  conj_tac >- suspend "run" >>
+  conj_tac >- suspend "state" >>
+  conj_tac >- gvs[eval_operand_def] >>
+  conj_tac >- (rpt strip_tac >> IF_CASES_TAC >> gvs[]) >>
+  conj_tac >- suspend "old_alloc" >>
+  conj_tac >- suspend "locals" >> metis_tac[]
+QED
+
+Resume selector_buffer_run_frame[run]:
+  `lookup_var p u = SOME (n2w (w2n w'))` by gvs[eval_operand_def] >>
+  drule run_inst_seq_append >> disch_then (qspec_then
+    `[mk_inst il MSTORE [Var p; Lit 4w] [];
+      mk_inst ip ADD [Var p; Lit 32w] [q];
+      mk_inst iw MSTORE [Var q; value] []]` SUBST1_TAC) >>
+  irule selector_store_tail_run >> simp[]
+QED
+
+Resume selector_buffer_run_frame[state]:
+  irule selector_store_tail_state_rel >> simp[] >>
+  conj_tac >- metis_tac[regions_disjoint_def] >>
+  qexists_tac `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
+    [STRING #"%" (toString sa.cs_next_var)]` >>
+  simp[mk_inst_def] >> metis_tac[regions_disjoint_def]
+QED
+
+Resume selector_buffer_run_frame[old_alloc]:
+  rpt strip_tac >>
+  `regions_disjoint (w2n w') 64 off len` by metis_tac[] >>
+  drule selector_store_tail_memory_frame >>
+  disch_then (qspecl_then [`w`, `u`, `q`] mp_tac) >> simp[]
+QED
+
+Resume selector_buffer_run_frame[locals]:
+  rpt strip_tac >>
+  `local_region cenv es.scopes u name off len` by
+    (irule local_region_frame_fwd >> goal_assum (drule_at Any) >>
+     qexists_tac `sa` >> simp[]) >>
+  `regions_disjoint (w2n w') 64 off len` by metis_tac[] >>
+  drule selector_store_tail_memory_frame >>
+  disch_then (qspecl_then [`w`, `u`, `q`] mp_tac) >> simp[]
+QED
+
+Finalise selector_buffer_run_frame
