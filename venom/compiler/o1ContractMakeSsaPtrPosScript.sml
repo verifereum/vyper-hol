@@ -372,12 +372,6 @@ Proof
   metis_tac[]
 QED
 
-Theorem make_ssa_pos_suc[local]:
-  make_ssa_pos fn fn' l (SUC k) = SUC (make_ssa_pos fn fn' l k)
-Proof
-  simp[make_ssa_pos_def]
-QED
-
 (* A paired state of a MakeSSA lockstep sits at make_ssa_pos in the block
    of the same label (lockstep_rel, state_rel); the revert forwarding
    (make_ssa_current_fn_revert_forward_at) and a REVERT right after
