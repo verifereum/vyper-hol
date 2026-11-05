@@ -527,3 +527,314 @@ Proof
   strip_tac >> drule ao_resolve_iszero_inst_labels >>
   simp[get_successors_def, ao_resolve_iszero_inst_fields]
 QED
+
+Theorem ao_simple_peephole_unary:
+  LENGTH inst.inst_outputs = 1 /\
+  inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT ==>
+  !out.
+    (MEM out (ao_opt_shift inst) \/
+     MEM out (ao_opt_signextend ra lbl idx inst) \/
+     MEM out (ao_opt_exp inst) \/
+     MEM out (ao_opt_addsub inst) \/
+     MEM out (ao_opt_and inst) \/
+     MEM out (ao_opt_muldiv inst) \/
+     MEM out (ao_opt_or dfg inst)) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    out.inst_opcode <> ASSERT
+Proof
+  strip_tac >> gen_tac >>
+  pure_rewrite_tac[DISJ_IMP_THM] >> rpt conj_tac >>
+  Cases_on `inst.inst_operands` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t'` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `h` >> Cases_on `h'` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ao_opt_eq_unary:
+  LENGTH inst.inst_outputs = 1 /\
+  inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT ==>
+  !out. MEM out (ao_opt_eq dfg fr inst) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    out.inst_opcode <> ASSERT
+Proof
+  strip_tac >> gen_tac >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_eq_def] >>
+  Cases_on `t` >> simp[ao_opt_eq_def] >>
+  Cases_on `t'` >> simp[ao_opt_eq_def] >>
+  Cases_on `fr "not"` >> Cases_on `fr "xor"` >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ao_cmp_prefer_iz_unary:
+  LENGTH inst.inst_outputs = 1 ==>
+  !out.
+    (MEM out (ao_cmp_prefer_iz_zero fr op1 inst) \/
+     MEM out (ao_cmp_prefer_iz_max fr op1 inst) \/
+     MEM out (ao_cmp_prefer_iz_general fr op1 op2 inst)) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    out.inst_opcode <> ASSERT
+Proof
+  strip_tac >> Cases_on `fr "not"` >> Cases_on `fr "xor"` >>
+  Cases_on `fr "iz"` >>
+  simp[ao_cmp_prefer_iz_zero_def, ao_cmp_prefer_iz_max_def,
+       ao_cmp_prefer_iz_general_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem ao_opt_comparator_unary:
+  LENGTH inst.inst_outputs = 1 /\
+  inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT ==>
+  !out. MEM out (ao_opt_comparator dfg ra lbl idx fr inst) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    out.inst_opcode <> ASSERT
+Proof
+  strip_tac >> gen_tac >>
+  `!op1 op2 out.
+    (MEM out (ao_cmp_prefer_iz_zero fr op1 inst) \/
+     MEM out (ao_cmp_prefer_iz_max fr op1 inst) \/
+     MEM out (ao_cmp_prefer_iz_general fr op1 op2 inst)) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    out.inst_opcode <> ASSERT` by metis_tac[ao_cmp_prefer_iz_unary] >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t'` >> simp[ao_opt_comparator_def] >>
+  Cases_on `h = h'` >> simp[] >>
+  Cases_on `ao_opt_cmp_range ra lbl idx inst
+    (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+    (inst.inst_opcode = SGT \/ inst.inst_opcode = SLT)` >> simp[] >>
+  pairarg_tac >> simp[] >>
+  Cases_on `fr "not"` >> Cases_on `fr "iz"` >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem ao_peephole_inst_unary:
+  !source inst. inst_wf source /\ inst.inst_opcode = source.inst_opcode /\
+  LENGTH inst.inst_outputs = LENGTH source.inst_outputs /\
+  LENGTH inst.inst_operands = LENGTH source.inst_operands ==>
+  !out. MEM out (ao_peephole_inst dfg ra lbl idx fr inst) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    (out.inst_opcode = ASSERT ==> LENGTH out.inst_operands = 1)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  Cases_on `source.inst_opcode` >>
+  gvs[inst_wf_def] >> simp[ao_peephole_inst_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[] >>
+  `inst.inst_opcode <> ISZERO /\ inst.inst_opcode <> ASSERT` by simp[] >>
+  metis_tac[ao_simple_peephole_unary, ao_opt_eq_unary,
+            ao_opt_comparator_unary]
+QED
+
+Theorem ao_inst_wf_unary:
+  inst_wf inst ==>
+    (inst.inst_opcode = ISZERO ==>
+      LENGTH inst.inst_operands = 1 /\ LENGTH inst.inst_outputs = 1) /\
+    (inst.inst_opcode = ASSERT ==> LENGTH inst.inst_operands = 1)
+Proof
+  Cases_on `inst.inst_opcode` >> simp[inst_wf_def]
+QED
+
+Theorem ao_transform_inst_unary:
+  inst_wf inst ==>
+  !out. MEM out (ao_transform_inst dfg ra lbl idx targets fr inst) ==>
+    (out.inst_opcode = ISZERO ==>
+      LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+    (out.inst_opcode = ASSERT ==> LENGTH out.inst_operands = 1)
+Proof
+  strip_tac >> gen_tac >>
+  drule ao_inst_wf_unary >> strip_tac >>
+  simp[ao_transform_inst_def] >>
+  qabbrev_tac `inst0 = ao_resolve_iszero_inst targets inst` >>
+  `inst0.inst_opcode = inst.inst_opcode /\
+   inst0.inst_outputs = inst.inst_outputs /\
+   LENGTH inst0.inst_operands = LENGTH inst.inst_operands` by
+    simp[Abbr `inst0`, ao_resolve_iszero_inst_fields] >>
+  Cases_on `inst0.inst_outputs = []`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  Cases_on `inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
+            inst0.inst_opcode = PARAM`
+  >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[] >> Cases_on `ao_opt_producer dfg inst0`
+  >- (simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+      `!out. MEM out (ao_peephole_inst dfg ra lbl idx fr
+                       (ao_pre_flip_inst inst0)) ==>
+        (out.inst_opcode = ISZERO ==>
+          LENGTH out.inst_operands = 1 /\ LENGTH out.inst_outputs = 1) /\
+        (out.inst_opcode = ASSERT ==> LENGTH out.inst_operands = 1)` by
+        (match_mp_tac ao_peephole_inst_unary >> qexists_tac `inst` >>
+         simp[ao_pre_flip_inst_shape]) >>
+      gvs[ao_post_flip_inst_shape] >> metis_tac[]) >>
+  simp[MEM_MAP] >> rpt strip_tac >> gvs[] >>
+  drule ao_opt_producer_shape >> strip_tac >> gvs[] >>
+  gvs[ao_post_flip_inst_shape] >> metis_tac[]
+QED
+
+Theorem ao_simple_peephole_control:
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI ==>
+  !outs.
+    (outs = ao_opt_shift inst \/
+     outs = ao_opt_signextend ra lbl idx inst \/
+     outs = ao_opt_exp inst \/ outs = ao_opt_addsub inst \/
+     outs = ao_opt_and inst \/ outs = ao_opt_muldiv inst \/
+     outs = ao_opt_or dfg inst) ==>
+    outs <> [] /\
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI) outs
+Proof
+  strip_tac >> gen_tac >>
+  pure_rewrite_tac[DISJ_IMP_THM] >> rpt conj_tac >>
+  Cases_on `inst.inst_operands` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `t'` >>
+  simp[ao_opt_shift_def, ao_opt_signextend_def, ao_opt_exp_def,
+       ao_opt_addsub_def, ao_opt_and_def, ao_opt_muldiv_def, ao_opt_or_def] >>
+  Cases_on `h` >> Cases_on `h'` >> simp[] >>
+  rpt (IF_CASES_TAC >> simp[]) >> rpt strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem ao_opt_eq_control:
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI ==>
+  ao_opt_eq dfg fr inst <> [] /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+    (ao_opt_eq dfg fr inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_eq_def] >>
+  Cases_on `t` >> simp[ao_opt_eq_def] >>
+  Cases_on `t'` >> simp[ao_opt_eq_def] >>
+  Cases_on `fr "not"` >> Cases_on `fr "xor"` >>
+  rpt (IF_CASES_TAC >> simp[is_terminator_def])
+QED
+
+Theorem ao_opt_comparator_control:
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI ==>
+  ao_opt_comparator dfg ra lbl idx fr inst <> [] /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+    (ao_opt_comparator dfg ra lbl idx fr inst)
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_operands` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t` >> simp[ao_opt_comparator_def] >>
+  Cases_on `t'` >> simp[ao_opt_comparator_def] >>
+  Cases_on `h = h'` >> simp[is_terminator_def] >>
+  Cases_on `ao_opt_cmp_range ra lbl idx inst
+    (inst.inst_opcode = GT \/ inst.inst_opcode = SGT)
+    (inst.inst_opcode = SGT \/ inst.inst_opcode = SLT)` >>
+  simp[is_terminator_def] >> pairarg_tac >> simp[] >>
+  Cases_on `fr "not"` >> Cases_on `fr "xor"` >> Cases_on `fr "iz"` >>
+  rpt (IF_CASES_TAC >> simp[ao_cmp_prefer_iz_zero_def,
+       ao_cmp_prefer_iz_max_def, ao_cmp_prefer_iz_general_def,
+       is_terminator_def])
+QED
+
+Theorem ao_peephole_inst_control:
+  ao_peephole_inst dfg ra lbl idx fr inst <> [] /\
+  ((is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI) ==>
+    ao_peephole_inst dfg ra lbl idx fr inst = [inst]) /\
+  ((~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI) ==>
+    EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+      (ao_peephole_inst dfg ra lbl idx fr inst))
+Proof
+  Cases_on `inst.inst_outputs = []`
+  >- simp[ao_peephole_inst_def] >>
+  Cases_on `inst.inst_opcode` >> simp[ao_peephole_inst_def, is_terminator_def] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI` by
+    simp[is_terminator_def] >>
+  metis_tac[ao_simple_peephole_control, ao_opt_eq_control,
+            ao_opt_comparator_control]
+QED
+
+Theorem ao_transform_inst_control_owner:
+  is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst =
+    [ao_resolve_iszero_inst targets inst]
+Proof
+  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
+  simp[ao_transform_inst_def, ao_resolve_iszero_inst_fields,
+       ao_opt_producer_def, ao_pre_flip_inst_shape,
+       ao_peephole_inst_def, ao_post_flip_inst_shape, is_terminator_def]
+QED
+
+Theorem ao_transform_inst_noncontrol:
+  ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI ==>
+  ao_transform_inst dfg ra lbl idx targets fr inst <> [] /\
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+    (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  strip_tac >> simp[ao_transform_inst_def] >>
+  qabbrev_tac `inst0 = ao_resolve_iszero_inst targets inst` >>
+  `~is_terminator inst0.inst_opcode /\ inst0.inst_opcode <> PHI` by
+    simp[Abbr `inst0`, ao_resolve_iszero_inst_fields] >>
+  Cases_on `inst0.inst_outputs = []` >- simp[] >>
+  Cases_on `inst0.inst_opcode = ASSIGN \/ inst0.inst_opcode = PHI \/
+            inst0.inst_opcode = PARAM` >- simp[] >>
+  simp[] >> Cases_on `ao_opt_producer dfg inst0`
+  >- (simp[] >>
+      `ao_peephole_inst dfg ra lbl idx fr (ao_pre_flip_inst inst0) <> [] /\
+       EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+         (ao_peephole_inst dfg ra lbl idx fr (ao_pre_flip_inst inst0))` by
+        metis_tac[ao_peephole_inst_control, ao_pre_flip_inst_shape] >>
+      simp[EVERY_MAP, combinTheory.o_DEF, ao_post_flip_inst_shape]) >>
+  simp[] >> drule ao_opt_producer_shape >> strip_tac >>
+  gvs[ao_post_flip_inst_shape]
+QED
+
+Theorem ao_transform_inst_nonempty:
+  ao_transform_inst dfg ra lbl idx targets fr inst <> []
+Proof
+  Cases_on `is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI`
+  >- (gvs[] >> simp[ao_transform_inst_control_owner]) >>
+  metis_tac[ao_transform_inst_noncontrol]
+QED
+
+Theorem ao_transform_inst_control:
+  EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+    (FRONT (ao_transform_inst dfg ra lbl idx targets fr inst)) /\
+  is_terminator (LAST (ao_transform_inst dfg ra lbl idx targets fr inst)).inst_opcode =
+    is_terminator inst.inst_opcode /\
+  ((LAST (ao_transform_inst dfg ra lbl idx targets fr inst)).inst_opcode = PHI <=>
+    inst.inst_opcode = PHI)
+Proof
+  Cases_on `is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI`
+  >- (gvs[] >> simp[ao_transform_inst_control_owner, ao_resolve_iszero_inst_fields]) >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> PHI` by gvs[] >>
+  `ao_transform_inst dfg ra lbl idx targets fr inst <> [] /\
+   EVERY (\i. ~is_terminator i.inst_opcode /\ i.inst_opcode <> PHI)
+     (ao_transform_inst dfg ra lbl idx targets fr inst)` by
+    metis_tac[ao_transform_inst_noncontrol] >>
+  gvs[EVERY_MEM] >> conj_tac
+  >- metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
+  metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
+QED
+
+Theorem ao_transform_inst_successors:
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+     ~is_label_operand op) ==>
+  get_successors (LAST (ao_transform_inst dfg ra lbl idx targets fr inst)) =
+    get_successors inst
+Proof
+  strip_tac >>
+  Cases_on `is_terminator inst.inst_opcode \/ inst.inst_opcode = PHI`
+  >- (gvs[] >> simp[ao_transform_inst_control_owner] >>
+      metis_tac[ao_resolve_iszero_inst_successors]) >>
+  `is_terminator
+     (LAST (ao_transform_inst dfg ra lbl idx targets fr inst)).inst_opcode =
+   is_terminator inst.inst_opcode` by metis_tac[ao_transform_inst_control] >>
+  gvs[get_successors_def]
+QED
