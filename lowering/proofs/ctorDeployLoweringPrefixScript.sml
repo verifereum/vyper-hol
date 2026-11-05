@@ -1517,6 +1517,137 @@ Proof
   simp[callTraceTheory.observe_def]
 QED
 
+Theorem deploy_prefix_noncall_opcode[local]:
+  next_opcode c <> SOME Call /\ next_opcode c <> SOME StaticCall /\
+  next_opcode c <> SOME Create /\ next_opcode c <> SOME Create2 ==>
+  ~observable_call c
+Proof
+  simp[callTraceTheory.observable_call_def]
+QED
+
+Theorem deploy_prefix_negative_code_projection[local]:
+  (^prefix_ctxt_tm).msgParams.code = ^prefix_deploy_bc_tm ++ ^prefix_args_tm
+Proof
+  simp[vfmContextTheory.initial_context_simp,
+       vfmContextTheory.initial_msg_params_def]
+QED
+
+Theorem deploy_prefix_negative_parsed_projection[local]:
+  (^prefix_ctxt_tm).msgParams.parsed = ^prefix_parsed_tm
+Proof
+  simp[deploy_prefix_negative_context_projections, deploy_prefix_negative_parsed]
+QED
+
+Theorem deploy_prefix_next_opcode_update[local]:
+  next_opcode (c with <|pc := pc; stack := stk; gasUsed := gas; memory := mem|>) =
+  if LENGTH c.msgParams.code <= pc then SOME Stop else FLOOKUP c.msgParams.parsed pc
+Proof
+  simp[callTraceTheory.next_opcode_def]
+QED
+
+Theorem deploy_prefix_negative_next_opcode[local]:
+  next_opcode
+    (^prefix_ctxt_tm with <|pc := pc; stack := stk; gasUsed := gas; memory := mem|>) =
+  if 65 <= pc then SOME Stop else FLOOKUP ^prefix_parsed_tm pc
+Proof
+  pure_rewrite_tac[deploy_prefix_next_opcode_update,
+       deploy_prefix_negative_code_projection, deploy_prefix_negative_parsed_projection] >>
+  simp[]
+QED
+
+Theorem deploy_prefix_negative_context_observer:
+  MEM pc [0;1;3;4;5;6;9;10;11;12;13;14;15;16;17;18;19;20;21;22;25;26;27;28] ==>
+  ~observable_call
+    (^prefix_ctxt_tm with <|pc := pc; stack := stk; gasUsed := gas; memory := mem|>) /\
+  next_opcode
+    (^prefix_ctxt_tm with <|pc := pc; stack := stk; gasUsed := gas; memory := mem|>) <> SOME Gas
+Proof
+  disch_tac >> conj_tac
+  >- (irule deploy_prefix_noncall_opcode >>
+      pure_rewrite_tac[deploy_prefix_negative_next_opcode] >>
+      pop_assum mp_tac >> pure_rewrite_tac[listTheory.MEM] >>
+      strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE])
+  >> pure_rewrite_tac[deploy_prefix_negative_next_opcode] >>
+  pop_assum mp_tac >> pure_rewrite_tac[listTheory.MEM] >>
+  strip_tac >> gvs[finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem deploy_prefix_observe_singleton[local]:
+  ~observable_call c /\ next_opcode c <> SOME Gas ==>
+  observe d (es with contexts := [(c,rb)]) (r,post)
+    <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  strip_tac >> irule deploy_prefix_observe_noncall >> simp[]
+QED
+
+Theorem deploy_prefix_negative_observe_context:
+  MEM pc [0;1;3;4;5;6;9;10;11;12;13;14;15;16;17;18;19;20;21;22;25;26;27;28] ==>
+  observe d
+    (es with contexts :=
+      [(^prefix_ctxt_tm with <|pc := pc; stack := stk; gasUsed := gas; memory := mem|>, rb)])
+    (r,post) <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  strip_tac >> irule deploy_prefix_observe_singleton >>
+  irule deploy_prefix_negative_context_observer >> asm_rewrite_tac[]
+QED
+
+Theorem deploy_prefix_context_keep_memory[local]:
+  c with <|pc := pc; stack := stk; gasUsed := gas; memory := c.memory|> =
+  c with <|pc := pc; stack := stk; gasUsed := gas|>
+Proof
+  simp[vfmContextTheory.context_component_equality]
+QED
+
+Theorem deploy_prefix_negative_observe_stack:
+  MEM pc [0;1;3;4;5;6;9;10;11;12;13;14;15;16;17;18;19;20;21;22;25;26;27;28] ==>
+  observe d ^(prefix_stack_state_tm (``pc:num``, ``gas:num``, ``stk:256 word list``))
+    (r,post) <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  strip_tac >> irule deploy_prefix_observe_noncall >>
+  drule deploy_prefix_negative_context_observer >>
+  disch_then (qspecl_then [`stk`, `(^prefix_ctxt_tm).memory`, `gas`] mp_tac) >>
+  pure_rewrite_tac[deploy_prefix_context_keep_memory] >> simp[LET_THM]
+QED
+
+Theorem deploy_prefix_negative_observe_memory:
+  MEM pc [0;1;3;4;5;6;9;10;11;12;13;14;15;16;17;18;19;20;21;22;25;26;27;28] ==>
+  observe d ^(prefix_mem_state_tm (``pc:num``, ``gas:num``, ``stk:256 word list``))
+    (r,post) <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  strip_tac >> irule deploy_prefix_observe_noncall >>
+  drule deploy_prefix_negative_context_observer >>
+  disch_then (qspecl_then [`stk`, `buffer_of_list ^prefix_args_tm`, `gas`] mp_tac) >>
+  simp[LET_THM]
+QED
+
+Theorem deploy_prefix_negative_stack_depth:
+  LENGTH (^(prefix_stack_state_tm (``pc:num``, ``gas:num``, ``stk:256 word list``))).contexts = 1
+Proof
+  simp[LET_THM]
+QED
+
+Theorem deploy_prefix_negative_memory_depth:
+  LENGTH (^(prefix_mem_state_tm (``pc:num``, ``gas:num``, ``stk:256 word list``))).contexts = 1
+Proof
+  simp[LET_THM]
+QED
+
+Theorem deploy_prefix_negative_observe_es1:
+  observe d ^prefix_es1_tm (r,post)
+    <|entries := []; readings := []; pending := NONE|> =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  irule deploy_prefix_observe_noncall >>
+  simp[callTraceTheory.observable_call_def, callTraceTheory.next_opcode_def,
+       LET_THM, vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
+  EVAL_TAC
+QED
+
 
 Theorem deploy_prefix_negative_wf_state:
   wf_state ^prefix_es_tm
