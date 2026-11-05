@@ -308,3 +308,23 @@ Proof
   drule current_env_realizes_append >>
   simp[current_env_realizes_def, latest_current_name_def]
 QED
+
+Theorem current_push_nonowner_separation:
+  current_allocation_consistent V H s rs /\
+  current_env_realizes H E rs V /\ current_env_owned V H E /\
+  MEM v V /\ MEM w V /\ w <> v /\
+  push_current_name s rs v = (rs',s',n) ==>
+  latest_current_name rs w <> n
+Proof
+  strip_tac >>
+  `~MEM n (MAP (SND o SND) H) /\ (MEM n V ==> n = v)` by
+    metis_tac[current_push_name_unused] >>
+  `E w = CurrentDefault w \/ ?a. MEM (E w,w,a) H` by
+    metis_tac[current_env_owned_def] >>
+  `current_token_name H (E w) = SOME (latest_current_name rs w)` by
+    metis_tac[current_env_realizes_def] >>
+  gvs[] >- metis_tac[] >>
+  `current_history_valid V H` by fs[current_allocation_consistent_def] >>
+  drule_all current_history_entry_name >> strip_tac >> gvs[] >>
+  fs[MEM_MAP] >> metis_tac[SND]
+QED

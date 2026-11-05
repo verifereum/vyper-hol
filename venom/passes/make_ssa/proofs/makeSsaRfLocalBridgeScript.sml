@@ -14,6 +14,36 @@ Proof
   metis_tac[current_push_latest]
 QED
 
+Theorem current_outputs_trace_nonoutput_avoids:
+  !anns s rs H E names s' rs' H' E'.
+  current_outputs_trace anns s rs H E names s' rs' H' E' /\
+  current_annotations_ok V H anns /\
+  current_allocation_consistent V H s rs /\ current_env_realizes H E rs V /\
+  current_env_owned V H E /\ MEM w V /\ ~MEM w (MAP SND anns) ==>
+  ~MEM (latest_current_name rs' w) names
+Proof
+  Induct >> simp[current_outputs_trace_def] >>
+  gen_tac >> PairCases_on `h` >> simp[current_outputs_trace_def] >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `current_annotations_ok V (H ++ [(h0,h1,n)]) anns` by
+    metis_tac[current_annotations_tail] >>
+  `(!v. h0 <> CurrentDefault v) /\ ~MEM h0 (MAP FST H) /\ MEM h1 V` by
+    fs[current_annotations_ok_def] >>
+  `current_allocation_consistent V (H ++ [(h0,h1,n)]) s1 rs1` by
+    (irule current_push_consistent >> metis_tac[]) >>
+  `current_env_realizes (H ++ [(h0,h1,n)]) ((h1 =+ h0) E) rs1 V` by
+    (irule current_push_env_realizes >> metis_tac[]) >>
+  `current_env_owned V (H ++ [(h0,h1,n)]) ((h1 =+ h0) E)` by
+    metis_tac[current_env_owned_push] >>
+  `latest_current_name rs' w = latest_current_name rs1 w` by
+    metis_tac[current_outputs_trace_nonoutput] >>
+  `latest_current_name rs1 w = latest_current_name rs w` by
+    metis_tac[current_push_latest] >>
+  conj_tac
+  >- metis_tac[current_push_nonowner_separation] >>
+  first_x_assum irule >> metis_tac[]
+QED
+
 Theorem current_outputs_trace_final_names:
   !anns s rs H E names s' rs' H' E'.
   current_outputs_trace anns s rs H E names s' rs' H' E' /\
