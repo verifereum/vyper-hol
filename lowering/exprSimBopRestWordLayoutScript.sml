@@ -404,3 +404,24 @@ Proof
     (Cases_on `0 < off` >> gvs[]) >>
   metis_tac[not_fresh_at_mono]
 QED
+
+Theorem rest_word_loop_layout_entry:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ?a b c. lookup_block h.rw_entry fn.fn_blocks = SOME
+    <|bb_label := h.rw_entry;
+      bb_instructions := [mk_inst a ASSIGN [Lit 0w] [h.rw_idx];
+                          mk_inst b ASSIGN [Lit 0w] [h.rw_result];
+                          mk_inst c JMP [Label h.rw_cond] []]|>
+Proof
+  simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
+
+Theorem rest_word_loop_layout_cond:
+  rest_word_loop_layout cs ct fn needle arr len stride off is_in out h code ==>
+  ?a b done. lookup_block h.rw_cond fn.fn_blocks = SOME
+    <|bb_label := h.rw_cond;
+      bb_instructions := [mk_inst a EQ [Var h.rw_idx; len] [done];
+        mk_inst b JNZ [Var done; Label h.rw_exit; Label h.rw_body] []]|>
+Proof
+  simp[rest_word_loop_layout_def] >> metis_tac[]
+QED
