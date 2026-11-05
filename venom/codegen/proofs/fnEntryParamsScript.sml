@@ -37,7 +37,9 @@ Theorem entry_prefix_fields[local]:
   (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
      with vs_inst_idx := k).vs_current_bb = s.vs_current_bb /\
   (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
-     with vs_inst_idx := k).vs_labels = s.vs_labels
+     with vs_inst_idx := k).vs_labels = s.vs_labels /\
+  (entry_bind_pairs (entry_param_pairs s (TAKE k insts)) s
+     with vs_inst_idx := k).vs_call_ctx = s.vs_call_ctx
 Proof
   simp[entry_bind_pairs_normal]
 QED
