@@ -51,7 +51,6 @@ Proof
   strip_tac >> irule expr_stop_function_has_code >> simp[]
 QED
 
-
 (* This certificate mentions only static instruction successors. Jump entry is
    after the target's PHIs, whereas a sequential edge retains the block. *)
 Theorem syntactic_region_closed:
@@ -112,7 +111,6 @@ Theorem syntactic_region_readonly:
 Proof
   simp[EVERY_MEM] >> metis_tac[]
 QED
-
 
 (* Concrete states share the block inventory across certificate outputs. *)
 Definition ifexp_observer_start_def:
@@ -246,7 +244,6 @@ Proof
   EVAL_TAC
 QED
 
-
 (* Diagnostic variants only: alias the initial block and final empty cut.
    Shared concrete endpoints keep the lookup and compilation probes identical. *)
 Definition ifexp_collision_start_def:
@@ -319,4 +316,3 @@ Proof
   strip_tac >> drule ifexp_collision_no_stop >>
   metis_tac[expr_stop_function_stop]
 QED
-
