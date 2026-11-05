@@ -4,7 +4,7 @@ Ancestors
  annAssignPtrCopy annAssignPtrSetup robustCopyTransportPtr valueEncodingProps
  valueEncoding venomMemProofs ptrDiscipline pred_set arithmetic
  bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv venomState
- finite_map loweringPosts exprLoweringProps
+ finite_map loweringPosts exprLoweringProps exprSimBufferStore venomExecSemantics venomMemDefs
 
 Theorem annassign_copy_taint_window_ptr:
  !old new a b k.
@@ -50,6 +50,8 @@ Theorem annassign_counted_copy_robust_ptr:
  (!x. lookup_var x s' = lookup_var x s) /\
  tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
  tn'.t_trans = tn.t_trans /\
+ s'.vs_memory = (if k = 0 then s.vs_memory else
+                   (mcopy (w2n b) (w2n a) k s).vs_memory) /\
  mem_bytes_at (w2n b) k s'.vs_memory = mem_bytes_at (w2n a) k s.vs_memory /\
  (!i. i < k ==> (w2n b+i IN tn'.t_mem <=> w2n a+i IN tn.t_mem)) /\
  (!i. ~(w2n b <= i /\ i < w2n b+k) ==>
@@ -63,13 +65,15 @@ Proof
  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
  drule annassign_static_copy_memory_window_ptr >> strip_tac >>
  drule annassign_copy_taint_window_ptr >> strip_tac >>
- qpat_x_assum `s'.vs_memory = _` kall_tac >>
  qpat_x_assum `tn'.t_mem = _` kall_tac >>
- qexistsl [`s'`,`tn'`] >> simp[] >>
- rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
- conj_tac >- simp[] >>
- qexistsl [`s.vs_memory`,`s'.vs_memory`,`k`,`w2n a`,`tn.t_mem`,`tn'.t_mem`] >>
- asm_rewrite_tac[]
+ `!m. mem_agree_outside tn'.t_mem s'.vs_memory m ==>
+      val_in_memory tv v (w2n b) m` by
+   (qpat_x_assum `s'.vs_memory = _` kall_tac >>
+    rpt strip_tac >> irule robust_val_in_memory_copy_transport >>
+    conj_tac >- simp[] >>
+    qexistsl [`s.vs_memory`,`s'.vs_memory`,`k`,`w2n a`,`tn.t_mem`,`tn'.t_mem`] >>
+    asm_rewrite_tac[]) >>
+ qexistsl [`s'`,`tn'`] >> simp[]
 QED
 
 Theorem annassign_coverage_var_frame_ptr:
@@ -145,8 +149,8 @@ Theorem annassign_alloca_copy_ghost_ptr:
  (s' with <|vs_memory := s.vs_memory;vs_inst_idx := s.vs_inst_idx|>) = s /\
  (tn' with t_mem := tn.t_mem) = tn /\
  (!i. ~(b <= i /\ i < b+k) ==>
-    mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
- (!i. ~(b <= i /\ i < b+k) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) ==>
+    mem_bytes_at i 1 s'.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tn'.t_mem <=> i IN tn.t_mem)) ==>
  ghost_inv d cenv cx es G tn' s'
 Proof
  rpt gen_tac >> strip_tac >>
@@ -161,5 +165,137 @@ Proof
  qexists `{i | b <= i /\ i < b+k}` >> simp[] >>
  rpt gen_tac >> strip_tac >>
  drule_all local_ptrs_rel_alloca_disjoint >>
- simp[regions_disjoint_def] >> decide_tac
+ simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem annassign_alloca_copy_state_ptr:
+ !ctx func cenv cx es s s' inst p b a sz k.
+ stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+ inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
+ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
+ (s' with <|vs_memory := s.vs_memory;vs_inst_idx := s.vs_inst_idx|>) = s /\
+ s'.vs_memory = (if k = 0 then s.vs_memory else (mcopy b a k s).vs_memory) ==>
+ stmt_state_rel ctx func cenv cx es s'
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule annassign_state_restore_elim_ptr >> disch_tac >>
+ Cases_on `k = 0` >> gvs[]
+ >- (`s' = s with vs_inst_idx := s'.vs_inst_idx` by
+       (qpat_x_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+        simp[venom_state_component_equality]) >>
+     metis_tac[stmt_state_rel_inst_idx]) >>
+ `stmt_state_rel ctx func cenv cx es (mcopy b a k s)` by
+   (irule stmt_state_rel_mcopy_alloca >> metis_tac[]) >>
+ `mcopy b a k s = s with vs_memory := (mcopy b a k s).vs_memory` by
+   simp[mcopy_def, write_memory_with_expansion_def,
+        venom_state_component_equality] >>
+ `s' = mcopy b a k s with vs_inst_idx := s'.vs_inst_idx` by
+   (qpat_x_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+    simp[mcopy_def, write_memory_with_expansion_def,
+         venom_state_component_equality]) >>
+ metis_tac[stmt_state_rel_inst_idx]
+QED
+
+Theorem annassign_ghost_kept_exterior_ptr:
+ !cenv es sa G0 tn0 s0 G tn tn' writes.
+ ghost_kept cenv es sa G0 tn0 s0 G tn /\ tn'.t_var = tn.t_var /\
+ (!i. i NOTIN writes ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
+ (!aid off sz i. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\
+    aid < sa.cs_next_id /\ off <= i /\ i < off+sz ==> i NOTIN writes) /\
+ (!n b sz i. local_region cenv es.scopes s0 n b sz /\
+    b <= i /\ i < b+sz ==> i NOTIN writes) ==>
+ ghost_kept cenv es sa G0 tn0 s0 G tn'
+Proof
+ rw[ghost_kept_def, op_taint_def] >> metis_tac[]
+QED
+
+Theorem annassign_alloca_copy_kept_ptr:
+ !ctx func cenv cx es sa G0 tn0 s0 G tn s tn' inst p b sz k.
+ stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
+ not_local_ptr cenv es.scopes p /\
+ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
+ sa.cs_next_id <= inst.inst_id /\
+ (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+              FLOOKUP s.vs_allocas aid = SOME entry) /\
+ (!n lo nsz. local_region cenv es.scopes s0 n lo nsz ==>
+              local_region cenv es.scopes s n lo nsz) /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn /\ tn'.t_var = tn.t_var /\
+ (!i. ~(b <= i /\ i < b+k) ==> (i IN tn'.t_mem <=> i IN tn.t_mem)) ==>
+ ghost_kept cenv es sa G0 tn0 s0 G tn'
+Proof
+ rpt gen_tac >> strip_tac >>
+ `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
+   fs[stmt_state_rel_def, state_rel_def] >>
+ irule annassign_ghost_kept_exterior_ptr >>
+ qexistsl [`tn`,`{i | b <= i /\ i < b+k}`] >> simp[] >> reverse conj_tac
+ >- (rpt gen_tac >> strip_tac >>
+     `FLOOKUP s.vs_allocas aid = SOME (off,sz')` by metis_tac[] >>
+     `aid <> inst.inst_id` by decide_tac >>
+     fs[alloca_inv_def, allocas_non_overlapping_def] >>
+     first_x_assum (qspecl_then [`aid`,`inst.inst_id`,`off`,`sz'`,`b`,`sz`] mp_tac) >>
+     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+ rpt gen_tac >> strip_tac >>
+ `local_region cenv es.scopes s n b' sz'` by metis_tac[] >>
+ drule_all local_ptrs_rel_alloca_disjoint >>
+ simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+
+Theorem annassign_allocated_static_copy_ptr:
+ !ctx func cenv cx es d PG G0 tn0 s0 sa G tn s dst src a b k st st1 tv v inst sz.
+ compile_copy_memory (Var dst) (Var src) k st = ((),st1) /\
+ fn_has_code st st1 func /\ fn_inst_ids_distinct func /\
+ s.vs_current_bb = st.cs_current_bb /\
+ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ k < dimword (:256) /\
+ stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+ ptr_covers G tn src s k /\ ptr_covers G tn dst s sz /\
+ val_wf tv v /\ val_footprint tv v <= k /\
+ (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
+ MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+ inst.inst_outputs = [dst] /\ not_local_ptr cenv es.scopes dst /\
+ FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,sz) /\ k <= sz /\
+ sa.cs_next_id <= inst.inst_id /\
+ (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+              FLOOKUP s.vs_allocas aid = SOME entry) /\
+ (!n lo nsz. local_region cenv es.scopes s0 n lo nsz ==>
+              local_region cenv es.scopes s n lo nsz) ==>
+ ?s' tn'. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
+ stmt_state_rel ctx func cenv cx es s' /\ ghost_inv d cenv cx es G tn' s' /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn' /\ ptr_covers G tn' dst s' sz /\
+ s'.vs_current_bb = st1.cs_current_bb /\
+ s'.vs_inst_idx = LENGTH st1.cs_current_insts /\ ~s'.vs_halted /\
+ (!x. lookup_var x s' = lookup_var x s) /\
+ (!m. mem_agree_outside tn'.t_mem s'.vs_memory m ==> val_in_memory tv v (w2n b) m)
+Proof
+ rpt gen_tac >> strip_tac >>
+ `ptr_covers G tn dst s k` by
+   (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+ drule_all annassign_counted_copy_robust_ptr >>
+ disch_then (qspecl_then [`cx_dead cx`,`PG`] strip_assume_tac) >>
+ `ghost_inv d cenv cx es G tn' s'` by
+   (qpat_x_assum `s'.vs_memory = _` kall_tac >>
+    drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) annassign_alloca_copy_ghost_ptr >>
+    disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
+    disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
+    disch_then (drule_at (Pat `(_ with <|vs_memory := _;vs_inst_idx := _|>) = _`)) >>
+    disch_then (drule_at (Pat `(_ with t_mem := _) = _`)) >>
+    disch_then irule >> simp[] >> qexists `k` >> simp[]) >>
+ `ghost_kept cenv es sa G0 tn0 s0 G tn'` by
+   (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`) annassign_alloca_copy_kept_ptr >>
+    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+    disch_then (drule_at (Pat `FLOOKUP _.vs_allocas _.inst_id = SOME _`)) >>
+    disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
+    disch_then (drule_at (Pat `_.t_var = _`)) >>
+    disch_then irule >> simp[] >> qexists `k` >> simp[] >>
+    rpt strip_tac >> metis_tac[]) >>
+ `stmt_state_rel ctx func cenv cx es s'` by
+   (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
+ `ptr_covers G tn' dst s' sz` by
+   (irule annassign_coverage_var_frame_ptr >> metis_tac[]) >>
+ qexistsl [`s'`,`tn'`] >> simp[]
 QED
