@@ -1521,3 +1521,126 @@ Proof
   Cases_on `bits` >> fs[arithmeticTheory.EVEN, arithmeticTheory.ODD_EVEN]
 QED
 
+
+Theorem unsigned_literal_exponent_guard_mem_src[local]:
+  !a:int e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ 0 <= a ==>
+    (Num a <= largest_pow_base e bits F <=>
+     within_int_bound (Unsigned bits) (a ** e))
+Proof
+  rpt strip_tac >>
+  `0 < e` by decide_tac >>
+  drule largest_pow_base_threshold_mem_src >>
+  disch_then (qspecl_then [`bits`, `F`, `Num a`] mp_tac) >>
+  `a = &(Num a)` by simp[] >>
+  pop_assum SUBST_ALL_TAC >>
+  simp[within_int_bound_def, GSYM integerTheory.INT_POW]
+QED
+
+Theorem literal_exponent_typed_shortcut_mem_src[local]:
+  !bits s a e. 0 < bits /\ bits MOD 8 = 0 /\
+    within_int_bound (if s then Signed bits else Unsigned bits) a /\
+    (e = 0 \/ e = 1) ==>
+    within_int_bound (if s then Signed bits else Unsigned bits) (a ** e)
+Proof
+  rpt gen_tac >>
+  `a ** 1 = a /\ a ** 0 = 1` by
+    (Cases_on `a` >> simp[integerTheory.INT_POW_NEG]) >>
+  rpt strip_tac >> gvs[] >> Cases_on `s` >>
+  simp[within_int_bound_def] >>
+  `8 <= bits` by
+    (qspec_then `8` mp_tac arithmeticTheory.DIVISION >> simp[] >>
+     disch_then (qspec_then `bits` mp_tac) >>
+     Cases_on `bits DIV 8` >> simp[] >> decide_tac) >>
+  gvs[within_int_bound_def, arithmeticTheory.ONE_LT_EXP]
+QED
+
+Theorem unsigned_power_upper_word_mem_src[local]:
+  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 ==>
+    w2n (n2w (largest_pow_base e bits F) : bytes32) =
+      largest_pow_base e bits F
+Proof
+  rpt strip_tac >>
+  `0 < e` by decide_tac >>
+  drule largest_pow_base_lt_limit_mem_src >>
+  disch_then (qspecl_then [`bits`, `F`] mp_tac) >> simp[] >> strip_tac >>
+  `2 ** bits <= 2 ** 256` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
+  `largest_pow_base e bits F < 2 ** 256` by decide_tac >>
+  fs[wordsTheory.w2n_n2w, wordsTheory.dimword_def]
+QED
+
+Theorem signed_literal_exponent_guard_mem_src[local]:
+  !a:int e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
+    (let u = largest_pow_base e bits T in
+     let l = if (u+1)**e = 2**(bits-1) then -&(u+1) else -&u in
+       (l <= a /\ a <= &u <=> within_int_bound (Signed bits) (a ** e)))
+Proof
+  rpt strip_tac >> simp_tac bool_ss [LET_THM] >>
+  `0 < e` by decide_tac >>
+  qabbrev_tac `u = largest_pow_base e bits T` >>
+  Cases_on `0 <= a`
+  >- (`a = &(Num a)` by simp[] >> pop_assum SUBST_ALL_TAC >>
+      qspec_then `e` mp_tac largest_pow_base_threshold_mem_src >>
+      simp[] >> disch_then (qspecl_then [`bits`, `T`, `Num a`] mp_tac) >>
+      simp[within_int_bound_def, GSYM integerTheory.INT_POW, Abbr `u`] >>
+      strip_tac >> IF_CASES_TAC >> simp[] >> intLib.ARITH_TAC) >>
+  `a < 0` by intLib.ARITH_TAC >>
+  `a = -&(Num (-a))` by (simp[] >> intLib.ARITH_TAC) >>
+  pop_assum SUBST_ALL_TAC >>
+  qabbrev_tac `m = Num (-a)` >>
+  `0 < m` by (fs[Abbr `m`] >> intLib.ARITH_TAC) >>
+  `(-&m:int) <= &u` by intLib.ARITH_TAC >>
+  `0 < m ** e` by simp[] >>
+  simp[within_int_bound_def, vyperMiscTheory.int_exp_num] >>
+  `ODD (bits - 1)` by metis_tac[byte_width_odd_predecessor_mem_src] >>
+  `((u + 1) ** e = 2 ** (bits - 1)) ==> ODD e` by
+    (strip_tac >> irule pow_two_odd_exponent_mem_src >>
+     qexistsl_tac [`u + 1`, `bits - 1`] >> simp[]) >>
+  `m <= u <=> m ** e < 2 ** (bits - 1)` by
+    (simp[Abbr `u`, largest_pow_base_threshold_mem_src]) >>
+  Cases_on `EVEN e`
+  >- (`~((u + 1) ** e = 2 ** (bits - 1))` by
+        metis_tac[arithmeticTheory.ODD_EVEN] >> simp[]) >>
+  simp[] >> IF_CASES_TAC
+  >- (qpat_x_assum `(u + 1) ** e = _`
+        (fn th => once_rewrite_tac[GSYM th]) >>
+      simp[arithmeticTheory.EXP_EXP_LE_MONO]) >>
+  `2 ** (bits - 1) <= (u + 1) ** e` by
+    (qspec_then `e` mp_tac largest_pow_base_bounds_mem_src >> simp[] >>
+     disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[Abbr `u`]) >>
+  Cases_on `m <= u` >- (simp[] >> decide_tac) >>
+  `u + 1 <= m` by decide_tac >>
+  `(u + 1) ** e <= m ** e` by simp[arithmeticTheory.EXP_EXP_LE_MONO] >>
+  simp[] >> decide_tac
+QED
+
+Theorem signed_power_upper_word_mem_src[local]:
+  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
+    w2i (n2w (largest_pow_base e bits T) : bytes32) =
+      &(largest_pow_base e bits T)
+Proof
+  rpt strip_tac >> `0 < e` by decide_tac >>
+  drule largest_pow_base_lt_limit_mem_src >>
+  disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[] >> strip_tac >>
+  `2 ** (bits - 1) <= 2 ** 255` by
+    (simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
+  `largest_pow_base e bits T < 2 ** 255` by decide_tac >>
+  irule integer_wordTheory.w2i_n2w_pos >> fs[wordsTheory.INT_MIN_def]
+QED
+
+Theorem signed_power_lower_word_mem_src[local]:
+  !e bits. 1 < e /\ 0 < bits /\ bits <= 256 /\ bits MOD 8 = 0 ==>
+    (let u = largest_pow_base e bits T in
+     let l = if (u+1)**e = 2**(bits-1) then -&(u+1) else -&u in
+       w2i (i2w l : bytes32) = l)
+Proof
+  rpt strip_tac >> `0 < e` by decide_tac >>
+  drule largest_pow_base_lt_limit_mem_src >>
+  disch_then (qspecl_then [`bits`, `T`] mp_tac) >> simp[] >> strip_tac >>
+  `2 ** (bits - 1) <= 2 ** 255` by
+    (simp[arithmeticTheory.EXP_EXP_LE_MONO] >> decide_tac) >>
+  `largest_pow_base e bits T < 2 ** 255` by decide_tac >>
+  simp_tac bool_ss [LET_THM] >> IF_CASES_TAC >>
+  irule integer_wordTheory.w2i_i2w >>
+  fs[wordsTheory.INT_MIN_def, wordsTheory.INT_MAX_def] >> intLib.ARITH_TAC
+QED
+
