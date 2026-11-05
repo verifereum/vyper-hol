@@ -551,6 +551,37 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem inventory_lupdate_mem[local]:
+  !stk i dst x. i < LENGTH stk /\ ALL_DISTINCT stk ==>
+    (MEM x (LUPDATE dst i stk) <=>
+     x = dst \/ (MEM x stk /\ x <> EL i stk))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `i`
+  >- (simp[LUPDATE_def] >> metis_tac[]) >>
+  simp[LUPDATE_def] >> strip_tac >> first_x_assum drule_all >>
+  strip_tac >> drule EL_MEM >> metis_tac[]
+QED
+
+Theorem inventory_poke_mem:
+  d < LENGTH stk /\ ALL_DISTINCT stk /\ stack_peek d stk = src ==>
+  !x. MEM x (stack_poke d dst stk) <=>
+      x = dst \/ (MEM x stk /\ x <> src)
+Proof
+  simp[stack_peek_def, stack_poke_def] >> rpt strip_tac >>
+  qpat_x_assum `_ = src` (SUBST1_TAC o SYM) >>
+  irule inventory_lupdate_mem >> simp[]
+QED
+
+Theorem inventory_poke_distinct:
+  ALL_DISTINCT stk /\ ~MEM dst stk ==>
+  ALL_DISTINCT (stack_poke d dst stk)
+Proof
+  rpt strip_tac >>
+  rw[EL_ALL_DISTINCT_EL_EQ, stack_poke_def, EL_LUPDATE] >>
+  rpt (IF_CASES_TAC >> gvs[]) >>
+  metis_tac[ALL_DISTINCT_EL_IMP, MEM_EL]
+QED
+
 (* Bounded contract checks: PHIs replace their unique incoming source,
    and discard a dead output on a non-halting path. *)
 Theorem regional_phi_live_probe:
