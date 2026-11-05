@@ -1,7 +1,7 @@
 (* A bounded test of the exported expression-post interface, not of execution. *)
 Theory assignBasePtrSourceBound
 Ancestors bodyPtrDefs loweringPosts exprLoweringProps compileEnv exprLowering
-  valueEncoding venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState
+  valueEncoding venomState ptrDiscipline words finite_map vyperTyping vyperValue valueEncodingProofs exprSimProps vyperAST vyperState vyperContext accountsRelProps
 
 (* Identity framing isolates the substantive placement and state relation
    obligations; no execution claim is made here. *)
@@ -101,3 +101,78 @@ Proof
        type_memory_size_def, w2n_n2w, dimword_def, FLOOKUP_UPDATE] >> EVAL_TAC
 QED
 
+
+(* Field interface: ordinary source matching is independent of allocation
+   bookkeeping when there are no locals or module declarations. *)
+Theorem assign_base_ptr_empty_state_rel:
+  !func cenv cx es s.
+    cenv.ce_vars = FEMPTY /\ cenv.ce_module_vars = FEMPTY /\
+    cx.sources = [] /\ es.scopes = [] /\
+    es.logs = [] /\ s.vs_logs = [] /\
+    es.requests = [] /\ s.vs_requests = [] /\
+    es.pending_deletions = [] /\ s.vs_pending_deletions = [] /\
+    es.outcomes = SOME s.vs_outcomes /\
+    s.vs_accounts = es.accounts /\ s.vs_transient = es.tStorage /\
+    call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx /\
+    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static ==>
+    state_rel func cenv cx es s
+Proof
+  rpt strip_tac >>
+  simp[state_rel_def, local_ptrs_rel_def, local_region_def,
+       lookup_scopes_def, storage_vars_rel_def, transient_vars_rel_def,
+       immutables_rel_def, logs_rel_def, accounts_rel_def,
+       get_module_code_def] >>
+  `s.vs_call_ctx.cc_address = cx.txn.target` by gvs[call_ctx_rel_def] >>
+  `accounts_rel cx es s` by simp[accounts_rel_def] >>
+  drule_all accounts_rel_storage_transient >> simp[]
+QED
+
+Theorem assign_base_ptr_call_context_exists:
+  !tx. tx_env_ok tx ==>
+    ?cc tc bc. call_ctx_rel tx cc tc bc /\ ~cc.cc_static
+Proof
+  rpt strip_tac >>
+  qexistsl [`ARB with <| cc_caller := tx.sender; cc_address := tx.target;
+              cc_callvalue := n2w tx.value; cc_calldata := tx.calldata;
+              cc_static := F |>`,
+    `ARB with <| tc_origin := tx.origin; tc_gasprice := n2w tx.gas_price;
+              tc_chainid := n2w tx.chain_id; tc_blobhashes := tx.blob_hashes |>`,
+    `ARB with <| bc_coinbase := tx.coinbase; bc_timestamp := n2w tx.time_stamp;
+              bc_number := n2w tx.block_number; bc_prevrandao := n2w tx.prev_randao;
+              bc_gaslimit := n2w tx.gas_limit; bc_basefee := n2w tx.base_fee;
+              bc_blobbasefee := n2w tx.blob_base_fee;
+              bc_blockhash := (\n. if n < tx.block_number /\
+                  tx.block_number - 256 <= n /\
+                  tx.block_number - n - 1 < LENGTH tx.block_hashes
+                then EL (tx.block_number - n - 1) tx.block_hashes else 0w) |>`] >>
+  simp[call_ctx_rel_def]
+QED
+
+Theorem assign_base_ptr_ordinary_state_exists:
+  !func mem vars allocas frontier.
+    ?cenv cx es s.
+      state_rel func cenv cx es s /\
+      ~cenv.ce_is_ctor /\ cenv.ce_imm_alloca = NONE /\ es.scopes = [] /\
+      s.vs_memory = mem /\ s.vs_vars = vars /\
+      s.vs_allocas = allocas /\ s.vs_alloca_next = frontier
+Proof
+  rpt gen_tac >>
+  qabbrev_tac `tx = ARB with <|is_static := F; block_number := 1;
+                              block_hashes := [0w]|>` >>
+  `tx_env_ok tx` by (simp[Abbr `tx`, tx_env_ok_def] >> EVAL_TAC) >>
+  drule assign_base_ptr_call_context_exists >>
+  disch_then (qx_choose_then `cc` (qx_choose_then `tc`
+    (qx_choose_then `bc` strip_assume_tac))) >>
+  qexistsl [`ARB with <|ce_vars := FEMPTY; ce_module_vars := FEMPTY;
+                       ce_is_ctor := F; ce_imm_alloca := NONE|>`,
+    `ARB with <|sources := []; txn := tx|>`,
+    `ARB with <|scopes := []; logs := []; requests := [];
+                pending_deletions := []; outcomes := SOME []|>`,
+    `ARB with <|vs_memory := mem; vs_vars := vars; vs_allocas := allocas;
+                vs_alloca_next := frontier; vs_accounts := (ARB:evaluation_state).accounts;
+                vs_transient := (ARB:evaluation_state).tStorage; vs_logs := []; vs_requests := [];
+                vs_pending_deletions := []; vs_outcomes := [];
+                vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc|>`] >>
+  simp[] >> irule assign_base_ptr_empty_state_rel >>
+  gvs[Abbr `tx`, call_ctx_rel_def]
+QED
