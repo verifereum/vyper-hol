@@ -2187,3 +2187,123 @@ Proof
     (irule reduce_depth_plan_adequate_fuel >> simp[]) >>
   irule reduce_depth_plan_bottom_frame >> simp[]
 QED
+
+Theorem stack_poke_bottom_extension:
+  !d x prefix core. d < LENGTH core ==>
+    stack_poke d x (prefix ++ core) = prefix ++ stack_poke d x core
+Proof
+  rpt strip_tac >>
+  `LENGTH (prefix ++ core) - 1 - d = LENGTH prefix + (LENGTH core - 1 - d)` by
+    (simp[] >> decide_tac) >>
+  simp[stack_poke_def, LUPDATE_APPEND2]
+QED
+
+Theorem reorder_one_bottom_frame:
+  !dfg targets idx op ps prefix ops qs.
+    ~MEM op prefix /\ idx < LENGTH targets /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_one dfg targets idx op ps = (ops,qs) ==>
+    reorder_one dfg targets idx op
+      (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  simp[reorder_one_def, LET_THM, stack_get_unfixed_depth_bottom_excluded] >>
+  pairarg_tac >> simp[] >>
+  rename1 `_ = (restore_ops, ps1)` >>
+  `LENGTH targets <= LENGTH ps1.ps_stack` by
+    (gvs[AllCaseEqs()] >>
+     qspecl_then [`op`, `ps`] mp_tac planWfTheory.do_restore_length >> simp[] >> decide_tac) >>
+  `((case stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+       (LENGTH targets) ps.ps_stack of
+       SOME _ => ([], ps with ps_stack := prefix ++ ps.ps_stack)
+     | NONE => case FLOOKUP ps.ps_spilled op of
+         SOME _ => do_restore op (ps with ps_stack := prefix ++ ps.ps_stack)
+       | NONE => ([], ps with ps_stack := prefix ++ ps.ps_stack)) =
+     (restore_ops, ps1 with ps_stack := prefix ++ ps1.ps_stack))` by
+    (gvs[AllCaseEqs()] >> metis_tac[do_restore_bottom_frame]) >>
+  simp[stack_get_unfixed_depth_bottom_excluded] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps1.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[] >> pairarg_tac >> simp[] >>
+  rename1 `_ = (reduce_ops, ps2)` >>
+  `LENGTH targets <= LENGTH ps2.ps_stack` by
+    (gvs[AllCaseEqs()] >> drule reduce_depth_plan_length_floor >>
+     simp[arithmeticTheory.MIN_DEF, arithmeticTheory.MAX_DEF] >> decide_tac) >>
+  `(if x > 16 then
+      reduce_depth_plan (LENGTH prefix + LENGTH ps1.ps_stack) targets op
+        (LENGTH targets - (idx + 1)) (LENGTH targets)
+        (ps1 with ps_stack := prefix ++ ps1.ps_stack)
+    else ([],ps1 with ps_stack := prefix ++ ps1.ps_stack)) =
+    (reduce_ops,ps2 with ps_stack := prefix ++ ps2.ps_stack)` by
+    (Cases_on `x > 16` >> gvs[] >>
+     drule_all reduce_depth_plan_height_bottom_frame >> simp[]) >>
+  `LENGTH targets - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
+  simp[stack_get_unfixed_depth_bottom_excluded] >>
+  Cases_on `stack_get_unfixed_depth op (LENGTH targets - (idx + 1))
+    (LENGTH targets) ps2.ps_stack` >- (simp[] >> strip_tac >> gvs[]) >>
+  `x' < LENGTH ps2.ps_stack` by metis_tac[stack_get_unfixed_depth_bound] >>
+  Cases_on `x' = LENGTH targets - (idx + 1)`
+  >- (simp[] >> strip_tac >> gvs[]) >>
+  simp[] >>
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = (restore_ops,ps1)` kall_tac >>
+  qpat_x_assum `(case _ of NONE => _ | SOME _ => _) = (restore_ops,_)` kall_tac >>
+  qpat_x_assum `(if _ then _ else _) = (reduce_ops,ps2)` kall_tac >>
+  qpat_x_assum `(if _ then _ else _) = (reduce_ops,_)` kall_tac >>
+  `stack_peek (LENGTH targets - (idx + 1)) (prefix ++ ps2.ps_stack) =
+   stack_peek (LENGTH targets - (idx + 1)) ps2.ps_stack` by
+    simp[stack_peek_def, EL_APPEND2] >>
+  simp[] >> IF_CASES_TAC
+  >- (`LENGTH (stack_poke x' (stack_peek (LENGTH targets - (idx + 1))
+           ps2.ps_stack) ps2.ps_stack) = LENGTH ps2.ps_stack` by
+        simp[stack_poke_def] >>
+      simp[stack_poke_bottom_extension] >> strip_tac >>
+      gvs[stackPlanTypesTheory.plan_state_component_equality]) >>
+  pairarg_tac >> simp[] >> rename1 `do_swap x' ps2 = (swap1,ps3)` >>
+  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+    (qspecl_then [`x'`, `ps2`] mp_tac planWfTheory.do_swap_length >> simp[]) >>
+  drule_all do_swap_bottom_frame >>
+  disch_then (qspec_then `prefix` assume_tac) >> simp[] >>
+  pairarg_tac >> simp[] >> rename1 `do_swap _ ps3 = (swap2,ps4)` >>
+  `LENGTH targets - (idx + 1) < LENGTH ps3.ps_stack` by decide_tac >>
+  qpat_x_assum `do_swap x' ps2 = _` kall_tac >>
+  drule_all do_swap_bottom_frame >>
+  disch_then (qspec_then `prefix` assume_tac) >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem reorder_fold_bottom_frame[local]:
+  !steps dfg targets ps prefix acc ops qs.
+    EVERY (\(idx,op). idx < LENGTH targets /\ ~MEM op prefix) steps /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    FOLDL (\(ops,ps) (idx,op).
+      let (step,ps') = reorder_one dfg targets idx op ps in
+      (ops ++ step,ps')) (acc,ps) steps = (ops,qs) ==>
+    FOLDL (\(ops,ps) (idx,op).
+      let (step,ps') = reorder_one dfg targets idx op ps in
+      (ops ++ step,ps')) (acc,ps with ps_stack := prefix ++ ps.ps_stack) steps =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  Induct >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> simp[] >> strip_tac >>
+  Cases_on `reorder_one dfg targets h0 h1 ps` >>
+  rename1 `reorder_one _ _ _ _ _ = (step_ops,ps_mid)` >>
+  `LENGTH targets <= LENGTH ps_mid.ps_stack` by
+    metis_tac[reorder_one_target_length] >>
+  drule_all reorder_one_bottom_frame >> simp[] >> strip_tac >>
+  first_x_assum (irule o SRULE [LET_THM]) >> gvs[]
+QED
+
+Theorem reorder_plan_bottom_frame:
+  !dfg targets ps prefix ops qs.
+    EVERY (\op. ~MEM op prefix) targets /\
+    LENGTH targets <= LENGTH ps.ps_stack /\
+    reorder_plan dfg targets ps = (ops,qs) ==>
+    reorder_plan dfg targets (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> simp[reorder_plan_def] >> strip_tac >>
+  irule (SRULE [LET_THM] reorder_fold_bottom_frame) >> simp[] >>
+  gvs[EVERY_MEM, pairTheory.FORALL_PROD, indexedListsTheory.MEM_MAPi] >>
+  rpt strip_tac >> gvs[] >> metis_tac[EL_MEM]
+QED

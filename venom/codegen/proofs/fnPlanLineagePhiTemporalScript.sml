@@ -285,16 +285,6 @@ Proof
        stack_swap_def, LENGTH_LUPDATE, LUPDATE_MAP, EL_MAP]
 QED
 
-Theorem stack_poke_bottom_extension:
-  !d x prefix core. d < LENGTH core ==>
-    stack_poke d x (prefix ++ core) = prefix ++ stack_poke d x core
-Proof
-  rpt strip_tac >>
-  `LENGTH (prefix ++ core) - 1 - d = LENGTH prefix + (LENGTH core - 1 - d)` by
-    (simp[] >> decide_tac) >>
-  simp[stack_poke_def, LUPDATE_APPEND2]
-QED
-
 Theorem stack_pop_bottom_extension:
   !n prefix core. n <= LENGTH core ==>
     stack_pop n (prefix ++ core) = prefix ++ stack_pop n core
