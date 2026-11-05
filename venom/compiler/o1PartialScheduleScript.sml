@@ -14,7 +14,7 @@ Ancestors
   o1PassContract o1FnScheduleDecomp venomPipelineRunner
   venomFnScheduleRunner venomFnScheduleRunnerProps venomPassDispatcher
   venomInst irSupply venomCompilerWf venomWf unitShapeDefs fcgDefs
-  list rich_list o1ScheduleDecompHelpers
+  list rich_list o1ScheduleDecompHelpers o1FnScheduleDecompHelpers
 
 
 (* ===== The whole schedule ===== *)
@@ -55,6 +55,51 @@ Definition chain_facts_def:
           SOME (LAST (FST (EL j chains)))
 End
 
+(* No instruction id is shared between functions of two different
+   chains: Concretize keys imported callee allocations by ALLOCA id, so
+   every stage context's ids must be distinct across its functions. *)
+Definition chains_ids_apart_def:
+  chains_ids_apart chains <=>
+    !i j f g id. i < LENGTH chains /\ j < LENGTH chains /\ i <> j /\
+      MEM f (FST (EL i chains)) /\ MEM g (FST (EL j chains)) /\
+      MEM id (fn_ir_inst_ids f) ==> ~MEM id (fn_ir_inst_ids g)
+End
+
+(* The supply has seen every id of every scheduled function's chain. *)
+Definition chains_ids_used_def:
+  chains_ids_used ctx done chains s <=>
+    !i f id. i < LENGTH chains /\ MEM (EL i ctx.ctx_functions).fn_name done /\
+      MEM f (FST (EL i chains)) /\ MEM id (fn_ir_inst_ids f) ==>
+      MEM id s.irs_used_inst_ids
+End
+
+Theorem ALL_DISTINCT_FLAT_EL_disjoint:
+  !ls i j x. ALL_DISTINCT (FLAT ls) /\ i < LENGTH ls /\ j < LENGTH ls /\
+    i <> j /\ MEM x (EL i ls) ==> ~MEM x (EL j ls)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  gvs[ALL_DISTINCT_APPEND] >> Cases_on `i` >> Cases_on `j` >> gvs[]
+  >- metis_tac[MEM_FLAT, EL_MEM]
+  >- metis_tac[MEM_FLAT, EL_MEM] >>
+  metis_tac[]
+QED
+
+Theorem ALL_DISTINCT_FLAT_EL_apart:
+  !ls. EVERY ALL_DISTINCT ls /\
+    (!i j x. i < LENGTH ls /\ j < LENGTH ls /\ i <> j /\
+       MEM x (EL i ls) ==> ~MEM x (EL j ls)) ==>
+    ALL_DISTINCT (FLAT ls)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  simp[ALL_DISTINCT_APPEND] >> conj_tac
+  >- (first_x_assum irule >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`SUC i`,`SUC j`,`x`] mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `MEM e (FLAT ls)` (strip_assume_tac o REWRITE_RULE [MEM_FLAT]) >>
+  `?m. m < LENGTH ls /\ EL m ls = l` by metis_tac[MEM_EL] >>
+  first_x_assum (qspecl_then [`0`,`SUC m`,`e`] mp_tac) >> simp[]
+QED
+
 (* Partial schedules keep chains in the original function order. *)
 Definition mixed_fns_def:
   mixed_fns ctx done chains =
@@ -67,11 +112,15 @@ Definition partial_schedule_def:
   partial_schedule rpolicy passes original order done chains current <=>
     LENGTH chains = LENGTH original.cu_context.ctx_functions /\
     (!i. i < LENGTH chains /\
+         ~MEM (EL i original.cu_context.ctx_functions).fn_name done ==>
+         FST (EL i chains) = [EL i original.cu_context.ctx_functions]) /\
+    (!i. i < LENGTH chains /\
          MEM (EL i original.cu_context.ctx_functions).fn_name done ==>
          chain_facts rpolicy passes original order chains i) /\
     current.cu_context = original.cu_context with ctx_functions :=
       mixed_fns original.cu_context done chains /\
-    o1_ctx_shape current.cu_context
+    o1_ctx_shape current.cu_context /\
+    chains_ids_apart chains
 End
 
 Theorem mixed_fns_length[simp]:
@@ -100,7 +149,27 @@ Theorem partial_schedule_initial:
   partial_schedule rpolicy passes original order []
     (MAP (\f. ([f],[])) original.cu_context.ctx_functions) original
 Proof
-  simp[partial_schedule_def]
+  strip_tac >> simp[partial_schedule_def, EL_MAP, chains_ids_apart_def] >>
+  rpt strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP fn_ir_inst_ids original.cu_context.ctx_functions))`
+    by fs[o1_ctx_shape_def, ctx_inst_ids_distinct_ir_ids] >>
+  drule ALL_DISTINCT_FLAT_EL_disjoint >>
+  disch_then (qspecl_then [`i`,`j`,`id`] mp_tac) >> gvs[EL_MAP]
+QED
+
+(* Each function of the current unit is a member of its own chain. *)
+Theorem partial_schedule_mixed_mem:
+  partial_schedule rpolicy passes original order done chains current /\
+  j < LENGTH chains ==>
+  MEM (EL j (mixed_fns original.cu_context done chains)) (FST (EL j chains))
+Proof
+  rw[partial_schedule_def] >>
+  `j < LENGTH original.cu_context.ctx_functions` by simp[] >>
+  simp[mixed_fns_EL] >> IF_CASES_TAC >> simp[] >>
+  first_x_assum drule_all >> simp[chain_facts_def] >> strip_tac >>
+  drule fn_chain_length >> strip_tac >>
+  `FST (EL j chains) <> []` by (strip_tac >> gvs[]) >>
+  drule LAST_MEM >> simp[]
 QED
 
 Theorem partial_schedule_names:
@@ -296,6 +365,80 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[o1_fn_shape_ctx_eq]
 QED
 
+(* A function's new chain keeps its ids apart from every other chain:
+   each of its ids is the function's own or unused in the supply, which
+   has seen every id of the other chains, scheduled or not. *)
+Theorem partial_schedule_new_apart:
+  partial_schedule rpolicy passes original order done chains current /\
+  chains_ids_used original.cu_context done chains s /\
+  ir_supply_covers_unit s current /\
+  i < LENGTH chains /\
+  ~MEM (EL i original.cu_context.ctx_functions).fn_name done /\
+  (!f id. MEM f fs /\ MEM id (fn_ir_inst_ids f) ==>
+     MEM id (fn_ir_inst_ids (EL i original.cu_context.ctx_functions)) \/
+     ~MEM id s.irs_used_inst_ids) ==>
+  chains_ids_apart (LUPDATE (fs,obs) i chains)
+Proof
+  strip_tac >>
+  qpat_x_assum `partial_schedule _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[partial_schedule_def] >> strip_tac >>
+  `FST (EL i chains) = [EL i original.cu_context.ctx_functions]` by
+    (first_x_assum irule >> simp[]) >>
+  `!j g id. j < LENGTH chains /\ j <> i /\ MEM g (FST (EL j chains)) /\
+     MEM id (fn_ir_inst_ids g) ==>
+     MEM id s.irs_used_inst_ids /\
+     ~MEM id (fn_ir_inst_ids (EL i original.cu_context.ctx_functions))` by
+    (rpt gen_tac >> strip_tac >> conj_tac
+     >- (Cases_on `MEM (EL j original.cu_context.ctx_functions).fn_name done`
+         >- (fs[chains_ids_used_def] >> metis_tac[]) >>
+         `FST (EL j chains) = [EL j original.cu_context.ctx_functions]` by
+           (first_x_assum irule >> simp[]) >>
+         `MEM g (mixed_fns original.cu_context done chains)` by
+           (simp[MEM_EL] >> qexists_tac `j` >> gvs[mixed_fns_EL]) >>
+         qpat_x_assum `ir_supply_covers_unit _ _` mp_tac >>
+         simp[ir_supply_covers_unit_def, list_subset_def, EVERY_MEM,
+              unit_ir_inst_ids_def, MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+         metis_tac[]) >>
+     qpat_x_assum `chains_ids_apart chains` mp_tac >>
+     rewrite_tac[chains_ids_apart_def] >>
+     disch_then (qspecl_then [`j`,`i`,`g`,
+       `EL i original.cu_context.ctx_functions`,`id`] mp_tac) >>
+     simp[]) >>
+  simp[chains_ids_apart_def, EL_LUPDATE] >>
+  qx_genl_tac [`a`,`b`,`f`,`g`,`x`] >> strip_tac >>
+  Cases_on `a = i` >> Cases_on `b = i` >> gvs[]
+  >- metis_tac[]
+  >- metis_tac[] >>
+  qpat_x_assum `chains_ids_apart chains` mp_tac >>
+  rewrite_tac[chains_ids_apart_def] >> metis_tac[]
+QED
+
+Theorem partial_schedule_last_apart:
+  partial_schedule rpolicy passes original order done chains current /\
+  i < LENGTH chains /\ (EL i original.cu_context.ctx_functions).fn_name = n /\
+  fs <> [] /\ chains_ids_apart (LUPDATE (fs,obs) i chains) /\
+  MEM h current.cu_context.ctx_functions /\ h.fn_name <> n /\
+  MEM id (fn_ir_inst_ids (LAST fs)) ==>
+  ~MEM id (fn_ir_inst_ids h)
+Proof
+  rpt strip_tac >>
+  `LENGTH chains = LENGTH original.cu_context.ctx_functions` by
+    gvs[partial_schedule_def] >>
+  `?j. j < LENGTH chains /\ h = EL j (mixed_fns original.cu_context done chains)` by
+    (qpat_x_assum `MEM h _` mp_tac >>
+     `current.cu_context.ctx_functions = mixed_fns original.cu_context done chains`
+       by gvs[partial_schedule_def] >>
+     simp[MEM_EL] >> metis_tac[]) >>
+  `(EL j original.cu_context.ctx_functions).fn_name <> n` by
+    metis_tac[partial_schedule_mixed_name] >>
+  `j <> i` by (strip_tac >> gvs[]) >>
+  drule_all partial_schedule_mixed_mem >> strip_tac >>
+  qpat_x_assum `chains_ids_apart _` mp_tac >>
+  rewrite_tac[chains_ids_apart_def] >>
+  disch_then (qspecl_then [`i`,`j`,`LAST fs`,`h`,`id`] mp_tac) >>
+  simp[EL_LUPDATE, LAST_MEM] >> gvs[]
+QED
+
 Theorem partial_schedule_new_chain:
   partial_schedule rpolicy passes original (done ++ n::todo) done chains current /\
   ALL_DISTINCT (done ++ n::todo) /\
@@ -325,13 +468,18 @@ Theorem partial_schedule_extend:
   (!k. k < LENGTH obs ==> EL k obs =
     unit_with_fns current (replace_fn n (EL k fs) current.cu_context.ctx_functions)) /\
   next.cu_context = current.cu_context with ctx_functions :=
-    replace_fn n (LAST fs) current.cu_context.ctx_functions ==>
+    replace_fn n (LAST fs) current.cu_context.ctx_functions /\
+  chains_ids_apart (LUPDATE (fs,obs) i chains) ==>
   partial_schedule rpolicy passes original (done ++ n::todo) (done ++ [n])
     (LUPDATE (fs,obs) i chains) next
 Proof
   strip_tac >>
   drule list_precedes_prefix >> strip_tac >>
   drule_all fn_chain_last_properties >> strip_tac >>
+  `fs <> []` by (drule fn_chain_length >> strip_tac >> strip_tac >> gvs[]) >>
+  `!h id. MEM h current.cu_context.ctx_functions /\ h.fn_name <> n /\
+     MEM id (fn_ir_inst_ids (LAST fs)) ==> ~MEM id (fn_ir_inst_ids h)` by
+    (rpt strip_tac >> drule_all partial_schedule_last_apart >> simp[]) >>
   `o1_ctx_shape next.cu_context` by
     (asm_rewrite_tac[] >> irule o1_ctx_shape_replace >>
      gvs[partial_schedule_def]) >>
@@ -353,6 +501,9 @@ Proof
        (irule distinct_fn_name_index >> gvs[ctx_fn_names_def]) >> metis_tac[]) >>
   drule partial_schedule_mixed_update >> simp[] >> strip_tac >>
   simp[partial_schedule_def] >> conj_tac
+  >- (qx_gen_tac `j` >> strip_tac >> `j <> i` by (strip_tac >> gvs[]) >>
+      simp[EL_LUPDATE] >> gvs[partial_schedule_def]) >>
+  conj_tac
   >- (rpt strip_tac >> metis_tac[]) >>
   gvs[partial_schedule_def]
 QED
@@ -363,14 +514,18 @@ Theorem partial_schedule_step:
   (!name. MEM name (done ++ n::todo) <=>
           MEM name (ctx_fn_names original.cu_context)) /\
   ALL_DISTINCT (unit_label_namespace current) /\
+  chains_ids_used original.cu_context done chains s /\
   run_configured_fn_passes execute_configured_fn_pass rpolicy passes n
     current s = SOME (next,s') /\ ir_supply_inst_ok s ==>
   ?chains'. partial_schedule rpolicy passes original (done ++ n::todo)
     (done ++ [n]) chains' next /\ unit_labels_wf next /\
-  ir_supply_inst_ok s'
+  ir_supply_inst_ok s' /\
+  chains_ids_used original.cu_context (done ++ [n]) chains' s'
 Proof
   strip_tac >>
   `o1_ctx_shape current.cu_context` by gvs[partial_schedule_def] >>
+  `ir_supply_covers_unit s current` by
+    (drule run_configured_fn_passes_success >> simp[]) >>
   drule_all run_configured_fn_passes_decomp >> strip_tac >>
   `ALL_DISTINCT (ctx_fn_names original.cu_context)` by
     (drule partial_schedule_names >> strip_tac >>
@@ -390,8 +545,30 @@ Proof
     (drule partial_schedule_pending_lookup >>
      disch_then (qspec_then `i` mp_tac) >> simp[]) >>
   `HD fs = EL i original.cu_context.ctx_functions` by metis_tac[optionTheory.SOME_11] >>
-  qexists_tac `LUPDATE (fs,obs) i chains` >> simp[] >>
-  irule partial_schedule_extend >> metis_tac[]
+  `~MEM n done` by gvs[ALL_DISTINCT_APPEND] >>
+  `chains_ids_apart (LUPDATE (fs,obs) i chains)` by
+    (irule partial_schedule_new_apart >> simp[] >>
+     qexistsl_tac [`current`,`done`,`done ++ n::todo`,`original`,`passes`,
+                   `rpolicy`,`s`] >>
+     simp[] >> metis_tac[]) >>
+  qexists_tac `LUPDATE (fs,obs) i chains` >> simp[] >> conj_tac
+  >- (irule partial_schedule_extend >> metis_tac[]) >>
+  rewrite_tac[chains_ids_used_def] >>
+  qx_genl_tac [`j`,`f`,`id`] >> strip_tac >>
+  Cases_on `j = i` >- (gvs[EL_LUPDATE] >> metis_tac[]) >>
+  `j < LENGTH original.cu_context.ctx_functions` by metis_tac[LENGTH_LUPDATE] >>
+  `(EL j original.cu_context.ctx_functions).fn_name <>
+   (EL i original.cu_context.ctx_functions).fn_name` by
+    (`(EL j original.cu_context.ctx_functions).fn_name =
+      (EL i original.cu_context.ctx_functions).fn_name <=> j = i` by
+       (irule distinct_fn_name_index >> fs[ctx_fn_names_def]) >>
+     simp[]) >>
+  `MEM (EL j original.cu_context.ctx_functions).fn_name done` by
+    (qpat_x_assum `MEM _ (done ++ _)` mp_tac >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `MEM f _` mp_tac >> simp[EL_LUPDATE] >> strip_tac >>
+  qpat_x_assum `chains_ids_used _ _ _ _` mp_tac >>
+  simp[chains_ids_used_def] >> disch_then drule_all >>
+  fs[list_subset_def, EVERY_MEM]
 QED
 
 Theorem partial_schedule_suffix:
@@ -402,6 +579,7 @@ Theorem partial_schedule_suffix:
   ALL_DISTINCT order /\
   (!name. MEM name order <=> MEM name (ctx_fn_names original.cu_context)) /\
   ALL_DISTINCT (unit_label_namespace current) /\
+  chains_ids_used original.cu_context done chains s /\
   run_named_fn_schedules execute_configured_fn_pass rpolicy passes todo
     current s = SOME (final,sf) /\ ir_supply_inst_ok s ==>
   ?chains'. partial_schedule rpolicy passes original order order chains' final /\

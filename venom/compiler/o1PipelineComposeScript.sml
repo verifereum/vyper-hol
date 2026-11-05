@@ -19,6 +19,7 @@
 Theory o1PipelineCompose
 Ancestors
   o1ComposeSupport o1PassContract o1ContractTheorems o1ScheduleDecomp
+  o1FnScheduleDecompHelpers
   ctxLookupAgree ptrDiscipline ptrDisciplineAgree unitMemInv
   unitTransformDefs unitShapeDefs venomPipelineDriver venomPipelineRunner
   venomPipelineRunnerProps venomFnScheduleRunner venomPassSchedule
@@ -173,6 +174,8 @@ Proof
   drule_all o1_source_unit_label_refs_no_phi >> strip_tac >>
   simp[o1_ctx_shape_def] >> conj_tac
   >- gvs[unit_wf_def, venom_wf_def] >>
+  conj_tac
+  >- gvs[unit_wf_def, venom_wf_def] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
   drule_all source_member_shape >> strip_tac >>
   simp[o1_fn_shape_def] >> rpt conj_tac
@@ -281,6 +284,10 @@ Proof
   strip_tac >> conj_tac
   >- (simp[o1_ctx_shape_def] >> conj_tac
       >- metis_tac[ctx_wf_prune_unit_fcg_unreachable, o1_ctx_shape_wf] >>
+      conj_tac
+      >- (fs[o1_ctx_shape_def, ctx_inst_ids_distinct_ir_ids,
+             prune_unit_fcg_unreachable_def] >>
+          metis_tac[namespace_filter_distinct]) >>
       simp[EVERY_MEM] >> metis_tac[pruned_member_shape]) >>
   simp[unit_label_namespace_def, prune_unit_fcg_unreachable_def] >>
   metis_tac[namespace_filter_distinct]
