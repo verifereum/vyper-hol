@@ -2,6 +2,7 @@ Theory algebraicOptMainShapeProofs
 Ancestors
   algebraicOptShapeProofs algebraicOptDefs algebraicOptSupplyProofs
   venomWf venomInst venomFnScheduleRunner irSupply rtaSupplyProofs
+  unitShapeDefs stackPlanTypes
 Libs
   listTheory pred_setTheory
 
@@ -412,4 +413,238 @@ Proof
   conj_tac >- gvs[fn_labels_def] >>
   gvs[fn_entry_label_def, entry_block_def, MAP_MAP_o, combinTheory.o_DEF] >>
   Cases_on `bbs` >> Cases_on `fn.fn_blocks` >> fs[]
+QED
+
+Theorem ao_compute_iszero_step_chain_property:
+  (!v chain. ALOOKUP targets v = SOME chain ==> EVERY P chain) /\
+  (inst.inst_opcode = ISZERO ==>
+    EVERY P inst.inst_operands /\ EVERY (P o Var) inst.inst_outputs) ==>
+  !v chain. ALOOKUP (ao_compute_iszero_step targets inst) v = SOME chain ==>
+    EVERY P chain
+Proof
+  strip_tac >>
+  Cases_on `inst.inst_opcode = ISZERO`
+  >- (Cases_on `inst.inst_operands`
+      >- (gvs[ao_compute_iszero_step_def] >> metis_tac[]) >>
+      Cases_on `t`
+      >- (Cases_on `inst.inst_outputs`
+          >- (gvs[ao_compute_iszero_step_def] >> metis_tac[]) >>
+          Cases_on `t`
+          >- (Cases_on `h`
+              >- (gvs[ao_compute_iszero_step_def, AllCaseEqs(), EVERY_SNOC,
+                      combinTheory.o_DEF] >> rpt strip_tac >> gvs[] >> metis_tac[]) 
+              >- (Cases_on `ALOOKUP targets s` >>
+                  gvs[ao_compute_iszero_step_def, AllCaseEqs(), EVERY_SNOC,
+                      combinTheory.o_DEF] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+              gvs[ao_compute_iszero_step_def, AllCaseEqs(), EVERY_SNOC,
+                  combinTheory.o_DEF] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
+          (gvs[ao_compute_iszero_step_def] >> metis_tac[])) >>
+      (Cases_on `inst.inst_outputs`
+       >- (gvs[ao_compute_iszero_step_def] >> metis_tac[]) >>
+       Cases_on `t` >> gvs[ao_compute_iszero_step_def] >> metis_tac[])) >>
+  (gvs[ao_compute_iszero_step_def] >> metis_tac[])
+QED
+
+Theorem ao_compute_iszero_fold_chain_property:
+  !insts targets.
+    (!v chain. ALOOKUP targets v = SOME chain ==> EVERY P chain) /\
+    EVERY (\inst. inst.inst_opcode = ISZERO ==>
+      EVERY P inst.inst_operands /\ EVERY (P o Var) inst.inst_outputs) insts ==>
+    !v chain. ALOOKUP (FOLDL ao_compute_iszero_step targets insts) v = SOME chain ==>
+      EVERY P chain
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  first_x_assum match_mp_tac >> simp[] >>
+  metis_tac[ao_compute_iszero_step_chain_property]
+QED
+
+Theorem ao_compute_iszero_targets_chain_property:
+  EVERY (\inst. inst.inst_opcode = ISZERO ==>
+    EVERY P inst.inst_operands /\ EVERY (P o Var) inst.inst_outputs) insts ==>
+  !v chain. ALOOKUP (ao_compute_iszero_targets insts) v = SOME chain ==>
+    EVERY P chain
+Proof
+  strip_tac >> simp[ao_compute_iszero_targets_def] >>
+  match_mp_tac ao_compute_iszero_fold_chain_property >> simp[]
+QED
+
+Theorem ao_compute_iszero_targets_support:
+  EVERY (\inst. set (inst_ir_vars inst) SUBSET V) insts ==>
+  !v chain op. ALOOKUP (ao_compute_iszero_targets insts) v = SOME chain /\
+    MEM op chain ==> set (venomInst$operand_vars [op]) SUBSET V
+Proof
+  strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = ISZERO ==>
+     EVERY (\op. set (venomInst$operand_vars [op]) SUBSET V) inst.inst_operands /\
+     EVERY ((\op. set (venomInst$operand_vars [op]) SUBSET V) o Var)
+       inst.inst_outputs) insts` by
+    (gvs[EVERY_MEM] >> gen_tac >> strip_tac >>
+     `set inst.inst_outputs SUBSET V /\ set (inst_uses inst) SUBSET V` by
+       (gvs[inst_ir_vars_def, SUBSET_DEF] >> metis_tac[]) >>
+     strip_tac >> conj_tac
+     >- (qpat_x_assum `set (inst_uses _) SUBSET _` mp_tac >>
+         rewrite_tac[inst_uses_def] >>
+         pure_once_rewrite_tac[ao_operand_support] >> simp[EVERY_MEM]) >>
+     gvs[EVERY_MEM, combinTheory.o_DEF, venomInstTheory.operand_vars_def,
+         venomInstTheory.operand_var_def, SUBSET_DEF]) >>
+  drule ao_compute_iszero_targets_chain_property >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem ao_transform_inst_supply_vars:
+  !s fr s1 inst.
+    ir_supply_inst_ok s /\ ao_alloc_fresh s = (fr,s1) /\
+    set (inst_ir_vars inst) SUBSET set s.irs_used_vars /\
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+      set (venomInst$operand_vars [op]) SUBSET set s.irs_used_vars) ==>
+    EVERY (\out. set (inst_ir_vars out) SUBSET set s1.irs_used_vars)
+      (ao_transform_inst dfg ra lbl idx targets fr inst)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fr "not" = fr "inner" /\ fr "xor" = fr "inner"` by
+    (conj_tac
+     >- (drule ao_alloc_fresh_tags >> disch_then (qspec_then `"not"` mp_tac) >> simp[]) >>
+     drule ao_alloc_fresh_tags >> disch_then (qspec_then `"xor"` mp_tac) >> simp[]) >>
+  `set (inst_uses inst) SUBSET set s.irs_used_vars /\
+   set inst.inst_outputs SUBSET set s.irs_used_vars` by
+    gvs[inst_ir_vars_def, SUBSET_DEF] >>
+  drule_all ao_transform_inst_supply_keys >> strip_tac >>
+  `!out. MEM out (ao_transform_inst dfg ra lbl idx targets fr inst) ==>
+    set (inst_uses out) SUBSET
+      (set s.irs_used_vars UNION {SND (fr "not"); SND (fr "iz")})` by
+    (match_mp_tac ao_transform_inst_support >> simp[] >> metis_tac[]) >>
+  drule_all ao_alloc_fresh_contract >> strip_tac >>
+  gvs[EVERY_MEM, inst_ir_vars_def, SUBSET_DEF, MEM_FLAT, MEM_MAP] >>
+  metis_tac[]
+QED
+
+Theorem ao_transform_insts_supply_vars:
+  !insts s idx outs s'.
+    ir_supply_inst_ok s /\
+    EVERY (\inst. set (inst_ir_vars inst) SUBSET set s.irs_used_vars) insts /\
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+      set (venomInst$operand_vars [op]) SUBSET set s.irs_used_vars) /\
+    ao_transform_insts_supply dfg ra lbl targets s idx insts = (outs,s') ==>
+    EVERY (\out. set (inst_ir_vars out) SUBSET set s'.irs_used_vars) outs
+Proof
+  Induct >> simp[Once ao_transform_insts_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_alloc_fresh s` >> rename1 `ao_alloc_fresh s = (fr,s1)` >>
+  Cases_on `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts` >>
+  rename1 `ao_transform_insts_supply dfg ra lbl targets s1 (SUC idx) insts = (tail,s2)` >>
+  gvs[Once ao_transform_insts_supply_def, EVERY_APPEND] >>
+  `ir_supply_inst_ok s1 /\ set s.irs_used_vars SUBSET set s1.irs_used_vars` by
+    (drule_all ao_alloc_fresh_contract >> strip_tac >> gvs[SUBSET_DEF]) >>
+  `EVERY (\inst. set (inst_ir_vars inst) SUBSET set s1.irs_used_vars) insts /\
+   (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+      set (venomInst$operand_vars [op]) SUBSET set s1.irs_used_vars)` by
+    (gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all ao_transform_inst_supply_vars >> strip_tac >>
+  drule_all ao_transform_insts_supply_mono >> strip_tac >>
+  gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_transform_block_supply_vars:
+  ir_supply_inst_ok s /\
+  EVERY (\inst. set (inst_ir_vars inst) SUBSET set s.irs_used_vars) bb.bb_instructions /\
+  (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+    set (venomInst$operand_vars [op]) SUBSET set s.irs_used_vars) /\
+  ao_transform_block_supply dfg ra targets s bb = (bb',s') ==>
+  EVERY (\out. set (inst_ir_vars out) SUBSET set s'.irs_used_vars) bb'.bb_instructions
+Proof
+  Cases_on `ao_transform_insts_supply dfg ra bb.bb_label targets s 0
+    bb.bb_instructions` >>
+  gvs[ao_transform_block_supply_def] >> strip_tac >> gvs[] >>
+  metis_tac[ao_transform_insts_supply_vars]
+QED
+
+Theorem ao_transform_blocks_supply_vars:
+  !bbs s bbs' s'.
+    ir_supply_inst_ok s /\
+    EVERY (\inst. set (inst_ir_vars inst) SUBSET set s.irs_used_vars)
+      (fn_insts_blocks bbs) /\
+    (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+      set (venomInst$operand_vars [op]) SUBSET set s.irs_used_vars) /\
+    ao_transform_blocks_supply dfg ra targets s bbs = (bbs',s') ==>
+    EVERY (\out. set (inst_ir_vars out) SUBSET set s'.irs_used_vars)
+      (fn_insts_blocks bbs')
+Proof
+  Induct >> simp[Once ao_transform_blocks_supply_def, fn_insts_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `ao_transform_block_supply dfg ra targets s h` >>
+  rename1 `ao_transform_block_supply dfg ra targets s h = (bb,s1)` >>
+  Cases_on `ao_transform_blocks_supply dfg ra targets s1 bbs` >>
+  rename1 `ao_transform_blocks_supply dfg ra targets s1 bbs = (tail,s2)` >>
+  gvs[Once ao_transform_blocks_supply_def, fn_insts_blocks_def, EVERY_APPEND] >>
+  drule_all ao_transform_block_supply_mono >> strip_tac >>
+  `EVERY (\inst. set (inst_ir_vars inst) SUBSET set s1.irs_used_vars)
+     (fn_insts_blocks bbs) /\
+   (!v chain op. ALOOKUP targets v = SOME chain /\ MEM op chain ==>
+      set (venomInst$operand_vars [op]) SUBSET set s1.irs_used_vars)` by
+    (gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  drule_all ao_transform_block_supply_vars >> strip_tac >>
+  drule_all ao_transform_blocks_supply_mono >> strip_tac >>
+  gvs[EVERY_MEM, SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ao_offset_function_vars:
+  !fn fn0 sup.
+    ir_supply_covers_fn sup fn /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks ==>
+    EVERY (\inst. set (inst_ir_vars inst) SUBSET set sup.irs_used_vars) (fn_insts fn0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule ao_offset_function_insts >> strip_tac >>
+  gvs[EVERY_MEM, MEM_MAP, ir_supply_covers_fn_def, list_subset_def,
+      fn_ir_vars_def, fn_insts_def] >>
+  rpt strip_tac >> gvs[inst_ir_vars_def, ao_handle_offset_inst_shape, SUBSET_DEF] >>
+  rpt strip_tac >>
+  qpat_x_assum `!x. MEM x (FLAT (MAP block_ir_vars _)) ==> _` irule >>
+  gvs[unitShapeDefsTheory.MEM_fn_insts_blocks_iff,
+      MEM_FLAT, MEM_MAP, block_ir_vars_def, inst_ir_vars_def] >>
+  simp[MEM_FLAT, MEM_MAP, PULL_EXISTS] >>
+  metis_tac[inst_ir_vars_def, MEM_APPEND]
+QED
+
+Theorem ao_main_function_vars:
+  !fn fn0 sup bbs sup1 mid.
+    ir_supply_inst_ok sup /\ ir_supply_covers_fn sup fn /\
+    fn0 = fn with fn_blocks :=
+      MAP (\bb. bb with bb_instructions :=
+        MAP ao_handle_offset_inst bb.bb_instructions) fn.fn_blocks /\
+    ao_transform_blocks_supply (dfg_build_function fn0) (range_analyze fn0)
+      (ao_compute_fn_iszero_targets fn0) sup fn0.fn_blocks = (bbs,sup1) /\
+    mid = fn0 with fn_blocks := bbs ==>
+    EVERY (\inst. set (inst_ir_vars inst) SUBSET set sup1.irs_used_vars) (fn_insts mid)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rename1 `ir_supply_inst_ok supply` >>
+  drule_all ao_offset_function_vars >> strip_tac >>
+  drule ao_compute_iszero_targets_support >> strip_tac >>
+  `!v chain op. ALOOKUP (ao_compute_fn_iszero_targets fn0) v = SOME chain /\
+    MEM op chain ==> set (venomInst$operand_vars [op]) SUBSET set supply.irs_used_vars` by
+    (rewrite_tac[ao_compute_fn_iszero_targets_def] >> metis_tac[]) >>
+  gvs[fn_insts_def] >>
+  drule_all ao_transform_blocks_supply_vars >> simp[]
+QED
+
+Theorem ao_compute_iszero_targets_no_labels:
+  EVERY label_positions_ok insts ==>
+  !v chain op. ALOOKUP (ao_compute_iszero_targets insts) v = SOME chain /\
+    MEM op chain ==> ~is_label_operand op
+Proof
+  strip_tac >>
+  `EVERY (\inst. inst.inst_opcode = ISZERO ==>
+     EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+     EVERY ((\op. ~is_label_operand op) o Var) inst.inst_outputs) insts` by
+    (gvs[EVERY_MEM, combinTheory.o_DEF,
+         stackPlanTypesTheory.is_label_operand_def] >> rpt strip_tac >>
+     `label_positions_ok inst` by metis_tac[] >>
+     gvs[label_positions_ok_def, EVERY_MEM]) >>
+  drule ao_compute_iszero_targets_chain_property >>
+  simp[EVERY_MEM] >> metis_tac[]
 QED
