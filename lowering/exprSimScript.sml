@@ -340,6 +340,18 @@ Proof
   gvs[]
 QED
 
+Theorem val_footprint_cases[local]:
+  !tv v.
+    (?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
+    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
+    val_footprint tv v = type_memory_size tv
+Proof
+  rpt gen_tac >> Cases_on `v` >> simp[val_footprint_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV bt` >> Cases_on `bt` >> simp[] >>
+  rename1 `BytesT sz` >> Cases_on `sz` >> simp[]
+QED
+
 (* A well-formed value's footprint fits its type's size. *)
 Theorem val_footprint_le:
   !tv v. val_wf tv v ==> val_footprint tv v <= type_memory_size tv
@@ -348,8 +360,7 @@ Proof
   `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
-    (Cases_on `v` >> simp[val_footprint_def] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[]))
+    metis_tac[val_footprint_cases]
   >- (gvs[val_footprint_def, valueEncodingTheory.val_wf_def,
           valueEncodingTheory.type_memory_size_def] >>
       irule word_size_le_of_le_mul >> simp[])
@@ -371,8 +382,7 @@ Proof
   `(?bs n. v = BytesV bs /\ tv = BaseTV (BytesT (Dynamic n))) \/
    (?str n. v = StringV str /\ tv = BaseTV (StringT n)) \/
    val_footprint tv v = type_memory_size tv` by
-    (Cases_on `v` >> simp[val_footprint_def] >>
-     rpt (BasicProvers.TOP_CASE_TAC >> simp[]))
+    metis_tac[val_footprint_cases]
   >- (gvs[val_footprint_def, val_in_memory_def] >>
       drule valueEncodingProofsTheory.mem_bytes_at_agree_window >>
       strip_tac >>
