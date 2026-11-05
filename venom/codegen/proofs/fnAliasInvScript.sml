@@ -17,6 +17,8 @@ Theory fnAliasInv
 Ancestors
   fnPlanLineage frameRel codegenRel unitShapeDefs stackPlanGen stackPlanTypes
   venomExecSemantics venomState livenessDefs dfgDefs cfgDefs
+  fnAliasInvOrdering fnAliasInvAvailability dfgAnalysisProps allocaRemapSSA
+  venomInst venomInstProps venomWf venomExecProps list rich_list
 
 (* Actual single steps followed by normalize_operand, including literal roots. *)
 Definition alias_assign_step_def:
@@ -24,6 +26,65 @@ Definition alias_assign_step_def:
     ?v inst. at = Var v /\ FLOOKUP dfg.dfg_defs v = SOME inst /\
       inst.inst_opcode = ASSIGN /\ inst.inst_operands = [src]
 End
+
+Theorem alias_assign_source_available:
+  wf_function fn /\ ssa_form fn /\ def_dominates_uses fn /\
+  alias_assign_step (dfg_build_function fn) (Var x) (Var y) /\
+  alias_path_available fn l i x ==>
+  alias_path_available fn l i y
+Proof
+  strip_tac >>
+  `?assign. dfg_get_def (dfg_build_function fn) x = SOME assign /\
+      assign.inst_opcode = ASSIGN /\ assign.inst_operands = [Var y]` by
+    gvs[alias_assign_step_def, dfg_get_def_def] >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `!bb j. MEM bb fn.fn_blocks /\ j < LENGTH bb.bb_instructions /\
+       MEM x (inst_defs (EL j bb.bb_instructions)) ==>
+       alias_path_available fn bb.bb_label j y` by
+    (rpt strip_tac >>
+     `EL j bb.bb_instructions = assign` by
+       (irule ssa_unique_output >> conj_tac
+        >- (qexists_tac `fn` >>
+            gvs[fn_insts_def, MEM_fn_insts_blocks_iff] >> metis_tac[EL_MEM]) >>
+        qexists_tac `x` >> gvs[inst_defs_def]) >>
+     irule alias_ordinary_use_available >>
+     simp[inst_uses_def, operand_vars_def, operand_var_def]) >>
+  rewrite_tac[alias_path_available_def] >> rpt strip_tac >>
+  qpat_x_assum `alias_path_available fn l i x` mp_tac >>
+  rewrite_tac[alias_path_available_def] >>
+  disch_then (qspec_then `path` mp_tac) >>
+  impl_tac >- metis_tac[] >> strip_tac
+  >- (`?j. j < LENGTH bb.bb_instructions /\
+           EL j bb.bb_instructions = inst` by metis_tac[MEM_EL] >>
+      `alias_path_available fn bb.bb_label j y` by
+        metis_tac[lookup_block_MEM] >>
+      `!p n. is_fn_path fn p ==> is_fn_path fn (TAKE n p)` by
+        (Induct >- simp[is_fn_path_def] >>
+         qx_gen_tac `head` >> Cases >- simp[is_fn_path_def] >>
+         Cases_on `p` >> simp[is_fn_path_def] >>
+         Cases_on `n'` >> simp[is_fn_path_def] >> strip_tac >>
+         qpat_x_assum `!n. is_fn_path fn (h::t) ==> _`
+           (qspec_then `SUC n` mp_tac) >> simp[]) >>
+      qpat_x_assum `alias_path_available fn bb.bb_label j y` mp_tac >>
+      rewrite_tac[alias_path_available_def] >>
+      disch_then (qspec_then `TAKE (SUC k) path` mp_tac) >>
+      impl_tac >- (simp[LENGTH_TAKE, HD_TAKE, LAST_EL, EL_TAKE] >>
+                    metis_tac[lookup_block_label]) >>
+      simp[LENGTH_TAKE, EL_TAKE] >> strip_tac >> disj1_tac
+      >- (gvs[EL_TAKE] >> qexistsl_tac [`k'`,`bb'`,`inst'`] >> simp[] >> decide_tac) >>
+      `bb.bb_label = EL k path` by metis_tac[lookup_block_label] >>
+      gvs[] >> qexistsl_tac [`k`,`bb`,`EL j' bb.bb_instructions`] >>
+      simp[EL_MEM]) >>
+  `alias_path_available fn bb.bb_label j y` by
+    metis_tac[lookup_block_MEM] >>
+  qpat_x_assum `alias_path_available fn bb.bb_label j y` mp_tac >>
+  rewrite_tac[alias_path_available_def] >>
+  disch_then (qspec_then `path` mp_tac) >>
+  impl_tac >- metis_tac[lookup_block_label] >>
+  strip_tac >- metis_tac[] >>
+  `bb.bb_label = l` by metis_tac[lookup_block_label] >> gvs[] >>
+  disj2_tac >> qexists_tac `j'` >> simp[]
+QED
 
 Theorem normalize_operand_assign_chain:
   !dfg visited at.
