@@ -17,20 +17,47 @@ Ancestors
   allocLimits compileVyper compileEnv supportedExprTraverse
   supportedStmtTraverse vyperAST list
 
+Theorem lowered_value_type_struct_fields:
+  !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
+           lowered_value_type c' e = lowered_value_type c e
+Proof
+  ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt strip_tac >>
+  gvs[exprLoweringTheory.lowered_value_type_def]
+QED
+
+Theorem ext_call_alloc_ok_struct_fields:
+  !c ct es c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
+               ext_call_alloc_ok c' ct es = ext_call_alloc_ok c ct es
+Proof
+  ho_match_mp_tac ext_call_alloc_ok_ind >> rpt strip_tac >>
+  drule type_memory_bytes_frame >> strip_tac >>
+  `lowered_value_type c' = lowered_value_type c` by
+    (simp[FUN_EQ_THM] >> metis_tac[lowered_value_type_struct_fields]) >>
+  gvs[ext_call_alloc_ok_def]
+QED
+
 Theorem alloc_limits_struct_fields:
-  (!c e c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
-  (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
               alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
-  (!c es c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c es c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
              alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
-  (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
               alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
-  (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
               alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
+  drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   simp[alloc_limits_expr_def, type_alloc_ok_def]
 QED
 
@@ -107,9 +134,11 @@ QED
 
 (* The other checks read only the struct sizes too. *)
 Theorem alloc_limits_assignment_struct_fields:
-  (!c g c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
             alloc_limits_assignment c' g = alloc_limits_assignment c g) /\
-  (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
              alloc_limits_assignments c' gs = alloc_limits_assignments c gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >> rpt conj_tac >>
@@ -118,7 +147,8 @@ Proof
 QED
 
 Theorem alloc_limits_frame:
-  !c c'. c'.ce_struct_fields = c.ce_struct_fields ==>
+  !c c'. c'.ce_struct_fields = c.ce_struct_fields /\
+              c'.ce_func_return_type = c.ce_func_return_type ==>
     type_memory_bytes c' = type_memory_bytes c /\
     alloc_limits_expr c' = alloc_limits_expr c /\
     alloc_limits_target c' = alloc_limits_target c /\
@@ -148,10 +178,12 @@ QED
 (* A statement's check reads the struct sizes and, for a log, the events. *)
 Theorem alloc_limits_stmt_struct_fields:
   (!c s c'. c'.ce_struct_fields = c.ce_struct_fields /\
-            c'.ce_event_info = c.ce_event_info ==>
+            c'.ce_event_info = c.ce_event_info /\
+             c'.ce_func_return_type = c.ce_func_return_type ==>
             alloc_limits_stmt c' s = alloc_limits_stmt c s) /\
   (!c ss c'. c'.ce_struct_fields = c.ce_struct_fields /\
-             c'.ce_event_info = c.ce_event_info ==>
+             c'.ce_event_info = c.ce_event_info /\
+             c'.ce_func_return_type = c.ce_func_return_type ==>
              alloc_limits_stmts c' ss = alloc_limits_stmts c ss)
 Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
@@ -168,7 +200,8 @@ Theorem fn_allocs_ok_body:
   !tops mut nr rr fname fargs dflts ret ss cenv.
     fn_allocs_ok tops (mut, nr, rr, fname, fargs, dflts, ret, ss) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\
-    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) ==>
+    cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+    cenv.ce_func_return_type = build_func_return_type tops ==>
     EVERY (\(_,ty). type_memory_bytes cenv ty < 2 ** 64) fargs /\
     alloc_limits_exprs cenv dflts /\ alloc_limits_stmts cenv ss /\
     ~supported_stmts_expr_exists (\e. ~alloc_limits_expr cenv e) ss /\
@@ -180,7 +213,9 @@ Proof
     simp[Abbr `c`, build_compile_env_ce_struct_fields] >>
   `cenv.ce_event_info = c.ce_event_info` by
     (simp[Abbr `c`, build_compile_env_def] >> rpt (pairarg_tac >> gvs[])) >>
-  drule alloc_limits_frame >> strip_tac >>
+  `cenv.ce_func_return_type = c.ce_func_return_type` by
+    simp[Abbr `c`, build_compile_env_ce_func_return_type] >>
+  drule_all alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>
   gvs[] >> irule (cj 2 alloc_limits_stmts_exists) >> simp[]
