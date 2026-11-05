@@ -102,6 +102,24 @@ Theorem annassign_mcopy_cursor_ptr:
 Proof
  simp[mcopy_def, write_memory_with_expansion_def, lookup_var_def]
 QED
+Theorem annassign_mcopy_restore_ptr:
+ !dst src k s idx.
+ ((mcopy dst src k s with vs_inst_idx := idx) with
+   <|vs_memory := s.vs_memory; vs_inst_idx := s.vs_inst_idx|>) = s
+Proof
+ simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem annassign_mcopy_taint_restore_ptr:
+ !id dst src count_op s u tn.
+ (step_taint (mk_inst id MCOPY [dst;src;count_op] []) s u tn
+   with t_mem := tn.t_mem) = tn
+Proof
+ simp[step_taint_def, instruction_accessors, set_var_taint_def,
+      adopt_reset_def, store_taint_def, imm_taint_def,
+      finite_mapTheory.DRESTRICT_UNIV, taint_component_equality]
+QED
+
 
 Theorem annassign_compile_copy_path_ptr:
  !D ctx func PG G tn s dst src a b k sa sb.
@@ -115,6 +133,8 @@ Theorem annassign_compile_copy_path_ptr:
  ?s' tn'. gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK s') /\
  s'.vs_current_bb = sb.cs_current_bb /\
  s'.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~s'.vs_halted /\
+ (s' with <|vs_memory := s.vs_memory;vs_inst_idx := s.vs_inst_idx|>) = s /\
+ (tn' with t_mem := tn.t_mem) = tn /\
  (!x. lookup_var x s' = lookup_var x s) /\
  s'.vs_memory = (if k = 0 then s.vs_memory
                 else (mcopy (w2n b) (w2n a) k s).vs_memory) /\
@@ -125,7 +145,8 @@ Theorem annassign_compile_copy_path_ptr:
 Proof
  rpt gen_tac >> strip_tac >> Cases_on `k`
  >- (gvs[compile_copy_memory_def, comp_return_def] >>
-     qexistsl [`s`,`tn`] >> simp[] >>
+     qexistsl [`s`,`tn`] >>
+     simp[venom_state_component_equality] >>
      irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
  `emit_inst MCOPY [Var dst;Var src;Lit (n2w (SUC n))] [] sa =
     ((),sb)` by
@@ -143,5 +164,6 @@ Proof
  >- (irule annassign_mcopy_path_ptr >>
      simp[eval_operand_def, op_taint_def, wordsTheory.w2n_n2w] >>
      metis_tac[]) >>
- simp[annassign_mcopy_cursor_ptr, annassign_static_mcopy_ghost_ptr]
+ simp[annassign_mcopy_cursor_ptr, annassign_static_mcopy_ghost_ptr,
+      annassign_mcopy_restore_ptr, annassign_mcopy_taint_restore_ptr]
 QED
