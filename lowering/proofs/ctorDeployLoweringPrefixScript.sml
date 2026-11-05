@@ -1641,13 +1641,109 @@ Theorem deploy_prefix_negative_observe_es1:
     <|entries := []; readings := []; pending := NONE|> =
     <|entries := []; readings := []; pending := NONE|>
 Proof
-  irule deploy_prefix_observe_noncall >>
+  irule deploy_prefix_observe_noncall >> simp[LET_THM] >>
   simp[callTraceTheory.observable_call_def, callTraceTheory.next_opcode_def,
-       LET_THM, vfmContextTheory.initial_context_def,
-       vfmContextTheory.initial_msg_params_def, deploy_prefix_negative_parsed] >>
-  EVAL_TAC
+       vfmContextTheory.initial_context_def,
+       vfmContextTheory.initial_msg_params_def,
+       SRULE [] deploy_prefix_negative_parsed, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem deploy_prefix_frame_exit[local]:
+  FST result = INR NONE /\ observe d es result obs = obs ==>
+  frame_obs_tr d obs es result = obs
+Proof
+  Cases_on `result` >> simp[Once callTraceTheory.frame_obs_tr_def, LET_THM] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem deploy_prefix_frame_advance[local]:
+  LENGTH post.contexts = 1 /\ observe 1 es (INL (),post) obs = obs ==>
+  frame_obs_tr 1 obs es (INL (),post) = frame_obs_tr 1 obs post (step post)
+Proof
+  strip_tac >> `post.contexts <> []` by (strip_tac >> gvs[]) >>
+  simp[Once callTraceTheory.frame_obs_tr_def, LET_THM] >>
+  gvs[callTraceTheory.observe_def]
+QED
+
+Theorem deploy_prefix_negative_frame_terminal:
+  frame_obs_tr 1 <|entries := []; readings := []; pending := NONE|>
+    ^prefix_es23_tm (step ^prefix_es23_tm) =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  irule deploy_prefix_frame_exit >>
+  rewrite_tac[deploy_prefix_negative_terminal] >>
+  Cases_on `step ^prefix_es23_tm` >>
+  irule deploy_prefix_negative_observe_memory >> simp[]
+QED
+
+
+fun prefix_frame_advance_tac (step_th, depth_th, observe_th) =
+  pure_rewrite_tac[step_th] >>
+  dep_rewrite.DEP_REWRITE_TAC[deploy_prefix_frame_advance] >>
+  conj_tac >- (conj_tac >- (irule depth_th) >> irule observe_th >> simp[]);
+
+Theorem deploy_prefix_negative_frame_empty:
+  frame_obs_tr 1 <|entries := []; readings := []; pending := NONE|>
+    ^prefix_es_tm (step ^prefix_es_tm) =
+    <|entries := []; readings := []; pending := NONE|>
+Proof
+  prefix_frame_advance_tac (deploy_prefix_negative_step1,
+    deploy_prefix_negative_step1_continues, deploy_prefix_negative_observe1) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step2,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_es1) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step3,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step4,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step5,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step6,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step7,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step8,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step9,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step10,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step11,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step12,
+    deploy_prefix_negative_stack_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step13,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_stack) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step14,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step15,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step16,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step17,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step18,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step19,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step20,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step21,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step22,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  prefix_frame_advance_tac (deploy_prefix_negative_step23,
+    deploy_prefix_negative_memory_depth, deploy_prefix_negative_observe_memory) >>
+  ACCEPT_TAC deploy_prefix_negative_frame_terminal
+QED
+
+Theorem deploy_prefix_negative_call_trace:
+  call_trace ^prefix_es_tm = []
+Proof
+  `LENGTH (^prefix_es_tm).contexts = 1` by simp[LET_THM] >>
+  pure_rewrite_tac[callTraceTheory.call_trace_def,
+                   callTraceTheory.frame_obs_def] >>
+  asm_rewrite_tac[deploy_prefix_negative_frame_empty] >> simp[]
+QED
 
 Theorem deploy_prefix_negative_wf_state:
   wf_state ^prefix_es_tm
