@@ -2,7 +2,7 @@
 Theory bodyIntCallArgLifetime
 Ancestors
   exprSimAggregateChildren exprSimAggregateSource exprLowering compileEnv vyperEvalPureExpr vyperPureExpr supportedExprs supportedExprForms
-  exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim exprLoweringProps fragExec
+  loweringPosts bodyIntCallSourceFrame exprReasonOperand exprSimHyps exprOperandVar exprSafeOperand context venomState exprSim exprLoweringProps fragExec
   vyperValue valueEncoding valueEncodingProps valueEncodingProofs vyperTypeEnv vyperTypeInvariants vyperTyping
 
 Theorem compile_multi_vvs_empty:
@@ -17,25 +17,6 @@ Proof
   simp[compile_stage_intcall_args_def, comp_return_def]
 QED
 
-Theorem supported_purity_semantic:
-  (!tops e. supported_pure_expr tops e ==> pure_expr e) /\
-  (!tops es. supported_pure_exprs tops es ==> EVERY pure_expr es) /\
-  (!tops fields. supported_pure_fields tops fields ==>
-     EVERY pure_expr (MAP SND fields)) /\
-  (!tops e. supported_place_expr tops e ==> pure_expr e)
-Proof
-  ho_match_mp_tac supported_pure_expr_ind >>
-  simp[supported_pure_expr_def, pure_expr_def, SF ETA_ss] >>
-  rpt conj_tac >> rpt gen_tac >>
-  Cases_on `es` >> simp[supported_builtin_form_def]
-QED
-
-Theorem supported_pure_eval_expr_state:
-  supported_pure_expr tops e /\ eval_expr cx e es = (res,es') ==>
-  es' = es
-Proof
-  metis_tac[supported_purity_semantic, eval_expr_preserves_state]
-QED
 
 (* A compiled operand is already reserved at the next compile boundary.
    The semantic invariant rules out label-valued local pointers. *)
@@ -125,11 +106,14 @@ QED
 Theorem vv_holds_nonmemory_frame:
   vv_holds cenv cx t raw (LocatedValue t' p) es s0 /\
   p.ptr_location <> LocMemory /\
+  (p.ptr_location = LocStorage ==> contract_storage s = contract_storage s0) /\
+  (p.ptr_location = LocTransient ==> contract_transient s = contract_transient s0) /\
   (!w. eval_operand p.ptr_operand s0 = SOME w ==>
        eval_operand p.ptr_operand s = SOME w) ==>
   vv_holds cenv cx t raw (LocatedValue t' p) es s
 Proof
-  Cases_on `p.ptr_location` >> simp[vv_holds_def] >> metis_tac[]
+  Cases_on `p.ptr_location` >>
+  simp[vv_holds_def, storage_holds_def] >> metis_tac[]
 QED
 
 Theorem vv_holds_memory_footprint_frame:
@@ -242,7 +226,7 @@ Theorem vv_post_covered_window:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' tv vv s /\
   ((?aid b sz. FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\
       aid < sm.cs_next_id /\ b <= off /\ off + len <= b + sz /\
       (!n lb lsz. local_region cenv es.scopes s0 n lb lsz ==>
@@ -267,7 +251,7 @@ Theorem vv_post_preserves_located_memory:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' tv vv s /\
   vv_holds cenv cx t raw (LocatedValue t' p) es s0 /\
   vv_at cenv cx t sa sm es raw (LocatedValue t' p) s0 /\
   p.ptr_location = LocMemory /\
@@ -288,7 +272,7 @@ Theorem vv_post_preserves_stack_value:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' tv vv s /\
   vv_holds cenv cx t raw (StackValue t' op) es s0 /\
   vv_at cenv cx t sa sm es raw (StackValue t' op) s0 /\
   (!w. eval_operand op s0 = SOME w ==> eval_operand op s = SOME w) ==>
@@ -309,7 +293,9 @@ Theorem vv_post_preserves_held_value:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_rel func cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es tv vv s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' tv vv s /\
+  contract_storage s = contract_storage s0 /\
+  contract_transient s = contract_transient s0 /\
   vv_holds cenv cx t raw held es s0 /\
   vv_at cenv cx t sa sm es raw held s0 /\
   (!w. eval_operand (vv_operand held) s0 = SOME w ==>
@@ -332,11 +318,16 @@ Theorem two_vv_posts_deferred_holds:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   compile_expr cenv ty1 e1 sa = (vv1,sm) /\
   vv_post ctx func cenv cx e1 es0 sa sm start es raw1 vv1 s0 /\
-  vv_post ctx func cenv cx e2 es sm sn s0 es2 raw2 vv2 s ==>
+  vv_post ctx func cenv cx e2 es sm sn s0 es2 raw2 vv2 s /\
+  contract_storage s = contract_storage s0 /\
+  contract_transient s = contract_transient s0 ==>
   vv_holds cenv cx (expr_type e1) raw1 vv1 es2 s
 Proof
   strip_tac >>
-  `es2 = es` by metis_tac[supported_pure_eval_expr_state] >> gvs[] >>
+  `es2 = es with outcomes := es2.outcomes` by
+    metis_tac[supported_eval_expr_outcomes] >>
+  `es2.scopes = es.scopes` by
+    fs[vyperStateTheory.evaluation_state_component_equality] >>
   `!w. eval_operand (vv_operand vv1) s0 = SOME w ==>
        eval_operand (vv_operand vv1) s = SOME w` by
     (rpt strip_tac >> irule vv_post_preserves_compiled_operand >> metis_tac[]) >>
@@ -345,7 +336,9 @@ Proof
    vv_holds cenv cx (expr_type e1) raw1 vv1 es s0 /\
    vv_at cenv cx (expr_type e1) sa sm es raw1 vv1 s0` by
     gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
-  irule vv_post_preserves_held_value >> metis_tac[]
+  `vv_holds cenv cx (expr_type e1) raw1 vv1 es s` by
+    (irule vv_post_preserves_held_value >> metis_tac[]) >>
+  metis_tac[vv_holds_outcomes]
 QED
 
 Theorem expr_vv_sim_success_frag:
@@ -367,41 +360,43 @@ Proof
 QED
 
 Theorem two_expr_vv_success_deferred:
-  expr_sim_inv cenv cx env es /\ well_typed_expr env e1 /\
+  expr_sim_inv cenv cx env es1 /\ well_typed_expr env e1 /\
   supported_pure_expr tops e2 /\
   expr_vv_sim ctx func cenv cx (expr_type e1) e1 es /\
-  expr_vv_sim ctx func cenv cx (expr_type e2) e2 es /\
-  eval_expr cx e1 es = (INL raw1,es) /\
-  eval_expr cx e2 es = (INL raw2,es) /\
+  expr_vv_sim ctx func cenv cx (expr_type e2) e2 es1 /\
+  eval_expr cx e1 es = (INL raw1,es1) /\
+  eval_expr cx e2 es1 = (INL raw2,es2) /\
   expr_vv_res_ok (INL raw1) /\ expr_vv_res_ok (INL raw2) /\
   compile_expr cenv (expr_type e1) e1 sa = (vv1,sm) /\
   compile_expr cenv (expr_type e2) e2 sm = (vv2,sn) /\
   fn_has_code sa sm func /\ fn_has_code sm sn func /\
   fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm ==>
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  (!mid s. vv_post ctx func cenv cx e2 es1 sm sn mid es2 raw2 vv2 s ==>
+     contract_storage s = contract_storage mid /\
+     contract_transient s = contract_transient mid) ==>
   frag_exec ctx sa sn
     (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
     (\s. ?mid.
-       vv_post ctx func cenv cx e1 es sa sm start es raw1 vv1 mid /\
-       vv_post ctx func cenv cx e2 es sm sn mid es raw2 vv2 s /\
-       vv_holds cenv cx (expr_type e1) raw1 vv1 es s)
+       vv_post ctx func cenv cx e1 es sa sm start es1 raw1 vv1 mid /\
+       vv_post ctx func cenv cx e2 es1 sm sn mid es2 raw2 vv2 s /\
+       vv_holds cenv cx (expr_type e1) raw1 vv1 es2 s)
     (\r. F)
 Proof
   strip_tac >>
   `frag_exec ctx sa sm
      (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
-     (vv_post ctx func cenv cx e1 es sa sm start es raw1 vv1)
+     (vv_post ctx func cenv cx e1 es sa sm start es1 raw1 vv1)
      (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
   drule frag_exec_then >> disch_then irule >>
   conj_tac
   >- (rpt strip_tac >>
       `frag_exec ctx sm sn
-         (\s. s = t /\ stmt_state_rel ctx func cenv cx es s)
-         (vv_post ctx func cenv cx e2 es sm sn t es raw2 vv2)
+         (\s. s = t /\ stmt_state_rel ctx func cenv cx es1 s)
+         (vv_post ctx func cenv cx e2 es1 sm sn t es2 raw2 vv2)
          (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
       irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
-      conj_tac
-      >- gvs[vv_post_def] >>
+      conj_tac >- gvs[vv_post_def] >>
       rpt strip_tac >> qexists_tac `t` >> simp[] >>
       irule two_vv_posts_deferred_holds >> metis_tac[]) >>
   metis_tac[cj 1 exprLoweringPropsTheory.compile_expr_grows]
@@ -530,7 +525,7 @@ QED
 Theorem vv_post_local_regions:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es raw vv s ==>
+  vv_post ctx func cenv cx e es sm sn s0 es' raw vv s ==>
   (!name b sz. local_region cenv es.scopes s name b sz <=>
                local_region cenv es.scopes s0 name b sz)
 Proof
@@ -550,7 +545,7 @@ QED
 Theorem vv_post_held_location:
   local_ptrs_rel func cenv es.scopes s0 /\
   local_ptrs_reserved cenv sm /\
-  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' raw_new vv_new s /\
   vv_at cenv cx ty lo sm es raw held s0 /\
   sm.cs_next_id <= sn.cs_next_id /\
   (!w. eval_operand (vv_operand held) s0 = SOME w ==>
@@ -567,12 +562,15 @@ Theorem vv_post_deferred_entry:
   expr_sim_inv cenv cx env es /\
   local_ptrs_rel func cenv es.scopes s0 /\ local_ptrs_reserved cenv sm /\
   compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
-  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' raw_new vv_new s /\
+  contract_storage s = contract_storage s0 /\
+  contract_transient s = contract_transient s0 /\
+  es' = es with outcomes := es'.outcomes /\
   vv_holds cenv cx ty raw held es s0 /\
   vv_at cenv cx ty lo sm es raw held s0 /\
   safe_operand sm (vv_operand held) ==>
-  vv_holds cenv cx ty raw held es s /\
-  vv_at cenv cx ty lo sn es raw held s /\
+  vv_holds cenv cx ty raw held es' s /\
+  vv_at cenv cx ty lo sn es' raw held s /\
   safe_operand sn (vv_operand held)
 Proof
   strip_tac >> drule (cj 1 compile_expr_grows) >> strip_tac >>
@@ -582,23 +580,28 @@ Proof
      qexistsl_tac [`s0`, `sm`] >> simp[] >> gvs[vv_post_def]) >>
   `local_ptrs_rel func cenv es.scopes s` by
     gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
-  conj_tac >- (irule vv_post_preserves_held_value >> metis_tac[]) >>
-  conj_tac >- (irule vv_post_held_location >> metis_tac[]) >>
-  metis_tac[safe_operand_mono]
+  `vv_holds cenv cx ty raw held es s` by
+    (irule vv_post_preserves_held_value >> metis_tac[]) >>
+  `vv_at cenv cx ty lo sn es raw held s` by
+    (irule vv_post_held_location >> metis_tac[]) >>
+  metis_tac[vv_holds_outcomes, vv_at_outcomes, safe_operand_mono]
 QED
 
 Theorem vv_post_deferred_prefix:
   expr_sim_inv cenv cx env es /\
   local_ptrs_rel func cenv es.scopes s0 /\ local_ptrs_reserved cenv sm /\
   compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
-  vv_post ctx func cenv cx e es sm sn s0 es raw_new vv_new s /\
+  vv_post ctx func cenv cx e es sm sn s0 es' raw_new vv_new s /\
+  contract_storage s = contract_storage s0 /\
+  contract_transient s = contract_transient s0 /\
+  es' = es with outcomes := es'.outcomes /\
   EVERY (\(ty,raw,held,lo).
     vv_holds cenv cx ty raw held es s0 /\
     vv_at cenv cx ty lo sm es raw held s0 /\
     safe_operand sm (vv_operand held)) hs ==>
   EVERY (\(ty,raw,held,lo).
-    vv_holds cenv cx ty raw held es s /\
-    vv_at cenv cx ty lo sn es raw held s /\
+    vv_holds cenv cx ty raw held es' s /\
+    vv_at cenv cx ty lo sn es' raw held s /\
     safe_operand sn (vv_operand held)) hs
 Proof
   simp[listTheory.EVERY_MEM] >> strip_tac >> gen_tac >> disch_tac >>
@@ -611,7 +614,11 @@ Theorem expr_vv_success_deferred_prefix:
   expr_sim_inv cenv cx env es /\ well_typed_expr env e /\
   expr_vv_sim ctx func cenv cx (expr_type e) e es /\
   compile_expr cenv (expr_type e) e sm = (vv_new,sn) /\
-  eval_expr cx e es = (INL raw_new,es) /\ expr_vv_res_ok (INL raw_new) /\
+  eval_expr cx e es = (INL raw_new,es') /\ expr_vv_res_ok (INL raw_new) /\
+  es' = es with outcomes := es'.outcomes /\
+  (!s. vv_post ctx func cenv cx e es sm sn start es' raw_new vv_new s ==>
+     contract_storage s = contract_storage start /\
+     contract_transient s = contract_transient start) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm ==>
   frag_exec ctx sm sn
@@ -620,10 +627,10 @@ Theorem expr_vv_success_deferred_prefix:
         vv_holds cenv cx ty raw held es s /\
         vv_at cenv cx ty lo sm es raw held s /\
         safe_operand sm (vv_operand held)) hs)
-    (\s. vv_post ctx func cenv cx e es sm sn start es raw_new vv_new s /\
+    (\s. vv_post ctx func cenv cx e es sm sn start es' raw_new vv_new s /\
       EVERY (\(ty,raw,held,lo).
-        vv_holds cenv cx ty raw held es s /\
-        vv_at cenv cx ty lo sn es raw held s /\
+        vv_holds cenv cx ty raw held es' s /\
+        vv_at cenv cx ty lo sn es' raw held s /\
         safe_operand sn (vv_operand held)) hs /\
       safe_operand sn (vv_operand vv_new))
     (\r. F)
@@ -633,7 +640,7 @@ Proof
   qpat_x_assum `s0 = start` SUBST_ALL_TAC >>
   `frag_exec ctx sm sn
      (\s. s = start /\ stmt_state_rel ctx func cenv cx es s)
-     (vv_post ctx func cenv cx e es sm sn start es raw_new vv_new)
+     (vv_post ctx func cenv cx e es sm sn start es' raw_new vv_new)
      (\r. F)` by (irule expr_vv_sim_success_frag >> metis_tac[]) >>
   irule frag_exec_conseq >> first_assum (irule_at Any) >> simp[] >>
   gen_tac >> disch_tac >> simp[] >> conj_tac
