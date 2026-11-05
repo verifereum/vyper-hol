@@ -123,3 +123,28 @@ Proof
   simp[abi_vyper_admissible_singleton] >>
   simp[Once abi_vyper_admissible_cases, compatible_bound_def]
 QED
+
+Theorem abi_vyper_admissible_convert_mutual:
+  (!env ty av. abi_vyper_admissible env ty av ==>
+    ?v. abi_to_vyper env ty av = SOME v) /\
+  (!env tys avs. abi_vyper_admissible_list env tys avs ==>
+    ?vs. abi_to_vyper_list env tys avs = SOME vs)
+Proof
+  ho_match_mp_tac abi_vyper_admissible_ind >>
+  rpt strip_tac >> simp[abi_to_vyper_def, check_IntV_def] >>
+  gvs[abi_to_vyper_def, check_IntV_def]
+QED
+
+Theorem abi_vyper_admissible_convert:
+  abi_vyper_admissible env ty av ==>
+  ?v. abi_to_vyper env ty av = SOME v
+Proof
+  metis_tac[abi_vyper_admissible_convert_mutual]
+QED
+
+Theorem abi_vyper_admissible_list_convert:
+  abi_vyper_admissible_list env tys avs ==>
+  ?vs. abi_to_vyper_list env tys avs = SOME vs
+Proof
+  metis_tac[abi_vyper_admissible_convert_mutual]
+QED
