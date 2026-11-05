@@ -7,7 +7,7 @@ Ancestors
   exprLowering emitHelperProps compileEnv loweringSlice
   vyperInterpreter vyperState venomState
 
-Theorem msg_gas_typed[local]:
+Theorem msg_gas_typed:
   expr_sim_pre cenv cx env (Builtin ann (Env MsgGas) args) es ==>
   ann = env_item_type MsgGas /\ args = []
 Proof
@@ -16,7 +16,7 @@ Proof
   Cases_on `args` >> simp[]
 QED
 
-Theorem msg_gas_post_frame[local]:
+Theorem msg_gas_post_frame:
   compile_env_var MsgGas sa = (Var out,sb) /\
   local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 ==>
   expr_post ctx func cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
