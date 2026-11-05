@@ -335,3 +335,45 @@ Proof
       wordsLib.WORD_DECIDE_TAC) >>
   simp[setup_callee_def, ptr_shared_fields_def]
 QED
+
+Theorem ptr_paired_prefix_normalize:
+  ptr_paired_prefix R lp positions lo vs0 C Ct
+    h a ht at done tokens registry births PT TG saved entries H calls ws /\
+  fn_inst_wf a.po_fn ==>
+  ?bb n delta snapshots.
+    lookup_block a.po_state.vs_current_bb a.po_fn.fn_blocks = SOME bb /\
+    LENGTH delta = n /\ LENGTH snapshots = n /\
+    ptr_paired_prefix R lp positions lo vs0 C Ct
+      (h ++ delta) (ptr_gap_scan bb n a) ht at done tokens registry births PT
+      TG saved entries (H ++ snapshots) calls ws /\
+    (ptr_gap_scan bb n a).po_inst.inst_opcode <> NOP /\
+    at.po_inst = concretize_inst_with_positions (lp a.po_fn)
+      (ptr_gap_scan bb n a).po_inst /\
+    (ptr_gap_scan bb n a).po_prov = a.po_prov /\
+    (ptr_gap_scan bb n a).po_taint = a.po_taint
+Proof
+  strip_tac >> drule ptr_paired_prefix_endpoint >> strip_tac >>
+  qpat_x_assum `ptr_paired_cursor lp a at` mp_tac >>
+  simp[ptr_paired_cursor_def] >> strip_tac >>
+  drule ptr_ledger_alignment_cursor >> strip_tac >>
+  `at.po_state.vs_inst_idx < LENGTH bbt.bb_instructions` by gvs[] >>
+  first_x_assum drule >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `EL j indices < LENGTH bb.bb_instructions` >>
+  qabbrev_tac `n = EL j indices - a.po_state.vs_inst_idx` >>
+  `a.po_state.vs_inst_idx + n = EL j indices` by
+    (simp[Abbr `n`] >> decide_tac) >>
+  `?delta snapshots. LENGTH delta = n /\ LENGTH snapshots = n /\
+    ptr_paired_prefix R lp positions lo vs0 C Ct
+      (h ++ delta) (ptr_gap_scan bb n a) ht at done tokens registry births PT
+      (ptr_gap_tag_scan bb n a PT TG) saved entries (H ++ snapshots) calls ws` by
+    (irule ptr_paired_prefix_gap_scan >> simp[] >> metis_tac[]) >>
+  `ptr_gap_tag_scan bb n a PT TG = TG /\
+   (ptr_gap_scan bb n a).po_prov = a.po_prov /\
+   (ptr_gap_scan bb n a).po_taint = a.po_taint` by
+    (irule ptr_assign_prefix_gap_ghosts >> simp[] >> metis_tac[]) >>
+  qexistsl_tac [`bb`,`delta`,`snapshots`] >> simp[] >>
+  Cases_on `n = 0`
+  >- (gvs[ptr_gap_scan_def] >> metis_tac[concretize_positions_nop]) >>
+  `0 < n` by decide_tac >>
+  simp[ptr_gap_scan_fields] >> metis_tac[concretize_positions_nop]
+QED
