@@ -42,21 +42,22 @@ QED
 
 Theorem raw_log_child_pre[local]:
   expr_sim_pre cenv cx env (Call ann RawLog args dflt) es /\
-  MEM e args /\ expr_sim_inv cenv cx env es' /\ source_supply es' ==>
+  MEM e args /\ expr_sim_inv cenv cx env es' ==>
   expr_sim_pre cenv cx env e es'
 Proof
   rw[expr_sim_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm] >>
+     byte_widths_expr_def, alloc_limits_expr_def, expr_has_evm_run_thm,
+     supported_expr_exists_def] >>
   drule_all well_typed_exprs_mem >> drule_all byte_widths_exprs_mem >>
   drule_all alloc_limits_exprs_mem >>
-  gvs[expr_has_evm_run_thm, EVERY_MEM, EXISTS_MEM] >>
+  gvs[expr_has_evm_run_thm, supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
   metis_tac[int_calls_exprs_mem]
 QED
 
 Theorem raw_log_topic_pre[local]:
   expr_sim_pre cenv cx env
     (Call ann RawLog [Builtin topic_ann (MakeArray elem_ty bnd) topics; data] dflt) es /\
-  MEM e topics /\ expr_sim_inv cenv cx env es' /\ source_supply es' ==>
+  MEM e topics /\ expr_sim_inv cenv cx env es' ==>
   expr_sim_pre cenv cx env e es'
 Proof
   strip_tac >>
@@ -118,7 +119,7 @@ Proof
 QED
 
 Theorem raw_log_eval[local]:
-  compatible_bound (Dynamic n) (LENGTH topics) ==>
+  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) ==>
   (do r <- eval_expr cx
         (Call ann RawLog
           [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -153,7 +154,7 @@ Proof
 QED
 
 Theorem raw_log_eval_cases[local]:
-  compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
+  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
   expr_sim_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -212,7 +213,7 @@ Proof
 QED
 
 Theorem raw_log_raw_eval_cases[local]:
-  compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
+  ~cx.txn.is_static /\ compatible_bound (Dynamic n) (LENGTH topics) /\ LENGTH topics <= 4 /\
   expr_sim_pre cenv cx env
     (Call ann RawLog
       [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
@@ -240,6 +241,46 @@ Proof
   drule_at (Pat `expr_sim_pre _ _ _ _ _`) raw_log_eval_cases >>
   simp[bind_def, read_result_def, return_def] >>
   metis_tac[]
+QED
+
+Theorem raw_log_topics_source[local]:
+  expr_sim_pre cenv cx env
+    (Call ann RawLog
+      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt) es /\
+  compatible_bound (Dynamic n) (LENGTH topics) /\
+  eval_exprs cx topics es = (INL vs,es1) ==>
+  expr_sim_pre cenv cx env data es1 /\
+  EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs
+Proof
+  strip_tac >>
+  `expr_sim_pre cenv cx env
+     (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) es` by
+    (irule raw_log_child_pre >>
+     conj_tac >- gvs[expr_sim_pre_def] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `eval_expr cx
+     (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
+       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) es =
+     (INL (Value (ArrayV (DynArrayV vs))), es1)` by
+    simp[raw_log_topics_eval, bind_def, return_def] >>
+  drule_all expr_sim_pre_eval_result >> strip_tac >>
+  conj_tac
+  >- (irule raw_log_child_pre >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[expr_type_def, vyperValueTheory.evaluate_type_def,
+      vyperTypeInvariantsTheory.eval_result_typed_def, vyperTypingTheory.value_has_type_def] >>
+  gvs[vyperTypingTheory.all_have_type_EVERY]
+QED
+
+Theorem raw_log_data_sim[local]:
+  expr_sim_below cenv (expr_size (Call ann RawLog [topic; data] dflt)) /\
+  expr_sim_pre cenv cx env data es1 ==>
+  expr_sim ctx func cenv cx (expr_type data) data es1
+Proof
+  simp[expr_size_def, expr_sim_below_def] >> strip_tac >>
+  first_x_assum (qspec_then `data` mp_tac) >>
+  simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
 
 Theorem raw_log_post_vv[local]:
@@ -457,47 +498,6 @@ Proof
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   simp[] >> qexists_tac `inst` >>
   fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
-QED
-
-Theorem raw_log_topics_source[local]:
-  expr_sim_pre cenv cx env
-    (Call ann RawLog
-      [Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-        (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics; data] dflt) es /\
-  compatible_bound (Dynamic n) (LENGTH topics) /\
-  eval_exprs cx topics es = (INL vs,es1) ==>
-  expr_sim_pre cenv cx env data es1 /\
-  EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs
-Proof
-  strip_tac >>
-  `expr_sim_pre cenv cx env
-     (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) es` by
-    (irule raw_log_child_pre >>
-     conj_tac >- gvs[expr_sim_pre_def] >>
-     conj_tac >- gvs[expr_sim_pre_def] >>
-     goal_assum (drule_at Any) >> simp[]) >>
-  `eval_expr cx
-     (Builtin (ArrayT (BaseT (BytesT (Fixed 32))) (Dynamic n))
-       (MakeArray (SOME (BaseT (BytesT (Fixed 32)))) (Dynamic n)) topics) es =
-     (INL (Value (ArrayV (DynArrayV vs))), es1)` by
-    simp[raw_log_topics_eval, bind_def, return_def] >>
-  drule_all expr_sim_pre_eval_result >> strip_tac >>
-  conj_tac
-  >- (irule raw_log_child_pre >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
-  gvs[expr_type_def, vyperValueTheory.evaluate_type_def,
-      vyperTypeInvariantsTheory.eval_result_typed_def, vyperTypingTheory.value_has_type_def] >>
-  gvs[vyperTypingTheory.all_have_type_EVERY]
-QED
-
-Theorem raw_log_data_sim[local]:
-  expr_sim_below cenv (expr_size (Call ann RawLog [topic; data] dflt)) /\
-  expr_sim_pre cenv cx env data es1 ==>
-  expr_sim ctx func cenv cx (expr_type data) data es1
-Proof
-  simp[expr_size_def, expr_sim_below_def] >> strip_tac >>
-  first_x_assum (qspec_then `data` mp_tac) >>
-  simp[expr_ok_def, expr_sim_ok_def] >> metis_tac[]
 QED
 
 Theorem raw_log_dynamic_sim[local]:
