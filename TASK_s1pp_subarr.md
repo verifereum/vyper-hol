@@ -1,4 +1,4 @@
-# TASK: array subscript simulation, live base
+# TASK: array subscript simulation, framed base
 
 ## Meta
 Status: planned
@@ -11,7 +11,7 @@ Location: lowering/exprSimSubscriptArrayScript.sml (project root: this directory
 In `lowering/exprSimSubscriptArrayScript.sml`, currently `cheat`:
 
 ```sml
-Theorem compile_subscript_array_live_case:
+Theorem compile_subscript_array_framed_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
@@ -19,41 +19,23 @@ Theorem compile_subscript_array_live_case:
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
-    (!s tv t r t'. eval_expr cx obj s = (INL tv, t) /\
-                   eval_expr cx idx t = (INL r, t') ==>
-                   subscript_base_live cx tv t') /\
-    (!ty st l. vv_location (FST (compile_expr cenv ty obj st)) = SOME l /\
-               is_slot_addressed l ==> ~expr_has_effect idx) /\
-    (!ty st s v t. cenv.ce_is_ctor /\
-                   vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode ==>
-                   eval_expr cx obj s <> (INL (Value v), t)) ==>
+    ((~cenv.ce_is_ctor /\
+      !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocCode) \/
+     ((?n. bd = Fixed n) /\
+      (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
+      !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory)) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 ```
 
-with, in the same file:
+**Do not modify this statement.** Prove it as-is, or produce a counterexample.
 
-```sml
-Definition subscript_base_live_def:
-  (subscript_base_live cx (PlaceR (MemoryPlace id path)) es <=>
-     ?entry v. lookup_scopes id es.scopes = SOME entry /\
-               evaluate_subscripts entry.type entry.value path = INL v) /\
-  (subscript_base_live cx (PlaceR (ImmutablePlace src id path)) es <=>
-     ?v es'. read_place cx (ImmutablePlace src id path) es = (INL v, es')) /\
-  (subscript_base_live cx (PlaceR (StoragePlace tr slot tv)) es <=>
-     storage_read_live cx tr (get_storage cx es tr) slot tv) /\
-  (subscript_base_live cx _ es <=> T)
-End
-```
-
-**Do not modify this statement or `subscript_base_live_def`.** Prove it as-is, or produce a counterexample.
-
-The other theorems in the file (`compile_subscript_array_storage_call_case`, `compile_subscript_array_index_writes_case`, `compile_subscript_array_dead_base_case`) are deliberately admitted and out of scope; leave them and `compile_subscript_array_case` unchanged.
+`compile_subscript_array_place_base_case` in the same file is deliberately admitted and out of scope (its comment says why the current judgments can't carry it); leave it and `compile_subscript_array_case` unchanged.
 
 ## Completion Criteria
 
-1. `holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory` passes with no CHEAT warning for `compile_subscript_array_live_case` (the three admitted subcases above keep theirs).
-2. An `array_len_ok` lemma for a dynamic array in code (compile_imm_load_word's ILOAD/DLOAD), next to `array_len_ok_MLOAD`/`SLOAD`/`TLOAD` in `lowering/exprSimArrayIndexScript.sml`, if the proof needs it.
-3. No duplicate or near-duplicate lemmas: search `lowering/` and `semantics/` before proving a helper; each helper exists once, in its most general form. Put this case's machinery in new leaf theories (e.g. `lowering/exprSimSubscriptArrayLiveScript.sml`) that `exprSimSubscriptArray` imports, registered like the others in `holproject.toml`; don't edit low-level shared ancestors except to add a lemma next to its definition where it belongs (as in criterion 2).
+1. `holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory` passes with no CHEAT warning for `compile_subscript_array_framed_base_case` (`compile_subscript_array_place_base_case` keeps its).
+2. An `array_len_ok` lemma for a dynamic array in code at runtime (compile_imm_load_word's DLOAD), next to `array_len_ok_MLOAD`/`SLOAD`/`TLOAD` in `lowering/exprSimArrayIndexScript.sml`, if the proof needs it.
+3. No duplicate or near-duplicate lemmas: search `lowering/` and `semantics/` before proving a helper; each helper exists once, in its most general form. Put this case's machinery in new leaf theories (e.g. `lowering/exprSimSubscriptArrayFramedScript.sml`) that `exprSimSubscriptArray` imports, registered like the others in `holproject.toml`; don't edit low-level shared ancestors except to add a lemma next to its definition where it belongs (as in criterion 2).
 4. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with `>~`, `>-`, `>|`. No tactic-timeout override. No new `cheat`, axiom, or changed statement anywhere. Don't change any definition in `semantics/`, `frontend/`, `lowering/defs/`, `venom/`, or any judgment (`exprSim*Defs`, `exprSimHyps*`, `loweringPosts`, `bodySim*`, `*Main`).
 5. Commit messages end with these two lines:
    `Bot: opus (Claude Opus 5.5)`
@@ -70,7 +52,7 @@ holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory
 
 ## Background
 
-vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to an index that leaves the source locals and immutables unchanged and a base whose place still reads its current value after the index is evaluated. The comments on the admitted subcases say why the other cases are out of reach of the current judgments; don't try to prove them.
+vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to an index that leaves the source locals and immutables unchanged, and a base that is an immutable at runtime (in the data section) or a static array with no dynamic array inside it in memory (a local or a temporary allocation). The comment on the admitted residual says why the other cases are out of reach of the current judgments; don't try to prove them.
 
 Source: `eval_expr` of `Subscript` (semantics/vyperInterpreterScript.sml) evaluates the base, then the index, reads the index's value, then `select_result` / `extend_place` (semantics/vyperStateScript.sml): for a place it reads the base's place, checks the index with `evaluate_subscripts`, and extends the place's path (memory, immutable) or computes the element's slot (`extend_storage_place`, storage). For a `Value` base it selects the element.
 
@@ -104,4 +86,4 @@ Lowering: `compile_subscript` (lowering/defs/exprLoweringScript.sml) lowers the 
 ## Notes
 
 - `nocalls` may be F: the index may contain internal calls.
-- The case split in `compile_subscript_array_case` already builds; only `compile_subscript_array_live_case` is yours.
+- The case split in `compile_subscript_array_case` already builds; only `compile_subscript_array_framed_base_case` is yours.
