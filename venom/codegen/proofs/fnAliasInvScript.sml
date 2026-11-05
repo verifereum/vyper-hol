@@ -2417,6 +2417,68 @@ Proof
   drule_all (SRULE [arithmeticTheory.GREATER_DEF] alias_regular_plan_var_live_support) >> simp[]
 QED
 
+Definition alias_collision_fn_def:
+  alias_collision_fn = mk_raw_function "collision"
+    [<| bb_label := "E"; bb_instructions :=
+       [mk_inst 0 ASSIGN [Lit 7w] ["x"];
+        mk_inst 1 ASSIGN [Lit 9w] ["y"];
+        mk_inst 2 CALLDATASIZE [] ["c"];
+        mk_inst 3 JNZ [Var "c"; Label "A"; Label "B"] []] |>;
+     <| bb_label := "A"; bb_instructions := [mk_inst 4 JMP [Label "J"] []] |>;
+     <| bb_label := "B"; bb_instructions := [mk_inst 5 JMP [Label "J"] []] |>;
+     <| bb_label := "J"; bb_instructions :=
+       [mk_inst 6 PHI [Label "A"; Var "x"; Label "B"; Var "y"] ["p"];
+        mk_inst 7 ASSIGN [Var "x"] ["q"];
+        mk_inst 8 JMP [Label "K"] []] |>;
+     <| bb_label := "K"; bb_instructions :=
+       [mk_inst 9 MSTORE [Lit 0w; Var "p"] [];
+        mk_inst 10 MSTORE [Lit 32w; Var "q"] [];
+        mk_inst 11 STOP [] []] |>]
+End
+
+Theorem alias_collision_normalize:
+  normalize_operand (dfg_build_function alias_collision_fn) [] (Var "x") = Lit 7w
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_collision_ready_probe:
+  ~codegen_ready_fn alias_collision_fn
+Proof
+  simp[codegen_ready_fn_def] >> EVAL_TAC
+QED
+
+Theorem alias_collision_phi_obstruction:
+  ~phi_operands_ready alias_collision_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_none_fn_def:
+  alias_none_fn = mk_raw_function "none_probe"
+    [<| bb_label := "E"; bb_instructions :=
+       [mk_inst 0 ASSIGN [Lit 7w] ["x"];
+        mk_inst 1 ASSIGN [Lit 9w] ["y"];
+        mk_inst 2 CALLDATASIZE [] ["c"];
+        mk_inst 3 JNZ [Var "c"; Label "A"; Label "B"] []] |>;
+     <| bb_label := "A"; bb_instructions := [mk_inst 4 JMP [Label "J"] []] |>;
+     <| bb_label := "B"; bb_instructions := [mk_inst 5 JMP [Label "J"] []] |>;
+     <| bb_label := "J"; bb_instructions :=
+       [mk_inst 7 ASSIGN [Var "x"] ["q"];
+        mk_inst 8 JMP [Label "K"] []] |>;
+     <| bb_label := "K"; bb_instructions :=
+       [mk_inst 10 MSTORE [Lit 32w; Var "q"] [];
+        mk_inst 11 STOP [] []] |>]
+End
+
+Theorem alias_none_ready:
+  codegen_ready_fn alias_none_fn /\
+  normalize_operand (dfg_build_function alias_none_fn) [] (Var "x") = Lit 7w
+Proof
+  EVAL_TAC
+QED
+
+
 Theorem alias_input_vars_no_phis:
   collect_phis instrs = [] ==>
   input_vars_from pred instrs live = live
@@ -2679,6 +2741,133 @@ val () =
     computeLib.add_convs [(alias_rel_c,2,alias_release_conv)];
     computeLib.add_funs callers
   end;
+
+Definition alias_none_e_def:
+  alias_none_e = THE (generate_block_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (HD alias_none_fn.fn_blocks) (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Definition alias_none_a_def:
+  alias_none_a = THE (generate_block_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (EL 2 alias_none_fn.fn_blocks) (SND alias_none_e))
+End
+
+Theorem alias_none_e_plan:
+  generate_block_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (HD alias_none_fn.fn_blocks) (init_cleanup_plan_state NONE [] 0 0) =
+    SOME alias_none_e
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_none_a_plan:
+  generate_block_plan (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (EL 2 alias_none_fn.fn_blocks) (SND alias_none_e) = SOME alias_none_a
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_none_inventory_probe:
+  plan_holds (SND alias_none_a) (Var "x")
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_none_cfg_edges:
+  cfg_succs_of (cfg_analyze alias_none_fn) "E" = ["B"; "A"] /\
+  cfg_succs_of (cfg_analyze alias_none_fn) "B" = ["J"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_none_dfs_a:
+  dfs_aux_call (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["B"] ["E"] (SND alias_none_e)
+Proof
+  `SND alias_none_e = (SND alias_none_e) with
+    <|ps_stack := (SND alias_none_e).ps_stack;
+      ps_spilled := (SND alias_none_e).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >>
+  qexists_tac `["A"]` >>
+  rewrite_tac[GSYM (cj 1 alias_none_cfg_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`HD alias_none_fn.fn_blocks`, `FST alias_none_e`,
+    `init_cleanup_plan_state NONE [] 0 0`, `[]`] >>
+  simp[alias_none_e_plan] >> conj_tac >- EVAL_TAC >>
+  irule dfs_aux_call_entry >> EVAL_TAC
+QED
+
+Theorem alias_none_dfs_j:
+  dfs_aux_call (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) ["J"] ["B"; "E"] (SND alias_none_a)
+Proof
+  `SND alias_none_a = (SND alias_none_a) with
+    <|ps_stack := (SND alias_none_a).ps_stack;
+      ps_spilled := (SND alias_none_a).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule dfs_aux_call_branch >>
+  qexists_tac `[]` >>
+  rewrite_tac[GSYM (cj 2 alias_none_cfg_edges)] >>
+  irule dfs_aux_call_succs >> simp[] >>
+  qexistsl_tac [`EL 2 alias_none_fn.fn_blocks`, `FST alias_none_a`,
+    `SND alias_none_e`, `[]`] >>
+  simp[alias_none_a_plan, alias_none_dfs_a] >> EVAL_TAC
+QED
+
+Theorem alias_none_dfs_states:
+  dfs_block_state (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) "E" (init_cleanup_plan_state NONE [] 0 0) /\
+  dfs_block_state (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) "B" (SND alias_none_e) /\
+  dfs_block_state (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) "J" (SND alias_none_a)
+Proof
+  rewrite_tac[dfs_block_state_def] >> conj_tac
+  >- (qexistsl_tac [`[]`,`[]`] >> simp[] >> irule dfs_aux_call_entry >> EVAL_TAC) >>
+  conj_tac
+  >- (qexistsl_tac [`[]`,`["E"]`] >> simp[alias_none_dfs_a]) >>
+  qexistsl_tac [`[]`,`["B"; "E"]`] >> simp[alias_none_dfs_j]
+QED
+
+Theorem alias_none_lineage_b:
+  lineage_state (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) "B" (SND alias_none_e)
+Proof
+  `SND alias_none_e = (SND alias_none_e) with
+    <|ps_stack := (SND alias_none_e).ps_stack;
+      ps_spilled := (SND alias_none_e).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >>
+  simp[alias_none_dfs_states] >>
+  qexistsl_tac [`HD alias_none_fn.fn_blocks`, `FST alias_none_e`, `NONE`, `"E"`, `F`,
+    `init_cleanup_plan_state NONE [] 0 0`, `init_cleanup_plan_state NONE [] 0 0`,
+    `SND alias_none_e`] >>
+  simp[alias_none_dfs_states, alias_none_e_plan, alias_none_cfg_edges] >>
+  FAIL_TAC "lineage remaining"
+QED
+
+Theorem alias_none_lineage_j:
+  lineage_state (liveness_analyze alias_none_fn)
+    (dfg_build_function alias_none_fn) (cfg_analyze alias_none_fn) alias_none_fn
+    (init_cleanup_plan_state NONE [] 0 0) "J" (SND alias_none_a)
+Proof
+  `SND alias_none_a = (SND alias_none_a) with
+    <|ps_stack := (SND alias_none_a).ps_stack;
+      ps_spilled := (SND alias_none_a).ps_spilled|>` by simp[] >>
+  pop_assum SUBST1_TAC >> irule lineage_state_step >>
+  simp[alias_none_dfs_states] >>
+  qexistsl_tac [`EL 2 alias_none_fn.fn_blocks`, `FST alias_none_a`, `NONE`, `"B"`, `F`,
+    `SND alias_none_e`, `SND alias_none_e`, `SND alias_none_a`] >>
+  simp[alias_none_dfs_states, alias_none_a_plan, alias_none_cfg_edges] >> EVAL_TAC
+QED
 
 Theorem alias_spill_probe_entry_fields:
   IS_SOME alias_spill_probe_entry_result /\
