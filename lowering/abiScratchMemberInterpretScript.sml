@@ -580,6 +580,55 @@ Proof
   qexists_tac `t` >> simp[]
 QED
 
+Theorem abi_site_member_dynamic_reach:
+  abi_site_encoder ei /\
+  compile_abi_encode_child dst src ei T ho dp st = (out,en) /\
+  abi_encode_child_prefix dst ho dp st = (ops,prepared) /\ fn_has_code st en func /\
+  abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A /\
+  (st.cs_blocks = en.cs_blocks \/
+    !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
+      phi_prefix_length bb.bb_instructions = 0) /\
+  abi_site_encoder_input ei at av st src dst sb source_cap d output_size A b cap initial /\
+  eval_operand dp initial = SOME (n2w slot) /\ mload slot initial = n2w off /\
+  abi_decoder_operand_live st.cs_next_var dp /\
+  ho+32 <= off /\ off+LENGTH (enc at av) <= output_size /\
+  abi_site_budget A b cap initial /\ site IN A /\ lo <= site /\ site < st.cs_next_id /\
+  FLOOKUP initial.vs_allocas site = SOME (slot,32) /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t. mem_bytes_at (d+off) (LENGTH (enc at av)) t.vs_memory = enc at av /\
+    mem_word_at (d+ho) t.vs_memory = n2w off /\
+    mem_word_at slot t.vs_memory = n2w (off+LENGTH (enc at av)) /\
+    FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+    eval_operand out t = SOME (n2w (LENGTH (enc at av))) /\
+    abi_site_encoder_effect A lo en.cs_next_id st.cs_next_var
+      limit_st d output_size b cap initial t /\
+    t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
+    ~t.vs_halted /\ abi_decode_sim ctx func initial t /\
+    abi_decode_footprint_frame
+      ([(d+ho,32);(d+off,LENGTH (enc at av))] ++
+        abi_decoder_child_scratch (A INTER abi_decoder_ids lo en.cs_next_id) b cap initial) initial t
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_site_member_dynamic_input >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  `!c r. abi_encoder_spine_core_code func c /\
+    abi_encoder_member_dynamic_pre (at,av,sb,source_cap,d+off) (A,b,cap,limit_st)
+      (\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A)
+      (FST ops,FST (SND ops),dp,d+ho,off,slot,site) c r ==>
+    ?u. abi_decode_sim ctx func r u /\
+      abi_encoder_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d+off) (A,b,cap,limit_st)
+        (\st en. abi_decoder_emitted_sites st.cs_next_id en.cs_next_id st en SUBSET A)
+        (FST ops,FST (SND ops),dp,d+ho,off,slot,site) c r u` by
+    (rpt strip_tac >> drule_all abi_encoder_member_dynamic_run >> simp[]) >>
+  qpat_x_assum `!c r. _` (mp_tac o HO_MATCH_MP abi_encoder_spine_child_generate) >>
+  simp_tac (bool_ss ++ ETA_ss) [] >>
+  disch_then drule >> strip_tac >>
+  drule_all abi_encoder_member_dynamic_output_detailed >> strip_tac >>
+  qexists_tac `t` >> simp[]
+QED
+
 val _ = List.app (fn theory => List.app (fn (name, th) =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso
