@@ -1863,66 +1863,6 @@ Proof
   >> drule_all deploy_prefix_safe_block_no_abort >> metis_tac[]
 QED
 
-Theorem deploy_prefix_negative_run_no_abort:
-  !fuel s a ss.
-    run_context fuel (^prefix_lower_unit_tm).cu_context s <> Abort a ss
-Proof
-  rpt gen_tac >>
-  simp[venomExecSemanticsTheory.run_context_def,
-       venomInstTheory.lookup_function_def,
-       listTheory.FIND_thm,
-       venomExecSemanticsTheory.run_function_def,
-       venomInstTheory.fn_entry_label_def, venomInstTheory.entry_block_def] >>
-  irule deploy_prefix_safe_blocks_no_abort >> simp[]
-QED
-
-Theorem deploy_prefix_negative_result_failure:
-  !fuel s gobs.
-    ~deploy_venom_result_rel ^prefix_tops_tm [] ^prefix_tx_tm
-      (load_contract NONE gobs initial_machine_state ^prefix_tx_tm
-        [(NONE,^prefix_tops_tm)] [])
-      (run_context fuel (^prefix_lower_unit_tm).cu_context s)
-Proof
-  rpt gen_tac >>
-  rewrite_tac[CONJUNCT2 deploy_prefix_negative_source_ready] >>
-  qspec_then `fuel` (qspec_then `s` assume_tac) deploy_prefix_negative_run_no_abort >>
-  Cases_on `run_context fuel (^prefix_lower_unit_tm).cu_context s` >>
-  gvs[ctorDeployDefsTheory.deploy_venom_result_rel_def,
-      unspecified_behaviour_exempt_def]
-QED
-
-Theorem deploy_prefix_negative_counterexample:
-  deploy_phases (o1_policy all_capabilities) ^prefix_tops_tm
-    (^prefix_deploy_bc_tm, [])
-    (^prefix_rp_tm, ^prefix_lower_unit_tm,
-     <|po_unit := ^prefix_final_unit_tm; po_final_assembly := FAP_Optimize|>,
-     ^prefix_prog_tm, ^prefix_context_plan_tm) /\
-  deploy_source_ok ^prefix_tops_tm initial_machine_state ^prefix_tx_tm /\
-  deploy_state_rel ^prefix_tops_tm ^prefix_deploy_bc_tm
-    initial_machine_state ^prefix_tx_tm ^prefix_es_tm /\
-  gas_variant ^prefix_vs_tm
-    (deploy_entry_state ^prefix_prog_tm ^prefix_context_plan_tm
-       ^prefix_tops_tm ^prefix_es_tm) /\
-  (?exts ints fb cf. classify_functions ^prefix_tops_tm = (exts, ints, fb, SOME cf)) /\
-  (!mut nr body am_c es0.
-    ~deploy_ctor_start ^prefix_tops_tm initial_machine_state ^prefix_tx_tm
-       (mut, nr, body, am_c, es0)) /\
-  ~(?fuel. !gobs.
-    deploy_venom_result_rel ^prefix_tops_tm [] ^prefix_tx_tm
-      (load_contract NONE gobs initial_machine_state ^prefix_tx_tm
-        [(NONE,^prefix_tops_tm)] [])
-      (run_context fuel (^prefix_lower_unit_tm).cu_context ^prefix_vs_tm))
-Proof
-  conj_tac >- ACCEPT_TAC deploy_prefix_negative_phases >>
-  conj_tac >- metis_tac[deploy_prefix_negative_source_ready] >>
-  conj_tac >- ACCEPT_TAC deploy_prefix_negative_state_rel >>
-  conj_tac >- irule gas_variant_refl >>
-  conj_tac >- (EVAL_TAC >> simp[]) >>
-  conj_tac
-  >- (irule deploy_prefix_negative_no_start >> simp[empty_call_txn_def]) >>
-  simp[deploy_prefix_negative_result_failure]
-QED
-
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
