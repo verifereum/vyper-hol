@@ -472,11 +472,14 @@ QED
    as the entry state has it (FmpLowering seeds its pointer variable from
    vs_initial_fmp), and "code_end" bound to the code/data boundary
    (code_layout_valid), which LowerDload's ADD [_; Label "code_end"]
-   reads. *)
+   reads.  The call is not static, as the entry state's call is
+   (call_state_rel): under a static call SSTORE and the other state
+   writes abort, and DFT, which does not order them against the reads
+   after them, could then run a read the original run never reaches. *)
 Definition o1_run_state_ok_def:
   o1_run_state_ok vs <=>
     o1_initial_state_ok vs /\ vs.vs_fmp = vs.vs_initial_fmp /\
-    code_layout_valid vs
+    code_layout_valid vs /\ ~vs.vs_call_ctx.cc_static
 End
 
 (* The lowered-phase fact with the frame pointer read off the state: the
