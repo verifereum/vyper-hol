@@ -184,7 +184,7 @@ QED
 
 Finalise point_word_transfer_trace
 
-Theorem point_word_transfer_code[local]:
+Theorem point_word_transfer_code:
   (do src <- emit_op ADD [Var root; Lit (n2w off)];
       value <- emit_op MLOAD [src];
       dst <- emit_op ADD [Var bufroot; Lit (n2w dstoff)];
@@ -196,7 +196,7 @@ Theorem point_word_transfer_code[local]:
        mk_inst (sa.cs_next_id+2) ADD [Var bufroot; Lit (n2w dstoff)] [dst];
        mk_inst (sa.cs_next_id+3) MSTORE [Var dst; Var tmp] []] /\
     (!p. not_fresh_at sa p ==> p <> src /\ p <> tmp /\ p <> dst) /\
-    tmp <> dst
+    tmp <> dst /\ sa.cs_next_var <= sb.cs_next_var
 Proof
   simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
@@ -270,4 +270,16 @@ Proof
     (qx_choose_then `tnf` strip_assume_tac))) >>
   qexistsl [`t`, `Gf`, `tnf`] >> simp[] >>
   conj_tac >> gvs[ptr_covers_def] >> metis_tac[]
+QED
+
+Theorem point_word_transfer_progress:
+  (do src <- emit_op ADD [Var root; Lit (n2w off)];
+      value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [Var bufroot; Lit (n2w dstoff)];
+      emit_void MSTORE [dst; value] od) sa = ((),sb) ==>
+  sa.cs_next_var <= sb.cs_next_var /\
+  EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb)
+Proof
+  strip_tac >> drule point_word_transfer_code >> strip_tac >>
+  simp[mk_inst_def, is_terminator_def]
 QED
