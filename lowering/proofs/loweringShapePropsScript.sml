@@ -7204,6 +7204,155 @@ Proof
   shape_under_tac lower_value_callback_shape `ValFrame` >> simp[Abbr `ValFrame`, Abbr `AddrFrame`]
 QED
 
+(* LOG accepts ordinary operands, including the reversed raw topic list. *)
+Theorem stmt_log_emit_shape[local]:
+  !internal ops.
+    shape_step internal compiler_label (\st. EVERY (plain_operand st) ops)
+      (emit_inst LOG ops []) (\u st. T)
+Proof
+  rpt gen_tac >> stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+    simp[shape_stable_plain_operands] >> conj_tac
+    >- (simp[EVERY_MEM, label_or_plain_def] >> metis_tac[]) >>
+    stmt_shape_emit_simp >>
+    simp[EVERY_MEM, plain_operand_def] >>
+    rpt strip_tac >> res_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
+QED
+
+Theorem raw_log_topic_exprs_shape[local]:
+  ~supported_expr_exists expr_shape_root e ==>
+  ~supported_exprs_exists expr_shape_root (raw_log_topic_exprs e)
+Proof
+  Cases_on `e` >> simp[raw_log_topic_exprs_def, supported_expr_exists_def] >>
+  rename1 `Builtin ann bi es` >> Cases_on `bi` >>
+  simp[raw_log_topic_exprs_def, supported_expr_exists_def]
+QED
+
+Theorem compile_raw_revert_shape[local]:
+  shape_step internal compiler_label (\st. plain_operand st data)
+    (builtinSystem$compile_raw_revert data) (\u st. T)
+Proof
+  simp[builtinSystemTheory.compile_raw_revert_def] >>
+  irule shape_step_bind >>
+  qexists_tac `\n st. plain_operand st n /\ plain_operand st data` >> conj_tac
+  >- (qx_gen_tac `n` >> BETA_TAC >> irule shape_step_bind >>
+      qexists_tac `\p st. plain_operand st p /\ plain_operand st n` >> conj_tac
+      >- (gen_tac >> BETA_TAC >> stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
+          simp[stmt_shape_stable_plain, shape_stable_conj, label_or_plain_def] >>
+          stmt_shape_emit_simp >>
+          simp[plain_operand_def, stackPlanTypesTheory.is_label_operand_def] >>
+          rpt strip_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])) >>
+      shape_under_tac shape_step_emit_op_plain `\st. plain_operand st n` >>
+      simp[stmt_shape_stable_plain] >> shape_opcode_tac) >>
+  shape_under_tac shape_step_emit_op_plain `\st. plain_operand st data` >>
+  simp[stmt_shape_stable_plain] >> shape_opcode_tac
+QED
+
+val shape_raw_return_zero_tac =
+  gen_tac >> simp[shape_step_def, shape_extends_refl, value_shape_ok_def] >>
+  shape_opcode_tac;
+
+Theorem compile_call_raw_revert_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_call cfn cenv ret_ty ty RawRevert args default_ret)
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >> namedCases_on `args` ["", "data_e tail"]
+  >- shape_send_invalid_tac >> Cases_on `tail`
+  >| [ALL_TAC, shape_send_invalid_tac] >>
+  gvs[supported_exprs_exists_every] >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >> qexists_tac `\v st. plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_callback_shape `\st. T` >> simp[shape_stable_def]) >>
+  qx_gen_tac `data` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\u st. T` >> conj_tac
+  >- shape_raw_return_zero_tac >> irule compile_raw_revert_shape
+QED
+
+val shape_raw_log_finish_tac =
+  irule shape_step_uncurry >> qexists_tac `\u st. T` >> conj_tac
+  >- shape_raw_return_zero_tac >>
+  irule shape_step_conseq >> irule_at Any stmt_log_emit_shape >> simp[EVERY_REVERSE] >>
+  shape_opcode_tac;
+
+Theorem compile_call_raw_log_shape[local]:
+  (!ce t child. ~supported_expr_exists expr_shape_root child ==>
+     shape_step internal compiler_label (\st. cenv_shape_ok st ce)
+       (cfn ce t child) (\v st. value_shape_ok st v)) /\
+  ~supported_exprs_exists expr_shape_root args ==>
+  shape_step internal compiler_label (\st. cenv_shape_ok st cenv)
+    (compile_call cfn cenv ret_ty ty RawLog args default_ret)
+    (\v st. value_shape_ok st v)
+Proof
+  strip_tac >> namedCases_on `args` ["", "topics_e rest"]
+  >- shape_send_invalid_tac >> namedCases_on `rest` ["", "data_e tail"]
+  >- shape_send_invalid_tac >> Cases_on `tail`
+  >| [ALL_TAC, shape_send_invalid_tac] >>
+  gvs[supported_exprs_exists_every] >>
+  `~supported_exprs_exists expr_shape_root (raw_log_topic_exprs topics_e)` by
+    (irule raw_log_topic_exprs_shape >> simp[]) >>
+  CONV_TAC (LAND_CONV (REWR_CONV (GSYM ETA_AX))) >>
+  simp[compile_call_def] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\vs st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) vs` >> reverse conj_tac
+  >- (shape_under_tac compile_multi_exprs_shape `\st. cenv_shape_ok st cenv` >>
+      simp[cenv_shape_ok_stable]) >>
+  qx_gen_tac `topic_ops` >> simp[] >>
+  qabbrev_tac `TopicFrame = \st. cenv_shape_ok st cenv /\ EVERY (plain_operand st) topic_ops` >>
+  `shape_stable TopicFrame` by
+    (simp[Abbr `TopicFrame`, shape_stable_conj, cenv_shape_ok_stable,
+          shape_stable_plain_operands]) >>
+  Cases_on `expr_type data_e = BaseT (BytesT (Fixed 32))` >> simp[]
+  >- suspend "word" >> suspend "bytes"
+QED
+Resume compile_call_raw_log_shape[word]:
+  irule shape_step_uncurry >>
+  qexists_tac `\b st. TopicFrame st /\ plain_operand st b.buf_operand` >> reverse conj_tac
+  >- (ho_match_mp_tac compile_alloc_buffer_shape_framed >> simp[]) >>
+  qx_gen_tac `buf` >> simp[] >>
+  qabbrev_tac `BufFrame = \st. TopicFrame st /\ plain_operand st buf.buf_operand` >>
+  `shape_stable BufFrame` by
+    (simp[Abbr `BufFrame`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. BufFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_callback_shape `BufFrame` >>
+      simp[Abbr `BufFrame`, Abbr `TopicFrame`]) >>
+  qx_gen_tac `data` >> simp[] >> irule shape_step_uncurry >>
+  qexists_tac `\u st. BufFrame st` >> reverse conj_tac
+  >- (shape_under_tac shape_step_emit_void_plain `BufFrame` >>
+      simp[Abbr `BufFrame`] >> shape_opcode_tac) >>
+  gen_tac >> simp[] >> shape_raw_log_finish_tac >>
+  simp[Abbr `BufFrame`, Abbr `TopicFrame`, plain_operand_def]
+QED
+Resume compile_call_raw_log_shape[bytes]:
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. TopicFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac lower_value_callback_shape `TopicFrame` >> simp[Abbr `TopicFrame`]) >>
+  qx_gen_tac `data` >> simp[] >>
+  qabbrev_tac `DataFrame = \st. TopicFrame st /\ plain_operand st data` >>
+  `shape_stable DataFrame` by
+    (simp[Abbr `DataFrame`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. DataFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `DataFrame` >>
+      simp[Abbr `DataFrame`] >> shape_opcode_tac) >>
+  qx_gen_tac `data_len` >> simp[] >>
+  qabbrev_tac `LenFrame = \st. DataFrame st /\ plain_operand st data_len` >>
+  `shape_stable LenFrame` by
+    (simp[Abbr `LenFrame`, shape_stable_conj, stmt_shape_stable_plain]) >>
+  irule shape_step_uncurry >>
+  qexists_tac `\v st. LenFrame st /\ plain_operand st v` >> reverse conj_tac
+  >- (shape_under_tac shape_step_emit_op_plain `LenFrame` >>
+      simp[Abbr `LenFrame`, Abbr `DataFrame`] >> shape_opcode_tac) >>
+  qx_gen_tac `data_ptr` >> simp[] >> shape_raw_log_finish_tac >>
+  simp[Abbr `LenFrame`, Abbr `DataFrame`, Abbr `TopicFrame`, plain_operand_def]
+QED
+Finalise compile_call_raw_log_shape[local]
+
 fun shape_raw_effect_tac frame effect =
   irule shape_step_uncurry >>
   qexists_tac ([QUOTE "\\u st. ("] @ frame @ [QUOTE ") st"]) >> reverse conj_tac
@@ -8470,6 +8619,10 @@ Resume compile_expr_body_shape[call]:
   >- (irule compile_call_int_shape >> simp[])
   >~ [`compile_call _ _ _ _ (Send has_gas)`]
   >- (irule compile_call_send_shape >> simp[])
+  >~ [`compile_call _ _ _ _ RawLog _ _`]
+  >- (irule compile_call_raw_log_shape >> simp[])
+  >~ [`compile_call _ _ _ _ RawRevert _ _`]
+  >- (irule compile_call_raw_revert_shape >> simp[])
   >~ [`compile_call _ _ _ _ (CreateTarget kind salted rof order)`]
   >- gvs[] >>
   gvs[] >> shape_send_invalid_tac
@@ -9114,19 +9267,6 @@ Proof
   irule shape_step_conseq >>
   qexistsl_tac [`compiler_label`, `\st. cenv_shape_ok st cenv /\ value_shape_ok st msg`,
                `\u st. T`] >> simp[compile_revert_with_reason_shape]
-QED
-
-Theorem stmt_log_emit_shape[local]:
-  !internal ops.
-    shape_step internal compiler_label (\st. EVERY (plain_operand st) ops)
-      (emit_inst LOG ops []) (\u st. T)
-Proof
-  rpt gen_tac >> stmt_drop (ho_match_mp_tac stmt_shape_emit_inst >>
-    simp[shape_stable_plain_operands] >> conj_tac
-    >- (simp[EVERY_MEM, label_or_plain_def] >> metis_tac[]) >>
-    stmt_shape_emit_simp >>
-    simp[EVERY_MEM, plain_operand_def] >>
-    rpt strip_tac >> res_tac >> gvs[stackPlanTypesTheory.is_label_operand_def])
 QED
 
 Theorem compile_log_shape:
