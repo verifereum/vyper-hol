@@ -165,6 +165,20 @@ Definition ptr_vv_ok_def:
            (w2n w) ty (w2n k) b)))
 End
 
+(* A memory value's pointer is covered for the whole buffer of e's lowered
+   type, not just the value's footprint: compile_assign_value's
+   memory-to-memory staging and its bytestring copies to storage read
+   type_memory_bytes of the source's lowered type. *)
+Definition ptr_buf_ok_def:
+  ptr_buf_ok cenv e op G (s : venom_state) <=>
+    !w. eval_operand op s = SOME w /\
+        type_memory_bytes cenv (lowered_value_type cenv e) <> 0 ==>
+        ?x b sz. op = Var x /\ FLOOKUP G x = SOME (b, sz) /\
+                 b <= w2n w /\
+                 w2n w + type_memory_bytes cenv (lowered_value_type cenv e)
+                   <= b + sz
+End
+
 (* frag_exec with the ghost: P, Q over the ghost and the state.  The
    continuing case carries the ghost along the run (ghost_run from s
    reaches what it reaches from s') and pointer safety back to s; an exit
@@ -223,6 +237,7 @@ Definition expr_sim_ptr_def:
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv d cenv cx ee G tn t /\
           ptr_val_ok cx (expr_type e) v op G tn t /\
+          (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
         (\res ee gt r. expr_exit res r)
 End
@@ -251,6 +266,10 @@ Definition expr_vv_sim_ptr_def:
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv d cenv cx ee G tn t /\
           ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
+          (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
+                   ptr_buf_ok cenv e op G t) /\
+          (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+                  ptr_buf_ok cenv e p.ptr_operand G t) /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
         (\res ee gt r. expr_exit res r)
 End
