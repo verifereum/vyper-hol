@@ -117,27 +117,6 @@ Proof
   gvs[ext_call_kwarg_def]
 QED
 
-Theorem raw_call_kwargs_sim[local]:
-  EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH es = LENGTH ks /\
-  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256))) Inv es /\ Inv st /\
-  wb_args_shape cenv (K (BaseT (UintT 256))) es /\
-  compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) /\
-  eval_exprs cx es st = (rr,st') /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
-  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
-    (\s. ?xs vs. rr = INL vs /\
-       typed_args_post ctx func cenv cx st sa s0 st' es xs vs s /\
-       vo = ext_call_kwarg EKValue ks xs /\
-       go = ext_call_kwarg EKGas ks xs /\ d = NONE)
-    (wb_args_exit rr)
-Proof
-  strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
-  drule_all lower_typed_args_sim >>
-  disch_then (qspec_then `s0` mp_tac) >>
-  strip_tac >> irule frag_exec_conseq >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
-QED
-
 Theorem eval_expr_raw_call_operands[local]:
   eval_exprs cx args es = (INL (addr_v::data_v::kvs), es1) /\
   dest_AddressV addr_v = SOME target /\ dest_BytesV data_v = SOME data /\
@@ -180,7 +159,7 @@ QED
 
 Theorem raw_call_pre_flags[local]:
   expr_body_pre cenv cx env (Call ann (RawCallTarget flags) args dflt) es ==>
-  ~flags.rcf_is_delegate /\ flags.rcf_revert_on_failure /\
+  ~flags.rcf_is_delegate /\
   flags.rcf_max_outsize < dimword (:256) /\
   LENGTH args = 2 + LENGTH flags.rcf_kws /\
   raw_call_kws_ok flags (DROP 2 args) /\
@@ -198,7 +177,8 @@ Theorem expr_body_pre_raw_call_arg[local]:
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
@@ -208,24 +188,52 @@ QED
 (* Oracle execution after operand evaluation; keep adoption explicit so both
    the successful and failing source states are retained by consumers. *)
 Theorem raw_call_oracle_result[local]:
-  ~flags.rcf_is_delegate /\ flags.rcf_revert_on_failure /\
+  ~flags.rcf_is_delegate /\ ~cx.txn.is_static /\
   (flags.rcf_is_static ==> amount = 0) /\ IS_SOME st.outcomes /\
   take_call_outcome target data
     (if flags.rcf_is_static then NONE else SOME amount) st =
       (INL (rq, outcome), st1) /\
   adopt_call_outcome rq outcome st1 = (INL (), st2) ==>
   eval_raw_call cx flags target data amount gas st =
-    (if call_outcome_success outcome then
-       INL (Value (if flags.rcf_max_outsize = 0 then NoneV
-                   else BytesV (TAKE flags.rcf_max_outsize
-                                      (call_outcome_return_data outcome))))
-     else INR (Error (RevertData (call_outcome_return_data outcome))), st2)
+    (if flags.rcf_revert_on_failure then
+       if call_outcome_success outcome then
+         INL (Value (if flags.rcf_max_outsize = 0 then NoneV
+                     else BytesV (TAKE flags.rcf_max_outsize
+                                        (call_outcome_return_data outcome))))
+       else INR (Error (RevertData (call_outcome_return_data outcome)))
+     else INL (Value (if flags.rcf_max_outsize = 0 then
+                        BoolV (call_outcome_success outcome)
+                      else ArrayV (TupleV [BoolV (call_outcome_success outcome);
+                        BytesV (TAKE flags.rcf_max_outsize
+                                     (call_outcome_return_data outcome))]))), st2)
 Proof
   strip_tac >>
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def] >>
+  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def,
+       type_check_def, assert_def, return_def, raise_def] >>
+  Cases_on `flags.rcf_revert_on_failure` >> simp[] >>
   Cases_on `call_outcome_success outcome` >> simp[return_def, raise_def] >>
   Cases_on `flags.rcf_max_outsize = 0` >> simp[return_def]
+QED
+
+Theorem raw_call_kwargs_sim[local]:
+  EVERY (\k. k = EKValue \/ k = EKGas) ks /\ LENGTH es = LENGTH ks /\
+  typed_args_ready ctx func cenv cx (K (BaseT (UintT 256))) Inv es /\ Inv st /\
+  wb_args_shape cenv (K (BaseT (UintT 256))) es /\
+  compile_ext_call_kwargs compile_expr cenv NoneT ks es sa = ((vo,go,d),sb) /\
+  eval_exprs cx es st = (rr,st') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx st s)
+    (\s. ?xs vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx st sa s0 st' es xs vs s /\
+       vo = ext_call_kwarg EKValue ks xs /\
+       go = ext_call_kwarg EKGas ks xs /\ d = NONE)
+    (wb_args_exit rr)
+Proof
+  strip_tac >> drule_all raw_call_kwargs_word_args >> strip_tac >>
+  drule_all lower_typed_args_sim >>
+  disch_then (qspec_then `s0` mp_tac) >>
+  strip_tac >> irule frag_exec_conseq >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 (* The failure copy needs no allocation-capacity or destination-end bound:
