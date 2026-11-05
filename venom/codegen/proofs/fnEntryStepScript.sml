@@ -67,6 +67,37 @@ Proof
   simp[phi_prefix_length_def]
 QED
 
+Theorem entry_step_run_rest[local]:
+  !cp fn vs as ra rest fuel ctx vs_p.
+  codegen_ready_fn fn /\ fn_entry_state_rel cp fn vs as ra rest /\
+  lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
+  exec_block fuel ctx (HD fn.fn_blocks) (vs with vs_inst_idx := 0) =
+    exec_block fuel ctx (HD fn.fn_blocks) vs_p ==>
+  run_blocks (SUC fuel) ctx fn vs =
+    block_rest fuel ctx fn (HD fn.fn_blocks) vs_p
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule entry_run_block >>
+  disch_then (qspecl_then [`fuel`, `ctx`, `vs`] assume_tac) >>
+  gvs[fn_entry_state_rel_def, run_blocks_unfold, block_rest_def] >>
+  Cases_on `exec_block fuel ctx (HD fn.fn_blocks) vs_p` >> simp[]
+QED
+
+Theorem entry_step_return[local]:
+  !cp fn vs as ra rest fuel ctx ret vs' as'.
+  fn_entry_state_rel cp fn vs as ra rest /\
+  run_blocks fuel ctx fn vs = IntRet ret vs' /\
+  context_memory_rel cp vs'.vs_memory as'.as_memory /\
+  (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+       read_byte b as'.as_memory = read_byte b as.as_memory) /\
+  shared_state_rel vs' as' ==>
+  fn_return_state_rel ctx cp fn vs' as as'
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule run_blocks_intret_fields >> strip_tac >>
+  gvs[fn_entry_state_rel_def, fn_return_state_rel_def, shared_state_rel_def]
+QED
+
 (* As for fn_block_frame_step, but for the entry block, which
    gen_fn_frame_sim_at excludes.
 
