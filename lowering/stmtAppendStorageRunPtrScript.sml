@@ -282,3 +282,106 @@ Proof
   simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
        is_terminator_def] >> metis_tac[]
 QED
+
+(* Scalar successful singleton endpoints do not depend on the instruction
+   cursor. This moves witnesses outside the uniform quantifier, not checks. *)
+Theorem scalar_uniform_endpoints:
+  ~is_terminator i.inst_opcode /\ step_inst_base i s = OK t /\
+  (!k. ?G' tn'.
+     inst_seq_ptr D lo ctx fn PG G tn [i]
+       (s with vs_inst_idx := k) G' tn' /\ P G' tn') ==>
+  ?G' tn'.
+    (!k. inst_seq_ptr D lo ctx fn PG G tn [i]
+       (s with vs_inst_idx := k) G' tn') /\ P G' tn'
+Proof
+  rpt strip_tac >>
+  gvs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
+  metis_tac[]
+QED
+
+Theorem emit_append_arith_uniform_ptr:
+  emit_op opc ops st = (rop,st') /\ (?a b. ops = [a;b]) /\
+  (opc = ADD \/ opc = MUL \/
+   opc = LT /\ (?v k. ops = [Var v; Lit k])) /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  (!op. MEM op ops ==> op_taint tn op = {}) /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn'.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+            (s with vs_inst_idx := k) G' tn') /\
+    op_taint tn' rop = {} /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==>
+         FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts st st' = [i]` >>
+  `~is_terminator i.inst_opcode` by
+    (gvs[Abbr `i`, mk_inst_def, is_terminator_def]) >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  simp[] >> ho_match_mp_tac scalar_uniform_endpoints >>
+  simp[] >> gen_tac >>
+  qpat_assum `emitted_insts st st' = [i]` (SUBST1_TAC o SYM) >>
+  irule emit_append_arith_ptr >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexists_tac `t with vs_inst_idx := k` >>
+  simp[run_inst_seq_def, step_inst_inst_idx_indep, exec_result_map_def]
+QED
+
+Theorem emit_storage_load_uniform_ptr:
+  emit_op (if tr then TLOAD else SLOAD) [bop] st = (lop,st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn bop = {} /\ eval_operand bop s = SOME slot /\
+  key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  ?G' tn'.
+    (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+            (s with vs_inst_idx := k) G' tn') /\
+    op_taint tn' lop = {} /\ tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    (!x. not_fresh_at st x ==>
+         FLOOKUP G' x = FLOOKUP G x /\
+         op_taint tn' (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts st st' = [i]` >>
+  `~is_terminator i.inst_opcode` by
+    (Cases_on `tr` >> gvs[Abbr `i`, mk_inst_def, is_terminator_def]) >>
+  `step_inst_base i s = OK t` by
+    (fs[run_inst_seq_def, AllCaseEqs()]) >>
+  simp[] >> ho_match_mp_tac scalar_uniform_endpoints >>
+  simp[] >> gen_tac >>
+  qpat_assum `emitted_insts st st' = [i]` (SUBST1_TAC o SYM) >>
+  irule emit_storage_load_ptr >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexists_tac `t with vs_inst_idx := k` >>
+  simp[run_inst_seq_def, step_inst_inst_idx_indep, exec_result_map_def]
+QED
+
+Theorem emit_storage_store_uniform_ptr:
+  emit_void (if tr then TSTORE else SSTORE) [a;v] st = ((),st') /\
+  run_inst_seq (emitted_insts st st') s = OK t /\
+  op_taint tn a = {} /\ op_taint tn v = {} /\
+  eval_operand a s = SOME slot /\
+  t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp /\
+  t.vs_requests = s.vs_requests /\ ~ctx_has_dalloca ctx ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts st st')
+    (s with vs_inst_idx := k) G
+    (if tr then tn with t_trans := key_update tn.t_trans slot {}
+     else tn with t_stor := key_update tn.t_stor slot {})
+Proof
+  rpt strip_tac >> irule emit_storage_store_ptr >> simp[] >>
+  reverse conj_tac >- metis_tac[] >>
+  qexists_tac `t with vs_inst_idx := k` >>
+  drule emitted_insts_emit_void >> strip_tac >>
+  Cases_on `tr` >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def, mk_inst_def,
+       is_terminator_def] >> metis_tac[]
+QED
