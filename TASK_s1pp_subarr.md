@@ -41,7 +41,7 @@ Theorem compile_subscript_array_framed_base_case:
 5. Commit messages end with these two lines:
    `Bot: opus (Claude Opus 5.5)`
    `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
-   Commit only `.sml` sources you changed or added . Never commit the 30 files the working tree has modified as a local admission overlay (they're listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
+   Commit only `.sml` sources you changed or added . Never commit the 26 files the working tree has modified as a local admission overlay (they're listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
 
 **If the theorem is false as stated:** produce a HOL4 counterexample, state the tightest sufficient fix, and do NOT silently weaken the statement.
 
@@ -65,7 +65,7 @@ Lowering: `compile_subscript` (lowering/defs/exprLoweringScript.sml) lowers the 
 
 - Follow `AGENTS.md` at the project root (proof conventions for this repo).
 - Default step timeout (2.5 s). A step near it is a proof performance bug: split it or cut the rewrite set.
-- The working tree carries an uncommitted local overlay that admits the proofs of ~30 shared theories not yet repaired on this branch (listed in `alan-ref/overlaid.txt`). Use their statements freely; don't edit, fix or commit them.
+- The working tree carries an uncommitted local overlay that admits the proofs of ~26 shared theories not yet repaired on this branch (listed in `alan-ref/overlaid.txt`). Use their statements freely; don't edit, fix or commit them.
 
 ## Available Resources
 
