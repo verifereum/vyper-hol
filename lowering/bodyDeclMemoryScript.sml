@@ -176,7 +176,7 @@ Proof
          byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
          expr_has_evm_run_def, supported_expr_exists_def, expr_evm_run_root_def,
          supportedProgramTheory.expr_abi_decode_target_root_def,
-         call_evaluation_safe_def] >>
+         call_evaluation_safe_def, exprLoweringTheory.is_extcode_def] >>
      metis_tac[]) >>
   drule stmt_env_annassign >> strip_tac >>
   `same_frame ce c` by

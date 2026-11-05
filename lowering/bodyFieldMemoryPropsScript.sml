@@ -782,12 +782,12 @@ Theorem body_unwrap_memory_counted_read:
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
-      (vv_store_bound cx t es' tv (LocatedValue t p) s ==>
+      (vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>
        expr_store_bound cx t v op u)
 Proof
   strip_tac >>
-  `vv_store_bound cx t es' tv (LocatedValue t p) s ==>
-   vv_store_bound cx t es' (Value v) (LocatedValue t p) s` by
+  `vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>
+   vv_store_bound cx t lt es' (Value v) (LocatedValue t p) s` by
     (rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      metis_tac[]) >>
   `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
