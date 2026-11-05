@@ -969,3 +969,64 @@ Resume native_regular_live_inventory[tail]:
 QED
 
 Finalise native_regular_live_inventory
+
+Theorem native_regular_variable_origins:
+  !liveness dfg cfg fn inst nl halting term lbl ps m core base ops qs.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) ==>
+    !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/
+      MEM (Var v) (compute_operands inst) \/ MEM v inst.inst_outputs
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all native_regular_stages >> strip_tac >>
+  `!v. MEM (Var v) (stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack) \/
+    Var v IN FDOM ps4.ps_spilled ==>
+    MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/
+    MEM (Var v) (compute_operands inst)` by
+    (drule (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] emit_reorder_pop_marker_variable_origins) >>
+     ntac 7 (disch_then drule) >>
+     disch_then (qspec_then `ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack` mp_tac) >> simp[]) >>
+  drule fnPlanLineageReorderTheory.generate_emit_ops_slots >>
+  disch_then (strip_assume_tac o SRULE [parameter_push_fold]) >>
+  `!v. MEM (Var v) ps8.ps_stack \/ Var v IN FDOM ps8.ps_spilled ==>
+    MEM (Var v) ps7.ps_stack \/ Var v IN FDOM ps7.ps_spilled` by
+    (Cases_on `popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) inst.inst_outputs)) ps7` >>
+     drule popmany_plan_inventory_subset >> strip_tac >>
+     Cases_on `inst.inst_outputs <> [] /\ (~halting \/ LENGTH inst.inst_outputs > 1)` >>
+     gvs[] >> metis_tac[]) >>
+  `!v. MEM (Var v) ps9.ps_stack \/ Var v IN FDOM ps9.ps_spilled ==>
+    MEM (Var v) ps8.ps_stack \/ Var v IN FDOM ps8.ps_spilled` by
+    (Cases_on `optimistic_swap_plan dfg inst nl term ps8` >>
+     drule optimistic_swap_plan_inventory_subset >> strip_tac >>
+     Cases_on `inst.inst_outputs <> [] /\ FILTER (\v. MEM v nl) inst.inst_outputs <> []` >>
+     gvs[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `MEM (Var v) ps9.ps_stack \/ Var v IN FDOM ps9.ps_spilled` by
+    metis_tac[release_dead_spills_inventory_subset] >>
+  `MEM (Var v) ps7.ps_stack \/ Var v IN FDOM ps7.ps_spilled` by metis_tac[] >>
+  gvs[MEM_MAP] >> metis_tac[]
+QED
+
+Theorem native_regular_variable_support:
+  !liveness dfg cfg fn inst nl halting term lbl ps m core base ops qs P.
+    ps.ps_stack = REPLICATE m dead_stack_marker ++ core /\
+    residual_budget_wf base [] (ps with ps_stack := core) /\
+    inst.inst_opcode <> JMP /\ LENGTH (compute_operands inst) <= 16 /\
+    EVERY (\x. x <> dead_stack_marker) (compute_operands inst) /\
+    (!v. MEM (Var v) (compute_operands inst) ==>
+      MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    generate_regular_inst_plan liveness dfg cfg fn inst nl halting term lbl ps = (ops,qs) /\
+    (!v. MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled \/
+      MEM (Var v) (compute_operands inst) \/ MEM v inst.inst_outputs ==> P v) ==>
+    !v. MEM (Var v) qs.ps_stack \/ Var v IN FDOM qs.ps_spilled ==> P v
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] native_regular_variable_origins) >>
+  ntac 6 (disch_then drule) >> metis_tac[]
+QED
