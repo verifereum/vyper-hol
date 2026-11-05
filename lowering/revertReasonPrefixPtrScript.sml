@@ -537,6 +537,22 @@ Proof
   decide_tac
 QED
 
+Theorem ptr_mem_ok_step_frame:
+  ptr_mem_ok cx ty v op G tn s /\
+  (!x. op = Var x ==> ~MEM x inst.inst_outputs) /\
+  eval_operand op t = eval_operand op s /\ t.vs_memory = s.vs_memory /\
+  (step_taint inst s t tn).t_mem = tn.t_mem ==>
+  ptr_mem_ok cx ty v op (step_prov PG G inst t) (step_taint inst s t tn) t
+Proof
+  strip_tac >> simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_mem_ok_def] >>
+  disch_then (qspecl_then [`tv`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `val_footprint _ _ <> 0 ==> _` (drule_then strip_assume_tac) >>
+  qexistsl_tac [`x`, `b`, `sz`] >> simp[step_prov_other_output]
+QED
+
 Theorem ptr_val_ok_step_frame:
   ptr_val_ok cx ty v op G tn s /\
   (!x. op = Var x ==> ~MEM x inst.inst_outputs) /\
@@ -547,12 +563,163 @@ Proof
   strip_tac >> fs[ptr_val_ok_def] >> conj_tac >-
     (Cases_on `op` >> gvs[op_taint_def, step_taint_other_output]) >>
   strip_tac >>
-  qpat_x_assum `~is_word_type _ ==> _` (drule_then assume_tac) >>
-  simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[ptr_mem_ok_def] >>
-  disch_then (qspecl_then [`tv`, `w`] mp_tac) >> simp[] >> strip_tac >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `val_footprint _ _ <> 0 ==> _` (drule_then strip_assume_tac) >>
-  qexistsl_tac [`x`, `b`, `sz`] >> simp[step_prov_other_output]
+  irule ptr_mem_ok_step_frame >> simp[]
+QED
+
+Theorem add_step_ptr_val_ok:
+  ptr_val_ok cx ty v op G tn s /\
+  (!x. op = Var x ==> x <> out) ==>
+  ptr_val_ok cx ty v op
+    (step_prov PG G (mk_inst id ADD [left; right] [out]) (update_var out w s))
+    (step_taint (mk_inst id ADD [left; right] [out]) s (update_var out w s) tn)
+    (update_var out w s)
+Proof
+  strip_tac >> irule ptr_val_ok_step_frame >> simp[mk_inst_def] >>
+  conj_tac >-
+    metis_tac[copy_len_binop_ghost_frame, mk_inst_def] >>
+  simp[update_var_def] >> Cases_on `op` >> gvs[eval_operand_def] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, update_var_def] >> metis_tac[]
+QED
+
+Theorem ptr_vv_ok_nonmemory_frame:
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es G tn s /\
+  p.ptr_location <> LocMemory /\
+  op_taint tnf p.ptr_operand = op_taint tn p.ptr_operand /\
+  eval_operand p.ptr_operand t = eval_operand p.ptr_operand s /\
+  tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+  (t.vs_accounts t.vs_call_ctx.cc_address).storage =
+    (s.vs_accounts s.vs_call_ctx.cc_address).storage /\
+  t.vs_transient t.vs_call_ctx.cc_address =
+    s.vs_transient s.vs_call_ctx.cc_address ==>
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es Gf tnf t
+Proof
+  simp[ptr_vv_ok_def]
+QED
+
+Theorem alloca_mstore_literal_ptr_val_ok:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx ty sa sb es v op s /\ ~is_word_type ty /\
+  ptr_val_ok cx ty v op G tn s /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  32 <= n /\ n < dimword(:256) /\
+  (!p. op = Var p ==> p <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  lookup_var out s1 = SOME a /\
+  G1 = step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1 /\
+  tn1 = step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn ==>
+  ptr_val_ok cx ty v op
+    (step_prov PG G1 (mk_inst (id+1) MSTORE [Var out; Lit value] [])
+      (mstore (w2n a) value s1))
+    (step_taint (mk_inst (id+1) MSTORE [Var out; Lit value] []) s1
+      (mstore (w2n a) value s1) tn1) (mstore (w2n a) value s1)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ptr_val_ok cx ty v op G1 tn1 s1` by
+    (qpat_x_assum `G1 = _` SUBST_ALL_TAC >>
+     qpat_x_assum `tn1 = _` SUBST_ALL_TAC >>
+     irule alloca_step_ptr_val_ok >> simp[] >> metis_tac[]) >>
+  irule mstore_literal_ptr_val_ok >> simp[] >>
+  metis_tac[alloca_step_expr_store_disjoint]
+QED
+
+Theorem alloca_step_data_frame:
+  step_inst_base (mk_inst id ALLOCA [Lit sz] [out]) s = OK t ==>
+  t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx
+Proof
+  simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >-
+    (strip_tac >> gvs[update_var_def]) >>
+  PairCases_on `x` >> simp[] >> strip_tac >> gvs[update_var_def]
+QED
+
+Theorem alloca_step_ptr_vv_nonmemory:
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es G tn s /\
+  p.ptr_location <> LocMemory /\
+  (!x. p.ptr_operand = Var x ==> x <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit sz] [out]) s = OK t ==>
+  ptr_vv_ok cx ty tv (LocatedValue ty' p) es
+    (step_prov PG G (mk_inst id ALLOCA [Lit sz] [out]) t)
+    (step_taint (mk_inst id ALLOCA [Lit sz] [out]) s t tn) t
+Proof
+  strip_tac >> irule ptr_vv_ok_nonmemory_frame >>
+  conj_tac >- simp[] >> qexistsl_tac [`G`, `s`, `tn`] >>
+  drule alloca_step_data_frame >> strip_tac >>
+  simp[step_taint_nonmemory_frame, mk_inst_def] >> conj_tac >-
+    (Cases_on `p.ptr_operand` >> gvs[op_taint_def, step_taint_other_output,
+      mk_inst_def]) >>
+  irule alloca_step_operand_preserved >>
+  qexistsl_tac [`id`, `w2n sz`, `out`] >> simp[] >> metis_tac[]
+QED
+
+Theorem local_region_update_nonlocal:
+  not_local_ptr cenv scopes out ==>
+  (local_region cenv scopes (update_var out w s) name b sz <=>
+   local_region cenv scopes s name b sz)
+Proof
+  simp[local_region_def, not_local_ptr_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE] >> rpt strip_tac >> eq_tac >> strip_tac >>
+  qexistsl_tac [`entry`, `p`, `w'`] >> simp[] >> metis_tac[]
+QED
+
+Theorem expr_val_at_update_nonlocal:
+  expr_val_at cenv cx ty sa sb es v op s /\
+  not_local_ptr cenv es.scopes out /\
+  (!x. op = Var x ==> x <> out) ==>
+  expr_val_at cenv cx ty sa sb es v op (update_var out w s)
+Proof
+  strip_tac >>
+  `eval_operand op (update_var out w s) = eval_operand op s` by
+    (Cases_on `op` >> gvs[eval_operand_def, lookup_var_def, update_var_def,
+      FLOOKUP_UPDATE] >> metis_tac[]) >>
+  fs[expr_val_at_def] >>
+  simp[update_var_def, GSYM update_var_def, local_region_update_nonlocal] >>
+  metis_tac[local_region_update_nonlocal]
+QED
+
+Theorem expr_val_at_allocation_frame:
+  expr_val_at cenv cx ty sa sb es v op s /\
+  eval_operand op t = eval_operand op s /\
+  (!aid. sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
+    FLOOKUP t.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
+  (!name b sz. local_region cenv es.scopes t name b sz <=>
+    local_region cenv es.scopes s name b sz) ==>
+  expr_val_at cenv cx ty sa sb es v op t
+Proof
+  simp[expr_val_at_def] >> metis_tac[]
+QED
+
+Theorem alloca_step_expr_val_at:
+  expr_val_at cenv cx ty sa sb es v op s /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  (!x. op = Var x ==> x <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit sz] [out]) s = OK t ==>
+  expr_val_at cenv cx ty sa sb es v op t
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand op t = eval_operand op s` by
+    (irule alloca_step_operand_preserved >>
+     qexistsl_tac [`id`, `w2n sz`, `out`] >> simp[] >> metis_tac[]) >>
+  irule expr_val_at_allocation_frame >> qexists_tac `s` >> simp[] >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_def, mk_inst_def, exec_alloca_def] >>
+  Cases_on `FLOOKUP s.vs_allocas id` >> simp[] >-
+    (strip_tac >> gnvs[] >> conj_tac >-
+       (simp[local_region_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+        fs[not_local_ptr_def] >> metis_tac[]) >>
+     simp[update_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
+     `aid <> id` by decide_tac >> simp[]) >>
+  PairCases_on `x` >> simp[] >> strip_tac >> gnvs[] >>
+  simp[update_var_def, GSYM update_var_def, local_region_update_nonlocal]
+QED
+
+Theorem expr_val_at_mstore:
+  expr_val_at cenv cx ty sa sb es v op (mstore a value s) <=>
+  expr_val_at cenv cx ty sa sb es v op s
+Proof
+  simp[expr_val_at_def, eval_operand_mstore, local_region_def,
+    lookup_var_mstore, mstore_def]
 QED
