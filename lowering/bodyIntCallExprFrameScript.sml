@@ -7,6 +7,7 @@ Ancestors
   exprSimHyps vyperTypeEnv vyperTypeInvariants vyperTyping valueEncodingProofs
   vyperTypeSystem exprLoweringProps venomExecSemantics exprSimUnop builtinSimple
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
+  bodyIntCallForceTransfer
   exprSimOps exprBopLowering exprSimCompare freshWrites rich_list exprSimArith
   exprSimOperators bodyIntCallSourceFrame bodyIntCallMappingFrame
 Libs
