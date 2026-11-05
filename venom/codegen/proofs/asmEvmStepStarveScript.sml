@@ -2396,6 +2396,12 @@ QED
 
 Finalise starve_context_dispatch
 
+Theorem starve_extcall_excluded:
+  !name as. ~is_evm_call_name name ==> asm_step_extcall name as = NONE
+Proof
+  simp[is_evm_call_name_def, asm_step_extcall_def]
+QED
+
 Theorem asm_evm_step_starve:
   !prog data as es.
     asm_encoding_wf prog /\
