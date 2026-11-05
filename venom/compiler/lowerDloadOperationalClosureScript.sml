@@ -2,6 +2,7 @@ Theory lowerDloadOperationalClosure
 Ancestors
   lowerDloadOpaqueExecution lowerDloadReachability venomExecSemantics
   lowerDloadFrameCertificate lowerDloadReturnBoundary
+  lowerDloadOwnership lowerDloadProvenanceSupport list
 
 (* IntRet assembly is already completed_callee_invoke_ok, imported above.
    Terminal propagation is one result-polymorphic boundary rather than
@@ -259,4 +260,45 @@ Proof
   strip_tac >>
   qpat_x_assum `ld_stack_origin _ _ _ _ _` mp_tac >>
   simp[ld_stack_origin_cons] >> strip_tac >> gvs[]
+QED
+
+Theorem ld_annotated_call_pop:
+  o1_ctx_shape C /\
+  ld_annotated_reachable vs0 C (f::stk) k L AP AG tn callee ri sr /\
+  step_inst fuelR C ri sr = IntRet ret send /\
+  f.lf_inst.inst_opcode = INVOKE /\
+  decode_invoke f.lf_inst = SOME (nm,ops) /\
+  lookup_function nm C.ctx_functions = SOME callee /\
+  eval_operands ops f.lf_state = SOME args /\
+  setup_callee callee args f.lf_state = SOME cs /\
+  bind_outputs f.lf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.lf_state send)) = SOME s' ==>
+  ?fuelS.
+    run_blocks fuelS C callee cs = IntRet ret send /\
+    step_inst fuelS C f.lf_inst f.lf_state = OK s' /\
+    (!inst'. active_inst f.lf_fn inst'
+       (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx) ==>
+     ld_annotated_reachable vs0 C stk k f.lf_local f.lf_params
+       (DRESTRICT f.lf_prov (COMPL (set f.lf_inst.inst_outputs)))
+       (tn with t_var := DRESTRICT f.lf_tvar
+         (COMPL (set f.lf_inst.inst_outputs)))
+       f.lf_fn inst' (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx))
+Proof
+  strip_tac >>
+  drule ld_annotated_erasure >> strip_tac >>
+  drule_all ld_frame_reachable_prefix >> strip_tac >>
+  gvs[MAP] >>
+  `s0 = cs` by
+    (irule ld_stack_origin_setup_eq >>
+     goal_assum (drule_at Any) >> simp[ld_erase_frame_def]) >>
+  gvs[] >>
+  `MEM callee C.ctx_functions` by metis_tac[ld_stack_origin_member] >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) callee.fn_blocks)` by
+    (drule o1_ctx_shape_distinct_block_labels >> simp[EVERY_MEM]) >>
+  drule_all ld_frame_return_complete >> strip_tac >>
+  qexists_tac `m` >> simp[] >> conj_tac
+  >- (irule completed_callee_invoke_ok >> goal_assum (drule_at Any) >> simp[]) >>
+  rpt strip_tac >> irule ld_annotated_reachable_ret >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[ld_annotated_active_inst]
 QED
