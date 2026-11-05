@@ -1985,6 +1985,51 @@ Proof
   decide_tac
 QED
 
+Theorem alias_popmany_upper_support:
+  popmany_plan to_pop ps = (ops,qs) /\ plan_holds qs (Var x) ==>
+  plan_holds ps (Var x)
+Proof
+  strip_tac >> mp_tac alias_var_mass_popmany >>
+  gvs[GSYM alias_var_mass_positive]
+QED
+
+Theorem alias_mark_dead_stack_upper_support:
+  MEM (Var x) (mark_dead_stack retained stk) ==> MEM (Var x) stk
+Proof
+  simp[mark_dead_stack_def, MEM_MAP] >> rpt strip_tac >>
+  Cases_on `MEM op retained` >> gvs[dead_stack_marker_def]
+QED
+
+Theorem alias_clean_stack_upper_support:
+  clean_stack_plan live cfg fn bb ps = (ops,qs) /\ plan_holds qs (Var x) ==>
+  plan_holds ps (Var x)
+Proof
+  Cases_on `cfg_preds_of cfg bb.bb_label`
+  >- (simp[clean_stack_plan_def] >> rpt strip_tac >> gvs[]) >>
+  rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >>
+  Cases_on `rest`
+  >- (simp[clean_stack_plan_def] >> IF_CASES_TAC
+      >- (rpt strip_tac >> gvs[]) >>
+      Cases_on `lookup_block pred fn.fn_blocks`
+      >- (simp[] >> rpt strip_tac >> gvs[]) >>
+      simp[] >>
+      qmatch_goalsub_abbrev_tac `if guard then _ else _` >>
+      qmatch_goalsub_abbrev_tac `if ok then _ else _` >>
+      qmatch_goalsub_abbrev_tac `mark_dead_stack retained` >>
+      qmatch_goalsub_abbrev_tac `popmany_plan cleanup ps` >>
+      qmatch_goalsub_abbrev_tac `popmany_plan other ps` >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      IF_CASES_TAC
+      >- (simp[plan_holds_def, MEM_MAP, dead_stack_marker_def] >>
+          rpt strip_tac >> gvs[MEM_MAP]) >>
+      IF_CASES_TAC
+      >- (pairarg_tac >> simp[] >> rpt strip_tac >> gvs[] >>
+          drule alias_popmany_upper_support >> disch_then irule >>
+          gvs[plan_holds_def] >> metis_tac[alias_mark_dead_stack_upper_support]) >>
+      simp[] >> metis_tac[alias_popmany_upper_support]) >>
+  simp[clean_stack_plan_def] >> rpt strip_tac >> gvs[]
+QED
+
 Theorem alias_unique_take_absent:
   LIST_ELEM_COUNT at stk <= 1 /\ i < LENGTH stk /\ k <= i /\ EL i stk = at ==>
   ~MEM at (TAKE k stk)
