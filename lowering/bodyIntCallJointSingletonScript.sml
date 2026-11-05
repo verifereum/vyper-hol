@@ -4,7 +4,7 @@ Ancestors
   exprSimSource exprSimHypsDefs vyperTypeSystem
   valueEncoding valueEncodingProps venomState
   bodyIntCallGasPrefix bodyIntCallJointTuple exprSimBuffer exprSimAlloc
-  context compileEnv emitHelper exprLowering
+  context compileEnv emitHelper exprLowering exprLoweringProps
 
 (* Materialise the sole child on its actual evaluation endpoint. *)
 Theorem joint_eval_make_tuple_singleton:
@@ -161,3 +161,66 @@ Proof
   simp[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   Cases_on `args` >> simp[vyperASTTheory.expr_type_def]
 QED
+
+(* Both suffix register writes are fresh at the original allocation entry. *)
+Theorem joint_alloc_gas_add_old_registers:
+  compile_alloc_buffer sz sa = (buf,sm) /\
+  compile_env_var MsgGas sm = (gop,sn) /\
+  emit_op ADD [buf.buf_operand; Lit 0w] sn = (dst,sp) /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) ==>
+  !x. not_fresh_at sa x ==>
+    lookup_var x
+      ((mstore (w2n p) w
+        (update_var (STRING #"%" (toString sn.cs_next_var)) p
+          (update_var (STRING #"%" (toString sm.cs_next_var)) w
+            (t with vs_gas_readings := tail))))
+        with vs_inst_idx := ix) = lookup_var x s0
+Proof
+  strip_tac >> drule_all joint_alloc_gas_add_registers >> strip_tac >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString sm.cs_next_var) /\
+   x <> STRING #"%" (toString sn.cs_next_var)` by
+    (gvs[not_fresh_at_def] >> conj_tac >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >>
+  gvs[lookup_var_def, update_var_def, mstore_def,
+      finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+(* Allocation-run facts frame the original entry, including its live locals.
+   The suffix's register and observation updates do not affect this memory. *)
+Theorem joint_allocated_store_entry_frame:
+  local_ptrs_reserved ce sa /\ t.vs_memory = s0.vs_memory /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\
+  (!name lb len. local_region ce es.scopes t name lb len ==>
+     regions_disjoint b sz lb len) /\
+  (!aid off len. aid < sa.cs_next_id /\
+     FLOOKUP s0.vs_allocas aid = SOME (off,len) ==>
+     regions_disjoint b sz off len) /\
+  b <= a /\ a + 32 <= b + sz /\
+  r.vs_memory = (mstore a w t).vs_memory ==>
+  locals_kept ce es s0 r /\
+  (!aid off len. FLOOKUP s0.vs_allocas aid = SOME (off,len) /\
+     aid < sa.cs_next_id ==>
+     mem_bytes_at off len r.vs_memory = mem_bytes_at off len s0.vs_memory)
+Proof
+  strip_tac >>
+  `!name lb len. local_region ce es.scopes s0 name lb len ==>
+     local_region ce es.scopes t name lb len` by
+    (rpt strip_tac >> irule exprSimPropsTheory.local_region_frame_fwd >>
+     qexistsl_tac [`s0`, `sa`, `es.scopes`] >> simp[]) >>
+  conj_tac
+  >- (irule exprSimPropsTheory.locals_kept_regions >> rpt strip_tac >>
+      `regions_disjoint b sz b' sz'` by metis_tac[] >>
+      qpat_x_assum `r.vs_memory = _` SUBST1_TAC >>
+      qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+      irule exprSimHashTheory.mstore_region_frame >>
+      qexistsl_tac [`b`, `sz`] >> simp[]) >>
+  rpt strip_tac >>
+  `regions_disjoint b sz off len` by metis_tac[] >>
+  qpat_x_assum `r.vs_memory = _` SUBST1_TAC >>
+  qpat_x_assum `t.vs_memory = _` (fn th => rewrite_tac[GSYM th]) >>
+  irule exprSimHashTheory.mstore_region_frame >>
+  qexistsl_tac [`b`, `sz`] >> simp[]
+QED
+
