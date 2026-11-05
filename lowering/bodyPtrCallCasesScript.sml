@@ -18,7 +18,8 @@ Theory bodyPtrCallCases
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST vyperInterpreter
   vyperState vyperContext vyperTypeCallGraph list bodyPtrCallResidual
-  bodyPtrCallCalldata
+  bodyPtrCallCalldata exprSendPtr bodyWordArgsReady typedWordArgsReadyPtr
+  exprSimSend exprSimPrecompiles exprSimHypsDefs
 
 val _ = Parse.hide "body";
 
@@ -31,7 +32,22 @@ Theorem body_send_case_ptr:
        body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Call v12 (Send has_gas) es v13)
 Proof
-  cheat
+  rpt gen_tac >> disch_tac >> rewrite_tac[body_expr_ptr_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule send_pre_types >> strip_tac >>
+  `body_exprs_ptr_ok cx es` by
+    (first_x_assum irule >>
+     simp[type_check_def, check_def, assert_def] >> metis_tac[]) >>
+  `!e s. MEM e es /\ expr_sim_inv cenv cx env s ==>
+     expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)` by
+    (rpt strip_tac >- metis_tac[expr_body_pre_send_arg] >> fs[EVERY_MEM]) >>
+  `typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) es` by
+    (irule body_word_args_ready >> simp[] >> metis_tac[]) >>
+  `ptr_args_ready d ctx PG func cenv cx expr_type (expr_sim_inv cenv cx env) es` by
+    (irule body_exprs_ptr_ok_ready >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (irule send_expr_sim_ptr >> qexists_tac `env` >> simp[]) >>
+  irule send_expr_vv_sim_ptr >> qexists_tac `env` >> simp[]
 QED
 
 (* bodyPtrCallResidual's residual, until extcall's lowering port and the
