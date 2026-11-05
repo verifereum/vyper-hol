@@ -232,6 +232,25 @@ Proof
   metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
 QED
 
+Theorem word_interval_mload_taint_snapshot:
+  eval_operand src s = SOME a /\
+  (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+  step_taint (mk_inst id MLOAD [src] [tmp]) s
+    (update_var tmp (mload (w2n a) s) s) tn =
+    tn with t_var := set_var_taint tn.t_var [tmp] {}
+Proof
+  strip_tac >>
+  `mem_word_taint tn.t_mem (w2n a) = {}` by
+    (simp[mem_word_taint_def, pred_setTheory.EXTENSION] >>
+     gen_tac >> Cases_on `x < 32` >> simp[] >>
+     first_x_assum irule >> decide_tac) >>
+  simp[step_taint_def, out_taint_def, mem_taint_def, imm_taint_def,
+       written_taint_def, step_writes_def, store_taint_def, adopt_reset_def,
+       new_site_bytes_def, source_memory_write_ranges_def, range_bytes_def,
+       mk_inst_def, update_var_def, taint_component_equality,
+       FLOOKUP_DEF, SF CONJ_ss]
+QED
+
 Theorem word_interval_condition_load:
   ~s.vs_halted /\ s.vs_inst_idx = 7 /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -243,7 +262,10 @@ Theorem word_interval_condition_load:
   ?u Ga ta. gas_path_ptr_edge D 0 ctx fn PG G tn s 0 Ga ta (OK u) /\
     ~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = 8 /\
     eval_operand (Var "%5") u = SOME (if b then 1w else 0w) /\
-    op_taint ta (Var "%5") = {}
+    op_taint ta (Var "%5") = {} /\
+    u = ((update_var "%5" (if b then 1w else 0w) s) with vs_inst_idx := 8) /\
+    Ga = DRESTRICT G (COMPL {"%5"}) /\
+    ta = tn with t_var := set_var_taint tn.t_var ["%5"] {}
 Proof
   strip_tac >>
   `gas_path_ptr_edge D 0 ctx fn PG G tn s 0
@@ -260,7 +282,11 @@ Proof
   conj_tac >- simp[Abbr `u`] >>
   conj_tac >- simp[Abbr `u`, eval_operand_def, lookup_var_def,
                    update_var_def, FLOOKUP_UPDATE] >>
-  simp[Abbr `ta`] >> metis_tac[mload_ghost_clean]
+  conj_tac >- (simp[Abbr `ta`] >> metis_tac[mload_ghost_clean]) >>
+  conj_tac >- simp[Abbr `u`] >>
+  conj_tac >- simp[Abbr `Ga`, step_prov_def, set_prov_def,
+                   out_prov_def, mk_inst_def] >>
+  simp[Abbr `ta`] >> metis_tac[word_interval_mload_taint_snapshot]
 QED
 
 Theorem word_interval_operand_scalar_path:
@@ -278,13 +304,22 @@ Theorem word_interval_operand_scalar_path:
   ?t G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     t.vs_current_bb = "@exit_2" /\ t.vs_inst_idx = 0 /\
     lookup_var "%6" t = SOME (if b then 1w else 2w) /\
-    op_prov G' (Var "%6") = NONE
+    op_prov G' (Var "%6") = NONE /\
+    t = jump_to "@exit_2" (update_var "%6" (if b then 1w else 2w)
+      (jump_to (if b then "@then_0" else "@else_1")
+        ((update_var "%5" (if b then 1w else 0w) s) with vs_inst_idx := 8))) /\
+    G' = DRESTRICT (DRESTRICT G (COMPL {"%5"})) (COMPL {"%6"}) /\
+    tn' = tn with t_var :=
+      set_var_taint (set_var_taint tn.t_var ["%5"] {}) ["%6"] {}
 Proof
   strip_tac >> drule_all word_interval_operand_embedding >> strip_tac >>
   `?u Ga ta. gas_path_ptr_edge D 0 ctx fn PG G tn s 0 Ga ta (OK u) /\
     ~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = 8 /\
     eval_operand (Var "%5") u = SOME (if b then 1w else 0w) /\
-    op_taint ta (Var "%5") = {}` by
+    op_taint ta (Var "%5") = {} /\
+    u = ((update_var "%5" (if b then 1w else 0w) s) with vs_inst_idx := 8) /\
+    Ga = DRESTRICT G (COMPL {"%5"}) /\
+    ta = tn with t_var := set_var_taint tn.t_var ["%5"] {}` by
     (irule word_interval_condition_load >> metis_tac[]) >>
   `?t G' tn'. gas_path_ptr D 0 ctx fn PG Ga ta u 0 G' tn' (OK t) /\
     t.vs_current_bb = "@exit_2" /\ t.vs_inst_idx = 0 /\
@@ -296,6 +331,7 @@ Proof
     tn' = ta with t_var := set_var_taint ta.t_var ["%6"] {}` by
     (irule word_interval_selected_branch_path >> simp[] >>
      Cases_on `b` >> gvs[] >> metis_tac[]) >>
-  qexistsl_tac [`t`, `G'`, `tn'`] >> simp[] >>
-  metis_tac[gas_path_ptr_rules, arithmeticTheory.ADD_CLAUSES]
+  qexistsl_tac [`t`, `G'`, `tn'`] >>
+  conj_tac >- (drule (cj 2 gas_path_ptr_rules) >> disch_then drule >> simp[]) >>
+  simp[]
 QED
