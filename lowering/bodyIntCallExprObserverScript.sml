@@ -1,7 +1,7 @@
 Theory bodyIntCallExprObserver
 Ancestors
-  abiEncoderObserver bodyIntCallObserverFrame fragExec compileEnv
-  venomInst venomExecSemantics venomExecProofs venomInstProofs venomWf list rich_list
+  abiEncoderObserver bodyIntCallObserverFrame fragExec compileEnv exprLowering vyperAST emitHelper
+  venomInst venomState venomExecSemantics venomExecProofs venomInstProofs venomWf list rich_list pred_set
 
 (* One package definition keeps completed-block ordering and the appended
    STOP identical in all containment, lookup and later region certificates.
@@ -130,3 +130,146 @@ val () = List.app (fn th =>
     else raise Fail "Syntactic region certificate has unproved dependencies"
   end) [syntactic_region_closed, expr_stop_function_region_safe,
         syntactic_region_readonly];
+
+(* Concrete states share the block inventory across certificate outputs. *)
+Definition ifexp_observer_start_def:
+  ifexp_observer_start =
+    <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 1;
+      cs_current_bb := "entry";
+      cs_current_insts := [mk_inst 0 SSTORE [Lit 0w; Lit 1w] []];
+      cs_blocks := []; cs_data_sections := []|>
+End
+
+Definition ifexp_observer_end_def:
+  ifexp_observer_end =
+    <|cs_next_var := 1; cs_next_label := 3; cs_next_id := 6;
+      cs_current_bb := "@exit_2"; cs_current_insts := [];
+      cs_blocks :=
+        [<|bb_label := "@else_1"; bb_instructions :=
+           [mk_inst 4 ASSIGN [Lit 9w] ["%0"];
+            mk_inst 5 JMP [Label "@exit_2"] []]|>;
+         <|bb_label := "@then_0"; bb_instructions :=
+           [mk_inst 2 ASSIGN [Lit 7w] ["%0"];
+            mk_inst 3 JMP [Label "@exit_2"] []]|>;
+         <|bb_label := "entry"; bb_instructions :=
+           [mk_inst 0 SSTORE [Lit 0w; Lit 1w] [];
+            mk_inst 1 JNZ [Lit 1w; Label "@then_0"; Label "@else_1"] []]|>];
+      cs_data_sections := []|>
+End
+
+Theorem ifexp_observer_compile_probe:
+  compile_expr ce (BaseT (UintT 256))
+    (IfExp (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))
+      (Literal (BaseT (UintT 256)) (IntL 7))
+      (Literal (BaseT (UintT 256)) (IntL 9))) ifexp_observer_start =
+    (StackValue (BaseT (UintT 256)) (Var "%0"),ifexp_observer_end)
+Proof
+  simp[ifexp_observer_start_def, ifexp_observer_end_def,
+       Once compile_expr_def, lower_value_def, expr_type_def,
+       is_word_type_def, fresh_var_def, fresh_label_def, fresh_label_output_def,
+       emit_inst_def, emit_def, fresh_id_def, new_block_def,
+       compile_ifexp_arm_def] >>
+  simp[compile_expr_def, compile_literal_vv_def, unwrap_value_def,
+       is_word_type_def, expr_type_def, comp_return_def, comp_bind_def,
+       fresh_id_def, emit_def] >> EVAL_TAC >> simp[]
+QED
+
+Definition ifexp_observer_region_def:
+  ifexp_observer_region =
+    {("entry",1); ("@then_0",0); ("@then_0",1);
+     ("@else_1",0); ("@else_1",1); ("@exit_2",0)}
+End
+
+Theorem ifexp_observer_region_start:
+  (ifexp_observer_start.cs_current_bb,
+   LENGTH ifexp_observer_start.cs_current_insts) IN ifexp_observer_region /\
+  (!i. i < LENGTH ifexp_observer_start.cs_current_insts ==>
+    (ifexp_observer_start.cs_current_bb,i) NOTIN ifexp_observer_region)
+Proof
+  simp[ifexp_observer_start_def, ifexp_observer_region_def]
+QED
+
+Theorem ifexp_observer_has_code:
+  fn_has_code ifexp_observer_start ifexp_observer_end
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template)
+Proof
+  irule expr_stop_function_has_code >>
+  EVAL_TAC
+QED
+
+Theorem ifexp_observer_stop:
+  ?bb. lookup_block "@exit_2"
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template).fn_blocks = SOME bb /\
+    get_instruction bb 0 = SOME (mk_inst id STOP [] [])
+Proof
+  mp_tac (Q.INST [`sa` |-> `ifexp_observer_start`,
+                 `sb` |-> `ifexp_observer_end`] expr_stop_function_stop) >>
+  simp[ifexp_observer_end_def]
+QED
+
+Theorem ifexp_observer_region_closed:
+  observer_region_closed ctx
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template)
+    ("@exit_2",0) ifexp_observer_region
+Proof
+  irule syntactic_region_closed >>
+  simp[ifexp_observer_region_def] >> rpt strip_tac >>
+  gvs[expr_stop_function_def, ifexp_observer_start_def,
+      ifexp_observer_end_def, emitted_blocks_def,
+      lookup_block_def, FIND_thm, get_instruction_def] >>
+  gvs[mk_inst_def, inst_wf_def, is_terminator_def, get_successors_def,
+      get_label_def, phi_prefix_length_def, ifexp_observer_region_def]
+QED
+
+Theorem ifexp_observer_region_safe:
+  observer_region_safe
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template)
+    ("@exit_2",0) ifexp_observer_region
+Proof
+  `observer_region_safe
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template)
+    (ifexp_observer_end.cs_current_bb,
+     LENGTH ifexp_observer_end.cs_current_insts) ifexp_observer_region`
+    suffices_by simp[ifexp_observer_end_def] >>
+  irule expr_stop_function_region_safe >>
+  simp[ifexp_observer_region_def, ifexp_observer_end_def] >> rpt strip_tac >>
+  gvs[expr_stop_function_def, ifexp_observer_start_def,
+      ifexp_observer_end_def, emitted_blocks_def,
+      lookup_block_def, FIND_thm, get_instruction_def] >>
+  gvs[mk_inst_def, step_inst_base_opcode_eqs, eval_operand_def,
+       jump_to_def, update_var_def]
+QED
+
+Theorem ifexp_observer_region_readonly:
+  (lbl,idx) IN ifexp_observer_region /\ (lbl,idx) <> ("@exit_2",0) /\
+  lookup_block lbl
+    (expr_stop_function ifexp_observer_start ifexp_observer_end id template).fn_blocks = SOME bb /\
+  get_instruction bb idx = SOME inst ==>
+  readonly_opcode inst.inst_opcode
+Proof
+  simp[ifexp_observer_region_def] >> rpt strip_tac >>
+  gvs[expr_stop_function_def, ifexp_observer_start_def,
+      ifexp_observer_end_def, emitted_blocks_def,
+      lookup_block_def, FIND_thm, get_instruction_def] >>
+  EVAL_TAC
+QED
+
+Theorem ifexp_observer_start_ok:
+  compile_state_ok ifexp_observer_start
+Proof
+  simp[compile_state_ok_def, ifexp_observer_start_def,
+       bound_labels_def, compiler_labels_future_def, DISJOINT_DEF,
+       EXTENSION, fresh_label_output_def] >>
+  EVAL_TAC
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "IfExp observer probe has unproved dependencies"
+  end) [ifexp_observer_compile_probe, ifexp_observer_region_start,
+        ifexp_observer_has_code, ifexp_observer_stop,
+        ifexp_observer_region_closed, ifexp_observer_region_safe,
+        ifexp_observer_region_readonly, ifexp_observer_start_ok];
