@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeResourcePrims
 Ancestors
-  exprSimAbiDecodeResource abiEncoder context emitHelper venomInst compileEnv
+  exprSimAbiDecodeResource abiEncoder context emitHelper venomInst compileEnv emitHelperProps pred_set exprSimAbiDecodeTrace exprSimAbiDecodeShapeProbe
 
 (* Straight-line contracts retain the entire caller's label pool. *)
 Definition decode_straight_def:
@@ -197,4 +197,96 @@ Proof
   match_mp_tac (GEN_ALL decode_straight_bind) >> qexists_tac `\v. v <> Label ex` >>
   conj_tac >- simp[decode_straight_emit_op] >>
   simp[decode_straight_range_check]
+QED
+
+Theorem decode_resource_reserved_switch:
+  decode_resource_run ex P m s x u Q /\ P SUBSET Q /\ l IN P ==>
+  decode_resource_run ex P
+    (comp_ignore_bind m (comp_ignore_bind (new_block l) (comp_return ())))
+    s () (decode_step (DecodeSwitch l) u) (Q DELETE l)
+Proof
+  strip_tac >> irule decode_resource_run_ignore_bind >>
+  qexistsl_tac [`Q`, `u`, `x`] >> simp[] >>
+  irule decode_resource_switch >>
+  drule decode_resource_run_pool >> fs[SUBSET_DEF]
+QED
+
+Theorem decode_resource_reserved_terminator:
+  decode_resource_run ex P m s x u Q /\ P SUBSET Q /\ l IN P /\
+  (opc = JMP \/ opc = JNZ) ==>
+  decode_resource_run ex P
+    (comp_ignore_bind m (comp_ignore_bind (emit_inst opc ops [])
+      (comp_ignore_bind (new_block l) (comp_return ())))) s ()
+    (decode_step (DecodeSwitch l)
+      (u with <|cs_next_id := u.cs_next_id + 1;
+        cs_current_insts := u.cs_current_insts ++ [mk_inst u.cs_next_id opc ops []]|>))
+    (Q DELETE l)
+Proof
+  strip_tac >> irule decode_resource_run_ignore_bind >>
+  qexistsl_tac [`Q`, `u`, `x`] >> simp[] >>
+  irule decode_resource_terminator_switch >>
+  drule decode_resource_run_pool >> fs[SUBSET_DEF]
+QED
+
+Theorem decode_resource_no_switch_safe:
+  decode_resource_run ex P m s x t Q ==>
+  ?es. m s = (x,t) /\ t = decode_history t (decode_replay es s) /\
+    decode_trace_safe s.cs_next_id t.cs_next_id (decode_switches es) ex es /\
+    (decode_switches es = [] ==>
+      EVERY (\i. ~MEM (Label ex) i.inst_operands) (decode_instructions es))
+Proof
+  strip_tac >> drule decode_resource_run_trace >> strip_tac >>
+  qexists_tac `es` >> fs[decode_trace_safe_def]
+QED
+
+Theorem decode_resource_two_switches:
+  P SUBSET decode_label_range 0 s.cs_next_label /\
+  hdr IN P /\ exit IN P /\ hdr <> exit /\ decode_straight ex m post ==>
+  ?t. decode_resource_run ex P
+    (comp_ignore_bind (comp_ignore_bind (new_block hdr) (comp_return ()))
+      (comp_ignore_bind m (comp_ignore_bind (emit_inst JMP [Label hdr] [])
+        (comp_ignore_bind (new_block exit) (comp_return ())))))
+    s () t ((P DELETE hdr) DELETE exit)
+Proof
+  strip_tac >>
+  `decode_resource_run ex P
+    (comp_ignore_bind (new_block hdr) (comp_return ())) s ()
+    (decode_step (DecodeSwitch hdr) s) (P DELETE hdr)` by
+    (irule decode_resource_switch >> simp[]) >>
+  drule decode_resource_run_pool >> strip_tac >>
+  qpat_x_assum `decode_straight _ _ _` mp_tac >>
+  rewrite_tac[decode_straight_def] >>
+  disch_then (qspecl_then [`decode_step (DecodeSwitch hdr) s`, `P DELETE hdr`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `exit IN P DELETE hdr` by simp[] >>
+  drule decode_resource_reserved_terminator >>
+  disch_then (qspecl_then [`[Label hdr]`, `JMP`, `exit`] mp_tac) >>
+  simp[] >> strip_tac >>
+  irule_at Any decode_resource_run_ignore_bind >>
+  metis_tac[]
+QED
+
+(* The three loop labels have all been reserved before the first switch.
+   The middle label remains available; the body cannot spend the exit. *)
+Theorem decode_resource_reserved_loop_example:
+  s.cs_next_label = n + 3 /\ decode_straight ex m post ==>
+  ?t. decode_resource_run ex (decode_label_range n (n + 3))
+    (comp_ignore_bind
+      (comp_ignore_bind (new_block (fresh_label_output "hdr" n)) (comp_return ()))
+      (comp_ignore_bind m
+        (comp_ignore_bind (emit_inst JMP [Label (fresh_label_output "hdr" n)] [])
+          (comp_ignore_bind (new_block (fresh_label_output "exit" (n + 2)))
+            (comp_return ()))))) s () t
+    ((decode_label_range n (n + 3) DELETE fresh_label_output "hdr" n)
+       DELETE fresh_label_output "exit" (n + 2))
+Proof
+  strip_tac >> match_mp_tac (GEN_ALL decode_resource_two_switches) >>
+  qexists_tac `post` >> simp[] >>
+  conj_tac
+  >- (rw[SUBSET_DEF, decode_label_range_def] >> metis_tac[]) >>
+  conj_tac
+  >- (simp[decode_label_range_def] >> qexistsl_tac [`"hdr"`, `n`] >> simp[]) >>
+  conj_tac
+  >- (simp[decode_label_range_def] >> qexistsl_tac [`"exit"`, `n + 2`] >> simp[]) >>
+  strip_tac >> drule fresh_label_output_inj >> simp[]
 QED
