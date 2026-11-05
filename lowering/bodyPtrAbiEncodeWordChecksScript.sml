@@ -7,7 +7,7 @@ Ancestors
   abiEncoderReentryLeaves emitHelperProps emitHelper compileEnv abiDecoderReentry
   abiDecoderContract exprLoweringProps
 
-Theorem abi_encode_mstore_inst_idx[local]:
+Theorem abi_encode_mstore_inst_idx:
   mstore off w (s with vs_inst_idx := k) =
   (mstore off w s) with vs_inst_idx := k
 Proof
