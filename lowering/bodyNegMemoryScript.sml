@@ -66,7 +66,10 @@ Theorem compile_neg_vv_sim_mem:
   expr_sim_mem ctx func cenv cx (expr_type e) e es ==>
   expr_vv_sim_mem ctx func cenv cx ty (Builtin ann Neg [e]) es
 Proof
-  strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  strip_tac >> `is_word_type (expr_type (Builtin ann Neg [e]))` by
+    (drule expr_body_pre_neg >> strip_tac >>
+     gvs[vyperASTTheory.expr_type_def]) >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   rpt conj_tac
   >~ [`compile_expr`] >- simp[compile_neg_stack]
   >~ [`eval_expr`] >- metis_tac[eval_expr_builtin_value] >>

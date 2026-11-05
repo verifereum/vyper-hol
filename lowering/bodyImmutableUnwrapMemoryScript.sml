@@ -88,7 +88,7 @@ Proof
 QED
 
 (* At runtime an immutable's bytes lie inside the data section. *)
-Theorem runtime_immutable_data_section[local]:
+Theorem runtime_immutable_data_section:
   immutable_holds cenv cx t (Value v) a es s /\ ~cenv.ce_is_ctor /\
   stmt_state_rel ctx func cenv cx es u /\
   evaluate_type (get_tenv cx) t = SOME tv ==>

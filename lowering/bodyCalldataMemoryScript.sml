@@ -237,7 +237,10 @@ Theorem compile_calldatasize_body_vv_sim_mem:
     expr_body_pre cenv cx env (Builtin ann CalldataLen args) es ==>
     expr_vv_sim_mem ctx func cenv cx ty (Builtin ann CalldataLen args) es
 Proof
-  rpt gen_tac >> strip_tac >> irule body_expr_vv_sim_mem_stack >>
+  rpt gen_tac >> strip_tac >> `is_word_type (expr_type (Builtin ann CalldataLen args))` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+         vyperASTTheory.expr_type_def, is_word_type_def] >>
+  drule_then irule body_expr_vv_sim_mem_stack_word >>
   conj_tac >- simp[compile_calldata_len_stack] >>
   conj_tac
   >- (`args = []` by
