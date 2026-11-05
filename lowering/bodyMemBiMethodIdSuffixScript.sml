@@ -499,7 +499,6 @@ Proof
   metis_tac[method_id_hash_as_keccak, keccak_typed_suffix_shape]
 QED
 
-(* Pending endpoint proof preserved for C1.3.2.2.
 Theorem method_id_runtime_typed_post_run_mem:
   expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
@@ -565,18 +564,19 @@ Proof
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all hash_method_id_mask_cut >> strip_tac >>
   drule_all method_id_dynamic_suffix_frame >> strip_tac >>
-  `sm'.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sm' /\
-   sb.cs_current_insts = sm'.cs_current_insts ++ emitted_insts sm' sb` by
-    (drule_all method_id_tail_shape >> strip_tac >>
-     metis_tac[method_id_hash_as_keccak, keccak_typed_suffix_shape]) >>
   `emitted_insts sm sb = emitted_insts sm sm' ++ emitted_insts sm' sb` by
-    (irule emitted_insts_append >> simp[]) >>
+    (irule method_id_runtime_hash_split >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
   `t' = t` by
-    (qpat_x_assum `run_inst_seq (emitted_insts sm sb) s = _` mp_tac >>
-     asm_rewrite_tac[run_inst_seq_append] >> simp[]) >>
+    (qpat_assum `run_inst_seq (emitted_insts sm sm') s = OK hashed`
+       (mp_tac o MATCH_MP run_inst_seq_append) >>
+     disch_then (qspec_then `emitted_insts sm' sb` assume_tac) >>
+     qpat_x_assum `run_inst_seq (emitted_insts sm sb) s = _` mp_tac >>
+     asm_rewrite_tac[] >> simp[]) >>
   gvs[] >>
   `w2n p + 64 <= t.vs_alloca_next` by
     (fs[stmt_state_rel_def] >> drule_all alloca_site_registered_below >> simp[]) >>
-  FAIL_TAC "bound simplification"
+  simp[vv_store_bound_def, vyperStateTheory.read_result_def, vyperStateTheory.return_def,
+    evaluate_type_def, val_store_size_def, valueEncodingTheory.type_memory_size_def] >>
+  `word_size 4 = 1` by EVAL_TAC >> simp[]
 QED
-*)
