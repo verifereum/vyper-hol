@@ -1853,3 +1853,37 @@ QED
    theorem. Apply independently to cut=pre and cut=events. It identifies
    the two LAST writes, not the earlier representative occurrence reached
    through ASSIGN; equality between those derivations remains missing. *)
+
+Definition cse_phase_has_source_def:
+ (cse_phase_has_source fn (CseExec n bb s) e src <=>
+   ?xs. FLOOKUP (ae_lookup_inst fn bb.bb_label s.vs_inst_idx) e = SOME xs /\
+     MEM src xs) /\
+ (cse_phase_has_source fn (CseRun n s) e src <=>
+   ?bb xs. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+     FLOOKUP (ae_lookup_inst fn s.vs_current_bb 0) e = SOME xs /\ MEM src xs)
+End
+
+Theorem cse_prefix_phase_unique[local]:
+ cse_prefix ctx fn fuel0 s0 events ph /\
+ cse_prefix ctx fn fuel0 s0 events ph' ==> ph = ph'
+Proof
+ once_rewrite_tac[cse_prefix_cases] >>
+ simp[GSYM rich_listTheory.SNOC_APPEND] >>
+ rpt strip_tac >> gvs[]
+QED
+
+Theorem cse_source_interval_snoc[local]:
+ cse_prefix ctx fn fuel0 s0 (events ++ [ev]) phase /\
+ cse_phase_has_source fn phase e src /\
+ (!k ph. (birth_index:num) < k /\ k <= LENGTH events /\
+    cse_prefix ctx fn fuel0 s0 (TAKE k events) ph ==>
+    cse_phase_has_source fn ph e src) ==>
+ !k ph. (birth_index:num) < k /\ k <= LENGTH (events ++ [ev]) /\
+    cse_prefix ctx fn fuel0 s0 (TAKE k (events ++ [ev])) ph ==>
+    cse_phase_has_source fn ph e src
+Proof
+ rpt strip_tac >> Cases_on `k <= LENGTH events`
+ >- (gvs[TAKE_APPEND1] >> first_x_assum irule >> metis_tac[]) >>
+ `k = LENGTH (events ++ [ev])` by (fs[] >> decide_tac) >>
+ gvs[TAKE_LENGTH_ID_rwt] >> metis_tac[cse_prefix_phase_unique]
+QED
