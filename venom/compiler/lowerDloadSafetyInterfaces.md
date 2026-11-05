@@ -982,7 +982,8 @@ This section supersedes earlier candidate run packages, not the frozen contract.
 The exact typed, capture-avoiding textual expansions are the ML quotations
 `ld_probe_guard`, `ld_probe_stable`, `ld_probe_point`, `ld_probe_entry`,
 `ld_probe_terminal`, `ld_probe_ambient`, `ld_probe_S`, `ld_probe_E`, and
-`ld_probe_R` in `lowerDloadReturnInterfaceProbeScript.sml`. They introduce **no
+`ld_probe_R` in `lowerDloadReturnPackageLib.sml` (extracted unchanged from
+`lowerDloadReturnInterfaceProbeScript.sml`). They introduce **no
 HOL constants or definitions**. The following formulas spell out the packages;
 all environment fields are individually quantified in S/E/R, not packaged in a
 new record. Write e for lo,P,C,C',vs0,stk,fn,fn',cs,fs,f0,A0,Sigma,names.
@@ -1110,3 +1111,63 @@ Missing concrete semantic work, deliberately NOT discharged by this probe:
 
 Verification: `holbuild(targets=['lowerDloadReturnInterfaceProbeTheory'])` passes
 without cheats; the frozen stage theorem has not been changed by this experiment.
+
+## 10. Shared quotation and covered-supply interface (C1.3.2.5.1)
+
+`lowerDloadReturnPackageLib.sml` is now the single quotation source for the
+packages in section 9. The old experimental Ambient is unchanged. The distinct
+production quotation is:
+
+```
+CoveredAmbient(e) = Ambient(e) /\
+  (!f. MEM f C.ctx_functions ==> ir_supply_covers_fn (Sigma f.fn_name) f)
+```
+
+`ld_return_package_induction` generalizes the predicate-parametric proof once;
+`ld_probe_conditional_induction` retains its original beta-equivalent statement
+as an experimental specialization. The new `ld_covered_package_induction` in
+`lowerDloadReturnAlignmentTheory` specializes the same proof to CoveredAmbient,
+Point and Terminal. Its base/INVOKE transfer antecedents are still explicit;
+this is NOT an unconditional reconstruction theorem. No package definition or
+second copy of the induction proof was introduced.
+
+`ld_sync_supply_covered` is deliberately more general than a CoveredAmbient
+projection. Its exact interface is:
+
+```
+(!f. MEM f C.ctx_functions ==> ir_supply_covers_fn (Sigma f.fn_name) f) /\
+ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) frames ==>
+ir_supply_covers_fn (HD frames).lf_supply fn
+```
+
+It obtains head membership/function identity from the existing synchronization
+boundary and rewrites the head supply through EVERY. Downstream package users
+can project the first conjunct from CoveredAmbient, without unfolding ld_sync
+again or attempting to infer freshness from transformed lookup equality.
+
+The existing stage certificate was inspected directly at
+`lowerDloadConfiguredOriginsScript.sml:963-993`. No near-duplicate wrapper was
+added. Its **actual** premises and conclusion are:
+
+```
+ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+ALL_DISTINCT (MAP (\fn. fn.fn_name) C.ctx_functions) ==>
+?Sigma. !fn. MEM fn C.ctx_functions ==>
+  ir_supply_covers_fn (Sigma fn.fn_name) fn /\
+  lookup_function fn.fn_name C'.ctx_functions =
+    SOME (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))
+```
+
+`o1_ctx_shape_distinct_names` supplies exactly its second premise from the
+unchanged frozen theorem's shape assumption. The chosen Sigma then provides
+both the global coverage conjunct of CoveredAmbient and the original Ambient's
+lookup conjunct, for the SAME configured transformation. The other Ambient
+facts remain the enclosing stage consumer's obligations. Neither coverage nor
+lookup is silently assumed as an additional frozen-theorem hypothesis.
+
+Checked targets: `lowerDloadReturnInterfaceProbeTheory` and
+`lowerDloadReturnAlignmentTheory`. The old experimental consumers rebuild;
+null-kernel-hypothesis assertions check the new supply and production
+specialization theorems. Concrete alignment, PHI and opcode producers remain
+unproved and are not included in this refactor's claim.
