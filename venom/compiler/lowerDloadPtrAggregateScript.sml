@@ -145,3 +145,13 @@ Proof
   qexistsl [`t0`,`H0`,`un0`] >> simp[] >>
   irule dload_prefix_extend >> simp[]
 QED
+
+(* Restrict only the active observations, retaining saved caller metadata. *)
+Theorem dload_boundary_vars_restrict:
+  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  V' SUBSET V ==>
+  dload_boundary_core lo fs V' Ws PG PH G H tn un s t cs ds
+Proof
+  simp[dload_boundary_core_def, dload_vars_match_def, pred_setTheory.SUBSET_DEF] >>
+  metis_tac[]
+QED
