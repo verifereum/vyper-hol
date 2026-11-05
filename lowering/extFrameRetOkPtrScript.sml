@@ -13,7 +13,7 @@ Ancestors
   loweringRuntimeCorrect bodyPtrDefs stmtSimDefs stmtSimProps loweringPosts bodySim moduleLowering
   stmtLowering vyperTypeSystem vyperState emitHelper vyperTypeSelectedEntrySoundness
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
-  unitShapeDefs o1PassContract
+  unitShapeDefs o1PassContract extRetScalarCopyCountedPtr
 
 val _ = Parse.hide "body";
 
