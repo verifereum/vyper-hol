@@ -4777,6 +4777,65 @@ Proof
   strip_tac >> gvs[]
 QED
 
+Definition asm_call_static_prefix_def:
+  asm_call_static_prefix saved a ts ds s <=>
+    s.rollback.accounts = a /\ s.rollback.tStorage = ts /\
+    s.rollback.toDelete = ds /\
+    ?active. active <> [] /\ s.contexts = active ++ saved /\
+      EVERY (\(c,rb). c.msgParams.static /\
+        (!x. c.msgParams.outputTo <> Code x) /\ c.logs = [] /\
+        rb.accounts = a /\ rb.tStorage = ts /\ rb.toDelete = ds) active
+End
+
+Theorem asm_call_static_prefix_intro:
+  s.rollback.accounts = a /\ s.rollback.tStorage = ts /\
+  s.rollback.toDelete = ds /\ active <> [] /\
+  s.contexts = active ++ saved /\
+  EVERY (\(c,rb). c.msgParams.static /\
+    (!x. c.msgParams.outputTo <> Code x) /\ c.logs = [] /\
+    rb.accounts = a /\ rb.tStorage = ts /\ rb.toDelete = ds) active ==>
+  asm_call_static_prefix saved a ts ds s
+Proof
+  rw[asm_call_static_prefix_def] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem asm_call_static_prefix_head:
+  asm_call_static_prefix saved a ts ds s ==>
+  s.contexts <> [] /\ (FST (HD s.contexts)).msgParams.static /\
+  (!x. (FST (HD s.contexts)).msgParams.outputTo <> Code x) /\
+  (FST (HD s.contexts)).logs = [] /\
+  (SND (HD s.contexts)).accounts = a /\
+  (SND (HD s.contexts)).tStorage = ts /\
+  (SND (HD s.contexts)).toDelete = ds
+Proof
+  rw[asm_call_static_prefix_def] >> Cases_on `active` >> gvs[] >>
+  PairCases_on `h` >> gvs[]
+QED
+
+Theorem asm_call_static_prefix_cp:
+  cp f /\ asm_call_static_prefix saved a ts ds s /\ f s = (r,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> fs[asm_call_static_prefix_def] >>
+  drule_at (Pat `EVERY _ _`) asm_call_cp_static_prefix >>
+  disch_then drule_all >> simp[] >> strip_tac >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem asm_call_static_prefix_push:
+  asm_call_static_prefix saved a ts ds s /\
+  ~fIN address precompile_addresses /\
+  proceed_call op sender address 0 ao az code stipend (Memory mr) s = (r,t) ==>
+  asm_call_static_prefix saved a ts ds t
+Proof
+  strip_tac >> drule asm_call_static_prefix_head >> strip_tac >>
+  Cases_on `s.contexts` >> gvs[] >> PairCases_on `h` >> fs[] >>
+  drule asm_call_static_push_snapshot >> simp[] >> disch_then drule_all >>
+  strip_tac >> gvs[asm_call_static_prefix_def] >>
+  qexists_tac `HD t.contexts :: active` >> simp[] >>
+  Cases_on `t.contexts` >> gvs[] >> PairCases_on `h` >> gvs[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
