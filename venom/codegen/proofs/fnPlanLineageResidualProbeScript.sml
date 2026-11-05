@@ -688,3 +688,184 @@ QED
    cleanup one must either establish that stronger reachable common core or
    prove cleanup respects the weaker paired relation. There is no cleanup
    at the join PHI endpoint that could supply it automatically. *)
+
+(* Actual consumer probes: abstract states unless explicitly stated otherwise. *)
+Definition physical_regular_def:
+  physical_regular dfg stk = generate_regular_inst_plan
+    (liveness_analyze physical_cleanup_fn) dfg (cfg_analyze physical_cleanup_fn)
+    physical_cleanup_fn (mk_inst 90 MSTORE [Var "a"; Lit 0w] [])
+    [] F F "A" ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := stk)
+End
+
+Definition physical_deep_def:
+  physical_deep dead = [Var "a"] ++ REPLICATE 16 (Var "z") ++ [dead]
+End
+
+Theorem physical_select_tag:
+  select_spill_candidate (physical_deep (Var "d")) [Var "a"] 17 1 = SOME 1 /\
+  select_spill_candidate ([Var "a"] ++ REPLICATE 16 (Lit 0w) ++ [Var "d"])
+    [Var "a"] 17 1 = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_deep_regular_dead_names:
+  FST (physical_regular dfg_empty (physical_deep (Var "d"))) =
+  FST (physical_regular dfg_empty (physical_deep (Var "e"))) /\
+  (SND (physical_regular dfg_empty (physical_deep (Var "d")))).ps_alloc =
+  (SND (physical_regular dfg_empty (physical_deep (Var "e")))).ps_alloc /\
+  FLOOKUP (SND (physical_regular dfg_empty (physical_deep (Var "d")))).ps_spilled
+    (Var "a") = NONE /\
+  FLOOKUP (SND (physical_regular dfg_empty (physical_deep (Var "e")))).ps_spilled
+    (Var "a") = NONE
+Proof
+  EVAL_TAC
+QED
+
+Definition physical_alias_dfg_def:
+  physical_alias_dfg = dfg_build_function (mk_raw_function "alias"
+    [<|bb_label := "E"; bb_instructions :=
+      [mk_inst 0 ASSIGN [Var "a"] ["d"]]|>])
+End
+
+Theorem physical_equiv_observation:
+  operand_equiv physical_alias_dfg (Var "a") (Var "d") /\
+  ~operand_equiv physical_alias_dfg (Var "a") (Var "e") /\
+  FST (reorder_one physical_alias_dfg [Var "a"] 0 (Var "a")
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "a"; Var "d"])) = [] /\
+  FST (reorder_one physical_alias_dfg [Var "a"] 0 (Var "a")
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := [Var "a"; Var "e"])) =
+      [SOSwap 1]
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_equiv_regular:
+  FST (physical_regular physical_alias_dfg [Var "a"; Var "d"]) <>
+  FST (physical_regular physical_alias_dfg [Var "a"; Var "e"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_deep_regular_tag:
+  FST (physical_regular dfg_empty (physical_deep (Var "d"))) =
+  FST (physical_regular dfg_empty
+    ([Var "a"] ++ REPLICATE 16 (Lit 0w) ++ [Var "d"]))
+Proof
+  EVAL_TAC
+QED
+
+Definition physical_jmp_def:
+  physical_jmp stk = generate_regular_inst_plan
+    (liveness_analyze physical_cleanup_fn) dfg_empty (cfg_analyze physical_cleanup_fn)
+    physical_cleanup_fn (mk_inst 91 JMP [Label "A"] [])
+    ["a"; "b"] F F "E"
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := stk)
+End
+
+Theorem physical_deep_jmp_names:
+  FST (physical_jmp (physical_deep (Var "d") ++ [Var "b"])) =
+  FST (physical_jmp (physical_deep (Var "e") ++ [Var "b"])) /\
+  (SND (physical_jmp (physical_deep (Var "d") ++ [Var "b"]))).ps_alloc =
+  (SND (physical_jmp (physical_deep (Var "e") ++ [Var "b"]))).ps_alloc /\
+  FLOOKUP (SND (physical_jmp (physical_deep (Var "d") ++ [Var "b"]))).ps_spilled
+    (Var "a") = NONE /\
+  FLOOKUP (SND (physical_jmp (physical_deep (Var "e") ++ [Var "b"]))).ps_spilled
+    (Var "a") = NONE
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_deep_prefix_ops:
+  FST (physical_regular dfg_empty (physical_deep (Var "d"))) =
+  FST (physical_regular dfg_empty ([Var "unqueried"] ++ physical_deep (Var "d")))
+Proof
+  EVAL_TAC
+QED
+
+(* Consumer premise audit: physical_equiv_regular REFUTES the candidate with
+   only equal demand occurrences/depths and paired dead positions. First
+   differing branch is operand_equiv in reorder_one, not cleanup. ASSIGN-root
+   normalization, not PHI-class/name equality, decides that branch. Existing
+   name-alias exclusions do not by their statements rule out ASSIGN roots.
+   physical_select_tag shows the candidate-search tag observation differs,
+   although physical_deep_regular_tag shows this particular MSTORE does not
+   expose it (input emission first duplicates its demand). Preservation still
+   needs matching candidate tags and forbidden membership when reduction runs. The equal-name-variant
+   tests certify ops, allocator and demand lookup only; they do NOT assert
+   native production, exact dead-key maps or arbitrary-prefix shielding.
+   No universal relation is introduced on the basis of these equations. *)
+
+Definition physical_native_fn_def:
+  physical_native_fn = mk_raw_function "physical-native"
+    [<|bb_label := "E"; bb_instructions :=
+      [mk_inst 0 PARAM [Lit 0w] ["c"];
+       mk_inst 1 PARAM [Lit 1w] ["a"];
+       mk_inst 2 PARAM [Lit 2w] ["b"];
+       mk_inst 11 PARAM [Lit 3w] ["k"];
+       mk_inst 3 JNZ [Var "c"; Label "A"; Label "B"] []]|>;
+     <|bb_label := "A"; bb_instructions := [mk_inst 4 JMP [Label "J"] []]|>;
+     <|bb_label := "B"; bb_instructions := [mk_inst 5 JMP [Label "J"] []]|>;
+     <|bb_label := "J"; bb_instructions :=
+       [mk_inst 6 PHI [Label "A"; Var "a"; Label "B"; Var "b"] ["x"];
+        mk_inst 7 MSTORE [Var "x"; Lit 0w] [];
+        mk_inst 8 JNZ [Var "k"; Label "C"; Label "D"] []]|>;
+     <|bb_label := "C"; bb_instructions := [mk_inst 9 STOP [] []]|>;
+     <|bb_label := "D"; bb_instructions := [mk_inst 10 STOP [] []]|>]
+End
+
+Definition physical_native_edge_def:
+  physical_native_edge edge = SND (THE (residual_matrix_step physical_native_fn edge
+    (SND (THE (residual_matrix_step physical_native_fn "E"
+      (init_cleanup_plan_state NONE [] 0 0))))))
+End
+
+Theorem physical_native_success:
+  codegen_ready_fn physical_native_fn /\
+  IS_SOME (generate_fn_plan_with_cleanup_analyzed
+    (liveness_analyze physical_native_fn) (dfg_build_function physical_native_fn)
+    (cfg_analyze physical_native_fn) NONE [] physical_native_fn 0 0) /\
+  IS_SOME (residual_matrix_step physical_native_fn "J" (physical_native_edge "A")) /\
+  IS_SOME (residual_matrix_step physical_native_fn "J" (physical_native_edge "B")) /\
+  FST (THE (residual_matrix_step physical_native_fn "J" (physical_native_edge "A"))) =
+  FST (THE (residual_matrix_step physical_native_fn "J" (physical_native_edge "B")))
+Proof
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >>
+  conj_tac >- EVAL_TAC >> EVAL_TAC
+QED
+
+Theorem physical_native_next_cleanup:
+  EVERY (\edge.
+    FST (clean_stack_plan (liveness_analyze physical_native_fn)
+      (cfg_analyze physical_native_fn) physical_native_fn
+      (THE (lookup_block "C" physical_native_fn.fn_blocks))
+      (SND (THE (residual_matrix_step physical_native_fn "J"
+        (physical_native_edge edge))))) = []) ["A"; "B"]
+Proof
+  EVAL_TAC
+QED
+
+(* The native fixture supplies successful analyzed calls from both arms and
+   PHI+MSTORE+JNZ replay plus the next real branch cleanup. It does not certify
+   the general frozen lineage/DFS relations. Its depths are shallow and its DFG
+   has no ASSIGN alias at mismatched cells: those additional premises, not
+   success alone, distinguish it from physical_equiv_regular. *)
+
+Definition physical_reduce_def:
+  physical_reduce dead = reduce_depth_plan 18 [Var "a"] (Var "a") 0 1
+    ((init_cleanup_plan_state NONE [] 0 0) with ps_stack :=
+      [Var "a"] ++ REPLICATE 15 (Var "z") ++ [dead; Var "b"])
+End
+
+Theorem physical_reduce_dead_keys:
+  FST (physical_reduce (Var "d")) = FST (physical_reduce (Var "e")) /\
+  (SND (physical_reduce (Var "d"))).ps_alloc =
+    (SND (physical_reduce (Var "e"))).ps_alloc /\
+  FLOOKUP (SND (physical_reduce (Var "d"))).ps_spilled (Var "d") = SOME 0 /\
+  FLOOKUP (SND (physical_reduce (Var "e"))).ps_spilled (Var "d") = NONE /\
+  FLOOKUP (SND (physical_reduce (Var "e"))).ps_spilled (Var "e") = SOME 0
+Proof
+  EVAL_TAC
+QED
