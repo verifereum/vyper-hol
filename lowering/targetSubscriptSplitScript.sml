@@ -30,6 +30,7 @@ Ancestors
   valueEncoding vyperAST vyperInterpreter vyperState vyperValue
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
+  vyperScopePreservation
   venomState venomInst
 Libs
   pairLib
@@ -98,14 +99,23 @@ Proof
   gvs[bind_def, target_res_ok_def, expr_res_ok_def]
 QED
 
-(* Internal-call defaults and bodies are bracketed by scope restoration,
-   even on exceptions; this boundary requires no invariant on the callee. *)
-Theorem target_subscript_restore_scopes:
-  finally source (set_scopes prev) es = (res, ee) ==>
-  ee.scopes = prev
+(* Internal-call defaults use the existing finally_set_scopes boundary
+   from vyperScopePreservation; body cleanup additionally unlocks. *)
+Theorem target_subscript_unlock_scopes:
+  unlock_if_nr cx nr is_view es = (res, ee) ==> ee.scopes = es.scopes
 Proof
-  simp[finally_def, bind_def, ignore_bind_def, set_scopes_def,
-       return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  Cases_on `nr /\ ~is_view` >>
+  simp[unlock_if_nr_def, return_def] >>
+  Cases_on `cx.nonreentrant_slot` >> simp[return_def] >>
+  metis_tac[release_nonreentrant_lock_scopes]
+QED
+
+Theorem target_subscript_call_cleanup_scopes:
+  finally source (ignore_bind (pop_function prev) (unlock_if_nr cx nr is_view))
+    es = (res, ee) ==> ee.scopes = prev
+Proof
+  strip_tac >> drule finally_pop_function_then_scopes >>
+  impl_tac >- metis_tac[target_subscript_unlock_scopes] >> simp[]
 QED
 
 (* A failed base consumes exactly the same marked path in the full target;
