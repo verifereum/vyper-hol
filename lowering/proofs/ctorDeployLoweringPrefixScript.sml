@@ -622,6 +622,204 @@ Proof
   EVAL_TAC
 QED
 
+(* Normalize syntax only; these ML abbreviations introduce no HOL constants. *)
+fun prefix_normal_tm tm = computeLib.EVAL_CONV tm |> concl |> rhs;
+val prefix_pre_pair_tm = deploy_prefix_negative_prewalk_artifact
+  |> concl |> find_term (fn tm => is_eq tm andalso optionSyntax.is_some (rhs tm))
+  |> rhs |> rand |> pairSyntax.dest_pair;
+val prefix_pre_unit_tm = prefix_normal_tm (fst prefix_pre_pair_tm);
+val prefix_pre_supply_tm = prefix_normal_tm (snd prefix_pre_pair_tm);
+val prefix_final_unit_tm = prefix_normal_tm prefix_dft_unit_tm;
+val prefix_final_supply_tm = prefix_normal_tm prefix_sue_supply_tm;
+val prefix_final_fn_tm = prefix_normal_tm
+  ``HD ((^prefix_final_unit_tm).cu_context.ctx_functions)``;
+val prefix_sue_fn_tm = prefix_normal_tm
+  ``HD ((^prefix_sue_unit_tm).cu_context.ctx_functions)``;
+val prefix_fmp_fn_tm = prefix_normal_tm
+  ``HD ((^prefix_fmp_unit_tm).cu_context.ctx_functions)``;
+val prefix_rp_tm = prefix_normal_tm
+  ``THE (resolve_o1_policy (o1_policy all_capabilities))``;
+
+Theorem deploy_prefix_negative_fold9:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm []
+    ^prefix_pre_unit_tm ^prefix_final_supply_tm ^prefix_final_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_fold8:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm
+    [CFP_Simple VP_CFGNormalization]
+    ^prefix_pre_unit_tm ^prefix_final_supply_tm ^prefix_final_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold9] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_fold7:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm
+    [CFP_Simple VP_DFT; CFP_Simple VP_CFGNormalization]
+    ^prefix_pre_unit_tm ^prefix_final_supply_tm ^prefix_sue_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold8] >> EVAL_TAC
+QED
+
+val prefix_tail6_tm = ``[CFP_Simple VP_SingleUseExpansion;
+  CFP_Simple VP_DFT; CFP_Simple VP_CFGNormalization]``;
+val prefix_dload_supply_norm_tm = prefix_normal_tm prefix_dload_supply_tm;
+
+Theorem deploy_prefix_negative_fold6:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail6_tm
+    ^prefix_pre_unit_tm ^prefix_dload_supply_norm_tm ^prefix_fmp_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold7] >> EVAL_TAC
+QED
+
+val prefix_tail5_tm = ``CFP_Simple VP_SimplifyCFG :: ^prefix_tail6_tm``;
+
+Theorem deploy_prefix_negative_fold5:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail5_tm
+    ^prefix_pre_unit_tm ^prefix_dload_supply_norm_tm ^prefix_fmp_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold6] >> EVAL_TAC
+QED
+
+val prefix_tail4_tm = ``CFP_Simple VP_MakeSSA :: ^prefix_tail5_tm``;
+
+Theorem deploy_prefix_negative_fold4:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail4_tm
+    ^prefix_pre_unit_tm ^prefix_dload_supply_norm_tm ^prefix_fmp_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold5] >> EVAL_TAC
+QED
+
+val prefix_tail3_tm = ``CFP_Simple VP_FmpLowering :: ^prefix_tail4_tm``;
+val prefix_concrete_fn_norm_tm = prefix_normal_tm prefix_concrete_fn_tm;
+
+Theorem deploy_prefix_negative_fold3:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail3_tm
+    ^prefix_pre_unit_tm ^prefix_dload_supply_norm_tm ^prefix_concrete_fn_norm_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold4] >> EVAL_TAC
+QED
+
+val prefix_tail2_tm = ``CFP_Simple VP_ConcretizeMemLoc :: ^prefix_tail3_tm``;
+val prefix_dload_fn_norm_tm = prefix_normal_tm prefix_dload_fn_tm;
+
+Theorem deploy_prefix_negative_fold2:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail2_tm
+    ^prefix_pre_unit_tm ^prefix_dload_supply_norm_tm ^prefix_dload_fn_norm_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``,
+     ``concretizeMemLocDefs$concretize_function_fuel_in_context``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_concrete_fn_artifact |>
+    CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV
+      [``concretizeMemLocDefs$concretize_function_fuel_in_context``]))] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold3] >> EVAL_TAC
+QED
+
+val prefix_tail1_tm = ``CFP_Simple VP_LowerDload :: ^prefix_tail2_tm``;
+val prefix_pre_fn_tm = prefix_normal_tm
+  ``HD ((^prefix_pre_unit_tm).cu_context.ctx_functions)``;
+
+Theorem deploy_prefix_negative_fold1:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm ^prefix_tail1_tm
+    ^prefix_pre_unit_tm ^prefix_pre_supply_tm ^prefix_pre_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold2] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_fold0:
+  venomFnScheduleRunner$run_configured_fn_pass_fold
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm
+    (CFP_Simple VP_MakeSSA :: ^prefix_tail1_tm)
+    ^prefix_pre_unit_tm ^prefix_pre_supply_tm ^prefix_pre_fn_tm [] =
+    SOME (^prefix_final_fn_tm, [], ^prefix_final_supply_tm)
+Proof
+  once_rewrite_tac[venomFnScheduleRunnerTheory.run_configured_fn_pass_fold_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold1] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_named_walk:
+  venomPipelineRunner$run_named_fn_schedules
+    venomPassDispatcher$execute_configured_fn_pass ^prefix_rp_tm
+    venomPassSchedule$o1_fn_passes ["__deploy"]
+    ^prefix_pre_unit_tm ^prefix_pre_supply_tm =
+    SOME (^prefix_final_unit_tm, ^prefix_final_supply_tm)
+Proof
+  rewrite_tac[venomPipelineRunnerTheory.run_named_fn_schedules_def,
+              venomFnScheduleRunnerTheory.run_configured_fn_passes_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomFnScheduleRunner$run_configured_fn_pass_fold``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_fold0] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_walk_artifact:
+  let tops = [FunctionDecl Deploy Payable F F "__init__"
+                [("x", BaseT (UintT 256))] [] NoneT []] in
+  let rp = THE (resolve_o1_policy (o1_policy all_capabilities)) in
+  let unit = THE (lower_vyper_deploy_unit tops rp []) in
+  let (pre,supply) = THE (venomPipelineRunner$run_pipeline_stages rp
+    venomPassSchedule$o1_pipeline_spec.ps_pre_walk_stages unit
+    (irSupply$init_ir_supply unit)) in
+  venomPipelineRunner$run_named_fn_schedules
+    venomPassDispatcher$execute_configured_fn_pass rp
+    venomPassSchedule$o1_fn_passes ["__deploy"] pre supply =
+    SOME (^prefix_final_unit_tm, ^prefix_final_supply_tm)
+Proof
+  simp_tac bool_ss [LET_THM] >>
+  pure_rewrite_tac[deploy_prefix_negative_prewalk_artifact |>
+                    SIMP_RULE bool_ss [LET_THM]] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``venomPipelineRunner$run_named_fn_schedules``,
+     ``venomPassSchedule$o1_fn_passes``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_named_walk] >> REFL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
