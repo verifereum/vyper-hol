@@ -25,7 +25,7 @@
 
 Theory stmtSimAssignTuple
 Ancestors
-  loweringPosts
+  loweringPosts exprSimTypedAlloc
   tupleAssignCode
   list rich_list finite_map pred_set tupleLocalStoreProps tupleLocalStoreRun
   tupleLoadProps

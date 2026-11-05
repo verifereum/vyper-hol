@@ -493,8 +493,7 @@ Theorem ifexp_typed_alloc_source[local]:
   stmt_state_rel ctx func cenv cx es s /\
   expr_val_at cenv cx sty origin sa es v src s /\
   eval_operand src s = SOME sw /\
-  val_in_memory stv v (w2n sw) s.vs_memory /\
-  w2n sw + type_memory_size stv < dimword (:256) ==>
+  val_in_memory stv v (w2n sw) s.vs_memory ==>
   frag_exec ctx sa sb (\z. z = s)
     (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
@@ -504,6 +503,10 @@ Theorem ifexp_typed_alloc_source[local]:
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)) R
 Proof
   strip_tac >>
+  `w2n sw + type_memory_size stv < dimword (:256)` by
+    (drule_all expr_val_at_bound >>
+     `val_footprint stv v = type_memory_size stv` by
+       metis_tac[ifexp_aggregate_footprint] >> simp[]) >>
   `0 < type_memory_size stv` by
     (drule_all ifexp_widened_source_positive >> simp[]) >>
   drule_all ifexp_aggregate_source_region >> strip_tac >> gvs[] >>
@@ -1155,14 +1158,13 @@ Proof
   qexists_tac `arm_ty` >> simp[]
 QED
 
-Theorem ifexp_different_type_unwrap[local]:
+Theorem ifexp_different_type_unwrap_pure[local]:
   !ce e ty sa vv sb.
     lowered_value_type ce e <> expr_type e /\
     ~is_word_type (expr_type e) /\
     ~is_word_type (lowered_value_type ce e) /\
     compile_expr ce ty e sa = (vv,sb) ==>
-    ?op. unwrap_value ce vv sb = (op,sb) /\
-         lower_value compile_expr ce ty e sa = (op,sb)
+    ?op. unwrap_value ce vv = comp_return op
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, expr_type_def] >>
@@ -1174,13 +1176,13 @@ Proof
       simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
            comp_return_def, lower_value_def, comp_bind_def,
            Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
-           compile_literal_vv_def])
+           compile_literal_vv_def] >> metis_tac[])
   >- suspend "bytes"
   >- suspend "abi"
   >> suspend "call"
 QED
 
-Resume ifexp_different_type_unwrap[bytes]:
+Resume ifexp_different_type_unwrap_pure[bytes]:
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
        compile_literal_vv_def, expr_type_def, comp_bind_def, comp_return_def] >>
@@ -1188,12 +1190,9 @@ Resume ifexp_different_type_unwrap[bytes]:
   simp[unwrap_value_def, base_ptr_def, is_word_type_def, expr_type_def,
        comp_return_def, lower_value_def, comp_bind_def,
        Once (cj 1 compile_expr_raw_def), compile_expr_body_def,
-       compile_literal_vv_def]
+       compile_literal_vv_def] >> metis_tac[]
 QED
-Resume ifexp_different_type_unwrap[abi]:
-  `?op. unwrap_value ce vv sb = (op,sb)` suffices_by
-    (strip_tac >> qexists_tac `op` >>
-     simp[lower_value_def, comp_bind_def]) >>
+Resume ifexp_different_type_unwrap_pure[abi]:
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[Once (cj 1 compile_expr_def), compile_expr_body_def, expr_type_def] >>
   simp[Once (cj 3 compile_expr_def), compile_type_builtin_dispatch_body_def] >>
@@ -1202,12 +1201,9 @@ Resume ifexp_different_type_unwrap[abi]:
   simp[oneline as_ptr_val_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
-  simp[unwrap_value_def, mk_ptr_def, comp_return_def]
+  simp[unwrap_value_def, mk_ptr_def, comp_return_def] >> metis_tac[]
 QED
-Resume ifexp_different_type_unwrap[call]:
-  `?op. unwrap_value ce vv sb = (op,sb)` suffices_by
-    (strip_tac >> qexists_tac `op` >>
-     simp[lower_value_def, comp_bind_def]) >>
+Resume ifexp_different_type_unwrap_pure[call]:
   qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
   simp[Once (cj 1 compile_expr_def), compile_expr_body_def,
        expr_type_def, compile_call_def] >>
@@ -1215,9 +1211,23 @@ Resume ifexp_different_type_unwrap[call]:
   rpt IF_CASES_TAC >> gvs[] >>
   rpt (pairarg_tac >> gvs[]) >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
-  simp[unwrap_value_def, base_ptr_def, comp_return_def]
+  simp[unwrap_value_def, base_ptr_def, comp_return_def] >> metis_tac[]
 QED
-Finalise ifexp_different_type_unwrap
+Finalise ifexp_different_type_unwrap_pure
+
+Theorem ifexp_different_type_unwrap[local]:
+  !ce e ty sa vv sb.
+    lowered_value_type ce e <> expr_type e /\
+    ~is_word_type (expr_type e) /\
+    ~is_word_type (lowered_value_type ce e) /\
+    compile_expr ce ty e sa = (vv,sb) ==>
+    ?op. unwrap_value ce vv sb = (op,sb) /\
+         lower_value compile_expr ce ty e sa = (op,sb)
+Proof
+  rpt strip_tac >> drule_all ifexp_different_type_unwrap_pure >>
+  strip_tac >> qexists_tac `op` >>
+  simp[comp_return_def, lower_value_def, comp_bind_def]
+QED
 
 Theorem ifexp_actual_arm_sim[local]:
   expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
