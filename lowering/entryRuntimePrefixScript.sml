@@ -112,7 +112,8 @@ Proof
   Cases_on `fallback_fn`
   >- (simp[] >> strip_tac >>
       `shape_step F jump_label_ok
-         (\st. T /\ EVERY (label_or_plain st) [Lit 0w; Lit 0w])
+         (\st. T /\ EVERY (label_or_plain st) [Lit 0w; Lit 0w] /\
+                EVERY (plain_operand st) (MAP Var []))
          (emit_inst REVERT [Lit 0w; Lit 0w] []) (\x st. T)` by
         (ho_match_mp_tac shape_step_emit_inst >>
          simp[shape_stable_def, lowered_inst_ok_def, mk_inst_def,
@@ -135,7 +136,8 @@ Theorem runtime_entry_prefix_states:
       ((), st_final) /\ shape_state st0 /\
   EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
   EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn /\
-  EVERY internal_fn_shape_ok internal_fns ==>
+  EVERY internal_fn_shape_ok internal_fns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) ==>
   ?fallback_lbl s1 s2 s3 old s4 entry_st ir segs.
     fresh_label "fallback" st0 = (fallback_lbl, s1) /\
     compile_selector_dispatch_linear
@@ -183,6 +185,7 @@ Theorem runtime_selected_body_states:
   EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
   EVERY external_fn_shape_ok external_fns /\ fallback_shape_ok fallback_fn /\
   EVERY internal_fn_shape_ok internal_fns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
   MEM (lbl, ce, args, cds, pay, nr, key, trans, view, fbody, rt) external_fns ==>
   ?entry_st sd selected_ce sa se ir segs.
     compile_register_positional_args ce args 4 sd = (selected_ce, sa) /\
