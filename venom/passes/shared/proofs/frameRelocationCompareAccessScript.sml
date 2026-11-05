@@ -8,7 +8,7 @@ Theorem erased_compare_access[local]:
   (FLOOKUP rv u <> NONE \/ FLOOKUP rv w <> NONE) ==>
   ?tu tw b sz x z.
     FLOOKUP rv u = SOME (tu,(b,sz)) /\
-    FLOOKUP rv w = SOME (tw,(b,sz)) /\
+    FLOOKUP rv w = SOME (tw,(b,sz)) /\ 0 < sz /\
     lookup_var u s = SOME x /\ lookup_var w s = SOME z /\
     b <= w2n x /\ w2n x <= b+sz /\
     b <= w2n z /\ w2n z <= b+sz
@@ -33,7 +33,7 @@ Theorem resolved_compare_access:
   (FLOOKUP rv u <> NONE \/ FLOOKUP rv w <> NONE) ==>
   ?tu tw b sz x z.
     FLOOKUP rv u = SOME (tu,(b,sz)) /\
-    FLOOKUP rv w = SOME (tw,(b,sz)) /\
+    FLOOKUP rv w = SOME (tw,(b,sz)) /\ 0 < sz /\
     lookup_var u s = SOME x /\ lookup_var w s = SOME z /\
     b <= w2n x /\ w2n x <= b+sz /\
     b <= w2n z /\ w2n z <= b+sz
