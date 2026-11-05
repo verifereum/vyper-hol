@@ -1869,3 +1869,56 @@ Theorem inventory_join_reached_length:
 Proof
   metis_tac[inventory_join_reached_exact]
 QED
+
+Theorem inventory_stack_swap_every:
+  d < LENGTH stk /\ EVERY P stk ==> EVERY P (stack_swap d stk)
+Proof
+  simp[EVERY_EL, stack_swap_def, EL_LUPDATE] >>
+  rpt strip_tac >> rpt IF_CASES_TAC >> simp[] >>
+  first_x_assum irule >> decide_tac
+QED
+
+Theorem inventory_optimistic_swap_every:
+  EVERY P ps.ps_stack ==>
+  EVERY P (SND (optimistic_swap_plan dfg inst nl next_term ps)).ps_stack
+Proof
+  strip_tac >> simp[optimistic_swap_plan_def, LET_THM] >>
+  rpt IF_CASES_TAC >> simp[] >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  rename1 `stack_get_depth _ _ = SOME dist` >>
+  drule stack_get_depth_props >> strip_tac >>
+  simp[do_swap_stack_result] >> irule inventory_stack_swap_every >> simp[]
+QED
+
+Theorem inventory_output_push_stack:
+  !outputs ps.
+  (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+    ps outputs).ps_stack = ps.ps_stack ++ MAP Var outputs
+Proof
+  Induct >> simp[] >> rpt gen_tac >>
+  first_x_assum (qspec_then `ps with ps_stack := stack_push (Var h) ps.ps_stack` mp_tac) >>
+  simp[stack_push_def, SNOC_APPEND, APPEND_ASSOC]
+QED
+
+Theorem inventory_outputs_dead_pop_support:
+  ALL_DISTINCT ps.ps_stack /\ ALL_DISTINCT outputs /\
+  EVERY (\x. ~MEM (Var x) ps.ps_stack) outputs /\
+  EVERY (\op. ?v. op = Var v /\ MEM v nl) ps.ps_stack ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v nl)
+    (SND (popmany_plan (MAP Var (FILTER (\v. ~MEM v nl) outputs))
+      (FOLDL (\s out. s with ps_stack := stack_push (Var out) s.ps_stack)
+        ps outputs))).ps_stack
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `popmany_plan dead pushed` >>
+  `pushed.ps_stack = ps.ps_stack ++ MAP Var outputs` by
+    simp[Abbr `pushed`, inventory_output_push_stack] >>
+  `ALL_DISTINCT (MAP Var outputs)` by
+    (irule ALL_DISTINCT_MAP_INJ >> simp[]) >>
+  `ALL_DISTINCT pushed.ps_stack` by
+    (gvs[ALL_DISTINCT_APPEND, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  drule inventory_popmany >> disch_then (qspec_then `dead` mp_tac) >>
+  simp[EVERY_MEM] >> strip_tac >> rpt strip_tac >>
+  gvs[Abbr `dead`, MEM_MAP, MEM_FILTER, MEM_APPEND, EVERY_MEM] >>
+  metis_tac[]
+QED
