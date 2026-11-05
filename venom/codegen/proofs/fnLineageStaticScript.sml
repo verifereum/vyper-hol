@@ -788,6 +788,19 @@ Proof
   metis_tac[ready_phi_var_pairs]
 QED
 
+Theorem ready_phi_input_exactly_one[local]:
+  codegen_ready_fn fn /\ fn_reachable fn lbl /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  MEM pred (cfg_preds_of (cfg_analyze fn) lbl) ==>
+  EVERY (\phi. ?!v. MEM (Var v) phi.inst_operands /\
+    MEM v (input_vars_from pred bb.bb_instructions
+      (live_vars_at (liveness_analyze fn) lbl 0)))
+    (collect_phis bb.bb_instructions)
+Proof
+  strip_tac >> drule_all ready_phi_input_hypotheses >> strip_tac >>
+  irule input_vars_phi_exactly_one >> metis_tac[]
+QED
+
 Theorem input_vars_from_collect[local]:
   input_vars_from pred (collect_phis instrs) live =
   input_vars_from pred instrs live
