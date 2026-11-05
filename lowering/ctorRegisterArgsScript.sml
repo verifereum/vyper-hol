@@ -140,7 +140,7 @@ Theorem ctor_register_cons:
    od) st
 Proof
   strip_tac >>
-  simp[build_positional_args_def, build_positional_arg_def,
+  simp_tac (srw_ss()) [LET_THM, build_positional_args_def, build_positional_arg_def,
        Once compile_register_constructor_args_def,
        var_location_memory_size_def, comp_bind_def, comp_return_def,
        comp_ignore_bind_def] >>
@@ -149,7 +149,8 @@ Proof
     (ce with ce_vars := ce.ce_vars |+
       (name, PtrVar buf.buf_operand (type_memory_bytes ce ty)))`
     by simp[compile_env_component_equality] >>
-  asm_rewrite_tac []
+  asm_simp_tac (srw_ss()) [LET_THM, var_location_memory_size_def,
+    comp_bind_def, comp_return_def, comp_ignore_bind_def]
 QED
 
 Theorem ctor_registration_appends:
@@ -794,7 +795,9 @@ Proof
         metis_tac[ctor_word_dec_descriptor] >>
       simp[build_positional_arg_def, compile_decode_args_def,
         var_location_decode_operand_def, compile_abi_decode_to_buf_def,
-        compile_abi_decode_static_def, FUN_EQ_THM,
+        compile_abi_decode_static_def,
+        abiDecoderRangeTheory.compile_abi_dec_addr_zero,
+        compile_abi_decode_range_check_def, FUN_EQ_THM,
         comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
       rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
       pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
@@ -955,7 +958,7 @@ QED
 Theorem ctor_prefix_decoder_code_phase[local]:
   cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
   abi_decode_source_opcode opc /\ st.cs_next_id <= middle.cs_next_id /\
-  compile_abi_decode_to_buf dst src opc hi di middle = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc (Lit 0w) hi di middle = ((),end_st) /\
   fn_has_code st end_st func /\
   (st.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
