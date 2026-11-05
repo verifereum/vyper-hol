@@ -4,7 +4,7 @@
  *)
 Theory o1ContractMakeSsaTaint
 Ancestors
-  o1PassContract ptrDiscipline unitMemInv venomPassSchedule list
+  o1PassContract ptrDiscipline unitMemInv venomPassSchedule list makeSsaCurrentLockstep
 
 Theorem make_ssa_stage_taint:
   !rpolicy D view C C' vs names.
