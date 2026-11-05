@@ -40,7 +40,13 @@ Theorem ptr_endpoint_protected_livesets:
       ?xs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel fn)
           observed.cu_context fn bp (cfg_analyze fn)) (Allocation aid) = SOME xs /\
         MEM ((ptr_owner_view d (EL t h)).cf_state.vs_current_bb,
-             (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs)
+             (ptr_owner_view d (EL t h)).cf_state.vs_inst_idx) xs) /\
+    (!k. w <= k /\ k < LENGTH h ==>
+      d <= LENGTH (EL k h).po_stack /\
+      FLOOKUP (ptr_owner_view d (EL k h)).cf_state.vs_allocas aid = SOME (b,sz) /\
+      ~in_revert_forward (EL k h).po_fn (EL k h).po_state) /\
+    ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `bp = bp_analyze_fuel (concretize_memloc_fuel (ptr_owner_view d endpoint).cf_fn)
