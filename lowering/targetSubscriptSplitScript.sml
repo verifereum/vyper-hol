@@ -31,6 +31,7 @@ Ancestors
   vyperTypeSystem vyperTypeCallGraph vyperTypeEnv vyperTypeInvariants
   vyperTypeExprSoundness vyperPlaceFrames vyperEvalMisc vyperPureExpr
   vyperScopePreservation vyperStatePreservation vyperCreateFrame
+  vyperPlaceResultTyping
   venomState venomInst
 Libs
   pairLib
@@ -302,7 +303,9 @@ Resume target_subscript_nopop_scopes_mutual[IntCall]:
   rule_assum_tac (SRULE [type_check_def, assert_def, lift_option_type_def,
                         option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >> strip_tac >>
+  gvs[bind_def, ignore_bind_def, type_check_def,
       assert_def, lift_option_type_def, option_CASE_rator,
       return_def, raise_def, AllCaseEqs()] >>
   imp_res_tac finally_set_scopes >>
@@ -360,8 +363,89 @@ Proof
   metis_tac[cj 11 target_subscript_nopop_scopes_mutual]
 QED
 
-(* A failed base consumes exactly the same marked path in the full target;
-   no index or pointer suffix is evaluated. *)
+(* A live local path remains live after a successful extension. *)
+Theorem target_subscript_extend_memory_live:
+  lookup_scopes id es.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  extend_place cx (PlaceR (MemoryPlace id path)) sb es = (INL pv,ee) ==>
+  ee = es /\ pv = PlaceR (MemoryPlace id (path ++ [sb])) /\
+  ?w. evaluate_subscripts entry.type entry.value (path ++ [sb]) = INL w
+Proof
+  strip_tac >>
+  qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
+  simp[extend_place_def, place_type_value_def, read_place_def,
+       get_scopes_def, bind_def, ignore_bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, read_memory_path_def,
+       extend_memory_place_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `subscripts_type entry.type path` >>
+  gvs[return_def, raise_def] >>
+  rename1 `subscripts_type entry.type path = SOME ptv` >>
+  Cases_on `evaluate_subscripts ptv v [sb]` >>
+  gvs[return_def, raise_def] >>
+  drule_all evaluate_subscripts_append >>
+  disch_then (qspec_then `[sb]` mp_tac) >> simp[]
+QED
+
+Theorem target_subscript_local_base_live:
+  !bt cx es pv ee id.
+    target_root bt = NameTarget id /\
+    ~supported_target_exists (\x. ?ty t. x = Pop ty t) bt /\
+    eval_base_place cx bt es = (INL pv,ee) ==>
+    ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id ee.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- (rpt strip_tac >>
+      gvs[target_root_def, Once evaluate_def, bind_def, ignore_bind_def,
+          get_scopes_def, type_check_def, assert_def, return_def,
+          raise_def, AllCaseEqs(), optionTheory.IS_SOME_EXISTS] >>
+      simp[evaluate_subscripts_def])
+  >- simp[target_root_def]
+  >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp[target_root_def, supported_expr_exists_def, Once evaluate_def,
+       bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule_all >> strip_tac >> gvs[]
+  >- (drule_all target_subscript_nopop_expr_scopes >> strip_tac >>
+      drule read_result_state >> strip_tac >> gvs[] >>
+      drule_at (Pat `extend_place _ _ _ _ = _`)
+        target_subscript_extend_memory_live >>
+      simp[] >> strip_tac >> gvs[] >> metis_tac[])
+  >> drule_all target_subscript_extend_memory_live >>
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem target_subscript_local_index_live:
+  target_root bt = NameTarget id /\
+  ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e) /\
+  eval_base_place cx bt es = (INL pv,mid) /\
+  bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
+  ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+    lookup_scopes id ee.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  simp[supported_expr_exists_def, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  drule_all target_subscript_local_base_live >> strip_tac >>
+  drule_all target_subscript_nopop_expr_scopes >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >> metis_tac[]
+QED
+
+Theorem target_subscript_pure_index_live:
+  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
+  eval_base_place cx bt es = (INL pv,mid) /\
+  bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
+  mid = es /\ ee = es /\ nested_pop_result_live cx ee pv
+Proof
+  simp[target_indices_def, EVERY_APPEND, bind_def, AllCaseEqs()] >>
+  rpt strip_tac >>
+  drule_all nested_pop_eval_base_live >> strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
+  drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
+  imp_res_tac read_result_state >> gvs[]
+QED
+
 Theorem target_subscript_base_exception:
   gas_marked_exec memory (ctx, func) (eval_base_place cx bt)
     (es, s0) marks (INR exc) fin r ==>
