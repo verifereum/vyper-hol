@@ -203,7 +203,9 @@ Theorem raw_call_tuple_build_no_restore_run[local]:
     w2n w + (32 + sz) < dimword (:256) /\
     val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
       (ArrayV (TupleV [BoolV success; BytesV bs])) (w2n w) t.vs_memory /\
-    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s)
+    (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
+    (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
+      w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w)
 Proof
   strip_tac >>
   `stmt_state_rel ctx func cenv cx es (s with vs_fmp := s.vs_fmp)` by simp[] >>
@@ -229,6 +231,20 @@ Proof
   fs[arithmeticTheory.ADD_COMM] >>
   `safe_operand sn (Var q)` by gvs[] >>
   qpat_x_assum `!w sz success. _` drule_all >> strip_tac >>
+  suspend "separation"
+QED
+
+Resume raw_call_tuple_build_no_restore_run[separation]:
+  `!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
+     w2n w + (32 + sz) <= lb \/ lb + lsz <= w2n w` by
+    (rpt strip_tac >>
+     `regions_disjoint (w2n w) (32 + sz) lb lsz` suffices_by
+       simp[compileEnvTheory.regions_disjoint_def] >>
+     irule local_ptrs_rel_alloca_disjoint >>
+     goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+     simp[mk_inst_def] >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
   qexistsl_tac [`t`, `w`] >> simp[] >> conj_tac
   >- (`inst_extends sa sm` by
         (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
@@ -245,8 +261,15 @@ Proof
       `inst_extends sn sc` by
         (irule inst_extends_trans >> qexists_tac `sb` >> simp[]) >>
       irule run_inst_seq_compose_ok >> qexistsl_tac [`u`, `sn`] >> simp[]) >>
-  metis_tac[safe_operand_mono]
+  conj_tac
+  >- (rpt strip_tac >>
+      `safe_operand sn p` by
+        (irule safe_operand_mono >> qexists_tac `sa` >> simp[]) >>
+      simp[]) >>
+  rpt strip_tac >> first_x_assum drule >> decide_tac
 QED
+
+Finalise raw_call_tuple_build_no_restore_run
 
 val _ = if null (hyp raw_call_tuple_build_no_restore_run)
   then print "raw-call no-restore tuple build: checked, no hypotheses\n"
@@ -370,7 +393,9 @@ Theorem raw_call_nonrevert_positive_run[local]:
     w2n tw + (64 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
     val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
       (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))
-      (w2n tw) t.vs_memory
+      (w2n tw) t.vs_memory /\
+    (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
+      w2n tw + (64 + ((n + 31) DIV 32) * 32) <= lb \/ lb + lsz <= w2n tw)
 Proof
   strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   qpat_x_assum `(if _ then _ else _) _ = _` kall_tac >>
@@ -429,9 +454,13 @@ Resume raw_call_nonrevert_positive_run[tuple]:
   disch_then drule_all >> strip_tac >>
   drule_all run_inst_seq_compose_ok >> strip_tac >>
   qexistsl_tac [`t`,`w'`,`s4.cs_next_id`] >> simp[] >>
-  rpt strip_tac >>
-  `safe_operand s4 p` by (irule safe_operand_mono >> goal_assum (drule_at Any) >> fs[ci_mono_def]) >>
-  metis_tac[]
+  conj_tac
+  >- (rpt strip_tac >>
+      `safe_operand s4 p` by
+        (irule safe_operand_mono >> goal_assum (drule_at Any) >> fs[ci_mono_def]) >>
+      metis_tac[]) >>
+  qpat_x_assum `!name lb lsz. local_region _ _ _ name lb lsz ==> _` mp_tac >>
+  simp[arithmeticTheory.ADD_COMM]
 QED
 
 Finalise raw_call_nonrevert_positive_run
@@ -479,7 +508,9 @@ Theorem raw_call_nonrevert_no_restore_frag[local]:
         w2n tw + (64 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
         val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
           (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))
-          (w2n tw) t.vs_memory)) (\r. F)
+          (w2n tw) t.vs_memory /\
+        (!name lb lsz. local_region cenv es.scopes t name lb lsz ==>
+          w2n tw + (64 + ((n + 31) DIV 32) * 32) <= lb \/ lb + lsz <= w2n tw))) (\r. F)
 Proof
   strip_tac >> Cases_on `n = 0`
   >- (gvs[comp_return_def] >>
@@ -498,7 +529,10 @@ Proof
   >- (simp[expr_val_rel_def, raw_call_return_type_def, is_word_type_def,
            evaluate_type_def, eval_operand_def, lookup_var_def] >>
       qexists_tac `tw` >> fs[] >> rpt strip_tac >> gvs[AllCaseEqs()]) >>
-  qexistsl_tac [`ti`,`tw`] >> fs[]
+  qexistsl_tac [`ti`,`tw`] >> fs[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  fs[local_region_def, lookup_var_def] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 val _ = if null (hyp raw_call_nonrevert_no_restore_frag) then ()
@@ -4266,6 +4300,49 @@ Proof
     vyperValueTheory.evaluate_type_def, is_word_type_def,
     val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def]
 QED
+
+Theorem raw_call_bool_post[local]:
+  expr_type e = BaseT BoolT /\
+  stmt_state_rel ctx func cenv cx es' s /\
+  expr_val_rel cx (expr_type e) (BoolV success) result s /\
+  wb_frame cenv es sa s0 s ==>
+  vv_post ctx func cenv cx e es sa sb s0 es' (Value (BoolV success))
+    (StackValue ann result) s
+Proof
+  strip_tac >> irule vv_post_word_intro >>
+  gvs[expr_val_rel_def, is_word_type_def]
+QED
+
+Theorem raw_call_tuple_post[local]:
+  expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
+  evaluate_type (get_tenv cx) (expr_type e) =
+    SOME (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))]) /\
+  stmt_state_rel ctx func cenv cx es' s /\
+  wb_frame cenv es sa s0 s /\
+  eval_operand result s = SOME w /\
+  FLOOKUP s.vs_allocas aid = SOME (w2n w,64 + ((n+31) DIV 32)*32) /\
+  sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+  (!name lb lsz. local_region cenv es'.scopes s name lb lsz ==>
+    w2n w + (64 + ((n+31) DIV 32)*32) <= lb \/ lb + lsz <= w2n w) /\
+  val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+    (ArrayV (TupleV [BoolV success;BytesV (TAKE n bytes)])) (w2n w) s.vs_memory ==>
+  vv_post ctx func cenv cx e es sa sb s0 es'
+    (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n bytes)])))
+    (LocatedValue (expr_type e) (mk_ptr result LocMemory)) s
+Proof
+  strip_tac >> irule vv_post_allocated_memory_intro >>
+  simp[is_word_type_def, contextTheory.mk_ptr_def] >>
+  qexistsl_tac [`aid`,`w2n w`,`64 + ((n+31) DIV 32)*32`] >>
+  simp[val_wf_def, LENGTH_TAKE_EQ, val_footprint_def, type_memory_size_def] >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.MULT_COMM]) >>
+  simp[vfmConstantsTheory.word_size_def] >>
+  qspec_then `n` mp_tac valueTypingMemoryPropsTheory.word_size_capacity >>
+  simp[vfmConstantsTheory.word_size_def] >> decide_tac
+QED
+
+val _ = if null (hyp raw_call_bool_post) andalso null (hyp raw_call_tuple_post)
+  then () else raise Fail "raw_call result packaging retained hypotheses";
 
 Theorem raw_call_bytes_post[local]:
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
