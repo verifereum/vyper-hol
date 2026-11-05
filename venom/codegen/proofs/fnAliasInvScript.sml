@@ -3141,6 +3141,104 @@ Proof
   EVAL_TAC
 QED
 
+(* PHI freshness probes at historical incoming edges, not arbitrary stacks. *)
+Definition alias_phi_self_fn_def:
+  alias_phi_self_fn = mk_raw_function "phi_self"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["a"];
+          mk_inst 1 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 2 PHI [Label "entry"; Var "a"; Label "back"; Var "p"] ["p"];
+          mk_inst 3 JMP [Label "back"] []] |>;
+     <| bb_label := "back"; bb_instructions :=
+         [mk_inst 4 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_phi_self_demand:
+  phi_uses_disjoint (collect_phis (EL 1 alias_phi_self_fn.fn_blocks).bb_instructions) /\
+  input_vars_from "back" (EL 1 alias_phi_self_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_phi_self_fn) "header" 0) = ["p"] /\
+  MEM "p" (live_vars_at (liveness_analyze alias_phi_self_fn) "header" 1) /\
+  ~phi_block_ready (liveness_analyze alias_phi_self_fn) (EL 1 alias_phi_self_fn.fn_blocks) /\
+  ~codegen_ready_fn alias_phi_self_fn
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_phi_cross_fn_def:
+  alias_phi_cross_fn = mk_raw_function "phi_cross"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["a"];
+          mk_inst 1 CALLDATASIZE [] ["b"];
+          mk_inst 2 JMP [Label "header"] []] |>;
+     <| bb_label := "header"; bb_instructions :=
+         [mk_inst 3 PHI [Label "entry"; Var "a"; Label "back"; Var "q"] ["p"];
+          mk_inst 4 PHI [Label "entry"; Var "b"; Label "back"; Var "p"] ["q"];
+          mk_inst 5 JMP [Label "back"] []] |>;
+     <| bb_label := "back"; bb_instructions :=
+         [mk_inst 6 JMP [Label "header"] []] |>]
+End
+
+Theorem alias_phi_cross_demand:
+  phi_uses_disjoint (collect_phis (EL 1 alias_phi_cross_fn.fn_blocks).bb_instructions) /\
+  MEM "p" (input_vars_from "back" (EL 1 alias_phi_cross_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_phi_cross_fn) "header" 0)) /\
+  MEM "q" (input_vars_from "back" (EL 1 alias_phi_cross_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_phi_cross_fn) "header" 0)) /\
+  MEM "p" (live_vars_at (liveness_analyze alias_phi_cross_fn) "header" 2) /\
+  MEM "q" (live_vars_at (liveness_analyze alias_phi_cross_fn) "header" 2) /\
+  ~phi_block_ready (liveness_analyze alias_phi_cross_fn) (EL 1 alias_phi_cross_fn.fn_blocks) /\
+  ~codegen_ready_fn alias_phi_cross_fn
+Proof
+  EVAL_TAC
+QED
+
+Theorem alias_phi_loop_readiness_clauses:
+  EVERY (\fn.
+    canonical_param_prefix fn /\ wf_function fn /\ fn_inst_wf fn /\
+    ssa_form fn /\ def_dominates_uses fn /\ single_use_form fn /\
+    cfg_is_normalized (cfg_analyze fn) fn /\
+    block_entries_ready (cfg_analyze fn) fn /\
+    EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks /\
+    offset_outputs_used fn /\ phis_at_joins (cfg_analyze fn) fn /\
+    ~phi_operands_ready fn /\
+    cfg_preds_of (cfg_analyze fn) "entry" = [] /\
+    cfg_succs_of (cfg_analyze fn) "entry" = ["header"] /\
+    cfg_succs_of (cfg_analyze fn) "header" = ["back"] /\
+    cfg_succs_of (cfg_analyze fn) "back" = ["header"])
+    [alias_phi_self_fn; alias_phi_cross_fn]
+Proof
+  EVAL_TAC
+QED
+
+Definition alias_phi_fresh_fn_def:
+  alias_phi_fresh_fn = mk_raw_function "phi_fresh"
+    [<| bb_label := "entry"; bb_instructions :=
+         [mk_inst 0 CALLDATASIZE [] ["a"];
+          mk_inst 1 CALLDATASIZE [] ["b"];
+          mk_inst 2 CALLDATASIZE [] ["cond"];
+          mk_inst 3 JNZ [Var "cond"; Label "left"; Label "right"] []] |>;
+     <| bb_label := "left"; bb_instructions := [mk_inst 4 JMP [Label "join"] []] |>;
+     <| bb_label := "right"; bb_instructions := [mk_inst 5 JMP [Label "join"] []] |>;
+     <| bb_label := "join"; bb_instructions :=
+         [mk_inst 6 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
+          mk_inst 7 ASSERT [Var "p"] [];
+          mk_inst 8 STOP [] []] |>]
+End
+
+Theorem alias_phi_fresh_control:
+  codegen_ready_fn alias_phi_fresh_fn /\
+  phi_uses_disjoint (collect_phis (EL 3 alias_phi_fresh_fn.fn_blocks).bb_instructions) /\
+  phi_block_ready (liveness_analyze alias_phi_fresh_fn) (EL 3 alias_phi_fresh_fn.fn_blocks) /\
+  live_vars_at (liveness_analyze alias_phi_fresh_fn) "join" 1 = ["p"] /\
+  input_vars_from "left" (EL 3 alias_phi_fresh_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_phi_fresh_fn) "join" 0) = ["a"] /\
+  input_vars_from "right" (EL 3 alias_phi_fresh_fn.fn_blocks).bb_instructions
+    (live_vars_at (liveness_analyze alias_phi_fresh_fn) "join" 0) = ["b"]
+Proof
+  EVAL_TAC
+QED
+
 Definition alias_collision_fn_def:
   alias_collision_fn = mk_raw_function "collision"
     [<| bb_label := "E"; bb_instructions :=
