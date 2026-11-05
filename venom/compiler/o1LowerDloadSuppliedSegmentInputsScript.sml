@@ -1,6 +1,6 @@
 Theory o1LowerDloadSuppliedSegmentInputs
 Ancestors
-  o1LowerDloadJointScalar o1LowerDloadJointRelation o1LowerDloadOccurrence
+  o1LowerDloadPtrDiscipline o1LowerDloadJointScalar o1LowerDloadJointRelation o1LowerDloadOccurrence
   o1LowerDloadGhost o1LowerDloadOpaque o1LowerDloadJointAssign
   ptrDiscipline pointerConfinedDefs memLocDefs unitShapeDefs o1PassContract
   venomInst finite_map list pred_set irSupply venomExecSemantics contextCodegenRel
@@ -40,7 +40,7 @@ Proof
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
   qpat_x_assum `ptr_discipline _ _ _`
-    (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+    (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
   drule frame_reachable_prov_support >>
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `MEM inst (fn_insts fn)` by

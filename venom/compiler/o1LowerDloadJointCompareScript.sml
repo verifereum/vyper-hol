@@ -1,7 +1,7 @@
 (* Comparison transport uses same positive-size occurrence, not global order. *)
 Theory o1LowerDloadJointCompare
 Ancestors
-  o1LowerDloadJointScalar o1LowerDloadJointGeometry o1LowerDloadJointAssign
+  o1LowerDloadPtrDiscipline o1LowerDloadJointScalar o1LowerDloadJointGeometry o1LowerDloadJointAssign
   o1LowerDloadAddressArithmetic o1LowerDloadJointRelation
   finite_map words arithmetic ptrDiscipline o1LowerDloadOccurrence
   o1LowerDloadEnvironment o1LowerDloadRelocationKernel venomState
@@ -69,7 +69,7 @@ Proof
      simp[occurrence_param_ok_def] >> rpt strip_tac >> gvs[]) >>
   `?P. FDOM G SUBSET fn_pv P fn /\ ptr_use_ok P (fn_pv P fn) inst` by
     (qpat_assum `ptr_discipline _ _ _`
-       (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+       (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
      drule frame_reachable_prov_support >>
      disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
      qexists_tac `P` >> simp[] >>

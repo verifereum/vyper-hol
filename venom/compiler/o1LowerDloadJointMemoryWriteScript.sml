@@ -1,7 +1,7 @@
 (* Masked writes under occurrence geometry, including empty protected sites. *)
 Theory o1LowerDloadJointMemoryWrite
 Ancestors
-  o1LowerDloadJointRelation o1LowerDloadMemoryConsumer
+  o1LowerDloadPtrDiscipline o1LowerDloadJointRelation o1LowerDloadMemoryConsumer
   o1LowerDloadRelocationKernel ptrDiscipline venomState words finite_map pred_set codegenRel
   o1LowerDloadJointMemoryRead o1LowerDloadJointScalar o1LowerDloadOccurrence
   o1LowerDloadAddressArithmetic venomExecSemantics list unitShapeDefs memLocDefs
@@ -87,7 +87,7 @@ Proof
     metis_tac[ptr_discipline_def] >>
   `op_taint tn p = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[o1LowerDloadGhostTheory.frame_reachable_prov_support] >>
   `ptr_use_ok P (fn_pv P fn) inst` by

@@ -1,7 +1,7 @@
 (* Clean unary scalar operands at a joint boundary. *)
 Theory o1LowerDloadJointScalar
 Ancestors
-  o1LowerDloadJointAssign o1LowerDloadGhost o1LowerDloadOpaque
+  o1LowerDloadPtrDiscipline o1LowerDloadJointAssign o1LowerDloadGhost o1LowerDloadOpaque
   o1LowerDloadJointRelation o1LowerDloadOccurrence ptrDiscipline
   pointerConfinedDefs memLocDefs unitShapeDefs o1PassContract
   venomInst finite_map list pred_set contextCodegenRel irSupply
@@ -78,7 +78,7 @@ Proof
   strip_tac >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_def] >>
+  `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by metis_tac[ptr_discipline_fn_ptr_ok] >>
   `MEM fn C.ctx_functions /\ FDOM G SUBSET fn_pv P fn` by
     metis_tac[frame_reachable_prov_support] >>
   `ptr_use_ok P (fn_pv P fn) inst` by
@@ -129,7 +129,7 @@ Proof
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
   qpat_x_assum `ptr_discipline _ _ _`
-    (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
+    (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
   drule frame_reachable_prov_support >>
   disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
   `MEM inst (fn_insts fn)` by
