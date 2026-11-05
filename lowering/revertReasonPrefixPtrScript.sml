@@ -5,6 +5,7 @@ Ancestors
   loweringSlice exprLoweringProps bodyPtrDefs fragExecPtr venomExecSemantics venomInst venomState
   ptrDiscipline finite_map words arithmetic exprSimAlloc localPtrsProps compileEnv instIdxIndep
   normalizationAllocPtr decoderGhostFramePtr loweringPosts
+  robustCopyTransportPtr emitHelperProps valueEncodingProps
 
 Theorem alloca_store_offset_alloca_checks:
   stmt_state_rel ctx func cenv cx es s /\
@@ -448,4 +449,110 @@ Proof
     (Cases_on `op` >> gvs[] >>
      simp[step_taint_other_output, mk_inst_def, op_taint_def]) >>
   strip_tac >> irule alloca_step_ptr_mem_ok >> simp[] >> metis_tac[]
+QED
+
+Theorem mstore_literal_ptr_mem_ok:
+  ptr_mem_ok cx t v op G tn s /\
+  lookup_var dst s = SOME a /\
+  (!tv w. evaluate_type (get_tenv cx) t = SOME tv /\
+    eval_operand op s = SOME w ==>
+    val_wf tv v /\
+    (!i. w2n w <= i /\ i < w2n w + val_footprint tv v ==>
+      ~(w2n a <= i /\ i < w2n a + 32))) ==>
+  ptr_mem_ok cx t v op
+    (step_prov PG G (mk_inst id MSTORE [Var dst; Lit value] [])
+      (mstore (w2n a) value s))
+    (step_taint (mk_inst id MSTORE [Var dst; Lit value] []) s
+      (mstore (w2n a) value s) tn) (mstore (w2n a) value s)
+Proof
+  strip_tac >>
+  `eval_operand (Lit value) s = SOME value /\
+   op_taint tn (Lit value) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all mstore_ghost_frame >> strip_tac >>
+  simp[ptr_mem_ok_def, eval_operand_mstore] >> rpt gen_tac >> strip_tac >>
+  first_assum (drule_then strip_assume_tac) >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_mem_ok_def] >>
+  disch_then (qspecl_then [`tv`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  `val_wf tv v` by metis_tac[] >>
+  rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+  conj_tac >- simp[] >>
+  qexistsl_tac [`s.vs_memory`, `(mstore (w2n a) value s).vs_memory`,
+    `tn.t_mem`, `tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}`,
+    `{i | w2n a <= i /\ i < w2n a + 32}`] >>
+  simp[] >> rpt strip_tac >>
+  irule mstore_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem mstore_literal_ptr_val_ok:
+  ptr_val_ok cx t v op G tn s /\ lookup_var dst s = SOME a /\
+  (!tv w. evaluate_type (get_tenv cx) t = SOME tv /\
+    eval_operand op s = SOME w ==>
+    val_wf tv v /\
+    (!i. w2n w <= i /\ i < w2n w + val_footprint tv v ==>
+      ~(w2n a <= i /\ i < w2n a + 32))) ==>
+  ptr_val_ok cx t v op
+    (step_prov PG G (mk_inst id MSTORE [Var dst; Lit value] [])
+      (mstore (w2n a) value s))
+    (step_taint (mk_inst id MSTORE [Var dst; Lit value] []) s
+      (mstore (w2n a) value s) tn) (mstore (w2n a) value s)
+Proof
+  strip_tac >>
+  `eval_operand (Lit value) s = SOME value /\
+   op_taint tn (Lit value) = {}` by simp[eval_operand_def, op_taint_def] >>
+  drule_all mstore_ghost_frame >> strip_tac >>
+  qpat_x_assum `ptr_val_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_val_ok_def] >> strip_tac >> conj_tac >-
+    (Cases_on `op` >> gvs[op_taint_def]) >>
+  strip_tac >> irule mstore_literal_ptr_mem_ok >> simp[] >> metis_tac[]
+QED
+
+Theorem alloca_step_expr_store_disjoint:
+  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  expr_val_at cenv cx t sa sb es v op s /\ ~is_word_type t /\
+  MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+  not_local_ptr cenv es.scopes out /\
+  (id < sa.cs_next_id \/ sb.cs_next_id <= id) /\
+  32 <= n /\ n < dimword(:256) /\
+  (!p. op = Var p ==> p <> out) /\
+  step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
+  lookup_var out s1 = SOME a ==>
+  !tv w. evaluate_type (get_tenv cx) t = SOME tv /\
+    eval_operand op s1 = SOME w ==>
+    val_wf tv v /\
+    (!i. w2n w <= i /\ i < w2n w + val_footprint tv v ==>
+      ~(w2n a <= i /\ i < w2n a + 32))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `eval_operand op s1 = eval_operand op s` by
+    (irule alloca_step_operand_preserved >> metis_tac[]) >>
+  drule_all alloca_step_site >> strip_tac >>
+  `a = n2w b` by gvs[eval_operand_def] >>
+  `w2n a = b` by (gvs[] >> simp[]) >>
+  rpt gen_tac >> strip_tac >> conj_tac >-
+    (fs[expr_val_at_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `~(b <= i /\ i < b+n)` by
+    (irule alloca_step_expr_disjoint >> simp[] >> metis_tac[]) >>
+  decide_tac
+QED
+
+Theorem ptr_val_ok_step_frame:
+  ptr_val_ok cx ty v op G tn s /\
+  (!x. op = Var x ==> ~MEM x inst.inst_outputs) /\
+  eval_operand op t = eval_operand op s /\ t.vs_memory = s.vs_memory /\
+  (step_taint inst s t tn).t_mem = tn.t_mem ==>
+  ptr_val_ok cx ty v op (step_prov PG G inst t) (step_taint inst s t tn) t
+Proof
+  strip_tac >> fs[ptr_val_ok_def] >> conj_tac >-
+    (Cases_on `op` >> gvs[op_taint_def, step_taint_other_output]) >>
+  strip_tac >>
+  qpat_x_assum `~is_word_type _ ==> _` (drule_then assume_tac) >>
+  simp[ptr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `ptr_mem_ok _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[ptr_mem_ok_def] >>
+  disch_then (qspecl_then [`tv`, `w`] mp_tac) >> simp[] >> strip_tac >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `val_footprint _ _ <> 0 ==> _` (drule_then strip_assume_tac) >>
+  qexistsl_tac [`x`, `b`, `sz`] >> simp[step_prov_other_output]
 QED
