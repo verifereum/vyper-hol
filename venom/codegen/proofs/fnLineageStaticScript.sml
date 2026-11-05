@@ -525,6 +525,87 @@ Proof
   Cases_on `v = h` >> gvs[] >> metis_tac[optionTheory.SOME_11]
 QED
 
+Theorem input_vars_placement_mem[local]:
+  ~NULL (collect_phis instrs) ==>
+  (MEM v (input_vars_from pred instrs live) <=>
+   (MEM v live /\ FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = NONE) \/
+   ?i w. MEM w live /\
+     FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) w = SOME i /\
+     FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) i = SOME v)
+Proof
+  strip_tac >>
+  Cases_on `build_phi_maps pred (collect_phis instrs)` >>
+  simp[input_vars_from_def, GSYM phi_place_run_def,
+       pairTheory.LAMBDA_PROD] >>
+  pairarg_tac >> gvs[] >>
+  rename1 `phi_place_run om mt [] [] live = (result,placed)` >>
+  qspec_then `live` mp_tac phi_place_run_mem >>
+  disch_then (qspecl_then [`om`, `mt`, `[]`, `[]`, `v`] mp_tac) >> simp[]
+QED
+
+Theorem phi_selected_exists[local]:
+  !pairs pred. (?v. MEM (pred,v) pairs) ==>
+    ?v. FIND (\pair. FST pair = pred) pairs = SOME (pred,v) /\
+        MEM (pred,v) pairs
+Proof
+  Induct >- simp[] >> Cases >> rpt gen_tac >>
+  simp[FIND_thm] >> strip_tac >> IF_CASES_TAC >> gvs[] >> metis_tac[]
+QED
+
+Theorem input_vars_phi_exactly_one[local]:
+  (!i j v. i < LENGTH (collect_phis instrs) /\ j < LENGTH (collect_phis instrs) /\
+    MEM v (MAP SND (phi_pairs (EL i (collect_phis instrs)).inst_operands)) /\
+    MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands)) ==> i = j) /\
+  (!phi v. MEM phi (collect_phis instrs) ==>
+    (MEM (Var v) phi.inst_operands <=> MEM v (MAP SND (phi_pairs phi.inst_operands)))) /\
+  (!phi. MEM phi (collect_phis instrs) ==> ?v. MEM (pred,v) (phi_pairs phi.inst_operands)) /\
+  (!phi. MEM phi (collect_phis instrs) ==> ?v. MEM v live /\
+    MEM v (MAP SND (phi_pairs phi.inst_operands))) ==>
+  EVERY (\phi. ?!v. MEM (Var v) phi.inst_operands /\
+    MEM v (input_vars_from pred instrs live)) (collect_phis instrs)
+Proof
+  strip_tac >> simp[EVERY_MEM] >> qx_gen_tac `phi` >> strip_tac >>
+  `?i. i < LENGTH (collect_phis instrs) /\ phi = EL i (collect_phis instrs)`
+    by metis_tac[MEM_EL] >>
+  `?chosen. FIND (\pair. FST pair = pred) (phi_pairs phi.inst_operands) =
+      SOME (pred,chosen) /\ MEM (pred,chosen) (phi_pairs phi.inst_operands)`
+    by metis_tac[phi_selected_exists] >>
+  `MEM chosen (MAP SND (phi_pairs phi.inst_operands))`
+    by (simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
+  `FLOOKUP (SND (build_phi_maps pred (collect_phis instrs))) i = SOME chosen`
+    by (drule build_phi_selected_lookup >> disch_then (qspec_then `pred` mp_tac) >>
+        qpat_x_assum `phi = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `!v j. FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME j <=>
+     j < LENGTH (collect_phis instrs) /\
+     MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands))`
+    by metis_tac[build_phi_owner_lookup] >>
+  `?seed. MEM seed live /\ MEM seed (MAP SND (phi_pairs phi.inst_operands))`
+    by metis_tac[] >>
+  `~NULL (collect_phis instrs)` by (Cases_on `collect_phis instrs` >> gvs[]) >>
+  `MEM chosen (input_vars_from pred instrs live)`
+    by (drule input_vars_placement_mem >>
+        disch_then (qspecl_then [`chosen`, `pred`, `live`] mp_tac) >>
+        metis_tac[]) >>
+  `!v. MEM (Var v) phi.inst_operands /\
+       MEM v (input_vars_from pred instrs live) ==> v = chosen` suffices_by
+    (simp[EXISTS_UNIQUE_THM] >> metis_tac[]) >>
+  qx_gen_tac `v` >> strip_tac >>
+  `MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
+  `FLOOKUP (FST (build_phi_maps pred (collect_phis instrs))) v = SOME i`
+    by metis_tac[] >>
+  drule_all input_vars_placement_mem >>
+  disch_then (qspecl_then [`v`, `pred`, `live`] mp_tac) >> simp[] >>
+  disch_then (qx_choose_then `j` (qx_choose_then `w` strip_assume_tac)) >>
+  `j < LENGTH (collect_phis instrs)` by metis_tac[] >>
+  drule build_phi_selected_lookup >> disch_then (qspec_then `pred` mp_tac) >>
+  simp[] >> strip_tac >>
+  rename1 `FIND _ _ = SOME selected` >> PairCases_on `selected` >> gs[] >>
+  drule venomExecPropsTheory.FIND_MEM >> strip_tac >>
+  `MEM v (MAP SND (phi_pairs (EL j (collect_phis instrs)).inst_operands))`
+    by (simp[MEM_MAP] >> metis_tac[pairTheory.SND]) >>
+  `j = i` by metis_tac[] >> gvs[]
+QED
+
 Theorem ready_phi_edge_wf[local]:
   codegen_ready_fn fn /\ lookup_block lbl fn.fn_blocks = SOME bb /\
   MEM phi (collect_phis bb.bb_instructions) ==>
