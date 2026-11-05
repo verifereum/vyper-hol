@@ -74,3 +74,32 @@ Proof
      rpt strip_tac >> metis_tac[]) >>
   fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
 QED
+
+Theorem array_round_increment:
+  !d ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond caller
+   orig k es s incr nv i1 i2 i3.
+  lookup_block incr func.fn_blocks =
+    SOME <|bb_label := incr; bb_instructions :=
+      [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
+       mk_inst i2 ASSIGN [Var nv] [idx];
+       mk_inst i3 JMP [Label cond] []]|> /\
+  array_round_inv d ctx func cenv cx P vs id idx saved_base base p dst sz
+    ainst incr caller orig k es s /\ k < LENGTH vs /\
+  not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
+  p <> idx /\ p <> nv /\
+  (!x. saved_base = Var x ==> x <> idx /\ x <> nv) /\
+  (!x. not_fresh_at caller x ==> x <> idx /\ x <> nv) /\
+  fn_inst_ids_distinct func ==>
+  ?t. gas_marked_path T ctx func s 0 (OK t) /\
+      array_round_inv d ctx func cenv cx P vs id idx saved_base base p dst sz
+        ainst cond caller orig (SUC k) es t
+Proof
+  rw[array_round_inv_def] >>
+  `alloca_history func s` by fs[array_round_frame_def] >>
+  drule array_increment_boundary_mem >> simp[] >>
+  disch_then drule >> simp[] >> strip_tac >>
+  rename1 `gas_path_mem ctx func s 0 (OK t)` >>
+  qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
+  irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
+  rpt strip_tac >> metis_tac[]
+QED
