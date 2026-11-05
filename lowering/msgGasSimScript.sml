@@ -7,6 +7,28 @@ Ancestors
   venomInst venomState vyperInterpreter vyperState vyperValue
   vyperTypeSystem list rich_list pair arithmetic
 
+Theorem emit_gas_placement_id:
+  emit_op GAS [] sa = (op,sb) /\ fn_has_code sa sb func ==>
+  ?out bb. op = Var out /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+    lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts) =
+      SOME (mk_inst sa.cs_next_id GAS [] [out]) /\
+    out = FST (fresh_var sa)
+Proof
+  strip_tac >>
+  `?out. op = Var out /\ out = FST (fresh_var sa) /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id GAS [] [out]]`
+    by (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+            comp_return_def, fresh_id_def, fresh_var_def, emit_def]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  qexistsl_tac [`out`, `bb`] >> simp[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
+
 Theorem msg_gas_placement:
   compile_env_var MsgGas sa = (op,sb) /\ fn_has_code sa sb func ==>
   ?out id bb. op = Var out /\
@@ -16,16 +38,9 @@ Theorem msg_gas_placement:
     get_instruction bb (LENGTH sa.cs_current_insts) =
       SOME (mk_inst id GAS [] [out])
 Proof
-  strip_tac >>
-  `?out id. op = Var out /\
-    sb.cs_current_bb = sa.cs_current_bb /\
-    sb.cs_current_insts = sa.cs_current_insts ++ [mk_inst id GAS [] [out]]`
-    by (gvs[compile_env_var_def, emit_op_def, comp_bind_def,
-            comp_ignore_bind_def, comp_return_def, fresh_id_def,
-            fresh_var_def, emit_def] >> metis_tac[]) >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  qexistsl_tac [`out`, `id`, `bb`] >> simp[] >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+  simp[compile_env_var_def] >> strip_tac >>
+  drule_all emit_gas_placement_id >> strip_tac >>
+  qexistsl_tac [`out`, `sa.cs_next_id`, `bb`] >> simp[]
 QED
 
 Theorem msg_gas_source:

@@ -6,7 +6,9 @@ name = "vyper-hol"
 version = "0.2.3"
 
 [build]
-roots = ["lowering/msgGasOriginScript.sml",
+roots = ["lowering/msgGasOriginPostScript.sml",
+         "lowering/generatedGasOriginScript.sml",
+         "lowering/msgGasOriginScript.sml",
          "lowering/stmtSimDeclComposeScript.sml",
          "lowering/gasExplicitSitesScript.sml",
          "lowering/stmtSimDeclSourceScript.sml",
