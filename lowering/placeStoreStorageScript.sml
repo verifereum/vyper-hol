@@ -53,12 +53,16 @@ Proof
   >- (`gas_path_edge ctx func s 0
          (OK (((if tr then tstore else sstore) k w s)
            with vs_inst_idx := SUC s.vs_inst_idx))` by
-        (drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
-         Cases_on `tr` >>
-         simp[mk_inst_def, is_terminator_def, step_inst_base_def,
-              exec_write2_def, eval_operands_def, eval_operand_def] >>
-         disch_then (qspecl_then [`(if tr then tstore else sstore) k w s`, `func`, `ctx`] mp_tac) >>
-         simp[]) >>
+        (`step_inst_base
+            (mk_inst id (if tr then TSTORE else SSTORE) [Lit k; Lit w] []) s =
+          OK ((if tr then tstore else sstore) k w s)` by
+           (Cases_on `tr` >>
+            simp[step_inst_base_def, mk_inst_def, exec_write2_def,
+                 eval_operands_def, eval_operand_def]) >>
+         drule_at (Pat `get_instruction _ _ = _`) tuple_straight_line_edge >>
+         simp[mk_inst_def, is_terminator_def] >>
+         disch_then (qspecl_then [`func`, `ctx`] mp_tac) >>
+         Cases_on `tr` >> simp[is_terminator_def]) >>
       simp[gas_marked_path_def] >>
       metis_tac[gas_path_rules, gas_path_edge_normal, ADD_0])
   >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]
@@ -203,6 +207,235 @@ Resume place_store_dead_subregion[tuple]:
 QED
 
 Finalise place_store_dead_subregion
+
+Theorem place_store_dead_tuple_frame:
+  !types i elem base lo len st st'.
+    oEL i types = SOME elem /\
+    base + tuple_prefix_slot_size i types <= lo /\
+    lo + len <= base + tuple_prefix_slot_size i types + type_slot_size elem /\
+    base + type_slot_size (TupleTV types) <= dimword (:256) /\
+    (!q. ~(lo <= w2n q /\ w2n q < lo + len) ==>
+         lookup_storage q st' = lookup_storage q st) /\
+    (!j b. ~(lo <= j /\ j < lo + len) /\
+       dead_bytes st (base + tuple_prefix_slot_size i types) elem j b ==>
+       dead_bytes st' (base + tuple_prefix_slot_size i types) elem j b) ==>
+    !j b. ~(lo <= j /\ j < lo + len) /\
+      dead_bytes st base (TupleTV types) j b ==>
+      dead_bytes st' base (TupleTV types) j b
+Proof
+  Induct >- simp[listTheory.oEL_def] >>
+  gen_tac >> Cases_on `i`
+  >- (simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
+           type_slot_size_def, dead_bytes_def] >>
+      rpt strip_tac >> gvs[] >> disj2_tac >>
+      `dead_bytes_list st' (base' + type_slot_size h) types j b =
+       dead_bytes_list st (base' + type_slot_size h) types j b` by
+        (irule (cj 2 dead_bytes_frame) >> rpt strip_tac >>
+         first_x_assum irule >>
+         `i < dimword (:256)` by decide_tac >>
+         simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+      asm_rewrite_tac[]) >>
+  simp[listTheory.oEL_def, tuple_prefix_slot_size_def,
+       type_slot_size_def, dead_bytes_def] >>
+  rpt strip_tac >> gvs[] >>
+  (Cases_on `dead_bytes st base' h j b`
+  >- (disj1_tac >>
+      `dead_bytes st' base' h j b = dead_bytes st base' h j b` by
+        (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+         first_x_assum irule >>
+         `i < dimword (:256)` by decide_tac >>
+         simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+      asm_rewrite_tac[]) >>
+  gvs[] >> disj2_tac >>
+  first_x_assum (drule_at (Pat `oEL _ _ = _`)) >>
+  disch_then (qspec_then `base' + type_slot_size h` mp_tac) >>
+  simp[GSYM ADD_ASSOC, type_slot_size_def, dead_bytes_def] >>
+  disch_then irule >> goal_assum (drule_at Any) >>
+  qexistsl_tac [`len`, `lo`] >> simp[] >> metis_tac[])
+QED
+
+Theorem place_store_dead_struct_frame:
+  !fields id off elem base lo len st st'.
+    struct_field_slot fields id = SOME (off,elem) /\
+    base + off <= lo /\ lo + len <= base + off + type_slot_size elem /\
+    base + type_slot_size (StructTV fields) <= dimword (:256) /\
+    (!q. ~(lo <= w2n q /\ w2n q < lo + len) ==>
+         lookup_storage q st' = lookup_storage q st) /\
+    (!j b. ~(lo <= j /\ j < lo + len) /\
+       dead_bytes st (base + off) elem j b ==>
+       dead_bytes st' (base + off) elem j b) ==>
+    !j b. ~(lo <= j /\ j < lo + len) /\
+      dead_bytes st base (StructTV fields) j b ==>
+      dead_bytes st' base (StructTV fields) j b
+Proof
+  Induct >- simp[struct_field_slot_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  Cases_on `h0 = id`
+  >- (simp[struct_field_slot_def, type_slot_size_def, dead_bytes_def] >>
+      rpt strip_tac >> gvs[] >> disj2_tac >>
+      `dead_bytes_fields st' (base' + type_slot_size elem) fields j b =
+       dead_bytes_fields st (base' + type_slot_size elem) fields j b` by
+        (irule (cj 3 dead_bytes_frame) >> rpt strip_tac >>
+         first_x_assum irule >>
+         `i < dimword (:256)` by decide_tac >>
+         simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+      asm_rewrite_tac[]) >>
+  simp[struct_field_slot_def, type_slot_size_def, dead_bytes_def,
+       AllCaseEqs()] >>
+  rpt strip_tac >> PairCases_on `z` >> gvs[] >>
+  (Cases_on `dead_bytes st base' h1 j b`
+   >- (disj1_tac >>
+       `dead_bytes st' base' h1 j b = dead_bytes st base' h1 j b` by
+         (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+          first_x_assum irule >>
+          `i < dimword (:256)` by decide_tac >>
+          simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+       asm_rewrite_tac[]) >>
+   gvs[] >> disj2_tac >>
+   first_x_assum (drule_at (Pat `struct_field_slot _ _ = _`)) >>
+   disch_then (qspec_then `base' + type_slot_size h1` mp_tac) >>
+   simp[GSYM ADD_ASSOC, type_slot_size_def, dead_bytes_def] >>
+   disch_then irule >> goal_assum (drule_at Any) >>
+   qexistsl_tac [`len`, `lo`] >> simp[] >> metis_tac[])
+QED
+
+Theorem place_store_dead_subregion_frame:
+  !root path delta leaf.
+    storage_subregion root path delta leaf ==>
+    !base st st' j b.
+    0 < type_slot_size leaf /\
+    (!q. ~(base+delta <= w2n q /\
+           w2n q < base+delta+type_slot_size leaf) ==>
+         lookup_storage q st' = lookup_storage q st) /\
+    ~(base+delta <= j /\ j < base+delta+type_slot_size leaf) /\
+    base + type_slot_size root <= dimword (:256) /\
+    dead_bytes st base root j b ==>
+    dead_bytes st' base root j b
+Proof
+  ho_match_mp_tac vyperStoragePlaceRegionTheory.storage_subregion_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp_tac (srw_ss())
+    [Once vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+  disch_tac >> gnvs[] >> rpt gen_tac >> disch_tac >> gnvs[] >>
+  all_tac
+  >- (gvs[] >> drule (cj 1 dead_bytes_range) >> decide_tac)
+  >- suspend "fixed"
+  >- suspend "dynamic"
+  >- suspend "struct"
+  >> suspend "tuple"
+QED
+
+Resume place_store_dead_subregion_frame[struct]:
+  gvs[] >> rpt strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  (irule place_store_dead_struct_frame >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   goal_assum (drule_at (Pat `struct_field_slot _ _ = _`)) >>
+   goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
+   qexistsl_tac [`type_slot_size leaf`, `base' + delta' + rest`] >>
+   simp_tac (srw_ss()) [GSYM ADD_ASSOC] >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   conj_tac
+   >- (rpt gen_tac >> strip_tac >>
+       first_x_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+       disch_then irule >>
+       drule vyperStoragePlaceRegionTheory.struct_field_slot_end_bound >>
+       strip_tac >> simp[GSYM ADD_ASSOC] >>
+       qexists_tac `st` >> simp[] >> metis_tac[]) >>
+   decide_tac)
+QED
+Resume place_store_dead_subregion_frame[tuple]:
+  gvs[] >> rpt strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  (irule place_store_dead_tuple_frame >>
+   conj_tac >- first_assum ACCEPT_TAC >>
+   goal_assum (drule_at (Pat `oEL _ _ = _`)) >>
+   goal_assum (drule_at (Pat `dead_bytes _ _ _ _ _`)) >>
+   qexistsl_tac [`type_slot_size leaf`,
+     `base' + tuple_prefix_slot_size (Num i) types + rest`] >>
+   simp_tac (srw_ss()) [GSYM ADD_ASSOC] >>
+   conj_tac >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+   conj_tac
+   >- (rpt gen_tac >> strip_tac >>
+       first_x_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+       disch_then irule >>
+       drule vyperStoragePlaceRegionTheory.tuple_component_slot_end_bound >>
+       strip_tac >> simp[GSYM ADD_ASSOC] >>
+       qexists_tac `st` >> simp[] >> metis_tac[]) >>
+   decide_tac)
+QED
+Resume place_store_dead_subregion_frame[fixed]:
+  gvs[] >> rpt strip_tac >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  gvs[dead_bytes_def, type_slot_size_def] >>
+  rename1 `dead_bytes st (base' + k * type_slot_size root) root j b` >>
+  (qexists_tac `k` >> simp[] >>
+  `k * type_slot_size root + type_slot_size root <= n * type_slot_size root` by
+    (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+  Cases_on `k = Num i`
+  >- (gvs[] >>
+      first_x_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+      disch_then irule >> simp[GSYM ADD_ASSOC] >>
+      qexists_tac `st` >> simp[] >> metis_tac[]) >>
+  `dead_bytes st' (base' + k * type_slot_size root) root j b =
+   dead_bytes st (base' + k * type_slot_size root) root j b` by
+    (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+     first_x_assum irule >>
+     rename1 `base' + k * type_slot_size root <= idx` >>
+     `idx < dimword (:256)` by decide_tac >>
+     simp[wordsTheory.w2n_n2w] >>
+     Cases_on `k < Num i`
+     >- (`k * type_slot_size root + type_slot_size root <= Num i * type_slot_size root` by
+           (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+         decide_tac) >>
+     `Num i * type_slot_size root + type_slot_size root <= k * type_slot_size root` by
+       (irule vyperLookupStorageTheory.array_index_element_end_bound >> decide_tac) >>
+     decide_tac) >>
+  asm_rewrite_tac[])
+QED
+Resume place_store_dead_subregion_frame[dynamic]:
+  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!delta. storage_subregion _ _ _ _ ==> _` (mk_asm "ih") >>
+  drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >> strip_tac >>
+  `lookup_storage (n2w base') st' = lookup_storage (n2w base') st` by
+    (first_x_assum irule >>
+     `base' < dimword (:256)` by
+       (gvs[type_slot_size_def] >> decide_tac) >>
+     simp[wordsTheory.w2n_n2w]) >>
+  qpat_x_assum `base' + type_slot_size (ArrayTV _ _) <= _` mp_tac >>
+  simp_tac (srw_ss()) [type_slot_size_def] >> disch_tac >>
+  qpat_x_assum `dead_bytes st base' (ArrayTV _ _) j b` mp_tac >>
+  simp_tac (srw_ss()) [Once dead_bytes_def] >> strip_tac >>
+  pure_once_rewrite_tac [dead_bytes_def] >>
+  rename1 `k < n` >>
+  (qexists_tac `k` >> simp[] >>
+   Cases_on `k < w2n (lookup_storage (n2w base') st)`
+   >- (gvs[] >>
+       `k * type_slot_size root + type_slot_size root <= n * type_slot_size root` by
+         (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+       Cases_on `k = Num i`
+       >- (gvs[] >>
+           asm_x "ih" (drule_at (Pat `storage_subregion _ _ _ _`)) >>
+           disch_then irule >> simp[GSYM ADD_ASSOC] >>
+           qexists_tac `st` >> simp[] >> metis_tac[]) >>
+       `dead_bytes st' (base' + (k * type_slot_size root + 1)) root j b =
+        dead_bytes st (base' + (k * type_slot_size root + 1)) root j b` by
+         (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+          first_x_assum irule >>
+          rename1 `base' + (k * type_slot_size root + 1) <= idx` >>
+          `idx < dimword (:256)` by decide_tac >>
+          simp[wordsTheory.w2n_n2w] >>
+          Cases_on `k < Num i`
+          >- (`k * type_slot_size root + type_slot_size root <= Num i * type_slot_size root` by
+                (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+              decide_tac) >>
+          `Num i * type_slot_size root + type_slot_size root <= k * type_slot_size root` by
+            (irule vyperLookupStorageTheory.array_index_element_end_bound >> decide_tac) >>
+          decide_tac) >>
+       asm_rewrite_tac[]) >>
+   gvs[])
+QED
+Finalise place_store_dead_subregion_frame
 
 (* compile_assign_value into (transient) storage, not a DynArray. *)
 Theorem place_store_value_storage_run:
