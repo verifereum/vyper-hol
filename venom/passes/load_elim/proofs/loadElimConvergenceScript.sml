@@ -66,7 +66,7 @@ Proof
   irule le_solver_bounded_measure >> simp[]
 QED
 
-Theorem le_process_changed[local]:
+Theorem le_process_changed:
   (df_boundary NONE (le_solver_process ctx fn lbl st) lbl <>
      df_boundary NONE st lbl) <=> le_solver_process ctx fn lbl st <> st
 Proof
@@ -114,7 +114,7 @@ Proof
   Induct >> simp[]
 QED
 
-Theorem le_populate_boundary[local]:
+Theorem le_populate_boundary:
   (df_populate_inst dir bottom join transfer edge_transfer ctx entry cfg bbs lbls st).
     ds_boundary = st.ds_boundary
 Proof
