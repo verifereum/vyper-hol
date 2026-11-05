@@ -5,6 +5,7 @@ Ancestors
  valueEncoding venomMemProofs ptrDiscipline pred_set arithmetic
  bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv venomState
  finite_map loweringPosts exprLoweringProps exprSimBufferStore venomExecSemantics venomMemDefs
+ allocationPtr annAssignPtrAllocGhost
 
 Theorem annassign_copy_taint_window_ptr:
  !old new a b k.
@@ -298,4 +299,61 @@ Proof
  `ptr_covers G tn' dst s' sz` by
    (irule annassign_coverage_var_frame_ptr >> metis_tac[]) >>
  qexistsl [`s'`,`tn'`] >> simp[]
+QED
+
+(* expr_val_at, not ghost coverage alone, supplies the frontier argument.
+   Its bytewise form also handles an empty value at an arbitrary address. *)
+Theorem annassign_alloca_expr_robust_ptr:
+ !ctx func cenv cx t sa sb es v op s tv w id n out u tn.
+ stmt_state_rel ctx func cenv cx es s /\
+ expr_val_at cenv cx t sa sb es v op s /\
+ evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
+ eval_operand op s = SOME w /\ val_wf tv v /\
+ MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+ n < dimword (:256) /\
+ step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
+ (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) ==>
+ !m. mem_agree_outside
+   (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn).t_mem
+   u.vs_memory m ==> val_in_memory tv v (w2n w) m
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all annassign_alloca_effects_ptr >>
+ disch_then (qspecl_then [`[]`,`FEMPTY`,`tn`] strip_assume_tac) >>
+ rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+ conj_tac >- simp[] >>
+ qexistsl [`s.vs_memory`,`u.vs_memory`,`tn.t_mem`,
+   `(step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn).t_mem`,
+   `{i | s.vs_alloca_next <= i}`] >> simp[] >>
+ rpt strip_tac >> drule_all expr_val_at_below_frontier >> decide_tac
+QED
+
+Theorem annassign_alloca_source_transport_ptr:
+ !ctx func cenv cx t sa sb es v src s tv w id n out u PG G tn k.
+ stmt_state_rel ctx func cenv cx es s /\
+ expr_val_at cenv cx t sa sb es v (Var src) s /\
+ evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
+ lookup_var src s = SOME w /\ src <> out /\ val_wf tv v /\
+ ptr_covers G tn src s k /\
+ MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
+ n < dimword (:256) /\
+ step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
+ (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) ==>
+ lookup_var src u = SOME w /\
+ ptr_covers (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
+   (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) src u k /\
+ (!m. mem_agree_outside
+   (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn).t_mem
+   u.vs_memory m ==> val_in_memory tv v (w2n w) m)
+Proof
+ rpt gen_tac >> strip_tac >> conj_tac
+ >- (drule_all annassign_alloca_effects_ptr >>
+     disch_then (qspecl_then [`PG`,`G`,`tn`] strip_assume_tac) >>
+     first_x_assum (qspec_then `src` mp_tac) >> simp[]) >>
+ conj_tac
+ >- (irule alloca_step_old_ptr_covers >> simp[] >> metis_tac[]) >>
+ drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`) annassign_alloca_expr_robust_ptr >>
+ disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >>
+ disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+ simp[eval_operand_def] >> disch_then (qspec_then `tn` mp_tac) >> simp[]
 QED
