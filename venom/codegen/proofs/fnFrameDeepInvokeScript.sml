@@ -11,7 +11,7 @@
 
 Theory fnFrameDeepInvoke
 Ancestors
-  deepResidualSim fnPlanPrefix fnFrameBoundary genFrameSim frameRel contextCodegenRel
+  deepResidualSim fnPlanPrefix fnFrameBoundary genFrameSim frameRel contextCodegenRel codegen
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs
