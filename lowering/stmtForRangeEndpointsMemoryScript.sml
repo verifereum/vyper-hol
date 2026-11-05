@@ -1,7 +1,7 @@
 Theory stmtForRangeEndpointsMemory
 Ancestors
   stmtSimForced gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasMode
-  fragGasPath fragGasPathMem fragExec vyperState
+  fragGasPath fragGasPathMem fragExec vyperState exprSimMemDefs
 
 Theorem for_endpoint_bind_outcome_mem:
   !tops ctx func (a : evaluation_state -> value evaluation_result)
@@ -48,4 +48,44 @@ Proof
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   simp[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]
+QED
+
+(* Consumer boundary for a forced endpoint.  The continuation receives both
+   the memory expression post and the source reachability fact needed by
+   dependent endpoint hypotheses. *)
+Theorem for_expr_endpoint_outcome_mem:
+  expr_sim_mem ctx func cenv cx ty e es /\
+  lower_value compile_expr cenv ty e sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\
+  gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!v ee t.
+     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+     expr_store_bound cx (expr_type e) v op t /\
+     t.vs_current_bb = sb.cs_current_bb /\
+     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+     ee.gas_obs = [] /\ ~t.vs_halted /\
+     (?gs ee1. bind (eval_expr cx e) (read_result cx)
+        (es with gas_obs := gs) = (INL v,ee1)) ==>
+     gas_outcome T (cx_tops cx) (ctx,func) (k v) (ee,t) Q R) /\
+  (!ex ee r. expr_exit (INR ex : value + exception) r ==> R (INR ex) ee r) ==>
+  gas_outcome T (cx_tops cx) (ctx,func)
+    (bind (bind (eval_expr cx e) (read_result cx))
+      (k : value -> evaluation_state -> unit evaluation_result)) (es,s0) Q R
+Proof
+  strip_tac >> irule for_endpoint_bind_outcome_mem >>
+  conj_tac >- simp[] >> qexists_tac `\v ee t.
+    expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    expr_store_bound cx (expr_type e) v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
+  qhdtm_x_assum `expr_sim_mem` mp_tac >>
+  simp[expr_sim_mem_def] >> disch_then irule >> simp[]
 QED
