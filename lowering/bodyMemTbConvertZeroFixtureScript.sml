@@ -4,7 +4,7 @@ Ancestors
   bodyMemTbConvertZeroProbe compileVyper venomCompilerTypes venomPolicyTypes
   vyperTypeInvariants vyperState vyperContext vyperTypeCallStackSoundness
   vyperStorageLayoutSafety vyperLookupStorage exprSimHypsDefs compileEnv placeTypingProps
-  vyperTypeStoragePreservation bodySim
+  vyperTypeStoragePreservation bodySim bodyMemoryPreds bodyLiteralBufferMemory
 
 Theorem convert_zero_empty_unit_exists:
   IS_SOME (lower_vyper_runtime_unit []
@@ -169,4 +169,41 @@ Proof
   Cases_on `lower_vyper_runtime_unit []
        <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
           rpol_final_assembly := FAP_Optimize |>` >> simp[]
+QED
+
+Theorem convert_zero_body_pre:
+  !cenv. cenv.ce_struct_fields = FEMPTY ==>
+  expr_body_pre cenv
+    (empty_evaluation_context with
+      <| sources := [(0w, [(NONE, [])])]; stk := [(NONE, "")] |> )
+    <| current_src := NONE; var_types := FEMPTY; var_assignable := FEMPTY;
+       bare_globals := FEMPTY; bare_global_assignable := FEMPTY;
+       toplevel_vtypes := FEMPTY; type_defs := FEMPTY; fn_sigs := FEMPTY;
+       flag_members := FEMPTY; event_fields := FEMPTY |>
+    (TypeBuiltin (BaseT BoolT) Convert (BaseT BoolT)
+      [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])])
+    (empty_state with <| outcomes := SOME []; scopes := [FEMPTY] |> )
+Proof
+  rpt strip_tac >>
+  simp[expr_body_pre_def, convert_zero_expr_invariant,
+       convert_zero_literal_static_pre,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       convert_zero_context_calls_safe] >>
+  mp_tac convert_zero_context_calls_safe >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem convert_zero_operand_induction_hypothesis:
+  !cx. body_exprs_mem_ok cx
+    [Literal (BaseT (BytesT (Dynamic 0))) (BytesL [])]
+Proof
+  simp[body_exprs_mem_ok_def, body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >>
+  irule literal_other_body_mem >>
+  simp[expr_sim_pre_def, expr_body_pre_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       compileEnvTheory.is_word_type_def] >>
+  gvs[expr_body_pre_def] >>
+  qexists_tac `env` >>
+  gvs[vyperTypeCallGraphTheory.int_calls_expr_def]
 QED
