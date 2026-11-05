@@ -19,7 +19,7 @@ Theory bodyAssignPlace
 Ancestors
   stmtSimAssignPlace bodySim exprSimHypsDefs stmtSimDefs
   targetPlaceSim targetPlaceSimCases supportedStmts supportedTargets
-  supportedStmtTraverse supportedProgram bodyExprPreFacts gasContext
+  supportedStmtTraverse supportedExprTraverse supportedProgram bodyExprPreFacts gasContext bodyStorageCases
   vyperTypeInvariants vyperTypeCallStackSoundness vyperTypeCallGraph vyperCompiler
   stmtLowering exprLowering compileEnv compileVyper
   vyperInterpreter vyperState vyperTypeSystem
@@ -123,6 +123,58 @@ Proof
   gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem target_indices_body_pre[local]:
+  !t cenv cx env pt.
+    type_place_target env t = SOME pt /\
+    ~supported_target_exists
+      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
+    call_evaluation_safe cx (int_calls_target t) /\
+    ~supported_target_exists expr_evm_run_root t /\
+    EVERY (\c. FST c = NONE) (int_calls_target t) /\
+    (?tops. supported_program tops /\ get_module_code cx NONE = SOME tops) /\
+    (!target. supported_target_exists (expr_abi_decode_target_root target) t ==>
+       occurs_abi_decode_target target (cx_tops cx)) /\
+    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+       is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
+    target_indices_pre cenv cx env t
+Proof
+  Induct using base_assignment_target_induct >>
+  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
+       listTheory.EVERY_APPEND] >> rpt strip_tac >>
+  gvs[Once well_typed_expr_def, AllCaseEqs()]
+  >- metis_tac[call_evaluation_safe_append_left] >>
+  irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
+  qexists_tac `[]` >> simp[] >>
+  metis_tac[call_evaluation_safe_append_right]
+QED
+
+Theorem body_assign_place_indices_pre[local]:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Assign (BaseTarget t) e) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Assign (BaseTarget t) e) ==> occurs_abi_decode_target target tops) /\
+  type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' /\
+  stmt_exprs_ok cenv (Assign (BaseTarget t) e) /\
+  call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget t) e)) ==>
+  target_indices_pre cenv cx env t
+Proof
+  rpt strip_tac >>
+  `?dty. type_place_target env t = SOME (Type dty)` by
+    metis_tac[assign_place_typing] >>
+  `supported_assignment tops bindings (BaseTarget t) e` by
+    gvs[supported_stmt_def] >>
+  drule_then strip_assume_tac supported_assignment_storage_syntax >>
+  `supported_program tops /\ get_module_code cx NONE = SOME tops /\
+   (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
+     is_dynamic (vyper_to_abi_type (type_env tops) target))` by
+    gvs[body_inv_def] >>
+  `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
+  irule target_indices_body_pre >>
+  gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>
+  metis_tac[call_evaluation_safe_append_left]
 QED
 
 Theorem body_assign_place_case:
