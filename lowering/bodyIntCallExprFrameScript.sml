@@ -1850,3 +1850,51 @@ val () = List.app (fn th =>
   end) [integer_typed_value_bound, integer_bop_operand_types,
         integer_bop_success_types, supported_word_eval_scopes,
         compile_checked_storage_frame_typed];
+
+(* Mapping roots produce addresses, not readable values.  The metadata lookup
+   is explicit: source typing/metadata transport is a separate obligation. *)
+Theorem compile_toplevel_slot_vv_shape:
+  FLOOKUP cenv.ce_module_vars nsid =
+    SOME (if tr then TransientLoc slot else StorageLoc slot) ==>
+  compile_expr cenv ty (TopLevelName ann nsid) sa =
+    (LocatedValue ann (mk_ptr (Lit slot) (slot_loc tr)),sa)
+Proof
+  Cases_on `tr` >>
+  simp[Once compile_expr_raw_def, compile_expr_body_def,
+       expr_type_def, slot_loc_def]
+QED
+
+Theorem hashmap_root_place_ptr_rel:
+  place_ptr_rel cenv cx s (HashMapRef tr slot kt vt)
+    slot (SOME (slot_loc tr)) (HashMapT kt vt)
+Proof
+  simp[place_ptr_rel_def]
+QED
+
+Theorem compile_hashmap_root_storage_frame_frag:
+  FLOOKUP cenv.ce_module_vars nsid =
+    SOME (if tr then TransientLoc slot else StorageLoc slot) /\
+  compile_expr cenv ty (TopLevelName ann nsid) sa = (vv,sb) ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ P s)
+    (\s. s = s0 /\ P s /\
+      (?w. eval_operand (vv_operand vv) s = SOME w /\
+           place_ptr_rel cenv cx s (HashMapRef tr slot kt vt)
+             w (vv_location vv) (HashMapT kt vt)) /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >> drule compile_toplevel_slot_vv_shape >> strip_tac >> gvs[] >>
+  irule frag_exec_refl >>
+  simp[contextTheory.vv_operand_def, contextTheory.vv_location_def,
+       contextTheory.mk_ptr_def, eval_operand_def, hashmap_root_place_ptr_rel]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Mapping root frame has unproved dependencies"
+  end)
+  [compile_toplevel_slot_vv_shape, hashmap_root_place_ptr_rel,
+   compile_hashmap_root_storage_frame_frag];
