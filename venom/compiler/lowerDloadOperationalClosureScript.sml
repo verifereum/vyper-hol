@@ -247,3 +247,16 @@ QED
    run_ind on the strength of this partial list. Strategist review must fix
    the state-only observable, reserve and entry/exit provenance interfaces.
 *)
+
+Theorem ld_stack_origin_setup_eq:
+  ld_stack_origin vs0 CS (f::stk) callee s0 /\
+  decode_invoke f.cf_inst = SOME (nm,ops) /\
+  lookup_function nm CS.ctx_functions = SOME callee /\
+  eval_operands ops f.cf_state = SOME args /\
+  setup_callee callee args f.cf_state = SOME cs ==>
+  s0 = cs
+Proof
+  strip_tac >>
+  qpat_x_assum `ld_stack_origin _ _ _ _ _` mp_tac >>
+  simp[ld_stack_origin_cons] >> strip_tac >> gvs[]
+QED
