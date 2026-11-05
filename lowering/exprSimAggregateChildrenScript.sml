@@ -24,13 +24,26 @@
  *)
 Theory exprSimAggregateChildren
 Ancestors
-  loweringPosts vyperTypeSystem vyperValue valueEncoding
+  loweringPosts vyperTypeSystem vyperValue valueEncoding valueEncodingProofs vyperTyping
   exprSimAlloc
   exprSim exprSimHyps exprSimUnwrap exprSimBufferStore exprSimBuffer
   vyperInterpreter vyperValueOperation vyperState fragExec
   compileEnv context exprSimLiteralBuffer exprSimOps venomState
   exprSimHash exprOperandVar emitHelperProps ASCIInumbers exprLoweringProps venomInst
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes
+
+Theorem typed_value_wf:
+  (!ty v. value_has_type ty v ==> val_wf ty v) /\
+  (!tvs vs. values_have_types tvs vs ==> tuple_val_wf vs tvs) /\
+  (!tv n kvs. sparse_has_type tv n kvs ==> kvs_val_wf kvs tv n) /\
+  (!tv vs. all_have_type tv vs ==> elems_val_wf vs tv) /\
+  (!ftvs fields. struct_has_type ftvs fields ==> fields_val_wf fields ftvs)
+Proof
+  ho_match_mp_tac value_has_type_ind >>
+  simp[value_has_type_def, val_wf_def, type_memory_size_def] >>
+  rpt strip_tac >>
+  qspec_then `max` assume_tac le_word_size_mul >> decide_tac
+QED
 
 Theorem nonbytes_val_footprint:
   (!n. tv <> BaseTV (BytesT (Dynamic n))) /\
@@ -900,4 +913,31 @@ Proof
     metis_tac[evaluated_nonbytes_footprint] >>
   `0 < type_memory_size tv` by decide_tac >>
   drule_all aggregate_physical_source_bounds >> simp[]
+QED
+
+Theorem aggregate_child_physical_encoding:
+  expr_body_pre ce cx env e es /\
+  (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
+  expr_post ctx func ce cx e ers sa sb r es' v op s /\
+  ~is_word_type (post_value_type ce e) ==>
+  ?stv sw.
+    evaluate_type (get_tenv cx) (post_value_type ce e) = SOME stv /\
+    value_has_type stv v /\ val_wf stv v /\
+    eval_operand op s = SOME sw /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    type_widens_to (get_tenv cx) (post_value_type ce e) (expr_type e)
+Proof
+  strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  drule_all memory_rhs_read_post_typed >>
+  simp[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >> strip_tac >>
+  `val_wf tv v` by metis_tac[cj 1 typed_value_wf] >>
+  `type_widens_to (get_tenv cx) (post_value_type ce e) (expr_type e)` by
+    (fs[expr_body_pre_def] >>
+     drule_all post_value_type_widens >> simp[]) >>
+  gvs[expr_post_def, expr_val_rel_def] >>
+  goal_assum (drule_at Any) >> simp[]
 QED
