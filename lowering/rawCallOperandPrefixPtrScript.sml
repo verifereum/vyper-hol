@@ -4,6 +4,7 @@ Theory rawCallOperandPrefixPtr
 Ancestors
   rawCallShapePtr typedOperandsPtr rawCallBufferPtr gasContext exprSimWordArgs
   exprSimDefs gasSummaryComposePtr vyperState vyperInterpreter exprSimHash
+  ghostPcTransportPtr typedCopyAmbientFramePtr
 
 Theorem eval_exprs_head_admissible:
   gas_admissible (eval_exprs cx (e::args))
@@ -285,3 +286,221 @@ Resume raw_call_addr_data_sim_ptr[posts]:
 QED
 
 Finalise raw_call_addr_data_sim_ptr
+
+(* Header reads need live-byte cleanliness independently of site coverage. *)
+Theorem raw_call_data_header_read_ready:
+  ptr_mem_ok cx ty (BytesV bs) op G tn s /\
+  evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic cap))) /\
+  op_taint tn op = {} /\ eval_operand op s = SOME w ==>
+  ?x base sz. op = Var x /\ FLOOKUP G x = SOME (base,sz) /\
+    base <= w2n w /\ w2n w + 32 + LENGTH bs <= base + sz /\
+    ptr_covers G tn x s 32 /\
+    (!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem) /\
+    (!i. w2n w + 32 <= i /\ i < w2n w + 32 + LENGTH bs ==>
+      i NOTIN tn.t_mem)
+Proof
+  strip_tac >> drule_all ptr_mem_ok_dynamic_bytes_site >> strip_tac >>
+  drule_all ptr_mem_ok_dynamic_bytes_clean >> strip_tac >>
+  gvs[] >> simp[bodyPtrDefsTheory.ptr_covers_def] >>
+  qexists_tac `w` >> fs[venomStateTheory.eval_operand_def] >> decide_tac
+QED
+
+Theorem raw_call_mload_path_ptr:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [out]) /\
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME w ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst id MLOAD [Var src] [out])
+      (update_var out (mload (w2n w) s) s))
+    (step_taint (mk_inst id MLOAD [Var src] [out]) s
+      (update_var out (mload (w2n w) s) s) tn)
+    (OK ((update_var out (mload (w2n w) s) s) with
+      vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
+     OK (update_var out (mload (w2n w) s) s)` by
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def,
+       venomStateTheory.eval_operand_def]) >>
+  `ptr_inst_ok D 0 0 ctx func G tn
+     (mk_inst id MLOAD [Var src] [out]) s` by
+    (irule typedCopyPtrTheory.ptr_inst_ok_mload >> simp[]) >>
+  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
+     (step_prov PG G (mk_inst id MLOAD [Var src] [out])
+       (update_var out (mload (w2n w) s) s))
+     (step_taint (mk_inst id MLOAD [Var src] [out]) s
+       (update_var out (mload (w2n w) s) s) tn)
+     (OK ((update_var out (mload (w2n w) s) s) with
+       vs_inst_idx := SUC s.vs_inst_idx))` by
+    (mp_tac (Q.INST [`i` |-> `mk_inst id MLOAD [Var src] [out]`,
+       `fn` |-> `func`, `lo` |-> `0`,
+       `u` |-> `update_var out (mload (w2n (w:256 word)) s) s`]
+       fragGasSeqPtrTheory.straight_line_ptr_edge) >>
+     gvs[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  drule (cj 2 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  simp[venomStateTheory.update_var_def]
+QED
+
+Theorem raw_call_add_path_ptr:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ADD [left;right] [out]) /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst id ADD [left;right] [out])
+      (update_var out (a+b) s))
+    (step_taint (mk_inst id ADD [left;right] [out]) s
+      (update_var out (a+b) s) tn)
+    (OK ((update_var out (a+b) s) with vs_inst_idx := SUC s.vs_inst_idx))
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst id ADD [left;right] [out]) s =
+     OK (update_var out (a+b) s)` by
+    (PURE_ONCE_REWRITE_TAC[venomExecSemanticsTheory.step_inst_base_def] >>
+     simp[venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure2_def]) >>
+  `ptr_inst_ok D 0 0 ctx func G tn
+     (mk_inst id ADD [left;right] [out]) s` by
+    (irule typedCopyPtrTheory.ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `gas_path_ptr_edge D 0 ctx func PG G tn s 0
+     (step_prov PG G (mk_inst id ADD [left;right] [out]) (update_var out (a+b) s))
+     (step_taint (mk_inst id ADD [left;right] [out]) s (update_var out (a+b) s) tn)
+     (OK ((update_var out (a+b) s) with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (mp_tac (Q.INST [`i` |-> `mk_inst id ADD [left;right] [out]`,
+       `fn` |-> `func`, `lo` |-> `0`,
+       `u` |-> `update_var out ((a:256 word)+(b:256 word)) s`]
+       fragGasSeqPtrTheory.straight_line_ptr_edge) >>
+     gvs[venomInstTheory.mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  drule (cj 2 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  disch_then (qspec_then `0` mp_tac) >> simp[] >> disch_then irule >>
+  irule (cj 1 fragGasPathPtrTheory.gas_path_ptr_rules) >>
+  simp[venomStateTheory.update_var_def]
+QED
+
+(* A read-only header instruction changes only fresh registers. *)
+Theorem raw_call_header_ghost_frame:
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==>
+    lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    op_taint un (Var x) = op_taint tn (Var x)) /\
+  t.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
+  un.t_stor = tn.t_stor /\ un.t_trans = tn.t_trans /\ un.t_imm = tn.t_imm /\
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient ==>
+  ghost_inv dep cenv cx es H un t /\
+  ghost_kept cenv es sa G tn s H un
+Proof
+  strip_tac >> conj_tac
+  >- (fs[bodyPtrDefsTheory.ghost_inv_def,
+         bodyPtrDefsTheory.return_buf_ptr_def,
+         bodyPtrDefsTheory.stor_taint_ok_def,
+         compileEnvTheory.local_ptrs_reserved_def] >>
+      rpt conj_tac >> rpt strip_tac
+      >- (fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[])
+      >- metis_tac[]
+      >- (Cases_on `dep` >>
+          fs[bodyPtrDefsTheory.return_buf_ptr_def] >>
+          PairCases_on `x` >>
+          fs[bodyPtrDefsTheory.return_buf_ptr_def] >>
+          `not_fresh_at sa x` by metis_tac[] >>
+          first_x_assum drule >> strip_tac >>
+          fs[bodyPtrDefsTheory.ptr_covers_def] >> metis_tac[])
+      >> metis_tac[]) >>
+  simp[bodyPtrDefsTheory.ghost_kept_def]
+QED
+
+Theorem raw_call_data_prefix_frame:
+  emit_op MLOAD [ptr_op] sa = (len_op,sl) /\
+  emit_op ADD [ptr_op; Lit 32w] sl = (data_op,sm) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  b < dimword (:256) /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa ==>
+  ?t. run_inst_seq (emitted_insts sa sm) s = OK t /\
+    eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
+    eval_operand data_op t = SOME (n2w (b+32)) /\
+    mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    (!x. len_op = Var x \/ data_op = Var x ==> not_fresh_at sm x)
+Proof
+  strip_tac >> drule_all hash_data_prefix_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK t` >>
+  `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `t with vs_vars := _ = _`
+       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
+  qexists_tac `t` >> simp[loweringPostsTheory.wb_frame_def,
+    loweringPostsTheory.locals_kept_def] >> first_assum ACCEPT_TAC
+QED
+
+Theorem raw_call_emit_mload_path_ptr:
+  emit_op MLOAD [Var src] sa = (Var out,sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  ptr_covers G tn src s 32 /\ lookup_var src s = SOME w ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+      (update_var out (mload (w2n w) s) s))
+    (step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
+      (update_var out (mload (w2n w) s) s) tn)
+    (OK ((update_var out (mload (w2n w) s) s) with
+      vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MLOAD [Var src] [out]]` by
+    (gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+      compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
+      compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+      compileEnvTheory.comp_return_def]) >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id MLOAD [Var src] [out])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all raw_call_mload_path_ptr >> simp[]
+QED
+
+Theorem raw_call_emit_add_path_ptr:
+  emit_op ADD [left;right] sa = (Var out,sb) /\ fn_has_code sa sb func /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0
+    (step_prov PG G (mk_inst sa.cs_next_id ADD [left;right] [out])
+      (update_var out (a+b) s))
+    (step_taint (mk_inst sa.cs_next_id ADD [left;right] [out]) s
+      (update_var out (a+b) s) tn)
+    (OK ((update_var out (a+b) s) with vs_inst_idx := LENGTH sb.cs_current_insts))
+Proof
+  strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id ADD [left;right] [out]]` by
+    (gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+      compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.fresh_var_def,
+      compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def,
+      compileEnvTheory.comp_return_def]) >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  `get_instruction bb s.vs_inst_idx =
+     SOME (mk_inst sa.cs_next_id ADD [left;right] [out])` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  drule_all raw_call_add_path_ptr >> simp[]
+QED
