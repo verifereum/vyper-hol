@@ -140,7 +140,25 @@ Theorem frame_obs_call_enter:
     call_trace es2 /\
   gas_readings es = gas_readings es2
 Proof
-  cheat
+  strip_tac >>
+  `run_call_tr (SUC (LENGTH es.contexts)) (step es1) = (INL (),es2)` by
+    gvs[run_call_eq_tr] >>
+  Cases_on `step es1` >>
+  drule_at (Pat `run_call_tr _ _ = _`) frame_obs_tr_child >>
+  disch_then (qspecl_then [`LENGTH es.contexts`, `es1`] mp_tac) >>
+  simp[] >> disch_tac >>
+  simp[call_trace_def, gas_readings_def, frame_obs_def] >>
+  once_rewrite_tac[frame_obs_tr_def] >> simp[observe_def] >>
+  qspecl_then [`LENGTH es.contexts`,
+    `<|entries := []; readings := []; pending := NONE|>`] mp_tac
+    frame_obs_tr_prefix >>
+  disch_then (qspec_then `es2` mp_tac) >>
+  disch_then (qspecl_then [`FST (step es2)`, `SND (step es2)`] mp_tac) >>
+  disch_then (qspecl_then
+    [`[(request_of es, outcome_of (request_of es).cr_kind es2
+        (LENGTH (FST (HD es.contexts)).logs) (LENGTH es.rollback.toDelete))]`,
+     `[]`] mp_tac) >>
+  simp[] >> disch_then SUBST1_TAC >> simp[]
 QED
 
 Theorem frame_obs_terminal:
