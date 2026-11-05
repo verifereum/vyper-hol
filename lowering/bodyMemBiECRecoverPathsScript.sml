@@ -25,6 +25,30 @@ Proof
   first_x_assum drule >> decide_tac
 QED
 
+Theorem ecrecover_seq_path_mem:
+  !code s t ctx func bb.
+    ~s.vs_halted /\ fn_inst_ids_distinct func /\
+    alloca_history func s /\ alloca_inv s /\
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq_mem_ok code s /\ run_inst_seq code s = OK t ==>
+    gas_path_mem ctx func s (LENGTH (FILTER (\i. i.inst_opcode = GAS) code))
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
+    alloca_history func (t with vs_inst_idx := s.vs_inst_idx + LENGTH code) /\
+    s.vs_alloca_next <= (t with vs_inst_idx := s.vs_inst_idx + LENGTH code).vs_alloca_next
+Proof
+  rpt strip_tac
+  >- (irule run_inst_seq_gas_path_mem >> goal_assum drule >> simp[])
+  >- (qpat_x_assum `isPREFIX _ _` mp_tac >>
+      pure_rewrite_tac[IS_PREFIX_APPEND] >> strip_tac >>
+      irule alloca_history_run_inst_seq >>
+      goal_assum (drule_at Any) >> simp[] >>
+      fs[EVERY_MEM]) >>
+  simp[] >> irule ecrecover_seq_frontier >>
+  goal_assum drule >> simp[]
+QED
+
 Theorem ecrecover_failure_path_mem:
   compile_ecrecover h v r sig sm = (op,sb) /\
   eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
