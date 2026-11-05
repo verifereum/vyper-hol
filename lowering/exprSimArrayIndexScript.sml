@@ -498,3 +498,42 @@ Proof
   qspecl_then [`st`, `mid`, `st'`, `ss`] mp_tac abort_propagates >>
   simp[]
 QED
+
+(* Execution of the pure suffix, independently of the length loader. *)
+Theorem array_check_ptr_run:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr bop idx_op dyn ws esz) sm = (dst,sn) /\
+  eval_operand bop s = SOME b /\ eval_operand idx_op s = SOME i /\
+  eval_operand len_op s = SOME len /\ fresh_vars_wrt sm s /\
+  idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sm sn) s = OK t /\
+    eval_operand dst t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz)
+Proof
+  strip_tac >>
+  qpat_x_assum `comp_ignore_bind _ _ _ = _` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_ok >> strip_tac >>
+  `eval_operand bop ss' = SOME b /\ eval_operand idx_op ss' = SOME i` by
+    metis_tac[] >>
+  drule_all array_elem_ptr_run >> strip_tac >>
+  drule_all run_inst_seq_chain >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem array_check_ptr_oob:
+  comp_ignore_bind (array_bounds_check idx_op len_op sgn)
+    (array_elem_ptr bop idx_op dyn ws esz) sm = (dst,sn) /\
+  eval_operand idx_op s = SOME i /\ eval_operand len_op s = SOME len /\
+  fresh_vars_wrt sm s /\ ~idx_in_range sgn i len ==>
+  ?t. run_inst_seq (emitted_insts sm sn) s = Abort Revert_abort t
+Proof
+  strip_tac >>
+  qpat_x_assum `comp_ignore_bind _ _ _ = _` mp_tac >>
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[oneTheory.one] >>
+  drule_all array_bounds_check_oob >> strip_tac >>
+  drule array_bounds_check_extends >> strip_tac >>
+  drule array_elem_ptr_extends >> strip_tac >>
+  qspecl_then [`sm`, `cs'`, `sn`, `s`] mp_tac abort_propagates >>
+  simp[]
+QED

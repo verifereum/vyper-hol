@@ -6,7 +6,7 @@ Ancestors
   vyperPlaceFrames vyperStatePreservation vyperInterpreter vyperArray exprSimLen exprSimPop
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
-  exprSimForeignImmutableFrame emitHelperProps ASCIInumbers
+  exprSimForeignImmutableFrame emitHelperProps ASCIInumbers freshWrites
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -4461,3 +4461,33 @@ Proof
   gvs[] >>
   simp[step_MLOAD, step_SLOAD, step_TLOAD, exprSimUnwrapTheory.step_DLOAD]
 QED
+
+(* Pure suffix after a separately certified length load.  All operands have
+   already been issued before sm; the length may be the loader's result. *)
+Theorem array_check_ptr_frag:
+  comp_ignore_bind (array_bounds_check iop lop sgn)
+    (array_elem_ptr bop iop dyn ws esz) sm = (dst,sn) /\
+  local_ptrs_reserved cenv sm /\ idx_in_range sgn i len /\
+  (!z. bop = Var z ==> not_fresh_at sm z) /\
+  (!z. iop = Var z ==> not_fresh_at sm z) /\
+  (!z. lop = Var z ==> not_fresh_at sm z) ==>
+  frag_exec ctx sm sn
+    (\s. s = q0 /\ stmt_state_rel ctx func cenv cx es s /\
+      (eval_operand bop s = SOME b /\ eval_operand iop s = SOME i /\
+       eval_operand lop s = SOME len))
+    (\q. stmt_state_rel ctx func cenv cx es q /\
+      eval_operand dst q = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
+      (!x w. not_fresh_at sm x /\ lookup_var x q0 = SOME w ==>
+        lookup_var x q = SOME w) /\
+      (!aid bs. FLOOKUP q0.vs_allocas aid = SOME bs ==>
+        FLOOKUP q.vs_allocas aid = SOME bs) /\ q.vs_memory = q0.vs_memory /\
+      q.vs_labels = q0.vs_labels) R
+Proof
+  strip_tac >> ho_match_mp_tac frag_exec_straight_fresh >>
+  qexistsl_tac [`comp_ignore_bind (array_bounds_check iop lop sgn)
+    (array_elem_ptr bop iop dyn ws esz)`, `\a. F`] >>
+  simp[straight_fresh_array_check_ptr] >> conj_tac
+  >- (rpt strip_tac >> metis_tac[eval_operand_drop_fresh]) >>
+  rpt strip_tac >> drule_all array_check_ptr_run >> simp[]
+QED
+

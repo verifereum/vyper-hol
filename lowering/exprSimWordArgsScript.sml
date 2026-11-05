@@ -138,6 +138,11 @@ Theorem word_builtin_frag_success:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[word_builtin_frag_def] >> rpt gen_tac >> strip_tac >>
+  qmatch_goalsub_abbrev_tac `frag_exec _ _ _ pre post exits` >>
+  `frag_exec ctx sa sb pre (\s. post s /\ s.vs_labels = s0.vs_labels) exits`
+    suffices_by (strip_tac >> irule frag_exec_conseq >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  simp[Abbr `pre`, Abbr `post`, Abbr `exits`, GSYM CONJ_ASSOC] >>
   ho_match_mp_tac frag_exec_straight_fresh >>
   qexistsl_tac [`code xs`, `\a. F`] >>
   simp[word_operands_drop_fresh] >> rpt strip_tac >>

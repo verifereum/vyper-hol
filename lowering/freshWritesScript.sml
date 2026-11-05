@@ -190,7 +190,7 @@ Theorem frag_exec_writes_fresh:
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                      FLOOKUP ss.vs_allocas aid = SOME b) /\
-            ss.vs_memory = s0.vs_memory) R
+            ss.vs_memory = s0.vs_memory /\ ss.vs_labels = s0.vs_labels) R
 Proof
   rpt strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
@@ -350,7 +350,7 @@ Theorem frag_exec_straight_fresh:
                     lookup_var x ss = SOME w') /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                      FLOOKUP ss.vs_allocas aid = SOME b) /\
-            ss.vs_memory = s0.vs_memory) R
+            ss.vs_memory = s0.vs_memory /\ ss.vs_labels = s0.vs_labels) R
 Proof
   rpt strip_tac >> irule frag_exec_writes_fresh >>
   qpat_x_assum `straight_fresh _` (mp_tac o REWRITE_RULE [straight_fresh_def]) >>
