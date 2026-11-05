@@ -693,7 +693,7 @@ Finalise normalize_tuple_fields_run
 
 (* Nominal lookup plus stored-size agreement reduces the struct traversal to
    the same-type field traversal; names are justified, never erased by size. *)
-Theorem normalize_struct_as_fields[local]:
+Theorem normalize_struct_as_fields:
   !fields doff soff.
     (!name ty sz. MEM (name,ty,sz) fields ==>
       ALOOKUP src_fields name = SOME (ty,sz) /\ sz = type_memory_bytes ce ty) ==>
