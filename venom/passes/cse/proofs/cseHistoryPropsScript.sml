@@ -3615,3 +3615,61 @@ Proof
    (mp_then Any mp_tac cse_prefix_memory_fold) >>
  simp[rich_listTheory.FOLDL_APPEND, cse_memory_fold_surviving]
 QED
+
+Theorem cse_mload_two_state_replay:
+ src.inst_opcode = MLOAD /\ inst.inst_opcode = MLOAD /\
+ src.inst_operands = [a] /\ inst.inst_operands = [b] /\
+ src.inst_outputs = [y] /\ inst.inst_outputs = [x] /\
+ step_inst m ctx src u = OK v /\ step_inst n ctx inst s = OK t /\
+ eval_operand a u = eval_operand b s /\ u.vs_memory = s.vs_memory ==>
+ lookup_var x t = lookup_var y v
+Proof
+ strip_tac >> gvs[step_inst_non_invoke] >>
+ gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs()] >>
+ gvs[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+     mload_def]
+QED
+
+Theorem cse_mload_root_memory[local]:
+ inst.inst_opcode = MLOAD ==>
+ Eff_MEMORY IN root_effects (mk_expr d inst)
+Proof
+ strip_tac >> simp[availExprDefsTheory.mk_expr_def,
+   Once availExprDefsTheory.mk_operand_expr_def] >>
+ simp[Once availExprDefsTheory.canon_expr_def] >>
+ IF_CASES_TAC >>
+ simp[availExprDefsTheory.root_effects_def, venomEffectsTheory.read_effects_def]
+QED
+
+Theorem cse_mload_history_replay:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m sb u) /\
+ cse_prefix ctx fn fuel0 s0 (pre ++ [CseStep m sb src u v] ++ post)
+   (CseExec n ib s) /\
+ get_instruction sb u.vs_inst_idx = SOME src /\
+ get_instruction ib s.vs_inst_idx = SOME inst /\
+ src.inst_opcode = MLOAD /\ inst.inst_opcode = MLOAD /\
+ src.inst_operands = [a] /\ inst.inst_operands = [b] /\
+ src.inst_outputs = [y] /\ inst.inst_outputs = [x] /\
+ step_inst m ctx src u = OK v /\ step_inst n ctx inst s = OK t /\
+ eval_operand a u = eval_operand b s /\
+ EVERY (cse_event_survives (mk_expr (dfg_build_function fn) inst)) post /\
+ (!j. MEM j (fn_insts fn) ==> j.inst_opcode <> ALLOCA) ==>
+ lookup_var x t = lookup_var y v
+Proof
+ strip_tac >>
+ `cse_prefix ctx fn fuel0 s0 (pre ++ [CseStep m sb src u v])
+    (CseExec m sb (v with vs_inst_idx := SUC u.vs_inst_idx))` by
+   (irule cse_prefix_ordinary_extend >> simp[is_terminator_def]) >>
+ `v.vs_memory = u.vs_memory` by
+   (irule write_effects_sound_memory >>
+    qexistsl [`ctx`, `m`, `src`] >>
+    simp[is_alloca_op_def, is_terminator_def, venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.empty_effects_def]) >>
+ `Eff_MEMORY IN root_effects (mk_expr (dfg_build_function fn) inst)` by
+   (irule cse_mload_root_memory >> simp[]) >>
+ `s.vs_memory = v.vs_memory` by
+   (drule_all cse_prefix_surviving_memory_frame >>
+    gvs[cse_phase_state_def, APPEND_ASSOC]) >>
+ irule cse_mload_two_state_replay >> metis_tac[]
+QED
