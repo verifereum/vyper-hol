@@ -1,6 +1,6 @@
 Theory makeSsaCurrentRuntimeTransport
 Ancestors makeSsaCurrentJointRuntime makeSsaCurrentSemanticHistory
-  makeSsaCurrentTemporalWrites
+  makeSsaCurrentTemporalWrites makeSsaCurrentExecutionHistory makeSsaCurrentRuntimeOwners
   venomState finite_map alist list pair
 
 (* A demanded origin must be explicitly defined; joint equality alone also
@@ -185,4 +185,43 @@ Proof
     qexists_tac `before` >> simp[] >> qexists_tac `writes` >> simp[] >>
     irule current_compatible_origin_realizes >> qexists_tac `Val` >> simp[]) >>
   rpt strip_tac >> drule_all current_write_decoration_selected >> simp[]
+QED
+
+Theorem current_actual_prefix_origin_transport:
+  current_history_valid U H /\ MEM v U /\
+  current_owner_name H v selected /\
+  (!l bb n. lookup_block l fn'.fn_blocks = SOME bb /\
+    MEM n (FLAT (MAP (\i. i.inst_outputs) bb.bb_instructions)) ==>
+    ?w. MEM w U /\ current_owner_name H w n) /\
+  current_actual_prefix fn' ctx loc before phases next result after /\
+  (!phase n w. MEM phase phases /\
+    MEM n (current_phase_outputs phase) /\ current_owner_name H w n ==> w <> v) /\
+  current_origin_realizes Val Ms source /\
+  current_origin_realizes Val Mt before /\
+  ALOOKUP Mt selected = SOME origin /\ Val origin = SOME value ==>
+  ?Val' Mt'.
+    current_origin_realizes Val' Ms source /\
+    current_origin_realizes Val' Mt' after /\
+    ALOOKUP Mt' selected = SOME origin /\ Val' origin = SOME value /\
+    lookup_var selected after = SOME value /\
+    (!orig. MEM orig (MAP SND Ms ++ MAP SND Mt ++ protected) ==> Val' orig = Val orig)
+Proof
+  strip_tac >>
+  `!phase. MEM phase phases ==> ~MEM selected (current_phase_outputs phase)` by
+    metis_tac[] >>
+  drule current_actual_prefix_history >>
+  disch_then (qspec_then `0` strip_assume_tac) >>
+  drule_all current_semantic_history_output_exclusion >> strip_tac >>
+  drule current_semantic_history_fold >> strip_tac >>
+  qpat_assum `current_origin_realizes Val Ms source`
+    (mp_then Any mp_tac current_fresh_decoration_total_realization) >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `origin::protected` strip_assume_tac) >>
+  `ALOOKUP (current_chronological_writes originWrites Mt) selected = SOME origin` by
+    metis_tac[] >>
+  `Val' origin = SOME value` by gvs[] >>
+  qexistsl_tac [`Val'`, `current_chronological_writes originWrites Mt`] >>
+  simp[] >> conj_tac
+  >- (irule current_origin_snapshot_read >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum irule >> simp[]
 QED
