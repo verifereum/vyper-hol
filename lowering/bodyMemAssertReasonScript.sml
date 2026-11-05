@@ -18,9 +18,9 @@ Theorem assert_reason_vv_sim_mem[local]:
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_mem_ok cx se) /\
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
-    ~expr_has_evm_run se /\
+    ~expr_has_evm_run se /\ ~is_extcode se /\
     ~supported_expr_exists
-       (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
+       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) se ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (do raw <- eval_expr cx e; read_result cx raw od)
@@ -59,7 +59,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  `~expr_has_evm_run se` by
+  `~expr_has_evm_run se /\ ~is_extcode se` by
     metis_tac[supported_string_reason_body_calls] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
@@ -71,12 +71,12 @@ Proof
   `!sa op sb. lower_value compile_expr cenv (BaseT BoolT) e sa = (op, sb) ==>
               cs_extends sa sb` by metis_tac[compile_expr_grows] >>
   `~supported_expr_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se` by
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) se` by
     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
         supported_assert_exists_def] >>
   `alloc_limits_expr cenv se` by
     (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ se` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> simp[]) >>
+     simp[] >> irule supported_expr_exists_root >> fs[]) >>
   `!target. supported_expr_exists (expr_abi_decode_target_root target) se ==>
             occurs_abi_decode_target target (cx_tops cx)` by
     (fs[supported_stmt_expr_exists_def,

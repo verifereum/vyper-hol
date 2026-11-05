@@ -16,13 +16,14 @@ Proof
   `supported_string_reason tops e` by
     gvs[supported_stmt_def, supported_raise_reason_def] >>
   `well_typed_expr env e` by gvs[type_stmt_def] >>
+  `~is_extcode e` by metis_tac[supported_string_reason_body_calls] >>
   `~supported_expr_exists
-      (\e. ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e` by
+      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) e` by
     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
         supported_raise_exists_def] >>
   `alloc_limits_expr cenv e` by
     (CCONTR_TAC >> qpat_x_assum `~supported_expr_exists _ _` mp_tac >>
-     simp[] >> irule supported_expr_exists_root >> simp[]) >>
+     simp[] >> irule supported_expr_exists_root >> fs[]) >>
   Cases_on `?ml str. e = Literal (BaseT (StringT ml)) (StringL str)`
   >- (gvs[] >> irule compile_raise_reason_lit_frag_mem >>
       gvs[well_typed_expr_def, well_typed_literal_def] >>
