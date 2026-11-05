@@ -68,3 +68,24 @@ Proof
   strip_tac >> gvs[unwrap_value_def, comp_return_def] >>
   irule (cj 1 gas_path_mem_rules) >> simp[]
 QED
+
+(* Reuse does not provide padding slack for a later, disjoint live source.
+   This is only an allocation-interface countermodel, not a simulation one. *)
+Theorem ifexp_reused_alloc_padding_probe:
+  s.vs_allocas = FEMPTY |+ (7,(0,64)) |+ (8,(64,33)) /\
+  s.vs_alloca_next = 97 ==>
+  alloca_inv s /\
+  ?u. exec_alloca (mk_inst 7 ALLOCA [Lit 64w] ["%probe"]) s (64w:bytes32) = OK u /\
+      u.vs_alloca_next = 97 /\
+      64 + 32 + 1 <= u.vs_alloca_next /\
+      ~(64 + 32 + 32 * word_size 1 <= u.vs_alloca_next) /\
+      0 + 32 + 32 * word_size 1 <= u.vs_alloca_next
+Proof
+  strip_tac >> conj_tac
+  >- (simp[venomMemDefsTheory.alloca_inv_def,
+           venomMemDefsTheory.allocas_non_overlapping_def,
+           venomMemDefsTheory.alloca_next_valid_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> gvs[AllCaseEqs()] >> decide_tac) >>
+  simp[venomExecSemanticsTheory.exec_alloca_def, venomInstTheory.mk_inst_def,
+       venomStateTheory.update_var_def, FLOOKUP_UPDATE] >> EVAL_TAC
+QED
