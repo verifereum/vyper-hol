@@ -9,6 +9,7 @@ Ancestors
   fnPlanLineageJoin genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
+  allocaRemapSSA
 
 Theorem phi_delete_spills_domain[local]:
   !xs ps at.
@@ -632,4 +633,18 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
   Cases_on `~halt /\ ~MEM (HD inst.inst_outputs) live` >> gvs[] >>
   imp_res_tac phi_popmany_spilled >> imp_res_tac phi_do_dup_spilled >> gvs[]
+QED
+
+Theorem phi_output_normalize_self:
+  !fn phi out visited.
+    ssa_form fn /\ MEM phi (fn_insts fn) /\ MEM out phi.inst_outputs /\
+    phi.inst_opcode = PHI ==>
+    normalize_operand (dfg_build_function fn) visited (Var out) = Var out
+Proof
+  rpt strip_tac >>
+  drule_all dfgAnalysisPropsTheory.dfg_build_function_defs_complete >> strip_tac >>
+  drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+  `phi = inst'` by
+    (irule allocaRemapSSATheory.ssa_unique_output >> metis_tac[]) >>
+  gvs[dfg_get_def_def] >> simp[Once normalize_operand_def]
 QED
