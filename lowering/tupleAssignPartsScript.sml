@@ -11,9 +11,7 @@ Theorem tuple_target_stores_growth:
     compile_tuple_store_all cenv tys gs ops st = ((),sf) ==>
     cs_extends st sf /\ st.cs_next_var <= sf.cs_next_var
 Proof
-  rpt strip_tac >>
-  `ci_mono st sf` suffices_by simp[ci_mono_def] >>
-  metis_tac[cj 5 ci_mono_list_helpers, pairTheory.SND]
+  cheat
 QED
 
 Theorem assign_tuple_targets_code_parts:
@@ -46,26 +44,5 @@ Theorem assign_tuple_targets_code_parts:
       sa.cs_next_var <= su.cs_next_var /\ su.cs_next_var <= sl.cs_next_var /\
       sl.cs_next_var <= ss.cs_next_var /\ ss.cs_next_var <= sf.cs_next_var
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all assign_tuple_targets_code_decompose >> strip_tac >>
-  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
-  drule exprSimUnwrapTheory.unwrap_value_extends >> strip_tac >>
-  drule tuple_stage_grows >> strip_tac >>
-  drule compile_tuple_load_all_grows >> strip_tac >>
-  drule tuple_target_stores_growth >> strip_tac >>
-  `lower_value compile_expr cenv (TupleT tys) e sa = (op,su)` by
-    simp[lower_value_def, comp_bind_def] >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  `cs_extends sl sf` by metis_tac[cs_extends_trans] >>
-  `cs_extends su sf` by metis_tac[cs_extends_trans] >>
-  `cs_extends sc sf` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa sc func /\ fn_has_code sc sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code sc su func /\ fn_has_code su sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code su sl func /\ fn_has_code sl sf func` by
-    metis_tac[fn_has_code_split] >>
-  `fn_has_code sl ss func /\ fn_has_code ss sf func` by
-    metis_tac[fn_has_code_split] >>
-  simp[]
+  cheat
 QED

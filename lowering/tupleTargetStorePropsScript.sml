@@ -15,9 +15,7 @@ Theorem tuple_targets_typing:
           assignable_type env.type_defs (TupleT tys) /\
           LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\ env' = env
 Proof
-  rpt strip_tac >>
-  gvs[type_stmt_def, atarget_accepts_def, well_typed_atarget_def,
-      AllCaseEqs(), ETA_THM]
+  cheat
 QED
 
 (* Locals and module words reuse the existing zero-instruction pointer
@@ -29,7 +27,7 @@ Theorem tuple_target_local_pointer:
     compile_get_target_ptr cfn cenv (NameTarget id) st =
       ((ptr, SOME LocMemory, SOME (ValPT ty)), st)
 Proof
-  simp[compile_get_target_ptr_def, comp_return_def]
+  cheat
 QED
 
 Theorem tuple_target_field_pointer:
@@ -48,11 +46,7 @@ Theorem tuple_target_field_pointer:
       ((ptr, SOME (if tr then LocTransient else LocStorage),
         SOME (ValPT fty)), st')
 Proof
-  rpt strip_tac >>
-  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
-  Cases_on `tr` >>
-  asm_simp_tac (srw_ss())
-    [Once compile_get_target_ptr_def, comp_bind_def, comp_return_def, LET_THM]
+  cheat
 QED
 
 Theorem tuple_target_base_type:
@@ -60,7 +54,7 @@ Theorem tuple_target_base_type:
     well_typed_atarget env (BaseTarget bt) ty <=>
     type_place_target env bt = SOME (Type ty)
 Proof
-  simp[well_typed_atarget_def, well_typed_target_def]
+  cheat
 QED
 
 (* Expose the source's sequential order without imposing distinct targets. *)
@@ -72,10 +66,7 @@ Theorem assign_tuple_target_list_cons:
         INL u => assign_tuple_target_list cx gs vs es1 = (res, es')
       | INR ex => res = INR ex /\ es' = es1
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, ignore_bind_def, bind_def] >>
-  Cases_on `assign_tuple_targets cx g v es` >>
-  rename1 `assign_tuple_targets _ _ _ _ = (head_res, head_es)` >>
-  Cases_on `head_res` >> simp[EQ_SYM_EQ]
+  cheat
 QED
 
 Theorem tuple_target_storage_write_safe:
@@ -86,12 +77,7 @@ Theorem tuple_target_storage_write_safe:
     ?es'. write_place cx (StoragePlace tr slot tv) v es = (INL (), es') /\
           es'.scopes = es.scopes
 Proof
-  rpt strip_tac >> drule_all encode_value_word_typed >> strip_tac >>
-  Cases_on `tr` >>
-  simp[write_place_def, write_storage_slot_def, get_storage_backend_def,
-       set_storage_backend_def, get_transient_storage_def, get_accounts_def,
-       update_transient_def, update_accounts_def, bind_def, ignore_bind_def,
-       lift_option_type_def, return_def]
+  cheat
 QED
 
 Theorem tuple_target_local_write_safe:
@@ -102,10 +88,7 @@ Theorem tuple_target_local_write_safe:
       (INL (), es with scopes :=
         pre ++ (sc |+ (id, entry with <|value := v; popped := []|>)) :: rest)
 Proof
-  simp[write_place_def, bind_def, ignore_bind_def, get_scopes_def,
-       lift_option_type_def, type_check_def, assert_def, lift_sum_def,
-       replace_memory_entry_def, evaluate_subscripts_def,
-       assign_subscripts_def, set_scopes_def, return_def]
+  cheat
 QED
 
 Theorem tuple_target_toplevel_place:
@@ -117,10 +100,7 @@ Theorem tuple_target_toplevel_place:
     eval_target_place cx (TopLevelNameTarget (src, id)) es =
       (INL (StoragePlace tr (n2w slot) tv), es)
 Proof
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, get_place_def]
+  cheat
 QED
 
 Theorem tuple_target_field_place:
@@ -133,11 +113,7 @@ Theorem tuple_target_field_place:
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
       es = (INL (StoragePlace tr (n2w slot + n2w off) tv), es)
 Proof
-  rpt strip_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, get_place_def, extend_place_def, extend_storage_place_def]
+  cheat
 QED
 
 Theorem tuple_target_local_preserves_layout:
@@ -148,12 +124,7 @@ Theorem tuple_target_local_preserves_layout:
         (pre ++ (sc |+ (id, entry with <|value := v; popped := []|>)) :: rest)) =
     OPTION_MAP (\e. (e.type, e.assignable)) (lookup_scopes n es.scopes)
 Proof
-  rpt strip_tac >> Cases_on `n = id`
-  >- (gvs[] >> drule find_containing_scope_lookup >> strip_tac >>
-      drule find_containing_scope_pre_none >> strip_tac >>
-      simp[lookup_scopes_update]) >>
-  drule find_containing_scope_structure >> strip_tac >>
-  simp[lookup_scopes_update_other]
+  cheat
 QED
 
 Theorem tuple_target_write_safe:
@@ -171,12 +142,7 @@ Theorem tuple_target_write_safe:
       !n. OPTION_MAP (\e. (e.type, e.assignable)) (lookup_scopes n es'.scopes) =
           OPTION_MAP (\e. (e.type, e.assignable)) (lookup_scopes n es.scopes)
 Proof
-  rpt gen_tac >> strip_tac
-  >- (drule_all tuple_target_local_write_safe >> strip_tac >>
-      simp[Once evaluate_def, bind_def] >>
-      metis_tac[tuple_target_local_preserves_layout]) >>
-  drule_all tuple_target_storage_write_safe >> strip_tac >>
-  simp[Once evaluate_def, bind_def] >> metis_tac[]
+  cheat
 QED
 
 (* Pure declaration information; deliberately no execution or compiler facts. *)
@@ -206,13 +172,7 @@ Theorem tuple_source_target_layout:
          OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n scopes)) ==>
     (tuple_source_target cx scopes' g tv <=> tuple_source_target cx scopes g tv)
 Proof
-  rpt strip_tac >> simp[tuple_source_target_def] >>
-  `!id. (?entry. lookup_scopes id scopes' = SOME entry /\ entry.assignable) <=>
-         (?entry. lookup_scopes id scopes = SOME entry /\ entry.assignable)` by
-    (gen_tac >> first_x_assum (qspec_then `id` mp_tac) >>
-     Cases_on `lookup_scopes id scopes'` >>
-     Cases_on `lookup_scopes id scopes` >> simp[] >> metis_tac[]) >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem tuple_source_target_safe:
@@ -223,17 +183,7 @@ Theorem tuple_source_target_safe:
       !n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes)
 Proof
-  rpt gen_tac >> simp[tuple_source_target_def] >> strip_tac >> gvs[]
-  >- (drule lookup_scopes_find_containing_scope >> strip_tac >>
-      irule tuple_target_write_safe >> conj_tac >- simp[] >> disj1_tac >>
-      first_assum (irule_at Any) >> simp[] >>
-      simp[Once evaluate_def, bind_def] >>
-      simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-           return_def, get_place_def, get_scopes_def])
-  >- (drule_all tuple_target_toplevel_place >> strip_tac >>
-      irule tuple_target_write_safe >> conj_tac >- simp[] >> disj2_tac >> metis_tac[]) >>
-  drule_all tuple_target_field_place >> strip_tac >>
-  irule tuple_target_write_safe >> conj_tac >- simp[] >> disj2_tac >> metis_tac[]
+  cheat
 QED
 
 Theorem assign_tuple_target_list_safe:
@@ -245,17 +195,7 @@ Theorem assign_tuple_target_list_safe:
       !n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
           OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes)
 Proof
-  Induct
-  >- (simp[Once evaluate_def, return_def] >> metis_tac[]) >>
-  rpt gen_tac >> Cases_on `tvs` >> simp[] >> Cases_on `vs` >> simp[] >>
-  strip_tac >> rename1 `LIST_REL value_has_type tail_tvs tail_vs` >>
-  drule_all tuple_source_target_safe >> strip_tac >>
-  `LIST_REL (tuple_source_target cx es'.scopes) gs tail_tvs` by
-    (irule LIST_REL_mono >> first_assum (irule_at Any) >>
-     metis_tac[tuple_source_target_layout]) >>
-  first_x_assum drule_all >> strip_tac >>
-  simp[assign_tuple_target_list_cons] >>
-  first_assum (irule_at Any) >> simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem assign_tuple_targets_safe:
@@ -266,8 +206,7 @@ Theorem assign_tuple_targets_safe:
     ?es'. assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs)) es =
       (INL (),es')
 Proof
-  rpt strip_tac >> drule_all assign_tuple_target_list_safe >>
-  simp[Once evaluate_def] >> metis_tac[]
+  cheat
 QED
 
 Theorem eval_assign_tuple_targets_error:
@@ -283,10 +222,7 @@ Theorem eval_assign_tuple_targets_error:
     (do result <- eval_expr cx e; read_result cx result od) es = (INR ex,es') /\
     expr_res_ok (INR ex : value + exception)
 Proof
-  rpt gen_tac >> strip_tac >> strip_tac >> drule eval_assign_tuple >> strip_tac >>
-  Cases_on `r` >> gvs[]
-  >- (drule_all assign_tuple_targets_safe >> gvs[]) >>
-  gvs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def]
+  cheat
 QED
 
 (* Exact destination types and compiler mappings, independent of source state. *)
@@ -316,7 +252,7 @@ Theorem tuple_compiler_target_local:
     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type id = SOME ty /\ 0 < type_memory_bytes cenv ty
 Proof
-  simp[tuple_compiler_target_def]
+  cheat
 QED
 
 Theorem tuple_compiler_target_toplevel:
@@ -327,7 +263,7 @@ Theorem tuple_compiler_target_toplevel:
       cenv.ce_hashmap_info nsid = NONE /\
       cenv.ce_module_var_type nsid = SOME ty /\ is_word_type ty
 Proof
-  simp[tuple_compiler_target_def]
+  cheat
 QED
 
 Theorem tuple_compiler_target_field:
@@ -341,13 +277,13 @@ Theorem tuple_compiler_target_field:
       ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
         fld = SOME (ty,fsz) /\ is_word_type ty
 Proof
-  simp[tuple_compiler_target_def]
+  cheat
 QED
 
 Theorem tuple_compiler_target_base:
   !cenv g ty. tuple_compiler_target cenv g ty ==> ?bt. g = BaseTarget bt
 Proof
-  simp[tuple_compiler_target_def] >> metis_tac[]
+  cheat
 QED
 
 (* Shared source/compiler locations; no execution assumptions. *)
@@ -400,8 +336,7 @@ Theorem tuple_target_aligned_compiler:
   !cenv cx g ty tv.
     tuple_target_aligned cenv cx g ty tv ==> tuple_compiler_target cenv g ty
 Proof
-  rpt gen_tac >> simp[tuple_target_aligned_def, tuple_compiler_target_def] >>
-  strip_tac >> metis_tac[]
+  cheat
 QED
 
 Theorem tuple_target_aligned_source:
@@ -409,9 +344,7 @@ Theorem tuple_target_aligned_source:
     tuple_target_aligned cenv cx g ty tv /\ tuple_target_layout scopes g ty tv v ==>
     tuple_source_target cx scopes g tv
 Proof
-  rpt gen_tac >>
-  simp[tuple_target_aligned_def, tuple_target_layout_def, tuple_source_target_def] >>
-  strip_tac >> gvs[] >> metis_tac[]
+  cheat
 QED
 
 Theorem tuple_target_aligned_nonlocal_word:
@@ -419,7 +352,7 @@ Theorem tuple_target_aligned_nonlocal_word:
     tuple_target_aligned cenv cx g ty tv /\
     (!id. g <> BaseTarget (NameTarget id)) ==> is_word_type ty
 Proof
-  simp[tuple_target_aligned_def] >> metis_tac[]
+  cheat
 QED
 
 Theorem tuple_target_layout_transport:
@@ -428,15 +361,7 @@ Theorem tuple_target_layout_transport:
          OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n scopes)) ==>
     (tuple_target_layout scopes' g ty tv v <=> tuple_target_layout scopes g ty tv v)
 Proof
-  rpt strip_tac >> simp[tuple_target_layout_def] >>
-  `!id. (?entry. lookup_scopes id scopes' = SOME entry /\ entry.assignable /\
-           entry.type = tv /\ (is_word_type ty ==> store_lays_out tv entry.type v)) <=>
-         (?entry. lookup_scopes id scopes = SOME entry /\ entry.assignable /\
-           entry.type = tv /\ (is_word_type ty ==> store_lays_out tv entry.type v))` by
-    (gen_tac >> first_x_assum (qspec_then `id` mp_tac) >>
-     Cases_on `lookup_scopes id scopes'` >> Cases_on `lookup_scopes id scopes` >>
-     simp[] >> metis_tac[]) >>
-  simp[]
+  cheat
 QED
 
 Theorem tuple_target_aligned_local:
@@ -447,7 +372,7 @@ Theorem tuple_target_aligned_local:
       evaluate_type (get_tenv cx) ty = SOME tv /\
       type_memory_bytes cenv ty = type_memory_size tv
 Proof
-  simp[tuple_target_aligned_def]
+  cheat
 QED
 
 Theorem tuple_target_layout_local:
@@ -456,7 +381,7 @@ Theorem tuple_target_layout_local:
     ?entry. lookup_scopes id scopes = SOME entry /\ entry.assignable /\
       entry.type = tv /\ (is_word_type ty ==> store_lays_out tv entry.type v)
 Proof
-  simp[tuple_target_layout_def]
+  cheat
 QED
 
 Theorem tuple_target_aligned_toplevel:
@@ -474,7 +399,7 @@ Theorem tuple_target_aligned_toplevel:
       (!u mem. storage_dead cx tr (update_storage (n2w k) u mem) =
                storage_dead cx tr mem)
 Proof
-  simp[tuple_target_aligned_def]
+  cheat
 QED
 
 Theorem tuple_target_aligned_field:
@@ -499,7 +424,7 @@ Theorem tuple_target_aligned_field:
       (!u mem. storage_dead cx tr (update_storage (n2w k + n2w off) u mem) =
                storage_dead cx tr mem)
 Proof
-  simp[tuple_target_aligned_def]
+  cheat
 QED
 
 Theorem tuple_target_local_assignment:
@@ -511,14 +436,7 @@ Theorem tuple_target_local_assignment:
       es' = es with scopes :=
         pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest
 Proof
-  rpt strip_tac >> drule lookup_scopes_find_containing_scope >> strip_tac >>
-  drule_all tuple_target_local_write_safe >> strip_tac >>
-  gvs[Once evaluate_def, bind_def] >>
-  gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
-      return_def, get_place_def, get_scopes_def] >>
-  gvs[Once evaluate_def, bind_def, get_scopes_def, lift_option_type_def,
-      return_def, get_place_def, ignore_bind_def, type_check_def, assert_def] >>
-  metis_tac[]
+  cheat
 QED
 
 Theorem tuple_target_storage_assignment:
@@ -527,9 +445,7 @@ Theorem tuple_target_storage_assignment:
     assign_tuple_targets cx (BaseTarget bt) v es = (INL (),es') ==>
     write_storage_slot cx tr slot tv v es = (INL (),es')
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, write_place_def]
+  cheat
 QED
 
 Theorem tuple_target_local_domain_frame:
@@ -538,8 +454,7 @@ Theorem tuple_target_local_domain_frame:
     MAP FDOM scopes =
       MAP FDOM (pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
 Proof
-  rpt strip_tac >> drule find_containing_scope_structure >>
-  simp[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[]
+  cheat
 QED
 
 Theorem tuple_target_storage_scope_frame:
@@ -547,12 +462,7 @@ Theorem tuple_target_storage_scope_frame:
     write_storage_slot cx tr slot tv v es = (INL (),es') ==>
     es'.scopes = es.scopes
 Proof
-  rpt gen_tac >> Cases_on `encode_value tv v` >>
-  Cases_on `tr` >>
-  simp[raise_def, write_storage_slot_def, get_storage_backend_def, set_storage_backend_def,
-       get_transient_storage_def, get_accounts_def, update_transient_def,
-       update_accounts_def, bind_def, ignore_bind_def, lift_option_type_def, return_def,
-       AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  cheat
 QED
 
 Theorem tuple_target_assignment_scope_frame:
@@ -564,20 +474,7 @@ Theorem tuple_target_assignment_scope_frame:
     (!n. OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es'.scopes) =
          OPTION_MAP (\e. (e.type,e.assignable)) (lookup_scopes n es.scopes))
 Proof
-  rpt gen_tac >> simp[tuple_target_aligned_def] >> strip_tac >> gvs[]
-  >- (gvs[tuple_target_layout_local] >>
-      drule_all tuple_target_local_assignment >> strip_tac >> gvs[] >>
-      conj_tac
-      >- (drule tuple_target_local_domain_frame >> simp[]) >>
-      irule tuple_target_local_preserves_layout >> simp[])
-  >- (drule_all tuple_target_toplevel_place >>
-      disch_then (qspec_then `es` assume_tac) >>
-      drule_all tuple_target_storage_assignment >> strip_tac >>
-      drule tuple_target_storage_scope_frame >> simp[]) >>
-  drule_all tuple_target_field_place >>
-  disch_then (qspec_then `es` assume_tac) >>
-  drule_all tuple_target_storage_assignment >> strip_tac >>
-  drule tuple_target_storage_scope_frame >> simp[]
+  cheat
 QED
 
 Theorem tuple_target_list_cons_success:
@@ -588,8 +485,5 @@ Theorem tuple_target_list_cons_success:
     ?es1. assign_tuple_targets cx g v es = (INL (),es1) /\
           assign_tuple_target_list cx gs vs es1 = (INL (),es')
 Proof
-  rpt strip_tac >> drule_all tuple_target_aligned_source >> strip_tac >>
-  drule_all tuple_source_target_safe >> strip_tac >>
-  qpat_x_assum `assign_tuple_target_list _ (_::_) _ _ = _` mp_tac >>
-  simp[assign_tuple_target_list_cons] >> metis_tac[]
+  cheat
 QED

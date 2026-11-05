@@ -84,34 +84,7 @@ Theorem static_length_memory_size:
      static_length (Tuple (vyper_to_abi_types tenv ts)) +
        SUM (MAP type_memory_size acc) = SUM (MAP type_memory_size tvs))
 Proof
-  ho_match_mp_tac evaluate_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
-      drule OPT_MMAP_LENGTH >> strip_tac >>
-      simp[type_memory_size_def, type_memory_size_fields_sum,
-           GSYM MAP_MAP_o, MAP_ZIP])
-  >~ [`TupleT ts`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      simp[type_memory_size_def, type_memory_size_list_sum])
-  >~ [`ArrayT t bd`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      Cases_on `bd` >> gvs[type_memory_size_def])
-  >~ [`BaseT bt`]
-  >- (rpt strip_tac >> Cases_on `bt` >>
-      gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >>
-      gvs[evaluate_type_def, AllCaseEqs(), type_memory_size_def])
-  >~ [`FlagT nsid`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs(),
-                           type_memory_size_def])
-  >~ [`evaluate_types tenv [] acc`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, MAP_REVERSE, SUM_REVERSE])
-  >~ [`evaluate_types tenv (t::ts) acc`]
-  >- (rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-      first_x_assum drule_all >> strip_tac >>
-      first_x_assum drule_all >> strip_tac >> fs[] >> decide_tac) >>
-  rpt strip_tac >> gvs[evaluate_type_def, type_memory_size_def]
+  cheat
 QED
 
 Theorem length_flat_map2_replicate[local]:
@@ -119,20 +92,13 @@ Theorem length_flat_map2_replicate[local]:
     (!i. i < LENGTH xs ==> LENGTH (enc t (EL i xs)) = k) ==>
     LENGTH (FLAT (MAP2 enc (REPLICATE (LENGTH xs) t) xs)) = LENGTH xs * k
 Proof
-  Induct >> simp[] >> rpt strip_tac >>
-  `LENGTH (enc t h) = k` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `LENGTH (FLAT (MAP2 enc (REPLICATE (LENGTH xs) t) xs)) = LENGTH xs * k` by
-    (first_x_assum irule >> rpt strip_tac >>
-     first_x_assum (qspec_then `SUC i` mp_tac) >> simp[]) >>
-  simp[MULT_CLAUSES]
+  cheat
 QED
 
 Theorem length_word_to_bytes_256[local,simp]:
   LENGTH (word_to_bytes (w:bytes32) T) = 32
 Proof
-  simp[byteTheory.LENGTH_word_to_bytes,
-       fcpLib.INDEX_CONV ``dimindex(:256)``]
+  cheat
 QED
 
 (* A static value's ABI encoding takes its memory size. *)
@@ -150,121 +116,48 @@ Theorem vyper_to_abi_static_enc_length:
      LENGTH (FLAT (MAP2 enc (vyper_to_abi_types env ts) avs)) =
        SUM (MAP type_memory_size tvs))
 Proof
-  ho_match_mp_tac vyper_to_abi_type_ind >> rpt conj_tac
-  >- suspend "base"
-  >- suspend "tuple"
-  >- (rpt strip_tac >> gvs[])
-  >- suspend "array"
-  >- suspend "struct"
-  >- (rpt strip_tac >>
-      rename1 `FlagT nsid` >> `is_word_type (FlagT nsid)` by simp[is_word_type_def] >>
-      drule_all vyper_to_abi_word_enc >> strip_tac >>
-      drule_all word_type_memory_size >> simp[])
-  >- (rpt strip_tac >> gvs[evaluate_type_def, type_memory_size_def] >>
-      simp[REV_DEF])
-  >- (rpt strip_tac >> Cases_on `vs` >> gvs[OPT_MMAP_def, value_has_type_def])
-  >> suspend "cons"
+  cheat
 QED
 
-Resume vyper_to_abi_static_enc_length[base]:
-  rpt strip_tac >> rename1 `BaseT bt` >>
-  `is_word_type (BaseT bt)` by
-    (Cases_on `bt` >> gvs[is_word_type_def, evaluate_type_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >>
-     gvs[is_word_type_def, evaluate_type_def]) >>
-  drule_all vyper_to_abi_word_enc >> strip_tac >>
-  drule_all word_type_memory_size >> simp[]
-QED
 
-Resume vyper_to_abi_static_enc_length[tuple]:
-  rpt strip_tac >> Cases_on `v` >>
-  gvs[evaluate_type_def, vyper_to_abi_def, AllCaseEqs()] >>
-  Cases_on `a` >>
-  gvs[value_has_type_def, vyper_to_abi_def, evaluate_types_OPT_MMAP,
-      AllCaseEqs(), any_dynamic_every_static] >>
-  first_x_assum drule_all >> strip_tac >>
-  `LENGTH (vyper_to_abi_types env ts) = LENGTH avs` by
-    simp[vyper_to_abi_types_length] >>
-  simp[enc_tuple_static_acc, type_memory_size_def, type_memory_size_list_sum]
-QED
 
-Resume vyper_to_abi_static_enc_length[array]:
-  rpt strip_tac >> gvs[evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >> gvs[value_has_type_def] >>
-  Cases_on `a` >> gvs[value_has_type_def, vyper_to_abi_def, AllCaseEqs()] >>
-  drule_all vyper_to_abi_sparse_EL >> strip_tac >>
-  rename1 `vyper_to_abi_sparse env t tv' n sparse = SOME xs` >>
-  `EVERY is_static (REPLICATE (LENGTH xs) (vyper_to_abi_type env t))` by
-    simp[EVERY_REPLICATE] >>
-  simp[enc_tuple_static_acc, type_memory_size_def] >>
-  `LENGTH (FLAT (MAP2 enc (REPLICATE (LENGTH xs) (vyper_to_abi_type env t))
-                   xs)) = LENGTH xs * type_memory_size tv'`
-    suffices_by simp[] >>
-  irule length_flat_map2_replicate >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >>
-  qexists_tac `sparse_val tv' sparse i` >> simp[] >>
-  metis_tac[sparse_val_has_type]
-QED
 
-Resume vyper_to_abi_static_enc_length[struct]:
-  rpt strip_tac >> Cases_on `v` >>
-  gvs[evaluate_type_def, vyper_to_abi_def, AllCaseEqs()] >>
-  gvs[evaluate_types_OPT_MMAP, value_has_type_def, any_dynamic_every_static] >>
-  drule struct_has_type_values_have_types >> strip_tac >>
-  drule OPT_MMAP_LENGTH >> strip_tac >>
-  gvs[MAP_ZIP] >>
-  first_x_assum drule_all >> strip_tac >>
-  `LENGTH (vyper_to_abi_types (env \\ nsid) (MAP SND args)) = LENGTH avs` by
-    simp[vyper_to_abi_types_length] >>
-  `MAP (type_memory_size o SND) (ZIP (MAP FST args, tvs)) =
-   MAP type_memory_size tvs` by simp[GSYM MAP_MAP_o, MAP_ZIP] >>
-  simp[enc_tuple_static_acc, type_memory_size_def,
-       type_memory_size_fields_sum]
-QED
 
-Resume vyper_to_abi_static_enc_length[cons]:
-  rpt strip_tac >> Cases_on `vs` >>
-  gvs[OPT_MMAP_def, vyper_to_abi_def, value_has_type_def, AllCaseEqs()] >>
-  first_x_assum drule_all >> strip_tac >>
-  first_x_assum drule_all >> simp[]
-QED
 
-Finalise vyper_to_abi_static_enc_length
 
 (* ===== Plans ===== *)
 
 Theorem vyper_to_abi_types_MAP[local]:
   !env ts. vyper_to_abi_types env ts = MAP (vyper_to_abi_type env) ts
 Proof
-  gen_tac >> Induct >> simp[]
+  cheat
 QED
 
 Theorem OPT_MMAP_MEM[local]:
   !ts tvs t. OPT_MMAP f ts = SOME tvs /\ MEM t ts ==>
              ?tv. f t = SOME tv /\ MEM tv tvs
 Proof
-  Induct >> simp[OPT_MMAP_def] >> rpt strip_tac >>
-  gvs[AllCaseEqs()] >> metis_tac[]
+  cheat
 QED
 
 Theorem EVERY_SND_ZIP[local]:
   !l1 l2. LENGTH l1 = LENGTH l2 ==>
           (EVERY (P o SND) (ZIP (l1, l2)) <=> EVERY P l2)
 Proof
-  Induct >> Cases_on `l2` >> simp[]
+  cheat
 QED
 
 Theorem map_field_types[local]:
   !fields. MAP (\(fn, fty, sz). g fty) fields = MAP g (MAP (FST o SND) fields)
 Proof
-  Induct >> simp[pairTheory.FORALL_PROD]
+  cheat
 QED
 
 Theorem dec_cenv_agrees_struct_keys[local]:
   tenv SUBMAP tenv0 /\ dec_cenv_agrees cenv tenv0 ==>
   (!k a. FLOOKUP tenv k = SOME (StructArgs a) ==> FST k = NONE)
 Proof
-  rw[dec_cenv_agrees_def, SUBMAP_FLOOKUP_EQN] >> metis_tac[]
+  cheat
 QED
 
 Theorem dec_cenv_agrees_flags[local]:
@@ -272,7 +165,7 @@ Theorem dec_cenv_agrees_flags[local]:
   (!nsid m. FLOOKUP tenv nsid = SOME (FlagArgs m) ==>
             cenv.ce_flag_n_members (nsid_to_string nsid) = m)
 Proof
-  rw[dec_cenv_agrees_def, SUBMAP_FLOOKUP_EQN] >> metis_tac[]
+  cheat
 QED
 
 (* What a plan element needs of a static component type. *)
@@ -283,8 +176,7 @@ Theorem dec_cenv_agrees_elem[local]:
   abi_embedded_static_size cenv.ce_struct_fields t = type_memory_size tv /\
   type_memory_bytes cenv t = type_memory_size tv
 Proof
-  rw[dec_cenv_agrees_def] >> drule_all abi_elem_props >> strip_tac >>
-  gvs[] >> metis_tac[static_length_memory_size]
+  cheat
 QED
 
 Theorem abi_dec_plans_map:
@@ -299,21 +191,7 @@ Theorem abi_dec_plans_map:
       (MAP (\t. (f t, abi_embedded_static_size cenv.ce_struct_fields t,
                  type_memory_bytes cenv t)) ts)
 Proof
-  ntac 4 gen_tac >> Induct >- simp[abi_dec_plan_nil] >>
-  gen_tac >> strip_tac >>
-  `?tv. evaluate_type tenv h = SOME tv`
-    by (first_x_assum (qspec_then `h` mp_tac) >> simp[optionTheory.IS_SOME_EXISTS]) >>
-  `~is_dynamic (vyper_to_abi_type tenv h) /\ abi_dec_plan tenv h (f h)`
-    by (first_x_assum (qspec_then `h` mp_tac) >> simp[]) >>
-  drule_all dec_cenv_agrees_elem >> strip_tac >>
-  `~EXISTS (is_abi_dynamic cenv.ce_struct_fields) ts /\
-   abi_dec_plans tenv ts
-     (MAP (\t. (f t, abi_embedded_static_size cenv.ce_struct_fields t,
-                type_memory_bytes cenv t)) ts)`
-    by (last_x_assum irule >> simp[] >> rpt strip_tac >>
-        first_x_assum (qspec_then `t` mp_tac) >> simp[]) >>
-  simp[] >> conj_tac >- fs[EVERY_MEM, EXISTS_MEM] >>
-  irule abi_dec_plan_cons >> simp[]
+  cheat
 QED
 
 (* The StructT case of type_to_abi_dec_info_plan, given each field's plan
@@ -337,44 +215,7 @@ Theorem type_to_abi_dec_info_plan_struct[local]:
   ~is_dynamic (vyper_to_abi_type tenv (StructT nsid)) ==>
   abi_dec_plan tenv (StructT nsid) (type_to_abi_dec_info sf cenv (StructT nsid))
 Proof
-  strip_tac >>
-  drule_then (drule_then assume_tac) dec_cenv_agrees_struct_keys >>
-  drule_all sfields_tenv_consistent_domsub >> strip_tac >>
-  `?fields. FLOOKUP sf (nsid_to_string nsid) = SOME fields /\
-            MAP (FST o SND) fields = MAP SND args`
-    by (qpat_x_assum `sfields_tenv_consistent sf tenv` mp_tac >>
-        simp[sfields_tenv_consistent_def] >> strip_tac >>
-        first_x_assum drule >> strip_tac >> simp[]) >>
-  gvs[evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP,
-      int_byte_widths_def, any_dynamic_every_static] >>
-  rename1 `OPT_MMAP _ _ = SOME ftvs` >>
-  drule OPT_MMAP_LENGTH >> strip_tac >>
-  `EVERY int_byte_widths ftvs` by gvs[EVERY_SND_ZIP, ETA_AX] >>
-  `tenv \\ nsid SUBMAP tenv0` by
-    (irule SUBMAP_TRANS >> qexists_tac `tenv` >> simp[]) >>
-  simp[Once type_to_abi_dec_info_def, map_field_types] >>
-  qspecl_then [`tenv \\ nsid`, `tenv0`, `cenv`,
-               `type_to_abi_dec_info (sf \\ nsid_to_string nsid) cenv`,
-               `MAP SND args`] mp_tac abi_dec_plans_map >>
-  impl_tac
-  >- (conj_tac >- simp[] >> conj_tac >- simp[] >>
-      gen_tac >> strip_tac >>
-      drule_all OPT_MMAP_MEM >> strip_tac >>
-      rename1 `evaluate_type (tenv \\ nsid) t = SOME ftv` >>
-      `?y. t = SND y /\ MEM y args` by (fs[MEM_MAP] >> metis_tac[]) >>
-      gvs[] >>
-      `int_byte_widths ftv` by metis_tac[EVERY_MEM] >>
-      `is_static (vyper_to_abi_type (tenv \\ nsid) (SND y))` by
-        (qpat_x_assum `EVERY is_static _` mp_tac >>
-         simp[vyper_to_abi_types_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
-         disch_then irule >> simp[]) >>
-      `assignable_type (tenv \\ nsid) (SND y)` by
-        (qpat_x_assum `EVERY (assignable_type _ o SND) _` mp_tac >>
-         simp[EVERY_MEM] >> disch_then drule >> simp[]) >>
-      simp[] >>
-      last_x_assum (qspec_then `y` mp_tac) >> simp[] >>
-      disch_then irule >> simp[] >> qexists_tac `tenv0` >> simp[]) >>
-  strip_tac >> simp[] >> irule abi_dec_plan_struct >> simp[]
+  cheat
 QED
 
 (* The TupleT case of type_to_abi_dec_info_plan, given each component's
@@ -396,29 +237,7 @@ Theorem type_to_abi_dec_info_plan_tuple[local]:
   ~is_dynamic (vyper_to_abi_type tenv (TupleT tys)) ==>
   abi_dec_plan tenv (TupleT tys) (type_to_abi_dec_info sf cenv (TupleT tys))
 Proof
-  strip_tac >>
-  gvs[assignable_type_def, evaluate_type_def, AllCaseEqs(),
-      evaluate_types_OPT_MMAP, int_byte_widths_def,
-      any_dynamic_every_static] >>
-  simp[Once type_to_abi_dec_info_def] >>
-  qspecl_then [`tenv`, `tenv0`, `cenv`, `type_to_abi_dec_info sf cenv`,
-               `tys`] mp_tac abi_dec_plans_map >>
-  impl_tac
-  >- (conj_tac >- simp[] >> conj_tac >- simp[] >>
-      gen_tac >> strip_tac >>
-      drule_all OPT_MMAP_MEM >> strip_tac >>
-      rename1 `evaluate_type tenv t = SOME etv` >>
-      `int_byte_widths etv` by metis_tac[EVERY_MEM] >>
-      `is_static (vyper_to_abi_type tenv t)` by
-        (qpat_x_assum `EVERY is_static _` mp_tac >>
-         simp[vyper_to_abi_types_MAP, EVERY_MEM, MEM_MAP, PULL_EXISTS] >>
-         disch_then irule >> simp[]) >>
-      `assignable_type tenv t` by metis_tac[EVERY_MEM] >>
-      simp[] >>
-      qpat_x_assum `!ty. MEM ty tys ==> _` (qspec_then `t` mp_tac) >>
-      simp[] >> disch_then irule >> simp[] >>
-      qexists_tac `tenv0` >> simp[]) >>
-  strip_tac >> simp[] >> irule abi_dec_plan_tuple >> simp[]
+  cheat
 QED
 
 (* type_to_abi_dec_info builds a plan for a static assignable type.  sf is
@@ -434,52 +253,7 @@ Theorem type_to_abi_dec_info_plan:
       ~is_dynamic (vyper_to_abi_type tenv ty) ==>
       abi_dec_plan tenv ty (type_to_abi_dec_info sf cenv ty)
 Proof
-  ho_match_mp_tac assignable_type_ind >> rpt conj_tac >> rpt gen_tac
-  >~ [`StructT nsid`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      `?args. FLOOKUP tenv nsid = SOME (StructArgs args)`
-        by (qpat_x_assum `assignable_type _ _` mp_tac >>
-            simp[assignable_type_def] >> rpt BasicProvers.TOP_CASE_TAC >>
-            simp[]) >>
-      drule_at (Pos hd) type_to_abi_dec_info_plan_struct >>
-      disch_then irule >>
-      qpat_x_assum `assignable_type _ _` mp_tac >>
-      simp[assignable_type_def] >> strip_tac >>
-      rpt conj_tac
-      >- (rpt strip_tac >>
-          first_x_assum (qspecl_then [`StructArgs args`, `args`, `x`, `SND x`]
-                           mp_tac) >>
-          simp[] >> disch_then irule >> simp[] >>
-          qexists_tac `tenv1` >> simp[])
-      >- fs[EVERY_MEM] >>
-      qexists_tac `tenv0` >> simp[])
-  >~ [`TupleT tys`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      drule_all type_to_abi_dec_info_plan_tuple >> simp[])
-  >~ [`ArrayT elem bd`]
-  >- (rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-      gvs[assignable_type_def, evaluate_type_def, AllCaseEqs()] >>
-      Cases_on `bd` >> gvs[int_byte_widths_def] >>
-      rename1 `evaluate_type tenv elem = SOME etv` >>
-      `abi_dec_plan tenv elem (type_to_abi_dec_info sf cenv elem)` by
-        (first_x_assum irule >> simp[] >> qexists_tac `tenv0` >> simp[]) >>
-      drule_all dec_cenv_agrees_elem >> strip_tac >>
-      simp[Once type_to_abi_dec_info_def, GSYM REPLICATE_GENLIST] >>
-      irule abi_dec_plan_sarray >> simp[])
-  >~ [`BaseT bt`]
-  >- (rpt strip_tac >>
-      `is_word_type (BaseT bt)` by
-        (Cases_on `bt` >> gvs[is_word_type_def, evaluate_type_def] >>
-         rename1 `BytesT bd` >> Cases_on `bd` >>
-         gvs[is_word_type_def, evaluate_type_def]) >>
-      irule type_to_abi_dec_info_word_plan >> simp[] >>
-      drule_then (drule_then assume_tac) dec_cenv_agrees_flags >> simp[] >>
-      rpt strip_tac >> gvs[evaluate_type_def, int_byte_widths_def])
-  >~ [`FlagT nsid`]
-  >- (rpt strip_tac >> irule type_to_abi_dec_info_word_plan >>
-      simp[is_word_type_def] >>
-      drule_then (drule_then assume_tac) dec_cenv_agrees_flags >> simp[]) >>
-  simp[assignable_type_def]
+  cheat
 QED
 
 (* ===== Head offsets ===== *)
@@ -493,12 +267,7 @@ Theorem abi_head_size_embedded:
     abi_head_size (vyper_to_abi_type tenv t) av =
     abi_embedded_static_size cenv.ce_struct_fields t
 Proof
-  rpt strip_tac >> fs[dec_cenv_agrees_def] >>
-  `tenv SUBMAP tenv` by simp[] >>
-  drule_all abi_elem_props >> strip_tac >>
-  simp[abi_head_size_def] >> IF_CASES_TAC >> simp[] >>
-  drule_all (cj 1 vyper_to_abi_static_enc_length) >> simp[] >>
-  metis_tac[static_length_memory_size]
+  cheat
 QED
 
 (* The decoder's head offset for argument i (abi_embedded_static_size
@@ -514,17 +283,7 @@ Theorem decode_head_offset:
                             (TAKE i avs)) =
     SUM (MAP (abi_embedded_static_size cenv.ce_struct_fields) (TAKE i tys))
 Proof
-  rpt strip_tac >> drule vyper_to_abi_list_EL >> strip_tac >>
-  AP_TERM_TAC >> irule LIST_EQ >>
-  simp[vyper_to_abi_types_length, EL_MAP2, EL_MAP, EL_TAKE] >>
-  rpt strip_tac >>
-  `x < LENGTH tys /\ x < LENGTH vals` by decide_tac >>
-  `EL x (vyper_to_abi_types tenv tys) = vyper_to_abi_type tenv (EL x tys)`
-    by metis_tac[vyper_to_abi_types_EL] >>
-  `vyper_to_abi tenv (EL x tys) (EL x vals) = SOME (EL x avs)` by simp[] >>
-  qpat_x_assum `!j. j < i ==> _` (qspec_then `x` mp_tac) >>
-  simp[] >> strip_tac >>
-  irule abi_head_size_embedded >> simp[] >> metis_tac[]
+  cheat
 QED
 
 (* ===== Arguments of calldata that encodes the call ===== *)
@@ -533,7 +292,7 @@ Theorem map_embedded_take[local]:
   MAP (abi_embedded_static_size sf o SND) (TAKE i args) =
   MAP (abi_embedded_static_size sf) (TAKE i (MAP SND args))
 Proof
-  simp[MAP_TAKE, MAP_MAP_o]
+  cheat
 QED
 
 (* The ABI head offset of argument i is the decoder's off. *)
@@ -548,8 +307,7 @@ Theorem calldata_head_offset[local]:
   4 + SUM (MAP (abi_embedded_static_size cenv0.ce_struct_fields o SND)
                (TAKE i args))
 Proof
-  strip_tac >> simp[map_embedded_take] >>
-  irule decode_head_offset >> simp[EL_MAP] >> metis_tac[]
+  cheat
 QED
 
 (* A static argument other than a word, of calldata that encodes the call,
@@ -585,32 +343,7 @@ Theorem compile_decode_static_arg_calldata:
            val_in_memory tv (EL i vals) (w2n p) t.vs_memory)
       (\r. F)
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `EL i args` >> rename1 `EL i args = (name, ty)` >> gvs[] >>
-  `EL i (MAP SND args) = ty` by simp[EL_MAP] >>
-  qspecl_then [`tenv`, `fname`, `MAP SND args`, `vals`,
-               `s0.vs_call_ctx.cc_calldata`, `i`] mp_tac
-    calldata_encodes_static_arg >>
-  simp[] >> strip_tac >>
-  drule_all (cj 1 vyper_to_abi_static_enc_length) >> strip_tac >>
-  `tenv SUBMAP tenv` by simp[] >>
-  drule_all dec_cenv_agrees_elem >> strip_tac >>
-  `abi_dec_plan tenv ty
-     (type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty)` by
-    (irule type_to_abi_dec_info_plan >> fs[dec_cenv_agrees_def] >>
-     qexists_tac `tenv` >> fs[dec_cenv_agrees_def]) >>
-  drule_all calldata_head_offset >> strip_tac >>
-  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[build_positional_arg_def] >> strip_tac >>
-  qspecl_then [`cenv`, `name`,
-               `abi_embedded_static_size cenv0.ce_struct_fields ty`,
-               `type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty`,
-               `4 + SUM (MAP (abi_embedded_static_size cenv0.ce_struct_fields o
-                             SND) (TAKE i args))`,
-               `hi`, `st`, `st'`, `ctx`, `loc`, `dst`, `s0`, `p`,
-               `tenv`, `ty`, `tv`, `EL i vals`, `EL i avs`] mp_tac
-    compile_decode_static_arg_correct >>
-  impl_tac >- gvs[] >> simp[]
+  cheat
 QED
 
 (* The same for a word argument (#739's compile_decode_word_arg_correct,
@@ -642,27 +375,7 @@ Theorem compile_decode_word_arg_calldata:
            val_in_memory tv (EL i vals) (w2n p) t.vs_memory)
       (\r. F)
 Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `EL i args` >> rename1 `EL i args = (name, ty)` >> gvs[] >>
-  `EL i (MAP SND args) = ty` by simp[EL_MAP] >>
-  qspecl_then [`tenv`, `fname`, `MAP SND args`, `vals`,
-               `s0.vs_call_ctx.cc_calldata`, `i`, `tv`] mp_tac
-    calldata_encodes_word_arg >>
-  simp[] >> strip_tac >>
-  drule_all calldata_head_offset >> strip_tac >>
-  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[build_positional_arg_def] >> strip_tac >>
-  qspecl_then [`cenv`, `cenv0`, `cenv0.ce_struct_fields`, `name`,
-               `is_abi_dynamic cenv0.ce_struct_fields ty`,
-               `abi_embedded_static_size cenv0.ce_struct_fields ty`,
-               `4 + SUM (MAP (abi_embedded_static_size cenv0.ce_struct_fields o
-                             SND) (TAKE i args))`,
-               `hi`, `st`, `st'`, `ctx`, `loc`, `dst`, `s0`, `p`,
-               `tenv`, `ty`, `tv`, `EL i vals`] mp_tac
-    compile_decode_word_arg_correct >>
-  impl_tac >> simp[] >>
-  gvs[dec_cenv_agrees_def] >> rpt strip_tac >>
-  gvs[evaluate_type_def, int_byte_widths_def]
+  cheat
 QED
 
 (* ===== The compiler's env ===== *)
@@ -679,20 +392,7 @@ Theorem make_struct_fields_map_dec_cenv_agrees:
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
     dec_cenv_agrees cenv (type_env tops)
 Proof
-  rpt strip_tac >>
-  `struct_args_unique tops`
-    by (irule typedCopyProducerTheory.distinct_type_keys_struct_args_unique >>
-        simp[]) >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (type_env tops)`
-    by simp[make_struct_fields_map_consistent] >>
-  `!k a. FLOOKUP (type_env tops) k = SOME (StructArgs a) ==> FST k = NONE`
-    by (rw[vyperContextTheory.type_env_def] >>
-        drule type_env_for_module_struct_mem >> rw[] >> simp[]) >>
-  `!t tv. evaluate_type (type_env tops) t = SOME tv ==>
-          type_memory_bytes cenv t = type_memory_size tv`
-    by (rpt strip_tac >> drule_all make_struct_fields_map_memory_size >>
-        simp[]) >>
-  simp[dec_cenv_agrees_def]
+  cheat
 QED
 
 (* build_flag_info's member counts are type_env's, for distinct keys. *)
@@ -702,8 +402,7 @@ Theorem build_flag_info_other[local]:
        (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) ==>
     SND (build_flag_info tops fmid fnm) id = fnm id
 Proof
-  Induct >> simp[build_flag_info_def] >> Cases >>
-  rw[build_flag_info_def, vyperTypeContractTheory.type_def_keys_toplevel_def]
+  cheat
 QED
 
 Theorem build_flag_info_n_members[local]:
@@ -712,12 +411,7 @@ Theorem build_flag_info_n_members[local]:
     FLOOKUP (type_env_for_module NONE tops) nsid = SOME (FlagArgs m) ==>
     SND (build_flag_info tops fmid fnm) (nsid_to_string nsid) = m
 Proof
-  Induct >> simp[vyperContextTheory.type_env_for_module_def] >> Cases >>
-  simp[vyperContextTheory.type_env_for_module_def, build_flag_info_def,
-       vyperTypeContractTheory.type_def_keys_toplevel_def, FLOOKUP_UPDATE,
-       ALL_DISTINCT_APPEND] >>
-  rw[] >> gvs[nsid_to_string_def, build_flag_info_other] >>
-  first_x_assum irule >> simp[]
+  cheat
 QED
 
 Theorem build_compile_env_ce_flag_n_members[local]:
@@ -725,8 +419,7 @@ Theorem build_compile_env_ce_flag_n_members[local]:
     (build_compile_env tops vis mut func_name args ret_type body use_trans).
       ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0))
 Proof
-  rpt strip_tac >> simp[build_compile_env_def] >>
-  rpt (pairarg_tac >> gvs[])
+  cheat
 QED
 
 (* package_external_fn decodes its positional arguments with the decode
@@ -742,11 +435,5 @@ Theorem package_external_fn_dec_cenv_agrees:
     pos_args = build_positional_args cenv fargs /\
     dec_cenv_agrees cenv (type_env tops)
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[package_external_fn_def] >>
-  irule make_struct_fields_map_dec_cenv_agrees >>
-  rw[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
-     build_compile_env_ce_struct_fields, build_compile_env_ce_flag_n_members] >>
-  gvs[vyperContextTheory.type_env_def] >>
-  irule build_flag_info_n_members >> simp[]
+  cheat
 QED

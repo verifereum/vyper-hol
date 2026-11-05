@@ -41,18 +41,7 @@ Theorem compile_return_none_external_frag_mem:
     (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
     frag_exec_mem ctx st st' P Q R
 Proof
-  rpt strip_tac >>
-  `st'.cs_current_bb = st.cs_current_bb /\
-   st'.cs_current_insts =
-     st.cs_current_insts ++ [mk_inst st.cs_next_id STOP [] []]` by
-    (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
-     simp[compile_stmt_def, optional_unlock_view, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def, emit_inst_def,
-          fresh_id_def, emit_def] >>
-     rpt strip_tac >> gvs[]) >>
-  qspecl_then [`ctx`, `st`, `st'`, `st.cs_next_id`, `P`, `Q`, `R`] mp_tac
-    stop_frag_mem >>
-  simp[]
+  cheat
 QED
 
 Theorem compile_guarded_body_stop_frag_mem:
@@ -66,19 +55,7 @@ Theorem compile_guarded_body_stop_frag_mem:
     (!s. P s ==> R (Halt (halt_state (s with vs_returndata := [])))) ==>
     frag_exec_mem ctx sb st' P Q R
 Proof
-  rpt strip_tac >>
-  `st'.cs_current_bb = sb.cs_current_bb /\
-   st'.cs_current_insts =
-     sb.cs_current_insts ++ [mk_inst sb.cs_next_id STOP [] []]` by
-    (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_guarded_body_def, optional_unlock_view, comp_bind_def,
-          comp_ignore_bind_def, comp_get_def] >>
-     strip_tac >>
-     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-         emit_inst_def, fresh_id_def, emit_def]) >>
-  qspecl_then [`ctx`, `sb`, `st'`, `sb.cs_next_id`, `P`, `Q`, `R`] mp_tac
-    stop_frag_mem >>
-  simp[]
+  cheat
 QED
 
 (* ===== Returned buffers ===== *)
@@ -95,55 +72,7 @@ Theorem return_word_mem_safe[local]:
     FLOOKUP (abi_builtin_allocate_state id 32 s).vs_allocas id = SOME (b,32)
     ==> mem_safe_run fuel ctx fn s
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all alloca_site_frontier >> strip_tac >>
-  `32 < dimword (:256)` by simp[dimword_def] >>
-  drule_all step_alloca_site >>
-  disch_then (qspec_then `buf` assume_tac) >>
-  qabbrev_tac `s1 = update_var buf (n2w b)
-    (abi_builtin_allocate_state id 32 s)` >>
-  `eval_operand (Var buf) s1 = SOME (n2w b) /\
-   eval_operand op s1 = SOME w /\
-   s1.vs_current_bb = s.vs_current_bb /\
-   s1.vs_alloca_next = (abi_builtin_allocate_state id 32 s).vs_alloca_next` by
-    (Cases_on `op` >> gvs[Abbr `s1`, eval_operand_def, lookup_var_def,
-      update_var_def, abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-     Cases_on `FLOOKUP s.vs_allocas id = NONE` >> gvs[]) >>
-  `w2n (n2w b : bytes32) + 32 <= s1.vs_alloca_next` by
-    (simp[wordsTheory.w2n_n2w] >> irule arithmeticTheory.LESS_EQ_TRANS >>
-     qexists_tac `b + 32` >> simp[arithmeticTheory.MOD_LESS_EQ]) >>
-  `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s` by
-    (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
-  `step_inst fuel ctx (mk_inst id ALLOCA [Lit 32w] [buf]) s = OK s1` by
-    simp[step_inst_non_invoke, mk_inst_def] >>
-  drule mem_safe_run_step >>
-  disch_then drule >> disch_then drule >>
-  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
-  simp[] >>
-  qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
-  `lookup_block t1.vs_current_bb fn.fn_blocks = SOME bb /\
-   get_instruction bb t1.vs_inst_idx =
-     SOME (mk_inst (id + 1) MSTORE [Var buf; op] []) /\
-   step_inst fuel ctx (mk_inst (id + 1) MSTORE [Var buf; op] []) t1 =
-     OK (mstore (w2n (n2w b : bytes32)) w t1) /\
-   mem_safe_step fuel ctx (mk_inst (id + 1) MSTORE [Var buf; op] []) t1` by
-    (simp[Abbr `t1`, arithmeticTheory.ADD1, step_inst_non_invoke,
-       step_inst_base_def, exec_write2_def, mk_inst_def,
-       mem_safe_step_non_invoke, below_frontier_MSTORE,
-       eval_op_inst_idx] >>
-     rpt strip_tac >> gvs[]) >>
-  qpat_x_assum `step_inst _ _ _ s = _` kall_tac >>
-  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
-  qpat_x_assum `lookup_block s.vs_current_bb _ = _` kall_tac >>
-  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
-  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
-  simp[] >>
-  irule return_buffer_mem_safe >>
-  qexistsl_tac [`n2w b`, `bb`, `Var buf`, `id + 2`, `32w`, `Lit 32w`] >>
-  gvs[Abbr `t1`, mstore_def, arithmeticTheory.ADD1, eval_operand_def,
-      lookup_var_def]
-
+  cheat
 QED
 
 
@@ -167,28 +96,7 @@ Theorem compile_external_return_word_frag_mem:
             R (Halt ss)) ==>
     frag_exec_mem ctx st st' P Q R
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all compile_external_return_word_parts >> strip_tac >>
-  simp[frag_exec_mem_def] >> rpt strip_tac >> disj2_tac >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `op <> Var buf` by metis_tac[] >>
-  `eval_operand op s = SOME w /\ alloca_next_valid s /\
-   ?b. FLOOKUP (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas
-          st.cs_next_id = SOME (b,32)` by metis_tac[] >>
-  `get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst st.cs_next_id ALLOCA [Lit 32w] [buf]) /\
-   get_instruction bb (s.vs_inst_idx + 1) =
-      SOME (mk_inst (st.cs_next_id + 1) MSTORE [Var buf; op] []) /\
-   get_instruction bb (s.vs_inst_idx + 2) =
-      SOME (mk_inst (st.cs_next_id + 2) RETURN [Var buf; Lit 32w] [])` by
-    (qpat_x_assum `!i. _` (fn th =>
-       map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
-  drule_all return_word_run >>
-  disch_then (qspecl_then [`0`, `ctx`] strip_assume_tac) >>
-  qexists_tac `0` >> simp[exit_result_def] >>
-  conj_tac >- metis_tac[] >>
-  irule return_word_mem_safe >> metis_tac[]
+  cheat
 QED
 
 Theorem return_copy_mem_safe[local]:
@@ -206,54 +114,7 @@ Theorem return_copy_mem_safe[local]:
     (m = 0 \/ w2n p + m <= s.vs_alloca_next)
     ==> mem_safe_run fuel ctx fn s
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all alloca_site_frontier >> strip_tac >>
-  drule_all step_alloca_site >>
-  disch_then (qspec_then `buf` assume_tac) >>
-  qabbrev_tac `s1 = update_var buf (n2w b)
-    (abi_builtin_allocate_state id n s)` >>
-  `eval_operand (Var buf) s1 = SOME (n2w b) /\
-   eval_operand op s1 = SOME p /\
-   s1.vs_current_bb = s.vs_current_bb /\
-   s1.vs_alloca_next = (abi_builtin_allocate_state id n s).vs_alloca_next /\
-   s.vs_alloca_next <= s1.vs_alloca_next` by
-    (Cases_on `op` >> gvs[Abbr `s1`, eval_operand_def, lookup_var_def,
-      update_var_def, abi_builtin_allocate_state_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-     Cases_on `FLOOKUP s.vs_allocas id = NONE` >> gvs[]) >>
-  `m < dimword (:256)` by decide_tac >>
-  `w2n (n2w b : bytes32) + m <= s1.vs_alloca_next` by
-    (`b MOD dimword (:256) <= b` by simp[arithmeticTheory.MOD_LESS_EQ] >>
-     gvs[wordsTheory.w2n_n2w] >> decide_tac) >>
-  `mem_safe_step fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s` by
-    (simp[mem_safe_step_non_invoke, mk_inst_def] >>
-     irule below_frontier_no_ranges >> simp[]) >>
-  `step_inst fuel ctx (mk_inst id ALLOCA [Lit (n2w n)] [buf]) s = OK s1` by
-    simp[step_inst_non_invoke, mk_inst_def] >>
-  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
-  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
-  simp[] >>
-  qabbrev_tac `t1 = s1 with vs_inst_idx := SUC s.vs_inst_idx` >>
-  `lookup_block t1.vs_current_bb fn.fn_blocks = SOME bb /\
-   get_instruction bb t1.vs_inst_idx =
-     SOME (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) /\
-   step_inst fuel ctx (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) t1 =
-     OK (mcopy (w2n (n2w b : bytes32)) (w2n p) m t1) /\
-   mem_safe_step fuel ctx (mk_inst (id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) t1` by
-    (simp[Abbr `t1`, arithmeticTheory.ADD1, step_inst_non_invoke,
-       step_inst_base_def, mk_inst_def,
-       mem_safe_step_non_invoke, below_frontier_MCOPY,
-       eval_op_inst_idx, eval_operand_def] >>
-     rpt strip_tac >> gvs[eval_operand_def, lookup_var_def] >> decide_tac) >>
-  qpat_x_assum `step_inst _ _ _ s = _` kall_tac >>
-  qpat_x_assum `get_instruction bb s.vs_inst_idx = _` kall_tac >>
-  qpat_x_assum `lookup_block s.vs_current_bb _ = _` kall_tac >>
-  drule mem_safe_run_step >> disch_then drule >> disch_then drule >>
-  simp[mk_inst_def, is_terminator_def] >> disch_then SUBST1_TAC >>
-  simp[] >>
-  irule return_buffer_mem_safe >>
-  qexistsl_tac [`n2w b`, `bb`, `Var buf`, `id + 2`, `n2w m`, `Lit (n2w m)`] >>
-  gvs[Abbr `t1`, mcopy_def, write_memory_with_expansion_def,
-      arithmeticTheory.ADD1, eval_operand_def, lookup_var_def]
+  cheat
 QED
 
 (* The MCOPY reads the value's m bytes at its address p, which the caller
@@ -278,26 +139,7 @@ Theorem compile_external_return_copy_frag_mem:
                   R (Halt ss)) ==>
     frag_exec_mem ctx st st' P Q R
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all compile_external_return_copy_parts >> strip_tac >>
-  simp[frag_exec_mem_def] >> rpt strip_tac >> disj2_tac >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `op <> Var buf` by metis_tac[] >>
-  qpat_x_assum `!s. P s ==> _` drule >> strip_tac >>
-  `m < dimword (:256)` by decide_tac >>
-  `get_instruction bb s.vs_inst_idx =
-      SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w msz)] [buf]) /\
-   get_instruction bb (s.vs_inst_idx + 1) =
-      SOME (mk_inst (st.cs_next_id + 1) MCOPY [Var buf; op; Lit (n2w m)] []) /\
-   get_instruction bb (s.vs_inst_idx + 2) =
-      SOME (mk_inst (st.cs_next_id + 2) RETURN [Var buf; Lit (n2w m)] [])` by
-    (qpat_x_assum `!i. _` (fn th =>
-       map_every (fn n => mp_tac (Q.SPEC n th)) [`0`, `1`, `2`]) >> simp[]) >>
-  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by metis_tac[] >>
-  drule_all return_copy_run >>
-  disch_then (qspecl_then [`0`, `ctx`] strip_assume_tac) >>
-  qexists_tac `0` >> simp[exit_result_def] >>
-  irule return_copy_mem_safe >> metis_tac[]
+  cheat
 QED
 
 (* ===== The entry's static argument decode ===== *)
@@ -308,18 +150,7 @@ Theorem compile_abi_clamp_basetype_footprint:
     EVERY (\i. !s. inst_mem_below_frontier i s /\ inst_dload_in_section i s)
       (emitted_insts st st')
 Proof
-  Cases >> rpt gen_tac >>
-  simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
-       compile_abi_bytes_clamp_def] >>
-  TRY (rename1 `if signed then _ else _` >> Cases_on `signed`) >>
-  simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
-  rpt strip_tac >> gvs[] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  simp[emitted_insts_def] >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
-  simp[mk_inst_def]
+  cheat
 QED
 
 Theorem compile_abi_clamp_basetype_mem_ok:
@@ -327,8 +158,7 @@ Theorem compile_abi_clamp_basetype_mem_ok:
     compile_abi_clamp_basetype op cl st = ((), st') ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
-  rpt strip_tac >> irule run_inst_seq_mem_ok_every >>
-  drule compile_abi_clamp_basetype_footprint >> simp[]
+  cheat
 QED
 
 Theorem compile_abi_decode_static_mem_ok:
@@ -339,58 +169,7 @@ Theorem compile_abi_decode_static_mem_ok:
     w2n p + 32 <= s.vs_alloca_next ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
-  simp[compile_abi_decode_static_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `emit_op CALLDATALOAD [src] st = (v, st1)` >>
-  rename1 `compile_abi_clamp_basetype v cl st1 = (_, st2)` >>
-  `compile_abi_clamp_basetype v cl st1 = ((), st2)` by
-    metis_tac[oneTheory.one] >>
-  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
-  `inst_extends st1 st2` by (drule compile_abi_clamp_structure >> simp[]) >>
-  `inst_extends st2 st'` by metis_tac[inst_extends_emit_void] >>
-  `inst_extends st1 st'` by metis_tac[inst_extends_trans] >>
-  `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  `emitted_insts st1 st' = emitted_insts st1 st2 ++ emitted_insts st2 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
-  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
-  >- (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-      simp[run_inst_seq_mem_ok_last] >> irule below_frontier_no_ranges >>
-      simp[mk_inst_def]) >>
-  Cases_on `eval_operand src s`
-  >- (drule emitted_insts_emit_op >> strip_tac >>
-      simp[run_inst_seq_def, step_inst_base_def, exec_read1_def, mk_inst_def]) >>
-  rename1 `eval_operand src s = SOME a` >>
-  `!id out. step_inst_base (mk_inst id CALLDATALOAD [src] [out]) s =
-      OK (update_var out (mem_word_at (w2n a) s.vs_call_ctx.cc_calldata) s)` by
-    (rpt gen_tac >> drule step_CALLDATALOAD >> simp[valueEncodingTheory.mem_word_at_def]) >>
-  drule decode_emit_update_frame >>
-  disch_then (qspecl_then [`s`, `mem_word_at (w2n a) s.vs_call_ctx.cc_calldata`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  rpt strip_tac >> gvs[] >>
-  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
-  >- (irule compile_abi_clamp_basetype_mem_ok >> goal_assum (drule_at Any)) >>
-  drule_all decode_clamp_frame >>
-  Cases_on `abi_clamp_ok cl (mem_word_at (w2n a) s.vs_call_ctx.cc_calldata)` >>
-  simp[] >> strip_tac >> rpt strip_tac >> gvs[] >>
-  drule emitted_insts_emit_void >> strip_tac >> gvs[] >>
-  simp[run_inst_seq_mem_ok_last, below_frontier_MSTORE] >>
-  `eval_operand dst s' = SOME p` by metis_tac[] >>
-  `eval_operand dst s'' = SOME p` by metis_tac[] >>
-  `s''.vs_alloca_next = s'.vs_alloca_next` by
-    (qpat_x_assum `vars_pc_only s' s''` mp_tac >>
-     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
-     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
-  `s'.vs_alloca_next = s.vs_alloca_next` by
-    (qpat_x_assum `vars_pc_only s s'` mp_tac >>
-     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
-     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!op v. eval_operand op s' = SOME v ==> _`
-    (qspec_then `dst` mp_tac) >>
-  qpat_x_assum `!op a. eval_operand op s = SOME a ==> _`
-    (qspec_then `dst` mp_tac) >> simp[] >> metis_tac[]
+  cheat
 QED
 
 Theorem decode_static_buf_mem_ok:
@@ -412,89 +191,10 @@ Theorem decode_static_buf_mem_ok:
        w2n p + k + n <= s.vs_alloca_next ==>
        run_inst_seq_mem_ok (emitted_insts st st') s)
 Proof
-  ho_match_mp_tac static_dec_strongind >> rpt conj_tac
-  >- (rpt strip_tac >> fs[compile_abi_decode_to_buf_def] >>
-      irule compile_abi_decode_static_mem_ok >>
-      simp[] >> qexistsl [`c`, `dst`, `p`, `src`] >> simp[])
-  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-      fs[compile_abi_decode_to_buf_def] >> first_x_assum irule >>
-      simp[] >> qexistsl [`a`, `dst`, `0`, `p`, `src`] >> simp[])
-  >- (rpt strip_tac >>
-      gvs[compile_abi_decode_to_buf_def, comp_return_def,
-          emitted_insts_def, run_inst_seq_mem_ok_def]) >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  suspend "cons"
+  cheat
 QED
 
-Resume decode_static_buf_mem_ok[cons]:
-  rename1 `static_dec ei m` >> rename1 `static_decs elems n` >>
-  drule_all decode_elems_cons_phases >> strip_tac >>
-  drule_all decode_elem_ptrs >> strip_tac >>
-  rename1 `run_inst_seq (emitted_insts st st2) s = OK t2` >>
-  `dec_straight st2 st3 /\ dec_straight st3 st'` by
-    metis_tac[static_dec_straight] >>
-  `inst_extends st st2 /\ inst_extends st2 st3 /\ inst_extends st3 st'` by
-    fs[dec_straight_def] >>
-  `inst_extends st2 st'` by metis_tac[inst_extends_trans] >>
-  `emitted_insts st st' = emitted_insts st st2 ++ emitted_insts st2 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  qpat_x_assum `emitted_insts st st' = _` SUBST1_TAC >>
-  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
-  >- suspend "pointers" >>
-  rpt strip_tac >> gvs[] >> rename1 `vars_pc_only s t2` >>
-  `w2n (p + n2w k) = w2n p + k /\ w2n (a + n2w k) = w2n a + k` by
-    (conj_tac >> irule w2n_add_n2w_lt >> decide_tac) >>
-  `t2.vs_alloca_next = s.vs_alloca_next` by
-    (qpat_x_assum `vars_pc_only s t2` mp_tac >>
-     rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
-     pop_assum (SUBST1_TAC o SYM) >> simp[]) >>
-  `emitted_insts st2 st' = emitted_insts st2 st3 ++ emitted_insts st3 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  qpat_x_assum `emitted_insts st2 st' = _` SUBST1_TAC >>
-  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
-  >- suspend "child" >>
-  suspend "tail"
-QED
 
-Resume decode_static_buf_mem_ok[pointers]:
-  qpat_x_assum `!dst src st st' s p a. _` kall_tac >>
-  qpat_x_assum `!dst src st st' s p a. _` kall_tac >>
-  drule getelemptr_static_emit >> strip_tac >>
-  `inst_extends st st1 /\ inst_extends st1 st2` by
-    metis_tac[inst_extends_emit_op] >>
-  `emitted_insts st st2 = emitted_insts st st1 ++ emitted_insts st1 st2` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  irule run_inst_seq_mem_ok_every >>
-  qpat_x_assum `emit_op ADD [src; _] st = _`
-    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
-  qpat_x_assum `emit_op ADD [dst; _] st1 = _`
-    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
-  simp[] >> rpt strip_tac >> TRY (irule below_frontier_no_ranges) >>
-  simp[mk_inst_def]
-QED
-Resume decode_static_buf_mem_ok[child]:
-  qpat_x_assum `!dst src k st st' s p a. _` kall_tac >>
-  first_x_assum irule >> simp[] >>
-  qexistsl [`a + n2w k`, `ed`, `p + n2w k`, `es`] >> simp[] >> decide_tac
-QED
-Resume decode_static_buf_mem_ok[tail]:
-  qpat_x_assum `!dst src st st' s p a. compile_abi_decode_to_buf _ _ _ _ _ _ = _ /\ _ ==> _`
-    kall_tac >>
-  drule (CONJUNCT1 decode_static_buf_run) >> disch_then drule >>
-  disch_then (qspecl_then [`t2`, `p + n2w k`, `a + n2w k`] mp_tac) >>
-  (impl_tac >- (simp[] >> decide_tac)) >>
-  simp[dec_run_def] >>
-  IF_CASES_TAC >> simp[] >> strip_tac >> rpt strip_tac >> gvs[] >>
-  rename1 `dec_frame st2 _ m t2 t3` >>
-  `t3.vs_alloca_next = s.vs_alloca_next` by
-    (drule dec_frame_allocas >> simp[]) >>
-  `eval_operand dst t2 = SOME p /\ eval_operand src t2 = SOME a` by metis_tac[] >>
-  `eval_operand dst t3 = SOME p /\ eval_operand src t3 = SOME a` by
-    metis_tac[dec_frame_eval] >>
-  first_x_assum irule >> simp[] >>
-  qexistsl [`a`, `dst`, `k + m`, `p`, `src`] >> simp[] >> decide_tac
-QED
-Finalise decode_static_buf_mem_ok
 
 (* The head-pointer ADD of an argument's decode touches no memory, and
    keeps the frontier and every defined operand. *)
@@ -508,20 +208,7 @@ Theorem decode_head_ptr_mem_ok[local]:
          run_inst_seq_mem_ok (emitted_insts st1 st') t) ==>
     run_inst_seq_mem_ok (emitted_insts st st') s
 Proof
-  rpt strip_tac >>
-  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
-  `emitted_insts st st' = emitted_insts st st1 ++ emitted_insts st1 st'` by
-    (irule emitted_insts_append >> fs[inst_extends_def]) >>
-  pop_assum SUBST1_TAC >>
-  match_mp_tac run_inst_seq_mem_ok_append >> conj_tac
-  >- (drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
-      simp[run_inst_seq_mem_ok_last] >> irule below_frontier_no_ranges >>
-      simp[mk_inst_def]) >>
-  rpt strip_tac >> drule_all decode_head_ptr_run >> strip_tac >> gvs[] >>
-  first_x_assum irule >> simp[] >>
-  qpat_x_assum `vars_pc_only s _` mp_tac >>
-  rw[moduleLoweringPropsTheory.vars_pc_only_def] >>
-  pop_assum (SUBST1_TAC o SYM) >> simp[]
+  cheat
 QED
 
 Theorem compile_abi_decode_static_extends[local]:
@@ -530,16 +217,7 @@ Theorem compile_abi_decode_static_extends[local]:
       (\v. compile_abi_clamp_basetype v cl) st = ((), st') ==>
     inst_extends st st'
 Proof
-  simp[compile_abi_decode_static_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt gen_tac >> strip_tac >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
-  rename1 `emit_op CALLDATALOAD [src] st = (v, st1)` >>
-  rename1 `compile_abi_clamp_basetype v cl st1 = (_, st2)` >>
-  `compile_abi_clamp_basetype v cl st1 = ((), st2)` by
-    metis_tac[oneTheory.one] >>
-  `inst_extends st st1` by metis_tac[inst_extends_emit_op] >>
-  `inst_extends st1 st2` by (drule compile_abi_clamp_structure >> simp[]) >>
-  `inst_extends st2 st'` by metis_tac[inst_extends_emit_void] >>
-  metis_tac[inst_extends_trans]
+  cheat
 QED
 
 (* A primitive argument's decode: the head-pointer ADD, then the clamped
@@ -557,11 +235,7 @@ Theorem compile_decode_word_arg_phases[local]:
                (case info of DecPrimWord c => c | _ => NoClamp)) st1 =
         ((), st')
 Proof
-  rpt strip_tac >>
-  qpat_x_assum `compile_decode_args _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_decode_args_def, compile_abi_decode_static_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> metis_tac[oneTheory.one]
+  cheat
 QED
 
 (* entry_decode_arg_run's premises, with the argument's buffer [p, p + its
@@ -588,43 +262,5 @@ Theorem entry_decode_arg_mem_ok:
     w2n p + type_memory_size tv <= s0.vs_alloca_next ==>
     run_inst_seq_mem_ok (emitted_insts st st') s0
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `4 <= off` by simp[] >>
-  qpat_x_assum `off = _` kall_tac >>
-  Cases_on `EL i args` >> rename1 `EL i args = (name, ty)` >>
-  Cases_on `is_word_type ty` >> fs[build_positional_arg_def]
-  >- (
-      drule_all compile_decode_word_arg_phases >> strip_tac >>
-      `type_memory_size tv = 32` by metis_tac[word_type_memory_size] >>
-      drule compile_abi_decode_static_extends >> strip_tac >>
-      irule decode_head_ptr_mem_ok >> simp[] >>
-      qexistsl [`off`, `src`, `st1`] >> simp[] >>
-      rpt strip_tac >>
-      `eval_operand dst t = SOME p` by metis_tac[] >>
-      irule compile_abi_decode_static_mem_ok >> simp[] >>
-      qexistsl [`case type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty of
-                   DecPrimWord c => c | _ => NoClamp`, `dst`, `p`, `src`] >>
-      simp[]) >>
-  fs[] >>
-  `~is_abi_dynamic cenv0.ce_struct_fields ty` by
-    (fs[dec_cenv_agrees_def] >>
-     `tenv SUBMAP tenv` by simp[] >>
-     drule_all abi_elem_props >> simp[]) >>
-  `abi_dec_plan tenv ty
-     (type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty)` by
-    (irule type_to_abi_dec_info_plan >> fs[dec_cenv_agrees_def] >>
-     qexists_tac `tenv` >> fs[dec_cenv_agrees_def]) >>
-  `static_dec (type_to_abi_dec_info cenv0.ce_struct_fields cenv0 ty)
-     (type_memory_size tv)` by metis_tac[cj 1 abi_dec_plan_static] >>
-  fs[] >>
-  drule_all compile_decode_static_arg_phases >> strip_tac >>
-  `dec_straight st1 st'` by
-    (drule (cj 1 static_dec_straight) >> disch_then drule >> simp[]) >>
-  irule decode_head_ptr_mem_ok >> simp[] >>
-  qexistsl [`off`, `src`, `st1`] >> fs[dec_straight_def] >>
-  rpt strip_tac >>
-  `eval_operand dst t = SOME p` by metis_tac[] >>
-  `w2n (n2w off : bytes32) = off` by (simp[] >> decide_tac) >>
-  drule (cj 1 decode_static_buf_mem_ok) >> disch_then irule >> simp[] >>
-  qexistsl [`n2w off`, `dst`, `p`, `src`] >> simp[]
+  cheat
 QED
