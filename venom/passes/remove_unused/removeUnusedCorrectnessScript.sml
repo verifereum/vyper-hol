@@ -8,8 +8,8 @@ Theory removeUnusedCorrectness
 Ancestors
   removeUnusedCorrectnessProofs
 
-Theorem remove_unused_function_correct =
-  removeUnusedCorrectnessProofsTheory.remove_unused_function_correct
+Theorem remove_unused_function_correct_gas =
+  removeUnusedCorrectnessProofsTheory.remove_unused_function_correct_gas
 
-Theorem remove_unused_pass_correct =
-  removeUnusedCorrectnessProofsTheory.remove_unused_pass_correct
+Theorem remove_unused_pass_correct_gas =
+  removeUnusedCorrectnessProofsTheory.remove_unused_pass_correct_gas

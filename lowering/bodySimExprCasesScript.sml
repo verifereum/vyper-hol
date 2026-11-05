@@ -244,6 +244,8 @@ Proof
 QED
 
 (* In and not in on an array literal: of words by bodySimBopInLiteralWord,
+   from the elements' judgments (bodySimBopHeld's
+   body_make_array_children_ok, held for the bodySim child-closure wave);
    of non-words held for #742 (bodySimBopHeld). *)
 Theorem body_bop_in_literal_case:
   !cx ty bop e1 a t n elems.
@@ -253,7 +255,8 @@ Theorem body_bop_in_literal_case:
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
   rpt gen_tac >> Cases_on `is_word_type (expr_type e1)`
-  >- (MATCH_MP_TAC body_bop_in_literal_word_case >> first_assum ACCEPT_TAC) >>
+  >- (rw[body_exprs_ok_def] >> irule body_bop_in_literal_word_case >>
+      rw[] >> irule body_make_array_children_ok >> metis_tac[]) >>
   MATCH_MP_TAC body_bop_in_literal_nonword_case >> first_assum ACCEPT_TAC
 QED
 
