@@ -2,7 +2,7 @@ Theory fnBlockPlanStaticInventory
 Ancestors
   stackModel stackPlanOps planWf doSwapSim reorderSim sorting list rich_list pred_set
   fnFrameStepsRevertForward stackPlanGen livenessDefs cfgDefs venomInst
-  fnBlockPlanStaticRetRegion
+  fnBlockPlanStaticRetRegion genericInputReady
 
 Theorem inventory_do_swap_promised:
   !d ps. (SND (do_swap d ps)).ps_cleanup_promised = ps.ps_cleanup_promised
@@ -825,6 +825,103 @@ Proof
     LIST_ELEM_COUNT op pending` by metis_tac[elem_count_append] >>
   `LIST_ELEM_COUNT op (stack_pop (LENGTH pending) qs.ps_stack) = 0` by decide_tac >>
   gvs[GSYM inventory_filter_count, GSYM inventory_count_pos]
+QED
+
+Theorem inventory_regular_core_dead_absent:
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) ==>
+  !v. MEM (Var v) operands /\ ~MEM v nl ==>
+    ~MEM (Var v) (stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!x. MEM x pending <=> MEM x operands` by metis_tac[PERM_MEM_EQ] >>
+  `!x. LIST_ELEM_COUNT x pending = LIST_ELEM_COUNT x operands` by
+    metis_tac[perm_operand_counts] >>
+  `!x. LIST_ELEM_COUNT x operands <= LIST_ELEM_COUNT x mid.ps_stack` by
+    metis_tac[emit_input_plan_materialised] >>
+  `MEM (Var v) ps.ps_stack \/ IS_SOME (FLOOKUP ps.ps_spilled (Var v))` by
+    metis_tac[stackPlanTypesTheory.is_var_operand_def, finite_mapTheory.FLOOKUP_DEF, optionTheory.IS_SOME_EXISTS] >>
+  `LIST_ELEM_COUNT (Var v) mid.ps_stack = LIST_ELEM_COUNT (Var v) operands` by
+    (metis_tac[inventory_emit_dead_count, inventory_filter_count]) >>
+  metis_tac[inventory_reorder_pop_exhausted]
+QED
+
+Theorem inventory_regular_core_residual_support:
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) /\
+  EVERY (\op. ?v. op = Var v /\ (MEM v nl \/ MEM op operands)) ps.ps_stack ==>
+  !op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
+    (?v. op = Var v /\ MEM v nl) \/
+    (op IN FDOM ps.ps_spilled /\ ~MEM op operands) \/
+    (~is_var_operand op /\ MEM op operands)
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) operands /\ ~MEM v nl ==>
+    ~MEM (Var v) (stack_pop (LENGTH operands) arranged.ps_stack)` by
+    metis_tac[inventory_regular_core_dead_absent] >>
+  `LENGTH pending = LENGTH operands` by metis_tac[PERM_LENGTH] >>
+  `!op. MEM op arranged.ps_stack ==>
+    MEM op mid.ps_stack \/ op IN FDOM mid.ps_spilled` by
+    metis_tac[rf_reorder_inventory_subset] >>
+  `!op. MEM op arranged.ps_stack ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled \/ MEM op operands` by
+    metis_tac[emit_input_plan_inventory_subset] >>
+  gen_tac >> strip_tac >>
+  `MEM op arranged.ps_stack` by
+    metis_tac[stack_pop_def, rich_listTheory.MEM_TAKE] >>
+  Cases_on `is_var_operand op`
+  >- (Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def, EVERY_MEM] >>
+      rename1 `MEM (Var v) arranged.ps_stack` >>
+      Cases_on `MEM v nl` >- simp[] >>
+      `~MEM (Var v) operands` by metis_tac[] >>
+      `~MEM (Var v) ps.ps_stack` by
+        (strip_tac >> qpat_x_assum `!op. MEM op ps.ps_stack ==> _`
+          (qspec_then `Var v` mp_tac) >> simp[]) >>
+      metis_tac[]) >>
+  gvs[EVERY_MEM] >> metis_tac[stackPlanTypesTheory.is_var_operand_def]
+QED
+
+Theorem inventory_regular_core_live_support:
+  ALL_DISTINCT ps.ps_stack /\
+  DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+  LENGTH operands <= 16 /\ PERM pending operands /\
+  (!op. MEM op operands /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  emit_input_plan opc operands nl ps = (iops,mid) /\
+  LENGTH operands <= LENGTH mid.ps_stack /\
+  reorder_plan dfg pending mid = (rops,arranged) /\
+  EVERY (\op. ?v. op = Var v /\ (MEM v nl \/ MEM op operands)) ps.ps_stack /\
+  (!op. MEM op (stack_pop (LENGTH operands) arranged.ps_stack) ==>
+    is_var_operand op /\ (MEM op ps.ps_stack \/ MEM op operands)) ==>
+  EVERY (\op. ?v. op = Var v /\ MEM v nl)
+    (stack_pop (LENGTH operands) arranged.ps_stack)
+Proof
+  strip_tac >>
+  `!v. MEM (Var v) operands /\ ~MEM v nl ==>
+    ~MEM (Var v) (stack_pop (LENGTH operands) arranged.ps_stack)` by
+    metis_tac[inventory_regular_core_dead_absent] >>
+  gvs[EVERY_MEM] >> gen_tac >> strip_tac >>
+  `is_var_operand op` by metis_tac[] >>
+  Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def] >>
+  rename1 `MEM v nl` >>
+  Cases_on `MEM v nl` >- simp[] >>
+  `~MEM (Var v) operands` by metis_tac[] >>
+  `MEM (Var v) ps.ps_stack` by metis_tac[] >>
+  qpat_x_assum `!op. MEM op ps.ps_stack ==> _`
+    (qspec_then `Var v` mp_tac) >> simp[]
 QED
 
 (* Bounded contract checks: PHIs replace their unique incoming source,
