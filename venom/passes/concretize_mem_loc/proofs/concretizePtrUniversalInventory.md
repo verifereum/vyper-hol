@@ -316,3 +316,34 @@ claimed; no unprovability evidence was produced.
 Verification: source dispatch/signatures inspected read-only. Regression build
 of CopyContent, BufferCopyContent and ExternalCallContent passed at session start
 (TO_concretize_ptr-20261105T100526Z_m9607_t001). This report adds no SML or cheats.
+
+## Shared-field boundary checkpoint (.56)
+
+`concretizePtrSharedFieldsTheory` defines `ptr_shared_fields` independently
+of memory, vars, params, cursor (`vs_current_bb`, `vs_inst_idx`, `vs_prev_bb`)
+and allocation bookkeeping. Exact shared fields are: transient, accounts,
+returndata, logs, outcomes, requests, pending_deletions, gas_readings,
+immutables, call_ctx, tx_ctx, block_ctx, data_section, labels, code,
+prev_hashes, fmp, call_entry_fmp, initial_fmp, return_pc_token, halted
+(all with the `vs_` prefix). `vs_labels` is a shared lookup environment,
+not the excluded execution cursor.
+
+Checked interfaces: reflexivity; independent update_var stability;
+target-success implies source-success for setup_callee with possibly
+relocated argument lists; merge_callee_state compatibility; adopt_return_fmp
+compatibility when both return adoption options are NONE. Setup needs
+matching block nonemptiness and equality of the final argument token
+(default 0w for empty args), NOT equality of the complete arguments.
+Deriving this token equality from value transport remains an integration
+obligation. Equal gas queues are intentional: NOP/ALLOCA removal does not
+remove GAS observations.
+
+Source audit (`venomExecSemanticsScript.sml:722-753`): INITIAL_FMP reads
+`vs_initial_fmp` and performs one update_var. RETPC_PARAM requires a literal
+operand but ignores its index value and reads `vs_return_pc_token`.
+BUMP uses explicit evaluated base and size: first writes ptr_out=base,
+then next_out=word_add base size; it neither reads nor changes FMP.
+If the two output names coincide, the second write wins. Shared-field
+stability therefore covers coincident outputs as well; equal/relocated
+output VALUES remain with the separate value relation. No conditional
+opcode wrapper or source simulation theorem is inferred from this audit.
