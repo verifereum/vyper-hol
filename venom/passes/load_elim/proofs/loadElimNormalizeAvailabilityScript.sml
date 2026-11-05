@@ -4,14 +4,14 @@ Ancestors
   simplifyCfgPhiRepair simplifyCfgStruct simplifyCfgWfssa simplifyCfgLabelProps
   list rich_list
 
-Theorem le_path_append_prefix[local]:
+Theorem le_path_append_prefix:
   !pre post. is_fn_path fn (pre ++ post) ==> is_fn_path fn pre
 Proof
   Induct >> simp[is_fn_path_def] >> Cases_on `pre` >>
   gvs[is_fn_path_def] >> metis_tac[]
 QED
 
-Theorem le_path_member_prefix[local]:
+Theorem le_path_member_prefix:
   is_fn_path fn path /\ MEM d path ==>
   ?pre post. path = pre ++ [d] ++ post /\ is_fn_path fn (pre ++ [d])
 Proof
