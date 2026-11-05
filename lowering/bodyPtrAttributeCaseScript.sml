@@ -111,7 +111,8 @@ Theorem attribute_nonmemory_field_ptr:
   struct_field_slot fs fld = SOME (off,ftv) /\
   eval_operand (vv_operand vv) s = SOME w /\
   eval_operand dst t = SOME (w + n2w off) /\
-  w2n (w + n2w off) = w2n w + off /\
+  ((vv_loc vv = LocStorage \/ vv_loc vv = LocTransient) /\
+   0 < type_slot_size ftv ==> w2n (w + n2w off) = w2n w + off) /\
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
@@ -120,6 +121,7 @@ Theorem attribute_nonmemory_field_ptr:
 Proof
   strip_tac >> irule ptr_vv_ok_nonmemory >>
   simp[mk_ptr_def] >> rpt strip_tac >> gvs[] >>
+  Cases_on `type_slot_size ftv = 0` >- gvs[] >>
   drule struct_field_slot_end_bound >> strip_tac >>
   `w2n w <= w2n k /\ w2n k < w2n w + type_slot_size (StructTV fs)` by decide_tac >>
   Cases_on `vv` >> gvs[vv_loc_def, vv_location_def] >>
