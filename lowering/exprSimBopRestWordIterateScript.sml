@@ -119,3 +119,83 @@ Proof
   qexists_tac `t` >> simp[] >>
   metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]
 QED
+
+(* The concrete persistent part of the search invariant.  The operand
+   compiler endpoint sm stays fixed throughout the loop. *)
+Definition rest_word_search_rep_def:
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+      needleop needle lenop len s <=>
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    eval_operand needleop s = SOME needle /\
+    eval_operand lenop s = SOME (n2w len)
+End
+
+Theorem rest_word_search_rep_update:
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len s /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  ~not_fresh_at sm x /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  needleop <> Var x /\ lenop <> Var x ==>
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len (update_var x w s)
+Proof
+  simp[rest_word_search_rep_def] >> strip_tac >> conj_tac
+  >- (irule vv_post_update_var >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
+  Cases_on `needleop` >> Cases_on `lenop` >>
+  gvs[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+      venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
+Theorem rest_word_search_rep_control:
+  (rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+     needleop needle lenop len (jump_to lbl s) <=>
+   rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+     needleop needle lenop len s) /\
+  (rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+     needleop needle lenop len (s with vs_inst_idx := k) <=>
+   rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+     needleop needle lenop len s)
+Proof
+  simp[rest_word_search_rep_def, rest_word_vv_post_jump] >>
+  Cases_on `needleop` >> Cases_on `lenop` >>
+  simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       venomStateTheory.jump_to_def]
+QED
+
+Theorem rest_word_search_rep_load:
+  context$compile_ptr_load ctor imm loc addr cl = (op,cm) /\
+  loc <> LocCalldata /\ sm.cs_next_var <= cl.cs_next_var /\
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len s /\
+  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  (!z. needleop = Var z ==> not_fresh_at cl z) /\
+  (!z. lenop = Var z ==> not_fresh_at cl z) /\
+  run_inst_seq (emitted_insts cl cm) s = OK t ==>
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
+    needleop needle lenop len t
+Proof
+  Cases_on `loc` >> Cases_on `ctor` >> Cases_on `imm` >>
+  simp[contextTheory.compile_ptr_load_def, contextTheory.compile_imm_load_word_def,
+       emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+       compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
+       compileEnvTheory.emit_def] >> strip_tac >> gvs[] >>
+  `!n. cl.cs_next_var <= n ==>
+       needleop <> Var (STRING #"%" (toString n)) /\
+       lenop <> Var (STRING #"%" (toString n))` by
+    (rpt strip_tac >> gvs[compileEnvTheory.not_fresh_at_def]) >>
+  qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
+  simp[exprLoweringPropsTheory.emitted_insts_def] >>
+  once_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, exprLoweringPropsTheory.run_inst_seq_def,
+       venomInstTheory.mk_inst_def, step_inst_base_opcode_eqs,
+       exec_read1_def, exec_pure2_def, AllCaseEqs()] >>
+  strip_tac >> gvs[] >>
+  irule rest_word_search_rep_update >>
+  simp[compileEnvTheory.not_fresh_at_def] >>
+  irule rest_word_search_rep_update >>
+  simp[compileEnvTheory.not_fresh_at_def]
+QED
