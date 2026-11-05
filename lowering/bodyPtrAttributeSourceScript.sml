@@ -3,7 +3,7 @@ Ancestors
   exprSimAttribute exprSimAttributeProps exprSimAttributeFields exprSimSource
   exprSimFieldLayout exprSimDefs exprSimHyps exprSimHypsDefs loweringPosts context
   exprLowering compileEnv vyperTypeExprSoundness vyperPlaceResultTyping
-  valueEncodingTyping vyperValue vyperAST vyperState list finite_map
+  exprSimProps valueEncoding valueEncodingTyping vyperValue vyperAST vyperState list finite_map
 
 (* This value/place elimination boundary is independent of field selection. *)
 Theorem attribute_vv_holds_read_operand:
@@ -72,4 +72,29 @@ Proof
   strip_tac >> simp[lowered_value_type_def, expr_type_def] >>
   irule expr_sim_inv_memory_size >> goal_assum (drule_at Any) >>
   fs[expr_body_pre_def] >> metis_tac[]
+QED
+
+Theorem attribute_memory_field_address:
+  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv t /\
+  expr_type obj = StructT sid /\ vv_loc bvv = LocMemory /\
+  read_result cx btv ee = (INL (StructV vals),ee) /\
+  evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+  eval_operand (vv_operand bvv) t = SOME w /\
+  fields_layout fields fs /\ ALOOKUP fs fld = SOME ftv ==>
+  w2n (w + n2w (struct_field_offset fields fld)) =
+    w2n w + struct_field_offset fields fld
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `vv_at cenv cx (StructT sid) sa sm ee btv bvv t` by fs[vv_post_def] >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  drule stmt_state_rel_region_lt >> strip_tac >>
+  drule_all struct_field_offset_le >> strip_tac >>
+  Cases_on `bvv` >>
+  gvs[vv_at_def, vv_loc_def, vv_location_def, vv_operand_def,
+      expr_val_at_def, is_word_type_def, val_footprint_def, type_memory_size_def] >>
+  first_x_assum drule >> strip_tac >>
+  irule field_ptr_w2n >>
+  qexistsl_tac [`type_memory_size ftv`, `type_memory_size_fields fs`] >>
+  simp[] >> decide_tac
 QED
