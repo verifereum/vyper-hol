@@ -1,6 +1,6 @@
 Theory fnBlockPlanStaticBalance
 Ancestors
-  stackPlanGen stackPlanTypes asmIR integer
+  stackPlanGen stackPlanTypes stackModel asmIR integer
 
 (* Physical planner bookkeeping; SOEmit is deliberately opaque. *)
 Definition stack_op_weight_def:
@@ -115,4 +115,33 @@ Theorem regular_correction_invoke_two_outputs:
   regular_correction inst topics = -(&(LENGTH (compute_operands inst)))
 Proof
   strip_tac >> drule_all regular_correction_invoke >> simp[]
+QED
+
+Theorem push_outputs_length:
+  !outs ps.
+  LENGTH (FOLDL (\s out.
+    s with ps_stack := stack_push (Var out) s.ps_stack) ps outs).ps_stack =
+  LENGTH ps.ps_stack + LENGTH outs
+Proof
+  Induct >> simp[] >> simp[stack_push_def]
+QED
+
+Theorem regular_silent_core_balance:
+  LENGTH (compute_operands inst) <= LENGTH ps4.ps_stack /\
+  ps5 = ps4 with ps_stack := stack_pop (LENGTH (compute_operands inst)) ps4.ps_stack /\
+  ps6 = FOLDL (\s out.
+    s with ps_stack := stack_push (Var out) s.ps_stack) ps5 inst.inst_outputs /\
+  generate_emit_ops inst topics ps6 = (emit_ops, ps7) ==>
+  &(LENGTH ps7.ps_stack) = &(LENGTH ps4.ps_stack) +
+    trace_weight emit_ops + regular_correction inst topics
+Proof
+  strip_tac >>
+  `ps7.ps_stack = ps6.ps_stack` by
+    metis_tac[generate_emit_ops_stack, pairTheory.SND] >>
+  `trace_weight emit_ops =
+    trace_weight (FST (generate_emit_ops inst topics (init_plan_state 0)))` by
+    metis_tac[generate_emit_ops_weight, pairTheory.FST] >>
+  gvs[regular_correction_def, push_outputs_length, stack_pop_def,
+      listTheory.LENGTH_TAKE] >>
+  intLib.ARITH_TAC
 QED
