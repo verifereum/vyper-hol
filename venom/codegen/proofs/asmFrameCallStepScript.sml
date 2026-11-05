@@ -2648,6 +2648,109 @@ Proof
   drule_all asm_frame_call_terminal_some >> simp[]
 QED
 
+Theorem asm_call_safe_bind:
+  (!s r t. P s /\ f s = (r,t) ==>
+    (!e. r = INR e ==> ~vfm_abort e) /\ (!x. r = INL x ==> P t)) /\
+  (!x s r t. P s /\ g x s = (r,t) ==>
+    (!e. r = INR e ==> ~vfm_abort e) /\ (!y. r = INL y ==> P t)) /\
+  P s /\ bind f g s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\ (!y. r = INL y ==> P t)
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  Cases_on `f s` >> rename1 `f s = (result,u)` >> Cases_on `result`
+  >- (simp[bind_def] >> strip_tac >>
+      qpat_x_assum `!s r t. _` (qspecl_then [`s`,`INL x`,`u`] mp_tac) >>
+      simp[] >> strip_tac >> metis_tac[]) >>
+  simp[bind_def] >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem asm_call_safe_get_context:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  get_current_context s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[get_current_context_def, return_def]
+QED
+
+Theorem asm_call_safe_set_context:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  set_current_context c s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >> gvs[set_current_context_def, return_def]
+QED
+
+Theorem asm_call_safe_pop_stack:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  pop_stack n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[pop_stack_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  IF_CASES_TAC >> simp[vfm_abort_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem asm_call_safe_push_stack:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  push_stack w s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[push_stack_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  IF_CASES_TAC >> simp[vfm_abort_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem asm_call_safe_consume_gas:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  consume_gas n s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  Cases_on `s.contexts` >> simp[] >>
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def] >>
+  IF_CASES_TAC >> simp[vfm_abort_def] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem asm_call_safe_access_address:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  access_address a s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[access_address_def, domain_check_def, set_domain_def,
+      ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_access_slot:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  access_slot a s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[access_slot_def, domain_check_def, set_domain_def,
+      ignore_bind_def, bind_def, return_def]
+QED
+
+Theorem asm_call_safe_storage_domain:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  ensure_storage_in_domain a s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [] /\ ?d. t.msdomain = Collect d)
+Proof
+  rpt strip_tac >>
+  gvs[ensure_storage_in_domain_def, domain_check_def, set_domain_def,
+      ignore_bind_def, bind_def, return_def]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
