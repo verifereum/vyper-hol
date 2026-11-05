@@ -22,7 +22,7 @@ Ancestors
   vyperContext stmtSimAugAssignStorage stmtSimAugAssignPlace
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlaceStorage bodyAugPlaceTarget
   stmtSimAssignPlace bodyExprPreFacts bodySimExprCases
-  supportedStmtTraverse vyperTypeCallGraph vyperState
+  supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
@@ -246,6 +246,26 @@ Proof
   `dty = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
   gvs[optionTheory.IS_SOME_EXISTS] >>
   metis_tac[assignable_type_well_formed]
+QED
+
+Theorem augassign_toplevel_success[local]:
+  body_inv tops ctx cenv cx /\
+  supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (AugAssign ty (TopLevelNameTarget (src,id)) bop e) =
+    SOME env' ==>
+  ?s p s1 s2 cur s3 s4 ptv s5.
+    eval_target_place cx (TopLevelNameTarget (src,id)) s = (INL p,s1) /\
+    read_place cx p s2 = (INL cur,s3) /\
+    place_type_value cx p s4 = (INL ptv,s5)
+Proof
+  rpt strip_tac >>
+  drule_all augassign_toplevel_metadata >> strip_tac >>
+  `contract_storage_well_formed cx es` by fs[expr_sim_inv_def] >>
+  drule_all toplevel_storage_read_decodes >> strip_tac >>
+  drule_all eval_target_place_toplevel >>
+  disch_then (qspec_then `es` strip_assume_tac) >>
+  metis_tac[read_place_def]
 QED
 
 (* x op= e on a word storage or transient variable of any width:
