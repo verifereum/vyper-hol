@@ -963,13 +963,6 @@ Proof
   drule_all tuple_memory_no_snapshot >> metis_tac[]
 QED
 
-Theorem tuple_resolve_empty[local]:
-  !cx tr slot tv st.
-    resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
-Proof
-  rpt gen_tac >> Cases_on `tv` >> simp[resolve_array_element_def, return_def]
-QED
-
 (* The element's selection reads no gas observation. *)
 Theorem tuple_select_gas_obs[local]:
   !cx ty tv i ee r.
@@ -991,7 +984,7 @@ Proof
   >~ [`StoragePlace tr slot ptv`]
   >- (Cases_on `ptv` >> Cases_on `tr` >>
       simp[select_result_def, extend_place_def, extend_storage_place_def,
-           resolve_array_element_def, tuple_resolve_empty, check_def,
+           resolve_array_element_def, vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, check_def,
            assert_def, ignore_bind_def, get_storage_backend_def,
            get_accounts_def, get_transient_storage_def, bind_def,
            lift_option_type_def, return_def, raise_def, pairTheory.UNCURRY,
