@@ -2858,3 +2858,112 @@ Proof
   gvs[execute_plan_def, asm_steps_def] >>
   irule phi_venom_rel_vars_transfer >> simp[] >> metis_tac[]
 QED
+
+Theorem phi_prefix_cons_plan:
+  inst.inst_opcode = PHI /\ block_len = SUC i + LENGTH rest ==>
+  generate_block_insts_prefix liveness dfg cfg fn label halt 0 block_len i
+    (SUC j) (inst::rest) ps =
+  let (step_ops, next) = generate_phi_plan inst
+        (live_vars_at liveness label (SUC i)) halt ps in
+  case generate_block_insts_prefix liveness dfg cfg fn label halt 0 block_len
+      (SUC i) j rest next of
+    NONE => NONE
+  | SOME (tail_ops, last) => SOME (step_ops ++ tail_ops, last)
+Proof
+  strip_tac >>
+  simp[generate_block_insts_prefix_def, generate_inst_plan_def,
+       is_pre_codegen_opcode_def, is_unlowered_fmp_opcode_def,
+       is_unlowered_internal_call_opcode_def, is_raw_fmp_opcode_def,
+       GSYM arithmeticTheory.ADD1] >>
+  Cases_on `rest` >> simp[] >>
+  Cases_on `generate_phi_plan inst (live_vars_at liveness label (SUC i)) halt ps` >>
+  simp[]
+QED
+
+Theorem phi_eval_snoc_update:
+  !done s partial inst out value.
+    EVERY (\i. i.inst_opcode = PHI) done /\
+    eval_phis s done = OK partial /\ inst.inst_opcode = PHI /\
+    eval_one_phi s inst = SOME (out,value) /\
+    ~MEM out (FLAT (MAP (\i. i.inst_outputs) done)) ==>
+    eval_phis s (done ++ [inst]) = OK (update_var out value partial)
+Proof
+  Induct >- simp[eval_phis_def] >> rpt gen_tac >>
+  simp[eval_phis_def] >> strip_tac >>
+  Cases_on `eval_one_phi s h` >> gvs[] >>
+  rename1 `eval_one_phi s h = SOME result` >> Cases_on `result` >>
+  rename1 `eval_one_phi s h = SOME (name, val)` >>
+  Cases_on `eval_phis s done` >> gvs[] >>
+  `name <> out` by
+    metis_tac[venomExecProofsTheory.eval_one_phi_output_mem] >>
+  first_x_assum drule >>
+  disch_then (qspecl_then [`inst`, `out`, `value`] mp_tac) >>
+  simp[] >> strip_tac >> simp[dftCommutationTheory.update_var_commutes]
+QED
+
+Theorem phi_parallel_frame_residents:
+  !done inst s partial next ps fn ra lo.
+    EVERY (\i. i.inst_opcode = PHI) done /\ inst.inst_opcode = PHI /\
+    ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ [inst]))) /\
+    eval_phis s done = OK partial /\
+    eval_phis s (done ++ [inst]) = OK next /\
+    ~MEM (Var (HD inst.inst_outputs)) ps.ps_stack /\
+    Var (HD inst.inst_outputs) NOTIN FDOM ps.ps_spilled ==>
+    frame_view fn ra next =
+      (frame_view fn ra partial with vs_vars := (frame_view fn ra next).vs_vars) /\
+    (!at. MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled ==>
+      operand_val (frame_view fn ra next) lo at =
+      operand_val (frame_view fn ra partial) lo at)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?out value. eval_one_phi s inst = SOME (out,value)` by
+    (irule phi_eval_member_result >>
+     qexistsl_tac [`next`, `done ++ [inst]`] >> simp[]) >>
+  `inst.inst_outputs = [out]` by
+    metis_tac[venomExecProofsTheory.eval_one_phi_imp_inst_outputs] >>
+  `~MEM out (FLAT (MAP (\i. i.inst_outputs) done))` by
+    gvs[listTheory.ALL_DISTINCT_APPEND] >>
+  `next = update_var out value partial` by
+    (drule_all phi_eval_snoc_update >> simp[]) >>
+  gvs[frameViewFactsTheory.frame_view_update_var] >> conj_tac
+  >- simp[update_var_def] >>
+  rpt strip_tac >> irule instSimHelpersTheory.operand_val_update_var >>
+  Cases_on `at` >> gvs[] >> metis_tac[]
+QED
+
+Theorem phi_parallel_selected_value:
+  codegen_ready_fn fn /\ retpc_shape_ok fn /\
+  MEM bb fn.fn_blocks /\ bb <> HD fn.fn_blocks /\
+  collect_phis bb.bb_instructions = done ++ inst::todo /\
+  eval_phis vs done = OK partial /\
+  eval_phis vs (done ++ [inst]) = OK next /\
+  vs.vs_prev_bb = SOME pred /\
+  resolve_phi pred inst.inst_operands = SOME (Var src) ==>
+  operand_val (frame_view fn ra next) lo (Var (HD inst.inst_outputs)) =
+    operand_val (frame_view fn ra partial) lo (Var src)
+Proof
+  strip_tac >>
+  `MEM inst (collect_phis bb.bb_instructions)` by simp[] >>
+  `inst.inst_opcode = PHI /\ LENGTH inst.inst_outputs = 1 /\
+   phi_well_formed inst.inst_operands` by metis_tac[phi_codegen_inst_shape] >>
+  `MEM (Var src) inst.inst_operands` by
+    metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
+  `FLOOKUP partial.vs_vars src = FLOOKUP vs.vs_vars src` by
+    (irule phi_prefix_operand_lookup >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[listTheory.MEM_APPEND]) >>
+  `MEM inst (fn_insts fn)` by
+    metis_tac[allocaRemapSSATheory.mem_fn_insts_intro,
+              livenessProofsTheory.collect_phis_mem] >>
+  `EVERY (\i. i.inst_opcode = PHI) (done ++ [inst])` by
+    (simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+     `MEM i (collect_phis bb.bb_instructions)` by gvs[] >>
+     metis_tac[phi_codegen_inst_shape]) >>
+  `ALL_DISTINCT (FLAT (MAP (\i. i.inst_outputs) (done ++ [inst])))` by
+    (`ssa_form fn` by gvs[codegen_ready_fn_def] >>
+     drule_all phi_block_outputs_distinct >> strip_tac >>
+     drule phi_collect_outputs_distinct >> simp[] >>
+     simp[listTheory.ALL_DISTINCT_APPEND]) >>
+  `MEM inst (done ++ [inst])` by simp[] >>
+  drule_all phi_selected_frame_value >>
+  simp[operand_val_def, frame_view_vars_lookup]
+QED
