@@ -753,7 +753,7 @@ Theorem phi_prefix_hits_frame_sim:
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
        ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                        (collect_phis bb.bb_instructions))) /\
-       normalize_operand dfg [] op = Var v ==>
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
@@ -984,4 +984,75 @@ Proof
         gvs[listTheory.EVERY_EL] >>
       gvs[phi_resolve_find_pairs]) >>
   metis_tac[phi_uses_disjoint_el]
+QED
+
+Theorem phi_prefix_is_collect_phis[local]:
+  !phis body.
+    LENGTH phis = phi_prefix_length (phis ++ body) ==>
+    phis = collect_phis (phis ++ body)
+Proof
+  Induct
+  >- (Cases >> simp[phi_prefix_length_def, collect_phis_def] >> rw[]) >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI` >>
+  simp[phi_prefix_length_def, collect_phis_def]
+QED
+
+Theorem phi_non_entry_non_param_insts[local]:
+  !fn bb.
+    canonical_param_prefix fn /\ MEM bb fn.fn_blocks /\
+    bb <> HD fn.fn_blocks ==>
+    non_param_insts bb = bb.bb_instructions
+Proof
+  rpt strip_tac >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[callLayoutDefsTheory.canonical_param_prefix_def,
+      listTheory.EVERY_MEM, callLayoutDefsTheory.no_param_insts_def,
+      non_param_insts_def] >>
+  simp[listTheory.FILTER_EQ_ID, listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+(* The hits premise of phi_prefix_hits_frame_sim at a join's lineage
+   entry. *)
+Theorem phi_join_entry_hits:
+  !liveness dfg cfg fn ch growth spill_base lbl_ctr pred bb lbl ps_l h
+   promised ps phis body.
+    liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
+    cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+    lookup_block lbl fn.fn_blocks = SOME bb /\
+    bb <> HD fn.fn_blocks /\
+    LENGTH (cfg_preds_of cfg bb.bb_label) <> 1 /\
+    lineage_entry liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr)
+      pred bb.bb_label ps_l /\
+    ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
+    non_param_insts bb = phis ++ body /\
+    LENGTH phis = phi_prefix_length bb.bb_instructions ==>
+    !inst. MEM inst phis ==>
+       !dist.
+         stack_get_phi_depth (FILTER is_var_operand inst.inst_operands)
+           ps.ps_stack = SOME dist ==>
+         resolve_phi pred inst.inst_operands =
+           SOME (stack_peek dist ps.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `bb.bb_label = lbl` by metis_tac[venomExecProofsTheory.lookup_block_label] >>
+  `MEM bb fn.fn_blocks` by metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `non_param_insts bb = bb.bb_instructions` by
+    metis_tac[phi_non_entry_non_param_insts, codegen_ready_fn_def] >>
+  `phis = collect_phis bb.bb_instructions` by
+    metis_tac[phi_prefix_is_collect_phis] >>
+  qspecl_then [`liveness`, `dfg`, `cfg`, `fn`, `ch`, `growth`, `spill_base`,
+               `lbl_ctr`, `pred`, `bb`, `ps_l`]
+    mp_tac fnPlanLineageJoinTheory.lineage_entry_join_stack >>
+  impl_tac >- gvs[] >> strip_tac >>
+  rpt strip_tac >> gvs[] >>
+  irule phi_join_stack_hit >> simp[] >>
+  conj_tac >- metis_tac[phi_codegen_uses_disjoint] >>
+  simp[listTheory.EVERY_MEM] >> rpt strip_tac >>
+  `phi.inst_opcode = PHI /\ MEM phi bb.bb_instructions` by
+    (qpat_x_assum `MEM phi _` mp_tac >>
+     qspec_tac (`bb.bb_instructions`, `l`) >>
+     Induct >> rw[collect_phis_def] >> gvs[]) >>
+  `inst_wf phi` by metis_tac[codegen_ready_fn_def, venomWfTheory.fn_inst_wf_def] >>
+  gvs[venomWfTheory.inst_wf_def]
 QED

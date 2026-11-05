@@ -65,7 +65,7 @@ Theorem phi_prefix_frame_sim:
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
        ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                        (collect_phis bb.bb_instructions))) /\
-       normalize_operand dfg [] op = Var v ==>
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
        ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
@@ -102,7 +102,10 @@ Theorem phi_prefix_frame_sim:
          operand_val (frame_view fn ra s_phi) lo at =
          operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_join_entry_hits >> disch_tac >>
+  drule_all fnFrameStepsPhiTheory.phi_prefix_hits_frame_sim >>
+  simp[]
 QED
 
 
