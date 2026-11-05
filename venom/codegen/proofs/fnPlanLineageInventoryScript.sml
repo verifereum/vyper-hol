@@ -3501,6 +3501,97 @@ Proof
   metis_tac[reduce_depth_plan_inventory_subset]
 QED
 
+(* Exact copy from reorderSim.stack_swap_mem_subset (local there).
+   Shared by the shallow and length-floor planner interfaces. *)
+Theorem stack_swap_mem_subset:
+  !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
+Proof
+  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
+  `LENGTH stk - 1 < LENGTH stk /\
+   LENGTH stk - (d + 1) < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
+  `MEM (EL (LENGTH stk - 1) stk) stk /\
+   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
+    (conj_tac >> irule EL_MEM >> decide_tac) >>
+  simp[stack_swap_def, LET_THM] >> strip_tac >>
+  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
+QED
+
+Theorem do_swap_safe_inventory_subset:
+  !d ps ops qs.
+    (d <= 16 \/ d < LENGTH ps.ps_stack) /\
+    do_swap d ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `d <= 16`
+  >- (qpat_x_assum `do_swap _ _ = _` mp_tac >>
+      simp[do_swap_def] >> Cases_on `d = 0` >> simp[] >>
+      strip_tac >> gvs[] >> metis_tac[stack_swap_mem_subset]) >>
+  metis_tac[reorderSimTheory.do_swap_inventory_subset]
+QED
+
+Theorem reorder_one_safe_inventory_subset:
+  !dfg tops idx op ps ops qs.
+    ((idx < LENGTH tops /\ LENGTH tops <= LENGTH ps.ps_stack) \/
+     LENGTH tops - 1 - idx <= 16) /\
+    reorder_one dfg tops idx op ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
+  rewrite_tac[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gnvs[] >>
+  `LENGTH ps.ps_stack <= LENGTH ps1.ps_stack /\
+   !at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule reorder_restore_inventory_subset_nb >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH tops - (idx + 1)) (LENGTH tops) ps1.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
+  pairarg_tac >> simp[] >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+        MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     metis_tac[reduce_depth_plan_inventory_subset]) >>
+  `~(LENGTH tops - (idx + 1) <= 16) ==>
+   LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` by
+    (Cases_on `LENGTH tops - (idx + 1) <= 16` >> simp[] >>
+     `idx < LENGTH tops /\ LENGTH tops <= LENGTH ps1.ps_stack` by decide_tac >>
+     `LENGTH tops <= LENGTH ps2.ps_stack` by
+       (drule reorder_reduce_inventory_subset_nb >> simp[]) >> decide_tac) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH tops - (idx + 1)) (LENGTH tops) ps2.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
+  `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  `MEM op ps2.ps_stack` by metis_tac[stack_peek_mem] >>
+  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` >> simp[] >>
+  Cases_on `operand_equiv dfg op
+    (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[] >>
+  all_tac >>~- ([`_ /\ (ps2 with ps_stack := _) = qs ==> _`],
+    `MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
+      (irule stack_peek_mem >> decide_tac) >>
+    strip_tac >> gvs[] >> rpt strip_tac >> metis_tac[stack_poke_mem_subset_nb]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gnvs[] >>
+  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
+    (qspecl_then [`dist'`, `ps2`] mp_tac planWfTheory.do_swap_length >> simp[]) >>
+  `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
+        MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
+    (rpt strip_tac >> irule reorderSimTheory.do_swap_inventory_subset >>
+     qexistsl [`dist'`, `swap1_ops`] >> simp[]) >>
+  `!at. MEM at ps4.ps_stack \/ at IN FDOM ps4.ps_spilled ==>
+        MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled` by
+    (rpt strip_tac >> irule do_swap_safe_inventory_subset >>
+     qexistsl [`LENGTH tops - (idx + 1)`, `swap2_ops`] >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem reorder_one_inventory_subset_nb:
   !dfg tops idx op ps ops ps'.
     idx < LENGTH tops /\
@@ -3509,51 +3600,7 @@ Theorem reorder_one_inventory_subset_nb:
     !at. MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled ==>
          MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  rewrite_tac[reorder_one_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gvs[] >>
-  `LENGTH tops <= LENGTH ps1.ps_stack /\
-   !at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
-        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
-    (drule reorder_restore_inventory_subset_nb >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps1.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
-  pairarg_tac >> simp[] >>
-  `LENGTH tops <= LENGTH ps2.ps_stack /\
-   !at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
-        MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
-    (drule reorder_reduce_inventory_subset_nb >> simp[] >> metis_tac[]) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps2.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[] >> metis_tac[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
-  `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
-    metis_tac[stack_get_unfixed_depth_props] >>
-  `MEM op ps2.ps_stack` by metis_tac[stack_peek_mem] >>
-  `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` by decide_tac >>
-  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[]
-  >- (strip_tac >> gvs[] >> metis_tac[]) >>
-  `MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
-    (irule stack_peek_mem >> decide_tac) >>
-  Cases_on `operand_equiv dfg op
-    (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
-  >- (strip_tac >> gvs[] >> rpt strip_tac >>
-      metis_tac[stack_poke_mem_subset_nb]) >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  rename1 `do_swap dist' ps2 = (swap1_ops,ps3)` >>
-  `LENGTH ps3.ps_stack = LENGTH ps2.ps_stack` by
-    (qspec_then `ps2` mp_tac (Q.SPEC `dist'` planWfTheory.do_swap_length) >> simp[]) >>
-  `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
-        MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
-    (qspec_then `dist'` mp_tac do_swap_inventory_subset >>
-     disch_then drule >> simp[] >> metis_tac[]) >>
-  strip_tac >> gvs[] >>
-  `LENGTH tops - (idx + 1) < LENGTH ps3.ps_stack` by decide_tac >>
-  drule_at (Pat `do_swap _ _ = _`) do_swap_inventory_subset >>
-  simp[] >> metis_tac[]
+  metis_tac[reorder_one_safe_inventory_subset]
 QED
 
 (* Exact copies from fnAliasStep, completing the unbounded reorder interface. *)
@@ -3721,37 +3768,6 @@ Proof
   metis_tac[reorder_plan_inventory_subset_nb,
             restore_spilled_plan_inventory_subset]
 QED
-
-(* Exact copy from reorderSim.stack_swap_mem_subset (local there).
-   Moved from fnPlanLineagePhiInventory to serve both planner consumers. *)
-Theorem stack_swap_mem_subset:
-  !d stk at. MEM at (stack_swap d stk) ==> MEM at stk
-Proof
-  rpt gen_tac >> Cases_on `stk = []` >- simp[stack_swap_def, LUPDATE_def] >>
-  `LENGTH stk - 1 < LENGTH stk /\
-   LENGTH stk - (d + 1) < LENGTH stk` by (Cases_on `stk` >> gvs[]) >>
-  `MEM (EL (LENGTH stk - 1) stk) stk /\
-   MEM (EL (LENGTH stk - (d + 1)) stk) stk` by
-    (conj_tac >> irule EL_MEM >> decide_tac) >>
-  simp[stack_swap_def, LET_THM] >> strip_tac >>
-  fs[MEM_LUPDATE, EL_LUPDATE] >> gvs[] >> metis_tac[EL_MEM]
-QED
-
-Theorem do_swap_safe_inventory_subset:
-  !d ps ops qs.
-    (d <= 16 \/ d < LENGTH ps.ps_stack) /\
-    do_swap d ps = (ops,qs) ==>
-    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
-         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
-Proof
-  rpt gen_tac >> strip_tac >>
-  Cases_on `d <= 16`
-  >- (qpat_x_assum `do_swap _ _ = _` mp_tac >>
-      simp[do_swap_def] >> Cases_on `d = 0` >> simp[] >>
-      strip_tac >> gvs[] >> metis_tac[stack_swap_mem_subset]) >>
-  metis_tac[reorderSimTheory.do_swap_inventory_subset]
-QED
-
 Theorem reorder_one_shallow_inventory_subset:
   !dfg tops idx op ps ops qs.
     LENGTH tops - 1 - idx <= 16 /\
@@ -3759,61 +3775,7 @@ Theorem reorder_one_shallow_inventory_subset:
     !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
          MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
-  rewrite_tac[reorder_one_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gvs[] >>
-  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
-        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
-    (drule reorder_restore_inventory_subset_nb >> metis_tac[]) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps1.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
-  pairarg_tac >> simp[] >>
-  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
-        MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
-    (Cases_on `dist > 16` >> gvs[] >>
-     metis_tac[reduce_depth_plan_inventory_subset]) >>
-  Cases_on `stack_get_unfixed_depth op
-    (LENGTH tops - (idx + 1)) (LENGTH tops) ps2.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[] >> metis_tac[]) >>
-  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
-  `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
-    metis_tac[stack_get_unfixed_depth_props] >>
-  `MEM op ps2.ps_stack` by metis_tac[stack_peek_mem] >>
-  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[]
-  >- (strip_tac >> gvs[] >> metis_tac[]) >>
-  Cases_on `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` >> simp[]
-  >- (Cases_on `operand_equiv dfg op
-        (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
-      >- (`MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
-            (irule stack_peek_mem >> decide_tac) >>
-          strip_tac >> gvs[] >> rpt strip_tac >> metis_tac[stack_poke_mem_subset_nb]) >>
-      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-      strip_tac >> gvs[] >>
-      `LENGTH tops - (idx + 1) <= 16` by decide_tac >>
-      `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
-            MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
-        (rpt strip_tac >> irule reorderSimTheory.do_swap_inventory_subset >>
-         qexistsl [`dist'`, `swap1_ops`] >> simp[]) >>
-      `!at. MEM at ps4.ps_stack \/ at IN FDOM ps4.ps_spilled ==>
-            MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled` by
-        (rpt strip_tac >> irule do_swap_safe_inventory_subset >>
-         qexistsl [`LENGTH tops - (idx + 1)`, `swap2_ops`] >> simp[]) >>
-      metis_tac[]) >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  strip_tac >> gvs[] >>
-      `LENGTH tops - (idx + 1) <= 16` by decide_tac >>
-      `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
-            MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
-        (rpt strip_tac >> irule reorderSimTheory.do_swap_inventory_subset >>
-         qexistsl [`dist'`, `swap1_ops`] >> simp[]) >>
-      `!at. MEM at ps4.ps_stack \/ at IN FDOM ps4.ps_spilled ==>
-            MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled` by
-        (rpt strip_tac >> irule do_swap_safe_inventory_subset >>
-         qexistsl [`LENGTH tops - (idx + 1)`, `swap2_ops`] >> simp[]) >>
-      metis_tac[]
+  metis_tac[reorder_one_safe_inventory_subset]
 QED
 
 Theorem plan_steps_reorder_shallow_inventory_subset[local]:
