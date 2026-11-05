@@ -277,6 +277,73 @@ Proof
   disch_then (qspec_then `v` assume_tac) >> simp[]
 QED
 
+Theorem concretize_positions_definition_endpoint:
+  EVERY inst_wf xs /\
+  (!inst. MEM inst xs /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  i < LENGTH xs /\ MEM v (EL i xs).inst_outputs ==>
+  ?i'. i' < LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
+          (MAP (concretize_inst_with_positions positions) xs)) /\
+    MEM v (EL i' (FILTER (\inst. inst.inst_opcode <> NOP)
+          (MAP (concretize_inst_with_positions positions) xs))).inst_outputs
+Proof
+  strip_tac >>
+  drule_all concretize_positions_definition_filter >>
+  disch_then (qspec_then `v` assume_tac) >>
+  `MEM (EL i xs) xs` by simp[EL_MEM] >>
+  `MEM (concretize_inst_with_positions positions (EL i xs))
+     (MAP (concretize_inst_with_positions positions)
+       (FILTER (\inst. MEM v inst.inst_outputs) xs))`
+    by (simp[MEM_MAP, MEM_FILTER] >> metis_tac[]) >>
+  qpat_x_assum `FILTER _ _ = _` (fn th => fs[GSYM th, MEM_FILTER]) >>
+  qmatch_goalsub_abbrev_tac `LENGTH retained` >>
+  `MEM (concretize_inst_with_positions positions (EL i xs)) retained`
+    by simp[Abbr `retained`, MEM_FILTER] >>
+  qpat_x_assum `MEM _ retained` (strip_assume_tac o REWRITE_RULE[MEM_EL]) >>
+  goal_assum drule >> gvs[]
+QED
+
+Theorem concretize_positions_definition_before_use:
+  EVERY inst_wf xs /\
+  (!inst. MEM inst xs /\ inst.inst_opcode = ALLOCA ==>
+    IS_SOME (FLOOKUP positions (Allocation inst.inst_id))) /\
+  i < j /\ j < LENGTH xs /\ MEM v (EL i xs).inst_outputs /\
+  (concretize_inst_with_positions positions (EL j xs)).inst_opcode <> NOP ==>
+  ?i' j'. i' < j' /\
+    j' < LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
+          (MAP (concretize_inst_with_positions positions) xs)) /\
+    MEM v (EL i' (FILTER (\inst. inst.inst_opcode <> NOP)
+          (MAP (concretize_inst_with_positions positions) xs))).inst_outputs /\
+    EL j' (FILTER (\inst. inst.inst_opcode <> NOP)
+          (MAP (concretize_inst_with_positions positions) xs)) =
+      concretize_inst_with_positions positions (EL j xs)
+Proof
+  strip_tac >>
+  `xs = TAKE j xs ++ EL j xs :: DROP (SUC j) xs`
+    by (qspec_then `j` (qspec_then `xs` mp_tac) TAKE_DROP_SUC >>
+        simp[]) >>
+  `EVERY inst_wf (TAKE j xs)` by metis_tac[EVERY_APPEND, EVERY_DEF] >>
+  `!inst. MEM inst (TAKE j xs) /\ inst.inst_opcode = ALLOCA ==>
+     IS_SOME (FLOOKUP positions (Allocation inst.inst_id))`
+    by metis_tac[MEM_APPEND] >>
+  `i < LENGTH (TAKE j xs) /\ MEM v (EL i (TAKE j xs)).inst_outputs`
+    by simp[LENGTH_TAKE, EL_TAKE] >>
+  drule_all concretize_positions_definition_endpoint >> strip_tac >>
+  qexistsl [`i'`, `LENGTH (FILTER (\inst. inst.inst_opcode <> NOP)
+       (MAP (concretize_inst_with_positions positions) (TAKE j xs)))`] >>
+  `FILTER (\inst. inst.inst_opcode <> NOP)
+     (MAP (concretize_inst_with_positions positions) xs) =
+   FILTER (\inst. inst.inst_opcode <> NOP)
+     (MAP (concretize_inst_with_positions positions) (TAKE j xs)) ++
+   concretize_inst_with_positions positions (EL j xs) ::
+   FILTER (\inst. inst.inst_opcode <> NOP)
+     (MAP (concretize_inst_with_positions positions) (DROP (SUC j) xs))`
+    by (qpat_x_assum `xs = _` (fn th =>
+          GEN_REWRITE_TAC (LAND_CONV o RAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+        simp[MAP_APPEND, FILTER_APPEND]) >>
+  simp[EL_APPEND_EQN]
+QED
+
 Theorem mk_concretize_layout_alloca_positions[local]:
   mk_concretize_layout reserved positions fn = SOME layout ==>
   !inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA ==>
