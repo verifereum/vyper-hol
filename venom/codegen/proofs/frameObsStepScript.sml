@@ -16,6 +16,37 @@ Ancestors
   callTrace frameOutcome vfmExecution vfmExecutionProp vfmDecreasesGas
   vfmAccountFrame vfmContextLength
 
+Theorem observe_prefix:
+  !d s rs obs ep gp.
+  observe d s rs (obs with <|entries := ep ++ obs.entries;
+                            readings := gp ++ obs.readings|>) =
+  (observe d s rs obs) with
+    <|entries := ep ++ (observe d s rs obs).entries;
+      readings := gp ++ (observe d s rs obs).readings|>
+Proof
+  rpt gen_tac >> PairCases_on `rs` >>
+  simp[observe_def] >>
+  rpt (IF_CASES_TAC >> simp[listTheory.APPEND_ASSOC]) >>
+  Cases_on `obs.pending` >> simp[] >>
+  rename1 `SOME x` >> PairCases_on `x` >> simp[listTheory.APPEND_ASSOC]
+QED
+
+Theorem frame_obs_tr_prefix:
+  !d obs s r post ep gp.
+  frame_obs_tr d
+    (obs with <|entries := ep ++ obs.entries;
+               readings := gp ++ obs.readings|>) s (r, post) =
+  (frame_obs_tr d obs s (r, post)) with
+    <|entries := ep ++ (frame_obs_tr d obs s (r, post)).entries;
+      readings := gp ++ (frame_obs_tr d obs s (r, post)).readings|>
+Proof
+  recInduct frame_obs_tr_ind >> rpt strip_tac >>
+  once_rewrite_tac[frame_obs_tr_def] >>
+  simp[observe_prefix] >> IF_CASES_TAC >> simp[] >>
+  first_x_assum (qspec_then `observe d s (r,s') obs` mp_tac) >>
+  Cases_on `r` >> gvs[]
+QED
+
 (* ===== call_trace and gas_readings ===== *)
 
 Theorem frame_obs_plain_step:
