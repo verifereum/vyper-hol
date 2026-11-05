@@ -7,6 +7,7 @@ Ancestors
   exprSimHyps vyperTypeEnv vyperTypeInvariants vyperTyping valueEncodingProofs
   vyperTypeSystem exprLoweringProps venomExecSemantics exprSimUnop builtinSimple
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
+  exprSimOps exprBopLowering
 Libs
   intLib
 
@@ -665,3 +666,187 @@ val () = List.app (fn th =>
     else raise Fail "Neg storage frame has unproved dependencies"
   end) [neg_storage_frame_run, neg_storage_frame_tail,
         compile_neg_storage_frame_frag];
+
+Theorem bitwise_storage_frame_op:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  compile_binop bop x y ty bl el sa = (op,sb) /\
+  eval_operand x s0 = SOME a /\ eval_operand y s0 = SOME b /\
+  local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
+         eval_operand op s = SOME
+           ((if bop = And then word_and else if bop = Or then word_or else word_xor) a b) /\
+         (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
+         (!aid base. FLOOKUP s0.vs_allocas aid = SOME base ==> FLOOKUP s.vs_allocas aid = SOME base) /\
+         s.vs_memory = s0.vs_memory /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R
+Proof
+  strip_tac >> gvs[compile_binop_def] >>
+  irule emit_op_storage_frame_frag >> simp[] >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  simp[step_AND, step_OR, step_XOR, is_terminator_def]
+QED
+
+Theorem bitwise_storage_frame_tail:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es' = INL v /\
+  (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
+    within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
+    within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2) /\
+  word_value v1 /\ word_value v2 /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  compile_binop bop x y (expr_type e1) bl el s2 = (op,sb) /\
+  (!z. x = Var z ==> not_fresh_at s1 z) /\ (!l. x <> Label l) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s2 /\
+  sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+  sa.cs_next_id <= s1.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t ==>
+  frag_exec ctx s2 sb
+    (\s. expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+           es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_res_ok (bop_result cx ann bop [expr_type e1; expr_type e2] v1 v2 es')` by
+    simp[expr_res_ok_def] >>
+  drule_all bop_result_bitwise >> strip_tac >> gnvs[] >>
+  irule frag_exec_pointwise >> gen_tac >> BETA_TAC >> strip_tac >>
+  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ u` >>
+  `stmt_state_rel ctx func cenv cx es' u /\
+   eval_operand x u = SOME (val_to_w256 v1) /\
+   eval_operand y u = SOME (val_to_w256 v2)` by
+    (fs[expr_post_def] >>
+     `eval_operand x t = SOME (val_to_w256 v1) /\
+      eval_operand y u = SOME (val_to_w256 v2)` by
+       (conj_tac >> irule expr_val_rel_word >> simp[] >> metis_tac[]) >>
+     simp[] >> irule eval_operand_frame >> metis_tac[]) >>
+  irule frag_exec_conseq >> irule_at Any bitwise_storage_frame_op >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  qexistsl_tac [`u`, `func`, `es'`, `cx`, `cenv`, `val_to_w256 v2`, `val_to_w256 v1`, `R`] >>
+  simp[] >> rpt strip_tac
+  >~ [`expr_post`]
+  >- (irule expr_post_bop >> simp[] >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`)) >> simp[]) >>
+  gvs[]
+QED
+
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Bitwise storage frame has unproved dependencies"
+  end) [bitwise_storage_frame_op, bitwise_storage_frame_tail];
+
+Theorem successful_bop_operands[local]:
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') ==>
+  ?v1 es1 v2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es') /\
+    bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es' = INL v
+Proof
+  strip_tac >> drule eval_expr_bop_cases >> simp[] >> metis_tac[]
+QED
+
+Theorem compile_bitwise_storage_frame_frag:
+  (bop = And \/ bop = Or \/ bop = XOr) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e1)) /\
+  IS_SOME (evaluate_type (get_tenv cx) (expr_type e2)) /\
+  (!v1 es1 v2 es2.
+    (do r <- eval_expr cx e1; read_result cx r od) es = (INL v1,es1) /\
+    (do r <- eval_expr cx e2; read_result cx r od) es1 = (INL v2,es2) ==>
+    word_value v1 /\ word_value v2 /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+    (!i1 i2. v1 = IntV i1 /\ v2 = IntV i2 ==>
+      within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i1 /\
+      within_int_bound (case type_to_int_bound ann of SOME u => u | NONE => Unsigned 0) i2)) /\
+  (!a b operand.
+    lower_value compile_expr cenv (expr_type e1) e1 a = (operand,b) ==>
+    !l. operand <> Label l) /\
+  (!e a b operand es0 es1 value start saved savedT R.
+    (e = e1 \/ e = e2) /\
+    lower_value compile_expr cenv (expr_type e1) e a = (operand,b) /\
+    (do r <- eval_expr cx e; read_result cx r od) es0 = (INL value,es1) /\
+    fn_has_code a b func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv a ==>
+    frag_exec ctx a b
+      (\s. s = start /\ stmt_state_rel ctx func cenv cx es0 s /\
+           contract_storage s = saved /\ contract_transient s = savedT)
+      (\s. expr_post ctx func cenv cx e es0 a b start es1 value operand s /\
+           contract_storage s = saved /\ contract_transient s = savedT) R) /\
+  lower_value compile_expr cenv ty (Builtin ann (Bop bop) [e1;e2]) sa = (op,sb) /\
+  (do r <- eval_expr cx (Builtin ann (Bop bop) [e1;e2]); read_result cx r od) es = (INL v,es') /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\
+         contract_storage s = saved /\ contract_transient s = savedT)
+    (\s. expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2]) es sa sb s0 es' v op s /\
+         contract_storage s = saved /\ contract_transient s = savedT) R
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~((bop = In \/ bop = NotIn) /\ is_ArrayT (expr_type e2)) /\
+   ~(is_bytestring_type (expr_type e1) /\ (bop = Eq \/ bop = NotEq))` by
+    (qpat_x_assum `bop = And \/ _` mp_tac >> rpt strip_tac >> gvs[]) >>
+  drule_all lower_value_bop >> strip_tac >>
+  qpat_assum `lower_value _ _ _ e1 sa = _`
+    (mp_then Any strip_assume_tac (cj 2 compile_expr_grows)) >>
+  qpat_assum `lower_value _ _ _ e2 s1 = _`
+    (mp_then Any strip_assume_tac (cj 2 compile_expr_grows)) >>
+  drule compile_binop_grows >> strip_tac >>
+  `cs_extends sa s2 /\ cs_extends s1 sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\ fn_has_code s2 sb func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2` by
+    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  drule successful_bop_operands >> strip_tac >>
+  qpat_x_assum `!v1 es1 v2 es2. _` (drule_all_then strip_assume_tac) >>
+  irule frag_exec_pointwise >> gen_tac >> BETA_TAC >> strip_tac >> gnvs[] >>
+  `frag_exec ctx sa s1 (\s. s = s0)
+    (\s. expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x s /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R` by
+    (irule frag_exec_pre_exit >>
+     qpat_assum `!e a b operand es0 es1 value start saved savedT R. _`
+       (irule_at (Pat `frag_exec _ _ _ _ _ _`)) >> simp[] >>
+     qexists_tac `R` >> simp[]) >>
+  drule frag_exec_then >> disch_then irule >> simp[] >> rpt strip_tac >>
+  rename1 `expr_post ctx _ _ _ e1 _ _ _ _ _ _ _ t` >>
+  `stmt_state_rel ctx func cenv cx es1 t` by fs[expr_post_def] >>
+  `frag_exec ctx s1 s2 (\s. s = t)
+    (\s. expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y s /\
+         contract_storage s = contract_storage s0 /\
+         contract_transient s = contract_transient s0) R` by
+    (irule frag_exec_pre_exit >>
+     qpat_assum `!e a b operand es0 es1 value start saved savedT R. _`
+       (irule_at (Pat `frag_exec _ _ _ _ _ _`)) >> simp[] >>
+     qexists_tac `R` >> simp[]) >>
+  qpat_x_assum `frag_exec ctx s1 s2 _ _ _`
+    (mp_then Any mp_tac frag_exec_then) >> disch_then irule >> simp[] >>
+  rpt strip_tac >>
+  irule frag_exec_conseq >> irule_at Any bitwise_storage_frame_tail >>
+  goal_assum (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `bop_result _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> qexists_tac `R` >> simp[] >>
+  qpat_assum `lower_value _ _ _ e1 sa = _`
+    (mp_then Any mp_tac compile_lower_value_var) >> simp[] >>
+  strip_tac >>
+  qpat_x_assum `!a b operand. _` (drule_then assume_tac) >> simp[]
+QED
+
+(* The no-label contract is discharged at typed callers by
+   lower_compile_expr_not_label, using well_typed_expr and the compiler's
+   PtrVar (Var p) environment mapping. It is independent of value semantics. *)
+val () = List.app (fn th =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th)
+  in
+    if null axioms andalso null (Thm.hyp th) andalso
+       List.all (fn oracle => oracle = "DISK_THM") oracles then ()
+    else raise Fail "Bitwise constructor has unproved dependencies"
+  end) [compile_bitwise_storage_frame_frag];
