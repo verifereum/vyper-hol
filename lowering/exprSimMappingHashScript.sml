@@ -377,3 +377,86 @@ Proof
       val_to_w256_def, encode_hashmap_key_def,
       vyperTypeSystemTheory.hashmap_key_type_def, is_word_type_def]
 QED
+
+Theorem evaluated_hashmap_key_representation:
+  hashmap_key_type kt /\ evaluate_type tenv kt = SOME tv ==>
+  is_word_type kt \/ is_bytestring_type kt
+Proof
+  Cases_on `kt` >>
+  gvs[vyperTypeSystemTheory.hashmap_key_type_def, vyperValueTheory.evaluate_type_def,
+      is_word_type_def, is_bytestring_type_def, AllCaseEqs()] >>
+  rename1 `BaseT bty` >> Cases_on `bty` >>
+  gvs[vyperTypeSystemTheory.hashmap_key_type_def, vyperValueTheory.evaluate_type_def,
+      is_word_type_def, is_bytestring_type_def, AllCaseEqs()] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[vyperValueTheory.evaluate_type_def, is_word_type_def,
+      is_bytestring_type_def, AllCaseEqs()]
+QED
+
+Theorem hashmap_key_preprocess:
+  expr_post ctx func cenv cx e es se sa s0 es' kv key_op s /\
+  expr_type e = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key_op F
+   else comp_return key_op) sa = (op,sb) /\
+  (!x. key_op = Var x ==> not_fresh_at sa x) /\
+  local_ptrs_reserved cenv sa ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (encode_hashmap_key kt kv) /\
+    stmt_state_rel ctx func cenv cx es' t /\
+    (t with vs_vars := s.vs_vars) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> Cases_on `is_bytestring_type kt`
+  >- (`(?cap. kt = BaseT (BytesT (Dynamic cap))) \/
+       (?cap. kt = BaseT (StringT cap))` by
+        (Cases_on `kt` >> gvs[is_bytestring_type_def] >>
+         rename1 `BaseT bty` >> Cases_on `bty` >>
+         gvs[is_bytestring_type_def] >>
+         rename1 `BytesT bd` >> Cases_on `bd` >>
+         gvs[is_bytestring_type_def]) >>
+      pop_assum strip_assume_tac
+      >- suspend "dynamic"
+      >> suspend "string") >>
+  `is_word_type kt` by
+    (drule_all evaluated_hashmap_key_representation >> simp[]) >>
+  drule_all typed_scalar_hashmap_key >> strip_tac >>
+  gvs[comp_return_def] >>
+  qexists_tac `s` >>
+  gvs[emitted_insts_def, run_inst_seq_def, exprSimTheory.expr_post_def, exprSimTheory.expr_val_rel_def]
+QED
+
+Resume hashmap_key_preprocess[dynamic]:
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `kv` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  `evaluate_type (get_tenv cx) (expr_type e) =
+     SOME (BaseTV (BytesT (Dynamic cap)))` by
+    simp[vyperValueTheory.evaluate_type_def] >>
+  drule_all hash_dynamic_post_view >> strip_tac >>
+  `stmt_state_rel ctx func cenv cx es' s` by gvs[exprSimTheory.expr_post_def] >>
+  drule_all compile_keccak256_key_frame >> strip_tac >>
+  qexists_tac `t` >>
+  gvs[encode_hashmap_key_def, word_of_bytes_be_def]
+QED
+
+Resume hashmap_key_preprocess[string]:
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  Cases_on `kv` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  `evaluate_type (get_tenv cx) (expr_type e) =
+     SOME (BaseTV (StringT cap))` by
+    simp[vyperValueTheory.evaluate_type_def] >>
+  drule_all hash_string_post_view >> strip_tac >>
+  rename1 `mem_bytes_at (b + 32) (LENGTH str) s.vs_memory = MAP (n2w o ORD) str` >>
+  `mem_word_at b s.vs_memory = n2w (LENGTH (MAP (n2w o ORD) str : word8 list)) /\
+   LENGTH (MAP (n2w o ORD) str : word8 list) < dimword (:256) /\
+   mem_bytes_at (b + 32) (LENGTH (MAP (n2w o ORD) str : word8 list)) s.vs_memory =
+     MAP (n2w o ORD) str` by simp[] >>
+  `stmt_state_rel ctx func cenv cx es' s` by gvs[exprSimTheory.expr_post_def] >>
+  drule_all compile_keccak256_key_frame >> strip_tac >>
+  qexists_tac `t` >>
+  `n2w_o_ORD = (n2w o ORD):char -> word8` by
+    simp[FUN_EQ_THM, vyperMiscTheory.n2w_o_ORD_def] >>
+  gvs[encode_hashmap_key_def, word_of_bytes_be_def]
+QED
+
+Finalise hashmap_key_preprocess

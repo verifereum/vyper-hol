@@ -1053,3 +1053,14 @@ Proof
   irule lookup_block_fn_insts >> goal_assum (drule_at Any) >>
   gvs[MEM_APPEND]
 QED
+
+(* Evaluability already excludes oversized fixed bytes. *)
+Theorem hashmap_key_fixed33_invalid_probe[local]:
+  ~well_formed_type FEMPTY (BaseT (BytesT (Fixed 33))) /\
+  hashmap_key_type (BaseT (BytesT (Fixed 33))) /\
+  ~is_bytestring_type (BaseT (BytesT (Fixed 33))) /\
+  ~is_word_type (BaseT (BytesT (Fixed 33)))
+Proof
+  EVAL_TAC
+QED
+
