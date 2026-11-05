@@ -76,12 +76,17 @@ End
    same holds for the JMP target's live-in variables, and the operands of
    a revert forwarding's instructions not defined inside it.  A RET block
    is not on a must-halt path, so it has no dead_stack_marker slots, and
-   every slot but RET's operands is dead and popped before it.  The
+   every slot but RET's operands is dead and popped before it (the DFS
+   premises tie h and promised: the replay must emit the DFS block's ops,
+   so its cleanup pops where the DFS one does).  OPEN: a dead OFFSET
+   output is pushed and never popped (generate_offset_plan), which leaves
+   a slot at RET; this conjunct needs that excluded.  The
    marker clauses hold since no instruction has the marker as an operand,
    and normalize_operand only follows ASSIGNs of operands. *)
 Theorem block_plan_state_static:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
-   ps_l h promised block_ops ps_after k ps inst next_live next_is_term.
+   ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
+   next_is_term.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
     cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
@@ -91,6 +96,10 @@ Theorem block_plan_state_static:
     lookup_block lbl fn.fn_blocks = SOME bb /\
     lineage_state liveness dfg cfg fn
       (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_l /\
+    dfs_block_state liveness dfg cfg fn
+      (init_cleanup_plan_state ch growth spill_base lbl_ctr) lbl ps_dfs /\
+    generate_block_plan liveness dfg cfg fn bb ps_dfs =
+      SOME (block_ops, ps_dfs_after) /\
     generate_block_plan liveness dfg cfg fn bb
       (ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |>) =
       SOME (block_ops, ps_after) /\
