@@ -1693,6 +1693,90 @@ Resume ifexp_forced_arm_typed[typed_exit]:
 QED
 Finalise ifexp_forced_arm_typed
 
+Theorem ifexp_aggregate_source_kind[local]:
+  !sty dty. arg_type_fits sty dty /\
+    ~is_word_type dty /\ ~is_bytestring_type dty ==>
+    ~is_word_type sty /\ ~is_bytestring_type sty
+Proof
+  Cases >> Cases >> simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT sb) (BaseT db)` >>
+  Cases_on `sb` >> Cases_on `db` >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT sb)) (BaseT (BytesT db))` >>
+  Cases_on `sb` >> Cases_on `db` >>
+  simp[vyperTypeSystemTheory.arg_type_fits_def, is_word_type_def, is_bytestring_type_def]
+QED
+
+Theorem ifexp_forced_arm_body_pre[local]:
+  expr_sim ctx func ce cx ty e es /\ expr_vv_sim ctx func ce cx ty e es /\
+  compile_expr ce ty e sa = (vv,sm) /\
+  compile_ifexp_arm ce (expr_type e) (lowered_value_type ce e) vv sm = (op,sb) /\
+  expr_body_pre ce cx env e es /\ acyclic_struct_metadata ce.ce_struct_fields /\
+  (do r <- eval_expr cx e; read_result cx r od) es = (res,es') /\ expr_res_ok res /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 ==>
+  frag_exec ctx sa sb (\s. s = s0)
+    (\s. ?v. res = INL v /\
+      expr_post ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 es' v op s)
+    (expr_exit res)
+Proof
+  strip_tac >>
+  `env.type_defs = get_tenv cx /\
+   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx)` by
+    gvs[expr_body_pre_def, expr_sim_inv_def,
+        vyperTypeInvariantsTheory.env_consistent_def,
+        vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `!v. res = INL v ==> ?tvt.
+     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v` by
+    (rpt strip_tac >> gvs[] >> drule_all memory_rhs_read_annotation_typed >>
+     gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def]) >>
+  `!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+     type_memory_bytes ce ty = type_memory_size tv` by
+    (gvs[expr_body_pre_def] >> metis_tac[expr_sim_inv_memory_size]) >>
+  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+     ~is_word_type (expr_type e) ==> type_memory_size tvt < 2 ** 64` by
+    metis_tac[expr_body_pre_copy_ok] >>
+  irule ifexp_forced_arm_typed >>
+  qpat_assum `compile_expr _ _ _ _ = _` (irule_at Any) >> simp[] >>
+  Cases_on `is_word_type (expr_type e)` >- simp[] >> simp[] >>
+  Cases_on `same_memory_layout ce (lowered_value_type ce e) (expr_type e)`
+  >- (disj1_tac >> drule ifexp_compat_body_pre_lowered_type >> simp[]) >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==> well_formed_type env.type_defs t` by
+    metis_tac[expr_body_pre_var_types_well_formed] >>
+  `well_typed_expr env e` by gvs[expr_body_pre_def] >>
+  `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by metis_tac[] >>
+  drule_all ifexp_lowered_type_classify >> strip_tac
+  >- simp[]
+  >- simp[] >>
+  suspend "call"
+QED
+
+Resume ifexp_forced_arm_body_pre[call]:
+  gvs[] >>
+  drule ifexp_body_pre_intcall_physical >> strip_tac >>
+  fs[vyperASTTheory.expr_type_def] >>
+  Cases_on `is_bytestring_type ty'`
+  >- (disj1_tac >> metis_tac[compileEnvTheory.arg_type_fits_bytestring_source]) >>
+  `~is_word_type (lowered_value_type ce (Call ty' (IntCall fid) args drv)) /\
+   ~is_bytestring_type (lowered_value_type ce (Call ty' (IntCall fid) args drv))` by
+    metis_tac[ifexp_aggregate_source_kind] >>
+  drule_all ifexp_intcall_copy_source >> strip_tac >>
+  disj2_tac >> simp[] >>
+  `lowered_value_type ce (Call ty' (IntCall fid) args drv) <> ty'` by
+    metis_tac[same_memory_layout_def, ifexp_layout_refl] >>
+  simp[] >>
+  conj_tac
+  >- (gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  drule expr_body_pre_type_evaluates >>
+  simp[optionTheory.IS_SOME_EXISTS, vyperASTTheory.expr_type_def] >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  drule_all ifexp_intcall_read_physical_typed >> strip_tac >>
+  gvs[] >>
+  metis_tac[valueEncodingTypingTheory.value_has_type_val_wf]
+QED
+Finalise ifexp_forced_arm_body_pre
+
 (* What compile_expr emits for an IfExp. *)
 Theorem compile_expr_ifexp:
   !cenv ty t c a b st vv st'.
