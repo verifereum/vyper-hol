@@ -1,7 +1,7 @@
 (* Small source-selection and emitted-cursor boundaries for deploy entry. *)
 Theory ctorDeployLoweringEntrySource
 Ancestors
-  ctorDeployLoweringDefs e2eDeployDefs emitHelperProps compileVyper
+  ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs emitHelperProps compileVyper
   vyperInterpreter vyperTypeContract supportedProgram
   venomInst venomWf venomState
 Libs finite_mapLib
@@ -590,6 +590,39 @@ Proof
   rewrite_tac[CONV_RULE
     (computeLib.RESTR_EVAL_CONV [``generate_context_plan``])
     deploy_ctor_noninit_plan_eq] >>
+  CONV_TAC (computeLib.CBV_CONV stage_cs)
+QED
+
+val deploy_prog = ``execute_plan 0 (context_plan_ops ^final_plan) ++
+  data_segment_asm (^final_unit).cu_data_segment ++ [AsmDataHeader "code_end"]``;
+val deploy_rpolicy = ``<|rpol_target := all_capabilities;
+  rpol_frontend_dispatch := Linear; rpol_final_assembly := FAP_Optimize|>``;
+val deploy_tops = ``[FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]``;
+
+Theorem deploy_ctor_noninit_phases:
+  deploy_phases <|cpol_target := all_capabilities|> ^deploy_tops
+    (assemble ^deploy_prog, [])
+    (^deploy_rpolicy, THE (lower_vyper_deploy_unit ^deploy_tops ^deploy_rpolicy []),
+     <|po_unit := ^final_unit; po_final_assembly := FAP_Optimize|>,
+     ^deploy_prog, ^final_plan)
+Proof
+  rewrite_tac[deploy_phases_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``lower_vyper_deploy_unit``, ``o1PipelineCorrect$o1_pipeline``,
+     ``codegen_assembly``, ``generate_context_plan``, ``assembly_target_safe``,
+     ``execute_plan``, ``data_segment_asm``, ``assemble``]) >>
+  rewrite_tac[CONV_RULE (computeLib.RESTR_EVAL_CONV
+    [``lower_vyper_deploy_unit``, ``o1PipelineCorrect$o1_pipeline``,
+     ``codegen_assembly``, ``generate_context_plan``, ``assembly_target_safe``,
+     ``execute_plan``, ``data_segment_asm``, ``assemble``])
+    deploy_ctor_noninit_pipeline_eq,
+    CONV_RULE (computeLib.RESTR_EVAL_CONV
+    [``codegen_assembly``, ``generate_context_plan``, ``execute_plan``,
+     ``data_segment_asm``]) deploy_ctor_noninit_codegen_eq,
+    CONV_RULE (computeLib.RESTR_EVAL_CONV [``generate_context_plan``])
+    deploy_ctor_noninit_plan_eq] >>
+  rewrite_tac[CONV_RULE (computeLib.RESTR_EVAL_CONV
+    [``lower_vyper_deploy_unit``]) deploy_ctor_noninit_lower_eq] >>
   CONV_TAC (computeLib.CBV_CONV stage_cs)
 QED
 
