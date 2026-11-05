@@ -203,6 +203,8 @@ val raise_reason_context_safe_eval = EVAL
 val raise_reason_assembly_safe_eval = EVAL
   ``assembly_target_safe (^raise_reason_rpolicy).rpol_target
       ^raise_reason_raw_asm``
+val raise_reason_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^raise_reason_raw_asm``
 val raise_reason_codegen_step1 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    raise_reason_target_wf_eval,
@@ -214,9 +216,9 @@ val raise_reason_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^raise_reason_rpolicy ^raise_reason_unit``
 val raise_reason_codegen_step2 = SIMP_CONV pure_ss
   [raise_reason_execute_context_eval,
-   raise_reason_data_asm_eval,
    raise_reason_raw_asm_eval,
-   raise_reason_assembly_safe_eval]
+   raise_reason_assembly_safe_eval,
+   raise_reason_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl raise_reason_codegen_step1))
 val raise_reason_codegen_step3 =
   EVAL (rhs (concl raise_reason_codegen_step2))

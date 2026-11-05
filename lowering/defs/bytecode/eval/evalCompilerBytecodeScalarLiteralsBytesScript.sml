@@ -175,6 +175,8 @@ val scalar_literals_bytes_context_safe_eval = EVAL
 val scalar_literals_bytes_assembly_safe_eval = EVAL
   ``assembly_target_safe (^scalar_literals_bytes_rpolicy).rpol_target
       ^scalar_literals_bytes_raw_asm``
+val scalar_literals_bytes_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^scalar_literals_bytes_raw_asm``
 val scalar_literals_bytes_codegen_step1 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    scalar_literals_bytes_target_wf_eval,
@@ -186,9 +188,9 @@ val scalar_literals_bytes_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^scalar_literals_bytes_rpolicy ^scalar_literals_bytes_unit``
 val scalar_literals_bytes_codegen_step2 = SIMP_CONV pure_ss
   [scalar_literals_bytes_execute_context_eval,
-   scalar_literals_bytes_data_asm_eval,
    scalar_literals_bytes_raw_asm_eval,
-   scalar_literals_bytes_assembly_safe_eval]
+   scalar_literals_bytes_assembly_safe_eval,
+   scalar_literals_bytes_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl scalar_literals_bytes_codegen_step1))
 val scalar_literals_bytes_codegen_assembly_eval =
   TRANS scalar_literals_bytes_codegen_step1 scalar_literals_bytes_codegen_step2

@@ -8,7 +8,7 @@
 
 Theory contextCodegenRel
 Ancestors
-  codegenRel venomExecSemantics venomWf fcgDefs
+  codegenRel venomExecSemantics venomWf fcgDefs fmpWfDefs
 
 (* A byte in any function's half-open spill interval. *)
 Definition context_spill_byte_def:
@@ -415,7 +415,7 @@ Definition codegen_context_obligations_def:
   codegen_context_obligations Inv ctx cp <=>
     generate_context_plan ctx = SOME cp /\
     context_plan_layout_wf cp /\
-    codegen_ready ctx /\ ctx_wf ctx /\
+    codegen_ready ctx /\ ctx_wf ctx /\ fmp_lowered_context_wf ctx /\
     reachable_call_graph_acyclic ctx /\
     (!name efn. ctx.ctx_entry = SOME name /\
        lookup_function name ctx.ctx_functions = SOME efn ==>

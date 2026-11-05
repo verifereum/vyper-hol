@@ -203,6 +203,8 @@ val assert_reason_context_safe_eval = EVAL
 val assert_reason_assembly_safe_eval = EVAL
   ``assembly_target_safe (^assert_reason_rpolicy).rpol_target
       ^assert_reason_raw_asm``
+val assert_reason_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^assert_reason_raw_asm``
 val assert_reason_codegen_step1 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def,
    assert_reason_target_wf_eval,
@@ -214,9 +216,9 @@ val assert_reason_codegen_step1 = SIMP_CONV pure_ss
   ``codegen_assembly ^assert_reason_rpolicy ^assert_reason_unit``
 val assert_reason_codegen_step2 = SIMP_CONV pure_ss
   [assert_reason_execute_context_eval,
-   assert_reason_data_asm_eval,
    assert_reason_raw_asm_eval,
-   assert_reason_assembly_safe_eval]
+   assert_reason_assembly_safe_eval,
+   assert_reason_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl assert_reason_codegen_step1))
 val assert_reason_codegen_assembly_eval =
   TRANS assert_reason_codegen_step1 assert_reason_codegen_step2

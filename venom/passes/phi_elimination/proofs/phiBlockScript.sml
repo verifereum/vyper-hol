@@ -536,7 +536,7 @@ Proof
   gvs[instIdxIndepTheory.exec_result_map_def]
 QED
 
-Triviality exec_block_skip_prefix_non_invoke:
+Theorem exec_block_skip_prefix_non_invoke:
   !prefix fuel ctx bb s j s'.
     j + LENGTH prefix <= LENGTH bb.bb_instructions /\
     EVERY (\inst. ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE) prefix /\

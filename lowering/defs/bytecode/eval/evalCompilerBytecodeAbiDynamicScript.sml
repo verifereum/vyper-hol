@@ -6,7 +6,7 @@
 
 Theory evalCompilerBytecodeAbiDynamic
 Ancestors evalCompilerSubsetAbiBuiltins compileVyper concretizeMemLocDefs codegenReadyCompute stackPlanGenCompute alist byte integer_word option cv_std
-Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib
+Libs evalCompilerBytecodeLib finite_mapLib computeLib wordsLib intReduce
 
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps [".."]
@@ -516,6 +516,8 @@ val abi_dynamic_context_safe_eval = EVAL
 val abi_dynamic_assembly_safe_eval = EVAL
   ``assembly_target_safe (^abi_dynamic_rpolicy).rpol_target
       ^abi_dynamic_raw_asm``
+val abi_dynamic_symbols_ok_eval = EVAL
+  ``asm_symbols_ok ^abi_dynamic_raw_asm``
 val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
   [codegenTheory.codegen_assembly_def, abi_dynamic_target_wf_eval,
    abi_dynamic_context_safe_eval, abi_dynamic_context_plan_eval,
@@ -525,7 +527,8 @@ val abi_dynamic_codegen_step0 = SIMP_CONV pure_ss
 val abi_dynamic_codegen_step1 = SIMP_CONV pure_ss
   [abi_dynamic_plan_ops_eval, abi_dynamic_initial_fmp_eval,
    abi_dynamic_execute_plan_eval, abi_dynamic_data_asm_eval,
-   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval]
+   abi_dynamic_raw_asm_eval, abi_dynamic_assembly_safe_eval,
+   abi_dynamic_symbols_ok_eval, AND_CLAUSES]
   (rhs (concl abi_dynamic_codegen_step0))
 val abi_dynamic_codegen_eval = save_thm
   ("abi_dynamic_codegen_eval",

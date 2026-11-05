@@ -1,7 +1,7 @@
 (* Small boundary/label regression cohort; no admitted simulation is applied. *)
 Theory fnBoundaryRegression
 Ancestors
-  fnBoundaryProps venomToAsmProps codegenRel contextCodegenRel
+  fnBoundaryProps venomToAsmProps frameRel codegenRel contextCodegenRel
   asmOracleRegression asmSem asmIR symbolResolve venomState venomInst
   venomExecSemantics stackPlanGen stackPlanTypes finite_map list rich_list
 Libs finite_mapLib

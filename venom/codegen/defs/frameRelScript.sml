@@ -17,9 +17,11 @@
  *
  * TOP-LEVEL:
  *   frame_view          — Venom state with return-PC variables read as ra
- *   retpc_shape_ok      — RET jumps through a return-PC variable
  *   closure_spill_byte  — spill byte of a function reachable from name
  *   fn_frame_inv        — the running frame invariant
+ *   fn_has_retpc, shared_state_rel, fn_entry_state_rel,
+ *   fn_return_state_rel — function boundary relations, used by
+ *                         venomToAsmProps's function simulation
  *)
 
 Theory frameRel
@@ -51,20 +53,6 @@ Proof
   simp[frame_view_vars_lookup] >> rpt strip_tac >>
   Cases_on `FLOOKUP vs.vs_vars x` >> simp[]
 QED
-
-(* The generated code for RET jumps to its last operand, so the function
-   theorem can land at the caller's return pc only if that operand is a
-   return-PC variable; and a PHI that merges a return-PC variable with an
-   ordinary one would read as ra on the ordinary path too.  opaque_use_ok
-   restricts where return-PC variables may be used but requires neither. *)
-Definition retpc_shape_ok_def:
-  retpc_shape_ok fn <=>
-    (!inst. MEM inst (fn_insts fn) /\ inst.inst_opcode = RET ==>
-       ?front x. inst.inst_operands = front ++ [Var x] /\ retpc_var fn x) /\
-    (!inst x y. MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
-       MEM (Var x) inst.inst_operands /\ MEM (Var y) inst.inst_operands /\
-       retpc_var fn x ==> retpc_var fn y)
-End
 
 (* A spill byte of some function reachable from name in the call graph,
    name itself included (fcg_path is reflexive). *)
@@ -103,3 +91,49 @@ Proof
   rw[fn_frame_inv_def] >>
   fs[context_venom_asm_rel_def, frame_view_def]
 QED
+
+(* ===== Function boundary (PLAN 5.9) ===== *)
+
+Definition fn_has_retpc_def:
+  fn_has_retpc fn <=>
+    EXISTS (\inst. inst.inst_opcode = RETPC_PARAM)
+      (get_params (HD fn.fn_blocks).bb_instructions)
+End
+
+(* Leftover outcomes and GAS readings are a running/function-return contract
+   ONLY.  terminal_rel still observes requests but not leftovers. *)
+Definition shared_state_rel_def:
+  shared_state_rel vs as <=>
+    venom_asm_terminal_rel vs as /\ as.as_outcomes = vs.vs_outcomes /\
+    as.as_gas_readings = vs.vs_gas_readings /\
+    as.as_call_ctx = vs.vs_call_ctx /\ as.as_tx_ctx = vs.vs_tx_ctx /\
+    as.as_block_ctx = vs.vs_block_ctx /\ as.as_code = vs.vs_code /\
+    as.as_prev_hashes = vs.vs_prev_hashes
+End
+
+(* Fresh source variables need no stack-value relation at callee entry.
+   ra is an opaque assembly address, not vs_return_pc_token; rest is caller-owned. *)
+Definition fn_entry_state_rel_def:
+  fn_entry_state_rel cp fn vs as ra rest <=>
+    vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\ ~vs.vs_halted /\
+    vs.vs_vars = FEMPTY /\
+    LENGTH vs.vs_params + (if fn_has_retpc fn then 1 else 0) =
+      LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
+    as.as_stack =
+      (if fn_has_retpc fn then [ra] else []) ++ REVERSE vs.vs_params ++ rest /\
+    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
+    context_memory_rel cp vs.vs_memory as.as_memory /\
+    shared_state_rel vs as
+End
+
+Definition fn_return_state_rel_def:
+  fn_return_state_rel ctx cp fn vs' as as' <=>
+    context_memory_rel cp vs'.vs_memory as'.as_memory /\
+    (!b. context_spill_byte cp b /\ ~closure_spill_byte ctx cp fn.fn_name b ==>
+         read_byte b as'.as_memory = read_byte b as.as_memory) /\
+    venom_asm_terminal_rel vs' as' /\ as'.as_outcomes = vs'.vs_outcomes /\
+    as'.as_gas_readings = vs'.vs_gas_readings /\
+    as'.as_call_ctx = as.as_call_ctx /\ as'.as_tx_ctx = as.as_tx_ctx /\
+    as'.as_block_ctx = as.as_block_ctx /\ as'.as_code = as.as_code /\
+    as'.as_prev_hashes = as.as_prev_hashes
+End
