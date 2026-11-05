@@ -64,6 +64,14 @@ G site whose bytes the copy makes untainted, so the robust
 `w2n w + val_store_size tv v <= b + sz` (`exprSimProps$val_store_size`,
 the word-padded footprint); type-sized buffers meet it.
 
+For a storage or transient `LocatedValue` at slot `w` with type `ty`,
+`ptr_vv_ok` also asks that every tainted `(k,b)` in `tn.t_stor`/`tn.t_trans`
+with `w2n w <= w2n k < w2n w + type_slot_size ty`, `b < 32` be
+`dead_bytes (current storage) (w2n w) ty (w2n k) b`. For a declared
+variable this follows from the region being a live read
+(`storage_read_live`, shown in S1's `exprSimTopLevelStorage` /
+`accountsRelProps`) together with `ghost_inv`'s `stor_taint_ok`.
+
 S1's proofs (the simulation half; reuse them): `exprSimTopLevel`,
 `exprSimTopLevelStorage`, `exprSimTopLevelImmutable`,
 `exprSimTopLevelMissing`, `exprSimTopLevelUndecodable`,
