@@ -4,7 +4,7 @@ Theory rawCallOperandPrefixPtr
 Ancestors
   rawCallShapePtr typedOperandsPtr rawCallBufferPtr gasContext exprSimWordArgs
   exprSimDefs gasSummaryComposePtr vyperState vyperInterpreter exprSimHash
-  ghostPcTransportPtr typedCopyAmbientFramePtr
+  ghostPcTransportPtr typedCopyAmbientFramePtr decoderGhostFramePtr
 
 Theorem eval_exprs_head_admissible:
   gas_admissible (eval_exprs cx (e::args))
@@ -503,4 +503,53 @@ Proof
   `LENGTH sb.cs_current_insts = SUC s.vs_inst_idx` by simp[] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
   drule_all raw_call_add_path_ptr >> simp[]
+QED
+
+(* Saved word operands need the later stage's entry frontier, not the
+   frontier before the operand was produced. *)
+Theorem saved_word_operand_ptr_frame:
+  wb_frame cenv es sa s t /\ ghost_kept cenv es sa G tn s H un /\
+  (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
+  is_word_type ty /\ expr_val_rel cx ty v op s /\ op_taint tn op = {} ==>
+  expr_val_rel cx ty v op t /\ op_taint un op = {}
+Proof
+  strip_tac >> conj_tac
+  >- (fs[loweringPostsTheory.expr_val_rel_def] >>
+      qexists_tac `w` >> conj_tac >- (
+      irule exprBopSimPropsTheory.eval_operand_frame >>
+      goal_assum (drule_at Any) >>
+      fs[loweringPostsTheory.wb_frame_def] >> metis_tac[]) >> gvs[]) >>
+  Cases_on `op` >>
+  gvs[ptrDisciplineTheory.op_taint_def, bodyPtrDefsTheory.ghost_kept_def] >>
+  metis_tac[]
+QED
+
+Theorem raw_call_header_fresh_step_frame:
+  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  ~not_fresh_at sa out /\ (opc = MLOAD \/ opc = ADD) /\
+  H = step_prov PG G (mk_inst id opc ops [out]) (update_var out w s) /\
+  un = step_taint (mk_inst id opc ops [out]) s (update_var out w s) tn ==>
+  ghost_inv dep cenv cx es H un (update_var out w s) /\
+  ghost_kept cenv es sa G tn s H un
+Proof
+  strip_tac >> (irule raw_call_header_ghost_frame >>
+  goal_assum (drule_at Any) >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `x <> out` by metis_tac[] >>
+      gvs[] >>
+      simp[decoderGhostFramePtrTheory.step_prov_other_output,
+        decoderGhostFramePtrTheory.step_taint_other_output,
+        venomInstTheory.mk_inst_def, venomStateTheory.update_var_def,
+        venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  gvs[ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.mem_taint_def,
+    ptrDisciplineTheory.new_site_bytes_def, ptrDisciplineTheory.step_writes_def,
+    ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.adopt_reset_def,
+    ptrDisciplineTheory.store_taint_def, ptrDisciplineTheory.imm_taint_def,
+    ptrDisciplineTheory.range_bytes_def, venomStateTheory.update_var_def,
+    venomInstTheory.mk_inst_def,
+    codegenRelTheory.source_memory_write_ranges_def,
+    finite_mapTheory.FLOOKUP_DEF] >>
+  rpt (CASE_TAC >> gvs[]) >> simp[SF CONJ_ss])
 QED
