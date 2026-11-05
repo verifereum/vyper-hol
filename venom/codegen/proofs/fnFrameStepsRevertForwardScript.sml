@@ -1888,3 +1888,104 @@ Proof
   gvs[rf_inventory_inv_def, stack_push_def, MEM_SNOC, MEM_APPEND] >>
   metis_tac[]
 QED
+
+(* Disconnected forwarding fixture: distinct SSA copies satisfy single use. *)
+Definition rf_probe_bb_def:
+  rf_probe_bb = <|bb_label := "dead"; bb_instructions :=
+    [mk_inst 1 ASSIGN [Lit 32w] ["p"];
+     mk_inst 2 ASSIGN [Lit 32w] ["q"];
+     mk_inst 3 RETURNDATACOPY [Var "p"; Lit 0w; Lit 1w] [];
+     mk_inst 4 REVERT [Var "q"; Lit 1w] []]|>
+End
+Definition rf_probe_fn_def:
+  rf_probe_fn = mk_raw_function "probe"
+    [<|bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []]|>;
+     rf_probe_bb]
+End
+Definition rf_probe_ps_def:
+  rf_probe_ps = (init_plan_state 0) with ps_stack := [Var "q"; Var "p"]
+End
+Theorem rf_probe_pair:
+  revert_forward_pair rf_probe_bb 2 3
+Proof
+  simp[revert_forward_pair_def, rf_probe_bb_def, get_instruction_def,
+       mk_inst_def] >>
+  simp[resolve_block_assigns_def]
+QED
+Theorem rf_probe_word_ne[local]:
+  (0w : 256 word) <> 1w
+Proof
+  wordsLib.WORD_DECIDE_TAC
+QED
+val _ = computeLib.add_funs
+  [normalize_operand_def, rf_probe_word_ne, listTheory.SET_TO_LIST_EMPTY];
+
+Theorem rf_probe_plan:
+  generate_block_insts_plan (liveness_analyze rf_probe_fn)
+    (dfg_build_function rf_probe_fn) (cfg_analyze rf_probe_fn)
+    rf_probe_fn "dead" T 0 4 2
+    (DROP 2 rf_probe_bb.bb_instructions) rf_probe_ps =
+    SOME ([SOPush (Lit 1w); SOPush (Lit 0w); SOSwap 1; SOSwap 2;
+           SOEmit "RETURNDATACOPY"; SOPush (Lit 1w); SOSwap 1; SOEmit "REVERT"],
+          (init_plan_state 0))
+Proof
+  EVAL_TAC
+QED
+
+Definition rf_probe_assign_bb_def:
+  rf_probe_assign_bb = <|bb_label := "dead"; bb_instructions :=
+    [mk_inst 1 ASSIGN [Lit 32w] ["p"];
+     mk_inst 2 RETURNDATACOPY [Var "p"; Lit 0w; Lit 1w] [];
+     mk_inst 3 ASSIGN [Var "p"] ["q"];
+     mk_inst 4 REVERT [Var "q"; Lit 1w] []]|>
+End
+Definition rf_probe_assign_fn_def:
+  rf_probe_assign_fn = mk_raw_function "probe"
+    [<|bb_label := "entry"; bb_instructions := [mk_inst 0 STOP [] []]|>;
+     rf_probe_assign_bb]
+End
+Definition rf_probe_assign_ps_def:
+  rf_probe_assign_ps = (init_plan_state 0) with ps_stack := [Var "p"]
+End
+Theorem rf_probe_assign_plan:
+  generate_block_insts_plan (liveness_analyze rf_probe_assign_fn)
+    (dfg_build_function rf_probe_assign_fn) (cfg_analyze rf_probe_assign_fn)
+    rf_probe_assign_fn "dead" T 0 4 1
+    (DROP 1 rf_probe_assign_bb.bb_instructions) rf_probe_assign_ps =
+    SOME ([SOPush (Lit 1w); SOPush (Lit 0w); SOSwap 1; SOSwap 2;
+           SOEmit "RETURNDATACOPY"; SOPush (Lit 1w); SOSwap 1; SOEmit "REVERT"],
+          init_plan_state 0)
+Proof
+  EVAL_TAC
+QED
+(* The only failed readiness clause is dominance: it includes reachability. *)
+Theorem rf_probe_assign_readiness_audit:
+  [canonical_param_prefix rf_probe_assign_fn;
+   wf_function rf_probe_assign_fn; fn_inst_wf rf_probe_assign_fn;
+   ssa_form rf_probe_assign_fn; def_dominates_uses rf_probe_assign_fn;
+   single_use_form rf_probe_assign_fn;
+   cfg_is_normalized (cfg_analyze rf_probe_assign_fn) rf_probe_assign_fn;
+   block_entries_ready (cfg_analyze rf_probe_assign_fn) rf_probe_assign_fn;
+   phi_operands_ready rf_probe_assign_fn;
+   EVERY (\bb. EVERY codegen_ready_inst bb.bb_instructions)
+     rf_probe_assign_fn.fn_blocks] = [T; T; T; T; F; T; T; T; T; T]
+Proof
+  EVAL_TAC
+QED
+
+Theorem rf_probe_assign_pair:
+  revert_forward_pair rf_probe_assign_bb 1 3
+Proof
+  simp[revert_forward_pair_def, rf_probe_assign_bb_def, get_instruction_def,
+       mk_inst_def] >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    `k = 2` by decide_tac >> gvs[]) >>
+  simp[resolve_block_assigns_def]
+QED
+Theorem rf_probe_assign_liveness:
+  ~MEM "dead" (cfg_analyze rf_probe_assign_fn).cfg_dfs_pre /\
+  live_vars_at (liveness_analyze rf_probe_assign_fn) "dead" 2 = [] /\
+  live_vars_at (liveness_analyze rf_probe_assign_fn) "dead" 3 = []
+Proof
+  EVAL_TAC
+QED
