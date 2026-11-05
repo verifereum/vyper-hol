@@ -171,3 +171,14 @@ Proof
   Cases_on `res` >> gvs[stmt_exit_def] >>
   Cases_on `y` >> gvs[stmt_exit_def]
 QED
+
+Theorem append_storage_word_suffix_grows_mem:
+  compile_dynarray_append cenv bop vop 1 1 dt vt cap T
+    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
+  sa.cs_next_var <= sf.cs_next_var
+Proof
+  Cases_on `tr` >>
+  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_id_def,
+       fresh_var_def, emit_def] >> strip_tac >> gvs[]
+QED
