@@ -4,6 +4,7 @@ Ancestors
   stmtSimLogMembersRun stmtSimLogScalarMembers stmtSimLogEncodeLayout abiEncoderInput
   abiEncoderLeaves abiDecoderGuards abiDecoderLoop abiBuiltinPrefix
   abiEncoderChildPrefix abiEncoderCounters abiDecoderReentryAddress abiDecoderReentry
+  abiEncoderMemberCode abiEncoder
   valueEncodingProofs abiEncoderBytes abiDecoderDynamicLoopSetup
   abiEncoderWindowBytesMem fragExecMem contractABI words arithmetic
   abiEncoderChildCode emitHelper emitHelperProps exprLoweringProps compileEnv list rich_list
@@ -245,3 +246,67 @@ Resume log_members_child_mem_ok[bytes_compose]:
   irule run_inst_seq_mem_ok_append >> simp[]
 QED
 Finalise log_members_child_mem_ok
+
+Theorem log_members_list_mem_ok:
+  !infos dst src so ho dp st out final tys avs pre pvs sb d hl outcap limit_st p s.
+  compile_abi_encode_complex_elems dst src infos so ho dp st = (out,final) /\
+  log_members_run_pre infos tys avs pre pvs sb so ho d hl outcap st limit_st src dst dp p s /\
+  final.cs_next_var <= limit_st.cs_next_var /\
+  sb+so+abi_encoder_member_span infos <= s.vs_alloca_next /\
+  d+outcap <= s.vs_alloca_next /\ p+32 <= s.vs_alloca_next /\
+  s.vs_alloca_next < dimword (:256) ==>
+  run_inst_seq_mem_ok (emitted_insts st final) s
+Proof
+  Induct >- suspend "nil" >>
+  qx_gen_tac `info` >> PairCases_on `info` >> rpt gen_tac >> strip_tac >>
+  drule log_members_run_pre_lengths >> strip_tac >>
+  Cases_on `tys` >- fs[] >> Cases_on `avs` >- fs[] >>
+  rename1 `log_members_run_pre _ (ty::tys) (av::avs) _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` >>
+  drule abi_encoder_member_cons_trace >> strip_tac >>
+  drule abi_encoder_members_bounds >> strip_tac >>
+  drule abi_encoder_child_bounds >> strip_tac >>
+  `child_end.cs_next_var <= limit_st.cs_next_var /\
+   prepared.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all log_members_run_source_add >>
+  disch_then (qx_choose_then `ready` strip_assume_tac) >>
+  drule_all log_members_run_child >>
+  disch_then (qx_choose_then `encoded` strip_assume_tac) >>
+  `ready.vs_alloca_next = s.vs_alloca_next /\
+   encoded.vs_alloca_next = s.vs_alloca_next` by fs[log_members_run_post_def] >>
+  `run_inst_seq_mem_ok (emitted_insts prepared child_end) ready` by
+    (drule log_members_child_mem_ok >> disch_then drule >> simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts child_end final) encoded` by
+    (first_x_assum drule >> disch_then drule >> simp[] >>
+     fs[abi_encoder_member_span_def] >> decide_tac) >>
+  suspend "compose"
+QED
+
+Resume log_members_list_mem_ok[compose]:
+  `run_inst_seq_mem_ok (emitted_insts st prepared) s` by
+    (drule emitted_insts_emit_op >> strip_tac >> simp[] >>
+     irule run_inst_seq_mem_ok_every >> simp[] >>
+     rpt strip_tac >> irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  drule_all log_members_run_list >>
+  disch_then (qx_choose_then `actual` strip_assume_tac) >>
+  `inst_extends st prepared /\ inst_extends prepared child_end /\
+   inst_extends child_end final /\
+   run_inst_seq (emitted_insts st prepared) s = OK ready /\
+   run_inst_seq (emitted_insts prepared child_end) ready = OK encoded` by
+    fs[log_members_run_post_def] >>
+  `emitted_insts prepared final = emitted_insts prepared child_end ++
+     emitted_insts child_end final` by
+    metis_tac[emitted_insts_append, inst_extends_def] >>
+  `emitted_insts st final = emitted_insts st prepared ++ emitted_insts prepared final` by
+    metis_tac[emitted_insts_append, inst_extends_def, inst_extends_trans] >>
+  asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_append >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  irule run_inst_seq_mem_ok_append >> simp[]
+QED
+
+Resume log_members_list_mem_ok[nil]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `compile_abi_encode_complex_elems _ _ [] _ _ _ _ = _` mp_tac >>
+  simp[Once compile_abi_encode_child_def, comp_return_def] >> strip_tac >> gvs[] >>
+  simp[emitted_insts_def, run_inst_seq_mem_ok_def]
+QED
+Finalise log_members_list_mem_ok
