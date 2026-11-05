@@ -38,7 +38,7 @@ Theorem pop_nested_local_live_case:
 4. Commit messages end with these two lines:
    `Bot: opus (Claude Opus 5.5)`
    `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
-   Commit only `.sml` sources you changed or added. Never commit the 30 files the working tree has modified as a local admission overlay (listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
+   Commit only `.sml` sources you changed or added. Never commit the files the working tree has modified as a local admission overlay (listed in `alan-ref/overlaid.txt`), nor `alan-ref/`, `.alan/`, PLAN_, LOG_, STATE_, LEARNINGS_, DOSSIER_ or evidence files.
 
 **If the theorem is false as stated:** produce a HOL4 counterexample, state the tightest sufficient fix, and do NOT silently weaken the statement.
 
@@ -66,7 +66,7 @@ The root case `bt = NameTarget id` is also `exprSimPop.compile_pop_name_sim` (ol
 
 - Follow `AGENTS.md` at the project root (proof conventions for this repo).
 - Default step timeout (2.5 s). A step near it is a proof performance bug: split it or cut the rewrite set.
-- The working tree carries an uncommitted local overlay that admits the proofs of 30 shared theories not yet repaired on this branch (listed in `alan-ref/overlaid.txt`). Use their statements freely; don't edit, fix or commit them. Their committed proofs are readable with `git show HEAD:<file>`.
+- The working tree carries an uncommitted local overlay that admits the proofs of the shared theories not yet repaired on this branch (listed in `alan-ref/overlaid.txt`). Use their statements freely; don't edit, fix or commit them. Their committed proofs are readable with `git show HEAD:<file>`.
 - `exprSimPopNestedBase` has other admitted helpers (storage pop) that belong to other pieces; don't depend on them.
 
 ## Available Resources
@@ -87,7 +87,7 @@ The root case `bt = NameTarget id` is also `exprSimPop.compile_pop_name_sim` (ol
 | Target cases in the counted form | `lowering/targetPlaceSimCasesBaseScript.sml`, `lowering/targetPlaceSimCasesScript.sml`, `lowering/stmtSimAssignAttrScript.sml` | Memory place pointers and writes at a field path |
 | Popped history facts | `lowering/stmtPoppedKeysScript.sml`, `lowering/exprSimHypsScript.sml` | `popped_keys_indexed` preservation (`eval_target_place_popped_keys_indexed`) |
 | Source facts | `semantics/prop/` (e.g. `vyperStatePreservationScript.sml`, `vyperPlaceFramesScript.sml`) | Evaluation invariants (scopes domain, assignability) |
-| Overlay list | `alan-ref/overlaid.txt` | The 30 locally admitted theories |
+| Overlay list | `alan-ref/overlaid.txt` | The locally admitted theories |
 | HOL4 sources | `.holbuild/src/` is off limits; use theory names via `DB.find` in scratch probes | |
 
 ## Notes
