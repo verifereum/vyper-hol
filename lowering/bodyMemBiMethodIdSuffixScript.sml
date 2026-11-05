@@ -2,7 +2,7 @@
 Theory bodyMemBiMethodIdSuffix
 Ancestors
   exprOperandVar venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
-  bodyAllocMemory allocaFootprint allocaSiteResource
+  bodyAllocMemory allocaFootprint allocaSiteResource loweringHalt
   builtinHashing builtinBytesMemory builtinBytes exprSimHash
   exprLoweringProps emitHelperProps emitHelper context compileEnv
   fragExecMem instMemFrontier venomState venomExecSemantics
@@ -410,4 +410,79 @@ Proof
   gvs[compile_method_id_hash_def] >>
   drule method_id_dynamic_hash_mem_ok >> disch_then irule >>
   simp[is_bytestring_type_def] >> metis_tac[]
+QED
+
+Theorem method_id_runtime_typed_mem_ok:
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
+  value_has_type (BaseTV bty) v /\
+  lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
+  compile_method_id_runtime (expr_type e) x fixed sm = (op,sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM es'.scopes /\
+  expr_store_bound cx (expr_type e) v x s /\ ~block_is_terminated sm ==>
+  run_inst_seq_mem_ok (emitted_insts sm sb) s
+Proof
+  strip_tac >> drule_all hash_method_id_runtime_cut >> strip_tac >>
+  drule_all hash_method_id_hash_cut >> strip_tac >>
+  `run_inst_seq_mem_ok (emitted_insts sm sm') s` by
+    (drule method_id_typed_hash_mem_ok_unrestricted >> disch_then irule >> simp[] >> metis_tac[]) >>
+  drule_all method_id_hash_typed_post_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sm') s = OK hashed` >>
+  `sa.cs_next_var <= sm'.cs_next_var` by
+    (drule (cj 2 compile_expr_grows) >> strip_tac >>
+     drule_all method_id_hash_grows >> strip_tac >> decide_tac) >>
+  `local_ptrs_reserved cenv sm'` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  `sm'.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sm' /\
+   sb.cs_current_insts = sm'.cs_current_insts ++ emitted_insts sm' sb` by
+    (drule_all method_id_tail_shape >> strip_tac >>
+     drule_all method_id_hash_as_keccak >>
+     disch_then (qspecl_then [`x`, `sm`] SUBST_ALL_TAC) >>
+     drule_all keccak_typed_suffix_shape >> simp[]) >>
+  `emitted_insts sm sb = emitted_insts sm sm' ++ emitted_insts sm' sb` by
+    (irule emitted_insts_append >> simp[]) >>
+  qpat_x_assum `emitted_insts sm sb = _` (fn th => rewrite_tac[th]) >>
+  irule run_inst_seq_mem_ok_append >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  `!u. run_inst_seq_mem_ok (emitted_insts sm' sp) u` by
+    (qpat_assum `emit_op SHR _ _ = _`
+       (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+     qpat_assum `emit_op SHL _ _ = _`
+       (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+     `emitted_insts sm' sp = emitted_insts sm' sn ++ emitted_insts sn sp` by
+       (irule emitted_insts_append >> simp[]) >>
+     simp[] >> gen_tac >> irule run_inst_seq_mem_ok_every >>
+     simp[] >> rpt conj_tac >> gen_tac >>
+     irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
+  Cases_on `fixed` >> gvs[] >>
+  drule_all hash_method_id_mask_cut >> strip_tac >>
+  drule_all method_id_mask_frame >> strip_tac >>
+  qpat_assum `emit_op SHR _ _ = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  qpat_assum `emit_op SHL _ _ = _`
+    (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+  `emitted_insts sm' sb = emitted_insts sm' sp ++ emitted_insts sp sb` by
+    (qpat_x_assum `sm'.cs_current_insts = _` kall_tac >>
+     qpat_x_assum `sb.cs_current_insts = _` kall_tac >>
+     drule compile_alloc_buffer_insts >> strip_tac >>
+     qpat_assum `emit_void MSTORE _ sh = _`
+       (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+     qpat_assum `emit_op ADD _ _ = _`
+       (strip_assume_tac o MATCH_MP emitted_insts_emit_op) >>
+     qpat_assum `emit_void MSTORE _ sd = _`
+       (strip_assume_tac o MATCH_MP emitted_insts_emit_void) >>
+     pure_rewrite_tac[emitted_insts_def] >>
+     map_every (fn q => qpat_assum q (fn th => pure_rewrite_tac[th]))
+       [`sb.cs_current_insts = _`, `sd.cs_current_insts = _`,
+        `st.cs_current_insts = _`, `sh.cs_current_insts = _`,
+        `sp.cs_current_insts = _`, `sn.cs_current_insts = _`] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     simp_tac list_ss [LENGTH_APPEND, DROP_APPEND2, GSYM APPEND_ASSOC]) >>
+  qpat_x_assum `emitted_insts sm' sb = _` (fn th => rewrite_tac[th]) >>
+  irule run_inst_seq_mem_ok_append >> simp[] >> rpt strip_tac >> gvs[] >>
+  drule method_id_output_buffer_mem_ok_unrestricted >> disch_then irule >>
+  metis_tac[]
 QED
