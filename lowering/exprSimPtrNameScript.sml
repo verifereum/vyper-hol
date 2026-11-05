@@ -19,6 +19,7 @@ Ancestors
   exprSimNameValue exprSimMemoryPath exprSimUnwrapProps exprSimProps
   exprSimHypsDefs exprSimDefs loweringPosts loweringSlice emitHelperProps
   exprLowering exprLoweringProps fragExec compileEnv context
+  exprSimHyps exprSimSource
   vyperAST vyperInterpreter vyperState vyperTypeEnv vyperTypeSystem
   vyperTypeInvariants vyperTyping valueEncoding
   valueEncodingProps venomExecSemantics venomInst venomState
@@ -73,6 +74,42 @@ Proof
   rpt strip_tac >> gvs[ptr_covers_def]
 QED
 
+Theorem word_type_memory_bytes[local]:
+  is_word_type ty ==> type_memory_bytes cenv ty = 32
+Proof
+  Cases_on `ty` >> simp[is_word_type_def, type_memory_bytes_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_word_type_def, type_memory_bytes_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_word_type_def, type_memory_bytes_def]
+QED
+
+(* The buffer of a local's type is its value's footprint. *)
+Theorem name_buf_bytes[local]:
+  expr_sim_pre cenv cx env (Name ann id) es /\
+  evaluate_type (get_tenv cx) ann = SOME tv ==>
+  type_memory_bytes cenv ann = type_memory_size tv
+Proof
+  strip_tac >> Cases_on `is_word_type ann`
+  >- metis_tac[word_type_memory_bytes, word_type_memory_size] >>
+  drule expr_sim_pre_body_pre >> strip_tac >>
+  drule expr_body_pre_copy_ok >>
+  disch_then (qspec_then `tv` mp_tac) >>
+  gvs[vyperASTTheory.expr_type_def]
+QED
+
+(* A local's pointer covers the buffer of its type. *)
+Theorem name_ptr_buf_ok[local]:
+  expr_sim_pre cenv cx env (Name ann id) es /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\
+  type_memory_size tv <= sz /\ ptr_covers G tn p s sz ==>
+  ptr_buf_ok cenv (Name ann id) (Var p) G s
+Proof
+  strip_tac >> drule_all name_buf_bytes >> strip_tac >>
+  rw[ptr_buf_ok_def, lowered_value_type_def, eval_operand_def] >>
+  gvs[ptr_covers_def, vyperASTTheory.expr_type_def]
+QED
+
 (* The source: a name reads its local's value, reading no gas. *)
 Theorem name_source[local]:
   lookup_scopes id es.scopes = SOME entry ==>
@@ -109,6 +146,8 @@ Proof
   drule compile_name_value_ptr >> strip_tac >> gvs[] >>
   drule_all name_ptr_mem_ok >> strip_tac >>
   drule name_source >> strip_tac >>
+  `ptr_buf_ok cenv (Name ann id) (Var p) G0 s0` by
+    metis_tac[name_ptr_buf_ok] >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`, `G0`, `tn0`,
@@ -140,6 +179,8 @@ Proof
        (INL entry.value, es with gas_obs := [])` by simp[] >>
      drule vv_post_read_result >> disch_then (fn th => rewrite_tac[GSYM th]) >>
      irule name_value_post >> simp[]) >>
+  `ptr_buf_ok cenv (Name ann id) (Var p) G0 s0` by
+    metis_tac[name_ptr_buf_ok] >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL entry.value`, `es`, `G0`, `tn0`, `OK s0`] >>

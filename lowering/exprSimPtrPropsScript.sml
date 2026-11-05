@@ -30,6 +30,7 @@ Theorem expr_stack_outcome_ptr:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
       ptr_val_ok cx (expr_type e) v op G tn u /\
+      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
@@ -39,6 +40,7 @@ Theorem expr_stack_outcome_ptr:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv d cenv cx ee G tn u /\
       ptr_vv_ok cx (expr_type e) tv (StackValue ty op) ee G tn u /\
+      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -52,7 +54,7 @@ Proof
               simp[]) >>
           gvs[vv_post_def, vv_holds_def, vv_at_def, expr_post_def,
               read_result_def, return_def, ptr_vv_ok_def] >>
-          first_assum ACCEPT_TAC) >>
+          metis_tac[]) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                     `es_end`, `G`, `tn`, `r`] >>
       simp[expr_exit_success_map] >> gen_tac >>

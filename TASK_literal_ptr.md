@@ -79,6 +79,13 @@ from the expr half for stack-valued forms; `ghost_inv_fresh_frame`;
 proofs `lowering/exprSimPtrFlagMemberScript.sml` (a word literal-like
 case, empty path) and `lowering/exprSimPtrNameScript.sml`.
 
+Both judgments' posts also carry `ptr_buf_ok cenv e op G t`
+(`lowering/bodyPtrDefsScript.sml`): when the value is not a word (a
+non-word StackValue, or a LocatedValue at LocMemory), its pointer's G site
+covers `type_memory_bytes cenv (lowered_value_type cenv e)` bytes from
+the pointer, whenever that size is non-zero.
+For a bytes/string literal the lowered type is `Bytes[LENGTH bs]`/`String[LENGTH s]` (`lowered_value_type_def`), whose `type_memory_bytes` is the ALLOCA's size.
+
 ## Domain Constraints
 
 - No definition changes, added assumptions, admissions, timeout overrides,

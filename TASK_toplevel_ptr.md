@@ -91,6 +91,13 @@ variables; `gas_path_ptr_one_step`; `emit_mload_ptr_path`), and the worked
 leaf proofs `lowering/exprSimPtrNameScript.sml` and
 `lowering/exprSimPtrFlagMemberScript.sml`.
 
+Both judgments' posts also carry `ptr_buf_ok cenv e op G t`
+(`lowering/bodyPtrDefsScript.sml`): when the value is not a word (a
+non-word StackValue, or a LocatedValue at LocMemory), its pointer's G site
+covers `type_memory_bytes cenv (lowered_value_type cenv e)` bytes from
+the pointer, whenever that size is non-zero.
+For a TopLevelName, `lowered_value_type` is the annotation, so a copy's fresh buffer must be at least `type_memory_bytes cenv ann` long (`expr_body_pre_copy_ok` relates it to `type_memory_size`).
+
 ## Domain Constraints
 
 - No definition changes, added assumptions, admissions, timeout overrides,
