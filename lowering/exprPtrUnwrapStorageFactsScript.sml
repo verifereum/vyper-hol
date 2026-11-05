@@ -65,3 +65,26 @@ Proof
   first_x_assum (qspecl_then [`n2w i`, `c`] mp_tac) >>
   simp[wordsTheory.w2n_n2w]
 QED
+
+Theorem storage_range_copied_live_memory:
+  !st rt w tv dst mem.
+    storage_range_agree st rt w tv /\
+    (!i. i < type_slot_size tv ==>
+      mem_word_at (dst + 32*i) mem = lookup_storage (w + n2w i) rt) ==>
+    storage_live_memory st (w2n w) tv dst mem
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[storage_live_memory_def, copy_bytes_def] >> rpt strip_tac >>
+  `w2n w + type_slot_size tv <= dimword (:256)` by
+    gvs[storage_range_agree_def] >>
+  `w2n w + i < dimword (:256)` by decide_tac >>
+  `w2n (w + n2w i) = w2n w + i` by
+    (irule w2n_add_n2w_lt >> simp[]) >>
+  qpat_x_assum `!i. i < _ ==> _` drule >> strip_tac >>
+  simp[mem_bytes_at_word] >>
+  qpat_x_assum `storage_range_agree _ _ _ _` mp_tac >>
+  simp[storage_range_agree_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`w + n2w i`, `b`] mp_tac) >>
+  simp[vyperStorageTheory.read_slot_def] >>
+  Cases_on `w` >> fs[wordsTheory.word_add_n2w, arithmeticTheory.ADD_COMM]
+QED
