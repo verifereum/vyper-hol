@@ -118,13 +118,6 @@ Proof
 QED
 
 Theorem assign_local_exempt:
-  (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf fin.
-     gas_exempt_cert memory tops (ctx', func')
-       (ignore_bind (bind (eval_expr cx' e') (read_result cx')) (return ()))
-       (es', s0) marks (err, ee) (leaf, fin) ==>
-     gas_exempt_cert memory tops (ctx', func')
-       (ignore_bind (eval_expr cx' e') (return ()))
-       (es', s0) marks (err, ee) (leaf, fin)) /\
   gas_exempt_cert memory tops (ctx, func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
     (es, s0) marks (err, ee) (leaf, fin) ==>
@@ -140,5 +133,6 @@ Proof
          (\p. bind (read_result cx pv) (write_place cx p))) (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
-  irule gas_exempt_cert_error_result >> first_x_assum irule >> simp[]
+  irule gas_exempt_cert_error_result >> irule gas_exempt_cert_unforce_result >>
+  simp[]
 QED

@@ -22,13 +22,6 @@ Proof
 QED
 
 Theorem assign_local_rhs_outcome:
-  (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf fin.
-     gas_exempt_cert memory tops (ctx',func')
-       (ignore_bind (bind (eval_expr cx' e') (read_result cx')) (return ()))
-       (es',s0) marks (err,ee) (leaf,fin) ==>
-     gas_exempt_cert memory tops (ctx',func')
-       (ignore_bind (eval_expr cx' e') (return ()))
-       (es',s0) marks (err,ee) (leaf,fin)) /\
   gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (stmt_res_ok lctx) es /\
   is_word_type (expr_type e) /\

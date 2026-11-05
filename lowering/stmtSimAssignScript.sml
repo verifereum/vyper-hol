@@ -133,18 +133,9 @@ QED
    outcome: e's errors exit, and on a value it is stored at x's pointer.
    store_lays_out says the stored word is how x's type lays e's value out:
    a word_value, or an address or bytesN of x's type
-   (store_lays_out_word_value, store_lays_out_typed).
-   The first hypothesis is the certificate rule
-   gas_exempt_cert_unforce_result, stated in full until that rule lands. *)
-Theorem assign_local_stmt_frag_given_unforce[local]:
+   (store_lays_out_word_value, store_lays_out_typed). *)
+Theorem compile_assign_local_stmt_frag:
   !ctx func cx lctx RetQ cenv ty id e es p sz vtyp etv.
-    (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf finish.
-       gas_exempt_cert memory tops (ctx', func')
-         (ignore_bind (bind (eval_expr cx' e') (read_result cx')) (return ()))
-         (es', s0) marks (err, ee) (leaf, finish) ==>
-       gas_exempt_cert memory tops (ctx', func')
-         (ignore_bind (eval_expr cx' e') (return ()))
-         (es', s0) marks (err, ee) (leaf, finish)) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     cenv.ce_var_type id = SOME vtyp /\ is_word_type vtyp /\
     is_word_type (expr_type e) /\
