@@ -15,7 +15,7 @@ Ancestors
   stmtLoweringMono venomWf memSafeRun allocaFrontierBound unitTransformDefs
   unitShapeDefs o1PassContract extRetScalarCopyCountedPtr extRetBytesCopyCountedPtr
   extRetBulkCopyCountedPtr extRetWordStmtPtr extRetCopySuffixPtr extRetCopyInputsPtr
-  extRetOperandBoundaryPtr
+  extRetOperandBoundaryPtr extRetDispatchProtectionPtr
 
 val _ = Parse.hide "body";
 
