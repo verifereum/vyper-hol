@@ -889,7 +889,8 @@ val prefix_plan_rules = List.concat (List.concat (map
   (fn (_,xs) => map (fn clauses.RRules ths => ths
                       | clauses.Conversion _ => []) xs)
   (computeLib.listItems (computeLib.the_compset ()))));
-val prefix_plan_cs = computeLib.copy (computeLib.the_compset ());
+val prefix_plan_cs = wordsLib.add_words_compset true
+  (computeLib.copy (computeLib.the_compset ()));
 val prefix_plan_cs = computeLib.scrub_const prefix_plan_cs prefix_release_const;
 fun prefix_release_elim_conv tm =
   let
