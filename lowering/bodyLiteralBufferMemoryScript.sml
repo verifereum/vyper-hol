@@ -154,7 +154,7 @@ Proof
 QED
 
 (* The whole literal: memory-safe and frontier-monotone. *)
-Theorem run_inst_seq_mem_ok_append_run[local]:
+Theorem run_inst_seq_mem_ok_append_run:
   run_inst_seq is1 s = OK s1 /\ run_inst_seq_mem_ok is1 s /\
   run_inst_seq_mem_ok is2 s1 ==> run_inst_seq_mem_ok (is1 ++ is2) s
 Proof
