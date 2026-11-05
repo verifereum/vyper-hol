@@ -11,7 +11,7 @@
 Theory asmEvmGasStep
 Ancestors
   evmStepSim asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
-  vfmExecution vfmExecutionProp
+  vfmExecution vfmExecutionProp vfmOperation list rich_list asmEncodeParse
 
 Theorem gas_handle_step_starved[local]:
   LENGTH es.contexts = 1 /\
@@ -30,6 +30,36 @@ Proof
        consume_gas_def, assert_def, set_current_context_def,
        set_return_data_def, get_num_contexts_def, reraise_def] >>
   IF_CASES_TAC >> simp[reraise_def]
+QED
+
+Theorem gas_step_setup[local]:
+  asm_encoding_wf prog /\
+  asm_evm_rel (prog ++ [AsmDataItem data]) as es /\
+  LENGTH es.contexts = 1 /\
+  as.as_pc < LENGTH prog /\
+  (!j. j <= as.as_pc ==> ~is_data_inst (EL j prog)) /\
+  EL as.as_pc prog = AsmOp "GAS" ==>
+  ?ctxt rb.
+    es.contexts = [(ctxt,rb)] /\
+    FLOOKUP ctxt.msgParams.parsed ctxt.pc = SOME Gas /\
+    ctxt.jumpDest = NONE /\
+    ctxt.pc = asm_pc_to_offset (prog ++ [AsmDataItem data]) as.as_pc /\
+    ctxt.stack = as.as_stack /\
+    (!a. ctxt.msgParams.outputTo <> Code a)
+Proof
+  strip_tac >>
+  `asm_encoding_wf (prog ++ [AsmDataItem data])` by
+    metis_tac[data_suffix_encoding_wf] >>
+  `as.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+  `!j. j <= as.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))`
+    by (gen_tac >> disch_tac >> `j < LENGTH prog` by decide_tac >>
+        simp[EL_APPEND1]) >>
+  `~is_data_inst (EL as.as_pc (prog ++ [AsmDataItem data]))` by simp[] >>
+  drule_all asm_evm_step_setup >> strip_tac >>
+  `op = Gas` by
+    (irule opcode_wf_inj >> simp[opcode_def, wf_opname_def] >>
+     gvs[EL_APPEND1, encode_inst_def, opcode_def, evm_opcode_byte_def, evm_opcode_table_def]) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem asm_evm_gas_step:
