@@ -1,7 +1,7 @@
 (* Current local memory representation for write-side subscripts. *)
 Theory targetSubscriptMemory
 Ancestors
-  fragGasFresh varsExt context
+  fragGasFresh fragGasMode varsExt context emitHelper emitHelperProps venomInst
   targetPlaceSim targetPlaceSimCasesBase exprSimProps exprSimArrayIndex
   exprSimHypsDefs exprLoweringProps freshWrites option vyperPlaceResultTyping
   exprSimAggregateEncoding tupleMemoryLayout exprSimAttributeFields
@@ -338,3 +338,46 @@ Proof
   simp[straight_fresh_array_check_ptr]
 QED
 
+
+Theorem target_memory_header_load:
+  compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory base_op sa = (dst,sb) /\
+  fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  eval_operand base_op s = SOME w ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand dst t = SOME (mload (w2n w) s) /\
+      stmt_state_rel ctx func cenv cx es t /\
+      (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
+             lookup_var x t = SOME v) /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  simp[compile_ptr_load_def] >> strip_tac >>
+  qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
+  qexists_tac `update_var out (mload (w2n w) s) s
+                with vs_inst_idx := SUC s.vs_inst_idx` >>
+  `!x. not_fresh_at sa x ==> x <> out` by
+    (simp[not_fresh_at_def, Abbr `out`] >> metis_tac[LESS_EQ_REFL]) >>
+  `not_local_ptr cenv es.scopes out` by
+    (qunabbrev_tac `out` >> irule local_ptrs_reserved_fresh >>
+     metis_tac[LESS_EQ_REFL]) >>
+  `dst = Var out /\ sb.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+    gvs[Abbr `out`, emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
+        comp_ignore_bind_def, comp_return_def, emit_def] >>
+  rpt conj_tac
+  >- (pure_rewrite_tac[gas_marked_path_def, COND_CLAUSES] >>
+      qunabbrev_tac `out` >>
+      irule emit_op_zero_path >> simp[] >>
+      qexistsl [`[base_op]`, `dst`, `MLOAD`, `sb`] >>
+      simp[is_terminator_def, step_MLOAD])
+  >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+  >- (simp[stmt_state_rel_inst_idx] >> irule stmt_state_rel_update_var >> simp[])
+  >- (rpt strip_tac >>
+      simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+      metis_tac[lookup_var_def]) >>
+  simp[update_var_def]
+QED
