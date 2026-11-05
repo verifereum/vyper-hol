@@ -171,3 +171,60 @@ Proof
   irule current_provenance_tree_static_slot >>
   metis_tac[current_actual_succs_distinct]
 QED
+
+Theorem current_nondeg_inserted_output_name:
+  k < LENGTH pre /\ (EL k pre).inst_outputs = [v] /\
+  LIST_REL (\anns inst.
+    LIST_REL (\(t,w) n. current_token_name H t = SOME n) anns inst.inst_outputs)
+    (current_block_annotations old pre) insts ==>
+  ?n. k < LENGTH insts /\ (EL k insts).inst_outputs = [n] /\
+      current_token_name H (CurrentInserted v old.bb_label) = SOME n
+Proof
+  strip_tac >>
+  `k < LENGTH (current_block_annotations old pre)` by
+    simp[current_block_annotations_def, current_inserted_annotations_def] >>
+  fs[LIST_REL_EL_EQN] >>
+  qpat_x_assum `!n. n < LENGTH (current_block_annotations old pre) ==> _` (qspec_then `k` mp_tac) >>
+  simp[current_block_annotations_def, current_inserted_annotations_def,
+       EL_APPEND_EQN, EL_MAP] >>
+  Cases_on `(EL k insts).inst_outputs` >> simp[] >>
+  Cases_on `t` >> simp[]
+QED
+
+Theorem current_nondeg_provenance_map_lookup:
+  !olds bbs annsss.
+  LENGTH olds = LENGTH bbs /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,bbs)) annsss /\ lookup_block h bbs = SOME placed ==>
+  ?old pre. MEM old olds /\ old.bb_label = h /\
+    placed = old with bb_instructions := pre ++ old.bb_instructions /\
+    current_annotation_map bbs annsss h = current_block_annotations old pre
+Proof
+  Induct >- (Cases_on `bbs` >> simp[lookup_block_def, FIND_thm]) >>
+  qx_gen_tac `old0` >>
+  Cases_on `bbs` >> Cases_on `annsss` >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `current_block_provenance _ _ _ _` mp_tac >>
+  simp[current_block_provenance_def] >> strip_tac >> gvs[] >>
+  Cases_on `old0.bb_label = h` >>
+  gvs[lookup_block_def, FIND_thm, current_annotation_map_def] >>
+  metis_tac[]
+QED
+
+Theorem current_nondeg_provenance_final_inserted_outputs:
+  LENGTH olds = LENGTH bbs /\
+  LIST_REL (\pair anns. current_block_provenance fn (FST pair) (SND pair) anns)
+    (ZIP (olds,bbs)) annsss /\ lookup_block h bbs = SOME placed /\
+  LIST_REL (\anns inst.
+    LIST_REL (\(t,w) n. current_token_name H t = SOME n) anns inst.inst_outputs)
+    (current_annotation_map bbs annsss h) new.bb_instructions ==>
+  ?old pre. MEM old olds /\ old.bb_label = h /\
+    placed = old with bb_instructions := pre ++ old.bb_instructions /\
+    current_annotation_map bbs annsss h = current_block_annotations old pre /\
+    (!k v. k < LENGTH pre /\ (EL k pre).inst_outputs = [v] ==>
+      ?n. k < LENGTH new.bb_instructions /\ (EL k new.bb_instructions).inst_outputs = [n] /\
+          current_token_name H (CurrentInserted v h) = SOME n)
+Proof
+  strip_tac >> drule_all current_nondeg_provenance_map_lookup >> strip_tac >>
+  qexistsl_tac [`old`, `pre`] >> simp[] >> rpt strip_tac >>
+  gvs[] >> drule_all current_nondeg_inserted_output_name >> simp[]
+QED
