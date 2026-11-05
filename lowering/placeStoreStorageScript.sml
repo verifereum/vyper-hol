@@ -4894,6 +4894,59 @@ Proof
   EVAL_TAC >> simp[]
 QED
 
+Theorem place_store_wrap_probe_source_slots:
+  !cx es ff.
+    write_place cx
+      (StoragePlace F 0w (ArrayTV
+        (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)))
+      (ArrayV (SArrayV [(0,BytesV [2w])])) es = (INL (),ff) ==>
+    lookup_storage 0w (lookup_account cx.txn.target ff.accounts).storage = 1w /\
+    EL 0 (word_to_bytes
+      (lookup_storage 1w (lookup_account cx.txn.target ff.accounts).storage) T) = 2w
+Proof
+  rpt gen_tac >>
+  simp[vyperStateTheory.write_place_def,
+       vyperStorageBackendTheory.write_storage_slot_eq] >>
+  simp[vyperStorageTheory.encode_value_def,
+       vyperStorageTheory.encode_dyn_bytes_slots_def] >>
+  Cases_on `cx.txn.is_static` >> simp[] >> strip_tac >> gvs[] >>
+  simp[vyperStorageBackendTheory.set_storage_def, vfmStateTheory.lookup_account_def,
+       combinTheory.APPLY_UPDATE_THM,
+       vyperEncodeDecodeTheory.apply_writes_append,
+       vyperStorageTheory.apply_writes_def] >>
+  qmatch_goalsub_abbrev_tac `update_storage 0w 1w st` >>
+  EVAL_TAC >> simp[]
+QED
+
+Theorem place_store_wrap_probe_live_observation:
+  !ctx func cenv txn es ff t.
+    let cx = place_store_wrap_probe_context with txn := txn in
+    txn.target = 0w /\
+    write_place cx
+      (StoragePlace F 0w (ArrayTV
+        (BaseTV (BytesT (Dynamic (dimword (:256) - 32)))) (Fixed 1)))
+      (ArrayV (SArrayV [(0,BytesV [2w])])) es = (INL (),ff) /\
+    stmt_state_rel ctx func cenv cx ff t ==>
+    EL 0 (word_to_bytes (lookup_storage 1w (contract_storage t)) T) = 2w
+Proof
+  simp_tac pure_ss [LET_THM] >> rpt gen_tac >> strip_tac >>
+  drule place_store_wrap_probe_source_slots >> strip_tac >>
+  `!mid n subs. declared_storage_region
+      (place_store_wrap_probe_context with txn := txn) mid n subs =
+      declared_storage_region place_store_wrap_probe_context mid n subs` by
+    (rpt gen_tac >> EVAL_TAC >> simp[] >> EVAL_TAC >> simp[]) >>
+  `~storage_dead (place_store_wrap_probe_context with txn := txn) F
+      (lookup_account txn.target ff.accounts).storage 1 0` by
+    (simp[storage_dead_def, place_store_wrap_probe_regions] >>
+     gvs[dead_bytes_def, dyn_bytes_dead_def]) >>
+  `storage_rel (place_store_wrap_probe_context with txn := txn)
+      txn.target ff t` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  fs[storage_rel_def, storage_agree_def] >>
+  first_x_assum (qspecl_then [`1w`, `0`] mp_tac) >>
+  gvs[]
+QED
+
 Theorem place_store_value_storage_run:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
