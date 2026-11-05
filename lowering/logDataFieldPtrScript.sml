@@ -1,12 +1,12 @@
 (* Reserved-slice field stores and exterior pointer-value transport. *)
 Theory logDataFieldPtr
-Ancestors logValueFramePtr robustCopyTransportPtr logBytesPathPtr
+Ancestors logValueFramePtr robustCopyTransportPtr logBytesPathPtr logBytesRobustSeqPtr
   logAbiPrefixPtr logTopicScalarPtr logInstSeqPtr stmtSimLogData
   stmtSimLogDataRun stmtSimLogDataFrame bodyPtrDefs loweringPosts
-  valueEncodingProps venomState finite_map words list arithmetic pred_set
+  valueEncodingProps venomState finite_map words list arithmetic pred_set context stmtSimLogTopics
   ptrDiscipline emitHelperProps venomInst exprSimBufferStore stmtSimReturn
   venomMemProofs valueEncodingProofs exprSimProps valueCopyBytes
-  vyperValue vyperTyping valueEncoding
+  vyperValue vyperTyping valueEncoding compileEnv
 
 Theorem ptr_val_ok_exterior_frame:
   ptr_val_ok cx ty v op G tn s /\
@@ -154,3 +154,161 @@ Proof
   gvs[] >> simp[ptr_covers_def] >>
   qexists_tac `w` >> gvs[eval_operand_def] >> decide_tac
 QED
+
+Theorem log_data_bytes_store_seq_ptr:
+  compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  n = 32 + 32 * ((len+31) DIV 32) /\
+  len+31 < dimword(:256) /\ n <= type_memory_size tv /\
+  type_memory_size tv < dimword(:256) /\
+  ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
+  is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ val_store_size tv v = n /\
+  ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+   (?str. v = StringV str /\ len = LENGTH str)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n a) m) /\ ~ctx_has_dalloca ctx ==>
+  ?Gf tnf sf.
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m) /\
+    log_write_frame sa (w2n b) (type_memory_size tv) s sf /\
+    (!i. ~(w2n b <= i /\ i < w2n b+type_memory_size tv) ==>
+      mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `n < dimword(:256)` by decide_tac >>
+  drule_all compile_store_bytestring_robust_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  `val_in_memory tv v (w2n a) s.vs_memory` by
+    (qpat_x_assum `!m. mem_agree_outside tn.t_mem _ m ==> _` irule >>
+     simp[mem_agree_outside_def]) >>
+  `eval_operand (Var src) s = SOME a /\ eval_operand (Var dst) s = SOME b` by
+    simp[eval_operand_def] >>
+  `!x. Var src = Var x \/ Var dst = Var x ==> not_fresh_at sa x` by
+    (simp[] >> rpt strip_tac >> gvs[]) >>
+  drule_all buffer_typed_bytestring_header >> strip_tac >>
+  drule_all buffer_store_bytestring_encoding >> strip_tac >>
+  `q = sf` by
+    (qpat_x_assum `run_inst_seq _ _ = OK q` mp_tac >> asm_rewrite_tac[] >> simp[]) >>
+  qpat_x_assum `q = sf` SUBST_ALL_TAC >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[] >>
+  conj_tac >- (pure_rewrite_tac[log_write_frame_def] >> asm_rewrite_tac[]) >>
+  rpt strip_tac >>
+  `~(w2n b <= i /\ i < w2n b+n)` by decide_tac >>
+  metis_tac[]
+QED
+
+Theorem log_data_bytes_source_ptr:
+  supported_scalar_type ty /\ is_bytestring_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\
+  expr_val_rel cx ty v op s /\ ptr_val_ok cx ty v op G tn s /\
+  type_memory_bytes cenv ty < dimword(:256) ==>
+  ?src a len n.
+    op = Var src /\ lookup_var src s = SOME a /\
+    n = 32 + 32 * ((len+31) DIV 32) /\ val_store_size tv v = n /\
+    n <= type_memory_size tv /\ n < dimword(:256) /\ len+31 < dimword(:256) /\
+    ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+     (?str. v = StringV str /\ len = LENGTH str)) /\
+    ptr_covers G tn src s n /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv v (w2n a) m)
+Proof
+  strip_tac >>
+  `~is_word_type ty` by metis_tac[is_bytestring_word_type] >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    metis_tac[log_scalar_memory_size] >>
+  drule_all log_data_bytes_size >> disch_then (qspec_then `cenv` strip_assume_tac) >>
+  `len <= 32*((len+31) DIV 32)` by
+    (qspec_then `len` mp_tac le_word_size_mul >>
+     simp[vfmConstantsTheory.word_size_def]) >>
+  `val_footprint tv v <> 0` by
+    (drule_all bytestring_type_value >> strip_tac >> Cases_on `v` >>
+     gvs[value_has_type_def,val_footprint_def]) >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_val_rel_def] >>
+  disch_then (qx_choose_then `w` strip_assume_tac) >>
+  `val_store_size tv v <= val_store_size tv v` by simp[] >>
+  drule_all ptr_val_ok_store_covers >> strip_tac >>
+  `lookup_var p s = SOME w` by gvs[eval_operand_def] >>
+  `val_store_size tv v <= type_memory_size tv /\
+   val_store_size tv v < dimword(:256) /\ len+31 < dimword(:256)` by decide_tac >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory tv v (w2n w) m` by
+    (gvs[ptr_val_ok_def,ptr_mem_ok_def] >> metis_tac[]) >>
+  qexistsl_tac [`p`,`w`,`len`,`val_store_size tv v`] >> asm_rewrite_tac[] >> simp[]
+QED
+
+Theorem log_data_store_memory_seq_ptr:
+  compile_store_memory cenv src (Var dst) ty ty sa = ((),sb) /\
+  supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
+  value_has_type tv v /\ val_wf tv v /\ expr_val_rel cx ty v src s /\
+  ptr_val_ok cx ty v src G tn s /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa dst /\
+  lookup_var dst s = SOME b /\ ptr_covers G tn dst s (type_memory_bytes cenv ty) /\
+  type_memory_bytes cenv ty < dimword(:256) /\ ~ctx_has_dalloca ctx ==>
+  ?Gf tnf sf.
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+      val_in_memory tv v (w2n b) m) /\
+    log_write_frame sa (w2n b) (type_memory_bytes cenv ty) s sf /\
+    (!i. ~(w2n b <= i /\ i < w2n b+type_memory_bytes cenv ty) ==>
+      mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `type_memory_bytes cenv ty = type_memory_size tv` by
+    metis_tac[log_scalar_memory_size] >>
+  Cases_on `is_bytestring_type ty`
+  >- suspend "bytes" >>
+  suspend "word"
+QED
+Resume log_data_store_memory_seq_ptr[bytes]:
+  `~is_word_type ty` by metis_tac[is_bytestring_word_type] >>
+  drule_all log_data_bytes_source_ptr >>
+  disch_then (qx_choose_then `p` (qx_choose_then `a`
+    (qx_choose_then `len` (qx_choose_then `n`
+      (map_every assume_tac o CONJUNCTS))))) >>
+  `not_fresh_at sa p` by metis_tac[] >>
+  qpat_x_assum `src = Var p` SUBST_ALL_TAC >>
+  `compile_store_bytestring (Var p) (Var dst) sa = ((),sb)` by
+    gvs[compile_store_memory_def] >>
+  `ptr_covers G tn dst s n` by
+    (gvs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS,LESS_EQ_MONO_ADD_EQ]) >>
+  `type_memory_size tv < dimword(:256)` by metis_tac[] >>
+  drule_all log_data_bytes_store_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[]
+QED
+Resume log_data_store_memory_seq_ptr[word]:
+  `is_word_type ty` by metis_tac[log_scalar_topic_shape] >>
+  `type_memory_size tv = 32` by metis_tac[word_type_sizes] >>
+  `emit_void MSTORE [Var dst;src] sa = ((),sb)` by
+    gvs[compile_store_memory_def] >>
+  `op_taint tn src = {}` by gvs[ptr_val_ok_def] >>
+  `ptr_covers G tn dst s 32` by metis_tac[] >>
+  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[expr_val_rel_def] >>
+  disch_then (qx_choose_then `w` strip_assume_tac) >>
+  `w = typed_val_to_w256 tv v` by metis_tac[] >>
+  drule_all log_data_word_store_seq_ptr >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`G`,`tnf`,`sf`] >> asm_rewrite_tac[] >>
+  simp[] >> rpt strip_tac >>
+  `~(w2n b <= i /\ i < w2n b+32)` by decide_tac >>
+  asm_rewrite_tac[] >> simp[]
+QED
+Finalise log_data_store_memory_seq_ptr
