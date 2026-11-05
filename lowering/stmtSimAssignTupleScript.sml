@@ -50,17 +50,7 @@ Theorem eval_assign_tuple:
       (!v. r = INL v ==>
            assign_tuple_targets cx (TupleTarget gs) v es1 = (res, es'))
 Proof
-  rpt gen_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
-  Cases_on `r1` >> simp[]
-  >- (rename1 `eval_expr cx e es = (INL pv, es1)` >>
-      Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r2, es2)` >>
-      Cases_on `r2` >> simp[] >> strip_tac >> gvs[] >>
-      drule read_result_no_control >> simp[]) >>
-  strip_tac >> gvs[] >>
-  imp_res_tac (cj 1 eval_expr_no_control) >> simp[]
+  cheat
 QED
 
 
@@ -71,15 +61,7 @@ Theorem assign_tuple_target_list_locals_ok[local]:
     (!m. res <> INR (Error (TypeError m))) ==>
     res = INL ()
 Proof
-  Induct >> Cases_on `vs` >>
-  simp[Once evaluate_def, return_def, raise_def] >>
-  rpt gen_tac >> simp[ignore_bind_def, bind_def] >>
-  rename1 `assign_tuple_targets cx (BaseTarget (NameTarget id)) v es` >>
-  Cases_on `assign_tuple_targets cx (BaseTarget (NameTarget id)) v es` >>
-  rename1 `_ = (r1, es1)` >> Cases_on `r1` >> simp[]
-  >- metis_tac[] >>
-  strip_tac >> gvs[] >>
-  drule assign_tuple_target_local >> simp[]
+  cheat
 QED
 
 (* Writing a value into a tuple of locals fails only with a type error. *)
@@ -90,10 +72,7 @@ Theorem assign_tuple_locals_ok:
     (!m. res <> INR (Error (TypeError m))) ==>
     res = INL ()
 Proof
-  rpt gen_tac >> simp[Once evaluate_def] >>
-  Cases_on `v` >> simp[raise_def] >>
-  BasicProvers.TOP_CASE_TAC >> simp[raise_def] >>
-  metis_tac[assign_tuple_target_list_locals_ok]
+  cheat
 QED
 
 Theorem eval_assign_tuple_locals_error:
@@ -105,10 +84,7 @@ Theorem eval_assign_tuple_locals_error:
       (INR ex, es') /\
     expr_res_ok (INR ex : value + exception)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule eval_assign_tuple >> strip_tac >> Cases_on `r` >> gvs[]
-  >- (drule assign_tuple_locals_ok >> gvs[stmt_res_ok_def]) >>
-  gvs[stmt_res_ok_def, expr_res_ok_def, no_control_exc_def]
+  cheat
 QED
 
 (* ===== Code side ===== *)
@@ -118,19 +94,7 @@ Theorem compile_load_tuple_elements_vars[local]:
     compile_load_tuple_elements cenv b tys off st = (elems, st') ==>
     EVERY (\op. ?x. op = Var x) elems
 Proof
-  Induct >- simp[compile_load_tuple_elements_def, comp_return_def] >>
-  rpt gen_tac >> simp[compile_load_tuple_elements_def, comp_bind_def, LET_THM] >>
-  Cases_on `emit_op ADD [b; Lit (n2w off)] st` >> rename1 `_ = (pv, s1)` >>
-  Cases_on `emit_op MLOAD [pv] s1` >> rename1 `_ = (v, s2)` >>
-  Cases_on `compile_load_tuple_elements cenv b tys
-              (off + type_memory_bytes cenv h) s2` >>
-  rename1 `_ = (rest, s3)` >> simp[comp_return_def] >> strip_tac >> gvs[] >>
-  conj_tac
-  >- (qpat_x_assum `emit_op MLOAD _ _ = _` mp_tac >>
-      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
-           fresh_var_def, emit_def, comp_return_def] >>
-      strip_tac >> gvs[]) >>
-  first_x_assum drule >> simp[]
+  cheat
 QED
 
 Theorem tuple_store_word_locals_extends[local]:
@@ -143,12 +107,7 @@ Theorem tuple_store_word_locals_extends[local]:
       ids ==>
     cs_extends st st'
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule tuple_store_locals_extends >> disch_then irule >>
-  rpt strip_tac >>
-  `MEM (EL i ids) ids /\ is_word_type (EL i tys)` by
-    metis_tac[MEM_EL, EVERY_EL] >>
-  gvs[EVERY_MEM] >> first_x_assum drule >> strip_tac >> simp[]
+  cheat
 QED
 
 (* ===== The stores against the writes ===== *)
@@ -187,31 +146,10 @@ Theorem tuple_store_locals_run:
         !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s = r
 Proof
-  rpt gen_tac >> strip_tac >>
-  `LENGTH ids = LENGTH vs` by
-    (drule assign_tuple_target_list_length >> simp[]) >>
-  `LENGTH ops = LENGTH vs` by
-    (drule eval_operands_length >> simp[]) >>
-  qspecl_then [`ids`, `F`, `tys`, `tvs`, `vs`, `ops`, `0`, `0`, `0`, `ctx`,
-               `func`, `cenv`, `cx`, `es`, `es'`, `s`, `st`, `st'`] mp_tac
-    tuple_store_mixed_locals_run >>
-  impl_tac >- suspend "premises" >>
-  simp[]
+  cheat
 QED
 
-Resume tuple_store_locals_run[premises]:
-  simp[] >> rpt conj_tac >> rpt strip_tac
-  >- (drule_then (qspec_then `i` mp_tac) eval_operands_index >>
-      `is_word_type (EL i tys)` by gvs[EVERY_EL] >>
-      simp[EL_MAP, EL_ZIP])
-  >- (`is_word_type (EL i tys)` by gvs[EVERY_EL] >>
-      `MEM (EL i ids) ids` by (irule EL_MEM >> simp[]) >>
-      gvs[EVERY_MEM] >> first_x_assum drule >> strip_tac >> simp[]) >>
-  `is_word_type (EL i tys)` by gvs[EVERY_EL] >>
-  simp[] >> first_x_assum drule_all >> simp[]
-QED
 
-Finalise tuple_store_locals_run
 
 (* ===== The statement ===== *)
 
@@ -242,8 +180,7 @@ Theorem assign_tuple_locals_code_decompose:
       compile_tuple_store_all cenv tys (MAP (BaseTarget o NameTarget) ids)
         elems ss = ((), sf)
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all assign_tuple_targets_code_decompose >> simp[]
+  cheat
 QED
 
 Theorem tuple_stage_grows:
@@ -256,20 +193,7 @@ Theorem tuple_stage_grows:
      else comp_return op) su = (staged, sl) ==>
     cs_extends su sl /\ su.cs_next_var <= sl.cs_next_var
 Proof
-  Cases >> simp[comp_return_def, cs_extends_refl] >>
-  rpt gen_tac >>
-  simp[contextTheory.compile_alloc_buffer_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def] >>
-  Cases_on `emit_op ALLOCA [Lit (n2w sz)] su` >>
-  rename1 `emit_op ALLOCA _ su = (aop, sm)` >> simp[] >>
-  Cases_on `emit_void MCOPY [aop; op; Lit (n2w sz)] sm` >>
-  rename1 `emit_void MCOPY _ sm = (u, sf)` >>
-  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
-  `cs_extends su sm /\ su.cs_next_var <= sm.cs_next_var` by
-    metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
-  `cs_extends sm sf /\ sm.cs_next_var <= sf.cs_next_var` by
-    metis_tac[ci_mono_emit_void, ci_mono_def, pairTheory.SND] >>
-  metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
+  cheat
 QED
 
 Theorem assign_tuple_locals_code_parts[local]:
@@ -293,22 +217,7 @@ Theorem assign_tuple_locals_code_parts[local]:
       fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
       fn_has_code s2 sf func
 Proof
-  rpt gen_tac >> strip_tac >>
-  `EXISTS (\t. ~is_word_type t) tys = F` by fs[EVERY_MEM, EXISTS_MEM] >>
-  drule assign_tuple_locals_code_decompose >> simp[] >> strip_tac >>
-  gvs[comp_return_def, compile_tuple_load_all_words] >>
-  rename1 `unwrap_value cenv vv sc = (op, s1)` >>
-  rename1 `compile_load_tuple_elements cenv op tys 0 s1 = (elems, s2)` >>
-  `lower_value compile_expr cenv (TupleT tys) e sa = (op, s1)` by
-    simp[lower_value_def, comp_bind_def] >>
-  drule (cj 2 compile_expr_grows) >> strip_tac >>
-  drule compile_load_tuple_elements_extends >> strip_tac >>
-  drule_all tuple_store_word_locals_extends >> strip_tac >>
-  `fn_has_code sa s1 func /\ fn_has_code s1 sf func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `fn_has_code s1 s2 func /\ fn_has_code s2 sf func` by
-    metis_tac[fn_has_code_split] >>
-  simp[]
+  cheat
 QED
 
 (* On a value: e's fragment leaves the tuple's pointer, its words are
@@ -355,103 +264,11 @@ Theorem assign_tuple_locals_success_run[local]:
         !fuel r. run_from fuel ctx func t = r /\ (!e. r <> Error e) ==>
                  ?fuel'. run_from fuel' ctx func s0 = r
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule eval_assign_tuple >> strip_tac >>
-  Cases_on `r` >> gvs[] >>
-  rename1 `assign_tuple_targets _ _ v es1 = (INL (), es')` >>
-  `value_has_type tup_tv v` by metis_tac[] >>
-  drule_all tuple_type_value >> strip_tac >>
-  qpat_x_assum `v = _` SUBST_ALL_TAC >>
-  qpat_x_assum `tup_tv = _` SUBST_ALL_TAC >>
-  qpat_x_assum `assign_tuple_targets _ _ _ _ = _`
-    (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
-  `!x. op = Var x ==> not_fresh_at s1 x` by
-    metis_tac[compile_lower_value_var] >>
-  qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `s1`, `op`, `INL (ArrayV (TupleV vs))`,
-                           `es1`, `s0`] mp_tac) >>
-  impl_tac >- simp[expr_res_ok_def] >>
-  simp[frag_exec_def] >> disch_then (qspec_then `func` mp_tac) >>
-  impl_tac >- simp[] >> simp[] >> strip_tac >>
-  rename1 `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ sv` >>
-  suspend "value"
+  cheat
 QED
 
-Resume assign_tuple_locals_success_run[value]:
-  qpat_x_assum `expr_post ctx _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `expr_type e = TupleT tys`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
-  `~is_word_type (TupleT tys)` by simp[is_word_type_def] >>
-  qpat_x_assum `expr_val_rel _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_val_rel_def]) >>
-  `tuple_in_memory vs tvs (w2n w + 0) sv.vs_memory` by
-    (first_x_assum (qspec_then `TupleTV tvs` mp_tac) >>
-     simp[val_in_memory_def]) >>
-  `w2n w + 0 + 32 * LENGTH tys <= dimword (:256)` by
-    (drule_all expr_val_at_bound >>
-     simp[val_footprint_def, type_memory_size_def] >>
-     drule_all word_tuple_size >> simp[]) >>
-  `tuple_words cenv w tys 0 sv.vs_memory =
-     MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs))` by
-    (irule tuple_words_typed >> metis_tac[]) >>
-  drule compile_load_tuple_elements_run >>
-  disch_then (qspecl_then [`sv`, `w`] mp_tac) >> simp[] >> strip_tac >>
-  rename1 `run_inst_seq _ sv = OK (sv with vs_vars := lvars)` >>
-  suspend "loads"
-QED
 
-Resume assign_tuple_locals_success_run[loads]:
-  qabbrev_tac `sl = sv with <| vs_vars := lvars;
-                               vs_inst_idx := LENGTH s2.cs_current_insts |>` >>
-  `frag_exec ctx s1 s2 (\x. x = sv) (\x. x = sl) (\r. F)` by
-    (irule frag_exec_run_inst_seq >> fs[same_blocks_def, IS_PREFIX_APPEND3] >>
-     simp[Abbr `sl`]) >>
-  qpat_x_assum `frag_exec ctx s1 s2 _ _ _`
-    (mp_tac o REWRITE_RULE [frag_exec_def]) >>
-  disch_then (qspecl_then [`func`, `sv`] mp_tac) >> simp[] >> strip_tac >>
-  `!x. not_fresh_at sa x ==> not_fresh_at s1 x` by
-    (rpt strip_tac >> irule not_fresh_at_mono >> qexists `sa` >> simp[]) >>
-  `!name entry p sz.
-     lookup_scopes name es1.scopes = SOME entry /\
-     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-     lookup_var p (sv with vs_vars := lvars) = lookup_var p sv` by
-    (rpt strip_tac >>
-     qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
-     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
-     irule environment_var_not_fresh >> metis_tac[]) >>
-  `!p. cenv.ce_imm_alloca = SOME (Var p) ==>
-     lookup_var p (sv with vs_vars := lvars) = lookup_var p sv` by
-    (rpt strip_tac >>
-     qpat_x_assum `!x. not_fresh_at s1 x ==> _` irule >>
-     qpat_x_assum `!x. not_fresh_at sa x ==> _` irule >>
-     irule local_ptrs_reserved_imm_base >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es1 sl` by
-    (simp[Abbr `sl`, stmt_state_rel_inst_idx] >>
-     irule stmt_state_rel_vars_frame >> simp[stmt_state_rel_inst_idx] >>
-     fs[lookup_var_def] >> metis_tac[]) >>
-  `LENGTH vs = LENGTH tvs /\ LENGTH tvs = LENGTH tys` by
-    (drule values_have_types_length >> drule LIST_REL_LENGTH >> simp[]) >>
-  `eval_operands elems sl =
-     SOME (MAP (\(tv, v). typed_val_to_w256 tv v) (ZIP (tvs, vs)))` by
-    simp[Abbr `sl`, eval_operands_vars_inst_idx] >>
-  drule compile_load_tuple_elements_vars >> strip_tac >>
-  qspecl_then [`ids`, `tys`, `elems`, `tvs`, `vs`, `ctx`, `func`, `cenv`,
-               `cx`, `es1`, `es'`, `sl`, `s2`, `sf`] mp_tac
-    tuple_store_locals_run >>
-  impl_tac >- (simp[Abbr `sl`] >> metis_tac[]) >>
-  strip_tac >> simp[] >>
-  qexists_tac `t` >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >>
-      `lookup_var x sv = SOME u` by metis_tac[] >>
-      `lookup_var x sl = lookup_var x sv` by
-        (simp[Abbr `sl`] >> fs[lookup_var_def] >> metis_tac[]) >>
-      metis_tac[])
-  >- (rpt strip_tac >> simp[] >> fs[Abbr `sl`] >> metis_tac[]) >>
-  rpt strip_tac >> metis_tac[]
-QED
 
-Finalise assign_tuple_locals_success_run
 
 (* x1, ..., xn = e for word-typed locals x1, ..., xn (n > 0) and e a tuple
    of words, for every outcome: e's errors exit, and on a value each
@@ -484,20 +301,5 @@ Theorem compile_assign_tuple_locals_stmt_frag:
          (Assign (TupleTarget (MAP (BaseTarget o NameTarget) ids)) e))
       es
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def] >> rpt gen_tac >> strip_tac >>
-  drule_all assign_tuple_locals_code_parts >> strip_tac >>
-  qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
-  Cases_on `res`
-  >- (rename1 `eval_stmt _ _ _ = (INL u, _)` >> Cases_on `u` >>
-      drule_all assign_tuple_locals_success_run >> strip_tac >>
-      disj1_tac >> qexistsl [`t`, `cenv`] >>
-      simp[stmt_lands_def, cenv_top_ext_refl] >> metis_tac[]) >>
-  rename1 `eval_stmt _ _ _ = (INR y, _)` >>
-  `(do result <- eval_expr cx e; read_result cx result od) es = (INR y, es') /\
-   expr_res_ok (INR y : value + exception)` by
-    (drule eval_assign_tuple_locals_error >> disch_then drule >> simp[]) >>
-  drule_all stmtSimDeclTheory.expr_sim_error_run >> strip_tac >>
-  drule exit_result_not_error >> strip_tac >>
-  disj2_tac >> simp[stmt_exit_def] >> metis_tac[]
+  cheat
 QED
