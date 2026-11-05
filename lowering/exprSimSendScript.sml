@@ -22,15 +22,19 @@
  * Helpers:
  *   compile_expr_call, compile_expr_send, compile_expr_send_stack — the
  *     compile side
- *   eval_expr_send_cases, eval_send_value, eval_send_read,
+ *   eval_expr_send_action, eval_send_value, eval_send_read,
  *     eval_expr_send_value,
  *     take_call_outcome_typed,
  *     eval_send_outcome_typed, address_typed_dest, uint256_typed_dest — the
  *     source side
  *   expr_body_pre_send_arg, send_pre_types, typed_args_ready_inv — the
  *     operands
- *   send_tail_shape, send_tail_frag, expr_post_none_intro — the CALL and
- *     the ASSERT
+ *   send_tail_shape, send_tail_path, expr_post_none_intro — the CALL and
+ *     the ASSERT, a run that reads no GAS
+ *   eval_send_gas_obs, eval_send_read_gas_obs — send reads no gas
+ *     observation
+ *   send_args_summary, send_exempt_cert — the operands' counted outcome
+ *     followed by the tail
  *)
 
 Theory exprSimSend
@@ -38,6 +42,8 @@ Ancestors
   exprSimSource
   exprSimHypsDefs
   exprSimDefs exprSimStack
+  gasSummary gasSummaryCompose gasOutcome gasExemptCert
+  fragGasMode fragGasPath fragGasSeq fragGasSeqAbort
   loweringPosts
   allocLimits
   list pair vyperMisc fragExec loweringSlice  exprSimHyps exprSimWordArgs
@@ -127,25 +133,6 @@ Proof
 QED
 
 (* ===== The source side ===== *)
-
-Theorem eval_expr_send_cases:
-  !cx ann has_gas args dflt es res es'.
-    LENGTH args = (if has_gas then 3 else 2) /\
-    (do r <- eval_expr cx (Call ann (Send has_gas) args dflt);
-        read_result cx r od) es = (res, es') ==>
-    (?exc. eval_exprs cx args es = (INR exc, es') /\ res = INR exc) \/
-    ?vs es1. eval_exprs cx args es = (INL vs, es1) /\
-             (do tv <- eval_send cx has_gas vs; read_result cx tv od) es1 =
-               (res, es')
-Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `bind _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def] >>
-  Cases_on `eval_exprs cx args es` >>
-  rename1 `eval_exprs cx args es = (rr, es1)` >>
-  Cases_on `rr` >> simp[]
-QED
 
 Theorem eval_send_value:
   !cx has_gas vs st tv st'.
@@ -266,7 +253,10 @@ Theorem expr_body_pre_send_arg:
     expr_body_pre cenv cx env e es'
 Proof
   rw[expr_body_pre_def, well_typed_expr_def, int_calls_expr_def,
-     byte_widths_expr_def, alloc_limits_expr_def] >>
+     byte_widths_expr_def, alloc_limits_expr_def,
+     supportedExprTraverseTheory.supported_expr_exists_def,
+     supportedExprTraverseTheory.supported_exprs_exists_every,
+     listTheory.EXISTS_MEM] >>
   imp_res_tac int_calls_exprs_every_mem >>
   gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, listTheory.EXISTS_MEM] >>
   metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
@@ -381,12 +371,96 @@ Proof
   gvs[mk_inst_def] >> metis_tac[]
 QED
 
-Theorem send_tail_frag:
+(* ===== The counted tail ===== *)
+
+(* send reads no gas observation: its run is the same under any reading. *)
+Theorem take_call_outcome_gas_obs[local]:
+  !target cd vo st g.
+    take_call_outcome target cd vo (st with gas_obs := g) =
+      (FST (take_call_outcome target cd vo st),
+       SND (take_call_outcome target cd vo st) with gas_obs := g) /\
+    (SND (take_call_outcome target cd vo st)).gas_obs = st.gas_obs
+Proof
+  rpt gen_tac >> simp[take_call_outcome_def, call_outcome_request_def] >>
+  Cases_on `st.outcomes` >> simp[LET_THM, UNCURRY] >> rw[]
+QED
+
+Theorem adopt_call_outcome_gas_obs[local]:
+  !rq oc st g.
+    adopt_call_outcome rq oc (st with gas_obs := g) =
+      (FST (adopt_call_outcome rq oc st),
+       SND (adopt_call_outcome rq oc st) with gas_obs := g) /\
+    (SND (adopt_call_outcome rq oc st)).gas_obs = st.gas_obs
+Proof
+  simp[adopt_call_outcome_def, return_def, LET_THM, UNCURRY]
+QED
+
+Theorem eval_send_gas_obs:
+  !cx has_gas vs st g.
+    eval_send cx has_gas vs (st with gas_obs := g) =
+      (FST (eval_send cx has_gas vs st),
+       SND (eval_send cx has_gas vs st) with gas_obs := g) /\
+    (SND (eval_send cx has_gas vs st)).gas_obs = st.gas_obs
+Proof
+  rpt gen_tac >>
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  rename1 `eval_send cx has_gas (to_v::amount_v::gas_vs)` >>
+  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, lift_option_type_def] >>
+  IF_CASES_TAC >> simp[raise_def, return_def] >>
+  Cases_on `dest_AddressV to_v` >> simp[raise_def, return_def] >>
+  Cases_on `dest_NumV amount_v` >> simp[raise_def, return_def] >>
+  rename1 `dest_AddressV to_v = SOME addr` >>
+  rename1 `dest_NumV amount_v = SOME amt` >>
+  Cases_on `st.outcomes` >> simp[bind_def, ignore_bind_def]
+  >- (simp[get_accounts_def, get_transient_storage_def, lift_option_def,
+           check_def, assert_def, update_accounts_def, update_transient_def,
+           append_logs_def, return_def, raise_def] >>
+      Cases_on `run_ext_call cx.txn.target addr [] (SOME amt)
+                  (forwarded_gas 0 (ext_call_kwarg EKGas [EKGas] gas_vs))
+                  st.accounts st.tStorage (vyper_to_tx_params cx.txn)` >>
+      simp[raise_def, return_def] >>
+      rename1 `_ = SOME rr` >> PairCases_on `rr` >> simp[] >>
+      IF_CASES_TAC >> simp[]) >>
+  qspecl_then [`addr`, `[]`, `SOME amt`, `st`, `g`] mp_tac
+    take_call_outcome_gas_obs >>
+  Cases_on `take_call_outcome addr [] (SOME amt) st` >>
+  rename1 `_ = (q, st1)` >> reverse (Cases_on `q`) >- simp[] >>
+  rename1 `INL rqoc` >> PairCases_on `rqoc` >> simp[] >> strip_tac >>
+  fs[check_def, assert_def, raise_def, return_def, bind_def, ignore_bind_def] >>
+  IF_CASES_TAC >> fs[] >>
+  qspecl_then [`rqoc0`, `rqoc1`, `st1`, `g`] mp_tac
+    adopt_call_outcome_gas_obs >>
+  Cases_on `adopt_call_outcome rqoc0 rqoc1 st1` >> rename1 `_ = (q2, _)` >>
+  Cases_on `q2` >> simp[]
+QED
+
+Theorem eval_send_read_gas_obs:
+  !cx has_gas vs st res st'.
+    (do tv <- eval_send cx has_gas vs; read_result cx tv od) st =
+      (res, st') ==>
+    st'.gas_obs = st.gas_obs /\
+    !g. (do tv <- eval_send cx has_gas vs; read_result cx tv od)
+          (st with gas_obs := g) = (res, st' with gas_obs := g)
+Proof
+  rpt gen_tac >> strip_tac >> drule eval_send_read >> strip_tac >>
+  qspecl_then [`cx`, `has_gas`, `vs`, `st`] assume_tac eval_send_gas_obs >>
+  gvs[] >> Cases_on `r`
+  >- (drule eval_send_value >> strip_tac >>
+      gvs[bind_def, read_result_def, return_def]) >>
+  gvs[bind_def]
+QED
+
+(* The CALL and the ASSERT read no GAS: their run is a zero-count path. *)
+Theorem send_tail_path:
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
-  emit_void ASSERT [success] s3 = (u, sb) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb func /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es sa s0 t /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   outcomes_accounts_typed es1.outcomes /\
   accounts_runtime_well_typed es1.accounts /\
   IS_SOME (eval_operand gas_op t) /\
@@ -396,18 +470,32 @@ Theorem send_tail_frag:
   (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
       read_result cx tv od) es1 = (res, es') /\
   expr_type e = NoneT ==>
-  frag_exec ctx sm sb (\s. s = t)
-    (\s. ?v. res = INL v /\
-             expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) s)
-    (expr_exit res)
+  ?r. gas_marked_path F ctx func t 0 r /\
+      ((?t'. r = OK t' /\
+             (?v. res = INL v /\
+                  expr_post ctx func cenv cx e es sa sb s0 es' v (Lit 0w) t') /\
+             t'.vs_current_bb = sb.cs_current_bb /\
+             t'.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+       (exit_result r /\ expr_exit res r))
 Proof
   strip_tac >> drule_all send_tail_shape >> strip_tac >>
   `~not_fresh_at sm out` by gvs[not_fresh_at_def] >>
-  `emitted_insts sm sb =
-     [mk_inst sm.cs_next_id CALL
-        [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out];
-      mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []]` by
-    fs[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+  qabbrev_tac `code = [mk_inst sm.cs_next_id CALL
+     [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w] [out];
+     mk_inst (sm.cs_next_id + 1) ASSERT [Var out] []]` >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+              ~is_terminator i.inst_opcode) code /\
+   FILTER (\i. i.inst_opcode = GAS) code = [] /\ LENGTH code = 2` by
+    simp[Abbr `code`, mk_inst_def, is_terminator_def] >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX code (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `fn_has_code sm sb func` mp_tac >>
+     simp[fn_has_code_def] >> strip_tac >> qexists_tac `bb` >>
+     qpat_x_assum `isPREFIX _ bb.bb_instructions` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     gvs[] >> qexists_tac `l` >>
+     REWRITE_TAC[GSYM listTheory.APPEND_ASSOC,
+                 rich_listTheory.DROP_LENGTH_APPEND]) >>
   drule_all send_call_read_step >>
   disch_then (qspecl_then [`out`, `sm.cs_next_id`] strip_assume_tac) >>
   rename1 `s' = t with <| vs_outcomes := _; vs_requests := _;
@@ -416,38 +504,61 @@ Proof
   `s'.vs_allocas = t.vs_allocas /\ s'.vs_alloca_next = t.vs_alloca_next /\
    s'.vs_memory = t.vs_memory /\ s'.vs_vars = t.vs_vars /\
    s'.vs_labels = t.vs_labels` by
-    (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  irule frag_exec_run_inst_seq >>
-  simp[rich_listTheory.IS_PREFIX_APPEND, mk_inst_def, is_terminator_def] >>
-  rpt strip_tac >>
-  gvs[run_inst_seq_def, SRULE [mk_inst_def] send_assert_ok,
-      SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
-  irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  reverse conj_tac
-  >- (irule stmt_state_rel_update_var >> conj_tac
-      >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
-      `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
-        (drule eval_send_read >> strip_tac >>
-         drule eval_send_preserves_non_accounts >> simp[]) >>
-      `immutable_alloca_sep func cenv cx es' s'` by
-        (irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
-         gvs[stmt_state_rel_def] >>
-         rpt strip_tac >> qexists_tac `id` >>
-         gvs[local_region_def, lookup_var_def]) >>
-      `immutable_base_zero cenv s'` by
-        (irule immutable_base_zero_frame >> qexists_tac `t` >>
-         fs[stmt_state_rel_def, lookup_var_def]) >>
-      irule stmt_state_rel_allocas_frame >> simp[] >>
-      qexistsl_tac [`es1`, `t`] >> simp[] >>
-      qpat_x_assum `s' = _ with <|vs_transient := _; vs_returndata := _;
-        vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
-        vs_pending_deletions := _|>`
-        (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  irule wb_frame_readonly_tail >>
-  qexists_tac `sm` >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
+    (qpat_x_assum `s' = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[])
+  >- (`run_inst_seq code t = OK (update_var out 1w s')` by
+        asm_simp_tac (srw_ss()) [Abbr `code`, run_inst_seq_def,
+                                 send_assert_ok] >>
+      qspecl_then [`code`, `t`, `update_var out 1w s'`, `ctx`, `func`, `bb`]
+        mp_tac tuple_run_inst_seq_gas_path >>
+      (impl_tac >- fs[EVERY_MEM]) >>
+      qpat_assum `FILTER _ code = []` (fn th => REWRITE_TAC[th, LENGTH]) >>
+      strip_tac >>
+      `LENGTH sb.cs_current_insts = t.vs_inst_idx + LENGTH code` by
+        (qpat_x_assum `sb.cs_current_insts = _` SUBST1_TAC >>
+         qpat_x_assum `t.vs_inst_idx = _` SUBST1_TAC >> simp[]) >>
+      qexists_tac `OK (update_var out 1w s' with
+                       vs_inst_idx := LENGTH sb.cs_current_insts)` >>
+      conj_tac
+      >- (pop_assum SUBST1_TAC >> simp[gas_marked_path_def] >>
+          first_assum ACCEPT_TAC) >>
+      disj1_tac >> simp[] >>
+      `(update_var out 1w s').vs_current_bb = sb.cs_current_bb` by
+        (qpat_x_assum `s' = _` SUBST1_TAC >> fs[update_var_def]) >>
+      pop_assum (fn th => simp[th]) >>
+      qpat_assum `res = _` (fn th => simp[th]) >>
+      reverse conj_tac
+      >- (qpat_x_assum `s' = _` SUBST1_TAC >> fs[]) >>
+      irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
+      reverse conj_tac
+      >- (irule stmt_state_rel_update_var >> conj_tac
+          >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> metis_tac[]) >>
+          `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
+            (drule eval_send_read >> strip_tac >>
+             drule eval_send_preserves_non_accounts >> simp[]) >>
+          `immutable_alloca_sep func cenv cx es' s'` by
+            (irule immutable_alloca_sep_fields >> qexistsl_tac [`t`, `es1`] >>
+             gvs[stmt_state_rel_def] >>
+             rpt strip_tac >> qexists_tac `id` >>
+             gvs[local_region_def, lookup_var_def]) >>
+          `immutable_base_zero cenv s'` by
+            (irule immutable_base_zero_frame >> qexists_tac `t` >>
+             fs[stmt_state_rel_def, lookup_var_def]) >>
+          irule stmt_state_rel_allocas_frame >> simp[] >>
+          qexistsl_tac [`es1`, `t`] >> simp[] >>
+          qpat_x_assum `s' = _`
+            (fn th => once_rewrite_tac[th]) >> simp[]) >>
+      irule wb_frame_readonly_tail >>
+      qexists_tac `sm` >>
+      qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+      simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+      rw[] >> gvs[not_fresh_at_def] >> metis_tac[]) >>
+  `run_inst_seq code t =
+     Abort Revert_abort (revert_state (set_returndata [] (update_var out 0w s')))` by
+    asm_simp_tac (srw_ss()) [Abbr `code`, run_inst_seq_def, send_assert_fail] >>
+  drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_abort_zero_path >>
+  disch_then (qspecl_then [`ctx`, `func`, `bb`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[exit_result_def, expr_exit_def]
 QED
 
 (* ===== send ===== *)
@@ -465,6 +576,155 @@ Proof
   simp[unwrap_value_def, comp_return_def] >> rw[] >> gvs[]
 QED
 
+Theorem eval_expr_send_action:
+  !cx ann has_gas args dflt.
+    LENGTH args = (if has_gas then 3 else 2) ==>
+    bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
+    bind (eval_exprs cx args)
+      (\vs. do tv <- eval_send cx has_gas vs; read_result cx tv od)
+Proof
+  rpt strip_tac >> simp[FUN_EQ_THM] >> qx_gen_tac `st` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def] >>
+  Cases_on `eval_exprs cx args st` >> rename1 `(rr, _)` >>
+  Cases_on `rr` >> simp[]
+QED
+
+Theorem send_exempt_cert:
+  LENGTH args = (if has_gas then 3 else 2) /\
+  gas_exempt_cert memory tops p
+    (ignore_bind (eval_exprs cx args) (return ())) start marks out endpoint ==>
+  gas_exempt_cert memory tops p
+    (ignore_bind
+      (bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx))
+      (return ())) start marks out endpoint
+Proof
+  strip_tac >> drule eval_expr_send_action >>
+  disch_then (qspecl_then [`cx`, `ann`, `dflt`] SUBST1_TAC) >>
+  PairCases_on `p` >> PairCases_on `start` >>
+  PairCases_on `out` >> PairCases_on `endpoint` >>
+  qmatch_goalsub_abbrev_tac `ignore_bind (bind _ k) _` >>
+  `ignore_bind (bind (eval_exprs cx args) k) (return ()) =
+   bind (eval_exprs cx args) (\vs. ignore_bind (k vs) (return ()))` by
+    simp[ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_values >> simp[]
+QED
+
+(* After the operands' counted run, the send tail reads no GAS and its
+   source part reads no observation, so the whole action keeps the operands'
+   marks. *)
+Theorem send_args_summary:
+  gas_summary_at F (ctx,func) marks (eval_exprs cx args) (es,s0)
+    (\rr ee t. ?vs. rr = INL vs /\
+       typed_args_post ctx func cenv cx es sa s0 ee args
+         ([addr_op; val_op] ++ (if has_gas then [gas_op] else [])) vs t /\
+       t.vs_current_bb = sm.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sm.cs_current_insts)
+    (\rr ee r. wb_args_exit rr r) /\
+  (~has_gas ==> gas_op = Lit 0w) /\
+  MAP expr_type args =
+    [BaseT AddressT; BaseT (UintT 256)] ++
+    (if has_gas then [BaseT (UintT 256)] else []) /\
+  LENGTH args = (if has_gas then 3 else 2) /\
+  typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) args /\
+  expr_sim_inv cenv cx env es /\
+  (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
+         expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
+  emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
+    sm = (success, s3) /\
+  emit_void ASSERT [success] s3 = (u, sb) /\ fn_has_code sm sb func /\
+  local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var ==>
+  gas_summary_at F (ctx,func) marks
+    (bind (eval_expr cx (Call NoneT (Send has_gas) args dflt)) (read_result cx))
+    (es,s0)
+    (\res ee t. ?v. res = INL v /\
+       expr_post ctx func cenv cx (Call NoneT (Send has_gas) args dflt)
+         es sa sb s0 ee v (Lit 0w) t /\
+       t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee r. expr_exit res r)
+Proof
+  rewrite_tac[gas_summary_at_def] >> strip_tac >>
+  qpat_x_assum `LENGTH args = _` (fn th => assume_tac th >>
+    rewrite_tac[MATCH_MP eval_expr_send_action th]) >>
+  gvs[]
+  >- suspend "normal" >>
+  Cases_on `res` >> gvs[wb_args_exit_def] >> rename1 `INR exc` >>
+  qexistsl_tac [`INR exc`, `es_end`, `r`] >>
+  conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  simp[]
+QED
+
+Resume send_args_summary[normal]:
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qabbrev_tac `es_in = es with gas_obs := gas_explicit marks s0.vs_gas_readings` >>
+  `eval_exprs cx args es_in = (INL vs, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[Abbr `es_in`]) >>
+  `expr_sim_inv cenv cx env es_in` by simp[Abbr `es_in`] >>
+  `expr_sim_inv cenv cx env (es_end with gas_obs := [])` by
+    metis_tac[typed_args_ready_inv] >>
+  `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+                        value_has_type tv v) args vs` by
+    (drule_all stack_args_values_typed_body >> simp[]) >>
+  gvs[typed_args_post_def] >>
+  `?to_v amount_v gas_vs. vs = to_v :: amount_v :: gas_vs /\
+     LENGTH gas_vs = (if has_gas then 1 else 0)` by
+    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  `?a v gs. args = a::v::gs` by
+    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
+  gvs[vyperValueTheory.evaluate_type_def] >>
+  `accounts_runtime_well_typed es_end.accounts /\
+   outcomes_accounts_typed es_end.outcomes` by
+    fs[expr_sim_inv_def,
+       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
+  Cases_on `(do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+                read_result cx tv od) (es_end with gas_obs := [])` >>
+  rename1 `_ = (res, fin)` >>
+  drule eval_send_read_gas_obs >> strip_tac >>
+  `?r. gas_marked_path F ctx func t 0 r /\
+       ((?t'. r = OK t' /\
+              (?w. res = INL w /\
+                   expr_post ctx func cenv cx
+                     (Call NoneT (Send has_gas) (a::v::gs) dflt)
+                     es sa sb s0 fin w (Lit 0w) t') /\
+              t'.vs_current_bb = sb.cs_current_bb /\
+              t'.vs_inst_idx = LENGTH sb.cs_current_insts) \/
+        (exit_result r /\ expr_exit res r))` by
+    (irule send_tail_path >> simp[expr_type_def] >>
+     qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
+     qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
+     qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
+     qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
+     qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            irule address_typed_dest >> first_assum ACCEPT_TAC,
+            irule uint256_typed_dest >> first_assum ACCEPT_TAC,
+            Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
+            fs[] >> NO_TAC]) >>
+  pop_assum strip_assume_tac >>
+  `!tail. (do tv <- eval_send cx has_gas (to_v :: amount_v :: gas_vs);
+              read_result cx tv od) (es_end with gas_obs := tail) =
+          (res, fin with gas_obs := tail)` by
+    (gen_tac >> qpat_x_assum `!g. _ = (res, _)` (qspec_then `tail` mp_tac) >>
+     simp[]) >>
+  `fin with gas_obs := [] = fin` by
+    gvs[evaluation_state_component_equality] >>
+  qexistsl_tac [`res`, `fin`, `r`] >>
+  (conj_tac
+   >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+              |> REWRITE_RULE [APPEND_NIL]) >>
+       qexistsl_tac [`es_end`, `t`, `to_v :: amount_v :: gas_vs`] >>
+       simp[gas_marked_exec_def] >> gvs[])) >>
+  gvs[]
+QED
+
+Finalise send_args_summary
+
 Theorem send_expr_sim:
   expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
   (!arg_ty. typed_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args) ==>
@@ -479,52 +739,27 @@ Proof
   `wb_args_shape cenv expr_type args` by metis_tac[typed_stack_args_shape] >>
   qpat_x_assum `!arg_ty. _` (qspec_then `expr_type` assume_tac) >>
   rewrite_tac[expr_sim_def] >> rpt gen_tac >> strip_tac >>
-  reverse (Cases_on `stmt_state_rel ctx func cenv cx es s0`)
-  >- (`(\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s) = (\s. F)` by
-        (simp[FUN_EQ_THM] >> metis_tac[]) >>
-      simp[] >> irule frag_exec_false_pre) >>
   drule lower_value_send >> strip_tac >> gvs[] >>
   drule_all compile_expr_send >> strip_tac >>
   drule_all lower_word_args_shape_ready >> strip_tac >>
   drule_all send_tail_shape >> strip_tac >>
   `fn_has_code sa sm func /\ fn_has_code sm sb func` by
     metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  drule_all eval_expr_send_cases >> strip_tac
-  >- (gvs[] >> drule_all lower_typed_args_sim >>
-      disch_then (qspec_then `s0` mp_tac) >> simp[wb_args_exit_def] >>
-      strip_tac >> irule frag_exec_exit_prefix >>
-      goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `expr_sim_inv cenv cx env es1` by metis_tac[typed_args_ready_inv] >>
-  `LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-                        value_has_type tv v) args vs` by
-    (drule_all stack_args_values_typed_body >> simp[]) >>
-  drule_all lower_typed_args_sim >> disch_then (qspec_then `s0` mp_tac) >>
-  simp[wb_args_exit_def] >> disch_then (mp_then Any irule wb_frag_then) >>
-  simp[] >> qx_gen_tac `t` >> strip_tac >> gvs[typed_args_post_def] >>
-  `LENGTH vs = LENGTH args` by metis_tac[LIST_REL_LENGTH] >>
-  `?to_v amount_v gas_vs. vs = to_v :: amount_v :: gas_vs /\
-     LENGTH gas_vs = (if has_gas then 1 else 0)` by
-    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
-  `?a v gs. args = a::v::gs` by
-    (Cases_on `has_gas` >> gvs[LENGTH_EQ_NUM_compute]) >>
-  gvs[vyperValueTheory.evaluate_type_def] >>
-  `accounts_runtime_well_typed es1.accounts` by
-    fs[expr_sim_inv_def,
-       vyperTypeExtCallCoreTheory.accounts_runtime_well_typed_accounts_well_typed] >>
-  `outcomes_accounts_typed es1.outcomes` by gvs[expr_sim_inv_def] >>
-  irule send_tail_frag >> simp[expr_type_def] >>
-  qpat_assum `bind (eval_send _ _ _) _ _ = _` (irule_at Any) >>
-  qpat_assum `emit_op _ _ _ = _` (irule_at Any) >>
-  qpat_assum `emit_void _ _ _ = _` (irule_at Any) >>
-  qpat_assum `eval_operand addr_op _ = _` (irule_at Any) >>
-  qpat_assum `eval_operand val_op _ = _` (irule_at Any) >>
-  rpt conj_tac >>
-  FIRST [first_assum ACCEPT_TAC,
-         irule address_typed_dest >> first_assum ACCEPT_TAC,
-         irule uint256_typed_dest >> first_assum ACCEPT_TAC,
-         Cases_on `has_gas` >> gvs[eval_operand_def] >> NO_TAC,
-         fs[] >> NO_TAC]
+  qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `expr_type`,
+    `expr_sim_inv cenv cx env`, `es`, `sa`,
+    `[addr_op; val_op] ++ (if has_gas then [gas_op] else [])`, `sm`, `s0`]
+    mp_tac lower_typed_args_sim >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule send_args_summary >> simp[expr_type_def] >>
+      conj_tac
+      >- (qexistsl_tac [`addr_op`, `gas_op`, `s3`, `sm`, `success`, `val_op`] >>
+          fs[]) >>
+      qexists_tac `env` >> fs[] >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >>
+  metis_tac[send_exempt_cert]
 QED
 
 (* TOP-LEVEL *)
