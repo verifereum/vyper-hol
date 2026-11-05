@@ -15,7 +15,7 @@ Ancestors
   stackPlanGen stackPlanTypes venomExecSemantics venomState venomInst
   venomWf livenessDefs dfgDefs list contextCodegenRelProps
   planExec stackOpSim blockSimHelpers stackPlanOps stackModel reorderSim
-  planWf
+  planWf dfgAnalysisProps allocaRemapSSA callLayoutDefs
 
 (* block_entries_ready: the entry block has no PHIs, so eval_phis leaves
    the state alone and the PHI prefix is empty. *)
@@ -265,6 +265,48 @@ Proof
   `dist < LENGTH next.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
   drule_at (Pat `do_swap _ _ = _`) do_swap_inventory_subset >>
   simp[] >> metis_tac[]
+QED
+
+Theorem entry_param_normalize[local]:
+  codegen_ready_fn fn /\
+  MEM at (MAP (\i. Var (HD i.inst_outputs))
+    (get_params (HD fn.fn_blocks).bb_instructions)) ==>
+  normalize_operand (dfg_build_function fn) [] at = at
+Proof
+  strip_tac >> gvs[MEM_MAP] >> rename1 `MEM inst (get_params _)` >>
+  `param_insts_from 0 (get_params (HD fn.fn_blocks).bb_instructions)` by
+    metis_tac[canonical_get_params_layout] >>
+  `is_param_opcode inst.inst_opcode /\ LENGTH inst.inst_outputs = 1` by
+    (qpat_assum `MEM inst (get_params _)`
+       (strip_assume_tac o REWRITE_RULE [MEM_SPLIT]) >>
+     gvs[param_insts_from_append, param_insts_from_def, param_inst_at_def]) >>
+  `MEM inst (fn_insts fn)` by
+    (qspec_then `(HD fn.fn_blocks).bb_instructions` strip_assume_tac get_params_suffix >>
+     `MEM inst (HD fn.fn_blocks).bb_instructions` by metis_tac[MEM_APPEND] >>
+     `fn.fn_blocks <> []` by
+       gvs[codegen_ready_fn_def, wf_function_def, fn_has_entry_def] >>
+     simp[fn_insts_def, fn_insts_blocks_def, MEM_FLAT, MEM_MAP] >>
+     Cases_on `fn.fn_blocks` >> gvs[fn_insts_blocks_def]) >>
+  `MEM (HD inst.inst_outputs) inst.inst_outputs` by
+    (Cases_on `inst.inst_outputs` >> gvs[]) >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  `inst' = inst` by
+    (drule dfg_build_function_correct >> strip_tac >>
+     `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+     metis_tac[ssa_unique_output]) >>
+  gvs[dfg_get_def_def] >>
+  simp[Once normalize_operand_def] >> gvs[is_param_opcode_iff]
+QED
+
+Theorem entry_plan_normalize[local]:
+  codegen_ready_fn fn /\
+  ps0 = init_cleanup_plan_state ch growth spill_base lbl_ctr /\
+  prepare_params_plan liveness fn ps0 = (ops, ps1) ==>
+  !at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+    normalize_operand (dfg_build_function fn) [] at = at
+Proof
+  rpt strip_tac >> irule entry_param_normalize >>
+  metis_tac[entry_params_inventory]
 QED
 
 Theorem entry_prefix_asm[local]:
