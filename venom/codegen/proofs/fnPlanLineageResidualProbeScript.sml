@@ -555,3 +555,136 @@ QED
 (* These universal equations validate physical residual introduction and replay
    for this no-spill loop only. They do not establish frozen lineage/DFS
    reachability or general cleanup, PHI, temporal coverage or spill producers. *)
+
+(* Physical-boundary diagnostics (abstract stacks, not reachability claims).
+   generate_block_plan cleans only BEFORE instructions, with one predecessor;
+   clean_stack_plan additionally requires that predecessor to branch.
+   generate_block_insts_plan has no cleanup between PHIs and regular ops.
+   Regular ops remove consumed inputs and dead OUTPUTS only (not all dead
+   cells); JMP restores/reorders its target and join_reached checks the suffix.
+   Thus a multi-predecessor join has no implicit post-PHI normalization. *)
+Definition physical_probe_def:
+  physical_probe stk requests =
+    (FST (popmany_plan requests
+       ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := stk)),
+     (SND (popmany_plan requests
+       ((init_cleanup_plan_state NONE [] 0 0) with ps_stack := stk))).ps_stack)
+End
+
+Theorem physical_probe_bulk_order:
+  physical_probe [Var "a"; Var "d"; Var "e"; Var "b"] [Var "d"; Var "e"] =
+    ([SOSwap 2; SOPop 2], [Var "a"; Var "b"]) /\
+  physical_probe [Var "a"; Var "e"; Var "d"; Var "b"] [Var "d"; Var "e"] =
+    ([SOSwap 2; SOPop 2], [Var "a"; Var "b"]) /\
+  physical_probe [Var "a"; Var "d"; Var "e"; Var "b"] [Var "e"; Var "d"] =
+    ([SOSwap 2; SOPop 2], [Var "a"; Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_probe_dead_position:
+  FILTER (\op. MEM op [Var "a"; Var "b"])
+    [Var "a"; Var "d"; Var "b"; Var "e"] = [Var "a"; Var "b"] /\
+  physical_probe [Var "a"; Var "d"; Var "b"; Var "e"] [Var "d"; Var "e"] =
+    ([SOPop 1; SOSwap 1; SOPop 1], [Var "a"; Var "b"]) /\
+  physical_probe [Var "a"; Var "d"; Var "b"; Var "e"] [Var "e"; Var "d"] =
+    ([SOPop 1; SOSwap 1; SOPop 1], [Var "a"; Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_probe_dead_identity:
+  physical_probe [Var "a"; Var "x"; Var "b"] [Var "d"] =
+    ([], [Var "a"; Var "x"; Var "b"]) /\
+  physical_probe [Var "a"; Var "d"; Var "b"] [Var "d"] =
+    ([SOSwap 1; SOPop 1], [Var "a"; Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_probe_prefix:
+  physical_probe [dead_stack_marker; Var "a"; Var "d"; Var "b"] [Var "d"] =
+    ([SOSwap 1; SOPop 1], [dead_stack_marker; Var "a"; Var "b"]) /\
+  physical_probe [Var "x"; Var "a"; Var "d"; Var "b"] [Var "d"] =
+    ([SOSwap 1; SOPop 1], [Var "x"; Var "a"; Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+Definition physical_cleanup_fn_def:
+  physical_cleanup_fn = mk_raw_function "physical-cleanup"
+    [<| bb_label := "E"; bb_instructions :=
+      [mk_inst 0 PARAM [Lit 0w] ["a"];
+       mk_inst 1 PARAM [Lit 1w] ["b"];
+       mk_inst 2 PARAM [Lit 2w] ["c"];
+       mk_inst 3 PARAM [Lit 3w] ["d"];
+       mk_inst 4 PARAM [Lit 4w] ["e"];
+       mk_inst 5 JNZ [Var "c"; Label "A"; Label "B"] []] |>;
+     <| bb_label := "A"; bb_instructions :=
+       [mk_inst 6 RETURN [Var "a"; Var "b"] []] |>;
+     <| bb_label := "B"; bb_instructions :=
+       [mk_inst 7 RETURN [Var "d"; Var "e"] []] |>]
+End
+
+(* Exactly the physical/retained/to_cleanup filters of clean_stack_plan. *)
+Theorem physical_cleanup_filters:
+  FILTER (\op. IS_SOME (stack_get_depth op
+      [Var "d"; Var "a"; Var "e"; Var "b"]))
+      [Var "d"; Var "e"] = [Var "d"; Var "e"] /\
+  FILTER (\op. below_all_live op ["a"; "b"]
+      [Var "d"; Var "a"; Var "e"; Var "b"])
+      [Var "d"; Var "e"] = [Var "d"] /\
+  FILTER (\op. ~MEM op [Var "d"]) [Var "d"; Var "e"] = [Var "e"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_cleanup_actual:
+  FST (clean_stack_plan (liveness_analyze physical_cleanup_fn)
+    (cfg_analyze physical_cleanup_fn) physical_cleanup_fn
+    (THE (lookup_block "A" physical_cleanup_fn.fn_blocks))
+    ((init_cleanup_plan_state NONE [] 0 0) with
+      <|ps_stack := [Var "d"; Var "a"; Var "e"; Var "b"];
+        ps_cleanup_promised := T|>)) = [SOSwap 1; SOPop 1] /\
+  (SND (clean_stack_plan (liveness_analyze physical_cleanup_fn)
+    (cfg_analyze physical_cleanup_fn) physical_cleanup_fn
+    (THE (lookup_block "A" physical_cleanup_fn.fn_blocks))
+    ((init_cleanup_plan_state NONE [] 0 0) with
+      <|ps_stack := [Var "d"; Var "a"; Var "e"; Var "b"];
+        ps_cleanup_promised := T|>))).ps_stack =
+      [dead_stack_marker; Var "a"; Var "b"]
+Proof
+  EVAL_TAC
+QED
+
+Theorem physical_probe_duplicate:
+  physical_probe [Var "a"; Var "d"; Var "d"; Var "b"] [Var "d"] =
+    ([SOSwap 1; SOPop 1], [Var "a"; Var "d"; Var "b"]) /\
+  physical_probe [Var "a"; Var "d"; Var "d"; Var "b"] [Var "d"; Var "d"] =
+    ([SOSwap 1; SOPop 1; SOSwap 1; SOPop 1], [Var "a"; Var "b"])
+Proof
+  EVAL_TAC
+QED
+
+(* Boundary decision: FILTER equality alone loses depths, multiplicity and
+   request membership (physical_probe_dead_position/dead_identity/duplicate).
+   A candidate for the REAL regular/JMP consumers is a common suffix of paired
+   positions, modulo independently sized bottom prefixes, with equal identities
+   at every future queried operand and paired but possibly different dead cells
+   elsewhere. This is stronger than FILTER equality, weaker than raw equality.
+   Its native producer must prove: every live operand's last-occurrence depth
+   agrees; all queried identities are absent from both arbitrary prefixes;
+   unequal paired identities cannot become later requests (including PHI retire,
+   emit_input, and dead-output pops); relevant duplicates agree; equal spill
+   maps/allocator and enough depth-window/cleanup bounds. Consumer preservation
+   must include reorder/optimistic swap, not merely popmany.
+   These are PROPOSED obligations, not facts certified by these examples.
+
+   cleanup_retained_prefix_replay (fnPlanLineageInventory) is not directly
+   applicable: lineage_core requires a common raw core and marker-only bottom
+   prefixes; ALL_DISTINCT core, equal allocators, and exact physical coverage
+   are also required. Endpoint marked/FILTER projection equality establishes
+   none of those raw-core/prefix/coverage facts. For the next actual branch
+   cleanup one must either establish that stronger reachable common core or
+   prove cleanup respects the weaker paired relation. There is no cleanup
+   at the join PHI endpoint that could supply it automatically. *)
