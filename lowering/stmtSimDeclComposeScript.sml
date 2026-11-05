@@ -47,7 +47,7 @@ Proof
   qexists_tac `cenv` >> simp[]
 QED
 
-Theorem gas_marked_exec_end_gas_obs[local]:
+Theorem gas_marked_exec_end_gas_obs:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res ee r ==>
   gas_marked_exec memory (ctx,func) source (es,s0) marks res
     (ee with gas_obs := gs) r
@@ -169,7 +169,7 @@ Proof
   gvs[] >> qexists_tac `inst` >> simp[]
 QED
 
-Theorem stmt_post_end_gas_obs[local]:
+Theorem stmt_post_end_gas_obs:
   stmt_post ctx func cx lctx old c sa sf s0 res (ee with gas_obs := gs) t =
   stmt_post ctx func cx lctx old c sa sf s0 res ee t
 Proof
