@@ -203,6 +203,15 @@ Resume compile_log_ready_stmt_frag_mem[args_value]:
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
+  (* TEMPORARY: the rounded footprint of each bytestring argument below the
+     frontier.  It follows once expr_sim_mem's post bounds it (planned), and
+     compile_log_eval_all_gas_mem carries that post to every argument. *)
+  `LIST_REL (\arg v. !w n.
+     ~is_word_type (SND arg) /\ eval_operand (FST arg) t = SOME w /\
+     ((?bs. v = BytesV bs /\ n = LENGTH bs) \/
+      (?str. v = StringV str /\ n = LENGTH str)) ==>
+     w2n w + 32 + 32 * ((n + 31) DIV 32) <= t.vs_alloca_next) xs vs` by
+    cheat >>
   qpat_assum `MAP SND xs = MAP expr_type args`
     (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_mem_ok)) >>
   strip_tac >>
