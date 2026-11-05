@@ -5406,3 +5406,55 @@ Resume compile_array_endpoint_post[immutable_calls]:
   gvs[] >> drule_all expr_vv_case_called_main_immutable_array_excluded >> simp[]
 QED
 Finalise compile_array_endpoint_post
+
+(* Static typing facts shared by the source selection and target adapter. *)
+Theorem array_subscript_annotation_index:
+  env_consistent env cx es /\
+  well_typed_expr env (Subscript ann obj idx) /\
+  expr_type obj = ArrayT et bd ==>
+  ann = et /\ vyperTypeSystem$is_int_type (expr_type idx)
+Proof
+  strip_tac >>
+  qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
+  simp[Once vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.subscript_type_ok_def] >>
+  strip_tac >> gvs[] >>
+  drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+  Cases_on `vt` >>
+  gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `ArrayT et bd = expr_type obj` (assume_tac o SYM) >>
+  fs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]
+QED
+
+Theorem expr_body_pre_integer_read:
+  expr_body_pre cenv cx env idx es /\
+  vyperTypeSystem$is_int_type (expr_type idx) /\
+  eval_expr cx idx es = (INL raw,t) /\
+  read_result cx raw t = (INL iv,t) ==>
+  ?itv i. iv = IntV i /\
+    evaluate_type (get_tenv cx) (expr_type idx) = SOME itv /\
+    value_has_type itv iv /\
+    0 < type_bits (expr_type idx) /\ type_bits (expr_type idx) <= 256
+Proof
+  strip_tac >>
+  `word_value_type (expr_type idx)` by
+    fs[word_value_type_def] >>
+  ` (do result <- eval_expr cx idx; read_result cx result od) es = (INL iv,t)` by
+    simp[bind_def] >>
+  drule_all expr_body_pre_word_result >> simp[] >> strip_tac >>
+  drule_all exprSimBinopFragTheory.int_type_value >> strip_tac >> gvs[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem evaluate_array_capacity_bound:
+  evaluate_type tenv (ArrayT et bd) = SOME tv ==>
+  bound_length bd < dimword (:256)
+Proof
+  simp[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  strip_tac >> rename1 `evaluate_type tenv et = SOME evt` >>
+  irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+  qexists_tac `bound_length bd * type_slot_size evt` >> reverse conj_tac
+  >- simp[arithmeticTheory.LE_MULT_CANCEL_RBARE] >>
+  Cases_on `bd` >>
+  gvs[vyperValueTheory.type_slot_size_def, vyperASTTheory.bound_length_def]
+QED
