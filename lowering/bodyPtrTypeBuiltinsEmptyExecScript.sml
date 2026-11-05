@@ -112,6 +112,8 @@ Theorem empty_buffer_prefixed_tail_certificate:
       tk.t_mem = th.t_mem DIFF
         {a | w2n w <= a /\ a < w2n w+(if header then 32 else sz)} /\
       tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\ tk.t_imm = th.t_imm /\
+      t.vs_call_ctx = u.vs_call_ctx /\ t.vs_accounts = u.vs_accounts /\
+      t.vs_transient = u.vs_transient /\
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q u /\
         FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))
 Proof
@@ -128,6 +130,8 @@ Proof
     tk.t_mem = th.t_mem DIFF
       {a | w2n w <= a /\ a < w2n w+(if header then 32 else sz)} /\
     tk.t_stor = th.t_stor /\ tk.t_trans = th.t_trans /\ tk.t_imm = th.t_imm /\
+    v.vs_call_ctx = u.vs_call_ctx /\ v.vs_accounts = u.vs_accounts /\
+    v.vs_transient = u.vs_transient /\
     (!q. not_fresh_at sa q ==> lookup_var q v = lookup_var q u /\
       FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))` by
     suspend "tail" >>
@@ -155,7 +159,8 @@ Resume empty_buffer_prefixed_tail_certificate[tail]:
   qpat_x_assum `ptr_covers H th p u sz` kall_tac >>
   drule_all empty_buffer_tail_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`] strip_assume_tac) >>
-  qexistsl_tac [`t'`, `H'`, `th'`] >> simp[lookup_var_def]
+  qexistsl_tac [`t'`, `H'`, `th'`] >>
+  gvs[lookup_var_def, venom_state_component_equality]
 QED
 Finalise empty_buffer_prefixed_tail_certificate
 
