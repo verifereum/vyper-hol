@@ -12,7 +12,8 @@
 
 Theory fnFrameBoundary
 Ancestors
-  fnFrameBoundaryGenRet fnFrameBoundaryEntryParams genFrameSim frameRel
+  fnFrameBoundaryGenRet fnFrameBoundaryEntryParams fnFrameBoundaryInvoke
+  genFrameSim frameRel codegen
   contextCodegenRel codegenRel stackOpAsmSim stackOpSim blockSimHelpers
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
@@ -138,6 +139,27 @@ QED
    spills survive, and bytes outside fn's closure are outside the
    callee's; the outputs are bound as the planner pushes them.  Halt and
    Abort pass through. *)
+(* Enter the callee and instantiate its simulation; leaves the callee's
+   three outcome clauses and the call-entry steps as assumptions. *)
+val invoke_enter_tac =
+  drule_all invoke_enter_callee >> strip_tac >>
+  first_x_assum (qspecl_then [`j`, `callee`, `EL j cplan.cp_regions`, `cvs`,
+    `cas`, `n2w ret_off`, `saved ++ rest`,
+    `st.as_pc + LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3`]
+    mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC,
+             qpat_x_assum `setup_callee _ _ _ = SOME _` mp_tac >>
+               rw[setup_callee_def] >> fs[] >> NO_TAC,
+             fs[] >> NO_TAC]) >>
+  strip_tac >>
+  `asm_steps lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3) st =
+   AsmOK cas` by
+    (irule asm_steps_compose_ok >> qexists `mid` >>
+     conj_tac >> first_assum ACCEPT_TAC);
+
 Theorem gen_invoke_frame_sim:
   !fuel rpolicy unit cp prog ctx lo o2pc Inv liveness dfg cfg fn inst
    next_liveness is_halting next_is_term bb_label base ps vs as ops ps' r ra
@@ -158,7 +180,8 @@ Theorem gen_invoke_frame_sim:
     inst.inst_operands = Label nm :: arg_ops /\
     ~vs.vs_call_ctx.cc_static /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -250,8 +273,87 @@ Theorem gen_invoke_frame_sim:
                 (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
                venom_asm_terminal_rel vs' as')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `codegen_context_obligations Inv ctx cplan` >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  rename1 `generated_plan_state_wf spillbase ps` >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- suspend "ok"
+  >- (drule_all invoke_source_halt >> strip_tac >> invoke_enter_tac >>
+      first_x_assum drule >> strip_tac >>
+      qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n`,
+        `as'`] >>
+      metis_tac[asm_steps_compose_halt]) >>
+  drule_all invoke_source_abort >> strip_tac >> invoke_enter_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n`,
+    `as'`] >>
+  metis_tac[asm_steps_compose_revert, asm_steps_compose_fault]
 QED
+
+Resume gen_invoke_frame_sim[ok]:
+  drule_all invoke_source_ok >> strip_tac >> invoke_enter_tac >>
+  first_x_assum drule >> strip_tac >>
+  rename1 `asm_steps lo o2pc prog n cas = AsmOK asr` >>
+  drule_all invoke_plan_decompose >> strip_tac >>
+  map_every (fn q => qpat_x_assum q kall_tac) [`ctx = _`, `lo = _`, `o2pc = _`] >>
+  gvs[] >>
+  rename1 `emit_input_plan INVOKE _ _ ps = (iops, prepared)` >>
+  rename1 `reorder_plan _ _ prepared = (rops, arranged)` >>
+  rename1 `fresh_label "return_label" _ = (ret_lbl, called)` >>
+  suspend "frame"
+QED
+
+Resume gen_invoke_frame_sim[frame]:
+  `ordered_spill_regions cplan.cp_regions /\ ctx_wf ctx` by
+    fs[codegen_context_obligations_def, context_plan_layout_wf_def] >>
+  `fn_directly_calls ctx fn.fn_name (EL j ctx.ctx_functions).fn_name` by
+    metis_tac[invoke_direct_call] >>
+  `~TC (fn_directly_calls ctx) fn.fn_name fn.fn_name` by
+    metis_tac[invoke_context_no_cycle] >>
+  qspecl_then [`spillbase`, `ps`, `inst`, `next_liveness`, `iops`, `prepared`,
+    `dfg`, `rops`, `arranged`] mp_tac invoke_entry_structural >>
+  impl_tac >- fs[] >> strip_tac >>
+  `ALL_DISTINCT inst.inst_outputs` by
+    metis_tac[codegen_ready_inst_outputs_distinct] >>
+  `EVERY (\x. ~retpc_var fn x) inst.inst_outputs` by
+    (simp[listTheory.EVERY_MEM] >> rpt gen_tac >> strip_tac >> irule frameViewFactsTheory.noncopy_output_not_retpc >>
+     conj_tac >- fs[codegen_ready_fn_def] >> qexists `inst` >> simp[]) >>
+  `!off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)` by
+    (qspecl_then [`cplan.cp_initial_fmp`, `lo`, `iops`, `rops`,
+       `(EL j ctx.ctx_functions).fn_name`, `ret_lbl`, `inst.inst_outputs`, `next_liveness`, `is_halting`, `called`,
+       `pops`, `popped`, `dfg`, `inst`, `next_is_term`, `opts`, `swapped`, `ps`]
+       mp_tac invoke_cleanup_spill_bounds >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
+  `fn_return_state_rel ctx cplan (EL j ctx.ctx_functions) rvs mid asr` by
+    (qpat_x_assum `fn_return_state_rel _ _ _ _ _ asr` mp_tac >>
+     simp[fn_return_state_rel_def]) >>
+  `asm_block_at prog asr.as_pc
+     (execute_plan cplan.cp_initial_fmp (SOLabel ret_lbl :: (pops ++ opts)))` by
+    (`asr.as_pc = st.as_pc +
+        LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3` by fs[] >>
+     pop_assum SUBST1_TAC >> irule invoke_return_block >>
+     qexists `(EL j ctx.ctx_functions).fn_name` >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`ctx`, `cplan`, `lo`, `o2pc`, `prog`, `fn`, `ra`, `rest`, `mem0`,
+    `arranged`, `compute_operands inst`, `args`, `vs`, `mid`, `saved`,
+    `ret.iret_values`, `EL j ctx.ctx_functions`, `rvs`, `ret`, `vs'`, `asr`, `r`,
+    `inst.inst_outputs`, `next_liveness`, `is_halting`, `dfg`, `inst`,
+    `next_is_term`, `ret_lbl`, `called`, `pops`, `popped`, `opts`, `swapped`,
+    `release_dead_spills next_liveness swapped`] mp_tac invoke_return_frame >>
+  impl_tac
+  >- (rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, fs[] >> NO_TAC]) >>
+  strip_tac >>
+  rename1 `asm_steps lo o2pc prog m asr = AsmOK fin` >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 3 + n + m`,
+    `fin`] >>
+  rpt conj_tac
+  >- metis_tac[asm_steps_compose_ok]
+  >- first_assum ACCEPT_TAC >>
+  fs[execute_plan_def, exec_stack_op_def]
+QED
+
+Finalise gen_invoke_frame_sim
 
 (* ===== Entry parameters ===== *)
 

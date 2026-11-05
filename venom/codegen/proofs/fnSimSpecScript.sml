@@ -29,7 +29,8 @@ Definition gen_fn_sim_at_def:
       EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
       MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
       (!f inst callee_name args callee.
-         MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+         MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+         MEM inst (fn_insts f) /\
          inst.inst_opcode = INVOKE /\
          inst.inst_operands = Label callee_name :: args /\
          lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -72,7 +73,8 @@ Definition gen_fn_frame_sim_at_def:
       EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
       MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
       (!f inst callee_name args callee.
-         MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+         MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+         MEM inst (fn_insts f) /\
          inst.inst_opcode = INVOKE /\
          inst.inst_operands = Label callee_name :: args /\
          lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -90,6 +92,7 @@ Definition gen_fn_frame_sim_at_def:
       generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
         spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
       fn_ops = r.sr_plan /\
+      ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
       lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
       bb <> HD fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
       lineage_entry liveness dfg cfg fn

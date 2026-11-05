@@ -9,12 +9,15 @@
  *                          dead_stack_marker slots allowed), and nothing on
  *                          its stack or in its spill map but the block's
  *                          PHI sources stands for a variable the block
- *                          defines (nothing at all with one predecessor)
+ *                          defines (nothing at all with one predecessor);
+ *                          it holds every live-in variable but the PHI
+ *                          operands, and one source of each PHI
  *)
 
 Theory fnLineageStatic
 Ancestors
-  fnPlanPrefix fnPlanLineage stackPlanGen stackPlanTypes livenessDefs dfgDefs
+  fnPlanLineageJoin fnLineageInv fnLiveDefDom fnPlanPrefix fnPlanLineage
+  stackPlanGen stackPlanTypes livenessDefs dfgDefs
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
    reorder's target, the predecessor-side PHI sources and the live-in
@@ -29,7 +32,15 @@ Ancestors
    release_dead_spills), so only the successor's DFS allocator matters; a
    single-predecessor block is entered with the predecessor's spill map,
    which the lineage run allocates as the DFS run does (the stacks differ
-   only in a bottom prefix of dead_stack_marker slots). *)
+   only in a bottom prefix of dead_stack_marker slots).  Coverage: the
+   state holds every variable live at the end of the predecessor
+   (fnLineageInv), and a live-in variable of the block that isn't a PHI
+   operand is one of them; at the entry block nothing is live
+   (fnLiveDefDom).  A PHI's operand from the entering edge is live at the
+   end of that predecessor; its other operands are not (phi_uses_disjoint,
+   phi_block_ready, and a join's predecessor has the join as its only
+   successor).  A block with one predecessor has no PHIs
+   (stackPlanGen$phis_at_joins). *)
 Theorem lineage_state_static:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb ps.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
@@ -46,12 +57,19 @@ Theorem lineage_state_static:
     (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
             ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
                               (collect_phis bb.bb_instructions))) /\
-            normalize_operand dfg [] op = Var v ==>
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
             ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     (LENGTH (cfg_preds_of cfg lbl) <= 1 ==>
      !op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
-            normalize_operand dfg [] op = Var v ==>
-            ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions)))
+            (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+            ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
+    (!v. MEM v (live_vars_at liveness lbl 0) /\
+         ~MEM (Var v) (FLAT (MAP (\inst. inst.inst_operands)
+                              (collect_phis bb.bb_instructions))) ==>
+         MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled) /\
+    EVERY (\phi. ?!v. MEM (Var v) phi.inst_operands /\
+                      (MEM (Var v) ps.ps_stack \/ Var v IN FDOM ps.ps_spilled))
+      (collect_phis bb.bb_instructions)
 Proof
   cheat
 QED
