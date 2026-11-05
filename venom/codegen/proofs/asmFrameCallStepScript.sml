@@ -568,6 +568,23 @@ Proof
 QED
 
 
+Theorem asm_call_prepare_success_stack:
+  s.contexts = (c,rb)::rest /\
+  asm_call_prepare op s = (INL result,u) ==>
+  6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `pop_stack (6 + (if call_has_value op then 1 else 0)) s =
+     (INR (SOME StackUnderflow),s)` by
+    (qpat_x_assum `asm_call_prepare _ _ = _` kall_tac >>
+     Cases_on `call_has_value op` >>
+     gvs[pop_stack_def, get_current_context_def, assert_def, bind_def,
+         ignore_bind_def, fail_def, return_def]) >>
+  qpat_x_assum `asm_call_prepare _ _ = _` mp_tac >>
+  pure_rewrite_tac[asm_call_prepare_def, LET_THM] >>
+  Cases_on `call_has_value op` >> gvs[] >> simp[bind_def]
+QED
+
 Theorem asm_pop_and_incorporate_context_state:
   s.contexts = (child,child_rb)::(parent,parent_rb)::rest /\
   child.msgParams.gasLimit - child.gasUsed <= parent.gasUsed ==>
@@ -816,6 +833,14 @@ Proof
           spillSimTheory.asm_expand_memory_length) >> decide_tac) >>
   qpat_x_assum `buffer_to_list _ = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
   simp[] >> decide_tac
+QED
+
+Theorem asm_take_outcome_failed_head:
+  take_outcome rq (failed_outcome rq :: os) = (failed_outcome rq,os)
+Proof
+  simp[take_outcome_def] >> Cases_on `computed_precompile rq` >> simp[] >>
+  Cases_on `precompile_result rq.cr_target rq.cr_data` >> simp[] >>
+  Cases_on `x` >> simp[]
 QED
 
 Theorem asm_frame_call_step:
