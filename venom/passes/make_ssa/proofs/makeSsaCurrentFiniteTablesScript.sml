@@ -183,3 +183,94 @@ Proof
   CONV_TAC (LHS_CONV EVAL) >> CONV_TAC (RHS_CONV EVAL) >> REFL_TAC
 QED
 
+
+Definition current_static_seed_data_def:
+  current_static_seed_data fn H p h i j old out x y <=>
+   (phi_prefix_length old.bb_instructions <= i /\ i < LENGTH old.bb_instructions /\
+    j = current_static_body_start old.bb_instructions out.bb_instructions +
+      (i - phi_prefix_length old.bb_instructions) /\ j < LENGTH out.bb_instructions /\
+    MEM (x,y) (ZIP ((EL i old.bb_instructions).inst_operands,
+      (EL j out.bb_instructions).inst_operands))) \/
+   (i = phi_prefix_length old.bb_instructions /\
+    phi_prefix_length out.bb_instructions <= j /\
+    j < current_static_body_start old.bb_instructions out.bb_instructions /\
+    ?n v. (EL j out.bb_instructions).inst_opcode = ASSIGN /\
+      (EL j out.bb_instructions).inst_outputs = [n] /\
+      (EL j out.bb_instructions).inst_operands = [y] /\
+      current_static_owner fn H h n v /\ x = Var v) \/
+   (i = 0 /\ j = 0 /\
+    ?inst n v. MEM inst (TAKE (phi_prefix_length out.bb_instructions) out.bb_instructions) /\
+      inst.inst_outputs = [n] /\ resolve_phi p inst.inst_operands = SOME y /\
+      ((current_actual_inserted fn v h /\
+        current_token_name H (CurrentInserted v h) = SOME n /\ x = Var v) \/
+       (?k. k < phi_prefix_length old.bb_instructions /\
+        current_token_name H (CurrentOriginal h k 0) = SOME n /\
+        resolve_phi p (EL k old.bb_instructions).inst_operands = SOME x)))
+End
+
+Theorem current_static_seed_at_cut:
+  lookup_block h fn.fn_blocks = SOME old /\
+  lookup_block h fn'.fn_blocks = SOME out ==>
+  (current_static_seed fn fn' H (CurrentStaticCut p h i j) x y <=>
+    current_static_seed_data fn H p h i j old out x y)
+Proof
+  strip_tac >>
+  simp[current_static_seed_def, current_static_edge_def, current_static_seed_data_def,
+    PULL_EXISTS] >>
+  eq_tac >> rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_static_seed_lookup:
+  current_static_seed fn fn' H (CurrentStaticCut p h i j) x y <=>
+  case lookup_block h fn.fn_blocks of NONE => F | SOME old =>
+    case lookup_block h fn'.fn_blocks of NONE => F | SOME out =>
+      current_static_seed_data fn H p h i j old out x y
+Proof
+  Cases_on `lookup_block h fn.fn_blocks` >>
+  Cases_on `lookup_block h fn'.fn_blocks` >> simp[]
+  >- (simp[current_static_seed_def, current_static_edge_def, PULL_EXISTS] >> metis_tac[])
+  >- (simp[current_static_seed_def, current_static_edge_def, PULL_EXISTS] >> metis_tac[])
+  >- (simp[current_static_seed_def, current_static_edge_def, PULL_EXISTS] >> metis_tac[]) >>
+  irule current_static_seed_at_cut >> simp[]
+QED
+
+Theorem current_finite_loop_history_data:
+  current_finite_history current_probe_loop =
+    [(CurrentOriginal "E" 0 0,"a","a"); (CurrentInserted "v" "D","v","v");
+     (CurrentOriginal "D" 0 0,"v","formal_var_0");
+     (CurrentOriginal "D" 1 0,"b","b")]
+Proof
+  CONV_TAC (LHS_CONV EVAL) >> REFL_TAC
+QED
+
+Theorem current_finite_loop_source_blocks:
+  current_probe_loop.fn_blocks =
+    [history_probe_bb "E"
+      [current_probe_inst 0 ASSIGN [Lit 1w] ["a"];
+       current_probe_inst 1 JMP [Label "D"] []];
+     history_probe_bb "D"
+      [current_probe_inst 2 PHI [Label "E";Var "a";Label "D";Var "b"] ["v"];
+       current_probe_inst 3 ASSIGN [Lit 2w] ["b"];
+       current_probe_inst 4 JNZ [Var "v";Label "D";Label "X"] []];
+     history_probe_bb "X" [current_probe_inst 5 STOP [] []]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem current_loop_seed_covered:
+  current_finite_seed current_probe_loop (current_finite_target current_probe_loop)
+    (current_finite_history current_probe_loop) c x y ==>
+  MEM (c,x,y) current_loop_seed_table
+Proof
+  simp[current_finite_seed_def] >>
+  CONV_TAC (LAND_CONV (LAND_CONV EVAL)) >>
+  strip_tac >> gvs[] >>
+  gvs[current_static_seed_lookup, current_finite_loop_target_blocks,
+    current_finite_loop_source_blocks, lookup_block_def, FIND_def, INDEX_FIND_def,
+    history_probe_bb_def, current_probe_inst_def] >>
+  gvs[current_static_seed_data_def, phi_prefix_length_def,
+    current_static_body_start_def, current_finite_loop_owners,
+    current_finite_loop_inserted, current_finite_loop_history_data] >>
+  gvs[current_loop_seed_table_def, current_token_name_def,
+    alistTheory.ALOOKUP_def, resolve_phi_def]
+QED
