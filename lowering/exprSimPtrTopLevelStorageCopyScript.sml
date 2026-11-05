@@ -1213,3 +1213,31 @@ Proof
   irule toplevel_counter_assign_ghost >>
   drule_all toplevel_counter_increment_ghost >> simp[]
 QED
+
+Theorem toplevel_copy_seq_split:
+  !pre s t G tn Gf tnf.
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\
+    run_inst_seq pre s = OK t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (pre ++ post) s Gf tnf ==>
+    ?Gm tnm. inst_seq_ptr D 0 ctx fn PG G tn pre s Gm tnm /\
+      inst_seq_ptr D 0 ctx fn PG Gm tnm post
+        (t with vs_inst_idx := s.vs_inst_idx + LENGTH pre) Gf tnf
+Proof
+  Induct_on `pre`
+  >- (simp[exprLoweringPropsTheory.run_inst_seq_def, inst_seq_ptr_def] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[exprLoweringPropsTheory.run_inst_seq_def, inst_seq_ptr_def] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `run_inst_seq pre (u with vs_inst_idx := SUC s.vs_inst_idx) =
+    OK (t with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[fragExecTheory.run_inst_seq_inst_idx, instIdxIndepTheory.exec_result_map_def] >>
+  first_x_assum (qspecl_then
+    [`u with vs_inst_idx := SUC s.vs_inst_idx`,
+     `t with vs_inst_idx := SUC s.vs_inst_idx`] mp_tac) >>
+  simp[] >> disch_then drule >>
+  strip_tac >> qexistsl [`Gm`, `tnm`] >>
+  `LENGTH pre + SUC s.vs_inst_idx = SUC (LENGTH pre + s.vs_inst_idx)` by decide_tac >>
+  simp[inst_seq_ptr_def, arithmeticTheory.ADD_CLAUSES] >> metis_tac[]
+QED
