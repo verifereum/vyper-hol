@@ -932,6 +932,35 @@ Proof
   irule simple_prefix_spill_wf >> simp[]
 QED
 
+Theorem list_elem_count_dom_length:
+  !xs ys. (!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x ys) ==>
+    LENGTH xs <= LENGTH ys
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  `MEM h ys` by
+    (first_x_assum (qspec_then `h` mp_tac) >>
+     Cases_on `MEM h ys` >> simp[LIST_ELEM_COUNT_THM] >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  qpat_x_assum `MEM h ys` mp_tac >>
+  rewrite_tac[listTheory.MEM_SPLIT] >> strip_tac >> gvs[] >>
+  `!x. LIST_ELEM_COUNT x xs <= LIST_ELEM_COUNT x (l1 ++ l2)` by
+    (gen_tac >> first_x_assum (qspec_then `x` mp_tac) >>
+     simp[LIST_ELEM_COUNT_DEF, FILTER_APPEND] >>
+     Cases_on `h = x` >> simp[] >> decide_tac) >>
+  first_x_assum drule >> simp[]
+QED
+
+Theorem available_input_plan_length:
+  !opc inputs nl ps input_ops ps1.
+    emit_input_plan opc inputs nl ps = (input_ops,ps1) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) ==>
+    LENGTH inputs <= LENGTH ps1.ps_stack
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule list_elem_count_dom_length >>
+  drule_all emit_input_plan_materialised >> simp[]
+QED
 
 Theorem available_preparation_prefix_wf:
   !opc inputs nl ps input_ops ps1 dfg reorder_ops ps2 lo.
@@ -1920,7 +1949,8 @@ Theorem rf_probe_pair:
 Proof
   simp[revert_forward_pair_def, rf_probe_bb_def, get_instruction_def,
        mk_inst_def] >>
-  simp[same_after_assigns_def, step_back_assign_def, resolve_block_assigns_def]
+  simp[resolve_block_assigns_def, same_after_assigns_def,
+       step_back_assign_def]
 QED
 Theorem rf_probe_word_ne[local]:
   (0w : 256 word) <> 1w
@@ -1990,7 +2020,8 @@ Proof
        mk_inst_def] >>
   conj_tac >- (rpt gen_tac >> strip_tac >>
     `k = 2` by decide_tac >> gvs[]) >>
-  simp[resolve_block_assigns_def]
+  simp[resolve_block_assigns_def, same_after_assigns_def,
+       step_back_assign_def]
 QED
 Theorem rf_probe_assign_liveness:
   ~MEM "dead" (cfg_analyze rf_probe_assign_fn).cfg_dfs_pre /\
@@ -2378,6 +2409,38 @@ Proof
   metis_tac[MEM_REVERSE, MEM_TAKE]
 QED
 
+Theorem step_back_assign_normalize:
+  !fn inst op op'. codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
+    step_back_assign inst op = SOME op' ==>
+    normalize_operand (dfg_build_function fn) [] op' =
+    normalize_operand (dfg_build_function fn) [] op
+Proof
+  rpt strip_tac >>
+  `op' = resolve_block_assigns [inst] op` by
+    (qpat_x_assum `step_back_assign _ _ = _` mp_tac >>
+     Cases_on `op` >> rw[step_back_assign_def, resolve_block_assigns_def]) >>
+  simp[] >> irule normalize_operand_resolve_block_assigns >> simp[]
+QED
+
+Theorem same_after_assigns_normalize:
+  !insts fn op1 op2. codegen_ready_fn fn /\
+    EVERY (\inst. MEM inst (fn_insts fn)) insts /\
+    same_after_assigns insts op1 op2 ==>
+    normalize_operand (dfg_build_function fn) [] op1 =
+    normalize_operand (dfg_build_function fn) [] op2
+Proof
+  Induct >> simp[same_after_assigns_def] >>
+  rpt gen_tac >> strip_tac >> Cases_on `op1 = op2` >> gvs[] >>
+  Cases_on `step_back_assign h op1` >> gvs[] >>
+  Cases_on `step_back_assign h op2` >> gvs[] >>
+  rename1 `step_back_assign h op1 = SOME op1'` >>
+  rename1 `step_back_assign h op2 = SOME op2'` >>
+  `normalize_operand (dfg_build_function fn) [] op1' =
+   normalize_operand (dfg_build_function fn) [] op2'` by
+    (first_x_assum irule >> simp[]) >>
+  metis_tac[step_back_assign_normalize]
+QED
+
 Theorem rf_forward_normalized_operands:
   codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
   revert_forward_pair bb i j /\
@@ -2390,12 +2453,33 @@ Theorem rf_forward_normalized_operands:
     normalize_operand (dfg_build_function fn) [] sz'
 Proof
   strip_tac >>
-  `!k op. normalize_operand (dfg_build_function fn) []
-     (resolve_block_assigns (REVERSE (TAKE k bb.bb_instructions)) op) =
+  `!insts. (!x. MEM x insts ==> MEM x bb.bb_instructions) ==>
+     EVERY (\inst. MEM inst (fn_insts fn)) insts` by
+    (simp[EVERY_MEM] >> rpt strip_tac >>
+     irule mem_fn_insts_intro >> qexists_tac `bb` >>
+     metis_tac[lookup_block_MEM]) >>
+  `EVERY (\inst. MEM inst (fn_insts fn))
+     (REVERSE (TAKE i bb.bb_instructions))` by
+    (first_x_assum irule >> metis_tac[MEM_REVERSE, MEM_TAKE]) >>
+  `EVERY (\inst. MEM inst (fn_insts fn))
+     (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions)))` by
+    (first_x_assum irule >>
+     metis_tac[MEM_REVERSE, MEM_TAKE, rich_listTheory.MEM_DROP_IMP]) >>
+  `!op1 op2. same_after_assigns (REVERSE (TAKE i bb.bb_instructions)) op1 op2 ==>
+     normalize_operand (dfg_build_function fn) [] op1 =
+     normalize_operand (dfg_build_function fn) [] op2` by
+    (rpt strip_tac >> irule same_after_assigns_normalize >> simp[] >>
+     qexists_tac `REVERSE (TAKE i bb.bb_instructions)` >> simp[]) >>
+  `!op. normalize_operand (dfg_build_function fn) []
+     (resolve_block_assigns
+        (REVERSE (TAKE (j - SUC i) (DROP (SUC i) bb.bb_instructions))) op) =
      normalize_operand (dfg_build_function fn) [] op` by
-    (rpt gen_tac >> irule rf_resolve_prefix_normalize >> simp[]) >>
-  fs[revert_forward_pair_def] >> gvs[] >>
-  metis_tac[normalize_operand_def]
+    (gen_tac >> irule normalize_operand_resolve_block_assigns >> simp[]) >>
+  qpat_x_assum `revert_forward_pair _ _ _` mp_tac >>
+  pure_rewrite_tac[revert_forward_pair_def] >> strip_tac >> gvs[] >>
+  `normalize_operand (dfg_build_function fn) [] (Lit 0w) = Lit 0w` by
+    simp[normalize_operand_def] >>
+  metis_tac[]
 QED
 
 Theorem rf_written_interval:

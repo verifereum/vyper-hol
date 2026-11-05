@@ -6,16 +6,17 @@
  *
  * Each runs against frameRel$fn_frame_inv, as genFrameSim's lemmas do.
  *
- * TOP-LEVEL (all CHEATED):
- *   phi_prefix_frame_sim      — a join block's PHI prefix
+ * TOP-LEVEL:
+ *   phi_prefix_frame_sim      — a join block's PHI prefix (CHEATED)
  *   revert_forward_frame_sim  — RETURNDATACOPY ... REVERT forwarding
  *)
 
 Theory fnFrameSteps
 Ancestors
-  genFrameSim fnPlanLineage frameRel contextCodegenRel codegenRel
+  genFrameSim fnPlanLineage fnPlanPrefix frameRel contextCodegenRel codegenRel
   unitShapeDefs genBlockSim stackPlanGen stackPlanTypes planExec asmSem
   venomExecSemantics venomState venomInst livenessDefs dfgDefs cfgDefs
+  fnFrameStepsRevertForward
 
 (* ===== PHI prefix ===== *)
 
@@ -58,7 +59,12 @@ Theorem phi_prefix_frame_sim:
       (init_cleanup_plan_state ch growth spill_base lbl_ctr)
       pred bb.bb_label ps_l /\
     ps = ps_l with <| ps_cleanup_height := h; ps_cleanup_promised := promised |> /\
-    generated_plan_state_wf base ps /\
+    generated_plan_state_wf_marked base ps /\
+    (!op v. (MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+       ~MEM op (FLAT (MAP (\inst. inst.inst_operands)
+                       (collect_phis bb.bb_instructions))) /\
+       (op = Var v \/ normalize_operand dfg [] op = Var v) ==>
+       ~MEM v (FLAT (MAP (\inst. inst.inst_outputs) bb.bb_instructions))) /\
     MEM r cp.cp_regions /\ r.sr_fn_name = fn.fn_name /\
     r.sr_spill_base <= ps3.ps_alloc.sa_spill_base /\
     ps3.ps_alloc.sa_next_offset <= r.sr_spill_end /\
@@ -78,6 +84,10 @@ Theorem phi_prefix_frame_sim:
     ==>
     ?phi_ops ps1 body_ops n as'.
       ops = phi_ops ++ body_ops /\
+      generate_block_insts_prefix liveness dfg cfg fn bb.bb_label
+        (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
+        (LENGTH bb.bb_instructions) 0 (LENGTH phis) (phis ++ body) ps =
+        SOME (phi_ops, ps1) /\
       generate_block_insts_plan liveness dfg cfg fn bb.bb_label
         (bb_is_halting bb) (LENGTH (get_params bb.bb_instructions))
         (LENGTH bb.bb_instructions) (LENGTH phis) body ps1 =
@@ -160,18 +170,6 @@ Theorem revert_forward_frame_sim:
          (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
         venom_asm_terminal_rel vs' as'
 Proof
-  cheat
-QED
-
-(* TEMPORARILY CHEATED (codegen skeleton): fnFrameStepsRevertForward was
-   proved against the old revert_forward_pair; the base cut redefines it
-   through step_back_assign and same_after_assigns, so that theory no
-   longer builds and is out of this theory's Ancestors until it is
-   repaired.  Repair piece; the original proof, with
-   fnFrameStepsRevertForward back in Ancestors:
-
-Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> disch_tac >>
   drule_all rf_entry_forward_abort >> simp[]
 QED
-*)

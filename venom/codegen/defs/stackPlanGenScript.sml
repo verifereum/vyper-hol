@@ -458,9 +458,12 @@ Definition codegen_ready_fn_def:
     EVERY (λbb. EVERY codegen_ready_inst bb.bb_instructions) fn.fn_blocks
 End
 
-(* Per-context: all functions ready *)
+(* Per-context: all functions ready, and every function but the first
+   (the entry) takes a return PC, which INVOKE pushes for its callee. *)
 Definition codegen_ready_def:
-  codegen_ready ctx ⇔ EVERY codegen_ready_fn ctx.ctx_functions
+  codegen_ready ctx ⇔
+    EVERY codegen_ready_fn ctx.ctx_functions ∧
+    EVERY (λfn. IS_SOME (fn_retpc_param fn)) (TL ctx.ctx_functions)
 End
 
 (* Dispatch to phi, offset, or regular.
