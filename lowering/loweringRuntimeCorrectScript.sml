@@ -496,7 +496,8 @@ Theorem linear_dispatch_shape[local]:
     EVERY (\(sel,lbl). jump_label_ok lbl) selectors /\
     fresh_label "fallback" (initial_compile_state "__entry") = (fallback,sa) /\
     compile_selector_dispatch_linear selectors fallback sa = ((),sd) ==>
-    shape_state sd /\ cs_extends sa sd /\ jump_label_ok fallback
+    shape_state sd /\ cs_extends sa sd /\ jump_label_ok fallback /\
+    EVERY (\l. ~internal_label_ok l) (added_labels sa sd)
 Proof
   rpt gen_tac >> strip_tac >>
   `shape_state (initial_compile_state "__entry")` by
@@ -680,7 +681,10 @@ Theorem runtime_entry_dispatch_code_labels[local]:
       compile_external_fn_bodies packages sd = ((),sx) /\
       shape_state sd /\ cs_extends sd se /\ cs_extends sx se /\
       (!l. l IN bound_labels sd ==> ~isPREFIX "fn_" l) /\
-      fn_has_code sa sd func
+      fn_has_code sa sd func /\
+      EVERY (\l. ~internal_label_ok l)
+        (MAP (\bb. bb.bb_label) (all_blocks se)) /\
+      all_blocks se <> [] /\ (HD (all_blocks se)).bb_label = "__entry"
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `fresh_label "fallback" (initial_compile_state "__entry")` >>
@@ -689,7 +693,8 @@ Proof
   rename1 `_ = (u,sd)` >> Cases_on `u` >>
   Cases_on `compile_external_fn_bodies packages sd` >>
   rename1 `_ = (u,sx)` >> Cases_on `u` >>
-  `shape_state sd /\ cs_extends sa sd /\ jump_label_ok fb` by
+  `shape_state sd /\ cs_extends sa sd /\ jump_label_ok fb /\
+   EVERY (\l. ~internal_label_ok l) (added_labels sa sd)` by
     (drule_all linear_dispatch_shape >> simp[]) >>
   `(do new_block fb;
       (case fallback_fn of
@@ -699,16 +704,125 @@ Proof
     od) sx = ((),se)` by
     (qpat_x_assum `_ (initial_compile_state "__entry") = ((),se)` mp_tac >>
      simp[comp_bind_def, comp_ignore_bind_def]) >>
-  `cs_extends sd sx` by
-    (qspecl_then [`packages`, `sd`] mp_tac
-       loweringShapePropsTheory.compile_external_fn_bodies_label_partition >> simp[]) >>
-  `cs_extends sx se` by
-    (qspecl_then [`fb`, `fallback_fn`, `\l. T`] mp_tac
-       loweringShapePropsTheory.runtime_fallback_suffix_labels >> simp[] >>
+  `cs_extends sd sx /\
+   EVERY (\l. ~internal_label_ok l) (added_labels sd sx)` by
+    (qspecl_then [`packages`, `\l. ~internal_label_ok l`] mp_tac
+       loweringShapePropsTheory.compile_external_fn_bodies_labels >>
+     (impl_tac >-
+       (conj_tac
+        >- (simp_tac std_ss [EVERY_MEM] >> gen_tac >> disch_tac >>
+            irule loweringShapeRulesTheory.jump_label_ok_not_internal >>
+            simp_tac std_ss [loweringShapeDefsTheory.jump_label_ok_def] >>
+            disj2_tac >> gvs[EVERY_MEM]) >>
+        gen_tac >> disch_tac >> BETA_TAC >>
+        Cases_on `l` >> gvs[loweringShapeDefsTheory.internal_label_ok_def])) >>
+     disch_then (qspec_then `sd` mp_tac) >> simp[]) >>
+  `cs_extends sx se /\
+   EVERY (\l. ~internal_label_ok l) (added_labels sx se)` by
+    (qspecl_then [`fb`, `fallback_fn`, `\l. ~internal_label_ok l`] mp_tac
+       loweringShapePropsTheory.runtime_fallback_suffix_labels >>
+     (impl_tac >-
+       (conj_tac >- metis_tac[loweringShapeRulesTheory.jump_label_ok_not_internal] >>
+        gen_tac >> disch_tac >> BETA_TAC >>
+        Cases_on `l` >> gvs[loweringShapeDefsTheory.internal_label_ok_def])) >>
      disch_then (qspec_then `sx` mp_tac) >> simp[]) >>
   `cs_extends sd se` by (irule cs_extends_trans >> goal_assum (drule_at Any) >> simp[]) >>
   drule_all linear_dispatch_prefix_code >> strip_tac >>
-  qexistsl_tac [`fb`, `sa`, `sd`, `sx`] >> simp[]
+  qexistsl_tac [`fb`, `sa`, `sd`, `sx`] >> simp[] >>
+  `cs_extends sa se` by
+    (irule cs_extends_trans >> goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac
+  >- (qpat_assum `cs_extends sx se` (mp_tac o MATCH_MP loweringShapeRulesTheory.cs_extends_labels) >>
+      qpat_assum `cs_extends sd sx` (mp_tac o MATCH_MP loweringShapeRulesTheory.cs_extends_labels) >>
+      qpat_assum `cs_extends sa sd` (mp_tac o MATCH_MP loweringShapeRulesTheory.cs_extends_labels) >>
+      simp[] >> rpt disch_tac >>
+      asm_rewrite_tac[EVERY_APPEND] >>
+      gvs[fresh_label_def, vyperCompilerTheory.initial_compile_state_def,
+          loweringShapeDefsTheory.all_blocks_def,
+          loweringShapeDefsTheory.internal_label_ok_def]) >>
+  drule loweringShapeRulesTheory.cs_extends_block_stream >> strip_tac >>
+  gvs[fresh_label_def, vyperCompilerTheory.initial_compile_state_def,
+      loweringShapeDefsTheory.all_blocks_def]
+QED
+
+Theorem run_lowering_entry_function_labels[local]:
+  !selectors external_fns internal_fns fallback_fn rpolicy buckets metadata dense info unit.
+    run_lowering selectors external_fns internal_fns fallback_fn rpolicy
+      buckets metadata dense info "__entry" = SOME unit /\
+    EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
+    EVERY (\p. isPREFIX "fn_" (FST p)) external_fns /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) ==>
+    ?se func.
+      (do fb <- fresh_label "fallback";
+          compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) selectors) fb;
+          compile_external_fn_bodies external_fns;
+          new_block fb;
+          (case fallback_fn of
+             NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+           | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
+               compile_fallback_body ce pay nr key ut iv fbody rt)
+       od) (initial_compile_state "__entry") = ((),se) /\
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      func.fn_blocks = all_blocks se /\
+      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry"
+Proof
+  rpt gen_tac >> strip_tac >>
+  `lowering_policy_ok rpolicy` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     rw[vyperCompilerTheory.run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by
+    fs[vyperCompilerTheory.lowering_policy_ok_def] >>
+  qabbrev_tac `prefix =
+    do fb <- fresh_label "fallback";
+       compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) selectors) fb;
+       compile_external_fn_bodies external_fns;
+       new_block fb;
+       (case fallback_fn of
+          NONE => emit_inst REVERT [Lit 0w; Lit 0w] []
+        | SOME (ce,pay,nr,key,ut,iv,fbody,rt) =>
+            compile_fallback_body ce pay nr key ut iv fbody rt)
+    od` >>
+  Cases_on `prefix (initial_compile_state "__entry")` >>
+  rename1 `_ = (u,se)` >> Cases_on `u` >>
+  Cases_on `compile_internal_fn_bodies internal_fns se` >>
+  rename1 `_ = (u,sf)` >> Cases_on `u` >>
+  `compile_generate_runtime selectors external_fns internal_fns fallback_fn
+     Linear buckets metadata dense info (initial_compile_state "__entry") = ((),sf)` by
+    (`compile_generate_runtime selectors external_fns internal_fns fallback_fn
+        Linear buckets metadata dense info =
+      (do prefix; _ <- compile_internal_fn_bodies internal_fns; return () od)` by
+       simp[Abbr `prefix`, compile_generate_runtime_def,
+            comp_ignore_bind_def, comp_bind_assoc] >>
+     asm_rewrite_tac[] >>
+     simp[comp_ignore_bind_def, comp_bind_def, comp_return_def]) >>
+  `EVERY (\(sel,lbl). jump_label_ok lbl)
+     (MAP (\(sel,lbl,z). (sel,lbl)) selectors)` by
+    (gvs[EVERY_MAP, EVERY_MEM, FORALL_PROD,
+         loweringShapeDefsTheory.jump_label_ok_def] >> metis_tac[]) >>
+  `EVERY (\l. ~internal_label_ok l) (MAP (\bb. bb.bb_label) (all_blocks se)) /\
+   all_blocks se <> [] /\ (HD (all_blocks se)).bb_label = "__entry"` by
+    (qpat_assum `prefix _ = _` mp_tac >>
+     simp_tac std_ss [Abbr `prefix`] >> disch_tac >>
+     drule_at (Pat `_ _ = ((),_)`) runtime_entry_dispatch_code_labels >>
+     disch_then (qspec_then `mk_raw_function "__entry" (all_blocks se)` mp_tac) >>
+     simp[venomInstTheory.mk_raw_function_def] >> metis_tac[]) >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[vyperCompilerTheory.run_lowering_def,
+       vyperCompilerTheory.extract_context_with_internals_def,
+       GSYM loweringShapeDefsTheory.all_blocks_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `entry_blocks = all_blocks se` by
+    (irule loweringShapePropsTheory.compile_internal_fn_bodies_entry_prefix >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     Cases_on `internal_fns` >> simp[] >> PairCases_on `h` >>
+     gvs[vyperCompilerTheory.internal_fn_descriptors_def, EVERY_MEM] >>
+     qpat_x_assum `!d. _ ==> internal_label_ok (FST d)`
+       (qspec_then `(h0,h3,h1.ce_returns_count)` mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  qexists_tac `mk_raw_function "__entry" entry_blocks` >>
+  gvs[venomInstTheory.mk_venom_context_def, venomInstTheory.mk_raw_function_def,
+      venomInstTheory.lookup_function_def, FIND_thm]
 QED
 
 Theorem external_checks_code[local]:
@@ -828,6 +942,123 @@ Proof
   drule_all runtime_entry_dispatch_code >> strip_tac >>
   drule_all external_checks_code >> strip_tac >>
   qexistsl_tac [`func`, `fb`, `sa`, `sd`, `st`, `st'`] >> simp[]
+QED
+
+Theorem run_lowering_entry_checks_code_labels[local]:
+  !selectors packages internal_fns fallback_fn rpolicy buckets metadata dense info unit
+   lbl ce args min_cds pay nr key ut iv fbody rt.
+    run_lowering selectors packages internal_fns fallback_fn rpolicy
+      buckets metadata dense info "__entry" = SOME unit /\
+    EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) selectors /\
+    EVERY (\p. isPREFIX "fn_" (FST p)) packages /\
+    EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns) /\
+    ALL_DISTINCT (MAP FST packages) /\
+    MEM (lbl,ce,args,min_cds,pay,nr,key,ut,iv,fbody,rt) packages ==>
+    ?func fb sa sd st st'.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry" /\
+      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
+      compile_selector_dispatch_linear (MAP (\(sel,lbl,z). (sel,lbl)) selectors)
+        fb sa = ((),sd) /\ fn_has_code sa sd func /\
+      compile_entry_checks min_cds pay st = ((),st') /\ fn_has_code st st' func /\
+      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
+      sd.cs_next_var <= st.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all run_lowering_entry_function_labels >> strip_tac >>
+  `EVERY (\(sel,lbl). jump_label_ok lbl)
+     (MAP (\(sel,lbl,z). (sel,lbl)) selectors)` by
+    (gvs[EVERY_MAP, EVERY_MEM, pairTheory.FORALL_PROD,
+         loweringShapeDefsTheory.jump_label_ok_def] >> metis_tac[]) >>
+  drule_all runtime_entry_dispatch_code_labels >> strip_tac >>
+  `isPREFIX "fn_" lbl` by (gvs[EVERY_MEM] >> metis_tac[pairTheory.FST]) >>
+  `~isPREFIX "@" lbl` by (Cases_on `lbl` >> gvs[]) >>
+  `~MEM lbl (MAP (\bb. bb.bb_label) (all_blocks sd))` by
+    (simp[MEM_MAP] >> rpt strip_tac >>
+     `lbl IN bound_labels sd` by
+       (gvs[loweringShapeDefsTheory.all_blocks_def, bound_labels_def, MEM_MAP] >>
+        metis_tac[]) >> metis_tac[]) >>
+  drule_all external_checks_labels_code >> strip_tac >>
+  qexistsl_tac [`func`, `fb`, `sa`, `sd`, `st`, `st'`] >> simp[]
+QED
+
+Theorem classified_external_labels_distinct[local]:
+  !tops. ALL_DISTINCT (supported_function_names tops) ==>
+    ALL_DISTINCT (MAP (\(mut,nr,rr,name,args,dflts,ret,fbody). "fn_" ++ name)
+      (FST (classify_functions tops)))
+Proof
+  Induct >> simp[classify_functions_def] >> gen_tac >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  Cases_on `h` >>
+  gvs[Once classify_functions_def, classify_function_def, supported_function_names_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> gvs[classify_function_def] >>
+  IF_CASES_TAC >> gvs[] >>
+  simp[MEM_MAP, FORALL_PROD] >> rpt strip_tac >>
+  rename1 `MEM (mut,nr,rr,name,args,dflts,ret,fbody) q` >>
+  `MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops))` by
+    simp[classify_functions_def] >>
+  drule loweringShapePropsTheory.classify_functions_external_source >>
+  strip_tac >>
+  metis_tac[loweringShapePropsTheory.MEM_supported_function_names]
+QED
+
+Theorem source_runtime_entry_checks_code[local]:
+  !tops rpolicy unit mut nr rr name args dflts ret fbody
+   lbl ce pos_args min_cds pay nr' key ut iv rt.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+    MEM (mut,nr,rr,name,args,dflts,ret,fbody) (FST (classify_functions tops)) /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
+        (mut,nr,rr,name,args,dflts,ret,fbody)) =
+      (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) ==>
+    ?func fb sa sd st st'.
+      unit.cu_context.ctx_entry = SOME "__entry" /\
+      venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME func /\
+      func.fn_blocks <> [] /\ (HD func.fn_blocks).bb_label = "__entry" /\
+      fresh_label "fallback" (initial_compile_state "__entry") = (fb,sa) /\
+      compile_selector_dispatch_linear
+        (MAP (\(sel,lbl,z). (sel,lbl))
+          (build_selectors (type_env tops) (FST (classify_functions tops))))
+        fb sa = ((),sd) /\ fn_has_code sa sd func /\
+      compile_entry_checks min_cds pay st = ((),st') /\ fn_has_code st st' func /\
+      st.cs_current_bb = lbl /\ st.cs_current_insts = [] /\
+      sd.cs_next_var <= st.cs_next_var
+Proof
+  rpt gen_tac >> strip_tac >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    gvs[supported_program_def, supported_declaration_names_def] >>
+  drule classified_external_labels_distinct >> disch_tac >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >>
+  rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
+  simp[] >> strip_tac >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
+     (build_selectors (type_env tops) exts)` by
+    simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
+  qmatch_asmsub_abbrev_tac `run_lowering selectors packages internal_fns fallback_fn` >>
+  `EVERY (\p. isPREFIX "fn_" (FST p)) packages` by
+    (simp[Abbr `packages`, EVERY_MAP, EVERY_MEM, FORALL_PROD,
+          set_external_package_target_def, package_external_fn_def, LET_THM]) >>
+  `ALL_DISTINCT (MAP FST packages)` by
+    (gvs[Abbr `packages`, MAP_MAP_o, combinTheory.o_DEF,
+         pairTheory.LAMBDA_PROD, set_external_package_target_def,
+         package_external_fn_def, LET_THM]) >>
+  `EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors internal_fns)` by
+    (simp_tac std_ss [Abbr `internal_fns`, GSYM MAP_MAP_o,
+          internal_fn_descriptors_set_internal_package_target,
+          internal_fn_descriptors_MAP_package_internal_fn] >>
+     simp_tac std_ss [EVERY_MAP, EVERY_MEM, FORALL_PROD,
+          source_internal_fn_descriptor_def, LET_THM] >>
+     rewrite_tac[loweringShapeDefsTheory.internal_label_ok_def,
+                 internal_fn_label_prefix]) >>
+  `MEM (lbl,ce,pos_args,min_cds,pay,nr',key,ut,iv,fbody,rt) packages` by
+    (simp[Abbr `packages`, MEM_MAP] >> fs[] >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  drule_all run_lowering_entry_checks_code_labels >>
+  simp[Abbr `selectors`]
 QED
 
 Theorem linear_dispatch_entry_no_phi[local]:
