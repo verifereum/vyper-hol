@@ -1,7 +1,7 @@
 # O1 bytecode parity fixtures
 
 This directory contains the independent Python oracle for the frozen 101-fixture
-HOL-supported-subset corpus. It includes the original 23-fixture milestone and
+HOL-supported-subset corpus (12 of them no longer parity-checked, see below). It includes the original 23-fixture milestone and
 78 subset/interaction fixtures.
 
 - `python-o1-no-asm-opt-sources/` contains Vyper source counterparts to the HOL
@@ -76,8 +76,8 @@ raw-context evaluator-cost measurements, is:
 holbuild --max-heap 16384 -j1 --tactic-timeout 600 evalCompilerBytecodeParityTheory
 ```
 
-All 101 retained fixtures have an exact checked theorem proved by plain
-`EVAL_TAC`; together they check 202 byte lists (deployment and runtime).
+89 of the 101 retained fixtures have an exact checked theorem proved by plain
+`EVAL_TAC`; together they check 178 byte lists (deployment and runtime).
 Expensive fixtures use kernel-derived staged compiler evaluation certificates.
 These rederive the exact `lowering_context_ok` check, including
 `unit_alloca_budget ctx < dimword (:256)`, and never register an oracle equality

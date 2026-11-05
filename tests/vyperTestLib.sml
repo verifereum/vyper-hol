@@ -355,6 +355,11 @@ val allowed_test_patterns = [
 
 (* Path exclusions carry reportable reasons and tracking issues. *)
 val excluded_test_file_rules = [
+  (* Unbounded (INF-length) types; vyper-hol models only bounded ones, so
+     these stay excluded. *)
+  ("vyper-test-exports/functional/codegen/features/test_inf_*",
+   "unbounded (INF-length) types are not modelled",
+   "https://github.com/vyperlang/vyper/pull/5127")
 ]
 
 val outside_admitted_suites_reason = "outside currently admitted test suites"
@@ -384,6 +389,21 @@ val excluded_test_names = [
      TODO: add shift builtin support *)
   "test_uint256_mulmod_complex",
   "test_shift_builtin_negative_literal*",
+  (* Compiles with unbounded (INF-length) types, which are not modelled;
+     stays excluded *)
+  "test_json_abi_bytes_slice",
+  (* Python reads the subscript base before an index call that mutates it;
+     the interpreter reads it after. Back with the subscript-overlap port. *)
+  "test_array_index_overlap",
+  "test_array_index_overlap_extcall",
+  "test_array_index_overlap_attribute",
+  (* raw_create evaluates value= after the positional args (source order);
+     the interpreter evaluates it first. Back with the CREATE semantics
+     change. *)
+  "test_raw_create_eval_order",
+  (* create_from_blueprint must revert on a code_offset that wraps; the
+     interpreter doesn't revert. Back with the CREATE semantics change. *)
+  "test_create_from_blueprint_bad_code_offset",
   (* Out-of-gas test - we don't model gas *)
   "test_ecrecover_oog_handling"
 ]
@@ -1182,7 +1202,9 @@ end
 fun read_definition_tests select_tests json_path = let
   val () = check_export_provenance json_path
   val selected = select_test_json json_path
-  val () = case #failures selected of
+  (* Failures are accumulated in reverse order. Report the original error,
+     not a later cascade from a partially constructed decoder constant. *)
+  val () = case List.rev (#failures selected) of
       [] => ()
     | (name, err)::_ => raise Fail (String.concat
         ["selection failure in ", json_path, ": ", name, " - ", exnMessage err])
@@ -1202,7 +1224,7 @@ fun read_definition_tests select_tests json_path = let
     handle e => (tests, (name, e)::failures)
   val (reversed_tests, decode_fails) = List.foldl decode_test ([], []) tests_json
   val tests = List.rev reversed_tests
-  val () = case decode_fails of
+  val () = case List.rev decode_fails of
       [] => ()
     | (name, err)::_ => raise Fail (String.concat
         ["decode failure in ", json_path, ": ", name, " - ", exnMessage err,

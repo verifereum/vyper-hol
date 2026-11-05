@@ -1,8 +1,8 @@
-(* Raw revert data, selfdestruct account effects and terminal control. *)
+(* Raw revert data and terminal control. *)
 Theory vyperSystemControl
 Ancestors
   vyperInterpreter vyperSmallStep[ignore_grammar] vyperState vyperAST
-  vyperMisc vyperTypeSystem vyperValue vyperValueOperation vfmExecution vfmState list
+  vyperMisc vyperTypeSystem vyperValue vyperValueOperation
 Libs BasicProvers
 
 Theorem raw_revert_no_success:
@@ -58,45 +58,4 @@ Proof
   simp[Once vyperSmallStepTheory.apply_vals_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,
     vyperStateTheory.type_check_def, vyperStateTheory.assert_def, vyperStateTheory.return_def, vyperStateTheory.raise_def,
     vyperStateTheory.lift_option_type_def, dest_BytesV_def]
-QED
-
-(* Account-layer probes for the shared big-step/CPS selfdestruct action.
-   After the checked transfer, a contract created in this transaction has
-   its own balance zeroed. Its queue transformer is CONS self, not append. *)
-Theorem zero_self_balance:
-  (lookup_account self
-    (update_account self (lookup_account self accounts with balance := 0)
-      accounts)).balance = 0
-Proof
-  simp[vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def]
-QED
-
-Theorem zero_self_preserves_other:
-  other <> self ==>
-  lookup_account other
-    (update_account self (lookup_account self accounts with balance := 0)
-      accounts) = lookup_account other accounts
-Proof
-  simp[vfmStateTheory.lookup_account_def, vfmStateTheory.update_account_def,
-       combinTheory.UPDATE_def] >> metis_tac[]
-QED
-
-Theorem deletion_prefix_observation:
-  TAKE (LENGTH (new ++ old) - LENGTH old) (new ++ old) = new
-Proof
-  simp[] >> Induct_on `new` >> simp[]
-QED
-
-Theorem vfm_deletion_cons:
-  (SND (vfmExecution$add_to_delete self s)).rollback.toDelete =
-    self :: s.rollback.toDelete
-Proof
-  EVAL_TAC
-QED
-
-Theorem finalize_accounts:
-  (finalize_pending_deletions am).accounts =
-    vfmExecution$process_deletions am.pending_deletions am.accounts
-Proof
-  simp[finalize_pending_deletions_def]
 QED

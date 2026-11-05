@@ -10,10 +10,13 @@ array retains its location: the target's pop shortens that array before the
 assignment copies it. Copying at conditional selection instead would return 2.
 `nested_retained_pop` returns 5 after an index expression pops the enclosing
 array: the previously captured inner location still contains the array to pop.
-`call_storage_read` returns 10 because internal calls capture every argument
-before reading the storage scalar changed by the later argument.
-`call_memory_pop` returns 1 because the later argument pops the memory array
-before the call copies it. Eager reads would return 0 and 2 respectively.
+`call_storage_read` and `call_memory_pop` differ between the two runs. The
+source interpreter captures every internal-call argument before reading it, so
+`call_storage_read` returns 10 (the later argument changes the storage scalar
+first) and `call_memory_pop` returns 1 (the later argument pops the memory array
+before the call copies it). The pinned Vyper reads each argument as it is
+evaluated (vyperlang/vyper#5127), so its bytecode returns 0 and 2; the
+interpreter follows once it reads call arguments eagerly too.
 `builtin_eager_read` returns 0: `min` reads its first storage argument before
 evaluating the second argument, which changes that storage slot.
 
@@ -38,7 +41,7 @@ uv tool run --from uv==0.10.11 uv venv --managed-python --python 3.11.11 \
   "$generator/venv"
 UV_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
 UV_BUILD_CONSTRAINT="$PWD/lowering/defs/bytecode/python-o1-oracle-constraints.txt" \
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   uv tool run --from uv==0.10.11 uv pip install \
     --python "$generator/venv/bin/python" "$generator/vyper-src"
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \

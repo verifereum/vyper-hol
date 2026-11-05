@@ -2,7 +2,8 @@ Theory vyperExprNoControl
 
 Ancestors
   pair vyperCreate vyperCreateFrame vyperInterpreter vyperAST vyperMisc
-  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches vyperCallOutcomeFrame
+  vyperCallFrame vyperCallOutcome vyperCallOutcomeProps
+  vyperCallOutcomeBranches vyperCallOutcomeFrame
   vyperRuntimeAccounts vyperState
 Libs
   pairLib monadsyntax
@@ -746,9 +747,10 @@ Proof
          gvs[no_control_exc_def]) >> NO_TAC,
     drule finally_unless_halt_no_control >> disch_then irule >>
     rpt strip_tac >> FIRST [
-      drule finally_no_control >> disch_then irule >> rpt strip_tac >>
-      FIRST [metis_tac[try_handle_function_no_control],
-             gvs[pop_function_def, set_scopes_def, return_def]],
+      drule finally_no_control >> disch_then irule >> rpt strip_tac
+      >~ [`pop_function _ _ = _`]
+      >- gvs[pop_function_def, set_scopes_def, return_def] >>
+      metis_tac[try_handle_function_no_control],
       gvs[release_nonreentrant_lock_def, get_transient_storage_def,
           update_transient_def, bind_def, return_def,
           COND_RATOR, option_CASE_rator, AllCaseEqs()]]]) >>

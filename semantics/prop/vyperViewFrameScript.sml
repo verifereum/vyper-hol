@@ -46,8 +46,8 @@ val _ = Parse.hide "body";
      [Return (SOME e)] for a Subscript chain over a TopLevelName, which is
      itself stmts_mutability_ok at View.
    - The view lock is acquire_nonreentrant_lock's is_view form (a read);
-     send_call_value fails unless the value is 0; evaluate_defaults works
-     on a throwaway state; with in_deploy = F, am_c = am. *)
+     send_call_value fails unless the value is 0; stateful defaults obey
+     the checked entry's mutability and preserve the machine. *)
 Theorem call_external_view_frame:
   check_contract F am.layouts tx.target mods = SOME art /\
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
