@@ -7,7 +7,7 @@ Ancestors
   strongPrefixSim asmFrameHelpers planExec prefixExec stackOpAsmSim
   stackOpSim blockSimHelpers asmSem stackModel rich_list codegenRel planWf
   reorderSim genBlockSim doSwapSim planAlign livenessAnalysisProps stackPlanOps
-  fnFrameTerminalHalt genericInputReady
+  fnFrameTerminalHalt fnFrameTerminalAbort genericInputReady
 
 Theorem resolve_block_assigns_cong:
   !insts at h.
@@ -3600,4 +3600,178 @@ Proof
      irule rf_live_use_current >> metis_tac[]) >>
   conj_tac >- (drule_all rf_copy_plan_generated_wf >> simp[]) >>
   drule_all rf_suffix_copy_success_invariants >> simp[]
+QED
+
+Theorem rf_take_padding_cong:
+  TAKE n xs = TAKE n ys ==> TAKE n (xs ++ pad) = TAKE n (ys ++ pad)
+Proof
+  strip_tac >>
+  `LENGTH (TAKE n xs) = LENGTH (TAKE n ys)` by simp[] >>
+  `n - LENGTH xs = n - LENGTH ys` by
+    (fs[LENGTH_TAKE_EQ] >> rpt IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  simp[TAKE_APPEND]
+QED
+
+Theorem rf_revert_stack_frame:
+  plan_stack_rel lo current (tail ++ [zop;dop]) stk /\
+  dop <> dead_stack_marker /\ zop <> dead_stack_marker /\
+  operand_val current lo dop = SOME dst /\
+  operand_val current lo zop = SOME sz /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  asm_block_at prog st.as_pc [AsmOp "REVERT"] ==>
+  ?out. asm_steps lo o2pc prog 1 st = AsmRevert out /\
+    venom_asm_terminal_rel
+      (revert_state (set_returndata
+        (TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory ++
+          REPLICATE (w2n sz) 0w)) vs)) out
+Proof
+  strip_tac >>
+  `?d z residual. stk = d :: z :: residual /\
+    operand_val current lo dop = SOME d /\
+    operand_val current lo zop = SOME z` by
+    (irule asm_stack_top2_from_plan >> simp[] >>
+     qexists_tac `tail` >> simp[]) >>
+  gvs[] >> irule terminal_revert_step_payload >> simp[] >>
+  irule rf_take_padding_cong >> first_assum ACCEPT_TAC
+QED
+
+Theorem rf_suffix_revert_execution:
+  codegen_ready_fn fn /\ rf_spills_separated ps /\
+  inst.inst_opcode = REVERT /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+  ?out. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+      AsmRevert out /\
+    venom_asm_terminal_rel
+      (revert_state (set_returndata
+        (TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory ++
+          REPLICATE (w2n sz) 0w)) vs)) out
+Proof
+  strip_tac >>
+  Cases_on `emit_input_plan REVERT (compute_operands inst) nl ps` >>
+  rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan (dfg_build_function fn) (compute_operands inst) ps1` >>
+  rename1 `_ = (ros,ps2)` >>
+  `compute_operands inst = [zop;dop]` by
+    simp[compute_operands_def, python_stack_operands_def,
+      venomInstTheory.ir_specific_operand_order_def] >>
+  `ops = ins ++ ros ++ [SOEmit "REVERT"]` by
+    gvs[generate_regular_inst_plan_def, venomEffectsTheory.is_commutative_def,
+      generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  `asm_block_at prog st.as_pc (execute_plan initial_fmp (ins ++ ros)) /\
+   asm_block_at prog (st.as_pc + LENGTH (execute_plan initial_fmp (ins ++ ros)))
+     [AsmOp "REVERT"]` by
+    gvs[execute_plan_append, execute_plan_def, exec_stack_op_def, asm_block_at_append] >>
+  `!off. ~MEM (SOSpill off) (ins ++ ros) /\
+    ~MEM (SORestore off) (ins ++ ros)` by fs[MEM_APPEND] >>
+  `REVERT <> INVOKE /\ LENGTH (compute_operands inst) <= 16 /\
+   EVERY (\op. ~is_label_operand op) (compute_operands inst)` by gvs[] >>
+  drule_all rf_suffix_preparation_execution >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `AsmOK mid` >>
+  `plan_stack_rel lo (frame_view fn ra vs)
+    (stack_pop 2 ps2.ps_stack ++ [zop;dop]) stk'` by
+    (qpat_x_assum `ps2.ps_stack = _` mp_tac >> simp[] >>
+     disch_then (fn th => pure_once_rewrite_tac[GSYM th]) >> asm_rewrite_tac[]) >>
+  qpat_x_assum `ps2.ps_stack = _` kall_tac >>
+  `mid.as_stack = stk' ++ rest /\ venom_asm_terminal_rel vs mid /\
+   TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory) =
+     TAKE (w2n sz) (DROP (w2n dst) mid.as_memory) /\
+   asm_block_at prog mid.as_pc [AsmOp "REVERT"]` by
+    (simp[Abbr `mid`] >> fs[venom_asm_terminal_rel_def]) >>
+  `dop <> dead_stack_marker /\ zop <> dead_stack_marker` by
+    (rpt strip_tac >> gvs[dead_stack_marker_def,
+      stackPlanTypesTheory.is_label_operand_def]) >>
+  drule_all rf_revert_stack_frame >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists_tac `out` >> conj_tac >- (
+    qpat_assum `asm_steps _ _ _ (LENGTH _) _ = AsmOK mid`
+      (mp_then Any (qspec_then `1` assume_tac) asm_steps_add_ok) >>
+    gvs[execute_plan_append, execute_plan_def, exec_stack_op_def]) >>
+  first_assum ACCEPT_TAC
+QED
+
+Theorem rf_forward_revert_range:
+  codegen_ready_fn fn /\ lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  revert_forward_pair bb i j /\
+  get_instruction bb i = SOME copy /\ copy.inst_operands = [cdop;csop;czop] /\
+  get_instruction bb j = SOME rev /\ rev.inst_operands = [dop;zop] /\
+  rf_value_inv fn ra bb j lo entry j vs /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] cdop) = SOME dst /\
+  operand_val entry lo (normalize_operand (dfg_build_function fn) [] czop) = SOME sz ==>
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz
+Proof
+  strip_tac >> drule_all rf_forward_normalized_operands >> strip_tac >>
+  `rev.inst_opcode = REVERT` by fs[revert_forward_pair_def] >>
+  `!op. MEM op [dop;zop] ==>
+    operand_val (frame_view fn ra vs) lo op =
+      operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_x_assum `rf_value_inv _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[rf_value_inv_def] >>
+     disch_then (qspec_then `op` mp_tac) >>
+     impl_tac >- (irule rf_live_use_current >>
+       simp[compute_operands_def, python_stack_operands_def,
+         venomInstTheory.ir_specific_operand_order_def] >> fs[]) >> simp[]) >>
+  gvs[]
+QED
+
+Theorem rf_suffix_revert_abort:
+  codegen_ready_fn fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  rf_spills_separated ps /\
+  inst.inst_opcode = REVERT /\ inst.inst_outputs = [] /\
+  inst.inst_operands = [dop;zop] /\
+  EVERY (\op. ~is_label_operand op) inst.inst_operands /\
+  rf_inventory_inv fn ra lo entry ps vs /\
+  (!op. MEM op (compute_operands inst) ==>
+    operand_val (frame_view fn ra vs) lo op =
+    operand_val entry lo (normalize_operand (dfg_build_function fn) [] op)) /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv (dfg_build_function fn) cfg fn inst
+    nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) /\
+  operand_val (frame_view fn ra vs) lo dop = SOME dst /\
+  operand_val (frame_view fn ra vs) lo zop = SOME sz /\
+  plan_stack_rel lo (frame_view fn ra vs) ps.ps_stack stk /\
+  st.as_stack = stk ++ rest /\ venom_asm_terminal_rel vs st /\
+  TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory) =
+    TAKE (w2n sz) (DROP (w2n dst) st.as_memory) /\
+  asm_block_at prog st.as_pc (execute_plan initial_fmp ops) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  a = Revert_abort /\
+  ?out. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st =
+    AsmRevert out /\ venom_asm_terminal_rel vs' out
+Proof
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==>
+    operand_val (frame_view fn ra vs) lo op = eval_operand op vs` by
+    (rpt strip_tac >> irule rf_ordinary_operand_value >>
+     conj_tac >- simp[] >> conj_tac >- fs[EVERY_MEM] >>
+     qexists_tac `inst` >> gvs[]) >>
+  `eval_operand dop vs = SOME dst /\ eval_operand zop vs = SOME sz` by
+    metis_tac[MEM] >>
+  `a = Revert_abort /\ vs' = revert_state (set_returndata
+     (TAKE (w2n sz) (DROP (w2n dst) vs.vs_memory ++ REPLICATE (w2n sz) 0w)) vs)` by
+    gvs[Once step_inst_def, step_inst_base_def] >>
+  simp[] >> drule_all rf_suffix_revert_execution >> simp[]
 QED
