@@ -1449,6 +1449,25 @@ Proof
   strip_tac >> drule vyperScopePreservationTheory.finally_set_scopes >> simp[]
 QED
 
+Theorem ifexp_entry_pop_read_obstruction[local]:
+  entry = <| assignable := T; type := BaseTV BoolT;
+    value := ArrayV (DynArrayV [BoolV F]); popped := [] |> /\
+  entry' = entry with <|value := ArrayV (DynArrayV []);
+    popped := [([ValueSubscript (IntV 0)], BoolV F)]|> ==>
+  entry_pop_step entry [] entry' /\
+  read_memory_path entry [ValueSubscript (IntV 0)] = INL (BoolV F) /\
+  read_memory_path entry' [ValueSubscript (IntV 0)] =
+    INR (RuntimeError "evaluate_subscripts array_index")
+Proof
+  rpt strip_tac >> gvs[] >>
+  simp[vyperPlaceResultTypingTheory.entry_pop_step_def,
+       read_memory_path_def, evaluate_subscripts_def, read_popped_def,
+       record_pop_def, subscripts_type_def, subscript_type_def,
+       vyperValueOperationTheory.popped_value_def,
+       vyperValueOperationTheory.pop_element_def,
+       assign_subscripts_def] >> EVAL_TAC >> simp[]
+QED
+
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
   (!msg. evaluate_subscripts entry.type entry.value retained <> INR (TypeError msg)) ==>
