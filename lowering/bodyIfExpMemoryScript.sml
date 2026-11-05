@@ -1487,6 +1487,206 @@ Proof
   drule ifexp_base_place_memory_domain >> simp[]
 QED
 
+Theorem ifexp_conditional_memory_origin[local]:
+  conditional_result cx res es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+  res = PlaceR (MemoryPlace id path) /\ ee = es
+Proof
+  Cases_on `res` >>
+  simp[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[COND_RATOR, return_def, bind_def, AllCaseEqs()] >>
+  drule place_type_value_state >> simp[]
+QED
+
+Theorem ifexp_select_memory_origin[local]:
+  select_result cx ty res sb es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+  extend_place cx res sb es = (INL (PlaceR (MemoryPlace id path)),ee)
+Proof
+  Cases_on `res` >>
+  simp[select_result_def, bind_def, lift_option_type_def, lift_sum_def,
+       return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[return_def, raise_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_pop_memory_origin[local]:
+  pop_place cx p es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+  ?baseid base. p = MemoryPlace baseid base
+Proof
+  Cases_on `p`
+  >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+      simp[pop_place_def, raise_def] >>
+      rename1 `ArrayTV tv bd` >> Cases_on `bd` >>
+      simp[pop_place_def, bind_def, ignore_bind_def, return_def, raise_def, AllCaseEqs()])
+  >- simp[] >>
+  simp[pop_place_def, bind_def, ignore_bind_def, return_def, AllCaseEqs()]
+QED
+
+Theorem ifexp_pop_memory_domain[local]:
+  lookup_scopes id es.scopes = SOME entry /\
+  (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg)) /\
+  pop_place cx (MemoryPlace id path) es = (INL (PlaceR (MemoryPlace outid outpath)),ee) ==>
+  ?entry'. lookup_scopes outid ee.scopes = SOME entry' /\
+    (!msg. evaluate_subscripts entry'.type entry'.value outpath <> INR (TypeError msg))
+Proof
+  strip_tac >> Cases_on `find_containing_scope id es.scopes`
+  >- gvs[pop_place_def, bind_def, get_scopes_def, lift_option_type_def, return_def, raise_def] >>
+  PairCases_on `x` >>
+  drule vyperLookupTheory.find_containing_scope_lookup >> strip_tac >> gvs[] >>
+  qpat_x_assum `pop_place _ _ _ = _` mp_tac >>
+  simp[pop_place_def, bind_def, get_scopes_def, lift_option_type_def,
+       type_check_def, vyperStateTheory.assert_def, ignore_bind_def,
+       lift_sum_def, return_def, raise_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >> gvs[return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `arr` >> gvs[return_def, raise_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >>
+  gvs[return_def, raise_def, vyperStateTheory.check_def,
+      ignore_bind_def, bind_def, vyperStateTheory.assert_def] >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs(), return_def, raise_def] >>
+  PairCases_on `x` >>
+  gvs[bind_def, set_scopes_def, return_def, AllCaseEqs(), raise_def] >>
+  drule vyperLookupTheory.find_containing_scope_pre_none >> strip_tac >>
+  gvs[vyperLookupTheory.lookup_scopes_update] >>
+  Cases_on `evaluate_subscripts entry.type entry.value path`
+  >- (Cases_on `assign_subscripts entry.type entry.value path
+        (Replace (ArrayV (DynArrayV (FRONT l))))` >>
+      gvs[return_def, raise_def] >>
+      drule ifexp_replace_path_runtime >>
+      disch_then (qspecl_then
+        [`[ValueSubscript (IntV &(LENGTH l - 1))]`,
+         `"evaluate_subscripts array_index"`] mp_tac) >>
+      simp[ifexp_shortened_child_runtime]) >>
+  gvs[AllCaseEqs(), return_def, raise_def] >>
+  Cases_on `replace_popped entry.type path
+    (ArrayV (DynArrayV (FRONT l))) entry.popped` >> gvs[return_def, raise_def] >>
+  drule evaluate_subscripts_error_shape >> strip_tac >> gvs[] >>
+  drule ifexp_current_error_append >> simp[]
+QED
+
+Theorem ifexp_create_no_memory[local]:
+  eval_create cx kind salt rof tys vs bsize st <>
+    (INL (PlaceR (MemoryPlace id path)),ee)
+Proof
+  strip_tac >>
+  gvs[vyperCreateTheory.eval_create_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+  gvs[COND_RATOR, bind_def, ignore_bind_def, return_def, raise_def,
+      vyperCreateTheory.create_soft_failure_def, AllCaseEqs()]
+  >- gvs[vyperCreateTheory.create_oracle_result_def, AllCaseEqs()] >>
+  gvs[vyperMiscTheory.option_CASE_rator, bind_def, ignore_bind_def,
+      return_def, raise_def, COND_RATOR, AllCaseEqs()] >>
+  qmatch_asmsub_rename_tac `run_create_evm _ _ _ _ _ _ _ _ = SOME tail` >>
+  PairCases_on `tail` >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()]
+QED
+
+Theorem ifexp_expr_memory_domain_mutual[local]:
+  (!(cx:evaluation_context) (s:stmt). T) /\
+  (!(cx:evaluation_context) (ss:stmt list). T) /\
+  (!(cx:evaluation_context) (it:iterator). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!cx e es id path ee.
+    eval_expr cx e es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+    ?entry. lookup_scopes id ee.scopes = SOME entry /\
+      (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg))) /\
+  (!(cx:evaluation_context) (es:expr list). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
+  (!(cx:evaluation_context) (g:assignment_target) (v:value). T) /\
+  (!(cx:evaluation_context) (gs:assignment_target list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (es:expr list). T)
+Proof
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp[] >> rpt strip_tac
+  >- (qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, get_scopes_def, type_check_def, assert_def,
+           check_def, bind_def, ignore_bind_def, return_def, raise_def,
+           AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      Cases_on `lookup_scopes id ee.scopes` >> gvs[evaluate_subscripts_def])
+  >- (qspec_then `TopLevelNameTarget (src_id_opt,id)` mp_tac
+        ifexp_base_place_memory_domain >>
+      simp[Once evaluate_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def] >> metis_tac[])
+  >- (PairCases_on `nsid` >>
+      gvs[Once evaluate_def, lookup_flag_mem_def,
+          vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs()])
+  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      drule ifexp_conditional_memory_origin >> strip_tac >> gvs[] >>
+      gvs[switch_BoolV_def, bind_def, COND_RATOR, return_def,
+          raise_def, AllCaseEqs()] >>
+      metis_tac[])
+  >- gvs[Once evaluate_def, return_def]
+  >- (gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()])
+  >- suspend "subscript"
+  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      drule ifexp_select_memory_origin >> strip_tac >>
+      drule ifexp_extend_memory_origin >> strip_tac >> gvs[] >>
+      first_x_assum drule >> strip_tac >>
+      drule_all ifexp_extend_memory_domain >> strip_tac >> gvs[] >> metis_tac[])
+  >- (gvs[Once evaluate_def] >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >- (gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+      drule ifexp_pop_memory_origin >> strip_tac >> gvs[] >>
+      drule ifexp_target_place_memory_domain >> strip_tac >>
+      drule_all ifexp_pop_memory_domain >> simp[])
+  >- (gvs[Once evaluate_def] >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()])
+  >- suspend "send"
+  >- suspend "extcall"
+  >- (gvs[Once evaluate_def] >> gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()]) >>
+  (gvs[Once evaluate_def] >>
+   gvs[bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
+   gvs[eval_raw_call_def, bind_def, ignore_bind_def, return_def,
+       raise_def, COND_RATOR, AllCaseEqs()] >>
+   gvs[pairTheory.UNCURRY, bind_def, ignore_bind_def, return_def,
+       raise_def, COND_RATOR, AllCaseEqs()]) >>
+  Cases_on `kind` >>
+  gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  metis_tac[ifexp_create_no_memory]
+QED
+
+Resume ifexp_expr_memory_domain_mutual[subscript]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  drule ifexp_select_memory_origin >> strip_tac >>
+  drule ifexp_extend_memory_origin >> strip_tac >> gvs[] >>
+  qpat_x_assum `!es id path ee. _` drule >> strip_tac >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  drule_all ifexp_eval_expr_retained_domain >> strip_tac >>
+  drule_all ifexp_extend_memory_domain >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Resume ifexp_expr_memory_domain_mutual[send]:
+  gvs[Once evaluate_def] >>
+  gvs[bind_def, ignore_bind_def, AllCaseEqs()] >>
+  Cases_on `vs` >> gvs[eval_send_def, raise_def] >>
+  Cases_on `t` >> gvs[eval_send_def, raise_def] >>
+  gvs[bind_def, ignore_bind_def, return_def, COND_RATOR,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  gvs[bind_def, ignore_bind_def, return_def, raise_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()] >>
+  pairarg_tac >> gvs[return_def, bind_def, ignore_bind_def, AllCaseEqs()]
+QED
+
+Resume ifexp_expr_memory_domain_mutual[extcall]:
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  qmatch_asmsub_rename_tac `eval_ext_call cx isstatic skip sig opts args st` >>
+  PairCases_on `sig` >> Cases_on `args` >>
+  gvs[eval_ext_call_def, raise_def, bind_def, ignore_bind_def, return_def,
+      vyperMiscTheory.option_CASE_rator, COND_RATOR, AllCaseEqs()] >>
+  gvs[bind_def, ignore_bind_def, return_def,
+      vyperMiscTheory.option_CASE_rator, AllCaseEqs()]
+QED
+
+Finalise ifexp_expr_memory_domain_mutual
+
+Theorem ifexp_eval_expr_memory_domain[local]:
+  !cx e es id path ee.
+    eval_expr cx e es = (INL (PlaceR (MemoryPlace id path)),ee) ==>
+    ?entry. lookup_scopes id ee.scopes = SOME entry /\
+      (!msg. evaluate_subscripts entry.type entry.value path <> INR (TypeError msg))
+Proof
+  metis_tac[ifexp_expr_memory_domain_mutual]
+QED
+
 Theorem ifexp_raw_admissible_force_boundary[local]:
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
   (!gs p ee res ef.
