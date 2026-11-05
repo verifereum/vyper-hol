@@ -119,12 +119,12 @@ Theorem ld_nonallocating_endpoint:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\
   ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\
   t.vs_inst_idx = p /\
-  step_inst 0 C inst s = OK ss /\ step_inst 0 C' inst t = OK ts /\
+  step_inst 0 C inst s = OK ss /\
   tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
   g = f with <|lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
-               lf_tgt := ts with vs_inst_idx := SUC p;
+               lf_tgt := ts with vs_inst_idx := p + LENGTH X;
                lf_H := H'; lf_tv := tn'.t_var|> /\
   ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
                         lf_H := H'; lf_tv := tn'.t_var|>) /\
@@ -153,7 +153,7 @@ Proof
    (ld_global lo A (f::fs) ==> ld_global lo A (g::fs))` by
     (irule ld_head_allocation_update >> simp[] >>
      qexistsl [`H'`, `ss with vs_inst_idx := SUC s.vs_inst_idx`,
-               `ts with vs_inst_idx := SUC p`, `tn'.t_var`] >> simp[]) >>
+               `ts with vs_inst_idx := p + LENGTH X`, `tn'.t_var`] >> simp[]) >>
   `ld_maps A f /\ FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) fs` by
     (qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[ld_sync_def, EVERY_MEM] >> metis_tac[]) >>
@@ -166,7 +166,7 @@ Proof
          wf_function_def, fn_labels_def] >> metis_tac[]) >>
   `?Y. ld_envelope f.lf_supply fn
        (ss with vs_inst_idx := SUC s.vs_inst_idx)
-       (SUC s.vs_inst_idx) Y (SUC p)` by
+       (SUC s.vs_inst_idx) Y (p + LENGTH X)` by
     (drule_all ld_envelope_source_next >> simp[ADD1]) >>
   `frame_reachable vs0 C stk PG G' tn' fn next
        (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
