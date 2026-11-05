@@ -688,7 +688,7 @@ Resume gas_base_data_dispatch[call]:
   Cases_on `eval_operand f s` >> simp[lift_result_def] >>
   Cases_on `eval_operand g s` >> simp[lift_result_def] >>
   IF_CASES_TAC >- simp[lift_result_def, halt_state_def, set_returndata_def] >>
-  irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
+  simp[] >> irule (SRULE [gas_replay_at_def] gas_exec_ext_call)
 QED
 Resume gas_base_data_dispatch[staticcall]:
   namedCases_on `inst.inst_operands` ["", "a ops"] >> simp[lift_result_def] >>
