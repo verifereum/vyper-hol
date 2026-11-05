@@ -1718,6 +1718,163 @@ Proof
   Cases_on `evaluate_subscripts entry.type current' retained` >> simp[]
 QED
 
+Theorem ifexp_read_popped_success_iff[local]:
+  !history tv path.
+    (?v. read_popped tv path history = SOME v) <=>
+    ?prefix old ptv v.
+      MEM (prefix,old) history /\ IS_PREFIX path prefix /\
+      subscripts_type tv prefix = SOME ptv /\
+      evaluate_subscripts ptv old (DROP (LENGTH prefix) path) = INL v
+Proof
+  Induct >- simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >>
+  simp[read_popped_def, RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+  Cases_on `IS_PREFIX path h0` >> simp[]
+  >- (Cases_on `subscripts_type tv h0` >> simp[] >>
+      Cases_on `evaluate_subscripts x h1 (DROP (LENGTH h0) path)` >> simp[])
+QED
+
+Theorem ifexp_snapshot_pop_readable[local]:
+  subscripts_type tv prefix = SOME ptv /\
+  evaluate_subscripts ptv old suffix = INL (ArrayV (DynArrayV (SNOC p xs))) /\
+  assign_subscripts ptv old suffix (Replace (ArrayV (DynArrayV xs))) = INL updated /\
+  subscripts_type tv retained = SOME rty /\
+  (?v. read_popped tv retained [(prefix,old)] = SOME v) ==>
+  ?w. read_popped tv retained
+    (record_pop (prefix ++ suffix) (ArrayV (DynArrayV (SNOC p xs))) p
+      [(prefix,updated)]) = SOME w
+Proof
+  strip_tac >>
+  qpat_x_assum `read_popped tv retained [(prefix,old)] = SOME v` mp_tac >>
+  simp[read_popped_def, AllCaseEqs()] >> strip_tac >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND] >>
+  `subscripts_type ptv l = SOME rty` by
+    (qpat_assum `subscripts_type tv prefix = SOME ptv`
+       (mp_then Any mp_tac vyperPlaceResultTypingTheory.subscripts_type_append) >>
+     disch_then (qspec_then `l` mp_tac) >> simp[]) >>
+  drule_all ifexp_pop_replace_readable >> strip_tac
+  >- (simp[ifexp_read_popped_success_iff, record_pop_def,
+           RIGHT_AND_OVER_OR, EXISTS_OR_THM] >>
+      disj2_tac >> qexists_tac `w` >>
+      simp[rich_listTheory.IS_PREFIX_APPEND,
+           rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `read_popped tv (prefix ++ l)
+     (record_pop (prefix ++ suffix) (ArrayV (DynArrayV (SNOC p xs))) p []) =
+   read_popped ptv l (record_pop suffix (ArrayV (DynArrayV (SNOC p xs))) p [])` by
+    (pure_rewrite_tac[vyperPlaceResultTypingTheory.record_pop_prefix_rebase] >>
+     qpat_assum `subscripts_type tv prefix = SOME ptv`
+       (mp_then Any mp_tac vyperPlaceResultTypingTheory.read_popped_prefix_rebase) >>
+     disch_then (fn th => rewrite_tac[th])) >>
+  `?w. read_popped tv (prefix ++ l)
+     (record_pop (prefix ++ suffix) (ArrayV (DynArrayV (SNOC p xs))) p [] ++
+       [(prefix,updated)]) = SOME w` by
+    (irule ifexp_read_popped_append_success >> metis_tac[]) >>
+  gvs[record_pop_def]
+QED
+
+Theorem ifexp_read_popped_cons_success[local]:
+  (?v. read_popped tv path ((prefix,old)::history) = SOME v) <=>
+  (?v. read_popped tv path [(prefix,old)] = SOME v) \/
+  (?v. read_popped tv path history = SOME v)
+Proof
+  simp[ifexp_read_popped_success_iff, RIGHT_AND_OVER_OR, EXISTS_OR_THM]
+QED
+
+Theorem ifexp_replace_popped_readable[local]:
+  !history tv mutation p xs history' retained rty v.
+    read_popped tv mutation history = SOME (ArrayV (DynArrayV (SNOC p xs))) /\
+    replace_popped tv mutation (ArrayV (DynArrayV xs)) history = SOME history' /\
+    subscripts_type tv retained = SOME rty /\
+    read_popped tv retained history = SOME v ==>
+    ?w. read_popped tv retained
+      (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p history') = SOME w
+Proof
+  Induct >- simp[read_popped_def] >>
+  gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac >>
+  Cases_on `IS_PREFIX mutation h0`
+  >- (Cases_on `subscripts_type tv h0`
+      >- suspend "HistoryNoType" >>
+      Cases_on `evaluate_subscripts x h1 (DROP (LENGTH h0) mutation)`
+      >- suspend "Selected" >> suspend "HistoryNoValue") >>
+  suspend "HistoryNotPrefix"
+QED
+
+Resume ifexp_replace_popped_readable[Selected]:
+  gvs[Once replace_popped_def, Once read_popped_def, AllCaseEqs()] >>
+  qpat_x_assum `!tv mutation p xs history' retained rty v. _` kall_tac >>
+  `(?w. read_popped tv retained [(h0,h1)] = SOME w) \/
+   (?w. read_popped tv retained history = SOME w)` by
+    (rewrite_tac[GSYM ifexp_read_popped_cons_success] >> metis_tac[]) >>
+  gvs[rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_LENGTH_APPEND]
+  >- (`?w. read_popped tv retained
+         (record_pop (h0 ++ l) (ArrayV (DynArrayV (SNOC p xs))) p [(h0,updated)]) = SOME w` by
+        (irule ifexp_snapshot_pop_readable >> metis_tac[]) >>
+      `?w. read_popped tv retained
+         (record_pop (h0 ++ l) (ArrayV (DynArrayV (SNOC p xs))) p [(h0,updated)] ++ history) = SOME w` by
+        (irule ifexp_read_popped_append_success >> metis_tac[]) >>
+      gvs[record_pop_def]) >>
+  `?w. read_popped tv retained
+     (record_pop (h0 ++ l) (ArrayV (DynArrayV (SNOC p xs))) p [(h0,updated)] ++ history) = SOME w` by
+    (irule ifexp_read_popped_append_success >> metis_tac[]) >>
+  gvs[record_pop_def]
+QED
+
+val ifexp_history_skipped_tac =
+  (
+  gvs[Once replace_popped_def, AllCaseEqs()] >>
+  qpat_x_assum `read_popped tv mutation ((h0,h1)::history) = _` mp_tac >>
+  simp[Once read_popped_def] >> disch_tac >>
+  `(?w. read_popped tv retained [(h0,h1)] = SOME w) \/
+   (?w. read_popped tv retained history = SOME w)` by
+    (rewrite_tac[GSYM ifexp_read_popped_cons_success] >> metis_tac[])
+  >- (`?w. read_popped tv retained
+         (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p [] ++
+          [(h0,h1)] ++ z) = SOME w` by
+        (irule ifexp_read_popped_append_success >> disj1_tac >>
+         irule ifexp_read_popped_append_success >> metis_tac[]) >>
+      gvs[record_pop_def]) >>
+  `?w. read_popped tv retained
+     (record_pop mutation (ArrayV (DynArrayV (SNOC p xs))) p z) = SOME w` by
+    (first_x_assum drule_all >> simp[]) >>
+  qpat_x_assum `!tv mutation p xs history' retained rty v. _` kall_tac >>
+  gvs[record_pop_def] >> metis_tac[ifexp_read_popped_cons_success]);
+
+Resume ifexp_replace_popped_readable[HistoryNoType]:
+  ifexp_history_skipped_tac
+QED
+
+Resume ifexp_replace_popped_readable[HistoryNoValue]:
+  ifexp_history_skipped_tac
+QED
+
+Resume ifexp_replace_popped_readable[HistoryNotPrefix]:
+  ifexp_history_skipped_tac
+QED
+
+Finalise ifexp_replace_popped_readable
+
+Theorem ifexp_entry_pop_history_readable[local]:
+  entry_pop_step entry mutation entry' /\
+  evaluate_subscripts entry.type entry.value mutation = INR err /\
+  subscripts_type entry.type retained = SOME rty /\
+  read_memory_path entry retained = INL v ==>
+  ?w. read_memory_path entry' retained = INL w
+Proof
+  simp[vyperPlaceResultTypingTheory.entry_pop_step_def] >>
+  rpt strip_tac >> gvs[] >>
+  gvs[read_memory_path_def, AllCaseEqs()] >>
+  Cases_on `arr` >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs()] >>
+  Cases_on `a` >>
+  gvs[vyperValueOperationTheory.popped_value_def,
+      vyperValueOperationTheory.pop_element_def, AllCaseEqs()] >>
+  `l = SNOC (LAST l) (FRONT l)` by metis_tac[SNOC_LAST_FRONT] >>
+  qpat_x_assum `l <> []` kall_tac >>
+  pop_assum SUBST_ALL_TAC >> gvs[FRONT_SNOC, LAST_SNOC] >>
+  drule_all ifexp_replace_popped_readable >> simp[]
+QED
+
 
 Theorem ifexp_entry_pop_domain[local]:
   entry_pop_step entry mutation entry' /\
