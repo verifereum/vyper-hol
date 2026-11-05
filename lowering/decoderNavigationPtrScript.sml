@@ -5,7 +5,7 @@ Ancestors typedCopyPtr bodyPtrDefs fragExecPtr words venomState finite_map
   decoderGhostFramePtr calldataDecodePtr entryDispatchPtr emitHelperProps
   exprLoweringProps venomExecSemantics pred_set ptrSafeRun codegenRel
   compileEnv emitHelper abiDecoderReentry calldataDynOwned instIdxIndep fragExec list
-  abiDecoderMemberSetup
+  abiDecoderMemberSetup decoderMemberValidEndpoint
 
 Theorem emitted_ptr_offset_frag_ptr:
   !cx ctx PG sa sb id root out off s a G tn total n R.
