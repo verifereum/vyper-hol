@@ -2052,3 +2052,38 @@ QED
    visit of the same static source. It establishes analysis membership only.
    Canonical representative epoch/value alignment and persistence of source
    output bindings remain separate semantic obligations. *)
+
+Theorem cse_prefix_exec_predecessor_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_path_preorder fn a src.inst_id /\ a <> src.inst_id /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME ri /\ ri.inst_id = a ==>
+ ~cse_phase_has_source fn (CseExec n bb s) e src
+Proof
+ strip_tac >>
+ `cse_static_trace fn (cse_project_trace events (CseExec n bb s))` by
+   (drule cse_prefix_project_trace >> simp[]) >>
+ drule_all cse_prefix_exec_control >> strip_tac >>
+ `cse_point_has_id fn (bb.bb_label,s.vs_inst_idx) a` by
+   (gvs[cse_point_has_id_def, get_instruction_def, AllCaseEqs()] >> metis_tac[]) >>
+ drule cse_static_trace_predecessor_barrier >>
+ simp[cse_project_trace_last, cse_phase_point_def, cse_phase_has_source_def] >>
+ strip_tac >>
+ `LAST (cse_project_trace events (CseExec n bb s)) = (bb.bb_label,s.vs_inst_idx)` by
+   simp[cse_project_trace_last, cse_phase_point_def] >> metis_tac[]
+QED
+
+Theorem cse_source_interval_predecessor_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_path_preorder fn a src.inst_id /\ a <> src.inst_id /\
+ (!j ph. birth_index < j /\ j <= LENGTH events /\
+    cse_prefix ctx fn fuel0 s0 (TAKE j events) ph ==>
+    cse_phase_has_source fn ph e src) /\
+ birth_index < k /\ k <= LENGTH events /\
+ cse_prefix ctx fn fuel0 s0 (TAKE k events) (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME ri ==>
+ ri.inst_id <> a
+Proof
+ rpt strip_tac >>
+ drule_all cse_prefix_exec_predecessor_barrier >> metis_tac[]
+QED

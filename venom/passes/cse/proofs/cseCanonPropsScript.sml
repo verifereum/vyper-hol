@@ -1136,3 +1136,55 @@ Proof
  qexists_tac `canonical_id (compute_canon (dfg_build_function fn) (avail_analyze fn) fn) a` >>
  metis_tac[compute_canon_path_preorder]
 QED
+
+Theorem cse_first_matching_point[local]:
+ !ps. (?p. MEM p ps /\ cse_point_has_id fn p a) ==>
+ ?pre p post. ps = pre ++ [p] ++ post /\ cse_point_has_id fn p a /\
+   EVERY (\q. ~cse_point_has_id fn q a) pre
+Proof
+ Induct >- simp[] >> gen_tac >> disch_tac >> Cases_on `cse_point_has_id fn h a`
+ >- (qexistsl_tac [`[]`, `h`, `ps`] >> simp[]) >>
+ `?p. MEM p ps /\ cse_point_has_id fn p a` by (fs[] >> metis_tac[]) >>
+ qpat_x_assum `_ ==> ?pre p post. _` mp_tac >>
+ (impl_tac >- metis_tac[]) >> strip_tac >>
+ qexistsl_tac [`h::pre`, `p'`, `post`] >> simp[]
+QED
+
+Theorem cse_static_trace_first_id[local]:
+ cse_static_trace fn ps /\ cse_point_has_id fn (LAST ps) a ==>
+ ?pre p. cse_static_trace fn (pre ++ [p]) /\ cse_point_has_id fn p a /\
+         EVERY (\q. ~cse_point_has_id fn q a) pre
+Proof
+ strip_tac >>
+ `?p. MEM p ps /\ cse_point_has_id fn p a` by
+   metis_tac[cse_static_trace_nonempty, rich_listTheory.MEM_LAST, listTheory.list_CASES] >>
+ qspec_then `ps` mp_tac cse_first_matching_point >>
+ (impl_tac >- metis_tac[]) >> strip_tac >>
+ qexistsl_tac [`pre`, `p'`] >> simp[] >>
+ irule cse_static_trace_prefix >> simp[] >>
+ qexists_tac `post` >> gvs[listTheory.APPEND_ASSOC]
+QED
+
+Theorem cse_static_trace_predecessor_barrier:
+ wf_function fn /\ fn_inst_wf fn /\
+ cse_path_preorder fn a src.inst_id /\ a <> src.inst_id /\
+ cse_static_trace fn ps /\ cse_point_has_id fn (LAST ps) a /\
+ LAST ps = (lbl,k) ==>
+ ~(?xs. FLOOKUP (ae_lookup_inst fn lbl k) e = SOME xs /\ MEM src xs)
+Proof
+ strip_tac >> strip_tac >>
+ drule_all cse_static_trace_first_id >> strip_tac >>
+ `p = (lbl,k)` by metis_tac[cse_point_has_id_injective] >> gvs[] >>
+ qspecl_then [`fn`, `pre ++ [(lbl,k)]`] mp_tac cse_static_trace_availability >>
+ (impl_tac >- simp[]) >> (impl_tac >- simp[]) >>
+ disch_then (qspecl_then [`lbl`, `k`] mp_tac) >>
+ (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+ `?q. MEM q pre /\ cse_point_has_id fn q src.inst_id` by
+   (gvs[availExprDefsTheory.ae_lookup_inst_def, availExprDefsTheory.avail_unwrap_def,
+        GSYM rich_listTheory.SNOC_APPEND, listTheory.FRONT_SNOC] >> metis_tac[]) >>
+ `pre <> []` by (Cases_on `pre` >> gvs[]) >>
+ `cse_static_trace fn pre` by
+   (irule cse_static_trace_prefix >> simp[] >> qexists_tac `[(lbl,k)]` >> simp[]) >>
+ drule_all cse_static_trace_member_prefix >> strip_tac >>
+ fs[cse_path_preorder_def, listTheory.EVERY_MEM] >> metis_tac[listTheory.MEM_APPEND]
+QED
