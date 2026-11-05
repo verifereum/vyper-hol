@@ -268,6 +268,44 @@ Proof
   fs[abi_encoder_child_post_def]
 QED
 
+Theorem abi_scratch_member_dynamic_pre_bridge:
+  abi_scratch_encoder ei ==>
+  (abi_scratch_member_dynamic_pre (at,av,sb,source_cap,d) (first,last,b,cap,limit_st)
+    (head,offset,dp,h,off,slot,site) (ei,dst,src,st,en,out) s <=>
+   abi_encoder_member_dynamic_pre (at,av,sb,source_cap,d)
+    (abi_decoder_ids first last,b,cap,limit_st)
+    (\st en. first <= st.cs_next_id /\ en.cs_next_id <= last)
+    (head,offset,dp,h,off,slot,site) (ei,dst,src,st,en,out) s)
+Proof
+  strip_tac >>
+  drule abi_encoder_child_capability_interval >>
+  disch_then (qspecl_then [`last`,`first`] assume_tac) >>
+  simp[abi_scratch_member_dynamic_pre_def, abi_scratch_member_core_pre_def,
+    abi_scratch_member_cursor_saved_def, abi_encoder_member_dynamic_pre_def,
+    abi_encoder_child_ready_def, abi_encoder_child_pre_def,
+    abi_encoder_member_cursor_saved_def, abi_decoder_ids_def,
+    abi_site_encoder_input_interval, abi_site_budget_interval] >>
+  metis_tac[]
+QED
+
+Theorem abi_scratch_member_dynamic_post_bridge:
+  abi_scratch_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d)
+    (first,last,b,cap,limit_st) (head,offset,dp,h,off,slot,site)
+    (ei,dst,src,st,en,out) s t ==>
+  abi_encoder_member_dynamic_post (ctx,func) (at,av,sb,source_cap,d)
+    (abi_decoder_ids first last,b,cap,limit_st)
+    (\st en. first <= st.cs_next_id /\ en.cs_next_id <= last)
+    (head,offset,dp,h,off,slot,site) (ei,dst,src,st,en,out) s t
+Proof
+  simp_tac bool_ss [abi_scratch_member_dynamic_post_def,
+    abi_encoder_member_dynamic_post_def] >> strip_tac >>
+  `abi_scratch_encoder ei /\ first <= st.cs_next_id /\ en.cs_next_id <= last` by
+    fs[abi_scratch_member_dynamic_pre_def, abi_scratch_member_core_pre_def] >>
+  fs[abi_scratch_member_core_post_def, abi_encoder_child_post_def,
+    abi_site_encoder_effect_interval] >>
+  simp[GSYM abi_scratch_member_dynamic_pre_bridge]
+QED
+
 val _ = List.app (fn (name, th) =>
   let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
     if null (Thm.hyp th) andalso null axioms andalso
