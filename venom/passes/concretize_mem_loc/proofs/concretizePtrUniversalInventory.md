@@ -650,3 +650,31 @@ RuntimeGeneration, RetrospectiveLocal, ActivationSupport, CallAncestry,
 TaggedSupport (TO_concretize_ptr-20261105T100526Z_m9868_t001). No rebase break was
 encountered. Universal prefix coverage and setup argument-token equality remain
 blocked and are not conclusions of this audit.
+
+## Checked reverse ancestor-destination supplier (.65)
+
+`concretizePtrTaggedCallLivenessTheory` now supplies
+`ptr_source_tagged_owner_call_liveset`: current source ownership, no DALLOCA,
+selected suspended token `EL (SUC n) tokens = owner`, and current full-tag
+lookup `FLOOKUP TG v = SOME(owner,aid)` give the production context liveset
+for `Allocation aid` at that owner's suspended call cursor, under the stated
+source function well-formedness/SSA/reachability/BP hypotheses. This uses
+.64's exact tag-selected call operand, `ptr_production_operand_gen`, suspended
+INVOKE/label shape, and the singleton interval of `ptr_owner_context_liveset`.
+The history already includes its endpoint (`LENGTH h-1`). No allocation size
+or numerical-site injectivity is used for that liveness fact.
+
+`ptr_output_tagged_ancestor_destination_separation` composes this fact into
+`ptr_output_suspended_descendant_separation`. It retains that theorem's actual
+stage/observed-context/pass/layout/item/metadata, positive sizes, import-id
+disjointness and descendant-cache premises, replacing the local liveset
+premise by ownership at the exact supplied `EL t h` plus its tag and source
+structural hypotheses. The conclusion is the same imported descendant tuple
+and `reserved_intervals_disjoint (pa,sa) (pb,sb)`.
+
+Dependency ledger: .64 -> production operand_gen -> suspended read/used gen
+-> singleton owner liveset -> CallSeparation -> reverse-row layout separation.
+This closes that source-side conflict supplier only: constructing the historical
+ownership snapshots and relating an actual target write to the selected source
+row still belong to universal prefix coverage. No target suffix exclusion,
+future read equality, or matching source execution is established here.

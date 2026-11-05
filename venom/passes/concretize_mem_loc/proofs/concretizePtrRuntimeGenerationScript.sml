@@ -14,6 +14,22 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[MEM_REVERSE, MEM]
 QED
 
+Theorem ptr_production_operand_gen:
+  fn_ptr_ok P fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
+  (!i. MEM i (fn_insts fn) ==> MEM i (bp_scan_insts fn cfg.cfg_dfs_pre)) /\
+  MEM inst (fn_insts fn) /\ MEM (Var v) inst.inst_operands /\
+  v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid) ==>
+  ml_operand_gen (Allocation aid)
+    (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) inst
+Proof
+  strip_tac >> drule_all ptr_bp_production_coverage >> strip_tac >>
+  `MEM (Allocation aid)
+     (find_base_allocas (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) (Var v))` by
+    (simp[GSYM bp_bases_find_base_allocas, bp_bases_def, MEM_MAP] >>
+     metis_tac[ptr_base_def]) >>
+  simp[ml_operand_gen_def] >> metis_tac[]
+QED
+
 Theorem ptr_production_operand_used_seed:
   fn_ptr_ok P fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn) /\
   (!i. MEM i (fn_insts fn) ==> MEM i (bp_scan_insts fn cfg.cfg_dfs_pre)) /\
@@ -22,12 +38,7 @@ Theorem ptr_production_operand_used_seed:
   ml_used_gen (Allocation aid)
     (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) mems inst
 Proof
-  strip_tac >> drule_all ptr_bp_production_coverage >> strip_tac >>
-  `MEM (Allocation aid)
-     (find_base_allocas (bp_analyze_fuel (concretize_memloc_fuel fn) cfg fn) (Var v))` by
-    (simp[GSYM bp_bases_find_base_allocas, bp_bases_def, MEM_MAP] >>
-     metis_tac[ptr_base_def]) >>
-  simp[ml_used_gen_def, ml_operand_gen_def] >> metis_tac[]
+  strip_tac >> drule_all ptr_production_operand_gen >> simp[ml_used_gen_def]
 QED
 
 Theorem ptr_history_write_used:
