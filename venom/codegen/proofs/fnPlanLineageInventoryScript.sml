@@ -3751,3 +3751,115 @@ Proof
       strip_tac >> gvs[] >> metis_tac[stack_swap_mem_subset]) >>
   metis_tac[reorderSimTheory.do_swap_inventory_subset]
 QED
+
+Theorem reorder_one_shallow_inventory_subset:
+  !dfg tops idx op ps ops qs.
+    LENGTH tops - 1 - idx <= 16 /\
+    reorder_one dfg tops idx op ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> gvs[] >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    (drule reorder_restore_inventory_subset_nb >> metis_tac[]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH tops - (idx + 1)) (LENGTH tops) ps1.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps1.ps_stack = SOME dist` >>
+  pairarg_tac >> simp[] >>
+  `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
+        MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     metis_tac[reduce_depth_plan_inventory_subset]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (LENGTH tops - (idx + 1)) (LENGTH tops) ps2.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[]) >>
+  rename1 `stack_get_unfixed_depth op _ _ ps2.ps_stack = SOME dist'` >>
+  `dist' < LENGTH ps2.ps_stack /\ stack_peek dist' ps2.ps_stack = op` by
+    metis_tac[stack_get_unfixed_depth_props] >>
+  `MEM op ps2.ps_stack` by metis_tac[stack_peek_mem] >>
+  Cases_on `dist' = LENGTH tops - (idx + 1)` >> simp[]
+  >- (strip_tac >> gvs[] >> metis_tac[]) >>
+  Cases_on `LENGTH tops - (idx + 1) < LENGTH ps2.ps_stack` >> simp[]
+  >- (Cases_on `operand_equiv dfg op
+        (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack)` >> simp[]
+      >- (`MEM (stack_peek (LENGTH tops - (idx + 1)) ps2.ps_stack) ps2.ps_stack` by
+            (irule stack_peek_mem >> decide_tac) >>
+          strip_tac >> gvs[] >> rpt strip_tac >> metis_tac[stack_poke_mem_subset_nb]) >>
+      pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+      strip_tac >> gvs[] >>
+      `LENGTH tops - (idx + 1) <= 16` by decide_tac >>
+      `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
+            MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
+        (rpt strip_tac >> irule reorderSimTheory.do_swap_inventory_subset >>
+         qexistsl [`dist'`, `swap1_ops`] >> simp[]) >>
+      `!at. MEM at ps4.ps_stack \/ at IN FDOM ps4.ps_spilled ==>
+            MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled` by
+        (rpt strip_tac >> irule do_swap_safe_inventory_subset >>
+         qexistsl [`LENGTH tops - (idx + 1)`, `swap2_ops`] >> simp[]) >>
+      metis_tac[]) >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  strip_tac >> gvs[] >>
+      `LENGTH tops - (idx + 1) <= 16` by decide_tac >>
+      `!at. MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled ==>
+            MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled` by
+        (rpt strip_tac >> irule reorderSimTheory.do_swap_inventory_subset >>
+         qexistsl [`dist'`, `swap1_ops`] >> simp[]) >>
+      `!at. MEM at ps4.ps_stack \/ at IN FDOM ps4.ps_spilled ==>
+            MEM at ps3.ps_stack \/ at IN FDOM ps3.ps_spilled` by
+        (rpt strip_tac >> irule do_swap_safe_inventory_subset >>
+         qexistsl [`LENGTH tops - (idx + 1)`, `swap2_ops`] >> simp[]) >>
+      metis_tac[]
+QED
+
+Theorem plan_steps_reorder_shallow_inventory_subset[local]:
+  !items dfg tops ps ops qs.
+    LENGTH tops <= 17 /\
+    plan_steps (\(idx,op) ps. reorder_one dfg tops idx op ps) items ps =
+      (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  Induct >> simp[foldlSimTheory.plan_steps_def] >> rpt gen_tac >>
+  Cases_on `h` >> rename1 `(idx,op)` >> simp[] >> strip_tac >>
+  pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  rename1 `reorder_one dfg tops idx op ps = (step_ops,ps1)` >>
+  `LENGTH tops - 1 - idx <= 16` by decide_tac >>
+  `!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
+        MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled` by
+    metis_tac[reorder_one_shallow_inventory_subset] >>
+  rpt strip_tac >>
+  `MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled` by
+    (first_x_assum (qspecl_then [`dfg`, `tops`, `ps1`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem reorder_plan_shallow_inventory_subset:
+  !dfg tops ps ops qs.
+    LENGTH tops <= 17 /\ reorder_plan dfg tops ps = (ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `reorder_plan _ _ _ = _`
+    (assume_tac o REWRITE_RULE [reorder_plan_eq_plan_steps]) >>
+  metis_tac[plan_steps_reorder_shallow_inventory_subset]
+QED
+
+Theorem restore_reorder_shallow_inventory_subset:
+  !targets ps restore_ops mid dfg reorder_ops qs.
+    LENGTH targets <= 17 /\
+    restore_spilled_plan targets ps = (restore_ops,mid) /\
+    reorder_plan dfg targets mid = (reorder_ops,qs) ==>
+    !at. MEM at qs.ps_stack \/ at IN FDOM qs.ps_spilled ==>
+         MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled
+Proof
+  rpt gen_tac >> strip_tac >>
+  metis_tac[reorder_plan_shallow_inventory_subset,
+            restore_spilled_plan_inventory_subset]
+QED
