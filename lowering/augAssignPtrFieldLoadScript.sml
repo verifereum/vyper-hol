@@ -227,3 +227,53 @@ Proof
   simp[] >> gen_tac >> strip_tac >>
   irule ghost_inv_scalar_field_clean >> metis_tac[arithmeticTheory.ADD_ASSOC]
 QED
+
+Theorem augassign_field_load_ptr:
+  emit_op ADD [Var src; Lit (n2w off)] sa = (Var dst,sm) /\
+  emit_op MLOAD [Var dst] sm = (Var out,sb) /\
+  fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ not_fresh_at sa src /\
+  ptr_covers G tn src s span /\ lookup_var src s = SOME a /\
+  off < span /\ off + 32 <= span /\ w2n a + off < dimword (:256) /\
+  (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==> i NOTIN tn.t_mem) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  return_buf_frame d cenv sa s ==>
+  ?Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    stmt_state_rel ctx fn cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
+    ghost_kept cenv es sa G tn s Gf tnf /\
+    lookup_var dst sf = SOME (a + n2w off) /\ ptr_covers Gf tnf dst sf 32 /\
+    lookup_var out sf = SOME (mload (w2n (a + n2w off)) s) /\
+    op_taint tnf (Var out) = {} /\
+    ~sf.vs_halted /\ sf.vs_current_bb = sb.cs_current_bb /\
+    sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    local_ptrs_reserved cenv sb /\ not_fresh_at sb dst /\ not_fresh_at sb out /\
+    (!rp. not_fresh_at sa rp ==> lookup_var rp sf = lookup_var rp s)
+Proof
+  strip_tac >>
+  drule_all emit_field_load_path_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `sm.cs_next_var = sa.cs_next_var + 1 /\
+   sb.cs_next_var = sm.cs_next_var + 1 /\
+   dst = STRCAT "%" (toString sa.cs_next_var) /\
+   out = STRCAT "%" (toString sm.cs_next_var)` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_var_def, fresh_id_def, emit_def] >>
+  `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sb` by
+    (conj_tac >> irule local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> simp[]) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[IgnAsm `sf = _`] >>
+  conj_tac
+  >- (gvs[] >> simp[stmt_state_rel_inst_idx] >>
+      irule stmt_state_rel_update_var >> conj_tac
+      >- (irule local_ptrs_reserved_fresh >> qexists_tac `sm` >> simp[]) >>
+      irule stmt_state_rel_update_var >> simp[stmt_state_rel_inst_idx] >>
+      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
+  conj_tac
+  >- (qpat_x_assum `sf = _` kall_tac >> irule ghost_inv_load_frame >>
+      qexistsl_tac [`G`, `s`, `sa`, `tn`] >> simp[]) >>
+  simp[ghost_kept_def, not_fresh_at_def]
+QED
