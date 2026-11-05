@@ -3,7 +3,7 @@ Ancestors
   bodyPtrBopHashFrame bodyPtrBopHashCompile bodyPtrBopHashSequence
   exprSimHash exprLoweringProps venomExecSemantics venomInst
   venomState finite_map exprLowering emitHelper compileEnv emitHelperProps
-  rich_list fragExec codegenRel instIdxIndep
+  rich_list fragExec codegenRel instIdxIndep fragGasPathPtr arithmetic ptrDiscipline
 
 Theorem bop_hash_compile_readonly:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
@@ -109,4 +109,105 @@ Proof
   pure_asm_rewrite_tac[bop_run_inst_seq_append_ok] >> strip_tac >>
   goal_assum (drule_at Any) >> simp[] >>
   drule_all bop_hash_compile_run_cursor >> simp[]
+QED
+
+Theorem bop_hash_compile_result_old:
+  compile_bytestring_hash ptr_op sc = (op,sd) ==>
+  ?h. op = Var h /\ not_fresh_at sd h
+Proof
+  simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+       emit_def] >> strip_tac >> gvs[] >>
+  simp[not_fresh_at_def]
+QED
+
+Theorem bop_hash_compile_operand_frame:
+  compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
+  lookup_var p s = SOME w /\
+  run_inst_seq (emitted_insts sc sd) s = OK t /\
+  local_ptrs_reserved cenv sc /\ not_fresh_at sc r /\
+  expr_val_at cenv cx ty sa sb es v (Var r) s /\
+  ptr_val_ok cx ty v (Var r) G tn s /\ tn'.t_mem = tn.t_mem /\
+  FLOOKUP G' r = FLOOKUP G r /\
+  FLOOKUP tn'.t_var r = FLOOKUP tn.t_var r ==>
+  expr_val_at cenv cx ty sa sb es v (Var r) (t with vs_inst_idx := idx) /\
+  ptr_val_ok cx ty v (Var r) G' tn' (t with vs_inst_idx := idx)
+Proof
+  strip_tac >> drule_all bop_hash_compile_run_frame >> strip_tac >>
+  conj_tac
+  >- (irule bop_expr_val_readonly_frame_cursor >>
+      qexistsl_tac [`s`, `sc`] >> simp[]) >>
+  irule bop_ptr_val_readonly_frame_cursor >>
+  qexistsl_tac [`G`, `s`, `tn`] >> simp[]
+QED
+
+Theorem bop_bytes_hash_pair_ptr:
+  compile_bytestring_hash (Var p) sc = (h1,sd) /\
+  compile_bytestring_hash (Var r) sd = (h2,se) /\
+  not_fresh_at sc p /\ not_fresh_at sc r /\ local_ptrs_reserved cenv sc /\
+  fn_has_code sc se fn /\ s.vs_current_bb = sc.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  expr_val_at cenv cx ty1 sa1 sb1 es (BytesV bs1) (Var p) s /\
+  expr_val_at cenv cx ty2 sa2 sb2 es (BytesV bs2) (Var r) s /\
+  ptr_val_ok cx ty1 (BytesV bs1) (Var p) G tn s /\
+  ptr_val_ok cx ty2 (BytesV bs2) (Var r) G tn s /\
+  evaluate_type (get_tenv cx) ty1 = SOME tv1 /\ ~is_word_type ty1 /\
+  evaluate_type (get_tenv cx) ty2 = SOME tv2 /\ ~is_word_type ty2 /\
+  tv1 <> BaseTV AddressT /\ (!k. tv1 <> BaseTV (BytesT (Fixed k))) /\
+  tv2 <> BaseTV AddressT /\ (!k. tv2 <> BaseTV (BytesT (Fixed k))) /\
+  lookup_var p s = SOME w1 /\ lookup_var r s = SOME w2 /\
+  LENGTH bs1 < dimword(:256) /\ LENGTH bs2 < dimword(:256) /\
+  run_inst_seq (emitted_insts sc se) s = OK t ==>
+  ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+      (OK (t with vs_inst_idx := s.vs_inst_idx + 6)) /\
+    op_taint tn' h1 = {} /\ op_taint tn' h2 = {} /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+    (!x. not_fresh_at sc x ==>
+      FLOOKUP G' x = FLOOKUP G x /\ FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x)
+Proof
+  strip_tac >> imp_res_tac bop_hash_compile_layout >>
+  `not_fresh_at sd r` by fs[not_fresh_at_def] >>
+  drule_all bop_hash_pair_run_split >> strip_tac >>
+  drule_all bop_bytes_hash_compile_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  `stmt_state_rel ctx func cenv cx es
+    (u with vs_inst_idx := LENGTH sd.cs_current_insts)` by
+    (irule bop_hash_compile_state_rel >> metis_tac[]) >>
+  qpat_x_assum `expr_val_at _ _ ty1 _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `ptr_val_ok _ ty1 _ _ _ _ _` kall_tac >>
+  `FLOOKUP G' r = FLOOKUP G r /\
+   FLOOKUP tn'.t_var r = FLOOKUP tn.t_var r` by metis_tac[] >>
+  drule_all bop_hash_compile_operand_frame >>
+  disch_then (qspec_then `LENGTH sd.cs_current_insts` strip_assume_tac) >>
+  drule_all bop_hash_compile_readonly >> strip_tac >>
+  drule_all bop_hash_compile_run_frame >> strip_tac >>
+  `local_ptrs_reserved cenv sd` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sc` >> simp[]) >>
+  `lookup_var r (u with vs_inst_idx := LENGTH sd.cs_current_insts) = SOME w2` by
+    fs[lookup_var_def] >>
+  `u.vs_current_bb = sd.cs_current_bb /\ ~u.vs_halted` by
+    (qpat_x_assum `(u with vs_vars := _) = s` mp_tac >>
+     simp[venom_state_component_equality] >> metis_tac[]) >>
+  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `ptr_val_ok _ _ _ _ G tn s` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
+  drule_all (GEN_ALL (SIMP_RULE (srw_ss()) []
+    (Q.INST [`s` |-> `u with vs_inst_idx := LENGTH sc.cs_current_insts`]
+      (SPEC_ALL bop_bytes_hash_compile_ptr)))) >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
+  `!x. not_fresh_at sc x ==> not_fresh_at sd x` by fs[not_fresh_at_def] >>
+  `op_taint tn'' h1 = {}` by
+    (qpat_assum `compile_bytestring_hash (Var p) sc = _`
+       (mp_then Any strip_assume_tac bop_hash_compile_result_old) >>
+     fs[op_taint_def] >> metis_tac[]) >>
+  `LENGTH sd.cs_current_insts = s.vs_inst_idx + 3` by simp[] >>
+  qexistsl_tac [`G''`, `tn''`] >> simp[] >>
+  irule (SIMP_RULE (srw_ss()) []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] (SPEC_ALL gas_path_ptr_then))) >>
+  qexistsl_tac [`G'`, `u with vs_inst_idx := LENGTH sd.cs_current_insts`, `tn'`] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ G tn _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ G' tn' _ _ _ _ _` mp_tac >>
+  simp[arithmeticTheory.ADD_ASSOC]
 QED
