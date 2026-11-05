@@ -217,12 +217,14 @@ Theorem emit_load_builtin_run:
     (mk_inst sa.cs_next_id opc [src] [STRING #"%" (toString sa.cs_next_var)])
     s (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)
     (Var (STRING #"%" (toString sa.cs_next_var))) = {} /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
-  ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv ss /\
+  ghost_inv d cenv cx es G tn s /\
+  ghost_kept cenv es0 ss G0 tn0 s0 G tn /\
+  ~not_fresh_at ss (STRING #"%" (toString sa.cs_next_var)) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-          not_fresh_at sa x) /\
+          not_fresh_at ss x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-          not_fresh_at sa x) /\
+          not_fresh_at ss x) /\
   stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -232,7 +234,7 @@ Theorem emit_load_builtin_run:
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     ghost_inv d cenv cx es G' tn' t /\
-    ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
+    ghost_kept cenv es0 ss G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ eval_operand op t = SOME w /\
     stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
