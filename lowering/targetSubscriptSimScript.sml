@@ -298,6 +298,26 @@ Proof
   fs[ci_mono_def] >> metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
+(* Reassociate the source index/read once, leaving consumers at its boundary. *)
+Theorem eval_base_place_subscript:
+  eval_base_place cx (SubscriptTarget bt e) es =
+  (case eval_base_place cx bt es of
+     (INR exc,es1) => (INR exc,es1)
+   | (INL pv,es1) =>
+       (case (do raw <- eval_expr cx e; read_result cx raw od) es1 of
+          (INR exc,es2) => (INR exc,es2)
+        | (INL v,es2) => extend_place cx pv (ValueSubscript v) es2))
+Proof
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt es` >> rename1 `(br,es1)` >>
+  Cases_on `br` >> simp[] >>
+  Cases_on `eval_expr cx e es1` >> rename1 `(er,es2)` >>
+  Cases_on `er` >> simp[] >>
+  rename1 `eval_expr cx e es1 = (INL raw,es2)` >>
+  Cases_on `read_result cx raw es2` >> rename1 `(rr,es3)` >>
+  Cases_on `rr` >> simp[]
+QED
+
 (* The index keeps the captured base pointer and composes its memory frame. *)
 Theorem target_post_index_frame:
   !ctx func cenv cx es sa sm sn s0 es1 es2 pv vt rb t e v ix u.
