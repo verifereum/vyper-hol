@@ -105,21 +105,21 @@ QED
      above is one checked component, not the complete word-copy wrapper.
    - Bytestring: compile_store_bytestring reads length and copies payload;
      needs a concrete run plus inst_seq_ptr (including length cleanliness).
-   - Fixed array: equal-layout ABI-static branch uses compile_copy_memory;
-     other branch is an explicit counter/JNZ loop recursively copying each
-     element. Dynamic array: length/capacity check and length MSTORE, then
-     dynamic bulk copy for equal element layouts, else a recursive loop.
-   - Tuple/struct: recursive field copies with byte-offset arithmetic.
-     Valid source metadata should exclude INVALID and fallback mismatches;
-     that exclusion must be derived from typing/layout readiness, not assumed.
+   - All other equal-type elements (including nested arrays, tuples and
+     structs) use compile_copy_memory: empty code for size zero, otherwise
+     one MCOPY. for_memory_element_copy_dispatch in forPtrCopyInterface
+     checks this actual consumer dispatch. The recursive typed-store branches
+     are NOT selected; no recursive-copy or INVALID exclusion proof is needed.
    Existing typedCopy*Ptr/wordCopyRobustPtr wrappers expose frag_exec_ptr,
-   not counted runs. Required interface for each reachable branch:
-     compiled typed store + source robust ptr_mem_ok + destination coverage
-       ==> gas_summary_ptr_at ... (zero source gas)
-           (robust destination representation AND exterior memory frame
-            AND old-variable value/provenance/taint frame).
-   Supply it by constructive straight-line witnesses for bulk paths and
-   counted loop recursion for per-element paths, never by erasure inversion.
+   not counted runs. Required interface for each reachable finite branch:
+     compiled equal-type store + robust source representation + coverage
+       ==> counted pointer path with zero source gas,
+           robust destination representation, exterior memory frame,
+           and old-variable value/provenance/taint frame.
+   Supply it by constructive straight-line witnesses and inst_seq_ptr for
+   the same run, never by erasure inversion. The checked dispatch alone does
+   not derive LocMemory, element coverage, robust representation, nonwrapping
+   extents or fresh destination separation; these remain consumer obligations.
 
    Callback audit: bodyPtrPredsScript:87-90 grants body_stmts_ptr_ok only
    for nonempty vs. bodyPtrDefsScript:249-278 supplies ghost_inv for cenv'',
