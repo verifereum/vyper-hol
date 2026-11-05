@@ -237,6 +237,8 @@ Proof
      (stmts_env cenv NoLoop ret fbody) (eval_stmts cx fbody) es0` by
     (irule body_stmts_sim_ptr >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[lookup_function_abi_decode_target_occurs]) >>
+  `~cenv.ce_is_ctor` by
+    gvs[bodySimTheory.body_inv_def, Abbr `cx`, initial_evaluation_context_def] >>
   qpat_x_assum `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_frag_ptr_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `G0`, `tn0`, `cenv'`] mp_tac) >>
