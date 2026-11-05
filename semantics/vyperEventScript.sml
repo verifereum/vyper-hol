@@ -109,19 +109,29 @@ Definition event_value_to_word_def:
   event_value_to_word _ = 0w
 End
 
+Definition event_topic_word_def:
+  event_topic_word (BaseT (BytesT (Fixed _))) (BytesV bs) =
+    word_of_bytes_be (PAD_RIGHT 0w 32 bs) ∧
+  event_topic_word (BaseT AddressT) (BytesV bs) =
+    word_of_bytes_be (PAD_LEFT 0w 32 bs) ∧
+  event_topic_word _ v = event_value_to_word v
+End
+
 Definition encode_event_topic_def:
-  encode_event_topic T (BytesV bs) =
-    SOME (word_of_bytes_be (Keccak_256_w64 bs)) ∧
-  encode_event_topic T (StringV s) =
-    SOME (word_of_bytes_be (Keccak_256_w64 (string_to_bytes s))) ∧
-  encode_event_topic T _ = NONE ∧
-  encode_event_topic F v = SOME (event_value_to_word v)
+  encode_event_topic ty v =
+    if is_event_bytestring_type ty then
+      case v of
+      | BytesV bs => SOME (word_of_bytes_be (Keccak_256_w64 bs))
+      | StringV s =>
+          SOME (word_of_bytes_be (Keccak_256_w64 (MAP (n2w o ORD) s)))
+      | _ => NONE
+    else SOME (event_topic_word ty v)
 End
 
 Definition encode_indexed_event_topics_def:
   encode_indexed_event_topics [] [] [] = SOME ([] : bytes32 list) ∧
   encode_indexed_event_topics (T::fs) (ty::tys) (v::vs) =
-    (case encode_event_topic (is_event_bytestring_type ty) v of
+    (case encode_event_topic ty v of
      | NONE => NONE
      | SOME topic =>
          OPTION_MAP (CONS topic) (encode_indexed_event_topics fs tys vs)) ∧
@@ -204,3 +214,18 @@ Definition encode_raw_event_values_def:
   encode_raw_event_values logger topic_vals data =
     encode_raw_event logger (MAP event_value_to_word topic_vals) data
 End
+
+(* Fixed bytes are left-aligned; address values are right-aligned even though
+   both are represented by BytesV. *)
+Theorem encode_event_topic_bytes20:
+  encode_event_topic (BaseT (BytesT (Fixed 20)))
+    (BytesV (1w :: REPLICATE 19 0w)) = SOME (1w << 248)
+Proof
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED
+
+Theorem encode_event_topic_address:
+  encode_event_topic (BaseT AddressT) (AddressV 1w) = SOME 1w
+Proof
+  EVAL_TAC >> wordsLib.WORD_DECIDE_TAC
+QED

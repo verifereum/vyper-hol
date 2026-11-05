@@ -227,13 +227,12 @@ Proof
 QED
 
 Theorem encode_event_topic_eq_log_topic_equiv:
-  encode_event_topic is_bytestring v = SOME topic <=>
-  log_topic_equiv is_bytestring v topic
+  encode_event_topic ty v = SOME topic <=>
+  log_topic_equiv ty v topic
 Proof
-  Cases_on `is_bytestring` >> Cases_on `v` >>
+  Cases_on `is_event_bytestring_type ty` >> Cases_on `v` >>
   simp[encode_event_topic_def, log_topic_equiv_def,
-       log_bytestring_topic_def, event_value_to_word_eq_val_to_w256,
-       byteTheory.word_of_bytes_be_def] >>
+       log_bytestring_topic_def, byteTheory.word_of_bytes_be_def] >>
   metis_tac[]
 QED
 
@@ -242,16 +241,9 @@ Theorem encode_indexed_event_topics_characterization:
   LENGTH flags = LENGTH tys /\
   LENGTH flags = LENGTH vals /\
   log_indexed_topics_equiv
-    (indexed_topic_flags flags (MAP is_bytestring_type tys))
+    (indexed_topic_flags flags tys)
     (indexed_values flags vals) topics
 Proof
-  `!ty. is_event_bytestring_type ty = is_bytestring_type ty` by
-    (gen_tac >> Cases_on `ty` >> simp[is_event_bytestring_type_def,
-                                      is_bytestring_type_def] >>
-     Cases_on `b` >> simp[is_event_bytestring_type_def,
-                          is_bytestring_type_def] >>
-     Cases_on `b'` >> simp[is_event_bytestring_type_def,
-                           is_bytestring_type_def]) >>
   qid_spec_tac `topics` >> qid_spec_tac `vals` >> qid_spec_tac `tys` >>
   Induct_on `flags`
   >- (Cases_on `tys` >> Cases_on `vals` >> Cases_on `topics` >>
