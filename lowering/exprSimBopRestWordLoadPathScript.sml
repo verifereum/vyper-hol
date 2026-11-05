@@ -136,6 +136,27 @@ Proof
   simp[DROP_LENGTH_APPEND, mk_inst_def, EVERY_DEF]
 QED
 
+Theorem rest_word_ptr_load_run_frame:
+  compile_ptr_load ctor imm loc addr sa = (op,sb) /\
+  loc <> LocCalldata /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t = s with vs_vars := t.vs_vars /\
+  (!x. (!i. MEM i (emitted_insts sa sb) ==> ~MEM x i.inst_outputs) ==>
+       FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x)
+Proof
+  strip_tac >> drule_all rest_word_ptr_load_code >> strip_tac >>
+  ho_match_mp_tac run_inst_seq_protected_frame >>
+  qexists `emitted_insts sa sb` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `MEM i.inst_opcode [ADD; MLOAD; SLOAD; TLOAD; ILOAD; DLOAD]` by
+    (qpat_assum `EVERY (\i. MEM _ _) _` mp_tac >>
+     pure_rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >> simp[]) >>
+  Cases_on `i.inst_opcode = ADD`
+  >- (qspec_then `i` mp_tac step_pure_opcode_frame >> simp[] >>
+      disch_then drule >> strip_tac >> metis_tac[]) >>
+  `MEM i.inst_opcode [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD]` by fs[] >>
+  drule_all rest_word_step_load_frame >> strip_tac >> metis_tac[]
+QED
+
 Theorem rest_word_ptr_load_path:
   compile_ptr_load ctor imm loc addr sa = (op,sb) /\
   loc <> LocCalldata /\ fn_has_code sa sb func /\ ~s.vs_halted /\
@@ -162,29 +183,16 @@ Proof
     (fs[EVERY_MEM] >> rpt strip_tac >>
      qpat_x_assum `!i. MEM i _ ==> _` (qspec_then `i` mp_tac) >>
      simp[] >> rpt strip_tac >> gvs[is_terminator_def]) >>
-  `!i v w. MEM i (emitted_insts sa sb) /\ step_inst_base i v = OK w ==>
-     w = v with vs_vars := w.vs_vars /\
-     (!x. (!j. MEM j (emitted_insts sa sb) ==> ~MEM x j.inst_outputs) ==>
-          FLOOKUP w.vs_vars x = FLOOKUP v.vs_vars x)` by
-    (rpt gen_tac >> strip_tac >>
-     `MEM i.inst_opcode [ADD; MLOAD; SLOAD; TLOAD; ILOAD; DLOAD]` by
-       (qpat_assum `EVERY (\i. MEM _ _) _` mp_tac >>
-        pure_rewrite_tac[EVERY_MEM] >> disch_then (qspec_then `i` mp_tac) >>
-        simp[]) >>
-     Cases_on `i.inst_opcode = ADD`
-     >- (qspec_then `i` mp_tac step_pure_opcode_frame >> simp[] >>
-         disch_then drule >> strip_tac >> metis_tac[]) >>
-     `MEM i.inst_opcode [MLOAD; SLOAD; TLOAD; ILOAD; DLOAD]` by fs[] >>
-     drule_all rest_word_step_load_frame >> strip_tac >> metis_tac[]) >>
-  drule_all (SRULE [] (Q.INST [`P` |->
-    `\x. !i. MEM i (emitted_insts sa sb) ==> ~MEM x i.inst_outputs`]
-    rest_word_readonly_sequence_path)) >>
-  disch_then (qspec_then `ctx` mp_tac) >> simp[] >> strip_tac >>
+  drule_all rest_word_ptr_load_run_frame >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    gvs[EVERY_MEM, FILTER_EQ_NIL] >>
+  drule_all tuple_run_inst_seq_gas_path >> simp[] >> strip_tac >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   `LENGTH sb.cs_current_insts =
    s.vs_inst_idx + LENGTH (emitted_insts sa sb)` by simp[] >>
-  qpat_x_assum `gas_path _ _ _ _ _` mp_tac >>
-  qpat_x_assum `!i v w. _` kall_tac >>
+  qpat_x_assum `!ctx. gas_path _ _ _ _ _` (qspec_then `ctx` mp_tac) >>
   Cases_on `op` >>
   gvs[eval_operand_def, lookup_var_def, venom_state_component_equality]
 QED
