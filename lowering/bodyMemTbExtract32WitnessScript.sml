@@ -273,3 +273,29 @@ Proof
   Cases_on `es` >> simp[] >> Cases_on `t` >> simp[] >>
   Cases_on `t'` >> simp[]
 QED
+
+Theorem extract32_load_instruction_signature:
+  compile_extract32_load len data start sa = (op,sb) ==>
+  ?v0 v1 v2 v3 v4 v5 v6.
+    sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+    op = Var v6 /\
+    MAP (\i. (i.inst_opcode, i.inst_operands, i.inst_outputs)) sb.cs_current_insts =
+    MAP (\i. (i.inst_opcode, i.inst_operands, i.inst_outputs)) sa.cs_current_insts ++
+      [(ADD, [start; Lit 32w], [v0]);
+       (LT, [Var v0; start], [v1]);
+       (GT, [Var v0; len], [v2]);
+       (OR, [Var v1; Var v2], [v3]);
+       (ISZERO, [Var v3], [v4]);
+       (ASSERT, [Var v4], []);
+       (ADD, [data; start], [v5]);
+       (MLOAD, [Var v5], [v6])]
+Proof
+  simp[builtinBytesTheory.compile_extract32_load_def,
+       builtinBytesTheory.compile_assert_slice_bounds_def,
+       compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+       compileEnvTheory.comp_return_def, emitHelperTheory.emit_op_def,
+       emitHelperTheory.emit_void_def, compileEnvTheory.fresh_id_def,
+       compileEnvTheory.fresh_var_def, compileEnvTheory.emit_def,
+       venomInstTheory.mk_inst_def] >> rpt strip_tac >> gvs[] >>
+  rpt (irule_at Any EQ_REFL) >> simp[]
+QED
