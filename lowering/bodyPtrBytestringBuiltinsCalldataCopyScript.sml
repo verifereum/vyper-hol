@@ -2,6 +2,7 @@ Theory bodyPtrBytestringBuiltinsCalldataCopy
 Ancestors
   fragExecPtr bodyPtrDefs ptrSafeRun ptrDiscipline venomExecSemantics
   venomInst venomState finite_map codegenRel memLocDefs contextCodegenRel
+  robustCopyTransportPtr valueEncodingProps
 
 Theorem ptr_inst_ok_calldatacopy_operand:
   !D ctx fn G tn s id dst src count n fuel.
@@ -64,4 +65,78 @@ Proof
        new_site_bytes_def, write_memory_with_expansion_def,
        FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
   simp[taint_component_equality]
+QED
+
+Theorem ghost_kept_mem_taint_decrease:
+  !cenv es sa G0 tn0 s0 G tn m.
+    ghost_kept cenv es sa G0 tn0 s0 G tn /\ m SUBSET tn.t_mem ==>
+    ghost_kept cenv es sa G0 tn0 s0 G (tn with t_mem := m)
+Proof
+  simp[ghost_kept_def, op_taint_def] >>
+  metis_tac[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem calldatacopy_write_ptr_covers:
+  !G tn p s sz off bytes m.
+    ptr_covers G tn p (write_memory_with_expansion off bytes s)
+      sz = ptr_covers G (tn with t_mem := m) p s sz
+Proof
+  simp[ptr_covers_def, op_taint_def, write_memory_with_expansion_def,
+       lookup_var_def]
+QED
+
+Theorem write_memory_robust_exterior:
+  !tn s off bytes tv v p.
+    val_wf tv v /\
+    (p + val_footprint tv v <= off \/ off + LENGTH bytes <= p) /\
+    (!mem. mem_agree_outside tn s.vs_memory mem ==>
+           val_in_memory tv v p mem) ==>
+    !mem. mem_agree_outside
+      (tn DIFF {i | off <= i /\ i < off + LENGTH bytes})
+      (write_memory_with_expansion off bytes s).vs_memory mem ==>
+      val_in_memory tv v p mem
+Proof
+  rpt strip_tac >>
+  irule robust_val_in_memory_exterior_frame >>
+  conj_tac >- simp[] >>
+  goal_assum (drule_at Any) >>
+  qexistsl_tac [`s.vs_memory`, `tn`,
+               `{i | off <= i /\ i < off + LENGTH bytes}`] >>
+  simp[] >> rpt strip_tac >>
+  irule write_memory_mem_bytes_at_disjoint >> decide_tac
+QED
+
+Theorem write_memory_ghost_inv:
+  !d cenv cx es G tn s off bytes.
+    ghost_inv d cenv cx es G tn s /\
+    (!name entry p sz w.
+       lookup_scopes name es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+       lookup_var p s = SOME w ==>
+       val_wf entry.type entry.value /\
+       (w2n w + val_footprint entry.type entry.value <= off \/
+        off + LENGTH bytes <= w2n w)) ==>
+    ghost_inv d cenv cx es G
+      (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
+      (write_memory_with_expansion off bytes s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[ghost_inv_def] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `ptr_covers G tn p s sz` by metis_tac[] >>
+      conj_tac
+      >- gvs[calldatacopy_write_ptr_covers, ptr_covers_def, op_taint_def] >>
+      rpt strip_tac >>
+      `lookup_var p s = SOME w` by
+        gvs[lookup_var_def, write_memory_with_expansion_def] >>
+      irule write_memory_robust_exterior >>
+      conj_tac >- metis_tac[] >>
+      goal_assum (drule_at Any) >> metis_tac[])
+  >- (Cases_on `d` >- simp[return_buf_ptr_def] >>
+      PairCases_on `x` >>
+      gvs[return_buf_ptr_def, calldatacopy_write_ptr_covers,
+          ptr_covers_def, op_taint_def, write_memory_with_expansion_def,
+          lookup_var_def])
+  >- gvs[op_taint_def] >>
+  gvs[stor_taint_ok_def, write_memory_with_expansion_def]
 QED
