@@ -21,14 +21,16 @@
 Theory dftContractGas
 Ancestors
   dftGasOracleFromList dftGasOracleToList dftGasOracleSim dftGasOracleInv
-  dftGasOracleDefs venomRetProps contextRawReachable
+  dftGasOracleDefs venomRetProps contextRawReachable ptrDiscipline passSimulationDefs
+  o1ContractCfgNorm gasOracleReplay dftWf dftCorrectnessFinal stackPlanGen contextCodegenRel
   o1DftStep dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
   o1PassContract unitMemInv unitShapeDefs lowerDloadDefs venomPassDispatcher
-  venomExecSemantics venomWf venomInst list
+  venomExecSemantics venomWf venomInst venomState list
 
 Theorem ctx_pass_stage_dft:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' ==>
   C'.ctx_entry = C.ctx_entry /\
+  C'.ctx_global_reserved = C.ctx_global_reserved /\
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions
 Proof
   rw[ctx_pass_stage_def] >>
@@ -91,6 +93,110 @@ Proof
   gvs[dft_fn_rel_def]
 QED
 
+(* ===== Assembly helpers ===== *)
+
+Theorem dft_ctx_block_ids_distinct:
+  !fs gs. LIST_REL dft_fn_rel fs gs ==>
+  EVERY (\fn. EVERY (\bb. ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions))
+                fn.fn_blocks) gs
+Proof
+  Induct_on `LIST_REL` >> rw[] >> rename1 `dft_fn_rel f g` >>
+  rw[EVERY_MEM] >> rename1 `MEM bb' g.fn_blocks` >>
+  `LIST_REL dftScheduleOrder$dft_block_rel f.fn_blocks g.fn_blocks /\
+   wf_function f` by fs[dft_fn_rel_def] >>
+  `?bb. MEM bb f.fn_blocks /\ dftScheduleOrder$dft_block_rel bb bb'` by
+    (fs[LIST_REL_EL_EQN, MEM_EL] >> metis_tac[]) >>
+  metis_tac[wf_fn_block_inst_ids_distinct, dft_block_rel_ids_distinct]
+QED
+
+Theorem dft_ctx_functions_map:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions ==>
+  C'.ctx_functions = MAP dft_fn C.ctx_functions
+Proof
+  rw[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP]
+QED
+
+Theorem dft_fn_name_eom[simp]:
+  (dft_fn fn).fn_name = fn.fn_name /\ (dft_fn fn).fn_eom = fn.fn_eom
+Proof
+  simp[dft_fn_def] >> pairarg_tac >> simp[]
+QED
+
+Theorem collect_fn_eoms_dft:
+  !fs. collect_fn_eoms (MAP dft_fn fs) = collect_fn_eoms fs
+Proof
+  Induct >> simp[collect_fn_eoms_def]
+QED
+
+Theorem dead_result_rel_halt_readings[local]:
+  dead_result_rel D (Halt s) (Halt (s with vs_gas_readings := w))
+Proof
+  simp[dead_result_rel_def, accounts_agree_except_def,
+       transient_agree_except_def, imms_agree_except_def,
+       storage_agree_except_def, word_agree_except_def,
+       vfmStateTheory.account_state_component_equality] >>
+  irule EVERY2_refl >>
+  simp[request_agree_except_def, accounts_agree_except_def,
+       transient_agree_except_def, storage_agree_except_def,
+       word_agree_except_def, vfmStateTheory.account_state_component_equality,
+       extCallOracleTheory.call_request_component_equality]
+QED
+
+Theorem dead_result_rel_gas_halt:
+  gas_variant a c /\ gas_variant b c ==> dead_result_rel D (Halt a) (Halt b)
+Proof
+  rw[gas_variant_def] >>
+  `b = a with vs_gas_readings := b.vs_gas_readings` by
+    fs[venom_state_component_equality] >>
+  pop_assum SUBST1_TAC >> simp[dead_result_rel_halt_readings]
+QED
+
+Theorem gas_dft_dead_result:
+  gas_res_rel r e /\ dft_res_rel e e' /\ gas_res_rel r' e' /\
+  terminates r /\ (!v t. r <> IntRet v t) /\ (!t. r <> OK t) ==>
+  dead_result_rel D r r'
+Proof
+  Cases_on `r` >> Cases_on `e` >>
+  simp[gas_res_rel_def, terminates_def, dft_res_rel_def] >>
+  rpt strip_tac >> gvs[] >>
+  Cases_on `r'` >> gvs[gas_res_rel_def]
+  >~ [`dead_result_rel _ (Halt _) (Halt _)`]
+  >- metis_tac[dead_result_rel_gas_halt] >>
+  gvs[dead_result_rel_def]
+QED
+
+Theorem lookup_function_name[local]:
+  !fns. lookup_function name fns = SOME fn ==> fn.fn_name = name
+Proof
+  Induct >> rw[lookup_function_def, FIND_thm] >> gvs[lookup_function_def]
+QED
+
+(* o1_fn_shape: the entry function has no RET, RETFMP or DRET. *)
+Theorem o1_ctx_shape_run_context_no_intret:
+  o1_ctx_shape C ==> run_context fuel C vs <> IntRet vals t
+Proof
+  strip_tac >> irule run_context_not_int_ret >> rpt strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `fn.fn_name = name` by metis_tac[lookup_function_name] >>
+  `o1_fn_shape C fn` by gvs[o1_ctx_shape_def, EVERY_MEM] >>
+  gvs[o1_fn_shape_def, entry_fn_no_return_def]
+QED
+
+Theorem gas_res_rel_terminates:
+  gas_res_rel r e /\ terminates r ==> terminates e
+Proof
+  Cases_on `r` >> Cases_on `e` >> simp[gas_res_rel_def, terminates_def]
+QED
+
+Theorem lowered_mem_fact_gas_readings[simp]:
+  lowered_mem_fact eom ctx fn inst (t with vs_gas_readings := ws) <=>
+  lowered_mem_fact eom ctx fn inst t
+Proof
+  `inst_mem_ranges inst (t with vs_gas_readings := ws) = inst_mem_ranges inst t` by
+    (irule supply_inst_mem_ranges_cong >> simp[]) >>
+  simp[lowered_mem_fact_def, lowered_mem_ok_def, in_revert_forward_def]
+QED
+
 (* The witness vs holds the readings C' consumes from vs', reordered to
    the order C reads them in.  Through the oracle semantics
    (dftGasOracleDefs): gas_oracle_from_list turns the run of C' from vs'
@@ -105,12 +211,44 @@ QED
 Theorem dft_ctx_sim_gas:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
-  C'.ctx_entry = C.ctx_entry /\ o1_ctx_shape C /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
   ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
-  cheat
+  strip_tac >>
+  drule dft_ctx_block_ids_distinct >> strip_tac >>
+  drule_then (qspec_then `vs'` strip_assume_tac) gas_oracle_from_list >>
+  drule_then assume_tac gas_oracle_to_list >>
+  first_x_assum (qspecl_then [`vs'`, `C`] strip_assume_tac) >>
+  rename1 `run_context _ C (vs' with vs_gas_readings := rds)` >>
+  qexists_tac `vs' with vs_gas_readings := rds` >>
+  conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
+  conj_tac
+  >- (rw[ctx_sim_def] >> qexists_tac `fuel` >>
+      irule gas_dft_dead_result >>
+      simp[run_context_not_ok, o1_ctx_shape_run_context_no_intret] >>
+      qexistsl [`ev_context orc fuel C vs'`, `ev_context orc fuel C' vs'`] >>
+      simp[] >> irule dft_ev_context_sim >> simp[] >>
+      metis_tac[gas_res_rel_terminates]) >>
+  rw[o1_lowered_inv_def] >> qexists_tac `eom` >>
+  `C'.ctx_functions = MAP dft_fn C.ctx_functions` by
+    metis_tac[dft_ctx_functions_map] >>
+  conj_tac >- gvs[max_live_eom_def, collect_fn_eoms_dft] >>
+  gvs[mem_inv_raw_reachable] >>
+  `!p d fn inst t. ev_reachable orc vs' C p d fn inst t ==>
+     lowered_mem_fact eom C fn inst t` by
+    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+     first_x_assum drule >> simp[]) >>
+  `!p d fn inst t. ev_reachable orc vs' C' p d fn inst t ==>
+     lowered_mem_fact eom C' fn inst t` by
+    (mp_tac (Q.INST [`s:venom_state` |-> `vs'`] dft_ev_lowered_inv) >>
+     simp[] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  conj_tac
+  >- (simp[lookup_function_map, dft_fn_entry_label] >> metis_tac[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> simp[]
 QED
 
 Theorem dft_out_wf_ssa:

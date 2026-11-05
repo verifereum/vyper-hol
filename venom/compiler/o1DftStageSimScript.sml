@@ -15,6 +15,7 @@ Theorem dft_stage_sim_gas:
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
   strip_tac >> drule_all dft_stage_fn_rel >> strip_tac >>
+  drule ctx_pass_stage_dft >> strip_tac >>
   irule dft_ctx_sim_gas >> simp[] >>
   irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]
 QED
