@@ -1,6 +1,7 @@
 (* Memory checks for the straight-line selector suffix. *)
 Theory bodyMemBiMethodIdSuffix
 Ancestors
+  bodyAllocMemory allocaFootprint allocaSiteResource
   builtinHashing builtinBytesMemory builtinBytes exprSimHash
   exprLoweringProps emitHelperProps emitHelper context compileEnv
   fragExecMem instMemFrontier venomState venomExecSemantics
@@ -76,4 +77,38 @@ Proof
   drule_at (Pat `compile_keccak256_bytes _ _ = _`) method_id_bytes_hash_mem_ok >>
   disch_then irule >> simp[] >>
   qexistsl_tac [`b`, `len`] >> simp[] >> decide_tac
+QED
+
+Theorem method_id_fixed_hash_mem_ok:
+  compile_keccak256_bytesm src m sa = (op,sb) /\ m <= 32 /\
+  eval_operand src s = SOME w /\ fresh_vars_wrt sa s /\
+  fn_has_code sa sb func /\ ~block_is_terminated sa /\
+  stmt_state_rel ctx func cenv cx es s ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+    [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (mp_tac (Q.INST [`sha` |-> `F`, `v` |-> `src`] hash_fixed_alloca_code) >>
+     simp[]) >>
+  `32 < dimword (:256)` by simp[dimword_def] >>
+  `?p. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id 32 s).vs_allocas
+        sa.cs_next_id = SOME (p,32)` by
+    (simp[alloca_site_cases] >>
+     Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id` >- simp[] >>
+     PairCases_on `x` >> fs[stmt_state_rel_def] >>
+     qpat_x_assum `!inst n base sz. _` drule >> simp[mk_inst_def]) >>
+  `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
+  `p + 32 < dimword (:256)` by
+    (gvs[alloca_site_cases] >-
+       (fs[stmt_state_rel_def] >> drule alloca_room_fresh >>
+        disch_then (qspec_then `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
+          [STRING #"%" (toString sa.cs_next_var)]` mp_tac) >>
+        simp[stmt_state_rel_def, mk_inst_def, finite_mapTheory.FLOOKUP_DEF] >>
+        metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
+     fs[stmt_state_rel_def] >>
+     drule_all alloca_site_registered_below >> strip_tac >>
+     drule alloca_room_next_lt >> decide_tac) >>
+  irule compile_keccak256_bytesm_mem_ok >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[]
 QED
