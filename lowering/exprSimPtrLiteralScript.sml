@@ -59,7 +59,8 @@ val literal_word_tac =
        vyperASTTheory.expr_type_def, eval_operand_def,
        typed_val_to_w256_word_value, word_value_def, val_to_w256_def,
        is_word_type_def, vyperValueTheory.evaluate_type_def,
-       locals_kept_def, ptr_val_ok_def, op_taint_def, ghost_kept_def] >>
+       locals_kept_def, ptr_val_ok_def, op_taint_def, op_prov_def,
+       ghost_kept_def] >>
   fs[];
 
 Theorem literal_word_sim_ptr[local]:
@@ -191,7 +192,7 @@ fun literal_buffer_value_tac e size tv value =
     (SPEC_ALL literal_ptr_value_posts)) >>
   (impl_tac
    >- (simp[vyperASTTheory.expr_type_def, vyperValueTheory.evaluate_type_def,
-            lowered_value_type_def, type_memory_bytes_def, type_memory_size_def] >>
+            is_word_type_def, lowered_value_type_def, type_memory_bytes_def, type_memory_size_def] >>
        gvs[well_formed_type_def, vyperValueTheory.evaluate_type_def,
            type_slot_size_def, vfmConstantsTheory.word_size_def,
            wordsTheory.dimword_def])) >>

@@ -144,7 +144,8 @@ Theorem emit_mload_ptr_path:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK ((update_var out (mload (w2n a) s) s) with
              vs_inst_idx := SUC s.vs_inst_idx)) /\
-    op_taint tn' (Var out) = {} /\ tn'.t_mem = tn.t_mem /\
+    op_taint tn' (Var out) = {} /\ op_prov G' (Var out) = NONE /\
+    tn'.t_mem = tn.t_mem /\
     tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
     tn'.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> x <> out) /\
@@ -194,6 +195,10 @@ Proof
     (rpt strip_tac
      >- (irule step_prov_other_output >> simp[mk_inst_def]) >>
      irule step_taint_other_output >> simp[mk_inst_def]) >>
+  `op_prov (step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+             (update_var out (mload (w2n a) s) s)) (Var out) = NONE` by
+    (irule step_prov_out_none >> simp[mk_inst_def] >>
+     irule out_prov_other_none >> simp[mk_inst_def]) >>
   `(step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
       (update_var out (mload (w2n a) s) s) tn).t_imm = tn.t_imm` by
     simp[step_taint_def, imm_taint_def, mk_inst_def] >>
