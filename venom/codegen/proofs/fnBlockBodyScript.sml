@@ -13,7 +13,7 @@
 
 Theory fnBlockBody
 Ancestors
-  fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
+  fnLineageStatic fnPlanPrefix fnSimSpec fnFrameSteps fnFrameBoundary fnFrameTerminal gasFrameSim
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics
 
@@ -51,15 +51,17 @@ End
    lineage state ps_l (with the cleanup fields h, promised that
    lineage_state_block_plan picks, which also gives the alloc equation).
    That plan is the block's DFS code block_ops, placed at pc0, and as is
-   at its rest_ops, the code of the instructions from k on.  The entry step starts here after the parameters
-   (entry_params_frame_sim), the block step after the cleanup and the PHI
-   prefix.
+   at its rest_ops, the code of the instructions from k on.  The entry
+   step starts here after the parameters (entry_params_frame_sim), the
+   block step after the cleanup and the PHI prefix.
 
    Why it should hold: by induction on the instructions from k.  Each runs
-   by its instruction lemma (gen_inst_frame_sim, gas_inst_frame_sim,
-   gen_invoke_frame_sim with gen_fn_sim_at fuel for the callee, the halt,
-   abort and return steps, revert_forward_frame_sim), whose static
-   premises hold at the planner state ps (block_plan_state) and whose
+   by its instruction lemma, in the fnFrameDeep form (operands at any
+   depth, repeated dead_stack_marker slots): gen_inst_frame_sim_deep,
+   gas_inst_frame_sim_owned_deep, gen_invoke_frame_sim_deep with
+   gen_fn_sim_at fuel for the callee, the halt, abort and return steps,
+   revert_forward_frame_sim.  Their static premises hold at the planner
+   state ps (block_plan_state, fnLineageStatic) and their
    memory premises come from Inv (codegen_memory_obligations,
    reachability_closed).  A JMP or JNZ ends the block at a successor
    whose code is placed (dfs_block_code_placed), entered with the
@@ -81,7 +83,8 @@ Theorem block_body_frame_sim:
     EL i ctx.ctx_functions = fn /\ EL i cp.cp_regions = r /\
     MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
@@ -100,6 +103,7 @@ Theorem block_body_frame_sim:
     generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
       spill_base lbl_ctr = SOME (fn_ops, ps_end) /\
     fn_ops = r.sr_plan /\
+    ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     lookup_block vs.vs_current_bb fn.fn_blocks = SOME bb /\
     fn_reachable fn bb.bb_label /\
     lineage_state liveness dfg cfg fn

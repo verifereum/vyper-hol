@@ -3,7 +3,7 @@
  * the entry block, run from fn_entry_state_rel, simulated by the code at
  * the start of the function's region.
  *
- * TOP-LEVEL (CHEATED, a skeleton piece):
+ * TOP-LEVEL:
  *   fn_entry_block_step - gen_fn_sim_at (SUC fuel) from both function
  *                         theorems at fuel
  *)
@@ -14,7 +14,7 @@ Ancestors
   genFrameSim fnPlanPlace fnPlanCover fnAliasInv fnPlanLineage frameRel
   venomExecSemantics fnBlockBody fnEntryPlan fnEntryParams fnRunFields
   unitShapeDefs contextPlanLayoutProps planSpillBounds contextCodegenRel stackPlanGen
-  stackPlanTypes
+  stackPlanTypes stackOpSim blockSimHelpers
 
 Theorem entry_step_shape[local]:
   !ctx unit Inv cp i fn.
@@ -110,7 +110,8 @@ Theorem entry_body_frame_sim[local]:
   EL i cp.cp_regions = r /\
   MEM fn.fn_name (fcg_analyze ctx).fcg_reachable /\
   (!f inst callee_name args callee.
-    MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+    MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+    MEM inst (fn_insts f) /\
     inst.inst_opcode = INVOKE /\ inst.inst_operands = Label callee_name :: args /\
     lookup_function callee_name ctx.ctx_functions = SOME callee ==>
     fn_has_retpc callee) /\
@@ -125,6 +126,7 @@ Theorem entry_body_frame_sim[local]:
   ps0 = init_cleanup_plan_state ch growth r.sr_spill_base lbl_ctr /\
   generate_fn_plan_with_cleanup_analyzed liveness dfg cfg ch growth fn
     r.sr_spill_base lbl_ctr = SOME (r.sr_plan, ps_end) /\
+  ps_end.ps_alloc.sa_next_offset <= r.sr_spill_end /\
   fn_entry_label fn = SOME (HD fn.fn_blocks).bb_label /\
   vs.vs_current_bb = (HD fn.fn_blocks).bb_label /\
   lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
@@ -213,5 +215,73 @@ Theorem fn_entry_block_step:
   !fuel. gen_fn_sim_at fuel /\ gen_fn_frame_sim_at fuel ==>
          gen_fn_sim_at (SUC fuel)
 Proof
-  cheat
+  gen_tac >> strip_tac >>
+  rewrite_tac[gen_fn_sim_at_def] >> rpt gen_tac >> strip_tac >>
+  drule_all entry_step_shape >> strip_tac >>
+  drule_all region_fn_plan >> strip_tac >>
+  drule_all entry_block_plan >> strip_tac >>
+  qabbrev_tac `lbl = (HD fn.fn_blocks).bb_label` >>
+  rename1 `generate_context_plan ctx = SOME cplan` >>
+  qabbrev_tac `fmp = cplan.cp_initial_fmp` >>
+  `!off. MEM (SOSpill off) param_ops ==> off < dimword (:256)` by
+    metis_tac[entry_step_spill_bound] >>
+  `asm_block_at prog as.as_pc
+     (execute_plan fmp (SOLabel lbl :: param_ops ++ body_ops)) /\
+   asm_block_at prog as.as_pc (execute_plan fmp (SOLabel lbl :: param_ops))` by
+    (qpat_x_assum `asm_block_at _ _ (execute_plan _ r.sr_plan)` mp_tac >>
+     qpat_assum `r.sr_plan = _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[execute_plan_append, asm_block_at_append] >>
+     rpt strip_tac >> fs[]) >>
+  `ps1.ps_alloc.sa_next_offset <= r.sr_spill_end` by decide_tac >>
+  qspecl_then [`fuel`, `ctx`, `cplan`, `lo`, `o2pc`, `prog`,
+    `liveness_analyze fn`, `dfg_build_function fn`, `fn`,
+    `cleanup_caller_height (LENGTH ctx.ctx_functions) ctx (fcg_analyze ctx)
+       fn.fn_name`,
+    `cleanup_growth_table ctx (fcg_analyze ctx)`, `r.sr_spill_base`,
+    `lbl_ctr`,
+    `init_cleanup_plan_state
+       (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+          (fcg_analyze ctx) fn.fn_name)
+       (cleanup_growth_table ctx (fcg_analyze ctx)) r.sr_spill_base lbl_ctr`,
+    `param_ops`, `ps1`, `r`, `vs`, `as`, `ra`, `rest`, `Inv`]
+    mp_tac entry_prefix_frame_sim >>
+  impl_tac >- (unabbrev_all_tac >> simp[]) >>
+  strip_tac >>
+  `run_blocks (SUC fuel) ctx fn vs = block_rest fuel ctx fn (HD fn.fn_blocks) vs_p`
+    by (irule entry_step_run_rest >> unabbrev_all_tac >> metis_tac[]) >>
+  qspecl_then [`fuel`, `rpolicy`, `unit`, `cplan`, `prog`, `ctx`, `lo`, `o2pc`,
+    `i`, `fn`, `r`, `liveness_analyze fn`, `dfg_build_function fn`,
+    `cfg_analyze fn`,
+    `cleanup_caller_height (LENGTH ctx.ctx_functions) ctx (fcg_analyze ctx)
+       fn.fn_name`,
+    `cleanup_growth_table ctx (fcg_analyze ctx)`, `lbl_ctr`, `ps_end`,
+    `init_cleanup_plan_state
+       (cleanup_caller_height (LENGTH ctx.ctx_functions) ctx
+          (fcg_analyze ctx) fn.fn_name)
+       (cleanup_growth_table ctx (fcg_analyze ctx)) r.sr_spill_base lbl_ctr`,
+    `param_ops`, `ps1`, `body_ops`, `ps_after`, `as.as_pc`, `vs_p`, `as'`,
+    `Inv`, `ra`, `pc_ret`, `rest`, `as.as_memory`]
+    mp_tac entry_body_frame_sim >>
+  impl_tac
+  >- (unabbrev_all_tac >> gvs[fn_entry_state_rel_def] >> metis_tac[]) >>
+  strip_tac >>
+  rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (qpat_x_assum `!vs'. block_rest _ _ _ _ _ = Halt _ ==> _`
+        (qspec_then `vs'` mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      metis_tac[asm_steps_compose_halt])
+  >- (qpat_x_assum `!a vs'. block_rest _ _ _ _ _ = Abort _ _ ==> _`
+        (qspecl_then [`a`, `vs'`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      metis_tac[asm_steps_compose_revert, asm_steps_compose_fault])
+  >- (qpat_x_assum `!ret vs'. block_rest _ _ _ _ _ = IntRet _ _ ==> _`
+        (qspecl_then [`ret`, `vs'`] mp_tac) >>
+      impl_tac >- metis_tac[] >> strip_tac >>
+      rename1 `asm_steps _ _ _ m as' = AsmOK as2` >>
+      qexistsl_tac [`n + m`, `as2`] >>
+      rpt conj_tac
+      >- metis_tac[asm_steps_compose_ok]
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- (irule entry_step_return >> metis_tac[]))
 QED
