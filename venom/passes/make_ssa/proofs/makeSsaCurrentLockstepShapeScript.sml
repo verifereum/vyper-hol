@@ -315,6 +315,45 @@ Proof
     lookup_block_projection)) >> simp[]
 QED
 
+(* Cleanup only partitions the leading PHI segment. *)
+Theorem simplify_current_phi_opcodes:
+  i.inst_opcode = PHI ==>
+  (simplify_current_phi i).inst_opcode = PHI \/
+  (simplify_current_phi i).inst_opcode = ASSIGN \/
+  (simplify_current_phi i).inst_opcode = NOP
+Proof
+  strip_tac >>
+  simp[simplify_current_phi_def, keep_current_phi_vars_def] >>
+  IF_CASES_TAC >> simp[] >>
+  simp[simplify_current_phi_raw_def] >>
+  rpt CASE_TAC >> gvs[]
+QED
+
+Theorem simplify_current_phi_prefix_partition:
+  !xs phis ord.
+  simplify_current_phi_prefix_parts xs = (phis,ord) ==>
+  ?copies. ord = copies ++ DROP (phi_prefix_length xs) xs /\
+    EVERY (\i. i.inst_opcode = PHI) phis /\
+    EVERY (\i. i.inst_opcode = ASSIGN \/ i.inst_opcode = NOP) copies /\
+    LENGTH phis + LENGTH copies = phi_prefix_length xs
+Proof
+  Induct
+  >- (simp[simplify_current_phi_prefix_parts_def, phi_prefix_length_def] >>
+      rpt strip_tac >> qexists `[]` >> simp[]) >>
+  rpt gen_tac >> Cases_on `h.inst_opcode = PHI`
+  >- (simp[simplify_current_phi_prefix_parts_def] >>
+      pairarg_tac >> gvs[] >>
+      Cases_on `(simplify_current_phi h).inst_opcode = PHI`
+      >- (gvs[] >> strip_tac >> gvs[] >>
+          qexists `copies` >> simp[phi_prefix_length_def]) >>
+      gvs[] >> strip_tac >> gvs[] >>
+      qexists `simplify_current_phi h :: copies` >>
+      simp[phi_prefix_length_def] >>
+      drule simplify_current_phi_opcodes >> simp[]) >>
+  simp[simplify_current_phi_prefix_parts_def, phi_prefix_length_def] >>
+  rpt strip_tac >> qexists `[]` >> simp[]
+QED
+
 Theorem make_ssa_current_fn_block_shape:
   make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
   first_block_no_preds fn /\ first_block_no_phi fn /\
