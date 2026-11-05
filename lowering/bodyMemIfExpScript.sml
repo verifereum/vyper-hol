@@ -99,5 +99,6 @@ Proof
     (irule compile_ifexp_vv_sim_mem >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> Cases_on `is_word_type v5`
   >- (irule compile_ifexp_word_sim_mem >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  irule expr_sim_mem_of_vv_sim_mem >> simp[vyperASTTheory.expr_type_def]
+  irule expr_sim_mem_of_vv_sim_mem >> simp[vyperASTTheory.expr_type_def] >>
+  rpt strip_tac >> drule compile_expr_ifexp >> strip_tac >> gvs[]
 QED
