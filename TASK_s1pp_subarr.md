@@ -17,6 +17,8 @@ Theorem compile_subscript_array_live_case:
     (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
+    (!t r t'. eval_expr cx idx t = (INL r, t') ==>
+              t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tv t r t'. eval_expr cx obj s = (INL tv, t) /\
                    eval_expr cx idx t = (INL r, t') ==>
                    subscript_base_live cx tv t') /\
@@ -37,13 +39,15 @@ Definition subscript_base_live_def:
                evaluate_subscripts entry.type entry.value path = INL v) /\
   (subscript_base_live cx (PlaceR (ImmutablePlace src id path)) es <=>
      ?v es'. read_place cx (ImmutablePlace src id path) es = (INL v, es')) /\
+  (subscript_base_live cx (PlaceR (StoragePlace tr slot tv)) es <=>
+     storage_read_live cx tr (get_storage cx es tr) slot tv) /\
   (subscript_base_live cx _ es <=> T)
 End
 ```
 
 **Do not modify this statement or `subscript_base_live_def`.** Prove it as-is, or produce a counterexample.
 
-The other theorems in the file (`compile_subscript_array_storage_call_case`, `compile_subscript_array_ancestor_pop_case`, `compile_subscript_array_ctor_pop_case`) are deliberately admitted and out of scope; leave them and `compile_subscript_array_case` unchanged.
+The other theorems in the file (`compile_subscript_array_storage_call_case`, `compile_subscript_array_index_writes_case`, `compile_subscript_array_dead_base_case`) are deliberately admitted and out of scope; leave them and `compile_subscript_array_case` unchanged.
 
 ## Completion Criteria
 
@@ -66,7 +70,7 @@ holbuild -j4 build exprSimSubscriptArrayTheory exprSimPlacesTheory
 
 ## Background
 
-vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to bases whose place still reads its current value after the index is evaluated.
+vyper-hol proves the Vyper-to-Venom lowering correct by an expression simulation: for each expression form, the code `compile_expr` emits, run from a state related to the source state, ends related to the source result (`expr_vv_sim`, in the counted `gas_outcome` form), or exits as `expr_exit` allows when the source raises. This case is `a[i]` for an array base (static or dynamic) in memory (a local, or a temporary), storage, transient storage or code (an immutable: the staged buffer in the constructor, the data section at runtime), restricted to an index that leaves the source locals and immutables unchanged and a base whose place still reads its current value after the index is evaluated. The comments on the admitted subcases say why the other cases are out of reach of the current judgments; don't try to prove them.
 
 Source: `eval_expr` of `Subscript` (semantics/vyperInterpreterScript.sml) evaluates the base, then the index, reads the index's value, then `select_result` / `extend_place` (semantics/vyperStateScript.sml): for a place it reads the base's place, checks the index with `evaluate_subscripts`, and extends the place's path (memory, immutable) or computes the element's slot (`extend_storage_place`, storage). For a `Value` base it selects the element.
 
