@@ -1272,11 +1272,11 @@ Proof
        CONS (FEMPTY |+ (id, <|assignable := F; type := tv; value := v;
                               popped := []|>))).accounts` by simp[] >>
   drule_all (cj 2 eval_scc_type_sound_mutual) >> strip_tac >>
-  Cases_on `r` >> simp[stmt_res_ok_def] >>
+  Cases_on `r` >> simp[stmtSimDefsTheory.stmt_res_ok_def] >>
   rename1 `no_type_error_result (INR err)` >>
-  Cases_on `err` >> gvs[stmt_res_ok_def, no_type_error_result_def] >>
+  Cases_on `err` >> gvs[stmtSimDefsTheory.stmt_res_ok_def, no_type_error_result_def] >>
   rename1 `Error er` >> Cases_on `er` >>
-  gvs[stmt_res_ok_def, no_type_error_result_def]
+  gvs[stmtSimDefsTheory.stmt_res_ok_def, no_type_error_result_def]
 QED
 
 Theorem array_body_direct_snapshot[local]:
