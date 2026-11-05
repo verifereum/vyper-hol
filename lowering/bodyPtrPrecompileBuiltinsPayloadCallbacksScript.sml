@@ -4,7 +4,8 @@ Ancestors bodyPtrPrecompileBuiltinsPayloadRuns
           emitHelper context compileEnv venomState exprLoweringProps
           exprSimWordBuiltins exprSimPrecompiles emitHelperProps
           immutableMemoryFrame valueEncodingProps moduleLoweringProps
-          venomMemProps immutableCopyExecution
+          venomMemProps immutableCopyExecution exprSimHash
+          loweringPosts vyperValue vyperTyping valueEncoding
 
 Theorem recovery_payload_run:
   (do emit_void MSTORE [buf; h];
@@ -234,4 +235,149 @@ Proof
   conj_tac >- (qpat_assum `run_inst_seq (emitted_insts sa sm) s = OK u`
     (mp_then Any mp_tac run_inst_seq_append) >> simp[]) >>
   gvs[mstore_vars_memory_overwrite, update_var_def]
+QED
+
+Theorem allocated_scratch_point_disjoint:
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v op s /\
+  eval_operand op s = SOME p /\ sf.cs_next_id <= sc.cs_next_id /\
+  (!name a sz. local_region cenv es.scopes s name a sz ==>
+     regions_disjoint b n a sz) /\
+  (!aid a sz. aid < sc.cs_next_id /\
+     FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
+     regions_disjoint b n a sz) ==>
+  regions_disjoint b n (w2n p) 64
+Proof
+  strip_tac >>
+  `val_footprint (ArrayTV (BaseTV (UintT 256)) (Fixed 2)) v = 64` by
+    (Cases_on `v` >> simp[val_footprint_def, type_memory_size_def]) >>
+  drule expr_val_at_footprint >>
+  simp[evaluate_type_def, is_word_type_def, type_slot_size_def,
+       wordsTheory.dimword_def] >>
+  strip_tac >>
+  `regions_disjoint b n b' sz` by metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS] >>
+  gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Theorem mul_payload_callback:
+  (do src <- emit_op ADD [point; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 0w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [point; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [dst; value] od)
+    sa = ((),sm) /\
+  (do dst <- emit_op ADD [buf; Lit 64w];
+      emit_void MSTORE [dst; scalar] od) sm = ((),sb) /\
+  eval_operand point s = SOME p /\ eval_operand buf s = SOME b /\
+  eval_operand scalar s = SOME w /\
+  (!x. MEM (Var x) [point;buf;scalar] ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  w2n p + 64 < dimword (:256) /\ w2n b + 96 < dimword (:256) /\
+  expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
+  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,96) /\
+  (!name a sz. local_region cenv es.scopes s name a sz ==>
+     regions_disjoint (w2n b) 96 a sz) /\
+  (!aid a sz. aid < sf.cs_next_id /\
+     FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
+     regions_disjoint (w2n b) 96 a sz) ==>
+  ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
+    mem_bytes_at (w2n b) 96 t.vs_memory =
+      word_to_bytes (mload (w2n p) s) T ++
+      word_to_bytes (mload (w2n p+32) s) T ++ word_to_bytes w T
+Proof
+  strip_tac >>
+  `regions_disjoint (w2n b) 96 (w2n p) 64` by
+    (irule allocated_scratch_point_disjoint >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[]) >>
+  `regions_disjoint (w2n b) 64 (w2n p) 64` by
+    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  drule_all mul_payload_stages_run >> strip_tac >>
+  drule precompile_alloca_immutable_disjoint >> disch_tac >>
+  `!a len. regions_disjoint (w2n b) 96 a len ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt strip_tac >>
+     `a + len <= w2n b \/ w2n b + 96 <= a` by
+       gvs[compileEnvTheory.regions_disjoint_def] >>
+     simp[mstore_mem_bytes_at_disjoint]) >>
+  `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
+    (simp[immutable_mstore_capacity] >> decide_tac) >>
+  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t` by
+    (irule scratch_memory_frame >> simp[] >>
+     conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
+  qexists `t` >> simp[] >> conj_tac
+  >- (drule bodyPtrPrecompileBuiltinsPayloadFramesTheory.scratch_reset_allocations >>
+      simp[]) >>
+  irule EQ_TRANS >> goal_assum (drule_at Any) >>
+  irule payload_operand_preserved >> goal_assum (drule_at Any) >>
+  qexists `sa` >> simp[] >> metis_tac[listTheory.MEM]
+QED
+
+Theorem add_payload_stages_run:
+  (do src <- emit_op ADD [point; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 0w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [point; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 32w]; emit_void MSTORE [dst; value] od)
+    sa = ((),sm) /\
+  (do src <- emit_op ADD [other; Lit 0w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 64w]; emit_void MSTORE [dst; value];
+      src <- emit_op ADD [other; Lit 32w]; value <- emit_op MLOAD [src];
+      dst <- emit_op ADD [buf; Lit 96w]; emit_void MSTORE [dst; value] od)
+    sm = ((),sb) /\
+  eval_operand point s = SOME p /\ eval_operand other s = SOME q /\
+  eval_operand buf s = SOME b /\
+  (!x. MEM (Var x) [point;other;buf] ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  w2n p + 64 < dimword (:256) /\ w2n q + 64 < dimword (:256) /\
+  w2n b + 128 < dimword (:256) /\
+  regions_disjoint (w2n b) 128 (w2n p) 64 /\
+  regions_disjoint (w2n b) 128 (w2n q) 64 ==>
+  ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
+    t.vs_memory = (mstore (w2n b+96) (mload (w2n q+32) s)
+      (mstore (w2n b+64) (mload (w2n q) s)
+      (mstore (w2n b+32) (mload (w2n p+32) s)
+        (mstore (w2n b) (mload (w2n p) s) s)))).vs_memory /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    mem_bytes_at (w2n b) 128 t.vs_memory =
+      word_to_bytes (mload (w2n p) s) T ++ word_to_bytes (mload (w2n p+32) s) T ++
+      word_to_bytes (mload (w2n q) s) T ++ word_to_bytes (mload (w2n q+32) s) T
+Proof
+  strip_tac >>
+  `regions_disjoint (w2n b) 64 (w2n p) 64` by
+    (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `?u. run_inst_seq (emitted_insts sa sm) s = OK u /\
+    u.vs_memory = (mstore (w2n b+32) (mload (w2n p+32) s)
+      (mstore (w2n b) (mload (w2n p) s) s)).vs_memory /\
+    (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s)` by
+    (simp[] >> irule (point_pair_payload_run |> SPEC_ALL |>
+       Q.INST [`off` |-> `0w`] |> SRULE [wordsTheory.WORD_ADD_0]) >> simp[] >>
+     qexistsl [`buf`,`point`] >> simp[] >> metis_tac[listTheory.MEM]) >>
+  `eval_operand buf u = SOME b /\ eval_operand other u = SOME q` by
+    (conj_tac >> irule EQ_TRANS >> goal_assum (drule_at Any) >>
+     irule payload_operand_preserved >> goal_assum (drule_at Any) >>
+     qexists `sa` >> simp[] >> metis_tac[listTheory.MEM]) >>
+  `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+    (gvs[not_fresh_at_def] >> decide_tac) >>
+  `w2n (b+64w) = w2n b + 64` by
+    (irule abiDecodeStaticPropsTheory.w2n_add_n2w_lt >> decide_tac) >>
+  `!a z r. w2n q <= a /\ a+32 <= w2n q+64 /\
+      (r = w2n b \/ r = w2n b+32) ==> !v.
+      mload a (mstore r v z) = mload a z` by
+    (rpt strip_tac >> irule mload_mstore_disjoint >>
+     gvs[venomMemDefsTheory.regions_disjoint_def,
+         compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+  `mload (w2n q) u = mload (w2n q) s /\
+   mload (w2n q+32) u = mload (w2n q+32) s` by
+    (simp[GSYM mem_word_at_eq_mload] >> simp[mem_word_at_eq_mload]) >>
+  `!x. MEM (Var x) [other;buf] ==> not_fresh_at sm x` by
+    metis_tac[listTheory.MEM] >>
+  drule (point_pair_payload_run |> SPEC_ALL |> Q.INST [`off` |-> `64w`] |>
+    SRULE [wordsTheory.word_add_n2w]) >>
+  simp[] >> (impl_tac >- (gvs[compileEnvTheory.regions_disjoint_def] >> decide_tac)) >>
+  strip_tac >> FAIL_TAC "add composition"
 QED
