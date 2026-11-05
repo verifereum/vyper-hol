@@ -1107,14 +1107,3 @@ Proof
   qexistsl_tac [`env`, `fsz`, `sid`] >> simp[]
 QED
 
-
-
-
-
-
-
-
-
-
-
-
