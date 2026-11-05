@@ -1,6 +1,6 @@
 Theory fnPlanLineageDemandSupport
 Ancestors
-  livenessTransferProofs venomExecProps venomExecProofs finite_map indexedLists list rich_list
+  livenessBlockProofs livenessTransferProofs venomExecProps venomExecProofs passSharedDefs finite_map indexedLists list rich_list
 Libs
   venomInstTheory venomWfTheory livenessDefsTheory pairTheory
 
@@ -180,4 +180,145 @@ Proof
      first_x_assum (qspec_then `[eb.bb_label]` mp_tac) >>
      simp[is_fn_path_def]) >>
   metis_tac[same_label_same_block]
+QED
+
+Theorem demand_available_before_use:
+  !fn bb i v.
+    wf_function fn /\ MEM bb fn.fn_blocks /\
+    i < LENGTH bb.bb_instructions /\
+    def_available_at fn bb (SOME (EL i bb.bb_instructions)) v ==>
+    demand_available fn bb i v
+Proof
+  rpt strip_tac >> gvs[def_available_at_def, demand_available_def] >>
+  qexistsl_tac [`def_bb`, `def_inst`] >> simp[] >> strip_tac >>
+  gvs[] >>
+  `j = i` by
+    (irule inst_ids_el_eq >> qexistsl_tac [`bb`, `fn`] >>
+     gvs[wf_function_def]) >>
+  qexists_tac `i'` >> simp[]
+QED
+
+Theorem demand_available_step_back:
+  !fn bb i v.
+    demand_available fn bb (SUC i) v /\
+    ~MEM v (EL i bb.bb_instructions).inst_outputs ==>
+    demand_available fn bb i v
+Proof
+  rpt strip_tac >> gvs[demand_available_def] >>
+  qexistsl_tac [`db`, `di`] >> simp[] >> strip_tac >> gvs[] >>
+  `k <> i` by metis_tac[] >>
+  qexists_tac `k` >> simp[]
+QED
+
+Theorem phi_well_formed_uses_pairs:
+  !ops. phi_well_formed ops ==>
+    operand_vars ops = MAP SND (phi_pairs ops)
+Proof
+  Induct_on `ops` using phi_well_formed_ind >>
+  simp[phi_well_formed_def, operand_vars_def, operand_var_def, phi_pairs_def]
+QED
+
+Theorem collect_phis_all_prefix:
+  !instrs i.
+    i < LENGTH instrs /\ (EL i instrs).inst_opcode = PHI /\
+    (!j. j < i ==> (EL j instrs).inst_opcode = PHI) ==>
+    MEM (EL i instrs) (collect_phis instrs)
+Proof
+  Induct >> simp[] >> rpt gen_tac >> Cases_on `i` >>
+  simp[collect_phis_def] >> strip_tac >> gvs[] >>
+  `h.inst_opcode = PHI` by
+    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  simp[] >> disj2_tac >> first_x_assum irule >> simp[] >>
+  rpt strip_tac >> first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+Theorem block_phi_mem_collect:
+  !bb i.
+    bb_well_formed bb /\ i < LENGTH bb.bb_instructions /\
+    (EL i bb.bb_instructions).inst_opcode = PHI ==>
+    MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)
+Proof
+  rpt strip_tac >> irule collect_phis_all_prefix >> simp[] >>
+  rpt strip_tac >>
+  Cases_on `(EL j bb.bb_instructions).inst_opcode = PHI` >> simp[] >>
+  `i < j` by (irule phi_before_non_phi >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  decide_tac
+QED
+
+Theorem instruction_use_demand:
+  !fn bb i v.
+    wf_function fn /\ def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    i < LENGTH bb.bb_instructions /\
+    MEM v (inst_uses (EL i bb.bb_instructions)) ==>
+    demand_available fn bb i v \/ MEM v (raw_phi_inputs bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `MEM (EL i bb.bb_instructions) bb.bb_instructions` by simp[EL_MEM] >>
+  qpat_x_assum `def_dominates_uses fn` mp_tac >>
+  simp[def_dominates_uses_def] >>
+  disch_then (drule_then drule) >>
+  Cases_on `(EL i bb.bb_instructions).inst_opcode = PHI` >> simp[]
+  >- (strip_tac >> disj2_tac >>
+      `MEM (EL i bb.bb_instructions) (collect_phis bb.bb_instructions)` by
+        (irule block_phi_mem_collect >> metis_tac[wf_function_bb_well_formed]) >>
+      gvs[phi_edge_uses_wf_def, inst_uses_def] >>
+      drule phi_well_formed_uses_pairs >> strip_tac >>
+      simp[raw_phi_inputs_def, MEM_FLAT, MEM_MAP] >> metis_tac[]) >>
+  strip_tac >> disj1_tac >> irule demand_available_before_use >> simp[] >>
+  first_x_assum irule >> gvs[inst_uses_def] >>
+  metis_tac[MEM_operand_vars_eq_Var]
+QED
+
+Theorem liveness_block_backward_demand:
+  !n fn bb cfg st i v.
+    n = LENGTH bb.bb_instructions - i /\ i <= LENGTH bb.bb_instructions /\
+    wf_function fn /\ def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (liveness_out fn.fn_blocks cfg bb.bb_label st) /\
+    MEM v (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st)
+      bb.bb_label i) ==>
+    demand_available fn bb i v \/ MEM v (raw_phi_inputs bb.bb_instructions)
+Proof
+  Induct
+  >- (rpt strip_tac >>
+      `i = LENGTH bb.bb_instructions` by decide_tac >> gvs[] >>
+      `liveness_instrs fn.fn_blocks bb.bb_label = bb.bb_instructions` by
+        simp[liveness_instrs_def] >>
+      gvs[GSYM liveness_block_exit, EVERY_MEM] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `i < LENGTH bb.bb_instructions` by decide_tac >>
+  `liveness_instrs fn.fn_blocks bb.bb_label = bb.bb_instructions` by
+    simp[liveness_instrs_def] >>
+  `MEM v (liveness_transfer fn.fn_blocks (EL i bb.bb_instructions)
+     (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st)
+        bb.bb_label (SUC i)))` by
+    metis_tac[liveness_block_transfer] >>
+  Cases_on `MEM v (inst_uses (EL i bb.bb_instructions))`
+  >- (irule instruction_use_demand >> simp[]) >>
+  gvs[liveness_transfer_def, live_update_def, MEM_FILTER, MEM_APPEND,
+      inst_defs_def] >>
+  `demand_available fn bb (SUC i) v \/
+     MEM v (raw_phi_inputs bb.bb_instructions)` by
+    (first_x_assum irule >> simp[] >>
+     `SUC i <= LENGTH bb.bb_instructions /\
+      n = LENGTH bb.bb_instructions - SUC i` by decide_tac >>
+     simp[] >> qexistsl_tac [`cfg`, `st`] >> simp[]) >>
+  metis_tac[demand_available_step_back]
+QED
+
+Theorem liveness_block_entry_demand:
+  !fn bb cfg st v.
+    wf_function fn /\ def_dominates_uses fn /\ MEM bb fn.fn_blocks /\
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (liveness_out fn.fn_blocks cfg bb.bb_label st) /\
+    MEM v (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st)
+      bb.bb_label 0) ==>
+    demand_available fn bb 0 v \/ MEM v (raw_phi_inputs bb.bb_instructions)
+Proof
+  rpt strip_tac >>
+  `lookup_block bb.bb_label fn.fn_blocks = SOME bb` by
+    (irule MEM_lookup_block >> gvs[wf_function_def, fn_labels_def]) >>
+  irule liveness_block_backward_demand >> simp[] >>
+  qexistsl_tac [`cfg`, `st`] >> simp[]
 QED

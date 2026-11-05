@@ -1,6 +1,6 @@
 Theory fnPlanLineageDemand
 Ancestors
-  livenessProofs cfgAnalysisProps venomWf stackPlanGen callLayoutDefs list rich_list
+  fnPlanLineageDemandSupport livenessProofs cfgAnalysisProps venomWf stackPlanGen callLayoutDefs list rich_list
 
 Theorem live_prefix_demand:
   !fn lbl bb n v.
@@ -26,12 +26,12 @@ Proof
 QED
 
 Theorem get_params_canonical_prefix:
-  !params k body.
-    param_insts_from k params /\ no_param_insts body ==>
-    get_params (params ++ body) = params
+  !params k tail_insts.
+    param_insts_from k params /\ no_param_insts tail_insts ==>
+    get_params (params ++ tail_insts) = params
 Proof
   Induct_on `params` >> simp[param_insts_from_def]
-  >- (Cases_on `body` >> simp[get_params_def, no_param_insts_def]) >>
+  >- (Cases >> simp[get_params_def, no_param_insts_def]) >>
   rpt strip_tac >> gvs[param_inst_at_def, get_params_def] >>
   first_x_assum irule >> simp[] >> qexists_tac `SUC k` >> simp[]
 QED
@@ -64,7 +64,7 @@ Proof
   rewrite_tac[canonical_param_prefix_iff] >>
   disch_then (qx_choose_then `entry` (qx_choose_then `rest`
     (qx_choose_then `users` (qx_choose_then `fmp` (qx_choose_then `retpc`
-      (qx_choose_then `body` (map_every assume_tac o CONJUNCTS))))))) >>
+      (qx_choose_then `tail_insts` (map_every assume_tac o CONJUNCTS))))))) >>
   gnvs[] >>
   `get_params entry.bb_instructions = users ++ fmp ++ retpc` by
     (gnvs[] >> rewrite_tac[APPEND_ASSOC] >>
@@ -118,4 +118,25 @@ Proof
   strip_tac >- simp[] >>
   disj2_tac >> irule phi_selected_def_available >>
   metis_tac[]
+QED
+
+Theorem liveness_block_projected_demand:
+  !fn pb bb cfg st v.
+    wf_function fn /\ def_dominates_uses fn /\
+    MEM pb fn.fn_blocks /\ MEM bb fn.fn_blocks /\
+    fn_reachable fn pb.bb_label /\ fn_cfg_edge fn pb.bb_label bb.bb_label /\
+    EVERY (demand_available fn bb (LENGTH bb.bb_instructions))
+      (liveness_out fn.fn_blocks cfg bb.bb_label st) /\
+    MEM v (input_vars_from pb.bb_label bb.bb_instructions
+      (df_at [] (liveness_block fn.fn_blocks cfg bb.bb_label st) bb.bb_label 0)) ==>
+    def_available_at fn pb NONE v
+Proof
+  rpt strip_tac >> drule input_vars_from_projected_membership >> strip_tac
+  >- (drule_all liveness_block_entry_demand >> strip_tac >> gvs[] >>
+      irule demand_available_predecessor >> metis_tac[]) >>
+  `MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI` by
+    metis_tac[livenessTransferProofsTheory.collect_phis_mem] >>
+  drule_all phi_selected_def_available >> strip_tac >>
+  `pred_bb = pb` by metis_tac[venomExecProofsTheory.same_label_same_block] >>
+  gvs[]
 QED
