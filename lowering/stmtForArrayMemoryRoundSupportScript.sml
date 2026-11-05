@@ -1,6 +1,6 @@
 Theory stmtForArrayMemoryRoundSupport
 Ancestors
-  stmtSimForArrayLoop stmtForArrayMemoryBodyEntry bodyMemoryDefs
+  stmtSimForArrayLoop stmtForArrayMemoryBodyEntry stmtForArrayMemorySupport bodyMemoryDefs
   loweringPosts compileEnv venomState allocaHistory
   finite_map list gasSummary gasOutcome gasSummaryCompose gasExemptCert stmtSimForRounds
   fragGasMode fragGasPathMem stmtSimDeclGas
@@ -232,4 +232,28 @@ Proof
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee with scopes := rest`, `leaf`, `fin`] >>
   irule array_round_exempt >> simp[] >> metis_tac[]
+QED
+
+Theorem array_round_outcome_prefix_mem:
+  gas_marked_path T ctx func s0 0 (OK s1) /\
+  gas_outcome T tops (ctx,func) source (es,s1) Q R ==>
+  gas_outcome T tops (ctx,func) source (es,s0) Q R
+Proof
+  strip_tac >>
+  `s1.vs_gas_readings = s0.vs_gas_readings` by
+    (drule gas_marked_path_ok_suffix >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >> fs[gas_summary_at_def] >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      fs[gas_marked_exec_def] >>
+      metis_tac[gas_marked_path_then, arithmeticTheory.ADD_CLAUSES]) >>
+  disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  `gas_marked_exec T (ctx,func) (return ()) (es,s0) [] (INL ()) es (OK s1)` by
+    simp[gas_marked_exec_def, return_def] >>
+  drule gas_exempt_cert_start_gas_obs >>
+  disch_then (qspec_then `[]` assume_tac) >>
+  drule gas_exempt_cert_bind_unit >>
+  disch_then (qspecl_then [`tops`, `\u:unit. ignore_bind source (return ())`] mp_tac) >>
+  simp[bind_return] >> disch_then irule >> gvs[]
 QED
