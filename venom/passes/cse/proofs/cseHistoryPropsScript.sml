@@ -3489,3 +3489,42 @@ Proof
  `MEM x d.inst_outputs` by simp[] >>
  drule_all cse_source_interval_predecessor_binding_all >> simp[]
 QED
+
+Theorem cse_prefix_some_operand_live_writer:
+ wf_function fn /\ fn_inst_wf fn /\ wf_ssa fn /\
+ cse_prefix ctx fn fuel0 s0 events (CseExec n bb s) /\
+ get_instruction bb s.vs_inst_idx = SOME use /\
+ use.inst_opcode <> PHI /\ MEM op use.inst_operands /\
+ operand_producer (dfg_build_function fn) seen op = SOME d.inst_id /\
+ MEM d (fn_insts fn) /\ d.inst_outputs = [x] /\ d.inst_opcode <> PHI ==>
+ ?pre post m db u t.
+ events = pre ++ [CseStep m db d u t] ++ post /\
+ cse_prefix ctx fn fuel0 s0 pre (CseExec m db u) /\
+ get_instruction db u.vs_inst_idx = SOME d /\
+ EVERY (\ev. ~cse_event_writes ev x) post /\
+ eval_operand op s = lookup_var x t /\
+ lookup_var x s = lookup_var x t /\ LENGTH pre < LENGTH events
+Proof
+ strip_tac >>
+ `?ev. MEM ev events /\ cse_event_writes ev x` by
+   (drule_all cse_prefix_some_operand_epoch >> strip_tac >>
+    `dfg_get_def (dfg_build_function fn) x' = SOME d'` by
+      simp[dfgDefsTheory.dfg_get_def_def] >>
+    drule dfgAnalysisPropsTheory.dfg_build_function_correct >> strip_tac >>
+    `MEM d' (fn_insts fn)` by gvs[fn_insts_def] >>
+    `d' = d` by (irule cse_fn_insts_id_injective >> metis_tac[]) >>
+    gvs[] >> metis_tac[MEM_APPEND, MEM]) >>
+ qspecl_then [`events`, `x`] strip_assume_tac cse_events_last_write
+ >- (gvs[EVERY_MEM] >> metis_tac[]) >>
+ `ssa_form fn` by gvs[wf_ssa_def] >>
+ `MEM ev' events` by gvs[MEM_APPEND] >>
+ `MEM x d.inst_outputs` by simp[] >>
+ drule_all cse_prefix_nonphi_writer_step >> strip_tac >>
+ qpat_x_assum `ev' = CseStep _ _ _ _ _` SUBST_ALL_TAC >>
+ drule_all cse_prefix_step_input_cut >> strip_tac >>
+ `lookup_var x s = lookup_var x v` by
+   (drule_all cse_prefix_last_write_binding >> simp[cse_phase_state_def, cse_event_output_def]) >>
+ `eval_operand op s = lookup_var x s` by
+   (irule cse_prefix_some_operand_single_output_binding >> metis_tac[]) >>
+ qexistsl [`pre`, `post`, `m`, `sb`, `u`, `v`] >> simp[]
+QED
