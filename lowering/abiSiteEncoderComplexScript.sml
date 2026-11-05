@@ -189,6 +189,77 @@ Proof
       (fn th => rewrite_tac[th]) >> simp[]) >> asm_rewrite_tac[]
 QED
 
+Theorem abi_site_effect_sequence:
+  abi_site_encoder_effect A lo mid next limit_st d sz b cap initial ready /\
+  abi_site_encoder_effect A lo hi later limit_st d sz b cap ready actual /\
+  mid <= hi /\ next <= later ==>
+  abi_site_encoder_effect A lo hi next limit_st d sz b cap initial actual
+Proof
+  strip_tac >>
+  `abi_site_encoder_effect A lo hi next limit_st d sz b cap initial ready` by
+    (irule abi_site_effect_widen >> qexistsl_tac [`d`, `mid`, `lo`, `next`, `sz`] >>
+     asm_simp_tac bool_ss [LESS_EQ_REFL]) >>
+  `abi_site_encoder_effect A lo hi next limit_st d sz b cap ready actual` by
+    (irule abi_site_effect_widen >> qexistsl_tac [`d`, `hi`, `lo`, `later`, `sz`] >>
+     asm_simp_tac bool_ss [LESS_EQ_REFL]) >>
+  irule abi_site_effect_trans >> qexists_tac `ready` >> asm_rewrite_tac[]
+QED
+
+Theorem abi_site_encoder_complex_dynamic:
+  EVERY (\(ei,_,_,_). abi_site_encoder ei) infos /\
+  EXISTS (\(_,_,_,dyn). dyn) infos ==>
+  abi_site_encoder (AbiComplex infos)
+Proof
+  strip_tac >> simp_tac bool_ss [abi_site_encoder_def] >> rpt gen_tac >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_assum `abi_site_encoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o PURE_REWRITE_RULE [abi_site_encoder_input_def]) >>
+  disch_then (qx_choose_then `tys` (qx_choose_then `avs`
+    (MAP_EVERY assume_tac o CONJUNCTS)) o REWRITE_RULE [abi_encoder_complex_input_iff]) >>
+  qpat_x_assum `av = ListV avs` SUBST_ALL_TAC >>
+  drule_all abi_site_members_root_pre >> strip_tac >>
+  qpat_assum `enc at (ListV avs) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th]) >> PURE_REWRITE_TAC [th]) >>
+  drule_all abi_encoder_complex_dynamic_context >>
+  disch_then (qx_choose_then `dyn_ptr` (qx_choose_then `prepared`
+    (qx_choose_then `ignored` (qx_choose_then `middle` (MAP_EVERY assume_tac o CONJUNCTS))))) >>
+  drule_all abi_site_complex_phase_sites >> strip_tac >>
+  `prepared.cs_next_var <= limit_st.cs_next_var /\
+   middle.cs_next_var <= limit_st.cs_next_var /\
+   start.cs_next_var <= prepared.cs_next_var` by decide_tac >>
+  qpat_assum `abi_site_encoder_input _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_site_encoder_input_def]) >>
+  `LENGTH (enc (Tuple tys) (ListV avs)) <= LENGTH (enc (Tuple tys) (ListV avs))` by simp[] >>
+  drule_all abi_site_complex_prepare >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func initial ready` >>
+  drule_all abi_site_members_run >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func ready encoded` >>
+  qpat_assum `abi_site_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ encoded`
+    (assume_tac o SIMP_RULE bool_ss [APPEND, ADD_CLAUSES]) >>
+  drule_all abi_site_complex_finish >> disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rename1 `abi_decode_sim ctx func encoded actual` >>
+  `abi_site_encoder_effect A start.cs_next_id middle.cs_next_id start.cs_next_var
+    limit_st d (LENGTH (enc (Tuple tys) (ListV avs))) b cap initial encoded` by
+    (irule abi_site_effect_sequence >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `abi_site_encoder_effect A start.cs_next_id end_st.cs_next_id start.cs_next_var
+    limit_st d (LENGTH (enc (Tuple tys) (ListV avs))) b cap initial actual` by
+    (irule abi_site_effect_sequence >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
+  `abi_decode_sim ctx func initial actual` by
+    (irule abi_decode_sim_trans >> qexists_tac `ready` >> asm_rewrite_tac[] >>
+     irule abi_decode_sim_trans >> qexists_tac `encoded` >> asm_rewrite_tac[]) >>
+  qexists_tac `actual` >> asm_simp_tac bool_ss []
+QED
+
+Theorem abi_site_encoder_complex:
+  EVERY (\(ei,_,_,_). abi_site_encoder ei) infos ==>
+  abi_site_encoder (AbiComplex infos)
+Proof
+  strip_tac >> Cases_on `EXISTS (\(_,_,_,dyn). dyn) infos` >>
+  metis_tac[abi_site_encoder_complex_static, abi_site_encoder_complex_dynamic]
+QED
+
 
 val _ = List.app (fn (name,th) =>
   let val (ors,axs) = Tag.dest_tag (Thm.tag th) in
