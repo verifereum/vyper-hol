@@ -68,16 +68,31 @@ Proof
   simp[expr_child_callback_def, witness_child_bounds, witness_gas_compile]
 QED
 
-(* Pending shape lemma: direct evaluation exceeds tactic budget on address BytesL.
 Theorem witness_compile_shape:
   compile_expr reach_cenv reach_return witness_expr wrap_probe_start =
     (LocatedValue reach_return (mk_ptr (FST reach_compile) LocMemory),
      SND reach_compile)
 Proof
-  CONV_TAC (computeLib.RESTR_EVAL_CONV
-    [``compile_external_call_kwargs``, ``function_selector``]) >> simp[]
+  `expr_child_callback (expr_size witness_expr) compile_expr reach_cenv
+     (BaseT AddressT) witness_target =
+     (\st. (StackValue (BaseT AddressT) (Lit 256w),st))` by
+    simp[FUN_EQ_THM, witness_target_callback] >>
+  `expr_child_callback (expr_size witness_expr) compile_expr reach_cenv
+     (BaseT (UintT 256)) witness_gas =
+     (\st. (StackValue (BaseT (UintT 256)) (Lit 10000w),st))` by
+    simp[FUN_EQ_THM, witness_gas_callback] >>
+  once_rewrite_tac[compile_expr_raw_def] >>
+  fs[SF ETA_ss, witness_expr_def, compile_expr_body_def, expr_type_def,
+       compile_call_def, lower_value_def, compile_multi_vvs_def,
+       compile_ext_call_kwargs_def, compile_ext_call_kwarg_def,
+       witness_target_callback, witness_gas_callback] >>
+  simp[SF ETA_ss, expr_child_callback_def, expr_size_def,
+       witness_target_def, witness_gas_def, witness_target_compile,
+       witness_gas_compile] >>
+  simp[comp_bind_def, comp_return_def, unwrap_value_def,
+       reach_compile_def, reach_wrapped_def, reach_return_def] >>
+  pairarg_tac >> simp[]
 QED
-*)
 
 (* Remaining full witness specification / premise table.
    Frozen theorem instantiation:
@@ -87,7 +102,7 @@ QED
    Simulation entry: ty=reach_return, sa=wrap_probe_start,
      (vv,sb)=compile_expr result in witness_compile_shape.
    Candidate cx: empty_evaluation_context with txn.block_number=1 and
-     sources=[(0w,[(NONE,[])])], layouts=[(0w,(FEMPTY,FEMPTY))].
+     sources=[(0w,[(NONE,[])])], layouts=[(0w,([],[]))].
    Candidate es: empty_state with scopes=[], outcomes=SOME[reach_outcome].
    Candidate env: artifact_env empty_contract_type_artifact [(NONE,[])] NONE.
    Candidate cenv: all variable/global/type maps empty, module=NONE,
@@ -133,3 +148,63 @@ QED
    The actual compile_expr adds no instructions before reach_compile: the
    target and explicit gas are immediate words, so IDs and ALLOCA base are
    exactly those from the checked helper trace. *)
+
+(* Concrete field specification supplement (construction, not certification).
+   No field below is to be chosen ARB when the full witness is constructed.
+   cenv:
+     ce_target = (\_. T); ce_vars = FEMPTY; ce_module_vars = FEMPTY;
+     ce_storage_layout = FEMPTY; ce_module = NONE; ce_struct_fields=FEMPTY;
+     ce_dynarray_capacity=(\_.0); ce_module_dynarray_capacity=(\_.0);
+     ce_method_id as specified above (all argument types, not just []);
+     ce_flag_member_id=(\_ _.0); ce_flag_n_members=(\_.0);
+     ce_var_type=(\_.NONE); ce_module_var_type=(\_.NONE);
+     ce_hashmap_info=(\_.NONE); ce_event_info=(\_.NONE); ce_type_env=FEMPTY;
+     ce_returns_count=0; ce_return_buf=NONE; ce_return_pc=NONE;
+     ce_ctor_exit_label=NONE; ce_is_external=F; ce_max_return_size=0;
+     ce_ret_enc_info=AbiPrimWord; ce_ret_dec_info=DecPrimWord NoClamp;
+     ce_is_ctor=F; ce_imm_alloca=NONE; ce_func_info=(\_.(0,0,[]));
+     ce_func_param_types=(\_.[]); ce_func_return_type=(\_.NoneT);
+     ce_func_ids=(\_.0); ce_nonreentrant=(F,0,F,F);
+     ce_raw_return=F; ce_alloca_locals=F.
+     ABI constructors checked against abiEncoder/abiDecoder definitions.
+   cx = empty_evaluation_context with
+     txn := empty_call_txn with <|block_number:=1; block_hashes:=[0w]|>,
+     sources := [(0w,[(NONE,[])])], layouts := [(0w,([],[]))].
+     Other cx fields remain their defined empty_evaluation_context values.
+   env = artifact_env empty_contract_type_artifact [(NONE,[])] NONE.
+   es = empty_state with <|scopes:=[];outcomes:=SOME[reach_outcome]|>.
+   s0 = init_venom_state "entry" with
+     <|vs_outcomes:=[reach_outcome]; vs_block_ctx:=empty_block_context with
+       <|bc_number:=1w; bc_blockhash:=(\_.0w)|>|>.
+     call_ctx_rel field audit requires cc_caller=cc_address=cc_callvalue=0w,
+     cc_calldata=[], cc_static=F; tc_origin=tc_gasprice=tc_chainid=0w,
+     tc_blobhashes=[]; bc_coinbase=bc_timestamp=bc_prevrandao=bc_gaslimit=
+     bc_basefee=bc_blobbasefee=0w. These follow the proposed zero transaction
+     fields if the defined empty contexts agree; checking them is deferred.
+     The blockhash conditional in call_ctx_rel reduces to 0w on both arms
+     for block_number=1, block_hashes=[0w]. tx_env_ok still needs proof.
+   func must use the full compile result (vv,sb) for this concrete cenv,
+     not reach_cenv. Exact proposed ir_function fields:
+     fn_name="probe";
+     fn_blocks=sb.cs_blocks ++
+       [<|bb_label:=sb.cs_current_bb;
+          bb_instructions:=sb.cs_current_insts ++
+            [mk_inst sb.cs_next_id STOP [] []]|>];
+     fn_call_abi=<|ica_has_memory_return_buffer:=NONE;
+                   ica_user_return_count:=NONE|>;
+     fn_noinline=F; fn_forced_alloc_positions=FEMPTY; fn_eom=NONE;
+     fn_mems_used=[]; fn_fmp_signature=NONE.
+     No function parameter/return-count fields exist in ir_function; these
+     are not additional assumptions. fn_has_code and distinct IDs remain
+     obligations, not consequences asserted by this record specification.
+   Checked here: literal types, literal compilation and callbacks, full
+     compile shape for reach_cenv. Unchecked: concrete records above,
+     shape transport from reach_cenv to concrete cenv, every invariant and
+     state-entry goal in the preceding table, source evaluation, STOP run,
+     global Abort exclusion, operand case judgments and exemption exclusion.
+   Compatibility risks explicitly retained: scope=[] may need a scope
+     frame; blockhash context convention; storage_layout record type;
+     accounts runtime typing for empty accounts; zero target account;
+     no ABI-target occurrences for an ExtCall return type. None is proved
+     merely by proposing these fields. These should be tested as small
+     probes in the C1.4 construction decomposition. *)
