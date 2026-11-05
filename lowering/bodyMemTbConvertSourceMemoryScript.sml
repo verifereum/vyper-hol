@@ -55,3 +55,18 @@ Proof
        venomExecSemanticsTheory.exec_read1_def, eval_operand_def,
        venomStateTheory.eval_operands_def, arithmeticTheory.ADD1]
 QED
+
+Theorem convert_stack_unwrap_capacity:
+  ~is_word_type t /\
+  unwrap_value cenv (StackValue t op0) sm = (op,sb) /\
+  vv_store_bound cx t lt ee tv (StackValue t op0) s /\
+  evaluate_type (get_tenv cx) lt = SOME tvt /\
+  eval_operand op s = SOME w ==>
+  sb = sm /\ op = op0 /\
+  (type_memory_size tvt = 0 \/
+   w2n w + type_memory_size tvt <= s.vs_alloca_next)
+Proof
+  strip_tac >>
+  gvs[unwrap_value_def, comp_return_def, vv_store_bound_def] >>
+  metis_tac[]
+QED
