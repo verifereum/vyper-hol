@@ -52,7 +52,7 @@ Ancestors
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
   vyperStorageLayoutSafety vyperLookupStorage
   list finite_map bodySim allocLimits allocLimitsProps  exprSimHyps exprLoweringProps
-  stmtSimIf stmtLoweringMono stmtLowering compileEnv fragExec
+  stmtSimIf stmtSimAssert stmtLoweringMono stmtLowering compileEnv fragExec
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
@@ -390,8 +390,8 @@ Proof
      Cases_on `se` >> gvs[supported_string_reason_def] >>
      rename1 `Literal _ lit` >> Cases_on `lit` >>
      gvs[supported_string_reason_def]) >>
-  `!es1. (do raw <- eval_expr cx e; read_result cx raw od) es =
-           (INL (BoolV F), es1) ==>
+  `!gs es1. (do raw <- eval_expr cx e; read_result cx raw od)
+             (es with gas_obs := gs) = (INL (BoolV F), es1) ==>
          expr_vv_sim ctx func cenv cx (expr_type se) se es1` by
     (rpt strip_tac >> irule assert_reason_vv_sim >>
      gvs[expr_sim_pre_body, stmt_exprs_ok_def,
@@ -760,7 +760,7 @@ Proof
   disch_then (strip_assume_tac o REWRITE_RULE[optionTheory.IS_SOME_EXISTS]) >>
   irule compile_assign_local_memory_widen_stmt_frag >> gns[] >>
   rpt conj_tac >>~- ([`val_footprint _ _ <= _`],
-    rpt gen_tac >> strip_tac >> metis_tac[body_assign_local_memory_read, type_widens_to_def]) >>
+    rpt gen_tac >> strip_tac >> metis_tac[body_assign_local_memory_read, expr_body_pre_gas_obs, type_widens_to_def]) >>
   metis_tac[type_widens_to_def, arg_type_fits_bytestring_source]
 QED
 
