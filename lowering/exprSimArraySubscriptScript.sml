@@ -7,7 +7,7 @@ Ancestors
   exprOracleStorageInterfaces vyperImmutablesPreservation vyperCreateFrame vyperCallFrame vyperCallOutcomeFrame
   fragExec venomExecSemantics venomInst venomState rich_list emitHelper intCallReturn
   exprSimForeignImmutableFrame emitHelperProps ASCIInumbers freshWrites
-  exprArrayOperandProvenance
+  exprArrayOperandProvenance exprSimWordArgs
 
 (* A current-value path takes priority over every historical snapshot. *)
 Theorem read_memory_path_current_append:
@@ -696,8 +696,10 @@ Theorem vv_holds_expr_post_nonword_frame:
               lookup_var q s0 = SOME w ==> lookup_var q s1 = SOME w) /\
   (!v. read_result cx tv es' = (INL v, es') <=>
        read_result cx tv es = (INL v, es)) /\
-  (!tr w. storage_holds cx tr ty tv w es ==> storage_holds cx tr ty tv w es') /\
-  (!w. immutable_holds cenv cx ty tv w es ==> immutable_holds cenv cx ty tv w es') ==>
+  (!tr w. vv_location vv = SOME (if tr then LocTransient else LocStorage) /\
+          storage_holds cx tr ty tv w es ==> storage_holds cx tr ty tv w es') /\
+  (!w. vv_location vv = SOME LocCode /\ immutable_holds cenv cx ty tv w es ==>
+        immutable_holds cenv cx ty tv w es') ==>
   vv_holds cenv cx ty tv vv es' s1
 Proof
   Cases_on `vv` >-
@@ -708,7 +710,7 @@ Proof
        (first_x_assum drule >> simp[]) >>
      drule_all expr_val_rel_expr_post_nonword_frame >> simp[]) >>
   qmatch_goalsub_rename_tac `LocatedValue vt aptr` >>
-  simp[vv_holds_def, contextTheory.vv_operand_def] >> strip_tac >>
+  simp[vv_holds_def, contextTheory.vv_operand_def, contextTheory.vv_location_def] >> strip_tac >>
   gvs[] >> Cases_on `aptr.ptr_location` >> gvs[]
   >~ [`val_in_memory`] >- suspend "memory"
   >> first_x_assum drule >> simp[]
@@ -4712,4 +4714,103 @@ Proof
   drule typed_array_length_capacity >> strip_tac >>
   irule idx_in_range_typed_integer >>
   conj_tac >- decide_tac >> simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
+(* Compose ownership and caller frames as well as the represented value.
+   Source observation frames are discharged separately at each location. *)
+Theorem vv_post_expr_post_nonword_frame:
+  ~is_word_type (expr_type obj) /\
+  vv_post ctx func cenv cx obj es0 sa sm s0 es tv bvv q0 /\
+  expr_post ctx func cenv cx idx es sm sn q0 es' iv iop q1 /\
+  stmt_state_rel ctx func cenv cx es0 s0 /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  sm.cs_next_id <= sn.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\ es'.scopes = es.scopes /\
+  (!n b sz. local_region cenv es.scopes q0 n b sz ==>
+    mem_bytes_at b sz q1.vs_memory = mem_bytes_at b sz q0.vs_memory) /\
+  (!w. eval_operand (vv_operand bvv) q0 = SOME w ==>
+       eval_operand (vv_operand bvv) q1 = SOME w) /\
+  (!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q q0 = SOME w ==> lookup_var q q1 = SOME w) /\
+  (!v. read_result cx tv es' = (INL v, es') <=>
+       read_result cx tv es = (INL v, es)) /\
+  (!tr w. vv_location bvv = SOME (if tr then LocTransient else LocStorage) /\
+          storage_holds cx tr (expr_type obj) tv w es ==>
+          storage_holds cx tr (expr_type obj) tv w es') /\
+  (!w. vv_location bvv = SOME LocCode /\
+        immutable_holds cenv cx (expr_type obj) tv w es ==>
+        immutable_holds cenv cx (expr_type obj) tv w es') ==>
+  vv_post ctx func cenv cx obj es0 sa sn s0 es' tv bvv q1
+Proof
+  strip_tac >>
+  `local_ptrs_rel func cenv es.scopes q0` by
+    fs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
+  `vv_holds cenv cx (expr_type obj) tv bvv es q0 /\
+   vv_at cenv cx (expr_type obj) sa sm es tv bvv q0` by fs[vv_post_def] >>
+  `vv_holds cenv cx (expr_type obj) tv bvv es' q1` by
+    (drule_all vv_holds_expr_post_nonword_frame >> simp[]) >>
+  `vv_at cenv cx (expr_type obj) sa sn es' tv bvv q1` by
+    (drule_all vv_at_expr_post_frame >> simp[]) >>
+  `wb_frame cenv es0 sa s0 q0` by
+    (fs[vv_post_def, wb_frame_def] >> metis_tac[]) >>
+  `wb_frame cenv es sm q0 q1` by
+    (irule expr_post_frame >> goal_assum (drule_at Any)) >>
+  `wb_frame cenv es0 sa s0 q1` by
+    (drule_all wb_frame_trans >> simp[]) >>
+  fs[vv_post_def, expr_post_def, wb_frame_def] >> metis_tac[]
+QED
+
+Theorem compile_array_memory_endpoint_post:
+  expr_body_pre cenv cx env obj es0 /\
+  expr_body_pre cenv cx env idx es /\ expr_type obj = ArrayT et bd /\
+  ~expr_has_pop obj /\ ~expr_has_pop idx /\
+  eval_expr cx obj es0 = (INL (PlaceR (MemoryPlace id path)),es) /\
+  eval_expr cx idx es = (res,es') /\
+  compile_expr cenv ty obj sa = (bvv,sm) /\
+  lower_value compile_expr cenv ity idx sm = (iop,sn) /\
+  vv_location bvv = SOME LocMemory /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel ctx func cenv cx es0 s0 /\
+  vv_post ctx func cenv cx obj es0 sa sm s0 es
+    (PlaceR (MemoryPlace id path)) bvv q0 /\
+  expr_post ctx func cenv cx idx es sm sn q0 es' iv iop q1 ==>
+  vv_post ctx func cenv cx obj es0 sa sn s0 es'
+    (PlaceR (MemoryPlace id path)) bvv q1
+Proof
+  strip_tac >>
+  `es.scopes = es0.scopes /\ es'.scopes = es.scopes` by
+    metis_tac[eval_expr_nopop_scopes] >>
+  `local_ptrs_reserved cenv sm` by
+    (drule_all compile_expr_local_ptrs_reserved >> simp[]) >>
+  `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+   sm.cs_next_id <= sn.cs_next_id` by
+    (drule (cj 1 compile_expr_grows) >>
+     drule (cj 2 compile_expr_grows) >> simp[]) >>
+  `!w. eval_operand (vv_operand bvv) q0 = SOME w ==>
+       eval_operand (vv_operand bvv) q1 = SOME w` by
+    (drule_at (Pat `compile_expr _ _ _ _ = _`)
+       compile_array_expr_operand_expr_post_frame >> simp[] >>
+     metis_tac[]) >>
+  `!n q sz w. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) sz) /\
+              lookup_var q q0 = SOME w ==> lookup_var q q1 = SOME w` by
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+       expr_post_cenv_ptr_vars >> simp[]) >>
+  `!v. read_result cx (PlaceR (MemoryPlace id path)) es' = (INL v,es') <=>
+       read_result cx (PlaceR (MemoryPlace id path)) es = (INL v,es)` by
+    (gen_tac >> irule read_result_source_components >> simp[]) >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `local_ptrs_rel func cenv es.scopes q0 /\
+   local_ptrs_rel func cenv es'.scopes q1 /\ locals_kept cenv es q0 q1` by
+    fs[vv_post_def, expr_post_def, stmt_state_rel_def, state_rel_def] >>
+  `!n b sz. local_region cenv es.scopes q0 n b sz ==>
+    mem_bytes_at b sz q1.vs_memory = mem_bytes_at b sz q0.vs_memory` by
+    (drule_at (Pat `locals_kept _ _ _ _`)
+       expr_sim_inv_unchanged_scopes_complete_regions >> simp[] >>
+     metis_tac[]) >>
+  irule vv_post_expr_post_nonword_frame >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[is_word_type_def] >> rpt strip_tac
+  >~ [`(if tr then LocTransient else LocStorage) = LocMemory`] >-
+    (Cases_on `tr` >> gvs[]) >>
+  metis_tac[]
 QED
