@@ -1,7 +1,7 @@
 (*
  * The planner's stack at a join block's entry.
  *
- * TOP-LEVEL (CHEATED, a piece):
+ * TOP-LEVEL (proved using the permitted lineage inventory admission):
  *   lineage_entry_join_stack — the lineage entry state of a join is a
  *                              dead_stack_marker prefix followed by exactly
  *                              the edge's live-in variables
@@ -189,15 +189,13 @@ QED
    pred's PHI operands from the top of the stack, and nothing below them
    may be a stale variable whose value the PHIs change.
 
-   Why it should hold: every predecessor of a join ends in a JMP
-   (block_entries_ready), whose plan reorders the stack so that it ends in
-   the target's live-in variables (join_reached).  Below them only
-   dead_stack_marker entries remain: the planner pops dead outputs,
-   consumes an operand at its last use, and clean_stack_plan pops or marks
-   dead what a single-predecessor block inherits but doesn't need.  This is
-   the static lineage_state invariant the comment on
-   fnPlanLineage$lineage_state_block_plan describes (a marker prefix, then
-   distinct variables that together are the live set at the edge). *)
+   Every predecessor of a join ends in a JMP (block_entries_ready), whose
+   successful plan ends in the target's live-in variables (join_reached).
+   The JMP has only one successor, so liveness convergence puts every
+   live-out variable in that suffix.  The permitted lineage inventory
+   supplies distinctness of the non-marker slots and says each is live-out.
+   A non-marker prefix slot would therefore also occur in the suffix,
+   contradicting distinctness. *)
 Theorem lineage_entry_join_stack:
   !liveness dfg cfg fn ch growth spill_base lbl_ctr pred bb ps.
     liveness = liveness_analyze fn /\ dfg = dfg_build_function fn /\
