@@ -410,3 +410,114 @@ revert mode and observations in production. Do NOT start global execution
 induction until those successor-producing interfaces exist. In particular,
 no conditional RET or final transport lemma proves backward coverage.
 *)
+
+(*
+CLOSURE AUDIT (2026-11-05; closure_audit checkpoint)
+=================================================
+This inventory does not assert a preservation theorem. R below is notation
+in this comment only, with the binders/types of the preceding audit:
+ R(E,live,keys,lo,t) =
+ !owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+   bt+sz <= lo \/ (?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)).
+
+TRANSITION / PRODUCER / GAP
+Shared seed: live={} makes R vacuous. ld_certificate_initial_boundary gives
+C1,C3,C4,C5,C6 with empty local maps, but does not state R or live={}.
+Original ALLOCA: ld_frame_embedding_target gives a witness ONLY for entries
+of current H. Neither ld_live nor C7 says every live owner belongs to H.
+Need new-site extension AND old-live retention; account/byte ALLOCA lemmas
+alone do not produce R. Repeated ALLOCA must retain the cached size.
+Scratch macro: ld_load_prefix_live_representation preserves assumed R for
+live' SUBSET live and n<=4. ld_load_semantic_backward composes this with
+source OK,C3,C10,C5. It does not initialize R or admit newly live owners.
+INVOKE: R with global lo is NOT inductively closed. setup_callee_def clears
+vs_allocas while retaining vs_alloca_next. ld_call_selected retains argument
+owners; ld_live_def also retains all selected saved caller sites. Thus take
+one caller allocation (bt,32) with bt>=lo and pass it as an argument: at child
+entry its owner remains live, bt+32>lo, and the child allocation map is empty.
+This is a concrete interface obstruction, NOT a counterexample to the task.
+No claim that this schematic trace is a checked program counterexample.
+ld_alloc_account_enter/ld_call_geometry correctly account for empty child
+maps; neither supplies R. ld_saved_embedded only pairs selections, layout,
+values and account: it contains no suspended-site floor certificate.
+Return: merge_callee_state_def restores caller allocation map/frontier but
+KEEPS callee memory. ld_return_geometry restores bounds/account; saved
+embedding return lemmas restore layout and variables conditionally. R for
+surviving caller owners can use saved witnesses, not child-map witnesses.
+Callee-only owners must be removed from live/table before caller restoration;
+ld_saved_embedded_table_cong is a conditional congruence, not that producer.
+
+REPAIR SHAPES (proposed obligations, NOT existing theorems)
+Keep global lo in C10. Introduce a separate logical frame floor f, with
+ lo<=f /\ allocas_from f t /\ f<=t.vs_alloca_next, and require
+ !owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+   bt+sz<=f \/ (?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j=SOME(bt,sz)).
+A generalized scratch separation consumer should then conclude
+ ?p. f<=p /\ p+32<dimword(:256) /\
+   ((FLOOKUP t.vs_allocas id=NONE /\ p=t.vs_alloca_next) \/
+     FLOOKUP t.vs_allocas id=SOME(p,32)) /\
+   (!aa bb. ((aa=bb /\ aa<lo) \/ ld_site_bytes E live aa bb) ==>
+     bb<p \/ p+32<=bb).
+Its remaining premises are ld_live_scratch_separation's account, id/key,
+nonoverlap, validity and headroom premises, with allocation floor f rather
+than lo. Do NOT use f for the identity part of the byte relation: relocated
+caller bytes below f are not generally equal at equal numeric addresses.
+Existing ld_live_scratch_separation is the special case f=lo; changing its
+statement is not authorized. Generalize at the strategy level without
+creating a near duplicate or rewriting accepted statements here.
+
+Intended entry producer, binders E live keys lo f t child fn args:
+ setup_callee fn args t=SOME child /\ lo<=t.vs_alloca_next /\
+ (!o bs bt sz. o IN live /\ ld_site_entry E o bs bt sz ==>
+   bt+sz<=t.vs_alloca_next) ==>
+ allocas_from t.vs_alloca_next child /\
+ (!o bs bt sz. o IN live /\ ld_site_entry E o bs bt sz ==>
+   bt+sz<=t.vs_alloca_next \/
+   (?j. j NOTIN keys /\ FLOOKUP child.vs_allocas j=SOME(bt,sz))).
+ld_setup_callee_floor already supplies the first clause. C8/paired endpoints
+supply the second's premise. The callee floor is the saved target frontier,
+not an arbitrary reserve. Preserve it across all child steps. Return must
+recover the SAVED caller floor, map witnesses and live restriction, while
+transporting C10 over current callee memory (ld_owned_return_memory and
+ld_site_bytes_return_memory are conditional tools, not completed execution).
+
+MACRO STRUCTURAL MATRIX (C rows refer to preceding audit)
+DLOAD: C3,C10,C5 and fixed-live R checked by ld_load_semantic_backward.
+C1: old local-map lookup preservation checked by ld_load_prefix_old_lookup;
+needs consolidated embedding transport (target scratch is absent from H).
+C2: source/target original output provenance becomes NONE; target ADD temp
+is also NONE. Need quantified paired-selection update plus unchanged AP/BP.
+C4: ld_reachable_load_owned gives ownership, not full opaque definedness;
+need original-name lookup statement including out and excluding av,bv.
+C6: endpoint bounds must advance with nondecreasing target frontier; frame
+and stack bound monotonicity must be assembled with preserved params/maps.
+C7: post selected/live shrink after out overwrite; no new original owner.
+C8,C9: E unchanged, live may shrink; need endpoint/frontier and subset proof.
+C11: output MLOAD clean (ld_load_completed_output), scratch/temp masks need
+boundedness integration. C12 and all observable shared fields: no account,
+storage, transient, immutable operation occurs, but no whole macro transport
+has yet assembled these equalities with step_taint. Saved frames unchanged;
+scratch charge A inserts a.inst_id, so indexed saved charges (tail sums) stay
+unchanged; exact global charge/count support still needs integration.
+
+DLOADBYTES: ld_reachable_bytes_memory gives source OK and C10 only.
+C1,C5: ld_bytes_completed_projections preserves allocation fields and
+ld_alloc_account_transport can lift them; source is memory-only.
+C2,C3,C4: ld_bytes_completed_lookup gives original lookups outside av;
+original outputs must be [] and av fresh in full V. Need t_var/provenance
+transport at the complete two-step boundary, not compiler ADD discipline.
+C6: ld_bytes_completed_params plus unchanged allocation fields; same bounds.
+C7-C9: same original locals/params/provenance/live and E, no owner extension.
+C11-C12: require completed taint transport; memory mask equation alone does
+not cover variable masks or storage/transient/immutable projections.
+Saved clauses: unchanged frames/charges, but table/live compatibility must
+be preserved by a consolidated boundary. Observables/control and source
+annotated successor remain separate missing integration rows for BOTH macros.
+
+RECOMMENDATION
+First generalize scratch separation to distinguish fixed lo and frame floor,
+with a call-entry and saved-return floor/witness probe; do not build a larger
+macro assembler over global R. Then consolidate all structural macro rows
+using existing effect transports. No global execution induction is justified
+by this inventory; revert-forward and observation production remain open.
+*)
