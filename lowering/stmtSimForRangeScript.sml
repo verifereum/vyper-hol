@@ -1238,7 +1238,13 @@ Resume for_range_checked_tail_outcome[checked_entry]:
   disch_then (qspecl_then [`jump_to entry_lbl sA`, `ctx`, `i2w n2`, `i2w n1`] mp_tac) >>
   (impl_tac >-
     (simp[jump_to_def, ASCIInumbersTheory.toString_inj] >>
-     Cases_on `is_signed_type fty` >> simp[] >> metis_tac[])) >>
+     Cases_on `is_signed_type fty` >> simp[] >>
+     gen_tac >> disch_tac >>
+     qpat_x_assum `!x. op1 = Var x \/ op2 = Var x ==> x <> p /\ _`
+       (qspec_then `x` mp_tac) >>
+     qpat_x_assum `op1 = Var x \/ op2 = Var x` (fn th => REWRITE_TAC [th]) >>
+     rpt (qpat_x_assum `_ = STRING #"%" (toString _)` SUBST1_TAC) >>
+     simp[])) >>
   strip_tac >>
   suspend "checked_tests"
 QED
@@ -1249,7 +1255,9 @@ Resume for_range_checked_tail_outcome[checked_tests]:
   `((if (if is_signed_type fty then SGT else GT) = SGT
        then word_gt (i2w n1 : bytes32) (i2w n2)
        else w2n (i2w n1 : bytes32) > w2n (i2w n2 : bytes32)) <=> n2 < n1)` by
-    (Cases_on `is_signed_type fty` >> gvs[]) >>
+    (qpat_x_assum `(if is_signed_type fty then _ else _) <=> _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `is_signed_type fty` >> simp[]) >>
   fs[] >>
   Cases_on `n1 <= n2`
   >- suspend "valid_order" >>
@@ -1398,7 +1406,8 @@ Resume for_range_checked_tail_outcome[loop_normal]:
 QED
 
 Resume for_range_checked_tail_outcome[loop_post]:
-  gvs[exit_result_def] >>
+  disj1_tac >>
+  qpat_x_assum `(\res ee s. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   suspend "loop_frames"
 QED
