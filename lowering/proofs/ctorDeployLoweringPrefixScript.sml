@@ -426,6 +426,127 @@ Proof
                    deploy_prefix_alloc_size_5] >> EVAL_TAC
 QED
 
+Theorem deploy_prefix_negative_layout_artifact:
+  concretizeMemLocDefs$compute_function_layout_fuel_in_context 48
+    (^prefix_dload_unit_tm).cu_context [] ^prefix_dload_fn_tm =
+    SOME <|cl_positions := FEMPTY |+ (Allocation 0,0)
+            |+ (Allocation 5,0) |+ (Allocation 8,0); cl_eom := 32|>
+Proof
+  pure_rewrite_tac[concretizeMemLocDefsTheory.compute_function_layout_fuel_in_context_def,
+    deploy_prefix_negative_alloc_items_artifact] >>
+  simp_tac bool_ss [LET_THM] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``cfgDefs$cfg_analyze``, ``concretizeMemLocDefs$bp_analyze_fuel``,
+     ``concretizeMemLocDefs$compute_alloc_map_fuel_in_context``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_bp_artifact,
+                  deploy_prefix_negative_cfg_artifact,
+                  deploy_prefix_negative_alloc_map_artifact] >>
+  EVAL_TAC >> simp[wordsTheory.dimword_def] >> EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_concrete_fn_artifact:
+  concretizeMemLocDefs$concretize_function_fuel_in_context 48
+    (^prefix_dload_unit_tm).cu_context [] ^prefix_dload_fn_tm =
+  SOME (^prefix_dload_fn_tm with
+    <|fn_blocks := [<|bb_label := "__deploy"; bb_instructions :=
+       [<|inst_id := 0; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+          inst_outputs := ["%0"]|>;
+        <|inst_id := 1; inst_opcode := ADD; inst_operands := [Lit 0w; Lit 0w];
+          inst_outputs := ["%1"]|>;
+        <|inst_id := 8; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+          inst_outputs := ["formal_var_0"]|>;
+        <|inst_id := 9; inst_opcode := ADD; inst_operands := [Var "%1"; Label "code_end"];
+          inst_outputs := ["formal_var_1"]|>;
+        <|inst_id := 10; inst_opcode := CODECOPY;
+          inst_operands := [Var "formal_var_0"; Var "formal_var_1"; Lit 32w];
+          inst_outputs := []|>;
+        <|inst_id := 11; inst_opcode := MLOAD; inst_operands := [Var "formal_var_0"];
+          inst_outputs := ["%2"]|>;
+        <|inst_id := 3; inst_opcode := MSTORE; inst_operands := [Var "%0"; Var "%2"];
+          inst_outputs := []|>;
+        <|inst_id := 5; inst_opcode := ASSIGN; inst_operands := [Lit 0w];
+          inst_outputs := ["%3"]|>;
+        <|inst_id := 6; inst_opcode := CODECOPY;
+          inst_operands := [Var "%3"; Label "runtime_begin"; Lit 0w]; inst_outputs := []|>;
+        <|inst_id := 7; inst_opcode := RETURN; inst_operands := [Var "%3"; Lit 0w];
+          inst_outputs := []|>]|>];
+      fn_eom := SOME 32;
+      fn_mems_used := [(Allocation 0,0,32);(Allocation 8,0,32);(Allocation 5,0,0)]|>)
+Proof
+  pure_rewrite_tac[concretizeMemLocDefsTheory.concretize_function_fuel_in_context_def] >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``concretizeMemLocDefs$compute_function_layout_fuel_in_context``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_layout_artifact |>
+    CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV
+      [``concretizeMemLocDefs$compute_function_layout_fuel_in_context``]))] >>
+  EVAL_TAC
+QED
+
+val prefix_dload_supply_tm = deploy_prefix_negative_dload_artifact
+  |> concl |> find_term (fn tm => is_eq tm andalso
+       optionSyntax.is_some (rhs tm)) |> rhs |> rand
+  |> pairSyntax.dest_pair |> snd;
+val prefix_concrete_fn_tm = deploy_prefix_negative_concrete_fn_artifact
+  |> concl |> rhs |> rand;
+val prefix_concrete_unit_tm =
+  ``^prefix_dload_unit_tm with cu_context :=
+    ((^prefix_dload_unit_tm).cu_context with ctx_functions := [^prefix_concrete_fn_tm])``;
+
+Theorem deploy_prefix_negative_concretize_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_ConcretizeMemLoc] "__deploy"
+    ^prefix_dload_unit_tm ^prefix_dload_supply_tm =
+    SOME (^prefix_concrete_unit_tm, ^prefix_dload_supply_tm)
+Proof
+  CONV_TAC (computeLib.RESTR_EVAL_CONV
+    [``concretizeMemLocDefs$concretize_function_fuel_in_context``]) >>
+  pure_rewrite_tac[deploy_prefix_negative_concrete_fn_artifact |>
+    CONV_RULE (LAND_CONV (computeLib.RESTR_EVAL_CONV
+      [``concretizeMemLocDefs$concretize_function_fuel_in_context``]))] >>
+  EVAL_TAC
+QED
+
+val prefix_fmp_unit_tm =
+  ``^prefix_concrete_unit_tm with cu_context :=
+    ((^prefix_concrete_unit_tm).cu_context with ctx_functions :=
+      [^prefix_concrete_fn_tm with fn_fmp_signature :=
+         SOME <|fms_has_fmp_param := F; fms_publishes := F|>])``;
+
+Theorem deploy_prefix_negative_fmp_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_FmpLowering] "__deploy"
+    ^prefix_concrete_unit_tm ^prefix_dload_supply_tm =
+    SOME (^prefix_fmp_unit_tm, ^prefix_dload_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_ssa2_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_MakeSSA] "__deploy"
+    ^prefix_fmp_unit_tm ^prefix_dload_supply_tm =
+    SOME (^prefix_fmp_unit_tm, ^prefix_dload_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
+Theorem deploy_prefix_negative_cfg2_artifact:
+  venomFnScheduleRunner$run_configured_fn_passes
+    venomPassDispatcher$execute_configured_fn_pass
+    (THE (resolve_o1_policy (o1_policy all_capabilities)))
+    [CFP_Simple VP_SimplifyCFG] "__deploy"
+    ^prefix_fmp_unit_tm ^prefix_dload_supply_tm =
+    SOME (^prefix_fmp_unit_tm, ^prefix_dload_supply_tm)
+Proof
+  EVAL_TAC
+QED
+
 (* When the source fails before the constructor body (the value transfer
    into a non-payable constructor, the reentrancy lock), so does the unit:
    its payable check and lock come first too. *)
