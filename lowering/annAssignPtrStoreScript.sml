@@ -8,7 +8,7 @@ Ancestors
   representationCleanPtr valueEncodingProps valueEncoding list pred_set
   venomMemProofs valueEncodingProofs ptrSafeRun ptrDiscipline
   robustCopyTransportPtr localPtrsProps exprLoweringProps exprSimProps
-  loweringPosts compileEnv venomMemDefs
+  loweringPosts compileEnv venomMemDefs emitHelper arithmetic
 
 Theorem annassign_ghost_scope_update_ptr:
  !d cenv cx es G tn s sc rest id entry p sz.
@@ -159,4 +159,77 @@ Proof
  Cases_on `d` >- simp[return_buf_ptr_def] >>
  PairCases_on `x` >> gvs[return_buf_ptr_def, ptr_covers_def, op_taint_def,
                        lookup_var_def]
+QED
+
+Theorem annassign_store_ghost_normalize_ptr[local]:
+ !PG G tn id p value s a wd.
+ lookup_var p s = SOME a /\ eval_operand value s = SOME wd /\
+ op_taint tn value = {} ==>
+ step_prov PG G (mk_inst id MSTORE [Var p; value] []) (mstore (w2n a) wd s) = G /\
+ step_taint (mk_inst id MSTORE [Var p; value] []) s (mstore (w2n a) wd s) tn =
+   (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32})
+Proof
+ rpt gen_tac >> strip_tac >> drule_all mstore_ghost_frame >> strip_tac >>
+ simp[] >> simp[taint_component_equality] >>
+ simp[step_taint_def, adopt_reset_def, step_writes_def,
+      set_var_taint_def, instruction_accessors, store_taint_def, imm_taint_def]
+QED
+
+Theorem annassign_declare_store_ptr:
+ !ctx func cenv cx es d PG G tn s st st' id p sz a inst value wd ty v sc rest assign sa G0 tn0 s0.
+ emit_void MSTORE [Var p; value] st = ((),st') /\
+ fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+ s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+ stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ es.scopes = sc::rest /\ lookup_scopes id es.scopes = NONE /\
+ FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+ not_local_ptr cenv es.scopes p /\ ptr_covers G tn p s sz /\
+ lookup_var p s = SOME a /\ eval_operand value s = SOME wd /\ op_taint tn value = {} /\
+ MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+ FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n a,sz) /\
+ 32 <= sz /\ type_memory_size ty <= sz /\ val_wf ty v /\
+ (!u. val_in_memory ty v (w2n a) (mstore (w2n a) wd u).vs_memory) ==>
+ ?s' tn'.
+ gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
+ stmt_state_rel ctx func cenv cx
+   (es with scopes := (sc |+ (id,<|assignable := assign; type := ty; value := v; popped := []|>))::rest) s' /\
+ ghost_inv d cenv cx
+   (es with scopes := (sc |+ (id,<|assignable := assign; type := ty; value := v; popped := []|>))::rest) G tn' s' /\
+ ghost_kept cenv es sa G0 tn0 s0 G tn' /\
+ tn' = (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) /\
+ s'.vs_memory = (mstore (w2n a) wd s).vs_memory /\
+ (!x. lookup_var x s' = lookup_var x s) /\
+ s'.vs_allocas = s.vs_allocas /\
+ ~s'.vs_halted /\ s'.vs_current_bb = st'.cs_current_bb /\
+ s'.vs_inst_idx = LENGTH st'.cs_current_insts
+Proof
+ rpt gen_tac >> strip_tac >>
+ `emit_inst MSTORE [Var p; value] [] st = ((),st')` by fs[emit_void_def, emit_inst_def] >>
+ drule_all annassign_emit_instruction_ptr >> strip_tac >>
+ `ptr_covers G tn p s 32` by
+   (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS, LESS_EQ_MONO_ADD_EQ]) >>
+ `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst st.cs_next_id MSTORE [Var p; value] [])` by simp[] >>
+ drule_all annassign_mstore_path_ptr >>
+ disch_then (qspecl_then [`cx_dead cx`, `PG`] assume_tac) >>
+ drule_all annassign_store_ghost_normalize_ptr >> strip_tac >>
+ `st'.cs_current_bb = st.cs_current_bb /\
+  LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
+   gvs[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+ qexistsl [`(mstore (w2n a) wd s) with vs_inst_idx := SUC s.vs_inst_idx`,
+   `tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}`] >>
+ simp[stmt_state_rel_inst_idx, annassign_ghost_inst_idx_ptr] >>
+ conj_tac >- metis_tac[] >>
+ conj_tac >- (irule stmt_state_rel_declare_store >> simp[] >>
+   qexists `inst` >> gvs[]) >>
+ conj_tac >- (
+   irule annassign_ghost_scope_update_ptr >> simp[] >>
+   reverse conj_tac
+   >- (irule annassign_alloca_mstore_ghost_ptr >> metis_tac[]) >>
+   conj_tac >- (rpt strip_tac >> irule annassign_clean_store_layout_ptr >> metis_tac[]) >>
+   gvs[ptr_covers_def, op_taint_def, mstore_def, lookup_var_def]) >>
+ simp[annassign_ghost_kept_mem_subset_ptr, mstore_def, lookup_var_def]
 QED

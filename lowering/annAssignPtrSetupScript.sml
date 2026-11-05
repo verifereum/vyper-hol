@@ -118,7 +118,7 @@ Proof
   PairCases_on `x` >> gvs[return_buf_ptr_def]
 QED
 
-Theorem annassign_emit_instruction_ptr[local]:
+Theorem annassign_emit_instruction_ptr:
   !opc args outs st st1 func.
     emit_inst opc args outs st = ((),st1) /\ fn_has_code st st1 func ==>
     ?bb. lookup_block st.cs_current_bb func.fn_blocks = SOME bb /\
@@ -134,7 +134,7 @@ Proof
   first_x_assum (qspec_then `0` mp_tac) >> simp[]
 QED
 
-Theorem annassign_ghost_inst_idx_ptr[local]:
+Theorem annassign_ghost_inst_idx_ptr:
  !d cenv cx es G tn s i.
  ghost_inv d cenv cx es G tn (s with vs_inst_idx := i) <=>
  ghost_inv d cenv cx es G tn s
