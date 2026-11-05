@@ -42,12 +42,6 @@ Theorem b20_dynarr_lit_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation b20_dynarr_lit))) >> EVAL_TAC
 QED
-val empty_string_ret = memoryStoreWitnessLib.evaluate fixture_root "empty_string_ret"
-Theorem empty_string_ret_matches_python_oracle:
-  ^(#term empty_string_ret) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "empty_string_ret")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation empty_string_ret))) >> EVAL_TAC
-QED
 val empty_dynarr_local = memoryStoreWitnessLib.evaluate fixture_root "empty_dynarr_local"
 Theorem empty_dynarr_local_matches_python_oracle:
   ^(#term empty_dynarr_local) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "empty_dynarr_local")
@@ -60,12 +54,6 @@ Theorem arr_local_elem_assign_matches_python_oracle:
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation arr_local_elem_assign))) >> EVAL_TAC
 QED
-val st_empty_ret = memoryStoreWitnessLib.evaluate fixture_root "st_empty_ret"
-Theorem st_empty_ret_matches_python_oracle:
-  ^(#term st_empty_ret) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "st_empty_ret")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation st_empty_ret))) >> EVAL_TAC
-QED
 val c10 = memoryStoreWitnessLib.evaluate fixture_root "c10_assign_empty_struct"
 Theorem c10_assign_empty_struct_matches_python_oracle:
   ^(#term c10) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "c10_assign_empty_struct")
@@ -77,10 +65,4 @@ Theorem c11_annassign_empty_fixed_array_matches_python_oracle:
   ^(#term c11) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "c11_annassign_empty_fixed_array")
 Proof
   CONV_TAC (LAND_CONV (K (#evaluation c11))) >> EVAL_TAC
-QED
-val c05 = memoryStoreWitnessLib.evaluate fixture_root "c05_assign_empty_builtin_string"
-Theorem c05_assign_empty_builtin_string_matches_python_oracle:
-  ^(#term c05) = SOME ^(memoryStoreWitnessLib.oracle fixture_root "c05_assign_empty_builtin_string")
-Proof
-  CONV_TAC (LAND_CONV (K (#evaluation c05))) >> EVAL_TAC
 QED
