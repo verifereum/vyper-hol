@@ -1,0 +1,57 @@
+Theory bodyMemBiECRecoverPaths
+Ancestors
+  bodyMemBiECRecoverMemory bodyMemBiECRecoverRun bodyMemBiECRecoverSuffix
+  compileEnv exprLoweringProps fragExec fragGasSeqAbort fragGasSeqMem
+  allocaHistoryFragment exprSimHash exprSimProps exprSimDefs
+  venomMemProps venomExecSemantics venomInstProofs venomInst list rich_list
+
+Theorem ecrecover_seq_frontier:
+  !code s t.
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    run_inst_seq code s = OK t ==>
+    s.vs_alloca_next <= t.vs_alloca_next
+Proof
+  Induct >> simp[run_inst_seq_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `step_inst_base h s` >> gvs[] >>
+  rename1 `step_inst_base h s = OK u` >>
+  `s.vs_alloca_next <= u.vs_alloca_next` by
+    (Cases_on `h.inst_opcode = ALLOCA`
+     >- (irule step_inst_alloca_alloca_next_mono >>
+         qexistsl_tac [`ARB`, `0`, `h`] >>
+         simp[step_inst_non_invoke, is_alloca_op_def]) >>
+     `u.vs_alloca_next = s.vs_alloca_next` by
+       (irule step_inst_base_preserves_alloca_next >>
+        qexists_tac `h` >> simp[]) >> simp[]) >>
+  first_x_assum drule >> decide_tac
+QED
+
+Theorem ecrecover_failure_path_mem:
+  compile_ecrecover h v r sig sm = (op,sb) /\
+  eval_operand h t = SOME wh /\ eval_operand v t = SOME wv /\
+  eval_operand r t = SOME wr /\ eval_operand sig t = SOME ws /\
+  stmt_state_rel ctx func cenv cx es t /\ fn_inst_ids_distinct func /\
+  fn_has_code sm sb func /\
+  ~(?co rest. t.vs_outcomes = co::rest /\ co.co_success) /\
+  local_ptrs_reserved cenv sm /\
+  (!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x) /\
+  ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?n a u. gas_marked_path T ctx func t n (Abort a u)
+Proof
+  strip_tac >>
+  `!i. MEM i (emitted_insts sm sb) ==> MEM i (fn_insts func)` by
+    metis_tac[hash_emitted_inst_mem] >>
+  drule_all compile_ecrecover_mem_ok >> strip_tac >>
+  drule_all compile_ecrecover_oracle_failure >> strip_tac >>
+  drule ecrecover_code_shape >> strip_tac >>
+  `sb.cs_current_bb = sm.cs_current_bb` by gvs[same_blocks_def] >>
+  `?bb. lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX (emitted_insts sm sb)
+          (DROP t.vs_inst_idx bb.bb_instructions)` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+     qexists_tac `l` >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> simp[]) >>
+  drule_at (Pat `run_inst_seq _ _ = Abort _ _`) run_inst_seq_abort_gas_path >>
+  disch_then (qspecl_then [`T`, `ctx`, `func`, `bb`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
