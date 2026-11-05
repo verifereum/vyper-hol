@@ -4,7 +4,8 @@ Theory bodyIfExpMemoryAdapter
 Ancestors
   bodyMemoryDefs loweringPosts instMemFrontier compileEnv
   finite_map arithmetic abiBuiltinAllocation exprSimHyps
-  exprLowering fragGasPathMem context vyperAST
+  exprLowering fragGasPathMem context vyperAST exprSimMemUnwrap
+  exprSimUnwrap exprSimUnwrapProps exprSimMemDefs
 
 Theorem ifexp_located_footprint_frontier:
   vv_at ce cx t sa sb es raw (LocatedValue t' p) s /\
@@ -101,4 +102,35 @@ Theorem ifexp_bytestring_store_extent_probe:
   val_store_size (TupleTV []) (ArrayV (TupleV [])) = 0
 Proof
   EVAL_TAC
+QED
+
+(* A nonword stack value is already a memory pointer.  Retain full capacity,
+   not merely the live padded extent, for the final conditional stack value. *)
+Theorem ifexp_identity_unwrap_post_mem:
+  ~is_word_type (expr_type e) /\
+  (vv = StackValue vt op \/
+   ?p. vv = LocatedValue (expr_type e) p /\ p.ptr_location = LocMemory /\
+       p.ptr_operand = op) /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  vv_store_bound cx (expr_type e) ee raw vv s /\
+  read_result cx raw ee = (INL v,ee) /\
+  ~s.vs_halted /\ alloca_history func s ==>
+  unwrap_value ce vv sm = (op,sm) /\
+  gas_path_mem ctx func s 0 (OK s) /\
+  expr_post ctx func ce cx e es sa sm s0 ee v op s /\
+  expr_store_bound cx (expr_type e) v op s /\
+  (!tvt w. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+           eval_operand op s = SOME w ==>
+     type_memory_size tvt = 0 \/
+     w2n w + type_memory_size tvt <= s.vs_alloca_next)
+Proof
+  rpt gen_tac >> disch_tac >>
+  `vv_post ctx func ce cx e es sa sm s0 ee (Value v) vv s` by
+    metis_tac[vv_post_read_result] >>
+  fs[] >>
+  `expr_post ctx func ce cx e es sa sm s0 ee v op s` by
+    metis_tac[expr_post_of_vv_post_stack, expr_post_of_vv_post_memory] >>
+  simp[unwrap_value_def, comp_return_def, cj 1 gas_path_mem_rules] >>
+  qpat_x_assum `vv_store_bound _ _ _ _ _ _` mp_tac >>
+  simp[vv_store_bound_def, expr_store_bound_def] >> metis_tac[]
 QED
