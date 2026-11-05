@@ -15,6 +15,205 @@ Ancestors
   callTrace frameOutcome vfmExecution vfmExecutionProp vfmSameFrame
   vfmStepLength vfmHandleStep vfmContextLength vfmRunCall
 
+Definition transplant_local_def:
+  transplant_local (m : 'a execution) <=>
+    !s c rb r t.
+      s.contexts = [(c, rb)] /\ m s = (r, t) ==>
+      ?c'. t.contexts = [(c', rb)] /\
+        !rest. m (s with contexts := (c, rb) :: rest) =
+          (r, t with contexts := (c', rb) :: rest)
+End
+
+Theorem transplant_local_return[simp]:
+  transplant_local (return x)
+Proof
+  rw[transplant_local_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_reraise[simp]:
+  transplant_local (reraise e)
+Proof
+  rw[transplant_local_def, reraise_def] >> gvs[]
+QED
+
+Theorem transplant_local_fail[simp]:
+  transplant_local (fail e)
+Proof
+  rw[transplant_local_def, fail_def] >> gvs[]
+QED
+
+Theorem transplant_local_bind:
+  transplant_local m /\ (!x. transplant_local (f x)) ==>
+  transplant_local (bind m f)
+Proof
+  rw[transplant_local_def, bind_def] >>
+  Cases_on `m s` >> rename1 `m s = (res, u)` >>
+  qpat_x_assum `!s c rb r t. _` (drule_all_then strip_assume_tac) >>
+  Cases_on `res` >> gvs[]
+QED
+
+Theorem transplant_local_ignore_bind:
+  transplant_local m /\ transplant_local n ==>
+  transplant_local (ignore_bind m n)
+Proof
+  simp[ignore_bind_def] >> strip_tac >>
+  irule transplant_local_bind >> simp[]
+QED
+
+Theorem transplant_local_finish[simp]:
+  transplant_local finish
+Proof
+  rw[transplant_local_def, finish_def] >> gvs[]
+QED
+
+Theorem transplant_local_revert[simp]:
+  transplant_local revert
+Proof
+  rw[transplant_local_def, revert_def] >> gvs[]
+QED
+
+Theorem transplant_local_assert[simp]:
+  transplant_local (assert b e)
+Proof
+  Cases_on `b` >> rw[transplant_local_def, assert_def] >> gvs[]
+QED
+
+Theorem transplant_local_cond[simp]:
+  (b ==> transplant_local m) /\ (~b ==> transplant_local n) ==>
+  transplant_local (if b then m else n)
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem transplant_local_get_current_context[simp]:
+  transplant_local get_current_context
+Proof
+  rw[transplant_local_def, get_current_context_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_set_current_context[simp]:
+  transplant_local (set_current_context d)
+Proof
+  rw[transplant_local_def, set_current_context_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_get_tx_params[simp]:
+  transplant_local get_tx_params
+Proof
+  rw[transplant_local_def, get_tx_params_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_get_rollback[simp]:
+  transplant_local get_rollback
+Proof
+  rw[transplant_local_def, get_rollback_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_set_rollback[simp]:
+  transplant_local (set_rollback rb)
+Proof
+  rw[transplant_local_def, set_rollback_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_get_accounts[simp]:
+  transplant_local get_accounts
+Proof
+  rw[transplant_local_def, get_accounts_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_update_accounts[simp]:
+  transplant_local (update_accounts f)
+Proof
+  rw[transplant_local_def, update_accounts_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_get_tStorage[simp]:
+  transplant_local get_tStorage
+Proof
+  rw[transplant_local_def, get_tStorage_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_set_tStorage[simp]:
+  transplant_local (set_tStorage ts)
+Proof
+  rw[transplant_local_def, set_tStorage_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_get_original[simp]:
+  transplant_local get_original
+Proof
+  rw[transplant_local_def, get_original_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_set_original[simp]:
+  transplant_local (set_original a)
+Proof
+  rw[transplant_local_def, set_original_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_add_to_delete[simp]:
+  transplant_local (add_to_delete a)
+Proof
+  rw[transplant_local_def, add_to_delete_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_set_domain[simp]:
+  transplant_local (set_domain d)
+Proof
+  rw[transplant_local_def, set_domain_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_domain_check:
+  transplant_local cont ==>
+  transplant_local (domain_check err check upd cont)
+Proof
+  rw[transplant_local_def] >>
+  qpat_x_assum `domain_check _ _ _ _ _ = _` mp_tac >>
+  Cases_on `s.msdomain` >>
+  simp[domain_check_def, ignore_bind_def, bind_def,
+       set_domain_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  gvs[domain_check_def, ignore_bind_def, bind_def,
+      set_domain_def, return_def, fail_def]
+QED
+
+Theorem transplant_local_access_address[simp]:
+  transplant_local (access_address a)
+Proof
+  rewrite_tac[access_address_def] >>
+  irule transplant_local_domain_check >>
+  rw[transplant_local_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_access_slot[simp]:
+  transplant_local (access_slot a)
+Proof
+  rewrite_tac[access_slot_def] >>
+  irule transplant_local_domain_check >>
+  rw[transplant_local_def, return_def] >> gvs[]
+QED
+
+Theorem transplant_local_ensure_storage_in_domain[simp]:
+  transplant_local (ensure_storage_in_domain a)
+Proof
+  simp[ensure_storage_in_domain_def, transplant_local_domain_check]
+QED
+
+Theorem transplant_local_option[simp]:
+  (!x. transplant_local (f x)) /\ transplant_local n ==>
+  transplant_local (case z of NONE => n | SOME x => f x)
+Proof
+  Cases_on `z` >> simp[]
+QED
+
+Theorem transplant_local_pair[simp]:
+  (!x y. transplant_local (f x y)) ==>
+  transplant_local (case z of (x, y) => f x y)
+Proof
+  Cases_on `z` >> simp[]
+QED
+
 Theorem transplant_handle_exception_memory_total[local]:
   s.contexts = (d, rb) :: (p, prb) :: rest /\
   d.msgParams.outputTo = Memory mr /\
