@@ -1,7 +1,7 @@
 (* Evaluations recovered from the actual public-copy expansion trace. *)
 Theory lowerDloadPublicTrace
 Ancestors
-  lowerDloadExpansionExit lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues
+  lowerDloadExpansionExit lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyUpdates
   lowerDloadSafetyWriteAssembly lowerDloadConfiguredOrigins lowerDloadOracleCallAssembly lowerDloadSafetyAssemblyPremises lowerDloadSafetyAllocBounds o1PassLift memSafeRun venomExecProps venomExecProofs contextRawReachable o1PassContract
   lowerDloadSafetyLocations venomFnScheduleRunner contextCodegenRel passSharedDefs lowerDloadSafetyRelation codegenRel lowerDloadDefs irSupply ptrDiscipline pointerConfinedDefs memLocDefs pred_set unitShapeDefs
   venomExecSemantics venomState venomInst finite_map list words
@@ -154,6 +154,45 @@ Proof
   qexists_tac `EL bi fn.fn_blocks` >> simp[] >> metis_tac[MEM_EL]
 QED
 
+Theorem ld_active_envelope_origin:
+  ir_supply_covers_fn supply fn /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ ld_envelope supply fn s s.vs_inst_idx X p ==>
+  ?bi bb ub ui.
+    bi < LENGTH fn.fn_blocks /\ EL bi fn.fn_blocks = bb /\
+    bb.bb_label = s.vs_current_bb /\ s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    EL s.vs_inst_idx bb.bb_instructions = inst /\
+    ub = SND (lower_dload_blocks_supply supply (TAKE bi fn.fn_blocks)) /\
+    ui = SND (lower_dload_insts_supply ub (TAKE s.vs_inst_idx bb.bb_instructions)) /\
+    X = FST (lower_dload_inst_supply ui inst) /\
+    (!v. MEM v (fn_ir_vars fn) ==> MEM v ui.irs_used_vars) /\
+    MEM inst (fn_insts fn)
+Proof
+  strip_tac >>
+  qpat_x_assum `ld_envelope _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ld_envelope_def] >> strip_tac >>
+  qpat_x_assum `active_inst _ _ _` mp_tac >>
+  simp[active_inst_def] >> strip_tac >>
+  `bb = bb'` by
+    (irule ld_block_label_unique >> conj_tac >- simp[] >>
+     qexists_tac `fn.fn_blocks` >> simp[] >> metis_tac[MEM_EL]) >> gvs[] >>
+  qexists_tac `bi` >> simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `MEM v supply.irs_used_vars` by
+        fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >>
+      Cases_on `lower_dload_blocks_supply supply (TAKE bi fn.fn_blocks)` >>
+      drule lower_dload_blocks_supply_flat >> strip_tac >>
+      Cases_on `lower_dload_insts_supply r (TAKE s.vs_inst_idx (EL bi fn.fn_blocks).bb_instructions)` >>
+      gvs[] >> metis_tac[lower_dload_insts_supply_used_vars_mono]) >>
+  simp[fn_insts_def] >>
+  `MEM (EL bi fn.fn_blocks) fn.fn_blocks` by metis_tac[MEM_EL] >>
+  qpat_x_assum `s.vs_inst_idx < LENGTH _` mp_tac >>
+  qpat_x_assum `MEM _ fn.fn_blocks` mp_tac >>
+  qspec_tac (`EL bi fn.fn_blocks`,`bbx`) >> gen_tac >>
+  qspec_tac (`fn.fn_blocks`,`bbs`) >> Induct >>
+  simp[fn_insts_blocks_def] >> metis_tac[MEM_EL]
+QED
+
 Theorem ld_dloadbytes_envelope_temporary:
   ir_supply_covers_fn supply fn /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
@@ -166,26 +205,74 @@ Theorem ld_dloadbytes_envelope_temporary:
        inst_operands := [dest;Var z;len]; inst_outputs := []|>] /\
     ~MEM z (fn_ir_vars fn) /\ dest <> Var z /\ len <> Var z
 Proof
-  strip_tac >> drule ld_envelope_supply_reserved >> strip_tac >>
-  qpat_x_assum `active_inst _ _ _` mp_tac >>
-  simp[active_inst_def] >> strip_tac >>
-  `bb = bb'` by
-    (irule ld_block_label_unique >> conj_tac >- simp[] >>
-     qexists_tac `fn.fn_blocks` >> simp[]) >> gvs[] >>
-  `!v. MEM v (fn_ir_vars fn) ==> MEM v ui.irs_used_vars` by
-    (fs[ir_supply_covers_fn_def, list_subset_def, EVERY_MEM] >> metis_tac[]) >>
-  `MEM (EL s.vs_inst_idx bb.bb_instructions) (fn_insts fn)` by
-    (simp[fn_insts_def] >>
-     qpat_x_assum `MEM bb fn.fn_blocks` mp_tac >>
-     qspec_tac (`fn.fn_blocks`,`bbs`) >> Induct >>
-     simp[fn_insts_blocks_def] >> metis_tac[MEM_EL]) >>
-  `!v. MEM (Var v) [dest;off;len] ==> MEM v ui.irs_used_vars` by
+  strip_tac >> drule_all ld_active_envelope_origin >> strip_tac >>
+  `!v. MEM (Var v) inst.inst_operands ==> MEM v ui.irs_used_vars` by
     (rpt strip_tac >> first_x_assum irule >> irule ld_inst_input_ir >>
-     qexists_tac `EL s.vs_inst_idx bb.bb_instructions` >> gvs[]) >>
-  qpat_assum `lower_dload_inst_supply ui _ = _`
-    (mp_then (Pat `lower_dload_inst_supply _ _ = _`) mp_tac
-      ld_dloadbytes_supply_temporary) >> simp[] >> strip_tac >>
+     qexists_tac `inst` >> gvs[]) >>
+  `lower_dload_inst_supply ui inst = (X, SND (lower_dload_inst_supply ui inst))` by
+    metis_tac[pairTheory.PAIR] >>
+  drule_all ld_dloadbytes_supply_temporary >> strip_tac >>
   qexistsl_tac [`ai`,`ci`,`z`] >> simp[] >> metis_tac[]
+QED
+
+Theorem ld_dload_supply_temporary:
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
+  (!v. MEM (Var v) inst.inst_operands ==> MEM v supply.irs_used_vars) /\
+  MEM out supply.irs_used_vars /\ lower_dload_inst_supply supply inst = (X,rest) ==>
+  ?ai zi ci mi a z. X =
+    [<|inst_id := ai; inst_opcode := ALLOCA;
+       inst_operands := [Lit 32w]; inst_outputs := [a]|>;
+     <|inst_id := zi; inst_opcode := ADD;
+       inst_operands := [off;Label "code_end"]; inst_outputs := [z]|>;
+     <|inst_id := ci; inst_opcode := CODECOPY;
+       inst_operands := [Var a;Var z;Lit 32w]; inst_outputs := []|>;
+     <|inst_id := mi; inst_opcode := MLOAD;
+       inst_operands := [Var a]; inst_outputs := [out]|>] /\
+    a <> z /\ out <> a /\ out <> z /\ off <> Var a /\
+    ~MEM a supply.irs_used_vars /\ ~MEM z supply.irs_used_vars
+Proof
+  strip_tac >>
+  gvs[lower_dload_inst_supply_def, AllCaseEqs(), fresh_inst_id_def] >>
+  imp_res_tac (cj 1 fresh_ir_var_contract) >>
+  imp_res_tac (cj 2 fresh_ir_var_contract) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem ld_dload_envelope_temporary:
+  ir_supply_covers_fn f.lf_supply fn /\ f.lf_fn = fn /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks) /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx X p /\ active_inst fn inst s /\
+  inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] ==>
+  ?ai zi ci mi a z. X =
+    [<|inst_id := ai; inst_opcode := ALLOCA;
+       inst_operands := [Lit 32w]; inst_outputs := [a]|>;
+     <|inst_id := zi; inst_opcode := ADD;
+       inst_operands := [off;Label "code_end"]; inst_outputs := [z]|>;
+     <|inst_id := ci; inst_opcode := CODECOPY;
+       inst_operands := [Var a;Var z;Lit 32w]; inst_outputs := []|>;
+     <|inst_id := mi; inst_opcode := MLOAD;
+       inst_operands := [Var a]; inst_outputs := [out]|>] /\
+    a <> z /\ out <> a /\ out <> z /\ off <> Var a /\
+    ~MEM a (fn_ir_vars fn) /\ ~MEM z (fn_ir_vars fn) /\
+    ld_private f inst.inst_id ai
+Proof
+  strip_tac >> drule_all ld_active_envelope_origin >> strip_tac >>
+  `!v. MEM (Var v) inst.inst_operands ==> MEM v ui.irs_used_vars` by
+    (rpt strip_tac >> first_x_assum irule >> irule ld_inst_input_ir >>
+     qexists_tac `inst` >> gvs[]) >>
+  `MEM out ui.irs_used_vars` by
+    (qpat_x_assum `!v. MEM v (fn_ir_vars fn) ==> _` irule >> irule ld_inst_output_ir >>
+     qexists_tac `inst` >> simp[]) >>
+  `lower_dload_inst_supply ui inst = (X,SND (lower_dload_inst_supply ui inst))` by
+    metis_tac[pairTheory.PAIR] >>
+  drule_all ld_dload_supply_temporary >> strip_tac >>
+  qexistsl_tac [`ai`,`zi`,`ci`,`mi`,`a`,`z`] >> asm_rewrite_tac[] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  pure_rewrite_tac[ld_private_def] >>
+  qexistsl_tac [`bb`,`s.vs_inst_idx`,`bi`,`ub`,`ui`,`inst`,`X`] >>
+  asm_simp_tac std_ss [LENGTH, HD] >>
+  conj_tac >- (qexistsl_tac [`off`,`out`] >> rewrite_tac[]) >>
+  conj_tac >- metis_tac[] >> simp[]
 QED
 
 Theorem ld_raw_reachable_code_data:
@@ -355,3 +442,8 @@ val _ = List.app (fn th => if null (hyp th) then ()
    ld_raw_reachable_code_data, ld_sync_source_code_layout,
    ld_sync_dloadbytes_code_offset, ld_dloadbytes_source_operands,
    ld_sync_dloadbytes_trace_evaluations, ld_sync_dloadbytes_destination_cases];
+
+val _ = app (fn th => if null (hyp th) then () else
+  raise Fail "active envelope boundary has hypotheses")
+  [ld_active_envelope_origin, ld_dloadbytes_envelope_temporary,
+   ld_dload_supply_temporary, ld_dload_envelope_temporary];
