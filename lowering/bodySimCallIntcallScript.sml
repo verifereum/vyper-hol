@@ -3,7 +3,7 @@
 Theory bodySimCallIntcall
 Ancestors
   bodySimExprCases bodyIntCallLocCodeMarked bodyIntCallCountedFrame
-  bodyIntCallGasJoint bodyIntCallGasPrefix bodyIntCallArgCounted
+  bodyIntCallGasJoint bodyIntCallGasPrefix bodyIntCallExprCounted
   list bodySim exprSimHyps vyperAST vyperInterpreter vyperState
   vyperContext vyperTypeCallGraph
 
