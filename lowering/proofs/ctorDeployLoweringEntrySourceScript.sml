@@ -94,3 +94,18 @@ Proof
   rpt strip_tac >>
   `j = 0 \/ j = 1 \/ j = 2` by decide_tac >> gvs[]
 QED
+
+Theorem deploy_ctor_noninit_raw_inputs_probe:
+  raw_static_inputs_wf (THE (lower_vyper_deploy_unit
+    [FunctionDecl Deploy Payable F F "other" [] [] NoneT [Return NONE]]
+    <| rpol_target := all_capabilities; rpol_frontend_dispatch := Linear;
+       rpol_final_assembly := FAP_Optimize |> [])).cu_context
+Proof
+  EVAL_TAC >> simp[wordsTheory.dimword_def,
+    staticLayoutWfTheory.raw_static_inputs_wf_def,
+    staticLayoutWfTheory.forced_positions_wf_def,
+    staticLayoutDefsTheory.reserved_intervals_wf_def,
+    finite_mapTheory.FEVERY_FEMPTY,
+    venomInstTheory.fn_insts_blocks_def]
+QED
+
