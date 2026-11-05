@@ -1743,8 +1743,8 @@ Proof
   strip_tac >>
   `t.vs_inst_idx = s.vs_inst_idx` by
     metis_tac[step_inst_base_preserves_inst_idx] >>
-  drule_all step_inst_base_jump_indep >>
-  disch_then (qspecl_then [`p`, `b`, `s.vs_inst_idx`] mp_tac) >>
+  qspecl_then [`inst`, `s`, `p`, `b`, `s.vs_inst_idx`]
+    mp_tac step_inst_base_jump_indep >>
   simp[instIdxIndepTheory.exec_result_map_def]
 QED
 
