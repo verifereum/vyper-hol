@@ -26,6 +26,9 @@ Theorem concretize_state_local_complete:
     (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
   relocation_taint_le
     (joint_relocation_demand lo (concretize_positions C') q0 es qs c) tn un /\
+  storage_agree_except tn.t_stor (contract_storage s) (contract_storage t) /\
+  storage_agree_except tn.t_trans (contract_transient s) (contract_transient t) /\
+  s.vs_outcomes = t.vs_outcomes /\ dead_wf D /\ taint_within D C vs0 /\
   c < LENGTH es /\ EL c es = SOME (OriginOrdinary fuel post) /\
   MEM inst.inst_opcode [SLOAD; TLOAD; SSTORE; TSTORE; ISTORE; RETURNDATACOPY] /\
   step_inst_base inst s = OK post ==>
@@ -44,7 +47,12 @@ Theorem concretize_state_local_complete:
     relocation_taint_le
       (joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c))
       (step_taint inst s post tn) (step_taint inst t tpost un) /\
-    relocation_env post tpost /\ relocation_reader_context post tpost
+    relocation_env post tpost /\ relocation_reader_context post tpost /\
+    storage_agree_except (step_taint inst s post tn).t_stor
+      (contract_storage post) (contract_storage tpost) /\
+    storage_agree_except (step_taint inst s post tn).t_trans
+      (contract_transient post) (contract_transient tpost) /\
+    post.vs_outcomes = tpost.vs_outcomes
 Proof
   cheat
 QED
