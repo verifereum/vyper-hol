@@ -7,8 +7,8 @@ Ancestors
   abiDecoderTypedContract abiDecoderCoherence abiDecoderFrame abiDecoderFrameCompose abiDecoderDynamicLoopSetup
   abiDecoderArraySetupInputs abiDecoderArrayBackedge abiDecoderReentry venomMemProofs
   abiDecoderArrayLoopInit abiDecoderDynarrayPrefix abiDecoderGuards abiDecoderDynarrayBound
-  abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayInit abiDecoderPrimitiveLoopEntry
-  abiDecoderLoopEmit abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry context
+  fragExec abiDecoderArrayHeader abiDecoderIndexInit abiDecoderArrayInit abiDecoderPrimitiveLoopEntry
+  abiDecoderLoopEmit abiDecoderAppend abiDecoderRecursiveLoopLayout abiDecoderRecursiveLoopEntry context
   abiDecoderBytesTyped abiDecoderContract abiEncoder emitHelper emitHelperProps exprLoweringProps compileEnv rich_list
   venomExecSemantics venomExecProofs venomState venomInst venomMemDefs valueEncoding valueEncodingProps words list arithmetic finite_map
 
@@ -1156,4 +1156,43 @@ Proof
        `loop_st.cs_next_id`, `loop_st.cs_current_insts`] >> fs[]) >>
   `jump_to hdr t = jump_to hdr prepared` by gvs[jump_to_def] >>
   metis_tac[abi_decode_sim_trans]
+QED
+
+Theorem entry_bytes_array_spatial[local]:
+  type_memory_bytes ce ty = type_memory_size tv /\
+  type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= capacity /\
+  LENGTH xs <= maxn /\
+  (d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= p \/ p+32 <= d) ==>
+  (d+32 <= p \/ p+32 <= d) /\
+  (!k. k < LENGTH xs ==>
+    32+k*type_memory_size tv <= capacity /\
+    d+32+k*type_memory_size tv+type_memory_size tv <=
+      d+type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
+    (p+32 <= d+32+k*type_memory_size tv \/
+     d+32+k*type_memory_size tv+type_memory_size tv <= p))
+Proof
+  `type_memory_bytes ce (ArrayT ty (Dynamic maxn)) =
+    32+maxn*type_memory_bytes ce ty` by simp[Once type_memory_bytes_def] >>
+  asm_rewrite_tac[] >> strip_tac >>
+  gvs[] >> rpt strip_tac >>
+  `k+1 <= maxn` by decide_tac >>
+  `(k+1)*type_memory_size tv <= maxn*type_memory_size tv` by simp[LE_MULT_RCANCEL] >>
+  qpat_x_assum `(k+1)*_ <= maxn*_` mp_tac >>
+  pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac
+QED
+
+Theorem entry_bytes_array_code_split[local]:
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    (DecDynArray (DecBytestring n) asz msz T maxn) st = ((),final) /\
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn asz st =
+    ((ip,cnt),loop_st) /\ fn_has_code st final fn ==>
+  fn_has_code st loop_st fn /\ fn_has_code loop_st final fn
+Proof
+  strip_tac >> drule abi_decode_loop_array_trace >> simp[] >> strip_tac >> gvs[] >>
+  `cs_extends loop_st final` by
+    (drule (PURE_REWRITE_RULE [cs_appends_def] (cj 3 cs_appends_abi_decode_mutual)) >> simp[]) >>
+  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_array_loop_init_shape >> strip_tac >>
+  `cs_extends st loop_st` by (irule cs_extends_same_block >> simp[]) >>
+  drule_all fn_has_code_split >> simp[]
 QED
