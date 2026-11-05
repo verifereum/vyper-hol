@@ -448,3 +448,100 @@ instantiating only the two ghost equations tn'/G'; no source/effect witnesses
 were recovered by backwards application. The permanent three boundaries also
 have explicit `null(hyp ...)` assertions. Public DLOADBYTES writes and changing
 allocation/scratch endpoint reconstruction remain separate obligations.
+
+## 7. Public DLOADBYTES probe (.12.6)
+
+### Checked payload and reduced overwrite consumer
+
+`ld_dloadbytes_codecopy_payload` in CodeDataBytes now produces actual source
+`step_inst_base inst s = OK ss`, together with ONE shared byte list and both
+source/target `write_memory_with_expansion` equations. It assumes independently
+evaluated source dst/off/len and target dst'/(off+basew)/len, code equality,
+code_layout_valid and the explicit no-wrap bound. Its statement permits every
+length, including zero, and does not restrict outputs. The kernel hypothesis
+list is explicitly checked empty. This is not yet a trace-to-effect theorem.
+
+A temporary `ld_public_payload_audit` checked the following reduced consumer:
+
+```
+ld_memory lo A tn s t /\ LENGTH bytes = n /\
+(n = 0 \/
+ (FLOOKUP A k = SOME (b,c,sz) /\ d = b+delta /\ d' = c+delta /\
+  delta+n <= sz /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) /\ a <> k /\ 0 < z /\ 0 < sz ==>
+    (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)))) /\
+tn'.t_mem = tn.t_mem DIFF {d+j | j < n}
+==>
+ld_memory lo A tn'
+  (write_memory_with_expansion d bytes s)
+  (write_memory_with_expansion d' bytes t)
+```
+
+The zero case used `ld_empty_write_read_byte`, not state equality or selected
+containment. The selected case used `ld_memory_write_slot` with M={} and the
+same byte list on both sides. The audit built with an empty hypothesis list
+(TO_ld_mem-20261104T190123Z_m6986_t001). It and its temporary ancestors were
+removed to avoid retaining a duplicate specialization. Low destinations use
+`ld_memory_write_low` with M={} instead; no new overwrite theorem is needed.
+Restored CodeDataBytes builds (TO_ld_mem-20261104T190123Z_m6995_t001).
+
+### Required correlated effect interface (UNPROVED)
+
+With the section 1 ambient/sync/ownership inputs, let the actual expansion be
+`X=[ADD [r;Label "code_end"] [z]; CODECOPY [d;Var z;n] []]` with its actual
+supply-generated ids, incoming target index p, prefix at h=1, and successful
+final target step `step_inst 0 C' (EL 1 X) t1 = OK u`. The producer must yield
+ONE tuple `ss,H',G',tn'` such that:
+
+```
+step_inst 0 C inst s = OK ss /\
+tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
+G' = ld_erase A o_f H' /\
+(!a. a IN FRANGE H' ==> a IN FDOM A) /\
+ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
+                     lf_H := H'; lf_tv := tn'.t_var|>) /\
+ld_memory lo A tn' ss u /\ ld_nonghost tn' ss u /\
+ss.vs_allocas = s.vs_allocas /\ u.vs_allocas = t0.vs_allocas /\
+ss.vs_alloca_next = s.vs_alloca_next /\
+u.vs_alloca_next = t0.vs_alloca_next /\
+ss.vs_inst_idx = s.vs_inst_idx /\ u.vs_inst_idx = p+1 /\
+ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
+u.vs_current_bb = t0.vs_current_bb /\ u.vs_prev_bb = t0.vs_prev_bb
+```
+
+This feeds a generalized nonallocating endpoint constructor using the actual
+expansion, not the singleton version's same-instruction premises. The final
+increment changes u's index to p+2. No successor activity is required for the
+effect fields. Source activity is used only for successor sync.
+
+### Exact residual boundaries for planning
+
+1. **Trace evaluations/fresh ADD:** derive source off/len evaluations and
+   target matching scalar evaluations from sync, source taint/access facts and
+   original-operand membership. Invert the one ADD prefix to obtain
+   `eval_operand (Var z) t1 = SOME (off+basew)` and preserve evaluations of d/n
+   and original-variable observations. Supply coverage must give
+   `~MEM z (fn_ir_vars fn)` and `d <> Var z`, `n <> Var z`. Label evaluation,
+   code equality and the no-wrap bound must be projected from nonghost,
+   code_layout_valid and dload_offset_ok, not added as frozen assumptions.
+2. **Address classification:** for nonzero len, produce either equal low
+   destinations with `dst+len<=lo`, or ONE selected identity k, equal delta,
+   source/target bases and `delta+len<=sz` plus global bounds/separation.
+   These are exactly the existing low/slot overwrite consumer premises. For
+   zero length skip this classification completely.
+3. **Ghost/taint update:** derive the displayed t_mem difference (empty
+   payload mask) from actual source step_taint. Derive H'/G' and t_var update
+   from actual source outputs; DLOADBYTES semantics ignoring outputs does NOT
+   justify silently assuming them empty. If fn_inst_wf supplies empty outputs,
+   project that fact before choosing H'=f.lf_H and unchanged variable taint.
+   Otherwise account for the actual set_prov/set_var_taint updates.
+4. **Remaining effect fields:** combine source/target write equations with
+   expansion-only fresh-variable observations using ld_vars_observation_cong;
+   prove nonghost under the new taint and actual public writes, not by private
+   CODECOPY noninterference. Allocation/control/index equations follow the
+   actual ADD and copy semantics and prefix position. None has yet been
+   packaged with the produced ss/H'/G'/tn' witnesses.
+
+The payload and reduced selected/zero consumer are checked; the four items
+above are precise remaining integration obligations, not claimed proofs.
