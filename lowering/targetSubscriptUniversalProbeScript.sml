@@ -463,3 +463,122 @@ Proof
        emitHelperPropsTheory.lookup_var_update_var] >>
   simp[wordsTheory.WORD_ADD_0, wordsTheory.WORD_MULT_CLAUSES]
 QED
+
+Theorem clear_return_buffer:
+  !ss p.
+    lookup_var "%8" ss = SOME p /\ lookup_var "%9" ss = SOME 0w ==>
+    run_inst_seq
+      (TAKE 3 (DROP 11
+        (HD probe_descendant_outer_caller.fn_blocks).bb_instructions)) ss =
+    OK (update_var "%11" 0w
+      (mstore (w2n p) 0w (update_var "%10" p ss)))
+Proof
+  rpt strip_tac >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``step_inst_base``, ``update_var``,
+    ``mstore``, ``w2n``]) >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, wordsTheory.WORD_ADD_0] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_write2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var,
+       venomMemProofsTheory.mload_mstore_same_proof]
+QED
+
+Theorem clear_child_suffix:
+  !ss.
+    lookup_var "%7" ss = SOME 1w /\ lookup_var "%11" ss = SOME 0w ==>
+    run_inst_seq
+      (TAKE 9 (DROP 14
+        (HD probe_descendant_outer_caller.fn_blocks).bb_instructions)) ss =
+    if sload 1w ss = 0w then
+      Abort Revert_abort
+        (revert_state (set_returndata []
+          (update_var "%16" 0w (update_var "%15" 1w
+            (update_var "%14" 1w (update_var "%13" 0w
+              (update_var "%12" 0w ss)))))))
+    else
+      OK (update_var "%19" 2w (update_var "%18" 0w
+        (update_var "%17" 2w (update_var "%16" 1w
+          (update_var "%15" 0w (update_var "%14" 0w
+            (update_var "%13" 1w (update_var "%12" (sload 1w ss) ss))))))))
+Proof
+  rpt strip_tac >> Cases_on `sload 1w ss = 0w` >>
+  CONV_TAC (computeLib.RESTR_EVAL_CONV [``step_inst_base``, ``sload``,
+    ``update_var``, ``revert_state``, ``set_returndata``]) >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_read1_def,
+       venomStateTheory.eval_operand_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, wordsTheory.WORD_OR_CLAUSES] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure1_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[GSYM arithmeticTheory.NOT_ZERO_LT_ZERO, wordsTheory.w2n_eq_0,
+       bool_to_word_def] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var] >>
+  simp[Once venomExecSemanticsTheory.step_inst_base_def,
+       venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var,
+       wordsTheory.WORD_ADD_0, wordsTheory.WORD_MULT_CLAUSES,
+       wordsTheory.word_add_n2w]
+QED
+
+Theorem clear_base_zero_sim:
+  !k env es.
+    lookup_storage 0w (get_storage probe_clear_source_context es F) = 0w ==>
+    target_sim (probe_descendant_ctx k) probe_descendant_outer_caller
+      probe_deep_cenv probe_clear_source_context env probe_clear_source_bt es
+Proof
+  rpt gen_tac >> strip_tac >>
+  rewrite_tac[targetPlaceSimTheory.target_sim_def] >> rpt strip_tac >>
+  drule_all clear_base_code_inversion >> strip_tac >>
+  qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
+  simp[clear_base_symbolic] >> strip_tac >> gvs[] >>
+  `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = TAKE 23
+     (HD probe_descendant_outer_caller.fn_blocks).bb_instructions` by
+    (qspec_then `sa` mp_tac clear_base_compile_symbolic >>
+     SIMP_TAC bool_ss [LET_THM] >>
+     disch_then (fn th => gvs[th]) >> EVAL_TAC >> simp[]) >>
+  qmatch_goalsub_abbrev_tac `frag_exec _ sa sb Pre _ _` >>
+  qabbrev_tac `mid = sa with cs_current_insts := TAKE 9
+    (HD probe_descendant_outer_caller.fn_blocks).bb_instructions` >>
+  irule fragExecTheory.frag_exec_exit_prefix >>
+  qexists `mid` >>
+  simp[Abbr `mid`, cs_extends_def] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  irule fragExecTheory.frag_exec_run_inst_seq >>
+  simp[emitted_insts_def] >>
+  reverse conj_tac >- EVAL_TAC >>
+  simp[Abbr `Pre`] >> rpt strip_tac >>
+  drule clear_entry_root_header >> simp[] >> strip_tac >>
+  simp[clear_root_prefix, exprSimTheory.expr_exit_def]
+QED
