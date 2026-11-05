@@ -1,8 +1,8 @@
 Theory algebraicOptChainProofs
 Ancestors
-  algebraicOptMainShapeProofs algebraicOptDefs venomInst
+  algebraicOptMainShapeProofs algebraicOptDefs venomInst venomExecSemantics
 Libs
-  listTheory
+  listTheory arithmeticTheory
 
 Definition ao_chain_edges_def:
   ao_chain_edges insts chn <=>
@@ -138,4 +138,136 @@ Theorem ao_compute_iszero_targets_adjacent:
     EL (SUC j) chn = Var y
 Proof
   metis_tac[ao_compute_iszero_targets_witnesses, ao_chain_edges_def]
+QED
+
+Definition ao_word_chain_def:
+  ao_word_chain (ws : bytes32 list) <=>
+    !j. SUC j < LENGTH ws ==>
+      EL (SUC j) ws = (if EL j ws = 0w then 1w else 0w)
+End
+
+Theorem ao_word_chain_value:
+  !j. ao_word_chain ws /\ j < LENGTH ws ==>
+  EL j ws =
+    if j = 0 then HD ws
+    else if j MOD 2 = 0 then (if HD ws = 0w then 0w else 1w)
+    else (if HD ws = 0w then 1w else 0w)
+Proof
+  Induct
+  >- simp[] >>
+  rpt strip_tac >>
+  `j < LENGTH ws` by decide_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  `EL (SUC j) ws = (if EL j ws = 0w then 1w else 0w)` by
+    metis_tac[ao_word_chain_def] >>
+  Cases_on `j = 0` >> gvs[] >>
+  Cases_on `j MOD 2 = 0`
+  >- (`SUC j MOD 2 <> 0` by (rewrite_tac[ADD1] >> once_rewrite_tac[GSYM MOD_PLUS] >> simp[]) >>
+      Cases_on `HD ws = 0w` >> gvs[]) >>
+  `j MOD 2 < 2` by simp[] >>
+  `j MOD 2 = 1` by decide_tac >>
+  `SUC j MOD 2 = 0` by
+    (rewrite_tac[ADD1] >> once_rewrite_tac[GSYM MOD_PLUS] >> simp[]) >>
+  Cases_on `HD ws = 0w` >> gvs[]
+QED
+
+Theorem ao_word_chain_same_parity:
+  ao_word_chain ws /\ i < LENGTH ws /\ j < LENGTH ws /\
+  i MOD 2 = j MOD 2 /\ 0 < i /\ 0 < j ==>
+  EL i ws = EL j ws
+Proof
+  strip_tac >>
+  qspec_then `i` mp_tac ao_word_chain_value >>
+  qspec_then `j` mp_tac ao_word_chain_value >> simp[]
+QED
+
+Theorem ao_word_chain_truth_parity:
+  ao_word_chain ws /\ i < LENGTH ws /\ j < LENGTH ws /\
+  i MOD 2 = j MOD 2 ==>
+  (EL i ws = 0w <=> EL j ws = 0w)
+Proof
+  strip_tac >>
+  qspec_then `i` mp_tac ao_word_chain_value >>
+  qspec_then `j` mp_tac ao_word_chain_value >> simp[] >>
+  Cases_on `i = 0` >> Cases_on `j = 0` >>
+  Cases_on `HD ws = 0w` >> gvs[]
+QED
+
+Theorem ao_word_chain_keep_exact:
+  ao_word_chain ws /\ d = LENGTH ws - 1 /\ k = 2 - d MOD 2 /\
+  k < d /\ k < LENGTH ws ==>
+  EL k ws = LAST ws
+Proof
+  rpt strip_tac >>
+  `d MOD 2 < 2` by simp[] >>
+  `0 < LENGTH ws /\ d < LENGTH ws /\ 0 < d /\ 0 < k` by decide_tac >>
+  `k MOD 2 = d MOD 2` by
+    (Cases_on `d MOD 2 = 0` >> gvs[] >>
+     `d MOD 2 = 1` by decide_tac >> gvs[]) >>
+  `LAST ws = EL d ws` by (Cases_on `ws` >> gvs[LAST_EL]) >>
+  metis_tac[ao_word_chain_same_parity]
+QED
+
+Theorem ao_word_chain_keep_truth:
+  ao_word_chain ws /\ d = LENGTH ws - 1 /\ k = d MOD 2 /\
+  k < d /\ k < LENGTH ws ==>
+  (EL k ws = 0w <=> LAST ws = 0w)
+Proof
+  rpt strip_tac >>
+  `0 < LENGTH ws /\ d < LENGTH ws` by decide_tac >>
+  `k MOD 2 = d MOD 2` by simp[] >>
+  `LAST ws = EL d ws` by (Cases_on `ws` >> gvs[LAST_EL]) >>
+  metis_tac[ao_word_chain_truth_parity]
+QED
+
+Theorem ao_chain_last_eval:
+  chn <> [] /\ LENGTH ws = LENGTH chn /\
+  (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws)) ==>
+  eval_operand (LAST chn) s = SOME (LAST ws)
+Proof
+  strip_tac >>
+  `LENGTH chn - 1 < LENGTH chn` by (Cases_on `chn` >> gvs[]) >>
+  first_x_assum drule >>
+  Cases_on `chn` >> Cases_on `ws` >> gvs[LAST_EL]
+QED
+
+Theorem ao_resolve_iszero_op_eval_exact:
+  ALOOKUP targets v = SOME chn /\ chn <> [] /\ LAST chn = Var v /\
+  LENGTH ws = LENGTH chn /\ ao_word_chain ws /\
+  (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws)) /\
+  use_opcode <> JNZ /\ use_opcode <> ASSERT /\ use_opcode <> ASSERT_UNREACHABLE ==>
+  eval_operand (ao_resolve_iszero_op targets use_opcode (Var v)) s =
+  eval_operand (Var v) s
+Proof
+  strip_tac >>
+  `eval_operand (Var v) s = SOME (LAST ws)` by
+    metis_tac[ao_chain_last_eval] >>
+  simp[ao_resolve_iszero_op_def] >>
+  Cases_on `use_opcode = ISZERO` >> simp[] >>
+  reverse (Cases_on `2 - (LENGTH chn - 1) MOD 2 < LENGTH chn - 1 /\
+                    2 - (LENGTH chn - 1) MOD 2 < LENGTH chn`)
+  >- simp[] >>
+  gvs[] >>
+  `EL (2 - (LENGTH chn - 1) MOD 2) ws = LAST ws` by
+    (irule ao_word_chain_keep_exact >> simp[] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem ao_resolve_iszero_op_eval_truth:
+  ALOOKUP targets v = SOME chn /\ chn <> [] /\ LAST chn = Var v /\
+  LENGTH ws = LENGTH chn /\ ao_word_chain ws /\
+  (!j. j < LENGTH chn ==> eval_operand (EL j chn) s = SOME (EL j ws)) /\
+  (use_opcode = JNZ \/ use_opcode = ASSERT \/ use_opcode = ASSERT_UNREACHABLE) ==>
+  ?w. eval_operand (ao_resolve_iszero_op targets use_opcode (Var v)) s = SOME w /\
+      (w = 0w <=> LAST ws = 0w)
+Proof
+  strip_tac >>
+  `eval_operand (Var v) s = SOME (LAST ws)` by
+    metis_tac[ao_chain_last_eval] >>
+  simp[ao_resolve_iszero_op_def] >>
+  reverse (Cases_on `(LENGTH chn - 1) MOD 2 < LENGTH chn - 1 /\
+                    (LENGTH chn - 1) MOD 2 < LENGTH chn`)
+  >- simp[] >>
+  gvs[] >>
+  irule ao_word_chain_keep_truth >> simp[] >> metis_tac[]
 QED
