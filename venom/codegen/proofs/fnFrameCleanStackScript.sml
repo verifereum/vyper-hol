@@ -8,7 +8,7 @@
  * repeat dead_stack_marker (generated_plan_state_wf_marked).
  *
  * TOP-LEVEL:
- *   clean_stack_plan_frame_sim - CHEATED (a piece helper)
+ *   clean_stack_plan_frame_sim - arbitrary-depth cleanup frame simulation
  *)
 
 Theory fnFrameCleanStack
@@ -397,5 +397,27 @@ Theorem clean_stack_plan_frame_sim:
             op = dead_stack_marker \/ MEM op ps.ps_stack \/
             op IN FDOM ps.ps_spilled)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  rename1 `generated_plan_state_wf_marked spillbase ps` >>
+  rename1 `fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st` >>
+  `EVERY (\s. case s of SOSpill off => off < dimword (:256)
+    | SORestore off => off < dimword (:256) | _ => T) clean_ops` by
+    (simp[EVERY_MEM] >> gen_tac >> strip_tac >>
+     Cases_on `s` >> simp[] >> metis_tac[]) >>
+  drule fnFrameTerminalPrepTheory.fn_frame_inv_local_state >> strip_tac >>
+  `asm_block_at prog (st with as_stack := top).as_pc
+    (execute_plan cplan.cp_initial_fmp clean_ops)` by simp[] >>
+  drule_all clean_stack_plan_local_sim >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  rename1 `venom_asm_rel lo ps2 _ endpoint` >>
+  drule asmFrameTheory.asm_steps_frame >> disch_then (qspec_then `rest` assume_tac) >>
+  `st with as_stack := top ++ rest = st` by
+    simp[asm_state_component_equality] >>
+  qexistsl [`LENGTH (execute_plan cplan.cp_initial_fmp clean_ops)`,
+    `endpoint with as_stack := endpoint.as_stack ++ rest`] >>
+  conj_tac >- gvs[] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (irule fnFrameBoundaryInvokeTheory.invoke_prefix_frame_transport >> metis_tac[]) >>
+  simp[] >> metis_tac[clean_stack_plan_inventory]
 QED
