@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsEmptyWords
 Ancestors
   bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsSeq abiEmptySequence
   builtinSimple emitHelper emitHelperProps compileEnv context exprLoweringProps
-  venomInst venomState list rich_list words typedCopyPtr ptrDiscipline
+  venomInst venomState list rich_list words typedCopyPtr ptrDiscipline finite_map
 
 Theorem empty_zero_words_successor_code:
   !n pop sa sm sb.
@@ -43,4 +43,15 @@ Proof
   rpt strip_tac >>
   simp[mstore_ghost_frame, copy_len_binop_ghost_frame,
        lookup_var_update_var, eval_operand_def, op_taint_def]
+QED
+
+Theorem empty_zero_pair_runtime_frame:
+  !s out w off q.
+    (mstore off 0w (update_var out w s) with
+      <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
+    (q <> out ==> lookup_var q (mstore off 0w (update_var out w s)) =
+       lookup_var q s)
+Proof
+  simp[mstore_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
+       venomStateTheory.venom_state_component_equality]
 QED
