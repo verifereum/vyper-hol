@@ -527,3 +527,192 @@ Proof
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
   simp[regions_disjoint_def] >> rpt strip_tac >> decide_tac
 QED
+
+Theorem literal_ptr_ghost_frame:
+  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
+    lookup_var x t = lookup_var x u /\ FLOOKUP G' x = FLOOKUP G x /\
+    FLOOKUP tn'.t_var x = FLOOKUP tn.t_var x) /\
+  (!name a len. local_region cenv es.scopes u name a len ==>
+    regions_disjoint b n a len) /\
+  u.vs_memory = s.vs_memory /\
+  (!a len. a+len <= b \/ b+n <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  tn'.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b+n} /\
+  tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+  t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
+  t.vs_transient = s.vs_transient ==>
+  ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
+    op_taint tn' (Var x) = op_taint tn (Var x)` by
+    (simp[op_taint_def] >> metis_tac[]) >>
+  reverse conj_tac
+  >- (irule literal_ghost_kept >> simp[] >> SET_TAC[]) >>
+  irule literal_ghost_inv_frame >>
+  qexistsl_tac [`G`, `s`, `sa`, `tn`, `{i | b <= i /\ i < b+n}`] >> simp[] >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      `lookup_var p u = SOME w` by metis_tac[] >>
+      drule_all literal_ptr_local_footprint_exterior >>
+      simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+  simp[] >> disch_then irule >> decide_tac
+QED
+
+Theorem literal_ptr_bytes_representation:
+  LENGTH bs <= n /\
+  mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  tn'.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH bs)} ==>
+  val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
+  val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) b s.vs_memory /\
+  val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV bs) <= 32+32*word_size (LENGTH bs) /\
+  (!i. b <= i /\ i < b+val_footprint (BaseTV (BytesT (Dynamic n))) (BytesV bs) ==>
+    i NOTIN tn'.t_mem) /\
+  val_store_size (BaseTV (BytesT (Dynamic n))) (BytesV bs) = 32+32*word_size (LENGTH bs)
+Proof
+  strip_tac >>
+  assume_tac (Q.SPEC `n` le_word_size_mul) >>
+  assume_tac (Q.SPEC `LENGTH (bs:word8 list)` le_word_size_mul) >>
+  simp[loweringPostsTheory.val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def, type_memory_size_def,
+       vyperValueTheory.compatible_bound_def] >>
+  rpt strip_tac >> simp[] >> decide_tac
+QED
+
+Theorem literal_ptr_string_representation:
+  LENGTH str <= n /\
+  mem_word_at b s.vs_memory = n2w (LENGTH str) /\
+  mem_bytes_at (b+32) (LENGTH str) s.vs_memory = MAP (n2w o ORD) str /\
+  tn'.t_mem = tn.t_mem DIFF {i | b <= i /\ i < b+32+32*word_size (LENGTH str)} ==>
+  val_wf (BaseTV (StringT n)) (StringV str) /\
+  val_in_memory (BaseTV (StringT n)) (StringV str) b s.vs_memory /\
+  val_footprint (BaseTV (StringT n)) (StringV str) <= 32+32*word_size (LENGTH str) /\
+  (!i. b <= i /\ i < b+val_footprint (BaseTV (StringT n)) (StringV str) ==>
+    i NOTIN tn'.t_mem) /\
+  val_store_size (BaseTV (StringT n)) (StringV str) = 32+32*word_size (LENGTH str)
+Proof
+  strip_tac >>
+  assume_tac (Q.SPEC `n` le_word_size_mul) >>
+  assume_tac (Q.SPEC `LENGTH (str:string)` le_word_size_mul) >>
+  simp[loweringPostsTheory.val_footprint_def, val_store_size_def, val_wf_def, val_in_memory_def, type_memory_size_def] >>
+  rpt strip_tac >> simp[] >> decide_tac
+QED
+
+Theorem literal_ptr_local_region_frame:
+  local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
+  !name a len. local_region cenv scopes t name a len <=>
+    local_region cenv scopes s name a len
+Proof
+  simp[local_region_def] >> rpt strip_tac >> eq_tac >> strip_tac >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[local_ptrs_reserved_def]
+QED
+
+Theorem literal_ptr_memory_vv_frame_post:
+  ~is_word_type (expr_type e) /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
+  val_footprint tv v <= n /\
+  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
+  (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
+  (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
+  LENGTH u.vs_memory <= LENGTH t.vs_memory /\
+  (!x. not_fresh_at sh x ==> lookup_var x t = lookup_var x u) /\
+  u.vs_memory = s.vs_memory /\
+  (!name a len. local_region cenv es.scopes u name a len ==>
+    regions_disjoint (w2n w) n a len) /\
+  (!a len. a+len <= w2n w \/ w2n w+n <= a ==>
+    mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
+  MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
+  FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP u.vs_allocas aid = SOME entry) /\
+  (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
+    regions_disjoint (w2n w) n a len) /\
+  eval_operand buf.buf_operand t = SOME w /\ sa.cs_next_id < sb.cs_next_id ==>
+  vv_post ctx func cenv cx e es sa sb s es (Value v)
+    (LocatedValue (expr_type e) (base_ptr buf))
+    (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx es t` by
+    (irule literal_ptr_state_memory_frame >> goal_assum (drule_at Any) >> simp[] >>
+     qexistsl_tac [`p`, `sa`, `sh`] >> simp[] >>
+     conj_tac >- (first_assum ACCEPT_TAC) >>
+     rpt strip_tac >>
+     qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+     simp[] >> disch_then irule >> decide_tac) >>
+  `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s` by metis_tac[] >>
+  `!name a len. local_region cenv es.scopes t name a len <=>
+    local_region cenv es.scopes u name a len` by
+    (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+  `!name a len. local_region cenv es.scopes s name a len <=>
+    local_region cenv es.scopes u name a len` by
+    (irule literal_ptr_local_region_frame >> simp[] >> metis_tac[]) >>
+  irule literal_ptr_memory_vv_post >> goal_assum (drule_at Any) >> simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+      simp[] >> disch_then irule >>
+      qpat_x_assum `!name a len. local_region _ _ u name a len ==> _` drule >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` mp_tac >>
+      simp[] >> disch_then irule >>
+      qpat_x_assum `!aid a len. _ ==> regions_disjoint _ _ a len` drule_all >>
+      simp[regions_disjoint_def] >> decide_tac) >>
+  `t.vs_allocas = u.vs_allocas` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = u` mp_tac >>
+     disch_then (SUBST1_TAC o SYM) >> simp[]) >>
+  simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem literal_ptr_value_posts:
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
+  (!i. w2n w <= i /\ i < w2n w+val_footprint tv v ==> i NOTIN tn.t_mem) /\
+  lookup_var p t = SOME w /\ FLOOKUP G p = SOME (b,n) /\
+  b <= w2n w /\ w2n w+val_store_size tv v <= b+n /\
+  w2n w+type_memory_bytes cenv (lowered_value_type cenv e) <= b+n /\
+  op_taint tn (Var p) = {} /\ buf.buf_operand = Var p ==>
+  ptr_vv_ok cx (expr_type e) (Value v)
+    (LocatedValue (expr_type e) (base_ptr buf)) es G tn (t with vs_inst_idx := idx) /\
+  ptr_val_ok cx (expr_type e) v (Var p) G tn (t with vs_inst_idx := idx) /\
+  ptr_buf_ok cenv e (Var p) G (t with vs_inst_idx := idx)
+Proof
+  strip_tac >>
+  `ptr_mem_ok cx (expr_type e) v (Var p) G tn (t with vs_inst_idx := idx)` by
+    (irule literal_clean_ptr_mem_ok >>
+     qexistsl_tac [`b`, `n`, `w`] >> gvs[lookup_var_def]) >>
+  simp[ptr_vv_ok_def, ptr_val_ok_def, base_ptr_def,
+       vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  irule literal_site_ptr_buf_ok >>
+  qexistsl_tac [`b`, `n`, `w`] >> gvs[lookup_var_def]
+QED
+
+Theorem literal_ptr_ghost_inv_normalize:
+  ghost_inv d cenv cx (es with gas_obs := gs) G tn (s with vs_inst_idx := idx) <=>
+  ghost_inv d cenv cx es G tn s
+Proof
+  simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
+       lookup_var_def] >> Cases_on `d` >> simp[return_buf_ptr_def] >>
+  rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
+  simp[return_buf_ptr_def, ptr_covers_def, lookup_var_def]
+QED
+
+Theorem literal_ptr_ghost_kept_initial_gas:
+  ghost_kept cenv (es with gas_obs := gs) sa G tn s G' tn' <=>
+  ghost_kept cenv es sa G tn s G' tn'
+Proof
+  simp[ghost_kept_def]
+QED
