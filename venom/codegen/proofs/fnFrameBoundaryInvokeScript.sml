@@ -1413,8 +1413,9 @@ Theorem invoke_enter_callee:
   lookup_function nm ctx.ctx_functions = SOME callee /\
   eval_operands arg_ops vs = SOME args /\
   setup_callee callee args vs = SOME cvs ==>
-  ?j iops prepared rops arranged ret_lbl ret_off post mid saved cas.
+  ?j iops prepared rops arranged ret_lbl ret_off post mid saved cas pc.
     callee.fn_name = nm /\
+    LENGTH args = LENGTH (compute_operands inst) /\
     j < LENGTH ctx.ctx_functions /\ EL j ctx.ctx_functions = callee /\
     MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
     fn_entry_inv Inv ctx callee cvs /\
@@ -1443,7 +1444,7 @@ Theorem invoke_enter_callee:
     r.sr_spill_base <= arranged.ps_alloc.sa_spill_base /\
     arranged.ps_alloc.sa_next_offset <= r.sr_spill_end /\
     asm_steps lo o2pc prog 3 mid = AsmOK cas /\
-    cas = mid with <| as_stack := n2w ret_off :: mid.as_stack; as_pc := cas.as_pc |>
+    cas = mid with <| as_stack := n2w ret_off :: mid.as_stack; as_pc := pc |>
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `codegen_context_obligations Inv ctx cplan` >>
@@ -1484,13 +1485,13 @@ Resume invoke_enter_callee[call]:
   qpat_x_assum `callee.fn_name = nm` (SUBST_ALL_TAC o SYM) >>
   drule_all invoke_call_entry >> strip_tac >>
   drule_all invoke_call_packet >> strip_tac >>
+  `LENGTH args = LENGTH (compute_operands inst)` by
+    metis_tac[eval_operands_some_length] >>
   `LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256)` by
-    (`LENGTH args = LENGTH (compute_operands inst)` by
-       metis_tac[eval_operands_some_length] >>
-     `LENGTH args + 1 < 18` by decide_tac >>
+    (`LENGTH args + 1 < 18` by decide_tac >>
      `18 < dimword (:256)` by simp[wordsTheory.dimword_def] >> decide_tac) >>
   qexistsl [`j`, `iops`, `prepared`, `rops`, `arranged`, `ret_lbl`, `ret_off`,
-    `post`, `mid`, `saved`, `cas`] >>
+    `post`, `mid`, `saved`, `cas`, `pc`] >>
   gvs[] >> simp[asm_state_component_equality]
 QED
 
@@ -1499,7 +1500,7 @@ Finalise invoke_enter_callee
 (* After the callee returns to the return label: the label, the dead-output
    pops and the optimistic swap re-establish the caller's frame invariant. *)
 Theorem invoke_return_frame:
-  !ctx cplan lo o2pc prog fn ra rest mem0 arranged operands vs mid saved vals
+  !ctx cplan lo o2pc prog fn ra rest mem0 arranged operands args vs mid saved vals
    callee rvs ret vs' asr r outs nl halting dfg inst term ret_lbl called
    pops popped opts swapped final.
   ordered_spill_regions cplan.cp_regions /\ MEM r cplan.cp_regions /\
@@ -1649,3 +1650,125 @@ Resume invoke_return_frame[lift]:
 QED
 
 Finalise invoke_return_frame
+
+(* The structural facts invoke_return_frame needs about the arranged state. *)
+Theorem invoke_entry_structural:
+  !spillbase ps inst nl iops prepared dfg rops arranged.
+  generated_plan_state_wf spillbase ps /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    (?d. stack_get_depth op ps.ps_stack = SOME d /\ d <= 15) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  emit_input_plan INVOKE (compute_operands inst) nl ps = (iops,prepared) /\
+  reorder_plan dfg (compute_operands inst) prepared = (rops,arranged) /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH prepared.ps_stack /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) ps.ps_stack /\
+  (!op. op IN FDOM ps.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs) ==>
+  spill_alloc_layout_wf arranged.ps_alloc arranged.ps_spilled /\
+  ALL_DISTINCT (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack) /\
+  DISJOINT (set (stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack))
+    (FDOM arranged.ps_spilled) /\
+  EVERY (\op. EVERY (\out. case op of Var x => x <> out | _ => T)
+    inst.inst_outputs) arranged.ps_stack /\
+  (!op. op IN FDOM arranged.ps_spilled ==>
+    EVERY (\out. case op of Var x => x <> out | _ => T) inst.inst_outputs)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    (rpt strip_tac >>
+     qpat_x_assum `!op. MEM op _ /\ is_var_operand op ==> _` drule >>
+     simp[] >> strip_tac
+     >- (drule stack_get_depth_props >> simp[stack_peek_def] >>
+         strip_tac >> disj1_tac >>
+         qpat_x_assum `EL _ _ = op` (SUBST1_TAC o SYM) >>
+         irule EL_MEM >> decide_tac) >>
+     Cases_on `op IN FDOM ps.ps_spilled` >> fs[FLOOKUP_DEF]) >>
+  `residual_budget_wf spillbase [] ps` by
+    (fs[generated_plan_state_wf_def] >>
+     metis_tac[residual_budget_wf_canonical]) >>
+  qspecl_then [`spillbase`, `ps`, `compute_operands inst`, `nl`, `iops`,
+    `prepared`, `dfg`, `rops`, `arranged`, `inst.inst_outputs`] mp_tac
+    invoke_prepared_structural >>
+  impl_tac >- simp[] >>
+  simp[plan_state_residual_wf_def]
+QED
+
+Theorem invoke_mem_front[local]:
+  !l x. MEM x l /\ LAST l <> x ==> MEM x (FRONT l)
+Proof
+  rpt strip_tac >> `l <> []` by (strip_tac >> fs[]) >>
+  drule APPEND_FRONT_LAST >>
+  disch_then (fn th => qpat_x_assum `MEM x l`
+    (mp_tac o ONCE_REWRITE_RULE [GSYM th])) >>
+  simp[]
+QED
+
+Theorem invoke_do_swap_last[local]:
+  !dist ps ops ps' off.
+  do_swap dist ps = (ops,ps') /\ ops <> [] ==> LAST ops <> SOSpill off
+Proof
+  rw[do_swap_def] >> gvs[] >> pairarg_tac >> gvs[] >>
+  simp[REVERSE_APPEND, LAST_APPEND_CONS]
+QED
+
+Theorem invoke_foldl_pop_last[local]:
+  !f l ops0 ps0 ops ps'.
+  (!a b v. FST (f (a,b) v) = a \/
+           ?sw n. FST (f (a,b) v) = a ++ sw ++ [SOPop n]) /\
+  FOLDL f (ops0, ps0) l = (ops, ps') ==>
+  ops = ops0 \/ ?pre n. ops = pre ++ [SOPop n]
+Proof
+  gen_tac >> Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  Cases_on `f (ops0,ps0) h` >> fs[] >>
+  first_x_assum drule_all >> strip_tac >> gvs[] >>
+  first_x_assum (qspecl_then [`ops0`, `ps0`, `h`] mp_tac) >> simp[] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Theorem invoke_popmany_last[local]:
+  !to_pop ps ops ps' off.
+  popmany_plan to_pop ps = (ops,ps') /\ ops <> [] ==> LAST ops <> SOSpill off
+Proof
+  Cases >> simp[popmany_plan_def] >> rpt gen_tac >> rw[]
+  >- (pairarg_tac >> gvs[] >> simp[LAST_APPEND_CONS]) >>
+  fs[popmany_individual_def] >>
+  drule_at (Pos last) invoke_foldl_pop_last >>
+  (impl_tac >- (rpt gen_tac >> simp[] >> CASE_TAC >>
+                simp[pairTheory.UNCURRY] >> metis_tac[])) >>
+  strip_tac >> gvs[]
+QED
+
+(* Spill offsets of the cleanup are covered by the prefix spill invariant on
+   FRONT ops: the last op of the plan is never a spill. *)
+Theorem invoke_cleanup_spill_bounds:
+  !f lo pre lbl outs nl halting called pops popped dfg inst term opts swapped ps.
+  (if outs = [] then ([],called)
+   else if ~halting \/ LENGTH outs > 1 then
+     popmany_plan (MAP Var (FILTER (\out. ~MEM out nl) outs)) called
+   else ([],called)) = (pops,popped) /\
+  (if outs = [] \/ FILTER (\out. MEM out nl) outs = [] then ([],popped)
+   else optimistic_swap_plan dfg inst nl term popped) = (opts,swapped) /\
+  prefix_spill_wf f lo (FRONT (pre ++ [SOLabel lbl] ++ pops ++ opts)) ps ==>
+  !off. MEM (SOSpill off) (pops ++ opts) ==> off < dimword (:256)
+Proof
+  rpt gen_tac >> strip_tac >> rpt strip_tac >>
+  `!off. LAST (pops ++ opts) <> SOSpill off` by
+    (gen_tac >> Cases_on `opts = []`
+     >- (gvs[] >> Cases_on `pops = []` >- gvs[] >>
+         qpat_x_assum `(if _ then _ else _) = (pops,popped)` mp_tac >>
+         rw[] >> metis_tac[invoke_popmany_last]) >>
+     simp[LAST_APPEND_NOT_NIL] >>
+     qpat_x_assum `(if _ then _ else _) = (opts,swapped)` mp_tac >>
+     rw[optimistic_swap_plan_def] >> gvs[AllCaseEqs()] >>
+     metis_tac[invoke_do_swap_last]) >>
+  `MEM (SOSpill off) (FRONT (pre ++ [SOLabel lbl] ++ pops ++ opts))` by
+    (irule invoke_mem_front >> simp[] >>
+     `pops ++ opts <> []` by (strip_tac >> fs[]) >>
+     `LAST (pre ++ [SOLabel lbl] ++ pops ++ opts) = LAST (pops ++ opts)` by
+       metis_tac[LAST_APPEND_NOT_NIL, APPEND_ASSOC] >>
+     fs[]) >>
+  metis_tac[prefix_spill_wf_address_bound]
+QED
