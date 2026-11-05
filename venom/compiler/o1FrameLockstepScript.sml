@@ -133,7 +133,8 @@ End
 
 (* R relates the states of a frame of fn in C with those of a frame of fn'
    in C' from the same entry state, for entry states with label table L.
-   Every output step is matched: an unpaired one stays at the same input
+   Every output step is matched: an unpaired one (an ASSIGN, or a NOP with
+   no operands) stays at the same input
    state; a paired one takes the same step there, to an equal execution
    frame; after a paired INVOKE, matching returns resume in R again. *)
 Definition lockstep_sim_def:
@@ -144,7 +145,8 @@ Definition lockstep_sim_def:
        state_rel sg s s' /\
        (p ==> inst_pair sg inst inst' /\
               s'.vs_inst_idx = pos s.vs_current_bb s.vs_inst_idx) /\
-       (~p ==> inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP)) /\
+       (~p ==> inst'.inst_opcode = ASSIGN \/
+               (inst'.inst_opcode = NOP /\ inst'.inst_operands = []))) /\
     (!s0 s1' inst'.
        fn_entry_state fn s0 /\ s0.vs_labels = L /\
        enters_block fn' s0 s1' /\ active_inst fn' inst' s1' ==>
@@ -890,7 +892,8 @@ Theorem lockstep_rel:
   active_inst fn inst s /\ active_inst fn' inst' s' /\ state_rel sg s s' /\
   (p ==> inst_pair sg inst inst' /\
          s'.vs_inst_idx = pos s.vs_current_bb s.vs_inst_idx) /\
-  (~p ==> inst'.inst_opcode = ASSIGN \/ inst'.inst_opcode = NOP)
+  (~p ==> inst'.inst_opcode = ASSIGN \/
+          (inst'.inst_opcode = NOP /\ inst'.inst_operands = []))
 Proof
   lockstep_clause_tac 0
 QED

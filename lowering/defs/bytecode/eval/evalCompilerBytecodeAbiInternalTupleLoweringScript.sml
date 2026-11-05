@@ -1059,7 +1059,7 @@ Theorem compile_stmt_return_ptr:
   cenv.ce_return_pc = SOME (PtrVar return_pc sz) ⇒
   compile_stmt cenv lctx ty (Return (SOME e)) =
     do val_op <- lower_value compile_expr cenv ty e;
-       compile_internal_return_from_env cenv ty (expr_type e)
+       compile_internal_return_from_env cenv ty (lowered_value_type cenv e)
          val_op return_pc
     od
 Proof
@@ -1074,8 +1074,15 @@ val internal_tuple_call_stmt_clean_step1 = RATOR_CONV
       ^internal_tuple_call_body_ret_ty
       (Return (SOME ^internal_tuple_call_return_expr))
       ^internal_tuple_call_state13``
+(* The return lowers at its lowered value type, which for this expression
+   is its source type. *)
+val internal_tuple_call_lowered_ty_eval = TRANS
+  (EVAL ``lowered_value_type ^internal_tuple_call_cenv2
+            ^internal_tuple_call_return_expr``)
+  (SYM internal_tuple_call_src_ty_eval)
 val internal_tuple_call_stmt_clean_step2 = SIMP_CONV pure_ss
   [compileEnvTheory.comp_bind_def,
+   internal_tuple_call_lowered_ty_eval,
    internal_tuple_call_return_value_eval,
    internal_tuple_call_return_from_env_clean_eval,
    LET_THM, pairTheory.UNCURRY_DEF, pairTheory.pair_case_def]
