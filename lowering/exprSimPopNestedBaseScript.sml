@@ -623,7 +623,7 @@ Proof
   simp[resolve_array_element_def, bind_def, ignore_bind_def,
        lift_option_type_def, check_def, assert_def, return_def, raise_def,
        AllCaseEqs()] >> rpt strip_tac >>
-  gvs[nested_pop_resolve_array_empty, vyperMiscTheory.option_CASE_rator,
+  gvs[vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, vyperMiscTheory.option_CASE_rator,
       vyperMiscTheory.prod_CASE_rator, return_def, raise_def, AllCaseEqs()]
   >- (irule nested_pop_fixed_slots >> metis_tac[]) >>
   irule nested_pop_dynamic_slots >> metis_tac[]

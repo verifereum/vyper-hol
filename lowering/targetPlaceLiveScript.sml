@@ -397,12 +397,6 @@ Proof
   qexists `k` >> simp[]
 QED
 
-Theorem nested_pop_resolve_array_empty:
-  resolve_array_element cx tr slot tv [] st = (INL (slot,tv,[]),st)
-Proof
-  Cases_on `tv` >> simp[resolve_array_element_def, return_def]
-QED
-
 Theorem nested_pop_extend_storage_live:
   get_storage_backend cx tr st = (INL raw,st) /\
   storage_read_live cx tr raw slot tv /\
@@ -431,7 +425,7 @@ Proof
   simp[resolve_array_element_def, bind_def, ignore_bind_def,
        lift_option_type_def, check_def, assert_def, return_def, raise_def,
        AllCaseEqs()] >> rpt strip_tac >>
-  gvs[nested_pop_resolve_array_empty, vyperMiscTheory.option_CASE_rator,
+  gvs[vyperStoragePlaceProvenanceTheory.resolve_array_element_empty, vyperMiscTheory.option_CASE_rator,
       vyperMiscTheory.prod_CASE_rator, return_def, raise_def, AllCaseEqs()]
   >- (irule nested_pop_live_fixed_element >> metis_tac[]) >>
   irule nested_pop_live_dynamic_element >> metis_tac[]
