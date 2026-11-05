@@ -2657,6 +2657,49 @@ Proof
        contextTheory.vv_location_def]
 QED
 
+(* A universal fragment judgment can test an INVALID fallback against a
+   STOP suffix. This uses backward result inclusion, not prefix reachability. *)
+Theorem frag_exec_invalid_no_normal_probe[local]:
+  !ctx sa sb s0 Q.
+    sb.cs_blocks = sa.cs_blocks /\
+    sb.cs_current_bb = sa.cs_current_bb /\
+    sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id INVALID [] []] /\
+    ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ~frag_exec ctx sa sb (\s. s = s0) Q (\r. F)
+Proof
+  rpt gen_tac >> strip_tac >> strip_tac >>
+  qabbrev_tac `bb = <|bb_label := sb.cs_current_bb;
+    bb_instructions := sb.cs_current_insts ++ [mk_inst 0 STOP [] []]|>` >>
+  qabbrev_tac `fn = <|fn_name := "probe"; fn_blocks := [bb]|>` >>
+  `fn_has_code sa sb fn` by
+    simp[fn_has_code_def, emitted_blocks_def, Abbr `fn`, Abbr `bb`,
+         lookup_block_def, listTheory.FIND_thm, IS_PREFIX_APPEND] >>
+  qpat_x_assum `frag_exec _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[frag_exec_def] >>
+  disch_then (qspecl_then [`fn`, `s0`] assume_tac) >>
+  qpat_x_assum `fn_has_code _ _ _ /\ _ ==> _` mp_tac >>
+  (impl_tac >- simp[]) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  rename1 `Q s1` >>
+  `!fuel. run_from fuel ctx fn s1 =
+    Halt (halt_state (s1 with vs_returndata := []))` by
+    (gen_tac >> irule run_from_halt >>
+     qexistsl_tac [`bb`, `mk_inst 0 STOP [] []`] >>
+     simp[Abbr `fn`, Abbr `bb`, lookup_block_def, listTheory.FIND_thm,
+          get_instruction_def, EL_APPEND2, venomInstTheory.mk_inst_def,
+          step_inst_base_def]) >>
+  `!fuel. run_from fuel ctx fn s0 =
+    Abort ExHalt_abort (halt_state (set_returndata [] s0))` by
+    (gen_tac >> simp[run_from_def, Abbr `fn`, lookup_block_def,
+                     listTheory.FIND_thm, Abbr `bb`] >>
+     simp[Once exec_block_def, get_instruction_def, EL_APPEND1, EL_APPEND2,
+          step_inst_non_invoke, venomInstTheory.mk_inst_def, step_inst_base_def]) >>
+  qpat_x_assum `!fuel. (!e. _ <> Error e) ==> _`
+    (qspec_then `0` mp_tac) >> simp[]
+QED
+
 Theorem compile_attribute_code_origin:
   vv_location (FST (compile_attribute cfn cenv rt ty obj fld sc)) = SOME LocCode ==>
   vv_location (FST (cfn cenv ty obj sc)) = SOME LocCode
