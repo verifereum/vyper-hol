@@ -114,7 +114,9 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
     valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
     initial_venom_state_rel tops am tx vs /\
     call_outcomes_ok am tx vs.vs_outcomes /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx) /\
+    (!marks. ~source_exempt tops
+       (call_external (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings) am tx)) /\
     ~ctx_has_dalloca unit.cu_context
     ==> ptr_discipline 0 unit.cu_context vs /\
         taint_within
@@ -122,6 +124,8 @@ Theorem lower_vyper_runtime_unit_ptr_taint:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
+  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
+    (first_assum (qspec_then `[]` mp_tac) >> simp[gas_explicit_nil]) >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> strip_tac >>
   drule run_lowering_entry >> strip_tac >>
@@ -172,8 +176,6 @@ Theorem lower_vyper_runtime_unit_memory_ok:
           unit.cu_context vs
 Proof
   rpt strip_tac >>
-  `~source_exempt tops (call_external (SOME vs.vs_outcomes) [] am tx)` by
-    (first_assum (qspec_then `[]` mp_tac) >> simp[gas_explicit_nil]) >>
   drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
   drule run_lowering_context_ok >> strip_tac >>
   drule run_lowering_entry >> strip_tac >>
