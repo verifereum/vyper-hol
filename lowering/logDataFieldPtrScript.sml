@@ -5,7 +5,8 @@ Ancestors logValueFramePtr robustCopyTransportPtr logBytesPathPtr
   stmtSimLogDataRun stmtSimLogDataFrame bodyPtrDefs loweringPosts
   valueEncodingProps venomState finite_map words list arithmetic pred_set
   ptrDiscipline emitHelperProps venomInst exprSimBufferStore stmtSimReturn
-  venomMemProofs valueEncodingProofs
+  venomMemProofs valueEncodingProofs exprSimProps valueCopyBytes
+  vyperValue vyperTyping valueEncoding
 
 Theorem ptr_val_ok_exterior_frame:
   ptr_val_ok cx ty v op G tn s /\
@@ -119,3 +120,33 @@ Resume log_data_word_store_seq_ptr[word_robust]:
   simp[LIST_EQ_REWRITE,EL_mem_bytes_at]
 QED
 Finalise log_data_word_store_seq_ptr
+
+Theorem log_data_bytes_size:
+  supported_scalar_type ty /\ is_bytestring_type ty /\
+  evaluate_type tenv ty = SOME tv /\ value_has_type tv v /\ val_wf tv v ==>
+  ?len.
+    ((?bs. v = BytesV bs /\ len = LENGTH bs) \/
+     (?str. v = StringV str /\ len = LENGTH str)) /\
+    val_store_size tv v = 32 + 32 * ((len+31) DIV 32) /\
+    32 + 32 * ((len+31) DIV 32) <= type_memory_bytes cenv ty
+Proof
+  strip_tac >>
+  `val_store_size tv v <= type_memory_bytes cenv ty` by
+    metis_tac[val_store_size_le,log_scalar_memory_size] >>
+  drule_all bytestring_type_value >> strip_tac >>
+  Cases_on `v` >>
+  gvs[value_has_type_def,val_store_size_def,vfmConstantsTheory.word_size_def]
+QED
+
+Theorem ptr_val_ok_store_covers:
+  ptr_val_ok cx ty v op G tn s /\ ~is_word_type ty /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ eval_operand op s = SOME w /\
+  val_footprint tv v <> 0 /\ n <= val_store_size tv v ==>
+  ?p. op = Var p /\ ptr_covers G tn p s n
+Proof
+  strip_tac >> fs[ptr_val_ok_def,ptr_mem_ok_def] >>
+  `?p b sz. op = Var p /\ FLOOKUP G p = SOME (b,sz) /\
+    b <= w2n w /\ w2n w + val_store_size tv v <= b+sz` by metis_tac[] >>
+  gvs[] >> simp[ptr_covers_def] >>
+  qexists_tac `w` >> gvs[eval_operand_def] >> decide_tac
+QED
