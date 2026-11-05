@@ -1,7 +1,7 @@
 (* Source-indexed successful dynamic-array iteration boundaries. *)
 Theory calldataValidOwnedStep
 Ancestors
-  calldataValidOwnedChild calldataDynOwned valueEncodingProps valueEncodingProofs
+  calldataValidOwnedChild calldataDynOwned abiEncoderChildSuffix valueEncodingProps valueEncodingProofs
   abiDecoderValidArrayEntry abiDecoderValidContract abiDecoderContract
   abiDecoderLoopRegisters abiDecoderArrayInvariant abiDecoderReentry abiDecoderArrayBackedge
   abiDecoderExecution abiDecoderTypedContract
@@ -258,3 +258,106 @@ Resume calldata_valid_header_child_reach[child_fields]:
 QED
 
 Finalise calldata_valid_header_child_reach
+
+(* The backedge writes the already-owned index cell, not a new footprint. *)
+Theorem calldata_valid_successor_footprint[local]:
+  abi_decode_footprint_frame ((d,sz)::old) initial u /\
+  entry.vs_memory = u.vs_memory /\ entry.vs_call_ctx = u.vs_call_ctx /\
+  entry.vs_data_section = u.vs_data_section /\
+  abi_decode_footprint_frame ((e,stride)::new) entry child /\
+  d <= e /\ e+stride <= d+sz /\ MEM (p,32) old /\
+  v = jump_to hdr (mstore p w (update_var nv w child)) ==>
+  abi_decode_footprint_frame ((d,sz)::(old++new)) initial v
+Proof
+  strip_tac >>
+  `abi_decode_footprint_frame ((d,sz)::old) initial entry` by
+    (irule abi_encoder_footprint_memory >>
+     fs[abiDecoderFrameTheory.abi_decode_footprint_frame_def] >> metis_tac[]) >>
+  drule_all calldata_footprint_accumulate >> strip_tac >>
+  `abi_decode_footprint_frame ((d,sz)::(old++new)) child (mstore p w child)` by
+    (irule abi_encoder_store_footprint >> simp[MEM_APPEND]) >>
+  `abi_decode_footprint_frame ((d,sz)::(old++new)) initial (mstore p w child)` by
+    (irule abiDecoderFrameTheory.abi_decode_footprint_frame_trans >>
+     qexists_tac `child` >> asm_rewrite_tac[]) >>
+  irule abi_encoder_footprint_memory >>
+  conj_tac
+  >- fs[abiDecoderFrameTheory.abi_decode_footprint_frame_def,
+        jump_to_def, mstore_def, update_var_def] >>
+  conj_tac
+  >- fs[abiDecoderFrameTheory.abi_decode_footprint_frame_def,
+        jump_to_def, mstore_def, update_var_def] >>
+  qexists_tac `mstore p w child` >>
+  simp[jump_to_def, mstore_def, update_var_def]
+QED
+
+(* Only variables below the final register bound are written on the backedge;
+   CALLDATALOAD's source window is unaffected by its index-cell store. *)
+Theorem calldata_valid_backedge_source[local]:
+  v = jump_to hdr (mstore p w
+    (update_var (STRING #"%" (toString nvar)) w child)) /\
+  nvar < limit_st.cs_next_var /\ fresh_vars_wrt limit_st child /\
+  src <> Var (STRING #"%" (toString nvar)) /\
+  dst <> Var (STRING #"%" (toString nvar)) /\
+  child.vs_call_ctx = u.vs_call_ctx /\
+  child.vs_data_section = u.vs_data_section /\
+  eval_operand src child = eval_operand src u /\
+  eval_operand dst child = eval_operand dst u /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap u /\
+  mem_bytes_at sb len (abi_decode_source CALLDATALOAD u) = bs ==>
+  fresh_vars_wrt limit_st v /\
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb len d outsz b cap v /\
+  mem_bytes_at sb len (abi_decode_source CALLDATALOAD v) = bs
+Proof
+  strip_tac >> conj_tac
+  >- (asm_rewrite_tac[] >> simp[] >> irule fresh_vars_wrt_mstore >>
+      irule abi_decoder_generated_update_fresh >> simp[]) >>
+  `v.vs_call_ctx = child.vs_call_ctx /\
+   v.vs_data_section = child.vs_data_section /\
+   eval_operand src v = eval_operand src child /\
+   eval_operand dst v = eval_operand dst child` by
+    (`eval_operand src (update_var (STRING #"%" (toString nvar)) w child) =
+        eval_operand src child /\
+      eval_operand dst (update_var (STRING #"%" (toString nvar)) w child) =
+        eval_operand dst child` by
+       (Cases_on `src` >> Cases_on `dst` >>
+        gvs[eval_operand_def, lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+     asm_rewrite_tac[] >> simp[eval_operand_mstore] >>
+     simp[jump_to_def, mstore_def, update_var_def]) >>
+  fs[abi_decoder_ranges_def, abi_decode_source_def]
+QED
+
+(* Transport allocation evidence through a nested interval and its backedge. *)
+Theorem calldata_valid_successor_allocations[local]:
+  lo <= a /\ a <= b /\ b <= hi /\
+  (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+    FLOOKUP u.vs_allocas id = SOME (q,k)) /\
+  (!id. id < lo \/ hi <= id ==>
+    FLOOKUP u.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+  (!id q k. FLOOKUP u.vs_allocas id = SOME (q,k) ==>
+    FLOOKUP child.vs_allocas id = SOME (q,k)) /\
+  (!id. id < a \/ b <= id ==>
+    FLOOKUP child.vs_allocas id = FLOOKUP u.vs_allocas id) /\
+  (!q k. MEM (q,k) old ==> ?id. lo <= id /\ id < hi /\
+    FLOOKUP u.vs_allocas id = SOME (q,k)) /\
+  (!q k. MEM (q,k) new ==> ?id. a <= id /\ id < b /\
+    FLOOKUP child.vs_allocas id = SOME (q,k)) /\
+  v.vs_allocas = child.vs_allocas ==>
+  (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+    FLOOKUP v.vs_allocas id = SOME (q,k)) /\
+  (!id. id < lo \/ hi <= id ==>
+    FLOOKUP v.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+  (!q k. MEM (q,k) (old++new) ==> ?id. lo <= id /\ id < hi /\
+    FLOOKUP v.vs_allocas id = SOME (q,k))
+Proof
+  strip_tac >> asm_rewrite_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `id < a \/ b <= id` by decide_tac >> metis_tac[]) >>
+  `!q k. MEM (q,k) old ==> ?id. lo <= id /\ id < hi /\
+      FLOOKUP child.vs_allocas id = SOME (q,k)` by
+    metis_tac[] >>
+  simp[MEM_APPEND] >> rpt gen_tac >> strip_tac
+  >- metis_tac[] >>
+  first_x_assum drule >> strip_tac >>
+  qexists_tac `id` >> simp[] >> decide_tac
+QED
