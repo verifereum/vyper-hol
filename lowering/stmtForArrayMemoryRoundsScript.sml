@@ -650,3 +650,75 @@ Resume array_one_round_mem[exit]:
 QED
 
 Finalise array_one_round_mem
+
+Theorem array_code_loop_outcome_mem:
+  array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride saved_base
+    p sz ainst idx dv ov ep nv cond exit stmts_lbl incr
+    j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
+  LENGTH vs < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
+  lookup_block stmts_lbl func.fn_blocks = SOME bb /\
+  isPREFIX sb0.cs_current_insts bb.bb_instructions /\
+  caller.cs_next_var <= sa.cs_next_var /\ sa.cs_next_var <= sb0.cs_next_var /\
+  (!x. not_fresh_at caller x ==> x <> idx /\ x <> dv /\ x <> ov /\ x <> ep /\ x <> nv) /\
+  (!l. saved_base <> Label l) /\
+  (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
+  (!k ei. k < LENGTH vs /\ P ei /\ lookup_scopes id ei.scopes = NONE ==>
+    not_local_ptr bc (FEMPTY :: ei.scopes) p /\
+    stmt_frag_mem d ctx func cx (InLoop exit incr) RetQ bc
+      (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts)
+      (ei with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes) /\
+    (!gs r ee. eval_stmts cx stmts
+      (ei with <|scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes;
+        gas_obs := gs|>) = (r,ee) ==>
+      stmt_res_ok (InLoop exit incr) r /\
+      ?sc rest. ee.scopes = sc :: rest /\
+        (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
+        ((r = INL () \/ r = INR ContinueException) ==>
+          P (ee with scopes := rest) /\ lookup_scopes id rest = NONE))) /\
+  (!k ei t. k < LENGTH vs /\
+    array_loop_inv ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+      ainst stmts_lbl caller k ei t ==>
+    val_in_memory tv (EL k vs) (w2n arr_base + k * stride) t.vs_memory /\
+    w2n arr_base + k * stride < dimword (:256) /\
+    w2n arr_base + LENGTH vs * stride <= t.vs_alloca_next) ==>
+  !k es s. k <= LENGTH vs /\
+    array_round_inv d ctx func cenv cx P vs id idx saved_base arr_base p dst sz
+      ainst cond caller orig k es s /\
+    gas_admissible (eval_for cx tv id stmts (DROP k vs)) ok es ==>
+    gas_outcome T (cx_tops cx) (ctx,func)
+      (eval_for cx tv id stmts (DROP k vs)) (es,s)
+      (\res ee t. res = INL () /\
+        array_round_done d ctx func cenv cx caller orig exit ee t)
+      (\res ee rr. ?ex. res = INR ex /\
+        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+Proof
+  strip_tac >>
+  ho_match_mp_tac stmtSimForRoundsTheory.eval_for_rounds >>
+  conj_tac >- suspend "round" >>
+  suspend "last"
+QED
+
+Resume array_code_loop_outcome_mem[round]:
+  rpt strip_tac >>
+  `P es /\ lookup_scopes id es.scopes = NONE` by
+    fs[array_round_inv_def, array_loop_inv_def] >>
+  qpat_x_assum `!k ei. _` drule_all >> strip_tac >>
+  drule array_one_round_mem >> disch_then irule >>
+  simp[] >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >> qpat_x_assum `!k ei t. _` drule_all >>
+  simp[MULT_COMM]
+QED
+
+Resume array_code_loop_outcome_mem[last]:
+  rpt strip_tac >>
+  drule array_for_code_iteration_static >> strip_tac >>
+  drule array_for_code_condition >> strip_tac >>
+  drule array_for_code_entry_static >> strip_tac >>
+  `not_local_ptr cenv es.scopes dv` by metis_tac[] >>
+  `!x. not_fresh_at caller x ==> x <> dv` by metis_tac[] >>
+  drule_all array_round_last >> simp[]
+QED
+
+Finalise array_code_loop_outcome_mem
