@@ -55,11 +55,11 @@ Proof
 QED
 
 Theorem structlit_mcopy_operand_byte_clean:
-  !tn id dst src count s t a b n j.
+  !tn id dst src count s t a b n j i.
     eval_operand dst s = SOME a /\ eval_operand src s = SOME b /\
     eval_operand count s = SOME n /\ j < w2n n /\
-    w2n b + j NOTIN tn.t_mem ==>
-    w2n a + j NOTIN
+    w2n b + j NOTIN tn.t_mem /\ i = w2n a + j ==>
+    i NOTIN
       (step_taint (mk_inst id MCOPY [dst;src;count] []) s t tn).t_mem
 Proof
   rpt strip_tac >>
