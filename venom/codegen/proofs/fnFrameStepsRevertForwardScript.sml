@@ -2070,3 +2070,79 @@ Proof
   drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
     rf_copy_plan_live_retained >> simp[]
 QED
+
+Theorem rf_optimistic_owned:
+  optimistic_swap_plan dfg inst nl term ps = (ops,ps') /\
+  EVERY is_simple_stack_op ops /\
+  (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled) ==>
+  MEM at ps'.ps_stack \/ at IN FDOM ps'.ps_spilled
+Proof
+  strip_tac >>
+  qpat_x_assum `optimistic_swap_plan _ _ _ _ _ = _` mp_tac >>
+  simp[optimistic_swap_plan_def] >>
+  rpt (IF_CASES_TAC >> simp[]) >>
+  Cases_on `stack_get_depth (Var (LAST nl)) ps.ps_stack` >> simp[] >>
+  strip_tac >> gvs[] >>
+  `x <= 16` by metis_tac[rf_simple_do_swap_shallow] >>
+  `x < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  `PERM ps'.ps_stack ps.ps_stack` by
+    (drule doSwapSimTheory.do_swap_stack_perm >> simp[]) >>
+  `ps'.ps_spilled = ps.ps_spilled` by
+    (qpat_x_assum `do_swap _ _ = _` mp_tac >>
+     Cases_on `x = 0` >> simp[do_swap_def] >> strip_tac >> gvs[]) >>
+  metis_tac[sortingTheory.PERM_MEM_EQ]
+QED
+
+Theorem rf_assign_postfix_live_owned:
+  ps.ps_stack = stack_push (Var out) tail /\ MEM x nl /\
+  (MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+  (if halting then ([],ps)
+   else popmany_plan (if MEM out nl then [] else [Var out]) ps) = (pops,ps8) /\
+  (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+   else ([],ps8)) = (opts,ps9) /\
+  EVERY is_simple_stack_op (pops ++ opts) ==>
+  MEM (Var x) (release_dead_spills nl ps9).ps_stack \/
+  Var x IN FDOM (release_dead_spills nl ps9).ps_spilled
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule rf_release_live_owned >> simp[] >>
+  Cases_on `MEM out nl`
+  >- (`pops = [] /\ ps8 = ps` by
+        (Cases_on `halting` >> gvs[popmany_plan_def]) >>
+      gvs[] >>
+      `MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled` by simp[] >>
+      drule rf_optimistic_owned >> simp[] >>
+      disch_then (qspec_then `Var x` mp_tac) >> simp[]) >>
+  gvs[] >> Cases_on `halting` >- gvs[] >>
+  `stack_get_depth (Var out) ps.ps_stack = SOME 0` by
+    simp[stack_push_def, REVERSE_SNOC, stack_get_depth_def, stack_find_def] >>
+  `popmany_plan [Var out] ps =
+    ([SOPop 1],ps with ps_stack := stack_pop 1 ps.ps_stack)` by
+    metis_tac[regularPostfixSimTheory.popmany_plan_top_singleton] >>
+  gvs[stack_pop_def, stack_push_def, SNOC_APPEND, TAKE_APPEND]
+QED
+
+Theorem rf_assign_plan_result:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\
+  emit_input_plan ASSIGN [rhs] nl ps = (ins,ps1) /\
+  reorder_plan dfg [rhs] ps1 = (ros,ps2) /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') ==>
+  ?pops ps8 opts ps9.
+    (if halting then ([],ps2 with ps_stack :=
+       stack_push (Var out) (stack_pop 1 ps2.ps_stack))
+     else popmany_plan (if MEM out nl then [] else [Var out])
+       (ps2 with ps_stack := stack_push (Var out) (stack_pop 1 ps2.ps_stack))) =
+       (pops,ps8) /\
+    (if MEM out nl then optimistic_swap_plan dfg inst nl term ps8
+     else ([],ps8)) = (opts,ps9) /\
+    ops = ins ++ ros ++ pops ++ opts /\ ps' = release_dead_spills nl ps9
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_regular_inst_plan_def, compute_operands_def,
+       python_stack_operands_def, generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def] >>
+  Cases_on `halting` >> Cases_on `MEM out nl` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
+QED
+
