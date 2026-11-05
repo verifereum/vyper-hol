@@ -1,7 +1,7 @@
 (* Admissible source-action boundaries for assignment to a local. *)
 Theory stmtSimAssignSource
 Ancestors
-  stmtSimDefs exprSimDefs gasContext stmtSimAssignStore
+  stmtSimDefs exprSimDefs gasContext gasExemptCert stmtSimAssignStore
   vyperInterpreter vyperState vyperExprNoControl
 Libs
   monadsyntax
@@ -115,4 +115,30 @@ Proof
   drule_all assign_local_continuation_success >> strip_tac >>
   qexistsl [`pre`, `env`, `entry`, `rest`] >> gvs[] >>
   drule write_place_local_success_gas_obs >> simp[]
+QED
+
+Theorem assign_local_exempt:
+  (!memory tops ctx' func' cx' e' es' s0 marks err ee leaf fin.
+     gas_exempt_cert memory tops (ctx', func')
+       (ignore_bind (bind (eval_expr cx' e') (read_result cx')) (return ()))
+       (es', s0) marks (err, ee) (leaf, fin) ==>
+     gas_exempt_cert memory tops (ctx', func')
+       (ignore_bind (eval_expr cx' e') (return ()))
+       (es', s0) marks (err, ee) (leaf, fin)) /\
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
+    (es, s0) marks (err, ee) (leaf, fin) ==>
+  gas_exempt_cert memory tops (ctx, func)
+    (ignore_bind (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (return ()))
+    (es, s0) marks (err, ee) (leaf, fin)
+Proof
+  strip_tac >>
+  `ignore_bind (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (return ()) =
+   bind (eval_expr cx e)
+     (\pv. ignore_bind
+       (bind (eval_target_place cx (NameTarget id))
+         (\p. bind (read_result cx pv) (write_place cx p))) (return ()))` by
+    simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
+  pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_result >> first_x_assum irule >> simp[]
 QED
