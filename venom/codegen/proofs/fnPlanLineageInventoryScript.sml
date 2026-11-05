@@ -2036,3 +2036,101 @@ Proof
     simp[stackPlanTypesTheory.plan_state_component_equality] >>
   gvs[] >> qexists_tac `core_state.ps_stack` >> simp[]
 QED
+
+
+Theorem FIND_member_cong[local]:
+  !xs P Q. (!x. MEM x xs ==> (P x <=> Q x)) ==>
+    FIND P xs = FIND Q xs
+Proof
+  Induct >> simp[listTheory.FIND_thm] >> rpt strip_tac >>
+  Cases_on `P h` >> gvs[]
+QED
+
+Theorem stack_get_unfixed_depth_bottom_excluded:
+  !op prefix core f n. ~MEM op prefix ==>
+    stack_get_unfixed_depth op f n (prefix ++ core) =
+    stack_get_unfixed_depth op f n core
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `n <= f + 1`
+  >- simp[stack_get_unfixed_depth_def, stack_get_depth_bottom_excluded] >>
+  asm_rewrite_tac[stack_get_unfixed_depth_def, LENGTH_APPEND] >>
+  `GENLIST I (LENGTH prefix + LENGTH core) =
+    GENLIST I (LENGTH core) ++
+    GENLIST (\t. t + LENGTH core) (LENGTH prefix)` by
+      simp[Once arithmeticTheory.ADD_COMM, GENLIST_APPEND] >>
+  asm_rewrite_tac[callLayoutDefsTheory.FIND_APPEND_CASE] >>
+  `FIND (\d. ~(f < d /\ d < n) /\ stack_peek d (prefix ++ core) = op)
+      (GENLIST I (LENGTH core)) =
+    FIND (\d. ~(f < d /\ d < n) /\ stack_peek d core = op)
+      (GENLIST I (LENGTH core))` by
+    (irule FIND_member_cong >> simp[MEM_GENLIST] >> rpt strip_tac >>
+     simp[stack_peek_def, EL_APPEND2]) >>
+  asm_rewrite_tac[] >>
+  Cases_on `FIND (\d. ~(f < d /\ d < n) /\ stack_peek d core = op)
+    (GENLIST I (LENGTH core))` >> simp[] >>
+  Cases_on `FIND (\d. ~(f < d /\ d < n) /\
+    stack_peek d (prefix ++ core) = op)
+    (GENLIST (\t. t + LENGTH core) (LENGTH prefix))` >> gvs[] >>
+  drule stackPlanGenTheory.FIND_SOME_MEM >> disch_then strip_assume_tac >>
+  qpat_x_assum `MEM _ (GENLIST _ _)` mp_tac >>
+  rewrite_tac[MEM_GENLIST] >> strip_tac >>
+  `x < LENGTH core + LENGTH prefix /\ LENGTH core <= x` by (fs[] >> decide_tac) >>
+  `LENGTH (prefix ++ core) - (x + 1) < LENGTH prefix` by simp[] >>
+  `MEM (stack_peek x (prefix ++ core)) prefix` by
+    (simp[stack_peek_def, EL_APPEND1] >> irule EL_MEM >> decide_tac) >>
+  metis_tac[]
+QED
+
+Theorem select_spill_candidate_bottom_frame:
+  !prefix core targets dist n. dist < LENGTH core ==>
+    select_spill_candidate (prefix ++ core) targets dist n =
+    select_spill_candidate core targets dist n
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MIN (dist - 1) (LENGTH (prefix ++ core) - 1) = dist - 1 /\
+   MIN (dist - 1) (LENGTH core - 1) = dist - 1` by simp[arithmeticTheory.MIN_DEF] >>
+  asm_rewrite_tac[select_spill_candidate_def, LET_THM] >> BETA_TAC >>
+  irule FIND_member_cong >> simp[MEM_GENLIST] >> rpt strip_tac >>
+  `x < LENGTH core` by (fs[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  simp[stack_peek_def, EL_APPEND2]
+QED
+
+Theorem do_restore_bottom_frame:
+  !op ps prefix ops qs. do_restore op ps = (ops,qs) ==>
+    do_restore op (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> simp[do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[stack_push_def, SNOC_APPEND, APPEND_ASSOC] >> strip_tac >> gvs[]
+QED
+
+Theorem do_spill_at_bottom_frame:
+  !d ps prefix ops qs.
+    d < LENGTH ps.ps_stack /\ d <= 16 /\ do_spill_at d ps = (ops,qs) ==>
+    do_spill_at d (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `alloc_spill_slot ps.ps_alloc` >>
+  Cases_on `d = 0` >> gvs[do_spill_at_def, do_spill_tos_def] >>
+  simp[stack_swap_bottom_extension, stack_peek_def, EL_APPEND2,
+       stack_pop_def, TAKE_APPEND, TAKE_LENGTH_TOO_LONG,
+       stackPlanTypesTheory.plan_state_component_equality] >>
+  pairarg_tac >> gvs[stack_pop_def, stack_peek_def]
+QED
+
+Theorem do_swap_bottom_frame:
+  !d ps prefix ops qs.
+    d < LENGTH ps.ps_stack /\ do_swap d ps = (ops,qs) ==>
+    do_swap d (ps with ps_stack := prefix ++ ps.ps_stack) =
+      (ops,qs with ps_stack := prefix ++ qs.ps_stack)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `d < LENGTH core`) do_swap_prefix_replay >>
+  disch_then (qspecl_then [`ps`, `ps with ps_stack := prefix ++ ps.ps_stack`,
+    `[]`, `prefix`] mp_tac) >>
+  simp[] >> strip_tac >>
+  gvs[stackPlanTypesTheory.plan_state_component_equality]
+QED
