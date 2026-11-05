@@ -19,7 +19,8 @@ Ancestors
   fnPlanLineageJoin fnLineageInv fnLiveDefDom fnPlanPrefix fnPlanLineage
   stackPlanGen stackPlanTypes livenessDefs dfgDefs
   codegenReadyCompute venomExecProofs venomWf venomExecProps venomInst
-  relation list finite_map
+  relation list finite_map dominatorProofs cfgAnalysisProps
+  removeUnusedSsaProofs
 
 Theorem lineage_state_entry_cases[local]:
   lineage_state liveness dfg cfg fn ps0 lbl ps ==>
@@ -94,6 +95,72 @@ Theorem initial_cleanup_empty[local]:
   (init_cleanup_plan_state ch growth spill_base lbl_ctr).ps_spilled = FEMPTY
 Proof
   simp[init_cleanup_plan_state_def, init_plan_state_def]
+QED
+
+Theorem dominates_entry_label[local]:
+  fn_entry_label fn = SOME entry /\ fn_dominates fn dom entry ==>
+  dom = entry
+Proof
+  rw[fn_dominates_def] >>
+  first_x_assum (qspec_then `[entry]` mp_tac) >>
+  simp[is_fn_path_def]
+QED
+
+Theorem ready_entry_no_preds[local]:
+  codegen_ready_fn fn /\ entry_block fn = SOME eb ==>
+  cfg_preds_of (cfg_analyze fn) eb.bb_label = []
+Proof
+  strip_tac >> gvs[codegen_ready_fn_def, block_entries_ready_def, NULL_EQ]
+QED
+
+Theorem small_preds_not_dominates_pred[local]:
+  codegen_ready_fn fn /\ fn_reachable fn pred /\
+  fn_cfg_edge fn pred succ /\
+  LENGTH (cfg_preds_of (cfg_analyze fn) succ) <= 1 ==>
+  ~fn_dominates fn succ pred
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[codegen_ready_fn_def] >>
+  `?eb. entry_block fn = SOME eb` by
+    (gvs[wf_function_def, fn_has_entry_def, entry_block_def] >>
+     Cases_on `fn.fn_blocks` >> gvs[]) >>
+  `MEM pred (cfg_preds_of (cfg_analyze fn) succ)` by
+    metis_tac[fn_cfg_edge_cfg_analyze, cfg_edge_symmetry_uncond] >>
+  `succ <> eb.bb_label` by metis_tac[ready_entry_no_preds, MEM] >>
+  `cfg_reachable_of (cfg_analyze fn) succ` by
+    metis_tac[fn_reachable_step, fn_reachable_cfg_analyze] >>
+  drule_all exists_pred_not_dominated >>
+  disch_then (qx_choose_then `other` strip_assume_tac) >>
+  `other = pred` by
+    (Cases_on `cfg_preds_of (cfg_analyze fn) succ` >> gvs[] >>
+     rename1 `SUC (LENGTH rest) <= 1` >> Cases_on `rest` >> gvs[]) >>
+  metis_tac[fn_dominates_cfg_analyze]
+QED
+
+Theorem dominating_def_excludes_outputs[local]:
+  codegen_ready_fn fn /\
+  MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
+  MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label pred /\
+  MEM target fn.fn_blocks /\ ~fn_dominates fn target.bb_label pred ==>
+  ~MEM v (FLAT (MAP (\i. i.inst_outputs) target.bb_instructions))
+Proof
+  strip_tac >> strip_tac >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  gvs[MEM_FLAT, MEM_MAP] >>
+  metis_tac[ssa_unique_output_block]
+QED
+
+Theorem strict_dominating_def_excludes_outputs[local]:
+  codegen_ready_fn fn /\
+  MEM def_bb fn.fn_blocks /\ MEM inst def_bb.bb_instructions /\
+  MEM v inst.inst_outputs /\ fn_dominates fn def_bb.bb_label target.bb_label /\
+  def_bb.bb_label <> target.bb_label /\ MEM target fn.fn_blocks ==>
+  ~MEM v (FLAT (MAP (\i. i.inst_outputs) target.bb_instructions))
+Proof
+  strip_tac >> strip_tac >>
+  `ssa_form fn` by gvs[codegen_ready_fn_def] >>
+  gvs[MEM_FLAT, MEM_MAP] >>
+  metis_tac[ssa_unique_output_block]
 QED
 
 (* Why it should hold.  Freshness: a join's entry stack is its JMP
