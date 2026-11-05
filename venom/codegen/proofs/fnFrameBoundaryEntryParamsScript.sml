@@ -1,7 +1,7 @@
 Theory fnFrameBoundaryEntryParams
 Ancestors
-  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim
-  callLayoutDefs venomExecSemantics venomState venomInst list rich_list
+  frameRel frameViewFacts stackPlanGen stackPlanTypes stackModel stackPlanOps doSwapSim cleanOpsSim strongPrefixSim planAlign stackOpSim planWf prefixExec blockSimHelpers
+  callLayoutDefs venomExecSemantics venomState venomInst list rich_list pred_set
   arithmetic words unitShapeDefs venomWf phiBlock cfgHelpers
   livenessAnalysisProps cfgAnalysisProps asmSem planExec fnFrameTerminalPrep codegenRel contextCodegenRel mixedPrefixSim prefixSim
 
@@ -1628,4 +1628,87 @@ Proof
   irule do_swap_prefix_spill_wf_from_generated_spills >>
   simp[] >> qexistsl [`dist`, `ps'`] >> simp[] >>
   irule do_swap_generated_spills_prefix_wf_bounds >> simp[]
+QED
+
+Theorem entry_pop_one_step_some:
+  !item ps dist.
+    stack_get_depth item ps.ps_stack = SOME dist ==>
+    pop_one_step item ps =
+      (FST (do_swap dist ps) ++ [SOPop 1],
+       (SND (do_swap dist ps)) with ps_stack :=
+         stack_pop 1 (SND (do_swap dist ps)).ps_stack)
+Proof
+  rpt strip_tac >> simp[pop_one_step_def] >>
+  Cases_on `dist = 0` >- simp[do_swap_def] >>
+  Cases_on `do_swap dist ps` >> simp[]
+QED
+
+Theorem entry_pop_one_step_structural:
+  !item ps ops ps'.
+    pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) ==>
+    spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+    ALL_DISTINCT ps'.ps_stack /\
+    DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  Cases_on `stack_get_depth item ps.ps_stack`
+  >- gvs[pop_one_step_def] >>
+  rename1 `stack_get_depth item ps.ps_stack = SOME dist` >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  drule_all entry_pop_one_step_some >> strip_tac >>
+  drule_all do_swap_structural_layout_wf >> strip_tac >>
+  gvs[stack_pop_def, ALL_DISTINCT_TAKE] >>
+  gvs[DISJOINT_DEF, EXTENSION] >> metis_tac[MEM_TAKE]
+QED
+
+Theorem entry_pop_one_step_sim:
+  !item ps ops ps' lo o2pc prog vs st initial_fmp.
+    pop_one_step item ps = (ops,ps') /\
+    spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\
+    ALL_DISTINCT ps.ps_stack /\
+    DISJOINT (set ps.ps_stack) (FDOM ps.ps_spilled) /\
+    (!off. MEM (SOSpill off) ops ==> off < dimword (:256)) /\
+    venom_asm_rel lo ps vs st /\
+    asm_block_at prog st.as_pc (execute_plan initial_fmp ops) ==>
+    ?st'. asm_steps lo o2pc prog (LENGTH (execute_plan initial_fmp ops)) st = AsmOK st' /\
+      venom_asm_rel lo ps' vs st' /\
+      st'.as_pc = st.as_pc + LENGTH (execute_plan initial_fmp ops) /\
+      spill_alloc_layout_wf ps'.ps_alloc ps'.ps_spilled /\
+      ALL_DISTINCT ps'.ps_stack /\
+      DISJOINT (set ps'.ps_stack) (FDOM ps'.ps_spilled)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all entry_pop_one_step_structural >> strip_tac >>
+  Cases_on `stack_get_depth item ps.ps_stack`
+  >- (gvs[pop_one_step_def] >> qexists `st` >>
+      simp[execute_plan_def, asm_steps_def]) >>
+  rename1 `stack_get_depth item ps.ps_stack = SOME dist` >>
+  `dist < LENGTH ps.ps_stack` by metis_tac[stack_get_depth_bound] >>
+  drule_all entry_pop_one_step_some >> strip_tac >>
+  Cases_on `do_swap dist ps` >>
+  rename1 `do_swap dist ps = (swap_ops, ps2)` >>
+  gvs[] >>
+  `prefix_spill_wf initial_fmp lo swap_ops ps` by
+    (irule entry_do_swap_prefix_spill_wf >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `asm_block_at _ _ _` mp_tac >>
+  pure_rewrite_tac[execute_plan_append, asm_block_at_append] >> strip_tac >>
+  drule_all do_swap_venom_asm_rel_layout >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  `0 < LENGTH ps2.ps_stack` by
+    (drule do_swap_length >> simp[] >> decide_tac) >>
+  `is_simple_stack_op (SOPop 1)` by simp[is_simple_stack_op_def] >>
+  `FST (stack_op_wf lo (SOPop 1) (LENGTH ps2.ps_stack))` by
+    simp[stack_op_wf_def] >>
+  `asm_block_at prog st'.as_pc (exec_stack_op initial_fmp (SOPop 1))` by
+    gvs[execute_plan_def] >>
+  qpat_x_assum `venom_asm_rel lo ps vs st` kall_tac >>
+  drule_all simple_op_venom_asm_rel >>
+  disch_then (qspec_then `o2pc` strip_assume_tac) >>
+  qexists `st''` >> conj_tac
+  >- (simp[execute_plan_def] >> irule asm_steps_compose_ok >>
+      qexists `st'` >> gvs[execute_plan_def]) >>
+  gvs[apply_simple_op_def, execute_plan_def, stack_pop_def]
 QED
