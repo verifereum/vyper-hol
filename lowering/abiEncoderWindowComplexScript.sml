@@ -3,7 +3,7 @@ Theory abiEncoderWindowComplex
 Ancestors
   abiEncoderWindow abiEncoderInput abiEncoderMembersDefs contractABI
   abiEncoderWindowStructuralMembers abiEncoderWindowMembers abiEncoderWindowContract
-  abiEncoderWindowPhase abiEncoderRegisteredEffect allocaSiteResource
+  abiEncoderWindowPhase abiEncoderWindowChild abiEncoderRegisteredEffect allocaSiteResource
   exprLoweringProps venomMemDefs venomState finite_map pred_set compileEnv emitHelper
   valueEncoding valueEncodingProps abiCanonicalWindows abiDecodeRanges list rich_list arithmetic words
 
@@ -496,11 +496,16 @@ Proof
   strip_tac >> drule_all window_complex_initialize_phase_sizes_observed >> metis_tac[]
 QED
 
-Theorem window_complex_strong_contract:
-  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) ==>
-  window_strong_contract (AbiComplex infos)
+Theorem window_complex_contract_core[local]:
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
+  (observe ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) ==>
+  !dst src st out st' ctx func s at av sb cap d.
+    compile_abi_encode_to_buf dst src (AbiComplex infos) st = (out,st') /\
+    abi_encoder_window_pre ctx func st st' dst src (AbiComplex infos) at av sb cap d s ==>
+    ?t. window_strong_result ctx func st st' out at av d s t /\
+      (observe ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
 Proof
-  strip_tac >> simp_tac bool_ss [window_strong_contract_def] >>
+  strip_tac >>
   rpt gen_tac >> strip_tac >>
   `abi_encoder_window_input (AbiComplex infos) at av sb cap s.vs_memory` by
     fs[abi_encoder_window_pre_def] >>
@@ -517,17 +522,18 @@ Proof
   suspend "static"
 QED
 
-Resume window_complex_strong_contract[empty]:
+Resume window_complex_contract_core[empty]:
   gvs[Once abiEncoderTheory.compile_abi_encode_child_def, comp_return_def] >>
   `enc at (ListV avs) = []` by
     (qpat_assum `abi_encoder_window_input _ _ _ _ _ _` mp_tac >>
      simp_tac bool_ss [abi_encoder_window_complex_iff] >> strip_tac >>
      gvs[abi_encoder_tuple_type_def, enc_def, LET_THM, REV_DEF]) >>
-  qexists_tac `s` >> irule window_complex_phase_result >>
+  qexists_tac `s` >> conj_tac >- (irule window_complex_phase_result >>
   asm_rewrite_tac[] >> simp_tac (srw_ss()) [NoAsms, LENGTH, mem_bytes_at_def, eval_operand_def] >>
-  metis_tac[window_pre_sites, window_phase_refl, abi_encoder_window_pre_def]
+  metis_tac[window_pre_sites, window_phase_refl, abi_encoder_window_pre_def]) >>
+  simp[]
 QED
-Resume window_complex_strong_contract[dynamic]:
+Resume window_complex_contract_core[dynamic]:
   asm_rewrite_tac[] >>
   qmatch_asmsub_abbrev_tac `AbiComplex infos` >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def] >>
@@ -544,7 +550,7 @@ Resume window_complex_strong_contract[dynamic]:
     metis_tac[cj 3 ci_mono_compile_abi_encode, ci_mono_emit_op, pairTheory.SND] >>
   `ci_mono ready st'` by
     (fs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
-  drule_all window_complex_initialize_phase_sizes >> strip_tac >>
+  drule_all window_complex_initialize_phase_sizes_observed >> strip_tac >>
   `abi_encoder_window_pre ctx func ready load dst src (AbiComplex infos) at
      (ListV avs) sb cap d u` by
     (qpat_assum `abi_encoder_window_pre _ _ ready st' _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -562,7 +568,8 @@ Resume window_complex_strong_contract[dynamic]:
      qpat_x_assum `!inst b sz. _` drule_all >> simp_tac bool_ss []) >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
      mem_word_at slot u.vs_memory = n2w (window_member_head_size infos)` by asm_rewrite_tac[] >>
-  drule_all window_complex_initialized_run_sizes >> strip_tac >>
+  drule_all window_complex_initialized_run_sizes_core >>
+  strip_tac >>
   `!i b sz. i IN window_alloca_sites func (frag_ids st st') /\
       FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
     (`!i b sz. i IN window_alloca_sites func (frag_ids st st') /\
@@ -601,7 +608,12 @@ Resume window_complex_strong_contract[dynamic]:
        `window_alloca_sites func (frag_ids ready load) UNION {st.cs_next_id}`,
        `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
      asm_rewrite_tac[] >> simp[EVERY_DEF, UNION_SUBSET, INSERT_SUBSET]) >>
-  irule window_complex_finish_load >>
+  `observe ==> !x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s` by
+    (rpt strip_tac >>
+     `~not_fresh_at load x /\ ~not_fresh_at ready x` by
+       metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def, LESS_EQ_TRANS] >>
+     metis_tac[]) >>
+  irule window_complex_finish_load_core >>
   goal_assum (drule_at Any) >> asm_rewrite_tac[SUBSET_REFL] >>
   `fn_has_code load st' func` by
     (qpat_assum `ci_mono ready load` mp_tac >>
@@ -610,10 +622,10 @@ Resume window_complex_strong_contract[dynamic]:
      `fn_has_code ready st' func` by
        metis_tac[abi_encoder_window_pre_def] >>
      metis_tac[fragExecTheory.fn_has_code_split]) >>
-  qexistsl_tac [`buf.buf_operand`, `slot`] >>
-  asm_rewrite_tac[] >> conj_tac >- decide_tac >> metis_tac[]
+  qexistsl_tac [`buf.buf_operand`, `window_alloca_sites func (frag_ids st st')`, `load`, `slot`] >>
+  asm_rewrite_tac[SUBSET_REFL] >> conj_tac >- decide_tac >> metis_tac[]
 QED
-Resume window_complex_strong_contract[static]:
+Resume window_complex_contract_core[static]:
   asm_rewrite_tac[] >>
   qmatch_asmsub_abbrev_tac `AbiComplex infos` >>
   simp_tac bool_ss [comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
@@ -627,7 +639,8 @@ Resume window_complex_strong_contract[static]:
       (LENGTH (enc at (ListV avs))) st s` by simp[window_member_cursor_def] >>
   `EXISTS (\(_,_,_,dyn). dyn) infos ==>
       mem_word_at 0 s.vs_memory = n2w (window_member_head_size infos)` by simp[] >>
-  drule_all window_complex_initialized_run_sizes >> strip_tac >>
+  drule_all window_complex_initialized_run_sizes_core >>
+  strip_tac >>
   `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
       FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
     (`!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
@@ -650,10 +663,33 @@ Resume window_complex_strong_contract[static]:
      drule abiEncoderOpenInputTheory.abi_encoder_open_tuple_length >>
      asm_rewrite_tac[] >> simp_tac bool_ss [head_lengths_acc] >> decide_tac) >>
   `~any_dynamic ats` by metis_tac[] >>
-  qexists_tac `t` >> irule window_complex_phase_result >>
+  qexists_tac `t` >> reverse conj_tac >- asm_rewrite_tac[] >>
+  irule window_complex_phase_result >>
   asm_rewrite_tac[] >>
   simp[eval_operand_def] >>
   qpat_x_assum `window_phase _ _ _ _ _ _ _ _` mp_tac >>
   pure_asm_rewrite_tac[] >> simp_tac (srw_ss()) [UNION_EMPTY]
 QED
-Finalise window_complex_strong_contract
+Finalise window_complex_contract_core
+
+Theorem window_complex_strong_contract:
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) ==>
+  window_strong_contract (AbiComplex infos)
+Proof
+  strip_tac >> simp_tac bool_ss [window_strong_contract_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `F`]
+    (SPEC_ALL window_complex_contract_core))) >> simp[]
+QED
+
+Theorem window_complex_observed_contract:
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) ==>
+  window_observed_contract (AbiComplex infos)
+Proof
+  strip_tac >>
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
+    metis_tac[window_observed_contract_strong] >>
+  simp_tac bool_ss [window_observed_contract_def] >> rpt gen_tac >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`observe` |-> `T`]
+    (SPEC_ALL window_complex_contract_core))) >> simp[]
+QED
