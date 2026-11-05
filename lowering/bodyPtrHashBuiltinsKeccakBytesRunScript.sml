@@ -139,3 +139,66 @@ Resume hash_keccak_bytes_triple[check]:
 QED
 
 Finalise hash_keccak_bytes_triple
+
+Theorem hash_keccak_bytes_inst_seq:
+  !D ctx fn PG G tn s x sa op sb b base cap n.
+    compile_keccak256_bytes (Var x) sa = (op,sb) /\ not_fresh_at sa x /\
+    eval_operand (Var x) s = SOME (n2w b) /\
+    FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
+    b+32 < dimword (:256) /\ n < dimword (:256) /\
+    op_taint tn (Var x) = {} /\
+    (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
+    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx ==>
+    ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+      op_taint tn' op = {} /\
+      tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+      tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+      (!z. not_fresh_at sa z ==>
+        FLOOKUP G' z = FLOOKUP G z /\
+        op_taint tn' (Var z) = op_taint tn (Var z))
+Proof
+  rpt gen_tac >> strip_tac >> drule hash_keccak_bytes_shape >> strip_tac >>
+  `ALL_DISTINCT [x;l;p;h]` by
+    (fs[listTheory.ALL_DISTINCT] >> metis_tac[]) >>
+  rename1 `FLOOKUP G x = SOME (rootbase,cap)` >>
+  qexistsl_tac [`DRESTRICT (DRESTRICT G (COMPL {l}) |+ (p,(rootbase,cap))) (COMPL {h})`,
+    `tn with t_var := tn.t_var |+ (l,{}) |+ (p,{}) |+ (h,{})`] >>
+  conj_tac >-
+    (qpat_x_assum `emitted_insts sa sb = _` (fn th => rewrite_tac[th]) >>
+     irule hash_keccak_bytes_triple >> simp[] >>
+     qexistsl_tac [`b`, `n`] >> simp[] >> decide_tac) >>
+  gvs[op_taint_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> res_tac >> simp[FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
+QED
+
+Theorem hash_keccak_bytes_counted:
+  !D ctx fn PG G tn s t bb x sa op sb b base cap n.
+    compile_keccak256_bytes (Var x) sa = (op,sb) /\ not_fresh_at sa x /\
+    eval_operand (Var x) s = SOME (n2w b) /\
+    FLOOKUP G x = SOME (base,cap) /\ base <= b /\ b+32+n <= base+cap /\
+    b+32 < dimword (:256) /\ n < dimword (:256) /\
+    op_taint tn (Var x) = {} /\
+    (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
+    mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
+    ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
+      op_taint tn' op = {} /\
+      tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+      tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+      (!z. not_fresh_at sa z ==>
+        FLOOKUP G' z = FLOOKUP G z /\
+        op_taint tn' (Var z) = op_taint tn (Var z))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all hash_keccak_bytes_inst_seq >>
+  disch_then (qspecl_then [`D`, `fn`, `PG`] strip_assume_tac) >>
+  qexistsl_tac [`G'`, `tn'`] >> simp[] >>
+  drule hash_keccak_bytes_shape >> strip_tac >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb)) = 0 /\
+   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+     (emitted_insts sa sb)` by simp[mk_inst_def, is_terminator_def] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
+QED
