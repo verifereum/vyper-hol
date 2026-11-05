@@ -4064,7 +4064,7 @@ Proof
   gvs[extCallOracleTheory.take_outcome_def]
 QED
 
-Theorem calldata_take_call_outcome_bound[local]:
+Theorem calldata_take_call_outcome_bound:
   outcomes_accounts_typed es.outcomes /\
   take_call_outcome target data amount es = (INL (rq,oc),consumed) ==>
   LENGTH oc.co_returnData < dimword(:256)
