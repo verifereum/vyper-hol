@@ -8,7 +8,7 @@ Ancestors
   exprLowering vyperContext vyperValue valueEncoding valueEncodingProofs
   integer_word words exprSimWordArgs exprSimProps exprSimEnv stmtFragPtr
   vyperAST exprSimPrecompiles vyperTypeSystem gasSummary
-  exprPtrUnwrap bodyPtrPreds exprSimHypsDefs
+  exprPtrUnwrap bodyPtrPreds exprSimHypsDefs exprSimCalldata loweringSlice
 
 Theorem ghost_inv_inst_idx[simp]:
   ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
@@ -199,4 +199,72 @@ Proof
   `args = [] /\ ann = env_item_type item` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   gvs[] >> metis_tac[compile_env_sim_ptr, compile_env_vv_sim_ptr]
+QED
+
+Theorem calldata_counted_post:
+  lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
+  fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
+  ghost_inv d cenv cx es G tn s /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  stmt_state_rel ctx fn cenv cx es s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?G' tn' t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
+    expr_post ctx fn cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+      es sa sb s (es with gas_obs := []) (IntV &LENGTH cx.txn.calldata) op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ptr_val_ok cx (BaseT (UintT 256)) (IntV &LENGTH cx.txn.calldata) op G' tn' t /\
+    ghost_kept cenv es sa G tn s G' tn'
+Proof
+  strip_tac >> gvs[lower_value_calldata_len] >>
+  `step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE []
+     [STRING #"%" (toString sa.cs_next_var)]) s =
+     OK (update_var (STRING #"%" (toString sa.cs_next_var))
+       (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s)` by
+    (simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
+         val_to_w256_def, integer_wordTheory.i2w_def]) >>
+  `ghost_kept cenv es sa G tn s G tn` by simp[ghost_kept_refl] >>
+  drule emit_scalar_builtin_run >> simp[MEM] >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qpat_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
+  irule expr_post_word_intro >>
+  simp[expr_type_def, is_word_type_def, word_value_def] >>
+  irule wb_frame_readonly_tail >>
+  qexistsl_tac [`sa`, `s`] >> simp[wb_frame_refl]
+QED
+
+Theorem compile_calldata_sim_ptr:
+  expr_sim_ptr d ctx PG fn cenv cx ty (Builtin (BaseT (UintT 256)) CalldataLen []) es
+Proof
+  rw[expr_sim_ptr_def] >>
+  drule_all calldata_counted_post >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL (IntV &LENGTH cx.txn.calldata)`, `es`, `G'`, `tn'`, `OK t`] >>
+  simp[gas_explicit_def, expr_type_def, is_word_type_def, calldata_source_all_tails]
+QED
+
+Theorem compile_calldata_vv_sim_ptr:
+  expr_vv_sim_ptr d ctx PG fn cenv cx ty (Builtin (BaseT (UintT 256)) CalldataLen []) es
+Proof
+  irule expr_vv_sim_ptr_stack >>
+  simp[compile_calldata_len_stack, compile_calldata_sim_ptr] >>
+  metis_tac[eval_expr_builtin_value]
+QED
+
+Theorem body_calldata_ptr_case:
+  body_expr_ptr_ok cx (Builtin ann CalldataLen args)
+Proof
+  rw[body_expr_ptr_ok_def] >>
+  `args = [] /\ ann = BaseT (UintT 256)` by
+    gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
+  gvs[] >> simp[compile_calldata_sim_ptr, compile_calldata_vv_sim_ptr]
 QED
