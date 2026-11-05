@@ -1591,6 +1591,49 @@ Proof
   rpt strip_tac >> Cases_on `q` >> gvs[] >> metis_tac[]
 QED
 
+Theorem rf_preparation_live_owned_before_release:
+  !nl x ps opc inputs iops ps1 dfg rops ps2.
+    MEM x nl /\
+    (MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+    (!op. MEM op inputs /\ is_var_operand op ==>
+      MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+    LENGTH inputs <= 16 /\
+    emit_input_plan opc inputs nl ps = (iops,ps1) /\
+    reorder_plan dfg inputs ps1 = (rops,ps2) /\
+    (!off. ~MEM (SOSpill off) (iops ++ rops) /\
+            ~MEM (SORestore off) (iops ++ rops)) ==>
+    MEM (Var x) (stack_pop (LENGTH inputs) ps2.ps_stack) \/
+    Var x IN FDOM ps2.ps_spilled
+Proof
+  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  `!at. LIST_ELEM_COUNT at inputs <= LIST_ELEM_COUNT at ps1.ps_stack` by
+    (drule_all emit_input_plan_materialised >> simp[]) >>
+  `LENGTH inputs <= LENGTH ps1.ps_stack` by
+    (irule list_elem_count_dom_length >> simp[]) >>
+  `ps2.ps_spilled = ps1.ps_spilled /\
+   (!at. LIST_ELEM_COUNT at ps2.ps_stack = LIST_ELEM_COUNT at ps1.ps_stack)` by
+    (drule_at (Pat `reorder_plan _ _ _ = _`) rf_reorder_spill_free >>
+     impl_tac >- (fs[MEM_APPEND]) >> simp[]) >>
+  `ps2.ps_stack = stack_pop (LENGTH inputs) ps2.ps_stack ++ inputs` by
+    (match_mp_tac fixed_suffix_decompose >> conj_tac
+     >- (irule list_elem_count_dom_length >> simp[]) >>
+     drule_at (Pat `reorder_plan _ _ _ = _`)
+       reorder_plan_materialised_order >> simp[]) >>
+  drule_all rf_emit_live_reserve >> strip_tac >>
+  Cases_on `Var x IN FDOM ps2.ps_spilled` >> simp[] >>
+  `0 < LIST_ELEM_COUNT (Var x) ps.ps_stack +
+       (if Var x IN FDOM ps.ps_spilled then 1 else 0)` by
+    (Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[] >>
+     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
+  `LIST_ELEM_COUNT (Var x) ps1.ps_stack =
+    LIST_ELEM_COUNT (Var x) (stack_pop (LENGTH inputs) ps2.ps_stack) +
+    LIST_ELEM_COUNT (Var x) inputs` by
+    metis_tac[elem_count_append] >>
+  Cases_on `Var x IN FDOM ps.ps_spilled` >>
+  gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+QED
+
 Theorem rf_preparation_live_retained:
   !nl x ps opc inputs iops ps1 dfg rops ps2.
     MEM x nl /\
@@ -1609,34 +1652,11 @@ Theorem rf_preparation_live_retained:
       (release_dead_spills nl
         (ps2 with ps_stack := stack_pop (LENGTH inputs) ps2.ps_stack)).ps_spilled
 Proof
-  rpt gen_tac >> disch_then (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
-  `!at. LIST_ELEM_COUNT at inputs <= LIST_ELEM_COUNT at ps1.ps_stack` by
-    (drule_all emit_input_plan_materialised >> simp[]) >>
-  `LENGTH inputs <= LENGTH ps1.ps_stack` by
-    (irule list_elem_count_dom_length >> simp[]) >>
-  `ps2.ps_spilled = ps1.ps_spilled /\
-   (!at. LIST_ELEM_COUNT at ps2.ps_stack = LIST_ELEM_COUNT at ps1.ps_stack)` by
-    (drule_at (Pat `reorder_plan _ _ _ = _`) rf_reorder_spill_free >>
-     impl_tac >- (fs[MEM_APPEND]) >> simp[]) >>
-  `ps2.ps_stack = stack_pop (LENGTH inputs) ps2.ps_stack ++ inputs` by
-    (match_mp_tac fixed_suffix_decompose >> conj_tac
-     >- (irule list_elem_count_dom_length >> simp[]) >>
-     drule_at (Pat `reorder_plan _ _ _ = _`)
-       reorder_plan_materialised_order >> simp[]) >>
-  drule_all rf_emit_live_reserve >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule rf_release_live_owned >> simp[] >>
-  Cases_on `Var x IN FDOM ps2.ps_spilled` >> simp[] >>
-  `0 < LIST_ELEM_COUNT (Var x) ps.ps_stack +
-       (if Var x IN FDOM ps.ps_spilled then 1 else 0)` by
-    (Cases_on `Var x IN FDOM ps.ps_spilled` >> simp[] >>
-     gvs[GSYM LIST_ELEM_COUNT_MEM]) >>
-  `LIST_ELEM_COUNT (Var x) ps1.ps_stack =
-    LIST_ELEM_COUNT (Var x) (stack_pop (LENGTH inputs) ps2.ps_stack) +
-    LIST_ELEM_COUNT (Var x) inputs` by
-    metis_tac[elem_count_append] >>
-  Cases_on `Var x IN FDOM ps.ps_spilled` >>
-  gvs[GSYM LIST_ELEM_COUNT_MEM] >> decide_tac
+  drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+    rf_preparation_live_owned_before_release >>
+  disch_then (qspecl_then [`x`, `dfg`, `rops`, `ps2`] mp_tac) >> simp[]
 QED
 
 (* Physical preparation above arbitrary caller stack; no memory relation. *)
@@ -2146,3 +2166,77 @@ Proof
   rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
+
+Theorem rf_assign_plan_live_retained:
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\ MEM x nl /\
+  (x = out \/ MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled) /\
+  (is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled) /\
+  generate_regular_inst_plan lv dfg cfg fn inst nl halting term lbl ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  MEM (Var x) ps'.ps_stack \/ Var x IN FDOM ps'.ps_spilled
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `emit_input_plan ASSIGN [rhs] nl ps` >> rename1 `_ = (ins,ps1)` >>
+  Cases_on `reorder_plan dfg [rhs] ps1` >> rename1 `_ = (ros,ps2)` >>
+  drule_all rf_assign_plan_result >> strip_tac >> gnvs[Excl "rf_release_stack"] >>
+  qabbrev_tac `pushed = ps2 with ps_stack :=
+    stack_push (Var out) (stack_pop 1 ps2.ps_stack)` >>
+  `MEM (Var x) pushed.ps_stack \/ Var x IN FDOM pushed.ps_spilled` by
+    (Cases_on `x = out` >- simp[Abbr `pushed`, stack_push_def] >>
+     `MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled` by metis_tac[] >>
+     drule_at (Pat `emit_input_plan _ _ _ _ = _`)
+       rf_preparation_live_owned_before_release >>
+     disch_then (qspecl_then [`x`, `dfg`, `ros`, `ps2`] mp_tac) >>
+     simp[MEM_APPEND, Abbr `pushed`, stack_push_def]) >>
+  `EVERY is_simple_stack_op (pops ++ opts)` by
+    (irule simple_or_spill_no_spills >> simp[MEM_APPEND] >>
+     simp[EVERY_APPEND] >> conj_tac
+     >- (Cases_on `halting` >> gvs[] >>
+         drule popmany_plan_enclosed >> simp[]) >>
+     Cases_on `MEM out nl` >> gvs[] >>
+     drule optimistic_swap_plan_enclosed >> simp[]) >>
+  `pushed.ps_stack = stack_push (Var out) (stack_pop 1 ps2.ps_stack)` by
+    simp[Abbr `pushed`] >>
+  drule_at (Pat `_.ps_stack = stack_push _ _`) rf_assign_postfix_live_owned >>
+  disch_then drule >> simp[] >>
+  disch_then (drule_at (Pat `(if _ then ([],_) else popmany_plan _ _) = _`)) >>
+  disch_then (drule_at (Pat `(if _ then optimistic_swap_plan _ _ _ _ _ else _) = _`)) >>
+  simp[GSYM EVERY_APPEND]
+QED
+
+Theorem rf_assign_ready_future_owned:
+  codegen_ready_fn fn /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!r ti. SUC k <= r /\ r <= j /\ get_instruction bb r = SOME ti ==>
+     ti.inst_opcode <> PHI) /\
+  get_instruction bb k = SOME inst /\
+  inst.inst_opcode = ASSIGN /\ inst.inst_operands = [rhs] /\
+  inst.inst_outputs = [out] /\
+  (!op. rf_live_use bb k j op /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled) /\
+  k <= j /\
+  generate_regular_inst_plan (liveness_analyze fn) dfg cfg fn inst
+    (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))
+    halting term bb.bb_label ps = (ops,ps') /\
+  (!off. ~MEM (SOSpill off) ops /\ ~MEM (SORestore off) ops) ==>
+  !op. rf_live_use bb (SUC k) j op /\ is_var_operand op ==>
+    MEM op ps'.ps_stack \/ op IN FDOM ps'.ps_spilled
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `op` >> gvs[stackPlanTypesTheory.is_var_operand_def] >>
+  rename1 `rf_live_use bb (SUC k) j (Var x)` >>
+  `MEM x (live_vars_at (liveness_analyze fn) bb.bb_label (SUC k))` by
+    (irule rf_live_use_ready_liveness >> simp[] >> qexists_tac `j` >> metis_tac[]) >>
+  `x = out \/ MEM (Var x) ps.ps_stack \/ Var x IN FDOM ps.ps_spilled` by
+    (Cases_on `x = out` >> simp[] >>
+     `rf_live_use bb k j (Var x)` by
+       (irule rf_live_use_backward >> simp[] >> metis_tac[MEM]) >>
+     metis_tac[stackPlanTypesTheory.is_var_operand_def]) >>
+  `(is_var_operand rhs ==> MEM rhs ps.ps_stack \/ rhs IN FDOM ps.ps_spilled)` by
+    (strip_tac >> first_x_assum irule >> simp[] >>
+     irule rf_live_use_current >> simp[] >>
+     simp[compute_operands_def, python_stack_operands_def]) >>
+  drule_at (Pat `generate_regular_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
+    rf_assign_plan_live_retained >> simp[]
+QED
