@@ -219,7 +219,6 @@ Proof
   >- (rpt gen_tac >> simp[run_configured_fn_pass_fold_def] >>
       strip_tac >> gvs[] >> qexistsl_tac [`[fn]`,`[]`] >>
       simp[fn_chain_def, label_map_dead_def, list_subset_def, EVERY_MEM] >>
-      conj_tac >- (Cases >> simp[]) >>
       qpat_x_assum `fn.fn_name = _` (SUBST_ALL_TAC o SYM) >>
       qpat_x_assum `ir_supply_covers_unit _ _` mp_tac >>
       simp[unit_with_fns_def, replace_fn_def] >> strip_tac >>
