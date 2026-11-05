@@ -590,6 +590,50 @@ Proof
   simp[GSYM alias_var_mass_def, LIST_ELEM_COUNT_THM] >> decide_tac
 QED
 
+Theorem alias_emit_reorder_consume_live:
+  emit_input_plan opc inputs nl ps = (iops,prepared) /\
+  (!op. MEM op inputs /\ is_var_operand op ==> plan_holds ps op) /\
+  PERM inputs selected /\ LENGTH inputs <= 16 /\
+  reorder_plan dfg selected prepared = (rops,arranged) /\
+  MEM x nl /\ plan_holds ps (Var x) ==>
+  plan_holds
+    (arranged with ps_stack := stack_pop (LENGTH selected) arranged.ps_stack)
+    (Var x)
+Proof
+  strip_tac >>
+  `!op. MEM op inputs /\ is_var_operand op ==>
+    MEM op ps.ps_stack \/ op IN FDOM ps.ps_spilled` by
+    gvs[plan_holds_def] >>
+  drule_all alias_emit_reorder_consumed_window >> strip_tac >>
+  drule_all emit_input_plan_materialised >> disch_tac >>
+  drule perm_operand_counts >> strip_tac >>
+  `LENGTH selected = LENGTH inputs` by metis_tac[PERM_LENGTH] >>
+  `!op. MEM op selected ==>
+    LIST_ELEM_COUNT op selected <= LIST_ELEM_COUNT op prepared.ps_stack` by
+    metis_tac[] >>
+  Cases_on `MEM (Var x) selected`
+  >- (`LENGTH selected <= 16` by simp[] >>
+      drule_all reorder_plan_materialised_counts >>
+      strip_tac >>
+      `MEM (Var x) inputs` by metis_tac[PERM_MEM_EQ] >>
+      drule emit_input_plan_vars_not_spilled >>
+      disch_then (qspec_then `Var x` mp_tac) >>
+      simp[is_var_operand_def] >> strip_tac >>
+      mp_tac (Q.SPECL [`inputs`, `opc`, `nl`, `ps`, `x`]
+        emit_input_plan_live_surplus) >>
+      simp[alias_var_mass_def] >>
+      `0 < alias_var_mass x ps` by simp[alias_var_mass_positive] >>
+      qpat_x_assum `arranged.ps_stack = _` (mp_tac o
+        Q.AP_TERM `LIST_ELEM_COUNT (Var x)`) >>
+      simp[elem_count_append, plan_holds_def, GSYM LIST_ELEM_COUNT_MEM] >>
+      gvs[alias_var_mass_def] >> rpt IF_CASES_TAC >> gvs[] >> decide_tac) >>
+  `plan_holds prepared (Var x)` by
+    (drule emit_input_plan_holds >>
+     disch_then (qspecl_then [`inputs`, `opc`, `nl`] mp_tac) >> simp[]) >>
+  irule reorder_consume_retains_noninputs >> simp[] >>
+  qexistsl [`dfg`, `rops`, `prepared`] >> simp[]
+QED
+
 Definition alias_var_budget_def:
   alias_var_budget pending ps <=>
     !x. alias_var_mass x ps <= SUC (LIST_ELEM_COUNT (Var x) pending)
