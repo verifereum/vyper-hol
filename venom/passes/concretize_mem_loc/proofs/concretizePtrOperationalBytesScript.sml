@@ -64,3 +64,28 @@ Proof
       simp[] >> metis_tac[]) >>
   metis_tac[]
 QED
+
+(* Sampling a source history at retained boundaries does not require source
+   and target event numbers to coincide. This is the source-only frame probe;
+   it deliberately makes no assertion about target write exclusion. *)
+Theorem ptr_chrono_history_interval_byte_frame:
+  !hi lo. ptr_chrono_history vs0 ctx h a /\
+    lo <= hi /\ hi < LENGTH h /\
+    (!k. lo <= k /\ k < hi ==>
+      x NOTIN range_bytes
+        (source_memory_write_ranges (EL k h).po_inst (EL k h).po_state)) ==>
+    read_byte x (EL hi h).po_state.vs_memory =
+      read_byte x (EL lo h).po_state.vs_memory
+Proof
+  Induct >> rpt strip_tac
+  >- (`lo = 0` by decide_tac >> simp[]) >>
+  Cases_on `lo = SUC hi` >- simp[] >>
+  `lo <= hi` by decide_tac >>
+  `read_byte x (EL (SUC hi) h).po_state.vs_memory =
+   read_byte x (EL hi h).po_state.vs_memory` by
+    (irule ptr_chrono_history_byte_frame >> simp[] >> metis_tac[]) >>
+  `read_byte x (EL hi h).po_state.vs_memory =
+   read_byte x (EL lo h).po_state.vs_memory` by
+    (first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.LESS_TRANS]) >>
+  metis_tac[]
+QED
