@@ -1,14 +1,16 @@
-(* Diagnostic only: this quotation checks the proposed producer's binders and
-   types. It does NOT assert the producer, and is not a simulation theorem.
+(* The ML quotation packages the unchanged proposed producer contract.
+   joint_audit_induction checks its mutual induction interface conditionally
+   on family proofs. Neither asserts the producer without those proofs.
    No new logical definition or axiom is introduced. *)
 Theory bodyIntCallJointAudit
 Ancestors
   bodyIntCallJointTuple bodyIntCallArgLifetime bodyIntCallGasPrefix
-  bodyIntCallJointCounted bodyIntCallJointSingleton
+  bodyIntCallJointCounted bodyIntCallJointSingleton bodyIntCallJointInduction
   exprSimHypsDefs gasOutcome gasContext
 
-val _ = ``
-  !ctx func ce cx env e es ty sa sb vv s0 hs.
+val joint_audit_contract = ``\tops e.
+  !ctx func ce cx env es ty sa sb vv s0 hs.
+  cx_tops cx = tops ==>
   expr_sim_pre ce cx env e es /\ supported_pure_expr (cx_tops cx) e /\
   compile_expr ce ty e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -126,3 +128,46 @@ val _ = ``
    window post and marked recursive composition remain unproved. This file
    neither implements a recursive producer nor closes the internal-call case.
 *)
+
+(* A checked specialization, not a proof of any of its family premises. *)
+Theorem joint_audit_induction:
+  !Pl Pf Pp. let Pe = ^joint_audit_contract in
+  (!tops ty n. Pe tops (Name ty n)) /\
+  (!tops ty l. Pe tops (Literal ty l)) /\
+  (!tops ty id. supported_pure_expr tops (TopLevelName ty id) ==>
+     Pe tops (TopLevelName ty id)) /\
+  (!tops ty c a b. supported_pure_expr tops (IfExp ty c a b) /\
+     Pe tops c /\ Pe tops a /\ Pe tops b ==> Pe tops (IfExp ty c a b)) /\
+  (!tops ty id fs. supported_pure_expr tops (StructLit ty id fs) /\
+     Pf tops fs ==> Pe tops (StructLit ty id fs)) /\
+  (!tops ty b k. supported_pure_expr tops (Subscript ty b k) /\
+     Pp tops b /\ Pe tops k ==> Pe tops (Subscript ty b k)) /\
+  (!tops ty b f. supported_pure_expr tops (Attribute ty b f) /\
+     Pp tops b ==> Pe tops (Attribute ty b f)) /\
+  (!tops ty blt es. supported_pure_expr tops (Builtin ty blt es) /\
+     Pl tops es ==> Pe tops (Builtin ty blt es)) /\
+  (!tops ty blt t es. supported_pure_expr tops (TypeBuiltin ty blt t es) /\
+     Pl tops es ==> Pe tops (TypeBuiltin ty blt t es)) /\
+  (!tops. Pl tops []) /\
+  (!tops e es. supported_pure_expr tops e /\ supported_pure_exprs tops es /\
+     Pe tops e /\ Pl tops es ==> Pl tops (e::es)) /\
+  (!tops. Pf tops []) /\
+  (!tops n e fs. supported_pure_expr tops e /\ supported_pure_fields tops fs /\
+     Pe tops e /\ Pf tops fs ==> Pf tops ((n,e)::fs)) /\
+  (!tops ty n. supported_place_expr tops (Name ty n) ==> Pp tops (Name ty n)) /\
+  (!tops ty id. supported_place_expr tops (TopLevelName ty id) ==>
+     Pp tops (TopLevelName ty id)) /\
+  (!tops ty b k. supported_place_expr tops (Subscript ty b k) /\
+     Pp tops b /\ Pe tops k ==> Pp tops (Subscript ty b k)) /\
+  (!tops ty b f. supported_place_expr tops (Attribute ty b f) /\
+     Pp tops b ==> Pp tops (Attribute ty b f)) /\
+  (!tops e. supported_pure_expr tops e /\ Pe tops e ==> Pp tops e) ==>
+  (!tops e. supported_pure_expr tops e ==> Pe tops e) /\
+  (!tops es. supported_pure_exprs tops es ==> Pl tops es) /\
+  (!tops fs. supported_pure_fields tops fs ==> Pf tops fs) /\
+  (!tops e. supported_place_expr tops e ==> Pp tops e)
+Proof
+  gen_tac >> gen_tac >> gen_tac >>
+  CONV_TAC (REWR_CONV LET_THM THENC BETA_CONV) >>
+  MATCH_ACCEPT_TAC joint_supported_induction
+QED
