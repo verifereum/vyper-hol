@@ -4574,6 +4574,49 @@ Proof
        asm_call_safe_fail]) >> simp[vfm_abort_def]
 QED
 
+Theorem asm_call_safe_call_step_inst:
+  is_call op /\ s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  step_inst op s = (r,t) ==>
+  (!e. r = INR e ==> ~vfm_abort e) /\
+  (!x. r = INL x ==> t.contexts <> [])
+Proof
+  Cases_on `op` >> simp[is_call_def, step_inst_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  FIRST (map (drule_at (Pat `_ _ = (_,_)`))
+    [asm_call_raw_safe, asm_create_raw_safe]) >> simp[]
+QED
+
+Theorem asm_call_inst_pc_noabort:
+  s.contexts <> [] /\ (?d. s.msdomain = Collect d) /\
+  (do step_inst op; inc_pc_or_jump op od) s = (INR e,t) ==> ~vfm_abort e
+Proof
+  Cases_on `is_call op`
+  >- (rpt strip_tac >>
+      gvs[inc_pc_or_jump_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
+      drule_at (Pat `step_inst _ _ = _`) asm_call_safe_call_step_inst >> simp[]) >>
+  rewrite_tac[ignore_bind_def] >>
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 3 disch_tac >>
+  asm_create_prefix_tac asm_call_safe_ordinary_step_inst >>
+  drule_at (Pat `inc_pc_or_jump _ _ = _`) asm_call_safe_inc_pc_or_jump >> simp[]
+QED
+
+Theorem asm_call_step_inner_noabort:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  step_inner s = (INR e,t) ==> ~vfm_abort e
+Proof
+  strip_tac >>
+  `s.contexts <> []` by gvs[wf_state_def] >>
+  qpat_x_assum `step_inner _ = _` mp_tac >>
+  rewrite_tac[step_inner_def, LET_THM, ignore_bind_def] >> BETA_TAC >>
+  disch_tac >> asm_create_prefix_tac asm_call_safe_get_context >>
+  Cases_on `FLOOKUP x.msgParams.parsed x.pc` >> gvs[]
+  >- (Cases_on `LENGTH x.msgParams.code <= x.pc` >> gvs[] >>
+      drule_at (Pat `step_inst _ _ = _`) asm_call_safe_ordinary_step_inst >>
+      simp[is_call_def]) >>
+  drule_at (Pat `_ _ = (INR _,_)`)
+    (PURE_REWRITE_RULE[ignore_bind_def] asm_call_inst_pc_noabort) >> simp[]
+QED
+
 Theorem asm_frame_call_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\
