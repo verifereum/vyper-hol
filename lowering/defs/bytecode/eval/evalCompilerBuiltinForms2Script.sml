@@ -21,6 +21,13 @@ val () = computeLib.upd_compset (computeLib.add_thms
   [fmap_to_alist_FEMPTY, i2w_pos])
 val fixture_root = "../builtin-forms/oracle"
 
+Theorem concat_fixed_word_allocation:
+  concat_alloc_size [BaseT (BytesT (Fixed 1)); BaseT (BytesT (Fixed 1))] = 65 /\
+  concat_alloc_size [BaseT (BytesT (Dynamic 10)); BaseT (BytesT (Fixed 4))] = 74
+Proof
+  EVAL_TAC
+QED
+
 (* two Bytes arguments. *)
 val concat_bytes2 = memoryStoreWitnessLib.evaluate fixture_root "concat_bytes2"
 Theorem concat_bytes2_matches_python_oracle:

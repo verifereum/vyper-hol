@@ -172,6 +172,7 @@ val checker_defs =
    well_typed_literal_def,
    well_typed_binop_def,
    well_typed_builtin_app_def,
+   bytelike_type_bound_def,
    int_literal_value_def,
    nonneg_int_literal_def,
    shift_amount_ok_def,

@@ -2116,7 +2116,7 @@ QED
 Resume compiler_builtin_reserved_cong[concat]:
   rename1 `Concat maxlen` >>
   simp[compile_builtin_dispatch_body_def, LET_THM] >>
-  Cases_on `compile_alloc_buffer (32 * ((maxlen + 31) DIV 32) + 32) sa` >>
+  Cases_on `compile_alloc_buffer (concat_alloc_size (MAP expr_type args)) sa` >>
   simp[] >> rename1 `compile_alloc_buffer _ sa = (alloc,sb)` >>
   `local_ptrs_reserved ce sb` by
     (irule compiler_ci_mono_reserved >> qexists `sa` >>
