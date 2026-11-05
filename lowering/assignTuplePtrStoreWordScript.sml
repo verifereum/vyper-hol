@@ -4,6 +4,7 @@ Ancestors
   assignTuplePtrStoreFrame stmtSimDeclStore robustCopyTransportPtr exprSimProps
   typedCopyPtr bodyPtrDefs list venomMemProofs valueEncodingProofs
   assignTuplePtrPrefix fragExecPtr venomInst venomExecSemantics venomState
+  compileEnv
 
 Theorem val_in_memory_clean_footprint_ptr:
   val_in_memory tv v off mem /\ val_wf tv v /\
@@ -56,4 +57,26 @@ Proof
   simp[is_terminator_def] >> conj_tac
   >- simp[step_inst_base_def, mk_inst_def, exec_write2_def, eval_operand_def] >>
   irule ptr_inst_ok_mstore >> simp[]
+QED
+
+Theorem local_region_other_footprint_ptr:
+  local_ptrs_rel func cenv scopes s /\
+  local_region cenv scopes s id dst cap /\ n <= cap /\
+  name <> id /\ lookup_scopes name scopes = SOME entry /\
+  FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+  lookup_var p s = SOME w ==>
+  val_wf entry.type entry.value /\
+  (!i. w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
+       i NOTIN {j | dst <= j /\ j < dst+n})
+Proof
+  strip_tac >>
+  `type_memory_size entry.type <= sz /\ val_wf entry.type entry.value` by
+    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
+  `local_region cenv scopes s name (w2n w) sz` by
+    simp[local_region_def] >>
+  `regions_disjoint dst cap (w2n w) sz` by
+    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
+  `val_footprint entry.type entry.value <= type_memory_size entry.type` by
+    metis_tac[val_footprint_le] >>
+  gvs[regions_disjoint_def] >> rpt strip_tac >> simp[] >> decide_tac
 QED
