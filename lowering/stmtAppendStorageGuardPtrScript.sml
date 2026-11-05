@@ -4,6 +4,7 @@ Theory stmtAppendStorageGuardPtr
 Ancestors stmtAppendStorageRunPtr instSeqComposePtr stmtSimAppendStorage
   exprLoweringProps emitHelperProps fragGasSeqPtr contextCodegenRel freshWrites
   stateFrame venomInst venomState ptrDiscipline finite_map list arithmetic compileEnv
+  emittedSeqComposePtr abiDecoderArrayInit
 
 Theorem emit_append_lt_uniform_ptr:
   !v cap st rop st' s t tn ctx.
@@ -51,7 +52,7 @@ Proof
    s1.vs_requests = s.vs_requests /\
    s2.vs_allocas = s1.vs_allocas /\ s2.vs_fmp = s1.vs_fmp /\
    s2.vs_requests = s1.vs_requests` by
-    (fs[state_frame_def, venom_state_component_equality]) >>
+    metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s1 = _` kall_tac >>
   qpat_x_assum `state_frame s2 = _` kall_tac >>
   drule_all emit_storage_load_uniform_ptr >>
@@ -64,16 +65,13 @@ Proof
     (qpat_assum `emit_op (if tr then TLOAD else SLOAD) _ _ = _`
        (mp_then Any mp_tac emitted_insts_emit_op) >>
      simp[not_fresh_at_def]) >>
-  `emitted_insts st0 st2 =
-   emitted_insts st0 st1 ++ emitted_insts st1 st2` by
-    (irule emitted_insts_append >>
-     imp_res_tac emitted_insts_emit_op >> simp[]) >>
+  imp_res_tac inst_extends_emit_op >>
+  `~is_terminator (if tr then TLOAD else SLOAD)` by
+    (Cases_on `tr` >> simp[is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st0 st1)` by
+    metis_tac[emitted_op_nonterminators] >>
   qexistsl_tac [`G''`, `tn''`] >> conj_tac
-  >- (asm_rewrite_tac[] >> irule inst_seq_ptr_uniform_append >>
-      conj_tac >- (qexistsl_tac [`G'`, `s1`, `tn'`] >> simp[]) >>
-      qpat_assum `emit_op (if tr then TLOAD else SLOAD) _ _ = _`
-        (mp_then Any mp_tac emitted_insts_emit_op) >>
-      simp[mk_inst_def] >> Cases_on `tr` >> simp[is_terminator_def]) >>
+  >- (irule emitted_inst_seq_ptr_uniform_compose >> metis_tac[]) >>
   simp[] >> rpt strip_tac >>
   `not_fresh_at st1 x` by metis_tac[not_fresh_at_mono] >>
   metis_tac[]
@@ -105,29 +103,22 @@ Proof
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`] strip_assume_tac) >>
   `s3.vs_allocas = s2.vs_allocas /\ s3.vs_fmp = s2.vs_fmp /\
    s3.vs_requests = s2.vs_requests` by
-    fs[state_frame_def, venom_state_component_equality] >>
+    metis_tac[state_frame_ptr_fields] >>
   qpat_x_assum `state_frame s3 = _` kall_tac >>
   `!k. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts st2 st3)
           (s2 with vs_inst_idx := k) G2 tn2` by
     (irule emit_append_assert_uniform_ptr >> simp[] >> metis_tac[]) >>
-  `emitted_insts st0 st2 =
-     emitted_insts st0 st1 ++ emitted_insts st1 st2` by
-    (irule emitted_insts_append >> imp_res_tac emit_op_extends >> simp[]) >>
-  `emitted_insts st0 st3 =
-     emitted_insts st0 st2 ++ emitted_insts st2 st3` by
-    (irule emitted_insts_append >> imp_res_tac emit_op_extends >>
-     imp_res_tac emit_void_extends >> gvs[] >> simp[APPEND_ASSOC]) >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends st0 st2` by metis_tac[inst_extends_trans] >>
+  `~is_terminator (if tr then TLOAD else SLOAD) /\ ~is_terminator LT` by
+    (Cases_on `tr` >> simp[is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st0 st2)` by
+    (irule abi_decoder_emitted_every_append >> qexists_tac `st1` >>
+     metis_tac[emitted_op_nonterminators]) >>
+  `run_inst_seq (emitted_insts st0 st2) s = OK s2` by
+    (irule run_inst_seq_compose_ok >> qexistsl_tac [`s1`, `st1`] >> simp[]) >>
   qexistsl_tac [`G2`, `tn2`] >> simp[] >>
-  irule inst_seq_ptr_uniform_append >>
-  conj_tac
-  >- (qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[] >>
-      metis_tac[run_inst_seq_append]) >>
-  asm_rewrite_tac[EVERY_APPEND] >>
-  qpat_assum `emit_op (if tr then TLOAD else SLOAD) _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  qpat_assum `emit_op LT _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  simp[mk_inst_def] >> Cases_on `tr` >> simp[is_terminator_def]
+  irule emitted_inst_seq_ptr_uniform_compose >> metis_tac[]
 QED
 
 Theorem append_storage_guard_abort_ptr:
@@ -156,22 +147,15 @@ Proof
   `!k. inst_seq_ptr D 0 ctx fn PG G2 tn2 (emitted_insts st2 st3)
           (s2 with vs_inst_idx := k) G2 tn2` by
     (irule emit_append_assert_abort_uniform_ptr >> simp[] >> metis_tac[]) >>
-  `emitted_insts st0 st2 =
-     emitted_insts st0 st1 ++ emitted_insts st1 st2` by
-    (irule emitted_insts_append >> imp_res_tac emit_op_extends >> simp[]) >>
-  `emitted_insts st0 st3 =
-     emitted_insts st0 st2 ++ emitted_insts st2 st3` by
-    (irule emitted_insts_append >> imp_res_tac emit_op_extends >>
-     imp_res_tac emit_void_extends >> gvs[] >> simp[APPEND_ASSOC]) >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends st0 st2` by metis_tac[inst_extends_trans] >>
+  `~is_terminator (if tr then TLOAD else SLOAD) /\ ~is_terminator LT` by
+    (Cases_on `tr` >> simp[is_terminator_def]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts st0 st2)` by
+    (irule abi_decoder_emitted_every_append >> qexists_tac `st1` >>
+     metis_tac[emitted_op_nonterminators]) >>
+  `run_inst_seq (emitted_insts st0 st2) s = OK s2` by
+    (irule run_inst_seq_compose_ok >> qexistsl_tac [`s1`, `st1`] >> simp[]) >>
   qexistsl_tac [`G2`, `tn2`] >> simp[] >>
-  irule inst_seq_ptr_uniform_append >>
-  conj_tac
-  >- (qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[] >>
-      metis_tac[run_inst_seq_append]) >>
-  asm_rewrite_tac[EVERY_APPEND] >>
-  qpat_assum `emit_op (if tr then TLOAD else SLOAD) _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  qpat_assum `emit_op LT _ _ = _`
-    (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-  simp[mk_inst_def] >> Cases_on `tr` >> simp[is_terminator_def]
+  irule emitted_inst_seq_ptr_uniform_compose >> metis_tac[]
 QED
