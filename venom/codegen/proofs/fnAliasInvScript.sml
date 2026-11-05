@@ -4158,6 +4158,130 @@ Proof
   rpt conj_tac >> CONV_TAC (RAND_CONV (RAND_CONV EVAL)) >> EVAL_TAC
 QED
 
+Definition alias_search_plan_def:
+  alias_search_plan two n ps =
+    generate_block_plan (liveness_analyze (alias_search_fn T F two))
+      (dfg_build_function (alias_search_fn T F two))
+      (cfg_analyze (alias_search_fn T F two)) (alias_search_fn T F two)
+      (EL n (alias_search_fn T F two).fn_blocks) ps
+End
+
+Definition alias_search_e_def:
+  alias_search_e two = THE (alias_search_plan two 0 (init_cleanup_plan_state NONE [] 0 0))
+End
+
+Theorem alias_search_e_state:
+  !two. IS_SOME (alias_search_plan two 0 (init_cleanup_plan_state NONE [] 0 0)) /\
+    SND (alias_search_e two) =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "seed"])
+Proof
+  Cases >> EVAL_TAC
+QED
+
+Definition alias_search_h_def:
+  alias_search_h two = THE (alias_search_plan two 1 (SND (alias_search_e two)))
+End
+
+Theorem alias_search_h_state:
+  !two. IS_SOME (alias_search_plan two 1 (SND (alias_search_e two))) /\
+    SND (alias_search_h two) =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack :=
+        [Var "r"; Var (if two then "keep2" else "keep1"); Var "c"])
+Proof
+  rewrite_tac[alias_search_h_def, alias_search_e_state] >> Cases >> EVAL_TAC
+QED
+
+Definition alias_search_r_def:
+  alias_search_r two = THE (alias_search_plan two 3 (SND (alias_search_h two)))
+End
+
+Theorem alias_search_r_state:
+  !two. IS_SOME (alias_search_plan two 3 (SND (alias_search_h two))) /\
+    SND (alias_search_r two) =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack :=
+        [Var (if two then "keep2" else "keep1"); Var "v2"; Var "v"])
+Proof
+  rewrite_tac[alias_search_r_def, alias_search_h_state] >> Cases >> EVAL_TAC
+QED
+
+Definition alias_search_j_def:
+  alias_search_j two = THE (alias_search_plan two 4 (SND (alias_search_r two)))
+End
+
+Theorem alias_search_j_state:
+  !two. IS_SOME (alias_search_plan two 4 (SND (alias_search_r two))) /\
+    SND (alias_search_j two) =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack :=
+        [Var (if two then "keep2" else "keep1"); Var "z"])
+Proof
+  rewrite_tac[alias_search_j_def, alias_search_r_state] >> Cases >> EVAL_TAC
+QED
+
+Definition alias_search_b_def:
+  alias_search_b two = THE (alias_search_plan two 6 (SND (alias_search_j two)))
+End
+
+Theorem alias_search_b_state:
+  !two. IS_SOME (alias_search_plan two 6 (SND (alias_search_j two))) /\
+    SND (alias_search_b two) =
+      (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"])
+Proof
+  rewrite_tac[alias_search_b_def, alias_search_j_state] >> Cases >> EVAL_TAC
+QED
+
+
+(* The exit-only demand retains the alias at join, but backedge cleanup
+   removes it before returning to the root-defining header. *)
+Definition alias_search_loop_def:
+  alias_search_loop two = SND (alias_search_e two) with
+    <|ps_stack := (SND (alias_search_b two)).ps_stack;
+      ps_spilled := (SND (alias_search_b two)).ps_spilled|>
+End
+
+Theorem alias_search_loop_state:
+  !two. alias_search_loop two =
+    (init_cleanup_plan_state NONE [] 0 0 with ps_stack := [Var "z"])
+Proof
+  rewrite_tac[alias_search_loop_def, alias_search_e_state, alias_search_b_state] >>
+  EVAL_TAC
+QED
+
+Theorem alias_search_header_replay:
+  !two. alias_search_plan two 1 (alias_search_loop two) = SOME (alias_search_h two)
+Proof
+  rewrite_tac[alias_search_loop_state, alias_search_h_def, alias_search_e_state] >>
+  Cases >> EVAL_TAC
+QED
+
+Theorem alias_search_header_prefixes:
+  !two.
+    (SND (generate_phi_plan
+      (EL 0 (EL 1 (alias_search_fn T F two).fn_blocks).bb_instructions)
+      (live_vars_at (liveness_analyze (alias_search_fn T F two)) "header" 1) F
+      (alias_search_loop two))).ps_stack = [Var "t"] /\
+    IS_SOME (generate_block_insts_plan (liveness_analyze (alias_search_fn T F two))
+      (dfg_build_function (alias_search_fn T F two))
+      (cfg_analyze (alias_search_fn T F two)) (alias_search_fn T F two)
+      "header" F 0 2 0
+      (TAKE 2 (EL 1 (alias_search_fn T F two).fn_blocks).bb_instructions)
+      (alias_search_loop two)) /\
+    (SND (THE (generate_block_insts_plan (liveness_analyze (alias_search_fn T F two))
+      (dfg_build_function (alias_search_fn T F two))
+      (cfg_analyze (alias_search_fn T F two)) (alias_search_fn T F two)
+      "header" F 0 2 0
+      (TAKE 2 (EL 1 (alias_search_fn T F two).fn_blocks).bb_instructions)
+      (alias_search_loop two)))).ps_stack = [Var "r"; Var "t"]
+Proof
+  rewrite_tac[alias_search_loop_state] >> Cases >> rpt conj_tac >> EVAL_TAC
+QED
+
+Theorem alias_search_no_retained_root_alias:
+  !two at. plan_holds (alias_search_loop two) at ==>
+    normalize_operand (dfg_build_function (alias_search_fn T F two)) [] at = at
+Proof
+  simp[alias_search_loop_state, plan_holds_def, init_cleanup_plan_state_def,
+       init_plan_state_def] >> rpt strip_tac >> gvs[] >> Cases_on `two` >> EVAL_TAC
+QED
 Theorem eval_one_phi_without_predecessor:
   s.vs_prev_bb = NONE ==> eval_one_phi s inst = NONE
 Proof
