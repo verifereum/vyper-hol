@@ -5,6 +5,7 @@ Ancestors
   mstoreOperandStep revertReasonLayout revertReasonCopyPtr revertAllocationPtr revertReasonPtr
   typedCopyPtr fragGasSeqPtr fragExecPtr bodyPtrDefs decoderGhostFramePtr exprLoweringProps
   venomMemProps fragExec fragGasPathPtr gasCount ptrSafeRun typedCopyLoopHeaderPtr
+  abiEncoderRounding
   venomInst venomExecSemantics venomState ptrDiscipline words arithmetic finite_map
 
 Theorem alloca_store_literal_checks:
@@ -366,3 +367,145 @@ Resume revert_abi_tail_checks[length]:
 QED
 
 Finalise revert_abi_tail_checks
+
+(* The padding store precedes the unpadded payload copy.  Payload bytes need
+   not be clean; only the two address/count controls do. *)
+Theorem zero_pad_copy_checks:
+  lookup_var dst s = SOME a /\ lookup_var lenvar s = SOME (n2w L) /\
+  lookup_var rounded s = SOME (n2w R) /\
+  ptr_covers G tn dst s capbytes /\ ptr_covers G tn src s (32+L) /\
+  op_taint tn (Var lenvar) = {} /\ op_taint tn (Var rounded) = {} /\
+  R < capbytes /\ R+32 <= capbytes /\ 32+L <= capbytes /\
+  w2n a+R < dimword(:256) /\ 32+L < dimword(:256) /\
+  dst <> endvar /\ src <> endvar /\ lenvar <> endvar /\
+  dst <> countvar /\ src <> countvar /\ ~ctx_has_dalloca ctx ==>
+  ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
+    [mk_inst id ADD [Var dst;Var rounded] [endvar];
+     mk_inst (id+1) MSTORE [Var endvar;Lit 0w] [];
+     mk_inst (id+2) ADD [Lit 32w;Var lenvar] [countvar];
+     mk_inst (id+3) MCOPY [Var dst;Var src;Var countvar] []] s Gf tnf
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j;k;l] _ _ _` >>
+  `op_taint tn (Var dst) = {}` by fs[ptr_covers_def] >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[]) >>
+  `step_inst_base i s = OK (update_var endvar (a+n2w R) s)` by
+    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `ptr_covers g1 t1 endvar s1 32` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`, Abbr `i`] >>
+     irule typed_copy_loop_dynamic_offset_covers >> simp[eval_operand_def] >>
+     qexists_tac `capbytes` >> simp[]) >>
+  `!x C. x <> endvar /\ ptr_covers G tn x s C ==>
+     ptr_covers g1 t1 x s1 C` by
+    (rpt strip_tac >> simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g1 t1 dst s1 capbytes /\ ptr_covers g1 t1 src s1 (32+L)` by
+    metis_tac[] >>
+  `lookup_var endvar s1 = SOME (a+n2w R)` by
+    simp[Abbr `s1`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  suspend "store"
+QED
+
+Resume zero_pad_copy_checks[store]:
+  `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
+    (simp[Abbr `j`] >> irule ptr_inst_ok_mstore >> simp[op_taint_def]) >>
+  `step_inst_base j s1 = OK (mstore (w2n (a+n2w R)) 0w s1)` by
+    (simp[Abbr `j`] >> irule step_mstore_operands >> simp[eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g2 t2 _ s2 _ _` >>
+  `!x C. ptr_covers g1 t1 x s1 C ==> ptr_covers g2 t2 x s2 C` by
+    (rpt strip_tac >> simp[Abbr `g2`, Abbr `t2`, Abbr `s2`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, mstore_def, lookup_var_def]) >>
+  `ptr_covers g2 t2 dst s2 capbytes /\ ptr_covers g2 t2 src s2 (32+L)` by
+    metis_tac[] >>
+  `lookup_var lenvar s2 = SOME (n2w L)` by
+    fs[Abbr `s2`, Abbr `s1`, mstore_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE] >>
+  `op_taint t1 (Var lenvar) = {}` by
+    (simp[Abbr `t1`, Abbr `i`, step_taint_def, set_var_taint_def,
+       op_taint_def, mk_inst_def, FLOOKUP_UPDATE] >> fs[op_taint_def]) >>
+  `t2.t_var = t1.t_var` by
+    (simp[Abbr `t2`, Abbr `j`] >>
+     irule (cj 2 mstore_ghost_frame) >> simp[eval_operand_def, op_taint_def]) >>
+  `op_taint t2 (Var lenvar) = {}` by fs[op_taint_def] >>
+  suspend "copy"
+QED
+
+Resume zero_pad_copy_checks[copy]:
+  qpat_x_assum `!x C. _` kall_tac >>
+  qpat_x_assum `!x C. _` kall_tac >>
+  `ptr_inst_ok D 0 0 ctx fn g2 t2 k s2` by
+    (simp[Abbr `k`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base k s2 = OK (update_var countvar (n2w (32+L)) s2)` by
+    (simp[Abbr `k`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def, GSYM word_add_n2w, WORD_ADD_COMM]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g3 t3 _ s3 _ _` >>
+  `!x C. x <> countvar /\ ptr_covers g2 t2 x s2 C ==>
+     ptr_covers g3 t3 x s3 C` by
+    (rpt strip_tac >> simp[Abbr `g3`, Abbr `t3`, Abbr `s3`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `k`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g3 t3 dst s3 capbytes /\ ptr_covers g3 t3 src s3 (32+L)` by
+    metis_tac[] >>
+  `ptr_covers g3 t3 dst s3 (32+L)` by
+    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
+  `op_taint t3 (Var countvar) = {}` by
+    simp[Abbr `t3`, Abbr `k`, cj 1 copy_len_binop_ghost_frame] >>
+  `lookup_var countvar s3 = SOME (n2w (32+L))` by
+    simp[Abbr `s3`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn g3 t3 l s3` by
+    (simp[Abbr `l`] >> irule ptr_inst_ok_mcopy_operand >>
+     simp[eval_operand_def, w2n_n2w, LESS_MOD] >> fs[ADD_COMM]) >>
+  Cases_on `step_inst_base l s3` >> simp[inst_seq_ptr_def]
+QED
+
+Finalise zero_pad_copy_checks
+
+Theorem round_ceil32_checks:
+  lookup_var lenvar s = SOME (n2w L) /\
+  op_taint tn (Var lenvar) = {} /\ L+63 < dimword(:256) /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id ADD [Var lenvar;Lit 31w] [tmp];
+       mk_inst (id+1) AND [Var tmp;
+         Lit 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w]
+         [out]] s Gf tnf /\
+    op_taint tnf (Var out) = {} /\ tnf.t_mem = tn.t_mem
+Proof
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [i;j] _ _ _` >>
+  `ptr_inst_ok D 0 0 ctx fn G tn i s` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base i s = OK (update_var tmp (n2w L+31w) s)` by
+    (simp[Abbr `i`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `op_taint t1 (Var tmp) = {} /\ t1.t_mem = tn.t_mem` by
+    simp[Abbr `t1`, Abbr `i`, copy_len_binop_ghost_frame] >>
+  `lookup_var tmp s1 = SOME (n2w L+31w)` by
+    simp[Abbr `s1`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
+    (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `(n2w L:bytes32)+31w &&
+      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
+      n2w (contractABI$ceil32 L)` by
+    (once_rewrite_tac[WORD_AND_COMM] >> rewrite_tac[Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >> simp[]) >>
+  `step_inst_base j s1 = OK (update_var out (n2w (contractABI$ceil32 L)) s1)` by
+    (simp[Abbr `j`, mk_inst_def] >> PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     PURE_REWRITE_TAC[instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame]
+QED
