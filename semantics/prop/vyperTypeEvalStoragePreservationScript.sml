@@ -1701,7 +1701,9 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_RawCallTarget]:
       `exprs_runtime_typed env es vs` by (
         irule eval_exprs_success_runtime_typed >> simp[] >>
         metis_tac[runtime_storage_consistent_runtime]) >>
-      mp_tac raw_call_args_runtime_typed_dest >>
+      rename1 `EL 1 (MAP expr_type es) = BaseT (BytesT (Dynamic data_bound))` >>
+      mp_tac (Q.INST [`bd` |-> `Dynamic data_bound`]
+        raw_call_args_runtime_typed_dest) >>
       impl_tac >- simp[] >> strip_tac >> gvs[] >>
       Cases_on `raw_call_value flags.rcf_kws (DROP 2 vs)` >>
       simp[bind_def, return_def, raise_def] >> strip_tac >> gvs[] >>
