@@ -1520,7 +1520,191 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-(* Shared actual-execution contract for recursive normalization. *)
+(* Straight-line index arithmetic and counter updates. *)
+Theorem place_store_binary_path:
+  emit_op opc [lhs;rhs] a = (res,b) /\
+  (opc = ADD \/ opc = MUL) /\
+  eval_operand lhs s = SOME lw /\ eval_operand rhs s = SOME rw /\
+  w = (if opc = ADD then lw + rw else lw * rw) /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand res t = SOME w /\
+      t.vs_memory = s.vs_memory /\
+      (!off len. typedMemoryCopy$typed_copy_state_frame a off len s t) /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  strip_tac >> irule place_store_emit_op_path >> simp[] >>
+  qexistsl_tac [`[lhs;rhs]`, `opc`] >>
+  gvs[venomInstTheory.is_terminator_def, step_inst_base_opcode_eqs,
+      mk_inst_def, exec_pure2_def]
+QED
+
+Theorem place_store_index_addresses_path:
+  emit_op MUL [Var counter; Lit (n2w ss)] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w ds)] b = (doff,c) /\
+  emit_op ADD [src;so] c = (sp,d) /\ emit_op ADD [dst;doff] d = (dp,e) /\
+  not_fresh_at a counter /\ lookup_var counter s = SOME (n2w k) /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  fn_has_code a e func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      eval_operand sp t = SOME (sw + n2w (k * ss)) /\
+      eval_operand dp t = SOME (dw + n2w (k * ds)) /\
+      t.vs_memory = s.vs_memory /\
+      (!off len. typedMemoryCopy$typed_copy_state_frame a off len s t) /\
+      ~t.vs_halted /\ t.vs_current_bb = e.cs_current_bb /\
+      t.vs_inst_idx = LENGTH e.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono] >>
+  `ci_mono a c /\ ci_mono a d /\ ci_mono b d /\ ci_mono b e /\ ci_mono c e` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `fn_has_code a b func /\ fn_has_code b c func /\
+   fn_has_code c d func /\ fn_has_code d e func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `?q1. gas_marked_path F ctx func s 0 (OK q1) /\
+       eval_operand so q1 = SOME (n2w k * n2w ss) /\
+       q1.vs_memory = s.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame a off len s q1) /\
+       ~q1.vs_halted /\ q1.vs_current_bb = b.cs_current_bb /\
+       q1.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (irule place_store_binary_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     simp[eval_operand_def]) >>
+  `lookup_var counter q1 = SOME (n2w k)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_counter] >>
+  `?q2. gas_marked_path F ctx func q1 0 (OK q2) /\
+       eval_operand doff q2 = SOME (n2w k * n2w ds) /\
+       q2.vs_memory = q1.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame b off len q1 q2) /\
+       ~q2.vs_halted /\ q2.vs_current_bb = c.cs_current_bb /\
+       q2.vs_inst_idx = LENGTH c.cs_current_insts` by
+    (irule place_store_binary_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     simp[eval_operand_def]) >>
+  `(!x. so = Var x ==> not_fresh_at b x) /\
+   (!x. doff = Var x ==> not_fresh_at c x) /\
+   (!x. sp = Var x ==> not_fresh_at d x)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh] >>
+  `eval_operand so q2 = SOME (n2w k * n2w ss) /\
+   eval_operand src q2 = SOME sw /\ eval_operand dst q2 = SOME dw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand,
+              typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
+  `?q3. gas_marked_path F ctx func q2 0 (OK q3) /\
+       eval_operand sp q3 = SOME (sw + n2w (k * ss)) /\
+       q3.vs_memory = q2.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame c off len q2 q3) /\
+       ~q3.vs_halted /\ q3.vs_current_bb = d.cs_current_bb /\
+       q3.vs_inst_idx = LENGTH d.cs_current_insts` by
+    (irule place_store_binary_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     simp[wordsTheory.word_mul_n2w]) >>
+  `eval_operand doff q3 = SOME (n2w k * n2w ds) /\
+   eval_operand dst q3 = SOME dw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand,
+              typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
+  `?q4. gas_marked_path F ctx func q3 0 (OK q4) /\
+       eval_operand dp q4 = SOME (dw + n2w (k * ds)) /\
+       q4.vs_memory = q3.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame d off len q3 q4) /\
+       ~q4.vs_halted /\ q4.vs_current_bb = e.cs_current_bb /\
+       q4.vs_inst_idx = LENGTH e.cs_current_insts` by
+    (irule place_store_binary_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     simp[wordsTheory.word_mul_n2w]) >>
+  qexists_tac `q4` >>
+  `gas_marked_path F ctx func s 0 (OK q2) /\
+   gas_marked_path F ctx func q2 0 (OK q4)` by
+    metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  conj_tac >- metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  simp[] >> rpt gen_tac >>
+  `typedMemoryCopy$typed_copy_state_frame a off len q1 q2 /\
+   typedMemoryCopy$typed_copy_state_frame a off len q2 q3 /\
+   typedMemoryCopy$typed_copy_state_frame a off len q3 q4` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_mono] >>
+  metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_trans]
+QED
+Theorem place_store_assign_path:
+  emit_inst ASSIGN [op] [counter] a = ((),b) /\
+  eval_operand op s = SOME w /\
+  (!x. not_fresh_at sa x ==> x <> counter) /\
+  fn_has_code a b func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      lookup_var counter t = SOME w /\ t.vs_memory = s.vs_memory /\
+      (!off len. typedMemoryCopy$typed_copy_state_frame sa off len s t) /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts
+Proof
+  strip_tac >>
+  `b.cs_current_insts = a.cs_current_insts ++ emitted_insts a b /\ same_blocks a b` by
+    (qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_inst_def, comp_bind_def, fresh_id_def, emit_def,
+          emitted_insts_def, same_blocks_def, rich_listTheory.DROP_LENGTH_APPEND] >>
+     strip_tac >> gvs[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  drule emitHelperPropsTheory.emitted_insts_emit_inst >> strip_tac >>
+  `gas_marked_path F ctx func s 0
+     (OK ((update_var counter w s) with vs_inst_idx := LENGTH b.cs_current_insts))` by
+    (irule place_store_emitted_seq_path >> simp[] >> qexists_tac `a` >>
+     simp[mk_inst_def, run_inst_seq_def, venomInstTheory.is_terminator_def,
+          step_inst_base_opcode_eqs]) >>
+  qexists_tac `(update_var counter w s) with vs_inst_idx := LENGTH b.cs_current_insts` >>
+  simp[emitHelperPropsTheory.lookup_var_update_var, update_var_def] >>
+  simp[typedMemoryCopyTheory.typed_copy_state_frame_def,
+       typedMemoryCopyTheory.typed_copy_frame_def, venom_state_component_equality,
+       lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> simp[]
+QED
+
+
+Theorem place_store_counter_increment_path:
+  emit_op ADD [Var counter; Lit 1w] a = (inc,b) /\
+  emit_inst ASSIGN [inc] [counter] b = ((),c) /\
+  ci_mono sa a /\ ~not_fresh_at sa counter /\ not_fresh_at a counter /\
+  lookup_var counter s = SOME (n2w k) /\
+  fn_has_code a c func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      lookup_var counter t = SOME (n2w (SUC k)) /\ t.vs_memory = s.vs_memory /\
+      (!off len. typedMemoryCopy$typed_copy_state_frame sa off len s t) /\
+      ~t.vs_halted /\ t.vs_current_bb = c.cs_current_bb /\
+      t.vs_inst_idx = LENGTH c.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono a b` by metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono] >>
+  `ci_mono b c` by
+    (qspecl_then [`ASSIGN`, `[inc]`, `[counter]`, `b`] mp_tac
+       exprLoweringPropsTheory.ci_mono_emit_inst >> simp[]) >>
+  `fn_has_code a b func /\ fn_has_code b c func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `?u. gas_marked_path F ctx func s 0 (OK u) /\
+       eval_operand inc u = SOME (n2w (SUC k)) /\
+       u.vs_memory = s.vs_memory /\
+       (!off len. typedMemoryCopy$typed_copy_state_frame a off len s u) /\
+       ~u.vs_halted /\ u.vs_current_bb = b.cs_current_bb /\
+       u.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (irule place_store_binary_path >> simp[] >>
+     goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+     simp[eval_operand_def, wordsTheory.word_add_n2w, ADD1]) >>
+  `!x. not_fresh_at sa x ==> x <> counter` by metis_tac[] >>
+  drule_all place_store_assign_path >>
+  disch_then (qspec_then `ctx` mp_tac) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  simp[] >> rpt gen_tac >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_trans >>
+  qexists_tac `u` >> simp[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
 Definition place_store_counted_entry_def:
   place_store_counted_entry cenv ctx dty sty dtv stv v <=>
     !dst src sa sb func s dw sw.
@@ -1650,6 +1834,170 @@ Proof
   qexists_tac `q2` >> conj_tac >- metis_tac[] >>
   irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
   qexists_tac `s2` >> simp[] >> metis_tac[ADD_COMM]
+QED
+
+Theorem place_store_index_child_path:
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b = (doff,c) /\
+  emit_op ADD [src;so] c = (sp,d) /\ emit_op ADD [dst;doff] d = (dp,e) /\
+  compile_store_memory_typed cenv dp dty sp sty e = ((),z) /\
+  place_store_counted_entry cenv ctx dty sty dtv stv v /\
+  not_fresh_at a counter /\
+  (!x. src = Var x ==> not_fresh_at a x) /\
+  (!x. dst = Var x ==> not_fresh_at a x) /\
+  lookup_var counter s = SOME (n2w k) /\
+  eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+  val_in_memory stv v (w2n sw + k * type_memory_size stv) s.vs_memory /\
+  w2n sw + k * type_memory_size stv + type_memory_size stv < dimword (:256) /\
+  w2n dw + k * type_memory_size dtv + type_memory_size dtv < dimword (:256) /\
+  regions_disjoint (w2n sw + k * type_memory_size stv) (type_memory_size stv)
+                   (w2n dw + k * type_memory_size dtv) (type_memory_size dtv) /\
+  fn_has_code a z func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      val_in_memory dtv v (w2n dw + k * type_memory_size dtv) t.vs_memory /\
+      typedMemoryCopy$typed_copy_state_frame a (w2n dw + k * type_memory_size dtv)
+        (type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = z.cs_current_bb /\
+      t.vs_inst_idx = LENGTH z.cs_current_insts
+Proof
+  strip_tac >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\ ci_mono e z` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono,
+              cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family, pairTheory.SND] >>
+  `ci_mono a e` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `fn_has_code a e func /\ fn_has_code e z func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `w2n (sw + n2w (k * type_memory_size stv)) = w2n sw + k * type_memory_size stv /\
+   w2n (dw + n2w (k * type_memory_size dtv)) = w2n dw + k * type_memory_size dtv` by
+    (conj_tac >> irule typedMemoryCopyTheory.typed_copy_offset_nonwrap >> decide_tac) >>
+  `(!x. sp = Var x ==> not_fresh_at e x) /\
+   (!x. dp = Var x ==> not_fresh_at e x)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_fresh,
+              typedMemoryCopyTheory.typed_copy_operand_fresh_mono] >>
+  drule_all place_store_index_addresses_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `u` strip_assume_tac)) >>
+  qpat_x_assum `place_store_counted_entry _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[place_store_counted_entry_def] >>
+  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`func`, `u`, `dw + n2w (k * type_memory_size dtv)`,
+                                        `sw + n2w (k * type_memory_size stv)`] mp_tac) >>
+  (impl_tac >- metis_tac[ADD_COMM]) >>
+  disch_then (qx_choose_then `t` strip_assume_tac) >>
+  qexists_tac `t` >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  conj_tac >- metis_tac[ADD_COMM] >> simp[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_trans >>
+  qexists_tac `u` >> conj_tac >- metis_tac[] >>
+  irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
+  qexists_tac `e` >> simp[] >> metis_tac[ADD_COMM]
+QED
+
+Theorem place_store_index_body_path:
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] a = (so,b) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b = (doff,c) /\
+  emit_op ADD [src;so] c = (sp,d) /\ emit_op ADD [dst;doff] d = (dp,e) /\
+  compile_store_memory_typed cenv dp dty sp sty e = ((),z) /\
+  emit_op ADD [Var counter; Lit 1w] z = (inc,z1) /\
+  emit_inst ASSIGN [inc] [counter] z1 = ((),endst) /\
+  ci_mono sa a /\ not_fresh_at a counter /\ ~not_fresh_at sa counter /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!i. i < N ==> place_store_counted_entry cenv ctx dty sty dtv stv (f i) /\
+                   val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  k < N /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
+  fn_has_code a endst func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\ s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_marked_path F ctx func s 0 (OK t) /\
+      typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 (SUC k) t /\
+      typedMemoryCopy$typed_copy_state_frame sa (w2n dw + k * type_memory_size dtv)
+        (type_memory_size dtv) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = endst.cs_current_bb /\
+      t.vs_inst_idx = LENGTH endst.cs_current_insts
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `ci_mono a b /\ ci_mono b c /\ ci_mono c d /\ ci_mono d e /\ ci_mono e z /\ ci_mono z z1` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_emit_op_mono,
+              cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family, pairTheory.SND] >>
+  `ci_mono z1 endst` by
+    (qspecl_then [`ASSIGN`, `[inc]`, `[counter]`, `z1`] mp_tac
+       exprLoweringPropsTheory.ci_mono_emit_inst >> simp[]) >>
+  `ci_mono a z /\ ci_mono sa z /\ ci_mono z endst` by
+    (gvs[ci_mono_def] >> metis_tac[cs_extends_trans, LESS_EQ_TRANS]) >>
+  `fn_has_code a z func /\ fn_has_code z endst func` by
+    (gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]) >>
+  `not_fresh_at z counter /\
+   (!x. src = Var x ==> not_fresh_at a x) /\
+   (!x. dst = Var x ==> not_fresh_at a x)` by
+    (conj_tac
+     >- (gvs[ci_mono_def, not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+     conj_tac >> metis_tac[typedMemoryCopyTheory.typed_copy_operand_fresh_mono]) >>
+  `w2n sw <= w2n sw + k * type_memory_size stv /\
+   w2n sw + k * type_memory_size stv + type_memory_size stv <= w2n sw + N * type_memory_size stv` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_array_subinterval] >>
+  `w2n dw <= w2n dw + k * type_memory_size dtv /\
+   w2n dw + k * type_memory_size dtv + type_memory_size dtv <= w2n dw + N * type_memory_size dtv` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_array_subinterval] >>
+  `lookup_var counter s = SOME (n2w k) /\
+   eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
+   val_in_memory stv (f k) (w2n sw + k * type_memory_size stv) s.vs_memory` by
+    gvs[typedMemoryCopyTheory.typed_copy_index_inv_def] >>
+  `place_store_counted_entry cenv ctx dty sty dtv stv (f k)` by metis_tac[] >>
+  `?u. gas_marked_path F ctx func s 0 (OK u) /\
+       val_in_memory dtv (f k) (w2n dw + k * type_memory_size dtv) u.vs_memory /\
+       typedMemoryCopy$typed_copy_state_frame a (w2n dw + k * type_memory_size dtv)
+         (type_memory_size dtv) s u /\
+       ~u.vs_halted /\ u.vs_current_bb = z.cs_current_bb /\
+       u.vs_inst_idx = LENGTH z.cs_current_insts` by
+    (irule place_store_index_child_path >> simp[] >>
+     goal_assum (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op ADD _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op MUL _ _ = _`)) >>
+     qexists_tac `sw` >> simp[regions_disjoint_def] >> decide_tac) >>
+  `lookup_var counter u = SOME (n2w k)` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_counter] >>
+  drule_all place_store_counter_increment_path >>
+  disch_then (qspec_then `ctx` (qx_choose_then `t` strip_assume_tac)) >>
+  `typedMemoryCopy$typed_copy_state_frame sa (w2n dw + k * type_memory_size dtv)
+     (type_memory_size dtv) s t` by
+    (irule typedMemoryCopyTheory.typed_copy_state_frame_trans >> qexists_tac `u` >>
+     simp[] >> irule typedMemoryCopyTheory.typed_copy_state_frame_mono >>
+     qexists_tac `a` >> simp[]) >>
+  `eval_operand src t = SOME sw /\ eval_operand dst t = SOME dw` by
+    metis_tac[typedMemoryCopyTheory.typed_copy_state_frame_operand] >>
+  qexists_tac `t` >>
+  conj_tac >- metis_tac[gas_marked_path_then, ADD_CLAUSES] >>
+  simp[] >> mp_tac typedMemoryCopyTheory.typed_copy_index_inv_step >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
+QED
+
+Theorem place_store_index_back_edge_path:
+  emit_inst JMP [Label hdr] [] a = ((),b) /\ fn_has_code a b func /\
+  typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k s /\
+  eval_operand length s = SOME nw /\
+  ~s.vs_halted /\ s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  gas_marked_path F ctx func s 0 (OK (jump_to hdr s)) /\
+  typedMemoryCopy$typed_copy_index_inv sa counter src dst sw dw f stv dtv N s0 k (jump_to hdr s) /\
+  eval_operand length (jump_to hdr s) = SOME nw /\
+  ~(jump_to hdr s).vs_halted /\ (jump_to hdr s).vs_current_bb = hdr /\
+  (jump_to hdr s).vs_inst_idx = 0
+Proof
+  strip_tac >> conj_tac
+  >- (irule place_store_branch_path >> simp[] >>
+      qexistsl_tac [`[Label hdr]`, `JMP`, `a`, `b`] >>
+      simp[venomInstTheory.is_terminator_def, step_inst_base_opcode_eqs, mk_inst_def]) >>
+  conj_tac >- metis_tac[typedMemoryCopyTheory.typed_copy_index_inv_jump] >>
+  simp[jump_to_def, eval_operand_def, lookup_var_def] >>
+  Cases_on `length` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
 Theorem place_store_counted_tuple_path:
