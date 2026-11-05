@@ -42,3 +42,44 @@ Proof
        vyperStateTheory.lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   rw[] >> EVAL_TAC >> simp[wordsTheory.dimword_def]
 QED
+
+Theorem order_ptr_frame_context:
+  env_context_consistent order_ptr_tenv order_frame_cx
+Proof
+  EVAL_TAC >> simp[finite_mapTheory.FUNION_FEMPTY_1] >>
+  rw[] >> gvs[AllCaseEqs()] >> EVAL_TAC
+QED
+
+(* Fix the source state to the same accounts as the initialized runtime. *)
+Definition order_ptr_source_def:
+  order_ptr_source = vyperState$empty_state with <|
+    scopes := bodyPtrBytestringBuiltinsOrderProbe$order_probe_scopes;
+    accounts := order_run_start.vs_accounts;
+    outcomes := SOME [] |>
+End
+
+Theorem order_ptr_frame_env:
+  env_consistent order_ptr_tenv order_frame_cx order_ptr_source
+Proof
+  simp[env_consistent_def, order_ptr_frame_context,
+       order_ptr_source_def, order_ptr_frame_scopes,
+       env_immutables_consistent_def, order_ptr_tenv_def,
+       env_scopes_consistent_def,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_scopes_def,
+       vyperStateTheory.lookup_scopes_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rw[] >> EVAL_TAC >> simp[wordsTheory.dimword_def]
+QED
+
+Theorem order_ptr_frame_state_typed:
+  state_well_typed order_ptr_source
+Proof
+  EVAL_TAC >> rw[] >> gvs[] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def] >> CONV_TAC wordsLib.WORD_EVAL_CONV
+QED
+
+Theorem order_ptr_frame_context_typed:
+  context_well_typed order_frame_cx /\ functions_well_typed order_frame_cx
+Proof
+  EVAL_TAC >> rw[] >> gvs[AllCaseEqs()] >>
+  fs[vyperInterpreterTheory.lookup_function_def]
+QED
