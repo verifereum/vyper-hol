@@ -141,7 +141,8 @@ Proof
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
   disch_then (qspecl_then [`ctx`, `nocalls`] mp_tac) >>
-  (impl_tac >- (rpt strip_tac >> simp[] >>
+  (impl_tac >- (rpt strip_tac >> simp[]
+    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
@@ -236,7 +237,8 @@ Resume compile_make_array_vv_case[tuple]:
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
-  (impl_tac >- (rpt strip_tac >> simp[] >>
+  (impl_tac >- (rpt strip_tac >> simp[]
+    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
     irule aggregate_alloca_immutable_sep >>
     goal_assum (drule_at (Pat `stmt_state_rel ctx _ _ _ _ _`)) >>
     qpat_x_assum `MEM inst (fn_insts func)` kall_tac >>
@@ -316,7 +318,8 @@ Resume compile_make_array_vv_case[array]:
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[wordsTheory.dimword_def] >>
   disch_then (qspecl_then [`env`,`ctx`,`nocalls`] mp_tac) >> simp[] >>
-  (impl_tac >- (rpt strip_tac >> simp[] >>
+  (impl_tac >- (rpt strip_tac >> simp[]
+    >~ [`int_calls_expr e = [] \/ _`] >- metis_tac[] >>
     `regions_disjoint io (type_memory_size itv) b
        (type_memory_bytes cenv (ArrayT x bnd))` by
       (irule aggregate_alloca_immutable_sep >>
