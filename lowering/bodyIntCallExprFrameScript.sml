@@ -9,7 +9,7 @@ Ancestors
   words integer_word arithmeticProps builtinProps vyperContext exprOperandVar
   bodyIntCallForceTransfer bodyIntCallAggregateCopy
   exprSimOps exprBopLowering exprSimCompare freshWrites rich_list exprSimArith
-  vyperHashMapStorage
+  vyperHashMapStorage vyperStorageLayoutSafety exprSimLeaves
   exprSimOperators bodyIntCallSourceFrame bodyIntCallMappingFrame
 Libs
   intLib
@@ -3044,3 +3044,198 @@ val () = List.app (fn th =>
   end)
   [mapping_place_post_retag, eval_subscript_result_split,
    mapping_subscript_nested_place_frag];
+
+Theorem toplevel_storage_live_view[local]:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt ==>
+  (!st. storage_read_live cx tr st (n2w slot) tvt) /\
+  w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256) /\
+  (!s. stmt_state_rel ctx func cenv cx es s ==>
+    storage_range_agree (get_storage cx es tr)
+      (if tr then contract_transient s else contract_storage s) (n2w slot) tvt)
+Proof
+  strip_tac >>
+  `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
+    simp[declared_storage_region_def] >>
+  `storage_layout_safe cx` by gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+  conj_asm1_tac
+  >- (gen_tac >> irule accountsRelPropsTheory.declared_storage_region_read_live >>
+      qexistsl [`src`, `id`, `[]`] >> simp[]) >>
+  conj_asm1_tac
+  >- (drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
+  rpt strip_tac >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
+    (get_storage cx es tr)
+    (if tr then contract_transient s else contract_storage s)` by
+    (Cases_on `tr` >>
+     gvs[stmt_state_rel_def, state_rel_def, storage_rel_def, transient_rel_def,
+       vyperStorageBackendTheory.get_storage_def, vfmStateTheory.lookup_account_def]) >>
+  irule accountsRelPropsTheory.storage_range_agree_of_live >> metis_tac[]
+QED
+
+Theorem compile_toplevel_storage_vv_frame_frag[local]:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+  evaluate_type (get_tenv cx) typ = SOME tvt /\
+  read_storage_slot cx tr (n2w slot) tvt es = (INL v,es) /\
+  compile_expr cenv ty (TopLevelName ann (src,id)) sa = (vv,sb) /\
+  eval_expr cx (TopLevelName ann (src,id)) es = (res,es') ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. (?raw. res = INL raw /\
+      vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sb s0 es' raw vv s) /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) (expr_exit res)
+Proof
+  strip_tac >>
+  `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
+    (irule toplevel_storage_slots_in_range >>
+     gvs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  `typ = ann` by
+    (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+     metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_storage_decl_type_eq]) >>
+  gvs[] >> drule_all eval_expr_toplevel_storage >> strip_tac >> gvs[] >>
+  reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
+  >- (irule frag_exec_conseq >>
+      qexistsl [`\s. F`, `\s. F`, `expr_exit (INL tv)`] >>
+      simp[frag_exec_false_pre] >> gvs[stmt_state_rel_def, state_rel_def]) >>
+  fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
+  drule_all toplevel_storage_live_view >> strip_tac >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_def, vyperASTTheory.expr_type_def] >>
+  Cases_on `tr` >> simp[] >> strip_tac >> gvs[] >>
+  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, storage_holds_def,
+    contextTheory.mk_ptr_def, eval_operand_def, vyperASTTheory.expr_type_def] >>
+  metis_tac[]
+QED
+
+Theorem compile_toplevel_immutable_vv_frame_frag[local]:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = NONE /\
+  compile_expr cenv ty (TopLevelName ann (src,id)) sa = (vv,sb) /\
+  eval_expr cx (TopLevelName ann (src,id)) es = (res,es') /\ expr_vv_res_ok res ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. (?raw. res = INL raw /\
+      vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sb s0 es' raw vv s) /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) (expr_exit res)
+Proof
+  strip_tac >>
+  `env_consistent env cx es /\ state_well_typed es /\
+   well_typed_expr env (TopLevelName ann (src,id))` by
+    fs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_find_NONE_bare_global >> strip_tac >>
+  `src = cenv.ce_module /\
+   ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+     !tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
+          off + type_memory_size tv < dimword (:256)` by
+    (fs[expr_sim_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+    return_def, raise_def, LET_THM] >>
+  simp[get_immutables_def, get_address_immutables_def, lift_option_type_def,
+    bind_def, return_def, raise_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> simp[return_def, raise_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  rename1 `ALOOKUP es.immutables cx.txn.target = SOME imms` >>
+  Cases_on `FLOOKUP (get_source_immutables cenv.ce_module imms) id` >>
+  simp[return_def, raise_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  rename1 `FLOOKUP _ id = SOME tvv` >> PairCases_on `tvv` >> strip_tac >> gvs[] >>
+  `evaluate_type (get_tenv cx) ann = SOME tvv0` by
+    (fs[env_consistent_def, env_immutables_consistent_def] >>
+     first_x_assum irule >> simp[] >> metis_tac[]) >>
+  `value_has_type tvv0 tvv1` by
+    (fs[state_well_typed_def, listTheory.EVERY_MEM] >>
+     drule alistTheory.ALOOKUP_MEM >> strip_tac >> first_x_assum drule >>
+     simp[imms_well_typed_def] >>
+     qpat_x_assum `FLOOKUP _ _ = SOME _` mp_tac >>
+     simp[get_source_immutables_def] >> CASE_TAC >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+  simp[compile_expr_def, vyperASTTheory.expr_type_def] >> strip_tac >> gvs[] >>
+  irule frag_exec_refl >> rpt strip_tac >> gvs[] >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
+    contextTheory.mk_ptr_def, eval_operand_def, vyperASTTheory.expr_type_def] >>
+  qexistsl [`id`, `off`, `tvv0`, `tvv1`, `0`] >>
+  simp[sub_layout_def, read_result_def, read_place_def, get_immutables_def,
+    get_address_immutables_def, lift_option_type_def, bind_def,
+    return_def, evaluate_subscripts_def, lift_sum_def]
+QED
+
+Theorem toplevel_frame_no_module_impossible[local]:
+  get_module_code cx src = NONE /\
+  eval_expr cx (TopLevelName ann (src,id)) es = (res,es') /\
+  expr_vv_res_ok res ==> F
+Proof
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+    return_def, raise_def, LET_THM] >>
+  strip_tac >> gvs[expr_vv_res_ok_def, expr_res_ok_def]
+QED
+
+Theorem toplevel_frame_storage_decodes[local]:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  get_module_code cx src = SOME ts /\
+  find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
+  eval_expr cx (TopLevelName ann (src,id)) es = (res,es') /\
+  expr_vv_res_ok res ==>
+  ?slot tvt v. lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
+    evaluate_type (get_tenv cx) typ = SOME tvt /\
+    read_storage_slot cx tr (n2w slot) tvt es = (INL v,es)
+Proof
+  strip_tac >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
+    return_def, raise_def, LET_THM] >>
+  Cases_on `lookup_var_slot_from_layout cx tr src id_str` >>
+  simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  Cases_on `evaluate_type (get_tenv cx) typ` >> simp[raise_def, return_def]
+  >- (strip_tac >> gvs[expr_vv_res_ok_def]) >>
+  `contract_storage_well_formed cx es` by
+    gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+  drule_all toplevel_storage_read_decodes >> metis_tac[]
+QED
+
+Theorem compile_toplevel_name_vv_storage_frame_frag:
+  expr_sim_pre cenv cx env (TopLevelName ann (src,id)) es /\
+  compile_expr cenv ty (TopLevelName ann (src,id)) sa = (vv,sb) /\
+  eval_expr cx (TopLevelName ann (src,id)) es = (res,es') /\
+  expr_vv_res_ok res /\ fn_has_code sa sb func /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
+  frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
+    (\s. (?raw. res = INL raw /\
+      vv_post ctx func cenv cx (TopLevelName ann (src,id)) es sa sb s0 es' raw vv s) /\
+      contract_storage s = contract_storage s0 /\
+      contract_transient s = contract_transient s0) (expr_exit res)
+Proof
+  strip_tac >> Cases_on `get_module_code cx src`
+  >- metis_tac[toplevel_frame_no_module_impossible] >>
+  rename1 `get_module_code cx src = SOME ts` >>
+  Cases_on `find_var_decl_by_name id ts`
+  >- (irule compile_toplevel_immutable_vv_frame_frag >> metis_tac[]) >>
+  rename1 `find_var_decl_by_name id ts = SOME di` >>
+  PairCases_on `di` >> Cases_on `di0`
+  >~ [`HashMapVarDecl`]
+  >- (gvs[expr_sim_pre_def, expr_sim_inv_def] >>
+      metis_tac[vyperTypeGlobalLookupSoundnessTheory.TopLevelName_Type_HashMapVarDecl_impossible]) >>
+  rename1 `StorageVarDecl tr typ` >>
+  drule_all toplevel_frame_storage_decodes >> strip_tac >>
+  irule compile_toplevel_storage_vv_frame_frag >> metis_tac[]
+QED
+
+val _ = List.app (fn (name,th) =>
+  if List.exists (fn s => s <> "DISK_THM") (#1 (Tag.dest_tag (Thm.tag th)))
+  then raise Fail ("oracle dependency: " ^ name) else ())
+  [("toplevel_storage_live_view", toplevel_storage_live_view),
+   ("compile_toplevel_storage_vv_frame_frag", compile_toplevel_storage_vv_frame_frag),
+   ("compile_toplevel_immutable_vv_frame_frag", compile_toplevel_immutable_vv_frame_frag),
+   ("toplevel_frame_no_module_impossible", toplevel_frame_no_module_impossible),
+   ("toplevel_frame_storage_decodes", toplevel_frame_storage_decodes),
+   ("compile_toplevel_name_vv_storage_frame_frag", compile_toplevel_name_vv_storage_frame_frag)];
