@@ -2417,6 +2417,68 @@ Proof
   drule_all (SRULE [arithmeticTheory.GREATER_DEF] alias_regular_plan_var_live_support) >> simp[]
 QED
 
+Theorem alias_input_vars_no_phis:
+  collect_phis instrs = [] ==>
+  input_vars_from pred instrs live = live
+Proof
+  simp[input_vars_from_def]
+QED
+
+Theorem alias_entry_demand_collision_probe:
+  input_vars_from "b"
+    [mk_inst 10 PHI [Label "a"; Var "x"; Label "b"; Var "y"] ["p"];
+     mk_inst 11 ASSIGN [Var "x"] ["q"]] ["x"; "y"] = ["y"] /\
+  ~MEM "x" (input_vars_from "b"
+    [mk_inst 10 PHI [Label "a"; Var "x"; Label "b"; Var "y"] ["p"];
+     mk_inst 11 ASSIGN [Var "x"] ["q"]] ["x"; "y"]) /\
+  MEM "x" (inst_uses (mk_inst 11 ASSIGN [Var "x"] ["q"]))
+Proof
+  EVAL_TAC
+QED
+
+(* Entry-demand producer audit (C1.20.3).
+   alias_entry_demand_collision_probe checks a genuine omission from the
+   selected-input list, NOT an omission from a reachable planner state.
+   Thus membership of x in ordinary uses does not justify invoking the
+   frozen selected-input ownership premise. In this example that premise
+   gives heldness/equality of y only. If x is already held, the separate
+   frozen equality premise DOES give its entry alias equality.
+
+   Existing interfaces do not supply that missing antecedent:
+   - alias_input_vars_from_partition is elimination from membership in
+     input_vars_from, not introduction of ordinary survivors.
+   - alias_build_phi_maps_absent_uses requires the source-map lookup to be
+     NONE (plus well-formed PHIs). Here x has a SOME lookup, so this theorem
+     cannot remove the collision.
+   - alias_phi_plan_holds_live requires MEM x live AND plan_holds ps (Var x).
+     It preserves existing heldness; it cannot establish entry heldness.
+   - alias_phi_plan_holds_output requires a singleton output, output liveness
+     AND a successful stack_get_phi_depth. It does not produce x in this
+     example, where x is an input, not the PHI output p.
+   generate_phi_plan itself returns ps unchanged if stack_get_phi_depth is
+   NONE. Otherwise it renames a found stack source, duplicating it first
+   when that source is live afterwards; spills are not searched as sources.
+   Consequently it preserves an already-held ordinary survivor but supplies
+   no independent entry-heldness producer for an omitted survivor.
+
+   Required unresolved implication: for every ordinary survivor actually
+   needed by the eventual semantic proof but omitted by input_vars_from,
+   derive plan_holds ps (Var x) from the frozen lineage/block-plan premises,
+   or prove that this survivor need not be demanded to establish any final
+   held alias. No unconditional physical PHI demand is implied by this audit.
+
+   NONE audit: lineage_state's entry/step constructors mention planner
+   states, CFG and DFS plans only; neither mentions a runtime state or
+   vs_prev_bb. lineage_entry names a static predecessor but the frozen
+   theorem assumes lineage_state, not its correspondence to vs_prev_bb.
+   Therefore prev=NONE must not be identified with function entry. With no
+   PHIs alias_input_vars_no_phis computes input_vars_from as identity, but
+   the frozen selected-input ownership premise is still vacuous when prev
+   is NONE. The same missing heldness-or-unneeded-demand implication must
+   cover that case. This audit supplies no target counterexample and does
+   not validate the proposed universal live-prefix base case.
+*)
+
 Definition alias_probe_phis_def:
   alias_probe_phis =
     [mk_inst 10 PHI [Label "left"; Var "a"; Label "right"; Var "b"] ["p"];
