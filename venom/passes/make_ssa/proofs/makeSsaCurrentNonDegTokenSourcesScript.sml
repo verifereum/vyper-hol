@@ -143,3 +143,79 @@ Proof
     metis_tac[makeSsaCurrentAnalysisTheory.current_all_labels_reachable] >>
   metis_tac[dominates_trans]
 QED
+
+Theorem current_nondeg_output_preserves_noninserted:
+  !xs j t. t <> CurrentInserted w h ==>
+    current_output_token v l i j xs t <> CurrentInserted w h
+Proof
+  Induct >> simp[current_output_token_def] >> rpt gen_tac >>
+  Cases_on `h' = v` >> simp[]
+QED
+
+Theorem current_nondeg_output_resets_inserted:
+  !xs j t. MEM v xs ==>
+    current_output_token v l i j xs t <> CurrentInserted w h
+Proof
+  Induct >> simp[current_output_token_def] >> rpt gen_tac >>
+  Cases_on `h' = v` >> simp[current_nondeg_output_preserves_noninserted]
+QED
+
+Theorem current_nondeg_original_preserves_noninserted:
+  !insts i t. t <> CurrentInserted w h ==>
+    current_original_scan v l i insts t <> CurrentInserted w h
+Proof
+  Induct >- simp[current_original_scan_def] >>
+  rpt gen_tac >> disch_tac >> rewrite_tac[current_original_scan_def] >>
+  first_x_assum irule >> simp[current_nondeg_output_preserves_noninserted]
+QED
+
+Theorem current_nondeg_original_resets_inserted:
+  !insts i t. (?inst. MEM inst insts /\ MEM v inst.inst_outputs) ==>
+    current_original_scan v l i insts t <> CurrentInserted w h
+Proof
+  Induct >- simp[] >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[current_original_scan_def] >>
+  Cases_on `inst = h'`
+  >- (irule current_nondeg_original_preserves_noninserted >>
+      gvs[current_nondeg_output_resets_inserted]) >>
+  first_x_assum irule >> gvs[] >> metis_tac[]
+QED
+
+Theorem current_nondeg_chain_preserves_noninserted:
+  !ls t. ~MEM h ls /\ t <> CurrentInserted w h ==>
+    current_chain_token fn ins v ls t <> CurrentInserted w h
+Proof
+  rpt strip_tac >>
+  qspec_then `ls` (qspec_then `t` strip_assume_tac)
+    current_nondeg_chain_token_local >>
+  gvs[current_nondeg_token_at_def]
+QED
+
+Theorem current_nondeg_original_ancestor_exit_nonself:
+  wf_function fn /\ all_reachable fn /\ entry_block fn = SOME eb /\
+  MEM a (fn_labels fn) /\ MEM h (fn_labels fn) /\
+  current_token_chain (dom_analyze (cfg_analyze fn) fn) eb.bb_label ps a /\
+  dominates (dom_analyze (cfg_analyze fn) fn) h a /\
+  lookup_block h fn.fn_blocks = SOME bb /\
+  (?inst. MEM inst bb.bb_instructions /\ MEM v inst.inst_outputs) ==>
+  current_chain_token fn ins v (REVERSE ps ++ [a]) t <> CurrentInserted w h
+Proof
+  strip_tac >>
+  `MEM h (a::ps)` by
+    (Cases_on `h = a` >> simp[] >>
+     metis_tac[current_actual_chain_membership, strict_dominates_def]) >>
+  drule_all current_token_chain_member_suffix >> strip_tac >>
+  `ALL_DISTINCT (a::ps)` by
+    metis_tac[current_actual_chain_distinct] >>
+  `~MEM h pre` by
+    (qpat_x_assum `ALL_DISTINCT (a::ps)` mp_tac >>
+     qpat_assum `a::ps = _` (fn th => rewrite_tac[th]) >>
+     simp[ALL_DISTINCT_APPEND] >> metis_tac[]) >>
+  `REVERSE ps ++ [a] = REVERSE ds ++ h::REVERSE pre` by
+    metis_tac[REVERSE_APPEND, REVERSE_DEF, APPEND_ASSOC, APPEND] >>
+  qpat_x_assum `REVERSE ps ++ [a] = _` (fn th => once_rewrite_tac[th]) >>
+  rewrite_tac[current_chain_token_append, current_chain_token_def] >>
+  irule current_nondeg_chain_preserves_noninserted >> simp[] >>
+  simp[current_block_token_def] >>
+  irule current_nondeg_original_resets_inserted >> metis_tac[]
+QED
