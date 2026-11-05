@@ -196,26 +196,9 @@ Proof
   qabbrev_tac `a = bind (eval_expr cx e) (read_result cx)` >>
   `ignore_bind (bind a k) (return ()) =
    bind a (\v. ignore_bind (k v) (return ()))` by
-    (simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
-     Cases_on `a x` >> Cases_on `q` >> simp[]) >>
+    simp[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   pop_assum SUBST1_TAC >>
   metis_tac[gas_exempt_cert_error_value]
-QED
-
-(* A continuation that never reads the gas observations, run as a counted
-   target path, is summarized with one hidden mark per GAS site. *)
-Theorem hash_suffix_summary:
-  (!tail. k (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)) /\
-  gas_marked_path F ctx func t n r /\
-  ((?u. r = OK u /\ Q res (ee' with gas_obs := []) u) \/
-   (exit_result r /\ R res (ee' with gas_obs := []) r)) ==>
-  gas_summary_at F (ctx, func) (REPLICATE n F) k (ee, t) Q R
-Proof
-  disch_then (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-  rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`res`, `ee'`, `r`] >>
-  asm_rewrite_tac[gas_explicit_replicate_false, APPEND, LENGTH_REPLICATE]
 QED
 
 (* A straight-line run of the emitted code is an actual counted path. *)
@@ -2657,7 +2640,8 @@ Proof
   simp[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
   Cases_on `es1.outcomes` >> simp[return_def] >> strip_tac >> gvs[] >>
   rename1 `SOME os` >> Cases_on `os` >> gvs[] >>
-  Cases_on `call_outcome_success h` >> gvs[return_def]
+  rename1 `SOME (outcome::_)` >>
+  Cases_on `call_outcome_success outcome` >> gvs[return_def]
 QED
 
 Theorem expr_exit_INR_cast[local]:
@@ -2822,10 +2806,6 @@ Proof
   qexistsl_tac [`res`, `es2`, `r`] >>
   simp[] >> metis_tac[]
 QED
-
-(* Unary composition keeps the complete argument postcondition available to
-   the suffix, including the footprint and protected-allocation frame. *)
-
 
 Theorem hash_eval_operand_inst_idx[simp]:
   eval_operand op (s with vs_inst_idx := n) = eval_operand op s
@@ -3412,15 +3392,15 @@ Proof
       drule_all hash_sha256_memory_alloca_code >> strip_tac >>
       `b < dimword (:256)` by decide_tac >>
       `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` by
-            metis_tac[] >>
-          drule_all compile_sha256_bytes_fail >> simp[]) >>
+        metis_tac[] >>
+      drule_all compile_sha256_bytes_fail >> simp[]) >>
   gvs[is_bytestring_type_def] >>
   drule_at (Pos hd) hash_string_post_view >> simp[] >> strip_tac >>
   drule_all hash_sha256_memory_alloca_code >> strip_tac >>
   `b < dimword (:256)` by decide_tac >>
   `~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success)` by
-            metis_tac[] >>
-          drule_all compile_sha256_bytes_fail >> simp[]
+    metis_tac[] >>
+  drule_all compile_sha256_bytes_fail >> simp[]
 QED
 
 Theorem sha256_typed_fail_path:
