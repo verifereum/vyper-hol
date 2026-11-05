@@ -180,3 +180,150 @@ Proof
   strip_tac >> drule_all phi_codegen_block_ready >>
   simp[phi_block_ready_def, listTheory.EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem phi_restore_spilled_domain:
+  !targets ps ops ps'.
+    restore_spilled_plan targets ps = (ops, ps') ==>
+    FDOM ps'.ps_spilled = FDOM ps.ps_spilled DIFF set targets
+Proof
+  Induct_on `targets` >- simp[stackPlanOpsTheory.restore_spilled_plan_def] >>
+  rpt gen_tac >>
+  simp[stackPlanOpsTheory.restore_spilled_plan_def,
+       stackPlanOpsTheory.do_restore_def] >>
+  Cases_on `FLOOKUP ps.ps_spilled h` >>
+  simp[] >> rpt (pairarg_tac >> gvs[]) >>
+  rpt strip_tac >> gvs[] >>
+  first_x_assum drule >> simp[finite_mapTheory.FDOM_DOMSUB] >>
+  gvs[finite_mapTheory.FLOOKUP_DEF] >>
+  simp[pred_setTheory.EXTENSION] >> metis_tac[]
+QED
+
+Theorem phi_spill_at_preserves_target_absence[local]:
+  do_spill_at d ps = (ops, ps') /\
+  ~MEM (stack_peek d ps.ps_stack) targets /\
+  MEM at targets /\ at NOTIN FDOM ps.ps_spilled ==>
+  at NOTIN FDOM ps'.ps_spilled
+Proof
+  simp[stackPlanOpsTheory.do_spill_at_def,
+       stackPlanOpsTheory.do_spill_tos_def, LET_THM] >>
+  Cases_on `d = 0` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  Cases_on `ps.ps_stack = []` >>
+  simp[stackModelTheory.stack_peek_def, stackModelTheory.stack_swap_def,
+       listTheory.EL_LUPDATE] >> rpt strip_tac >>
+  gvs[listTheory.LUPDATE_def] >> metis_tac[]
+QED
+
+Theorem phi_selected_spill_not_target[local]:
+  select_spill_candidate stk targets dist len = SOME cand ==>
+  ~MEM (stack_peek cand stk) targets
+Proof
+  simp[stackPlanOpsTheory.select_spill_candidate_def, LET_THM] >>
+  strip_tac >> drule stackPlanGenTheory.FIND_SOME_MEM >> simp[]
+QED
+
+
+Theorem phi_reduce_depth_target_absence[local]:
+  !fuel targets op f len ps ops ps' at.
+    reduce_depth_plan fuel targets op f len ps = (ops, ps') /\
+    MEM at targets /\ at NOTIN FDOM ps.ps_spilled ==>
+    at NOTIN FDOM ps'.ps_spilled
+Proof
+  Induct_on `fuel` >- (simp[stackPlanOpsTheory.reduce_depth_plan_def] >>
+    rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >>
+  simp[Once stackPlanOpsTheory.reduce_depth_plan_def] >>
+  IF_CASES_TAC >- (rpt strip_tac >> gvs[]) >>
+  Cases_on `stack_get_unfixed_depth op f len ps.ps_stack` >> simp[]
+  >- (rpt strip_tac >> gvs[]) >>
+  rename1 `dist <= 16` >>
+  IF_CASES_TAC >- (rpt strip_tac >> gvs[]) >>
+  Cases_on `select_spill_candidate ps.ps_stack targets dist len` >> simp[]
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >> gvs[] >>
+  drule phi_selected_spill_not_target >> strip_tac >>
+  drule_all phi_spill_at_preserves_target_absence >> strip_tac >>
+  qpat_x_assum `!targets op f len ps ops ps' at. _` drule_all >> simp[]
+QED
+
+Theorem phi_reorder_restore_absence[local]:
+  at NOTIN FDOM ps.ps_spilled ==>
+  at NOTIN FDOM (SND
+    (case stack_get_unfixed_depth op f len ps.ps_stack of
+       SOME _ => ([], ps)
+     | NONE => case FLOOKUP ps.ps_spilled op of
+         SOME _ => do_restore op ps | NONE => ([], ps))).ps_spilled
+Proof
+  Cases_on `stack_get_unfixed_depth op f len ps.ps_stack` >> simp[] >>
+  Cases_on `FLOOKUP ps.ps_spilled op` >>
+  simp[stackPlanOpsTheory.do_restore_def, finite_mapTheory.FDOM_DOMSUB]
+QED
+
+Theorem phi_reorder_one_target_absence[local]:
+  reorder_one dfg targets idx op ps = (ops, ps') /\
+  MEM at targets /\ at NOTIN FDOM ps.ps_spilled ==>
+  at NOTIN FDOM ps'.ps_spilled
+Proof
+  strip_tac >>
+  qpat_x_assum `reorder_one _ _ _ _ _ = _` mp_tac >>
+  rewrite_tac[stackPlanOpsTheory.reorder_one_def, LET_THM] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  `at NOTIN FDOM ps1.ps_spilled` by
+    (drule phi_reorder_restore_absence >>
+     disch_then (qspecl_then [`op`, `LENGTH targets`,
+       `LENGTH targets - (idx + 1)`] mp_tac) >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (num_ops - (idx + 1)) num_ops ps1.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  rename1 `stack_get_unfixed_depth _ _ _ _ = SOME dist` >>
+  pairarg_tac >> simp[] >>
+  `at NOTIN FDOM ps2.ps_spilled` by
+    (Cases_on `dist > 16` >> gvs[] >>
+     drule_all phi_reduce_depth_target_absence >> simp[]) >>
+  Cases_on `stack_get_unfixed_depth op
+    (num_ops - (idx + 1)) num_ops ps2.ps_stack` >> simp[]
+  >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+  IF_CASES_TAC >> simp[]
+  >- (IF_CASES_TAC >- (strip_tac >> gvs[]) >>
+      rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+      metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND]) >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  metis_tac[reorderSimTheory.do_swap_spilled_unchanged, pairTheory.SND]
+QED
+
+Theorem phi_reorder_fold_target_absence[local]:
+  !xs acc ps ops ps' at.
+    FOLDL (\(acc, ps) (idx, op).
+      let (step_ops, ps1) = reorder_one dfg targets idx op ps in
+      (acc ++ step_ops, ps1)) (acc, ps) xs = (ops, ps') /\
+    MEM at targets /\ at NOTIN FDOM ps.ps_spilled ==>
+    at NOTIN FDOM ps'.ps_spilled
+Proof
+  Induct_on `xs` >- (simp[] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> PairCases_on `h` >> simp[] >>
+  pairarg_tac >> simp[] >> rpt strip_tac >>
+  drule_all phi_reorder_one_target_absence >> strip_tac >>
+  gvs[LET_THM] >>
+  qpat_x_assum `!acc ps ops ps' at. _` drule_all >> simp[]
+QED
+
+Theorem phi_reorder_target_absence:
+  reorder_plan dfg targets ps = (ops, ps') /\
+  MEM at targets /\ at NOTIN FDOM ps.ps_spilled ==>
+  at NOTIN FDOM ps'.ps_spilled
+Proof
+  rewrite_tac[stackPlanOpsTheory.reorder_plan_def] >>
+  MATCH_ACCEPT_TAC phi_reorder_fold_target_absence
+QED
+
+Theorem phi_restore_reorder_target_absence:
+  restore_spilled_plan targets ps = (restore_ops, ps1) /\
+  reorder_plan dfg targets ps1 = (reorder_ops, ps2) /\
+  MEM at targets ==>
+  at NOTIN FDOM ps2.ps_spilled
+Proof
+  strip_tac >> drule phi_restore_spilled_domain >> strip_tac >>
+  `at NOTIN FDOM ps1.ps_spilled` by simp[] >>
+  drule_all phi_reorder_target_absence >> simp[]
+QED
