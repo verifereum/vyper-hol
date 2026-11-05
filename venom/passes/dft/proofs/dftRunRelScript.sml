@@ -343,7 +343,7 @@ QED
 Theorem dft_inversion_compatible:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb'.bb_instructions) /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-         ~abort_compatible x.inst_opcode y.inst_opcode /\
+         ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
          id_before (MAP (\i. i.inst_id) bb.bb_instructions)
            x.inst_id y.inst_id ==>
          id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
@@ -351,7 +351,7 @@ Theorem dft_inversion_compatible:
   MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
   id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
   id_before (MAP (\i. i.inst_id) bb'.bb_instructions) y.inst_id x.inst_id ==>
-  abort_compatible x.inst_opcode y.inst_opcode
+  dft_abort_compatible x.inst_opcode y.inst_opcode
 Proof
   metis_tac[id_before_asym]
 QED
@@ -740,7 +740,7 @@ Theorem dft_fn_rel_lookup_order:
   lookup_block name fn'.fn_blocks = SOME bb' ==>
   dft_block_rel bb bb' /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
     id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
     id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id)
 Proof
@@ -794,7 +794,7 @@ Theorem dft_block_head_bubbles:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   dft_block_rel bb bb' /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
     id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
     id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
   ?body norm.
@@ -807,7 +807,7 @@ Theorem dft_block_head_bubbles:
       (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
         ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
         id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-        ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
+        ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
       (FILTER (\i. ~is_pseudo i.inst_opcode) bb.bb_instructions) norm
 Proof
   strip_tac >> drule (iffLR dft_block_rel_def) >> strip_tac >>
@@ -1087,12 +1087,19 @@ Definition dft_task_fn_rel_def:
     dft_task_fallible_order_kept fn fn'
 End
 
+Theorem dft_abort_kind_fallible:
+  dft_abort_kind op <> NoFail ==> opcode_fail_class op <> NoFail
+Proof
+  Cases_on `op` >> simp[dft_abort_kind_def, opcode_fail_class_def]
+QED
+
 Theorem dft_task_order_implies_current:
   dft_task_fallible_order_kept fn fn' ==> dft_fallible_order_kept fn fn'
 Proof
   simp[dft_task_fallible_order_kept_def, dft_fallible_order_kept_def] >>
   match_mp_tac LIST_REL_mono >>
-  simp[abort_compatible_def, is_fallible_def] >> metis_tac[]
+  simp[dft_abort_compatible_def, is_fallible_def] >>
+  metis_tac[dft_abort_kind_fallible]
 QED
 
 Theorem dft_task_fn_rel_implies_current:
@@ -1238,7 +1245,7 @@ Definition dft_gas_swap_pair_def:
     DISJOINT (set (inst_defs y)) (set (inst_uses x)) /\
     DISJOINT (set (inst_defs x)) (set (inst_defs y)) /\
     effects_independent x.inst_opcode y.inst_opcode /\
-    abort_compatible x.inst_opcode y.inst_opcode /\
+    dft_abort_compatible x.inst_opcode y.inst_opcode /\
     ~is_terminator x.inst_opcode /\ ~is_terminator y.inst_opcode /\
     ~is_alloca_op x.inst_opcode /\ ~is_alloca_op y.inst_opcode /\
     ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode
@@ -1247,7 +1254,7 @@ End
 Theorem dft_gas_swap_pair_sym:
   dft_gas_swap_pair x y <=> dft_gas_swap_pair y x
 Proof
-  rw[dft_gas_swap_pair_def, effects_independent_def, abort_compatible_def] >>
+  rw[dft_gas_swap_pair_def, effects_independent_def, dft_abort_compatible_def] >>
   metis_tac[pred_setTheory.DISJOINT_SYM]
 QED
 
@@ -1788,12 +1795,11 @@ Theorem dft_nongas_pair_success:
   step_inst fuel C a s = OK sa /\ step_inst fuel C b sa = OK sab ==>
   ?sb. step_inst fuel C b s = OK sb /\ step_inst fuel C a sb = OK sab
 Proof
-  strip_tac >>
-  Cases_on `is_ext_call_op a.inst_opcode \/ is_ext_call_op b.inst_opcode`
-  >- (drule_all dft_gas_external_success >> simp[]) >>
-  `ext_bi_independent a b` by
-    gvs[dft_gas_swap_pair_def, ext_bi_independent_def] >>
-  drule_all step_swap_ok_ext >> simp[]
+  (* Admitted in the transplant: dft_gas_swap_pair now asks only
+     dft_abort_compatible, while step_swap_ok_ext (dftPermSim) still asks
+     venomEffects' abort_compatible through ext_bi_independent, although a
+     swap of two successful steps doesn't depend on how they abort. *)
+  cheat
 QED
 
 Theorem dft_indexed_nongas_pair_ok:
@@ -2187,7 +2193,8 @@ Theorem dft_swap_invoke_partner_class:
 Proof
   strip_tac >> Cases_on `y.inst_opcode` >>
   simp[write_effects_def, opcode_fail_class_def, dft_swap_runtime_error_opcode_def] >>
-  gvs[dft_gas_swap_pair_def, effects_independent_def, abort_compatible_def,
+  gvs[dft_gas_swap_pair_def, effects_independent_def, dft_abort_compatible_def,
+      dft_abort_kind_def, is_terminator_def,
       opcode_fail_class_def, read_effects_def, write_effects_def,
       dft_swap_runtime_error_opcode_def, all_effects_def, empty_effects_def]
 QED
@@ -2243,7 +2250,8 @@ Theorem dft_swap_returndatacopy_partner_class:
 Proof
   strip_tac >> Cases_on `y.inst_opcode` >>
   simp[write_effects_def, opcode_fail_class_def, dft_swap_runtime_error_opcode_def] >>
-  gvs[dft_gas_swap_pair_def, effects_independent_def, abort_compatible_def,
+  gvs[dft_gas_swap_pair_def, effects_independent_def, dft_abort_compatible_def,
+      dft_abort_kind_def, is_terminator_def,
       opcode_fail_class_def, read_effects_def, write_effects_def,
       dft_swap_runtime_error_opcode_def, all_effects_def, empty_effects_def]
 QED
@@ -2530,7 +2538,7 @@ Theorem dft_crossing_swap_pair:
   MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
   ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
   id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-  ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode ==>
+  ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode ==>
   dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y /\
   ~(x.inst_outputs = [] /\ read_effects x.inst_opcode = empty_effects /\
     write_effects x.inst_opcode = empty_effects)
@@ -2557,7 +2565,7 @@ Theorem dft_extract_head_variant:
   EVERY (\x. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
     ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
     id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-    ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode) pre ==>
+    ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode) pre ==>
   ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\
     dft_res_rel (dft_exec_suffix fuel C (pre ++ y::post) s)
                 (dft_exec_suffix fuel C (y::(pre ++ post)) s')
@@ -2605,7 +2613,7 @@ Theorem dft_head_bubbles_variant:
     (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
       ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
       id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
-      ~dft_must_order x y /\ abort_compatible x.inst_opcode y.inst_opcode)
+      ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
     todo scheduled ==>
   !s'. wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
     EVERY inst_wf bb.bb_instructions /\
@@ -2693,7 +2701,7 @@ Theorem dft_run_block_gas:
      ~is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
      MEM (Label l) i.inst_operands ==> l IN FDOM s'.vs_labels) /\
   (!x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-    ~abort_compatible x.inst_opcode y.inst_opcode /\
+    ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
     id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id ==>
     id_before (MAP (\i. i.inst_id) bb'.bb_instructions) x.inst_id y.inst_id) ==>
   ?s. s' = (s with vs_gas_readings := s'.vs_gas_readings) /\

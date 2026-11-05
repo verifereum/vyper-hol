@@ -169,6 +169,27 @@ Definition is_fallible_def:
   is_fallible inst <=> opcode_fail_class inst.inst_opcode <> NoFail
 End
 
+(* DFT's own abort classes, for which instructions it may reorder: an
+   ASSERT reverts, ASSERT_UNREACHABLE and RETURNDATACOPY halt
+   exceptionally, an INVOKE may end any way, and nothing else aborts in the
+   non-static frames DFT's output runs in.  Unlike opcode_fail_class, the
+   state writes a static frame aborts (SSTORE, LOG, CALL, ...) are none. *)
+Definition dft_abort_kind_def:
+  dft_abort_kind ASSERT = CanRevert /\
+  dft_abort_kind ASSERT_UNREACHABLE = CanExHalt /\
+  dft_abort_kind RETURNDATACOPY = CanExHalt /\
+  dft_abort_kind INVOKE = AnyFail /\
+  dft_abort_kind _ = NoFail
+End
+
+(* Two instructions DFT may swap without changing how a run aborts: one
+   of them never aborts, or both abort the same way, other than any. *)
+Definition dft_abort_compatible_def:
+  dft_abort_compatible op1 op2 <=>
+    dft_abort_kind op1 = NoFail \/ dft_abort_kind op2 = NoFail \/
+    (dft_abort_kind op1 = dft_abort_kind op2 /\ dft_abort_kind op1 <> AnyFail)
+End
+
 (* Chain all fallible instructions so abort-incompatible pairs can never
    be reordered. Ensures abort_compatible for every reorderable pair.
    (Diverges from Python DFT which lacks this — upstream bug.) *)

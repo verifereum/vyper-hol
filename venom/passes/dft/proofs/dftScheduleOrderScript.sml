@@ -35,10 +35,10 @@ Definition id_before_def:
 End
 
 (* fn' keeps the relative order of every pair of fn's instructions that
-   can abort in different ways (not abort_compatible: an ASSERT's revert,
-   the exceptional halt of ASSERT_UNREACHABLE, RETURNDATACOPY and INVALID,
-   and an INVOKE's anything), in every block.  Instructions that abort the
-   same way may swap.  dft_fn does not keep it (it schedules over
+   can abort in different ways (not dft_abort_compatible: an ASSERT's revert,
+   the exceptional halt of ASSERT_UNREACHABLE and RETURNDATACOPY, and an
+   INVOKE's anything), in every block.  Instructions that abort the same
+   way, other than two INVOKEs, may swap.  dft_fn does not keep it (it schedules over
    build_eda, which leaves an ASSERT free to move above an INVOKE); Vyper's
    fix for that (vyperlang/vyper#5329) orders exactly the aborting
    instructions of different kinds.  The O1 contract assumes it of DFT's
@@ -48,7 +48,7 @@ Definition dft_fallible_order_kept_def:
     LIST_REL
       (\bb bb'.
          !x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
-               ~abort_compatible x.inst_opcode y.inst_opcode /\
+               ~dft_abort_compatible x.inst_opcode y.inst_opcode /\
                id_before (MAP (\i. i.inst_id) bb.bb_instructions)
                  x.inst_id y.inst_id ==>
                id_before (MAP (\i. i.inst_id) bb'.bb_instructions)
