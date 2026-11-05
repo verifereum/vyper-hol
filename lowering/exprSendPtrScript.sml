@@ -2,8 +2,8 @@ Theory exprSendPtr
 Ancestors
   callStepPtr wordArgsPtr exprSimSend fragGasSeqPtr fragGasPathPtr stmtAssertPtr
   ptrSafeRun ptrDiscipline venomExecSemantics venomExecProofs
-  venomInst venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
-  venomCallOracleDefs venomMemProps
+  venomInst venomInstProofs venomState opcodeClass memLocDefs codegenRel contextCodegenRel list
+  venomCallOracleDefs venomMemProps ghostPcTransportPtr
 
 Theorem ptr_inst_ok_assert:
   ~ctx_has_dalloca ctx /\ op_taint tn op = {} /\
@@ -179,4 +179,71 @@ Theorem send_call_ghost_kept:
 Proof
   strip_tac >> drule_all send_call_runtime_frame >> strip_tac >>
   irule call_ghost_kept >> metis_tac[]
+QED
+
+Theorem call_assert_ok_path_ptr:
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; ao; az; ro; rz] /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst aid ASSERT [Var out] []) /\
+  ptr_inst_ok D 0 0 ctx fn G tn inst s /\
+  step_inst_base inst s = OK u /\
+  eval_operand (Var out) u = SOME w /\ w <> 0w ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G inst u) (step_taint inst s u tn)
+    (OK (u with vs_inst_idx := SUC (SUC s.vs_inst_idx)))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx inst s = OK u` by simp[step_inst_non_invoke] >>
+  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `op_taint (step_taint inst s u tn) (Var out) = {}` by
+    metis_tac[call_output_untainted] >>
+  `gas_path_ptr D 0 ctx fn PG (step_prov PG G inst u)
+    (step_taint inst s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx) 0
+    (step_prov PG G inst u) (step_taint inst s u tn)
+    (OK ((u with vs_inst_idx := SUC s.vs_inst_idx) with vs_inst_idx :=
+      SUC (u with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx))` by
+    (irule assert_ok_path_ptr >> simp[] >> metis_tac[]) >>
+  fs[] >>
+  `(inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode)` by
+    simp[is_terminator_def] >>
+  drule_all gas_path_ptr_step >> simp[]
+QED
+
+Theorem call_assert_fail_path_ptr:
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [gas; addr; value; ao; az; ro; rz] /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  get_instruction bb (SUC s.vs_inst_idx) =
+    SOME (mk_inst aid ASSERT [Var out] []) /\
+  ptr_inst_ok D 0 0 ctx fn G tn inst s /\
+  step_inst_base inst s = OK u /\ eval_operand (Var out) u = SOME 0w ==>
+  gas_path_ptr D 0 ctx fn PG G tn s 0
+    (step_prov PG G inst u) (step_taint inst s u tn)
+    (Abort Revert_abort (revert_state
+      (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx))))
+Proof
+  strip_tac >>
+  `step_inst 0 ctx inst s = OK u` by simp[step_inst_non_invoke] >>
+  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `op_taint (step_taint inst s u tn) (Var out) = {}` by
+    metis_tac[call_output_untainted] >>
+  `gas_path_ptr D 0 ctx fn PG (step_prov PG G inst u)
+    (step_taint inst s u tn) (u with vs_inst_idx := SUC s.vs_inst_idx) 0
+    (step_prov PG G inst u) (step_taint inst s u tn)
+    (Abort Revert_abort (revert_state
+      (set_returndata [] (u with vs_inst_idx := SUC s.vs_inst_idx))))` by
+    (irule assert_fail_path_ptr >> simp[] >> metis_tac[]) >>
+  `(inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode)` by
+    simp[is_terminator_def] >>
+  drule_all gas_path_ptr_step >> simp[]
 QED
