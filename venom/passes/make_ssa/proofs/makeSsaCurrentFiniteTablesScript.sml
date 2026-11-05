@@ -367,3 +367,106 @@ Proof
   gvs[current_backedges_seed_table_def, current_token_name_def,
     alistTheory.ALOOKUP_def, resolve_phi_def]
 QED
+
+Theorem current_static_back_lookup:
+  current_static_back fn fn' (CurrentStaticCut p h i j) kind x y a b <=>
+  case lookup_block h fn.fn_blocks of NONE => F | SOME old =>
+    case lookup_block h fn'.fn_blocks of NONE => F | SOME out =>
+      (kind = 0 /\
+        current_static_phi_subst p
+          (TAKE (phi_prefix_length old.bb_instructions) old.bb_instructions) x = SOME a /\
+        current_static_phi_subst p
+          (TAKE (phi_prefix_length out.bb_instructions) out.bb_instructions) y = SOME b) \/
+      (kind = 1 /\ a = CurrentStaticRead x /\
+        current_static_copy_subst (EL j out.bb_instructions) y = SOME b) \/
+      (kind = 2 /\ a = current_static_inst_subst (EL i old.bb_instructions) x /\
+        b = current_static_inst_subst (EL j out.bb_instructions) y) \/
+      (kind = 3 /\ a = CurrentStaticRead x /\ b = CurrentStaticRead y)
+Proof
+  Cases_on `lookup_block h fn.fn_blocks` >>
+  Cases_on `lookup_block h fn'.fn_blocks` >>
+  simp[current_static_back_def, PULL_EXISTS] >> metis_tac[]
+QED
+
+Definition current_loop_demand_table_def:
+  current_loop_demand_table =
+    FLAT (MAP (\c. MAP (\op. (c,op,op))
+      [Lit 1w; Lit 2w; Label "D"; Label "X"])
+      (current_finite_cuts current_probe_loop (current_finite_target current_probe_loop))) ++
+    [(CurrentStaticCut "" "E" 1 1,Var "a",Var "a");
+     (CurrentStaticCut "" "E" 2 2,Var "a",Var "a");
+     (CurrentStaticCut "E" "D" 0 0,Var "a",Var "a");
+     (CurrentStaticCut "D" "D" 0 0,Var "b",Var "b")] ++
+    FLAT (MAP (\p.
+      [(CurrentStaticCut p "D" 1 1,Var "v",Var "formal_var_0");
+       (CurrentStaticCut p "D" 1 2,Var "v",Var "formal_var_0");
+       (CurrentStaticCut p "D" 2 3,Var "v",Var "formal_var_0");
+       (CurrentStaticCut p "D" 2 3,Var "b",Var "b");
+       (CurrentStaticCut p "D" 3 4,Var "b",Var "b")]) ["E";"D"])
+End
+
+Theorem current_loop_table_seeds:
+  current_finite_seed current_probe_loop (current_finite_target current_probe_loop)
+    (current_finite_history current_probe_loop) c x y ==>
+  MEM (c,x,y) current_loop_demand_table
+Proof
+  strip_tac >> drule current_loop_seed_covered >>
+  CONV_TAC (LAND_CONV EVAL) >>
+  CONV_TAC (RAND_CONV EVAL) >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* Executable inverse substitution, for checking finite data certificates only. *)
+Definition current_table_pull_def:
+  current_table_pull fn fn' (CurrentStaticCut p h i j) kind x y =
+    case lookup_block h fn.fn_blocks of NONE => NONE | SOME old =>
+    case lookup_block h fn'.fn_blocks of NONE => NONE | SOME out =>
+      if kind = 0 then
+        OPTION_BIND (current_static_phi_subst p
+          (TAKE (phi_prefix_length old.bb_instructions) old.bb_instructions) x)
+          (\a. OPTION_MAP (\b. (a,b)) (current_static_phi_subst p
+            (TAKE (phi_prefix_length out.bb_instructions) out.bb_instructions) y))
+      else if kind = 1 then OPTION_MAP (\b. (CurrentStaticRead x,b))
+        (current_static_copy_subst (EL j out.bb_instructions) y)
+      else if kind = 2 then SOME
+        (current_static_inst_subst (EL i old.bb_instructions) x,
+         current_static_inst_subst (EL j out.bb_instructions) y)
+      else if kind = 3 then SOME (CurrentStaticRead x,CurrentStaticRead y)
+      else NONE
+End
+
+Theorem current_table_pull_back:
+  current_table_pull fn fn' c kind x y = SOME (a,b) <=>
+    current_static_back fn fn' c kind x y a b
+Proof
+  Cases_on `c` >> simp[current_table_pull_def, current_static_back_lookup] >>
+  rpt (CASE_TAC >> simp[]) >> metis_tac[]
+QED
+
+Definition current_table_closed_check_def:
+  current_table_closed_check fn fn' table =
+    EVERY (\(c,d,k). EVERY (\(e,x,y).
+      if e = d then
+        case current_table_pull fn fn' c k x y of
+          SOME (CurrentStaticRead u,CurrentStaticRead v) => MEM (c,u,v) table
+        | _ => T
+      else T) table) (current_finite_edges fn fn')
+End
+
+Theorem current_table_closed_check_sound:
+  current_table_closed_check fn fn' table ==>
+  !c d k x y u v.
+    MEM (d,x,y) table /\ current_finite_edge fn fn' c d k /\
+    current_static_back fn fn' c k x y (CurrentStaticRead u) (CurrentStaticRead v) ==>
+    MEM (c,u,v) table
+Proof
+  simp[current_table_closed_check_def, EVERY_MEM] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `MEM (c,d,k) (current_finite_edges fn fn')` by
+    simp[current_finite_edges_exact] >>
+  first_x_assum drule >> simp[EVERY_MEM] >>
+  disch_then drule >> simp[GSYM current_table_pull_back] >>
+  gvs[GSYM current_table_pull_back]
+QED
+
+
