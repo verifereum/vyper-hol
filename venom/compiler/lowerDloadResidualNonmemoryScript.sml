@@ -11,6 +11,7 @@ Ancestors
   lowerDloadParameterEnvelope lowerDloadParamProducer lowerDloadMaskBounds
   lowerDloadEnvironmentRead lowerDloadOperand lowerDloadStorageRead
   lowerDloadSharedState vfmState lowerDloadStorageWrite lowerDloadNormalTransport
+  lowerDloadMaskedStorage
 
 Theorem ld_annotated_inst_wf:
   o1_ctx_shape CS /\ (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
@@ -693,3 +694,210 @@ Proof
   metis_tac[]
 QED
 
+
+Theorem ld_storage_write_footprint:
+  MEM i.inst_opcode [SSTORE; TSTORE] /\
+  (i.inst_opcode = SSTORE ==> s' = sstore key x s) /\
+  (i.inst_opcode = TSTORE ==> s' = tstore key x s) ==>
+  (s' with <|vs_accounts := s.vs_accounts; vs_transient := s.vs_transient|>) = s /\
+  (!addr. addr <> s.vs_call_ctx.cc_address ==>
+    (s'.vs_accounts addr).storage = (s.vs_accounts addr).storage /\
+    s'.vs_transient addr = s.vs_transient addr)
+Proof
+  strip_tac >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+  simp[MEM] >> strip_tac >> gvs[sstore_def, tstore_def, combinTheory.APPLY_UPDATE_THM]
+QED
+
+Theorem ld_storage_write_annotation:
+  MEM i.inst_opcode [SSTORE; TSTORE] /\ i.inst_outputs = [] /\
+  s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
+  ld_step_prov AP AG L i = AG /\
+  (step_taint i s s' tn).t_var = tn.t_var /\
+  (step_taint i s s' tn).t_mem = tn.t_mem /\
+  (step_taint i s s' tn).t_imm = tn.t_imm
+Proof
+  strip_tac >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+  simp[MEM] >> strip_tac >>
+  gvs[ld_step_prov_def, step_taint_def, mem_taint_def, imm_taint_def,
+      new_site_bytes_def, step_writes_def, source_memory_write_ranges_def,
+      written_taint_def, range_bytes_def, set_var_taint_def,
+      ld_set_prov_def, DRESTRICT_UNIV, FLOOKUP_DEF, SF CONJ_ss] >>
+  rpt CASE_TAC >> simp[]
+QED
+
+Theorem ld_storage_write_taint_inclusions:
+  MEM i.inst_opcode [SSTORE; TSTORE] /\ i.inst_operands = [a;v] /\
+  eval_operand a s = SOME key /\ eval_operand a t = SOME key /\
+  op_taint un v SUBSET op_taint tn v /\
+  un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\
+  un.t_imm SUBSET tn.t_imm ==>
+  (step_taint i t t' un).t_stor SUBSET (step_taint i s s' tn).t_stor /\
+  (step_taint i t t' un).t_trans SUBSET (step_taint i s s' tn).t_trans /\
+  (step_taint i t t' un).t_imm SUBSET (step_taint i s s' tn).t_imm
+Proof
+  strip_tac >> qpat_x_assum `MEM i.inst_opcode _` mp_tac >>
+  simp[MEM] >> strip_tac >>
+  gvs[step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def] >>
+  metis_tac[ld_key_update_mono]
+QED
+
+Theorem ld_normal_storage_write_complete:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  MEM i.inst_opcode [SSTORE; TSTORE] /\ i.inst_operands = [a;v] /\
+  i.inst_outputs = [] /\
+  eval_operand a s = SOME key /\ eval_operand a t = SOME key /\
+  op_taint un v SUBSET op_taint tn v /\
+  (i.inst_opcode = SSTORE ==> s' = sstore key x s /\ t' = sstore key y t) /\
+  (i.inst_opcode = TSTORE ==> s' = tstore key x s /\ t' = tstore key y t) /\
+  ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t' ==>
+  ld_normal_data CS fn V U lo E L H AP BP
+    (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+    (step_taint i s s' tn) (step_taint i t t' un) s' t'
+    astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def, ld_shared_state_def]) >>
+  `(s' with <|vs_accounts := s.vs_accounts; vs_transient := s.vs_transient|>) = s /\
+   (!addr. addr <> s.vs_call_ctx.cc_address ==>
+     (s'.vs_accounts addr).storage = (s.vs_accounts addr).storage /\
+     s'.vs_transient addr = s.vs_transient addr)` by
+    (irule ld_storage_write_footprint >> metis_tac[]) >>
+  `(t' with <|vs_accounts := t.vs_accounts; vs_transient := t.vs_transient|>) = t /\
+   (!addr. addr <> t.vs_call_ctx.cc_address ==>
+     (t'.vs_accounts addr).storage = (t.vs_accounts addr).storage /\
+     t'.vs_transient addr = t.vs_transient addr)` by
+    (irule ld_storage_write_footprint >> metis_tac[]) >>
+  `s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp /\
+   t'.vs_allocas = t.vs_allocas /\ t'.vs_fmp = t.vs_fmp /\
+   s'.vs_call_ctx = s.vs_call_ctx` by
+    (dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
+     dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >> simp[]) >>
+  `ld_step_prov AP AG L i = AG /\
+   (step_taint i s s' tn).t_var = tn.t_var /\
+   (step_taint i s s' tn).t_mem = tn.t_mem` by
+    metis_tac[ld_storage_write_annotation] >>
+  `ld_step_prov BP BH H i = BH /\
+   (step_taint i t t' un).t_var = un.t_var /\
+   (step_taint i t t' un).t_mem = un.t_mem` by
+    metis_tac[ld_storage_write_annotation] >>
+  drule ld_normal_data_companions >> strip_tac >>
+  drule ld_normal_data_frame >> strip_tac >>
+  `un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\
+   un.t_imm SUBSET tn.t_imm` by metis_tac[ld_normal_data_masks] >>
+  `(step_taint i t t' un).t_stor SUBSET (step_taint i s s' tn).t_stor /\
+   (step_taint i t t' un).t_trans SUBSET (step_taint i s s' tn).t_trans /\
+   (step_taint i t t' un).t_imm SUBSET (step_taint i s s' tn).t_imm` by
+    (irule ld_storage_write_taint_inclusions >> simp[] >> metis_tac[]) >>
+  simp[] >> irule ld_normal_data_storage_transport >> simp[] >>
+  qexistsl_tac [`s`,`t`,`tn`,`un`] >> simp[] >>
+  dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
+  dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >> simp[]
+QED
+
+Theorem ld_annotated_storage_operands:
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\
+  ptr_discipline lo CS vs0 /\ opaque_use_ok fn /\
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i.inst_opcode [SSTORE; TSTORE] /\ i.inst_operands = [a;v] ==>
+  (!op. MEM op i.inst_operands ==>
+    (!w. op = Var w ==> w IN V /\ ~retpc_var fn w) /\ ld_op_prov AG op = NONE) /\
+  op_taint tn a = {}
+Proof
+  strip_tac >>
+  `MEM fn CS.ctx_functions` by metis_tac[ld_annotated_fn_member] >>
+  `fn_ptr_ok P fn` by metis_tac[] >>
+  `MEM i (fn_insts fn)` by
+    (drule ld_annotated_active_inst >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
+  `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
+  `ptr_use_ok P (fn_pv P fn) i` by (fs[fn_ptr_ok_def] >> metis_tac[]) >>
+  `!w. MEM (Var w) i.inst_operands ==> w NOTIN fn_pv P fn` by
+    (qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+     simp[ptr_use_ok_def, is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def] >>
+     metis_tac[]) >>
+  conj_tac
+  >- (gen_tac >> disch_tac >> conj_tac
+      >- (gen_tac >> disch_tac >> conj_tac >- metis_tac[] >>
+          gvs[] >> irule ld_retpc_observable_operand >> simp[] >> qexists_tac `i` >> simp[]) >>
+      irule ld_annotated_scalar_prov >>
+      goal_assum (drule_at (Pat `ld_annotated_reachable _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[] >> metis_tac[]) >>
+  irule ld_taint_store_address_clean >>
+  qexistsl_tac [`fn`,`i`,`s`,`v`] >> simp[] >>
+  qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> metis_tac[]
+QED
+
+Theorem ld_normal_storage_write_backward:
+  ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
+  ptr_discipline lo CS vs0 /\
+  (!f. MEM f CS.ctx_functions ==> fn_ptr_ok P f) /\ opaque_use_ok fn /\
+  U = {v | v IN V /\ ~retpc_var fn v} /\
+  (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
+  MEM i.inst_opcode [SSTORE; TSTORE] /\ inst_wf i /\
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  step_inst fuel CT i t = OK t' ==>
+  ?s'. step_inst fuel CS i s = OK s' /\
+    ld_normal_data CS fn V U lo E L H AP BP
+      (ld_step_prov AP AG L i) (ld_step_prov BP BH H i)
+      (step_taint i s s' tn) (step_taint i t t' un) s' t'
+      astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  `?a v. i.inst_operands = [a;v] /\ i.inst_outputs = []` by
+    (qpat_x_assum `inst_wf i` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+     simp[inst_wf_def] >> strip_tac >>
+     namedCases_on `i.inst_operands` ["", "a ops"] >> gvs[] >>
+     namedCases_on `ops` ["", "v rest"] >> gvs[] >> Cases_on `rest` >> gvs[]) >>
+  `(!op. MEM op i.inst_operands ==> (!w. op = Var w ==> w IN U) /\
+      ld_op_prov AG op = NONE) /\ op_taint tn a = {}` by
+    (drule_all ld_annotated_storage_operands >> simp[] >> metis_tac[]) >>
+  `ld_owned_vars U E AG BH tn un s t /\ ld_shared_state tn un s t` by
+    (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
+  `eval_operand a s = eval_operand a t` by
+    (irule ld_owned_operand_clean >>
+     qexistsl_tac [`AG`,`BH`,`E`,`U`,`tn`,`un`] >> simp[] >> metis_tac[MEM]) >>
+  `?key y. eval_operand a t = SOME key /\ eval_operand v t = SOME y` by
+    (qpat_x_assum `step_inst fuel CT i t = OK t'` mp_tac >>
+     qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+     simp[Once step_inst_non_invoke, SimpLHS] >>
+     asm_rewrite_tac[step_inst_base_def, opcode_case_def] >>
+     simp[exec_write2_def, eval_operands_def, AllCaseEqs()] >> metis_tac[]) >>
+  `?x. eval_operand v s = SOME x` by
+    (`eval_operand v s = NONE <=> eval_operand v t = NONE` by
+       (irule ld_owned_operand_defined >>
+        qexistsl_tac [`AG`,`BH`,`E`,`U`,`tn`,`un`] >> simp[] >> metis_tac[MEM]) >>
+     Cases_on `eval_operand v s` >> gvs[]) >>
+  `ld_owned_value E (ld_op_prov AG v) (ld_op_prov BH v)
+    (op_taint tn v) (op_taint un v) x y` by
+    (irule ld_owned_operand_value >> qexistsl_tac [`U`,`s`,`t`] >>
+     simp[] >> metis_tac[MEM]) >>
+  `word_agree_except (op_taint tn v INTER count 32) x y /\
+   op_taint un v SUBSET op_taint tn v` by
+    (`ld_op_prov AG v = NONE` by metis_tac[MEM] >>
+     fs[ld_owned_value_def, ld_mask_word_def, word_agree_except_def] >> metis_tac[]) >>
+  suspend "finish"
+QED
+
+Resume ld_normal_storage_write_backward[finish]:
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[ld_shared_state_def] >>
+  drule ld_normal_data_companions >> strip_tac >>
+  `?s'. step_inst fuel CS i s = OK s' /\
+    (i.inst_opcode = SSTORE ==> s' = sstore key x s /\ t' = sstore key y t) /\
+    (i.inst_opcode = TSTORE ==> s' = tstore key x s /\ t' = tstore key y t)` by
+    (irule ld_storage_write_backward >> simp[] >> metis_tac[]) >>
+  `ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t'` by
+    (`?s1. step_inst fuel CS i s = OK s1 /\
+      ld_shared_state (step_taint i s s1 tn) (step_taint i t t' un) s1 t'` by
+      (irule ld_shared_storage_write_backward >> simp[] >> metis_tac[]) >>
+     metis_tac[venomExecSemanticsTheory.exec_result_11]) >>
+  qexists_tac `s'` >> simp[] >>
+  irule ld_normal_storage_write_complete >> simp[] >> metis_tac[]
+QED
+
+Finalise ld_normal_storage_write_backward

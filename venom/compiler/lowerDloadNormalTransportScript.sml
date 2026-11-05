@@ -2,7 +2,7 @@ Theory lowerDloadNormalTransport
 Ancestors
   lowerDloadNormalData lowerDloadScalarClosure lowerDloadEffectTransport
   lowerDloadVariableTransport lowerDloadFrameCertificate lowerDloadAllocation
-  lowerDloadCoverageInvariant
+  lowerDloadCoverageInvariant lowerDloadPairedBoundary
   ptrDiscipline venomState
 
 (* Companion completion is deliberately independent of execution and of the
@@ -99,5 +99,37 @@ Proof
   dxrule ld_memory_restore_normalize >> disch_then SUBST_ALL_TAC >>
   gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
       ld_alloc_account_def, allocas_from_def, lookup_var_def] >>
+  asm_rewrite_tac[]
+QED
+
+Theorem ld_storage_restore_normalize:
+  (s' with <|vs_accounts := s.vs_accounts; vs_transient := s.vs_transient|>) = s ==>
+  s' = (s with <|vs_accounts := s'.vs_accounts; vs_transient := s'.vs_transient|>)
+Proof
+  strip_tac >> pop_assum (fn th => once_rewrite_tac[GSYM th]) >> simp[]
+QED
+
+Theorem ld_normal_data_storage_transport:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f /\
+  (s' with <|vs_accounts := s.vs_accounts; vs_transient := s.vs_transient|>) = s /\
+  (t' with <|vs_accounts := t.vs_accounts; vs_transient := t.vs_transient|>) = t /\
+  tn'.t_var = tn.t_var /\ un'.t_var = un.t_var /\
+  tn'.t_mem = tn.t_mem /\ un'.t_mem = un.t_mem /\
+  ld_shared_state tn' un' s' t' /\
+  un'.t_stor SUBSET tn'.t_stor /\ un'.t_trans SUBSET tn'.t_trans /\
+  un'.t_imm SUBSET tn'.t_imm /\
+  (!a. a <> s'.vs_call_ctx.cc_address ==>
+    (s'.vs_accounts a).storage = (t'.vs_accounts a).storage) /\
+  (!a. a <> s'.vs_call_ctx.cc_address ==> s'.vs_transient a = t'.vs_transient a) ==>
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn' un' s' t'
+    astk live keys d A suspended gstk f
+Proof
+  strip_tac >>
+  dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
+  dxrule ld_storage_restore_normalize >> disch_then SUBST_ALL_TAC >>
+  gvs[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
+      ld_alloc_account_def, allocas_from_def, read_memory_def,
+      ld_owned_vars_def, lookup_var_def, op_taint_def] >>
   asm_rewrite_tac[]
 QED
