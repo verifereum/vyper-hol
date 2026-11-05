@@ -13,7 +13,7 @@ Ancestors
   o1FrameLockstep o1PassLift makeSsaCurrentDefs venomWf cfgWf venomInst
   irSupply unitShapeDefs o1PassContract venomState stateFrame venomExecSemantics
   venomExecProps venomExecProofs contextCodegenRel list rich_list
-  makeSsaCurrentCutInv
+  makeSsaCurrentCutInv makeSsaCurrentWfSsa
 
 Definition make_ssa_pos_def:
   make_ssa_pos fn fn' l k =
@@ -123,6 +123,75 @@ Proof
   drule_all lockstep_terminator_boundary >> strip_tac >>
   qpat_x_assum `inst = EL _ _` kall_tac >>
   simp[fn_cfg_edge_def] >> metis_tac[]
+QED
+
+Theorem make_ssa_pos_suc[simp]:
+  make_ssa_pos fn fn' l (SUC k) = SUC (make_ssa_pos fn fn' l k)
+Proof
+  simp[make_ssa_pos_def]
+QED
+
+Theorem make_ssa_pos_prefix:
+  lookup_block l fn.fn_blocks = SOME old /\
+  lookup_block l fn'.fn_blocks = SOME new /\
+  LENGTH new.bb_instructions = LENGTH pre + LENGTH old.bb_instructions ==>
+  make_ssa_pos fn fn' l i = LENGTH pre + i
+Proof
+  simp[make_ssa_pos_def]
+QED
+
+Theorem make_ssa_lockstep_phi_context:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  entry_block fn = SOME eb /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==>
+  ?renamed A H events.
+    current_wf_phi_context s fn renamed s' A H events /\
+    fn' = fn with fn_blocks :=
+      simplify_current_phis_if (blocks_have_leading_phi fn.fn_blocks) renamed
+Proof
+  strip_tac >>
+  `all_reachable fn` by fs[make_ssa_input_ok_def] >>
+  drule_all current_wf_named_structural_certificate >> strip_tac >>
+  qpat_x_assum `current_structural_certificate _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[current_wf_precleanup_certificate_stages] >> strip_tac >>
+  qexistsl_tac [`renamed`, `A`, `H`, `events`] >> simp[] >>
+  irule current_wf_phi_context_intro >> fs[make_ssa_input_ok_def] >>
+  metis_tac[]
+QED
+
+Theorem current_phi_context_annotation:
+  current_wf_phi_context s fn renamed s' A H events /\
+  lookup_block l fn.fn_blocks = SOME old ==>
+  ?pre. A l = current_block_annotations old pre
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_insertion_lookup >> metis_tac[]
+QED
+
+Theorem current_phi_context_entry_annotation:
+  current_wf_phi_context s fn renamed s' A H events /\
+  lookup_block l fn.fn_blocks = SOME old /\
+  fn_entry_label fn = SOME old.bb_label ==>
+  A l = current_block_annotations old []
+Proof
+  strip_tac >>
+  `current_wf_precleanup_certificate s fn renamed s' A H events` by
+    fs[current_wf_phi_context_def] >>
+  drule_all current_wf_precleanup_insertion_lookup >> strip_tac >>
+  `pre = []` suffices_by metis_tac[] >>
+  Cases_on `pre` >- simp[] >>
+  fs[EVERY_MEM] >>
+  `current_actual_inserted fn w old.bb_label` by
+    (first_x_assum (qspec_then `w` mp_tac) >>
+     disch_then (irule o iffRL) >> qexists_tac `h` >>
+     simp[build_phi_inst_supply_def]) >>
+  `wf_function fn /\ all_reachable fn /\ first_block_no_preds fn` by
+    fs[current_wf_phi_context_def] >>
+  metis_tac[current_wf_inserted_nonentry]
 QED
 
 Theorem make_ssa_current_fn_frame_lockstep:
