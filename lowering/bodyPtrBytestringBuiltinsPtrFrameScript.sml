@@ -164,3 +164,44 @@ Proof
   simp[relationTheory.irreflexive_def, Once relationTheory.TC_CASES1,
        vyperTypeCallGraphSoundnessTheory.call_edge_rel_def]
 QED
+
+Theorem order_ptr_body_inv:
+  body_inv [] order_frame_unit.cu_context order_ptr_env order_ptr_cx
+Proof
+  mp_tac order_ptr_frame_body_inv >>
+  simp[bodySimTheory.body_inv_def, order_ptr_cx_def,
+       vyperLookupStorageTheory.get_tenv_stk,
+       vyperLookupStorageTheory.get_module_code_stk]
+QED
+
+Theorem order_ptr_sim_inv:
+  exprSimHypsDefs$expr_sim_inv order_ptr_env order_ptr_cx
+    order_ptr_tenv order_ptr_source
+Proof
+  mp_tac order_ptr_frame_sim_inv >>
+  simp[exprSimHypsDefsTheory.expr_sim_inv_def, order_ptr_cx_def,
+       vyperLookupStorageTheory.get_tenv_stk,
+       vyperLookupStorageTheory.get_module_code_stk] >>
+  strip_tac >> simp[] >>
+  EVAL_TAC >> simp[finite_mapTheory.FUNION_FEMPTY_1] >>
+  rw[] >> gvs[AllCaseEqs()] >> EVAL_TAC >>
+  fs[vyperInterpreterTheory.lookup_function_def] >>
+  simp[wordsTheory.dimword_def]
+QED
+
+Theorem order_ptr_body_pre:
+  exprSimHypsDefs$expr_body_pre order_ptr_env order_ptr_cx order_ptr_tenv
+    bodyPtrBytestringBuiltinsOrderProbe$order_probe_expr order_ptr_source
+Proof
+  simp[exprSimHypsDefsTheory.expr_body_pre_def, order_ptr_sim_inv,
+       order_ptr_frame_expr_typed, order_ptr_call_safety,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_internal_calls,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_byte_widths,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_alloc_limits,
+       bodyPtrBytestringBuiltinsOrderProbeTheory.order_probe_no_evm_run] >>
+  conj_tac >- (EVAL_TAC >> simp[]) >>
+  simp[order_ptr_cx_def, order_frame_cx_def,
+       gasContextTheory.cx_tops_def, vyperContextTheory.get_tenv_def,
+       vyperContextTheory.get_module_code_def] >>
+  EVAL_TAC >> simp[]
+QED
