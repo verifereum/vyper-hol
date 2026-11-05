@@ -270,3 +270,53 @@ Proof
   first_x_assum drule >> strip_tac >>
   drule generate_inst_plan_promised >> simp[]
 QED
+
+Theorem promise_cleanup_unsafe[local]:
+  ~ps.ps_cleanup_promised /\
+  (!n. ~cleanup_elision_safe ps.ps_cleanup_height ps.ps_cleanup_growth cfg fn bb n) ==>
+  ~(SND (clean_stack_plan lv cfg fn bb ps)).ps_cleanup_promised
+Proof
+  strip_tac >> simp[clean_stack_plan_def, LET_THM] >>
+  Cases_on `cfg_preds_of cfg bb.bb_label` >> simp[] >>
+  rename1 `cfg_preds_of cfg bb.bb_label = pred::rest` >>
+  Cases_on `rest` >> simp[] >>
+  IF_CASES_TAC >> simp[] >>
+  Cases_on `lookup_block pred fn.fn_blocks` >>
+  simp[inventory_popmany_promised]
+QED
+
+Theorem ret_cleanup_plan_unpromised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  ~ps.ps_cleanup_promised /\ clean_stack_plan lv cfg fn bb ps = (ops,qs) ==>
+  ~qs.ps_cleanup_promised
+Proof
+  strip_tac >> drule_all inventory_ret_cleanup_not_safe >>
+  disch_then (qspec_then `ps` assume_tac) >>
+  drule_all promise_cleanup_unsafe >>
+  disch_then (qspec_then `lv` mp_tac) >> simp[]
+QED
+
+Theorem ret_block_plan_unpromised:
+  cfg = cfg_analyze fn /\ codegen_ready_fn fn /\
+  lookup_block target fn.fn_blocks = SOME retbb /\
+  MEM ret_inst retbb.bb_instructions /\ ret_inst.inst_opcode = RET /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ cfg_path cfg lbl target /\
+  ~ps.ps_cleanup_promised /\
+  generate_block_plan lv dfg cfg fn bb ps = SOME (ops,qs) ==>
+  ~qs.ps_cleanup_promised
+Proof
+  strip_tac >>
+  qpat_x_assum `generate_block_plan _ _ _ _ _ _ = _` mp_tac >>
+  simp[generate_block_plan_def, LET_THM] >> pairarg_tac >>
+  `~ps1.ps_cleanup_promised` by
+    (gvs[AllCaseEqs()] >> metis_tac[prepare_params_plan_promised, pairTheory.SND]) >>
+  simp[] >> qpat_x_assum `_ = (param_ops,ps1)` kall_tac >>
+  pairarg_tac >>
+  `~ps2.ps_cleanup_promised` by
+    (gvs[AllCaseEqs()] >> metis_tac[ret_cleanup_plan_unpromised]) >>
+  simp[] >> strip_tac >> gvs[AllCaseEqs()] >>
+  drule generate_block_insts_plan_promised >> simp[]
+QED
