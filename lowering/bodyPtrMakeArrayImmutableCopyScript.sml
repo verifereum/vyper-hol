@@ -5,6 +5,7 @@ Ancestors
   immutableCopyExecution exprSimCopy context compileEnv exprLoweringProps
   ptrDiscipline bodyPtrDefs fragGasSeqPtr venomState venomExecSemantics
   finite_map pred_set arithmetic freshWrites venomInst fragGasPathPtr
+  bodyPtrMakeArrayImmutablePrefix
 
 Theorem immutable_runtime_copy_checked:
   !n off sa sb s G tn.
@@ -23,6 +24,8 @@ Theorem immutable_runtime_copy_checked:
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem SUBSET tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    ((!k. k < off ==> w2n b+k NOTIN tn.t_mem) ==>
+      (!k. k < off+32*n ==> w2n b+k NOTIN tnf.t_mem)) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p))
@@ -57,6 +60,17 @@ Proof
       irule (cj 1 immutable_transfers_cong) >>
       simp[immutable_word_transfer_fields, immutable_transfer_data]) >>
   conj_tac >- (qpat_x_assum `_ SUBSET _` mp_tac >> simp[SUBSET_DEF]) >>
+  conj_tac
+  >- (strip_tac >>
+      `w2n (b+n2w off) = w2n b+off` by
+        (irule immutable_destination_address_no_wrap >> metis_tac[]) >>
+      `!k. k < off+32 ==> w2n b+k NOTIN tnf.t_mem` by
+        (gen_tac >> strip_tac >> Cases_on `k < off` >>
+         gvs[] >> simp[] >> decide_tac) >>
+      `off + 32 * SUC n = (off+32)+32*n` by decide_tac >>
+      asm_rewrite_tac[] >>
+      qpat_x_assum `(_ ==> !k. _ ==> _ NOTIN tnf'.t_mem)` mp_tac >>
+      simp[arithmeticTheory.ADD_COMM]) >>
   rpt strip_tac >>
   `not_fresh_at sc p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> fs[copy_runtime_frame_def]) >>
@@ -96,6 +110,8 @@ Theorem immutable_runtime_copy_ptr_path:
     u.vs_allocas = s.vs_allocas /\ u.vs_fmp = s.vs_fmp /\
     tnf.t_mem SUBSET tn.t_mem /\
     tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    ((!k. k < off ==> w2n b+k NOTIN tn.t_mem) ==>
+      (!k. k < off+32*n ==> w2n b+k NOTIN tnf.t_mem)) /\
     (!p. not_fresh_at sa p ==>
       lookup_var p u = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
