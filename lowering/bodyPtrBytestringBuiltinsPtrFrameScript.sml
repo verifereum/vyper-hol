@@ -83,3 +83,9 @@ Proof
   EVAL_TAC >> rw[] >> gvs[AllCaseEqs()] >>
   fs[vyperInterpreterTheory.lookup_function_def]
 QED
+
+Theorem order_ptr_frame_accounts_typed:
+  accounts_well_typed order_ptr_source.accounts
+Proof
+  EVAL_TAC >> rw[] >> EVAL_TAC
+QED
