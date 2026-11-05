@@ -90,3 +90,15 @@ Proof
        venomStateTheory.update_var_def, FLOOKUP_UPDATE] >> EVAL_TAC
 QED
 
+
+(* The counted contract uses the padded store extent, including the header
+   for an empty bytestring; it also retains full staging capacity separately. *)
+Theorem ifexp_bytestring_store_extent_probe:
+  val_store_size (BaseTV (BytesT (Dynamic 1))) (BytesV [0w]) = 64 /\
+  val_store_size (BaseTV (BytesT (Dynamic 1))) (BytesV []) = 32 /\
+  type_memory_size (BaseTV (BytesT (Dynamic 1))) = 64 /\
+  type_memory_size (BaseTV (BytesT (Dynamic 0))) = 32 /\
+  val_store_size (TupleTV []) (ArrayV (TupleV [])) = 0
+Proof
+  EVAL_TAC
+QED
