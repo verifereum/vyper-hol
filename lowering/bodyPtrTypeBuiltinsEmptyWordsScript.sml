@@ -2,7 +2,7 @@ Theory bodyPtrTypeBuiltinsEmptyWords
 Ancestors
   bodyPtrTypeBuiltinsEmptyZero bodyPtrTypeBuiltinsSeq abiEmptySequence
   builtinSimple emitHelper emitHelperProps compileEnv context exprLoweringProps
-  venomInst venomState list rich_list words
+  venomInst venomState list rich_list words typedCopyPtr ptrDiscipline
 
 Theorem empty_zero_words_successor_code:
   !n pop sa sm sb.
@@ -24,4 +24,23 @@ Proof
   `LENGTH sa.cs_current_insts <= LENGTH sm.cs_current_insts` by
     (qpat_x_assum `sm.cs_current_insts = _` (mp_tac o AP_TERM ``LENGTH:instruction list -> num``) >> simp[]) >>
   simp[DROP_APPEND1]
+QED
+
+Theorem empty_zero_pair_storage_frame:
+  !PG G tn s id p out w off.
+    lookup_var p s = SOME w ==>
+    (step_taint (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
+      (update_var out (w+n2w off) s)
+      (mstore (w2n (w+n2w off)) 0w (update_var out (w+n2w off) s))
+      (step_taint (mk_inst id ADD [Var p; Lit (n2w off)] [out]) s
+        (update_var out (w+n2w off) s) tn)).t_stor = tn.t_stor /\
+    (step_taint (mk_inst (id+1) MSTORE [Var out; Lit 0w] [])
+      (update_var out (w+n2w off) s)
+      (mstore (w2n (w+n2w off)) 0w (update_var out (w+n2w off) s))
+      (step_taint (mk_inst id ADD [Var p; Lit (n2w off)] [out]) s
+        (update_var out (w+n2w off) s) tn)).t_trans = tn.t_trans
+Proof
+  rpt strip_tac >>
+  simp[mstore_ghost_frame, copy_len_binop_ghost_frame,
+       lookup_var_update_var, eval_operand_def, op_taint_def]
 QED
