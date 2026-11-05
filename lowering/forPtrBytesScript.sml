@@ -1,6 +1,6 @@
 (* Counted bytestring copies: only the length word must be clean. *)
 Theory forPtrBytes
-Ancestors forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
+Ancestors forPtrSeqCompose forPtrBulk typedCopyPtr representationCleanPtr valueCopyBytes
   exprSimBufferStore valueEncoding valueEncodingProps bodyPtrDefs
   loweringPosts venomState venomExecSemantics venomInst ptrSafeRun
   ptrDiscipline fragGasSeqPtr ghostPcTransportPtr finite_map exprLoweringProps
@@ -169,4 +169,31 @@ Proof
   map_every (fn pat => qpat_x_assum pat kall_tac)
     [`u0 = _`, `u1 = _`, `u2 = _`, `u3 = _`] >>
   simp[run_inst_seq_def]
+QED
+
+(* Consumer probe for the cursor-uniform composition boundary. *)
+Theorem for_copy_len_binop_cons:
+  (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
+  eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
+  op_taint tn left = {} /\ op_taint tn right = {} /\
+  ~ctx_has_dalloca ctx /\ u = update_var tmp (f a b) s /\
+  g = step_prov PG G (mk_inst id opc [left;right] [tmp]) u /\
+  t = step_taint (mk_inst id opc [left;right] [tmp]) s u tn /\
+  (!k. inst_seq_ptr D 0 ctx fn PG g t code
+    (u with vs_inst_idx := k) gf tf) ==>
+  !k. inst_seq_ptr D 0 ctx fn PG G tn
+    (mk_inst id opc [left;right] [tmp] :: code)
+    (s with vs_inst_idx := k) gf tf
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  irule for_inst_seq_ptr_cons_nonterminator >>
+  conj_tac >- (gvs[] >> simp[mk_inst_def, is_terminator_def]) >>
+  qexistsl [`g`, `t`, `u`] >>
+  reverse conj_tac >- (simp[] >> irule for_copy_len_binop_step >> simp[]) >>
+  simp[] >> gen_tac >>
+  irule (cj 1 for_copy_len_binop_checked) >> simp[] >>
+  qexists `f` >>
+  `update_var tmp (f a b) (s with vs_inst_idx := k) =
+    (update_var tmp (f a b) s) with vs_inst_idx := k` by simp[update_var_def] >>
+  simp[]
 QED
