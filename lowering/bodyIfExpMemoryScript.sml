@@ -560,6 +560,20 @@ Proof
   irule gas_exempt_cert_error_result >> simp[ignore_bind_def]
 QED
 
+Theorem ifexp_missing_flag_type_probe[local]:
+  get_tenv cx = FEMPTY ==>
+  is_word_type (FlagT nsid) /\
+  evaluate_type (get_tenv cx) (FlagT nsid) = NONE /\
+  vv_holds cenv cx (FlagT nsid) (Value NoneV)
+    (LocatedValue (FlagT nsid) (mk_ptr (Lit 0w) LocMemory)) es s /\
+  vv_store_bound cx (FlagT nsid) es (Value NoneV)
+    (LocatedValue (FlagT nsid) (mk_ptr (Lit 0w) LocMemory)) s
+Proof
+  simp[is_word_type_def, vyperValueTheory.evaluate_type_def,
+       finite_mapTheory.FLOOKUP_EMPTY, vv_holds_def, vv_store_bound_def,
+       contextTheory.mk_ptr_def, eval_operand_def, read_result_def, return_def]
+QED
+
 Theorem compile_ifexp_vv_sim_mem:
   !ctx func cenv cx ty t c a b es.
     expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
