@@ -134,6 +134,7 @@ Proof
      simp[] >> strip_tac >>
      drule (CONJUNCT1 vyperEncodeDecodeTheory.encode_writes_bounded) >>
      simp[] >> metis_tac[]) >>
+  Cases_on `cx.txn.is_static` >>
   gvs[vyperStorageBackendTheory.write_storage_slot_eq,
       vyperStorageTheory.apply_writes_def] >>
   Cases_on `b = b'` >> gvs[]

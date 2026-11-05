@@ -200,6 +200,15 @@ Proof
   drule next_gas_reading_state >> rw[] >> simp[]
 QED
 
+Theorem metadata_frame_static[local]:
+  state_rel_frame immutable_metadata_frame (frame_call_value cx value_opt) /\
+  state_rel_frame immutable_metadata_frame (check_not_static cx)
+Proof
+  conj_tac >> irule metadata_frame_eq_op >> rpt strip_tac
+  >- (drule frame_call_value_state >> simp[]) >>
+  gvs[]
+QED
+
 Theorem metadata_frame_precompile_call_success[local]:
   state_rel_frame immutable_metadata_frame (precompile_call_success bt)
 Proof
@@ -310,6 +319,7 @@ val metadata_frame_net =
   let
     val rules = [metadata_frame_bind, metadata_frame_try, metadata_frame_finally]
     val leaves = metadata_frame_reads :: metadata_frame_primitives ::
+      metadata_frame_static ::
       metadata_frame_next_gas_reading :: metadata_frame_precompile_call_success ::
       metadata_frame_storage :: metadata_frame_mutations :: metadata_frame_write ::
       metadata_frame_handlers :: METADATA_LOCALS :: [METADATA_TAKE]

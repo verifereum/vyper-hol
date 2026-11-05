@@ -236,6 +236,28 @@ Proof
   metis_tac[reserved_transient_write_preserves_contract_storage_well_formed]
 QED
 
+Theorem lock_action_preserves_contract_storage_well_formed[local]:
+  (if nr then
+     case cx.nonreentrant_slot of
+       NONE => raise (Error (TypeError "nonreentrant slot missing"))
+     | SOME slot => do
+           acquire_nonreentrant_lock cx.txn.target slot
+             (is_view \/ cx.txn.is_static);
+           if is_view then return () else check_not_static cx
+         od
+   else return ()) st = (res,st') /\
+  contract_storage_well_formed cx st /\
+  storage_layout_safe cx ==>
+  contract_storage_well_formed cx st'
+Proof
+  strip_tac >>
+  Cases_on `nr` >> gvs[return_def, raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[raise_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
+  drule_all acquire_nonreentrant_lock_preserves_contract_storage_well_formed >>
+  simp[]
+QED
+
 Theorem release_nonreentrant_lock_preserves_contract_storage_well_formed:
   contract_storage_well_formed cx st /\
   storage_layout_safe cx /\
@@ -613,7 +635,11 @@ Theorem intcall_lock_state_preserves_runtime_frame_storage[local]:
     (if nr then
        case cx.nonreentrant_slot of
          NONE => raise (Error (TypeError "nonreentrant slot missing"))
-       | SOME slot => acquire_nonreentrant_lock cx.txn.target slot is_view
+       | SOME slot => do
+             acquire_nonreentrant_lock cx.txn.target slot
+               (is_view \/ cx.txn.is_static);
+             if is_view then return () else check_not_static cx
+           od
      else return ()) st = (INL (),lock_st) ==>
     lock_st.scopes = st.scopes /\
     lock_st.immutables = st.immutables /\
@@ -622,7 +648,8 @@ Theorem intcall_lock_state_preserves_runtime_frame_storage[local]:
 Proof
   rpt strip_tac >>
   Cases_on `nr` >> gvs[return_def, raise_def] >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
+  Cases_on `cx.nonreentrant_slot` >>
+  gvs[raise_def, bind_def, ignore_bind_def, COND_RATOR, AllCaseEqs(), return_def] >>
   imp_res_tac lock_outcomes_preserved >>
   drule acquire_nonreentrant_lock_scopes >>
   drule acquire_nonreentrant_lock_immutables >>
@@ -1448,10 +1475,9 @@ Resume eval_scc_storage_preservation_results_mutual[Log]:
   first_x_assum drule_all >> strip_tac >>
   Cases_on `exprs_res` >> gvs[bind_def, return_def, push_log_def] >>
   Cases_on `encode_source_event (get_tenv cx) cx.sources cx.txn.target id x` >>
-  gvs[lift_option_def, raise_def, return_def, push_log_def] >>
-  rpt strip_tac >>
-  pop_assum (SUBST1_TAC o SYM) >>
-  metis_tac[contract_storage_well_formed_logs]
+  gvs[lift_option_def, raise_def, return_def, push_log_def, bind_def,
+      ignore_bind_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[contract_storage_well_formed_logs]
 QED
 
 Resume eval_scc_storage_preservation_results_mutual[Iterator_Array]:
@@ -1627,7 +1653,7 @@ Theorem eval_raw_call_preserves_contract_storage:
   eval_raw_call cx flags target_addr calldata amount gas st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
-  simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
+  simp[eval_raw_call_def, frame_call_value_def, check_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
        append_logs_def, return_def, raise_def, COND_RATOR,
@@ -2484,7 +2510,7 @@ Theorem eval_send_storage_preserved[local]:
 Proof
   Cases_on `vs` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
   Cases_on `t` >- (simp[eval_send_def, raise_def] >> rw[] >> gvs[]) >>
-  simp[eval_send_def, bind_def, ignore_bind_def, type_check_def, assert_def,
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def, assert_def,
        check_def, lift_option_type_def, lift_option_def, get_accounts_def,
        get_transient_storage_def, update_accounts_def, update_transient_def,
        append_logs_def, return_def, raise_def,
@@ -2564,7 +2590,7 @@ Resume eval_scc_storage_preservation_results_mutual[Expr_Call_SelfDestructTarget
         drule_all transfer_value_preserves_contract_storage_well_formed >>
         Cases_on `transfer_res` >>
         gvs[bind_apply, ignore_bind_apply, return_def, raise_def] >>
-        rpt strip_tac >> gvs[]) >>
+        rpt strip_tac >> gvs[AllCaseEqs()]) >>
       rpt strip_tac >> gvs[]) >>
     rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[Once well_typed_expr_def]
@@ -3305,6 +3331,7 @@ Proof
        COND_RATOR, vfmTypesTheory.option_CASE_rator,
        vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
   strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac frame_call_value_state >> gvs[] >>
   drule_all eval_ext_call_effects_storage_preserved >> simp[]
 QED
 
@@ -3817,21 +3844,25 @@ Resume eval_scc_storage_preservation_results_mutual[intcall_storage]:
        (if x''1 then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-              (x''0 = View \/ x''0 = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((x''0 = View \/ x''0 = Pure) \/ cx.txn.is_static);
+                if (x''0 = View \/ x''0 = Pure) then return () else check_not_static cx
+              od
         else return ()) (pre with scopes := args_st.scopes) = (lock_res,lock_st) ==>
        contract_storage_well_formed cx lock_st` by (
       rpt strip_tac >>
-      Cases_on `x''1` >> gvs[return_def, raise_def] >>
-      Cases_on `cx.nonreentrant_slot` >> gvs[raise_def] >>
-      drule_all acquire_nonreentrant_lock_preserves_contract_storage_well_formed >>
+      drule_all lock_action_preserves_contract_storage_well_formed >>
       simp[]) >>
     Cases_on
       `(if x''1 then
           case cx.nonreentrant_slot of
             NONE => raise (Error (TypeError "nonreentrant slot missing"))
-          | SOME slot => acquire_nonreentrant_lock cx.txn.target slot
-              (x''0 = View \/ x''0 = Pure)
+          | SOME slot => do
+                acquire_nonreentrant_lock cx.txn.target slot
+                  ((x''0 = View \/ x''0 = Pure) \/ cx.txn.is_static);
+                if (x''0 = View \/ x''0 = Pure) then return () else check_not_static cx
+              od
         else return ()) (pre with scopes := args_st.scopes)` >>
     rename1 `_ (pre with scopes := args_st.scopes) = (lock_res,lock_st)` >>
     `contract_storage_well_formed cx lock_st` by (

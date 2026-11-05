@@ -126,6 +126,10 @@ Proof
         drule abi_decoder_write2_inputs >> simp[]) >>
   gvs[abi_decoder_inputs_defined_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[eval_operand_def]
+  (* SSTORE and TSTORE outside a static frame *)
+  >>~- ([`exec_write2 f inst s = OK u`],
+        drule abi_decoder_write2_inputs >>
+        simp[abi_decoder_inputs_defined_def] >> disch_then irule >> simp[])
   >>~- ([`eval_operand (HD (REVERSE log_ops)) s = SOME log_off`],
         rename1 `eval_operand (EL 1 (REVERSE log_ops)) s = SOME log_sz` >>
         rename1 `eval_operands (DROP 2 (REVERSE log_ops)) s = SOME log_topics` >>

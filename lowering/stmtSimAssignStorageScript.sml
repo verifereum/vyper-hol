@@ -128,6 +128,7 @@ Theorem stmt_state_rel_write_storage_word:
       (if tr then tstore slot w s else sstore slot w s)
 Proof
   rpt gen_tac >> strip_tac >>
+  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq, apply_writes_def, LET_THM] >>
   `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
@@ -370,7 +371,8 @@ Proof
   rename1 `eval_stmt _ _ _ = (INR y, _)` >>
   drule_all eval_assign_toplevel >> strip_tac >>
   `r = INR y /\ es1 = es'` by
-    (Cases_on `r` >> gvs[] >> rename1 `write_storage_slot _ _ _ _ v` >>
+    (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+     Cases_on `r` >> gvs[] >> rename1 `write_storage_slot _ _ _ _ v` >>
      `encode_value tvt v = SOME [(0, typed_val_to_w256 etv v)]` by
        metis_tac[] >>
      gvs[write_storage_slot_eq]) >>

@@ -101,7 +101,8 @@ Theorem append_storage_word_run_frag:
   (!x. vop = Var x ==> not_fresh_at sa x) /\
   eval_operand bop sbase = SOME slot /\ eval_operand vop sbase = SOME w /\
   cap < dimword (:256) /\
-  len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap ==>
+  len = w2n (if tr then tload slot sbase else sload slot sbase) /\ len < cap /\
+  ~sbase.vs_call_ctx.cc_static ==>
   frag_exec ctx sa sf (\s. s = sbase)
     (\s. ?u. s = u with vs_inst_idx := LENGTH sf.cs_current_insts /\
       state_frame u = state_frame
@@ -124,6 +125,7 @@ Proof
               else sload slot (drop_fresh sa sbase))` by
     simp[drop_fresh_def, tload_def, sload_def,
          contract_transient_def, contract_storage_def] >>
+  `~(drop_fresh sa sbase).vs_call_ctx.cc_static` by simp[drop_fresh_def] >>
   drule_all compile_dynarray_append_word_run >> strip_tac >>
   qexists_tac `t` >> conj_tac >- first_assum ACCEPT_TAC >>
   qx_gen_tac `u` >> strip_tac >> qexists_tac `u` >>
@@ -219,7 +221,9 @@ Theorem append_storage_word_success_frag:
       (!x a. not_fresh_at sa x /\ lookup_var x sbase = SOME a ==>
              lookup_var x s = SOME a) /\ s.vs_allocas = sbase.vs_allocas) R
 Proof
-  strip_tac >> drule_all append_storage_word_run_frag >>
+  strip_tac >>
+  `~sbase.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  drule_all append_storage_word_run_frag >>
   disch_then (qspecl_then [`ctx`, `R`] assume_tac) >>
   irule frag_exec_conseq >> goal_assum $ drule_at Any >>
   simp_tac bool_ss [] >> gen_tac >> strip_tac >>
@@ -292,7 +296,8 @@ Theorem append_storage_word_value_frag[local]:
 Proof
   strip_tac >> drule_all append_storage_header_agree >> strip_tac >>
   Cases_on `w2n (lookup_storage slot (get_storage cx es tr)) < cap`
-  >- (`res = INL ()` by
+  >- (`~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+      `res = INL ()` by
         metis_tac[append_storage_word_success, pairTheory.PAIR_EQ, sumTheory.INL_11] >>
       `eval_operand (Lit slot) s = SOME slot` by simp[eval_operand_def] >>
       `!x. Lit slot = Var x ==> not_fresh_at sb x` by simp[] >>

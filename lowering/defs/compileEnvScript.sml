@@ -1451,6 +1451,7 @@ QED
    - the call context is not static: the entry relation (venom_env_rel)
      assumes it and the lowered code never writes cc_static, so a CALL
      asks a static request exactly when the source does.
+   - neither is the source frame (txn.is_static), so source writes succeed.
    - outcomes and requests: the oracle outcomes still to consume and the
      requests recorded so far, as in the result relation; a request's
      snapshot of the running contract's storage agrees up to dead bytes.
@@ -1468,6 +1469,7 @@ Definition state_rel_def:
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
+     ¬cx.txn.is_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
      LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)

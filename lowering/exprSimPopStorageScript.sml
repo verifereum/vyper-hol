@@ -9,13 +9,15 @@ Ancestors
   exprLoweringProps venomState vyperLookupStorage list
   emitHelperProps venomExecSemantics venomInst
 
-(* Evaluation at a known declared dynamic-array slot.  This boundary does
-   not assume that all top-level declarations are storage declarations. *)
+(* Evaluation at a known declared dynamic-array slot, outside a static frame.
+   This boundary does not assume that all top-level declarations are storage
+   declarations. *)
 Theorem eval_pop_storage:
   get_module_code cx src = SOME ts /\
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr (ArrayT et (Dynamic n)), name) /\
   lookup_var_slot_from_layout cx tr src name = SOME slot /\
-  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) ==>
+  evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
+  ~cx.txn.is_static ==>
   eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
     let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr)) in
     if len = 0 then
@@ -377,7 +379,7 @@ Proof
 QED
 
 Theorem storage_pop_step_store[local]:
-  IS_SOME (lookup_var x s) ==>
+  IS_SOME (lookup_var x s) /\ ~s.vs_call_ctx.cc_static ==>
   step_inst_base (mk_inst id (if tr then TSTORE else SSTORE) [Lit slot; Var x] []) s =
     OK (if tr then tstore slot (THE (lookup_var x s)) s
         else sstore slot (THE (lookup_var x s)) s)
@@ -426,7 +428,7 @@ Proof
 QED
 
 Theorem dynarray_pop_storage_run:
-  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
+  ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\ ~s.vs_call_ctx.cc_static /\
   (if tr then tload slot s else sload slot s) <> 0w ==>
   ?u. run_inst_seq
     [mk_inst id (if tr then TLOAD else SLOAD) [Lit slot] [x0];
@@ -660,7 +662,8 @@ Proof
         (simp[FUN_EQ_THM] >> metis_tac[]) >>
       simp[] >> irule fragExecTheory.frag_exec_false_pre) >>
   `expr_sim_inv cenv cx env es` by fs[expr_sim_pre_def] >>
-  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
+   ~cx.txn.is_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule_all toplevel_storage_ce_vars >> strip_tac >>
   drule_all pop_storage_compiler_facts >> strip_tac >>
@@ -698,6 +701,8 @@ QED
 Resume compile_pop_storage_normalized_sim[positive]:
   `ALL_DISTINCT [x6;x5;x4;x3;x2;x1;x0] /\
    (if tr then tload (n2w slot) s0 else sload (n2w slot) s0) <> 0w` by simp[] >>
+  `~s0.vs_call_ctx.cc_static` by
+    fs[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
   drule_all dynarray_pop_storage_run >>
   disch_then (qspecl_then [`sa.cs_next_id`, `type_slot_size tv`] strip_assume_tac) >>
   qexists_tac `u` >> simp[] >>

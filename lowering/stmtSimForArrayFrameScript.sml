@@ -1173,7 +1173,8 @@ Resume typed_projection_frames_mutual[log]:
   gvs[supported_stmt_def, supported_log_def,
       supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
   qpat_x_assum `eval_stmt _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
+  Cases_on `cx.txn.is_static` >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac supported_pure_exprs_scopes >> imp_res_tac read_results_state >>
   imp_res_tac lift_option_state >> imp_res_tac push_log_scopes >> gvs[]
 QED

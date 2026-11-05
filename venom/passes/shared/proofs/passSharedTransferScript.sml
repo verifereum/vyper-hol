@@ -168,10 +168,23 @@ val exec_ok_transfer_thms =
 val exec_ok_transfer_tac =
   FIRST (map (fn th => drule_all th >> simp[]) exec_ok_transfer_thms);
 
+(* A state write first tests the static flag and its operands, which agree
+   in both states: split on that guard when the dispatch exposes it. *)
+fun static_guard_tac (g as (_, w)) = let
+  val (ante, _) = boolSyntax.dest_imp w
+  val (l, _) = boolSyntax.dest_eq ante
+  val (_, t, _) = boolSyntax.dest_cond l
+  val is_abort = same_const (fst (strip_comb t)) ``Abort``
+ in
+  if is_abort then (IF_CASES_TAC >- simp[] >> REWRITE_TAC[]) g
+  else ALL_TAC g
+ end handle HOL_ERR _ => ALL_TAC g;
+
 val ok_transfer_finish_tac =
   qpat_x_assum `step_inst_base _ _ = OK _` mp_tac >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   ASM_REWRITE_TAC[opcode_case_def] >>
+  static_guard_tac >>
   rpt strip_tac >>
   TRY (exec_ok_transfer_tac >> NO_TAC) >>
   gvs[AllCaseEqs()] >>
@@ -237,13 +250,16 @@ Theorem step_inst_base_ok_transfer:
     (inst.inst_opcode = PARAM ==> s.vs_params = s'.vs_params) /\
     (inst.inst_opcode = FMP_PARAM ==> s.vs_params = s'.vs_params) /\
     (inst.inst_opcode = RETURNDATACOPY ==>
-       s.vs_returndata = s'.vs_returndata) ==>
+       s.vs_returndata = s'.vs_returndata) /\
+    s.vs_call_ctx = s'.vs_call_ctx ==>
     ?v'. step_inst_base inst s' = OK v'
 Proof
   rpt gen_tac >> strip_tac >>
   `!op. MEM op inst.inst_operands ==>
         eval_operand op s' = eval_operand op s` by
     (rpt strip_tac >> res_tac >> gvs[]) >>
+  `eval_operands inst.inst_operands s' = eval_operands inst.inst_operands s`
+    by (irule eval_operands_agree_lem >> metis_tac[]) >>
   Cases_on `inst.inst_opcode` >>
   gvs[is_terminator_def, is_alloca_op_def, is_ext_call_op_def]
   >- ok_transfer_finish_tac

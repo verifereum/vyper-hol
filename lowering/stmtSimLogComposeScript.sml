@@ -33,7 +33,7 @@ Theorem log_ready_eval_outcome[local]:
      !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
        R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
                         value_has_type tv v) /\
-  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\
+  R args es /\ eval_stmt cx (Log id args) es = (res,es') /\ ~cx.txn.is_static /\
   lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
   MAP expr_type args = tys /\ LENGTH flags = LENGTH tys /\
   EVERY supported_scalar_type tys ==>
@@ -123,6 +123,10 @@ Theorem compile_log_ready_stmt_frag:
     (stmt_env cenv lctx ty (Log id args)) es res es'
 Proof
   strip_tac >>
+  (* A static frame has no related target state. *)
+  Cases_on `cx.txn.is_static`
+  >- (simp[stmt_frag_def] >> rpt strip_tac >>
+      fs[stmt_state_rel_def, state_rel_def]) >>
   `(!e tail s. R (e::tail) s ==>
      !v s1. (do r <- eval_expr cx e; read_result cx r od) s = (INL v,s1) ==>
        R tail s1 /\ ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

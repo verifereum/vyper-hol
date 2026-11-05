@@ -3105,7 +3105,7 @@ QED
 
 Theorem step_inst_create_abort[local]:
   !fuel ctx inst vs a vs'.
-    inst.inst_opcode = CREATE /\
+    inst.inst_opcode = CREATE /\ ~vs.vs_call_ctx.cc_static /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
     ?val_op off_op sz_op value offset sz out.
       inst.inst_operands = [val_op; off_op; sz_op] /\
@@ -3126,7 +3126,7 @@ QED
 
 Theorem step_inst_create2_abort[local]:
   !fuel ctx inst vs a vs'.
-    inst.inst_opcode = CREATE2 /\
+    inst.inst_opcode = CREATE2 /\ ~vs.vs_call_ctx.cc_static /\
     step_inst fuel ctx inst vs = Abort a vs' ==>
     ?val_op off_op sz_op salt_op value offset sz salt out.
       inst.inst_operands = [val_op; off_op; sz_op; salt_op] /\
@@ -3285,6 +3285,9 @@ Theorem gen_inst_abort_sim:
     (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
           (?d. stack_get_depth op ps.ps_stack = SOME d) \/
           IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+    (* Venom aborts at a static frame's state writes; the assembly
+       semantics doesn't model static frames yet (S7). *)
+    ~vs.vs_call_ctx.cc_static /\
     venom_asm_rel label_offsets ps vs as /\
     generate_inst_plan liveness dfg cfg fn inst
       next_liveness is_halting next_is_term bb_label ps =

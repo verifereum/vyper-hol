@@ -249,7 +249,7 @@ Proof
   qpat_x_assum `MEM inst.inst_opcode _` mp_tac >> simp[] >> strip_tac >>
   qpat_x_assum `step_inst_base inst s = OK s'` mp_tac >>
   simp[Once (opcode_equation ``CREATE``), Once (opcode_equation ``CREATE2``),
-       AllCaseEqs()] >> strip_tac >> gvs[] >>
+       AllCaseEqs()] >> strip_tac >> gvs[eval_operands_def] >>
   rename1 `exec_create inst s _ argOff argSize _ = OK s'` >>
   `?out. inst.inst_outputs = [out]` by
     (qpat_x_assum `exec_create _ _ _ _ _ _ = OK s'` mp_tac >>
@@ -265,6 +265,7 @@ Proof
   drule_all exec_create_frame_view >>
   disch_then (qspec_then `ra` strip_assume_tac) >>
   qexists_tac `m` >>
+  `(frame_view fn ra s).vs_call_ctx = s.vs_call_ctx` by simp[frame_view_def] >>
   simp[opcode_equation ``CREATE``, opcode_equation ``CREATE2``]
 QED
 

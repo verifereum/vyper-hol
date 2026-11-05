@@ -86,7 +86,7 @@ QED
 Theorem Send_outcome_type_sound:
   runtime_consistent env cx st /\
   (do
-    (rq,outcome) <- take_call_outcome target [] (SOME amount);
+    (rq,outcome) <- take_call_outcome target [] value_opt;
     check outcome.co_success "send failed";
     adopt_call_outcome rq outcome;
     return (Value NoneV)

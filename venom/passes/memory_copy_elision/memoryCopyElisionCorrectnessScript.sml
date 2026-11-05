@@ -25,6 +25,7 @@ Theorem copy_elision_function_correct:
     fn_inst_wf fn /\
     wf_ssa fn /\
     s.vs_inst_idx = 0 /\
+    ~s.vs_call_ctx.cc_static /\
     fn_entry_label fn = SOME s.vs_current_bb /\
     dfg_assigns_sound dfg s /\
     bp_ptr_sound bp s /\
