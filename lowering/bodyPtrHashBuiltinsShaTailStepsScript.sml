@@ -171,3 +171,19 @@ Proof
   simp[mk_inst_def, is_terminator_def] >>
   gvs[mk_inst_def] >> metis_tac[]
 QED
+
+Theorem hash_gas_prefix_check:
+  !D ctx fn PG G tn id gas code s G' tn'.
+    ~ctx_has_dalloca ctx /\
+    inst_seq_ptr D 0 ctx fn PG (DRESTRICT G (COMPL {gas}))
+      (tn with t_var := tn.t_var |+ (gas,{})) code
+      (update_var gas (HD (s.vs_gas_readings ++ [0w]))
+        (s with vs_gas_readings := DROP 1 s.vs_gas_readings)
+        with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+    inst_seq_ptr D 0 ctx fn PG G tn (mk_inst id GAS [] [gas]::code) s G' tn'
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[Once inst_seq_ptr_def, hash_gas_step] >>
+  conj_tac >- (irule hash_gas_inst_ok >> simp[]) >>
+  gvs[SRULE [] (cj 1 hash_gas_ghost), SRULE [] (cj 2 hash_gas_ghost)]
+QED
