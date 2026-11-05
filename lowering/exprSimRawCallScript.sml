@@ -24,7 +24,8 @@
 Theory exprSimRawCall
 Ancestors
   exprSimSource exprSimHypsDefs exprSimDefs exprSimStack loweringPosts
-  exprSimProps exprSimVVFrame
+  exprSimProps exprSimVVFrame exprSimAttributeFields
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert
   allocLimits freshWrites varsExt builtinSimple builtinProps
   list pair vyperMisc fragExec loweringSlice exprSimHyps exprSimWordArgs
   exprSimPrecompiles exprSimOperators exprSimOperands exprSimAccounts
@@ -38,6 +39,42 @@ Ancestors
   exprSimHash exprSimAlloc exprSimBuffer builtinSystem exprWordOperand exprSafeOperand exprOperandVar
 Libs
   pairLib
+
+Theorem raw_call_values_outcome_bind[local]:
+  gas_outcome memory tops (ctx,func)
+    (a : evaluation_state -> value list evaluation_result) (es,s0) P E /\
+  (!rr ee r. E rr ee r ==> ?exc. rr = INR exc /\ R (INR exc) ee r) /\
+  (!rr ee t. P rr ee t ==> ?v. rr = INL v) /\
+  (!gs v ee t. a (es with gas_obs := gs) = (INL v,ee) /\
+     ee.gas_obs = [] /\ P (INL v) ee t ==>
+     gas_outcome memory tops (ctx,func) (k v) (ee,t) Q R) ==>
+  gas_outcome memory tops (ctx,func) (bind a k) (es,s0) Q R
+Proof
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+  >- (gvs[gas_summary_at_def]
+      >- (qpat_x_assum `!rr ee t. P rr ee t ==> _` drule >> strip_tac >> gvs[] >>
+          `a (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+             (INL v, es_end with gas_obs := [])` by
+            (fs[gas_marked_exec_def] >>
+             first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+          qpat_x_assum `!gs v ee t. _ ==> gas_outcome _ _ _ _ _ _ _` drule >>
+          simp[] >> disch_then drule >> strip_tac >>
+          qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+            (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
+          >- (fs[gas_summary_at_def] >>
+              drule_all gas_marked_exec_bind_normal >> strip_tac >>
+              simp[gas_outcome_def, gas_summary_at_def] >>
+              metis_tac[]) >>
+          simp[gas_outcome_def] >>
+          qexists_tac `marks ++ marks'` >> disj2_tac >>
+          fs[ignore_bind_def, bind_assoc] >>
+          irule_at Any gas_exempt_cert_bind_values >>
+          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      FAIL_TAC "exception prefix") >>
+  FAIL_TAC "prefix exempt"
+QED
 
 (* raw_call's data operand is a dynamic Bytes value (the lowering reads it
    as a memory pointer); RawCallCalldataTarget has no data operand. *)
@@ -513,30 +550,36 @@ QED
 Finalise raw_call_outbuf_positive_run
 
 Theorem raw_call_frame_footprint[local]:
-  expr_val_at cenv cx ty sa sb es v op s /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\
-  ~is_word_type ty /\ ~dynarray_type ty /\
+  expr_sim_inv cenv cx env es /\
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sb es (BytesV bs) op s /\
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
   eval_operand op s = SOME w /\ sb.cs_next_id <= sk.cs_next_id /\
   wb_frame cenv es sk s t ==>
-  mem_bytes_at (w2n w) (val_footprint tv v) t.vs_memory =
-  mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory
+  mem_bytes_at (w2n w) (val_footprint (BaseTV (BytesT (Dynamic cap))) (BytesV bs)) t.vs_memory =
+  mem_bytes_at (w2n w) (val_footprint (BaseTV (BytesT (Dynamic cap))) (BytesV bs)) s.vs_memory
 Proof
   strip_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_val_at_def] >> strip_tac >> gvs[]
+  simp[expr_val_at_def, is_word_type_def] >> strip_tac >> gvs[]
   >- (fs[wb_frame_def] >>
       `aid < sk.cs_next_id` by decide_tac >>
       qpat_x_assum `!aid off sz. _ ==> mem_bytes_at _ _ _ = _` drule_all >>
       disch_then (mp_tac o cj 1 o MATCH_MP valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
-      disch_then (qspecl_then [`w2n w`, `val_footprint tv v`] mp_tac) >>
+      disch_then (qspecl_then [`w2n w`, `val_footprint (BaseTV (BytesT (Dynamic cap))) (BytesV bs)`] mp_tac) >>
       simp[])
   >- (fs[wb_frame_def, locals_kept_def] >>
       qpat_x_assum `!n b sz off len. _ ==> _` irule >>
-      qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> decide_tac)
+      qexistsl_tac [`b`, `n`, `sz`] >> simp[] >> rpt strip_tac >>
+      `dynarray_free (BaseTV (BytesT (Dynamic cap)))` by
+        simp[exprSimPropsTheory.dynarray_free_base] >>
+      drule_all exprSimAttributeFieldsTheory.local_val_at_dynarray_apart >>
+      decide_tac)
   >> simp[mem_bytes_at_def]
 QED
 
 Theorem raw_call_frame_bytes[local]:
+  expr_sim_inv cenv cx env es /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sb es (BytesV bs) op s /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
     SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -546,13 +589,26 @@ Theorem raw_call_frame_bytes[local]:
   mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs
 Proof
   strip_tac >>
-  `~is_word_type (BaseT (BytesT (Dynamic cap))) /\
-   ~dynarray_type (BaseT (BytesT (Dynamic cap)))` by
-    simp[is_word_type_def, dynarray_type_def] >>
   drule_all raw_call_frame_footprint >>
   simp[val_footprint_def, wordsTheory.w2n_n2w] >> strip_tac >>
   drule (cj 1 valueEncodingProofsTheory.mem_bytes_at_agree_window) >>
   disch_then (qspecl_then [`b+32`, `LENGTH bs`] mp_tac) >> simp[]
+QED
+
+Theorem raw_call_kwargs_payload[local]:
+  expr_sim_inv cenv cx env es /\
+  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
+  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
+    SOME (BaseTV (BytesT (Dynamic cap))) /\
+  eval_operand data s = SOME (n2w b) /\ b < dimword (:256) /\
+  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
+  sd.cs_next_id <= sk.cs_next_id /\
+  typed_args_post ctx func cenv cx es sk s es' kws xs vs t ==>
+  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs
+Proof
+  strip_tac >>
+  `wb_frame cenv es sk s t` by fs[typed_args_post_def] >>
+  drule_all raw_call_frame_bytes >> simp[]
 QED
 
 Theorem raw_call_addr_data_post[local]:
@@ -591,7 +647,7 @@ Proof
     (qpat_x_assum `expr_val_rel cx (BaseT AddressT) av addr td` mp_tac >>
      simp[expr_val_rel_def, is_word_type_def] >> strip_tac >>
      qexists_tac `w` >> simp[] >>
-     irule exprSimOpsTheory.eval_operand_frame >> simp[] >>
+     irule exprBopSimPropsTheory.eval_operand_frame >> simp[] >>
      qexistsl_tac [`s2`, `td`] >> fs[wb_frame_def]) >>
   qexistsl_tac [`t`, `b`] >> simp[] >> metis_tac[]
 QED
@@ -824,21 +880,6 @@ Proof
   simp[]
 QED
 
-Theorem raw_call_kwargs_payload[local]:
-  expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) sa sd es (BytesV bs) data s /\
-  evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic cap))) =
-    SOME (BaseTV (BytesT (Dynamic cap))) /\
-  eval_operand data s = SOME (n2w b) /\ b < dimword (:256) /\
-  mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
-  sd.cs_next_id <= sk.cs_next_id /\
-  typed_args_post ctx func cenv cx es sk s es' kws xs vs t ==>
-  mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs
-Proof
-  strip_tac >>
-  `wb_frame cenv es sk s t` by fs[typed_args_post_def] >>
-  drule_all raw_call_frame_bytes >> simp[]
-QED
-
 Theorem raw_call_optional_gas_run[local]:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
   (!g. go = SOME g ==> ?w. eval_operand g s = SOME w) /\
@@ -1024,6 +1065,7 @@ Resume raw_call_prefix_sim[keywords]:
   `expr_body_pre cenv cx env d es2` by
     (irule expr_body_pre_raw_call_arg >>
      first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+  `expr_sim_inv cenv cx env es2` by fs[expr_body_pre_def] >>
   `evaluate_type (get_tenv cx) (expr_type d) = SOME (BaseTV (BytesT (Dynamic cap)))` by
     (drule_at (Pat `expr_body_pre _ _ _ d _`) expr_body_pre_type_evaluates >>
      simp[vyperValueTheory.evaluate_type_def]) >>
