@@ -21,14 +21,15 @@
  *     on that theory's admissions
  *   compile_guarded_body_end_mem_safe -- falling off the end of the body
  *
- * Pieces, each admitted in its own leaf theory (loweringMem{BodyStmts,
- * EntryRevert,EntryReach,FrameRet}), all memory twins of pieces S1
- * rests on:
- *   body_stmts_sim_mem -- body_stmts_sim with memory (#641's body
- *     footprint)
- *   external_entry_value_revert_mem, external_entry_reaches_body_mem --
- *     S1's entry bridge with memory (#639, #867)
- *   external_frame_ret_ok_mem -- the frame's returns with memory (#640),
+ * Pieces, each in its own theory, all memory twins of pieces S1 rests on:
+ *   body_stmts_sim_mem (bodyMemory) -- body_stmts_sim with memory (#641's
+ *     body footprint), given lookup_function_abi_decode_target
+ *     (loweringMemAbiTarget) for its abi_decode target premise
+ *   external_entry_value_revert_mem (loweringMemEntryRevert),
+ *   external_entry_reaches_body_mem (loweringMemEntryReach) -- S1's entry
+ *     bridge with memory (#639, #867)
+ *   external_frame_ret_ok_mem (loweringMemFrameRet) -- the frame's returns
+ *     with memory (#640),
  *     from entryHaltMem's return leaves
  *)
 Theory loweringMemCorrect
@@ -43,8 +44,8 @@ Ancestors
   vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
   entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
-  loweringMemBodyStmts loweringMemEntryRevert loweringMemEntryReach
-  loweringMemFrameRet
+  bodyMemory loweringMemAbiTarget loweringMemEntryRevert
+  loweringMemEntryReach loweringMemFrameRet
 
 val _ = Parse.hide "body";
 
@@ -195,6 +196,10 @@ Proof
         gvs[package_external_fn_def, set_external_package_target_def] >>
       drule guarded_body_code >> strip_tac >>
       drule_all guarded_body_stmts_env >> strip_tac >>
+      `!target. supported_stmts_expr_exists
+                  (expr_abi_decode_target_root target) fbody ==>
+                occurs_abi_decode_target target tops` by
+        metis_tac[lookup_function_abi_decode_target] >>
       drule_all body_stmts_sim_mem >>
       disch_then (qspec_then `NoLoop` assume_tac) >>
       `fn_has_code sa sb func /\ fn_has_code sb st' func` by
