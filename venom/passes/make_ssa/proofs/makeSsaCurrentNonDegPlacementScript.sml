@@ -52,3 +52,34 @@ Proof
   simp[listTheory.LRC_def] >>
   gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]
 QED
+
+Theorem nondeg_separating_predecessor:
+  wf_function fn /\ entry_block fn = SOME entry /\
+  cfg_reachable_of (cfg_analyze fn) y /\ y <> entry.bb_label /\
+  MEM d (fn_labels fn) /\
+  (d = y \/ ~dominates (dom_analyze (cfg_analyze fn) fn) d y) ==>
+  ?q. MEM q (cfg_preds_of (cfg_analyze fn) y) /\
+      ~dominates (dom_analyze (cfg_analyze fn) fn) d q /\
+      ~dominates (dom_analyze (cfg_analyze fn) fn) y q
+Proof
+  rpt gen_tac >> disch_tac >> Cases_on `d = y`
+  >- (gvs[] >> drule_all dominatorProofsTheory.exists_pred_not_dominated >>
+      metis_tac[]) >>
+  gvs[] >>
+  `?ls. LRC (\a b. MEM b (cfg_succs_of (cfg_analyze fn) a))
+      ls entry.bb_label y /\ ~MEM d ls` by
+    (spose_not_then assume_tac >>
+     `dominates (dom_analyze (cfg_analyze fn) fn) d y` suffices_by gvs[] >>
+     pure_rewrite_tac[dominatorDefsTheory.dominates_def] >>
+     irule dominatorProofsTheory.on_every_path_dom >>
+     goal_assum $ drule_at Any >> gvs[] >> metis_tac[]) >>
+  `entry.bb_label <> y` by simp[] >>
+  drule_all nondeg_lrc_first_arrival >> strip_tac >>
+  `~MEM d pre /\ d <> q` by
+    (gvs[pred_setTheory.SUBSET_DEF] >> metis_tac[]) >>
+  qexists_tac `q` >> conj_tac
+  >- metis_tac[cfgAnalysisPropsTheory.cfg_edge_symmetry_uncond] >>
+  qspecl_then [`fn`, `entry`, `pre`, `q`] mp_tac
+    dominatorProofsTheory.dom_on_every_path >>
+  simp[GSYM dominatorDefsTheory.dominates_def] >> metis_tac[]
+QED
