@@ -70,7 +70,7 @@ Proof
             arithmeticTheory.LESS_LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]
 QED
 
-Theorem mem_region_slot_unique[local]:
+Theorem mem_region_slot_unique:
   a + k * s <= j /\ j < a + k * s + s /\
   a + l * s <= j /\ j < a + l * s + s ==> k = l
 Proof
