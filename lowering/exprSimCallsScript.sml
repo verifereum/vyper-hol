@@ -109,7 +109,8 @@ Theorem compile_create_sim:
     expr_sim_below cenv (expr_size (Call ann (CreateTarget kind has_salt rof order) args dflt)) ==>
     expr_vv_ok cenv (Call ann (CreateTarget kind has_salt rof order) args dflt)
 Proof
-  rw[expr_vv_ok_def, expr_sim_pre_def,
+  rw[exprSimHypsDefsTheory.expr_vv_ok_def,
+     exprSimHypsDefsTheory.expr_sim_pre_def,
      supportedExprTraverseTheory.expr_has_evm_run_thm,
      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED

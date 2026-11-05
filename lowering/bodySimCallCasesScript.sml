@@ -171,6 +171,7 @@ Theorem body_create_case:
     body_expr_ok cx (Call ty (CreateTarget kind has_salt rof kw_order) es v26)
 Proof
   rpt strip_tac >> irule body_expr_ok_intro >>
-  rw[expr_body_pre_def, supportedExprTraverseTheory.expr_has_evm_run_thm,
+  rw[exprSimHypsDefsTheory.expr_body_pre_def,
+     supportedExprTraverseTheory.expr_has_evm_run_thm,
      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
