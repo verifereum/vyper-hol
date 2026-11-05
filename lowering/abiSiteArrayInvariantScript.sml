@@ -45,6 +45,20 @@ Proof
   rpt strip_tac >> gvs[] >> decide_tac
 QED
 
+Theorem abi_site_array_loop_inv_facts:
+  abi_site_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
+    site slot cursor_site cursor_slot A first hi sb source_cap d output_size b cap count_op label j origin s ==>
+  has_type (Array NONE ty) (ListV avs) /\ j <= LENGTH avs /\ LENGTH avs < dimword (:256) /\
+  first <= site /\ fresh_vars_wrt limit_st s /\ abi_site_budget A b cap s
+Proof
+  simp_tac bool_ss [abi_site_array_loop_inv_def, abi_site_encoder_input_def] >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_encoder_input_typed >> disch_tac >>
+  `j <= LENGTH avs` by fs[abi_encoder_array_prefix_def] >>
+  drule_all abi_encoder_array_prefix_types >> strip_tac >>
+  fs[abi_site_encoder_effect_def, abi_encoder_cursor_def]
+QED
+
 Theorem abi_site_array_loop_inv_advance:
   abi_site_array_loop_inv ei asz msz active ty avs owner_st limit_st src dst ip dyn_ptr
     site slot cursor_site cursor_slot A first hi sb source_cap d output_size b cap count_op label j origin initial /\
