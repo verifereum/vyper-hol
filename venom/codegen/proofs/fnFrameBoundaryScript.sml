@@ -158,7 +158,8 @@ Theorem gen_invoke_frame_sim:
     inst.inst_operands = Label nm :: arg_ops /\
     ~vs.vs_call_ctx.cc_static /\
     (!f inst callee_name args callee.
-       MEM f ctx.ctx_functions /\ MEM inst (fn_insts f) /\
+       MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
+       MEM inst (fn_insts f) /\
        inst.inst_opcode = INVOKE /\
        inst.inst_operands = Label callee_name :: args /\
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
