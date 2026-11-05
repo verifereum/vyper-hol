@@ -6,6 +6,7 @@ Ancestors
   abiDecoderSequenceReach abiDecoderContract abiEncoder compileEnv emitHelper
   emitHelperProps exprLoweringProps venomState venomInst instIdxIndep
   abiDecoderSiteEffect abiDecoderBytestringOutcome actualDecoderSites
+  abiValidMembers abiDecodeRanges vyperABI contractABI rich_list
   finite_map pred_set words list arithmetic
 
 Theorem abi_decode_member_setup_reach:
@@ -79,4 +80,87 @@ Proof
   drule_all abi_decoder_run_sequence_abort >> strip_tac >>
   qpat_x_assum `!ctx. _` (qspec_then `ctx` strip_assume_tac) >>
   simp[Dabort_def] >> qexistsl_tac [`t with vs_inst_idx := n`, `0`] >> simp[]
+QED
+
+(* A recursive decoder keeps the ambient payload fixed.  Only its view changes:
+   an inline child gets exactly its static width, not the whole suffix. *)
+Definition abi_decode_source_view_def:
+  abi_decode_source_view at bs pos =
+    if is_dynamic at then DROP pos bs
+    else TAKE (static_length at) (DROP pos bs)
+End
+
+Theorem abi_decode_member_static_view:
+  ~is_dynamic at ==>
+  abi_decode_member_bytes at (DROP pos bs) (DROP ao (DROP pos bs)) =
+    abi_decode_source_view at bs (pos+ao)
+Proof
+  simp[abi_decode_member_bytes_def, abi_decode_source_view_def,
+       DROP_DROP_T, ADD_COMM]
+QED
+
+Theorem abi_decode_member_dynamic_view:
+  is_dynamic at /\ delta = abi_head_word (DROP ao (DROP pos bs)) ==>
+  abi_decode_member_bytes at (DROP pos bs) (DROP ao (DROP pos bs)) =
+    abi_decode_source_view at bs (pos+delta)
+Proof
+  simp[abi_decode_member_bytes_def, abi_decode_source_view_def,
+       DROP_DROP_T, ADD_COMM]
+QED
+
+Theorem abi_decode_member_contextual_view:
+  (is_dynamic at ==> delta = abi_head_word (DROP ao (DROP pos bs))) ==>
+  abi_decode_member_bytes at (DROP pos bs) (DROP ao (DROP pos bs)) =
+    abi_decode_source_view at bs (pos + if is_dynamic at then delta else ao)
+Proof
+  Cases_on `is_dynamic at` >>
+  simp[abi_decode_member_bytes_def, abi_decode_source_view_def,
+       DROP_DROP_T, ADD_COMM]
+QED
+
+Theorem abi_decode_empty_tuple_static[local]:
+  !ats. vyper_decode_valid_enc_tuple ats ([]:byte list) [] ==>
+    ~EXISTS is_dynamic ats
+Proof
+  Induct >- simp[] >> rpt strip_tac >>
+  drule abi_valid_member_cons >> strip_tac >>
+  Cases_on `is_dynamic h` >>
+  gvs[abi_member_head_size_def, Excl "vyper_decode_valid_enc_def",
+      Excl "dec_def"] >>
+  fs[EVERY_MEM, EXISTS_MEM, combinTheory.o_DEF] >> metis_tac[]
+QED
+
+Theorem abi_decode_dynamic_empty_reject:
+  is_dynamic at /\ (!elem. at <> Array (SOME 0) elem) ==>
+  ~vyper_decode_valid_enc at ([]:byte list)
+Proof
+  Cases_on `at` >>
+  simp[Once is_dynamic_def, Once vyper_decode_valid_enc_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+  >- (Cases_on `o'` >> gvs[is_dynamic_def, vyper_decode_valid_enc_def])
+  >- gvs[Once vyper_decode_valid_enc_def]
+  >- (Cases_on `o'`
+      >- gvs[Once vyper_decode_valid_enc_def] >>
+      gvs[] >> rename1 `Array (SOME n) a` >> Cases_on `n` >>
+      gvs[vyper_decode_valid_enc_def]) >>
+  disj2_tac >> strip_tac >> drule abi_decode_empty_tuple_static >>
+  simp[GSYM any_dynamic_EXISTS]
+QED
+
+Theorem abi_decode_member_wrap_source_reject:
+  is_dynamic at /\ (!elem. at <> Array (SOME 0) elem) /\
+  delta = abi_head_word (DROP ao (DROP pos bs)) /\
+  LENGTH bs <= H /\ H < dimword(:256) /\
+  dimword(:256) <= pos+delta ==>
+  ~vyper_decode_valid_enc at
+    (abi_decode_member_bytes at (DROP pos bs) (DROP ao (DROP pos bs)))
+Proof
+  strip_tac >>
+  `LENGTH bs <= pos+delta` by decide_tac >>
+  `DROP delta (DROP pos bs) = []` by
+    (pure_rewrite_tac[DROP_EQ_NIL, LENGTH_DROP] >> decide_tac) >>
+  `~vyper_decode_valid_enc at ([]:byte list)` by
+    (irule abi_decode_dynamic_empty_reject >> simp[]) >>
+  qpat_x_assum `delta = _` (fn th => rewrite_tac[abi_decode_member_bytes_def, GSYM th]) >>
+  pure_asm_rewrite_tac[] >> simp[]
 QED
