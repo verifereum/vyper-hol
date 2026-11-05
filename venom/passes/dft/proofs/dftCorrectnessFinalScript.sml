@@ -372,11 +372,11 @@ Proof
   rw[dft_block_def, LET_THM] >>
   irule pseudos_prefix_filter_append >> simp[MEM_FILTER] >>
   rpt strip_tac >>
-  `eda_wf (build_eda bb.bb_instructions) bb.bb_instructions` by
-    simp[build_eda_wf] >>
+  `eda_wf (dft_eda bb.bb_instructions) bb.bb_instructions` by
+    simp[dft_eda_wf] >>
   `EVERY (\i. MEM i bb.bb_instructions)
          (entry_instructions bb.bb_instructions order
-            (build_eda bb.bb_instructions))` by
+            (dft_eda bb.bb_instructions))` by
     simp[entry_instructions_mem] >>
   imp_res_tac schedule_output_from_block
 QED

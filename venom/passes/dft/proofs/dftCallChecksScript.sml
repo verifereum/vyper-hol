@@ -62,16 +62,16 @@ Theorem dft_block_schedule_order:
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `bi = bb.bb_instructions` >>
-  `eda_wf (build_eda bi) bi` by simp[build_eda_wf] >>
+  `eda_wf (dft_eda bi) bi` by simp[dft_eda_wf] >>
   `np_defs_before_uses bi /\ bi <> [] /\
    is_terminator (LAST bi).inst_opcode /\
    (!k. k < LENGTH bi /\ is_terminator (EL k bi).inst_opcode ==>
         k = PRE (LENGTH bi))` by
     gvs[bb_well_formed_def, non_pseudo_defs_before_uses_def, Abbr `bi`] >>
-  `eda_topo_compatible bi (build_eda bi) order` by
-    (irule eda_topo_compatible_gen_weak_plain >> simp[Abbr `bi`]) >>
-  qabbrev_tac `entries = entry_instructions bi order (build_eda bi)` >>
-  qabbrev_tac `sched = schedule_from_entries bi order (build_eda bi)
+  `eda_topo_compatible bi (dft_eda bi) order` by
+    (irule eda_topo_compatible_dft_eda >> simp[Abbr `bi`]) >>
+  qabbrev_tac `entries = entry_instructions bi order (dft_eda bi)` >>
+  qabbrev_tac `sched = schedule_from_entries bi order (dft_eda bi)
     (build_offspring_map bi order) entries` >>
   `EVERY (\i. MEM i bi) entries` by simp[Abbr `entries`, entry_instructions_mem] >>
   `EVERY (\i. ~is_pseudo i.inst_opcode) sched` by
@@ -83,8 +83,10 @@ Proof
           FILTER_APPEND_DISTRIB, FILTER_FILTER] >>
      simp[FILTER_EQ_ID]) >>
   simp[] >>
-  conj_tac >> simp[Abbr `sched`] >>
-  metis_tac[schedule_output_producer_before, schedule_output_eda_before]
+  conj_tac >> simp[Abbr `sched`]
+  >- metis_tac[schedule_output_producer_before] >>
+  irule output_eda_before_dft_eda >>
+  metis_tac[schedule_output_eda_before]
 QED
 
 Theorem dft_block_nonflippable_mem:
@@ -907,19 +909,31 @@ Proof
   gvs[ALL_DISTINCT_APPEND, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem source_prefix_entry_split:
+(* With effectless, outputless roots kept as entries, an ASSERT is an entry
+   whatever the effect dependencies. *)
+Theorem assert_entry_gen:
+  !bi a order eda.
+    MEM a bi /\ inst_wf a /\ a.inst_opcode = ASSERT ==>
+    MEM a (entry_instructions bi order eda)
+Proof
+  rpt strip_tac >> simp[entry_instructions_def, MEM_FILTER] >>
+  gvs[inst_wf_def, venomEffectsTheory.read_effects_def,
+      venomEffectsTheory.write_effects_def, venomInstTheory.is_pseudo_def]
+QED
+
+Theorem source_prefix_entry_split_gen:
   !left a right order.
     ALL_DISTINCT (MAP (\i. i.inst_id) (left ++ a::right)) /\
     inst_wf a /\ a.inst_opcode = ASSERT ==>
     ?es rs.
-      entry_instructions (left ++ a::right) order (build_eda (left ++ a::right)) =
+      entry_instructions (left ++ a::right) order eda =
         es ++ a::rs /\
       EVERY (\i. source_prefix_ids (left ++ a::right) left i.inst_id) es
 Proof
   rpt strip_tac >>
   `MEM a (entry_instructions (left ++ a::right) order
-           (build_eda (left ++ a::right)))` by
-    (irule assert_entry >> simp[]) >>
+           eda)` by
+    (irule assert_entry_gen >> simp[]) >>
   qpat_x_assum `MEM a _` mp_tac >>
   pure_rewrite_tac[entry_instructions_def, LET_THM] >> BETA_TAC >>
   qmatch_goalsub_abbrev_tac `FILTER keep (FILTER _ _)` >>
@@ -929,6 +943,18 @@ Proof
             `FILTER keep (FILTER (\i. ~is_pseudo i.inst_opcode) right)`] >>
   simp[EVERY_MEM, MEM_FILTER] >> rpt strip_tac >>
   simp[source_prefix_ids_def] >> metis_tac[MEM_APPEND]
+QED
+
+Theorem source_prefix_entry_split:
+  !left a right order.
+    ALL_DISTINCT (MAP (\i. i.inst_id) (left ++ a::right)) /\
+    inst_wf a /\ a.inst_opcode = ASSERT ==>
+    ?es rs.
+      entry_instructions (left ++ a::right) order (build_eda (left ++ a::right)) =
+        es ++ a::rs /\
+      EVERY (\i. source_prefix_ids (left ++ a::right) left i.inst_id) es
+Proof
+  metis_tac[source_prefix_entry_split_gen]
 QED
 
 Theorem nonterminator_deps_backward:
@@ -956,6 +982,33 @@ Proof
   `~is_pseudo dep.inst_opcode` by
     metis_tac[build_eda_wf, eda_wf_def] >>
   metis_tac[eda_deps_backward_plain]
+QED
+
+Theorem nonterminator_dft_eda_deps_backward:
+  !bi order inst dep.
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    non_pseudo_defs_before_uses bi /\ MEM inst bi /\
+    ~is_pseudo inst.inst_opcode /\ ~is_terminator inst.inst_opcode /\
+    MEM dep (inst_all_deps bi order (dft_eda bi) inst) ==>
+    ?i j. i < j /\ j < LENGTH bi /\ i < LENGTH bi /\
+          EL i bi = dep /\ EL j bi = inst
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `MEM dep (inst_all_deps _ _ _ _)` mp_tac >>
+  simp[inst_all_deps_def, inst_data_deps_def,
+       passSharedDefsTheory.MEM_nub_first] >> strip_tac
+  >- (gvs[MEM_MAP, MEM_FILTER, optionTheory.IS_SOME_EXISTS] >>
+      rename1 `operand_producer bi op = SOME dep` >>
+      Cases_on `op` >> gvs[operand_producer_def] >>
+      `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+      qpat_x_assum `non_pseudo_defs_before_uses _` mp_tac >>
+      rewrite_tac[non_pseudo_defs_before_uses_def, np_defs_before_uses_def] >>
+      disch_then (qspecl_then [`j`, `s`, `dep`] mp_tac) >> simp[] >>
+      strip_tac >> qexistsl [`i`, `j`] >> simp[]) >>
+  Cases_on `FLOOKUP (dft_eda bi) inst.inst_id` >> gvs[] >>
+  `~is_pseudo dep.inst_opcode` by
+    metis_tac[dft_eda_wf, eda_wf_def] >>
+  metis_tac[dft_eda_deps_backward]
 QED
 Theorem source_prefix_nonterminating:
   !bb left a right k.
@@ -1014,6 +1067,39 @@ Proof
   `~is_terminator inst.inst_opcode` by
     (drule_all source_prefix_nonterminating >> gvs[]) >>
   drule_all nonterminator_deps_backward >> strip_tac >>
+  rename1 `EL p bi = dep` >> rename1 `EL q bi = inst` >>
+  `q <= LENGTH left` by metis_tac[source_prefix_index_bound] >>
+  `p < LENGTH left` by decide_tac >>
+  `MEM dep left` by
+    (`EL p left = dep` by (gvs[] >> fs[EL_APPEND_EQN]) >> metis_tac[MEM_EL]) >>
+  simp[source_prefix_ids_def] >>
+  qexists_tac `dep` >> simp[] >> metis_tac[MEM_EL]
+QED
+
+Theorem source_prefix_dependency_closed_dft_eda:
+  !bb bi left a right order inst dep.
+    bb_well_formed bb /\ bi = bb.bb_instructions /\
+    bi = left ++ a::right /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    non_pseudo_defs_before_uses bi /\ a.inst_opcode = ASSERT /\
+    MEM inst bi /\ ~is_pseudo inst.inst_opcode /\
+    (source_prefix_ids bi left inst.inst_id \/ inst = a) /\
+    MEM dep (inst_all_deps bi order (dft_eda bi) inst) ==>
+    source_prefix_ids bi left dep.inst_id
+Proof
+  rpt gen_tac >> strip_tac >>
+  `MEM inst left \/ inst = a` by
+    (Cases_on `inst = a` >> fs[] >>
+     qpat_x_assum `source_prefix_ids _ _ _` mp_tac >>
+     pure_rewrite_tac[source_prefix_ids_def] >> strip_tac >>
+     `j = inst` by metis_tac[all_distinct_map_mem_inj] >> gvs[]) >>
+  `?j. j < LENGTH bi /\ EL j bi = inst` by metis_tac[MEM_EL] >>
+  `j <= LENGTH left` by metis_tac[source_prefix_index_bound] >>
+  `~is_terminator a.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
+  `bb.bb_instructions = left ++ a::right` by metis_tac[] >>
+  `~is_terminator inst.inst_opcode` by
+    (drule_all source_prefix_nonterminating >> gvs[]) >>
+  drule_all nonterminator_dft_eda_deps_backward >> strip_tac >>
   rename1 `EL p bi = dep` >> rename1 `EL q bi = inst` >>
   `q <= LENGTH left` by metis_tac[source_prefix_index_bound] >>
   `p < LENGTH left` by decide_tac >>
@@ -1309,6 +1395,34 @@ Proof
   metis_tac[MEM_APPEND, MEM]
 QED
 
+Theorem assert_schedule_barrier_dft_eda:
+  !bb bi left a right order sched.
+    bb_well_formed bb /\ bi = bb.bb_instructions /\
+    ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\
+    non_pseudo_defs_before_uses bi /\ bi = left ++ a::right /\
+    inst_wf a /\ a.inst_opcode = ASSERT /\
+    sched = schedule_from_entries bi order (dft_eda bi)
+      (build_offspring_map bi order) (entry_instructions bi order (dft_eda bi)) /\
+    MEM a sched ==>
+    ?pre post. sched = pre ++ a::post /\
+      EVERY (\i. source_prefix_ids bi left i.inst_id) pre
+Proof
+  rpt gen_tac >> strip_tac >>
+  `~is_pseudo a.inst_opcode /\ ~is_flippable a.inst_opcode` by
+    simp[venomInstTheory.is_pseudo_def, is_flippable_def,
+         venomEffectsTheory.is_commutative_def, passSharedDefsTheory.is_comparator_def] >>
+  `~source_prefix_ids bi left a.inst_id` by
+    metis_tac[source_prefix_ids_not_barrier] >>
+  `?es rs. entry_instructions bi order (dft_eda bi) = es ++ a::rs /\
+     EVERY (\i. source_prefix_ids bi left i.inst_id) es` by
+    metis_tac[source_prefix_entry_split_gen] >>
+  drule_at (Pat `out = schedule_from_entries _ _ _ _ _`) schedule_barrier_split >>
+  disch_then irule >> simp[dft_eda_wf, entry_instructions_mem] >>
+  reverse conj_tac >- (qexistsl [`es`, `rs`] >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >> irule source_prefix_dependency_closed_dft_eda >>
+  metis_tac[MEM_APPEND, MEM]
+QED
+
 Theorem from_block_source_prefix:
   !bi left x.
     ALL_DISTINCT (MAP (\i. i.inst_id) bi) /\ from_block bi x /\
@@ -1334,8 +1448,8 @@ Theorem dft_block_assert_barrier:
 Proof
   rpt gen_tac >> strip_tac >>
   qabbrev_tac `bi = bb.bb_instructions` >>
-  qabbrev_tac `sched = schedule_from_entries bi order (build_eda bi)
-    (build_offspring_map bi order) (entry_instructions bi order (build_eda bi))` >>
+  qabbrev_tac `sched = schedule_from_entries bi order (dft_eda bi)
+    (build_offspring_map bi order) (entry_instructions bi order (dft_eda bi))` >>
   `~is_pseudo a.inst_opcode /\ ~is_flippable a.inst_opcode` by
     simp[venomInstTheory.is_pseudo_def, is_flippable_def,
          venomEffectsTheory.is_commutative_def, passSharedDefsTheory.is_comparator_def] >>
@@ -1347,7 +1461,7 @@ Proof
   `MEM a sched` by gvs[MEM_APPEND, MEM_FILTER] >>
   `?pre post. sched = pre ++ a::post /\
      EVERY (\i. source_prefix_ids bi left i.inst_id) pre` by
-    (irule assert_schedule_barrier >> metis_tac[]) >>
+    (irule assert_schedule_barrier_dft_eda >> metis_tac[]) >>
   qexistsl [`FILTER (\i. is_pseudo i.inst_opcode) bi ++ pre`, `post`] >>
   simp[APPEND_ASSOC] >> rpt gen_tac >> strip_tac
   >- gvs[MEM_FILTER] >>
