@@ -276,6 +276,8 @@ val abi_dynamic_ready_insts_eval = TRANS abi_dynamic_ready_insts_step1
   (TRY_CONV EVAL (rhs (concl abi_dynamic_ready_insts_step1)))
 val abi_dynamic_ready_offsets_eval =
   EVAL ``stackPlanGen$offset_outputs_used ^abi_dynamic_ready_fn``
+val abi_dynamic_ready_phi_joins_eval =
+  EVAL ``stackPlanGen$phis_at_joins (cfg_analyze ^abi_dynamic_ready_fn) ^abi_dynamic_ready_fn``
 val abi_dynamic_ready_fn_rhs = LIST_CONJ
   [EQT_ELIM abi_dynamic_ready_canonical_eval,
    EQT_ELIM abi_dynamic_ready_wf_fn_eval,
@@ -287,7 +289,8 @@ val abi_dynamic_ready_fn_rhs = LIST_CONJ
    EQT_ELIM abi_dynamic_ready_entries_eval,
    EQT_ELIM abi_dynamic_ready_phi_eval,
    EQT_ELIM abi_dynamic_ready_insts_eval,
-   EQT_ELIM abi_dynamic_ready_offsets_eval]
+   EQT_ELIM abi_dynamic_ready_offsets_eval,
+   EQT_ELIM abi_dynamic_ready_phi_joins_eval]
 val abi_dynamic_ready_fn_thm = prove
   (``codegen_ready_fn ^abi_dynamic_ready_fn``,
    PURE_REWRITE_TAC [stackPlanGenTheory.codegen_ready_fn_def] >>
