@@ -1,7 +1,8 @@
 (* Declaration store: source-state and memory continuation boundaries. *)
 Theory bodyDeclMemory
 Ancestors
-  bodyDeclMemoryCore
+  bodyDeclMemoryCounted bodyDeclMemoryCore
+  gasOutcome gasSummary fragGasMode fragGasPathMem
   loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
   bodyNameMemoryFacts bodyCopyMemory bodyMemoryDefs stmtSimDeclMem
   localPtrsProps stmtSimDeclStore stmtSimDecl valueCopy valueCopyBytes
@@ -55,7 +56,7 @@ Proof
   drule_all body_annassign_read_eval >> simp[]
 QED
 
-Theorem body_annassign_name_exec[local]:
+Theorem body_annassign_name_path[local]:
   declare_local ce id ty sa = (c,st) /\ ce.ce_alloca_locals /\
   lookup_scopes id es.scopes = NONE /\ FLOOKUP ce.ce_vars id = NONE /\
   p = STRING #"%" (toString sa.cs_next_var) /\
@@ -72,24 +73,25 @@ Theorem body_annassign_name_exec[local]:
   fn_has_code sa sA func /\ fn_has_code sA sb func /\
   cs_extends sa sA /\ cs_extends sA sb /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
-  alloca_history func s /\ return_buf_frame d ce sa s ==>
-  frag_exec_mem ctx sa sb (\u. u = s)
-    (\t. stmt_state_rel ctx func c cx
-        (es with scopes :=
-          (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) t /\
-      alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-      return_buf_frame d c sb t /\
-      (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
-      (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)) R
+  alloca_history func s /\ return_buf_frame d ce sa s /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    stmt_state_rel ctx func c cx
+      (es with scopes :=
+        (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) t /\
+    alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    return_buf_frame d c sb t /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
 Proof
   strip_tac >>
   `type_memory_bytes ce ty < dimword (:256)` by decide_tac >>
   `!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q sz. l = PtrVar q sz` by simp[] >>
   drule_all annassign_setup_shape >> strip_tac >>
-  drule_all annassign_setup_body_frag_mem >>
-  disch_then (qspec_then `R` mp_tac) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_mem_then) >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
+  drule_all annassign_setup_body_gas_path_mem >> strip_tac >>
   gvs[] >>
   qmatch_asmsub_abbrev_tac `MEM A (fn_insts func)` >>
   `A.inst_opcode = ALLOCA /\
@@ -103,11 +105,13 @@ Proof
    type_memory_size tyv <= type_memory_size tyv` by simp[] >>
   `sa.cs_next_var <= sA.cs_next_var` by
     (drule emit_inst_extends >> simp[] >> decide_tac) >>
-  drule_all annassign_name_rhs_body_frag_mem >>
-  disch_then (qspecl_then [`T`, `R`] mp_tac) >>
-  disch_then (mp_tac o MATCH_MP frag_exec_mem_weaken) >>
-  disch_then irule >> simp[] >> rpt strip_tac >>
-  metis_tac[not_fresh_at_mono]
+  drule_all annassign_name_rhs_body_path >>
+  disch_then (qspec_then `T` (qx_choose_then `t2` strip_assume_tac)) >>
+  qexists_tac `t2` >>
+  `gas_path_mem ctx func s (0 + 0) (OK t2)` by
+    (irule gas_path_mem_then >> qexists_tac `t` >> simp[]) >>
+  fs[] >> rpt strip_tac >>
+  metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem body_annassign_name_prepare[local]:
@@ -243,6 +247,7 @@ Proof
 QED
 
 Theorem body_decl_normal_landing[local]:
+  !ctx func c cx es' s sb ce lctx.
   stmt_state_rel ctx func c cx es' s /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -251,7 +256,7 @@ Theorem body_decl_normal_landing[local]:
   cenv_top_ext ce c (es' with gas_obs := []).scopes /\
   stmt_state_rel ctx func c cx (es' with gas_obs := []) s
 Proof
-  strip_tac >> simp[stmt_lands_def] >>
+  rpt gen_tac >> strip_tac >> simp[stmt_lands_def] >>
   drule msg_gas_state_frame >>
   disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
   simp[NoAsms]
@@ -278,10 +283,19 @@ Proof
   `0 < type_memory_bytes cenv' typ` by decide_tac >>
   drule_all body_annassign_name_code >> strip_tac >>
   `STRING #"%" (toString sa.cs_next_var) = STRING #"%" (toString sa.cs_next_var)` by simp[] >>
-  drule_all body_annassign_name_exec >>
-  disch_then (qspec_then `(\r. F)` mp_tac) >>
-  strip_tac >> gvs[] >> disj1_tac >>
-  drule body_decl_normal_landing >> simp[] >>
-  disch_then (qspecl_then [`lctx`, `cenv`] mp_tac) >> simp[]
+  drule_all body_annassign_name_path >> strip_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl_tac [`INL ()`, `es'`, `OK t`] >>
+  simp[gas_marked_exec_def, gas_marked_path_def] >>
+  qspecl_then [`ctx`, `func`, `cenv'`, `cx`, `es'`, `t`, `sb`, `cenv`, `lctx`]
+    mp_tac body_decl_normal_landing >>
+  impl_tac >- gvs[] >>
+  strip_tac >> gvs[] >>
+  disj1_tac >>
+  qpat_x_assum `stmt_state_rel ctx func cenv' cx (es with scopes := _) t` mp_tac >>
+  rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac) >>
+  strip_tac >> drule msg_gas_state_frame >>
+  disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
+  simp[NoAsms, Excl "stmt_state_rel_gas_obs"]
 QED
-
