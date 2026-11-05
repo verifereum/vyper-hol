@@ -69,6 +69,7 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
               frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
@@ -77,8 +78,14 @@ Theorem e2e_deploy_correctness:
                   lookup_account a es'.rollback.accounts =
                   lookup_account a am'.accounts) /\
              (lookup_account tx.target es'.rollback.accounts) with code := [] =
-             (lookup_account tx.target am'.accounts) with code := [] /\
-             es'.rollback.tStorage = am'.tStorage /\
+             (lookup_account tx.target am'.accounts) with
+               <| code := [];
+                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+             storage_agree
+               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+               (lookup_account tx.target am'.accounts).storage
+               (lookup_account tx.target es'.rollback.accounts).storage /\
+             transient_agree cx am'.tStorage es'.rollback.tStorage /\
              logs_correspond (compiled_event_info tops) (type_env tops)
                tx.target am'.logs lgs
        | INR (AssertException s) =>
@@ -104,10 +111,10 @@ Proof
     fs[deploy_phases_def] >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>
-  qspecl_then [`deploy_dead`, `imm_len tops`, `rpolicy`, `dunit`, `dout`,
-               `deploy_entry_state prog cplan tops es`] mp_tac
+  qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `rpolicy`,
+               `dunit`, `dout`, `deploy_entry_state prog cplan tops es`] mp_tac
     run_venom_pipeline_correct >>
-  impl_tac >- fs[dead_wf_deploy_dead] >> strip_tac >>
+  impl_tac >- fs[deploy_dead_wf] >> strip_tac >>
   Cases_on `?marks. deploy_source_exempt tops
               (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                  [(NONE, tops)] [])`
@@ -125,20 +132,23 @@ Proof
      qexists_tac `deploy_entry_state prog cplan tops es` >> fs[o1_run_state_ok_def]) >>
   drule_all deploy_unit_memory_ok >> strip_tac >>
   drule_all deploy_unit_dload_ok >> strip_tac >>
-  `ctx_sim deploy_dead dunit.cu_context dout.po_unit.cu_context vs_in
+  `ctx_sim (deploy_dead tops runtime_bc am tx) dunit.cu_context dout.po_unit.cu_context vs_in
      (deploy_entry_state prog cplan tops es) /\
    o1_lowered_inv dout.po_unit.cu_context (deploy_entry_state prog cplan tops es)` by
     metis_tac[] >>
   `terminates (run_context fuel dunit.cu_context vs_in)` by
     metis_tac[deploy_venom_result_rel_terminates] >>
-  `?fuel'. dead_result_rel deploy_dead (run_context fuel dunit.cu_context vs_in)
+  `?fuel'. dead_result_rel (deploy_dead tops runtime_bc am tx) (run_context fuel dunit.cu_context vs_in)
              (run_context fuel' dout.po_unit.cu_context
                 (deploy_entry_state prog cplan tops es))` by
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
          [(NONE, tops)] [])` by metis_tac[] >>
-  drule_all deploy_venom_result_rel_dead >> strip_tac >>
+  qspecl_then [`tops`, `runtime_bc`, `am`, `tx`,
+               `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
+    deploy_venom_result_rel_dead >>
+  simp[] >> disch_then drule_all >> strip_tac >>
   `(deploy_entry_state prog cplan tops es).vs_initial_fmp = n2w cplan.cp_initial_fmp` by
     simp[deploy_entry_state_def, entry_venom_state_def] >>
   drule_all o1_pipeline_memory_obligations >> strip_tac >>
