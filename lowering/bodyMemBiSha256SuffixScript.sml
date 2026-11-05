@@ -3,7 +3,7 @@ Theory bodyMemBiSha256Suffix
 Ancestors
   bodyMemBiSha256Bounds emitHelper fragExecMem instMemFrontier memSafeRun
   exprLoweringProps compileEnv emitHelperProps venomExecSemantics venomInst venomState venomMemProps
-  venomMemDefs venomInstProps venomInstProofs words list bufferAllocationExecution
+  venomMemDefs venomInstProps venomInstProofs words list bufferAllocationExecution exprSimHash
 
 Theorem sha256_call_preserves_operand:
   step_inst_base (mk_inst i STATICCALL ops [sv]) s = OK t /\
@@ -296,4 +296,116 @@ Proof
      qpat_assum `run_inst_seq (emitted_insts c2 c3) _ = OK t3`
        (fn th => pure_rewrite_tac[th]) >> simp[]) >>
   qpat_x_assum `t4 = t3` SUBST_ALL_TAC >> first_assum ACCEPT_TAC
+QED
+
+Theorem sha256_data_prefix_mem_ok:
+  emit_op MLOAD [ptr_op] sa = (len_op,sl) /\
+  emit_op ADD [ptr_op; Lit 32w] sl = (data_op,sm) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  b < dimword (:256) /\ b + 32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (emitted_insts sa sm) s
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_var_def,
+       fresh_id_def, emit_def] >> strip_tac >>
+  gvs[emitted_insts_def] >>
+  CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+  simp[rich_listTheory.DROP_LENGTH_APPEND, Once run_inst_seq_mem_ok_def,
+       below_frontier_MLOAD, w2n_n2w] >>
+  simp[run_inst_seq_mem_ok_last, below_frontier_no_ranges] >>
+  simp[mk_inst_def] >> CASE_TAC >> simp[]
+QED
+
+(* Execution of the read prefix reuses the task-permitted overlay fact
+   exprSimHash.hash_data_prefix_run; this dependency carries its oracle tag. *)
+Theorem compile_sha256_bytes_mem_ok:
+  compile_sha256_bytes ptr_op sa = (op,sb) /\
+  eval_operand ptr_op s = SOME (n2w b) /\
+  (!x. ptr_op = Var x ==> not_fresh_at sa x) /\
+  mem_word_at b s.vs_memory = n2w len /\
+  b < dimword (:256) /\
+  b + 32 <= s.vs_alloca_next /\
+  (len = 0 \/ w2n (n2w (b + 32):bytes32) + len <= s.vs_alloca_next) /\
+  alloca_next_valid s /\
+  (!base cap. FLOOKUP s.vs_allocas (sa.cs_next_id + 2) = SOME (base,cap) ==> cap = 32) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  simp[builtinHashingTheory.compile_sha256_bytes_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rename1 `emit_op MLOAD [ptr_op] sa = (len_op,sl)` >>
+  rename1 `emit_op ADD [ptr_op; Lit 32w] sl = (data_op,sm)` >>
+  rename1 `compile_alloc_buffer 32 sm = (buf,sn)` >>
+  rename1 `emit_void ASSERT _ _ = (u,sh)` >> Cases_on `u` >>
+  qpat_x_assum `!base cap. _` (mk_asm "size") >>
+  drule_all hash_data_prefix_run >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK prefix` >>
+  `run_inst_seq_mem_ok (emitted_insts sa sm) s` by
+    (irule sha256_data_prefix_mem_ok >> metis_tac[]) >>
+  `prefix.vs_allocas = s.vs_allocas /\
+   prefix.vs_alloca_next = s.vs_alloca_next /\
+   prefix.vs_memory = s.vs_memory` by
+    (qpat_x_assum `(prefix with vs_vars := _) = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `alloca_next_valid prefix` by (fs[alloca_next_valid_def] >> metis_tac[]) >>
+  `!base cap. FLOOKUP prefix.vs_allocas sm.cs_next_id = SOME (base,cap) ==> cap = 32` by
+    (asm "size" assume_tac >> metis_tac[]) >>
+  qpat_assum `compile_alloc_buffer 32 sm = _`
+    (mp_then Any mp_tac sha256_alloc32_mem) >>
+  disch_then (qspec_then `prefix` mp_tac) >>
+  impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
+  qpat_x_assum `!base cap. _` kall_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) prefix = OK allocated` >>
+  qpat_assum `compile_alloc_buffer 32 sm = _`
+    (mp_then Any strip_assume_tac sha256_alloc32_compile) >>
+  `eval_operand len_op allocated = SOME (n2w len) /\
+   eval_operand data_op allocated = SOME (n2w (b + 32))` by metis_tac[] >>
+  `!x. data_op = Var x \/ len_op = Var x ==> not_fresh_at sn x` by
+    (qpat_assum `!x. len_op = Var x \/ data_op = Var x ==> _` mp_tac >>
+     qpat_assum `sn.cs_next_var = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
+  `run_inst_seq_mem_ok (emitted_insts sn sb) allocated` by
+    (irule emit_sha256_tail_mem_ok >>
+     goal_assum (drule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op STATICCALL _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_op GAS _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_void ASSERT _ _ = _`)) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     `w2n (n2w len:bytes32) <= len` by simp[w2n_n2w, arithmeticTheory.MOD_LESS_EQ] >>
+     Cases_on `len = 0` >- simp[] >> fs[] >> decide_tac) >>
+  `sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    (qpat_x_assum `emit_op GAS [] sn = _` mp_tac >>
+     qpat_x_assum `emit_op STATICCALL _ _ = _` mp_tac >>
+     qpat_x_assum `emit_void ASSERT _ _ = _` mp_tac >>
+     qpat_x_assum `emit_op MLOAD _ sh = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[emitted_insts_def] >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `emitted_insts sa sb = emitted_insts sa sm ++
+      (emitted_insts sm sn ++ emitted_insts sn sb)` by
+    (pure_rewrite_tac[emitted_insts_def] >>
+     qpat_x_assum `sb.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `sn.cs_current_insts = _` SUBST1_TAC >>
+     qpat_x_assum `sm.cs_current_insts = _` SUBST1_TAC >>
+     rpt (pop_assum kall_tac) >>
+     CONV_TAC (DEPTH_CONV (REWR_CONV (GSYM APPEND_ASSOC))) >>
+     simp[rich_listTheory.DROP_LENGTH_APPEND, rich_listTheory.DROP_APPEND] >>
+     `!a b:num. a - (a + b) = 0` by decide_tac >> simp[]) >>
+  pop_assum SUBST1_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `t1` >> strip_tac >>
+  `t1 = prefix` by
+    (qpat_x_assum `run_inst_seq _ s = OK t1` mp_tac >>
+     qpat_assum `run_inst_seq _ s = OK prefix` (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `t1 = prefix` SUBST_ALL_TAC >>
+  irule run_inst_seq_mem_ok_append >> reverse conj_tac >- first_assum ACCEPT_TAC >>
+  qx_gen_tac `t2` >> strip_tac >>
+  `t2 = allocated` by
+    (qpat_x_assum `run_inst_seq _ prefix = OK t2` mp_tac >>
+     qpat_assum `run_inst_seq _ prefix = OK allocated` (fn th => pure_rewrite_tac[th]) >> simp[]) >>
+  qpat_x_assum `t2 = allocated` SUBST_ALL_TAC >> first_assum ACCEPT_TAC
 QED
